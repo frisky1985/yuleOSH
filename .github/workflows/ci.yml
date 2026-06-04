@@ -1,0 +1,79 @@
+name: yuleOSH CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest coverage
+
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -q --ignore=tests/test_e2e.py
+
+    - name: Run CI Layer 1
+      run: |
+        python src/ci/run.py 1
+      env:
+        CI_RUN: "1"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    - name: Run plan-lint
+      run: |
+        python -c "
+        import os
+        issues = 0
+        for root, dirs, files in os.walk('.'):
+            for f in files:
+                if 'task' in f.lower() and f.endswith('.md'):
+                    content = open(os.path.join(root, f)).read()
+                    if not any(k in content.lower() for k in ['feature','bugfix','refactor','docs']):
+                        print(f'⚠️  Missing kind: {os.path.join(root, f)}')
+                        issues += 1
+        if issues:
+            exit(1)
+        print('✅ plan-lint passed')
+        "
+
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    - name: Generate evidence pack
+      run: |
+        python src/evidence/pack.py
+    - name: Upload compliance pack
+      uses: actions/upload-artifact@v4
+      with:
+        name: compliance-evidence
+        path: .osh/evidence/
