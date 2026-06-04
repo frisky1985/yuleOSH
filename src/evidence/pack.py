@@ -261,8 +261,13 @@ class EvidenceCollector:
         return str(zip_path)
 
 
-def generate_evidence(project_dir: str = None):
-    """Generate full evidence chain."""
+def generate_evidence(project_dir: str = None, spec_path: str = None):
+    """Generate full evidence chain.
+    
+    Args:
+        project_dir: Root directory of the project. Defaults to OSH_HOME env or cwd.
+        spec_path: Optional explicit spec file path. Defaults to docs/spec.md under project_dir.
+    """
     if project_dir is None:
         project_dir = os.environ.get("OSH_HOME", os.getcwd())
     
@@ -271,7 +276,7 @@ def generate_evidence(project_dir: str = None):
     
     collector = EvidenceCollector(project_dir)
     
-    collector.collect_requirements()
+    collector.collect_requirements(spec_path=spec_path)
     collector.collect_reviews()
     collector.collect_ci_results()
     
@@ -299,10 +304,12 @@ def generate_evidence(project_dir: str = None):
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "pack":
-        generate_evidence()
-    else:
-        generate_evidence()
+    """CLI entry point for evidence generation."""
+    spec_path = None
+    args = [a for a in sys.argv[1:] if a != "pack"]
+    if args:
+        spec_path = args[0]
+    generate_evidence(spec_path=spec_path)
 
 
 if __name__ == "__main__":

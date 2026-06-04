@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# ============================================================================
+# yuleosh-demo — One-Command Demo
+#
+# Runs the full yuleOSH demo flow on a realistic BLE sensor firmware project.
+# No prior setup needed — just run this script.
+#
+# Usage:
+#   bin/yuleosh-demo [demo-dir]
+#
+# Default demo dir: /tmp/yuleosh-demo-YYYYMMDD-HHMMSS
+# ============================================================================
+set -euo pipefail
+
+# ---- Locate directories ----------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+YULEOSH_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEMO_DIR="${1:-/tmp/yuleosh-demo-$(date +%Y%m%d-%H%M%S)}"
+PYTHON="${YULEOSH_PYTHON:-python3}"
+
+# ---- Colors ----------------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()  { echo -e "  ${CYAN}ℹ${NC} $1"; }
+ok()    { echo -e "  ${GREEN}✅${NC} $1"; }
+warn()  { echo -e "  ${YELLOW}⚠️${NC} $1"; }
+fail()  { echo -e "  ${RED}❌${NC} $1"; }
+header(){ echo -e "\n${BOLD}━━━ $1 ━━━${NC}\n"; }
+
+# ---- Pre-flight checks -----------------------------------------------------
+if ! command -v "$PYTHON" &>/dev/null; then
+    fail "python3 is required but not on PATH."
+    exit 1
+fi
+
+# Validate yuleOSH can be found
+if [ ! -f "$YULEOSH_DIR/src/cli/yuleosh.sh" ]; then
+    fail "yuleOSH not found at $YULEOSH_DIR"
+    exit 1
+fi
+
+# ---- Cleanup handler -------------------------------------------------------
+cleanup() {
+    echo ""
+    warn "Demo interrupted. Demo dir preserved at:"
+    echo "  ${DEMO_DIR}"
+}
+trap cleanup EXIT
+
+# ============================================================================
+#  MAIN DEMO
+# ============================================================================
+clear
+cat << "BANNER"
+
+  ╔══════════════════════════════════════════════╗
+  ║                                              ║
+  ║    🔱  y u l e O S H   D E M O              ║
+  ║                                              ║
+  ║    Embedded AI Development Platform          ║
+  ║    OpenSpec + Superpowers + Harness Eng.     ║
+  ║                                              ║
+  ╚══════════════════════════════════════════════╝
+
+BANNER
+
+echo -e "  ${CYAN}YuleOSH dir${NC}  ${BOLD}$YULEOSH_DIR${NC}"
+echo -e "  ${CYAN}Demo dir${NC}     ${BOLD}$DEMO_DIR${NC}"
+echo -e "  ${CYAN}Date${NC}         ${BOLD}$(date)${NC}"
+echo ""
+
+# ────────────────────────────────────────────────────────────────────────────
+header "Step 1/7: Project Initialization"
+# ────────────────────────────────────────────────────────────────────────────
+
+mkdir -p "$DEMO_DIR/docs" "$DEMO_DIR/src" "$DEMO_DIR/tests" "$DEMO_DIR/specs" "$DEMO_DIR/tasks"
+echo ""
+info "Project structure created:"
+echo "    $DEMO_DIR/"
+echo "    ├── docs/     — Documentation & OpenSpec"
+echo "    ├── src/      — Source code"
+echo "    ├── tests/    — Tests"
+echo "    ├── specs/    — Additional specs"
+echo "    └── tasks/    — Task definitions"
+echo ""
+ok "Demo project initialized at: $DEMO_DIR"
+
+# ────────────────────────────────────────────────────────────────────────────
+header "Step 2/7: Creating Sample BLE Sensor Spec"
+# ────────────────────────────────────────────────────────────────────────────
+
+# Also init git so tools that check git context work
+cd "$DEMO_DIR"
+git init -q 2>/dev/null || true
+git add . 2>/dev/null || true
+
+cat > "$DEMO_DIR/docs/spec.md" << 'SPEC'
+# BLE Temperature & Humidity Sensor Firmware
+
+> Version: 0.1.0 (MVP) | Status: Draft | Target: nRF52840 MCU
+
+---
+
+## 1. 传感器功能需求
+
+### Req-SENSOR-001: 温湿度采集
+- The system SHALL initialize the SHT30 sensor over I2C on boot
+- The system SHALL read temperature with ±0.2°C accuracy at 1 Hz
+- The system SHALL read humidity with ±2% RH accuracy at 1 Hz
+- The system SHALL convert raw I2C register values to engineering units (Celsius, %RH)
+- The system SHOULD support configurable sampling rate (0.1–10 Hz)
+
+#### Reason
+核心传感器功能：温湿度数据是 BLE 传感器的基础能力，必须提供精确的物理量转换
+
+### Req-SENSOR-002: BLE GATT 服务
+- The system SHALL advertise as `Temperature & Humidity Sensor` over BLE 5.0
+- The system SHALL expose temperature via GATT characteristic (UUID: 0x2A6E)
+- The system SHALL expose humidity via GATT characteristic (UUID: 0x2A6F)
+- The system SHALL notify connected clients on data update every 1 second
+- The system SHOULD support secure pairing with bonding
+
+#### Reason
+BLE 通信是传感器的对外接口，GATT profile 需遵循 Bluetooth SIG 标准
+
+### Req-SENSOR-003: 电源管理
+- The system SHALL enter deep sleep (10 µA) when disconnected for 60 seconds
+- The system SHALL wake from BLE advertisement event
+- The system SHALL report battery level (GATT UUID 0x2A19)
+- The system SHOULD support coin-cell CR2032 operation for 6 months
+
+#### Reason
+嵌入式电池供电设备的电源管理直接决定产品寿命，是 MVP 关键指标
+
+### Req-SENSOR-004: 错误处理与诊断
+- The system SHALL detect I2C bus errors and retry up to 3 times
+- The system SHALL report sensor failures via a dedicated status characteristic
+- The system SHALL log all error events with timestamps
+- The system SHOULD store last 10 error codes in NVM for debugging
+- The system MAY trigger a watchdog reset after 3 consecutive sensor failures
+
+#### Reason
+嵌入式系统的容错和诊断能力是现场可维护性的基础
+
+---
+
+## 2. 验收场景
+
+### Scenario: 上电初始化流程
+- GIVEN the device is powered on for the first time
+- WHEN boot completes
+- THEN the system SHALL initialize the I2C bus
+- AND the system SHALL detect the SHT30 sensor
+- AND the system SHALL start BLE advertisement
+- AND the system SHALL report sensor status as READY
+
+### Scenario: 正常数据采集
+- GIVEN the sensor is initialized and a BLE client is connected
+- WHEN 1 second has elapsed since the last reading
+- THEN the system SHALL trigger a sensor read
+- AND the system SHALL convert the raw values to engineering units
+- AND the system SHALL notify the connected BLE client
+- AND the system SHALL update battery level every 60 seconds
+
+### Scenario: 断线省电
+- GIVEN the device is powered and no BLE client is connected
+- WHEN 60 seconds have elapsed without connection
+- THEN the system SHALL enter deep sleep mode
+- AND the system SHALL wake periodically for advertisement
+- AND the system SHALL resume normal operation on client connect
+
+### Scenario: 传感器故障恢复
+- GIVEN the device is running and collecting data
+- WHEN the I2C bus returns a NACK on sensor read
+- THEN the system SHALL retry the read up to 3 times
+- AND the system SHALL log the error with timestamp
+- AND the system SHALL report failure via status characteristic
+- AND if 3 consecutive reads fail, the system SHALL trigger watchdog reset
+
+---
+
+## 3. 非功能性需求
+
+- The system SHALL respond to BLE commands within 100 ms
+- The system SHALL operate on 3.0 V ± 10% supply voltage
+- The system SHALL recover from watchdog reset within 500 ms
+- The system SHALL store firmware version in read-only characteristic
+- The system SHOULD support OTA firmware update via BLE DFU service
+SPEC
+
+git init -q 2>/dev/null && git add -A 2>/dev/null && git commit -q -m "init" --allow-empty 2>/dev/null || true
+
+info "Sample spec created: BLE Temperature & Humidity Sensor Firmware"
+echo "    Requirements:  4 (SENSOR-001 to SENSOR-004)"
+echo "    Scenarios:     4 (init, data, sleep, recovery)"
+echo "    SHALL/SHOULD:  17 + 4 non-functional"
+echo "    Target MCU:    nRF52840"
+echo ""
+ok "Sample spec written to: $DEMO_DIR/docs/spec.md"
+
+# ────────────────────────────────────────────────────────────────────────────
+header "Step 3/7: Spec Validation"
+# ────────────────────────────────────────────────────────────────────────────
+
+cd "$DEMO_DIR"
+PYTHONPATH="$YULEOSH_DIR/src/spec:$YULEOSH_DIR" "$PYTHON" "$YULEOSH_DIR/src/spec/validate.py" docs/spec.md
+echo ""
+ok "Spec validation passed"
+
+# ────────────────────────────────────────────────────────────────────────────
+header "Step 4/7: Agent Pipeline Run"
+# ────────────────────────────────────────────────────────────────────────────
+
+echo -e "  Pipeline: ${CYAN}小明 → Hermes → Claude${NC} (9 automated steps)"
+echo ""
+PYTHONPATH="$YULEOSH_DIR/src:$YULEOSH_DIR" "$PYTHON" "$YULEOSH_DIR/src/pipeline/run.py" docs/spec.md
+echo ""
+ok "Agent pipeline completed"
+
+# ────────────────────────────────────────────────────────────────────────────
+header "Step 5/7: CI Layer 1 — Development Verification"
+# ────────────────────────────────────────────────────────────────────────────
+
+PYTHONPATH="$YULEOSH_DIR/src:$YULEOSH_DIR" "$PYTHON" "$YULEOSH_DIR/src/ci/run.py" 1
+echo ""
+ok "CI Layer 1 completed"
+
+# ────────────────────────────────────────────────────────────────────────────
+header "Step 6/7: Compliance Evidence Pack"
+# ────────────────────────────────────────────────────────────────────────────
+
+PYTHONPATH="$YULEOSH_DIR/src:$YULEOSH_DIR" "$PYTHON" "$YULEOSH_DIR/src/evidence/pack.py"
+echo ""
+ok "Compliance evidence pack generated"
+
+# ────────────────────────────────────────────────────────────────────────────
+header "Step 7/7: Review and Stats"
+# ────────────────────────────────────────────────────────────────────────────
+
+PYTHONPATH="$YULEOSH_DIR/src:$YULEOSH_DIR" "$PYTHON" "$YULEOSH_DIR/src/review/run.py" auto
+echo ""
+PYTHONPATH="$YULEOSH_DIR/src:$YULEOSH_DIR" "$PYTHON" "$YULEOSH_DIR/src/cli/stats.py"
+echo ""
+
+# ────────────────────────────────────────────────────────────────────────────
+#  SUMMARY
+# ────────────────────────────────────────────────────────────────────────────
+# Get the latest session for the summary link
+LATEST_SESSION=$(ls -t "$DEMO_DIR/.osh/sessions/" 2>/dev/null | head -1)
+
+header "🎉 DEMO COMPLETE — Summary"
+
+echo -e "  ${CYAN}Project:${NC}         ${BOLD}BLE Temperature & Humidity Sensor${NC}"
+echo -e "  ${CYAN}Location:${NC}         ${BOLD}$DEMO_DIR${NC}"
+echo ""
+echo -e "  ${GREEN}✓${NC} Spec validation   → ${DEMO_DIR}/docs/spec.md"
+echo -e "  ${GREEN}✓${NC} Pipeline run      → ${DEMO_DIR}/.osh/sessions/"
+echo -e "  ${GREEN}✓${NC} CI Layer 1        → ${DEMO_DIR}/.osh/ci/"
+echo -e "  ${GREEN}✓${NC} Review            → ${DEMO_DIR}/.osh/reviews/"
+echo -e "  ${GREEN}✓${NC} Evidence pack     → ${DEMO_DIR}/.osh/evidence/compliance-pack.zip"
+echo ""
+echo -e "  ${CYAN}Key artifacts:${NC}"
+echo -e "    📋 Spec:            ${DEMO_DIR}/docs/spec.md"
+echo -e "    🔬 Pipeline report:  ${DEMO_DIR}/.osh/sessions/${LATEST_SESSION:-<run>}/final-report.md"
+echo -e "    📊 Stats:           ${YELLOW}yuleosh stats${NC}"
+echo -e "    🖥️  Dashboard:       ${YELLOW}yuleosh ui start${NC} → http://localhost:8080"
+echo ""
+echo -e "  ${BOLD}Next steps:${NC}"
+echo "    cd $DEMO_DIR"
+echo "    yuleosh pipeline status"
+echo "    yuleosh ci run 2      # Layer 2: Integration Verification"
+echo "    yuleosh ci run 3      # Layer 3: System Verification"
+echo "    yuleosh ui start      # Launch dashboard"
+echo ""
+
+# Disable the cleanup trap — we succeeded, keep the demo dir
+trap - EXIT

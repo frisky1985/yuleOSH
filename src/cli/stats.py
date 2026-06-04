@@ -46,12 +46,14 @@ def count_source_lines(project_dir: str) -> dict:
     src_dir = Path(project_dir) / "src"
     test_dir = Path(project_dir) / "tests"
 
+    EXCLUDED_DIRS = {"self", ".osh", "__pycache__", ".git", "node_modules", "venv", ".venv"}
+
     for base_dir in [src_dir, test_dir]:
         if not base_dir.exists():
             continue
         for root, dirs, files in os.walk(base_dir):
-            # Skip hidden dirs and caches
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+            # Skip hidden dirs, caches, and dogfooding/OSH artifacts
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS and not d.startswith(".")]
             for f in files:
                 ext = Path(f).suffix
                 stat_info = langs.get(ext)
@@ -93,7 +95,7 @@ def count_source_lines(project_dir: str) -> dict:
 
 
 def count_tests(project_dir: str) -> dict:
-    """Count test files and test functions."""
+    """Count test files and test functions, excluding self/ and .osh/ directories."""
     test_dir = Path(project_dir) / "tests"
     if not test_dir.exists():
         return {"test_files": 0, "test_functions": 0, "test_functions_by_file": {}}
@@ -102,8 +104,9 @@ def count_tests(project_dir: str) -> dict:
     by_file = {}
 
     import re
+    EXCLUDED_DIRS = {"self", ".osh", "__pycache__"}
     for root, dirs, files in os.walk(test_dir):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS and not d.startswith(".")]
         for f in sorted(files):
             if f.endswith(".py") and not f.startswith("_"):
                 filepath = Path(root) / f

@@ -37,6 +37,9 @@ venv/
 # Runtime data (persistent DB, session state)
 .yuleosh/
 
+# Dogfooding — local-only self-referential projects
+self/
+
 # OSH build artifacts (keep .gitkeep markers)
 .osh/ci/
 .osh/evidence/

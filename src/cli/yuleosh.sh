@@ -82,6 +82,65 @@ cmd_ui_start() {
   python3 "$OSH_HOME/src/ui/server.py"
 }
 
+_show_examples() {
+  echo ""
+  echo "📖 yuleOSH — Usage Examples"
+  echo "══════════════════════════════════════════════"
+  echo ""
+  echo "🧰 Getting Started"
+  echo "  osh-cli init my-project"
+  echo "  cd my-project"
+  echo ""
+  echo "  osh-cli template init my-embedded-app"
+  echo "  cd my-embedded-app"
+  echo ""
+  echo "📋 Spec Management"
+  echo "  # Validate your requirements spec"
+  echo "  osh-cli spec validate docs/spec.md"
+  echo ""
+  echo "  # Track requirement changes across versions"
+  echo "  osh-cli spec diff docs/spec.md docs/spec-v2.md"
+  echo ""
+  echo "🚀 Agent Pipeline"
+  echo "  # Full 9-step pipeline: 小明 → Hermes → Claude"
+  echo "  osh-cli pipeline run docs/spec.md"
+  echo ""
+  echo "  # Check session status"
+  echo "  osh-cli pipeline status"
+  echo ""
+  echo "🔬 CI/CD Pipeline"
+  echo "  osh-cli ci run 1    # Dev Verification (unit tests, coverage)"
+  echo "  osh-cli ci run 2    # Integration Verification (cross-compile, static analysis)"
+  echo "  osh-cli ci run 3    # System Verification (E2E, evidence pack)"
+  echo ""
+  echo "📝 Code Review"
+  echo "  osh-cli review auto                       # Auto-review changes"
+  echo "  osh-cli review task add-temp-sensor feature  # Feature review (4 agents)"
+  echo "  osh-cli review task fix-bug bugfix           # Quick bugfix review (2 agents)"
+  echo ""
+  echo "📦 Compliance"
+  echo "  osh-cli evidence pack                     # ASPICE compliance pack"
+  echo ""
+  echo "🌐 Dashboard"
+  echo "  osh-cli ui start                          # Launch http://localhost:8080"
+  echo ""
+  echo "📊 Statistics"
+  echo "  osh-cli stats"
+  echo "  osh-cli stats --json"
+  echo ""
+  echo "📌 End-to-End Workflow"
+  echo "  1. osh-cli template init my-sensor-project"
+  echo "  2. cd my-sensor-project && osh-cli spec validate docs/spec.md"
+  echo "  3. osh-cli ci run 1"
+  echo "  4. osh-cli pipeline run docs/spec.md"
+  echo "  5. osh-cli review auto"
+  echo "  6. osh-cli evidence pack"
+  echo "  7. osh-cli ui start"
+  echo ""
+  echo "📖 Full docs: docs/USAGE.md"
+  echo ""
+}
+
 case "${1:-help}" in
   init) cmd_init "${2:-}";;
   template)
@@ -126,20 +185,35 @@ case "${1:-help}" in
   evidence) shift; cmd_evidence_pack "$@";;
   ui) shift; cmd_ui_start "$@";;
   help|--help|-h)
-    echo "OSH Platform CLI"
-    echo "Usage:"
-    echo "  osh-cli init [dir]                    — Initialize project"
-    echo "  osh-cli template init <name>          — Create project from starter template"
-    echo "  osh-cli stats [--json]                — Show project statistics"
-    echo "  osh-cli spec validate <file>          — Validate OpenSpec"
-    echo "  osh-cli spec diff <o> <n>             — Diff specs"
-    echo "  osh-cli pipeline run <spec>           — Run full pipeline"
-    echo "  osh-cli pipeline status               — Pipeline status"
-    echo "  osh-cli review auto                   — Auto-review changes"
-    echo "  osh-cli review task <name> [kind]     — Review specific task"
-    echo "  osh-cli ci run <layer>                — Run CI layer (1/2/3)"
-    echo "  osh-cli evidence pack                 — Generate compliance pack"
-    echo "  osh-cli ui start                      — Start Dashboard"
+    cmd="${2:-}"
+    if [ "$cmd" = "--examples" ]; then
+      _show_examples
+    else
+      echo "OSH Platform CLI — 嵌入式开发全流程平台"
+      echo "Usage: osh-cli <command> [options]"
+      echo ""
+      echo "Commands:"
+      echo "  init [dir]                    — Initialize project structure"
+      echo "  template init <name>          — Create project from starter template"
+      echo "  stats [--json]                — Show project statistics"
+      echo "  spec validate <file>          — Validate OpenSpec (SHALL/SHOULD/MAY + GIVEN/WHEN/THEN)"
+      echo "  spec diff <old> <new>         — Compare two OpenSpec files"
+      echo "  pipeline run <spec>           — Run full 9-step Agent pipeline"
+      echo "  pipeline status [name]        — Show pipeline session status"
+      echo "  review auto                   — Auto-review all changed files"
+      echo "  review task <name> [kind]     — Review specific task (feature|bugfix|refactor|docs|config)"
+      echo "  ci run <layer>                — Run CI layer (1=Dev|2=Integration|3=System)"
+      echo "  evidence pack                 — Generate ASPICE compliance evidence pack"
+      echo "  ui start                      — Launch Dashboard at http://localhost:8080"
+      echo "  help [--examples]             — Show this help, or usage examples"
+      echo ""
+      echo "Run 'osh-cli help --examples' for real usage examples."
+    fi
     ;;
-  *) echo "Unknown command: $1"; exit 1;;
+  --examples)
+    _show_examples
+    ;;
+  *) echo "Unknown command: $1"
+     echo "Run 'osh-cli help' for usage."
+     exit 1;;
 esac

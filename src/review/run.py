@@ -24,7 +24,8 @@ class ReviewFinding:
         self.line = line
         self.message = message
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
+        """Serialize finding to dictionary."""
         return {
             "severity": self.severity,
             "category": self.category,
@@ -44,7 +45,8 @@ class ReviewResult:
         self.summary = ""
         self.retry_count = 0
 
-    def add_finding(self, finding: ReviewFinding):
+    def add_finding(self, finding: ReviewFinding) -> None:
+        """Add a finding to this review result."""
         self.findings.append(finding)
 
     def decide(self) -> str:
@@ -68,7 +70,8 @@ class ReviewResult:
 
         return self.status
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
+        """Serialize review result to dictionary."""
         return {
             "task": self.task_name,
             "reviewer": self.reviewer,
@@ -97,7 +100,8 @@ class ReviewSession:
         self.reviews: list[ReviewResult] = []
         self.decision: Optional[str] = None
 
-    def add_review(self, result: ReviewResult):
+    def add_review(self, result: ReviewResult) -> None:
+        """Add an agent review result to this session."""
         self.reviews.append(result)
 
     def final_decision(self) -> str:
@@ -120,13 +124,15 @@ class ReviewSession:
         self.status = "completed"
         return self.decision
 
-    def save(self):
+    def save(self) -> None:
+        """Persist review session to disk as JSON."""
         sdir = Path(self.project_dir) / ".osh" / "reviews" / self.task_name
         sdir.mkdir(parents=True, exist_ok=True)
         with open(sdir / "review-session.json", "w") as f:
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
+        """Serialize review session to dictionary."""
         return {
             "task": self.task_name,
             "created_at": self.created_at,

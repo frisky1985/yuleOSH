@@ -52,12 +52,14 @@ class PipelineSession:
         self.session_dir = self._ensure_session_dir()
 
     def _ensure_session_dir(self) -> Path:
+        """Ensure the session directory exists and return its path."""
         base = Path(os.environ.get("OSH_HOME", "."))
         sdir = base / ".osh" / "sessions" / self.name
         sdir.mkdir(parents=True, exist_ok=True)
         return sdir
 
-    def add_step(self, step_name: str, agent: str, action: str):
+    def add_step(self, step_name: str, agent: str, action: str) -> dict:
+        """Add a new step to the pipeline and return it."""
         step = {
             "step": len(self.steps) + 1,
             "name": step_name,
@@ -72,14 +74,16 @@ class PipelineSession:
         self.steps.append(step)
         return step
 
-    def start_step(self, step_idx: int):
+    def start_step(self, step_idx: int) -> None:
+        """Mark a step as running and record the start timestamp."""
         if step_idx < len(self.steps):
             self.steps[step_idx]["status"] = "running"
             self.steps[step_idx]["started_at"] = datetime.now().isoformat()
             self.current_step = step_idx
             self._save()
 
-    def complete_step(self, step_idx: int, output_path: str):
+    def complete_step(self, step_idx: int, output_path: str) -> None:
+        """Mark a step as completed with its output path."""
         if step_idx < len(self.steps):
             self.steps[step_idx]["status"] = "completed"
             self.steps[step_idx]["completed_at"] = datetime.now().isoformat()
@@ -87,7 +91,8 @@ class PipelineSession:
             self.updated_at = datetime.now().isoformat()
             self._save()
 
-    def fail_step(self, step_idx: int, error: str):
+    def fail_step(self, step_idx: int, error: str) -> None:
+        """Fail a step, record the error, and set session status to failed."""
         if step_idx < len(self.steps):
             self.steps[step_idx]["status"] = "failed"
             self.steps[step_idx]["completed_at"] = datetime.now().isoformat()
@@ -97,11 +102,13 @@ class PipelineSession:
             self.updated_at = datetime.now().isoformat()
             self._save()
 
-    def set_artifact(self, key: str, path: str):
+    def set_artifact(self, key: str, path: str) -> None:
+        """Register a generated artifact and persist session state."""
         self.artifacts[key] = str(path)
         self._save()
 
-    def _save(self):
+    def _save(self) -> None:
+        """Persist session state to disk (JSON) and SQLite store."""
         data = self.to_dict()
         with open(self.session_dir / "session.json", "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -113,6 +120,7 @@ class PipelineSession:
                 pass
 
     def to_dict(self) -> dict:
+        """Serialize session to a dictionary for storage."""
         return {
             "name": self.name,
             "spec_path": self.spec_path,
@@ -169,33 +177,106 @@ def step_spec_check(session: PipelineSession) -> str:
         raise RuntimeError(f"Spec validation subprocess failed: {e}")
 
 
+def _read_spec_requirements(spec_path: str) -> list[dict]:
+    """Read requirements from a spec file. Each requirement is a dict with name and shall_statements."""
+    requirements = []
+    try:
+        path = Path(spec_path)
+        if not path.exists():
+            return requirements
+        content = path.read_text()
+        lines = content.split("\n")
+        current_name = None
+        current_shalls = []
+        in_requirement = False
+        for line in lines:
+            stripped = line.strip()
+            # Detect requirement header: ### Req-XXX:
+            if stripped.startswith("### ") and "Req-" in stripped:
+                if current_name:
+                    requirements.append({
+                        "name": current_name,
+                        "shall_statements": current_shalls
+                    })
+                current_name = stripped.replace("### ", "")
+                current_shalls = []
+                in_requirement = True
+            elif in_requirement and stripped.startswith("-") and ("SHALL" in stripped or "SHOULD" in stripped):
+                current_shalls.append(stripped)
+            elif in_requirement and stripped.startswith("### ") and "Req-" not in stripped:
+                # End of requirement, next section (Scenario or other)
+                in_requirement = False
+        if current_name:
+            requirements.append({
+                "name": current_name,
+                "shall_statements": current_shalls
+            })
+    except Exception:
+        pass
+    return requirements
+
+
+def _count_spec_scenarios(spec_path: str) -> list[str]:
+    """Read GIVEN/WHEN/THEN scenarios from a spec file."""
+    scenarios = []
+    try:
+        path = Path(spec_path)
+        if not path.exists():
+            return scenarios
+        content = path.read_text()
+        for line in content.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("### ") and ("GIVEN" in stripped or "WHEN" in stripped or "THEN" in stripped):
+                scenarios.append(stripped.replace("### ", ""))
+    except Exception:
+        pass
+    return scenarios
+
+
 def step_super_analysis(session: PipelineSession) -> str:
-    """Step 1: 小明 — S.U.P.E.R 分析"""
+    """Step 1: 小明 — S.U.P.E.R analysis with real spec data."""
     try:
         print("  📊 [小明] Generating S.U.P.E.R analysis...")
         log.info("Generating S.U.P.E.R analysis")
         
         spec_name = Path(session.spec_path).stem
+        requirements = _read_spec_requirements(session.spec_path)
+        scenarios = _count_spec_scenarios(session.spec_path)
+        
+        total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
+        req_list = "\n".join(f"  - {r['name']} ({len(r.get('shall_statements', []))} SHALLs)" for r in requirements[:15])
         
         template = f"""# S.U.P.E.R Analysis: {spec_name}
 
+> Source spec: {session.spec_path}
+> Requirements found: {len(requirements)}
+> Total SHALL statements: {total_shall}
+> Scenarios found: {len(scenarios)}
+
 ## S — Situation
-_Context and current state_
+Project: {spec_name}
+Spec contains {len(requirements)} requirement(s) with {total_shall} SHALL statement(s) and {len(scenarios)} scenario(s).
 
 ## U — Understanding
-_Deep needs and pain points_
+Key requirements derived from spec:
+{req_list}
 
 ## P — Problem
-_Core problem definition_
+Core objectives defined by the {len(requirements)} requirements ({total_shall} SHALLs) above.
 
 ## E — Execution
-_Execution plan and approach_
+Pipeline execution across {len(PIPELINE_STEPS)} steps:
+"""
+        for step_key, agent, step_name, _handler in PIPELINE_STEPS:
+            template += f"  - [{agent}] {step_name}\n"
 
+        template += f"""
 ## R — Resources
-_Resource assessment_
+- Source files in project: discovered during architecture step
+- Test framework: pytest (Python) / go test (Go)
 
 ## P — Priority
-_Priority judgment (P0/P1/P2)_
+P0 — Core requirements (SHALL): {len(requirements)}
 """
         out_path = session.session_dir / "startup-analysis.md"
         try:
@@ -203,7 +284,7 @@ _Priority judgment (P0/P1/P2)_
         except OSError as e:
             log.error(f"Cannot write analysis file: {e}")
             raise RuntimeError(f"Cannot write analysis file: {e}")
-        print(f"  ✅ [小明] S.U.P.E.R template generated at {out_path}")
+        print(f"  ✅ [小明] S.U.P.E.R analysis generated at {out_path}")
         log.info(f"S.U.P.E.R analysis saved to {out_path}")
         return str(out_path)
     except Exception as e:
@@ -212,10 +293,21 @@ _Priority judgment (P0/P1/P2)_
 
 
 def step_hermes_prd(session: PipelineSession) -> str:
-    """Step 2: Hermes — 产品需求分析"""
+    """Step 2: Hermes — PRD with mapped requirements from spec."""
     try:
         print("  🔮 [Hermes] Writing PRD...")
         log.info("Writing PRD")
+        
+        requirements = _read_spec_requirements(session.spec_path)
+        scenarios = _count_spec_scenarios(session.spec_path)
+        
+        total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
+        req_table = "\n".join(
+            f"- [ ] {r['name']}"
+            + ("\n    " + "\n    ".join(s for s in r.get('shall_statements', [])[:5]) if r.get('shall_statements') else "")
+            for r in requirements
+        )
+        scenario_list = "\n".join(f"- {s}" for s in scenarios)
         
         out_path = session.session_dir / "prd.md"
         content = f"""# PRD: {session.name}
@@ -226,14 +318,19 @@ def step_hermes_prd(session: PipelineSession) -> str:
 ## Overview
 Based on S.U.P.E.R analysis and OpenSpec validation.
 
-## Requirements Coverage
-_Each SHALL statement mapped to implementation plan_
+## Requirements Coverage ({len(requirements)} total)
+Each SHALL statement mapped to implementation plan:
+{req_table}
 
-## Scenarios
-_Each GIVEN/WHEN/THEN mapped to test strategy_
+## Scenarios ({len(scenarios)} total)
+Each GIVEN/WHEN/THEN mapped to test strategy:
+{scenario_list}
 
 ## Delivery Criteria
-_Criteria for completion_
+- All SHALL requirements implemented ({len(requirements)})
+- All scenarios passing ({len(scenarios)})
+- CI/CD pipeline green
+- Evidence pack generated
 """
         try:
             out_path.write_text(content)
@@ -288,27 +385,101 @@ def step_internal_review(session: PipelineSession) -> str:
 
 
 def step_claude_arch(session: PipelineSession) -> str:
-    """Step 4: Claude — 架构设计"""
+    """Step 4: Claude — Architecture design with real project analysis.
+
+    Scans the project directory to discover actual directories, source files,
+    and tech stack, filling the architecture template with real data.
+    """
     try:
         print("  💻 [Claude] Designing architecture...")
         log.info("Designing architecture")
-        
+
+        # Discover project structure
+        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+        src_dir = project_dir / "src"
+
+        directories = []
+        source_files = []
+        tech_stack = set()
+
+        if src_dir.exists():
+            for root, dirs, files in os.walk(src_dir):
+                # Skip hidden dirs and caches
+                dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+                rel_dir = Path(root).relative_to(project_dir)
+                directories.append(str(rel_dir))
+                for f in files:
+                    if f.endswith((".py", ".sh", ".html", ".js", ".css", ".ts", ".go", ".rs")):
+                        source_files.append(str(Path(rel_dir) / f))
+                        ext = Path(f).suffix
+                        if ext == ".py":
+                            tech_stack.add("Python")
+                        elif ext == ".go":
+                            tech_stack.add("Go")
+                        elif ext == ".rs":
+                            tech_stack.add("Rust")
+                        elif ext in (".html", ".js", ".css", ".ts"):
+                            tech_stack.add("Web (HTML/JS/CSS)")
+                        elif ext == ".sh":
+                            tech_stack.add("Shell")
+
+        # Read spec for business domain hints
+        spec_requirements = []
+        spec_path = Path(session.spec_path)
+        if spec_path.exists():
+            try:
+                content = spec_path.read_text()
+                for line in content.split("\n"):
+                    stripped = line.strip()
+                    if stripped.startswith("### ") and "SHALL" not in stripped and "SHOULD" not in stripped:
+                        spec_requirements.append(stripped.replace("### ", "").split(":")[0].strip())
+            except Exception:
+                pass
+
+        tech_stack_str = ", ".join(sorted(tech_stack)) if tech_stack else "Python"
+
         out_path = session.session_dir / "architecture.md"
         content = f"""# Architecture: {session.name}
 
-> Based on spec + PRD
+> Generated by Claude Architecture Analysis
+> Spec: {session.spec_path}
 
-## Bounded Contexts
-_Context mapping from DDD analysis_
+## Project Overview
+- **Tech Stack**: {tech_stack_str}
+- **Source Directories**: {len(directories)}
+- **Source Files**: {len(source_files)}
 
-## Aggregates
-_Key aggregates and entities_
+## Directory Structure
+"""
+        for d in sorted(directories):
+            content += f"- `{d}/`\n"
 
-## Domain Events
-_Events that trigger cross-context communication_
+        content += f"""
+## Source Files ({len(source_files)})
+"""
+        for sf in sorted(source_files)[:30]:  # Show first 30 files
+            content += f"- `{sf}`\n"
 
-## Key Decisions
-_Architecture Decision Records_
+        if len(source_files) > 30:
+            content += f"- ... and {len(source_files) - 30} more file(s)\n"
+
+        content += f"""
+## Identified Bounded Contexts
+"""
+        for req in spec_requirements[:10]:
+            content += f"- {req}\n"
+
+        content += f"""
+## Architecture Decision Records
+### ADR-001: Tech Stack
+**Status**: Accepted  
+**Context**: Based on discovered source files and project configuration.  
+**Decision**: Use {tech_stack_str} as primary implementation languages.  
+**Consequences**: Standardises tooling and CI configuration around this stack.
+
+## Key Design Considerations
+- {len(source_files)} source files discovered across {len(directories)} directories
+- Total project scope: {session.spec_path}
 """
         try:
             out_path.write_text(content)
@@ -324,22 +495,80 @@ _Architecture Decision Records_
 
 
 def step_claude_dev(session: PipelineSession) -> str:
-    """Step 5: Claude — 开发"""
+    """Step 5: Claude — Development log with real project metrics.
+
+    Checks git log for recent changes, counts lines of code,
+    and writes meaningful development metadata.
+    """
     try:
         print("  💻 [Claude] Development...")
         log.info("Running development step")
-        
+
+        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+
+        # Gather git stats
+        git_log = ""
+        git_commits = 0
+        try:
+            result = subprocess.run(
+                ["git", "log", "--oneline", "-10", "--format=%h %s (%ar)"],
+                capture_output=True, text=True, timeout=10, cwd=project_dir
+            )
+            if result.returncode == 0:
+                git_log = result.stdout.strip()
+                git_commits = len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
+        except Exception:
+            git_log = "(not a git repository or git not available)"
+
+        # Count lines in src and tests
+        total_lines = 0
+        src_lines = 0
+        test_lines = 0
+        src_files = list(project_dir.glob("src/**/*.py")) + list(project_dir.glob("src/**/*.sh")) + list(project_dir.glob("src/**/*.html"))
+        test_files = list(project_dir.glob("tests/**/*.py"))
+
+        for f in src_files:
+            try:
+                n = len(f.read_text().splitlines())
+                src_lines += n
+                total_lines += n
+            except Exception:
+                pass
+        for f in test_files:
+            try:
+                n = len(f.read_text().splitlines())
+                test_lines += n
+                total_lines += n
+            except Exception:
+                pass
+
         out_path = session.session_dir / "development-log.md"
         content = f"""# Development Log: {session.name}
 
-## Tasks
-_Task breakdown from architecture design_
+## Project Metrics
+- **Total Lines of Code**: {total_lines}
+- **Source Lines**: {src_lines}
+- **Test Lines**: {test_lines}
+- **Source Files**: {len(src_files)}
+- **Test Files**: {len(test_files)}
 
-## Implementation
-_Per-task implementation details_
+## Recent Git Activity
+- **Recent commits (last 10)**: {git_commits}
 
-## Self-Test Results
-_TDD RED→GREEN→REFACTOR log_
+```
+{git_log}
+```
+
+## Task Breakdown
+From architecture: spec at `{session.spec_path}`
+
+### Implementation Summary
+- Source code: {src_lines} lines across {len(src_files)} files
+- Test code: {test_lines} lines across {len(test_files)} files
+- Test-to-source ratio: {test_lines/src_lines:.1%} if src_lines > 0 else "N/A"
+
+## TDD Status
+Spec validation and evidence collection available in session artifacts.
 """
         try:
             out_path.write_text(content)
@@ -355,22 +584,132 @@ _TDD RED→GREEN→REFACTOR log_
 
 
 def step_claude_test(session: PipelineSession) -> str:
-    """Step 6: Claude — 自测"""
+    """Step 6: Claude — Self-test with real test runner output.
+
+    Runs pytest or go test to get actual test results, parse them,
+    and write a meaningful test report.
+    """
     try:
         print("  🧪 [Claude] Self-testing...")
         log.info("Running self-test step")
-        
+
+        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+
+        # Try pytest first
+        test_output = ""
+        test_summary = ""
+        passed = 0
+        failed = 0
+        total = 0
+        is_python = True
+
+        # Check if go.mod exists for Go project
+        has_go = (project_dir / "go.mod").exists()
+
+        if has_go:
+            is_python = False
+            try:
+                result = subprocess.run(
+                    ["go", "test", "./...", "-count=1"],
+                    capture_output=True, text=True, timeout=120, cwd=project_dir
+                )
+                test_output = result.stdout + "\n" + result.stderr
+                # Parse: "ok  package 0.5s" or "FAIL  package 0.5s"
+                for line in result.stdout.split("\n"):
+                    if line.startswith("ok "):
+                        passed += 1
+                        total += 1
+                    elif line.startswith("FAIL "):
+                        failed += 1
+                        total += 1
+                test_summary = f"Go test: {total} packages, {passed} passed, {failed} failed"
+            except FileNotFoundError:
+                test_summary = "Go not installed — tests skipped"
+            except subprocess.TimeoutExpired:
+                test_summary = "Go tests timed out"
+            except Exception as e:
+                test_summary = f"Go test error: {e}"
+        else:
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-m", "pytest", "tests/", "-q", "--ignore=tests/test_e2e.py"],
+                    capture_output=True, text=True, timeout=120, cwd=project_dir
+                )
+                test_output = result.stdout + "\n" + result.stderr
+                # Parse pytest output like "33 passed in 0.03s"
+                for line in result.stdout.split("\n"):
+                    line = line.strip()
+                    if "passed" in line or "failed" in line:
+                        test_summary = line
+                        import re
+                        m = re.search(r"(\d+) passed", line)
+                        if m:
+                            passed = int(m.group(1))
+                        m = re.search(r"(\d+) failed", line)
+                        if m:
+                            failed = int(m.group(1))
+                        total = passed + failed
+                if not test_summary:
+                    test_summary = f"pytest completed (exit code {result.returncode})"
+            except FileNotFoundError:
+                test_summary = "pytest not installed — tests skipped"
+            except subprocess.TimeoutExpired:
+                test_summary = "Tests timed out"
+            except Exception as e:
+                test_summary = f"Test error: {e}"
+
+        # Read spec scenarios for mapping
+        spec_scenarios = []
+        spec_path = Path(session.spec_path)
+        if spec_path.exists():
+            try:
+                content = spec_path.read_text()
+                in_scenario = False
+                current_scenario = ""
+                for line in content.split("\n"):
+                    if line.strip().startswith("### ") and "GIVEN" in line.upper():
+                        if current_scenario:
+                            spec_scenarios.append(current_scenario)
+                        current_scenario = line.strip().replace("### ", "")
+                        in_scenario = True
+                    elif in_scenario and line.strip():
+                        pass
+                if current_scenario:
+                    spec_scenarios.append(current_scenario)
+            except Exception:
+                pass
+
+        status_icon = "✅" if failed == 0 else "❌"
+        runner = "pytest" if is_python else "go test"
+
         out_path = session.session_dir / "self-test-report.md"
         content = f"""# Self-Test Report: {session.name}
 
-## Test Results
-_PASS/FAIL per scenario_
+## Test Runner
+- **Runner**: {runner}
+- **Total Tests**: {total}
+- **Passed**: {passed}
+- **Failed**: {failed}
+- **Status**: {status_icon}
 
-## Coverage
-_Code coverage metrics_
+## Test Summary
+```
+{test_summary}
+```
 
-## Evidence
-_Test evidence per scenario from spec_
+## Test Output
+```
+{test_output[:2000]}
+```
+
+## Spec Scenarios ({len(spec_scenarios)})
+"""
+        for s in spec_scenarios:
+            content += f"- {s}\n"
+
+        content += f"""
+## Coverage Note
+Run CI Layer 1 to generate detailed coverage metrics for compliance.
 """
         try:
             out_path.write_text(content)
@@ -499,6 +838,10 @@ def run_pipeline(spec_path: str, name: Optional[str] = None):
             log.info(f"Step {step_idx+1}/{len(PIPELINE_STEPS)}: [{agent}] {step_name}")
             
             try:
+                # Set status to completed before the final report step
+                # so the report captures the correct status
+                if step_key == "final-report":
+                    session.status = "completed"
                 output_path = handler(session)
                 session.complete_step(step_idx, str(output_path))
                 session.set_artifact(step_key, str(output_path))
@@ -513,7 +856,6 @@ def run_pipeline(spec_path: str, name: Optional[str] = None):
                 break
         
         if session.status != "failed":
-            session.status = "completed"
             session._save()
         
         print(f"\n{'='*50}")
@@ -534,8 +876,12 @@ def run_pipeline(spec_path: str, name: Optional[str] = None):
         sys.exit(1)
 
 
-def status_pipeline(name: Optional[str] = None):
-    """Show pipeline status."""
+def status_pipeline(name: Optional[str] = None) -> None:
+    """Display pipeline session status(es).
+
+    Args:
+        name: Optional session name. If None, lists all sessions.
+    """
     base = Path(os.environ.get("OSH_HOME", ".")) / ".osh" / "sessions"
     
     sessions = []
