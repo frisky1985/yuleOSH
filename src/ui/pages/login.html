@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔱 OSH-Fusion — Login</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --red: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px;
+  width: 420px;
+  max-width: 90vw;
+}
+.login-card h1 { font-size: 24px; font-weight: 800; margin-bottom: 4px; text-align: center; }
+.login-card h1 .green { color: var(--green); }
+.login-card h1 .blue { color: var(--blue); }
+.login-card .subtitle { text-align: center; color: var(--text2); font-size: 14px; margin: 8px 0 24px; }
+.login-card .msg { color: var(--red); font-size: 13px; margin-bottom: 12px; min-height: 20px; text-align: center; }
+.login-card .msg.success { color: var(--green); }
+.login-card label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text2); }
+.login-card input {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s;
+  margin-bottom: 16px;
+}
+.login-card input:focus { border-color: var(--green); }
+.login-card input::placeholder { color: var(--text2); }
+.login-card button {
+  width: 100%;
+  padding: 12px;
+  background: var(--green);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.login-card button:hover { opacity: .85; }
+.login-card .toggle { text-align: center; margin-top: 16px; font-size: 13px; }
+.login-card .toggle a { color: var(--blue); cursor: pointer; text-decoration: none; }
+.login-card .toggle a:hover { text-decoration: underline; }
+.login-card .hint { font-size: 11px; color: var(--text2); text-align: center; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="login-card">
+  <h1><span class="green">🔱 OSH</span><span class="blue">-Fusion</span></h1>
+  <p class="subtitle" id="subtitle">Sign in to your organization</p>
+  <div class="msg" id="msg">{msg}</div>
+  <form id="authForm" onsubmit="return handleAuth(event)">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" placeholder="you@example.com" autofocus required>
+
+    <label for="invite_code" id="inviteLabel">Invite Code <span style="color:var(--text2);font-weight:400;">(optional — leave blank to create a new org)</span></label>
+    <input type="text" id="invite_code" name="invite_code" placeholder="org-slug">
+
+    <button type="submit" id="submitBtn">→ Continue</button>
+  </form>
+  <div class="toggle">
+    <span id="toggleText">First time?</span>
+  </div>
+  <div class="hint">Enter your email to sign in or create a new organization</div>
+</div>
+
+<script>
+let mode = 'login';
+
+async function handleAuth(e) {
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const invite_code = document.getElementById('invite_code').value.trim();
+  const msgEl = document.getElementById('msg');
+  const btn = document.getElementById('submitBtn');
+
+  if (!email) {
+    msgEl.textContent = 'Email is required';
+    return false;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Please wait...';
+
+  try {
+    const resp = await fetch('/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, invite_code }),
+    });
+    const data = await resp.json();
+
+    if (resp.ok) {
+      if (data.redirect) {
+        window.location.href = data.redirect;
+      } else if (data.token) {
+        localStorage.setItem('osh_token', data.token);
+        window.location.href = data.redirect || '/project/select';
+      }
+    } else {
+      msgEl.textContent = data.error || 'Something went wrong';
+      btn.disabled = false;
+      btn.textContent = '→ Continue';
+    }
+  } catch (err) {
+    msgEl.textContent = 'Network error — please try again';
+    btn.disabled = false;
+    btn.textContent = '→ Continue';
+  }
+  return false;
+}
+</script>
+</body>
+</html>

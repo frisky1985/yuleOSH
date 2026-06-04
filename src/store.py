@@ -34,7 +34,11 @@ class Store:
         """Clear all instances (for testing)."""
         cls._instances = {}
 
+    # Current migration version — bump to trigger new table creation
+    _MIGRATION_VERSION = 2
+
     def _migrate(self):
+        # Create or update meta table for tracking migration version
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS pipelines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +69,185 @@ class Store:
             );
         """)
         self.conn.commit()
+
+        # Multi-tenant auth tables (migration v2+)
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS _meta (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
+            CREATE TABLE IF NOT EXISTS organizations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                slug TEXT UNIQUE NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                org_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (org_id) REFERENCES organizations(id),
+                UNIQUE(org_id, email)
+            );
+            CREATE TABLE IF NOT EXISTS org_projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                org_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (org_id) REFERENCES organizations(id),
+                UNIQUE(org_id, slug)
+            );
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+        """)
+        self.conn.commit()
+
+        # Record migration version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO _meta (key, value) VALUES ('migration_version', ?)",
+            (str(self._MIGRATION_VERSION),)
+        )
+        self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Multi-tenant: Organizations
+    # ------------------------------------------------------------------
+
+    def create_organization(self, name: str, slug: str) -> dict:
+        now = datetime.now().isoformat()
+        cur = self.conn.execute(
+            "INSERT INTO organizations (name, slug, created_at) VALUES (?, ?, ?)",
+            (name, slug, now)
+        )
+        self.conn.commit()
+        return {"id": cur.lastrowid, "name": name, "slug": slug, "created_at": now}
+
+    def get_organization(self, slug: str) -> Optional[dict]:
+        cur = self.conn.execute("SELECT * FROM organizations WHERE slug=?", (slug,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_organization_by_id(self, org_id: int) -> Optional[dict]:
+        cur = self.conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def list_organizations(self) -> list[dict]:
+        cur = self.conn.execute("SELECT * FROM organizations ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Multi-tenant: Users
+    # ------------------------------------------------------------------
+
+    def create_user(self, org_id: int, email: str, role: str = "member") -> dict:
+        now = datetime.now().isoformat()
+        cur = self.conn.execute(
+            "INSERT INTO users (org_id, email, role, created_at) VALUES (?, ?, ?, ?)",
+            (org_id, email, role, now)
+        )
+        self.conn.commit()
+        return {"id": cur.lastrowid, "org_id": org_id, "email": email, "role": role, "created_at": now}
+
+    def get_user(self, org_id: int, email: str) -> Optional[dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM users WHERE org_id=? AND email=?", (org_id, email)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_user_by_id(self, user_id: int) -> Optional[dict]:
+        cur = self.conn.execute("SELECT * FROM users WHERE id=?", (user_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def list_users(self, org_id: int) -> list[dict]:
+        cur = self.conn.execute(
+            "SELECT id, email, role, created_at FROM users WHERE org_id=? ORDER BY created_at",
+            (org_id,)
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Multi-tenant: Org-scoped Projects
+    # ------------------------------------------------------------------
+
+    def create_org_project(self, org_id: int, name: str, slug: str, description: str = "") -> dict:
+        now = datetime.now().isoformat()
+        cur = self.conn.execute(
+            "INSERT INTO org_projects (org_id, name, slug, description, created_at) VALUES (?, ?, ?, ?, ?)",
+            (org_id, name, slug, description, now)
+        )
+        self.conn.commit()
+        return {"id": cur.lastrowid, "org_id": org_id, "name": name, "slug": slug,
+                "description": description, "created_at": now}
+
+    def get_org_project(self, org_id: int, slug: str) -> Optional[dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM org_projects WHERE org_id=? AND slug=?", (org_id, slug)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_org_project_by_id(self, project_id: int) -> Optional[dict]:
+        cur = self.conn.execute("SELECT * FROM org_projects WHERE id=?", (project_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def list_org_projects(self, org_id: int) -> list[dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM org_projects WHERE org_id=? ORDER BY created_at DESC", (org_id,)
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Multi-tenant: Sessions
+    # ------------------------------------------------------------------
+
+    def create_session(self, user_id: int, token: str, ttl_hours: int = 24) -> dict:
+        now = datetime.now()
+        expires = datetime.fromtimestamp(now.timestamp() + ttl_hours * 3600)
+        now_str = now.isoformat()
+        exp_str = expires.isoformat()
+        self.conn.execute(
+            "INSERT INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (user_id, token, now_str, exp_str)
+        )
+        self.conn.commit()
+        return {"user_id": user_id, "token": token, "created_at": now_str, "expires_at": exp_str}
+
+    def get_session(self, token: str) -> Optional[dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM user_sessions WHERE token=? AND expires_at > datetime('now')",
+            (token,)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def delete_session(self, token: str):
+        self.conn.execute("DELETE FROM user_sessions WHERE token=?", (token,))
+        self.conn.commit()
+
+    def cleanup_expired_sessions(self):
+        self.conn.execute(
+            "DELETE FROM user_sessions WHERE expires_at <= datetime('now')"
+        )
+        self.conn.commit()
+
+    def get_migration_version(self) -> int:
+        cur = self.conn.execute("SELECT value FROM _meta WHERE key='migration_version'")
+        row = cur.fetchone()
+        return int(row["value"]) if row else 0
 
     def save_pipeline(self, name: str, data: dict):
         self.conn.execute("""INSERT OR REPLACE INTO pipelines 
