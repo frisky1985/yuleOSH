@@ -1,0 +1,6 @@
+.osh/
+__pycache__/
+.coverage
+coverage.json
+.pytest_cache/
+*.pyc
