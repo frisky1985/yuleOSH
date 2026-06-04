@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Keys - OSH-Fusion Dashboard</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --purple: #8b5cf6;
+  --red: #ef4444;
+  --cyan: #06b6d4;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 { font-size: 20px; font-weight: 800; }
+.header h1 span.green { color: var(--green); }
+.header h1 span.blue { color: var(--blue); }
+.header h1 span.yellow { color: var(--yellow); }
+.header .nav-links { display: flex; align-items: center; gap: 16px; }
+.header .nav-links a { color: var(--text2); text-decoration: none; font-size: 13px; transition: color .15s; }
+.header .nav-links a:hover { color: var(--green); }
+.header .nav-links a.active { color: var(--green); border-bottom: 2px solid var(--green); padding-bottom: 2px; }
+
+.container { padding: 24px 32px; max-width: 1200px; margin: 0 auto; }
+
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+.page-header h2 { font-size: 22px; font-weight: 700; }
+.page-header p { color: var(--text2); font-size: 13px; margin-top: 4px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 20px; border-radius: 8px; border: 1px solid var(--border);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all .15s; background: var(--surface2); color: var(--text);
+}
+.btn:hover { border-color: var(--green); }
+.btn-primary { background: var(--green); color: #000; border-color: var(--green); }
+.btn-primary:hover { background: #059669; border-color: #059669; }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover { background: rgba(239,68,68,.15); }
+.btn-sm { padding: 4px 12px; font-size: 12px; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--text2); }
+.btn-ghost:hover { color: var(--text); }
+
+/* Table */
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; padding: 12px 18px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  color: var(--text2); border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+tbody td {
+  padding: 12px 18px; font-size: 13px;
+  border-bottom: 1px solid rgba(30,41,59,.5);
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(16,185,129,.03); }
+
+.prefix-cell { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .5px; color: var(--cyan); }
+.label-cell { font-weight: 600; }
+.date-cell { color: var(--text2); font-size: 12px; }
+.status-cell { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.status-dot.active { background: var(--green); }
+.status-dot.revoked { background: var(--red); }
+.actions-cell { text-align: right; }
+
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--text2);
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* Modal overlay */
+.modal-overlay {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 32px;
+  max-width: 520px;
+  width: 90%;
+  box-shadow: 0 16px 48px rgba(0,0,0,.5);
+}
+.modal h3 { font-size: 18px; margin-bottom: 8px; }
+.modal p { color: var(--text2); font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.form-group input {
+  width: 100%; padding: 10px 14px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 14px;
+  outline: none; transition: border-color .15s;
+}
+.form-group input:focus { border-color: var(--green); }
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+/* Key reveal box */
+.key-reveal {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.key-reveal .key-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--green);
+  user-select: all;
+  background: rgba(16,185,129,.08);
+  padding: 10px 12px;
+  border-radius: 6px;
+  line-height: 1.5;
+}
+.key-reveal .warning {
+  font-size: 12px;
+  color: var(--yellow);
+  margin-top: 8px;
+}
+.key-reveal .copy-btn {
+  margin-top: 10px;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--surface2); border: 1px solid var(--green); border-radius: 10px;
+  padding: 14px 20px; font-size: 13px; box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  opacity: 0; transform: translateY(20px); transition: all .3s;
+  z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { border-color: var(--red); }
+
+/* Confirm dialog */
+.confirm-text { color: var(--text); font-size: 14px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span class="green">🔱 OSH</span><span class="blue">-Fusion</span></h1>
+  <div class="nav-links">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/apikeys" class="active">API Keys</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="page-header">
+    <div>
+      <h2>🔑 API Keys</h2>
+      <p>Manage API keys for programmatic access to the OSH platform</p>
+    </div>
+    <button class="btn btn-primary" onclick="showGenerateModal()">+ Generate New Key</button>
+  </div>
+
+  <!-- Keys Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Key Prefix</th>
+          <th>Label</th>
+          <th>Created</th>
+          <th>Last Used</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="keysBody">
+        <tr>
+          <td colspan="6">
+            <div class="empty-state">
+              <div class="icon">🔑</div>
+              <p>Loading keys...</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Generate Key Modal -->
+<div class="modal-overlay" id="generateModal">
+  <div class="modal">
+    <h3>Generate New API Key</h3>
+    <p>Create a new API key for programmatic access.</p>
+
+    <div class="form-group">
+      <label for="keyLabel">Label</label>
+      <input type="text" id="keyLabel" placeholder="e.g. CI Pipeline, Production Deploy, Dev Tool" autocomplete="off">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="hideGenerateModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="generateKey()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- Key Reveal Modal -->
+<div class="modal-overlay" id="revealModal">
+  <div class="modal">
+    <h3>🎉 API Key Generated</h3>
+    <p>Copy this key now. You won't be able to see it again!</p>
+
+    <div class="key-reveal">
+      <div class="key-value" id="newKeyValue"></div>
+      <p class="warning">⚠️ This is the only time the full key will be shown.</p>
+      <button class="btn btn-sm copy-btn" onclick="copyNewKey()">📋 Copy to Clipboard</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="hideRevealModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Revoke Confirm Modal -->
+<div class="modal-overlay" id="revokeModal">
+  <div class="modal">
+    <h3>⚠️ Revoke API Key</h3>
+    <div class="confirm-text" id="revokeInfo">
+      Are you sure you want to revoke this API key?<br>
+      Any services using this key will lose access immediately.
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideRevokeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmRevoke()">Revoke Key</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let pendingRevokeId = null;
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = type === 'error' ? 'var(--red)' : 'var(--green)';
+  t.className = 'toast show';
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function showGenerateModal() {
+  document.getElementById('keyLabel').value = '';
+  document.getElementById('generateModal').classList.add('show');
+}
+
+function hideGenerateModal() {
+  document.getElementById('generateModal').classList.remove('show');
+}
+
+function hideRevealModal() {
+  document.getElementById('revealModal').classList.remove('show');
+}
+
+function showRevokeModal(keyId, label) {
+  pendingRevokeId = keyId;
+  document.getElementById('revokeInfo').innerHTML =
+    'Are you sure you want to revoke <strong>' + label + '</strong>?<br>' +
+    'Any services using this key will lose access immediately.';
+  document.getElementById('revokeModal').classList.add('show');
+}
+
+function hideRevokeModal() {
+  pendingRevokeId = null;
+  document.getElementById('revokeModal').classList.remove('show');
+}
+
+async function generateKey() {
+  const label = document.getElementById('keyLabel').value.trim();
+  if (!label) {
+    showToast('Please enter a label', 'error');
+    return;
+  }
+  if (label.length > 100) {
+    showToast('Label must be 100 characters or fewer', 'error');
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/v1/apikeys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    const data = await r.json();
+    if (!data.ok) {
+      showToast('Error: ' + (data.error || 'unknown'), 'error');
+      return;
+    }
+
+    hideGenerateModal();
+
+    // Show the full key once
+    document.getElementById('newKeyValue').textContent = data.data.key;
+    document.getElementById('revealModal').classList.add('show');
+
+    showToast('🔑 API key generated successfully');
+    loadKeys();
+  } catch (e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
+}
+
+function copyNewKey() {
+  const keyEl = document.getElementById('newKeyValue');
+  const text = keyEl.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('📋 Key copied to clipboard');
+  }).catch(() => {
+    // Fallback select
+    const range = document.createRange();
+    range.selectNodeContents(keyEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    showToast('Select the key and copy (Ctrl+C)');
+  });
+}
+
+async function confirmRevoke() {
+  if (pendingRevokeId === null) return;
+
+  try {
+    const r = await fetch('/api/v1/apikeys/' + pendingRevokeId, {
+      method: 'DELETE',
+    });
+    const data = await r.json();
+    if (!data.ok) {
+      showToast('Error: ' + (data.error || 'unknown'), 'error');
+      return;
+    }
+
+    hideRevokeModal();
+    showToast('🔴 Key revoked');
+    loadKeys();
+  } catch (e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
+}
+
+async function loadKeys() {
+  const tbody = document.getElementById('keysBody');
+
+  try {
+    const r = await fetch('/api/v1/apikeys');
+    const data = await r.json();
+
+    if (!data.ok) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">⚠️</div><p>Failed to load keys: ' + (data.error || 'unknown') + '</p></div></td></tr>';
+      return;
+    }
+
+    const keys = data.data.keys;
+    if (keys.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">🔑</div><p>No API keys yet. Generate your first key!</p></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = keys.map(k => {
+      const isActive = !k.revoked;
+      const statusClass = isActive ? 'active' : 'revoked';
+      const statusText = isActive ? 'Active' : 'Revoked';
+      const created = k.created_at ? new Date(k.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+      const lastUsed = k.last_used_at ? new Date(k.last_used_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Never';
+
+      return '<tr>' +
+        '<td><span class="prefix-cell">' + (k.prefix || '—') + '…</span></td>' +
+        '<td><span class="label-cell">' + escapeHtml(k.label) + '</span></td>' +
+        '<td><span class="date-cell">' + created + '</span></td>' +
+        '<td><span class="date-cell">' + lastUsed + '</span></td>' +
+        '<td><span class="status-cell"><span class="status-dot ' + statusClass + '"></span>' + statusText + '</span></td>' +
+        '<td class="actions-cell">' +
+          (isActive ? '<button class="btn btn-sm btn-danger" onclick="showRevokeModal(' + k.id + ', \'' + escapeHtml(k.label) + '\')">Revoke</button>' : '') +
+        '</td>' +
+        '</tr>';
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">⚠️</div><p>Network error: ' + e.message + '</p></div></td></tr>';
+  }
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', loadKeys);
+</script>
+</body>
+</html>
