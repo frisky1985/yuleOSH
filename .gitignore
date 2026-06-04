@@ -1,8 +1,45 @@
-.osh/
+# yuleOSH gitignore
+
+# Python
 __pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Coverage
 .coverage
+.coverage.*
 coverage.json
+htmlcov/
+
+# Pytest
 .pytest_cache/
-*.pyc
-__pycache__/
-*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Environment
+.env
+.venv/
+venv/
+
+# Runtime data (persistent DB, session state)
+.yuleosh/
+
+# OSH build artifacts (keep .gitkeep markers)
+.osh/ci/
+.osh/evidence/
+.osh/sessions/
+.osh/reviews/
+.osh/store.db
