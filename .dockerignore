@@ -1,0 +1,9 @@
+.git
+.gitignore
+.osh/
+__pycache__/
+*.pyc
+.coverage
+coverage.json
+.pytest_cache/
+

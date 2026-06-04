@@ -17,6 +17,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# Add src to path for store import
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+try:
+    from store import Store
+    _store = Store()
+except Exception:
+    _store = None
+
 
 class PipelineSession:
     """Represents a running pipeline session."""
@@ -87,6 +95,12 @@ class PipelineSession:
         data = self.to_dict()
         with open(self.session_dir / "session.json", "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        # Also persist to SQLite
+        if _store:
+            try:
+                _store.save_pipeline(self.name, data)
+            except Exception:
+                pass
 
     def to_dict(self) -> dict:
         return {

@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  yuleosh:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - yuleosh_data:/app/.yuleosh
+      - ./projects:/app/projects:rw
+    environment:
+      - YULEOSH_DB=/app/.yuleosh/store.db
+      - OSH_HOME=/app
+    command: python3 src/ui/server.py
+
+volumes:
+  yuleosh_data:
