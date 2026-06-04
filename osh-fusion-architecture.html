@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSH-Fusion 架构图 — 嵌入式开发全流程平台</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --accent: #10b981;
+  --accent2: #3b82f6;
+  --accent3: #f59e0b;
+  --red: #ef4444;
+  --purple: #8b5cf6;
+  --cyan: #06b6d4;
+  --pink: #ec4899;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.header {
+  padding: 40px 48px 0;
+  text-align: center;
+}
+
+.header h1 {
+  font-size: 36px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--accent2), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+
+.header p {
+  margin-top: 8px;
+  color: var(--text2);
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.header .badges {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge.open { background: rgba(16,185,129,.15); color: var(--accent); border: 1px solid rgba(16,185,129,.3); }
+.badge.super { background: rgba(59,130,246,.15); color: var(--accent2); border: 1px solid rgba(59,130,246,.3); }
+.badge.harness { background: rgba(245,158,11,.15); color: var(--accent3); border: 1px solid rgba(245,158,11,.3); }
+.badge.ci { background: rgba(139,92,246,.15); color: var(--purple); border: 1px solid rgba(139,92,246,.3); }
+
+canvas { display: block; }
+
+.container { padding: 32px 48px 80px; max-width: 1400px; margin: 0 auto; }
+
+/* Top: Core Mantra */
+.mantra {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+}
+
+.mantra-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 28px;
+  text-align: center;
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+  transition: all .2s;
+}
+
+.mantra-item:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+.mantra-item .icon { font-size: 28px; margin-bottom: 8px; }
+.mantra-item .title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+.mantra-item .desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.mantra-item.o .title { color: var(--accent); }
+.mantra-item.s .title { color: var(--accent2); }
+.mantra-item.h .title { color: var(--accent3); }
+
+/* Section title */
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 48px 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-title .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Pillar: Phase Pipeline */
+.pipeline {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.phase {
+  flex: 1;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all .2s;
+}
+
+.phase:hover { border-color: var(--accent2); transform: translateY(-2px); }
+
+.phase-header {
+  padding: 14px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.phase.sdd .phase-header { background: rgba(16,185,129,.1); color: var(--accent); border-bottom-color: rgba(16,185,129,.2); }
+.phase.ddd .phase-header { background: rgba(59,130,246,.1); color: var(--accent2); border-bottom-color: rgba(59,130,246,.2); }
+.phase.tdd .phase-header { background: rgba(245,158,11,.1); color: var(--accent3); border-bottom-color: rgba(245,158,11,.2); }
+.phase.cicd .phase-header { background: rgba(139,92,246,.1); color: var(--purple); border-bottom-color: rgba(139,92,246,.2); }
+
+.phase-body { padding: 14px 18px; }
+
+.phase-body .item {
+  font-size: 12px;
+  color: var(--text2);
+  padding: 5px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.phase-body .item .arrow { color: var(--accent); flex-shrink: 0; }
+
+.aspice-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.aspice-tag.req { background: rgba(16,185,129,.2); color: var(--accent); }
+.aspice-tag.arch { background: rgba(59,130,246,.2); color: var(--accent2); }
+.aspice-tag.dev { background: rgba(245,158,11,.2); color: var(--accent3); }
+.aspice-tag.test { background: rgba(239,68,68,.2); color: var(--red); }
+
+/* Agent Matrix */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all .2s;
+}
+
+.agent-card:hover { transform: translateY(-2px); }
+
+.agent-card .avatar {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+
+.agent-card:nth-child(1) .avatar { background: rgba(16,185,129,.15); }
+.agent-card:nth-child(2) .avatar { background: rgba(139,92,246,.15); }
+.agent-card:nth-child(3) .avatar { background: rgba(6,182,212,.15); }
+
+.agent-card .name { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+.agent-card .role { font-size: 12px; color: var(--accent); margin-bottom: 12px; }
+.agent-card .duties { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+/* CI/CD Layer Cards */
+.cicd-layers {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.layer {
+  flex: 1;
+  min-width: 250px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all .2s;
+}
+
+.layer:hover { transform: translateY(-2px); }
+
+.layer-header {
+  padding: 14px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.layer.l1 .layer-header { background: rgba(16,185,129,.1); color: var(--accent); border-bottom-color: rgba(16,185,129,.2); }
+.layer.l2 .layer-header { background: rgba(59,130,246,.1); color: var(--accent2); border-bottom-color: rgba(59,130,246,.2); }
+.layer.l3 .layer-header { background: rgba(139,92,246,.1); color: var(--purple); border-bottom-color: rgba(139,92,246,.2); }
+
+.layer-header .tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.layer.l1 .tag { background: rgba(16,185,129,.2); color: var(--accent); }
+.layer.l2 .tag { background: rgba(59,130,246,.2); color: var(--accent2); }
+.layer.l3 .tag { background: rgba(139,92,246,.2); color: var(--purple); }
+
+.layer-body { padding: 14px 18px; }
+
+.layer-body .item {
+  font-size: 12px;
+  color: var(--text2);
+  padding: 5px 0;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.layer-body .item .bullet { color: var(--accent); flex-shrink: 0; }
+
+.evidence-box {
+  margin-top: 16px;
+  background: var(--surface2);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.evidence-box .ev-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent3);
+  margin-bottom: 8px;
+}
+
+.evidence-box .ev-list {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.6;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Requirements Section */
+.req-chain {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.req-node {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  text-align: center;
+  min-width: 90px;
+  transition: all .2s;
+}
+
+.req-node:hover { border-color: var(--accent2); }
+
+.req-node .code {
+  font-size: 10px;
+  color: var(--text2);
+  margin-bottom: 2px;
+}
+
+.req-node .label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.req-arrow { color: var(--text2); font-size: 18px; flex-shrink: 0; }
+
+/* V-Model */
+.vmodel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 24px 0;
+}
+
+.vrow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.vleft, .vright {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all .2s;
+}
+
+.vleft:hover, .vright:hover { border-color: var(--accent); transform: translateX(2px); }
+
+.vconnector {
+  width: 40px;
+  text-align: center;
+  color: var(--text2);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.vleft { text-align: right; }
+.vright { text-align: left; }
+
+.vleft.sdd { border-left: 3px solid var(--accent); color: var(--accent); }
+.vleft.ddd { border-left: 3px solid var(--accent2); color: var(--accent2); }
+.vright.tdd { border-right: 3px solid var(--accent3); color: var(--accent3); }
+.vright.cicd { border-right: 3px solid var(--purple); color: var(--purple); }
+.vleft.sys { border-left: 3px solid var(--cyan); color: var(--cyan); }
+.vright.sys { border-right: 3px solid var(--cyan); color: var(--cyan); }
+
+/* Timeline */
+.timeline {
+  position: relative;
+  padding-left: 28px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--accent), var(--accent2), var(--purple));
+}
+
+.tl-item {
+  position: relative;
+  padding: 8px 0 8px 16px;
+}
+
+.tl-item::before {
+  content: '';
+  position: absolute;
+  left: -24px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid;
+}
+
+.tl-item:nth-child(1)::before { background: rgba(16,185,129,.2); border-color: var(--accent); }
+.tl-item:nth-child(2)::before { background: rgba(59,130,246,.2); border-color: var(--accent2); }
+.tl-item:nth-child(3)::before { background: rgba(245,158,11,.2); border-color: var(--accent3); }
+.tl-item:nth-child(4)::before { background: rgba(139,92,246,.2); border-color: var(--purple); }
+.tl-item:nth-child(5)::before { background: rgba(6,182,212,.2); border-color: var(--cyan); }
+
+.tl-item .tl-phase {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.tl-item .tl-desc {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 40px;
+  color: var(--text2);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 48px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .container { padding: 20px 16px; }
+  .header { padding: 24px 16px 0; }
+  .agent-grid { grid-template-columns: 1fr; }
+  .pipeline { flex-direction: column; }
+  .vrow { flex-direction: column; gap: 4px; }
+  .vconnector { transform: rotate(90deg); }
+  .cicd-layers { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔱 OSH-Fusion 平台架构</h1>
+  <p>OpenSpec + Superpowers + Harness Engineering · 嵌入式 ASPICE 全流程平台</p>
+  <div class="badges">
+    <span class="badge open">▣ OpenSpec — 需求定义</span>
+    <span class="badge super">▣ Superpowers — 规则引擎</span>
+    <span class="badge harness">▣ Harness Engineering — 调度编排</span>
+    <span class="badge ci">▣ 3-Layer CI/CD — 验证交付</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Core Philosophy -->
+  <div class="section-title"><span class="dot" style="background:var(--accent)"></span> 核心哲学 <span style="font-size:12px;color:var(--text2);font-weight:400;margin-left:8px;">缺一不可</span></div>
+  <div class="mantra">
+    <div class="mantra-item o">
+      <div class="icon">📋</div>
+      <div class="title">没有 Spec → 没有方向</div>
+      <div class="desc">OpenSpec RFC 2119 精确需求定义<br/>SHALL / SHOULD / MAY 语法约束</div>
+    </div>
+    <div class="mantra-item s">
+      <div class="icon">⚙️</div>
+      <div class="title">没有 Rules → 没有质量</div>
+      <div class="desc">Superpowers 14 Rules 门禁体系<br/>Agent 审查 × 代码/架构/模型</div>
+    </div>
+    <div class="mantra-item h">
+      <div class="icon">🔗</div>
+      <div class="title">没有 Pipeline → 没有效率</div>
+      <div class="desc">Harness Engineering Agent 流水线<br/>三层 CI/CD + 自动证据链</div>
+    </div>
+  </div>
+
+  <!-- V-Model + SDD/DDD/TDD Mapping -->
+  <div class="section-title"><span class="dot" style="background:var(--cyan)"></span> ASPICE V-Model × OSH 流水线</div>
+  <div class="vmodel">
+    <div class="vrow"><div class="vleft sdd"><span class="aspice-tag req">SYS.3</span> 系统需求分析<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">SDD: Spec + S.U.P.E.R 分析</span></div><div class="vconnector">◀ ─ ─ ▶</div><div class="vright sys"><span class="aspice-tag test">SYS.6</span> 系统合格性测试<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">CD Layer 3: E2E + 耐久 + 压力</span></div></div>
+    <div class="vrow"><div class="vleft sdd"><span class="aspice-tag req">SWE.1</span> 软件需求分析<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">SDD: 场景定义 + 验收标准</span></div><div class="vconnector">◀ ─ ─ ▶</div><div class="vright cicd"><span class="aspice-tag test">SWE.6</span> 软件合格性测试<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">CD Layer 3: 全量回归 + 合规包</span></div></div>
+    <div class="vrow"><div class="vleft ddd"><span class="aspice-tag arch">SWE.2</span> 软件架构设计<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">DDD: 限界上下文 + 聚合根</span></div><div class="vconnector">◀ ─ ─ ▶</div><div class="vright cicd"><span class="aspice-tag test">SWE.5</span> 软件集成测试<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">CI Layer 2: MR 全量编译 + 交叉链</span></div></div>
+    <div class="vrow"><div class="vleft ddd"><span class="aspice-tag arch">SWE.3</span> 软件详细设计<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">DDD: Task 分解 + Worktree 隔离</span></div><div class="vconnector">◀ ─ ─ ▶</div><div class="vright tdd"><span class="aspice-tag dev">SWE.4</span> 软件单元验证<br/><span style="font-weight:400;font-size:11px;color:var(--text2)">TDD: RED→GREEN→REFACTOR</span></div></div>
+  </div>
+
+  <!-- Requirements Hierarchy -->
+  <div class="section-title"><span class="dot" style="background:var(--accent)"></span> 需求管理层级 <span style="font-size:12px;color:var(--text2);font-weight:400;margin-left:8px;">OpenSpec + S.U.P.E.R 分析</span></div>
+  <div class="req-chain">
+    <div class="req-node" style="border-color:var(--accent)"><div class="code">SYS.3</div><div class="label" style="color:var(--accent)">系统需求</div></div>
+    <div class="req-arrow">→</div>
+    <div class="req-node" style="border-color:var(--accent)"><div class="code">SWE.1</div><div class="label" style="color:var(--accent)">软件需求</div></div>
+    <div class="req-arrow">→</div>
+    <div class="req-node" style="border-color:var(--accent2)"><div class="code">SWE.2</div><div class="label" style="color:var(--accent2)">架构建模</div></div>
+    <div class="req-arrow">→</div>
+    <div class="req-node" style="border-color:var(--accent3)"><div class="code">SWE.3</div><div class="label" style="color:var(--accent3)">Task 分解</div></div>
+    <div class="req-arrow">→</div>
+    <div class="req-node" style="border-color:var(--red)"><div class="code">SWE.4-6</div><div class="label" style="color:var(--red)">测试验证</div></div>
+  </div>
+
+  <!-- Phase Pipeline -->
+  <div class="section-title"><span class="dot" style="background:var(--accent2)"></span> 全链路开发流水线 <span style="font-size:12px;color:var(--text2);font-weight:400;margin-left:8px;">SDD → DDD → TDD → CI/CD</span></div>
+  <div class="pipeline">
+    <div class="phase sdd">
+      <div class="phase-header">📋 SDD · 需求与设计</div>
+      <div class="phase-body">
+        <div class="item"><span class="arrow">▸</span> S.U.P.E.R 启动分析</div>
+        <div class="item"><span class="arrow">▸</span> brainstroming + 需求对齐</div>
+        <div class="item"><span class="arrow">▸</span> 限界上下文划分</div>
+        <div class="item"><span class="arrow">▸</span> 通用语言对齐</div>
+        <div class="item"><span class="arrow">▸</span> 设计文档输出</div>
+        <div class="item"><span class="arrow">▸</span> plan-lint 静态校验</div>
+      </div>
+    </div>
+    <div class="phase ddd">
+      <div class="phase-header">🏗️ DDD · 领域建模与计划</div>
+      <div class="phase-body">
+        <div class="item"><span class="arrow">▸</span> Worktree 隔离判定</div>
+        <div class="item"><span class="arrow">▸</span> Task 分解 + kind 分类</div>
+        <div class="item"><span class="arrow">▸</span> T00 三步法模板</div>
+        <div class="item"><span class="arrow">▸</span> 聚合根 + 实体/值对象</div>
+        <div class="item"><span class="arrow">▸</span> 领域事件定义</div>
+        <div class="item"><span class="arrow">▸</span> 边界覆盖度 > 98%</div>
+      </div>
+    </div>
+    <div class="phase tdd">
+      <div class="phase-header">🧪 TDD · 测试驱动开发</div>
+      <div class="phase-body">
+        <div class="item"><span class="arrow">▸</span> <span style="color:var(--red)">RED</span> 写失败测试</div>
+        <div class="item"><span class="arrow">▸</span> <span style="color:var(--accent)">GREEN</span> 最小实现</div>
+        <div class="item"><span class="arrow">▸</span> <span style="color:var(--accent3)">REFACTOR</span> 重构净化</div>
+        <div class="item"><span class="arrow">▸</span> per-task Agent 审查</div>
+        <div class="item"><span class="arrow">▸</span> pass→commit | fail→重试</div>
+        <div class="item"><span class="arrow">▸</span> 覆盖率门禁 > 98%</div>
+      </div>
+    </div>
+    <div class="phase cicd">
+      <div class="phase-header">🚀 CI/CD · 验证与交付</div>
+      <div class="phase-body">
+        <div class="item"><span class="arrow">▸</span> /code-review all 全量</div>
+        <div class="item"><span class="arrow">▸</span> git-push 预检推送</div>
+        <div class="item"><span class="arrow">▸</span> MR 创建 + CI 监控</div>
+        <div class="item"><span class="arrow">▸</span> Worktree 自动清理</div>
+        <div class="item"><span class="arrow">▸</span> 追溯矩阵自动生成</div>
+        <div class="item"><span class="arrow">▸</span> 合规证据包导出</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Team -->
+  <div class="section-title"><span class="dot" style="background:var(--purple)"></span> Agent 角色矩阵 <span style="font-size:12px;color:var(--text2);font-weight:400;margin-left:8px;">三人小队 · 自动流转</span></div>
+  <div class="agent-grid">
+    <div class="agent-card">
+      <div class="avatar">🔥</div>
+      <div class="name">小明</div>
+      <div class="role">Orchestrator / PM</div>
+      <div class="duties">
+        OpenSpec 合规检查<br/>
+        S.U.P.E.R 启动分析<br/>
+        Agent 编排调度<br/>
+        CI/CD Pipeline 编排<br/>
+        最终报告生成
+      </div>
+    </div>
+    <div class="agent-card">
+      <div class="avatar">🔮</div>
+      <div class="name">Hermes</div>
+      <div class="role">产品分析 / 审查</div>
+      <div class="duties">
+        写 spec.md + prd.md<br/>
+        需求评审与验证<br/>
+        code-review Agent<br/>
+        spec 覆盖度审计
+      </div>
+    </div>
+    <div class="agent-card">
+      <div class="avatar">💻</div>
+      <div class="name">Claude</div>
+      <div class="role">架构师 / 开发者</div>
+      <div class="duties">
+        架构设计 + DDD 建模<br/>
+        编码实现 (RED→GREEN)<br/>
+        自测 + 测试用例<br/>
+        REFACTOR 建议
+      </div>
+    </div>
+  </div>
+
+  <!-- CI/CD 3-Layer -->
+  <div class="section-title"><span class="dot" style="background:var(--purple)"></span> CI/CD 三层流水线 <span style="font-size:12px;color:var(--text2);font-weight:400;margin-left:8px;">嵌入式专属 · ASPICE 全覆盖</span></div>
+  <div class="cicd-layers">
+    <div class="layer l1">
+      <div class="layer-header">
+        <span>🔬 Layer 1: 开发验证 CI</span>
+        <span class="tag">每个 Commit</span>
+      </div>
+      <div class="layer-body">
+        <div class="item"><span class="bullet">◆</span> pre-commit: plan-lint + clang-tidy</div>
+        <div class="item"><span class="bullet">◆</span> 单元测试 GTest/Unity/CUnit</div>
+        <div class="item"><span class="bullet">◆</span> 覆盖率门禁 > 80% line</div>
+        <div class="item"><span class="bullet">◆</span> per-task auto-reviewer</div>
+        <div class="item" style="color:var(--text);font-weight:500;margin-top:8px;">📄 SWE.4 软件单元验证</div>
+      </div>
+    </div>
+    <div class="layer l2">
+      <div class="layer-header">
+        <span>🔄 Layer 2: 集成验证 CI</span>
+        <span class="tag">Merge Request</span>
+      </div>
+      <div class="layer-body">
+        <div class="item"><span class="bullet">◆</span> 全量编译 (ARM/RISC-V/x86)</div>
+        <div class="item"><span class="bullet">◆</span> MISRA-C/C++ + AUTOSAR</div>
+        <div class="item"><span class="bullet">◆</span> 接口契约 + 集成测试</div>
+        <div class="item"><span class="bullet">◆</span> /code-review all 全量审查</div>
+        <div class="item" style="color:var(--text);font-weight:500;margin-top:8px;">📄 SWE.5 软件集成测试</div>
+      </div>
+    </div>
+    <div class="layer l3">
+      <div class="layer-header">
+        <span>🚀 Layer 3: 系统验证 CD</span>
+        <span class="tag">Release Tag</span>
+      </div>
+      <div class="layer-body">
+        <div class="item"><span class="bullet">◆</span> E2E 场景 + 压力 + 耐久</div>
+        <div class="item"><span class="bullet">◆</span> 固件签名 + OTA 包构建</div>
+        <div class="item"><span class="bullet">◆</span> 追溯矩阵自动生成</div>
+        <div class="item"><span class="bullet">◆</span> 合规审计包导出</div>
+        <div class="item" style="color:var(--text);font-weight:500;margin-top:8px;">📄 SWE.6 / SYS.5 / SYS.6</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evidence Chain -->
+  <div class="evidence-box">
+    <div class="ev-title">📦 ASPICE 审计证据包（自动产出）</div>
+    <div class="ev-list">
+evidence/<br/>
+├── traceability-matrix.md    ← 需求↔设计↔代码↔测试 双向追溯<br/>
+├── review-log.json           ← 所有 Agent 审查记录 (小明+Hermes+Claude)<br/>
+├── test-coverage-report.md   ← 代码覆盖率 (Line/Branch/MCDC)<br/>
+├── requirement-coverage.md   ← 需求覆盖率 (SHALL 语句 → 测试用例)<br/>
+└── compliance-pack.zip       ← 一键导出，可直接提交 ASPICE 审计
+    </div>
+  </div>
+
+  <!-- Implementation Timeline -->
+  <div class="section-title"><span class="dot" style="background:var(--pink)"></span> 建设路线图 <span style="font-size:12px;color:var(--text2);font-weight:400;margin-left:8px;">Phase 1 → Phase 3</span></div>
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-phase" style="color:var(--accent)">Phase 1 · MVP (Week 1-2)</div>
+      <div class="tl-desc">OpenSpec 需求管理模块 · Agent 审查矩阵 · Layer 1 CI 流水线 · 三人小队编排</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase" style="color:var(--accent2)">Phase 2 · 工程化 (Week 3-4)</div>
+      <div class="tl-desc">DDD 建模工具 · Worktree 隔离集成 · Layer 2 CI · 嵌入式交叉编译链</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase" style="color:var(--accent3)">Phase 3 · 平台化 (Month 2)</div>
+      <div class="tl-desc">SaaS 多租户架构 · Web UI / Mobile / Desktop · Layer 3 CD · 证据链自动导出</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase" style="color:var(--purple)">Phase 4 · 智能 (Month 3)</div>
+      <div class="tl-desc">Agent 自学习规则优化 · MISRA/AUTOSAR 智能分析 · ASPICE 成熟度评估</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-phase" style="color:var(--cyan)">Phase 5 · 生态 (Month 4+)</div>
+      <div class="tl-desc">Plugin 市场 · 三方工具集成 · 行业模板库 (车载/工控/IoT)</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    🔱 OSH-Fusion v1.0 · OpenSpec + Superpowers + Harness Engineering<br/>
+    Designed for 嵌入式 ASPICE 全流程开发平台 · 2026-06-04
+  </div>
+
+</div>
+
+</body>
+</html>
