@@ -35,7 +35,7 @@ class Store:
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 4
+    _MIGRATION_VERSION = 5
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -122,6 +122,18 @@ class Store:
                 created_at TEXT NOT NULL,
                 last_used_at TEXT,
                 revoked INTEGER NOT NULL DEFAULT 0
+            );
+        """)
+        self.conn.commit()
+
+        # Spec parsing cache table (v5)
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS spec_cache (
+                spec_path TEXT NOT NULL,
+                mtime TEXT NOT NULL,
+                result_json TEXT NOT NULL,
+                cached_at TEXT NOT NULL,
+                PRIMARY KEY (spec_path, mtime)
             );
         """)
         self.conn.commit()
@@ -340,6 +352,29 @@ class Store:
             "DELETE FROM user_sessions WHERE expires_at <= datetime('now')"
         )
         self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Spec parsing cache
+    # ------------------------------------------------------------------
+
+    def cache_spec_parse(self, spec_path: str, mtime: float, result: dict):
+        """Cache spec parsing results keyed by path + mtime."""
+        self.conn.execute(
+            "INSERT OR REPLACE INTO spec_cache (spec_path, mtime, result_json, cached_at) VALUES (?, ?, ?, ?)",
+            (spec_path, str(mtime), json.dumps(result), datetime.now().isoformat())
+        )
+        self.conn.commit()
+
+    def get_cached_spec_parse(self, spec_path: str, mtime: float) -> Optional[dict]:
+        """Return cached parse result if spec hasn't changed, else None."""
+        cur = self.conn.execute(
+            "SELECT result_json FROM spec_cache WHERE spec_path=? AND mtime=?",
+            (spec_path, str(mtime))
+        )
+        row = cur.fetchone()
+        if row:
+            return json.loads(row["result_json"])
+        return None
 
     def create_api_key(self, key_hash: str, label: str, prefix: str) -> dict:
         now = datetime.now().isoformat()

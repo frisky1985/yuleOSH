@@ -4,19 +4,26 @@ yuleOSH Template Init — Create new projects from a starter spec template.
 
 Usage:
     yuleosh template init <project-name>
+    yuleosh template init <project-name> --from <template-dir>
+
+The first form creates a generic Python project with a starter OpenSpec spec.
+The second form scaffolds a project from an existing embedded template
+(e.g. templates/ble-sensor, templates/can-bus, templates/mcu-firmware).
 
 Creates:
     <project-name>/
       ├── docs/
-      │   └── spec.md          — Starter spec with 3 sample SHALL requirements
+      │   └── spec.md          — OpenSpec specification with 3+ SHALL statements
       ├── src/                  — Source code directory
       ├── tests/                — Test directory
+      ├── Makefile              — Build system (for C/C++ templates)
       ├── .gitignore
-      └── pyproject.toml
+      └── pyproject.toml        — Project config (Python starter only)
 """
 
 import os
 import sys
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -100,14 +107,88 @@ build/
 """
 
 
-def cmd_template_init(project_name: str, parent_dir: str = ".") -> Path:
-    """Initialize a new project from the yuleOSH starter template."""
+def cmd_template_init(project_name: str, parent_dir: str = ".",
+                      from_template: str | None = None) -> Path:
+    """Initialize a new project from the yuleOSH starter template.
+
+    Args:
+        project_name: Name of the new project directory.
+        parent_dir: Parent directory to create the project in.
+        from_template: Optional path to a template directory to copy from.
+                       If provided, the template's spec, sources, tests, and
+                       Makefile are scaffolded into the new project.
+    """
     project_dir = Path(parent_dir) / project_name
 
     if project_dir.exists():
         print(f"❌ Directory already exists: {project_dir}", file=sys.stderr)
         sys.exit(1)
 
+    # Resolve template path relative to project root or absolute
+    template_path = None
+    if from_template:
+        template_path = Path(from_template)
+        if not template_path.is_absolute():
+            # Try relative to parent_dir, then to OSH_HOME
+            candidates = [
+                Path(parent_dir) / from_template,
+                Path(from_template),
+            ]
+            osh_home = os.environ.get("OSH_HOME", str(Path(__file__).resolve().parent.parent.parent))
+            candidates.append(Path(osh_home) / from_template)
+
+            for c in candidates:
+                if c.exists() and c.is_dir():
+                    template_path = c
+                    break
+
+        if not template_path.exists() or not template_path.is_dir():
+            print(f"❌ Template directory not found: {from_template}", file=sys.stderr)
+            print(f"   Checked: {template_path}", file=sys.stderr)
+            sys.exit(1)
+
+    if template_path:
+        return _init_from_template(project_name, project_dir, template_path)
+    else:
+        return _init_starter(project_name, project_dir)
+
+
+def _init_from_template(project_name: str, project_dir: Path,
+                         template_path: Path) -> Path:
+    """Initialize a project by copying from an existing template directory."""
+    print(f"📦 Scaffolding '{project_name}' from template: {template_path}")
+
+    # Copy all files from template to new project directory
+    shutil.copytree(str(template_path), str(project_dir))
+
+    # Remove any git state or build artifacts
+    for stale in [".git", ".pytest_cache", "__pycache__", "build"]:
+        stale_path = project_dir / stale
+        if stale_path.exists():
+            if stale_path.is_dir():
+                shutil.rmtree(stale_path)
+            else:
+                stale_path.unlink()
+
+    print(f"\n✅ Project '{project_name}' initialized from template at: {project_dir}")
+    print(f"   Template source: {template_path}")
+    print(f"   ├── docs/spec.md")
+    print(f"   ├── src/")
+    print(f"   ├── tests/")
+    print(f"   ├── Makefile")
+    print(f"   └── (template files copied)")
+    print()
+    print(f"   Next steps:")
+    print(f"   1. Review and edit {project_dir / 'docs' / 'spec.md'}")
+    print(f"   2. Run: yuleosh spec validate {project_dir / 'docs' / 'spec.md'}")
+    print(f"   3. Run: yuleosh ci run 1  # Run Layer 1 CI")
+    print()
+
+    return project_dir
+
+
+def _init_starter(project_name: str, project_dir: Path) -> Path:
+    """Initialize a generic Python starter project."""
     # Create directory structure
     dirs = [
         project_dir / "docs",
@@ -163,16 +244,26 @@ def test_placeholder():
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 template.py init <project-name>", file=sys.stderr)
+        print("Usage: python3 template.py init <project-name> [--from <template-dir>]",
+              file=sys.stderr)
         sys.exit(1)
 
     cmd = sys.argv[1]
 
     if cmd == "init":
         if len(sys.argv) < 3:
-            print("Usage: python3 template.py init <project-name>", file=sys.stderr)
+            print("Usage: python3 template.py init <project-name> [--from <template-dir>]",
+                  file=sys.stderr)
             sys.exit(1)
-        cmd_template_init(sys.argv[2])
+
+        project_name = sys.argv[2]
+        from_template = None
+
+        # Parse optional --from flag
+        if len(sys.argv) >= 5 and sys.argv[3] == "--from":
+            from_template = sys.argv[4]
+
+        cmd_template_init(project_name, from_template=from_template)
     else:
         print(f"Unknown template command: {cmd}", file=sys.stderr)
         sys.exit(1)

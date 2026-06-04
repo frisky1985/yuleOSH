@@ -4,16 +4,64 @@
 Includes multi-tenant auth (organizations, projects, users) alongside
 the original API-key based auth and all original dashboard routes.
 """
+import gzip
+import hashlib
 import http.server
 import json
 import os
 import subprocess
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Optional
 
 from src.store import Store
+
+
+# ------------------------------------------------------------------
+# Caching & compression helpers
+# ------------------------------------------------------------------
+
+
+def _compute_etag(content: bytes) -> str:
+    """Return a weak ETag for the given content."""
+    return f'W/"{hashlib.md5(content).hexdigest()}"'
+
+
+def _format_http_datetime(timestamp: float) -> str:
+    """Format a Unix timestamp as an HTTP-date string (RFC 7231)."""
+    import datetime as dt
+    return dt.datetime.fromtimestamp(timestamp, tz=dt.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+
+def _parse_http_datetime(date_str: str) -> float:
+    """Parse an HTTP-date string back to a Unix timestamp."""
+    import datetime as dt
+    for fmt in ("%a, %d %b %Y %H:%M:%S GMT", "%a, %d %b %Y %H:%M:%S %Z"):
+        try:
+            parsed = dt.datetime.strptime(date_str.strip(), fmt)
+            return parsed.replace(tzinfo=dt.timezone.utc).timestamp()
+        except ValueError:
+            pass
+    return 0.0
+
+
+def _send_gzipped_json(handler, data: dict, status: int = 200):
+    """Send a JSON response with gzip compression and CORS headers."""
+    body = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+    accept_encoding = handler.headers.get("Accept-Encoding", "")
+    if "gzip" in accept_encoding and len(body) > 512:
+        body_gz = gzip.compress(body)
+        handler.send_response(status)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Encoding", "gzip")
+        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.send_header("Content-Length", str(len(body_gz)))
+        handler.end_headers()
+        handler.wfile.write(body_gz)
+    else:
+        handler._json_response(data, status)
 
 # Add parent dir to path for auth import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -60,8 +108,31 @@ except ImportError:
         handler.send_response(501)
         handler.send_header("Content-Type", "application/json")
         handler.send_header("Access-Control-Allow-Origin", "*")
+        _send_security_headers(handler)
         handler.end_headers()
         handler.wfile.write(json.dumps({"ok": False, "error": "API layer not available"}).encode())
+
+# Rate limiter
+try:
+    from src.api.ratelimit import check_rate_limit, get_remaining
+except ImportError:
+    def check_rate_limit(ip): return True, 0
+    def get_remaining(ip): return 0
+
+# Audit logging
+try:
+    from src.api.audit import log_request as _audit_log
+except ImportError:
+    def _audit_log(method, path, status, ip, duration): pass
+
+
+def _send_security_headers(handler):
+    """Send security headers on the given handler."""
+    handler.send_header("Content-Security-Policy", "default-src 'self'")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("X-Frame-Options", "DENY")
+    handler.send_header("Strict-Transport-Security", "max-age=31536000")
+    handler.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
 
 OSH_HOME = os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UI_DIR = Path(__file__).parent
@@ -71,61 +142,122 @@ PORT = int(os.environ.get("OSH_PORT", "8080"))
 
 class OSHHandler(http.server.BaseHTTPRequestHandler):
 
+    def __init__(self, *args, **kwargs):
+        self._request_start_time = 0.0
+        self._response_status = 200
+        super().__init__(*args, **kwargs)
+
+    # ------------------------------------------------------------------
+    # Override send_response to capture status code for audit logging
+    # ------------------------------------------------------------------
+
+    def send_response(self, code, message=None):
+        self._response_status = code
+        super().send_response(code, message)
+
+    # ------------------------------------------------------------------
+    # Security headers helper
+    # ------------------------------------------------------------------
+
+    def _add_security_headers(self):
+        self.send_header("Content-Security-Policy", "default-src 'self'")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Strict-Transport-Security", "max-age=31536000")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+
+    # ------------------------------------------------------------------
+    # Client IP helper
+    # ------------------------------------------------------------------
+
+    def _get_client_ip(self) -> str:
+        return self.client_address[0]
+
     # ------------------------------------------------------------------
     # Routing
     # ------------------------------------------------------------------
 
     def do_GET(self):
+        self._request_start_time = time.time()
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        # Rate limiting
+        allowed, retry_after = check_rate_limit(self._get_client_ip())
+        if not allowed:
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Retry-After", str(retry_after))
+            self._add_security_headers()
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("X-RateLimit-Remaining", "0")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "ok": False,
+                "error": f"Rate limit exceeded. Retry after {retry_after} seconds."
+            }).encode())
+            self._log_audit()
+            return
 
         # API v1 routes — dispatch to modular handlers
         if path.startswith("/api/v1/"):
             api_v1_dispatch(self, path)
+            self._log_audit()
             return
 
         # Healthcheck — always accessible
         if path == "/api/health":
             self._json_response(self._get_health())
+            self._log_audit()
             return
 
         # Health dashboard page
         if path == "/health":
             self._serve_page("health.html", {})
+            self._log_audit()
             return
 
         # Tenant auth endpoints
         if path == "/api/auth/session":
             self._handle_api("session")
+            self._log_audit()
             return
         if path == "/api/auth/logout":
             self._handle_api("logout")
+            self._log_audit()
             return
         if path == "/api/project/list":
             self._handle_api("project_list")
+            self._log_audit()
             return
         if path == "/api/org/info":
             self._handle_api("org_info")
+            self._log_audit()
             return
 
         # Welcome/wizard page (no auth required)
         if path == "/welcome":
             self._serve_page("welcome.html", {})
+            self._log_audit()
             return
 
         # Tenant auth pages (no legacy auth required)
         if path == "/login":
             self._serve_page("login.html", {"msg": ""})
+            self._log_audit()
             return
         if path == "/org/setup":
             self._serve_page("org-setup.html", {})
+            self._log_audit()
             return
         if path == "/project/select":
             self._serve_page("project-select.html", {})
+            self._log_audit()
             return
 
         # Legacy auth check for all other routes
         if not self._check_auth():
+            self._log_audit()
             return
 
         if path == "/" or path == "/index.html":
@@ -138,6 +270,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
                     self._serve_file(UI_DIR / "marketing" / "index.html", "text/html; charset=utf-8")
                 else:
                     self.send_response(302)
+                    self._add_security_headers()
                     self.send_header("Location", "/welcome")
                     self.end_headers()
             except Exception:
@@ -170,55 +303,102 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._handle_exec(parsed.query)
         else:
             self._json_response({"error": "not found"}, 404)
+        self._log_audit()
 
     def do_POST(self):
+        self._request_start_time = time.time()
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        # Rate limiting
+        allowed, retry_after = check_rate_limit(self._get_client_ip())
+        if not allowed:
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Retry-After", str(retry_after))
+            self._add_security_headers()
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("X-RateLimit-Remaining", "0")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "ok": False,
+                "error": f"Rate limit exceeded. Retry after {retry_after} seconds."
+            }).encode())
+            self._log_audit()
+            return
 
         # API v1 routes — dispatch to modular handlers
         if path.startswith("/api/v1/"):
             api_v1_dispatch(self, path)
+            self._log_audit()
             return
 
         # Legacy login endpoint — always accessible
         if path == "/_auth/login":
             self._handle_login()
+            self._log_audit()
             return
 
         # Tenant auth endpoints — always accessible
         if path == "/api/auth/signin":
             self._handle_api("signin")
+            self._log_audit()
             return
         if path == "/api/org/create":
             self._handle_api("org_create")
+            self._log_audit()
             return
         if path == "/api/project/create":
             self._handle_api("project_create")
+            self._log_audit()
             return
         if path == "/api/auth/logout":
             self._handle_api("logout")
+            self._log_audit()
             return
 
         # Legacy auth check
         if not self._check_auth():
+            self._log_audit()
             return
 
         self._json_response({"error": "not found"}, 404)
+        self._log_audit()
 
     def do_DELETE(self):
+        self._request_start_time = time.time()
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path.startswith("/api/v1/"):
             api_v1_dispatch(self, path)
+            self._log_audit()
             return
         self._json_response({"error": "not found"}, 404)
+        self._log_audit()
 
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
+        self._add_security_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
         self.end_headers()
+
+    # ------------------------------------------------------------------
+    # Audit logging helper
+    # ------------------------------------------------------------------
+
+    def _log_audit(self):
+        """Log the current request to the audit log."""
+        duration_ms = (time.time() - self._request_start_time) * 1000
+        path = urllib.parse.urlparse(self.path).path
+        _audit_log(
+            method=self.command,
+            path=path,
+            status_code=self._response_status,
+            ip=self._get_client_ip(),
+            duration_ms=round(duration_ms, 2),
+        )
 
     # ------------------------------------------------------------------
     # API handler for tenant auth
@@ -318,6 +498,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         if path.startswith("/api/") or path.startswith("/exec"):
             self.send_response(401)
             self.send_header("Content-Type", "application/json")
+            self._add_security_headers()
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"error": "unauthorized", "message": "X-API-Key header required"}).encode())
@@ -326,6 +507,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             # Serve login page for browser requests
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self._add_security_headers()
             self.end_headers()
             self.wfile.write(legacy_login_page().encode("utf-8"))
             return False
@@ -340,6 +522,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         if not api_key_input:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self._add_security_headers()
             self.end_headers()
             self.wfile.write(legacy_login_page("API key is required").encode("utf-8"))
             return
@@ -351,11 +534,13 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header("Set-Cookie",
                 f"osh_session={cookie_val}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400")
+            self._add_security_headers()
             self.send_header("Location", "/")
             self.end_headers()
         else:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self._add_security_headers()
             self.end_headers()
             self.wfile.write(legacy_login_page("Invalid API key").encode("utf-8"))
 
@@ -375,16 +560,49 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         for key, value in context.items():
             content = content.replace("{" + key + "}", str(value))
 
+        body = content.encode("utf-8")
+        etag = _compute_etag(body)
+        last_mod = filepath.stat().st_mtime
+        inm = self.headers.get("If-None-Match")
+        ims = self.headers.get("If-Modified-Since")
+        if inm == etag or (ims and abs(last_mod - _parse_http_datetime(ims)) < 2):
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Last-Modified", _format_http_datetime(last_mod))
+            self._add_security_headers()
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("ETag", etag)
+        self.send_header("Last-Modified", _format_http_datetime(last_mod))
+        self._add_security_headers()
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(content.encode("utf-8"))
+        self.wfile.write(body)
 
     def _serve_file(self, filepath: Path, mime: str):
         if filepath.exists():
             data = filepath.read_bytes()
+            etag = _compute_etag(data)
+            last_mod = filepath.stat().st_mtime
+            inm = self.headers.get("If-None-Match")
+            ims = self.headers.get("If-Modified-Since")
+            if inm == etag or (ims and abs(last_mod - _parse_http_datetime(ims)) < 2):
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Last-Modified", _format_http_datetime(last_mod))
+                self._add_security_headers()
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                return
             self.send_response(200)
             self.send_header("Content-Type", mime)
+            self.send_header("ETag", etag)
+            self.send_header("Last-Modified", _format_http_datetime(last_mod))
+            self._add_security_headers()
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(data)
@@ -392,11 +610,25 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._json_response({"error": "file not found"}, 404)
 
     def _json_response(self, data, status: int = 200):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(json.dumps(data, indent=2, ensure_ascii=False).encode())
+        body = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+        accept_encoding = self.headers.get("Accept-Encoding", "")
+        if "gzip" in accept_encoding and len(body) > 512:
+            body_gz = gzip.compress(body)
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Encoding", "gzip")
+            self._add_security_headers()
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(body_gz)))
+            self.end_headers()
+            self.wfile.write(body_gz)
+        else:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self._add_security_headers()
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
 
     def _handle_exec(self, query: str):
         params = urllib.parse.parse_qs(query)

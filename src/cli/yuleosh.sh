@@ -59,12 +59,19 @@ cmd_init() {
 
 cmd_template_init() {
   local project_name="$1"
+  shift
+  local from_flag=""
   if [ -z "$project_name" ]; then
-    echo "❌ Usage: osh-cli template init <project-name>"
+    echo "❌ Usage: osh-cli template init <project-name> [--from <template-dir>]"
     exit 1
   fi
+  # Check for --from flag
+  if [ "$1" = "--from" ] && [ -n "$2" ]; then
+    from_flag="--from $2"
+    shift 2
+  fi
   echo "📦 Creating new project from starter template: $project_name"
-  python3 "$OSH_HOME/src/cli/template.py" init "$project_name"
+  python3 "$OSH_HOME/src/cli/template.py" init "$project_name" $from_flag
 }
 
 cmd_stats() {
@@ -146,8 +153,8 @@ case "${1:-help}" in
   template)
     shift
     case "${1:-}" in
-      init) shift; cmd_template_init "$1";;
-      *) echo "Usage: osh-cli template init <project-name>"; exit 1;;
+      init) shift; cmd_template_init "$@";;
+      *) echo "Usage: osh-cli template init <project-name> [--from <template-dir>]"; exit 1;;
     esac
     ;;
   stats) shift; cmd_stats "$@";;

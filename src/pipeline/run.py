@@ -8,6 +8,7 @@ Routes tasks through:
 Follows Harness Engineering SOP flow.
 """
 
+import functools
 import json
 import logging
 import os
@@ -44,6 +45,41 @@ try:
     _store = Store()
 except Exception:
     _store = None
+
+
+# ------------------------------------------------------------------
+# Timing / profiling decorator
+# ------------------------------------------------------------------
+
+
+def timed_step(handler):
+    """Decorate a step handler to measure and log execution time."""
+    @functools.wraps(handler)
+    def wrapper(session):
+        t0 = time.perf_counter()
+        try:
+            result = handler(session)
+            elapsed = time.perf_counter() - t0
+            log.info(f"Step {handler.__name__} took {elapsed:.3f}s")
+            return result
+        except Exception as e:
+            elapsed = time.perf_counter() - t0
+            log.info(f"Step {handler.__name__} FAILED after {elapsed:.3f}s")
+            raise
+    return wrapper
+
+
+# ------------------------------------------------------------------
+# Spec cache — stores parsed results in SQLite keyed by path+mtime
+# ------------------------------------------------------------------
+
+
+def _get_spec_mtime(spec_path: str) -> float:
+    """Return file mtime for cache invalidation."""
+    try:
+        return Path(spec_path).stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 class PipelineSession:
@@ -90,7 +126,7 @@ class PipelineSession:
             self.steps[step_idx]["status"] = "running"
             self.steps[step_idx]["started_at"] = datetime.now().isoformat()
             self.current_step = step_idx
-            self._save()
+            self._save(persist=False)
 
     def complete_step(self, step_idx: int, output_path: str) -> None:
         """Mark a step as completed with its output path."""
@@ -99,7 +135,7 @@ class PipelineSession:
             self.steps[step_idx]["completed_at"] = datetime.now().isoformat()
             self.steps[step_idx]["output_path"] = output_path
             self.updated_at = datetime.now().isoformat()
-            self._save()
+            self._save(persist=False)
 
     def fail_step(self, step_idx: int, error: str) -> None:
         """Fail a step, record the error, and set session status to failed."""
@@ -115,10 +151,17 @@ class PipelineSession:
     def set_artifact(self, key: str, path: str) -> None:
         """Register a generated artifact and persist session state."""
         self.artifacts[key] = str(path)
-        self._save()
+        self._save(persist=False)
 
-    def _save(self) -> None:
-        """Persist session state to disk (JSON) and SQLite store."""
+    def _save(self, persist: bool = True) -> None:
+        """Persist session state to disk (JSON) and SQLite store.
+        
+        Args:
+            persist: If True, write to disk & store.  Set False for
+                     intermediate calls to avoid file I/O churn.
+        """
+        if not persist:
+            return
         data = self.to_dict()
         with open(self.session_dir / "session.json", "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -146,6 +189,7 @@ class PipelineSession:
 
 # --- Step Handlers ---
 
+@timed_step
 def step_spec_check(session: PipelineSession) -> str:
     """Step 0: 小明 — OpenSpec 合规检查"""
     try:
@@ -187,7 +231,38 @@ def step_spec_check(session: PipelineSession) -> str:
         raise RuntimeError(f"Spec validation subprocess failed: {e}")
 
 
-def _read_spec_requirements(spec_path: str) -> list[dict]:
+def _parse_spec(spec_path: str) -> dict:
+    """Parse spec file: returns requirements + scenarios, cached via SQLite.
+
+    Cache is invalidated when the spec file's mtime changes.
+    """
+    mtime = _get_spec_mtime(spec_path)
+
+    # Try cache hit
+    if _store:
+        try:
+            cached = _store.get_cached_spec_parse(spec_path, mtime)
+            if cached is not None:
+                return cached
+        except Exception:
+            pass
+
+    # Parse fresh
+    requirements = _parse_requirements(spec_path)
+    scenarios = _parse_scenarios(spec_path)
+    result = {"requirements": requirements, "scenarios": scenarios}
+
+    # Store in cache
+    if _store:
+        try:
+            _store.cache_spec_parse(spec_path, mtime, result)
+        except Exception:
+            pass
+
+    return result
+
+
+def _parse_requirements(spec_path: str) -> list[dict]:
     """Read requirements from a spec file. Each requirement is a dict with name and shall_statements."""
     requirements = []
     try:
@@ -226,7 +301,7 @@ def _read_spec_requirements(spec_path: str) -> list[dict]:
     return requirements
 
 
-def _count_spec_scenarios(spec_path: str) -> list[str]:
+def _parse_scenarios(spec_path: str) -> list[str]:
     """Read GIVEN/WHEN/THEN scenarios from a spec file."""
     scenarios = []
     try:
@@ -243,6 +318,7 @@ def _count_spec_scenarios(spec_path: str) -> list[str]:
     return scenarios
 
 
+@timed_step
 def step_super_analysis(session: PipelineSession) -> str:
     """Step 1: 小明 — S.U.P.E.R analysis with real spec data."""
     try:
@@ -250,8 +326,9 @@ def step_super_analysis(session: PipelineSession) -> str:
         log.info("Generating S.U.P.E.R analysis")
         
         spec_name = Path(session.spec_path).stem
-        requirements = _read_spec_requirements(session.spec_path)
-        scenarios = _count_spec_scenarios(session.spec_path)
+        parsed = _parse_spec(session.spec_path)
+        requirements = parsed["requirements"]
+        scenarios = parsed["scenarios"]
         
         total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
         req_list = "\n".join(f"  - {r['name']} ({len(r.get('shall_statements', []))} SHALLs)" for r in requirements[:15])
@@ -302,14 +379,16 @@ P0 — Core requirements (SHALL): {len(requirements)}
         raise
 
 
+@timed_step
 def step_hermes_prd(session: PipelineSession) -> str:
     """Step 2: Hermes — PRD with mapped requirements from spec."""
     try:
         print("  🔮 [Hermes] Writing PRD...")
         log.info("Writing PRD")
         
-        requirements = _read_spec_requirements(session.spec_path)
-        scenarios = _count_spec_scenarios(session.spec_path)
+        parsed = _parse_spec(session.spec_path)
+        requirements = parsed["requirements"]
+        scenarios = parsed["scenarios"]
         
         total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
         req_table = "\n".join(
@@ -355,6 +434,7 @@ Each GIVEN/WHEN/THEN mapped to test strategy:
         raise
 
 
+@timed_step
 def step_internal_review(session: PipelineSession) -> str:
     """Step 3: 小明 — 内部评审"""
     try:
@@ -394,6 +474,7 @@ def step_internal_review(session: PipelineSession) -> str:
         raise
 
 
+@timed_step
 def step_claude_arch(session: PipelineSession) -> str:
     """Step 4: Claude — Architecture design with real project analysis.
 
@@ -504,6 +585,7 @@ def step_claude_arch(session: PipelineSession) -> str:
         raise
 
 
+@timed_step
 def step_claude_dev(session: PipelineSession) -> str:
     """Step 5: Claude — Development log with real project metrics.
 
@@ -593,6 +675,7 @@ Spec validation and evidence collection available in session artifacts.
         raise
 
 
+@timed_step
 def step_claude_test(session: PipelineSession) -> str:
     """Step 6: Claude — Self-test with real test runner output.
 
@@ -734,6 +817,7 @@ Run CI Layer 1 to generate detailed coverage metrics for compliance.
         raise
 
 
+@timed_step
 def step_hermes_review(session: PipelineSession) -> str:
     """Step 7: Hermes — 代码审查"""
     try:
@@ -763,6 +847,7 @@ def step_hermes_review(session: PipelineSession) -> str:
         raise
 
 
+@timed_step
 def step_final_report(session: PipelineSession) -> str:
     """Step 8: 小明 — 最终报告生成"""
     try:

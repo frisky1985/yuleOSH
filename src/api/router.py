@@ -23,6 +23,7 @@ from .notify import handle_notify
 from .apikeys import handle_apikeys
 from .wizard import handle_wizard
 from .webhooks import handle_webhooks
+from .audit import handle_audit
 
 
 # Resource routing map: resource_name -> handler function
@@ -39,6 +40,7 @@ ROUTES = {
     "notify": handle_notify,
     "apikeys": handle_apikeys,
     "webhooks": handle_webhooks,
+    "audit": handle_audit,
 }
 
 
@@ -85,9 +87,13 @@ def dispatch(handler: BaseHTTPRequestHandler, path: str):
 
 
 def _respond(handler: BaseHTTPRequestHandler, data: dict, status: int = 200):
-    """Send a JSON response."""
+    """Send a JSON response with security headers."""
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.send_header("Content-Security-Policy", "default-src 'self'")
+    handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("X-Frame-Options", "DENY")
+    handler.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
     handler.end_headers()
     handler.wfile.write(json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8"))
