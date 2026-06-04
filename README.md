@@ -41,6 +41,10 @@ CI/CD 三层流水线 (ASPICE 对齐):
 ## 🚀 快速开始
 
 ```bash
+# 0. 从模板创建新项目（推荐）
+yuleosh template init my-project
+cd my-project
+
 # 1. 验证 OpenSpec 规范
 yuleosh spec validate docs/spec.md
 
@@ -58,6 +62,9 @@ yuleosh review task "my-feature" feature
 
 # 5. 生成 ASPICE 审计合规包
 yuleosh evidence pack
+
+# 6. 查看项目统计
+yuleosh stats
 ```
 
 ## 📦 目录结构
@@ -85,6 +92,8 @@ yuleOSH/
 | 命令 | 功能 |
 |:----|:------|
 | `yuleosh init [dir]` | 初始化项目 |
+| `yuleosh template init <name>` | 从模板创建新项目 |
+| `yuleosh stats [--json]` | 查看项目统计信息 |
 | `yuleosh spec validate <file>` | 验证 OpenSpec (SHALL/SCENARIO/覆盖度) |
 | `yuleosh spec diff <old> <new>` | 需求变更追踪 |
 | `yuleosh pipeline run <spec>` | 运行全流程 Agent 流水线 |
@@ -93,6 +102,9 @@ yuleOSH/
 | `yuleosh review task <name> [kind]` | 审查特定任务 |
 | `yuleosh ci run <layer>` | 运行 CI 层 (1/2/3) |
 | `yuleosh evidence pack` | 生成 ASPICE 合规包 |
+| `yuleosh ui start` | 启动 Dashboard |
+
+> 详细文档请参阅 [docs/USAGE.md](docs/USAGE.md)
 
 ## 🌐 Dashboard
 

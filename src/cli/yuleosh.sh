@@ -57,8 +57,41 @@ cmd_init() {
   echo "✅ Initialized OSH project at $dir"
 }
 
+cmd_template_init() {
+  local project_name="$1"
+  if [ -z "$project_name" ]; then
+    echo "❌ Usage: osh-cli template init <project-name>"
+    exit 1
+  fi
+  echo "📦 Creating new project from starter template: $project_name"
+  python3 "$OSH_HOME/src/cli/template.py" init "$project_name"
+}
+
+cmd_stats() {
+  local json_flag=""
+  for arg in "$@"; do
+    if [ "$arg" = "--json" ]; then
+      json_flag="--json"
+    fi
+  done
+  python3 "$OSH_HOME/src/cli/stats.py" $json_flag
+}
+
+cmd_ui_start() {
+  echo "🌐 Starting yuleOSH Dashboard..."
+  python3 "$OSH_HOME/src/ui/server.py"
+}
+
 case "${1:-help}" in
   init) cmd_init "${2:-}";;
+  template)
+    shift
+    case "${1:-}" in
+      init) shift; cmd_template_init "$1";;
+      *) echo "Usage: osh-cli template init <project-name>"; exit 1;;
+    esac
+    ;;
+  stats) shift; cmd_stats "$@";;
   spec)
     shift
     case "${1:-}" in
@@ -91,18 +124,22 @@ case "${1:-help}" in
     esac
     ;;
   evidence) shift; cmd_evidence_pack "$@";;
+  ui) shift; cmd_ui_start "$@";;
   help|--help|-h)
     echo "OSH Platform CLI"
     echo "Usage:"
-    echo "  osh-cli init [dir]              — Initialize project"
-    echo "  osh-cli spec validate <file>    — Validate OpenSpec"
-    echo "  osh-cli spec diff <o> <n>       — Diff specs"
-    echo "  osh-cli pipeline run <spec>     — Run full pipeline"
-    echo "  osh-cli pipeline status         — Pipeline status"
-    echo "  osh-cli review auto             — Auto-review changes"
-    echo "  osh-cli review task <name> [kind] — Review specific task"
-    echo "  osh-cli ci run <layer>          — Run CI layer (1/2/3)"
-    echo "  osh-cli evidence pack           — Generate compliance pack"
+    echo "  osh-cli init [dir]                    — Initialize project"
+    echo "  osh-cli template init <name>          — Create project from starter template"
+    echo "  osh-cli stats [--json]                — Show project statistics"
+    echo "  osh-cli spec validate <file>          — Validate OpenSpec"
+    echo "  osh-cli spec diff <o> <n>             — Diff specs"
+    echo "  osh-cli pipeline run <spec>           — Run full pipeline"
+    echo "  osh-cli pipeline status               — Pipeline status"
+    echo "  osh-cli review auto                   — Auto-review changes"
+    echo "  osh-cli review task <name> [kind]     — Review specific task"
+    echo "  osh-cli ci run <layer>                — Run CI layer (1/2/3)"
+    echo "  osh-cli evidence pack                 — Generate compliance pack"
+    echo "  osh-cli ui start                      — Start Dashboard"
     ;;
   *) echo "Unknown command: $1"; exit 1;;
 esac
