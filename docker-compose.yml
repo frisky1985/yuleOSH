@@ -1,10 +1,13 @@
 version: '3.8'
 
 services:
+  # ── yuleOSH application server ──────────────────────────────────────
   yuleosh:
     build: .
-    ports:
-      - "8080:8080"
+    # No external port mapping — Caddy handles ingress.
+    # Uncomment the line below for direct access during development:
+    # ports:
+    #   - "8080:8080"
     volumes:
       - yuleosh_data:/app/.yuleosh
       - ./projects:/app/projects:rw
@@ -22,6 +25,41 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - yuleosh_net
+
+  # ── Caddy reverse proxy with auto TLS ──────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"       # HTTP (redirects to HTTPS)
+      - "443:443"     # HTTPS
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # TLS certificates + ACME state
+      - caddy_config:/config  # Caddy runtime config
+    environment:
+      # If behind a CDN/cloud LB, set the trusted proxy CIDR:
+      # - CADDY_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      - TZ=Asia/Shanghai
+    depends_on:
+      - yuleosh
+    networks:
+      - yuleosh_net
+    # Healthcheck: verify Caddy is listening
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   yuleosh_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  yuleosh_net:
+    driver: bridge

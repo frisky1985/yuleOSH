@@ -1,0 +1,104 @@
+# =============================================================================
+# Caddyfile — yuleOSH Reverse Proxy with Auto TLS
+# =============================================================================
+#
+# Replace 'yuleosh.example.com' with your actual domain.
+# Caddy will automatically obtain and renew Let's Encrypt certificates.
+#
+# For local/staging without a domain, set your domain to :443 or :80 and
+# comment out the tls directive, or use tls internal for self-signed certs.
+#
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────
+# Production — replace with your actual domain
+# ─────────────────────────────────────────────────────────────────────
+yuleosh.yourdomain.com {
+    # Auto TLS via Let's Encrypt (default; no extra directive needed)
+    # For staging (avoid rate limits while testing):
+    #   tls {
+    #     issuer acme {
+    #       dir https://acme-staging-v02.api.letsencrypt.org/directory
+    #     }
+    #   }
+
+    # Reverse proxy to the yuleOSH container
+    reverse_proxy yuleosh:8080 {
+        # Forward the original Host header to the backend
+        header_up Host {host}
+
+        # Forward the real client IP (Caddy sees the real IP)
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Health check — Caddy will skip unhealthy backends
+        health_uri /api/health
+        health_interval 30s
+        health_timeout 5s
+    }
+
+    # Security headers
+    header {
+        # HSTS — tell browsers to always use HTTPS (max-age=1 year)
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Clickjacking protection
+        X-Frame-Options "DENY"
+
+        # Cross-site scripting filter (legacy browsers)
+        X-XSS-Protection "1; mode=block"
+
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Permissions policy — restrict browser features
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+        # Hide Caddy version from attackers
+        -Server
+    }
+
+    # Rate limiting — protect the API from abuse
+    rate_limit {
+        zone api_zone {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+
+    # Logging — structured JSON logs
+    log {
+        output file /data/logs/yuleosh-access.log {
+            roll_size 50MB
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Development / local
+# ─────────────────────────────────────────────────────────────────────
+# Uncomment for local testing with self-signed certs:
+# :443 {
+#     tls internal
+#     reverse_proxy yuleosh:8080
+# }
+#
+# Or plain HTTP for local-only:
+# :80 {
+#     reverse_proxy yuleosh:8080
+# }
+
+# ─────────────────────────────────────────────────────────────────────
+# HTTP→HTTPS redirect (automatic in Caddy when a TLS-enabled domain
+# is configured above; this block is kept for explicitness)
+# ─────────────────────────────────────────────────────────────────────
+# yuleosh.yourdomain.com:80 {
+#     redir https://{host}{uri} permanent
+# }

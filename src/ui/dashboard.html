@@ -186,6 +186,40 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 
 <div class="container">
 
+  <!-- Stats Summary Bar (top of dashboard) -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="stat-value stat-green" id="statPipelines">—</div>
+      <div class="stat-label">Total Pipelines</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-blue" id="statCI">—</div>
+      <div class="stat-label">CI Runs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-yellow" id="statReviews">—</div>
+      <div class="stat-label">Reviews</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-purple" id="statEvidence">—</div>
+      <div class="stat-label">Evidence Packs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-cyan" id="statProjects">—</div>
+      <div class="stat-label">Active Projects</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-green" id="statPipeRate">—</div>
+      <div class="stat-label">Pipeline Success</div>
+      <div class="stat-rate" id="statPipeRateDetail"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-blue" id="statCIRate">—</div>
+      <div class="stat-label">CI Pass Rate</div>
+      <div class="stat-rate" id="statCIRateDetail"></div>
+    </div>
+  </div>
+
   <!-- Pipeline Status -->
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
@@ -256,35 +290,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
     </div>
   </div>
 
-  <!-- Stats Summary Bar -->
-  <div class="stats-bar" id="statsBar">
-    <div class="stat-card">
-      <div class="stat-value stat-green" id="statPipelines">—</div>
-      <div class="stat-label">Total Pipelines</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value stat-blue" id="statCI">—</div>
-      <div class="stat-label">CI Runs</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value stat-yellow" id="statReviews">—</div>
-      <div class="stat-label">Reviews</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value stat-purple" id="statProjects">—</div>
-      <div class="stat-label">Active Projects</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value stat-cyan" id="statPipeRate">—</div>
-      <div class="stat-label">Pipeline Success</div>
-      <div class="stat-rate" id="statPipeRateDetail"></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value stat-green" id="statCIRate">—</div>
-      <div class="stat-label">CI Pass Rate</div>
-      <div class="stat-rate" id="statCIRateDetail"></div>
-    </div>
-  </div>
+
 
   <div class="refresh-bar">
     <span class="dot"></span>
@@ -553,6 +559,7 @@ async function loadStats() {
       document.getElementById('statPipelines').textContent = d.total_pipelines ?? '0';
       document.getElementById('statCI').textContent = d.total_ci_runs ?? '0';
       document.getElementById('statReviews').textContent = d.total_reviews ?? '0';
+      document.getElementById('statEvidence').textContent = d.total_evidence ?? '0';
       document.getElementById('statProjects').textContent = d.total_projects ?? '0';
       document.getElementById('statPipeRate').textContent = (d.pipeline_success_rate ?? 0) + '%';
       document.getElementById('statPipeRateDetail').textContent = 'of ' + d.total_pipelines + ' runs';
