@@ -1,0 +1,10 @@
+[project]
+name = "yuleOSH"
+version = "0.1.0"
+description = "嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体"
+authors = [{name = "frisky1985"}]
+license = {text = "MIT"}
+requires-python = ">=3.10"
+
+[project.scripts]
+yuleosh = "yuleosh_cli:main"
