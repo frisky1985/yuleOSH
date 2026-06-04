@@ -20,11 +20,15 @@ from .evidence import handle_evidence
 from .project import handle_project
 from .stats import handle_stats
 from .notify import handle_notify
+from .apikeys import handle_apikeys
+from .wizard import handle_wizard
+from .webhooks import handle_webhooks
 
 
 # Resource routing map: resource_name -> handler function
 ROUTES = {
     "health": handle_health,
+    "wizard": handle_wizard,
     "spec": handle_spec,
     "pipeline": handle_pipeline,
     "ci": handle_ci,
@@ -33,6 +37,8 @@ ROUTES = {
     "project": handle_project,
     "stats": handle_stats,
     "notify": handle_notify,
+    "apikeys": handle_apikeys,
+    "webhooks": handle_webhooks,
 }
 
 

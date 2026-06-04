@@ -178,7 +178,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 
 <div class="header">
   <h1><span class="green">🔱 OSH</span><span class="blue">-Fusion</span> <span style="font-weight:400;font-size:14px;color:var(--text2)">Dashboard</span></h1>
-  <span class="status-badge" id="statusBadge">● Running</span>
+  <div style="display:flex;align-items:center;gap:16px">
+    <a href="/apikeys" style="color:var(--text2);text-decoration:none;font-size:13px;transition:color .15s">🔑 API Keys</a>
+    <span class="status-badge" id="statusBadge">● Running</span>
+  </div>
 </div>
 
 <div class="container">

@@ -35,7 +35,7 @@ class Store:
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 3
+    _MIGRATION_VERSION = 4
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -108,6 +108,20 @@ class Store:
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+        """)
+        self.conn.commit()
+
+        # API keys table (v4)
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key_hash TEXT UNIQUE NOT NULL,
+                label TEXT NOT NULL,
+                prefix TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT,
+                revoked INTEGER NOT NULL DEFAULT 0
             );
         """)
         self.conn.commit()
@@ -327,10 +341,63 @@ class Store:
         )
         self.conn.commit()
 
+    def create_api_key(self, key_hash: str, label: str, prefix: str) -> dict:
+        now = datetime.now().isoformat()
+        cur = self.conn.execute(
+            "INSERT INTO api_keys (key_hash, label, prefix, created_at) VALUES (?, ?, ?, ?)",
+            (key_hash, label, prefix, now)
+        )
+        self.conn.commit()
+        return {"id": cur.lastrowid, "label": label, "prefix": prefix, "created_at": now, "revoked": 0}
+
+    def get_api_key_by_hash(self, key_hash: str):
+        cur = self.conn.execute(
+            "SELECT * FROM api_keys WHERE key_hash=?", (key_hash,)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def list_api_keys(self) -> list[dict]:
+        cur = self.conn.execute(
+            "SELECT id, label, prefix, created_at, last_used_at, revoked FROM api_keys ORDER BY created_at DESC"
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def revoke_api_key(self, key_id: int) -> bool:
+        cur = self.conn.execute(
+            "UPDATE api_keys SET revoked=1 WHERE id=? AND revoked=0", (key_id,)
+        )
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    def update_api_key_last_used(self, key_id: int):
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "UPDATE api_keys SET last_used_at=? WHERE id=?", (now, key_id)
+        )
+        self.conn.commit()
+
     def get_migration_version(self) -> int:
         cur = self.conn.execute("SELECT value FROM _meta WHERE key='migration_version'")
         row = cur.fetchone()
         return int(row["value"]) if row else 0
+
+    # ------------------------------------------------------------------
+    # First-run Wizard
+    # ------------------------------------------------------------------
+
+    def is_wizard_completed(self) -> bool:
+        """Check if the first-run wizard has been completed."""
+        cur = self.conn.execute("SELECT value FROM _meta WHERE key='wizard_completed'")
+        row = cur.fetchone()
+        return row is not None and row["value"] == "1"
+
+    def complete_wizard(self):
+        """Mark the first-run wizard as completed."""
+        self.conn.execute(
+            "INSERT OR REPLACE INTO _meta (key, value) VALUES ('wizard_completed', '1')"
+        )
+        self.conn.commit()
 
     def save_pipeline(self, name: str, data: dict):
         self.conn.execute("""INSERT OR REPLACE INTO pipelines 

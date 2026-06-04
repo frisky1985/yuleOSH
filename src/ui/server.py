@@ -13,6 +13,8 @@ import urllib.parse
 from pathlib import Path
 from typing import Optional
 
+from src.store import Store
+
 # Add parent dir to path for auth import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -87,6 +89,11 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._json_response(self._get_health())
             return
 
+        # Health dashboard page
+        if path == "/health":
+            self._serve_page("health.html", {})
+            return
+
         # Tenant auth endpoints
         if path == "/api/auth/session":
             self._handle_api("session")
@@ -99,6 +106,11 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/org/info":
             self._handle_api("org_info")
+            return
+
+        # Welcome/wizard page (no auth required)
+        if path == "/welcome":
+            self._serve_page("welcome.html", {})
             return
 
         # Tenant auth pages (no legacy auth required)
@@ -117,11 +129,29 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if path == "/" or path == "/index.html":
-            self._serve_file(UI_DIR / "marketing" / "index.html", "text/html; charset=utf-8")
+            # Check if first-time user — redirect to welcome wizard
+            try:
+                store = Store()
+                cur = store.conn.execute("SELECT value FROM _meta WHERE key='wizard_completed'")
+                row = cur.fetchone()
+                if row and row["value"] == "1":
+                    self._serve_file(UI_DIR / "marketing" / "index.html", "text/html; charset=utf-8")
+                else:
+                    self.send_response(302)
+                    self.send_header("Location", "/welcome")
+                    self.end_headers()
+            except Exception:
+                self._serve_file(UI_DIR / "marketing" / "index.html", "text/html; charset=utf-8")
         elif path == "/pricing":
             self._serve_file(UI_DIR / "marketing" / "pricing.html", "text/html; charset=utf-8")
+        elif path == "/en" or path == "/en/index.html":
+            self._serve_file(UI_DIR / "marketing" / "en" / "index.html", "text/html; charset=utf-8")
+        elif path == "/en/pricing":
+            self._serve_file(UI_DIR / "marketing" / "en" / "pricing.html", "text/html; charset=utf-8")
         elif path == "/dashboard":
             self._serve_file(UI_DIR / "dashboard.html", "text/html")
+        elif path == "/apikeys":
+            self._serve_page("apikeys.html", {})
         elif path == "/api/status":
             self._json_response(self._get_status())
         elif path == "/api/evidence":
@@ -132,6 +162,10 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._json_response(self._get_ci_results())
         elif path == "/api/health":
             self._json_response(self._get_health())
+        elif path == "/health":
+            self._serve_page("health.html", {})
+        elif path == "/welcome":
+            self._serve_page("welcome.html", {})
         elif path.startswith("/exec"):
             self._handle_exec(parsed.query)
         else:
