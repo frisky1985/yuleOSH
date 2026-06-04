@@ -299,10 +299,12 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._serve_page("health.html", {})
         elif path == "/welcome":
             self._serve_page("welcome.html", {})
+        elif path == "/demo":
+            self._serve_page("demo.html", {})
         elif path.startswith("/exec"):
             self._handle_exec(parsed.query)
         else:
-            self._json_response({"error": "not found"}, 404)
+            self._serve_page("404.html", {})
         self._log_audit()
 
     def do_POST(self):
@@ -362,7 +364,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._log_audit()
             return
 
-        self._json_response({"error": "not found"}, 404)
+        self._serve_page("404.html", {})
         self._log_audit()
 
     def do_DELETE(self):
@@ -373,7 +375,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             api_v1_dispatch(self, path)
             self._log_audit()
             return
-        self._json_response({"error": "not found"}, 404)
+        self._serve_page("404.html", {})
         self._log_audit()
 
     def do_OPTIONS(self):
@@ -552,6 +554,18 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         """Serve an HTML page from the pages/ directory, with simple template substitution."""
         filepath = PAGES_DIR / name
         if not filepath.exists():
+            # Fallback: serve static 404 page
+            fallback = PAGES_DIR / "404.html"
+            if fallback.exists():
+                content = fallback.read_text(encoding="utf-8")
+                body = content.encode("utf-8")
+                self.send_response(404)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._add_security_headers()
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
             self._json_response({"error": "page not found"}, 404)
             return
 
@@ -607,9 +621,34 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
         else:
+            # Serve custom 404 page for missing static files
+            fallback = PAGES_DIR / "404.html"
+            if fallback.exists():
+                content = fallback.read_text(encoding="utf-8")
+                body = content.encode("utf-8")
+                self.send_response(404)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._add_security_headers()
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
             self._json_response({"error": "file not found"}, 404)
 
     def _json_response(self, data, status: int = 200):
+        # Serve custom 500 page for browser requests
+        if status == 500 and 'text/html' in self.headers.get('Accept', ''):
+            fallback = PAGES_DIR / "500.html"
+            if fallback.exists():
+                content = fallback.read_text(encoding="utf-8")
+                body = content.encode("utf-8")
+                self.send_response(500)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._add_security_headers()
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
         body = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
         accept_encoding = self.headers.get("Accept-Encoding", "")
         if "gzip" in accept_encoding and len(body) > 512:

@@ -333,8 +333,8 @@ function renderPipeline(steps) {
   }
   el.innerHTML = steps.map(s => {
     const cls = s.status === 'completed' ? 'done' : s.status === 'running' ? 'active' : 'pending';
-    const icon = s.status === 'completed' ? '✅' : s.status === 'running' ? '🔄' : '⏳';
-    return `<div class="pip-step ${cls}">${icon} ${s.agent}<div class="step-label">${s.name}</div></div>`;
+    const dot = s.status === 'completed' ? '🟢' : s.status === 'running' ? '🟡' : '🔴';
+    return `<div class="pip-step ${cls}">${dot} ${s.agent}<div class="step-label">${s.name}</div></div>`;
   }).join('');
 }
 
@@ -363,12 +363,13 @@ function renderCI(results) {
     return;
   }
   el.innerHTML = results.map(r => {
+    const borderColor = r.status === 'passed' ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--yellow)';
     const icon = r.status === 'passed' ? '✅' : r.status === 'failed' ? '❌' : '🔄';
     const layers = r.stages?.map(s => {
       const si = s.status === 'passed' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'skipped' ? '⏭️' : '⚠️';
       return `<span style="font-size:11px;color:var(--text2);margin-right:6px">${si}${s.name}</span>`;
     }).join('') || '';
-    return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);border-left:3px solid ${borderColor};padding-left:10px;margin-bottom:4px;border-radius:0 4px 4px 0">
       <div>${icon} Layer ${r.layer} <span style="color:var(--text2);font-size:11px">${r.status}</span></div>
       <div style="margin-top:4px">${layers}</div>
     </div>`;
@@ -380,7 +381,7 @@ function renderReviews(reviews) {
   const el = document.getElementById('reviewPanel');
   document.getElementById('reviewCount').textContent = reviews?.length || 0;
   if (!reviews || reviews.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="icon">🔍</div>No reviews yet</div>';
+    el.innerHTML = '<div class="empty"><div class="icon">🔍</div>暂无审查数据</div>';
     return;
   }
   el.innerHTML = reviews.map(r => {
