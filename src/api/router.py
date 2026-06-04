@@ -18,6 +18,8 @@ from .ci import handle_ci
 from .review import handle_review
 from .evidence import handle_evidence
 from .project import handle_project
+from .stats import handle_stats
+from .notify import handle_notify
 
 
 # Resource routing map: resource_name -> handler function
@@ -29,6 +31,8 @@ ROUTES = {
     "review": handle_review,
     "evidence": handle_evidence,
     "project": handle_project,
+    "stats": handle_stats,
+    "notify": handle_notify,
 }
 
 

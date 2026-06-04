@@ -41,6 +41,27 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .container { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
 
+/* Stats Summary Bar */
+.stats-bar {
+  display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.stat-card {
+  flex: 1; min-width: 130px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; text-align: center;
+  transition: border-color .15s;
+}
+.stat-card:hover { border-color: rgba(16,185,129,.3); }
+.stat-card .stat-value { font-size: 22px; font-weight: 800; }
+.stat-card .stat-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.stat-card .stat-rate { font-size: 10px; margin-top: 1px; }
+.stat-green { color: var(--green); }
+.stat-blue { color: var(--blue); }
+.stat-yellow { color: var(--yellow); }
+.stat-purple { color: var(--purple); }
+.stat-cyan { color: var(--cyan); }
+
+
 /* Refresh bar */
 .refresh-bar {
   display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
@@ -229,6 +250,36 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
       <div class="card-body" id="evidencePanel">
         <div class="empty"><div class="icon">📦</div>Generate evidence pack</div>
       </div>
+    </div>
+  </div>
+
+  <!-- Stats Summary Bar -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="stat-value stat-green" id="statPipelines">—</div>
+      <div class="stat-label">Total Pipelines</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-blue" id="statCI">—</div>
+      <div class="stat-label">CI Runs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-yellow" id="statReviews">—</div>
+      <div class="stat-label">Reviews</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-purple" id="statProjects">—</div>
+      <div class="stat-label">Active Projects</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-cyan" id="statPipeRate">—</div>
+      <div class="stat-label">Pipeline Success</div>
+      <div class="stat-rate" id="statPipeRateDetail"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value stat-green" id="statCIRate">—</div>
+      <div class="stat-label">CI Pass Rate</div>
+      <div class="stat-rate" id="statCIRateDetail"></div>
     </div>
   </div>
 
@@ -490,6 +541,28 @@ async function loadEvidence() {
   addLogEntry('Loaded evidence data', 'info');
 }
 
+// --- Stats Loader ---
+async function loadStats() {
+  try {
+    const data = await loadJSON('/api/v1/stats/overview');
+    if (data && data.ok) {
+      const d = data.data;
+      document.getElementById('statPipelines').textContent = d.total_pipelines ?? '0';
+      document.getElementById('statCI').textContent = d.total_ci_runs ?? '0';
+      document.getElementById('statReviews').textContent = d.total_reviews ?? '0';
+      document.getElementById('statProjects').textContent = d.total_projects ?? '0';
+      document.getElementById('statPipeRate').textContent = (d.pipeline_success_rate ?? 0) + '%';
+      document.getElementById('statPipeRateDetail').textContent = 'of ' + d.total_pipelines + ' runs';
+      document.getElementById('statCIRate').textContent = (d.ci_pass_rate ?? 0) + '%';
+      document.getElementById('statCIRateDetail').textContent = 'of ' + d.total_ci_runs + ' runs';
+      addLogEntry('Stats loaded: ' + d.total_pipelines + ' pipes, ' + d.total_ci_runs + ' CI', 'info');
+    }
+  } catch(e) {
+    // Stats endpoint may not be available; fall back gracefully
+    addLogEntry('Stats load failed: ' + e, 'warning');
+  }
+}
+
 async function loadAll() {
   addLogEntry('Refreshing dashboard...', 'info');
   await Promise.all([
@@ -498,6 +571,7 @@ async function loadAll() {
     loadCI(),
     loadReviews(),
     loadEvidence(),
+    loadStats(),
   ]);
   document.getElementById('statusBadge').textContent = '● Live';
   addLogEntry('Dashboard refreshed ✅', 'success');

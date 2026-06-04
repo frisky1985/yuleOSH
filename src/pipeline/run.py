@@ -19,6 +19,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# Notifications (optional import)
+_notify = None
+try:
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from notify import notify_pipeline
+    _notify = notify_pipeline
+except ImportError:
+    _notify = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -868,7 +878,20 @@ def run_pipeline(spec_path: str, name: Optional[str] = None):
         print()
         
         log.info(f"Pipeline finished: {session.status}, errors={len(session.errors)}")
-        
+
+        # Send notification on pipeline completion or failure
+        if _notify:
+            try:
+                _notify(
+                    name=session.name,
+                    status=session.status,
+                    total_steps=len(PIPELINE_STEPS),
+                    completed_steps=sum(1 for s in session.steps if s.get("status") == "completed"),
+                    errors=session.errors,
+                )
+            except Exception as ne:
+                log.warning(f"Notification failed: {ne}")
+
         return session
     except Exception as e:
         log.critical(f"Pipeline orchestrator crashed: {e}")

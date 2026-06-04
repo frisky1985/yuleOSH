@@ -1,0 +1,30 @@
+1. Get the application URL by running these commands:
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}{{ .paths[0].path }}
+{{- end }}
+{{- else }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "yuleosh.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT={{ .Values.service.targetPort }}
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+{{- end }}
+
+2. Check pod health:
+  kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "yuleosh.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+3. View logs:
+  kubectl logs -f --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "yuleosh.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+4. Enable authentication (recommended for production):
+  Create a Secret with your API key:
+  kubectl create secret generic {{ include "yuleosh.fullname" . }}-apikey \
+    --from-literal=api-key='your-secure-api-key-here' \
+    --namespace {{ .Release.Namespace }}
+
+  Then upgrade the release with auth enabled:
+  helm upgrade {{ .Release.Name }} . --set env.YULEOSH_API_KEY=your-secure-api-key-here
+
+5. Uninstall the release:
+  helm uninstall {{ .Release.Name }} --namespace {{ .Release.Namespace }}

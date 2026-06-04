@@ -1,0 +1,89 @@
+# yuleOSH Prometheus Configuration
+# Scrape metrics from the /api/v1/health endpoint and expose
+# via a simple metrics bridge.
+#
+# By default, the OSH server runs on port 8080.
+# Customize with env var OSH_PORT or override targets below.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+  external_labels:
+    monitor: "yuleosh"
+    project: "osh-fusion"
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files for alert rules (optional)
+rule_files:
+  # - "alerts.yml"
+
+scrape_configs:
+  # ---------------------------------------
+  # yuleOSH OSH-Fusion API Server
+  # ---------------------------------------
+  - job_name: "yuleosh"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /api/v1/health
+    scheme: http
+
+    # Basic service discovery — static targets
+    static_configs:
+      - targets:
+          # Default local dev target
+          - "localhost:8080"
+          # Add production targets here:
+          # - "osh-api.prod.svc.cluster.local:8080"
+        labels:
+          service: "api"
+          env: "production"
+
+    # Optional basic auth if YULEOSH_API_KEY is set
+    # basic_auth:
+    #   username: "admin"
+    #   password: "${YULEOSH_API_KEY}"
+
+    # Relabel metrics from the health JSON response
+    # (Replace this with an OSH metrics exporter for full Prometheus support)
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "yuleosh_(.+)"
+        target_label: metric
+        replacement: "${1}"
+
+  # ---------------------------------------
+  # yuleOSH Prometheus Exporter (optional)
+  # ---------------------------------------
+  # If you deploy the separate metrics exporter:
+  - job_name: "yuleosh_exporter"
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "localhost:9100"
+        labels:
+          service: "exporter"
+          env: "production"
+
+# Sample alert rules (uncomment and add rule file)
+# groups:
+#   - name: yuleosh_alerts
+#     rules:
+#       - alert: ServerDown
+#         expr: probe_success{job="yuleosh"} == 0
+#         for: 1m
+#         annotations:
+#           summary: "OSH server is down"
+#       - alert: HighFailureRate
+#         expr: yuleosh_pipeline_success_rate < 80
+#         for: 5m
+#         annotations:
+#           summary: "Pipeline failure rate exceeds 20%"

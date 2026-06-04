@@ -35,7 +35,7 @@ class Store:
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 2
+    _MIGRATION_VERSION = 3
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -112,12 +112,95 @@ class Store:
         """)
         self.conn.commit()
 
+        # Migration v3 — add stat tracking columns
+        version = self.get_migration_version()
+        if version < 3:
+            self._run_migration_v3()
+
         # Record migration version
         self.conn.execute(
             "INSERT OR REPLACE INTO _meta (key, value) VALUES ('migration_version', ?)",
             (str(self._MIGRATION_VERSION),)
         )
         self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Migration helpers
+    # ------------------------------------------------------------------
+
+    def _run_migration_v3(self):
+        """Migration v3: add pipeline_run_count and last_active_at to projects."""
+        from sqlite3 import OperationalError
+        try:
+            self.conn.execute(
+                "ALTER TABLE projects ADD COLUMN pipeline_run_count INTEGER DEFAULT 0"
+            )
+        except OperationalError:
+            pass
+        try:
+            self.conn.execute(
+                "ALTER TABLE projects ADD COLUMN last_active_at TEXT"
+            )
+        except OperationalError:
+            pass
+        self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Usage Statistics
+    # ------------------------------------------------------------------
+
+    def record_activity(self, project_name: str):
+        """Increment pipeline_run_count and update last_active_at for a project."""
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "UPDATE projects SET pipeline_run_count = COALESCE(pipeline_run_count, 0) + 1, last_active_at = ? WHERE name = ?",
+            (now, project_name)
+        )
+        self.conn.commit()
+
+    def get_total_users(self) -> int:
+        """Return total users across all organizations."""
+        cur = self.conn.execute("SELECT COUNT(*) as c FROM users")
+        return cur.fetchone()["c"]
+
+    def get_total_projects(self) -> int:
+        """Return total projects (both legacy and org-scoped)."""
+        legacy = self.conn.execute("SELECT COUNT(*) as c FROM projects").fetchone()["c"]
+        org = self.conn.execute("SELECT COUNT(*) as c FROM org_projects").fetchone()["c"]
+        return legacy + org
+
+    def get_usage_stats(self) -> dict:
+        """Return aggregated usage statistics."""
+        conn = self.conn
+        pipe_count = conn.execute("SELECT COUNT(*) as c FROM pipelines").fetchone()["c"]
+        ci_count = conn.execute("SELECT COUNT(*) as c FROM ci_runs").fetchone()["c"]
+        review_count = conn.execute("SELECT COUNT(*) as c FROM reviews").fetchone()["c"]
+        ev_count = conn.execute("SELECT COUNT(*) as c FROM evidence").fetchone()["c"]
+        proj_count = conn.execute("SELECT COUNT(*) as c FROM projects").fetchone()["c"]
+        org_count = conn.execute("SELECT COUNT(*) as c FROM organizations").fetchone()["c"]
+        user_count = self.get_total_users()
+
+        # Aggregate pipeline statuses
+        pipe_statuses = conn.execute(
+            "SELECT status, COUNT(*) as c FROM pipelines GROUP BY status"
+        ).fetchall()
+
+        # Aggregate CI layer statistics
+        ci_layers = conn.execute(
+            "SELECT layer, COUNT(*) as c FROM ci_runs GROUP BY layer"
+        ).fetchall()
+
+        return {
+            "total_pipelines": pipe_count,
+            "total_ci_runs": ci_count,
+            "total_reviews": review_count,
+            "total_evidence": ev_count,
+            "total_projects": proj_count,
+            "total_organizations": org_count,
+            "total_users": user_count,
+            "pipeline_statuses": {r["status"]: r["c"] for r in pipe_statuses},
+            "ci_by_layer": {str(r["layer"]): r["c"] for r in ci_layers},
+        }
 
     # ------------------------------------------------------------------
     # Multi-tenant: Organizations

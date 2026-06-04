@@ -1,0 +1,18 @@
+apiVersion: v2
+name: yuleosh
+description: yuleOSH — Embedded AI Dev Lifecycle Platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.24.0-0"
+home: https://github.com/frisky1985/yuleOSH
+sources:
+  - https://github.com/frisky1985/yuleOSH
+keywords:
+  - ai
+  - dev-lifecycle
+  - osh
+  - embedded
+maintainers:
+  - name: frisky1985
+    email: maintainers@yuleosh.dev

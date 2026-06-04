@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "yuleosh.fullname" . }}-config
+  labels:
+    {{- include "yuleosh.labels" . | nindent 4 }}
+data:
+  OSH_HOME: {{ .Values.env.OSH_HOME | quote }}
+  YULEOSH_DB: {{ .Values.env.YULEOSH_DB | quote }}
+  {{- if .Values.env.PYTHONUNBUFFERED }}
+  PYTHONUNBUFFERED: {{ .Values.env.PYTHONUNBUFFERED | quote }}
+  {{- end }}

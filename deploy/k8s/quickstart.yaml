@@ -1,0 +1,159 @@
+# =============================================================================
+# quickstart.yaml — Single-file yuleOSH deployment (no Helm required)
+# =============================================================================
+# Apply directly:
+#   kubectl apply -f quickstart.yaml
+#
+# Then port-forward to access:
+#   kubectl port-forward svc/yuleosh 8080:8080
+#
+# Enable authentication (recommended for production):
+#   kubectl create secret generic yuleosh-apikey --from-literal=api-key='your-secure-api-key-here'
+#   Then uncomment the YULEOSH_API_KEY env entry below and re-apply.
+#
+# Customize by editing the ConfigMap, replicas, resources, etc.
+# =============================================================================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: yuleosh
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yuleosh-data
+  namespace: yuleosh
+  labels:
+    app.kubernetes.io/name: yuleosh
+    app.kubernetes.io/instance: yuleosh
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yuleosh-config
+  namespace: yuleosh
+  labels:
+    app.kubernetes.io/name: yuleosh
+    app.kubernetes.io/instance: yuleosh
+data:
+  OSH_HOME: "/app"
+  YULEOSH_DB: "/app/.yuleosh/store.db"
+  PYTHONUNBUFFERED: "1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yuleosh
+  namespace: yuleosh
+  labels:
+    app.kubernetes.io/name: yuleosh
+    app.kubernetes.io/instance: yuleosh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: yuleosh
+      app.kubernetes.io/instance: yuleosh
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: yuleosh
+        app.kubernetes.io/instance: yuleosh
+    spec:
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: yuleosh
+          image: yuleosh/server:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: yuleosh-config
+          env:
+            # Uncomment and set a strong key to enable authentication:
+            # - name: YULEOSH_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: yuleosh-apikey
+            #       key: api-key
+            #       optional: false
+            - name: YULEOSH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: yuleosh-apikey
+                  key: api-key
+                  optional: true
+          securityContext:
+            runAsUser: 1001
+            runAsGroup: 1001
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /app/.yuleosh
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: yuleosh-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: yuleosh
+  namespace: yuleosh
+  labels:
+    app.kubernetes.io/name: yuleosh
+    app.kubernetes.io/instance: yuleosh
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: yuleosh
+    app.kubernetes.io/instance: yuleosh

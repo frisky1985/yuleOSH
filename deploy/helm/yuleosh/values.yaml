@@ -1,0 +1,121 @@
+# =============================================================================
+# yuleOSH Helm Values
+# =============================================================================
+# All configurable parameters for the yuleOSH deployment.
+# Override via `--set key=value` or a custom values file.
+
+# -- Number of replicas to run
+replicaCount: 1
+
+# -- Override the base name of the application
+nameOverride: ""
+
+# -- Override the full application name
+fullnameOverride: ""
+
+image:
+  # -- Repository for the yuleOSH image
+  repository: yuleosh/server
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to Chart.appVersion)
+  tag: ""
+
+imagePullSecrets: []
+
+# -- Configurable environment variables injected into the pod
+env:
+  # -- OSH_HOME defines the application root directory inside the container
+  OSH_HOME: "/app"
+  # -- Path to the SQLite database file (stored on the PVC)
+  YULEOSH_DB: "/app/.yuleosh/store.db"
+  # -- API key for authentication (leave empty to disable auth)
+  # YULEOSH_API_KEY: "your-secure-api-key-here"
+  # -- Keep Python stdio unbuffered for live logs
+  PYTHONUNBUFFERED: "1"
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 8080
+  # -- Target container port
+  targetPort: 8080
+
+ingress:
+  # -- Enable ingress
+  enabled: false
+  # -- Ingress class name
+  className: ""
+  # -- Ingress annotations
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  # -- Hostnames for the ingress
+  hosts:
+    - host: yuleosh.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration
+  tls: []
+  # - secretName: yuleosh-tls
+  #   hosts:
+  #     - yuleosh.example.com
+
+persistence:
+  # -- Enable persistent volume for SQLite database
+  enabled: true
+  # -- Size of the PVC
+  size: 1Gi
+  # -- Storage class name (omit to use cluster default)
+  storageClass: ""
+  # -- Access modes
+  accessModes:
+    - ReadWriteOnce
+  # -- Existing PVC name (leave empty to create new)
+  existingClaim: ""
+  # -- Sub-path under the volume mount (for multi-use volumes)
+  subPath: ""
+
+# -- Resource limits and requests
+resources:
+  # -- Resource requests
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  # -- Resource limits
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# -- Node selector constraints
+nodeSelector: {}
+
+# -- Tolerations for scheduling
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
+
+# -- Security context for the pod
+podSecurityContext:
+  fsGroup: 1001
+  fsGroupChangePolicy: OnRootMismatch
+
+# -- Security context for the container
+containerSecurityContext:
+  runAsUser: 1001
+  runAsGroup: 1001
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Pod disruption budget (min available pods)
+podDisruptionBudget:
+  minAvailable: 1

@@ -6,6 +6,7 @@ Runs on every commit: plan-lint, clang-tidy, unit tests, coverage gate.
 """
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -13,6 +14,16 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger("ci")
+
+# Notifications (optional import)
+_notify = None
+try:
+    from notify import notify_ci as _notify_ci
+    _notify = _notify_ci
+except ImportError:
+    _notify = None
 
 
 class CIResult:
@@ -337,6 +348,18 @@ def run_layer1(project_dir: Optional[str] = None):
     with open(result_path, "w") as f:
         json.dump(ci.to_dict(), f, indent=2)
     
+    # Send notification
+    if _notify:
+        try:
+            _notify(
+                layer=1,
+                status="passed" if all_passed else "failed",
+                stages=ci.stages,
+                errors=ci.errors,
+            )
+        except Exception as ne:
+            log.warning(f"Notification failed: {ne}")
+
     print(f"\n{'='*40}")
     if all_passed:
         print("✅ CI Layer 1: ALL STAGES PASSED")
@@ -438,6 +461,18 @@ def run_layer2(project_dir: Optional[str] = None):
     with open(ci_dir / f"layer2-{commit}.json", "w") as f:
         json.dump(ci.to_dict(), f, indent=2)
     
+    # Send notification
+    if _notify:
+        try:
+            _notify(
+                layer=2,
+                status="passed" if all_passed else "failed",
+                stages=ci.stages,
+                errors=ci.errors,
+            )
+        except Exception as ne:
+            log.warning(f"Notification failed: {ne}")
+
     print(f"\n{'='*40}")
     if all_passed:
         print("✅ CI Layer 2: ALL STAGES PASSED")
@@ -516,6 +551,18 @@ def run_layer3(project_dir: Optional[str] = None):
     with open(ci_dir / f"layer3-{commit}.json", "w") as f:
         json.dump(ci.to_dict(), f, indent=2)
     
+    # Send notification
+    if _notify:
+        try:
+            _notify(
+                layer=3,
+                status="passed" if all_passed else "failed",
+                stages=ci.stages,
+                errors=ci.errors,
+            )
+        except Exception as ne:
+            log.warning(f"Notification failed: {ne}")
+
     print(f"\n{'='*40}")
     if all_passed:
         print("✅ CI Layer 3: ALL STAGES PASSED 🎉")
