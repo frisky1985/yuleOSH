@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# ============================================================================
+# yuleosh-server — OSH Fusion Dashboard Server Startup Script
+#
+# Usage:
+#   export YULEOSH_API_KEY="your-key"
+#   bin/yuleosh-server
+#
+# Or set key via config file:
+#   echo "YULEOSH_API_KEY=your-key" > ~/.yuleosh.conf
+#   bin/yuleosh-server
+# ============================================================================
+set -euo pipefail
+
+# --- Locate OSH_HOME --------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_OSH_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+export OSH_HOME="${OSH_HOME:-$DEFAULT_OSH_HOME}"
+cd "$OSH_HOME"
+
+# --- Config loading ---------------------------------------------------------
+CONFIG_FILES=(
+    "/etc/yuleosh.conf"
+    "$HOME/.yuleosh.conf"
+    ".yuleosh.conf"
+)
+for cf in "${CONFIG_FILES[@]}"; do
+    if [ -f "$cf" ]; then
+        source "$cf"
+    fi
+done
+
+# --- Setup ------------------------------------------------------------------
+YULEOSH_PORT="${OSH_PORT:-8080}"
+PYTHON="${YULEOSH_PYTHON:-python3}"
+
+# --- Banner -----------------------------------------------------------------
+echo ""
+echo "  🔱 OSH-Fusion Dashboard Server"
+echo "  ─────────────────────────────"
+echo "  OSH_HOME:   $OSH_HOME"
+echo "  Port:       $YULEOSH_PORT"
+echo "  Python:     $(command -v "$PYTHON")"
+echo "  Auth:       $([ -n "${YULEOSH_API_KEY:-}" ] && echo 'enabled' || echo 'disabled (set YULEOSH_API_KEY)')"
+echo ""
+
+# --- Dependency checks ------------------------------------------------------
+check_dep() {
+    if ! command -v "$1" &>/dev/null; then
+        echo "  ⚠️  $1 not found — trying pip install..."
+        if ! $PYTHON -m pip install --quiet "$2" 2>/dev/null; then
+            echo "  ❌ Failed to install $2. Please install manually."
+            return 1
+        fi
+    fi
+}
+
+check_dep "$PYTHON" "python3" || exit 1
+
+# Verify yuleOSH imports work
+echo "  🔍 Checking dependencies..."
+if ! $PYTHON -c "import src.ui.server" 2>/dev/null; then
+    echo "  ⚠️  Module import failed — checking PYTHONPATH..."
+    export PYTHONPATH="$OSH_HOME:$PYTHONPATH"
+    if ! $PYTHON -c "import src.ui.server" 2>/dev/null; then
+        echo "  ❌ Could not import yuleOSH modules. Is the project installed?"
+        exit 1
+    fi
+fi
+echo "  ✅ Dependencies OK"
+echo ""
+
+# --- Create required directories --------------------------------------------
+mkdir -p "$OSH_HOME/.osh/reviews"
+mkdir -p "$OSH_HOME/.osh/ci"
+mkdir -p "$OSH_HOME/.osh/evidence"
+
+# --- Start server -----------------------------------------------------------
+echo "  🚀 Starting dashboard on http://localhost:$YULEOSH_PORT"
+echo "  Press Ctrl+C to stop"
+echo ""
+
+exec $PYTHON src/ui/server.py
