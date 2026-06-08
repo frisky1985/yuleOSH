@@ -265,6 +265,8 @@ def run_plan_lint(project_dir: str, ci: CIResult) -> bool:
     # Look for task files
     task_files = []
     for root, dirs, files in os.walk(project_dir):
+        # Skip hidden directories (test artifacts, .git, .osh/sessions etc.)
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
         if "tasks" in root.split(os.sep) or root.endswith("tasks"):
             for f in files:
                 if f.endswith(".md") and ("task" in f.lower() or "plan" in f.lower()):
@@ -458,7 +460,7 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     try:
         cov_env = {**os.environ, "COVERAGE_RUN": "1"}
         result = subprocess.run(
-            [sys.executable, "-m", "coverage", "run", "--branch", "-m", "pytest", "-q", "--tb=short"],
+            [sys.executable, "-m", "coverage", "run", "--branch", "--source=src", "-m", "pytest", "-q", "--tb=short", "tests/"],
             capture_output=True, text=True, timeout=120, cwd=project_dir, env=cov_env,
         )
         
