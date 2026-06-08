@@ -88,7 +88,7 @@ class EvidenceCollector:
 
         e.g.
             def test_ci_blocking_logic():
-                \"\"\"Covers: CI 阻断逻辑, pipeline 硬错误\"\"\"
+                \"\"\"Covers: CI \u963b\u65ad\u903b\u8f91, pipeline \u786c\u9519\u8bef\"\"\"
                 ...
         """
         keywords = []
@@ -198,6 +198,51 @@ class EvidenceCollector:
             print("  \u26a0\ufe0f  No Covers: markers found in any test file")
         return coverage
 
+    def _build_requirement_to_test_map(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+        """Build bidirectional map: req_name <-> test_files via keyword matching."""
+        if not self.test_coverage:
+            self._collect_test_coverage()
+
+        self.req_to_tests = {}
+        self.test_to_reqs = {t: [] for t in self.test_coverage}
+
+        # Stop words used for filtering SHALL keywords
+        _stop_words = {"the", "and", "for", "with", "each", "from", "that", "this", "all", "support", "system", "shall"}
+
+        for req in self.requirements:
+            req_name = req.get("name", "")
+            if not req_name:
+                continue
+
+            # Collect all keywords from SHALL statements
+            shall_keywords: set[str] = set()
+            for shall in req.get("shall", []):
+                words = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{1,}", shall.lower())
+                for w in words:
+                    if w not in _stop_words:
+                        shall_keywords.add(w)
+
+            # Also add req_name keywords
+            name_words = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{1,}", req_name.lower())
+            for w in name_words:
+                if w not in _stop_words:
+                    shall_keywords.add(w)
+
+            # Match against each test file's Covers keywords
+            matching_tests: list[str] = []
+            for test_file, covered_kws in self.test_coverage.items():
+                covered_lower = [k.lower() for k in covered_kws]
+                # If any test keyword overlaps with shall keywords
+                if any(ck in shall_keywords for ck in covered_lower):
+                    matching_tests.append(test_file)
+
+            self.req_to_tests[req_name] = matching_tests
+            for t in matching_tests:
+                if req_name not in self.test_to_reqs.setdefault(t, []):
+                    self.test_to_reqs[t].append(req_name)
+
+        return self.req_to_tests, self.test_to_reqs
+
     # ------------------------------------------------------------------ #
     # Categorization for friendly warning display
     # ------------------------------------------------------------------ #
@@ -258,7 +303,7 @@ class EvidenceCollector:
             covered_count = total_shalls - len(uncovered)
 
             if covered_count == 0:
-                # All SHALLs uncovered — friendly info message
+                # All SHALLs uncovered -- friendly info message
                 print(f"  \u2139\ufe0f  SHALL coverage: 0/{total_shalls} \u2014"
                       f" Run pipeline with real LLM to see actual coverage")
                 return uncovered

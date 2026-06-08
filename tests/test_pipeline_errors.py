@@ -243,7 +243,7 @@ def test_pipeline_llm_failure_stops_pipeline(tmp_path, monkeypatch):
         raise PipelineStepError("LLM API timeout after 60s")
 
     with mock.patch("pipeline.run.step_super_analysis", failing_handler):
-        session = run_pipeline(str(spec_file), name="test-llm-fail")
+        session = run_pipeline(str(spec_file), name="test-llm-fail", mock=True)
 
     assert session.status == "failed"
     errors_str = " ".join(session.errors).lower()
