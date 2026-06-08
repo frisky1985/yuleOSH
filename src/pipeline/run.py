@@ -18,7 +18,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 # Notifications (optional import)
 _notify = None
@@ -41,6 +41,9 @@ log = logging.getLogger("pipeline")
 # Add src to path for store import
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from llm.client import chat_completion  # noqa: E402
+
+# Local imports
+from pipeline.prompts import build_test_planning_prompt  # noqa: E402
 try:
     from store import Store
     _store = Store()
@@ -99,7 +102,12 @@ def _get_spec_mtime(spec_path: str) -> float:
 class PipelineSession:
     """Represents a running pipeline session."""
     
-    def __init__(self, name: str, spec_path: str):
+    def __init__(
+        self,
+        name: str,
+        spec_path: str,
+        llm_client: Optional[Callable] = None,
+    ):
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
         self.created_at = datetime.now().isoformat()
@@ -110,6 +118,7 @@ class PipelineSession:
         self.artifacts: dict = {}
         self.errors: list[str] = []
         self.session_dir = self._ensure_session_dir()
+        self.llm_client = llm_client
 
     def _ensure_session_dir(self) -> Path:
         """Ensure the session directory exists and return its path."""
@@ -199,6 +208,24 @@ class PipelineSession:
             "artifacts": self.artifacts,
             "errors": self.errors,
         }
+
+
+# --- LLM call helper (DI support) ---
+
+
+def _call_llm(
+    session: PipelineSession,
+    system_prompt: str,
+    user_prompt: str,
+    **kwargs,
+) -> dict:
+    """Call LLM using the session's injected client or fall back to global chat_completion.
+
+    This is the single point of dependency injection for LLM calls in pipeline steps.
+    Tests can inject a mock via ``PipelineSession(llm_client=mock_fn)``.
+    """
+    client = session.llm_client if session.llm_client is not None else chat_completion
+    return client(system_prompt, user_prompt, **kwargs)
 
 
 # --- Step Handlers ---
@@ -380,7 +407,7 @@ def step_super_analysis(session: PipelineSession) -> str:
         )
 
         try:
-            result = chat_completion(system_prompt, user_prompt)
+            result = _call_llm(session, system_prompt, user_prompt)
         except Exception as e:
             log.error(f"LLM call failed during S.U.P.E.R analysis: {e}")
             raise PipelineStepError(
@@ -485,7 +512,7 @@ def step_hermes_prd(session: PipelineSession) -> str:
         )
 
         try:
-            result = chat_completion(system_prompt, user_prompt)
+            result = _call_llm(session, system_prompt, user_prompt)
         except Exception as e:
             log.error(f"LLM call failed during PRD generation: {e}")
             raise PipelineStepError(
@@ -652,7 +679,7 @@ def step_claude_arch(session: PipelineSession) -> str:
         )
 
         try:
-            result = chat_completion(system_prompt, user_prompt)
+            result = _call_llm(session, system_prompt, user_prompt)
         except Exception as e:
             log.error(f"LLM call failed during architecture analysis: {e}")
             raise PipelineStepError(
@@ -807,7 +834,7 @@ def step_claude_dev(session: PipelineSession) -> str:
         user_prompt += "\n\n---\n\nNow produce the development plan, task breakdown, and tech debt identification as Markdown."
 
         try:
-            result = chat_completion(system_prompt, user_prompt, max_tokens=4096)
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
         except Exception as e:
             log.error(f"LLM call failed during development planning: {e}")
             raise PipelineStepError(
@@ -851,8 +878,95 @@ def step_claude_dev(session: PipelineSession) -> str:
 
 
 @timed_step
+def step_test_planning(session: PipelineSession) -> str:
+    """Step 6: Claude — AI-powered test planning.
+
+    Reads spec + architecture + development plan from artifacts,
+    sends to LLM, and generates a comprehensive test plan with
+    strategy, requirement traceability matrix, and coverage targets.
+    """
+    try:
+        print("  📋 [Claude] Running AI-powered test planning...")
+        log.info("Running AI-powered test planning")
+
+        # --- Gather inputs ---
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
+        parsed = _parse_spec(session.spec_path)
+        requirements = parsed["requirements"]
+
+        # Architecture analysis from artifacts
+        architecture_content = None
+        if "architecture" in session.artifacts:
+            ap = Path(session.artifacts["architecture"])
+            if ap.exists():
+                architecture_content = ap.read_text()
+
+        # Development plan from artifacts
+        dev_plan_content = None
+        if "development" in session.artifacts:
+            dp = Path(session.artifacts["development"])
+            if dp.exists():
+                dev_plan_content = dp.read_text()
+
+        # --- Build prompt ---
+        system_prompt, user_prompt = build_test_planning_prompt(
+            spec_content=spec_content,
+            requirements=requirements,
+            architecture_content=architecture_content,
+            development_plan_content=dev_plan_content,
+        )
+
+        # --- Call LLM ---
+        try:
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
+        except Exception as e:
+            log.error(f"LLM call failed during test planning: {e}")
+            raise PipelineStepError(
+                f"Test planning LLM call failed: {e}\n"
+                f"Spec: {session.spec_path}"
+            )
+
+        plan = result["content"]
+        usage = result.get("usage", {})
+        log.info(
+            "LLM returned %d tokens (prompt=%s, completion=%s)",
+            usage.get("total_tokens", "?"),
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
+
+        total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
+        full_output = (
+            f"# Test Plan: {session.name}\n\n"
+            f"> Generated by: LLM ({result.get('model', 'unknown')})\n"
+            f"> Source spec: {session.spec_path}\n"
+            f"> Requirements: {len(requirements)}  |  SHALLs: {total_shall}\n"
+            f"> Tokens: {usage.get('total_tokens', '?')} "
+            f"(prompt {usage.get('prompt_tokens', '?')} + "
+            f"completion {usage.get('completion_tokens', '?')})\n\n"
+            f"{plan}"
+        )
+
+        out_path = session.session_dir / "test-plan.md"
+        try:
+            out_path.write_text(full_output)
+        except OSError as e:
+            log.error(f"Cannot write test plan: {e}")
+            raise PipelineStepError(f"Cannot write test plan: {e}")
+        print(f"  ✅ [Claude] AI test plan generated at {out_path}")
+        log.info(f"AI test plan saved to {out_path}")
+        return str(out_path)
+    except PipelineStepError:
+        raise
+    except Exception as e:
+        log.error(f"Test planning step failed: {e}")
+        raise PipelineStepError(f"Test planning step failed: {e}")
+
+
+@timed_step
 def step_claude_test(session: PipelineSession) -> str:
-    """Step 6: Claude — Self-test with real test runner output.
+    """Step 7: Claude — Self-test with real test runner output.
 
     Runs pytest or go test to get actual test results, parse them,
     and write a meaningful test report.
@@ -1191,7 +1305,7 @@ def step_hermes_review(session: PipelineSession) -> str:
         )
 
         try:
-            result = chat_completion(system_prompt, user_prompt, max_tokens=4096)
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
         except Exception as e:
             log.error(f"LLM call failed during code review: {e}")
             raise PipelineStepError(
@@ -1295,20 +1409,29 @@ PIPELINE_STEPS = [
     ("internal-review", "小明", "内部评审", step_internal_review),
     ("architecture", "Claude", "架构设计", step_claude_arch),
     ("development", "Claude", "开发实现", step_claude_dev),
+    ("test-planning", "Claude", "测试规划", step_test_planning),
     ("self-test", "Claude", "自测验证", step_claude_test),
     ("code-review", "Hermes", "代码审查", step_hermes_review),
     ("final-report", "小明", "最终报告", step_final_report),
 ]
 
 
-def run_pipeline(spec_path: str, name: Optional[str] = None):
-    """Run the full OSH pipeline for a given spec."""
+def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None):
+    """Run the full OSH pipeline for a given spec.
+    
+    Args:
+        spec_path: Path to the specification file.
+        name: Optional session name (auto-generated if None).
+        llm_client: Optional injected LLM callable for testing.
+            When provided, all LLM-dependent steps use this callable
+            instead of the global ``chat_completion``.
+    """
     
     try:
         if name is None:
             name = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
-        session = PipelineSession(name, spec_path)
+        session = PipelineSession(name, spec_path, llm_client=llm_client)
         print(f"\n🚀 Pipeline started: {name}")
         print(f"   Spec: {spec_path}")
         print(f"   Session: {session.session_dir}")
