@@ -10,8 +10,10 @@ Automatically generates:
   - Compliance pack (ZIP)
 """
 
+import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import zipfile
@@ -36,6 +38,137 @@ class EvidenceCollector:
         self.reviews: list[dict] = []
         self.ci_results: list[dict] = []
         self.coverage_data: Optional[dict] = None
+
+        # Traceability data
+        self.test_coverage: dict[str, list[str]] = {}  # test_file -> [covered_keywords]
+        self.req_to_tests: dict[str, list[str]] = {}   # req_name -> [test_files]
+        self.test_to_reqs: dict[str, list[str]] = {}   # test_file -> [req_names]
+
+    def _parse_covers_from_file(self, test_path: str) -> list[str]:
+        """Parse Covers: marker from a test file's module docstring or line comments."""
+        keywords = []
+        try:
+            with open(test_path, encoding="utf-8") as f:
+                content = f.read()
+
+            # 1) Try AST module-level docstring
+            try:
+                tree = ast.parse(content)
+                docstring = ast.get_docstring(tree)
+                if docstring:
+                    for line in docstring.split("\n"):
+                        m = re.search(r"^\s*Covers:\s*(.+)$", line, re.IGNORECASE)
+                        if m:
+                            raw = m.group(1)
+                            keywords.extend(
+                                k.strip() for k in raw.split(",") if k.strip()
+                            )
+            except SyntaxError:
+                pass
+
+            # 2) Fallback: regex scan for line comments
+            if not keywords:
+                for line in content.split("\n"):
+                    m = re.search(r"^\s*#\s*Covers:\s*(.+)$", line, re.IGNORECASE)
+                    if m:
+                        raw = m.group(1)
+                        keywords.extend(
+                            k.strip() for k in raw.split(",") if k.strip()
+                        )
+        except (OSError, UnicodeDecodeError):
+            pass
+
+        return keywords
+
+    def _collect_test_coverage(self) -> dict[str, list[str]]:
+        """Scan tests/ for Covers: markers and return test_file -> [covered_keywords]."""
+        tests_dir = Path(self.project_dir) / "tests"
+        if not tests_dir.is_dir():
+            print("  ⏭️  No tests/ directory found")
+            return {}
+
+        coverage: dict[str, list[str]] = {}
+        for test_file in sorted(tests_dir.glob("test_*.py")):
+            keywords = self._parse_covers_from_file(str(test_file))
+            if keywords:
+                coverage[test_file.name] = keywords
+
+        self.test_coverage = coverage
+        print(f"  📋 Collected test coverage from {len(coverage)} test file(s)")
+        if not coverage:
+            print("  ⚠️  No Covers: markers found in any test file")
+        return coverage
+
+    def _build_requirement_to_test_map(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+        """Build bidirectional map: req_name <-> test_files via keyword matching."""
+        if not self.test_coverage:
+            self._collect_test_coverage()
+
+        self.req_to_tests = {}
+        self.test_to_reqs = {t: [] for t in self.test_coverage}
+
+        # Stop words used for filtering SHALL keywords
+        _stop_words = {"the", "and", "for", "with", "each", "from", "that", "this", "all", "support", "system", "shall"}
+
+        for req in self.requirements:
+            req_name = req.get("name", "")
+            if not req_name:
+                continue
+
+            # Collect all keywords from SHALL statements
+            shall_keywords: set[str] = set()
+            for shall in req.get("shall", []):
+                words = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{1,}", shall.lower())
+                for w in words:
+                    if w not in _stop_words:
+                        shall_keywords.add(w)
+
+            # Also add req_name keywords
+            name_words = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{1,}", req_name.lower())
+            for w in name_words:
+                if w not in _stop_words:
+                    shall_keywords.add(w)
+
+            # Match against each test file's Covers keywords
+            matching_tests: list[str] = []
+            for test_file, covered_kws in self.test_coverage.items():
+                covered_lower = [k.lower() for k in covered_kws]
+                # If any test keyword overlaps with shall keywords
+                if any(ck in shall_keywords for ck in covered_lower):
+                    matching_tests.append(test_file)
+
+            self.req_to_tests[req_name] = matching_tests
+            for t in matching_tests:
+                if req_name not in self.test_to_reqs.setdefault(t, []):
+                    self.test_to_reqs[t].append(req_name)
+
+        return self.req_to_tests, self.test_to_reqs
+
+    def _check_traceability_completeness(self) -> list[dict]:
+        """Check each SHALL for test coverage. Returns list of uncovered SHALLs."""
+        if not self.req_to_tests:
+            self._build_requirement_to_test_map()
+
+        uncovered: list[dict] = []
+        for req in self.requirements:
+            req_name = req.get("name", "")
+            covered = self.req_to_tests.get(req_name, [])
+            for shall in req.get("shall", []):
+                if not covered:
+                    uncovered.append({
+                        "req_name": req_name,
+                        "shall": shall,
+                        "req_id": req.get("req_id", ""),
+                    })
+
+        if uncovered:
+            print(f"  ⚠️  {len(uncovered)} SHALL(s) not covered by any test:")
+            for u in uncovered[:5]:
+                print(f"      {u['req_name']}: {u['shall'][:60]}...")
+            if len(uncovered) > 5:
+                print(f"      ... and {len(uncovered)-5} more")
+
+        return uncovered
 
     def collect_requirements(self, spec_path: str = None):
         """Parse OpenSpec and collect requirements."""
@@ -89,7 +222,12 @@ class EvidenceCollector:
         print(f"  📋 Collected {len(self.ci_results)} CI result(s)")
 
     def generate_traceability_matrix(self) -> str:
-        """Generate requirements traceability matrix."""
+        """Generate requirements traceability matrix with test mappings."""
+        # Build test coverage if not already done
+        if not self.req_to_tests:
+            self._build_requirement_to_test_map()
+        uncovered = self._check_traceability_completeness()
+
         lines = [
             f"# Traceability Matrix",
             f"",
@@ -103,9 +241,13 @@ class EvidenceCollector:
         for req in self.requirements:
             name = req.get("name", "Unknown")
             shall_count = req.get("shall_count", 0)
+            req_id = req.get("req_id", "")
             lines.append(f"### {name}")
+            if req_id:
+                lines.append(f"- Req ID: {req_id}")
             lines.append(f"- SHALL statements: {shall_count}")
-            lines.append(f"- Status: {'✅ Covered' if shall_count > 0 else '❌ No implementation'}")
+            implementation_status = '✅ Covered' if shall_count > 0 else '❌ No implementation'
+            lines.append(f"- Status: {implementation_status}")
             
             # Check for matching scenarios
             matching_scenarios = [
@@ -118,6 +260,22 @@ class EvidenceCollector:
                     lines.append(f"  - {s['name']}: GIVEN({len(s['given'])}) → WHEN({len(s['when'])}) → THEN({len(s['then'])})")
             else:
                 lines.append(f"- Scenarios: 0 ⚠️")
+            
+            # Test coverage mapping
+            matching_tests = self.req_to_tests.get(name, [])
+            if matching_tests:
+                lines.append(f"- Test files ({len(matching_tests)}):")
+                for tf in matching_tests:
+                    lines.append(f"  - {tf}")
+            else:
+                lines.append(f"- Test files: 0 ❌ Not covered by any test")
+            
+            # List individual SHALL coverage
+            lines.append(f"- SHALL details:")
+            for shall in req.get("shall", []):
+                is_covered = bool(matching_tests)
+                icon = "✅" if is_covered else "❌"
+                lines.append(f"  {icon} {shall[:80]}{'...' if len(shall) > 80 else ''}")
             
             # Check review records
             matching_reviews = [
@@ -133,10 +291,13 @@ class EvidenceCollector:
         # Summary
         total = len(self.requirements)
         covered = sum(1 for r in self.requirements if r.get("shall_count", 0) > 0)
+        test_covered = sum(1 for r in self.requirements if self.req_to_tests.get(r.get("name", ""), []))
         lines.extend([
             f"## Summary",
             f"- Total Requirements: {total}",
-            f"- Covered: {covered} ({covered/total*100:.0f}%)" if total > 0 else "- Covered: 0",
+            f"- Requirements with implementation: {covered} ({covered/total*100:.0f}%)" if total > 0 else "- Requirements with implementation: 0",
+            f"- Requirements with test coverage: {test_covered} ({test_covered/total*100:.0f}%)" if total > 0 else "- Requirements with test coverage: 0",
+            f"- Uncovered SHALLs: {len(uncovered)}",
             f"- Scenarios: {len(self.scenarios)}",
             f"- Reviews: {len(self.reviews)}",
             f"- CI Runs: {len(self.ci_results)}",
@@ -237,6 +398,58 @@ class EvidenceCollector:
         print(f"  ✅ Review logs aggregated: {output_path}")
         return str(output_path)
 
+    def generate_acceptance_matrix(self) -> str:
+        """Generate acceptance matrix: Req/SHALL -> verification method -> test file -> status."""
+        if not self.req_to_tests:
+            self._build_requirement_to_test_map()
+
+        lines = [
+            f"# Acceptance Matrix",
+            f"",
+            f"> Generated: {self.generated_at}",
+            f"> Version: {self.version}",
+            f"",
+            f"| Req ID | Requirement | SHALL | 验证方法 | 测试文件 | 状态 |",
+            f"|:------:|:-----------|:------|:---------|:--------|:----:|",
+        ]
+
+        total_shalls = 0
+        covered_shalls = 0
+        for req in self.requirements:
+            name = req.get("name", "Unknown")
+            req_id = req.get("req_id", "RS---")
+            shall_list = req.get("shall", [])
+            matching_tests = self.req_to_tests.get(name, [])
+            test_str = ", ".join(matching_tests) if matching_tests else "—"
+            status = "✅" if matching_tests else "❌"
+
+            for idx, shall in enumerate(shall_list):
+                total_shalls += 1
+                # Each SHALL gets its own row; test coverage check at req level
+                shall_status = status if matching_tests else "❌"
+                if matching_tests:
+                    covered_shalls += 1
+                lines.append(
+                    f"| {req_id} | {name} | {shall} | Unit Test | {test_str} | {shall_status} |"
+                )
+
+        # Summary
+        pct = (covered_shalls / total_shalls * 100) if total_shalls > 0 else 0
+        lines.extend([
+            f"",
+            f"## Summary",
+            f"- Total SHALL statements: {total_shalls}",
+            f"- Covered by tests: {covered_shalls} ({pct:.0f}%)",
+            f"- Uncovered: {total_shalls - covered_shalls}",
+            f"- Threshold: 100% → {'✅ PASS' if pct >= 100 else '❌ FAIL'}",
+        ])
+
+        content = "\n".join(lines)
+        output_path = self.evidence_dir / "acceptance-matrix.md"
+        output_path.write_text(content)
+        print(f"  ✅ Acceptance matrix generated: {output_path}")
+        return str(output_path)
+
     def pack_compliance_zip(self) -> str:
         """Create compliance pack ZIP for ASPICE audit."""
         zip_path = self.evidence_dir / "compliance-pack.zip"
@@ -286,6 +499,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     artifacts.append(collector.generate_traceability_matrix())
     artifacts.append(collector.generate_requirement_coverage())
     artifacts.append(collector.generate_code_coverage_report())
+    artifacts.append(collector.generate_acceptance_matrix())
     artifacts.append(collector.aggregate_review_logs())
     artifacts.append(collector.pack_compliance_zip())
     
