@@ -1,12 +1,9 @@
 """Evidence endpoints — generate, list files, download compliance pack."""
 
-import json
 import os
 import sys
 import subprocess
-import zipfile
 from pathlib import Path
-from io import BytesIO
 
 from . import json_ok, json_error
 
@@ -32,7 +29,7 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
         result = subprocess.run(
             [sys.executable, "src/evidence/pack.py", "pack"],
             capture_output=True, text=True, timeout=120,
-            cwd=project_dir,
+            cwd=project_dir, check=False,
         )
         return json_ok({
             "status": "completed",
@@ -42,8 +39,8 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
         })
     except subprocess.TimeoutExpired:
         return json_error("Evidence generation timed out", 504)
-    except Exception as e:
-        return json_error(f"Evidence generation error: {e}", 500)
+    except (OSError, subprocess.CalledProcessError) as e:
+        return json_error("Evidence generation error: " + str(e), 500)
 
 
 def _list_evidence_files() -> tuple[dict, int]:
@@ -77,8 +74,10 @@ def _download_pack(handler) -> tuple[dict, int]:
         data = zip_path.read_bytes()
         handler.send_response(200)
         handler.send_header("Content-Type", "application/zip")
-        handler.send_header("Content-Disposition",
-                            f'attachment; filename="compliance-pack.zip"')
+        handler.send_header(
+            "Content-Disposition",
+            'attachment; filename="compliance-pack.zip"',
+        )
         handler.send_header("Content-Length", str(len(data)))
         handler.send_header("Access-Control-Allow-Origin", "*")
         handler.end_headers()

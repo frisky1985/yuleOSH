@@ -913,6 +913,123 @@ class TestRunPipeline:
                 f"Artifact {key} file missing at {session.artifacts[key]}"
             )
 
+    # ========== B-01 Integration Test: test-plan.md with traceability ==========
+
+    def test_pipeline_generates_test_plan_with_traceability(self, spec_file, tmp_path, monkeypatch):
+        """B-01: Full pipeline with mock LLM must generate test-plan.md
+        containing a requirement traceability matrix."""
+        from pipeline.run import run_pipeline, PIPELINE_STEPS
+
+        project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        monkeypatch.setenv("OSH_HOME", project_dir)
+
+        def mock_self_test(session):
+            out_path = session.session_dir / "self-test-report.md"
+            out_path.write_text("# Self-Test Report (mocked)\n\nAll tests passed.")
+            session.set_artifact("self-test", str(out_path))
+            return str(out_path)
+
+        def mock_llm(system_prompt, user_prompt, **kwargs):
+            """Mock LLM that returns distinct content per step."""
+            if "JSON" in system_prompt or "code review" in system_prompt.lower():
+                return {
+                    "content": json.dumps({
+                        "session": "mock-b01",
+                        "reviewer": "Hermes",
+                        "timestamp": "2024-01-01T00:00:00",
+                        "status": "passed",
+                        "findings": [],
+                        "finding_breakdown": {"critical": 0, "major": 0, "minor": 0, "info": 0},
+                        "summary": "All checks passed.",
+                    }),
+                    "model": "mock-model",
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+                }
+            if "SHALL" in user_prompt or "Test Plan" in system_prompt or "test" in user_prompt.lower():
+                return {
+                    "content": (
+                        "# Test Plan: B-01 Integration\n\n"
+                        "## 1. Test Strategy\n"
+                        "- Unit tests: 70%\n"
+                        "- Integration: 20%\n"
+                        "- E2E: 10%\n\n"
+                        "## 2. Test Case \u2192 Requirement Traceability Matrix\n"
+                        "| Requirement ID | SHALL Description | Test Case ID | Test Case Description | Level | Status |\n"
+                        "| Req-RS-001 | SHALL authenticate users via OAuth2 | TC-RS-001-1 | Verify OAuth2 login flow | Unit | Planned |\n"
+                        "| Req-RS-001 | SHOULD support refresh tokens | TC-RS-001-2 | Verify token refresh | Integration | Planned |\n"
+                        "| Req-SWR-001.1 | SHALL have email/password fields | TC-SWR-001.1-1 | Verify login form fields | Unit | Planned |\n"
+                        "| Req-SWR-001.1 | SHALL validate input before submission | TC-SWR-001.1-2 | Verify input validation | Unit | Planned |\n\n"
+                        "## 3. Coverage Targets\n"
+                        "- Line coverage: 85%\n"
+                        "- Requirement coverage: 100% (every SHALL tested)\n"
+                    ),
+                    "model": "mock-model",
+                    "usage": {"prompt_tokens": 80, "completion_tokens": 60, "total_tokens": 140},
+                }
+            return {
+                "content": (
+                    "## Mock Analysis\n\n"
+                    "Mock content for B-01 integration test.\n"
+                    "### Situation\nTest.\n"
+                    "### Priority\nP0.\n"
+                    "### Architecture\nClean architecture.\n"
+                ),
+                "model": "mock-model",
+                "usage": {"prompt_tokens": 50, "completion_tokens": 25, "total_tokens": 75},
+            }
+
+        # Patch self-test to skip actual pytest invocation
+        patched_steps = [
+            (key, agent, name, mock_self_test if name == "\u81ea\u6d4b\u9a8c\u8bc1" else handler)
+            for key, agent, name, handler in PIPELINE_STEPS
+        ]
+
+        with mock.patch("pipeline.run.PIPELINE_STEPS", patched_steps):
+            session = run_pipeline(
+                spec_file,
+                name="test-b01-integration",
+                llm_client=mock_llm,
+            )
+
+        assert session.status == "completed", f"Pipeline failed: {session.errors}"
+
+        # B-01 assertion 1: test-plan.md artifact exists
+        assert "test-planning" in session.artifacts, "B-01: Missing test-planning artifact"
+        tp_path = session.artifacts["test-planning"]
+        assert os.path.exists(tp_path), f"B-01: test-plan.md not found at {tp_path}"
+
+        # B-01 assertion 2: test-plan.md content has requirement traceability
+        tp_content = Path(tp_path).read_text()
+        assert "Test Plan" in tp_content, "B-01: test-plan.md missing 'Test Plan' header"
+        assert "Traceability" in tp_content or "traceability" in tp_content, (
+            "B-01: test-plan.md missing traceability matrix"
+        )
+        assert "Requirement ID" in tp_content, (
+            "B-01: traceability matrix missing 'Requirement ID' column"
+        )
+        assert "Test Case" in tp_content, (
+            "B-01: traceability matrix missing 'Test Case' column"
+        )
+        assert "Req-RS-001" in tp_content, (
+            "B-01: traceability matrix missing requirement mapping"
+        )
+        assert "SHALL" in tp_content, (
+            "B-01: traceability matrix missing SHALL statement references"
+        )
+
+        # B-01 assertion 3: all 10 step artifacts exist
+        expected_artifacts = [
+            "spec-check", "super-analysis", "prd", "internal-review",
+            "architecture", "development", "test-planning",
+            "self-test", "code-review", "final-report",
+        ]
+        for key in expected_artifacts:
+            assert key in session.artifacts, f"Missing artifact: {key}"
+
+        # B-01 assertion 4: session has 10 completed steps
+        completed = sum(1 for s in session.steps if s.get("status") == "completed")
+        assert completed == 10, f"B-01: Expected 10 completed steps, got {completed}"
+
     def test_pipeline_fails_on_llm_error(self, spec_file, mock_llm_failure,
                                           tmp_path, monkeypatch):
         """Pipeline should fail on LLM error, not silently degrade."""

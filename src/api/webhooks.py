@@ -3,12 +3,8 @@
 Endpoint: POST /api/v1/webhooks/github
 """
 
-import json
 import logging
-import os
-import sys
 from datetime import datetime
-from pathlib import Path
 
 from . import json_ok, json_error, OSH_HOME
 
@@ -42,8 +38,6 @@ def _handle_github_push(payload: dict, handler=None) -> tuple:
         # Extract repository info
         repo = payload.get("repository", {})
         repo_name = repo.get("full_name", repo.get("name", "unknown"))
-        clone_url = repo.get("clone_url", "")
-        default_branch = repo.get("default_branch", "main")
 
         # Extract branch info from ref (refs/heads/main)
         ref = payload.get("ref", "")
@@ -56,19 +50,13 @@ def _handle_github_push(payload: dict, handler=None) -> tuple:
         pusher = payload.get("pusher", {})
         pusher_name = pusher.get("name", "unknown")
 
-        # Extract changed files
-        modified = head_commit.get("modified", []) if head_commit else []
-        added = head_commit.get("added", []) if head_commit else []
-        removed = head_commit.get("removed", []) if head_commit else []
-
         log.info(
             f"GitHub push: repo={repo_name}, branch={branch}, "
             f"commit={commit_hash}, pusher={pusher_name}"
         )
 
         # Trigger CI Layer 1
-        ci_result = _trigger_ci(repo_name, branch, commit_hash, commit_message,
-                                modified, added, removed)
+        ci_result = _trigger_ci(repo_name, branch, commit_hash, commit_message)
 
         return json_ok({
             "status": "received",
@@ -92,8 +80,7 @@ def _handle_github_push(payload: dict, handler=None) -> tuple:
 
 
 def _trigger_ci(repo_name: str, branch: str, commit_hash: str,
-                commit_message: str, modified: list, added: list,
-                removed: list) -> dict:
+                commit_message: str) -> dict:
     """Trigger CI Layer 1 pipeline for the given commit.
 
     Returns the CI result dict or None if CI could not be triggered.

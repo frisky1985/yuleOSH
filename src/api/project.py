@@ -1,17 +1,13 @@
 """Project CRUD endpoints."""
 
-import json
-import os
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 from . import json_ok, json_error
 
 
 def handle_project(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to project sub-resources."""
-    from src.store import Store
+    from src.store import Store  # pylint: disable=import-error
     store = Store()
 
     if path_tail == "stats" and method == "GET":
@@ -33,7 +29,6 @@ def handle_project(method: str, path_tail: str, body: dict, query: dict, **kwarg
 
 def _list_projects(store) -> tuple[dict, int]:
     """GET /api/v1/project — list all projects."""
-    from src.store import Store
     conn = store.conn
     cur = conn.execute("SELECT * FROM projects ORDER BY created_at DESC")
     projects = [dict(r) for r in cur.fetchall()]

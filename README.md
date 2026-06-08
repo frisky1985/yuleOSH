@@ -8,11 +8,11 @@
     <a href="https://github.com/frisky1985/yuleOSH/actions">
       <img src="https://img.shields.io/badge/CI-Layer%201%20Passing-brightgreen?style=flat-square" alt="CI">
     </a>
-    <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/version-0.3.0-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-≥3.10-ff69b4?style=flat-square" alt="Python">
-    <img src="https://img.shields.io/badge/coverage-39.8%25-yellow?style=flat-square" alt="Coverage">
-    <img src="https://img.shields.io/badge/tests-43%20passed-success?style=flat-square" alt="Tests">
+    <img src="https://img.shields.io/badge/coverage-67%25-yellowgreen?style=flat-square" alt="Coverage">
+    <img src="https://img.shields.io/badge/tests-257%20passed-success?style=flat-square" alt="Tests">
     <img src="https://img.shields.io/badge/ASPICE-compliant-8A2BE2?style=flat-square" alt="ASPICE">
   </p>
 </div>
@@ -70,7 +70,7 @@ Open the dashboard at **http://localhost:8080** to monitor pipelines and review 
 | **Spec Engine** | OpenSpec Parser | Parse SHALL/SHOULD/MAY requirements with GIVEN/WHEN/THEN scenarios |
 | **Spec Engine** | Coverage Scoring | Auto-calculate requirement coverage against rules and tests |
 | **Spec Engine** | Delta Tracking | Track requirement changes with spec-diff between versions |
-| **Agent Pipeline** | 9-Step Orchestration | Full SDD → DDD → TDD flow with 小明/Hermes/Claude agents |
+| **Agent Pipeline** | 10-Step Orchestration | Full SDD → DDD → TDD flow with 小明/Hermes/Claude agents + test planning |
 | **Agent Pipeline** | S.U.P.E.R Analysis | Startup analysis for every new requirement |
 | **Agent Pipeline** | Internal Review | Blocking review gate before proceeding to next stage |
 | **CI/CD** | Layer 1 — Dev Verify | Unit tests + coverage gate + plan-lint on each commit |
@@ -131,20 +131,23 @@ Open the dashboard at **http://localhost:8080** to monitor pipelines and review 
 yuleOSH/
 ├── src/
 │   ├── spec/          # OpenSpec parser, validator, differ
-│   ├── pipeline/      # Agent pipeline orchestrator (9 steps)
-│   ├── ci/            # 3-layer CI/CD engine
+│   │   └── validate.py  # Requirement ID hierarchy (SYS/SW/FEATURE)
+│   ├── pipeline/      # Agent pipeline orchestrator (10 steps)
+│   │   └── prompts.py   # Test planning prompt templates
+│   ├── ci/            # 3-layer CI/CD engine with dependency chaining
 │   ├── review/        # 4-agent parallel review matrix
-│   ├── evidence/      # Traceability matrix + compliance ZIP
+│   ├── evidence/      # Traceability matrix + acceptance matrix + compliance ZIP
 │   ├── ui/            # Dashboard server (auth, pages)
 │   ├── cli/           # CLI subcommands
 │   ├── store.py       # SQLite persistent store
 │   └── notify.py      # Multi-channel notifications
-├── tests/             # 44 tests (43 passed, 1 skipped)
+├── tests/             # 257 tests (all passing)
 ├── docs/              # Specification, guides, reports
 ├── deploy/            # Production deployment configs
-├── .osh/              # Runtime data (pipelines, CI, evidence)
+├── .osh/              # Runtime data (pipelines, CI, evidence, plans)
 ├── Dockerfile         # Multi-stage production Dockerfile
 ├── docker-compose.yml # Docker Compose for production
+├── Dockerfile.cross   # ARM/RISC-V cross-compilation toolchain image
 └── install.sh         # One-line production installation
 ```
 
@@ -192,7 +195,7 @@ yuleosh help
 
 ## Roadmap
 
-### v0.1.0 — Current (2026 Q2) ✅
+### v0.1.0 — Foundation (2026 Q2) ✅
 - [x] OpenSpec requirement parsing & validation
 - [x] 9-step AI agent pipeline
 - [x] 3-layer CI/CD for embedded
@@ -201,20 +204,25 @@ yuleosh help
 - [x] Web dashboard with API key auth
 - [x] Docker / Compose production deployment
 
-### v0.2.0 — Commercial MVP (2026 Q3)
-- [ ] Multi-tenant auth with organization/project/user hierarchy
-- [ ] Marketing landing page with pricing tiers
-- [ ] Onboarding wizard — create first project in 30 seconds
-- [ ] REST API for all platform features
-- [ ] Usage analytics dashboard
+### v0.2.0 — ASPICE Compliance Refactor (2026 Q3) ✅
+- [x] CI Layer 1 strict-mode enforcement (no silent skips)
+- [x] Pipeline LLM failure hard errors (no silent degradation)
+- [x] CI Layer dependency chaining (L1→L2→L3)
+- [x] Pipeline dependency injection for testability
+- [x] 30+ pipeline unit tests with mock LLM (≥80% coverage)
+- [x] E2E test stabilisation (no skipif bypass)
+- [x] spec-diff impact analysis
+- [x] Requirement-verification bidirectional tracing
+- [x] Automated acceptance matrix generation
 
-### v0.3.0 — Enterprise (2026 Q4)
-- [ ] Helm Chart for Kubernetes deployment
-- [ ] Email & webhook notifications
-- [ ] SAML / OAuth SSO integration
-- [ ] Plugin SDK for third-party integrations
-- [ ] ARM64 Docker image support
-- [ ] i18n (English/Chinese/Japanese)
+### v0.3.0 — Ground Reinforcement (2026 Q4) ✅
+- [x] SWE.4 Test Planning step in pipeline (B-01)
+- [x] Requirement ID hierarchy (SYS/SW/FEATURE) with state machine
+- [x] Requirement status tracking (PROPOSED→APPROVED→IMPLEMENTED→VERIFIED)
+- [x] Cross-compilation containerisation (ARM/RISC-V via Docker)
+- [x] Full 10-step pipeline integration + full regression (256→257 tests)
+- [x] CI hook plan-lint hardening
+- [x] 67% overall test coverage (threshold: 38%)
 
 ### v1.0.0 — Production (2027 Q1)
 - [ ] HIL/SIL adapter layer for hardware-in-the-loop testing
