@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "yuleOSH"
-version = "0.1.0"
+name = "yuleosh"
+version = "0.3.0"
 description = "嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体"
 authors = [{name = "frisky1985"}]
 license = {text = "MIT"}
