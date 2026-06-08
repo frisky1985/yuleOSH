@@ -43,6 +43,66 @@ def is_misra_fail_fast() -> bool:
 
 
 # ------------------------------------------------------------------
+# Layer dependency configuration (A-03)
+# ------------------------------------------------------------------
+
+# Layer dependency chain: each layer lists its upstream dependencies.
+# L1 has no dependencies.  L2 depends on L1.  L3 depends on L1 and L2.
+# Order: L1 → L2 → L3.
+layer_dependencies: dict[int, list[int]] = {
+    1: [],
+    2: [1],
+    3: [1, 2],
+}
+
+
+def get_latest_layer_result(layer: int, project_dir: str) -> Optional[dict]:
+    """Read the most recent CI result for the given layer from .osh/ci/.
+
+    Returns the parsed JSON dict if found, or None if no result exists.
+    """
+    ci_dir = Path(project_dir) / ".osh" / "ci"
+    if not ci_dir.exists():
+        return None
+
+    prefix = f"layer{layer}-"
+    result_files = sorted(
+        [f for f in ci_dir.iterdir() if f.name.startswith(prefix) and f.suffix == ".json"],
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+    if not result_files:
+        return None
+    try:
+        return json.loads(result_files[0].read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def check_layer_dependency(target_layer: int, project_dir: str) -> Optional[str]:
+    """Check if all dependencies for *target_layer* are satisfied.
+
+    Returns None if all deps passed, or a string describing the first
+    blocking dependency failure.
+    """
+    deps = layer_dependencies.get(target_layer, [])
+    for dep in deps:
+        result = get_latest_layer_result(dep, project_dir)
+        if result is None:
+            return (
+                f"Layer {dep} has no recorded result — "
+                f"run layer {dep} first before layer {target_layer}"
+            )
+        if result.get("status") != "passed":
+            return (
+                f"Layer {dep} status is '{result.get('status', 'unknown')}' — "
+                f"layer {target_layer} blocked (dependency chain: "
+                f"{' → '.join(str(l) for l in deps)})"
+            )
+    return None
+
+
+# ------------------------------------------------------------------
 # Timing decorator
 # ------------------------------------------------------------------
 
@@ -560,12 +620,110 @@ def run_layer2(project_dir: Optional[str] = None):
             if f.endswith((".c", ".cpp")):
                 c_files.append(os.path.join(root, f))
     
-    if c_files:
-        print(f"    Found {len(c_files)} C/C++ files — cross-compile ready")
-        ci.add_stage("cross-compile", "info", f"{len(c_files)} files ready for ARM/RISC-V/x86")
+    cross_src = os.path.join(project_dir, "src", "cross", "hello.c")
+    build_dir = os.path.join(project_dir, "build")
+    
+    if not os.path.exists(cross_src):
+        print(f"    ⏭️  No cross-compile test source (src/cross/hello.c)")
+        ci.add_stage("cross-compile", "skipped", "No src/cross/hello.c")
     else:
-        print(f"    ⏭️  No C/C++ files — cross-compile skipped")
-        ci.add_stage("cross-compile", "skipped", "No C/C++ sources")
+        # Attempt 1: run `make TARGET=arm` directly
+        compiled_ok = False
+        make_available = False
+        try:
+            subprocess.run(
+                ["make", "--version"],
+                capture_output=True, timeout=5,
+            )
+            make_available = True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            make_available = False
+
+        if make_available:
+            print(f"    Found cross-compile source: {cross_src}")
+            print(f"    Running: make TARGET=arm...")
+            try:
+                result = subprocess.run(
+                    ["make", "TARGET=arm"],
+                    capture_output=True, text=True, timeout=60,
+                    cwd=project_dir,
+                )
+                if result.returncode == 0:
+                    elf_files = list(Path(build_dir).glob("*.elf")) if os.path.exists(build_dir) else []
+                    if elf_files:
+                        print(f"    ✅ Cross-compilation succeeded: {', '.join(str(e) for e in elf_files)}")
+                        ci.add_stage("cross-compile", "passed",
+                                     f"ARM ELF at {elf_files[0]}")
+                        compiled_ok = True
+                    else:
+                        print(f"    ⚠️  make succeeded but no .elf found in build/")
+                        ci.add_stage("cross-compile", "failed",
+                                     "make returned 0 but no .elf found")
+                        all_passed = False
+                else:
+                    detail = result.stderr[:400] if result.stderr else result.stdout[:400]
+                    print(f"    ❌ make TARGET=arm failed: {detail}")
+                    ci.add_stage("cross-compile", "failed",
+                                 f"make returned {result.returncode}: {detail}")
+                    all_passed = False
+            except subprocess.TimeoutExpired:
+                print(f"    ❌ make timed out")
+                ci.add_stage("cross-compile", "failed", "make timed out")
+                all_passed = False
+        else:
+            # Attempt 2: try Docker
+            docker_available = False
+            try:
+                subprocess.run(
+                    ["docker", "--version"],
+                    capture_output=True, timeout=5,
+                )
+                docker_available = True
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                docker_available = False
+
+            if docker_available:
+                print(f"    make not available, trying Docker (Dockerfile.cross)...")
+                try:
+                    subprocess.run(
+                        ["docker", "build", "-t", "yuleosh-cross",
+                         "-f", "Dockerfile.cross", "."],
+                        capture_output=True, text=True, timeout=120,
+                        cwd=project_dir,
+                    )
+                    result = subprocess.run(
+                        ["docker", "run", "--rm",
+                         "-v", f"{project_dir}:/work",
+                         "yuleosh-cross", "make", "TARGET=arm"],
+                        capture_output=True, text=True, timeout=120,
+                    )
+                    if result.returncode == 0:
+                        print(f"    ✅ Docker cross-compilation succeeded")
+                        ci.add_stage("cross-compile", "passed",
+                                     "ARM ELF via Docker")
+                        compiled_ok = True
+                    else:
+                        detail = result.stderr[:400] if result.stderr else result.stdout[:400]
+                        print(f"    ❌ Docker cross-compilation failed: {detail}")
+                        ci.add_stage("cross-compile", "failed",
+                                     f"Docker make failed: {detail}")
+                        all_passed = False
+                except (subprocess.TimeoutExpired, OSError) as e:
+                    print(f"    ❌ Docker error: {e}")
+                    ci.add_stage("cross-compile", "failed",
+                                 f"Docker error: {e}")
+                    all_passed = False
+            else:
+                # Neither make nor Docker available — clear error
+                print(f"    ❌ Cross-compilation FAILED: no ARM toolchain, no make, no Docker")
+                print(f"       Install gcc-arm-none-eabi or Docker to enable cross-compilation.")
+                msg = (
+                    "ARM cross-compilation tools not found. "
+                    "Install gcc-arm-none-eabi (apt: gcc-arm-none-eabi) "
+                    "or Docker, then run 'make TARGET=arm' manually."
+                )
+                ci.add_stage("cross-compile", "failed", msg)
+                all_passed = False
     
     # Stage 2: Static analysis (cppcheck)
     print("  🔎 CI: static analysis...")
@@ -784,10 +942,65 @@ def run_layer3(project_dir: Optional[str] = None):
     return all_passed
 
 
+def run_all(project_dir: Optional[str] = None):
+    """Run the full CI pipeline: L1 → L2 → L3 with dependency gating.
+
+    Each layer only runs if all its upstream dependencies passed.
+    Returns True if all layers passed, False otherwise.
+    """
+    if project_dir is None:
+        project_dir = os.environ.get("OSH_HOME", os.getcwd())
+
+    print("\n" + "=" * 50)
+    print("  🚀 CI Pipeline: L1 → L2 → L3")
+    print("=" * 50)
+
+    layers = [1, 2, 3]
+    all_passed = True
+
+    for layer in layers:
+        # Check dependencies before running
+        blocker = check_layer_dependency(layer, project_dir)
+        if blocker:
+            print(f"\n  🔒 Layer {layer} SKIPPED — dependency not satisfied")
+            print(f"     Reason: {blocker}")
+            all_passed = False
+            break  # Chain break: no point continuing
+
+        # Run the layer
+        if layer == 1:
+            passed = run_layer1(project_dir)
+        elif layer == 2:
+            passed = run_layer2(project_dir)
+        elif layer == 3:
+            passed = run_layer3(project_dir)
+        else:
+            passed = False
+
+        if not passed:
+            all_passed = False
+            print(f"\n  🔒 Layer {layer} FAILED — downstream layers blocked")
+            remaining = [l for l in layers if l > layer]
+            if remaining:
+                print(f"     Blocked layers: {', '.join(f'L{l}' for l in remaining)}")
+            break
+
+    print("\n" + "=" * 50)
+    if all_passed:
+        print("  ✅ CI Pipeline: ALL LAYERS PASSED 🎉")
+    else:
+        print("  ❌ CI Pipeline: FAILED")
+    print("=" * 50 + "\n")
+    return all_passed
+
+
 def main():
     layer = sys.argv[1] if len(sys.argv) > 1 else "1"
     
-    if layer == "1":
+    if layer == "all":
+        success = run_all()
+        sys.exit(0 if success else 1)
+    elif layer == "1":
         success = run_layer1()
         sys.exit(0 if success else 1)
     elif layer == "2":
@@ -798,6 +1011,7 @@ def main():
         sys.exit(0 if success else 1)
     else:
         print(f"Unknown layer: {layer}")
+        print("Usage: python3 run.py [1|2|3|all]")
         sys.exit(1)
 
 

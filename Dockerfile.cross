@@ -1,0 +1,55 @@
+# =============================================================================
+# yuleOSH Cross-Compilation Environment
+#
+# Provides ARM (gcc-arm-none-eabi) and RISC-V (riscv64-unknown-elf-gcc)
+# cross-compilation toolchains on Ubuntu 22.04.
+#
+# Usage:
+#   docker build -t yuleosh-cross -f Dockerfile.cross .
+#   docker run --rm -v $(pwd):/work yuleosh-cross make TARGET=all
+# =============================================================================
+
+FROM ubuntu:22.04
+
+LABEL maintainer="frisky1985"
+LABEL description="yuleOSH — Cross-compilation environment (ARM + RISC-V)"
+LABEL version="0.1.0"
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install base toolchain packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc-arm-none-eabi \
+    make \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install RISC-V toolchain (riscv64-unknown-elf-gcc)
+# If the package is not found in the default apt sources, download manually.
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends riscv64-unknown-elf-gcc 2>/dev/null || \
+     (echo "riscv64-unknown-elf-gcc not in apt; downloading prebuilt toolchain..." && \
+      apt-get install -y --no-install-recommends xz-utils && \
+      wget -q https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.04.12/riscv64-unknown-elf-gcc-13.2.0-20240412-x86_64-linux-ubuntu14.tar.xz -O /tmp/riscv.tar.xz && \
+      tar -xf /tmp/riscv.tar.xz -C /usr/local && \
+      mv /usr/local/riscv64-unknown-elf-gcc-13.2.0-20240412-x86_64-linux-ubuntu14 /usr/local/riscv && \
+      ln -sf /usr/local/riscv/bin/riscv64-unknown-elf-gcc /usr/local/bin/riscv64-unknown-elf-gcc && \
+      ln -sf /usr/local/riscv/bin/riscv64-unknown-elf-objdump /usr/local/bin/riscv64-unknown-elf-objdump && \
+      rm -f /tmp/riscv.tar.xz)) && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /work
+
+# Verify installation
+RUN echo "=== Toolchain verification ===" && \
+    echo -n "arm-none-eabi-gcc: " && (arm-none-eabi-gcc --version 2>&1 | head -1 || echo "NOT FOUND") && \
+    echo -n "riscv64-unknown-elf-gcc: " && (riscv64-unknown-elf-gcc --version 2>&1 | head -1 || echo "NOT FOUND (optional)") && \
+    echo -n "make: " && (make --version 2>&1 | head -1 || echo "NOT FOUND") && \
+    echo "=== Done ==="
+
+# Default command
+CMD ["make", "TARGET=all"]
