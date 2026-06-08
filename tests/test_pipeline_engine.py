@@ -818,7 +818,11 @@ class TestRunPipeline:
     """Full pipeline orchestration tests with injected mock LLM."""
 
     def test_pipeline_fails_without_llm_key(self, spec_file, tmp_path, monkeypatch):
-        """Pipeline should fail when no LLM client is injected and no API key is available."""
+        """Pipeline should fail when no LLM client is injected and no API key is available.
+
+        Uses mock=True to bypass the early LLM key check and focus on testing
+        that the pipeline fails deterministically when no LLM client is available.
+        """
         from pipeline.run import run_pipeline
 
         monkeypatch.delenv("LLM_API_KEY", raising=False)
@@ -828,7 +832,7 @@ class TestRunPipeline:
         project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         monkeypatch.setenv("OSH_HOME", project_dir)
 
-        session = run_pipeline(spec_file, name="test-no-key")
+        session = run_pipeline(spec_file, name="test-no-key", mock=True)
         assert session.status == "failed"
 
     def test_pipeline_completes_with_injected_llm(self, spec_file, tmp_path, monkeypatch):

@@ -7,13 +7,14 @@ Usage:
     yuleosh template init <project-name>     — Create new project from starter template
     yuleosh spec validate <file>             — Validate OpenSpec spec
     yuleosh spec diff <old> <new>            — Diff two specs
-    yuleosh pipeline run <spec>              — Run full Agent pipeline
+    yuleosh pipeline run [--mock] <spec>     — Run full Agent pipeline
     yuleosh pipeline status [name]           — Show pipeline status
     yuleosh review auto                      — Auto-review changes
     yuleosh review task <name> [kind]        — Review specific task
     yuleosh ci run <layer>                   — Run CI layer (1/2/3)
     yuleosh evidence pack                    — Generate ASPICE compliance pack
     yuleosh stats [--json]                   — Show project statistics
+    yuleosh ui                              — Start dashboard server (:8080)
 """
 
 import os
@@ -68,10 +69,10 @@ def cmd_spec_diff(old: str, new: str):
     diff_main()
 
 
-def cmd_pipeline_run(spec_path: str):
+def cmd_pipeline_run(spec_path: str, mock: bool = False):
     from src.pipeline.run import run_pipeline
 
-    session = run_pipeline(spec_path)
+    session = run_pipeline(spec_path, mock=mock)
     sys.exit(0 if session.status == "completed" else 1)
 
 
@@ -194,9 +195,11 @@ def main():
         subcmd = sys.argv[2]
         if subcmd == "run":
             if len(sys.argv) < 4:
-                print("Usage: yuleosh pipeline run <spec>", file=sys.stderr)
+                print("Usage: yuleosh pipeline run [--mock] <spec>", file=sys.stderr)
                 sys.exit(1)
-            cmd_pipeline_run(sys.argv[3])
+            mock = "--mock" in sys.argv
+            spec_file = [a for a in sys.argv[3:] if a != "--mock"][0]
+            cmd_pipeline_run(spec_file, mock=mock)
         elif subcmd == "status":
             cmd_pipeline_status(sys.argv[3] if len(sys.argv) > 3 else None)
         else:
