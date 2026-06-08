@@ -467,3 +467,198 @@ def test_full_evidence_flow_with_traceability():
         assert "requirement tree hierarchy" in am_content
         assert "per-task blocking review" in am_content
         assert "archive review records" in am_content
+
+
+# ===================================================================
+# Tests: D-01 — Multi-layer Covers parsing
+# ===================================================================
+
+def _make_test_file_with_fn_covers(tmp_dir: str, filename: str) -> str:
+    """Create a test file with Covers: in a function-level docstring."""
+    test_dir = os.path.join(tmp_dir, "tests")
+    os.makedirs(test_dir, exist_ok=True)
+    path = os.path.join(test_dir, filename)
+    content = '''"""Module docstring (no Covers here)."""
+
+def test_ci_blocking():
+    """Covers: CI blocking, pipeline gates"""
+    assert True
+
+def test_sdd_roundtrip():
+    """Covers: roundtrip, specification"""
+    assert True
+'''
+    with open(path, "w") as f:
+        f.write(content)
+    return filename
+
+
+def _make_test_file_no_covers(tmp_dir: str, filename: str) -> str:
+    """Create a test file with no Covers: marker at all."""
+    test_dir = os.path.join(tmp_dir, "tests")
+    os.makedirs(test_dir, exist_ok=True)
+    path = os.path.join(test_dir, filename)
+    content = '''"""Plain test module with no Covers."""
+
+def test_dummy():
+    assert True
+'''
+    with open(path, "w") as f:
+        f.write(content)
+    return filename
+
+
+def _make_test_file_with_inferrable_names(tmp_dir: str, filename: str) -> str:
+    """Create a test file whose function names imply coverage keywords.
+
+    test_pipeline_processing -> inferred: ['pipeline', 'processing']
+    """
+    test_dir = os.path.join(tmp_dir, "tests")
+    os.makedirs(test_dir, exist_ok=True)
+    path = os.path.join(test_dir, filename)
+    content = '''"""No explicit Covers — rely on function name inference."""
+
+def test_pipeline_processing():
+    assert True
+
+def test_review_blocking():
+    assert True
+'''
+    with open(path, "w") as f:
+        f.write(content)
+    return filename
+
+
+def test_collect_test_coverage_function_level_covers():
+    """D-1: Parse Covers: from per-test-function docstrings."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        _make_test_file_with_fn_covers(tmp, "test_ci.py")
+
+        coverage = c._collect_test_coverage()
+
+        assert "test_ci.py" in coverage, "File should be in coverage dict"
+        kws = coverage["test_ci.py"]
+        # Should contain keywords from function-level Covers:
+        # test_ci_blocking -> CI, blocking, pipeline, gates
+        # test_sdd_roundtrip -> roundtrip, specification
+        assert "CI" in kws or "CI blocking" in kws or "blocking" in kws, \
+            f"Expected function-level Covers keywords, got {kws}"
+        # Check that module-level Covers (none) didn't suppress function-level
+        assert len(kws) >= 3, f"Expected multiple keywords from function-level, got {len(kws)}: {kws}"
+
+
+def test_collect_test_coverage_function_name_inference():
+    """D-1: Infer Covers keywords from function names when no explicit Covers exist."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        _make_test_file_with_inferrable_names(tmp, "test_inferred.py")
+
+        coverage = c._collect_test_coverage()
+
+        assert "test_inferred.py" in coverage, "File should be in coverage dict"
+        kws = coverage["test_inferred.py"]
+        # Inferred from test_pipeline_processing -> pipeline, processing
+        # Inferred from test_review_blocking -> review, blocking
+        assert "pipeline" in kws, f"Expected 'pipeline' inferred from function name, got {kws}"
+        assert "review" in kws, f"Expected 'review' inferred from function name, got {kws}"
+
+
+def test_collect_test_coverage_module_only():
+    """D-1: Only module-level Covers works (no function-level, no inference needed)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        _make_test_file(tmp, "test_module.py", ["module", "keyword"])
+
+        coverage = c._collect_test_coverage()
+
+        assert "test_module.py" in coverage
+        assert "module" in coverage["test_module.py"]
+        assert "keyword" in coverage["test_module.py"]
+
+
+def test_collect_test_coverage_empty_no_covers():
+    """D-1: Files with absolutely no Covers (no docstring Covers, no inferrable names)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        _make_test_file_no_covers(tmp, "test_nocover.py")
+
+        coverage = c._collect_test_coverage()
+        # The function name is "test_something" which has no meaningful 3-char words
+        # after the stop_words filter, so no keywords should be inferred.
+        assert coverage == {}, f"Expected empty coverage, got {coverage}"
+
+
+# ===================================================================
+# Tests: D-02 — Friendly warning display
+# ===================================================================
+
+def test_all_uncovered_friendly_message():
+    """D-2: When all SHALLs are uncovered, show friendly info instead of scary red list."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        # No test files with coverage
+        c.requirements = [
+            {
+                "name": "Agent Pipeline",
+                "shall": ["The system SHALL support pipeline"],
+                "shall_count": 1,
+                "req_id": "RS-001",
+                "level": "SYS",
+            },
+        ]
+
+        uncovered = c._check_traceability_completeness()
+
+        # Still returns all uncovered for programmatic use
+        assert len(uncovered) == 1
+        assert uncovered[0]["req_name"] == "Agent Pipeline"
+
+
+def test_partial_coverage_graded_warning():
+    """D-2: Partial coverage shows graded CRITICAL/WARN output."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        # One test covers "pipeline"
+        _make_test_file(tmp, "test_pipeline.py", ["pipeline"])
+        c.requirements = [
+            {
+                "name": "Agent Pipeline",
+                "shall": ["The system SHALL support pipeline processing"],
+                "shall_count": 1,
+                "req_id": "RS-001",
+                "level": "SYS",
+            },
+            {
+                "name": "Unrelated Core Feature",
+                "shall": ["The system SHALL do something core"],
+                "shall_count": 1,
+                "req_id": "RS-002",
+                "level": "SYS",
+            },
+            {
+                "name": "Multi-tenant",
+                "shall": ["The system SHALL support multi-tenant isolation"],
+                "shall_count": 1,
+                "req_id": "RS-003",
+                "level": "SYS",
+            },
+        ]
+
+        uncovered = c._check_traceability_completeness()
+
+        # 1 covered (pipeline), 2 uncovered (core, multi-tenant)
+        assert len(uncovered) == 2, f"Expected 2 uncovered, got {len(uncovered)}"
+
+        # Categorize the uncovered
+        critical, warn = EvidenceCollector._categorize_uncovered(uncovered)
+
+        # "Unrelated Core Feature" -> core logic -> critical
+        critical_names = {u["req_name"] for u in critical}
+        assert "Unrelated Core Feature" in critical_names, \
+            f"Core feature should be CRITICAL, got critical={critical_names}"
+
+        # "Multi-tenant" -> non-functional -> warn
+        warn_names = {u["req_name"] for u in warn}
+        assert "Multi-tenant" in warn_names, \
+            f"Multi-tenant should be WARN, got warn={warn_names}"
