@@ -1,10 +1,33 @@
-"""End-to-end tests for yuleOSH platform."""
-import sys, os, tempfile, json, subprocess
+"""End-to-end tests for yuleOSH platform.
+
+Pipeline tests that require an LLM API key are conditionally skipped.
+Structural/validation E2E tests always run.
+"""
+import json
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import urllib.request
+
 import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+_HAS_API_KEY = bool(
+    os.environ.get("LLM_API_KEY")
+    or os.environ.get("DEEPSEEK_API_KEY")
+    or os.environ.get("OPENAI_API_KEY")
+)
+
+
+# ---------------------------------------------------------------------------
+# Spec validation (no API key needed)
+# ---------------------------------------------------------------------------
 
 
 def test_e2e_spec_validate():
@@ -32,12 +55,13 @@ def test_e2e_spec_diff():
     assert data["total_changes"] == 0, f"Same file should have 0 changes: {data}"
 
 
+@pytest.mark.skipif(not _HAS_API_KEY, reason="LLM_API_KEY required for pipeline E2E")
 def test_e2e_pipeline_run():
-    """E2E: pipeline runs end-to-end."""
+    """E2E: pipeline runs end-to-end with real API key."""
     spec_path = os.path.join(PROJECT_DIR, "docs", "spec.md")
     result = subprocess.run(
         [sys.executable, "src/pipeline/run.py", spec_path],
-        capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
+        capture_output=True, text=True, cwd=PROJECT_DIR, timeout=120,
     )
     assert result.returncode == 0, f"Pipeline failed: {result.stderr[:500]}"
     assert "completed" in result.stdout, "Pipeline should complete"
@@ -51,6 +75,20 @@ def test_e2e_pipeline_status():
     )
     assert result.returncode == 0, f"Status failed: {result.stderr}"
     assert "completed" in result.stdout or "No pipeline" in result.stdout
+
+
+def test_e2e_pipeline_spec_check_only():
+    """E2E: pipeline spec-check step works in isolation (no API key needed)."""
+    spec_path = os.path.join(PROJECT_DIR, "docs", "spec.md")
+    from src.llm.client import _resolve_env
+    from src.pipeline.run import PipelineSession, step_spec_check
+
+    session = PipelineSession("test-spec-check", spec_path)
+    result = step_spec_check(session)
+    assert result is not None
+    assert os.path.exists(result)
+    data = json.loads(open(result).read())
+    assert data.get("coverage", {}).get("score", 0) >= 80
 
 
 @pytest.mark.skipif(True, reason="CI test requires separate invocation")
@@ -97,12 +135,10 @@ def test_e2e_cli_help():
 
 def test_e2e_dashboard_server():
     """E2E: Dashboard server starts and responds."""
-    import socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result = sock.connect_ex(('127.0.0.1', 8080))
     sock.close()
     if result == 0:
-        import urllib.request
         resp = urllib.request.urlopen("http://127.0.0.1:8080/api/status")
         data = json.loads(resp.read())
         assert data["status"] == "running"

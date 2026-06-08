@@ -40,11 +40,25 @@ log = logging.getLogger("pipeline")
 
 # Add src to path for store import
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from llm.client import chat_completion  # noqa: E402
 try:
     from store import Store
     _store = Store()
 except Exception:
     _store = None
+
+
+# ------------------------------------------------------------------
+# Exception classes — no silent degradation
+# ------------------------------------------------------------------
+
+class PipelineStepError(RuntimeError):
+    """Raised when a pipeline step encounters a hard failure.
+
+    Replaces silent degradation (try/except/pass) with an explicit,
+    interruptible error that stops the pipeline.
+    """
+    pass
 
 
 # ------------------------------------------------------------------
@@ -169,8 +183,8 @@ class PipelineSession:
         if _store:
             try:
                 _store.save_pipeline(self.name, data)
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(f"Store save_pipeline failed (non-fatal): {e}")
 
     def to_dict(self) -> dict:
         """Serialize session to a dictionary for storage."""
@@ -206,29 +220,38 @@ def step_spec_check(session: PipelineSession) -> str:
         if result.returncode != 0:
             err_msg = result.stderr or result.stdout or "Unknown error"
             log.error(f"Spec validation failed (exit {result.returncode}): {err_msg[:200]}")
-            raise RuntimeError(f"Spec validation failed:\n{err_msg}")
+            raise PipelineStepError(f"Spec validation failed:\n{err_msg}")
         
         try:
             data = json.loads(result.stdout)
         except json.JSONDecodeError as e:
             log.error(f"Spec check output is not valid JSON: {e}")
-            raise RuntimeError(f"Spec check output is not valid JSON: {e}")
+            raw_preview = result.stdout[:500] if result.stdout else "(empty output)"
+            raise PipelineStepError(
+                f"Spec check output is not valid JSON: {e}\n"
+                f"Raw output (first 500 chars):\n{raw_preview}"
+            )
         
         if data.get("error_count", 0) > 0:
             issues = [i["message"] for i in data.get("issues", []) if i["severity"] == "ERROR"]
             for iss in issues:
                 log.error(f"Spec error: {iss}")
-            raise RuntimeError(f"Spec has {data['error_count']} error(s): {'; '.join(issues)}")
+            raise PipelineStepError(f"Spec has {data['error_count']} error(s): {'; '.join(issues)}")
         
         print(f"  ✅ [小明] Spec validated: {data['coverage']['score']}% coverage")
         log.info(f"Spec validated: {data['coverage']['score']}% coverage")
         return str(out_path)
     except subprocess.TimeoutExpired:
         log.error("Spec validation timed out")
-        raise RuntimeError("Spec validation timed out")
+        raise PipelineStepError("Spec validation timed out")
     except subprocess.CalledProcessError as e:
         log.error(f"Spec validation subprocess failed: {e}")
-        raise RuntimeError(f"Spec validation subprocess failed: {e}")
+        raise PipelineStepError(f"Spec validation subprocess failed: {e}")
+    except PipelineStepError:
+        raise
+    except Exception as e:
+        log.error(f"Spec validation unexpected error: {e}")
+        raise PipelineStepError(f"Spec validation unexpected error: {e}")
 
 
 def _parse_spec(spec_path: str) -> dict:
@@ -244,8 +267,8 @@ def _parse_spec(spec_path: str) -> dict:
             cached = _store.get_cached_spec_parse(spec_path, mtime)
             if cached is not None:
                 return cached
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"Spec cache read failed (will re-parse): {e}")
 
     # Parse fresh
     requirements = _parse_requirements(spec_path)
@@ -256,8 +279,8 @@ def _parse_spec(spec_path: str) -> dict:
     if _store:
         try:
             _store.cache_spec_parse(spec_path, mtime, result)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"Spec cache write failed (non-fatal): {e}")
 
     return result
 
@@ -268,6 +291,7 @@ def _parse_requirements(spec_path: str) -> list[dict]:
     try:
         path = Path(spec_path)
         if not path.exists():
+            log.warning(f"Spec file not found: {spec_path}")
             return requirements
         content = path.read_text()
         lines = content.split("\n")
@@ -296,8 +320,8 @@ def _parse_requirements(spec_path: str) -> list[dict]:
                 "name": current_name,
                 "shall_statements": current_shalls
             })
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning(f"Failed to parse requirements from {spec_path}: {e}")
     return requirements
 
 
@@ -307,131 +331,200 @@ def _parse_scenarios(spec_path: str) -> list[str]:
     try:
         path = Path(spec_path)
         if not path.exists():
+            log.warning(f"Spec file not found for scenarios: {spec_path}")
             return scenarios
         content = path.read_text()
         for line in content.split("\n"):
             stripped = line.strip()
             if stripped.startswith("### ") and ("GIVEN" in stripped or "WHEN" in stripped or "THEN" in stripped):
                 scenarios.append(stripped.replace("### ", ""))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning(f"Failed to parse scenarios from {spec_path}: {e}")
     return scenarios
 
 
 @timed_step
 def step_super_analysis(session: PipelineSession) -> str:
-    """Step 1: 小明 — S.U.P.E.R analysis with real spec data."""
+    """Step 1: 小明 — S.U.P.E.R analysis powered by real LLM."""
     try:
-        print("  📊 [小明] Generating S.U.P.E.R analysis...")
-        log.info("Generating S.U.P.E.R analysis")
-        
-        spec_name = Path(session.spec_path).stem
+        print("  📊 [小明] Running AI-powered S.U.P.E.R analysis...")
+        log.info("Running AI-powered S.U.P.E.R analysis")
+
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
         parsed = _parse_spec(session.spec_path)
         requirements = parsed["requirements"]
         scenarios = parsed["scenarios"]
-        
         total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
-        req_list = "\n".join(f"  - {r['name']} ({len(r.get('shall_statements', []))} SHALLs)" for r in requirements[:15])
-        
-        template = f"""# S.U.P.E.R Analysis: {spec_name}
 
-> Source spec: {session.spec_path}
-> Requirements found: {len(requirements)}
-> Total SHALL statements: {total_shall}
-> Scenarios found: {len(scenarios)}
+        system_prompt = (
+            "You are a senior product analyst. Perform a S.U.P.E.R. analysis of the given "
+            "OpenSpec specification document. Analyze: S (Situation — project context), "
+            "U (Understanding — key requirements and intent), "
+            "P (Problem — core objectives), "
+            "E (Execution — how to deliver), "
+            "R (Resources — tools, frameworks, skills needed), and "
+            "P (Priority — P0/P1/P2 grouping of requirements). "
+            "Output a well-structured Markdown report."
+        )
+        user_prompt = (
+            f"# Specification: {spec_path.name}\n\n"
+            f"```markdown\n{spec_content[:12000]}\n```\n\n"
+            f"## Parsed Metadata\n"
+            f"- Requirements found: {len(requirements)}\n"
+            f"- Total SHALL statements: {total_shall}\n"
+            f"- Scenarios found: {len(scenarios)}\n\n"
+            f"Write a complete S.U.P.E.R. analysis as Markdown. "
+            f"Use the parsed metadata above as a starting point but enrich it "
+            f"with genuine insights derived from the spec content."
+        )
 
-## S — Situation
-Project: {spec_name}
-Spec contains {len(requirements)} requirement(s) with {total_shall} SHALL statement(s) and {len(scenarios)} scenario(s).
+        try:
+            result = chat_completion(system_prompt, user_prompt)
+        except Exception as e:
+            log.error(f"LLM call failed during S.U.P.E.R analysis: {e}")
+            raise PipelineStepError(
+                f"S.U.P.E.R analysis LLM call failed: {e}\n"
+                f"Spec: {session.spec_path}\n"
+                f"This error is not silently degraded — the pipeline stops here."
+            )
 
-## U — Understanding
-Key requirements derived from spec:
-{req_list}
+        analysis = result["content"]
+        usage = result.get("usage", {})
+        log.info(
+            "LLM returned %d tokens (prompt=%s, completion=%s)",
+            usage.get("total_tokens", "?"),
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
 
-## P — Problem
-Core objectives defined by the {len(requirements)} requirements ({total_shall} SHALLs) above.
+        # Prepend a metadata header
+        full_output = (
+            f"# S.U.P.E.R Analysis: {Path(session.spec_path).stem}\n\n"
+            f"> Source spec: {session.spec_path}\n"
+            f"> Generated by: LLM ({result.get('model', 'unknown')})\n"
+            f"> Requirements: {len(requirements)}  |  SHALLs: {total_shall}  |  Scenarios: {len(scenarios)}\n"
+            f"> Tokens: {usage.get('total_tokens', '?')} (prompt {usage.get('prompt_tokens', '?')} + completion {usage.get('completion_tokens', '?')})\n\n"
+            f"{analysis}"
+        )
 
-## E — Execution
-Pipeline execution across {len(PIPELINE_STEPS)} steps:
-"""
-        for step_key, agent, step_name, _handler in PIPELINE_STEPS:
-            template += f"  - [{agent}] {step_name}\n"
-
-        template += f"""
-## R — Resources
-- Source files in project: discovered during architecture step
-- Test framework: pytest (Python) / go test (Go)
-
-## P — Priority
-P0 — Core requirements (SHALL): {len(requirements)}
-"""
         out_path = session.session_dir / "startup-analysis.md"
         try:
-            out_path.write_text(template)
+            out_path.write_text(full_output)
         except OSError as e:
             log.error(f"Cannot write analysis file: {e}")
-            raise RuntimeError(f"Cannot write analysis file: {e}")
-        print(f"  ✅ [小明] S.U.P.E.R analysis generated at {out_path}")
-        log.info(f"S.U.P.E.R analysis saved to {out_path}")
+            raise PipelineStepError(f"Cannot write analysis file: {e}")
+        print(f"  ✅ [小明] AI S.U.P.E.R analysis generated at {out_path}")
+        log.info(f"AI S.U.P.E.R analysis saved to {out_path}")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"S.U.P.E.R analysis failed: {e}")
-        raise
+        raise PipelineStepError(f"S.U.P.E.R analysis failed: {e}")
 
 
 @timed_step
 def step_hermes_prd(session: PipelineSession) -> str:
-    """Step 2: Hermes — PRD with mapped requirements from spec."""
+    """Step 2: Hermes — AI-powered PRD generation from spec.
+
+    Reads the spec file, parses requirements and scenarios,
+    then uses the LLM to produce a real Product Requirements Document.
+    """
     try:
-        print("  🔮 [Hermes] Writing PRD...")
-        log.info("Writing PRD")
-        
+        print("  🔮 [Hermes] Running AI-powered PRD generation...")
+        log.info("Running AI-powered PRD generation")
+
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
         parsed = _parse_spec(session.spec_path)
         requirements = parsed["requirements"]
         scenarios = parsed["scenarios"]
-        
         total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
-        req_table = "\n".join(
-            f"- [ ] {r['name']}"
-            + ("\n    " + "\n    ".join(s for s in r.get('shall_statements', [])[:5]) if r.get('shall_statements') else "")
-            for r in requirements
+
+        # Read S.U.P.E.R analysis from artifacts if available
+        super_content = ""
+        super_key = "super-analysis"
+        if super_key in session.artifacts:
+            super_path = Path(session.artifacts[super_key])
+            if super_path.exists():
+                super_content = super_path.read_text()
+
+        system_prompt = (
+            "You are a senior product manager (Hermes). Given an OpenSpec specification "
+            "document and optionally a S.U.P.E.R analysis, generate a comprehensive "
+            "Product Requirements Document (PRD) in Markdown.\n\n"
+            "The PRD must cover:\n"
+            "1. **Product Overview** — summary of the product scope and target users\n"
+            "2. **Goals & Success Metrics** — measurable objectives for this release\n"
+            "3. **User Stories** — structured as GIVEN/WHEN/THEN scenarios mapped to each requirement\n"
+            "4. **Functional Requirements** — mapped from each spec SHALL/SHOULD statement, "
+            "with implementation notes and priority (P0/P1/P2)\n"
+            "5. **Non-Functional Requirements** — performance, security, compliance\n"
+            "6. **Acceptance Criteria** — how we know each requirement is done\n"
+            "7. **Out of Scope** — explicitly what this release does NOT cover\n\n"
+            "Be thorough and reference specific requirement names and scenario details."
         )
-        scenario_list = "\n".join(f"- {s}" for s in scenarios)
-        
-        out_path = session.session_dir / "prd.md"
-        content = f"""# PRD: {session.name}
+        user_prompt = (
+            f"# Specification: {Path(session.spec_path).name}\n\n"
+            f"```markdown\n{spec_content[:12000]}\n```\n\n"
+            f"## Parsed Metadata\n"
+            f"- Requirements found: {len(requirements)}\n"
+            f"- Total SHALL/SHOULD statements: {total_shall}\n"
+            f"- Scenarios found: {len(scenarios)}\n\n"
+        )
+        if super_content:
+            user_prompt += (
+                f"## S.U.P.E.R. Analysis (from prior step)\n"
+                f"```markdown\n{super_content[:4000]}\n```\n\n"
+            )
+        user_prompt += (
+            f"Write a comprehensive PRD based on the above specification. "
+            f"Map each requirement to concrete user stories and acceptance criteria. "
+            f"Assign priority (P0/P1/P2) to each requirement group."
+        )
 
-> Generated from spec: {session.spec_path}
-> Pipeline Session: {session.created_at}
-
-## Overview
-Based on S.U.P.E.R analysis and OpenSpec validation.
-
-## Requirements Coverage ({len(requirements)} total)
-Each SHALL statement mapped to implementation plan:
-{req_table}
-
-## Scenarios ({len(scenarios)} total)
-Each GIVEN/WHEN/THEN mapped to test strategy:
-{scenario_list}
-
-## Delivery Criteria
-- All SHALL requirements implemented ({len(requirements)})
-- All scenarios passing ({len(scenarios)})
-- CI/CD pipeline green
-- Evidence pack generated
-"""
         try:
-            out_path.write_text(content)
+            result = chat_completion(system_prompt, user_prompt)
+        except Exception as e:
+            log.error(f"LLM call failed during PRD generation: {e}")
+            raise PipelineStepError(
+                f"PRD generation LLM call failed: {e}\n"
+                f"Spec: {session.spec_path}"
+            )
+
+        analysis = result["content"]
+        usage = result.get("usage", {})
+        log.info(
+            "LLM returned %d tokens (prompt=%s, completion=%s)",
+            usage.get("total_tokens", "?"),
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
+
+        full_output = (
+            f"# PRD: {session.name}\n\n"
+            f"> Generated from spec: {session.spec_path}\n"
+            f"> Generated by: LLM ({result.get('model', 'unknown')})\n"
+            f"> Requirements: {len(requirements)}  |  SHALLs: {total_shall}  |  Scenarios: {len(scenarios)}\n"
+            f"> Tokens: {usage.get('total_tokens', '?')} (prompt {usage.get('prompt_tokens', '?')} + completion {usage.get('completion_tokens', '?')})\n\n"
+            f"{analysis}"
+        )
+
+        out_path = session.session_dir / "prd.md"
+        try:
+            out_path.write_text(full_output)
         except OSError as e:
             log.error(f"Cannot write PRD: {e}")
-            raise RuntimeError(f"Cannot write PRD: {e}")
-        print(f"  ✅ [Hermes] PRD written at {out_path}")
-        log.info(f"PRD saved to {out_path}")
+            raise PipelineStepError(f"Cannot write PRD: {e}")
+        print(f"  ✅ [Hermes] AI-powered PRD generated at {out_path}")
+        log.info(f"AI-powered PRD saved to {out_path}")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"PRD step failed: {e}")
-        raise
+        raise PipelineStepError(f"PRD step failed: {e}")
 
 
 @timed_step
@@ -458,32 +551,34 @@ def step_internal_review(session: PipelineSession) -> str:
         
         if missing:
             log.error(f"Internal review failed — missing artifacts: {', '.join(missing)}")
-            raise RuntimeError(f"Internal review failed — missing artifacts: {', '.join(missing)}")
+            raise PipelineStepError(f"Internal review failed — missing artifacts: {', '.join(missing)}")
         
         out_path = session.session_dir / "review-result.md"
         try:
             out_path.write_text("\n".join(report))
         except OSError as e:
             log.error(f"Cannot write review result: {e}")
-            raise RuntimeError(f"Cannot write review result: {e}")
+            raise PipelineStepError(f"Cannot write review result: {e}")
         print(f"  ✅ [小明] Internal review passed")
         log.info("Internal review passed")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"Internal review failed: {e}")
-        raise
+        raise PipelineStepError(f"Internal review failed: {e}")
 
 
 @timed_step
 def step_claude_arch(session: PipelineSession) -> str:
-    """Step 4: Claude — Architecture design with real project analysis.
+    """Step 4: Claude — AI-powered architecture design.
 
-    Scans the project directory to discover actual directories, source files,
-    and tech stack, filling the architecture template with real data.
+    Scans the project directory to discover actual source structure,
+    then sends the spec + structure to the LLM for real architecture analysis.
     """
     try:
-        print("  💻 [Claude] Designing architecture...")
-        log.info("Designing architecture")
+        print("  💻 [Claude] Running AI-powered architecture analysis...")
+        log.info("Running AI-powered architecture analysis")
 
         # Discover project structure
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
@@ -492,16 +587,19 @@ def step_claude_arch(session: PipelineSession) -> str:
         directories = []
         source_files = []
         tech_stack = set()
+        src_tree_lines = []
 
         if src_dir.exists():
             for root, dirs, files in os.walk(src_dir):
-                # Skip hidden dirs and caches
                 dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
                 rel_dir = Path(root).relative_to(project_dir)
                 directories.append(str(rel_dir))
-                for f in files:
-                    if f.endswith((".py", ".sh", ".html", ".js", ".css", ".ts", ".go", ".rs")):
+                indent = "  " * (len(Path(rel_dir).parts) - 1) if len(Path(rel_dir).parts) > 1 else ""
+                src_tree_lines.append(f"{indent}{Path(rel_dir).name}/")
+                for f in sorted(files):
+                    if f.endswith((".py", ".sh", ".html", ".js", ".css", ".ts", ".go", ".rs", ".json", ".toml", ".yaml", ".yml", ".md")):
                         source_files.append(str(Path(rel_dir) / f))
+                        src_tree_lines.append(f"{indent}  {f}")
                         ext = Path(f).suffix
                         if ext == ".py":
                             tech_stack.add("Python")
@@ -514,91 +612,94 @@ def step_claude_arch(session: PipelineSession) -> str:
                         elif ext == ".sh":
                             tech_stack.add("Shell")
 
-        # Read spec for business domain hints
-        spec_requirements = []
+        # Read spec
         spec_path = Path(session.spec_path)
-        if spec_path.exists():
-            try:
-                content = spec_path.read_text()
-                for line in content.split("\n"):
-                    stripped = line.strip()
-                    if stripped.startswith("### ") and "SHALL" not in stripped and "SHOULD" not in stripped:
-                        spec_requirements.append(stripped.replace("### ", "").split(":")[0].strip())
-            except Exception:
-                pass
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
+
+        # Read key source files for context
+        key_file_snippets = []
+        for sf in sorted(source_files)[:15]:
+            fpath = project_dir / sf
+            if fpath.exists() and fpath.stat().st_size < 10000:
+                try:
+                    content = fpath.read_text()[:2000]
+                    key_file_snippets.append(f"### {sf}\n```\n{content}\n```")
+                except Exception:
+                    pass
 
         tech_stack_str = ", ".join(sorted(tech_stack)) if tech_stack else "Python"
+        tree_str = "\n".join(src_tree_lines[:80])
+
+        system_prompt = (
+            "You are a senior software architect. Analyze the project specification "
+            "and source code structure provided. Produce a comprehensive architecture "
+            "design document in Markdown covering:\n"
+            "1. **Project Overview** — tech stack, module count, file count\n"
+            "2. **Directory Structure** — show the tree and explain each module's role\n"
+            "3. **Bounded Contexts** — domain boundaries derived from the spec\n"
+            "4. **Architecture Decision Records (ADRs)** — at least 3 meaningful ADRs\n"
+            "5. **Key Design Considerations** — constraints, trade-offs, patterns used\n"
+            "Be specific and reference actual file paths and code elements."
+        )
+        user_prompt = (
+            f"# Project: {session.name}\n\n"
+            f"## Tech Stack\n{tech_stack_str}\n\n"
+            f"## Source Tree ({len(directories)} dirs, {len(source_files)} files)\n```\n{tree_str}\n```\n\n"
+            f"## Specification ({spec_path.name})\n```markdown\n{spec_content[:8000]}\n```\n\n"
+            f"## Key Source File Snippets\n"
+            + "\n".join(key_file_snippets[:10])
+            + "\n\nWrite a comprehensive architecture document."
+        )
+
+        try:
+            result = chat_completion(system_prompt, user_prompt)
+        except Exception as e:
+            log.error(f"LLM call failed during architecture analysis: {e}")
+            raise PipelineStepError(
+                f"Architecture analysis LLM call failed: {e}\n"
+                f"Spec: {session.spec_path}"
+            )
+
+        analysis = result["content"]
+        usage = result.get("usage", {})
+        log.info(
+            "LLM returned %d tokens (prompt=%s, completion=%s)",
+            usage.get("total_tokens", "?"),
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
 
         out_path = session.session_dir / "architecture.md"
-        content = f"""# Architecture: {session.name}
-
-> Generated by Claude Architecture Analysis
-> Spec: {session.spec_path}
-
-## Project Overview
-- **Tech Stack**: {tech_stack_str}
-- **Source Directories**: {len(directories)}
-- **Source Files**: {len(source_files)}
-
-## Directory Structure
-"""
-        for d in sorted(directories):
-            content += f"- `{d}/`\n"
-
-        content += f"""
-## Source Files ({len(source_files)})
-"""
-        for sf in sorted(source_files)[:30]:  # Show first 30 files
-            content += f"- `{sf}`\n"
-
-        if len(source_files) > 30:
-            content += f"- ... and {len(source_files) - 30} more file(s)\n"
-
-        content += f"""
-## Identified Bounded Contexts
-"""
-        for req in spec_requirements[:10]:
-            content += f"- {req}\n"
-
-        content += f"""
-## Architecture Decision Records
-### ADR-001: Tech Stack
-**Status**: Accepted  
-**Context**: Based on discovered source files and project configuration.  
-**Decision**: Use {tech_stack_str} as primary implementation languages.  
-**Consequences**: Standardises tooling and CI configuration around this stack.
-
-## Key Design Considerations
-- {len(source_files)} source files discovered across {len(directories)} directories
-- Total project scope: {session.spec_path}
-"""
         try:
-            out_path.write_text(content)
+            out_path.write_text(analysis)
         except OSError as e:
             log.error(f"Cannot write architecture: {e}")
-            raise RuntimeError(f"Cannot write architecture: {e}")
-        print(f"  ✅ [Claude] Architecture design at {out_path}")
-        log.info(f"Architecture design saved to {out_path}")
+            raise PipelineStepError(f"Cannot write architecture: {e}")
+        print(f"  ✅ [Claude] AI architecture analysis at {out_path}")
+        log.info(f"AI architecture analysis saved to {out_path}")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"Architecture step failed: {e}")
-        raise
+        raise PipelineStepError(f"Architecture step failed: {e}")
 
 
 @timed_step
 def step_claude_dev(session: PipelineSession) -> str:
-    """Step 5: Claude — Development log with real project metrics.
+    """Step 5: Claude — AI-powered development planning.
 
-    Checks git log for recent changes, counts lines of code,
-    and writes meaningful development metadata.
+    Reads spec content + architecture analysis from artifacts,
+    sends to LLM, and generates a real development plan with
+    task breakdown and tech debt identification.
     """
     try:
-        print("  💻 [Claude] Development...")
-        log.info("Running development step")
+        print("  💻 [Claude] Running AI-powered development planning...")
+        log.info("Running AI-powered development planning")
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
 
-        # Gather git stats
+        # --- Gather project metrics (git stats + line counts) ---
         git_log = ""
         git_commits = 0
         try:
@@ -609,10 +710,10 @@ def step_claude_dev(session: PipelineSession) -> str:
             if result.returncode == 0:
                 git_log = result.stdout.strip()
                 git_commits = len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
-        except Exception:
+        except Exception as e:
+            log.warning(f"Git log failed (non-fatal): {e}")
             git_log = "(not a git repository or git not available)"
 
-        # Count lines in src and tests
         total_lines = 0
         src_lines = 0
         test_lines = 0
@@ -634,45 +735,119 @@ def step_claude_dev(session: PipelineSession) -> str:
             except Exception:
                 pass
 
-        out_path = session.session_dir / "development-log.md"
-        content = f"""# Development Log: {session.name}
+        # --- Read spec content ---
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
 
-## Project Metrics
-- **Total Lines of Code**: {total_lines}
-- **Source Lines**: {src_lines}
-- **Test Lines**: {test_lines}
-- **Source Files**: {len(src_files)}
-- **Test Files**: {len(test_files)}
+        # --- Read architecture analysis from artifacts ---
+        architecture_content = ""
+        arch_key = "architecture"
+        if arch_key in session.artifacts:
+            arch_path = Path(session.artifacts[arch_key])
+            if arch_path.exists():
+                architecture_content = arch_path.read_text()
 
-## Recent Git Activity
-- **Recent commits (last 10)**: {git_commits}
+        # --- Read PRD from artifacts (if available) ---
+        prd_content = ""
+        prd_key = "prd"
+        if prd_key in session.artifacts:
+            prd_path = Path(session.artifacts[prd_key])
+            if prd_path.exists():
+                prd_content = prd_path.read_text()
 
-```
-{git_log}
-```
+        # --- Read S.U.P.E.R analysis (if available) ---
+        super_content = ""
+        super_key = "super-analysis"
+        if super_key in session.artifacts:
+            super_path = Path(session.artifacts[super_key])
+            if super_path.exists():
+                super_content = super_path.read_text()
 
-## Task Breakdown
-From architecture: spec at `{session.spec_path}`
+        # --- Build LLM prompt ---
+        system_prompt = (
+            "You are a senior software developer and tech lead. "
+            "Given a project specification, S.U.P.E.R. analysis, PRD, and architecture document, "
+            "produce a detailed development plan in Markdown covering:\n"
+            "1. **Development Plan** — what to build, in what order, and why (priority-driven)\n"
+            "2. **Task Breakdown** — atomic implementation tasks with estimated effort, "
+            "file paths to modify, and acceptance criteria for each\n"
+            "3. **Tech Debt Identification** — areas in the existing code that need refactoring, "
+            "patterns that don't scale, missing tests, or quality concerns\n"
+            "4. **Implementation Order** — recommended sequence of work with dependencies\n"
+            "5. **Risk Assessment** — technical risks, unknowns, and mitigation strategies\n"
+            "Be specific, reference actual file paths from the project, and provide actionable tasks."
+        )
 
-### Implementation Summary
-- Source code: {src_lines} lines across {len(src_files)} files
-- Test code: {test_lines} lines across {len(test_files)} files
-- Test-to-source ratio: {test_lines/src_lines:.1%} if src_lines > 0 else "N/A"
+        context_parts = [
+            f"# Specification: {Path(session.spec_path).name}\n```markdown\n{spec_content[:6000]}\n```"
+        ]
+        if architecture_content:
+            context_parts.append(
+                f"# Architecture Analysis\n```markdown\n{architecture_content[:4000]}\n```"
+            )
+        if prd_content:
+            context_parts.append(
+                f"# PRD\n```markdown\n{prd_content[:3000]}\n```"
+            )
+        if super_content:
+            context_parts.append(
+                f"# S.U.P.E.R. Analysis\n```markdown\n{super_content[:3000]}\n```"
+            )
 
-## TDD Status
-Spec validation and evidence collection available in session artifacts.
-"""
+        context_parts.append(
+            f"# Project Metrics\n"
+            f"- Source lines: {src_lines} across {len(src_files)} files\n"
+            f"- Test lines: {test_lines} across {len(test_files)} files\n"
+            f"- Test-to-source ratio: {test_lines/src_lines:.1%} (if src_lines > 0 else 'N/A')\n"
+            f"- Recent git commits: {git_commits}\n"
+            f"```\n{git_log}\n```"
+        )
+
+        user_prompt = "\n\n---\n\n".join(context_parts)
+        user_prompt += "\n\n---\n\nNow produce the development plan, task breakdown, and tech debt identification as Markdown."
+
         try:
-            out_path.write_text(content)
+            result = chat_completion(system_prompt, user_prompt, max_tokens=4096)
+        except Exception as e:
+            log.error(f"LLM call failed during development planning: {e}")
+            raise PipelineStepError(
+                f"Development planning LLM call failed: {e}\n"
+                f"Spec: {session.spec_path}"
+            )
+
+        plan = result["content"]
+        usage = result.get("usage", {})
+        log.info(
+            "LLM returned %d tokens (prompt=%s, completion=%s)",
+            usage.get("total_tokens", "?"),
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
+
+        full_output = (
+            f"# Development Plan: {session.name}\n\n"
+            f"> Generated by: LLM ({result.get('model', 'unknown')})\n"
+            f"> Source spec: {session.spec_path}\n"
+            f"> Tokens: {usage.get('total_tokens', '?')} "
+            f"(prompt {usage.get('prompt_tokens', '?')} + "
+            f"completion {usage.get('completion_tokens', '?')})\n\n"
+            f"{plan}"
+        )
+
+        out_path = session.session_dir / "development-plan.md"
+        try:
+            out_path.write_text(full_output)
         except OSError as e:
-            log.error(f"Cannot write development log: {e}")
-            raise RuntimeError(f"Cannot write development log: {e}")
-        print(f"  ✅ [Claude] Development log at {out_path}")
-        log.info(f"Development log saved to {out_path}")
+            log.error(f"Cannot write development plan: {e}")
+            raise PipelineStepError(f"Cannot write development plan: {e}")
+        print(f"  ✅ [Claude] AI development plan at {out_path}")
+        log.info(f"AI development plan saved to {out_path}")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"Development step failed: {e}")
-        raise
+        raise PipelineStepError(f"Development step failed: {e}")
 
 
 @timed_step
@@ -717,10 +892,13 @@ def step_claude_test(session: PipelineSession) -> str:
                         total += 1
                 test_summary = f"Go test: {total} packages, {passed} passed, {failed} failed"
             except FileNotFoundError:
+                log.warning("Go not installed — tests cannot run")
                 test_summary = "Go not installed — tests skipped"
             except subprocess.TimeoutExpired:
+                log.warning("Go tests timed out")
                 test_summary = "Go tests timed out"
             except Exception as e:
+                log.warning(f"Go test error: {e}")
                 test_summary = f"Go test error: {e}"
         else:
             try:
@@ -745,10 +923,13 @@ def step_claude_test(session: PipelineSession) -> str:
                 if not test_summary:
                     test_summary = f"pytest completed (exit code {result.returncode})"
             except FileNotFoundError:
+                log.warning("pytest not installed — tests cannot run")
                 test_summary = "pytest not installed — tests skipped"
             except subprocess.TimeoutExpired:
+                log.warning("Tests timed out")
                 test_summary = "Tests timed out"
             except Exception as e:
+                log.warning(f"Test error: {e}")
                 test_summary = f"Test error: {e}"
 
         # Read spec scenarios for mapping
@@ -769,8 +950,8 @@ def step_claude_test(session: PipelineSession) -> str:
                         pass
                 if current_scenario:
                     spec_scenarios.append(current_scenario)
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(f"Failed to parse spec scenarios for test report: {e}")
 
         status_icon = "✅" if failed == 0 else "❌"
         runner = "pytest" if is_python else "go test"
@@ -808,43 +989,252 @@ Run CI Layer 1 to generate detailed coverage metrics for compliance.
             out_path.write_text(content)
         except OSError as e:
             log.error(f"Cannot write test report: {e}")
-            raise RuntimeError(f"Cannot write test report: {e}")
+            raise PipelineStepError(f"Cannot write test report: {e}")
         print(f"  ✅ [Claude] Self-test report at {out_path}")
         log.info(f"Self-test report saved to {out_path}")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"Self-test step failed: {e}")
-        raise
+        raise PipelineStepError(f"Self-test step failed: {e}")
+
+
+def _try_parse_hermes_json(raw: str, session_name: str) -> dict:
+    """Parse Hermes review JSON from LLM output with robust fallback.
+
+    Supports common format deviations:
+      - Markdown ```json code fences
+      - Leading/trailing explanatory text
+      - Missing required fields (fills in defaults)
+      - Pre/post whitespace
+      - Multiple code blocks (uses the first valid JSON block)
+
+    Returns a valid review dict in all cases (with status='retry' if
+    parsing ultimately fails, including raw output for debugging).
+    """
+    json_str = raw.strip()
+    raw_preview_500 = raw[:500]
+
+    # Try bare JSON first
+    if json_str.startswith("{") and json_str.endswith("}"):
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass  # Fall through to fence stripping
+
+    # Strip markdown fences: ```json ... ``` or ``` ... ```
+    if "```" in json_str:
+        # Collect all fenced blocks
+        blocks = []
+        in_fence = False
+        current = []
+        for line in json_str.split("\n"):
+            if line.strip().startswith("```"):
+                if in_fence:
+                    # End of a fenced block
+                    blocks.append("\n".join(current))
+                    current = []
+                    in_fence = False
+                else:
+                    in_fence = True
+                    # Skip the opening fence (optionally with "json" after)
+                    lang = line.strip().lstrip("```").strip().lower()
+                    if lang and lang != "json":
+                        # It's a non-JSON code block, skip content
+                        in_fence = False
+                    current = []
+            elif in_fence:
+                current.append(line)
+
+        for block in blocks:
+            block = block.strip()
+            try:
+                return json.loads(block)
+            except json.JSONDecodeError:
+                continue
+
+    # If we have leading text before a JSON block, try to find { ... }
+    brace_start = json_str.find("{")
+    if brace_start >= 0:
+        # Find matching closing brace
+        depth = 0
+        for i in range(brace_start, len(json_str)):
+            if json_str[i] == "{":
+                depth += 1
+            elif json_str[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = json_str[brace_start:i+1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        continue
+
+    # Final fallback: return retry status with raw output embedded
+    log.warning(f"Could not parse Hermes review JSON. Raw output (first 500 chars): {raw_preview_500}")
+    return {
+        "session": session_name,
+        "reviewer": "Hermes",
+        "timestamp": datetime.now().isoformat(),
+        "status": "retry",
+        "_raw_llm_output": raw,
+        "findings": [{
+            "severity": "major",
+            "category": "reviewer-error",
+            "file": "",
+            "line": None,
+            "message": (
+                f"LLM review output was not valid JSON. "
+                f"Raw output (first 500 chars): {raw_preview_500}"
+            ),
+        }],
+        "finding_breakdown": {"critical": 0, "major": 1, "minor": 0, "info": 0},
+        "summary": f"LLM review could not be parsed — check raw output.",
+    }
 
 
 @timed_step
 def step_hermes_review(session: PipelineSession) -> str:
-    """Step 7: Hermes — 代码审查"""
+    """Step 7: Hermes — AI-powered code review.
+
+    Reads spec + all artifacts (architecture, test report, development plan, etc.),
+    sends to LLM, and produces a real code review with findings.
+    """
     try:
-        print("  🔮 [Hermes] Code review...")
-        log.info("Running code review")
-        
+        print("  🔮 [Hermes] Running AI-powered code review...")
+        log.info("Running AI-powered code review")
+
+        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+
+        # --- Read spec ---
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
+
+        # --- Collect all available artifacts ---
+        artifact_contents = {}
+        for key in ["architecture", "development", "self-test", "prd", "super-analysis", "review-result"]:
+            if key in session.artifacts:
+                ap = Path(session.artifacts[key])
+                if ap.exists():
+                    artifact_contents[key] = ap.read_text()
+
+        # --- Scan actual source files ---
+        source_files = []
+        src_dir = project_dir / "src"
+        if src_dir.exists():
+            for root, dirs, files in os.walk(src_dir):
+                dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+                for f in sorted(files):
+                    if f.endswith(".py"):
+                        fpath = Path(root) / f
+                        rel = fpath.relative_to(project_dir)
+                        content = fpath.read_text() if fpath.exists() and fpath.stat().st_size < 20000 else ""
+                        source_files.append({"path": str(rel), "lines": len(content.splitlines()), "content": content[:3000]})
+
+        # --- Build LLM prompt ---
+        system_prompt = (
+            "You are an expert code reviewer (Hermes). Review the project's source code "
+            "against the specification and all available pipeline artifacts. "
+            "Produce a detailed review JSON with findings.\n\n"
+            "Respond with ONLY valid JSON (no markdown, no explanation). "
+            "The JSON must have this exact structure:\n"
+            "{\n"
+            '  "session": "<session-name>",\n'
+            '  "reviewer": "Hermes",\n'
+            '  "timestamp": "<ISO-timestamp>",\n'
+            '  "status": "passed|failed|retry",\n'
+            '  "findings": [\n'
+            "    {\n"
+            '      "severity": "critical|major|minor|info",\n'
+            '      "category": "architecture|domain|style|security|coverage|spec-compliance",\n'
+            '      "file": "<relative-file-path>",\n'
+            '      "line": <integer-or-null>,\n'
+            '      "message": "<detailed-description>"\n'
+            "    }\n"
+            "  ],\n"
+            '  "finding_breakdown": {\n'
+            '    "critical": <int>, "major": <int>, "minor": <int>, "info": <int>\n'
+            "  },\n"
+            '  "summary": "<overall-review-summary>"\n'
+            "}"
+        )
+
+        artifact_sections = []
+        for key, content in artifact_contents.items():
+            artifact_sections.append(f"### {key}\n```\n{content[:3000]}\n```")
+
+        source_sections = []
+        for sf in source_files:
+            source_sections.append(f"### {sf['path']} ({sf['lines']} lines)\n```python\n{sf['content']}\n```")
+
+        # Limit source files to avoid huge prompts
+        if len(source_sections) > 8:
+            source_sections = source_sections[:8]
+            source_sections.append("*(additional source files truncated)*")
+
+        user_prompt = (
+            f"# Specification: {Path(session.spec_path).name}\n"
+            f"```markdown\n{spec_content[:5000]}\n```\n\n"
+            f"# Pipeline Artifacts\n"
+            + "\n".join(artifact_sections)
+            + "\n\n# Source Code\n"
+            + "\n".join(source_sections)
+            + "\n\n---\n\n"
+            f"Review session: {session.name}\n"
+            f"Timestamp: {datetime.now().isoformat()}\n\n"
+            "Produce the JSON review. Check:\n"
+            "- Does the code satisfy all spec SHALL/SHOULD statements?\n"
+            "- Are there any architecture violations or layering issues?\n"
+            "- Code style, security, and test coverage concerns?\n"
+            "- Quality of the development plan and architecture design?"
+        )
+
+        try:
+            result = chat_completion(system_prompt, user_prompt, max_tokens=4096)
+        except Exception as e:
+            log.error(f"LLM call failed during code review: {e}")
+            raise PipelineStepError(
+                f"Code review LLM call failed: {e}\n"
+                f"Spec: {session.spec_path}"
+            )
+
+        raw = result["content"].strip()
+        usage = result.get("usage", {})
+        log.info(
+            "LLM returned %d tokens (prompt=%s, completion=%s)",
+            usage.get("total_tokens", "?"),
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
+
+        # Parse with robust fallback (handles markdown fences, leading text, etc.)
+        review = _try_parse_hermes_json(raw, session.name)
+
+        # Ensure required fields
+        review.setdefault("session", session.name)
+        review.setdefault("reviewer", "Hermes")
+        review.setdefault("timestamp", datetime.now().isoformat())
+        review.setdefault("status", "passed")
+        review.setdefault("findings", [])
+        review.setdefault("finding_breakdown", {"critical": 0, "major": 0, "minor": 0, "info": 0})
+        review.setdefault("summary", "")
+
         out_path = session.session_dir / "code-review.json"
-        review = {
-            "session": session.name,
-            "reviewer": "Hermes",
-            "timestamp": datetime.now().isoformat(),
-            "status": "passed",
-            "findings": [],
-            "summary": "Code review completed. All spec requirements verified.",
-        }
         try:
             with open(out_path, "w") as f:
-                json.dump(review, f, indent=2)
+                json.dump(review, f, indent=2, ensure_ascii=False)
         except (OSError, IOError) as e:
             log.error(f"Cannot write code review: {e}")
-            raise RuntimeError(f"Cannot write code review: {e}")
-        print(f"  ✅ [Hermes] Code review completed")
-        log.info("Code review completed")
+            raise PipelineStepError(f"Cannot write code review: {e}")
+        print(f"  ✅ [Hermes] AI code review completed ({len(review['findings'])} findings, status={review['status']})")
+        log.info(f"AI code review: {len(review['findings'])} findings, status={review['status']}")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"Code review step failed: {e}")
-        raise
+        raise PipelineStepError(f"Code review step failed: {e}")
 
 
 @timed_step
@@ -885,13 +1275,15 @@ def step_final_report(session: PipelineSession) -> str:
             out_path.write_text("\n".join(lines))
         except OSError as e:
             log.error(f"Cannot write final report: {e}")
-            raise RuntimeError(f"Cannot write final report: {e}")
+            raise PipelineStepError(f"Cannot write final report: {e}")
         print(f"  ✅ Final report at {out_path}")
         log.info(f"Final report generated at {out_path}")
         return str(out_path)
+    except PipelineStepError:
+        raise
     except Exception as e:
         log.error(f"Final report step failed: {e}")
-        raise
+        raise PipelineStepError(f"Final report step failed: {e}")
 
 
 # --- Pipeline definition ---
@@ -1030,6 +1422,7 @@ def main():
             status_pipeline(sys.argv[2] if len(sys.argv) > 2 else None)
         else:
             session = run_pipeline(cmd)
+
             sys.exit(0 if session.status == "completed" else 1)
     except KeyboardInterrupt:
         log.warning("Pipeline interrupted by user")

@@ -21,6 +21,28 @@ log = logging.getLogger("ci")
 
 
 # ------------------------------------------------------------------
+# Strict mode helpers
+# ------------------------------------------------------------------
+
+def is_strict() -> bool:
+    """Check if CI is running in strict mode (CI_STRICT=1).
+
+    In strict mode, missing tools cause pipeline failure instead of
+    silent skip.  Any stage with FileNotFoundError blocks the pipeline.
+    """
+    return os.environ.get("CI_STRICT", "0") == "1"
+
+
+def is_misra_fail_fast() -> bool:
+    """Check if MISRA_FAIL_FAST is active.
+
+    When enabled, MISRA/CppCheck or clang-tidy failures (non-zero exit)
+    block the pipeline immediately instead of producing warnings.
+    """
+    return os.environ.get("MISRA_FAIL_FAST", "0") == "1"
+
+
+# ------------------------------------------------------------------
 # Timing decorator
 # ------------------------------------------------------------------
 
@@ -188,6 +210,11 @@ def run_plan_lint(project_dir: str, ci: CIResult) -> bool:
                 if f.endswith(".md") and ("task" in f.lower() or "plan" in f.lower()):
                     task_files.append(os.path.join(root, f))
     
+    if not task_files:
+        ci.add_stage("plan-lint", "skipped", "No task/plan files found")
+        print("    ⏭️  No task/plan files — skipped")
+        return True
+    
     issues = []
     for tf in task_files:
         content = Path(tf).read_text()
@@ -202,8 +229,9 @@ def run_plan_lint(project_dir: str, ci: CIResult) -> bool:
     if issues:
         for i in issues:
             print(f"    ⚠️  {i}")
-        ci.add_stage("plan-lint", "warning", "; ".join(issues[:3]))
-        return True  # Warnings don't block
+        ci.add_stage("plan-lint", "failed", "; ".join(issues[:3]))
+        print(f"    ❌ plan-lint found {len(issues)} issue(s) — blocking pipeline")
+        return False  # Warnings block the pipeline per A-01
     else:
         ci.add_stage("plan-lint", "passed")
         print("    ✅ plan-lint passed")
@@ -226,6 +254,9 @@ def run_clang_tidy(project_dir: str, ci: CIResult) -> bool:
         print("    ⏭️  No C/C++ files — skipped")
         return True
     
+    strict = is_strict()
+    misra_ff = is_misra_fail_fast()
+    
     # Try to run clang-tidy
     try:
         result = subprocess.run(
@@ -237,13 +268,32 @@ def run_clang_tidy(project_dir: str, ci: CIResult) -> bool:
             print("    ✅ clang-tidy passed")
             return True
         else:
-            ci.add_stage("clang-tidy", "failed", result.stdout[:500])
-            print(f"    ⚠️  clang-tidy warnings:\n{result.stdout[:300]}")
-            return True  # Warnings only, not blocking
+            detail = result.stdout[:500] if result.stdout else result.stderr[:500]
+            if misra_ff:
+                ci.add_stage("clang-tidy", "failed", detail)
+                print(f"    ❌ clang-tidy found issues (MISRA_FAIL_FAST):\n{detail}")
+                return False
+            ci.add_stage("clang-tidy", "failed", detail)
+            print(f"    ❌ clang-tidy found issues:\n{result.stdout[:300]}")
+            return False  # A-01: always block on tool failure
     except FileNotFoundError:
-        ci.add_stage("clang-tidy", "skipped", "clang-tidy not installed")
-        print("    ⏭️  clang-tidy not installed — skipped")
-        return True
+        reason = "clang-tidy not installed"
+        if strict:
+            ci.add_stage("clang-tidy", "failed", reason)
+            print(f"    ❌ {reason} (strict mode)")
+            return False
+        ci.add_stage("clang-tidy", "skipped", reason)
+        print(f"    ⏭️  {reason} — skipped")
+        return False  # A-01: skip returns False, blocking pipeline
+    except subprocess.TimeoutExpired:
+        reason = "clang-tidy timed out"
+        if strict:
+            ci.add_stage("clang-tidy", "failed", reason)
+            print(f"    ❌ {reason} (strict mode)")
+            return False
+        ci.add_stage("clang-tidy", "skipped", reason)
+        print(f"    ⏭️  {reason} — skipped")
+        return False  # A-01: skip returns False, blocking pipeline
 
 
 @timed_stage
@@ -297,8 +347,18 @@ def run_unit_tests(project_dir: str, ci: CIResult) -> bool:
                     ci.add_stage("unit-tests", "failed", result.stdout[:300])
                     print(f"    ❌ Tests failed")
                     return False
-        except Exception:
-            pass
+        except FileNotFoundError:
+            ci.add_stage("unit-tests", "skipped", "pytest not installed")
+            print("    ⏭️  pytest not installed — blocked")
+            return False  # A-01: missing tool blocks
+        except subprocess.TimeoutExpired:
+            ci.add_stage("unit-tests", "skipped", "pytest timed out")
+            print("    ⏭️  pytest timed out — blocked")
+            return False  # A-01: tool error blocks
+        except Exception as e:
+            ci.add_stage("unit-tests", "skipped", f"pytest error: {e}")
+            print(f"    ⏭️  pytest error: {e} — blocked")
+            return False  # A-01: tool error blocks
         
         ci.add_stage("unit-tests", "skipped", "No test framework detected")
         print("    ⏭️  No tests discovered — skipped")
@@ -320,18 +380,20 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     if hook_type == "commit":
         ci.add_stage("coverage", "skipped", "HOOK_TYPE=commit — skip coverage, runs on push")
         print(f"    ⏭️  Coverage skipped (pre-commit hook — runs on push)")
-        return True
+        return True  # Intentional skip, not a failure
 
     # Skip coverage if run from within a coverage run (prevent recursion)
     if os.environ.get("COVERAGE_RUN") == "1":
         ci.add_stage("coverage", "skipped", "Skipped to prevent recursion")
         print(f"    ⏭️  Coverage skipped (nested run)")
-        return True
+        return True  # Intentional skip, not a failure
     
     print("  📊 CI: coverage check...")
     
     threshold_line = 38.0  # MVP threshold, raise as tests grow
     threshold_cond = 38.0
+    
+    strict = is_strict()
     
     try:
         cov_env = {**os.environ, "COVERAGE_RUN": "1"}
@@ -380,21 +442,32 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
             return True
         else:
             ci.add_stage("coverage", "skipped", "coverage JSON not available")
-            print("    ⏭️  Coverage data not available — skipped")
-            return True
+            print("    ⏭️  Coverage data not available — blocked")
+            return False  # A-01: missing data blocks
             
     except FileNotFoundError:
-        ci.add_stage("coverage", "skipped", "Coverage tool not installed")
-        print("    ⏭️  Coverage tool not installed — skipped")
-        return True
+        reason = "Coverage tool not installed"
+        if strict:
+            ci.add_stage("coverage", "failed", reason)
+            print(f"    ❌ {reason} (strict mode)")
+            return False
+        ci.add_stage("coverage", "skipped", reason)
+        print(f"    ⏭️  {reason} — blocked (missing tool)")
+        return False  # A-01: missing tool blocks
     except subprocess.TimeoutExpired:
-        ci.add_stage("coverage", "skipped", "Coverage run timed out")
-        print("    ⏭️  Coverage run timed out — skipped")
-        return True
+        reason = "Coverage run timed out"
+        if strict:
+            ci.add_stage("coverage", "failed", reason)
+            print(f"    ❌ {reason} (strict mode)")
+            return False
+        ci.add_stage("coverage", "skipped", reason)
+        print(f"    ⏭️  {reason} — blocked (timeout)")
+        return False  # A-01: tool error blocks
     except json.JSONDecodeError as e:
-        ci.add_stage("coverage", "skipped", f"JSON decode: {e}")
-        print("    ⏭️  Coverage JSON invalid — skipped")
-        return True
+        reason = f"Coverage JSON invalid: {e}"
+        ci.add_stage("coverage", "skipped", reason)
+        print(f"    ⏭️  {reason} — blocked")
+        return False  # A-01: data error blocks
 
 
 def run_layer1(project_dir: Optional[str] = None):
@@ -475,6 +548,8 @@ def run_layer2(project_dir: Optional[str] = None):
     
     ci = CIResult(2, commit)
     all_passed = True
+    misra_ff = is_misra_fail_fast()
+    strict = is_strict()
     
     # Stage 1: Cross-compilation matrix
     print("  🔧 CI: cross-compilation check...")
@@ -492,7 +567,7 @@ def run_layer2(project_dir: Optional[str] = None):
         print(f"    ⏭️  No C/C++ files — cross-compile skipped")
         ci.add_stage("cross-compile", "skipped", "No C/C++ sources")
     
-    # Stage 2: Static analysis
+    # Stage 2: Static analysis (cppcheck)
     print("  🔎 CI: static analysis...")
     if c_files:
         try:
@@ -504,13 +579,38 @@ def run_layer2(project_dir: Optional[str] = None):
                 ci.add_stage("static-analysis", "passed")
                 print(f"    ✅ cppcheck passed")
             else:
-                ci.add_stage("static-analysis", "warning", result.stdout[:200])
-                print(f"    ⚠️  cppcheck found issues")
+                detail = result.stdout[:500] if result.stdout else result.stderr[:500]
+                if misra_ff:
+                    ci.add_stage("static-analysis", "failed", detail)
+                    print(f"    ❌ cppcheck found issues (MISRA_FAIL_FAST)")
+                    all_passed = False
+                else:
+                    ci.add_stage("static-analysis", "failed", result.stdout[:200])
+                    print(f"    ❌ cppcheck found issues")
+                    all_passed = False  # A-01: always block, not just warning
         except FileNotFoundError:
-            ci.add_stage("static-analysis", "skipped", "cppcheck not installed")
-            print(f"    ⏭️  cppcheck not installed — skipped")
+            reason = "cppcheck not installed"
+            if strict:
+                ci.add_stage("static-analysis", "failed", reason)
+                print(f"    ❌ {reason} (strict mode)")
+                all_passed = False
+            else:
+                ci.add_stage("static-analysis", "skipped", reason)
+                print(f"    ⏭️  {reason} — blocked (missing tool)")
+                all_passed = False  # A-01: missing tool blocks
+        except subprocess.TimeoutExpired:
+            reason = "cppcheck timed out"
+            if strict:
+                ci.add_stage("static-analysis", "failed", reason)
+                print(f"    ❌ {reason} (strict mode)")
+                all_passed = False
+            else:
+                ci.add_stage("static-analysis", "skipped", reason)
+                print(f"    ⏭️  {reason} — blocked (timeout)")
+                all_passed = False
     else:
         ci.add_stage("static-analysis", "skipped", "No C/C++ sources")
+        print(f"    ⏭️  No C/C++ sources")
     
     # Stage 3: Integration tests
     print("  🔗 CI: integration tests...")
@@ -529,8 +629,20 @@ def run_layer2(project_dir: Optional[str] = None):
                 ci.add_stage("integration-tests", "failed", result.stdout[:200])
                 print(f"    ❌ Integration tests failed")
                 all_passed = False
+        except FileNotFoundError:
+            reason = "pytest not installed"
+            ci.add_stage("integration-tests", "skipped", reason)
+            print(f"    ⏭️  {reason} — blocked")
+            all_passed = False
+        except subprocess.TimeoutExpired:
+            reason = "Integration tests timed out"
+            ci.add_stage("integration-tests", "skipped", reason)
+            print(f"    ⏭️  {reason} — blocked")
+            all_passed = False
         except Exception as e:
             ci.add_stage("integration-tests", "error", str(e))
+            print(f"    ❌ Integration tests error: {e}")
+            all_passed = False
     else:
         ci.add_stage("integration-tests", "skipped", "No integration tests")
         print(f"    ⏭️  No integration tests directory")
@@ -602,8 +714,18 @@ def run_layer3(project_dir: Optional[str] = None):
                 ci.add_stage("e2e-tests", "failed", result.stdout[:200])
                 print(f"    ❌ E2E tests failed")
                 all_passed = False
+        except FileNotFoundError:
+            ci.add_stage("e2e-tests", "skipped", "pytest not installed — blocked")
+            print(f"    ⏭️  pytest not installed — blocked")
+            all_passed = False
+        except subprocess.TimeoutExpired:
+            ci.add_stage("e2e-tests", "skipped", "E2E tests timed out — blocked")
+            print(f"    ⏭️  E2E tests timed out — blocked")
+            all_passed = False
         except Exception as e:
             ci.add_stage("e2e-tests", "error", str(e))
+            print(f"    ❌ E2E tests error: {e}")
+            all_passed = False
     else:
         ci.add_stage("e2e-tests", "skipped", "No E2E tests")
         print(f"    ⏭️  No E2E tests directory")
