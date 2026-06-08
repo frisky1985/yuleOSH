@@ -1416,7 +1416,32 @@ PIPELINE_STEPS = [
 ]
 
 
-def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None):
+def _check_llm_key() -> str | None:
+    """Check for a valid LLM API key in environment variables.
+
+    Returns the key if found, or None if neither LLM_API_KEY nor
+    OPENAI_API_KEY is set.
+    """
+    key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if not key:
+        print("""
+❌ LLM API key not found
+
+yuleOSH's pipeline requires an LLM API key to run AI agent steps.
+Set one of these environment variables:
+
+    export LLM_API_KEY=sk-...    # OpenAI/OpenAI-compatible API
+    export OPENAI_API_KEY=sk-... # OpenAI
+
+Then re-run: yuleosh pipeline run <spec>
+
+\U0001f4a1 For demo/testing without a real LLM, use the --mock flag:
+    yuleosh pipeline run --mock docs/spec.md
+""")
+    return key
+
+
+def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None, mock: bool = False):
     """Run the full OSH pipeline for a given spec.
     
     Args:
@@ -1425,7 +1450,14 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         llm_client: Optional injected LLM callable for testing.
             When provided, all LLM-dependent steps use this callable
             instead of the global ``chat_completion``.
+        mock: If True, skip LLM key check (for demo/testing).
     """
+
+    # Check for LLM API key before starting (skip when a mock/injected client is provided)
+    if not mock and llm_client is None:
+        key = _check_llm_key()
+        if not key:
+            sys.exit(1)
     
     try:
         if name is None:

@@ -769,9 +769,44 @@ def main():
     if not AUTH_ENABLED and not TENANT_AUTH:
         print(f"⚠️  Auth disabled — set YULEOSH_API_KEY or install auth_extended.py")
 
-    print(f"🌐 OSH Dashboard: http://localhost:{PORT}")
-    print(f"   OSH_HOME: {OSH_HOME}")
+    # Build API route listing from router ROUTES dict
+    api_routes = []
+    try:
+        from src.api.router import ROUTES as api_routes_dict
+        for name, handler in sorted(api_routes_dict.items()):
+            doc = (handler.__doc__ or "").strip()
+            # Shorten verbose docstrings for clean display
+            if doc.startswith("Route to") or doc.startswith("Handle") or doc == "":
+                doc = f"/api/v1/{name}"
+            api_routes.append((f"/api/v1/{name}", doc))
+    except Exception:
+        api_routes = [
+            ("/api/v1/health", "System health status"),
+            ("/api/v1/wizard", "Wizard setup API"),
+            ("/api/v1/spec", "Spec validate & diff"),
+            ("/api/v1/pipeline", "Run & list pipelines"),
+            ("/api/v1/ci", "Run & list CI layers"),
+            ("/api/v1/review", "Auto & task review"),
+            ("/api/v1/evidence", "Generate & list evidence"),
+            ("/api/v1/project", "Project CRUD"),
+            ("/api/v1/stats", "Project statistics & trends"),
+            ("/api/v1/notify", "Notification config"),
+            ("/api/v1/apikeys", "Manage API keys"),
+            ("/api/v1/webhooks", "Webhook management"),
+            ("/api/v1/audit", "Audit log (admin)"),
+        ]
+
+    print(f"""
+🚀 yuleOSH Dashboard
+   ────────────────────────────────────
+   Dashboard:   http://localhost:{PORT}/
+   API v1:      http://localhost:{PORT}/api/v1/
+
+   API Endpoints:""")
+    for route, desc in api_routes:
+        print(f"     {route:35s} — {desc}")
     print(f"   Press Ctrl+C to stop")
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
