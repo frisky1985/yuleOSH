@@ -2,6 +2,8 @@
 """OSH Spec Diff Engine — compare two OpenSpec files and produce delta with impact analysis."""
 import json
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from validate import parse_spec, diff_specs
 
 
