@@ -1,4 +1,8 @@
-"""Tests for review engine."""
+"""Tests for review engine.
+
+Covers: review, agent, blocking, archive, coverage, gate
+Scenario-Ref: SDD → DDD → TDD 全流程
+"""
 import sys, os, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "review"))
 

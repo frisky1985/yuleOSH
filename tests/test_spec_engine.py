@@ -1,4 +1,8 @@
-"""Tests for the spec engine."""
+"""Tests for the spec engine.
+
+Covers: spec, requirement, validation, tree, hierarchy, OpenSpec, delta
+Scenario-Ref: 变更管理
+"""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "spec"))
 
