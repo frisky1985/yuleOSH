@@ -326,8 +326,11 @@ class Store:
     def create_session(self, user_id: int, token: str, ttl_hours: int = 24) -> dict:
         now = datetime.now()
         expires = datetime.fromtimestamp(now.timestamp() + ttl_hours * 3600)
-        now_str = now.isoformat()
-        exp_str = expires.isoformat()
+        # Use space separator (SQLite-compatible format) so that
+        # comparisons against datetime('now') work correctly.
+        # isoformat() with 'T' separator sorts differently from SQLite's space.
+        now_str = now.isoformat(sep=" ")
+        exp_str = expires.isoformat(sep=" ")
         self.conn.execute(
             "INSERT INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
             (user_id, token, now_str, exp_str)

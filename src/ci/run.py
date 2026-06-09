@@ -159,6 +159,156 @@ def timed_stage(func):
 
 
 # ------------------------------------------------------------------
+# Extracted stage helpers — break up monolithic layer functions
+# ------------------------------------------------------------------
+
+
+def _save_layer_result(
+    project_dir: str,
+    ci: "CIResult",
+    all_passed: bool,
+    commit: str,
+    layer: int,
+) -> Path:
+    """Write CI result JSON to disk and send notification."""
+    ci_dir = Path(project_dir) / ".osh" / "ci"
+    ci_dir.mkdir(parents=True, exist_ok=True)
+    result_path = ci_dir / f"layer{layer}-{commit}.json"
+    with open(result_path, "w") as f:
+        json.dump(ci.to_dict(), f, indent=2)
+
+    if _notify:
+        try:
+            _notify(
+                layer=layer,
+                status="passed" if all_passed else "failed",
+                stages=ci.stages,
+                errors=ci.errors,
+            )
+        except Exception as ne:
+            log.warning(f"Notification failed: {ne}")
+    return result_path
+
+
+def _resolve_cross_compile(
+    project_dir: str,
+    cross_src: str,
+    build_dir: str,
+    ci: "CIResult",
+) -> bool:
+    """Attempt cross-compilation via make or Docker fallback.
+
+    Returns True if compilation succeeded, False otherwise.
+    """
+    compiled_ok = False
+    make_available = False
+    try:
+        subprocess.run(["make", "--version"], capture_output=True, timeout=5)
+        make_available = True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        make_available = False
+
+    if make_available:
+        print(f"    Running: make TARGET=arm...")
+        try:
+            result = subprocess.run(
+                ["make", "TARGET=arm"],
+                capture_output=True, text=True, timeout=60,
+                cwd=project_dir,
+            )
+            if result.returncode == 0:
+                elf_files = list(Path(build_dir).glob("*.elf")) if os.path.exists(build_dir) else []
+                if elf_files:
+                    print(f"    ✅ Cross-compilation succeeded: {', '.join(str(e) for e in elf_files)}")
+                    ci.add_stage("cross-compile", "passed", f"ARM ELF at {elf_files[0]}")
+                    compiled_ok = True
+                else:
+                    print(f"    ⚠️  make succeeded but no .elf found in build/")
+                    ci.add_stage("cross-compile", "failed", "make returned 0 but no .elf found")
+            else:
+                detail = result.stderr[:400] if result.stderr else result.stdout[:400]
+                print(f"    ❌ make TARGET=arm failed: {detail}")
+                ci.add_stage("cross-compile", "failed", f"make returned {result.returncode}: {detail}")
+        except subprocess.TimeoutExpired:
+            print(f"    ❌ make timed out")
+            ci.add_stage("cross-compile", "failed", "make timed out")
+            compiled_ok = False
+    else:
+        # Fallback: try Docker
+        compiled_ok = _cross_compile_via_docker(project_dir, ci)
+    return compiled_ok
+
+
+def _cross_compile_via_docker(project_dir: str, ci: "CIResult") -> bool:
+    """Cross-compile via Dockerfile.cross when make is unavailable."""
+    try:
+        subprocess.run(["docker", "--version"], capture_output=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        msg = "ARM cross-compilation tools not found. Install gcc-arm-none-eabi or Docker."
+        print(f"    ❌ Cross-compilation FAILED: no ARM toolchain, no make, no Docker")
+        ci.add_stage("cross-compile", "failed", msg)
+        return False
+
+    print(f"    make not available, trying Docker (Dockerfile.cross)...")
+    try:
+        subprocess.run(
+            ["docker", "build", "-t", "yuleosh-cross", "-f", "Dockerfile.cross", "."],
+            capture_output=True, text=True, timeout=120, cwd=project_dir,
+        )
+        result = subprocess.run(
+            ["docker", "run", "--rm", "-v", f"{project_dir}:/work",
+             "yuleosh-cross", "make", "TARGET=arm"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode == 0:
+            print(f"    ✅ Docker cross-compilation succeeded")
+            ci.add_stage("cross-compile", "passed", "ARM ELF via Docker")
+            return True
+        else:
+            detail = result.stderr[:400] if result.stderr else result.stdout[:400]
+            print(f"    ❌ Docker cross-compilation failed: {detail}")
+            ci.add_stage("cross-compile", "failed", f"Docker make failed: {detail}")
+            return False
+    except (subprocess.TimeoutExpired, OSError) as e:
+        print(f"    ❌ Docker error: {e}")
+        ci.add_stage("cross-compile", "failed", f"Docker error: {e}")
+        return False
+
+
+def _handle_stage_error(ci, stage: str, reason: str, strict: bool) -> bool:
+    """Record a stage error with strict-mode awareness. Returns True if blocked."""
+    if strict:
+        ci.add_stage(stage, "failed", reason)
+        print(f"    ❌ {reason} (strict mode)")
+    else:
+        ci.add_stage(stage, "skipped", reason)
+        print(f"    ⏭️  {reason} — blocked (missing tool)")
+    return False  # All tool errors block per A-01
+
+
+def _run_subprocess(
+    cmd: list[str],
+    cwd: str,
+    timeout: int = 60,
+) -> tuple[bool, str, str]:
+    """Run a subprocess with unified error handling.
+
+    Returns (success, stdout_summary, error_detail).
+    """
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        if result.returncode == 0:
+            return True, result.stdout[:200], ""
+        return False, result.stdout[:200], result.stderr[:400]
+    except FileNotFoundError:
+        return False, "", f"Command not found: {cmd[0]}"
+    except subprocess.TimeoutExpired:
+        return False, "", f"Command timed out after {timeout}s"
+    except Exception as e:
+        return False, "", str(e)
+
+
+# ------------------------------------------------------------------
 # Test file discovery cache — keyed by project_dir, invalidated on mtime
 # ------------------------------------------------------------------
 
@@ -467,6 +617,60 @@ def run_unit_tests(project_dir: str, ci: CIResult) -> bool:
 
 
 @timed_stage
+def _should_skip_coverage() -> bool:
+    """Check if coverage should be skipped (pre-commit hook or nested run)."""
+    hook_type = os.environ.get("HOOK_TYPE", "")
+    if hook_type == "commit":
+        return True
+    if os.environ.get("COVERAGE_RUN") == "1":
+        return True
+    return False
+
+
+def _coverage_skip_reason() -> str:
+    """Return the human-readable skip reason."""
+    if os.environ.get("HOOK_TYPE") == "commit":
+        return "HOOK_TYPE=commit — skip coverage, runs on push"
+    if os.environ.get("COVERAGE_RUN") == "1":
+        return "Skipped to prevent recursion"
+    return ""
+
+
+def _run_coverage_and_export(project_dir: str) -> tuple[bool, str]:
+    """Run ``coverage run`` + ``coverage json``.
+
+    Returns (success, error_detail).
+    """
+    cov_env = {**os.environ, "COVERAGE_RUN": "1"}
+    result = subprocess.run(
+        [sys.executable, "-m", "coverage", "run", "--branch", "--source=src",
+         "-m", "pytest", "-q", "--tb=short", "tests/"],
+        capture_output=True, text=True, timeout=120, cwd=project_dir, env=cov_env,
+    )
+    if result.returncode != 0:
+        return False, f"coverage run returned non-zero ({result.returncode}): {result.stderr[:200]}"
+
+    result2 = subprocess.run(
+        [sys.executable, "-m", "coverage", "json", "--pretty"],
+        capture_output=True, text=True, timeout=30, cwd=project_dir,
+    )
+    if result2.returncode != 0:
+        return False, f"coverage json returned non-zero ({result2.returncode}): {result2.stderr[:200]}"
+
+    return True, ""
+
+
+def _load_coverage_json(project_dir: str) -> tuple[float, float]:
+    """Parse coverage.json and return (line_pct, condition_pct)."""
+    json_file_path = os.path.join(project_dir, "coverage.json")
+    with open(json_file_path) as f:
+        cov_data = json.loads(f.read())
+    totals = cov_data.get("totals", {})
+    line_pct = totals.get("percent_covered", 0)
+    cond_pct = totals.get("percent_covered_condition", line_pct)
+    return line_pct, cond_pct
+
+
 def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     """Check test coverage meets threshold.
 
@@ -474,23 +678,14 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     slowing down every commit.  Coverage runs on push (HOOK_TYPE=push
     or when not in a hook at all).
     """
-    # In pre-commit hooks, skip coverage to keep commit fast;
-    # coverage runs on push / standalone CI runs.
-    hook_type = os.environ.get("HOOK_TYPE", "")
-    if hook_type == "commit":
-        ci.add_stage("coverage", "skipped", "HOOK_TYPE=commit — skip coverage, runs on push")
-        print(f"    ⏭️  Coverage skipped (pre-commit hook — runs on push)")
-        return True  # Intentional skip, not a failure
+    if _should_skip_coverage():
+        reason = _coverage_skip_reason()
+        ci.add_stage("coverage", "skipped", reason)
+        print(f"    ⏭️  Coverage skipped ({reason})")
+        return True
 
-    # Skip coverage if run from within a coverage run (prevent recursion)
-    if os.environ.get("COVERAGE_RUN") == "1":
-        ci.add_stage("coverage", "skipped", "Skipped to prevent recursion")
-        print(f"    ⏭️  Coverage skipped (nested run)")
-        return True  # Intentional skip, not a failure
-    
     print("  📊 CI: coverage check...")
-    
-    # Read thresholds from CI config (SWR-003.2)
+
     from ci.config import DEFAULT_COVERAGE_THRESHOLD_LINE, DEFAULT_COVERAGE_THRESHOLD_COND
     try:
         cfg = _get_ci_config(project_dir)
@@ -499,90 +694,54 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     except Exception:
         threshold_line = DEFAULT_COVERAGE_THRESHOLD_LINE
         threshold_cond = DEFAULT_COVERAGE_THRESHOLD_COND
-    
+
     strict = is_strict()
-    
+
     try:
-        cov_env = {**os.environ, "COVERAGE_RUN": "1"}
-        result = subprocess.run(
-            [sys.executable, "-m", "coverage", "run", "--branch", "--source=src", "-m", "pytest", "-q", "--tb=short", "tests/"],
-            capture_output=True, text=True, timeout=120, cwd=project_dir, env=cov_env,
-        )
-        if result.returncode != 0:
-            ci.add_stage("coverage", "failed", f"coverage run returned non-zero ({result.returncode}): {result.stderr[:200]}")
-            print(f"    ❌ Coverage run failed (exit {result.returncode})")
+        # Step 1: Run coverage
+        run_ok, err_detail = _run_coverage_and_export(project_dir)
+        if not run_ok:
+            ci.add_stage("coverage", "failed", err_detail)
+            print(f"    ❌ {err_detail}")
             return False
-        
-        result2 = subprocess.run(
-            [sys.executable, "-m", "coverage", "json", "--pretty"],
-            capture_output=True, text=True, timeout=30, cwd=project_dir,
-        )
-        if result2.returncode != 0:
-            ci.add_stage("coverage", "failed", f"coverage json returned non-zero ({result2.returncode}): {result2.stderr[:200]}")
-            print(f"    ❌ Coverage JSON export failed (exit {result2.returncode})")
+
+        # Step 2: Parse results
+        line_pct, cond_pct = _load_coverage_json(project_dir)
+
+        ci.coverage = {
+            "line_coverage": line_pct,
+            "condition_coverage": cond_pct,
+            "threshold_line": threshold_line,
+            "threshold_condition": threshold_cond,
+            "line_pass": line_pct >= threshold_line,
+            "condition_pass": cond_pct >= threshold_cond,
+        }
+
+        print(f"    Line coverage: {line_pct:.1f}% (threshold: {threshold_line}%)")
+        print(f"    Condition coverage: {cond_pct:.1f}% (threshold: {threshold_cond}%)")
+
+        # Step 3: Check thresholds
+        if line_pct < threshold_line:
+            ci.add_stage("coverage", "failed", f"Line coverage {line_pct}% < {threshold_line}%")
+            print(f"    ❌ Line coverage below threshold!")
             return False
-        
-        # Read coverage data from JSON file
-        json_file = os.path.join(project_dir, "coverage.json")
-        if os.path.exists(json_file):
-            json_output = open(json_file).read()
-            cov_data = json.loads(json_output)
-            totals = cov_data.get("totals", {})
-            line_pct = totals.get("percent_covered", 0)
-            cond_pct = totals.get("percent_covered_condition", line_pct)  # fallback to line
-            
-            ci.coverage = {
-                "line_coverage": line_pct,
-                "condition_coverage": cond_pct,
-                "threshold_line": threshold_line,
-                "threshold_condition": threshold_cond,
-                "line_pass": line_pct >= threshold_line,
-                "condition_pass": cond_pct >= threshold_cond,
-            }
-            
-            print(f"    Line coverage: {line_pct:.1f}% (threshold: {threshold_line}%)")
-            print(f"    Condition coverage: {cond_pct:.1f}% (threshold: {threshold_cond}%)")
-            
-            if line_pct < threshold_line:
-                ci.add_stage("coverage", "failed", f"Line coverage {line_pct}% < {threshold_line}%")
-                print(f"    ❌ Line coverage below threshold!")
-                return False
-            if cond_pct < threshold_cond:
-                ci.add_stage("coverage", "failed", f"Condition coverage {cond_pct}% < {threshold_cond}%")
-                print(f"    ❌ Condition coverage below threshold!")
-                return False
-            
-            ci.add_stage("coverage", "passed", f"line={line_pct}%, cond={cond_pct}%")
-            print(f"    ✅ Coverage thresholds met")
-            return True
-        else:
-            ci.add_stage("coverage", "skipped", "coverage JSON not available")
-            print("    ⏭️  Coverage data not available — blocked")
-            return False  # A-01: missing data blocks
-            
+        if cond_pct < threshold_cond:
+            ci.add_stage("coverage", "failed", f"Condition coverage {cond_pct}% < {threshold_cond}%")
+            print(f"    ❌ Condition coverage below threshold!")
+            return False
+
+        ci.add_stage("coverage", "passed", f"line={line_pct}%, cond={cond_pct}%")
+        print(f"    ✅ Coverage thresholds met")
+        return True
+
     except FileNotFoundError:
-        reason = "Coverage tool not installed"
-        if strict:
-            ci.add_stage("coverage", "failed", reason)
-            print(f"    ❌ {reason} (strict mode)")
-            return False
-        ci.add_stage("coverage", "skipped", reason)
-        print(f"    ⏭️  {reason} — blocked (missing tool)")
-        return False  # A-01: missing tool blocks
+        return _handle_stage_error(ci, "coverage", "Coverage tool not installed", strict)
     except subprocess.TimeoutExpired:
-        reason = "Coverage run timed out"
-        if strict:
-            ci.add_stage("coverage", "failed", reason)
-            print(f"    ❌ {reason} (strict mode)")
-            return False
-        ci.add_stage("coverage", "skipped", reason)
-        print(f"    ⏭️  {reason} — blocked (timeout)")
-        return False  # A-01: tool error blocks
+        return _handle_stage_error(ci, "coverage", "Coverage run timed out", strict)
     except json.JSONDecodeError as e:
-        reason = f"Coverage JSON invalid: {e}"
-        ci.add_stage("coverage", "skipped", reason)
-        print(f"    ⏭️  {reason} — blocked")
-        return False  # A-01: data error blocks
+        ci.add_stage("coverage", "skipped", f"Coverage JSON invalid: {e}")
+        print(f"    ⏭️  Coverage JSON invalid: {e} — blocked")
+        return False
 
 
 @timed_stage
@@ -765,12 +924,155 @@ def run_layer1(project_dir: Optional[str] = None):
     return all_passed
 
 
+# ------------------------------------------------------------------
+# HIL stage helpers — break up run_layer_25
+# ------------------------------------------------------------------
+
+
+def _detect_hil_target(project_dir: str, ci: "CIResult", mock_mode: bool, strict: bool) -> bool:
+    """Stage 1: Detect hardware target (real or mock). Returns True on success."""
+    print("  🎯 CI: HIL target detection...")
+    try:
+        sys.path.insert(0, os.path.join(project_dir, "src", "cross"))
+        sys.path.insert(0, os.path.join(project_dir, "src"))
+
+        if mock_mode:
+            print(f"    ✅ Mock mode — hardware detection skipped")
+            ci.add_stage("target-detect", "passed", "mock mode")
+            return True
+
+        from cross.target_config import discover_targets
+        targets = discover_targets(project_dir)
+        if targets:
+            target_names = list(targets.keys())
+            print(f"    ✅ Found {len(targets)} target(s): {', '.join(target_names)}")
+            ci.add_stage("target-detect", "passed", f"{len(target_names)} targets")
+        else:
+            print(f"    ⚠️  No hardware targets configured in .yuleosh/targets/")
+            ci.add_stage("target-detect", "warning", "no targets")
+        return True
+    except ImportError as e:
+        msg = f"Cannot import target detection: {e}"
+        ci.add_stage("target-detect", "warning", msg)
+        print(f"    ⚠️  {msg}")
+        return True
+    except Exception as e:
+        msg = f"Target detection error: {e}"
+        if strict:
+            ci.add_stage("target-detect", "failed", msg)
+            print(f"    ❌ {msg}")
+            return False
+        ci.add_stage("target-detect", "warning", msg)
+        print(f"    ⚠️  {msg}")
+        return True
+
+
+def _run_hil_mock_tests(ci: "CIResult", hw_cfg, scripts_full: str, boot_pattern: str) -> list[dict]:
+    """Run simulated (mock) HIL tests — no real hardware needed."""
+    import time as t_mod
+    mock_start = t_mod.monotonic()
+    t_mod.sleep(0.1)
+    mock_duration = t_mod.monotonic() - mock_start
+
+    results = [{
+        "test": "mock-boot-test",
+        "passed": True,
+        "flash": {"passed": True, "tool": "mock"},
+        "boot_log": f"{boot_pattern}\nSystem ready\n",
+        "duration": round(mock_duration, 2),
+    }]
+
+    script_files = list(Path(scripts_full).glob("*.yaml")) if os.path.exists(scripts_full) else []
+    for script_file in script_files:
+        results.append({
+            "test": script_file.name, "passed": True,
+            "flash": {"passed": True, "tool": "mock"},
+            "boot_log": f"(mock) processed {script_file.name}", "duration": 0.01,
+        })
+
+    print(f"    ✅ Mock HIL: {len(results)} test(s) simulated")
+    return results
+
+
+def _run_hil_real_tests(ci: "CIResult", hw_cfg, firmware_full: str, strict: bool,
+                        boot_pattern: str) -> list[dict]:
+    """Run real HIL tests — flash firmware and assert serial output."""
+    try:
+        from cross.flash import flash_firmware
+        from cross.hil_runner import hil_test
+    except ImportError as e:
+        print(f"    ❌ Cannot import HIL modules: {e}")
+        if strict:
+            ci.errors.append(f"hil-import-failed: {e}")
+        return []
+
+    flash_tool = hw_cfg.flash_tool if hw_cfg else "auto"
+    serial_port = hw_cfg.serial_port if hw_cfg else ""
+    baud = hw_cfg.baud if hw_cfg else 115200
+    boot_delay = hw_cfg.boot_delay if hw_cfg else 2.0
+    test_timeout = hw_cfg.test_timeout if hw_cfg else 30
+
+    if not os.path.exists(firmware_full):
+        print(f"    ⏭️  Firmware not found: {firmware_full}")
+        return []
+
+    result = hil_test(
+        firmware=firmware_full, expect_pattern=boot_pattern,
+        flash_tool=flash_tool, serial_port=serial_port,
+        baud=baud, boot_delay=boot_delay, timeout=test_timeout,
+    )
+    entry = {
+        "test": "hil-boot-test",
+        "passed": result.passed,
+        "flash": {
+            "passed": result.flash_result.passed if result.flash_result else False,
+            "tool": result.flash_result.tool if result.flash_result else "",
+        },
+        "boot_log": result.boot_log,
+        "duration": result.phase_timings.get("total", 0),
+    }
+    print(f"    {'✅' if result.passed else '❌'} HIL boot test: {boot_pattern}")
+    return [entry]
+
+
+def _record_hil_results(ci: "CIResult", results: list[dict]) -> bool:
+    """Record HIL test results into CI stages. Returns True if all passed."""
+    if not results:
+        return True
+    failures = [r for r in results if not r["passed"]]
+    if failures:
+        ci.add_stage("hil-tests", "failed", f"{len(failures)}/{len(results)} test(s) failed")
+        for f in failures:
+            print(f"    ❌ {f['test']}: FAILED")
+        return False
+    ci.add_stage("hil-tests", "passed", f"{len(results)} test(s) passed")
+    return True
+
+
+def _save_hil_report(project_dir: str, all_passed: bool, commit: str,
+                     mock_mode: bool, boot_pattern: str) -> dict:
+    """Stage 3: Save HIL report to disk and return report dict."""
+    print("  📋 CI: HIL report...")
+    ci_dir = Path(project_dir) / ".osh" / "ci"
+    ci_dir.mkdir(parents=True, exist_ok=True)
+    report = {
+        "layer": 25, "commit": commit,
+        "timestamp": datetime.now().isoformat(),
+        "passed": all_passed,
+        "config": {"mock_mode": mock_mode, "boot_pattern": boot_pattern},
+    }
+    report_path = ci_dir / f"hil-report-{commit}.json"
+    with open(report_path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"    ✅ HIL report saved to {report_path}")
+    return report
+
+
+# ------------------------------------------------------------------
+
+
 def run_layer_25(project_dir: Optional[str] = None):
     """CI Layer 2.5: Hardware-in-the-Loop (HIL) — runs after L2 passes.
-
-    This layer flashes firmware to a (real or mock) hardware target,
-    opens a serial monitor, and runs HIL test scripts that assert
-    expected serial output patterns.
 
     When ``mock=True`` in ci-config.yaml, all hardware interaction is
     simulated — suitable for CI environments without physical boards.
@@ -781,8 +1083,7 @@ def run_layer_25(project_dir: Optional[str] = None):
     commit = git_commit_hash()
     print(f"\n🛠️  CI Layer 2.5: Hardware-in-the-Loop (HIL)")
     print(f"   Commit: {commit}")
-    print(f"   Project: {project_dir}")
-    print()
+    print(f"   Project: {project_dir}\n")
 
     ci = CIResult(25, commit)
     all_passed = True
@@ -794,147 +1095,33 @@ def run_layer_25(project_dir: Optional[str] = None):
         cfg = None
 
     hw_cfg = cfg.hardware_test if cfg else None
-    mock_mode = hw_cfg.mock if hw_cfg else True  # Default to mock for safety
+    mock_mode = hw_cfg.mock if hw_cfg else True
+    boot_pattern = hw_cfg.boot_pattern if hw_cfg else "Boot Complete"
 
-    # Stage 1: Detect hardware target
-    print("  🎯 CI: HIL target detection...")
-    try:
-        sys.path.insert(0, os.path.join(project_dir, "src", "cross"))
-        sys.path.insert(0, os.path.join(project_dir, "src"))
+    # Stage 1: Target detection
+    target_ok = _detect_hil_target(project_dir, ci, mock_mode, strict)
+    if not target_ok:
+        all_passed = False
 
-        if mock_mode:
-            print(f"    ✅ Mock mode — hardware detection skipped")
-            ci.add_stage("target-detect", "passed", "mock mode")
-        else:
-            # Real target detection via target_config
-            from cross.target_config import discover_targets  # type: ignore
-            targets = discover_targets(project_dir)
-            if targets:
-                target_names = list(targets.keys())
-                print(f"    ✅ Found {len(targets)} target(s): {', '.join(target_names)}")
-                ci.add_stage("target-detect", "passed", f"{len(target_names)} targets")
-            else:
-                print(f"    ⚠️  No hardware targets configured in .yuleosh/targets/")
-                ci.add_stage("target-detect", "warning", "no targets")
-    except ImportError as e:
-        msg = f"Cannot import target detection: {e}"
-        ci.add_stage("target-detect", "warning", msg)
-        print(f"    ⚠️  {msg}")
-    except Exception as e:
-        msg = f"Target detection error: {e}"
-        if strict:
-            ci.add_stage("target-detect", "failed", msg)
-            print(f"    ❌ {msg}")
-            all_passed = False
-        else:
-            ci.add_stage("target-detect", "warning", msg)
-            print(f"    ⚠️  {msg}")
-
-    # Stage 2: Run HIL tests
+    # Stage 2: HIL tests
     print("  🧪 CI: HIL tests...")
+    firmware_path = hw_cfg.firmware if hw_cfg else "build/firmware.elf"
+    firmware_full = os.path.join(project_dir, firmware_path)
+    scripts_dir = hw_cfg.test_scripts_dir if hw_cfg else "tests/hil"
+    scripts_full = os.path.join(project_dir, scripts_dir)
+
+    hil_results: list[dict] = []
     try:
-        firmware_path = hw_cfg.firmware if hw_cfg else "build/firmware.elf"
-        firmware_full = os.path.join(project_dir, firmware_path)
-        boot_pattern = hw_cfg.boot_pattern if hw_cfg else "Boot Complete"
-
-        # Discover HIL test scripts
-        scripts_dir = hw_cfg.test_scripts_dir if hw_cfg else "tests/hil"
-        scripts_full = os.path.join(project_dir, scripts_dir)
-
         if not os.path.exists(scripts_full) and not mock_mode:
-            # No HIL scripts — skipped or warn
             print(f"    ⏭️  No HIL test scripts at {scripts_dir}")
             ci.add_stage("hil-tests", "skipped", f"No {scripts_dir} directory")
+        elif mock_mode:
+            hil_results = _run_hil_mock_tests(ci, hw_cfg, scripts_full, boot_pattern)
         else:
-            hil_results: list[dict] = []
+            hil_results = _run_hil_real_tests(ci, hw_cfg, firmware_full, strict, boot_pattern)
 
-            if mock_mode:
-                # Simulate HIL test success (no real hardware)
-                import time as t_mod
-                mock_start = t_mod.monotonic()
-                t_mod.sleep(0.1)  # Simulate minimal test time
-                mock_duration = t_mod.monotonic() - mock_start
-
-                hil_results.append({
-                    "test": "mock-boot-test",
-                    "passed": True,
-                    "flash": {"passed": True, "tool": "mock"},
-                    "boot_log": f"{boot_pattern}\nSystem ready\n",
-                    "duration": round(mock_duration, 2),
-                })
-
-                # Discover real scripts even in mock mode (to validate syntax)
-                script_files = list(Path(scripts_full).glob("*.yaml")) if os.path.exists(scripts_full) else []
-                for script_file in script_files:
-                    hil_results.append({
-                        "test": script_file.name,
-                        "passed": True,
-                        "flash": {"passed": True, "tool": "mock"},
-                        "boot_log": f"(mock) processed {script_file.name}",
-                        "duration": 0.01,
-                    })
-
-                print(f"    ✅ Mock HIL: {len(hil_results)} test(s) simulated")
-            else:
-                # Real HIL — try to use FlashRunner + HilTestRunner
-                try:
-                    from cross.flash import flash_firmware  # type: ignore
-                    from cross.hil_runner import hil_test  # type: ignore
-
-                    flash_tool = hw_cfg.flash_tool if hw_cfg else "auto"
-                    serial_port = hw_cfg.serial_port if hw_cfg else ""
-                    baud = hw_cfg.baud if hw_cfg else 115200
-                    boot_delay = hw_cfg.boot_delay if hw_cfg else 2.0
-                    test_timeout = hw_cfg.test_timeout if hw_cfg else 30
-
-                    if os.path.exists(firmware_full):
-                        result = hil_test(
-                            firmware=firmware_full,
-                            expect_pattern=boot_pattern,
-                            flash_tool=flash_tool,
-                            serial_port=serial_port,
-                            baud=baud,
-                            boot_delay=boot_delay,
-                            timeout=test_timeout,
-                        )
-                        hil_results.append({
-                            "test": "hil-boot-test",
-                            "passed": result.passed,
-                            "flash": {
-                                "passed": result.flash_result.passed if result.flash_result else False,
-                                "tool": result.flash_result.tool if result.flash_result else "",
-                            },
-                            "boot_log": result.boot_log,
-                            "duration": result.phase_timings.get("total", 0),
-                        })
-                        print(f"    {'✅' if result.passed else '❌'} HIL boot test: {boot_pattern}")
-                    else:
-                        print(f"    ⏭️  Firmware not found: {firmware_path}")
-                        ci.add_stage("hil-tests", "skipped", f"No firmware at {firmware_path}")
-                except ImportError as e:
-                    print(f"    ❌ Cannot import HIL modules: {e}")
-                    if strict:
-                        all_passed = False
-                        ci.errors.append(f"hil-import-failed: {e}")
-
-            # Determine pass/fail from results
-            if hil_results:
-                test_failures = [r for r in hil_results if not r["passed"]]
-                if test_failures:
-                    ci.add_stage(
-                        "hil-tests",
-                        "failed",
-                        f"{len(test_failures)} / {len(hil_results)} test(s) failed",
-                    )
-                    for fail in test_failures:
-                        print(f"    ❌ {fail['test']}: FAILED")
-                    all_passed = False
-                else:
-                    ci.add_stage(
-                        "hil-tests",
-                        "passed",
-                        f"{len(hil_results)} test(s) passed",
-                    )
+        if not _record_hil_results(ci, hil_results):
+            all_passed = False
     except Exception as e:
         msg = f"HIL test error: {e}"
         ci.add_stage("hil-tests", "failed", msg)
@@ -943,245 +1130,138 @@ def run_layer_25(project_dir: Optional[str] = None):
             all_passed = False
             ci.errors.append(msg)
 
-    # Stage 3: HIL report generation
-    print("  📋 CI: HIL report...")
-    try:
-        ci_dir = Path(project_dir) / ".osh" / "ci"
-        ci_dir.mkdir(parents=True, exist_ok=True)
-        report_path = ci_dir / f"hil-report-{commit}.json"
-
-        # Collect report data from ci.stages
-        report = {
-            "layer": 25,
-            "commit": commit,
-            "timestamp": datetime.now().isoformat(),
-            "passed": all_passed,
-            "stages": ci.stages,
-            "errors": ci.errors,
-            "config": {
-                "mock_mode": mock_mode,
-                "boot_pattern": boot_pattern if hw_cfg else "Boot Complete",
-            },
-        }
-        with open(report_path, "w") as f:
-            json.dump(report, f, indent=2)
-        ci.add_stage("hil-report", "passed", str(report_path))
-        print(f"    ✅ HIL report saved to {report_path}")
-    except Exception as e:
-        msg = f"HIL report error: {e}"
-        ci.add_stage("hil-report", "warning", msg)
-        print(f"    ⚠️  {msg}")
+    # Stage 3: Report
+    _save_hil_report(project_dir, all_passed, commit, mock_mode, boot_pattern)
 
     ci.complete("passed" if all_passed else "failed")
-
-    ci_dir = Path(project_dir) / ".osh" / "ci"
-    ci_dir.mkdir(parents=True, exist_ok=True)
-    result_path = ci_dir / f"layer25-{commit}.json"
-    with open(result_path, "w") as f:
-        json.dump(ci.to_dict(), f, indent=2)
-
-    if _notify:
-        try:
-            _notify(
-                layer=25,
-                status="passed" if all_passed else "failed",
-                stages=ci.stages,
-                errors=ci.errors,
-            )
-        except Exception as ne:
-            log.warning(f"Notification failed: {ne}")
+    result_path = _save_layer_result(project_dir, ci, all_passed, commit, 25)
 
     print(f"\n{'='*40}")
     if all_passed:
         print("✅ CI Layer 2.5: ALL HIL STAGES PASSED")
     else:
         print(f"❌ CI Layer 2.5: FAILED — {len(ci.errors)} error(s)")
-    print(f"   Report: {result_path}")
-    print()
-
+    print(f"   Report: {result_path}\n")
     return all_passed
 
 
-def run_layer2(project_dir: Optional[str] = None):
-    """CI Layer 2: Integration Verification — runs on MR."""
-    if project_dir is None:
-        project_dir = os.environ.get("OSH_HOME", os.getcwd())
-    
-    commit = git_commit_hash()
-    print(f"\n🔄 CI Layer 2: Integration Verification")
-    print(f"   Commit: {commit}")
-    print(f"   Project: {project_dir}")
-    print()
-    
-    ci = CIResult(2, commit)
-    all_passed = True
-    misra_ff = is_misra_fail_fast()
-    strict = is_strict()
-    
-    # Stage 1: Cross-compilation matrix
-    print("  🔧 CI: cross-compilation check...")
+def _find_c_sources(project_dir: str) -> tuple[list[str], str, str]:
+    """Find C/C++ source files and cross-compile paths."""
     src_dir = os.path.join(project_dir, "src")
     c_files = []
     for root, dirs, files in os.walk(src_dir):
         for f in files:
             if f.endswith((".c", ".cpp")):
                 c_files.append(os.path.join(root, f))
-    
     cross_src = os.path.join(project_dir, "src", "cross", "hello.c")
     build_dir = os.path.join(project_dir, "build")
-    
+    return c_files, cross_src, build_dir
+
+
+def _cross_compile_stage(project_dir: str, cross_src: str, build_dir: str, ci) -> bool:
+    """Stage 1: Cross-compilation check. Returns True if passed/skipped."""
+    print("  🔧 CI: cross-compilation check...")
     if not os.path.exists(cross_src):
         print(f"    ⏭️  No cross-compile test source (src/cross/hello.c)")
         ci.add_stage("cross-compile", "skipped", "No src/cross/hello.c")
-    else:
-        # Attempt 1: run `make TARGET=arm` directly
-        compiled_ok = False
-        make_available = False
-        try:
-            subprocess.run(
-                ["make", "--version"],
-                capture_output=True, timeout=5,
-            )
-            make_available = True
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            make_available = False
+        return True
 
-        if make_available:
-            print(f"    Found cross-compile source: {cross_src}")
-            print(f"    Running: make TARGET=arm...")
-            try:
-                result = subprocess.run(
-                    ["make", "TARGET=arm"],
-                    capture_output=True, text=True, timeout=60,
-                    cwd=project_dir,
-                )
-                if result.returncode == 0:
-                    elf_files = list(Path(build_dir).glob("*.elf")) if os.path.exists(build_dir) else []
-                    if elf_files:
-                        print(f"    ✅ Cross-compilation succeeded: {', '.join(str(e) for e in elf_files)}")
-                        ci.add_stage("cross-compile", "passed",
-                                     f"ARM ELF at {elf_files[0]}")
-                        compiled_ok = True
-                    else:
-                        print(f"    ⚠️  make succeeded but no .elf found in build/")
-                        ci.add_stage("cross-compile", "failed",
-                                     "make returned 0 but no .elf found")
-                        all_passed = False
-                else:
-                    detail = result.stderr[:400] if result.stderr else result.stdout[:400]
-                    print(f"    ❌ make TARGET=arm failed: {detail}")
-                    ci.add_stage("cross-compile", "failed",
-                                 f"make returned {result.returncode}: {detail}")
-                    all_passed = False
-            except subprocess.TimeoutExpired:
-                print(f"    ❌ make timed out")
-                ci.add_stage("cross-compile", "failed", "make timed out")
-                all_passed = False
-        else:
-            # Attempt 2: try Docker
-            docker_available = False
-            try:
-                subprocess.run(
-                    ["docker", "--version"],
-                    capture_output=True, timeout=5,
-                )
-                docker_available = True
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                docker_available = False
+    compiled_ok = _resolve_cross_compile(project_dir, cross_src, build_dir, ci)
+    if not compiled_ok:
+        return False
+    return True
 
-            if docker_available:
-                print(f"    make not available, trying Docker (Dockerfile.cross)...")
-                try:
-                    subprocess.run(
-                        ["docker", "build", "-t", "yuleosh-cross",
-                         "-f", "Dockerfile.cross", "."],
-                        capture_output=True, text=True, timeout=120,
-                        cwd=project_dir,
-                    )
-                    result = subprocess.run(
-                        ["docker", "run", "--rm",
-                         "-v", f"{project_dir}:/work",
-                         "yuleosh-cross", "make", "TARGET=arm"],
-                        capture_output=True, text=True, timeout=120,
-                    )
-                    if result.returncode == 0:
-                        print(f"    ✅ Docker cross-compilation succeeded")
-                        ci.add_stage("cross-compile", "passed",
-                                     "ARM ELF via Docker")
-                        compiled_ok = True
-                    else:
-                        detail = result.stderr[:400] if result.stderr else result.stdout[:400]
-                        print(f"    ❌ Docker cross-compilation failed: {detail}")
-                        ci.add_stage("cross-compile", "failed",
-                                     f"Docker make failed: {detail}")
-                        all_passed = False
-                except (subprocess.TimeoutExpired, OSError) as e:
-                    print(f"    ❌ Docker error: {e}")
-                    ci.add_stage("cross-compile", "failed",
-                                 f"Docker error: {e}")
-                    all_passed = False
-            else:
-                # Neither make nor Docker available — clear error
-                print(f"    ❌ Cross-compilation FAILED: no ARM toolchain, no make, no Docker")
-                print(f"       Install gcc-arm-none-eabi or Docker to enable cross-compilation.")
-                msg = (
-                    "ARM cross-compilation tools not found. "
-                    "Install gcc-arm-none-eabi (apt: gcc-arm-none-eabi) "
-                    "or Docker, then run 'make TARGET=arm' manually."
-                )
-                ci.add_stage("cross-compile", "failed", msg)
-                all_passed = False
-    
-    # Stage 2: Static analysis (cppcheck)
+
+def _static_analysis_stage(c_files: list[str], project_dir: str, ci, misra_ff: bool, strict: bool) -> bool:
+    """Stage 2: Static analysis via cppcheck. Returns True if passed/skipped."""
     print("  🔎 CI: static analysis...")
-    if c_files:
-        try:
-            result = subprocess.run(
-                ["cppcheck", "--enable=all", "--suppress=missingIncludeSystem", "-q"] + c_files[:30],
-                capture_output=True, text=True, timeout=30,
-            )
-            if result.returncode == 0:
-                ci.add_stage("static-analysis", "passed")
-                print(f"    ✅ cppcheck passed")
-            else:
-                detail = result.stdout[:500] if result.stdout else result.stderr[:500]
-                if misra_ff:
-                    ci.add_stage("static-analysis", "failed", detail)
-                    print(f"    ❌ cppcheck found issues (MISRA_FAIL_FAST)")
-                    all_passed = False
-                else:
-                    ci.add_stage("static-analysis", "failed", result.stdout[:200])
-                    print(f"    ❌ cppcheck found issues")
-                    all_passed = False  # A-01: always block, not just warning
-        except FileNotFoundError:
-            reason = "cppcheck not installed"
-            if strict:
-                ci.add_stage("static-analysis", "failed", reason)
-                print(f"    ❌ {reason} (strict mode)")
-                all_passed = False
-            else:
-                ci.add_stage("static-analysis", "skipped", reason)
-                print(f"    ⏭️  {reason} — blocked (missing tool)")
-                all_passed = False  # A-01: missing tool blocks
-        except subprocess.TimeoutExpired:
-            reason = "cppcheck timed out"
-            if strict:
-                ci.add_stage("static-analysis", "failed", reason)
-                print(f"    ❌ {reason} (strict mode)")
-                all_passed = False
-            else:
-                ci.add_stage("static-analysis", "skipped", reason)
-                print(f"    ⏭️  {reason} — blocked (timeout)")
-                all_passed = False
-    else:
+    if not c_files:
         ci.add_stage("static-analysis", "skipped", "No C/C++ sources")
         print(f"    ⏭️  No C/C++ sources")
-    
+        return True
+
+    success, stdout, stderr = _run_subprocess(
+        ["cppcheck", "--enable=all", "--suppress=missingIncludeSystem", "-q"] + c_files[:30],
+        project_dir, timeout=30,
+    )
+    if stderr.startswith("Command not found"):
+        return _handle_stage_error(ci, "static-analysis", "cppcheck not installed", strict)
+    if stderr.startswith("Command timed out"):
+        return _handle_stage_error(ci, "static-analysis", "cppcheck timed out", strict)
+
+    if success:
+        ci.add_stage("static-analysis", "passed")
+        print(f"    ✅ cppcheck passed")
+        return True
+
+    detail = stderr[:500] if stderr else stdout[:500]
+    issue_type = "failed (MISRA_FAIL_FAST)" if misra_ff else "failed"
+    ci.add_stage("static-analysis", issue_type, detail)
+    print(f"    ❌ cppcheck found issues")
+    return False
+
+
+def _integration_test_stage(project_dir: str, ci) -> bool:
+    """Stage 4: Integration tests. Returns True if passed/skipped."""
+    print("  🔗 CI: integration tests...")
+    int_test_dir = os.path.join(project_dir, "tests", "integration")
+    if not os.path.exists(int_test_dir):
+        ci.add_stage("integration-tests", "skipped", "No integration tests")
+        print(f"    ⏭️  No integration tests directory")
+        return True
+
+    success, stdout, stderr = _run_subprocess(
+        [sys.executable, "-m", "pytest", int_test_dir, "-x", "-q"],
+        project_dir, timeout=60,
+    )
+    if stderr.startswith("Command not found"):
+        ci.add_stage("integration-tests", "skipped", "pytest not installed")
+        print(f"    ⏭️  pytest not installed — blocked")
+        return False
+    if stderr.startswith("Command timed out"):
+        ci.add_stage("integration-tests", "skipped", "Integration tests timed out")
+        print(f"    ⏭️  Tests timed out — blocked")
+        return False
+
+    if success:
+        ci.add_stage("integration-tests", "passed")
+        print(f"    ✅ Integration tests passed")
+        return True
+
+    ci.add_stage("integration-tests", "failed", stdout[:200])
+    print(f"    ❌ Integration tests failed")
+    return False
+
+
+def run_layer2(project_dir: Optional[str] = None):
+    """CI Layer 2: Integration Verification — runs on MR."""
+    if project_dir is None:
+        project_dir = os.environ.get("OSH_HOME", os.getcwd())
+
+    commit = git_commit_hash()
+    print(f"\n🔄 CI Layer 2: Integration Verification")
+    print(f"   Commit: {commit}")
+    print(f"   Project: {project_dir}\n")
+
+    ci = CIResult(2, commit)
+    all_passed = True
+    misra_ff = is_misra_fail_fast()
+    strict = is_strict()
+
+    c_files, cross_src, build_dir = _find_c_sources(project_dir)
+
+    # Stage 1: Cross-compilation
+    if not _cross_compile_stage(project_dir, cross_src, build_dir, ci):
+        all_passed = False
+
+    # Stage 2: Static analysis
+    if not _static_analysis_stage(c_files, project_dir, ci, misra_ff, strict):
+        all_passed = False
+
     # Stage 3: SIL tests
     print("  🖥️  CI: SIL tests...")
     try:
-        sil_ok = run_sil_tests(project_dir, ci)
-        if not sil_ok:
+        if not run_sil_tests(project_dir, ci):
             all_passed = False
             ci.errors.append("sil-tests failed")
     except Exception as e:
@@ -1190,40 +1270,9 @@ def run_layer2(project_dir: Optional[str] = None):
         all_passed = False
 
     # Stage 4: Integration tests
-    print("  🔗 CI: integration tests...")
-    int_test_dir = os.path.join(project_dir, "tests", "integration")
-    if os.path.exists(int_test_dir):
-        print(f"    Found integration test directory")
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pytest", int_test_dir, "-x", "-q"],
-                capture_output=True, text=True, timeout=60,
-            )
-            if result.returncode == 0:
-                ci.add_stage("integration-tests", "passed")
-                print(f"    ✅ Integration tests passed")
-            else:
-                ci.add_stage("integration-tests", "failed", result.stdout[:200])
-                print(f"    ❌ Integration tests failed")
-                all_passed = False
-        except FileNotFoundError:
-            reason = "pytest not installed"
-            ci.add_stage("integration-tests", "skipped", reason)
-            print(f"    ⏭️  {reason} — blocked")
-            all_passed = False
-        except subprocess.TimeoutExpired:
-            reason = "Integration tests timed out"
-            ci.add_stage("integration-tests", "skipped", reason)
-            print(f"    ⏭️  {reason} — blocked")
-            all_passed = False
-        except Exception as e:
-            ci.add_stage("integration-tests", "error", str(e))
-            print(f"    ❌ Integration tests error: {e}")
-            all_passed = False
-    else:
-        ci.add_stage("integration-tests", "skipped", "No integration tests")
-        print(f"    ⏭️  No integration tests directory")
-    
+    if not _integration_test_stage(project_dir, ci):
+        all_passed = False
+
     # Stage 5: Memory safety
     print("  🛡️  CI: memory safety check...")
     if os.path.exists(os.path.join(project_dir, "tests", "asan")):
@@ -1232,25 +1281,9 @@ def run_layer2(project_dir: Optional[str] = None):
     else:
         ci.add_stage("memory-safety", "skipped", "No ASan tests")
         print(f"    ⏭️  No ASan tests found")
-    
+
     ci.complete("passed" if all_passed else "failed")
-    
-    ci_dir = Path(project_dir) / ".osh" / "ci"
-    ci_dir.mkdir(parents=True, exist_ok=True)
-    with open(ci_dir / f"layer2-{commit}.json", "w") as f:
-        json.dump(ci.to_dict(), f, indent=2)
-    
-    # Send notification
-    if _notify:
-        try:
-            _notify(
-                layer=2,
-                status="passed" if all_passed else "failed",
-                stages=ci.stages,
-                errors=ci.errors,
-            )
-        except Exception as ne:
-            log.warning(f"Notification failed: {ne}")
+    _save_layer_result(project_dir, ci, all_passed, commit, 2)
 
     print(f"\n{'='*40}")
     if all_passed:
