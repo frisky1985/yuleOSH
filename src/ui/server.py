@@ -9,7 +9,6 @@ import hashlib
 import http.server
 import json
 import os
-import subprocess
 import sys
 import time
 import urllib.parse
@@ -306,8 +305,6 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._serve_page("welcome.html", {})
         elif path == "/demo":
             self._serve_page("demo.html", {})
-        elif path.startswith("/exec"):
-            self._handle_exec(parsed.query)
         else:
             self._serve_page("404.html", {})
         self._log_audit()
@@ -502,7 +499,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
 
         # Not authenticated — check if it's an API call or browser request
         path = urllib.parse.urlparse(self.path).path
-        if path.startswith("/api/") or path.startswith("/exec"):
+        if path.startswith("/api/"):
             self.send_response(401)
             self.send_header("Content-Type", "application/json")
             self._add_security_headers()
@@ -673,26 +670,6 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
-
-    def _handle_exec(self, query: str):
-        params = urllib.parse.parse_qs(query)
-        cmd = params.get("cmd", [""])[0]
-
-        try:
-            result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=60,
-                cwd=OSH_HOME,
-            )
-            output = result.stdout or result.stderr
-            self._json_response({
-                "status": "ok",
-                "exit_code": result.returncode,
-                "output": output[:2000],
-            })
-        except subprocess.TimeoutExpired:
-            self._json_response({"status": "error", "output": "Command timed out"}, 500)
-        except Exception as e:
-            self._json_response({"status": "error", "output": str(e)}, 500)
 
     def _get_status(self) -> dict:
         return {

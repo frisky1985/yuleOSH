@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-yuleOSH — 嵌入式AI开发全流程平台 CLI
+yuleOSH — Embedded AI Development Platform CLI
 
 Usage:
     yuleosh init [dir]                       — Initialize project
@@ -17,6 +17,7 @@ Usage:
     yuleosh ui                              — Start dashboard server (:8080)
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -55,18 +56,35 @@ def cmd_template_init(project_name: str):
 
 
 def cmd_spec_validate(filepath: str):
-    from src.spec.validate import main as spec_main
+    from src.spec.validate import parse_spec, validate_spec
 
-    # Rewrite argv for the submodule
-    sys.argv = ["validate", filepath]
-    spec_main()
+    # Use the API directly instead of mutating sys.argv
+    try:
+        doc = parse_spec(filepath)
+        issues = validate_spec(doc)
+        error_count = sum(1 for i in issues if i.get("severity") == "ERROR")
+        if error_count > 0:
+            print(f"❌ Spec validation failed: {error_count} error(s)")
+            for i in issues:
+                if i.get("severity") == "ERROR":
+                    print(f"  - {i.get('message', i)}")
+            sys.exit(1)
+        print(f"✅ Spec validated successfully")
+    except Exception as e:
+        print(f"❌ Spec validation failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_spec_diff(old: str, new: str):
-    from src.spec.diff import main as diff_main
+    from src.spec.validate import diff_specs
 
-    sys.argv = ["diff", old, new]
-    diff_main()
+    try:
+        result = diff_specs(old, new)
+        import json
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    except Exception as e:
+        print(f"❌ Spec diff failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_pipeline_run(spec_path: str, mock: bool = False):
@@ -126,136 +144,125 @@ def cmd_stats(json_output: bool = False):
     cmd_stats(to_json=json_output)
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the yuleOSH CLI."""
+    parser = argparse.ArgumentParser(
+        prog="yuleosh",
+        description="yuleOSH — Embedded AI Development Platform CLI",
+    )
+    sub = parser.add_subparsers(dest="command", help="Available commands")
+
+    # init
+    p_init = sub.add_parser("init", help="Initialize a yuleOSH project directory")
+    p_init.add_argument("dir", nargs="?", default=".", help="Project directory")
+
+    # template
+    p_template = sub.add_parser("template", help="Project template management")
+    tsub = p_template.add_subparsers(dest="template_sub")
+    p_template_init = tsub.add_parser("init", help="Create project from template")
+    p_template_init.add_argument("project_name", help="Project name")
+
+    # spec
+    p_spec = sub.add_parser("spec", help="OpenSpec management")
+    ssub = p_spec.add_subparsers(dest="spec_sub")
+    p_spec_val = ssub.add_parser("validate", help="Validate an OpenSpec file")
+    p_spec_val.add_argument("file", help="Spec file path")
+    p_spec_diff = ssub.add_parser("diff", help="Diff two OpenSpec files")
+    p_spec_diff.add_argument("old", help="Old spec file")
+    p_spec_diff.add_argument("new", help="New spec file")
+
+    # pipeline
+    p_pipe = sub.add_parser("pipeline", help="Agent pipeline management")
+    psub = p_pipe.add_subparsers(dest="pipeline_sub")
+    p_pipe_run = psub.add_parser("run", help="Run the full Agent pipeline")
+    p_pipe_run.add_argument("--mock", action="store_true", help="Run in mock mode (no real LLM)")
+    p_pipe_run.add_argument("spec", help="Specification file path")
+    p_pipe_status = psub.add_parser("status", help="Show pipeline status")
+    p_pipe_status.add_argument("name", nargs="?", help="Pipeline session name")
+
+    # review
+    p_review = sub.add_parser("review", help="Code review management")
+    rsub = p_review.add_subparsers(dest="review_sub")
+    rsub.add_parser("auto", help="Auto-review recent changes")
+    p_review_task = rsub.add_parser("task", help="Review a specific task")
+    p_review_task.add_argument("name", help="Task name")
+    p_review_task.add_argument("kind", nargs="?", default="feature", help="Task kind")
+
+    # ci
+    p_ci = sub.add_parser("ci", help="CI pipeline management")
+    csub = p_ci.add_subparsers(dest="ci_sub")
+    p_ci_run = csub.add_parser("run", help="Run a CI layer")
+    p_ci_run.add_argument("layer", help="CI layer (1/2/3)")
+
+    # evidence
+    sub.add_parser("evidence", help="Generate ASPICE compliance evidence")
+
+    # stats
+    p_stats = sub.add_parser("stats", help="Show project statistics")
+    p_stats.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # ui
+    sub.add_parser("ui", help="Start the web dashboard")
+
+    return parser
+
+
 def main():
     ensure_osh_home()
 
-    if len(sys.argv) < 2:
-        print(__doc__)
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    if args.command is None:
+        parser.print_help()
         sys.exit(1)
 
-    cmd = sys.argv[1]
-
-    if cmd in ("help", "--help", "-h"):
-        print(__doc__)
-        return
-
-    # yuleosh init
-    if cmd == "init":
-        cmd_init(sys.argv[2] if len(sys.argv) > 2 else ".")
-        return
-
-    # yuleosh template
-    if cmd == "template":
-        if len(sys.argv) < 3:
-            print("Usage: yuleosh template init <project-name>", file=sys.stderr)
-            sys.exit(1)
-        subcmd = sys.argv[2]
-        if subcmd == "init":
-            if len(sys.argv) < 4:
-                print("Usage: yuleosh template init <project-name>", file=sys.stderr)
-                sys.exit(1)
-            cmd_template_init(sys.argv[3])
+    # Dispatch
+    if args.command == "init":
+        cmd_init(args.dir)
+    elif args.command == "template":
+        if args.template_sub == "init":
+            cmd_template_init(args.project_name)
         else:
-            print(f"Unknown template command: {subcmd}", file=sys.stderr)
+            parser.print_help()
             sys.exit(1)
-        return
-
-    # yuleosh stats
-    if cmd == "stats":
-        to_json = "--json" in sys.argv
-        cmd_stats(to_json)
-        return
-
-    # yuleosh spec
-    if cmd == "spec":
-        if len(sys.argv) < 3:
-            print("Usage: yuleosh spec validate|diff <args>", file=sys.stderr)
-            sys.exit(1)
-        subcmd = sys.argv[2]
-        if subcmd == "validate":
-            if len(sys.argv) < 4:
-                print("Usage: yuleosh spec validate <file>", file=sys.stderr)
-                sys.exit(1)
-            cmd_spec_validate(sys.argv[3])
-        elif subcmd == "diff":
-            if len(sys.argv) < 5:
-                print("Usage: yuleosh spec diff <old> <new>", file=sys.stderr)
-                sys.exit(1)
-            cmd_spec_diff(sys.argv[3], sys.argv[4])
+    elif args.command == "spec":
+        if args.spec_sub == "validate":
+            cmd_spec_validate(args.file)
+        elif args.spec_sub == "diff":
+            cmd_spec_diff(args.old, args.new)
         else:
-            print(f"Unknown spec command: {subcmd}", file=sys.stderr)
+            parser.print_help()
             sys.exit(1)
-        return
-
-    # yuleosh pipeline
-    if cmd == "pipeline":
-        if len(sys.argv) < 3:
-            print("Usage: yuleosh pipeline run|status", file=sys.stderr)
-            sys.exit(1)
-        subcmd = sys.argv[2]
-        if subcmd == "run":
-            if len(sys.argv) < 4:
-                print("Usage: yuleosh pipeline run [--mock] <spec>", file=sys.stderr)
-                sys.exit(1)
-            mock = "--mock" in sys.argv
-            spec_file = [a for a in sys.argv[3:] if a != "--mock"][0]
-            cmd_pipeline_run(spec_file, mock=mock)
-        elif subcmd == "status":
-            cmd_pipeline_status(sys.argv[3] if len(sys.argv) > 3 else None)
+    elif args.command == "pipeline":
+        if args.pipeline_sub == "run":
+            cmd_pipeline_run(args.spec, mock=args.mock)
+        elif args.pipeline_sub == "status":
+            cmd_pipeline_status(args.name)
         else:
-            print(f"Unknown pipeline command: {subcmd}", file=sys.stderr)
+            parser.print_help()
             sys.exit(1)
-        return
-
-    # yuleosh review
-    if cmd == "review":
-        if len(sys.argv) < 3:
-            print("Usage: yuleosh review auto|task", file=sys.stderr)
-            sys.exit(1)
-        subcmd = sys.argv[2]
-        if subcmd == "auto":
+    elif args.command == "review":
+        if args.review_sub == "auto":
             cmd_review_auto()
-        elif subcmd == "task":
-            if len(sys.argv) < 4:
-                print("Usage: yuleosh review task <name> [kind]", file=sys.stderr)
-                sys.exit(1)
-            cmd_review_task(sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "feature")
+        elif args.review_sub == "task":
+            cmd_review_task(args.name, args.kind)
         else:
-            print(f"Unknown review command: {subcmd}", file=sys.stderr)
+            parser.print_help()
             sys.exit(1)
-        return
-
-    # yuleosh ci
-    if cmd == "ci":
-        if len(sys.argv) < 3:
-            print("Usage: yuleosh ci run <layer>", file=sys.stderr)
-            sys.exit(1)
-        subcmd = sys.argv[2]
-        if subcmd == "run":
-            if len(sys.argv) < 4:
-                print("Usage: yuleosh ci run <layer>", file=sys.stderr)
-                sys.exit(1)
-            cmd_ci_run(sys.argv[3])
+    elif args.command == "ci":
+        if args.ci_sub == "run":
+            cmd_ci_run(args.layer)
         else:
-            print(f"Unknown ci command: {subcmd}", file=sys.stderr)
+            parser.print_help()
             sys.exit(1)
-        return
-
-    # yuleosh evidence
-    if cmd == "evidence":
+    elif args.command == "evidence":
         cmd_evidence_pack()
-        return
-
-    # yuleosh ui
-    if cmd == "ui":
+    elif args.command == "stats":
+        cmd_stats(json_output=args.json)
+    elif args.command == "ui":
         from src.ui.server import main as ui_main
-
         ui_main()
-        return
-
-    print(f"Unknown command: {cmd}", file=sys.stderr)
-    print(__doc__)
-    sys.exit(1)
 
 
 if __name__ == "__main__":
