@@ -126,25 +126,8 @@ class SerialMonitor:
         if self.is_open:
             return
 
-        try:
-            import serial as pyserial
-        except ImportError:
-            raise RuntimeError(
-                "pyserial is required for SerialMonitor. "
-                "Install it: pip install pyserial"
-            )
-
-        try:
-            self._serial = pyserial.Serial(
-                port=self.port,
-                baudrate=self.baud,
-                timeout=self.timeout,
-                write_timeout=self.timeout,
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                f"Cannot open serial port '{self.port}': {exc}"
-            ) from exc
+        self._import_pyserial()
+        self._serial = self._open_port()
 
         self._open_time = time.monotonic()
         self._stop_event.clear()
@@ -155,6 +138,35 @@ class SerialMonitor:
         )
         self._capture_thread.start()
         log.info("Serial monitor opened: %s @ %d baud", self.port, self.baud)
+
+    def _import_pyserial(self) -> None:
+        """Import the pyserial library. Raises RuntimeError if unavailable."""
+        if getattr(self, "_pyserial_mod", None) is not None:
+            return
+        try:
+            import serial  # type: ignore[import-untyped]
+            self._pyserial_mod = serial
+        except ImportError:
+            raise RuntimeError(
+                "pyserial is required for SerialMonitor. "
+                "Install it: pip install pyserial"
+            )
+
+    def _open_port(self) -> Any:
+        """Open the configured serial port. Returns a pyserial.Serial instance."""
+        if not hasattr(self, "_pyserial_mod") or self._pyserial_mod is None:
+            self._import_pyserial()
+        try:
+            return self._pyserial_mod.Serial(
+                port=self.port,
+                baudrate=self.baud,
+                timeout=self.timeout,
+                write_timeout=self.timeout,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Cannot open serial port '{self.port}': {exc}"
+            ) from exc
 
     def close(self) -> None:
         """Stop background capture and close the serial port."""
@@ -187,8 +199,7 @@ class SerialMonitor:
         while not self._stop_event.is_set():
             try:
                 if self._serial.in_waiting > 0:
-                    raw = self._serial.readline()
-                    text = raw.decode(self.encoding, errors="replace")
+                    text = self._read_line()
                     with self._lock:
                         self._captured.append(text)
                 else:
@@ -197,6 +208,18 @@ class SerialMonitor:
             except Exception as exc:
                 log.debug("Serial read error: %s", exc)
                 break
+
+    def _read_line(self) -> str:
+        """Read and decode a single line from the serial port.
+
+        Returns
+        -------
+        str
+            The decoded text line.
+        """
+        assert self._serial is not None
+        raw = self._serial.readline()
+        return raw.decode(self.encoding, errors="replace")
 
     # ------------------------------------------------------------------
     # Expect / assert API

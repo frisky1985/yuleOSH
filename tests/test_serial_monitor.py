@@ -24,6 +24,7 @@ from cross.serial_monitor import (
     SerialMonitor,
     PipeSerialMonitor,
     SerialMonitorTimeout,
+    SerialMonitorTimeout,
     SerialMonitorResult,
 )
 
@@ -273,6 +274,166 @@ class TestSerialMonitorTimeout:
         exc = SerialMonitorTimeout("Pattern 'X' not found within 5.0s")
         assert "not found" in str(exc)
         assert isinstance(exc, AssertionError)
+
+
+class TestSerialMonitorOpen:
+    """GIVEN SerialMonitor.open() WHEN called THEN lifecycle is correct."""
+
+    def test_import_pyserial_missing(self):
+        """WHEN pyserial not installed THEN _import_pyserial raises RuntimeError."""
+        mon = SerialMonitor(port="/dev/null", baud=115200)
+        mon._pyserial_mod = None  # force re-import
+
+        with mock.patch(
+            "cross.serial_monitor.SerialMonitor._import_pyserial",
+            side_effect=RuntimeError("pyserial is required"),
+        ):
+            with pytest.raises(RuntimeError, match="pyserial is required"):
+                mon.open()
+
+    def test_open_port_success(self):
+        """WHEN port opens THEN _open_port returns serial instance."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=9600, timeout=2.0)
+        mock_serial = mock.MagicMock()
+        mock_serial.is_open = True
+        mock_serial.in_waiting = 0
+        mock_serial_mod = mock.MagicMock()
+        mock_serial_mod.Serial.return_value = mock_serial
+        mon._pyserial_mod = mock_serial_mod
+
+        result = mon._open_port()
+        assert result == mock_serial
+        mock_serial_mod.Serial.assert_called_once_with(
+            port="/dev/ttyTEST", baudrate=9600, timeout=2.0, write_timeout=2.0
+        )
+
+    def test_open_port_failure(self):
+        """WHEN port cannot open THEN _open_port raises RuntimeError."""
+        mon = SerialMonitor(port="/dev/NOEXIST", baud=115200)
+        mock_serial_mod = mock.MagicMock()
+        mock_serial_mod.Serial.side_effect = OSError("No such device")
+        mon._pyserial_mod = mock_serial_mod
+
+        with pytest.raises(RuntimeError, match="Cannot open serial port"):
+            mon._open_port()
+
+    def test_open_full_lifecycle(self):
+        """WHEN open called with mock pyserial THEN full lifecycle works."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=115200, timeout=2.0)
+
+        mock_serial = mock.MagicMock()
+        mock_serial.is_open = True
+        mock_serial.in_waiting = 0
+
+        mock_serial_mod = mock.MagicMock()
+        mock_serial_mod.Serial.return_value = mock_serial
+        mon._pyserial_mod = mock_serial_mod
+
+        mon.open()
+        assert mon._serial is not None
+        assert mon._open_time > 0
+        assert mon._capture_thread is not None
+        assert mon._capture_thread.is_alive()
+
+        mon.close()
+        if mon._capture_thread:
+            mon._capture_thread.join(timeout=2.0)
+            assert not mon._capture_thread.is_alive()
+        mock_serial.close.assert_called_once()
+
+    def test_open_reentrant(self):
+        """WHEN open called twice THEN second call is no-op."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=115200)
+        mock_serial = mock.MagicMock()
+        mock_serial.is_open = True
+        mock_serial.in_waiting = 0
+        mock_serial_mod = mock.MagicMock()
+        mock_serial_mod.Serial.return_value = mock_serial
+        mon._pyserial_mod = mock_serial_mod
+        mon._serial = mock_serial
+
+        # First open (already set _serial, no re-open)
+        mon.open()
+        mon.close()
+
+    def test_close_double_close(self):
+        """WHEN close called twice THEN no error."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=115200)
+        mock_serial = mock.MagicMock()
+        mock_serial.is_open = True
+        mock_serial.in_waiting = 0
+        mock_serial_mod = mock.MagicMock()
+        mock_serial_mod.Serial.return_value = mock_serial
+        mon._pyserial_mod = mock_serial_mod
+
+        mon.open()
+        mon.close()
+        mon.close()  # Should not raise
+        assert True
+
+    def test_read_line_with_mock(self):
+        """WHEN _read_line called THEN decodes from serial."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=115200)
+        mock_serial = mock.MagicMock()
+        mock_serial.readline.return_value = b"Hello World\r\n"
+        mock_serial.is_open = True
+        mon._serial = mock_serial
+
+        line = mon._read_line()
+        assert line == "Hello World\r\n"
+        mock_serial.readline.assert_called_once()
+
+    def test_read_line_captures(self):
+        """WHEN capture loop reads lines THEN text is accumulated."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=115200, timeout=2.0)
+
+        mock_serial = mock.MagicMock()
+        mock_serial.is_open = True
+        mock_serial.in_waiting = 1  # Data available
+
+        # Return data, then stop
+        mock_serial.readline.side_effect = [
+            b"Line 1\n", b"Line 2\n", b"",
+        ]
+
+        mock_serial_mod = mock.MagicMock()
+        mock_serial_mod.Serial.return_value = mock_serial
+        mon._pyserial_mod = mock_serial_mod
+
+        mon.open()
+        time.sleep(0.3)
+        mon.close()
+
+        log = mon.captured_log
+        assert "Line 1" in log
+        assert "Line 2" in log
+
+    def test_import_pyserial_via_open_port(self):
+        """WHEN _open_port called w/out _pyserial_mod THEN imports automatically."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=115200)
+
+        with mock.patch(
+            "cross.serial_monitor.SerialMonitor._import_pyserial",
+            side_effect=RuntimeError("pyserial is required"),
+        ):
+            with pytest.raises(RuntimeError, match="pyserial is required"):
+                mon._open_port()
+
+    def test_capture_loop_stops_on_stop_event(self):
+        """WHEN stop_event set THEN _capture_loop exits."""
+        mon = SerialMonitor(port="/dev/ttyTEST", baud=115200)
+        mock_serial = mock.MagicMock()
+        mock_serial.is_open = True
+        mock_serial.in_waiting = 0
+        mon._serial = mock_serial
+        mon._stop_event = threading.Event()
+
+        thread = threading.Thread(target=mon._capture_loop, daemon=True)
+        thread.start()
+        time.sleep(0.1)
+        mon._stop_event.set()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()
 
 
 class TestSerialMonitorEdgeCases:

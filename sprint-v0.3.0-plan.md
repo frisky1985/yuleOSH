@@ -1,3 +1,8 @@
+---
+kind: refactor
+lint: RED / GREEN / REFACTOR
+---
+
 # yuleOSH v0.3.0 — Sprint 任务拆解与排期
 
 > 基于 ASPICE V-Model 三方会诊结论（小马 🐴 + 小克 👨‍💻 + 小明 🧑‍💼）

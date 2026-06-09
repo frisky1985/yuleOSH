@@ -41,7 +41,7 @@ def test_layer_dependencies_chain():
     """Dependency chain: L1 none, L2=[1], L3=[1,2]."""
     assert layer_dependencies[1] == [], "L1 should have no dependencies"
     assert layer_dependencies[2] == [1], "L2 should depend on L1"
-    assert layer_dependencies[3] == [1, 2], "L3 should depend on L1 and L2"
+    assert layer_dependencies[3] == [1, 2, 25], "L3 should depend on L1, L2, L2.5"
 
 
 def test_layer_dependencies_no_cycles():
@@ -161,33 +161,41 @@ def test_check_dependency_passed():
 
 
 def test_check_dependency_two_levels():
-    """L3 depends on both L1 and L2 — both must pass."""
+    """L3 depends on L1, L2, and L2.5 — all must pass."""
     with tempfile.TemporaryDirectory() as tmp:
         ci_dir = Path(tmp) / ".osh" / "ci"
         ci_dir.mkdir(parents=True)
 
-        # Only L1 passed, no L2 → L3 blocked
         (ci_dir / "layer1-pass.json").write_text(
             json.dumps({"layer": 1, "status": "passed"})
         )
+        # Only L1 passed, no L2 → L3 blocked on L2
         result = check_layer_dependency(3, tmp)
         assert result is not None
         assert "Layer 2" in result
 
-        # Add L2 passed → L3 unblocked
+        # Add L2 passed → L3 still blocked on L25
         (ci_dir / "layer2-pass.json").write_text(
             json.dumps({"layer": 2, "status": "passed"})
         )
         result = check_layer_dependency(3, tmp)
-        assert result is None, "Both L1 and L2 passed, L3 should be unblocked"
+        assert result is not None
+        assert "Layer 25" in result
 
-        # L2 fails → L3 blocked again
-        (ci_dir / "layer2-fail.json").write_text(
-            json.dumps({"layer": 2, "status": "failed"})
+        # Add L25 passed → L3 fully unblocked
+        (ci_dir / "layer25-pass.json").write_text(
+            json.dumps({"layer": 25, "status": "passed"})
+        )
+        result = check_layer_dependency(3, tmp)
+        assert result is None, "L1, L2, L25 all passed, L3 should be unblocked"
+
+        # L25 fails → L3 blocked again
+        (ci_dir / "layer25-fail.json").write_text(
+            json.dumps({"layer": 25, "status": "failed"})
         )
         result = check_layer_dependency(3, tmp)
         assert result is not None
-        assert "Layer 2" in result
+        assert "Layer 25" in result
 
 
 # ---------------------------------------------------------------------------
@@ -274,19 +282,20 @@ def test_l1_result_saved(tmp_path):
 
 def test_dependency_chain_integrity():
     """Full integrity check of the layer dependency system."""
-    # All defined layers should be 1, 2, 3
-    assert set(layer_dependencies.keys()) == {1, 2, 3}
+    # All defined layers should be 1, 2, 2.5, 3
+    assert set(layer_dependencies.keys()) == {1, 2, 25, 3}
     # No self-dependency
     for layer, deps in layer_dependencies.items():
         assert layer not in deps, f"Layer {layer} should not depend on itself"
         for d in deps:
             assert d in layer_dependencies, \
                 f"Layer {layer} depends on undefined layer {d}"
-    # Dependencies should be topologically sorted (lower numbers first)
+    # Dependencies should follow pipeline order: 1 → 2 → 25 → 3
+    pipeline_order = {1: 0, 2: 1, 25: 2, 3: 3}
     for layer, deps in layer_dependencies.items():
         for d in deps:
-            assert d < layer, \
-                f"Layer {layer} depends on higher-numbered layer {d}"
+            assert pipeline_order.get(d, -1) < pipeline_order[layer], \
+                f"Layer {layer} depends on out-of-order layer {d}"
 
 
 def test_run_all_skips_blocked_layer(tmp_path):
