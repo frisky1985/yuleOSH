@@ -1,0 +1,18 @@
+# yuleOSH HIL LED Blink Test
+# Validates LED control patterns over serial.
+
+name: LED Blink Verification
+description: Check LED ON/OFF serial output pattern.
+
+stages:
+  - flash:
+      tool: pyocd
+      timeout: 10
+  - boot:
+      pattern: "Boot Complete"
+      timeout: 5
+  - assert:
+      - expect: "LED ON"
+        timeout: 3
+      - expect: "LED OFF"
+        timeout: 3

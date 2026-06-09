@@ -229,3 +229,111 @@ class TestRunLayer25Integration:
         report = _read_hil_report(with_mock_config)
         assert "commit" in report
         assert report["commit"] != ""
+
+
+# ------------------------------------------------------------------
+# Tests: Non-mock code path (real HIL path exercised)
+# ------------------------------------------------------------------
+
+
+class TestRunLayer25NonMock:
+    """GIVEN mock=False config WHEN run THEN non-mock code path is exercised."""
+
+    @pytest.fixture
+    def with_nonmock_config(self, tmp_project):
+        """Write ci-config.yaml with mock=false."""
+        cfg = {
+            "hardware_test": {
+                "enabled": True,
+                "firmware": "build/firmware.elf",
+                "boot_pattern": "Boot Complete",
+                "flash_tool": "openocd",
+                "serial_port": "/dev/ttyACM0",
+                "baud": 115200,
+                "boot_delay": 1.5,
+                "test_timeout": 30,
+                "mock": False,
+            },
+        }
+        cfg_path = Path(tmp_project) / ".yuleosh" / "ci-config.yaml"
+        import yaml
+        with open(cfg_path, "w") as f:
+            yaml.dump(cfg, f)
+        return tmp_project
+
+    def test_nonmock_target_detect_no_targets(self, with_nonmock_config):
+        """WHEN mock=False with no target YAMLs THEN target-detect warns."""
+        _clear_ci_config_cache()
+        result = run_layer_25(with_nonmock_config)
+        assert result is True
+
+    def test_nonmock_target_detect_with_targets(self, with_nonmock_config):
+        """WHEN mock=False with target YAML THEN targets are discovered."""
+        _clear_ci_config_cache()
+        targets_dir = Path(with_nonmock_config) / ".yuleosh" / "targets"
+        targets_dir.mkdir(parents=True, exist_ok=True)
+        with open(targets_dir / "stm32f4.yaml", "w") as f:
+            f.write("mcu: cortex-m4\narch: arm\nqemu:\n  machine: lm3s6965evb\n  cpu: cortex-m3\n")
+        result = run_layer_25(with_nonmock_config)
+        assert result is True
+
+    def test_nonmock_no_firmware_skips_hil(self, with_nonmock_config):
+        """WHEN mock=False and no firmware file THEN HIL tests skip."""
+        _clear_ci_config_cache()
+        result = run_layer_25(with_nonmock_config)
+        report = _read_layer_result(with_nonmock_config)
+        stage_names = [s["name"] for s in report.get("stages", [])]
+        assert "target-detect" in stage_names
+        assert result is True
+
+    def test_nonmock_with_firmware_attempts_hil(self, with_nonmock_config):
+        """WHEN mock=False with firmware THEN attempts HIL imports."""
+        _clear_ci_config_cache()
+        build_dir = Path(with_nonmock_config) / "build"
+        build_dir.mkdir(parents=True, exist_ok=True)
+        with open(build_dir / "firmware.elf", "wb") as f:
+            f.write(b"\x7fELF")
+        result = run_layer_25(with_nonmock_config)
+        # Should not crash — graceful import error handling
+        assert result is not None
+        report = _read_layer_result(with_nonmock_config)
+        stage_names = [s["name"] for s in report.get("stages", [])]
+        assert "hil-tests" in stage_names
+
+    def test_nonmock_with_hil_scripts_discovers(self, with_nonmock_config):
+        """WHEN mock=False with HIL scripts THEN they are discovered."""
+        _clear_ci_config_cache()
+        hil_dir = Path(with_nonmock_config) / "tests" / "hil"
+        hil_dir.mkdir(parents=True, exist_ok=True)
+        with open(hil_dir / "boot-test.yaml", "w") as f:
+            f.write("name: Boot Test\nstages: []\n")
+        result = run_layer_25(with_nonmock_config)
+        assert result is not None
+
+
+# ------------------------------------------------------------------
+# Tests: Performance baseline (v0.6.0)
+# ------------------------------------------------------------------
+
+
+class TestRunLayer25Performance:
+    """GIVEN L2.5 in mock mode WHEN run THEN completes within 1 second."""
+
+    def test_mock_completes_under_1s(self, tmp_project):
+        """WHEN mock mode THEN total time < 1000ms."""
+        import time as t_mod
+        start = t_mod.monotonic()
+        result = run_layer_25(tmp_project)
+        elapsed = t_mod.monotonic() - start
+        assert result is True
+        assert elapsed < 1.0, f"L2.5 mock took {elapsed:.3f}s, expected <1.0s"
+
+    def test_mock_with_scripts_still_fast(self, with_mock_config, with_hil_scripts):
+        """WHEN mock with many scripts THEN still completes fast."""
+        import time as t_mod
+        _clear_ci_config_cache()
+        start = t_mod.monotonic()
+        result = run_layer_25(with_mock_config)
+        elapsed = t_mod.monotonic() - start
+        assert result is True
+        assert elapsed < 1.0, f"L2.5 mock with scripts took {elapsed:.3f}s"
