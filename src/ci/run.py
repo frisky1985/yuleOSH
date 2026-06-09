@@ -807,11 +807,12 @@ def run_layer_25(project_dir: Optional[str] = None):
             ci.add_stage("target-detect", "passed", "mock mode")
         else:
             # Real target detection via target_config
-            from cross.target_config import list_targets  # type: ignore
-            targets = list_targets(project_dir)
+            from cross.target_config import discover_targets  # type: ignore
+            targets = discover_targets(project_dir)
             if targets:
-                print(f"    ✅ Found {len(targets)} target(s): {', '.join(targets)}")
-                ci.add_stage("target-detect", "passed", f"{len(targets)} targets")
+                target_names = list(targets.keys())
+                print(f"    ✅ Found {len(targets)} target(s): {', '.join(target_names)}")
+                ci.add_stage("target-detect", "passed", f"{len(target_names)} targets")
             else:
                 print(f"    ⚠️  No hardware targets configured in .yuleosh/targets/")
                 ci.add_stage("target-detect", "warning", "no targets")

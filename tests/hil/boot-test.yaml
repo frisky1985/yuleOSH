@@ -1,0 +1,17 @@
+# yuleOSH HIL Boot Test
+# Validates firmware boot sequence over serial.
+# Mock mode: simulated flash → boot → assert.
+
+name: Boot Verification Test
+description: Check that firmware boots and emits "Boot Complete" on serial.
+
+stages:
+  - flash:
+      tool: auto
+      timeout: 10
+  - boot:
+      pattern: "Boot Complete"
+      timeout: 5
+  - assert:
+      - expect: "System ready"
+        timeout: 5
