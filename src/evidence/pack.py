@@ -45,6 +45,14 @@ class EvidenceCollector:
         self.req_to_tests: dict[str, list[str]] = {}   # req_name -> [test_files]
         self.test_to_reqs: dict[str, list[str]] = {}   # test_file -> [req_names]
 
+        # Scenario-Ref exact match data (Priority 1)
+        self.scenario_refs: dict[str, list[str]] = {}  # test_file -> [explicit scenario names]
+
+        # Match mode & confidence tracking
+        # mode: "exact" | "keyword" | "none"
+        self.match_modes: dict[str, dict[str, str]] = {}
+        self.match_confidences: dict[str, dict[str, float]] = {}
+
         # Stop words for function-name inference
         _common_test_words = {"test", "the", "and", "for", "with", "each", "from",
                               "that", "this", "all", "support", "system", "shall",
@@ -53,10 +61,59 @@ class EvidenceCollector:
         self._inference_stop_words: set[str] = _common_test_words
 
     # ------------------------------------------------------------------ #
+    # Scenario-Ref parsing (Priority 1 exact matching)
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _parse_scenario_refs(text: str) -> list[str]:
+        """Parse Scenario-Ref: markers from docstring or comment text.
+
+        Supports two formats:
+          1. Inline on a Covers: line:
+             Covers: pipeline, SDD, Scenario-Ref: SDD → DDD → TDD 全流程
+          2. Standalone line:
+             Scenario-Ref: CI/CD 三层验证
+
+        Returns deduplicated list of scenario reference names.
+        """
+        refs: list[str] = []
+        seen: set[str] = set()
+        for line in text.split("\n"):
+            m = re.search(r"Scenario-Ref:\s*(.+)$", line, re.IGNORECASE)
+            if m:
+                raw = m.group(1).strip()
+                # Strip trailing Scenario-Ref segments
+                raw = re.split(r",\s*Scenario-Ref:", raw, flags=re.IGNORECASE)[0]
+                # Strip trailing quotes, commas, semicolons, whitespace
+                raw = raw.rstrip('",; \t\n\r')
+                # Also strip trailing triple-quote sequences
+                raw = re.sub(r'"{2,}$', '', raw)
+                if raw and raw not in seen:
+                    seen.add(raw)
+                    refs.append(raw)
+        return refs
+
+    def _collect_scenario_refs_from_file(self, test_path: str) -> list[str]:
+        """Extract Scenario-Ref values from a test file.
+
+        Scans module docstring, function docstrings, and line comments.
+        """
+        try:
+            with open(test_path, encoding="utf-8") as f:
+                content = f.read()
+        except (OSError, UnicodeDecodeError):
+            return []
+
+        return self._parse_scenario_refs(content)
+
+    # ------------------------------------------------------------------ #
     # Layer-1: Module-level Covers (existing logic)
     # ------------------------------------------------------------------ #
-    def _parse_module_covers(self, tree: ast.AST) -> list[str]:
-        """Parse module-level docstring Covers: marker."""
+    @staticmethod
+    def _parse_module_covers(tree: ast.AST) -> list[str]:
+        """Parse module-level docstring Covers: marker.
+
+        Strips Scenario-Ref: portions to keep keywords clean.
+        """
         keywords = []
         docstring = ast.get_docstring(tree)
         if docstring:
@@ -64,18 +121,26 @@ class EvidenceCollector:
                 m = re.search(r"^\s*Covers:\s*(.+)$", line, re.IGNORECASE)
                 if m:
                     raw = m.group(1)
+                    # Strip Scenario-Ref: portions from Covers line
+                    raw = re.sub(r"Scenario-Ref:\s*[^,]+(?:,\s*)?", "", raw, flags=re.IGNORECASE)
                     keywords.extend(
                         k.strip() for k in raw.split(",") if k.strip()
                     )
         return keywords
 
-    def _parse_comment_covers(self, content: str) -> list[str]:
-        """Parse # Covers: line comments (fallback when no module docstring)."""
+    @staticmethod
+    def _parse_comment_covers(content: str) -> list[str]:
+        """Parse # Covers: line comments (fallback when no module docstring).
+
+        Strips Scenario-Ref: portions to keep keywords clean.
+        """
         keywords = []
         for line in content.split("\n"):
             m = re.search(r"^\s*#\s*Covers:\s*(.+)$", line, re.IGNORECASE)
             if m:
                 raw = m.group(1)
+                # Strip Scenario-Ref: portions from Covers line
+                raw = re.sub(r"Scenario-Ref:\s*[^,]+(?:,\s*)?", "", raw, flags=re.IGNORECASE)
                 keywords.extend(
                     k.strip() for k in raw.split(",") if k.strip()
                 )
@@ -89,7 +154,7 @@ class EvidenceCollector:
 
         e.g.
             def test_ci_blocking_logic():
-                \"\"\"Covers: CI \u963b\u65ad\u903b\u8f91, pipeline \u786c\u9519\u8bef\"\"\"
+                \"\"\"Covers: CI 阻断逻辑, pipeline 硬错误\"\"\"
                 ...
         """
         keywords = []
@@ -149,6 +214,9 @@ class EvidenceCollector:
           2. Module-level # Covers: line comments (fallback)
           3. Per-test-function docstring Covers:
           4. Inference from test function names
+
+        Note: Scenario-Ref markers on Covers lines are stripped from keywords;
+        they are parsed separately via _collect_scenario_refs_from_file().
         """
         keywords = []
         try:
@@ -184,7 +252,7 @@ class EvidenceCollector:
         """Scan tests/ for Covers: markers and return test_file -> [covered_keywords]."""
         tests_dir = Path(self.project_dir) / "tests"
         if not tests_dir.is_dir():
-            print("  \u23ed\ufe0f  No tests/ directory found")
+            print("  ⏭️  No tests/ directory found")
             return {}
 
         coverage: dict[str, list[str]] = {}
@@ -194,28 +262,78 @@ class EvidenceCollector:
                 coverage[test_file.name] = keywords
 
         self.test_coverage = coverage
-        print(f"  \U0001f4cb Collected test coverage from {len(coverage)} test file(s)")
+        print(f"  📋 Collected test coverage from {len(coverage)} test file(s)")
         if not coverage:
-            print("  \u26a0\ufe0f  No Covers: markers found in any test file")
+            print("  ⚠️  No Covers: markers found in any test file")
         return coverage
 
     def _build_requirement_to_test_map(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-        """Build bidirectional map: req_name <-> test_files via keyword matching."""
+        """Build bidirectional map: req_name <-> test_files via two-level matching.
+
+        Priority 1: Exact Scenario-Ref matching — test file declares explicit scenario ref
+        Priority 2: Keyword-weighted overlap fallback — current substring matching
+
+        Also populates self.match_modes and self.match_confidences per (req, test_file).
+        """
         if not self.test_coverage:
             self._collect_test_coverage()
 
+        # Common stop words (define early, used by both reverse-index and keyword matching)
+        _stop_words = {"the", "and", "for", "with", "each", "from", "that", "this",
+                       "all", "support", "system", "shall", "should", "can", "be",
+                       "is", "a", "an", "in", "to", "of", "it", "as", "at", "by", "on"}
+
+        # Collect Scenario-Ref data for all test files
+        if not self.scenario_refs:
+            tests_dir = Path(self.project_dir) / "tests"
+            if tests_dir.is_dir():
+                for test_file in sorted(tests_dir.glob("test_*.py")):
+                    self.scenario_refs[test_file.name] = \
+                        self._collect_scenario_refs_from_file(str(test_file))
+
+        # Build scenario → requirements reverse index via keyword overlap
+        scenario_to_reqs: dict[str, list[str]] = {}
+        for req in self.requirements:
+            req_name = req.get("name", "")
+            if not req_name:
+                continue
+            # Collect SHALL keywords for this requirement
+            req_words: set[str] = set()
+            for shall in req.get("shall", []):
+                for w in re.findall(r"[a-zA-Z_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]{1,}", shall.lower()):
+                    if w not in _stop_words:
+                        req_words.add(w)
+            name_words = re.findall(r"[a-zA-Z_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]{1,}", req_name.lower())
+            for w in name_words:
+                if w not in _stop_words:
+                    req_words.add(w)
+
+            for s in self.scenarios:
+                s_name = s.get("name", "")
+                if not s_name:
+                    continue
+                # Match: req_name substring in scenario name OR vice versa
+                is_match = req_name.lower() in s_name.lower() or s_name.lower() in req_name.lower()
+                if not is_match:
+                    # Keyword overlap fallback for scenario→req
+                    s_text = s_name.lower() + " " + " ".join(s.get("given", [])) + " " + " ".join(s.get("when", [])) + " " + " ".join(s.get("then", []))
+                    s_words = set(re.findall(r"[a-zA-Z_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]{1,}", s_text))
+                    if s_words & req_words:
+                        is_match = True
+                if is_match:
+                    scenario_to_reqs.setdefault(s_name, []).append(req_name)
+
         self.req_to_tests = {}
         self.test_to_reqs = {t: [] for t in self.test_coverage}
-
-        # Stop words used for filtering SHALL keywords
-        _stop_words = {"the", "and", "for", "with", "each", "from", "that", "this", "all", "support", "system", "shall"}
+        self.match_modes = {}
+        self.match_confidences = {}
 
         for req in self.requirements:
             req_name = req.get("name", "")
             if not req_name:
                 continue
 
-            # Collect all keywords from SHALL statements
+            # Collect SHALL-level keywords
             shall_keywords: set[str] = set()
             for shall in req.get("shall", []):
                 words = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{1,}", shall.lower())
@@ -229,16 +347,55 @@ class EvidenceCollector:
                 if w not in _stop_words:
                     shall_keywords.add(w)
 
-            # Match against each test file's Covers keywords
-            matching_tests: list[str] = []
+            # ---- Priority 1: Exact Scenario-Ref matching ----
+            exact_matches: list[str] = []
+            for test_file, srefs in self.scenario_refs.items():
+                if not srefs:
+                    continue
+                for sref in srefs:
+                    reqs_for_scenario = scenario_to_reqs.get(sref, [])
+                    if req_name in reqs_for_scenario:
+                        if test_file not in exact_matches:
+                            exact_matches.append(test_file)
+                        break
+
+            # ---- Priority 2: Keyword-weighted fallback ----
+            keyword_matches: list[str] = []
+            keyword_confidences: dict[str, float] = {}
             for test_file, covered_kws in self.test_coverage.items():
                 covered_lower = [k.lower() for k in covered_kws]
-                # If any test keyword overlaps with shall keywords
-                if any(ck in shall_keywords for ck in covered_lower):
-                    matching_tests.append(test_file)
+                overlap = [ck for ck in covered_lower if ck in shall_keywords]
+                if overlap:
+                    keyword_matches.append(test_file)
+                    confidence = min(1.0, len(overlap) / max(len(shall_keywords), 1))
+                    keyword_confidences[test_file] = round(confidence, 2)
 
-            self.req_to_tests[req_name] = matching_tests
-            for t in matching_tests:
+            # Merge: exact first, then keyword (deduplicated)
+            all_matches: list[str] = []
+            for t in exact_matches:
+                if t not in all_matches:
+                    all_matches.append(t)
+            for t in keyword_matches:
+                if t not in all_matches:
+                    all_matches.append(t)
+
+            # Record modes and confidences
+            self.match_modes.setdefault(req_name, {})
+            self.match_confidences.setdefault(req_name, {})
+            for test_file in all_matches:
+                if test_file in exact_matches:
+                    self.match_modes[req_name][test_file] = "exact"
+                    self.match_confidences[req_name][test_file] = 1.0
+                elif test_file in keyword_matches:
+                    self.match_modes[req_name][test_file] = "keyword"
+                    self.match_confidences[req_name][test_file] = \
+                        keyword_confidences.get(test_file, 0.5)
+                else:
+                    self.match_modes[req_name][test_file] = "keyword"
+                    self.match_confidences[req_name][test_file] = 0.5
+
+            self.req_to_tests[req_name] = all_matches
+            for t in all_matches:
                 if req_name not in self.test_to_reqs.setdefault(t, []):
                     self.test_to_reqs[t].append(req_name)
 
@@ -305,41 +462,86 @@ class EvidenceCollector:
 
             if covered_count == 0:
                 # All SHALLs uncovered -- friendly info message
-                print(f"  \u2139\ufe0f  SHALL coverage: 0/{total_shalls} \u2014"
+                print(f"  ℹ️  SHALL coverage: 0/{total_shalls} —"
                       f" Run pipeline with real LLM to see actual coverage")
                 return uncovered
 
             # Partial coverage: categorize and show graded output
             critical, warn = self._categorize_uncovered(uncovered)
 
-            print(f"  \u26a0\ufe0f  SHALL coverage: {covered_count}/{total_shalls}"
+            print(f"  ⚠️  SHALL coverage: {covered_count}/{total_shalls}"
                   f" ({len(uncovered)} uncovered)")
 
             # Show critical first
             if critical:
-                print(f"    \U0001f534 CRITICAL: {len(critical)} core SHALL(s) not covered:")
+                print(f"    🔴 CRITICAL: {len(critical)} core SHALL(s) not covered:")
                 for u in critical[:5]:
-                    print(f"      \u2022 {u['req_name']}: {u['shall'][:60]}...")
+                    print(f"      • {u['req_name']}: {u['shall'][:60]}...")
                 if len(critical) > 5:
-                    print(f"      \u2026 and {len(critical) - 5} more critical")
+                    print(f"      … and {len(critical) - 5} more critical")
 
             # Warn with sample only
             if warn:
-                print(f"    \U0001f7e1 WARN: {len(warn)} non-functional SHALL(s) not covered:")
+                print(f"    🟡 WARN: {len(warn)} non-functional SHALL(s) not covered:")
                 for u in warn[:3]:
-                    print(f"      \u2022 {u['req_name']}: {u['shall'][:60]}...")
+                    print(f"      • {u['req_name']}: {u['shall'][:60]}...")
                 if len(warn) > 3:
-                    print(f"      \u2026 and {len(warn) - 3} more non-functional")
+                    print(f"      … and {len(warn) - 3} more non-functional")
 
         return uncovered
 
+    def _find_latest_pipeline_spec(self) -> Optional[str]:
+        """Auto-discover spec_path from the most recent pipeline session.
+
+        Queries the SQLite store for the latest pipeline, falling back to
+        session JSON on disk if the store is unavailable.
+        """
+        # Try SQLite store first
+        try:
+            from store import Store
+            store = Store()
+            pipelines = store.list_pipelines()
+            if pipelines:
+                latest_name = pipelines[0].get("name")
+                if latest_name:
+                    full = store.get_pipeline(latest_name)
+                    if full and full.get("spec_path"):
+                        return full["spec_path"]
+        except Exception:
+            pass
+
+        # Fallback: scan .osh/sessions/ on disk
+        sessions_dir = Path(self.project_dir) / ".osh" / "sessions"
+        if sessions_dir.is_dir():
+            session_files = sorted(
+                sessions_dir.rglob("session.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for sf in session_files:
+                try:
+                    data = json.loads(sf.read_text())
+                    sp = data.get("spec_path")
+                    if sp and os.path.exists(sp):
+                        return sp
+                except (json.JSONDecodeError, OSError, KeyError):
+                    continue
+
+        return None
+
     def collect_requirements(self, spec_path: str = None):
-        """Parse OpenSpec and collect requirements."""
+        """Parse OpenSpec and collect requirements.
+
+        When *spec_path* is None, auto-discovers the spec from the most
+        recent pipeline session.  Falls back to ``docs/spec.md``.
+        """
+        if spec_path is None:
+            spec_path = self._find_latest_pipeline_spec()
         if spec_path is None:
             spec_path = os.path.join(self.project_dir, "docs", "spec.md")
 
         if not os.path.exists(spec_path):
-            print(f"  \u23ed\ufe0f  Spec not found: {spec_path}")
+            print(f"  ⏭️  Spec not found: {spec_path}")
             return
 
         sys.path.insert(0, os.path.join(self.project_dir, "src", "spec"))
@@ -348,13 +550,13 @@ class EvidenceCollector:
         doc = parse_spec(spec_path)
         self.requirements = [r.to_dict() for r in doc.requirements]
         self.scenarios = [s.to_dict() for s in doc.scenarios]
-        print(f"  \U0001f4cb Collected {len(self.requirements)} requirements, {len(self.scenarios)} scenarios")
+        print(f"  📋 Collected {len(self.requirements)} requirements, {len(self.scenarios)} scenarios")
 
     def collect_reviews(self):
         """Collect all review session records."""
         rev_dir = Path(self.project_dir) / ".osh" / "reviews"
         if not rev_dir.exists():
-            print("  \u23ed\ufe0f  No review records found")
+            print("  ⏭️  No review records found")
             return
 
         for task_dir in rev_dir.iterdir():
@@ -364,13 +566,13 @@ class EvidenceCollector:
                     with open(sess_file) as f:
                         self.reviews.append(json.load(f))
 
-        print(f"  \U0001f4cb Collected {len(self.reviews)} review session(s)")
+        print(f"  📋 Collected {len(self.reviews)} review session(s)")
 
     def collect_ci_results(self):
         """Collect all CI layer results."""
         ci_dir = Path(self.project_dir) / ".osh" / "ci"
         if not ci_dir.exists():
-            print("  \u23ed\ufe0f  No CI results found")
+            print("  ⏭️  No CI results found")
             return
 
         for f in sorted(ci_dir.glob("layer*.json")):
@@ -382,19 +584,19 @@ class EvidenceCollector:
                 if data.get("coverage"):
                     self.coverage_data = data["coverage"]
 
-        print(f"  \U0001f4cb Collected {len(self.ci_results)} CI result(s)")
+        print(f"  📋 Collected {len(self.ci_results)} CI result(s)")
 
     def collect_sil_reports(self):
         """Collect SIL (Software-in-the-Loop) test report files from
         ``.osh/ci/*sil*.json`` and integrate into the evidence chain."""
         ci_dir = Path(self.project_dir) / ".osh" / "ci"
         if not ci_dir.exists():
-            print("  \u23ed\ufe0f  No CI directory — no SIL reports to collect")
+            print("  ⏭️  No CI directory — no SIL reports to collect")
             return
 
         sil_files = sorted(ci_dir.glob("*sil*.json"))
         if not sil_files:
-            print("  \u23ed\ufe0f  No SIL test reports found (*sil*.json)")
+            print("  ⏭️  No SIL test reports found (*sil*.json)")
             return
 
         for sf in sil_files:
@@ -406,12 +608,12 @@ class EvidenceCollector:
                 # Also add to ci_results for traceability
                 self.ci_results.append(data)
             except (json.JSONDecodeError, OSError) as e:
-                print(f"    \u26a0\ufe0f  Could not read SIL report {sf.name}: {e}")
+                print(f"    ⚠️  Could not read SIL report {sf.name}: {e}")
 
         total_tests = sum(
             len(r.get("results", [])) for r in self.sil_reports
         )
-        print(f"  \U0001f5a5\ufe0f  Collected {len(self.sil_reports)} SIL report(s)"
+        print(f"  🖥️  Collected {len(self.sil_reports)} SIL report(s)"
               f" ({total_tests} test case(s))")
 
     def generate_traceability_matrix(self) -> str:
@@ -427,7 +629,7 @@ class EvidenceCollector:
             f"> Generated: {self.generated_at}",
             f"> Version: {self.version}",
             f"",
-            f"## Requirements \u2192 Implementation \u2192 Tests",
+            f"## Requirements → Implementation → Tests",
             f"",
         ]
 
@@ -439,7 +641,7 @@ class EvidenceCollector:
             if req_id:
                 lines.append(f"- Req ID: {req_id}")
             lines.append(f"- SHALL statements: {shall_count}")
-            implementation_status = '\u2705 Covered' if shall_count > 0 else '\u274c No implementation'
+            implementation_status = '✅ Covered' if shall_count > 0 else '❌ No implementation'
             lines.append(f"- Status: {implementation_status}")
 
             # Check for matching scenarios
@@ -450,24 +652,27 @@ class EvidenceCollector:
             if matching_scenarios:
                 lines.append(f"- Scenarios: {len(matching_scenarios)}")
                 for s in matching_scenarios:
-                    lines.append(f"  - {s['name']}: GIVEN({len(s['given'])}) \u2192 WHEN({len(s['when'])}) \u2192 THEN({len(s['then'])})")
+                    lines.append(f"  - {s['name']}: GIVEN({len(s['given'])}) → WHEN({len(s['when'])}) → THEN({len(s['then'])})")
             else:
-                lines.append(f"- Scenarios: 0 \u26a0\ufe0f")
+                lines.append(f"- Scenarios: 0 ⚠️")
 
-            # Test coverage mapping
+            # Test coverage mapping with match mode and confidence
             matching_tests = self.req_to_tests.get(name, [])
             if matching_tests:
                 lines.append(f"- Test files ({len(matching_tests)}):")
                 for tf in matching_tests:
-                    lines.append(f"  - {tf}")
+                    mode = self.match_modes.get(name, {}).get(tf, "keyword")
+                    conf = self.match_confidences.get(name, {}).get(tf, 0.5)
+                    mode_icon = "🎯" if mode == "exact" else "🔍"
+                    lines.append(f"  - {tf} ({mode_icon} {mode}, confidence: {conf:.0%})")
             else:
-                lines.append(f"- Test files: 0 \u274c Not covered by any test")
+                lines.append(f"- Test files: 0 ❌ Not covered by any test")
 
             # List individual SHALL coverage
             lines.append(f"- SHALL details:")
             for shall in req.get("shall", []):
                 is_covered = bool(matching_tests)
-                icon = "\u2705" if is_covered else "\u274c"
+                icon = "✅" if is_covered else "❌"
                 lines.append(f"  {icon} {shall[:80]}{'...' if len(shall) > 80 else ''}")
 
             # Check review records
@@ -499,7 +704,7 @@ class EvidenceCollector:
         content = "\n".join(lines)
         output_path = self.evidence_dir / "traceability-matrix.md"
         output_path.write_text(content)
-        print(f"  \u2705 Traceability matrix generated: {output_path}")
+        print(f"  ✅ Traceability matrix generated: {output_path}")
         return str(output_path)
 
     def generate_requirement_coverage(self) -> str:
@@ -516,7 +721,7 @@ class EvidenceCollector:
         for req in self.requirements:
             name = req.get("name", "Unknown")
             sc = req.get("shall_count", 0)
-            status = "\u2705" if sc > 0 else "\u274c"
+            status = "✅" if sc > 0 else "❌"
             lines.append(f"| {name} | {sc} | {status} |")
 
         # Requirement coverage summary
@@ -528,13 +733,13 @@ class EvidenceCollector:
             f"**Requirement Coverage**: {covered}/{total} ({pct:.0f}%)",
             f"**Scenarios**: {len(self.scenarios)}",
             f"**Threshold**: 100%",
-            f"**Pass**: {'\u2705' if pct >= 100 else '\u274c'}",
+            f"**Pass**: {'✅' if pct >= 100 else '❌'}",
         ])
 
         content = "\n".join(lines)
         output_path = self.evidence_dir / "requirement-coverage.md"
         output_path.write_text(content)
-        print(f"  \u2705 Requirement coverage report: {output_path}")
+        print(f"  ✅ Requirement coverage report: {output_path}")
         return str(output_path)
 
     def generate_code_coverage_report(self) -> str:
@@ -550,16 +755,16 @@ class EvidenceCollector:
             lines.extend([
                 f"| Metric | Value | Threshold | Status |",
                 f"|:-------|:-----:|:---------:|:------:|",
-                f"| Line Coverage | {self.coverage_data.get('line_coverage', 'N/A')}% | {self.coverage_data.get('threshold_line', 80)}% | {'\u2705' if self.coverage_data.get('line_pass') else '\u274c'} |",
-                f"| Condition Coverage | {self.coverage_data.get('condition_coverage', 'N/A')}% | {self.coverage_data.get('threshold_condition', 75)}% | {'\u2705' if self.coverage_data.get('condition_pass') else '\u274c'} |",
+                f"| Line Coverage | {self.coverage_data.get('line_coverage', 'N/A')}% | {self.coverage_data.get('threshold_line', 80)}% | {'✅' if self.coverage_data.get('line_pass') else '❌'} |",
+                f"| Condition Coverage | {self.coverage_data.get('condition_coverage', 'N/A')}% | {self.coverage_data.get('threshold_condition', 75)}% | {'✅' if self.coverage_data.get('condition_pass') else '❌'} |",
             ])
         else:
-            lines.append("No coverage data available \u2014 run CI Layer 1 first.")
+            lines.append("No coverage data available — run CI Layer 1 first.")
 
         content = "\n".join(lines)
         output_path = self.evidence_dir / "code-coverage-report.md"
         output_path.write_text(content)
-        print(f"  \u2705 Code coverage report: {output_path}")
+        print(f"  ✅ Code coverage report: {output_path}")
         return str(output_path)
 
     def aggregate_review_logs(self) -> str:
@@ -571,8 +776,8 @@ class EvidenceCollector:
             lines.append(f"- Created: {r.get('created_at', 'N/A')}")
             lines.append(f"- Reviews ({len(r.get('reviews', []))} agents):")
             for rev in r.get("reviews", []):
-                status_icon = {"passed": "\u2705", "failed": "\u274c", "retry": "\U0001f504", "running": "\u23f3"}
-                icon = status_icon.get(rev.get("status", ""), "\u2753")
+                status_icon = {"passed": "✅", "failed": "❌", "retry": "🔄", "running": "⏳"}
+                icon = status_icon.get(rev.get("status", ""), "❓")
                 findings = rev.get("finding_breakdown", {})
                 lines.append(f"  {icon} {rev.get('reviewer', 'N/A')}: {rev.get('status', 'N/A')} "
                            f"(C:{findings.get('critical',0)} M:{findings.get('major',0)} m:{findings.get('minor',0)})")
@@ -588,11 +793,14 @@ class EvidenceCollector:
         with open(json_path, "w") as f:
             json.dump(self.reviews, f, indent=2, ensure_ascii=False)
 
-        print(f"  \u2705 Review logs aggregated: {output_path}")
+        print(f"  ✅ Review logs aggregated: {output_path}")
         return str(output_path)
 
     def generate_acceptance_matrix(self) -> str:
-        """Generate acceptance matrix: Req/SHALL -> verification method -> test file -> status."""
+        """Generate acceptance matrix: Req/SHALL -> verification method -> test file -> status.
+
+        Includes match mode and confidence columns for traceability quality.
+        """
         if not self.req_to_tests:
             self._build_requirement_to_test_map()
 
@@ -602,8 +810,8 @@ class EvidenceCollector:
             f"> Generated: {self.generated_at}",
             f"> Version: {self.version}",
             f"",
-            f"| Req ID | Requirement | SHALL | \u9a8c\u8bc1\u65b9\u6cd5 | \u6d4b\u8bd5\u6587\u4ef6 | \u72b6\u6001 |",
-            f"|:------:|:-----------|:------|:---------|:--------|:----:|",
+            f"| Req ID | Requirement | SHALL | 验证方法 | 测试文件 | 匹配方式 | 置信度 | 状态 |",
+            f"|:------:|:-----------|:------|:---------|:--------|:--------:|:------:|:----:|",
         ]
 
         total_shalls = 0
@@ -613,17 +821,29 @@ class EvidenceCollector:
             req_id = req.get("req_id", "RS---")
             shall_list = req.get("shall", [])
             matching_tests = self.req_to_tests.get(name, [])
-            test_str = ", ".join(matching_tests) if matching_tests else "\u2014"
-            status = "\u2705" if matching_tests else "\u274c"
+            test_str = ", ".join(matching_tests) if matching_tests else "—"
+            status = "✅" if matching_tests else "❌"
+
+            # Determine dominant match mode and confidence for this req
+            modes = self.match_modes.get(name, {})
+            confs = self.match_confidences.get(name, {})
+            if matching_tests:
+                # Pick best mode: "exact" if any test matched exactly
+                dominant_mode = "exact" if any(m == "exact" for m in modes.values()) else "keyword"
+                best_conf = max(confs.values()) if confs else 0.0
+            else:
+                dominant_mode = "—"
+                best_conf = 0.0
 
             for idx, shall in enumerate(shall_list):
                 total_shalls += 1
-                # Each SHALL gets its own row; test coverage check at req level
-                shall_status = status if matching_tests else "\u274c"
+                shall_status = status if matching_tests else "❌"
                 if matching_tests:
                     covered_shalls += 1
+                mode_str = dominant_mode if idx == 0 else ""
+                conf_str = f"{best_conf:.0%}" if idx == 0 and matching_tests else ""
                 lines.append(
-                    f"| {req_id} | {name} | {shall} | Unit Test | {test_str} | {shall_status} |"
+                    f"| {req_id} | {name} | {shall} | Unit Test | {test_str} | {mode_str} | {conf_str} | {shall_status} |"
                 )
 
         # Summary
@@ -634,13 +854,13 @@ class EvidenceCollector:
             f"- Total SHALL statements: {total_shalls}",
             f"- Covered by tests: {covered_shalls} ({pct:.0f}%)",
             f"- Uncovered: {total_shalls - covered_shalls}",
-            f"- Threshold: 100% \u2192 {'\u2705 PASS' if pct >= 100 else '\u274c FAIL'}",
+            f"- Threshold: 100% → {'✅ PASS' if pct >= 100 else '❌ FAIL'}",
         ])
 
         content = "\n".join(lines)
         output_path = self.evidence_dir / "acceptance-matrix.md"
         output_path.write_text(content)
-        print(f"  \u2705 Acceptance matrix generated: {output_path}")
+        print(f"  ✅ Acceptance matrix generated: {output_path}")
         return str(output_path)
 
     def pack_compliance_zip(self) -> str:
@@ -674,7 +894,7 @@ class EvidenceCollector:
                 for sil_file in sorted(ci_dir.glob("*sil*.json")):
                     zf.write(sil_file, arcname=f"sil-reports/{sil_file.name}")
 
-        print(f"  \U0001f4e6 Compliance pack created: {zip_path}")
+        print(f"  📦 Compliance pack created: {zip_path}")
         return str(zip_path)
 
 
@@ -688,7 +908,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     if project_dir is None:
         project_dir = os.environ.get("OSH_HOME", os.getcwd())
 
-    print(f"\n\U0001f4e6 OSH Evidence Generation")
+    print(f"\n📦 OSH Evidence Generation")
     print(f"{'='*50}")
 
     collector = EvidenceCollector(project_dir)
@@ -709,7 +929,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     artifacts.append(collector.pack_compliance_zip())
 
     print(f"\n{'='*50}")
-    print(f"\u2705 Evidence generation complete")
+    print(f"✅ Evidence generation complete")
     print(f"   Output: {collector.evidence_dir}")
     print(f"   Artifacts: {len(artifacts)}")
     print(f"   - traceability-matrix.md")
@@ -717,13 +937,8 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     print(f"   - code-coverage-report.md")
     print(f"   - review-log-summary.md + review-log.json")
     print(f"   - acceptance-matrix.md")
-    print(f"   - sil-reports/ (in compliance-pack.zip) \U0001f5a5")
-    print(f"   - compliance-pack.zip \U0001f3af")
-    print(f"   - traceability-matrix.md")
-    print(f"   - requirement-coverage.md")
-    print(f"   - code-coverage-report.md")
-    print(f"   - review-log-summary.md + review-log.json")
-    print(f"   - compliance-pack.zip \U0001f3af")
+    print(f"   - sil-reports/ (in compliance-pack.zip) 🖥")
+    print(f"   - compliance-pack.zip 🎯")
     print()
 
     return artifacts

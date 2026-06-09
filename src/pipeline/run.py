@@ -43,7 +43,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from llm.client import chat_completion  # noqa: E402
 
 # Local imports
-from pipeline.prompts import build_test_planning_prompt  # noqa: E402
+from pipeline.prompts import (  # noqa: E402
+    build_super_analysis_prompt,
+    build_prd_prompt,
+    build_architecture_prompt,
+    build_development_prompt,
+    build_test_planning_prompt,
+    build_code_review_prompt,
+    build_final_report_prompt,
+    build_internal_review_prompt,
+)
 try:
     from store import Store
     _store = Store()
@@ -126,6 +135,9 @@ class PipelineSession:
         self.errors: list[str] = []
         self.session_dir = self._ensure_session_dir()
         self.llm_client = llm_client
+        # Token usage tracking across all steps
+        self.token_usage_total: int = 0
+        self.token_usage_steps: list[dict] = []
 
     def _ensure_session_dir(self) -> Path:
         """Ensure the session directory exists and return its path."""
@@ -391,26 +403,11 @@ def step_super_analysis(session: PipelineSession) -> str:
         scenarios = parsed["scenarios"]
         total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
 
-        system_prompt = (
-            "You are a senior product analyst. Perform a S.U.P.E.R. analysis of the given "
-            "OpenSpec specification document. Analyze: S (Situation — project context), "
-            "U (Understanding — key requirements and intent), "
-            "P (Problem — core objectives), "
-            "E (Execution — how to deliver), "
-            "R (Resources — tools, frameworks, skills needed), and "
-            "P (Priority — P0/P1/P2 grouping of requirements). "
-            "Output a well-structured Markdown report."
-        )
-        user_prompt = (
-            f"# Specification: {spec_path.name}\n\n"
-            f"```markdown\n{spec_content[:12000]}\n```\n\n"
-            f"## Parsed Metadata\n"
-            f"- Requirements found: {len(requirements)}\n"
-            f"- Total SHALL statements: {total_shall}\n"
-            f"- Scenarios found: {len(scenarios)}\n\n"
-            f"Write a complete S.U.P.E.R. analysis as Markdown. "
-            f"Use the parsed metadata above as a starting point but enrich it "
-            f"with genuine insights derived from the spec content."
+        system_prompt, user_prompt = build_super_analysis_prompt(
+            spec_content=spec_content,
+            spec_name=spec_path.name,
+            requirements=requirements,
+            scenarios=scenarios,
         )
 
         try:
@@ -431,6 +428,8 @@ def step_super_analysis(session: PipelineSession) -> str:
             usage.get("prompt_tokens", "?"),
             usage.get("completion_tokens", "?"),
         )
+        session.token_usage_total += usage.get("total_tokens", 0)
+        session.token_usage_steps.append({"step": "super-analysis", "usage": usage})
 
         # Prepend a metadata header
         full_output = (
@@ -484,38 +483,12 @@ def step_hermes_prd(session: PipelineSession) -> str:
             if super_path.exists():
                 super_content = super_path.read_text()
 
-        system_prompt = (
-            "You are a senior product manager (Hermes). Given an OpenSpec specification "
-            "document and optionally a S.U.P.E.R analysis, generate a comprehensive "
-            "Product Requirements Document (PRD) in Markdown.\n\n"
-            "The PRD must cover:\n"
-            "1. **Product Overview** — summary of the product scope and target users\n"
-            "2. **Goals & Success Metrics** — measurable objectives for this release\n"
-            "3. **User Stories** — structured as GIVEN/WHEN/THEN scenarios mapped to each requirement\n"
-            "4. **Functional Requirements** — mapped from each spec SHALL/SHOULD statement, "
-            "with implementation notes and priority (P0/P1/P2)\n"
-            "5. **Non-Functional Requirements** — performance, security, compliance\n"
-            "6. **Acceptance Criteria** — how we know each requirement is done\n"
-            "7. **Out of Scope** — explicitly what this release does NOT cover\n\n"
-            "Be thorough and reference specific requirement names and scenario details."
-        )
-        user_prompt = (
-            f"# Specification: {Path(session.spec_path).name}\n\n"
-            f"```markdown\n{spec_content[:12000]}\n```\n\n"
-            f"## Parsed Metadata\n"
-            f"- Requirements found: {len(requirements)}\n"
-            f"- Total SHALL/SHOULD statements: {total_shall}\n"
-            f"- Scenarios found: {len(scenarios)}\n\n"
-        )
-        if super_content:
-            user_prompt += (
-                f"## S.U.P.E.R. Analysis (from prior step)\n"
-                f"```markdown\n{super_content[:4000]}\n```\n\n"
-            )
-        user_prompt += (
-            f"Write a comprehensive PRD based on the above specification. "
-            f"Map each requirement to concrete user stories and acceptance criteria. "
-            f"Assign priority (P0/P1/P2) to each requirement group."
+        system_prompt, user_prompt = build_prd_prompt(
+            spec_content=spec_content,
+            spec_name=Path(session.spec_path).name,
+            requirements=requirements,
+            scenarios=scenarios,
+            super_analysis_content=super_content,
         )
 
         try:
@@ -535,6 +508,8 @@ def step_hermes_prd(session: PipelineSession) -> str:
             usage.get("prompt_tokens", "?"),
             usage.get("completion_tokens", "?"),
         )
+        session.token_usage_total += usage.get("total_tokens", 0)
+        session.token_usage_steps.append({"step": "prd", "usage": usage})
 
         full_output = (
             f"# PRD: {session.name}\n\n"
@@ -563,37 +538,99 @@ def step_hermes_prd(session: PipelineSession) -> str:
 
 @timed_step
 def step_internal_review(session: PipelineSession) -> str:
-    """Step 3: 小明 — 内部评审"""
+    """Step 3: 小明 — AI-powered internal review.
+
+    Checks artifact existence (hard requirement) then uses LLM to assess
+    quality, consistency, and traceability of generated artifacts.
+    """
     try:
-        print("  🔍 [小明] Internal review...")
+        print("  🔍 [小明] Running AI-powered internal review...")
         log.info("Running internal review")
-        
+
         artifacts = session.artifacts
-        report = []
-        
-        for key, path in artifacts.items():
-            p = Path(path)
-            if p.exists():
-                report.append(f"✅ {key}: {path}")
-            else:
-                report.append(f"❌ {key}: MISSING")
-                log.warning(f"Artifact missing: {key} at {path}")
-        
-        # Check consistency
+
+        # Check required artifacts exist (hard requirement)
         required = ["spec-check", "super-analysis", "prd"]
         missing = [r for r in required if r not in artifacts]
-        
         if missing:
             log.error(f"Internal review failed — missing artifacts: {', '.join(missing)}")
-            raise PipelineStepError(f"Internal review failed — missing artifacts: {', '.join(missing)}")
-        
+            raise PipelineStepError(
+                f"Internal review failed — missing artifacts: {', '.join(missing)}"
+            )
+
+        # Read artifact summaries for LLM analysis
+        artifact_summaries: dict[str, str] = {}
+        for key, path in artifacts.items():
+            try:
+                p = Path(path)
+                if p.exists():
+                    content = p.read_text()[:300]
+                    first_line = content.split("\n", 1)[0].strip("# ").strip()
+                    artifact_summaries[key] = first_line or "(empty)"
+                else:
+                    artifact_summaries[key] = "MISSING"
+            except Exception:
+                artifact_summaries[key] = "(cannot read)"
+
+        # Read spec for context
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
+
+        system_prompt, user_prompt = build_internal_review_prompt(
+            session_name=session.name,
+            spec_content=spec_content,
+            spec_name=spec_path.name,
+            artifact_paths=session.artifacts,
+            artifact_summaries=artifact_summaries,
+        )
+
+        try:
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+            analysis = result["content"]
+            usage = result.get("usage", {})
+            log.info(
+                "LLM returned %d tokens for internal review (prompt=%s, completion=%s)",
+                usage.get("total_tokens", "?"),
+                usage.get("prompt_tokens", "?"),
+                usage.get("completion_tokens", "?"),
+            )
+            session.token_usage_total += usage.get("total_tokens", 0)
+            session.token_usage_steps.append({"step": "internal-review", "usage": usage})
+
+            full_output = (
+                f"# Internal Review: {session.name}\n\n"
+                f"> Generated by: LLM ({result.get('model', 'unknown')})\n"
+                f"> Tokens: {usage.get('total_tokens', '?')} "
+                f"(prompt {usage.get('prompt_tokens', '?')} + "
+                f"completion {usage.get('completion_tokens', '?')})\n\n"
+                f"{analysis}"
+            )
+        except (RuntimeError, PipelineStepError) as llm_err:
+            # Fallback to basic report if LLM fails
+            log.warning(f"LLM call for internal review failed, using basic template: {llm_err}")
+            lines = [
+                f"# Internal Review: {session.name}",
+                f"",
+                f"> ⚠️ AI-powered analysis unavailable — LLM call failed",
+                f"",
+                f"## Artifact Status",
+                f"",
+            ]
+            for key, path in session.artifacts.items():
+                p = Path(path)
+                if p.exists():
+                    lines.append(f"✅ **{key}**: `{path}`")
+                else:
+                    lines.append(f"❌ **{key}**: MISSING at `{path}`")
+            full_output = "\n".join(lines)
+
         out_path = session.session_dir / "review-result.md"
         try:
-            out_path.write_text("\n".join(report))
+            out_path.write_text(full_output)
         except OSError as e:
             log.error(f"Cannot write review result: {e}")
             raise PipelineStepError(f"Cannot write review result: {e}")
-        print(f"  ✅ [小明] Internal review passed")
+        print(f"  ✅ [小明] AI internal review generated at {out_path}")
         log.info("Internal review passed")
         return str(out_path)
     except PipelineStepError:
@@ -664,25 +701,15 @@ def step_claude_arch(session: PipelineSession) -> str:
         tech_stack_str = ", ".join(sorted(tech_stack)) if tech_stack else "Python"
         tree_str = "\n".join(src_tree_lines[:80])
 
-        system_prompt = (
-            "You are a senior software architect. Analyze the project specification "
-            "and source code structure provided. Produce a comprehensive architecture "
-            "design document in Markdown covering:\n"
-            "1. **Project Overview** — tech stack, module count, file count\n"
-            "2. **Directory Structure** — show the tree and explain each module's role\n"
-            "3. **Bounded Contexts** — domain boundaries derived from the spec\n"
-            "4. **Architecture Decision Records (ADRs)** — at least 3 meaningful ADRs\n"
-            "5. **Key Design Considerations** — constraints, trade-offs, patterns used\n"
-            "Be specific and reference actual file paths and code elements."
-        )
-        user_prompt = (
-            f"# Project: {session.name}\n\n"
-            f"## Tech Stack\n{tech_stack_str}\n\n"
-            f"## Source Tree ({len(directories)} dirs, {len(source_files)} files)\n```\n{tree_str}\n```\n\n"
-            f"## Specification ({spec_path.name})\n```markdown\n{spec_content[:8000]}\n```\n\n"
-            f"## Key Source File Snippets\n"
-            + "\n".join(key_file_snippets[:10])
-            + "\n\nWrite a comprehensive architecture document."
+        system_prompt, user_prompt = build_architecture_prompt(
+            spec_content=spec_content,
+            spec_name=spec_path.name,
+            session_name=session.name,
+            directories=directories,
+            source_files=source_files,
+            tech_stack=sorted(tech_stack),
+            source_tree_str=tree_str,
+            key_file_snippets=key_file_snippets,
         )
 
         try:
@@ -702,6 +729,8 @@ def step_claude_arch(session: PipelineSession) -> str:
             usage.get("prompt_tokens", "?"),
             usage.get("completion_tokens", "?"),
         )
+        session.token_usage_total += usage.get("total_tokens", 0)
+        session.token_usage_steps.append({"step": "architecture", "usage": usage})
 
         out_path = session.session_dir / "architecture.md"
         try:
@@ -798,47 +827,19 @@ def step_claude_dev(session: PipelineSession) -> str:
                 super_content = super_path.read_text()
 
         # --- Build LLM prompt ---
-        system_prompt = (
-            "You are a senior software developer and tech lead. "
-            "Given a project specification, S.U.P.E.R. analysis, PRD, and architecture document, "
-            "produce a detailed development plan in Markdown covering:\n"
-            "1. **Development Plan** — what to build, in what order, and why (priority-driven)\n"
-            "2. **Task Breakdown** — atomic implementation tasks with estimated effort, "
-            "file paths to modify, and acceptance criteria for each\n"
-            "3. **Tech Debt Identification** — areas in the existing code that need refactoring, "
-            "patterns that don't scale, missing tests, or quality concerns\n"
-            "4. **Implementation Order** — recommended sequence of work with dependencies\n"
-            "5. **Risk Assessment** — technical risks, unknowns, and mitigation strategies\n"
-            "Be specific, reference actual file paths from the project, and provide actionable tasks."
+        system_prompt, user_prompt = build_development_prompt(
+            spec_content=spec_content,
+            spec_name=Path(session.spec_path).name,
+            architecture_content=architecture_content,
+            prd_content=prd_content,
+            super_analysis_content=super_content,
+            src_lines=src_lines,
+            src_file_count=len(src_files),
+            test_lines=test_lines,
+            test_file_count=len(test_files),
+            git_commits=git_commits,
+            git_log=git_log,
         )
-
-        context_parts = [
-            f"# Specification: {Path(session.spec_path).name}\n```markdown\n{spec_content[:6000]}\n```"
-        ]
-        if architecture_content:
-            context_parts.append(
-                f"# Architecture Analysis\n```markdown\n{architecture_content[:4000]}\n```"
-            )
-        if prd_content:
-            context_parts.append(
-                f"# PRD\n```markdown\n{prd_content[:3000]}\n```"
-            )
-        if super_content:
-            context_parts.append(
-                f"# S.U.P.E.R. Analysis\n```markdown\n{super_content[:3000]}\n```"
-            )
-
-        context_parts.append(
-            f"# Project Metrics\n"
-            f"- Source lines: {src_lines} across {len(src_files)} files\n"
-            f"- Test lines: {test_lines} across {len(test_files)} files\n"
-            f"- Test-to-source ratio: {test_lines/src_lines:.1%} (if src_lines > 0 else 'N/A')\n"
-            f"- Recent git commits: {git_commits}\n"
-            f"```\n{git_log}\n```"
-        )
-
-        user_prompt = "\n\n---\n\n".join(context_parts)
-        user_prompt += "\n\n---\n\nNow produce the development plan, task breakdown, and tech debt identification as Markdown."
 
         try:
             result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
@@ -857,6 +858,8 @@ def step_claude_dev(session: PipelineSession) -> str:
             usage.get("prompt_tokens", "?"),
             usage.get("completion_tokens", "?"),
         )
+        session.token_usage_total += usage.get("total_tokens", 0)
+        session.token_usage_steps.append({"step": "development", "usage": usage})
 
         full_output = (
             f"# Development Plan: {session.name}\n\n"
@@ -942,6 +945,8 @@ def step_test_planning(session: PipelineSession) -> str:
             usage.get("prompt_tokens", "?"),
             usage.get("completion_tokens", "?"),
         )
+        session.token_usage_total += usage.get("total_tokens", 0)
+        session.token_usage_steps.append({"step": "test-planning", "usage": usage})
 
         total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
         full_output = (
@@ -1254,61 +1259,13 @@ def step_hermes_review(session: PipelineSession) -> str:
                         source_files.append({"path": str(rel), "lines": len(content.splitlines()), "content": content[:3000]})
 
         # --- Build LLM prompt ---
-        system_prompt = (
-            "You are an expert code reviewer (Hermes). Review the project's source code "
-            "against the specification and all available pipeline artifacts. "
-            "Produce a detailed review JSON with findings.\n\n"
-            "Respond with ONLY valid JSON (no markdown, no explanation). "
-            "The JSON must have this exact structure:\n"
-            "{\n"
-            '  "session": "<session-name>",\n'
-            '  "reviewer": "Hermes",\n'
-            '  "timestamp": "<ISO-timestamp>",\n'
-            '  "status": "passed|failed|retry",\n'
-            '  "findings": [\n'
-            "    {\n"
-            '      "severity": "critical|major|minor|info",\n'
-            '      "category": "architecture|domain|style|security|coverage|spec-compliance",\n'
-            '      "file": "<relative-file-path>",\n'
-            '      "line": <integer-or-null>,\n'
-            '      "message": "<detailed-description>"\n'
-            "    }\n"
-            "  ],\n"
-            '  "finding_breakdown": {\n'
-            '    "critical": <int>, "major": <int>, "minor": <int>, "info": <int>\n'
-            "  },\n"
-            '  "summary": "<overall-review-summary>"\n'
-            "}"
-        )
-
-        artifact_sections = []
-        for key, content in artifact_contents.items():
-            artifact_sections.append(f"### {key}\n```\n{content[:3000]}\n```")
-
-        source_sections = []
-        for sf in source_files:
-            source_sections.append(f"### {sf['path']} ({sf['lines']} lines)\n```python\n{sf['content']}\n```")
-
-        # Limit source files to avoid huge prompts
-        if len(source_sections) > 8:
-            source_sections = source_sections[:8]
-            source_sections.append("*(additional source files truncated)*")
-
-        user_prompt = (
-            f"# Specification: {Path(session.spec_path).name}\n"
-            f"```markdown\n{spec_content[:5000]}\n```\n\n"
-            f"# Pipeline Artifacts\n"
-            + "\n".join(artifact_sections)
-            + "\n\n# Source Code\n"
-            + "\n".join(source_sections)
-            + "\n\n---\n\n"
-            f"Review session: {session.name}\n"
-            f"Timestamp: {datetime.now().isoformat()}\n\n"
-            "Produce the JSON review. Check:\n"
-            "- Does the code satisfy all spec SHALL/SHOULD statements?\n"
-            "- Are there any architecture violations or layering issues?\n"
-            "- Code style, security, and test coverage concerns?\n"
-            "- Quality of the development plan and architecture design?"
+        system_prompt, user_prompt = build_code_review_prompt(
+            spec_content=spec_content,
+            spec_name=Path(session.spec_path).name,
+            session_name=session.name,
+            artifact_contents=artifact_contents,
+            source_files=source_files,
+            timestamp=datetime.now().isoformat(),
         )
 
         try:
@@ -1328,6 +1285,8 @@ def step_hermes_review(session: PipelineSession) -> str:
             usage.get("prompt_tokens", "?"),
             usage.get("completion_tokens", "?"),
         )
+        session.token_usage_total += usage.get("total_tokens", 0)
+        session.token_usage_steps.append({"step": "code-review", "usage": usage})
 
         # Parse with robust fallback (handles markdown fences, leading text, etc.)
         review = _try_parse_hermes_json(raw, session.name)
@@ -1360,43 +1319,101 @@ def step_hermes_review(session: PipelineSession) -> str:
 
 @timed_step
 def step_final_report(session: PipelineSession) -> str:
-    """Step 8: 小明 — 最终报告生成"""
+    """Step 9: 小明 — AI-powered final report generation.
+
+    Uses LLM to summarize the entire pipeline run with executive summary,
+    key findings, artifact inventory, and next steps.
+    Falls back to template if LLM is unavailable.
+    """
     try:
-        print("  📋 [小明] Generating final report...")
+        print("  📋 [小明] Generating AI-powered final report...")
         log.info("Generating final report")
-        
+
         out_path = session.session_dir / "final-report.md"
-        lines = [
-            f"# Final Report: {session.name}",
-            f"",
-            f"**Status**: {session.status}",
-            f"**Spec**: {session.spec_path}",
-            f"**Created**: {session.created_at}",
-            f"**Completed**: {session.updated_at}",
-            f"",
-            f"## Pipeline Steps",
-            f"",
-        ]
-        
-        for step in session.steps:
-            status_icon = {"completed": "✅", "running": "🔄", "pending": "⏳", "failed": "❌"}
-            icon = status_icon.get(step["status"], "❓")
-            lines.append(f"{icon} **Step {step['step']}** [{step['agent']}] {step['name']}: {step['status']}")
-        
-        if session.errors:
-            lines.extend(["", "## Errors", ""])
-            for e in session.errors:
-                lines.append(f"- ❌ {e}")
-        
-        lines.extend(["", "## Artifacts", ""])
+
+        # Read artifact summaries (first 100 chars of each artifact)
+        artifact_summaries: dict[str, str] = {}
         for key, path in session.artifacts.items():
-            lines.append(f"- **{key}**: {path}")
-        
+            try:
+                content = Path(path).read_text()[:200]
+                # Extract meaningful first line
+                first_line = content.split("\n", 1)[0].strip("# ").strip()
+                artifact_summaries[key] = first_line or "(binary/empty)"
+            except Exception:
+                artifact_summaries[key] = "(cannot read)"
+
+        system_prompt, user_prompt = build_final_report_prompt(
+            session_name=session.name,
+            session_status=session.status,
+            spec_path=session.spec_path,
+            steps=session.steps,
+            errors=session.errors,
+            artifact_paths=session.artifacts,
+            artifact_summaries=artifact_summaries,
+        )
+
         try:
-            out_path.write_text("\n".join(lines))
-        except OSError as e:
-            log.error(f"Cannot write final report: {e}")
-            raise PipelineStepError(f"Cannot write final report: {e}")
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+            llm_report = result["content"]
+            usage = result.get("usage", {})
+            log.info(
+                "LLM returned %d tokens for final report (prompt=%s, completion=%s)",
+                usage.get("total_tokens", "?"),
+                usage.get("prompt_tokens", "?"),
+                usage.get("completion_tokens", "?"),
+            )
+            session.token_usage_total += usage.get("total_tokens", 0)
+            session.token_usage_steps.append({"step": "final-report", "usage": usage})
+
+            full_output = (
+                f"# Final Report: {session.name}\n\n"
+                f"> Generated by: LLM ({result.get('model', 'unknown')})\n"
+                f"> Tokens: {usage.get('total_tokens', '?')} "
+                f"(prompt {usage.get('prompt_tokens', '?')} + "
+                f"completion {usage.get('completion_tokens', '?')})\n\n"
+                f"{llm_report}"
+            )
+            try:
+                out_path.write_text(full_output)
+            except OSError as e:
+                log.error(f"Cannot write final report: {e}")
+                raise PipelineStepError(f"Cannot write final report: {e}")
+        except (RuntimeError, PipelineStepError) as llm_err:
+            # Fallback to template-based report if LLM fails
+            log.warning(f"LLM call for final report failed, using template fallback: {llm_err}")
+            lines = [
+                f"# Final Report: {session.name}",
+                f"",
+                f"**Status**: {session.status}",
+                f"**Spec**: {session.spec_path}",
+                f"**Created**: {session.created_at}",
+                f"**Completed**: {session.updated_at}",
+                f"",
+                f"> ⚠️ AI-powered summary unavailable — LLM call failed",
+                f"",
+                f"## Pipeline Steps",
+                f"",
+            ]
+            for step in session.steps:
+                status_icon = {"completed": "✅", "running": "🔄", "pending": "⏳", "failed": "❌"}
+                icon = status_icon.get(step["status"], "❓")
+                lines.append(
+                    f"{icon} **Step {step['step']}** [{step['agent']}] "
+                    f"{step['name']}: {step['status']}"
+                )
+            if session.errors:
+                lines.extend(["", "## Errors", ""])
+                for e in session.errors:
+                    lines.append(f"- ❌ {e}")
+            lines.extend(["", "## Artifacts", ""])
+            for key, path in session.artifacts.items():
+                lines.append(f"- **{key}**: {path}")
+            try:
+                out_path.write_text("\n".join(lines))
+            except OSError as e:
+                log.error(f"Cannot write final report: {e}")
+                raise PipelineStepError(f"Cannot write final report: {e}")
+
         print(f"  ✅ Final report at {out_path}")
         log.info(f"Final report generated at {out_path}")
         return str(out_path)
@@ -1513,6 +1530,11 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 output_path = handler(session)
                 session.complete_step(step_idx, str(output_path))
                 session.set_artifact(step_key, str(output_path))
+                # Persist immediately after the final-report step completes
+                # to eliminate the race condition between setting status and
+                # the deferred save at the end of the loop.
+                if step_key == "final-report":
+                    session._save()
                 log.info(f"Step {step_idx+1} completed: {step_key}")
                 print()
             except Exception as e:
@@ -1536,6 +1558,26 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         print()
         
         log.info(f"Pipeline finished: {session.status}, errors={len(session.errors)}")
+
+        # Token usage summary
+        if session.token_usage_total > 0:
+            step_tokens = [
+                f"  {s['step']}: {s['usage'].get('total_tokens', 0)} tokens"
+                for s in session.token_usage_steps
+            ]
+            log.info(
+                "Pipeline token usage: %d total tokens across %d LLM calls:\n%s",
+                session.token_usage_total,
+                len(session.token_usage_steps),
+                "\n".join(step_tokens),
+            )
+            print(f"\n📊 Token Usage: {session.token_usage_total} total tokens "
+                  f"({len(session.token_usage_steps)} LLM calls)")
+            for s in session.token_usage_steps:
+                u = s["usage"]
+                print(f"   {s['step']}: {u.get('total_tokens', 0)} tokens "
+                      f"(prompt {u.get('prompt_tokens', 0)}, "
+                      f"completion {u.get('completion_tokens', 0)})")
 
         # Send notification on pipeline completion or failure
         if _notify:

@@ -1,6 +1,9 @@
 """
 Tests for the QEMU SIL Runner (v0.4.0 Iteration 1).
 
+Covers: SIL, QEMU, emulation, serial, UART, semihosting, timeout, elf, binary
+Scenario-Ref: SIL 仿真测试
+
 All tests run in `mock` mode — they do NOT require a real QEMU binary or
 target hardware. Subprocess calls and YAML file operations are mocked to
 simulate various QEMU behaviors (normal exit, timeout, assertion failure,

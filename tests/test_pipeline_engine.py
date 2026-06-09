@@ -1,5 +1,8 @@
 """Unit tests for pipeline engine with mock LLM injection.
 
+Covers: pipeline, SDD, DDD, TDD, agent, orchestration, session, dependency injection
+Scenario-Ref: SDD → DDD → TDD 全流程
+
 Tests all 10 pipeline steps across 3 scenarios (normal / LLM failure / LLM timeout),
 PipelineSession state transitions, and dependency injection via ``llm_client``.
 

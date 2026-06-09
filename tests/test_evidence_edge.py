@@ -218,7 +218,9 @@ def test_acceptance_matrix_correct_line_format():
         assert len(table_rows) >= 3
         data_rows = [l for l in table_rows if l.startswith("| RS-001")]
         assert len(data_rows) == 1
-        assert "| RS-001 | Test Req | The system SHALL do X | Unit Test | — | ❌ |" in data_rows[0]
+        # Updated to 8-column format with 匹配方式 and 置信度
+        assert "| RS-001 | Test Req | The system SHALL do X | Unit Test | — |" in data_rows[0]
+        assert "| ❌ |" in data_rows[0]
 
 
 # ===================================================================
@@ -314,3 +316,234 @@ def test_requirement_coverage_empty():
         c.requirements = []
         path = c.generate_requirement_coverage()
         assert os.path.exists(path)
+
+
+# ===================================================================
+# Scenario-Ref parsing & two-level matching (P0 I3)
+# ===================================================================
+
+def test_parse_scenario_refs_from_docstring():
+    """Parse Scenario-Ref from module-level docstring."""
+    text = '''"""Test module.
+
+Scenario-Ref: SDD → DDD → TDD 全流程
+Covers: pipeline, SDD
+"""
+'''
+    refs = EvidenceCollector._parse_scenario_refs(text)
+    assert "SDD → DDD → TDD 全流程" in refs
+    assert len(refs) == 1
+
+
+def test_parse_scenario_refs_inline_covers():
+    """Parse Scenario-Ref inline on a Covers: line."""
+    text = '''"""Test module.
+
+Covers: pipeline, SDD, Scenario-Ref: CI/CD 三层验证
+"""
+'''
+    refs = EvidenceCollector._parse_scenario_refs(text)
+    assert "CI/CD 三层验证" in refs
+
+
+def test_parse_scenario_refs_multiple():
+    """Parse multiple Scenario-Ref entries."""
+    text = '''"""Test module.
+
+Scenario-Ref: SDD → DDD → TDD 全流程
+Scenario-Ref: CI/CD 三层验证
+Covers: pipeline
+"""
+'''
+    refs = EvidenceCollector._parse_scenario_refs(text)
+    assert "SDD → DDD → TDD 全流程" in refs
+    assert "CI/CD 三层验证" in refs
+    assert len(refs) == 2
+
+
+def test_parse_scenario_refs_deduplicate():
+    """Parse Scenario-Ref: deduplicates identical refs."""
+    text = '''"""
+Scenario-Ref: SIL 仿真测试
+Scenario-Ref: SIL 仿真测试
+"""
+'''
+    refs = EvidenceCollector._parse_scenario_refs(text)
+    assert refs == ["SIL 仿真测试"]
+
+
+def test_parse_scenario_refs_from_comment():
+    """Parse Scenario-Ref from # comment lines."""
+    text = '''# Covers: pipeline, Scenario-Ref: SDD → DDD → TDD 全流程
+'''
+    refs = EvidenceCollector._parse_scenario_refs(text)
+    assert "SDD → DDD → TDD 全流程" in refs
+
+
+def test_parse_scenario_refs_no_ref():
+    """Parse Scenario-Ref returns empty when no refs present."""
+    text = '''"""Test module.
+
+Covers: pipeline, SDD
+"""
+def test_x():
+    assert True
+'''
+    refs = EvidenceCollector._parse_scenario_refs(text)
+    assert refs == []
+
+
+def test_collect_scenario_refs_from_file():
+    """End-to-end: collect Scenario-Ref from a real test file."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        test_dir = Path(tmp) / "tests"
+        test_dir.mkdir()
+        path = test_dir / "test_with_ref.py"
+        path.write_text('''"""Test module with Scenario-Ref.
+
+Scenario-Ref: CI/CD 三层验证
+Covers: pipeline, SDD
+"""
+
+def test_pipeline():
+    """Covers: agent, orchestration, Scenario-Ref: SDD → DDD → TDD 全流程"""
+    assert True
+''')
+        refs = c._collect_scenario_refs_from_file(str(path))
+        assert "CI/CD 三层验证" in refs
+        assert "SDD → DDD → TDD 全流程" in refs
+        assert len(refs) >= 2
+
+
+def test_scenario_ref_exact_match_mode():
+    """Priority 1: Scenario-Ref exact match yields mode='exact' with confidence=1.0."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        test_dir = Path(tmp) / "tests"
+        test_dir.mkdir()
+        # Test file with explicit Scenario-Ref pointing to a scenario
+        tf = test_dir / "test_exact.py"
+        tf.write_text('''"""Test module.
+
+Scenario-Ref: Agent Pipeline 全流程验证
+Covers: pipeline
+"""
+def test_thing():
+    assert True
+''')
+        # Scenario that matches the ref AND contains requirement name as substring
+        c.scenarios = [{"name": "Agent Pipeline 全流程验证", "given": ["a"], "when": ["b"], "then": ["c"]}]
+        # Requirement name is a substring of scenario name
+        c.requirements = [{
+            "name": "Agent Pipeline",
+            "shall": ["The system SHALL support pipeline"],
+            "shall_count": 1,
+            "req_id": "RS-001",
+        }]
+
+        c._collect_test_coverage()
+        c._build_requirement_to_test_map()
+
+        # Check match mode
+        mode = c.match_modes.get("Agent Pipeline", {}).get("test_exact.py", "none")
+        conf = c.match_confidences.get("Agent Pipeline", {}).get("test_exact.py", 0.0)
+        assert mode == "exact", f"Expected 'exact', got '{mode}'"
+        assert conf == 1.0, f"Expected 1.0, got {conf}"
+
+
+def test_scenario_ref_keyword_fallback_mode():
+    """Priority 2: Keyword match yields mode='keyword' with partial confidence."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        test_dir = Path(tmp) / "tests"
+        test_dir.mkdir()
+        # Test file with Covers keywords but NO Scenario-Ref
+        tf = test_dir / "test_keyword.py"
+        tf.write_text('''"""Covers: pipeline, SDD"""
+def test_thing():
+    assert True
+''')
+        c.requirements = [{
+            "name": "Agent Pipeline",
+            "shall": [
+                "The system SHALL support an SDD pipeline",
+                "The system SHALL route tasks through agent orchestration",
+                "The system SHALL enforce CI blocking logic",
+            ],
+            "shall_count": 3,
+            "req_id": "RS-001",
+        }]
+        c.scenarios = []
+
+        c._collect_test_coverage()
+        c._build_requirement_to_test_map()
+
+        mode = c.match_modes.get("Agent Pipeline", {}).get("test_keyword.py", "none")
+        conf = c.match_confidences.get("Agent Pipeline", {}).get("test_keyword.py", 0.0)
+        assert mode == "keyword", f"Expected 'keyword', got '{mode}'"
+        assert 0.0 < conf < 1.0, f"Expected partial confidence, got {conf}"
+
+
+def test_scenario_ref_strips_from_covers_keywords():
+    """Scenario-Ref on Covers line is stripped from Covers keywords."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        test_dir = Path(tmp) / "tests"
+        test_dir.mkdir()
+        tf = test_dir / "test_strip.py"
+        tf.write_text('''"""Covers: pipeline, SDD, Scenario-Ref: CI/CD 三层验证"""
+def test_x():
+    assert True
+''')
+        coverage = c._collect_test_coverage()
+        kws = coverage.get("test_strip.py", [])
+        assert "pipeline" in kws
+        assert "SDD" in kws
+        # Scenario-Ref should NOT be in Covers keywords
+        ref_values = [k for k in kws if "CI/CD" in k or "Scenario-Ref" in k]
+        assert len(ref_values) == 0, f"Scenario-Ref leaked into keywords: {ref_values}"
+
+
+def test_traceability_matrix_shows_match_mode():
+    """Traceability matrix includes match mode (exact/keyword) and confidence."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        test_dir = Path(tmp) / "tests"
+        test_dir.mkdir()
+        tf = test_dir / "test_ref.py"
+        tf.write_text('''"""Scenario-Ref: Agent Pipeline 全流程验证
+Covers: pipeline"""
+def test_x():
+    assert True
+''')
+        c.scenarios = [{"name": "Agent Pipeline 全流程验证", "given": ["a"], "when": ["b"], "then": ["c"]}]
+        c.requirements = [{
+            "name": "Agent Pipeline",
+            "shall": ["The system SHALL support pipeline"],
+            "shall_count": 1,
+            "req_id": "RS-001",
+        }]
+
+        path = c.generate_traceability_matrix()
+        content = open(path).read()
+        # Should show match mode and confidence
+        assert "exact" in content, f"Matrix should show 'exact' match mode, got:\n{content}"
+        assert "confidence" in content.lower(), f"Matrix should show confidence, got:\n{content}"
+
+
+def test_acceptance_matrix_shows_match_columns():
+    """Acceptance matrix includes 匹配方式和置信度 columns."""
+    with tempfile.TemporaryDirectory() as tmp:
+        c = EvidenceCollector(tmp)
+        c.requirements = [{
+            "name": "Test Req",
+            "shall": ["The system SHALL do X"],
+            "shall_count": 1,
+            "req_id": "RS-001",
+        }]
+        c.scenarios = []
+        path = c.generate_acceptance_matrix()
+        content = open(path).read()
+        assert "匹配方式" in content, "Acceptance matrix should have 匹配方式 column"
+        assert "置信度" in content, "Acceptance matrix should have 置信度 column"
