@@ -108,10 +108,18 @@ def get_latest_layer_result(layer: int, project_dir: str) -> Optional[dict]:
 def check_layer_dependency(target_layer: int, project_dir: str) -> Optional[str]:
     """Check if all dependencies for *target_layer* are satisfied.
 
+    Reads the dependency chain from ``ci-config.yaml`` first, falling back
+    to the hardcoded global ``layer_dependencies`` dict when the config
+    file is absent or broken.
+
     Returns None if all deps passed, or a string describing the first
     blocking dependency failure.
     """
-    deps = layer_dependencies.get(target_layer, [])
+    try:
+        cfg = _get_ci_config(project_dir)
+        deps = cfg.layer_dependencies.get(target_layer, [])
+    except Exception:
+        deps = layer_dependencies.get(target_layer, [])
     for dep in deps:
         result = get_latest_layer_result(dep, project_dir)
         if result is None:
@@ -483,13 +491,14 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     print("  📊 CI: coverage check...")
     
     # Read thresholds from CI config (SWR-003.2)
+    from ci.config import DEFAULT_COVERAGE_THRESHOLD_LINE, DEFAULT_COVERAGE_THRESHOLD_COND
     try:
         cfg = _get_ci_config(project_dir)
-        threshold_line = cfg.coverage.threshold_line if cfg else 38.0
-        threshold_cond = cfg.coverage.threshold_condition if cfg else 38.0
+        threshold_line = cfg.coverage.threshold_line if cfg else DEFAULT_COVERAGE_THRESHOLD_LINE
+        threshold_cond = cfg.coverage.threshold_condition if cfg else DEFAULT_COVERAGE_THRESHOLD_COND
     except Exception:
-        threshold_line = 38.0
-        threshold_cond = 38.0
+        threshold_line = DEFAULT_COVERAGE_THRESHOLD_LINE
+        threshold_cond = DEFAULT_COVERAGE_THRESHOLD_COND
     
     strict = is_strict()
     
@@ -499,11 +508,19 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
             [sys.executable, "-m", "coverage", "run", "--branch", "--source=src", "-m", "pytest", "-q", "--tb=short", "tests/"],
             capture_output=True, text=True, timeout=120, cwd=project_dir, env=cov_env,
         )
+        if result.returncode != 0:
+            ci.add_stage("coverage", "failed", f"coverage run returned non-zero ({result.returncode}): {result.stderr[:200]}")
+            print(f"    ❌ Coverage run failed (exit {result.returncode})")
+            return False
         
         result2 = subprocess.run(
             [sys.executable, "-m", "coverage", "json", "--pretty"],
             capture_output=True, text=True, timeout=30, cwd=project_dir,
         )
+        if result2.returncode != 0:
+            ci.add_stage("coverage", "failed", f"coverage json returned non-zero ({result2.returncode}): {result2.stderr[:200]}")
+            print(f"    ❌ Coverage JSON export failed (exit {result2.returncode})")
+            return False
         
         # Read coverage data from JSON file
         json_file = os.path.join(project_dir, "coverage.json")
