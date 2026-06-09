@@ -532,6 +532,121 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
         return False  # A-01: data error blocks
 
 
+@timed_stage
+def run_sil_tests(project_dir: str, ci: CIResult) -> bool:
+    """Run SIL (Software-in-the-Loop) tests using QEMU emulation.
+
+    Searches for prebuilt .elf firmware in ``tests/fixtures/prebuilt/``
+    and runs each through the SIL runner.  Results are saved to
+    ``.osh/ci/sil-test-results.json``.
+
+    Returns ``True`` if all tests pass (or are skipped), ``False``
+    on any failure.
+    """
+    print("  \U0001f5a5\ufe0f  CI: SIL tests...")
+
+    # Look for prebuilt test firmware
+    prebuilt_dir = Path(project_dir) / "tests" / "fixtures" / "prebuilt"
+
+    elf_files = []
+    if prebuilt_dir.exists():
+        elf_files = list(prebuilt_dir.glob("*.elf"))
+
+    if not elf_files:
+        msg = (
+            "No prebuilt .elf found in tests/fixtures/prebuilt/. "
+            "Compile with: cd tests/fixtures/hello-arm && make"
+        )
+        ci.add_stage("sil-tests", "skipped", msg)
+        print(f"    \u23ed\ufe0f  {msg}")
+        return True  # Intentional skip — not a pipeline failure
+
+    strict = is_strict()
+
+    try:
+        from cross.sil_runner import SilResult, sil_test
+        from cross.target_config import TargetConfig
+
+        results: list[dict] = []
+        all_passed = True
+
+        for elf_path in elf_files:
+            print(f"    Running SIL test: {elf_path.name}")
+
+            # Infer arch from filename convention or default to ARM
+            cfg = TargetConfig(
+                name="sil-ci-test",
+                mcu="cortex-m3",
+                arch="arm" if "arm" in elf_path.name else "arm",
+                qemu_machine="lm3s6965evb",
+                qemu_cpu="cortex-m3",
+                qemu_serial="-serial stdio",
+                elf=str(elf_path),
+                default_timeout=30,
+            )
+
+            result = sil_test(
+                cfg,
+                expect_pattern="Hello from yuleOSH cross-compilation test!",
+                timeout=15,
+            )
+
+            entry = {
+                "elf": elf_path.name,
+                "passed": result.passed,
+                "elapsed": result.elapsed,
+                "error": result.error,
+                "assertion_failures": result.assertion_failures,
+                "log_snippet": result.log[-200:],
+            }
+            results.append(entry)
+
+            if result.passed:
+                print(f"      \u2705 {elf_path.name} passed ({result.elapsed:.1f}s)")
+            else:
+                failures = result.error or result.assertion_failures[0] if result.assertion_failures else "unknown"
+                print(f"      \u274c {elf_path.name} failed: {failures}")
+                all_passed = False
+
+        # Save results to .osh/ci/
+        ci_dir = Path(project_dir) / ".osh" / "ci"
+        ci_dir.mkdir(parents=True, exist_ok=True)
+        results_path = ci_dir / "sil-test-results.json"
+        with open(results_path, "w") as f:
+            json.dump({
+                "layer": 2,
+                "stage": "sil-tests",
+                "timestamp": datetime.now().isoformat(),
+                "all_passed": all_passed,
+                "results": results,
+            }, f, indent=2)
+
+        if all_passed:
+            ci.add_stage("sil-tests", "passed", f"{len(results)} test(s) passed")
+            print(f"    \u2705 SIL tests: {len(results)} passed")
+            return True
+        else:
+            failed_count = sum(1 for r in results if not r["passed"])
+            ci.add_stage("sil-tests", "failed", f"{failed_count}/{len(results)} failed")
+            print(f"    \u274c SIL tests: {failed_count}/{len(results)} failed")
+            return False
+
+    except ImportError as e:
+        reason = f"Cannot import SIL test modules: {e}"
+        if strict:
+            ci.add_stage("sil-tests", "failed", reason)
+            print(f"    \u274c {reason} (strict mode)")
+            return False
+        ci.add_stage("sil-tests", "skipped", reason)
+        print(f"    \u23ed\ufe0f  {reason} \u2014 skipped")
+        return False  # A-01: missing tool blocks
+    except Exception as e:
+        reason = f"SIL test error: {e}"
+        ci.add_stage("sil-tests", "failed", reason)
+        print(f"    \u274c {reason}")
+        return False
+
+
 def run_layer1(project_dir: Optional[str] = None):
     """Run Layer 1 CI pipeline."""
     if project_dir is None:
@@ -772,7 +887,19 @@ def run_layer2(project_dir: Optional[str] = None):
         ci.add_stage("static-analysis", "skipped", "No C/C++ sources")
         print(f"    ⏭️  No C/C++ sources")
     
-    # Stage 3: Integration tests
+    # Stage 3: SIL tests
+    print("  🖥️  CI: SIL tests...")
+    try:
+        sil_ok = run_sil_tests(project_dir, ci)
+        if not sil_ok:
+            all_passed = False
+            ci.errors.append("sil-tests failed")
+    except Exception as e:
+        ci.add_stage("sil-tests", "error", str(e))
+        ci.errors.append(f"sil-tests: {e}")
+        all_passed = False
+
+    # Stage 4: Integration tests
     print("  🔗 CI: integration tests...")
     int_test_dir = os.path.join(project_dir, "tests", "integration")
     if os.path.exists(int_test_dir):
@@ -807,7 +934,7 @@ def run_layer2(project_dir: Optional[str] = None):
         ci.add_stage("integration-tests", "skipped", "No integration tests")
         print(f"    ⏭️  No integration tests directory")
     
-    # Stage 4: Memory safety
+    # Stage 5: Memory safety
     print("  🛡️  CI: memory safety check...")
     if os.path.exists(os.path.join(project_dir, "tests", "asan")):
         ci.add_stage("memory-safety", "info", "ASan tests configured")

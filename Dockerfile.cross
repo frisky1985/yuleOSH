@@ -1,31 +1,39 @@
 # =============================================================================
 # yuleOSH Cross-Compilation Environment
 #
-# Provides ARM (gcc-arm-none-eabi) and RISC-V (riscv64-unknown-elf-gcc)
-# cross-compilation toolchains on Ubuntu 22.04.
+# Provides ARM (gcc-arm-none-eabi), RISC-V (riscv64-unknown-elf-gcc) and
+# QEMU system emulators for SIL (Software-in-the-Loop) testing.
+#
+# Base: Ubuntu 24.04 (Noble) — ships QEMU 8.2.x natively.
 #
 # Usage:
 #   docker build -t yuleosh-cross -f Dockerfile.cross .
 #   docker run --rm -v $(pwd):/work yuleosh-cross make TARGET=all
 # =============================================================================
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 LABEL maintainer="frisky1985"
-LABEL description="yuleOSH — Cross-compilation environment (ARM + RISC-V)"
-LABEL version="0.1.0"
+LABEL description="yuleOSH — Cross-compilation environment (ARM + RISC-V + QEMU)"
+LABEL version="0.4.1"
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install base toolchain packages
+# Install base toolchain packages + QEMU system emulators
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc-arm-none-eabi \
     make \
     wget \
     ca-certificates \
+    qemu-system-arm \
+    qemu-system-riscv64 \
     && rm -rf /var/lib/apt/lists/*
+
+# Pin QEMU packages to prevent accidental major-version upgrades
+# Ubuntu 24.04 ships QEMU 8.2.x which matches the minimum requirement
+RUN apt-mark hold qemu-system-arm qemu-system-riscv64 qemu-system-data
 
 # Install RISC-V toolchain (riscv64-unknown-elf-gcc)
 # If the package is not found in the default apt sources, download manually.
@@ -49,6 +57,8 @@ RUN echo "=== Toolchain verification ===" && \
     echo -n "arm-none-eabi-gcc: " && (arm-none-eabi-gcc --version 2>&1 | head -1 || echo "NOT FOUND") && \
     echo -n "riscv64-unknown-elf-gcc: " && (riscv64-unknown-elf-gcc --version 2>&1 | head -1 || echo "NOT FOUND (optional)") && \
     echo -n "make: " && (make --version 2>&1 | head -1 || echo "NOT FOUND") && \
+    echo -n "qemu-system-arm: " && (qemu-system-arm --version 2>&1 | head -1 || echo "NOT FOUND") && \
+    echo -n "qemu-system-riscv64: " && (qemu-system-riscv64 --version 2>&1 | head -1 || echo "NOT FOUND") && \
     echo "=== Done ==="
 
 # Default command

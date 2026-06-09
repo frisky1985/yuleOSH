@@ -38,6 +38,7 @@ class EvidenceCollector:
         self.reviews: list[dict] = []
         self.ci_results: list[dict] = []
         self.coverage_data: Optional[dict] = None
+        self.sil_reports: list[dict] = []
 
         # Traceability data
         self.test_coverage: dict[str, list[str]] = {}  # test_file -> [covered_keywords]
@@ -383,6 +384,36 @@ class EvidenceCollector:
 
         print(f"  \U0001f4cb Collected {len(self.ci_results)} CI result(s)")
 
+    def collect_sil_reports(self):
+        """Collect SIL (Software-in-the-Loop) test report files from
+        ``.osh/ci/*sil*.json`` and integrate into the evidence chain."""
+        ci_dir = Path(self.project_dir) / ".osh" / "ci"
+        if not ci_dir.exists():
+            print("  \u23ed\ufe0f  No CI directory — no SIL reports to collect")
+            return
+
+        sil_files = sorted(ci_dir.glob("*sil*.json"))
+        if not sil_files:
+            print("  \u23ed\ufe0f  No SIL test reports found (*sil*.json)")
+            return
+
+        for sf in sil_files:
+            try:
+                with open(sf) as f:
+                    data = json.load(f)
+                data["_source_file"] = sf.name
+                self.sil_reports.append(data)
+                # Also add to ci_results for traceability
+                self.ci_results.append(data)
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"    \u26a0\ufe0f  Could not read SIL report {sf.name}: {e}")
+
+        total_tests = sum(
+            len(r.get("results", [])) for r in self.sil_reports
+        )
+        print(f"  \U0001f5a5\ufe0f  Collected {len(self.sil_reports)} SIL report(s)"
+              f" ({total_tests} test case(s))")
+
     def generate_traceability_matrix(self) -> str:
         """Generate requirements traceability matrix with test mappings."""
         # Build test coverage if not already done
@@ -613,7 +644,12 @@ class EvidenceCollector:
         return str(output_path)
 
     def pack_compliance_zip(self) -> str:
-        """Create compliance pack ZIP for ASPICE audit."""
+        """Create compliance pack ZIP for ASPICE audit.
+
+        Includes all generated evidence files, the requirements spec,
+        startup analysis, and any SIL test reports found in
+        ``.osh/ci/``.
+        """
         zip_path = self.evidence_dir / "compliance-pack.zip"
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -631,6 +667,12 @@ class EvidenceCollector:
             sa_path = os.path.join(self.project_dir, "docs", "startup-analysis.md")
             if os.path.exists(sa_path):
                 zf.write(sa_path, arcname="startup-analysis.md")
+
+            # Include SIL test reports from .osh/ci/*sil*.json
+            ci_dir = Path(self.project_dir) / ".osh" / "ci"
+            if ci_dir.exists():
+                for sil_file in sorted(ci_dir.glob("*sil*.json")):
+                    zf.write(sil_file, arcname=f"sil-reports/{sil_file.name}")
 
         print(f"  \U0001f4e6 Compliance pack created: {zip_path}")
         return str(zip_path)
@@ -654,6 +696,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     collector.collect_requirements(spec_path=spec_path)
     collector.collect_reviews()
     collector.collect_ci_results()
+    collector.collect_sil_reports()
 
     print(f"\n{'='*50}")
 
@@ -669,6 +712,13 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     print(f"\u2705 Evidence generation complete")
     print(f"   Output: {collector.evidence_dir}")
     print(f"   Artifacts: {len(artifacts)}")
+    print(f"   - traceability-matrix.md")
+    print(f"   - requirement-coverage.md")
+    print(f"   - code-coverage-report.md")
+    print(f"   - review-log-summary.md + review-log.json")
+    print(f"   - acceptance-matrix.md")
+    print(f"   - sil-reports/ (in compliance-pack.zip) \U0001f5a5")
+    print(f"   - compliance-pack.zip \U0001f3af")
     print(f"   - traceability-matrix.md")
     print(f"   - requirement-coverage.md")
     print(f"   - code-coverage-report.md")

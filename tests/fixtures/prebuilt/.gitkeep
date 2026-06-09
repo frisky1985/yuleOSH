@@ -1,0 +1,2 @@
+# Pre-built firmware binaries for CI SIL testing
+# Build from tests/fixtures/hello-arm/ with: make install-prebuilt
