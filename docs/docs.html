@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yuleOSH — Developer Documentation</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        osh: { bg: '#0a0e17', surface: '#111827', surface2: '#1a2332', border: '#1e293b', text: '#e2e8f0', text2: '#94a3b8' }
+      },
+      fontFamily: { sans: ['Inter', '-apple-system', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] }
+    }
+  }
+}
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+* { scroll-behavior: smooth; }
+body { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+.glow-green { box-shadow: 0 0 40px rgba(16,185,129,.15), 0 0 80px rgba(16,185,129,.05); }
+.text-glow { text-shadow: 0 0 40px rgba(16,185,129,.3); }
+.gradient-text {
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-border {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, #10b981, #3b82f6, #f59e0b, #10b981);
+  background-size: 300% 300%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-shimmer 4s ease infinite;
+}
+@keyframes border-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.nav-blur { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.doc-card {
+  transition: all .3s cubic-bezier(.4,0,.2,1);
+}
+.doc-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(16,185,129,.4);
+}
+.toc-link { transition: all .2s ease; border-left: 2px solid transparent; }
+.toc-link:hover, .toc-link.active { border-left-color: #10b981; color: #e2e8f0; }
+.code-block { position: relative; }
+.code-block .copy-btn {
+  position: absolute; top: 8px; right: 8px;
+  padding: 4px 10px; font-size: 11px; border-radius: 6px;
+  background: rgba(16,185,129,.15); border: 1px solid rgba(16,185,129,.3);
+  color: #10b981; cursor: pointer; transition: all .2s;
+  font-family: inherit;
+}
+.code-block .copy-btn:hover { background: rgba(16,185,129,.25); }
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+</style>
+</head>
+<body class="bg-[#0a0e17] text-[#e2e8f0] antialiased">
+
+<!-- ===== NAV ===== -->
+<nav class="fixed top-0 left-0 right-0 z-50 border-b border-[#1e293b]/60 nav-blur" style="background:rgba(10,14,23,.85)">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16">
+      <a href="/" class="flex items-center gap-2.5 group">
+        <span class="text-2xl font-black tracking-tight">
+          <span class="text-[#10b981]">yule</span><span class="text-[#3b82f6]">OSH</span>
+        </span>
+      </a>
+      <div class="hidden md:flex items-center gap-8">
+        <a href="/" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">Home</a>
+        <a href="#architecture" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">Architecture</a>
+        <a href="#installation" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">Install</a>
+        <a href="#cli" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">CLI</a>
+        <a href="#api" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">API</a>
+        <a href="#config" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">Config</a>
+        <a href="#faq" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">FAQ</a>
+        <a href="https://github.com/stefanji/yuleOSH" target="_blank"
+           class="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg border border-[#1e293b] text-[#94a3b8]
+                  hover:border-[#10b981]/40 hover:text-[#e2e8f0] transition-all">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+      <div class="md:hidden">
+        <button id="mobileMenuBtn" class="p-2 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white transition-all">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div id="mobileMenu" class="hidden md:hidden border-t border-[#1e293b] bg-[#0a0e17]/95 nav-blur">
+    <div class="px-4 py-4 space-y-3">
+      <a href="/" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">Home</a>
+      <a href="#architecture" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">Architecture</a>
+      <a href="#installation" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">Install</a>
+      <a href="#cli" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">CLI</a>
+      <a href="#api" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">API</a>
+      <a href="#config" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">Config</a>
+      <a href="#faq" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">FAQ</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<section class="relative pt-24 pb-16 bg-grid overflow-hidden">
+  <div class="absolute top-0 left-1/4 w-96 h-96 bg-[#10b981]/5 rounded-full blur-[120px]"></div>
+  <div class="absolute bottom-0 right-1/4 w-80 h-80 bg-[#3b82f6]/5 rounded-full blur-[120px]"></div>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <div class="text-center">
+      <span class="text-xs font-semibold tracking-widest uppercase text-[#10b981]">Developer Docs</span>
+      <h1 class="text-4xl sm:text-5xl font-black tracking-tight mt-3 mb-4">
+        <span class="gradient-text">Documentation</span>
+      </h1>
+      <p class="text-[#94a3b8] max-w-2xl mx-auto">
+        Everything you need to build with yuleOSH — from architecture overview to CLI reference, API endpoints, and environment configuration.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
+  <div class="flex flex-col lg:flex-row gap-10">
+
+    <!-- ===== SIDEBAR TOC ===== -->
+    <aside class="lg:w-64 shrink-0">
+      <div class="sticky top-24 space-y-1 text-sm">
+        <div class="text-xs font-semibold tracking-widest uppercase text-[#64748b] mb-3">On this page</div>
+        <a href="#architecture" class="toc-link block py-1.5 pl-4 text-[#94a3b8]">Architecture</a>
+        <a href="#installation" class="toc-link block py-1.5 pl-4 text-[#94a3b8]">Installation</a>
+        <a href="#cli" class="toc-link block py-1.5 pl-4 text-[#94a3b8]">CLI Reference</a>
+        <a href="#api" class="toc-link block py-1.5 pl-4 text-[#94a3b8]">API Reference</a>
+        <a href="#config" class="toc-link block py-1.5 pl-4 text-[#94a3b8]">Configuration</a>
+        <a href="#faq" class="toc-link block py-1.5 pl-4 text-[#94a3b8]">FAQ</a>
+      </div>
+    </aside>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="flex-1 min-w-0 max-w-4xl">
+
+      <!-- ===== ARCHITECTURE ===== -->
+      <section id="architecture" class="scroll-mt-24">
+        <h2 class="text-2xl font-black text-[#e2e8f0] mb-6">Architecture Overview</h2>
+        <p class="text-[#94a3b8] mb-8 leading-relaxed">
+          yuleOSH is built on a three-layer architecture that combines structured requirements management, AI agent-driven development, and automated CI/CD for embedded systems.
+        </p>
+
+        <!-- Layer diagram -->
+        <div class="gradient-border mb-8">
+          <div class="bg-[#111827] rounded-2xl p-6 sm:p-8">
+            <div class="grid gap-6">
+              <!-- Layer 1 -->
+              <div class="rounded-xl border border-[#1e293b] bg-[#0d111f] p-5">
+                <div class="flex items-center gap-3 mb-3">
+                  <span class="px-2.5 py-1 rounded-md bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981] text-xs font-bold">Layer 1</span>
+                  <span class="text-sm font-bold text-[#e2e8f0]">OpenSpec — Requirements Framework</span>
+                </div>
+                <p class="text-xs text-[#94a3b8] leading-relaxed">
+                  RFC 2119-based structured requirements using <code class="text-[#10b981]">SHALL</code> / <code class="text-[#3b82f6]">SHOULD</code> / <code class="text-[#f59e0b]">MAY</code> keywords. Every requirement has a reason, acceptance scenarios use GIVEN/WHEN/THEN. Auto-validated for completeness with coverage scoring.
+                </p>
+              </div>
+              <!-- Layer 2 -->
+              <div class="rounded-xl border border-[#1e293b] bg-[#0d111f] p-5">
+                <div class="flex items-center gap-3 mb-3">
+                  <span class="px-2.5 py-1 rounded-md bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6] text-xs font-bold">Layer 2</span>
+                  <span class="text-sm font-bold text-[#e2e8f0]">Superpowers — Agent Orchestration</span>
+                </div>
+                <p class="text-xs text-[#94a3b8] leading-relaxed">
+                  14 Rules + S.U.P.E.R analysis engine. Three AI agents (小明/Hermes/Claude) orchestrate a 9-step pipeline: spec check → S.U.P.E.R analysis → PRD → review → architecture → development → self-test → code review → final report. Each step produces auditable artifacts.
+                </p>
+              </div>
+              <!-- Layer 3 -->
+              <div class="rounded-xl border border-[#1e293b] bg-[#0d111f] p-5">
+                <div class="flex items-center gap-3 mb-3">
+                  <span class="px-2.5 py-1 rounded-md bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] text-xs font-bold">Layer 3</span>
+                  <span class="text-sm font-bold text-[#e2e8f0]">Harness Engineering — CI/CD &amp; Compliance</span>
+                </div>
+                <p class="text-xs text-[#94a3b8] leading-relaxed">
+                  Three-layer CI/CD pipeline (Dev → Integration → System verification). Built-in cross-compilation for ARM/RISC-V/x86-64, MISRA-C static analysis gates, and one-click ASPICE compliance evidence pack generation with traceability matrix.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline flow -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-6 mb-8">
+          <h3 class="text-sm font-semibold text-[#94a3b8] mb-4">Agent Pipeline Flow</h3>
+          <div class="flex flex-wrap items-center justify-center gap-2 text-xs">
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981] font-medium">OpenSpec</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6] font-medium">S.U.P.E.R</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] font-medium">PRD</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981] font-medium">Review</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6] font-medium">Arch</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] font-medium">Dev</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981] font-medium">Self-Test</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6] font-medium">Code Review</span>
+            <svg class="w-3 h-3 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <span class="px-2.5 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] font-medium">Report</span>
+          </div>
+        </div>
+
+        <!-- Agent roles -->
+        <div class="grid sm:grid-cols-3 gap-4 mb-8">
+          <div class="doc-card rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <div class="text-lg mb-2">🧠</div>
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-1">小明 (Xiao Ming)</h4>
+            <p class="text-xs text-[#94a3b8]">PM / orchestrator — spec check, S.U.P.E.R analysis, internal review, final report</p>
+          </div>
+          <div class="doc-card rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <div class="text-lg mb-2">⚡</div>
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-1">Hermes</h4>
+            <p class="text-xs text-[#94a3b8]">Product / review — PRD writing, code review</p>
+          </div>
+          <div class="doc-card rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <div class="text-lg mb-2">🤖</div>
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-1">Claude</h4>
+            <p class="text-xs text-[#94a3b8]">Architect / developer — architecture, development, self-test</p>
+          </div>
+        </div>
+
+        <!-- Directory structure -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+          <h3 class="text-sm font-semibold text-[#94a3b8] mb-4">Project Directory Structure</h3>
+          <pre class="text-xs text-[#94a3b8] font-mono leading-relaxed overflow-x-auto">
+project/
+├── docs/
+│   └── spec.md              # OpenSpec requirements (SHALL/SHOULD/MAY + GIVEN/WHEN/THEN)
+├── src/                      # Source code
+├── tests/                    # Test files
+│   ├── integration/          # Integration tests (Layer 2)
+│   └── e2e/                  # End-to-end tests (Layer 3)
+├── specs/                    # Additional spec files
+├── tasks/                    # Task definitions
+├── .osh/                     # Runtime data (gitignored)
+│   ├── sessions/             # Pipeline artifacts
+│   ├── ci/                   # CI results
+│   ├── reviews/              # Review records
+│   └── evidence/             # Compliance evidence
+└── pyproject.toml            # Project config</pre>
+        </div>
+      </section>
+
+      <hr class="my-16 border-[#1e293b]">
+
+      <!-- ===== INSTALLATION ===== -->
+      <section id="installation" class="scroll-mt-24">
+        <h2 class="text-2xl font-black text-[#e2e8f0] mb-6">Installation</h2>
+        <p class="text-[#94a3b8] mb-8 leading-relaxed">
+          Choose the installation method that fits your workflow. yuleOSH supports one-line install, Docker deployment, and Kubernetes Helm charts.
+        </p>
+
+        <!-- curl | bash -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-6 mb-6">
+          <h3 class="text-base font-bold text-[#e2e8f0] mb-2">Option 1: One-Click Install (curl | bash)</h3>
+          <p class="text-xs text-[#94a3b8] mb-4">Clone the repository and install dependencies.</p>
+          <div class="code-block">
+            <pre class="bg-[#0d111f] rounded-lg p-4 text-xs text-[#94a3b8] font-mono overflow-x-auto leading-relaxed"
+>git clone https://github.com/frisky1985/yuleOSH.git
+cd yuleOSH
+python3 -m pip install -e .
+sudo ln -sf "$(pwd)/src/cli/yuleosh.sh" /usr/local/bin/yuleosh</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText(`git clone https://github.com/frisky1985/yuleOSH.git\ncd yuleOSH\npython3 -m pip install -e .\nsudo ln -sf \"\$(pwd)/src/cli/yuleosh.sh\" /usr/local/bin/yuleosh`)">Copy</button>
+          </div>
+          <p class="text-xs text-[#64748b] mt-3">Or without sudo — add <code class="text-[#10b981]">bin/</code> to <code class="text-[#10b981]">$PATH</code>:</p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-4 text-xs text-[#94a3b8] font-mono overflow-x-auto leading-relaxed"
+>export PATH="$PATH:$(pwd)/bin"</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText(`export PATH=\"\$PATH:\$(pwd)/bin\"`)">Copy</button>
+          </div>
+        </div>
+
+        <!-- Docker -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-6 mb-6">
+          <h3 class="text-base font-bold text-[#e2e8f0] mb-2">Option 2: Docker</h3>
+          <p class="text-xs text-[#94a3b8] mb-4">Run the full yuleOSH server in a container.</p>
+          <div class="code-block">
+            <pre class="bg-[#0d111f] rounded-lg p-4 text-xs text-[#94a3b8] font-mono overflow-x-auto leading-relaxed"
+>docker run -p 8080:8080 \
+  -v $(pwd)/.yuleosh:/app/.yuleosh \
+  yuleosh/server:latest</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('docker run -p 8080:8080 -v $(pwd)/.yuleosh:/app/.yuleosh yuleosh/server:latest')">Copy</button>
+          </div>
+          <p class="text-xs text-[#64748b] mt-3">Or using docker-compose:</p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-4 text-xs text-[#94a3b8] font-mono overflow-x-auto leading-relaxed"
+>docker-compose up -d</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('docker-compose up -d')">Copy</button>
+          </div>
+        </div>
+
+        <!-- Helm -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+          <h3 class="text-base font-bold text-[#e2e8f0] mb-2">Option 3: Kubernetes (Helm)</h3>
+          <p class="text-xs text-[#94a3b8] mb-4">Deploy to Kubernetes with Helm charts.</p>
+          <div class="code-block">
+            <pre class="bg-[#0d111f] rounded-lg p-4 text-xs text-[#94a3b8] font-mono overflow-x-auto leading-relaxed"
+># Install with Helm
+helm install yuleosh ./deploy/helm/yuleosh \
+  --set persistence.enabled=true \
+  --set ingress.host=yuleosh.example.com</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('helm install yuleosh ./deploy/helm/yuleosh --set persistence.enabled=true --set ingress.host=yuleosh.example.com')">Copy</button>
+          </div>
+          <p class="text-xs text-[#64748b] mt-3">Quick Kubernetes deployment:</p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-4 text-xs text-[#94a3b8] font-mono overflow-x-auto leading-relaxed"
+>kubectl apply -f deploy/k8s/quickstart.yaml</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('kubectl apply -f deploy/k8s/quickstart.yaml')">Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <hr class="my-16 border-[#1e293b]">
+
+      <!-- ===== CLI REFERENCE ===== -->
+      <section id="cli" class="scroll-mt-24">
+        <h2 class="text-2xl font-black text-[#e2e8f0] mb-6">CLI Reference</h2>
+        <p class="text-[#94a3b8] mb-8 leading-relaxed">
+          The <code class="text-[#10b981]">yuleosh</code> CLI provides all the tools you need for project management, spec validation, pipeline orchestration, CI/CD, and compliance.
+        </p>
+
+        <!-- Command table -->
+        <div class="overflow-x-auto mb-8">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-[#1e293b]">
+                <th class="text-left py-3 px-4 text-[#94a3b8] font-semibold text-xs">Command</th>
+                <th class="text-left py-3 px-4 text-[#94a3b8] font-semibold text-xs">Description</th>
+              </tr>
+            </thead>
+            <tbody class="text-[#e2e8f0]">
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#10b981] text-xs">init [dir]</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Initialize project directory structure</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#10b981] text-xs">template init &lt;name&gt;</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Create new project from starter spec template</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#3b82f6] text-xs">spec validate &lt;file&gt;</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Validate OpenSpec file (SHALL/SHOULD/MAY + GIVEN/WHEN/THEN)</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#3b82f6] text-xs">spec diff &lt;old&gt; &lt;new&gt;</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Compare two OpenSpec files and show delta</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#f59e0b] text-xs">pipeline run &lt;spec&gt;</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Run full 9-step Agent pipeline on a spec</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#f59e0b] text-xs">pipeline status [name]</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Show pipeline session status and history</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#10b981] text-xs">ci run &lt;layer&gt;</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Run CI layer (1=Dev | 2=Integration | 3=System)</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#3b82f6] text-xs">review auto</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Auto-review all changed files compared to git HEAD</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#3b82f6] text-xs">review task &lt;name&gt; [kind]</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Review specific task (feature|bugfix|refactor|docs|config)</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#f59e0b] text-xs">evidence pack</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Generate ASPICE compliance evidence pack</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#10b981] text-xs">ui start</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Launch Dashboard at http://localhost:8080</td></tr>
+              <tr class="border-b border-[#1e293b]/50"><td class="py-3 px-4"><code class="text-[#94a3b8] text-xs">stats [--json]</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Show project statistics and metrics</td></tr>
+              <tr><td class="py-3 px-4"><code class="text-[#94a3b8] text-xs">help [--examples]</code></td><td class="py-3 px-4 text-xs text-[#94a3b8]">Show help or real usage examples</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Detailed command examples -->
+        <h3 class="text-lg font-bold text-[#e2e8f0] mb-4">Command Examples</h3>
+
+        <div class="space-y-6">
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">init — Initialize project</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh init my-project
+# Creates: specs/ tasks/ src/ docs/ evidence/</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh init my-project')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">template init — Create from starter template</h4>
+            <div class="code-block mb-3">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh template init my-embedded-app
+# Creates full project with starter spec.md:
+# docs/spec.md, src/, tests/, pyproject.toml, .gitignore</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh template init my-embedded-app')">Copy</button>
+            </div>
+            <p class="text-xs text-[#94a3b8]">Use <code class="text-[#10b981]">--from</code> to scaffold from an existing template project:</p>
+            <div class="code-block mt-2">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh template init my-sensor --from templates/ble-sensor</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh template init my-sensor --from templates/ble-sensor')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">spec validate — Validate OpenSpec requirements</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh spec validate docs/spec.md
+# → Coverage: 85% (SHALL: 40% · Reason: 20% · Scenarios: 25%)
+#   PASS: 3 requirements, 2 scenarios validated</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh spec validate docs/spec.md')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">spec diff — Track requirement changes</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh spec diff docs/spec.md docs/spec-v2.md
+# → Added: Req-004 (1 SHALL), Req-005 (2 SHALL, 1 SHOULD)
+#   Removed: none
+#   Modified: Req-001 (SHALL count: 2 → 3)</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh spec diff docs/spec.md docs/spec-v2.md')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">pipeline run — Full Agent pipeline</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh pipeline run docs/spec.md
+# → [小明] Spec check: 3 requirements found
+#   [小明] S.U.P.E.R analysis: urgency=high, impact=medium
+#   [Hermes] PRD written: 3 feature sections
+#   [Hermes] Review: all requirements coverable
+#   [Claude] Architecture: 3 modules defined
+#   [Claude] Development: src/ populated, tests/ scaffolded
+#   [Claude] Self-test: 6 tests pass
+#   [Hermes] Code review: 2 minor suggestions
+#   [小明] Final report: session saved to .osh/sessions/</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh pipeline run docs/spec.md')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">ci run — Run CI layers</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh ci run 1    # Dev Verification: unit tests + coverage ≥ 40%
+yuleosh ci run 2    # Integration: cross-compile + cppcheck + integration tests
+yuleosh ci run 3    # System: E2E tests + version check + evidence pack</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh ci run 1\n# Layer 1: unit tests, coverage gate\n# Layer 2: cross-compilation, static analysis\n# Layer 3: E2E, evidence pack')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">review — Code review by AI agents</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh review auto                      # Auto-review all git changes
+yuleosh review task add-temp-sensor feature  # Feature review: 4 agents
+yuleosh review task fix-bug bugfix          # Bugfix review: 2 agents</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh review auto\nyuleosh review task add-temp-sensor feature\nyuleosh review task fix-bug bugfix')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">evidence pack — Generate compliance artifacts</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh evidence pack
+# → traceability-matrix.md     (Req ↔ Design ↔ Code ↔ Test)
+#   requirement-coverage.md    (Per-requirement coverage)
+#   code-coverage-report.md    (Line/condition metrics)
+#   review-log-summary.md      (Human-readable audit trail)
+#   review-log.json             (Machine-readable records)
+#   compliance-pack.zip         (All bundled for audit)</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh evidence pack')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">ui start — Launch Dashboard</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh ui start
+# → Dashboard at http://localhost:8080
+#   Custom port: OSH_PORT=9090 yuleosh ui start</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh ui start')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">stats — Project statistics</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh stats
+# → Pipelines: 12 total (10 completed, 2 failed)
+#   CI runs: 45 (40 passed, 5 failed)
+#   Reviews: 28
+#   Projects: 3
+
+yuleosh stats --json
+# → {"pipelines": 12, "ci_runs": 45, ...}</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh stats\nyuleosh stats --json')">Copy</button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5">
+            <h4 class="text-sm font-bold text-[#e2e8f0] mb-2">help — Get help</h4>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto"
+>yuleosh help                     # Show command list
+yuleosh help --examples          # Show real-world usage examples</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('yuleosh help\nyuleosh help --examples')">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- End-to-end workflow -->
+        <div class="gradient-border mt-8">
+          <div class="bg-[#111827] rounded-2xl p-6">
+            <h3 class="text-sm font-bold text-[#e2e8f0] mb-4">End-to-End Workflow</h3>
+            <div class="code-block">
+              <pre class="bg-[#0d111f] rounded-lg p-4 text-xs text-[#94a3b8] font-mono overflow-x-auto leading-relaxed"
+># 1. Initialize from template
+yuleosh template init my-sensor-project
+cd my-sensor-project
+
+# 2. Validate requirements
+yuleosh spec validate docs/spec.md
+
+# 3. Run Layer 1 CI (unit tests)
+yuleosh ci run 1
+
+# 4. Run full Agent pipeline
+yuleosh pipeline run docs/spec.md
+
+# 5. Auto-review changes
+yuleosh review auto
+
+# 6. Run full CI suite
+yuleosh ci run 2
+yuleosh ci run 3
+
+# 7. Generate compliance pack
+yuleosh evidence pack
+
+# 8. Launch Dashboard
+yuleosh ui start</pre>
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('# 1. Initialize\nyuleosh template init my-sensor-project\ncd my-sensor-project\n\n# 2. Validate\nyuleosh spec validate docs/spec.md\n\n# 3. CI Layer 1\nyuleosh ci run 1\n\n# 4. Pipeline\nyuleosh pipeline run docs/spec.md\n\n# 5. Review\nyuleosh review auto\n\n# 6. CI Layers 2-3\nyuleosh ci run 2\nyuleosh ci run 3\n\n# 7. Evidence\nyuleosh evidence pack\n\n# 8. Dashboard\nyuleosh ui start')">Copy</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr class="my-16 border-[#1e293b]">
+
+      <!-- ===== API REFERENCE ===== -->
+      <section id="api" class="scroll-mt-24">
+        <h2 class="text-2xl font-black text-[#e2e8f0] mb-6">API Reference</h2>
+        <p class="text-[#94a3b8] mb-8 leading-relaxed">
+          All API endpoints are mounted under <code class="text-[#10b981]">/api/v1/</code> and return JSON. Every response follows the format <code class="text-[#10b981]">{ "ok": true, "data": {...} }</code> or <code class="text-[#10b981]">{ "ok": false, "error": "..." }</code>.
+        </p>
+
+        <!-- endpoint: health -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/health</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Comprehensive system health monitoring — DB connectivity, store status, disk space, uptime.</p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto">curl http://localhost:8080/api/v1/health</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('curl http://localhost:8080/api/v1/health')">Copy</button>
+          </div>
+        </div>
+
+        <!-- endpoint: wizard -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/wizard/complete</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Mark first-run wizard as completed.</p>
+        </div>
+
+        <!-- endpoint: spec -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/spec/validate</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Validate an OpenSpec file. Body: <code class="text-[#10b981]">{ "path": "docs/spec.md" }</code></p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto">curl -X POST http://localhost:8080/api/v1/spec/validate \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"docs/spec.md"}'</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -X POST http://localhost:8080/api/v1/spec/validate -H \'Content-Type: application/json\' -d \'{"path":"docs/spec.md"}\'')">Copy</button>
+          </div>
+        </div>
+
+        <!-- endpoint: spec diff -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/spec/diff</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Diff two OpenSpec files. Body: <code class="text-[#10b981]">{ "old": "...", "new": "..." }</code></p>
+        </div>
+
+        <!-- endpoint: pipeline -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/pipeline/run</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Run the 9-step Agent pipeline. Body: <code class="text-[#10b981]">{ "spec": "docs/spec.md", "name": "optional-name" }</code></p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/pipeline/status</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">List all pipeline sessions.</p>
+        </div>
+
+        <!-- endpoint: ci -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/ci/run/{layer}</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Run a CI layer (1, 2, or 3).</p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto">curl -X POST http://localhost:8080/api/v1/ci/run/1</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -X POST http://localhost:8080/api/v1/ci/run/1')">Copy</button>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/ci/runs</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">List all CI run results.</p>
+        </div>
+
+        <!-- endpoint: review -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/review/auto</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Auto-review all changed files.</p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/review/task</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Review a specific task. Body: <code class="text-[#10b981]">{ "task": "add-sensor", "kind": "feature" }</code></p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/review/list</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">List all review sessions.</p>
+        </div>
+
+        <!-- endpoint: evidence -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/evidence/generate</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Generate compliance evidence pack.</p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/evidence/files</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">List generated evidence files.</p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/evidence/pack</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Download the compliance ZIP pack.</p>
+        </div>
+
+        <!-- endpoint: project -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/project</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">List all projects.</p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto">curl http://localhost:8080/api/v1/project</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('curl http://localhost:8080/api/v1/project')">Copy</button>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/project</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Create a new project. Body: <code class="text-[#10b981]">{ "name": "my-project", "description": "..." }</code></p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/project/{name}</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Get a specific project by name.</p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/project/stats</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Aggregate project statistics across all store tables.</p>
+        </div>
+
+        <!-- endpoint: stats -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/stats/overview</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Aggregated counts of everything — pipelines, CI, reviews, evidence.</p>
+          <div class="code-block mt-2">
+            <pre class="bg-[#0d111f] rounded-lg p-3 text-xs text-[#94a3b8] font-mono overflow-x-auto">curl http://localhost:8080/api/v1/stats/overview</pre>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('curl http://localhost:8080/api/v1/stats/overview')">Copy</button>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/stats/trends?period=daily&days=7</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Daily or weekly trends. Supports <code class="text-[#10b981]">period</code> (daily|weekly) and <code class="text-[#10b981]">days</code> params.</p>
+        </div>
+
+        <!-- endpoint: notify -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/notify/config</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Get current notification configuration (Feishu, email, webhook).</p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">PUT</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/notify/config</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Update notification config. All fields optional.</p>
+        </div>
+
+        <!-- endpoint: apikeys -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/apikeys</code>
+          </div>
+          <p class="text-xs text-[#94a3b8] mb-2">Generate a new API key. Body: <code class="text-[#10b981]">{ "label": "My Key" }</code></p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">GET</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/apikeys</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">List API keys (prefix + label, never the full key).</p>
+        </div>
+
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30">DELETE</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/apikeys/{id}</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Revoke an API key by ID.</p>
+        </div>
+
+        <!-- endpoint: webhooks -->
+        <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-5 mb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30">POST</span>
+            <code class="text-sm text-[#e2e8f0] font-mono">/api/v1/webhooks/github</code>
+          </div>
+          <p class="text-xs text-[#94a3b8]">Receive GitHub push webhook events and trigger CI Layer 1.</p>
+        </div>
+      </section>
+
+      <hr class="my-16 border-[#1e293b]">
+
+      <!-- ===== CONFIGURATION ===== -->
+      <section id="config" class="scroll-mt-24">
+        <h2 class="text-2xl font-black text-[#e2e8f0] mb-6">Configuration</h2>
+        <p class="text-[#94a3b8] mb-8 leading-relaxed">
+          yuleOSH is configured through environment variables. The table below lists all supported variables with defaults.
+        </p>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-[#1e293b]">
+                <th class="text-left py-3 px-4 text-[#94a3b8] font-semibold text-xs">Variable</th>
+                <th class="text-left py-3 px-4 text-[#94a3b8] font-semibold text-xs">Default</th>
+                <th class="text-left py-3 px-4 text-[#94a3b8] font-semibold text-xs">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_HOME</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>project root</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Project root directory path</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_PORT</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>8080</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Dashboard HTTP server port</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_AUTH</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>disabled</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Enable auth <code class="text-[#10b981]">enabled</code> or <code class="text-[#10b981]">disabled</code></td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_ADMIN_PWD</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>admin</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Admin password when auth is enabled</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_DB_PATH</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>.yuleosh/store.db</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">SQLite database file path</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_LOG_LEVEL</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>INFO</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Logging level: DEBUG, INFO, WARN, ERROR</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_CI_COVERAGE</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>40</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">CI Layer 1 coverage threshold (%)</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_SPEC_THRESHOLD</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>80</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Spec validation coverage threshold (%)</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_REVIEW_THRESHOLD</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>80</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Review coverage threshold (%)</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_SESSIONS_DIR</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>.osh/sessions</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Pipeline session artifacts directory</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_EVIDENCE_DIR</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>.osh/evidence</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Compliance evidence directory</td>
+              </tr>
+              <tr class="border-b border-[#1e293b]/50">
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">OSH_CI_DIR</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b]"><code>.osh/ci</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">CI results directory</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4"><code class="text-[#10b981] text-xs">DESIGNATED_TESTERS</code></td>
+                <td class="py-3 px-4 text-xs text-[#64748b"><code>(empty)</code></td>
+                <td class="py-3 px-4 text-xs text-[#94a3b8]">Comma-separated designated tester IDs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="my-16 border-[#1e293b]">
+
+      <!-- ===== FAQ ===== -->
+      <section id="faq" class="scroll-mt-24 mb-16">
+        <h2 class="text-2xl font-black text-[#e2e8f0] mb-6">Frequently Asked Questions</h2>
+
+        <div class="space-y-3">
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              What is yuleOSH and who is it for?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              yuleOSH (you-unify-Lifecycle-of-OpenSpec-Superpowers-Harness) is an embedded AI development platform combining OpenSpec requirements format, AI Agent pipeline (3 agents, 9 steps), and 3-layer CI/CD. It's built for embedded MCU/SoC teams needing ASPICE compliance, AI-assisted development, and automated CI/CD.
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              Do I need AI API keys?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              No. The Agent pipeline simulates agents with template-based artifacts — no external AI API keys required. The platform is fully functional out of the box.
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              Can I use yuleOSH with existing projects?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              Yes. Run <code class="text-[#10b981]">yuleosh init</code> in your existing project directory to add the required structure, then write your OpenSpec in <code class="text-[#10b981]">docs/spec.md</code>. Existing files are not modified.
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              What are the system requirements?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              Python 3.10+, Git 2.20+, macOS/Linux (Windows via WSL). Optional: pytest + coverage (CI Layer 1), cppcheck (Layer 2 static analysis).
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              What is OpenSpec format?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              OpenSpec is a structured markdown format using RFC 2119 keywords (SHALL/SHOULD/MAY) plus GIVEN/WHEN/THEN acceptance scenarios. Each requirement must have at least one SHALL statement and a Reason section. Scenarios must have GIVEN, WHEN, and THEN clauses.
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              What does spec coverage score mean?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              Coverage score (0–100%) measures spec completeness: SHALL statements (40%), Reason sections (20%), complete scenarios (40%). The pass threshold is 80%.
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              What are the 4 review agents?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              Architecture (module coupling, function length), Domain Modeling (mutable defaults), Code Style (docstrings, formatting), Coverage Guardian (≥80% line coverage). Task kinds determine which reviewers run: feature=all 4, bugfix=style+coverage, refactor=architecture+style+coverage, docs=pass, config=style.
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              How do I run tests?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              <code class="text-[#10b981]">python3 -m pytest tests/ -v</code> from the project root. Layer 1 CI runs tests with coverage gating. For available templates, see the <code class="text-[#10b981]">templates/</code> directory with pre-built sensor, CAN bus, and MCU firmware projects.
+            </div>
+          </details>
+
+          <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+            <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+              What's in the ASPICE compliance pack?
+              <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </summary>
+            <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+              Run <code class="text-[#10b981]">yuleosh evidence pack</code> to generate: traceability-matrix.md (Req ↔ Design ↔ Code ↔ Test), requirement-coverage.md, code-coverage-report.md, review-log-summary.md, review-log.json, and compliance-pack.zip — all bundled for ASPICE auditor submission.
+            </div>
+          </details>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<footer class="py-12 border-t border-[#1e293b] bg-[#0a0e17]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-lg font-black tracking-tight">
+          <span class="text-[#10b981]">yule</span><span class="text-[#3b82f6]">OSH</span>
+        </a>
+        <span class="text-xs text-[#64748b]">v0.1.0 · MIT License</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="/" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">Home</a>
+        <a href="/docs" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">Docs</a>
+        <a href="https://github.com/stefanji/yuleOSH" target="_blank" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>
+        <a href="https://github.com/stefanji/yuleOSH/issues" target="_blank" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">Issues</a>
+      </div>
+    </div>
+    <div class="mt-6 text-center text-xs text-[#393e4a]">
+      Built for embedded developers. Open source and community driven.
+    </div>
+  </div>
+</footer>
+
+<script>
+document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+  document.getElementById('mobileMenu').classList.toggle('hidden');
+});
+document.querySelectorAll('#mobileMenu a').forEach(link => {
+  link.addEventListener('click', () => {
+    document.getElementById('mobileMenu').classList.add('hidden');
+  });
+});
+</script>
+</body>
+</html>
