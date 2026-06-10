@@ -526,7 +526,7 @@ class EvidenceCollector:
         # Try SQLite store first
         try:
             from store import Store
-            store = Store()
+            store = Store(db_path=os.path.join(self.project_dir, ".osh", "store.db"))
             pipelines = store.list_pipelines()
             if pipelines:
                 latest_name = pipelines[0].get("name")
@@ -732,6 +732,45 @@ class EvidenceCollector:
         output_path = self.evidence_dir / "traceability-matrix.md"
         output_path.write_text(content)
         print(f"  ✅ Traceability matrix generated: {output_path}")
+
+        # Also output structured JSON for downstream tooling
+        json_data: dict = {
+            "generated": self.generated_at,
+            "version": self.version,
+            "summary": {
+                "total_requirements": total,
+                "with_implementation": covered,
+                "with_test_coverage": test_covered,
+                "uncovered_shalls": len(uncovered),
+                "total_scenarios": len(self.scenarios),
+                "total_reviews": len(self.reviews),
+                "total_ci_runs": len(self.ci_results),
+            },
+            "requirements": [],
+        }
+        for req in self.requirements:
+            req_name = req.get("name", "Unknown")
+            matching_tests = self.req_to_tests.get(req_name, [])
+            json_req: dict = {
+                "name": req_name,
+                "req_id": req.get("req_id", ""),
+                "shall_count": req.get("shall_count", 0),
+                "shall_statements": req.get("shall", []),
+                "matched_tests": [
+                    {
+                        "file": tf,
+                        "mode": self.match_modes.get(req_name, {}).get(tf, "keyword"),
+                        "confidence": self.match_confidences.get(req_name, {}).get(tf, 0.0),
+                    }
+                    for tf in matching_tests
+                ],
+            }
+            json_data["requirements"].append(json_req)
+
+        json_path = self.evidence_dir / "traceability-matrix.json"
+        json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False))
+        print(f"  ✅ Traceability JSON generated: {json_path}")
+
         return str(output_path)
 
     def generate_requirement_coverage(self) -> str:
@@ -1017,7 +1056,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     print(f"✅ Evidence generation complete")
     print(f"   Output: {collector.evidence_dir}")
     print(f"   Artifacts: {len(artifacts)}")
-    print(f"   - traceability-matrix.md")
+    print(f"   - traceability-matrix.md + traceability-matrix.json")
     print(f"   - requirement-coverage.md")
     print(f"   - code-coverage-report.md")
     print(f"   - review-log-summary.md + review-log.json")
