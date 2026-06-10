@@ -8,7 +8,7 @@
     <a href="https://github.com/frisky1985/yuleOSH/actions">
       <img src="https://img.shields.io/badge/CI-Layer%201%20Passing-brightgreen?style=flat-square" alt="CI">
     </a>
-    <img src="https://img.shields.io/badge/version-0.8.0-blue?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/version-1.0.0-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-≥3.10-ff69b4?style=flat-square" alt="Python">
     <img src="https://img.shields.io/badge/coverage-86%25-brightgreen?style=flat-square" alt="Coverage">

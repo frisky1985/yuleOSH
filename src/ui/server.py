@@ -678,14 +678,14 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         return {
             "status": "running",
             "osh_home": OSH_HOME,
-            "version": "0.8.0",
+            "version": "1.0.0",
             "timestamp": __import__("datetime").datetime.now().isoformat(),
         }
 
     def _get_health(self) -> dict:
         return {
             "status": "ok",
-            "version": "0.8.0",
+            "version": "1.0.0",
             "uptime_seconds": None,
             "auth_enabled": AUTH_ENABLED,
             "tenant_auth": TENANT_AUTH,
