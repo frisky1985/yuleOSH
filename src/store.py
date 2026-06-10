@@ -35,7 +35,7 @@ class Store:
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 6  # v0.8.0: password_hash column on users
+    _MIGRATION_VERSION = 7  # v0.9.0: usage/subscription tables + org tier
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -110,6 +110,26 @@ class Store:
                 expires_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
+            CREATE TABLE IF NOT EXISTS usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                org_id INTEGER NOT NULL,
+                project_id INTEGER,
+                resource TEXT NOT NULL,
+                amount INTEGER NOT NULL DEFAULT 1,
+                recorded_at TEXT NOT NULL,
+                FOREIGN KEY (org_id) REFERENCES organizations(id)
+            );
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                org_id INTEGER NOT NULL UNIQUE,
+                stripe_subscription_id TEXT,
+                stripe_customer_id TEXT,
+                tier TEXT NOT NULL DEFAULT 'community',
+                status TEXT NOT NULL DEFAULT 'active',
+                current_period_end TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (org_id) REFERENCES organizations(id)
+            );
         """)
         self.conn.commit()
 
@@ -145,6 +165,8 @@ class Store:
             self._run_migration_v3()
         if version < 6:
             self._run_migration_v6()
+        if version < 7:
+            self._run_migration_v7()
 
         # Record migration version
         self.conn.execute(
@@ -180,6 +202,17 @@ class Store:
         try:
             self.conn.execute(
                 "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL"
+            )
+        except OperationalError:
+            pass
+        self.conn.commit()
+
+    def _run_migration_v7(self):
+        """Migration v7: add tier to organizations (v0.9.0)."""
+        from sqlite3 import OperationalError
+        try:
+            self.conn.execute(
+                "ALTER TABLE organizations ADD COLUMN tier TEXT DEFAULT 'pro'"
             )
         except OperationalError:
             pass
@@ -521,3 +554,72 @@ class Store:
 
     def close(self):
         self.conn.close()
+
+    # ── v0.9.0: Usage & Subscription ─────────────────────────────────────────
+
+    def record_usage(self, org_id: int, project_id: int, resource: str, amount: int):
+        """Record a usage event."""
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "INSERT INTO usage_log (org_id, project_id, resource, amount, recorded_at) VALUES (?, ?, ?, ?, ?)",
+            (org_id, project_id, resource, amount, now)
+        )
+        self.conn.commit()
+
+    def get_monthly_usage(self, org_id: int) -> dict:
+        """Get aggregated usage for the current month."""
+        month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        rows = self.conn.execute(
+            "SELECT resource, SUM(amount) FROM usage_log WHERE org_id=? AND recorded_at >= ? GROUP BY resource",
+            (org_id, month_start)
+        ).fetchall()
+        usage = {"project_count": 0, "pipeline_runs": 0, "llm_tokens": 0, "storage_mb": 0}
+        for resource, total in rows:
+            usage[resource] = total
+        # Count projects for this org
+        proj_count = self.conn.execute(
+            "SELECT COUNT(*) FROM org_projects WHERE org_id=?", (org_id,)
+        ).fetchone()[0]
+        usage["project_count"] = proj_count
+        return usage
+
+    def get_subscription(self, org_id: int):
+        """Get subscription info for an org."""
+        row = self.conn.execute(
+            "SELECT * FROM subscriptions WHERE org_id=?", (org_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def upsert_subscription(self, org_id: int, data: dict):
+        """Create or update subscription."""
+        existing = self.get_subscription(org_id)
+        now = datetime.now().isoformat()
+        if existing:
+            for key in ("stripe_subscription_id", "stripe_customer_id", "tier", "status", "current_period_end"):
+                if key in data and data[key]:
+                    self.conn.execute(
+                        f"UPDATE subscriptions SET {key}=? WHERE org_id=?",
+                        (data[key], org_id)
+                    )
+        else:
+            self.conn.execute(
+                "INSERT INTO subscriptions (org_id, stripe_subscription_id, stripe_customer_id, tier, status, current_period_end, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (org_id, data.get("stripe_subscription_id", ""), data.get("stripe_customer_id", ""),
+                 data.get("tier", "pro"), data.get("status", "active"),
+                 data.get("current_period_end", ""), now)
+            )
+        self.conn.commit()
+
+    def update_org_tier(self, org_id: int, tier: str):
+        """Update organization tier."""
+        self.conn.execute("UPDATE organizations SET tier=? WHERE id=?", (tier, org_id))
+        self.conn.commit()
+
+    def get_org_by_stripe_subscription(self, sub_id: str):
+        """Find organization by Stripe subscription ID."""
+        row = self.conn.execute(
+            "SELECT org_id FROM subscriptions WHERE stripe_subscription_id=?", (sub_id,)
+        ).fetchone()
+        if row:
+            return self.get_organization_by_id(row["org_id"])
+        return None
