@@ -1,14 +1,14 @@
 """Multi-tenant Organization, Project & User Authentication for yuleOSH.
 
+v0.8.0: JWT + bcrypt password auth + rate limiting + security headers.
+
 Provides:
-- Email-based signup/login with invite codes
-- Organization creation and membership
+- Password-based signin/signup with bcrypt hashing
+- Rate-limited login (10 attempts / 5 min per email)
+- Organization creation and membership with invite codes
 - Project creation and switching
 - Role-based access control (admin vs member)
-- Session management with bearer tokens
-
-Designed as a drop-in enhancement alongside src/ui/auth.py (API key auth).
-Both can coexist: API key auth for automation, tenant auth for browser UI.
+- Session management with signed JWT bearer tokens
 """
 
 import json
@@ -18,6 +18,7 @@ import secrets
 import time
 from typing import Optional
 
+import bcrypt
 import jwt  # PyJWT
 
 from src.store import Store
@@ -35,15 +36,51 @@ SESSION_TTL_HOURS = 72
 JWT_SECRET = os.environ.get("YULEOSH_JWT_SECRET", secrets.token_urlsafe(32))
 JWT_ALGORITHM = "HS256"
 
+# ── Rate limiting ────────────────────────────────────────────────────────────
+_SIGNIN_RATE_LIMIT: dict[str, tuple[int, int]] = {}  # email -> (attempts, window_start)
+_MAX_SIGNIN_ATTEMPTS = 10
+_RATE_WINDOW_SECONDS = 300  # 5 minutes
+
+
+def _check_rate_limit(email: str) -> bool:
+    """Check signin rate limit. Returns True if blocked."""
+    now = int(time.time())
+    entry = _SIGNIN_RATE_LIMIT.get(email)
+    if entry:
+        attempts, window_start = entry
+        if now - window_start > _RATE_WINDOW_SECONDS:
+            _SIGNIN_RATE_LIMIT[email] = (1, now)
+            return False
+        if attempts >= _MAX_SIGNIN_ATTEMPTS:
+            return True
+        _SIGNIN_RATE_LIMIT[email] = (attempts + 1, window_start)
+    else:
+        _SIGNIN_RATE_LIMIT[email] = (1, now)
+    return False
+
+
+# ── Password hashing ─────────────────────────────────────────────────────────
+
+def _hash_password(password: str) -> str:
+    """Hash password with bcrypt (12 rounds). Returns hashed string."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """Verify password against bcrypt hash. Constant-time comparison."""
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Token helpers
 # ---------------------------------------------------------------------------
 
 def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "") -> str:
     """Generate a signed JWT with embedded user/org claims and expiration."""
-    import time as _time
-    now = int(_time.time())
+    now = int(time.time())
     payload = {
         "sub": str(user_id),
         "org": org_id,
@@ -67,14 +104,11 @@ def _slugify(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Session helpers (used by server.py for cookie-based auth)
+# Session helpers
 # ---------------------------------------------------------------------------
 
 def get_session_user(token: str) -> Optional[dict]:
-    """Resolve a bearer token to a user dict with org info.
-    
-    Returns dict with user_id, org_id, email, role, org_name, org_slug, or None.
-    """
+    """Resolve a bearer token to a user dict with org info."""
     if not token:
         return None
     store = Store()
@@ -84,16 +118,16 @@ def get_session_user(token: str) -> Optional[dict]:
     user = store.get_user_by_id(session["user_id"])
     if not user:
         return None
-    org = store.get_organization_by_id(user["org_id"])
+    org = store.get_organization_by_id(user.get("org_id", 0))
     if not org:
         return None
     return {
         "user_id": user["id"],
         "org_id": org["id"],
-        "email": user["email"],
-        "role": user["role"],
-        "org_name": org["name"],
-        "org_slug": org["slug"],
+        "email": user.get("email", ""),
+        "role": user.get("role", "member"),
+        "org_name": org.get("name", ""),
+        "org_slug": org.get("slug", ""),
     }
 
 
@@ -102,50 +136,67 @@ def get_session_user(token: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def handle_signin(body: dict) -> dict:
-    """POST /api/auth/signin - Email + optional invite code.
+    """POST /api/auth/signin — Password-based signin/signup.
+
+    Body: {email, password, [invite_code]}
 
     Flow:
-    1. If invite_code provided and org exists → login or signup as member
-    2. If no invite_code and user doesn't exist → first time, needs org creation
-    3. If user exists (email + org found) → login
-
-    Returns: {token, redirect} or {error}
+    1. Rate limit check
+    2. If user exists with password → verify password → login
+    3. If invite_code → join org (signup without password first time)
+    4. If email-only (backward compat) → first-time org creation flow
     """
     email = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
     invite_code = (body.get("invite_code") or "").strip().lower()
 
     if not email or not EMAIL_RE.match(email):
         return {"error": "Valid email is required"}, 400
 
+    # Rate limit
+    if _check_rate_limit(email):
+        return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
+
     store = Store()
 
-    # Check if invite_code points to an existing org
+    # Check invite code
     target_org = None
     if invite_code:
         target_org = store.get_organization(invite_code)
         if not target_org:
-            return {"error": f"Organization '{invite_code}' not found. Check the invite code."}, 404
+            return {"error": f"Organization '{invite_code}' not found."}, 404
 
     if target_org:
-        # Joining an existing org
         existing_user = store.get_user(target_org["id"], email)
         if existing_user:
-            # Login existing member
+            # Verify password if user has one
+            if existing_user.get("password_hash"):
+                if not password:
+                    return {"error": "Password required"}, 400
+                if not _verify_password(password, existing_user["password_hash"]):
+                    return {"error": "Invalid password"}, 401
             return _create_login_response(store, existing_user)
         else:
-            # Sign up as new member (role=member by default)
-            user = store.create_user(target_org["id"], email, "member")
+            # New member — require password for signup into existing org
+            if not password or len(password) < 8:
+                return {"error": "Password must be at least 8 characters"}, 400
+            password_hash = _hash_password(password)
+            user = store.create_user(target_org["id"], email, "member", password_hash)
             return _create_login_response(store, user)
     else:
-        # No invite code → check if user has an org
-        # We need to find the user across all orgs
+        # No invite code — check across all orgs
         orgs = store.list_organizations()
         for org in orgs:
             user = store.get_user(org["id"], email)
             if user:
+                if user.get("password_hash"):
+                    if not password:
+                        return {"error": "Password required"}, 400
+                    if not _verify_password(password, user["password_hash"]):
+                        return {"error": "Invalid password"}, 401
                 return _create_login_response(store, user)
 
-        # First-time user — need to create org first
+        # First-time user — need to create org
         token = _generate_token(email=email)
         return {"token": token, "redirect": "/org/setup", "needs_org": True}, 200
 
@@ -153,14 +204,15 @@ def handle_signin(body: dict) -> dict:
 def handle_org_create(body: dict, session_token: str) -> dict:
     """POST /api/org/create - Create organization and first project.
 
-    Requires a valid session token from signin (needs_org flow).
+    Body: {org_name, org_slug, project_name, project_slug, email, [password]}
     """
     org_name = (body.get("org_name") or "").strip()
     org_slug = (body.get("org_slug") or "").strip().lower()
     project_name = (body.get("project_name") or "").strip()
     project_slug = (body.get("project_slug") or "").strip().lower()
+    email = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
 
-    # Validate
     if not org_name or not org_slug:
         return {"error": "Organization name and slug are required"}, 400
     if not SLUG_RE.match(org_slug):
@@ -169,29 +221,21 @@ def handle_org_create(body: dict, session_token: str) -> dict:
         return {"error": "Project name and slug are required"}, 400
     if not SLUG_RE.match(project_slug):
         return {"error": "Project slug must be lowercase alphanumeric with hyphens"}, 400
+    if not email:
+        return {"error": "Email is required for org creation"}, 400
 
     store = Store()
 
     # Check slug uniqueness
-    existing = store.get_organization(org_slug)
-    if existing:
+    if store.get_organization(org_slug):
         return {"error": f"Organization slug '{org_slug}' is already taken"}, 409
-
-    # We need the user's email from the signin flow
-    # The session token was returned by handle_signin when needs_org was True.
-    # For simplicity, we use the session token or an email in the body.
-    email = (body.get("email") or "").strip().lower()
-
-    # If email wasn't in body, try to get it from the signin flow
-    # The client should pass it; if not, reject.
-    if not email:
-        return {"error": "Email is required for org creation"}, 400
 
     # Create org
     org = store.create_organization(org_name, org_slug)
 
-    # Create user as admin
-    user = store.create_user(org["id"], email, "admin")
+    # Create user as admin — with optional password
+    password_hash = _hash_password(password) if (password and len(password) >= 8) else None
+    user = store.create_user(org["id"], email, "admin", password_hash)
 
     # Create first project
     store.create_org_project(org["id"], project_name, project_slug)
@@ -209,10 +253,7 @@ def handle_org_create(body: dict, session_token: str) -> dict:
 
 
 def handle_session_info(session_token: str) -> dict:
-    """GET /api/auth/session - Get current session info.
-
-    Returns user, org, and project context.
-    """
+    """GET /api/auth/session - Get current session info."""
     user_info = get_session_user(session_token)
     if not user_info:
         return {"error": "Invalid or expired session"}, 401
@@ -278,27 +319,15 @@ def handle_project_create(body: dict, session_token: str) -> dict:
         return {"error": "Slug must be lowercase alphanumeric with hyphens"}, 400
 
     store = Store()
-
-    # Check uniqueness within org
-    existing = store.get_org_project(user_info["org_id"], slug)
-    if existing:
+    if store.get_org_project(user_info["org_id"], slug):
         return {"error": f"Project slug '{slug}' already exists in this organization"}, 409
 
-    project = store.create_org_project(
-        user_info["org_id"], name, slug
-    )
-
+    project = store.create_org_project(user_info["org_id"], name, slug)
     return {
-        "id": project["id"],
-        "name": project["name"],
-        "slug": project["slug"],
-        "created_at": project["created_at"],
+        "id": project["id"], "name": project["name"],
+        "slug": project["slug"], "created_at": project["created_at"],
     }, 200
 
-
-# ---------------------------------------------------------------------------
-# Org endpoints
-# ---------------------------------------------------------------------------
 
 def handle_org_info(session_token: str) -> dict:
     """GET /api/org/info - Get org info including member list."""
@@ -312,12 +341,10 @@ def handle_org_info(session_token: str) -> dict:
     projects = store.list_org_projects(user_info["org_id"])
 
     return {
-        "id": org["id"],
-        "name": org["name"],
-        "slug": org["slug"],
+        "id": org["id"], "name": org["name"], "slug": org["slug"],
         "created_at": org["created_at"],
         "members": [
-            {"id": u["id"], "email": u["email"], "role": u["role"]}
+            {"id": u["id"], "email": u.get("email", ""), "role": u.get("role", "member")}
             for u in users
         ],
         "projects": [
@@ -339,6 +366,6 @@ def _create_login_response(store: Store, user: dict) -> dict:
         "token": token,
         "redirect": "/project/select",
         "user_id": user["id"],
-        "org_id": user["org_id"],
-        "role": user["role"],
+        "org_id": user.get("org_id", 0),
+        "role": user.get("role", "member"),
     }, 200
