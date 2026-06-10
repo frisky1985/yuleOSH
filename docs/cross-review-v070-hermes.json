@@ -1,0 +1,82 @@
+{
+  "reviewer": "小克 👨‍💻 (via 小明 proxy)",
+  "review_target": "小马 🐴 — yuleOSH v0.7.0 I2+I3 (Evidence Engine 修复 + 追溯矩阵升级)",
+  "version": "v0.7.0",
+  "timestamp": "2026-06-10T08:30:00+08:00",
+  "score": 8,
+  "summary": "整体质量良好。Evidence Engine 的自动发现、竞态修复、多级 Covers 解析器设计清晰，测试覆盖扎实（80 tests, 1493 lines）。发现 1 个 critical、3 个 major、4 个 minor 问题。建议在 v0.7.1 修复。",
+  "findings": [
+    {
+      "severity": "critical",
+      "file": "src/evidence/pack.py",
+      "line": 506,
+      "title": "bare except 吞掉所有异常",
+      "description": "_find_latest_pipeline_spec() 中 try/except Exception: pass 会静默吞掉所有错误，包括 ImportError (store.py 不存在) 和数据库损坏。一旦 store 模块存在但有运行时错误，自动发现会静默失败并走磁盘 fallback，开发者无法感知问题。建议：至少用 log.warning 记录异常信息。",
+      "recommendation": "将 `except Exception: pass` 改为 `except Exception as e: log.warning('store lookup failed: %s', e)` 并添加 import logging"
+    },
+    {
+      "severity": "major",
+      "file": "src/evidence/pack.py",
+      "line": 905,
+      "title": "竞态修复只检查 .osh/sessions/ 不检查 .osh/reviews/ 和 .osh/ci/",
+      "description": "_check_pipeline_not_running 只检查 session.json 的 status 字段，但 pipeline 的 _save 时序还可能写入 reviews/ 和 ci/ 目录。如果 pipeline 已完成但 review 正在序列化，evidence collector 可能拿到不完整的 review 数据。建议：同时检查最近 review-session.json 的写入时间是否在最近 5 秒内。",
+      "recommendation": "扩展 _check_pipeline_not_running 同时检查 reviews/ 和 ci/ 目录的最近写入时间"
+    },
+    {
+      "severity": "major",
+      "file": "src/evidence/pack.py",
+      "line": 117,
+      "title": "Covers 解析对中文标识符支持不完整",
+      "description": "_parse_module_covers 和 _parse_comment_covers 用 `k.strip()` 分割 Covers: 行，但 Covers: CI 阻断逻辑, pipeline 硬错误 中的 阻断逻辑 通过逗号分割后作为整体关键词。而 _build_requirement_to_test_map 中的关键词匹配用 re.findall 对英文单词拆分，中英文混用可能造成匹配失败。",
+      "recommendation": "统一关键词切分逻辑，或在 _build_requirement_to_test_map 中保留原始逗号分隔的短语作为完整 token"
+    },
+    {
+      "severity": "major",
+      "file": "src/evidence/pack.py",
+      "line": 277,
+      "title": "_collect_test_coverage 静默失败不报告错误文件",
+      "description": "扫描 tests/ 目录时，语法错误或读取失败的文件会返回空列表，但没有区别 '文件没有 Covers 标记' 和 '文件解析失败'。可能导致测试文件 silently not covered。",
+      "recommendation": "添加 FailedParseCount 计数器，在最终报告中显示解析失败的文件数"
+    },
+    {
+      "severity": "minor",
+      "file": "src/evidence/pack.py",
+      "line": 514,
+      "title": "_find_latest_pipeline_spec 的 store 查询依赖隐式数据库路径",
+      "description": "Store() 构造函数不知道 project_dir，可能读取错误的数据库。如果多个项目共享同一进程，store 可能指向全局数据库而非项目数据库。",
+      "recommendation": "传递 project_dir 给 Store() 或检查数据库路径是否匹配"
+    },
+    {
+      "severity": "minor",
+      "file": "src/evidence/pack.py",
+      "line": 701,
+      "title": "traceability matrix 输出纯 Markdown 无结构化数据",
+      "description": "generate_traceability_matrix 生成 .md 文件，但没有同时输出 JSON 版本。下游工具（CI Dashboard）需要解析 Markdown 才能提取数据。T3.3 的匹配置信度只在 Markdown 文本中体现。",
+      "recommendation": "同时输出 traceability-matrix.json 包含结构化数据"
+    },
+    {
+      "severity": "minor",
+      "file": "tests/test_evidence_engine_extended.py",
+      "line": 709,
+      "title": "test_find_latest_pipeline_spec 测试偶发失败（flaky test）",
+      "description": "在全量测试运行中曾出现 2 个 test_find_latest_pipeline* 测试失败，单独运行通过。可能是测试间的 Store 状态未清理导致的状态泄漏。",
+      "recommendation": "添加 store cleanup fixture 或在测试中使用 tmp_path 隔离"
+    },
+    {
+      "severity": "minor",
+      "file": "src/evidence/pack.py",
+      "line": 800,
+      "title": "acceptance matrix 生成未包含 match_mode 信息",
+      "description": "generate_acceptance_matrix 注释说 'Includes match mode and confidence columns' 但需要确认实际输出。如果缺失，追溯质量评估不完整。",
+      "recommendation": "验证 acceptance-matrix.md 输出是否包含 mode/confidence 列，若缺失则补充"
+    }
+  ],
+  "positive_observations": [
+    "Scenario-Ref 解析器设计精巧，支持 inline 和 standalone 两种格式，去重逻辑正确",
+    "4 层 Covers 解析器（module docstring → comment → function docstring → name inference）架构清晰、fallback 健壮",
+    "_check_pipeline_not_running 的等待机制设计合理（30s 上限 + 递增 sleep）",
+    "_build_requirement_to_test_map 的优先级建模（exact → keyword）和置信度系统是对质量工程很好的补充",
+    "测试覆盖扎实：80 tests, 1493 lines，覆盖自动发现、竞态、边界、格式变异",
+    "traceability matrix 输出的质量很高，包含 Req→Impl→Test→Review 全链路和 match_mode/confidence"
+  ]
+}
