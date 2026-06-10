@@ -9,9 +9,31 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "evidence"))
 
 from pack import EvidenceCollector
+
+
+# ===================================================================
+# Store cleanup fixture — prevents flaky tests from state leakage
+# ===================================================================
+
+@pytest.fixture(autouse=True)
+def _cleanup_store():
+    """Reset Store singleton before and after each test to prevent state leakage."""
+    try:
+        from store import Store
+        Store.reset()
+    except ImportError:
+        pass
+    yield
+    try:
+        from store import Store
+        Store.reset()
+    except ImportError:
+        pass
 
 
 # ===================================================================
