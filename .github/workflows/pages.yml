@@ -15,16 +15,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v4
-      - uses: actions/upload-pages-artifact@v3
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Build static site
+        run: |
+          mkdir -p _site
+          cp -r docs/ui/* _site/
+          cp docs/.nojekyll _site/ 2>/dev/null || touch _site/.nojekyll
+          cat > _site/index.html << 'HTML'
+          <!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="refresh" content="0;url=dashboard.html"><title>yuleOSH</title></head><body></body></html>
+          HTML
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
-      - id: deployment
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
