@@ -306,6 +306,8 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._serve_page("welcome.html", {})
         elif path == "/onboarding":
             self._serve_page("onboarding.html", {})
+        elif path == "/pipeline-flow":
+            self._serve_file(UI_DIR / "pages" / "pipeline-flow.html", "text/html; charset=utf-8")
         elif path == "/demo":
             self._serve_page("demo.html", {})
         else:

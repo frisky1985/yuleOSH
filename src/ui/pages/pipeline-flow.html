@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline — yuleOSH</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --purple:#722ed1; --purple-bg:rgba(114,46,209,.08);
+  --blue:#1677ff; --blue-bg:rgba(22,119,255,.08);
+  --green:#52c41a; --green-bg:rgba(82,196,26,.08);
+  --orange:#d4a017; --orange-bg:rgba(250,173,20,.08);
+  --red:#ff4d4f; --red-bg:rgba(255,77,79,.08);
+  --bg:#0a0e17; --surface:#111827; --surface2:#1a2332;
+  --border:#1e293b; --text:#e2e8f0; --text2:#94a3b8; --text3:#64748b;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(114,46,209,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(114,46,209,.015) 1px,transparent 1px);
+  background-size:60px 60px;
+}
+
+.header{padding:24px 32px;display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+.header-title{font-size:24px;font-weight:800;letter-spacing:-.5px}
+.gradient-text{background:linear-gradient(135deg,var(--purple),var(--blue),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header-meta{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--text2)}
+
+/* ── Flow Container ── */
+.flow-container{padding:0 32px 32px;position:relative;z-index:1;max-width:1400px;margin:0 auto}
+
+/* Phase labels */
+.phase-strip{display:flex;align-items:center;margin-bottom:16px;gap:12px}
+.phase-dot{width:10px;height:10px;border-radius:50%}
+.phase-dot.p1{background:var(--purple);box-shadow:0 0 8px rgba(114,46,209,.4)}
+.phase-dot.p2{background:var(--blue);box-shadow:0 0 8px rgba(22,119,255,.4)}
+.phase-dot.p3{background:var(--green);box-shadow:0 0 8px rgba(82,196,26,.4)}
+.phase-text{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.phase-text.p1{color:var(--purple)}.phase-text.p2{color:var(--blue)}.phase-text.p3{color:var(--green)}
+
+/* Horizontal flow */
+.flow-row{display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding:8px 0 24px;position:relative}
+.flow-step{flex:1;min-width:100px;max-width:140px;position:relative;cursor:pointer;z-index:1}
+.flow-step:nth-child(3n+1) .flow-card{border-top:3px solid var(--purple)}
+.flow-step:nth-child(3n+2) .flow-card{border-top:3px solid var(--blue)}
+.flow-step:nth-child(3n+0) .flow-card{border-top:3px solid var(--green)}
+.flow-step.gate .flow-card{border-color:rgba(250,173,20,.3)}
+.flow-step.gate .flow-card{background:linear-gradient(180deg,rgba(250,173,20,.04),var(--surface))}
+
+/* Flow card */
+.flow-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:14px 12px;text-align:center;transition:all .25s;position:relative
+}
+.flow-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.flow-step.gate .flow-card:hover{box-shadow:0 4px 20px rgba(250,173,20,.1)}
+.flow-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--surface2);color:var(--text3);font-size:11px;font-weight:700;margin-bottom:8px}
+.flow-step.gate .flow-num{background:var(--orange-bg);color:var(--orange)}
+.flow-icon{font-size:22px;margin-bottom:6px}
+.flow-title{font-size:12px;font-weight:600;line-height:1.3;color:var(--text)}
+.flow-status{font-size:10px;margin-top:4px;font-weight:600}
+.status-pass{color:var(--green)}.status-fail{color:var(--red)}.status-run{color:var(--blue);animation:pulse 1.5s infinite}.status-pend{color:var(--text3)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Arrow connector */
+.flow-arrow{position:absolute;right:-12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:12px;z-index:2;pointer-events:none}
+.flow-step:last-child .flow-arrow{display:none}
+.flow-step.expanded .flow-arrow{color:var(--green)}
+
+/* Gate badge */
+.gate-badge{position:absolute;top:6px;right:6px;width:16px;height:16px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700}
+
+/* ── Expand Panel ── */
+.expand-panel{
+  display:none;background:var(--surface);border:1px solid var(--border-active);
+  border-radius:12px;padding:20px;margin-top:0;animation:slideDown .25s ease
+}
+.expand-panel.show{display:block}
+@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+
+.panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.panel-title{font-size:16px;font-weight:700}
+.panel-close{background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px}
+.panel-close:hover{background:var(--surface2);color:var(--text)}
+
+/* Stats grid */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.stat-mini{background:var(--surface2);border-radius:8px;padding:14px;text-align:center}
+.stat-mini-val{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
+.stat-mini-val.green{color:var(--green)}.stat-mini-val.blue{color:var(--blue)}.stat-mini-val.purple{color:var(--purple)}.stat-mini-val.orange{color:var(--orange)}.stat-mini-val.red{color:var(--red)}
+.stat-mini-label{font-size:11px;color:var(--text2);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+
+/* Detail row */
+.detail-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.detail-chip{font-size:11px;padding:4px 10px;border-radius:6px;font-weight:500}
+.chip-green{background:var(--green-bg);color:var(--green);border:1px solid rgba(82,196,26,.15)}
+.chip-blue{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(22,119,255,.15)}
+.chip-red{background:var(--red-bg);color:var(--red);border:1px solid rgba(255,77,79,.15)}
+
+/* Summary bar */
+.summary-bar{display:flex;gap:16px;margin-bottom:20px;padding:12px 16px;background:var(--surface);border-radius:10px;border:1px solid var(--border);font-size:13px}
+.summary-item{display:flex;align-items:center;gap:6px}
+.summary-dot{width:8px;height:8px;border-radius:50%}
+.summary-dot.pass{background:var(--green)}.summary-dot.fail{background:var(--red)}.summary-dot.pend{background:var(--text3)}
+
+@media(max-width:768px){.flow-row{flex-wrap:wrap}.flow-step{min-width:70px;max-width:90px}.flow-arrow{display:none}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1 class="header-title"><span class="gradient-text">Pipeline</span></h1>
+  <div class="header-meta">
+    <span>Last run: <strong id="lastRun">2 min ago</strong></span>
+    <span style="color:var(--green)">●</span> Live
+  </div>
+</div>
+
+<div class="flow-container">
+  <!-- Summary -->
+  <div class="summary-bar">
+    <div class="summary-item"><span class="summary-dot pass"></span> 6 Passed</div>
+    <div class="summary-item"><span class="summary-dot pend"></span> 3 Pending</div>
+    <div class="summary-item"><span class="summary-dot fail"></span> 0 Failed</div>
+    <div style="margin-left:auto;color:var(--text2)">Total: 2min 34s</div>
+  </div>
+
+  <!-- Phase 1: 质量预检 -->
+  <div class="phase-strip"><span class="phase-dot p1"></span><span class="phase-text p1">Phase 1 · 质量预检</span></div>
+  <div class="flow-row" id="phase1">
+    <!-- Stage 0: Spec Validation (Gate) -->
+    <div class="flow-step gate" onclick="toggleStage(event,'s0')">
+      <div class="flow-card">
+        <div class="gate-badge">⚡</div>
+        <div class="flow-num">0</div>
+        <div class="flow-icon">📊</div>
+        <div class="flow-title">Spec<br>Validation</div>
+        <div class="flow-status status-pass">✓ Passed</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+    <!-- Stage 1: Plan Lint -->
+    <div class="flow-step" onclick="toggleStage(event,'s1')">
+      <div class="flow-card">
+        <div class="flow-num">1</div>
+        <div class="flow-icon">📋</div>
+        <div class="flow-title">Plan<br>Lint</div>
+        <div class="flow-status status-pass">✓ Passed</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+    <!-- Stage 2: Clang-Tidy -->
+    <div class="flow-step" onclick="toggleStage(event,'s2')">
+      <div class="flow-card">
+        <div class="flow-num">2</div>
+        <div class="flow-icon">🔎</div>
+        <div class="flow-title">Clang<br>Tidy</div>
+        <div class="flow-status status-pend">— Skipped</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+  </div>
+  <div class="expand-panel" id="panel-s0"></div>
+  <div class="expand-panel" id="panel-s1"></div>
+  <div class="expand-panel" id="panel-s2"></div>
+
+  <!-- Phase 2: 代码与测试 -->
+  <div class="phase-strip"><span class="phase-dot p2"></span><span class="phase-text p2">Phase 2 · 代码与测试</span></div>
+  <div class="flow-row" id="phase2">
+    <div class="flow-step gate" onclick="toggleStage(event,'s3')">
+      <div class="flow-card">
+        <div class="gate-badge">⚡</div>
+        <div class="flow-num">3</div>
+        <div class="flow-icon">🧪</div>
+        <div class="flow-title">Unit<br>Tests</div>
+        <div class="flow-status status-pass">✓ 1035</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+    <div class="flow-step gate" onclick="toggleStage(event,'s4')">
+      <div class="flow-card">
+        <div class="gate-badge">⚡</div>
+        <div class="flow-num">4</div>
+        <div class="flow-icon">📊</div>
+        <div class="flow-title">Coverage<br>Check</div>
+        <div class="flow-status status-pass">✓ 86%</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+    <div class="flow-step" onclick="toggleStage(event,'s5')">
+      <div class="flow-card">
+        <div class="flow-num">5</div>
+        <div class="flow-icon">🖥️</div>
+        <div class="flow-title">SIL<br>Tests</div>
+        <div class="flow-status status-pend">— Skipped</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+  </div>
+  <div class="expand-panel" id="panel-s3"></div>
+  <div class="expand-panel" id="panel-s4"></div>
+  <div class="expand-panel" id="panel-s5"></div>
+
+  <!-- Phase 3: 构建与交付 -->
+  <div class="phase-strip"><span class="phase-dot p3"></span><span class="phase-text p3">Phase 3 · 构建与交付</span></div>
+  <div class="flow-row" id="phase3">
+    <div class="flow-step" onclick="toggleStage(event,'s6')">
+      <div class="flow-card">
+        <div class="flow-num">6</div>
+        <div class="flow-icon">🔨</div>
+        <div class="flow-title">Cross<br>Compile</div>
+        <div class="flow-status status-pend">— Skipped</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+    <div class="flow-step" onclick="toggleStage(event,'s7')">
+      <div class="flow-card">
+        <div class="flow-num">7</div>
+        <div class="flow-icon">⚡</div>
+        <div class="flow-title">HIL<br>Tests</div>
+        <div class="flow-status status-pend">— No HW</div>
+      </div>
+      <div class="flow-arrow">▶</div>
+    </div>
+    <div class="flow-step gate" onclick="toggleStage(event,'s8')">
+      <div class="flow-card">
+        <div class="gate-badge">⚡</div>
+        <div class="flow-num">8</div>
+        <div class="flow-icon">📦</div>
+        <div class="flow-title">Evidence<br>Pack</div>
+        <div class="flow-status status-pass">✓ Done</div>
+      </div>
+    </div>
+  </div>
+  <div class="expand-panel" id="panel-s6"></div>
+  <div class="expand-panel" id="panel-s7"></div>
+  <div class="expand-panel" id="panel-s8"></div>
+
+</div>
+
+<script>
+const data={
+  s0:{title:'Spec Validation',icon:'📊',phase:1,
+    stats:[{v:'25',l:'Requirements',c:'purple'},{v:'6',l:'Scenarios',c:'blue'},{v:'69',l:'SHALL statements',c:'green'},{v:'0',l:'Errors',c:'green'}],
+    chips:[{t:'100% compliance',c:'green'},{t:'OpenSpec v0.8.0',c:'blue'}],
+    detail:'All 25 requirements validated. 6 scenarios complete. 0 errors detected.'},
+  s1:{title:'Plan Lint',icon:'📋',phase:1,
+    stats:[{v:'2',l:'Sprint plans',c:'blue'},{v:'0',l:'Warnings',c:'green'},{v:'< 1s',l:'Duration',c:'purple'}],
+    chips:[{t:'All plans valid',c:'green'}],
+    detail:'Sprint plans checked for mandatory sections, task IDs, and GIVEN/WHEN/THEN format.'},
+  s2:{title:'Clang-Tidy',icon:'🔎',phase:1,
+    stats:[{v:'0',l:'C files found',c:'text3'},{v:'Skipped',l:'Status',c:'text3'}],
+    chips:[{t:'No C/C++ sources',c:'red'}],
+    detail:'No C/C++ files detected in project. Add C source files to enable static analysis.'},
+  s3:{title:'Unit Tests',icon:'🧪',phase:2,
+    stats:[{v:'1035',l:'Tests collected',c:'green'},{v:'100%',l:'Pass rate',c:'green'},{v:'36',l:'Test files',c:'blue'},{v:'2.2s',l:'Duration',c:'purple'}],
+    chips:[{t:'All passing',c:'green'},{t:'pytest 9.0',c:'blue'}],
+    detail:'1035 tests across 36 test files. Pytest 9.0.3. Coverage: 86%+. 3 warnings (non-critical).'},
+  s4:{title:'Coverage Check',icon:'📊',phase:2,
+    stats:[{v:'86%',l:'Line coverage',c:'green'},{v:'7',l:'A+ modules',c:'purple'},{v:'85%',l:'Threshold',c:'blue'},{v:'PASS',l:'Gate',c:'green'}],
+    chips:[{t:'Above 85%',c:'green'},{t:'Quality Gate passed',c:'green'}],
+    detail:'7 modules at A+ (≥95%). Lowest: ci/run at 65% (orchestration code, industry acceptable).'},
+  s5:{title:'SIL Tests',icon:'🖥️',phase:2,
+    stats:[{v:'0',l:'ELF found',c:'text3'},{v:'Skipped',l:'Status',c:'text3'}],
+    chips:[{t:'No ELF binaries',c:'red'},{t:'Need cross-compile',c:'blue'}],
+    detail:'No prebuilt .elf found in tests/fixtures/prebuilt/. Compile with: cd tests/fixtures/hello-arm && make'},
+  s6:{title:'Cross-Compile',icon:'🔨',phase:3,
+    stats:[{v:'0',l:'Targets',c:'text3'},{v:'Skipped',l:'Status',c:'text3'}],
+    chips:[{t:'No cross src',c:'red'},{t:'ARM GCC needed',c:'blue'}],
+    detail:'No cross-compile test source found. Add src/cross/hello.c or configure ARM GCC toolchain.'},
+  s7:{title:'HIL Tests',icon:'⚡',phase:3,
+    stats:[{v:'0',l:'Devices',c:'text3'},{v:'Skipped',l:'Status',c:'text3'}],
+    chips:[{t:'No hardware',c:'red'},{t:'Mock mode available',c:'blue'}],
+    detail:'No hardware devices detected. Connect a debug probe (ST-Link/J-Link) to run real HIL tests.'},
+  s8:{title:'Evidence Pack',icon:'📦',phase:3,
+    stats:[{v:'3',l:'Reports',c:'green'},{v:'2',l:'Matrices',c:'blue'},{v:'< 1s',l:'Generation',c:'purple'}],
+    chips:[{t:'Traceability ✓',c:'green'},{t:'Acceptance ✓',c:'green'},{t:'Coverage ✓',c:'green'}],
+    detail:'traceability-matrix.json + acceptance-matrix.md + code-coverage-report.md'},
+};
+
+let currentPanel=null;
+
+function toggleStage(e,id){
+  e.stopPropagation();
+  const panel=document.getElementById('panel-'+id);
+  const step=e.currentTarget;
+  
+  if(panel.classList.contains('show')){
+    panel.classList.remove('show');
+    step.classList.remove('expanded');
+    return;
+  }
+
+  // Hide current
+  if(currentPanel && currentPanel!==panel){
+    currentPanel.classList.remove('show');
+    document.querySelector('.flow-step.expanded')?.classList.remove('expanded');
+  }
+
+  // Show new
+  const d=data[id];
+  panel.innerHTML=`
+    <div class="panel-header">
+      <div class="panel-title">${d.icon} ${d.title} — Details</div>
+      <button class="panel-close" onclick="document.getElementById('panel-${id}').classList.remove('show')">✕</button>
+    </div>
+    <div class="stats-grid">
+      ${d.stats.map(s=>`<div class="stat-mini"><div class="stat-mini-val ${s.c}">${s.v}</div><div class="stat-mini-label">${s.l}</div></div>`).join('')}
+    </div>
+    <div class="detail-row">
+      ${d.chips.map(c=>`<span class="detail-chip chip-${c.c}">${c.t}</span>`).join('')}
+    </div>
+    <div style="margin-top:12px;font-size:13px;color:var(--text2);line-height:1.6">${d.detail}</div>
+  `;
+  panel.classList.add('show');
+  step.classList.add('expanded');
+  currentPanel=panel;
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&currentPanel){currentPanel.classList.remove('show');currentPanel=null}});
+</script>
+</body>
+</html>
