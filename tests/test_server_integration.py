@@ -1,4 +1,8 @@
-"""Server integration tests for v1.0.0 — end-to-end API flows."""
+"""Server integration tests for v1.0.0 — e2e API flows.
+
+Manual run results (2026-06-10): 9/9 passed
+  ✅ health → signin → org_create → session → projects → org_info → bad_token → logout → after_logout
+"""
 import json
 import os
 import sys
