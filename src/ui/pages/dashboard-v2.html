@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — yuleOSH</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: { colors: { osh: { bg: '#0a0e17', card: '#111827', cardHover: '#1a2332', border: '#1e293b', text: '#e2e8f0', text2: '#94a3b8', green: '#10b981', blue: '#3b82f6', amber: '#f59e0b', red: '#ef4444', purple: '#8b5cf6' }}} } };
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+body { font-family: 'Inter', sans-serif; background: #0a0e17; color: #e2e8f0; margin: 0; }
+.card { transition: all 0.2s ease; }
+.card:hover { transform: translateY(-2px); }
+.pulse { animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+</style>
+</head>
+<body class="min-h-screen">
+<nav class="border-b border-[#1e293b] bg-[#111827]/80 backdrop-blur sticky top-0 z-50">
+  <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="text-2xl">🚀</span>
+      <span class="text-xl font-black"><span class="bg-gradient-to-r from-[#10b981] via-[#3b82f6] to-[#f59e0b] bg-clip-text text-transparent">yuleOSH</span></span>
+      <span class="text-xs text-[#94a3b8] ml-2 font-mono">v1.0.0</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span id="orgName" class="text-sm text-[#94a3b8]"></span>
+      <span id="tierBadge" class="text-xs px-2 py-1 rounded-full"></span>
+      <button onclick="logout()" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition">Logout</button>
+    </div>
+  </div>
+</nav>
+
+<main class="max-w-6xl mx-auto px-6 py-8">
+  <!-- Stats -->
+  <div class="grid grid-cols-4 gap-4 mb-8">
+    <div class="bg-[#111827] rounded-xl p-4 border border-[#1e293b]">
+      <p class="text-xs text-[#94a3b8] uppercase tracking-wider mb-1">Projects</p>
+      <p class="text-2xl font-bold" id="statProjects">-</p>
+      <p class="text-xs text-[#94a3b8]" id="statProjectLimit"></p>
+    </div>
+    <div class="bg-[#111827] rounded-xl p-4 border border-[#1e293b]">
+      <p class="text-xs text-[#94a3b8] uppercase tracking-wider mb-1">Pipeline Runs</p>
+      <p class="text-2xl font-bold" id="statRuns">-</p>
+      <p class="text-xs text-[#94a3b8]" id="statRunLimit"></p>
+    </div>
+    <div class="bg-[#111827] rounded-xl p-4 border border-[#1e293b]">
+      <p class="text-xs text-[#94a3b8] uppercase tracking-wider mb-1">LLM Tokens</p>
+      <p class="text-2xl font-bold" id="statTokens">-</p>
+      <p class="text-xs text-[#94a3b8]" id="statTokenLimit"></p>
+    </div>
+    <div class="bg-[#111827] rounded-xl p-4 border border-[#1e293b]" id="trialCard">
+      <p class="text-xs text-[#94a3b8] uppercase tracking-wider mb-1">Trial</p>
+      <p class="text-2xl font-bold text-[#10b981]" id="statTrial">-</p>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="flex gap-3 mb-8">
+    <button onclick="createProject()" class="bg-[#10b981] text-black font-bold px-5 py-2 rounded-lg hover:bg-[#059669] transition flex items-center gap-2">
+      <span>＋</span> New Project
+    </button>
+    <button onclick="runCI()" class="bg-[#3b82f6] text-white font-bold px-5 py-2 rounded-lg hover:bg-[#2563eb] transition flex items-center gap-2">
+      <span>▶</span> Run CI
+    </button>
+    <button onclick="viewEvidence()" class="bg-[#8b5cf6] text-white font-bold px-5 py-2 rounded-lg hover:bg-[#7c3aed] transition flex items-center gap-2">
+      <span>📋</span> Evidence
+    </button>
+    <button onclick="upgradeTier()" class="ml-auto border border-[#f59e0b] text-[#f59e0b] font-bold px-5 py-2 rounded-lg hover:bg-[#f59e0b] hover:text-black transition">
+      ⬆ Upgrade
+    </button>
+  </div>
+
+  <!-- Projects -->
+  <h2 class="text-lg font-bold mb-4">📁 Your Projects</h2>
+  <div id="projectList" class="grid gap-4">
+    <div class="text-center text-[#94a3b8] py-8">Loading projects...</div>
+  </div>
+
+  <!-- Recent Activity -->
+  <h2 class="text-lg font-bold mt-8 mb-4">🕐 Recent Activity</h2>
+  <div id="activityFeed" class="bg-[#111827] rounded-xl border border-[#1e293b] divide-y divide-[#1e293b]">
+    <div class="text-center text-[#94a3b8] py-8">Loading...</div>
+  </div>
+</main>
+
+<script>
+const token = localStorage.getItem('yuleosh_token');
+let usage = {};
+
+async function api(path, opts={}) {
+  const h = {'Content-Type':'application/json'};
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  const r = await fetch(path, {headers:h, ...opts});
+  return r.json();
+}
+
+async function load() {
+  try {
+    const session = await api('/api/auth/session');
+    if (session.error) { window.location = '/'; return; }
+    document.getElementById('orgName').textContent = session.org_name || session.email;
+
+    // Load usage
+    usage = await api('/api/v1/usage');
+    renderStats(usage);
+    renderTier(usage);
+
+    // Load projects
+    const projects = await api('/api/project/list');
+    renderProjects(projects.projects || []);
+  } catch(e) {
+    console.error('Dashboard load:', e);
+  }
+}
+
+function renderStats(u) {
+  if (!u.usage) return;
+  const set = (id, v, limit) => {
+    document.getElementById(id).textContent = v;
+    if (limit > 0) document.getElementById(id+'Limit').textContent = `/ ${limit}`;
+  };
+  set('statProjects', u.usage.projects.used, u.usage.projects.limit);
+  set('statRuns', u.usage.pipeline_runs.used, u.usage.pipeline_runs.limit);
+  set('statTokens', u.usage.llm_tokens.used, u.usage.llm_tokens.limit);
+  if (u.trial?.in_trial) {
+    document.getElementById('statTrial').textContent = u.trial.days_left + 'd left';
+  } else {
+    document.getElementById('statTrial').textContent = 'Active';
+  }
+}
+
+function renderTier(u) {
+  const badge = document.getElementById('tierBadge');
+  const tier = (u.tier||'community').toUpperCase();
+  const colors = {COMMUNITY:'bg-gray-700 text-gray-300', PRO:'bg-[#10b981] text-black', ENTERPRISE:'bg-[#8b5cf6] text-white'};
+  badge.className = 'text-xs px-2 py-1 rounded-full ' + (colors[tier]||colors.COMMUNITY);
+  badge.textContent = tier;
+}
+
+function renderProjects(projects) {
+  const el = document.getElementById('projectList');
+  if (!projects.length) {
+    el.innerHTML = '<div class="text-center text-[#94a3b8] py-8">No projects yet — <a href="/onboarding" class="text-[#10b981]">create your first one</a></div>';
+    return;
+  }
+  el.innerHTML = projects.map(p => `
+    <div class="bg-[#111827] rounded-xl p-4 border border-[#1e293b] card cursor-pointer" onclick="openProject('${p.slug}')">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-lg">${p.name}</h3>
+          <p class="text-xs text-[#94a3b8] font-mono">${p.slug}</p>
+        </div>
+        <span class="text-xs text-[#94a3b8]">${p.created_at||''}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function createProject() { window.location = '/onboarding'; }
+function runCI() { 
+  document.getElementById('activityFeed').innerHTML = '<div class="text-center py-4"><span class="pulse">⏳ Running CI pipeline...</span></div>';
+  api('/api/v1/pipeline/run', {method:'POST', body: JSON.stringify({layer:1})}).then(r => {
+    if (r.job_id) pollJob(r.job_id);
+    else load();
+  });
+}
+function viewEvidence() { window.location = '/api/v1/evidence'; }
+function openProject(slug) { alert('Project: '+slug); }
+function upgradeTier() { window.location = '/pricing'; }
+function logout() { api('/api/auth/logout', {method:'POST'}); localStorage.clear(); window.location = '/'; }
+
+async function pollJob(id) {
+  const s = await api('/api/v1/pipeline/status/'+id);
+  if (s.status === 'running') {
+    document.getElementById('activityFeed').innerHTML = '<div class="text-center py-4"><span class="pulse">⏳ Pipeline running...</span></div>';
+    setTimeout(() => pollJob(id), 2000);
+  } else {
+    document.getElementById('activityFeed').innerHTML = `<div class="text-center py-4 ${s.status==='passed'?'text-[#10b981]':'text-[#ef4444]'}">${s.status==='passed'?'✅ Pipeline passed!':'❌ Pipeline failed'}</div>`;
+    setTimeout(load, 1000);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
