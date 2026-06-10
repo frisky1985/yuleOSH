@@ -278,7 +278,8 @@ class HilTestRunner:
                 with SerialMonitor(port=port, baud=self.baud, timeout=5) as serial:
                     time.sleep(1)
                     boot_log += serial.captured_log
-            except Exception:
+            except Exception as e:
+                import logging; logging.getLogger("__name__").warning("%s", e)
                 pass
 
             result.passed = False
