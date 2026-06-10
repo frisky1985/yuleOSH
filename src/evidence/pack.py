@@ -898,6 +898,32 @@ class EvidenceCollector:
         return str(zip_path)
 
 
+def _check_pipeline_not_running(project_dir: str) -> bool:
+    """Check that no pipeline is currently writing to avoid race conditions.
+
+    Returns True if it's safe to collect evidence (no running pipeline).
+    """
+    sessions_dir = Path(project_dir) / ".osh" / "sessions"
+    if not sessions_dir.is_dir():
+        return True
+
+    # Check recent pipeline sessions for active/running status
+    for sf in sorted(
+        sessions_dir.rglob("session.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:3]:
+        try:
+            data = json.loads(sf.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        status = data.get("status", "")
+        if status in ("running", "in_progress"):
+            print(f"  ⚠️  Pipeline still running: {sf.parent.name} (status={status})")
+            return False
+    return True
+
+
 def generate_evidence(project_dir: str = None, spec_path: str = None):
     """Generate full evidence chain.
 
@@ -910,6 +936,16 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
 
     print(f"\n📦 OSH Evidence Generation")
     print(f"{'='*50}")
+
+    # Race condition guard: wait if pipeline is still running
+    import time as _time
+    _max_wait = 30  # seconds
+    _waited = 0
+    while not _check_pipeline_not_running(project_dir) and _waited < _max_wait:
+        _sleep = min(2, _max_wait - _waited)
+        print(f"  ⏳ Waiting for pipeline to finish... ({_waited}s elapsed)")
+        _time.sleep(_sleep)
+        _waited += _sleep
 
     collector = EvidenceCollector(project_dir)
 

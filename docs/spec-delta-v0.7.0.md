@@ -28,34 +28,34 @@
 
 ---
 
-## 🔥 P0 — AI Agent 核心能力（当前执行中）
+## 🔥 P0 — AI Agent 核心能力 ✅ (已完成)
 
 ### I1: LLM Agent Pipeline 内容生成 → 小克 👨‍💻
 
 | Task | 内容 | 状态 |
 |:-----|:-----|:----:|
-| T1.1 | Prompt 模板工程 — 10 个 step 各自 prompt | 🔄 |
-| T1.2 | PipelineStep 注入 LLM 调用 | 🔄 |
-| T1.3 | Token 用量追踪 + 成本估算 | 🔄 |
-| T1.4 | 硬错误模式（LLM 失败 → PipelineStepError） | 🔄 |
-| T1.5 | Prompt 版本管理与 spec-delta 联动 | 🔄 |
+| T1.1 | Prompt 模板工程 — 8 个 step prompt builders | ✅ |
+| T1.2 | PipelineStep 注入 LLM 调用 | ✅ |
+| T1.3 | Token 用量追踪 + 成本估算 | ✅ |
+| T1.4 | 硬错误模式（LLM 失败 → PipelineStepError） | ✅ |
+| T1.5 | Prompt 版本管理与 spec-delta 联动 | ✅ |
 
 ### I2: Evidence Engine 修复 → 小马 🐴
 
 | Task | 内容 | 状态 |
 |:-----|:-----|:----:|
-| T2.1 | 硬编码路径→最近 pipeline session 自动发现 | 🔄 |
-| T2.2 | Pipeline 状态竞态修复（_save 时序） | 🔄 |
-| T2.3 | 测试覆盖 | 🔄 |
+| T2.1 | 硬编码路径→最近 pipeline session 自动发现 | ✅ |
+| T2.2 | Pipeline 状态竞态修复（_check_pipeline_not_running） | ✅ |
+| T2.3 | 测试覆盖 | ✅ |
 
 ### I3: 追溯矩阵升级 → 小马 🐴
 
 | Task | 内容 | 状态 |
 |:-----|:-----|:----:|
-| T3.1 | Scenario-Ref 显式字段设计与解析器 | 🔄 |
-| T3.2 | 两级匹配：精确 Ref → 关键词回退 | 🔄 |
-| T3.3 | 匹配置信度标注 | 🔄 |
-| T3.4 | 现有测试文件添加 Covers 标记 | 🔄 |
+| T3.1 | Scenario-Ref 显式字段设计与解析器 | ✅ |
+| T3.2 | 两级匹配：精确 Ref → 关键词回退 | ✅ |
+| T3.3 | 匹配置信度标注 | ✅ |
+| T3.4 | 现有测试文件添加 Covers 标记 | ✅ |
 
 ---
 
@@ -90,4 +90,4 @@
 | 时间 | 变更 | 内容 |
 |:-----|:-----|:-----|
 | 2026-06-09 | v0.6.1 | Pipeline重构 + 安全加固 + CLI argparse迁移（小克） |
-| 2026-06-10 | v0.7.0 kickoff | Ralph Loop 启动 P0 I1/I2/I3 三线并行 |
+| 2026-06-10 | v0.7.0 P0 完成 | 小明完成 P0 三线补齐：T1.5 Prompt版本 + T2.2 竞态修复 + spec-delta 状态更新 + 10 新测试 |

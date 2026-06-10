@@ -21,6 +21,33 @@ Steps:
 from pathlib import Path
 from typing import Optional
 
+# ---------------------------------------------------------------------------
+# Prompt version management (T1.5: spec-delta 联动)
+# ---------------------------------------------------------------------------
+# Each prompt builder has a semantic version. When a prompt is modified,
+# bump its version and record the change in docs/spec-delta.md.
+
+PROMPT_VERSIONS: dict[str, str] = {
+    "super-analysis":     "1.0.0",
+    "prd":                "1.0.0",
+    "internal-review":    "1.0.0",
+    "architecture":       "1.0.0",
+    "development":        "1.0.0",
+    "test-planning":      "1.0.0",
+    "code-review":        "1.0.0",
+    "final-report":       "1.0.0",
+}
+
+
+def get_prompt_versions() -> dict[str, str]:
+    """Return a copy of the current prompt version map."""
+    return dict(PROMPT_VERSIONS)
+
+
+def get_prompt_version(step_key: str) -> str:
+    """Return the version string for a given step key."""
+    return PROMPT_VERSIONS.get(step_key, "0.0.0")
+
 
 # ---------------------------------------------------------------------------
 # Step 1: S.U.P.E.R Analysis — 小明
