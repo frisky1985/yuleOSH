@@ -287,7 +287,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         elif path == "/en/pricing":
             self._serve_file(UI_DIR / "marketing" / "en" / "pricing.html", "text/html; charset=utf-8")
         elif path == "/dashboard":
-            self._serve_file(UI_DIR / "dashboard.html", "text/html")
+            self._serve_file(UI_DIR / "pages" / "dashboard-v3.html", "text/html; charset=utf-8")
         elif path == "/apikeys":
             self._serve_page("apikeys.html", {})
         elif path == "/api/status":
