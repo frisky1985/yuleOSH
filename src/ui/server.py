@@ -277,7 +277,8 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
                     self._add_security_headers()
                     self.send_header("Location", "/welcome")
                     self.end_headers()
-            except Exception:
+            except Exception as e:
+                logging.warning("Signin redirect fallback: %s", e)
                 self._serve_file(UI_DIR / "marketing" / "index.html", "text/html; charset=utf-8")
         elif path == "/pricing":
             self._serve_file(UI_DIR / "marketing" / "pricing.html", "text/html; charset=utf-8")
@@ -756,7 +757,8 @@ def main():
             if doc.startswith("Route to") or doc.startswith("Handle") or doc == "":
                 doc = f"/api/v1/{name}"
             api_routes.append((f"/api/v1/{name}", doc))
-    except Exception:
+    except Exception as e:
+        logging.warning("API route listing failed: %s", e)
         api_routes = [
             ("/api/v1/health", "System health status"),
             ("/api/v1/wizard", "Wizard setup API"),

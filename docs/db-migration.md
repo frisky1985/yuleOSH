@@ -2,7 +2,7 @@
 
 > Built-in SQLite migration framework (no Alembic dependency)
 
-## Schema Version: v5
+## Schema Version: v6
 
 ## Migration History
 
@@ -13,6 +13,7 @@
 | v3 | ALTER `pipelines` (stat columns) | `_run_migration_v3()` — stat tracking |
 | v4 | `api_keys` | API key management |
 | v5 | `spec_cache` | Spec parsing result cache |
+| v6 | `users.password_hash` (ALTER) | bcrypt password hashing (v0.8.0) |
 
 ## How Migrations Work
 
@@ -20,7 +21,7 @@
 
 ```python
 class Store:
-    _MIGRATION_VERSION = 5  # bump this to trigger new migrations
+    _MIGRATION_VERSION = 6  # v0.8.0: password_hash column on users  # bump this to trigger new migrations
 
     def _migrate(self):
         # CREATE TABLE IF NOT EXISTS for all current tables

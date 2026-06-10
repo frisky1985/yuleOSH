@@ -8,12 +8,13 @@
     <a href="https://github.com/frisky1985/yuleOSH/actions">
       <img src="https://img.shields.io/badge/CI-Layer%201%20Passing-brightgreen?style=flat-square" alt="CI">
     </a>
-    <img src="https://img.shields.io/badge/version-0.3.0-blue?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/version-0.8.0-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-≥3.10-ff69b4?style=flat-square" alt="Python">
-    <img src="https://img.shields.io/badge/coverage-67%25-yellowgreen?style=flat-square" alt="Coverage">
-    <img src="https://img.shields.io/badge/tests-257%20passed-success?style=flat-square" alt="Tests">
+    <img src="https://img.shields.io/badge/coverage-86%25-brightgreen?style=flat-square" alt="Coverage">
+    <img src="https://img.shields.io/badge/tests-988%20passed-success?style=flat-square" alt="Tests">
     <img src="https://img.shields.io/badge/ASPICE-compliant-8A2BE2?style=flat-square" alt="ASPICE">
+    <img src="https://img.shields.io/badge/JWT-auth-blue?style=flat-square" alt="JWT">
   </p>
 </div>
 
@@ -27,7 +28,9 @@ Built for teams shipping firmware on MCU, SoC, and RTOS platforms who need:
 
 - **ASPICE traceability** without the paperwork overhead
 - **AI agent pipeline** that replaces manual code reviews and test planning
-- **3-layer CI/CD** tailored for embedded cross-compilation and static analysis
+- **4-layer CI/CD** tailored for embedded cross-compilation and HIL testing
+- **Multi-tenant SaaS** with JWT auth, org/project isolation, and bcrypt passwords
+- **One-click compliance** — evidence pack, traceability matrix, acceptance matrix auto-generated
 - **One-click compliance packs** for ISO 26262 / ASPICE audits
 
 ---

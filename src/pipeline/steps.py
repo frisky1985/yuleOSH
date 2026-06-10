@@ -359,7 +359,8 @@ class ArchitectureStep(PipelineStep):
                 try:
                     content = fpath.read_text()[:2000]
                     key_file_snippets.append(f"### {sf}\n```\n{content}\n```")
-                except Exception:
+                except Exception as e:
+                    log.warning("Could not read source file %s: %s", sf, e)
                     pass
 
         return build_architecture_prompt(
@@ -434,12 +435,14 @@ class DevelopmentStep(PipelineStep):
         for f in src_files:
             try:
                 src_lines += len(f.read_text().splitlines())
-            except Exception:
+            except Exception as e:
+                log.warning("Could not read source file in count: %s", e)
                 pass
         for f in test_files:
             try:
                 test_lines += len(f.read_text().splitlines())
-            except Exception:
+            except Exception as e:
+                log.warning("Could not read test file in count: %s", e)
                 pass
 
         return build_development_prompt(

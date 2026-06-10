@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import html
 import http.cookies
+import logging
 import os
 import secrets
 import time
@@ -63,7 +64,9 @@ def validate_session(cookie_val: str) -> bool:
             del _sessions[token]
             return False
         return True
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger("ui.auth").warning("Session validation error: %s", e)
         return False
 
 

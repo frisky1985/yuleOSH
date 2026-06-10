@@ -12,6 +12,7 @@ Provides:
 """
 
 import json
+import logging
 import os
 import re
 import secrets
@@ -95,7 +96,8 @@ def _decode_token(token: str) -> Optional[dict]:
     """Decode and validate JWT. Returns payload dict or None if invalid/expired."""
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-    except Exception:
+    except Exception as e:
+        logging.getLogger("auth_extended").warning("JWT decode failed: %s", e)
         return None
 
 

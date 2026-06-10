@@ -56,7 +56,8 @@ from pipeline.prompts import (  # noqa: E402
 try:
     from store import Store
     _store = Store()
-except Exception:
+except Exception as e:
+    import logging; logging.getLogger("pipeline.run").warning("Store init failed: %s", e)
     _store = None
 
 # Step base classes (refactored — replaces duplicated step handler boilerplate)
@@ -569,8 +570,8 @@ def step_internal_review(session: PipelineSession) -> str:
                     artifact_summaries[key] = first_line or "(empty)"
                 else:
                     artifact_summaries[key] = "MISSING"
-            except Exception:
-                artifact_summaries[key] = "(cannot read)"
+            except Exception as e:
+                artifact_summaries[key] = f"(read error)"
 
         # Read spec for context
         spec_path = Path(session.spec_path)
@@ -695,7 +696,8 @@ def step_claude_arch(session: PipelineSession) -> str:
                 try:
                     content = fpath.read_text()[:2000]
                     key_file_snippets.append(f"### {sf}\n```\n{content}\n```")
-                except Exception:
+                except Exception as e:
+                    import logging; logging.getLogger("pipeline.run").warning("Snippet read for %s: %s", sf, e)
                     pass
 
         tech_stack_str = ", ".join(sorted(tech_stack)) if tech_stack else "Python"
@@ -788,7 +790,7 @@ def step_claude_dev(session: PipelineSession) -> str:
                 n = len(f.read_text().splitlines())
                 src_lines += n
                 total_lines += n
-            except Exception:
+            except Exception as e:
                 pass
         for f in test_files:
             try:
