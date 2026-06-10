@@ -1,65 +1,39 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # ── yuleOSH application server ──────────────────────────────────────
   yuleosh:
+    image: frisky1985/yuleosh:1.0.0
     build: .
-    # No external port mapping — Caddy handles ingress.
-    # Uncomment the line below for direct access during development:
-    # ports:
-    #   - "8080:8080"
+    ports:
+      - "8080:8080"
+    environment:
+      - YULEOSH_JWT_SECRET=${YULEOSH_JWT_SECRET}
+      - YULEOSH_API_KEY=${YULEOSH_API_KEY:-}
+      - YULEOSH_BASE_URL=${YULEOSH_BASE_URL:-http://localhost:8080}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - YULEOSH_NOTIFY_FEISHU_URL=${YULEOSH_NOTIFY_FEISHU_URL:-}
     volumes:
       - yuleosh_data:/app/.yuleosh
-      - ./projects:/app/projects:rw
-    environment:
-      - YULEOSH_DB=/app/.yuleosh/store.db
-      - OSH_HOME=/app
-      # Set YULEOSH_API_KEY to enable authentication
-      # Uncomment and set a strong key for production:
-      # - YULEOSH_API_KEY=your-secure-api-key-here
-      - PYTHONUNBUFFERED=1
+      - ./docs:/app/docs:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health').read()"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-    networks:
-      - yuleosh_net
 
-  # ── Caddy reverse proxy with auto TLS ──────────────────────────────
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
+  nginx:
+    image: nginx:alpine
     ports:
-      - "80:80"       # HTTP (redirects to HTTPS)
-      - "443:443"     # HTTPS
+      - "443:443"
     volumes:
-      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data      # TLS certificates + ACME state
-      - caddy_config:/config  # Caddy runtime config
-    environment:
-      # If behind a CDN/cloud LB, set the trusted proxy CIDR:
-      # - CADDY_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-      - TZ=Asia/Shanghai
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
     depends_on:
       - yuleosh
-    networks:
-      - yuleosh_net
-    # Healthcheck: verify Caddy is listening
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   yuleosh_data:
-  caddy_data:
-  caddy_config:
-
-networks:
-  yuleosh_net:
-    driver: bridge
