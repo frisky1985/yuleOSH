@@ -304,6 +304,8 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._serve_page("health.html", {})
         elif path == "/welcome":
             self._serve_page("welcome.html", {})
+        elif path == "/onboarding":
+            self._serve_page("onboarding.html", {})
         elif path == "/demo":
             self._serve_page("demo.html", {})
         else:

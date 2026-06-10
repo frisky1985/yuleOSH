@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome — yuleOSH</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: { colors: { osh: { bg: '#0a0e17', surface: '#111827', surface2: '#1a2332', border: '#1e293b', text: '#e2e8f0', text2: '#94a3b8', accent: '#10b981', accent2: '#3b82f6', warn: '#f59e0b' }},
+  fontFamily: { sans: ['Inter','-apple-system','system-ui','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } };
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+body { font-family: 'Inter', sans-serif; background: #0a0e17; color: #e2e8f0; margin: 0; }
+.gradient-text { background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.step-active { border-color: #10b981; box-shadow: 0 0 20px rgba(16,185,129,.3); }
+.step-done { border-color: #10b981; opacity: 0.8; }
+.step-pending { border-color: #1e293b; opacity: 0.4; }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-4xl mx-auto px-6 py-12">
+  <div class="text-center mb-12">
+    <h1 class="text-4xl font-black mb-2"><span class="gradient-text">Welcome to yuleOSH</span></h1>
+    <p class="text-lg text-[#94a3b8]">Let's get your first embedded project running in 3 minutes</p>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="flex gap-2 mb-10" id="progressBar">
+    <div class="flex-1 h-1 rounded bg-[#10b981]"></div>
+    <div class="flex-1 h-1 rounded bg-[#1e293b]" id="bar2"></div>
+    <div class="flex-1 h-1 rounded bg-[#1e293b]" id="bar3"></div>
+    <div class="flex-1 h-1 rounded bg-[#1e293b]" id="bar4"></div>
+  </div>
+
+  <!-- Step 1: Create Project -->
+  <div class="bg-[#111827] rounded-xl border border-[#10b981] p-6 mb-4 step-active" id="step1">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="w-8 h-8 bg-[#10b981] rounded-full flex items-center justify-center font-bold text-black">1</span>
+      <h2 class="text-xl font-bold">Create Your First Project</h2>
+    </div>
+    <div class="flex gap-3">
+      <input id="orgName" placeholder="Organization name" class="flex-1 bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 text-[#e2e8f0] focus:border-[#10b981] outline-none" />
+      <input id="projectName" placeholder="Project name" class="flex-1 bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 text-[#e2e8f0] focus:border-[#10b981] outline-none" />
+      <button onclick="createProject()" class="bg-[#10b981] text-black font-bold px-6 py-2 rounded hover:bg-[#059669] transition">Create</button>
+    </div>
+    <p id="step1Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
+  </div>
+
+  <!-- Step 2: Write Spec -->
+  <div class="bg-[#111827] rounded-xl border border-[#1e293b] p-6 mb-4 step-pending" id="step2">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="w-8 h-8 bg-[#1e293b] rounded-full flex items-center justify-center font-bold text-[#94a3b8]">2</span>
+      <h2 class="text-xl font-bold">Write Your Spec</h2>
+    </div>
+    <textarea id="specContent" rows="6" placeholder="### RS-001: My Feature&#10;The system SHALL provide...&#10;&#10;#### Scenario: Basic Test&#10;GIVEN a connected device&#10;WHEN the system starts&#10;THEN the system SHALL respond with OK" class="w-full bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 text-[#e2e8f0] font-mono text-sm focus:border-[#3b82f6] outline-none"></textarea>
+    <div class="flex gap-3 mt-3">
+      <button onclick="saveSpec()" class="bg-[#3b82f6] text-white font-bold px-6 py-2 rounded hover:bg-[#2563eb] transition">Save Spec</button>
+      <button onclick="useTemplate()" class="border border-[#1e293b] text-[#94a3b8] font-bold px-4 py-2 rounded hover:border-[#3b82f6] transition">Use Template</button>
+    </div>
+    <p id="step2Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
+  </div>
+
+  <!-- Step 3: Run Pipeline -->
+  <div class="bg-[#111827] rounded-xl border border-[#1e293b] p-6 mb-4 step-pending" id="step3">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="w-8 h-8 bg-[#1e293b] rounded-full flex items-center justify-center font-bold text-[#94a3b8]">3</span>
+      <h2 class="text-xl font-bold">Run Your First Pipeline</h2>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="runPipeline()" class="bg-[#f59e0b] text-black font-bold px-6 py-2 rounded hover:bg-[#d97706] transition">Run CI Pipeline</button>
+      <button onclick="runFullPipeline()" class="border border-[#f59e0b] text-[#f59e0b] font-bold px-6 py-2 rounded hover:bg-[#f59e0b] hover:text-black transition">Run Full Pipeline</button>
+    </div>
+    <div id="step3Status" class="mt-3 text-sm hidden"></div>
+    <p id="step3Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
+  </div>
+
+  <!-- Step 4: View Evidence -->
+  <div class="bg-[#111827] rounded-xl border border-[#1e293b] p-6 mb-4 step-pending" id="step4">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="w-8 h-8 bg-[#1e293b] rounded-full flex items-center justify-center font-bold text-[#94a3b8]">4</span>
+      <h2 class="text-xl font-bold">View Your Evidence</h2>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="viewEvidence()" class="bg-[#8b5cf6] text-white font-bold px-6 py-2 rounded hover:bg-[#7c3aed] transition">Traceability Matrix</button>
+      <button onclick="viewDashboard()" class="border border-[#8b5cf6] text-[#8b5cf6] font-bold px-6 py-2 rounded hover:bg-[#8b5cf6] hover:text-white transition">Go to Dashboard</button>
+    </div>
+    <p id="step4Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
+  </div>
+
+  <div class="text-center mt-8">
+    <a href="/dashboard" class="text-[#10b981] hover:text-[#059669] text-sm">Skip onboarding → Dashboard</a>
+  </div>
+</div>
+
+<script>
+let step = 1;
+const token = localStorage.getItem('yuleosh_token') || '';
+
+function markDone(n) {
+  for (let i = 2; i <= 4; i++) {
+    const el = document.getElementById('step'+i);
+    const bar = document.getElementById('bar'+i);
+    if (i <= n) {
+      el.classList.remove('step-pending'); el.classList.add('step-done');
+      bar.classList.remove('bg-[#1e293b]'); bar.classList.add('bg-[#10b981]');
+    } else if (i == n+1) {
+      el.classList.remove('step-pending'); el.classList.add('step-active');
+    }
+  }
+}
+
+async function api(method, path, body) {
+  const h = {'Content-Type':'application/json'};
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  const r = await fetch(path, {method, headers:h, body: body ? JSON.stringify(body) : undefined});
+  return r.json();
+}
+
+async function createProject() {
+  const org = document.getElementById('orgName').value.trim();
+  const proj = document.getElementById('projectName').value.trim();
+  if (!org || !proj) { alert('Fill both fields'); return; }
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-');
+  const r = await api('POST', '/api/org/create', {
+    org_name: org, org_slug: slug(org),
+    project_name: proj, project_slug: slug(proj),
+    email: localStorage.getItem('yuleosh_email') || 'user@yuleosh.com'
+  });
+  if (r.error) { document.getElementById('step1Result').innerHTML = '❌ '+r.error; document.getElementById('step1Result').classList.remove('hidden'); return; }
+  localStorage.setItem('yuleosh_token', r.token);
+  document.getElementById('step1Result').innerHTML = '✅ Created! Org: '+r.org_slug;
+  document.getElementById('step1Result').classList.remove('hidden');
+  markDone(1); step = 2;
+}
+
+async function saveSpec() {
+  const content = document.getElementById('specContent').value.trim();
+  if (!content) { alert('Write some spec content first'); return; }
+  const r = await api('POST', '/api/v1/spec', { content });
+  document.getElementById('step2Result').innerHTML = r.error ? '❌ '+r.error : '✅ Spec saved & validated!';
+  document.getElementById('step2Result').classList.remove('hidden');
+  if (!r.error) { markDone(2); step = 3; }
+}
+
+function useTemplate() {
+  document.getElementById('specContent').value = `### RS-001: LED Control\nStatus: PROPOSED\n\nThe system SHALL control an LED via GPIO.\n\n#### Scenario: LED Toggle\nGIVEN GPIO pin is configured as output\nWHEN the toggle command is sent\nTHEN the LED SHALL change state`;
+}
+
+async function runPipeline() {
+  const statusEl = document.getElementById('step3Status');
+  statusEl.innerHTML = '⏳ Running CI Layer 1...';
+  statusEl.classList.remove('hidden');
+  const r = await api('POST', '/api/v1/pipeline/run', { layer: 1 });
+  if (r.job_id) {
+    let poll = setInterval(async () => {
+      const s = await api('GET', '/api/v1/pipeline/status/'+r.job_id);
+      if (s.status == 'running') statusEl.innerHTML = '⏳ Pipeline running...';
+      else {
+        clearInterval(poll);
+        if (s.status == 'passed') {
+          statusEl.innerHTML = '✅ Pipeline passed!';
+          document.getElementById('step3Result').innerHTML = '✅ All checks passed';
+          document.getElementById('step3Result').classList.remove('hidden');
+          markDone(3); step = 4;
+        } else {
+          statusEl.innerHTML = '❌ Pipeline failed: ' + (s.result||'');
+        }
+      }
+    }, 2000);
+  } else {
+    statusEl.innerHTML = '⚠️ API not available (local mode)';
+  }
+}
+
+async function runFullPipeline() {
+  const statusEl = document.getElementById('step3Status');
+  statusEl.innerHTML = '⏳ Running full pipeline (layers 1-3)...';
+  statusEl.classList.remove('hidden');
+  const r = await api('POST', '/api/v1/pipeline/run', { layer: 0 });
+  if (r.job_id) {
+    let poll = setInterval(async () => {
+      const s = await api('GET', '/api/v1/pipeline/status/'+r.job_id);
+      if (s.status == 'running') statusEl.innerHTML = '⏳ Pipeline running...';
+      else {
+        clearInterval(poll);
+        statusEl.innerHTML = '✅ Pipeline completed: ' + (s.result||s.status);
+        markDone(3); step = 4;
+      }
+    }, 3000);
+  } else {
+    statusEl.innerHTML = '⚠️ API not available (local mode)';
+  }
+}
+
+function viewEvidence() {
+  window.location.href = '/api/v1/evidence';
+}
+function viewDashboard() {
+  window.location.href = '/dashboard';
+}
+</script>
+</body>
+</html>
