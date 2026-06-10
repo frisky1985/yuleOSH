@@ -35,7 +35,7 @@ class Store:
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 5
+    _MIGRATION_VERSION = 6  # v0.8.0: password_hash column on users
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -87,6 +87,7 @@ class Store:
                 org_id INTEGER NOT NULL,
                 email TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'member',
+                password_hash TEXT DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (org_id) REFERENCES organizations(id),
                 UNIQUE(org_id, email)
@@ -142,6 +143,8 @@ class Store:
         version = self.get_migration_version()
         if version < 3:
             self._run_migration_v3()
+        if version < 6:
+            self._run_migration_v6()
 
         # Record migration version
         self.conn.execute(
@@ -166,6 +169,17 @@ class Store:
         try:
             self.conn.execute(
                 "ALTER TABLE projects ADD COLUMN last_active_at TEXT"
+            )
+        except OperationalError:
+            pass
+        self.conn.commit()
+
+    def _run_migration_v6(self):
+        """Migration v6: add password_hash column to users (v0.8.0)."""
+        from sqlite3 import OperationalError
+        try:
+            self.conn.execute(
+                "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL"
             )
         except OperationalError:
             pass
@@ -259,14 +273,14 @@ class Store:
     # Multi-tenant: Users
     # ------------------------------------------------------------------
 
-    def create_user(self, org_id: int, email: str, role: str = "member") -> dict:
+    def create_user(self, org_id: int, email: str, role: str = "member", password_hash: str = None) -> dict:
         now = datetime.now().isoformat()
         cur = self.conn.execute(
-            "INSERT INTO users (org_id, email, role, created_at) VALUES (?, ?, ?, ?)",
-            (org_id, email, role, now)
+            "INSERT INTO users (org_id, email, role, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+            (org_id, email, role, password_hash, now)
         )
         self.conn.commit()
-        return {"id": cur.lastrowid, "org_id": org_id, "email": email, "role": role, "created_at": now}
+        return {"id": cur.lastrowid, "org_id": org_id, "email": email, "role": role, "password_hash": password_hash, "created_at": now}
 
     def get_user(self, org_id: int, email: str) -> Optional[dict]:
         cur = self.conn.execute(
