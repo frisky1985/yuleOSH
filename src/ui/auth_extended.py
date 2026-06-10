@@ -15,7 +15,10 @@ import json
 import os
 import re
 import secrets
+import time
 from typing import Optional
+
+import jwt  # PyJWT
 
 from src.store import Store
 
@@ -28,13 +31,35 @@ EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 SESSION_TTL_HOURS = 72
 
+# ── JWT ──────────────────────────────────────────────────────────────────────
+JWT_SECRET = os.environ.get("YULEOSH_JWT_SECRET", secrets.token_urlsafe(32))
+JWT_ALGORITHM = "HS256"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _generate_token() -> str:
-    return secrets.token_urlsafe(48)
+def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "") -> str:
+    """Generate a signed JWT with embedded user/org claims and expiration."""
+    import time as _time
+    now = int(_time.time())
+    payload = {
+        "sub": str(user_id),
+        "org": org_id,
+        "email": email,
+        "iat": now,
+        "exp": now + SESSION_TTL_HOURS * 3600,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _decode_token(token: str) -> Optional[dict]:
+    """Decode and validate JWT. Returns payload dict or None if invalid/expired."""
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except Exception:
+        return None
 
 
 def _slugify(text: str) -> str:
@@ -121,7 +146,7 @@ def handle_signin(body: dict) -> dict:
                 return _create_login_response(store, user)
 
         # First-time user — need to create org first
-        token = _generate_token()
+        token = _generate_token(email=email)
         return {"token": token, "redirect": "/org/setup", "needs_org": True}, 200
 
 
@@ -172,7 +197,7 @@ def handle_org_create(body: dict, session_token: str) -> dict:
     store.create_org_project(org["id"], project_name, project_slug)
 
     # Create session
-    token = _generate_token()
+    token = _generate_token(user["id"], org["id"], email)
     store.create_session(user["id"], token, SESSION_TTL_HOURS)
 
     return {
@@ -308,7 +333,7 @@ def handle_org_info(session_token: str) -> dict:
 
 def _create_login_response(store: Store, user: dict) -> dict:
     """Create a session for the user and return the response."""
-    token = _generate_token()
+    token = _generate_token(user["id"], user.get("org_id", 0), user.get("email", ""))
     store.create_session(user["id"], token, SESSION_TTL_HOURS)
     return {
         "token": token,
