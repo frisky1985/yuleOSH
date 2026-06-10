@@ -2,7 +2,7 @@
 
 > Built-in SQLite migration framework (no Alembic dependency)
 
-## Schema Version: v6
+## Schema Version: v7
 
 ## Migration History
 
@@ -14,6 +14,7 @@
 | v4 | `api_keys` | API key management |
 | v5 | `spec_cache` | Spec parsing result cache |
 | v6 | `users.password_hash` (ALTER) | bcrypt password hashing (v0.8.0) |
+| v7 | `usage_log` + `subscriptions` + `organizations.tier` | Metering + Payment (v0.9.0) |
 
 ## How Migrations Work
 

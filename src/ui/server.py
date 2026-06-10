@@ -795,5 +795,43 @@ def main():
         server.shutdown()
 
 
+
+    # ── v0.9.0: Async pipeline + usage handlers ─────────────────────────────
+
+    def _handle_pipeline_status(self, path: str):
+        """GET /api/v1/pipeline/status/{job_id}"""
+        job_id = path.rsplit("/", 1)[-1]
+        try:
+            from pipeline.async_runner import get_job_status
+            status = get_job_status(job_id)
+            if status:
+                self._json_response(status)
+            else:
+                self._json_response({"error": "Job not found"}, 404)
+        except Exception:
+            self._json_response({"error": "Pipeline status unavailable"}, 500)
+
+    def _handle_usage(self):
+        """GET /api/v1/usage — current org usage summary"""
+        token = self._get_bearer_token()
+        if not token:
+            self._json_response({"error": "Unauthorized"}, 401)
+            return
+        try:
+            from src.ui.auth_extended import get_session_user
+            user = get_session_user(token)
+            if not user:
+                self._json_response({"error": "Invalid session"}, 401)
+                return
+            store = Store()
+            from usage.metering import get_usage_summary
+            summary = get_usage_summary(store, user["org_id"])
+            self._json_response(summary)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self._json_response({"error": str(e)}, 500)
+
+
 if __name__ == "__main__":
     main()
