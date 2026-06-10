@@ -43,7 +43,9 @@ def _overview():
             passed = conn.execute(
                 "SELECT COUNT(*) as c FROM ci_runs WHERE status='passed'"
             ).fetchone()["c"]
-        except Exception:
+        except Exception as e:
+            import logging; logging.getLogger("api.stats").warning("Stats query error: %s", e)
+            passed = 0
             pass
         ci_pass_rate = round(passed / stats["total_ci_runs"] * 100, 1)
 

@@ -118,7 +118,8 @@ def check_layer_dependency(target_layer: int, project_dir: str) -> Optional[str]
     try:
         cfg = _get_ci_config(project_dir)
         deps = cfg.layer_dependencies.get(target_layer, [])
-    except Exception:
+    except Exception as e:
+        import logging; logging.getLogger("ci.run").info("Layer dependency check config: %s", e)
         deps = layer_dependencies.get(target_layer, [])
     for dep in deps:
         result = get_latest_layer_result(dep, project_dir)
@@ -691,7 +692,8 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
         cfg = _get_ci_config(project_dir)
         threshold_line = cfg.coverage.threshold_line if cfg else DEFAULT_COVERAGE_THRESHOLD_LINE
         threshold_cond = cfg.coverage.threshold_condition if cfg else DEFAULT_COVERAGE_THRESHOLD_COND
-    except Exception:
+    except Exception as e:
+        import logging; logging.getLogger("ci.run").info("Coverage config fallback: %s", e)
         threshold_line = DEFAULT_COVERAGE_THRESHOLD_LINE
         threshold_cond = DEFAULT_COVERAGE_THRESHOLD_COND
 
@@ -1091,7 +1093,9 @@ def run_layer_25(project_dir: Optional[str] = None):
 
     try:
         cfg = _get_ci_config(project_dir)
-    except Exception:
+    except Exception as e:
+        import logging; logging.getLogger("ci.run").info("HIL config fallback: %s", e)
+        cfg = None
         cfg = None
 
     hw_cfg = cfg.hardware_test if cfg else None
@@ -1408,7 +1412,8 @@ def run_all(project_dir: Optional[str] = None):
     try:
         cfg = _get_ci_config(project_dir)
         layers = cfg.layers if cfg else [1, 2, 25, 3]
-    except Exception:
+    except Exception as e:
+        import logging; logging.getLogger("ci.run").info("Run all config: %s", e)
         layers = [1, 2, 25, 3]
 
     print("\n" + "=" * 50)

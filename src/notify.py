@@ -162,7 +162,8 @@ def _get_store():
         try:
             from src.store import Store
             _store_instance = Store()
-        except Exception:
+        except Exception as e:
+            logging.getLogger("notify").warning("Notification send failed: %s", e)
             pass
     return _store_instance
 

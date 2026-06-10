@@ -28,5 +28,12 @@ Repository = "https://github.com/frisky1985/yuleOSH"
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "pytest-mock"]
 
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.paths]
+source = ["src", "src/ui", "src/ci", "src/pipeline", "src/cross", "src/spec", "src/evidence", "src/cli", "src/api", "src/llm"]
+
 [project.scripts]
 yuleosh = "yuleosh_cli:main"

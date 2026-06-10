@@ -82,7 +82,8 @@ def _do_request(req: urllib.request.Request, timeout: int = 60) -> dict:
             body = e.read()
             detail = json.loads(body)
             msg = detail.get("error", {}).get("message", str(e))
-        except Exception:
+        except Exception as e:
+            logging.getLogger("llm.client").warning("LLM response error handling: %s", e)
             msg = f"HTTP {e.code}: {body.decode('utf-8', errors='replace')[:500] or str(e)}"
         raise RuntimeError(f"LLM API error: {msg}")
     except urllib.error.URLError as e:

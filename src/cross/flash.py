@@ -775,7 +775,8 @@ def detect_hardware() -> list[dict[str, Any]]:
                             "description": line.strip(),
                             "serial": "unknown",
                         })
-        except Exception:
+        except Exception as e:
+            logging.getLogger("cross.flash").warning("Flash tool check failed: %s", e)
             pass
 
     return detected

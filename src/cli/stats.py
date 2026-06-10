@@ -64,7 +64,8 @@ def count_source_lines(project_dir: str) -> dict:
                     line_count = len(filepath.read_text().splitlines())
                     stat_info["files"] += 1
                     stat_info["lines"] += line_count
-                except Exception:
+                except Exception as e:
+                    import logging; logging.getLogger("cli.stats").warning("File read: %s", e)
                     pass
 
     total_files = sum(v["files"] for v in langs.values())
@@ -80,7 +81,8 @@ def count_source_lines(project_dir: str) -> dict:
             try:
                 doc_lines += len(f.read_text().splitlines())
                 doc_files += 1
-            except Exception:
+            except Exception as e:
+                import logging; logging.getLogger("cli.stats").warning("Doc read: %s", e)
                 pass
 
     return {
@@ -119,7 +121,8 @@ def count_tests(project_dir: str) -> dict:
                     rel = str(Path(root).relative_to(test_dir) / f)
                     if all_funcs:
                         by_file[rel] = len(all_funcs)
-                except Exception:
+                except Exception as e:
+                    import logging; logging.getLogger("cli.stats").warning("Func parse: %s", e)
                     pass
 
     return {
@@ -188,7 +191,8 @@ def count_pipeline_runs(project_dir: str) -> dict:
                     "created_at": data.get("created_at", ""),
                     "steps": len(data.get("steps", [])),
                 })
-        except Exception:
+        except Exception as e:
+            import logging; logging.getLogger("cli.stats").warning("Session read: %s", e)
             pass
 
     runs["recent_runs"] = recent
@@ -219,7 +223,8 @@ def count_ci_runs(project_dir: str) -> dict:
             elif status == "failed":
                 failed += 1
             total += 1
-        except Exception:
+        except Exception as e:
+            import logging; logging.getLogger("cli.stats").warning("CI read: %s", e)
             pass
 
     return {"total_runs": total, "by_layer": by_layer, "passed": passed, "failed": failed}

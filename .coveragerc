@@ -1,0 +1,14 @@
+[run]
+source = src
+branch = true
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+
+[paths]
+source =
+    src
+    */site-packages
