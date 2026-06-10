@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>定价 — yuleOSH 嵌入式AI开发平台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        osh: { bg: '#0a0e17', surface: '#111827', surface2: '#1a2332', border: '#1e293b', text: '#e2e8f0', text2: '#94a3b8' }
+      },
+      fontFamily: { sans: ['Inter', '-apple-system', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] }
+    }
+  }
+}
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+* { scroll-behavior: smooth; }
+body { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+
+.glow-green { box-shadow: 0 0 40px rgba(16,185,129,.15), 0 0 80px rgba(16,185,129,.05); }
+.gradient-text {
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(16,185,129,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16,185,129,.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.nav-blur { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+
+/* Pricing card hover */
+.pricing-card { transition: all .3s cubic-bezier(.4,0,.2,1); }
+.pricing-card:hover { transform: translateY(-4px); }
+
+/* Comparison table */
+.comp-row { transition: background .15s; }
+.comp-row:hover { background: rgba(16,185,129,.03); }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0e17; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #334155; }
+</style>
+</head>
+<body class="bg-[#0a0e17] text-[#e2e8f0] antialiased">
+
+<!-- ==================== NAV ==================== -->
+<nav class="border-b border-[#1e293b]/60 nav-blur" style="background:rgba(10,14,23,.85)">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16">
+      <a href="/" class="flex items-center gap-2.5 group">
+        <span class="text-2xl font-black tracking-tight">
+          <span class="text-[#10b981]">yule</span><span class="text-[#3b82f6]">OSH</span>
+        </span>
+      </a>
+      <div class="hidden md:flex items-center gap-8">
+        <a href="/" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">首页</a>
+        <a href="/#features" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">功能</a>
+        <a href="/pricing" class="text-sm text-[#e2e8f0] font-medium">定价</a>
+        <a href="https://github.com/stefanji/yuleOSH" target="_blank"
+           class="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg border border-[#1e293b] text-[#94a3b8]
+                  hover:border-[#10b981]/40 hover:text-[#e2e8f0] transition-all">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ==================== HERO ==================== -->
+<section class="py-20 bg-grid">
+  <div class="max-w-4xl mx-auto px-4 text-center">
+    <span class="text-xs font-semibold tracking-widest uppercase text-[#f59e0b]">定价方案</span>
+    <h1 class="text-4xl sm:text-5xl font-black mt-4 mb-4">
+      <span class="gradient-text">简单透明的定价</span>
+    </h1>
+    <p class="text-[#94a3b8] text-lg max-w-2xl mx-auto">
+      从个人开发者到企业团队，找到适合你的方案。<br>
+      所有计划均包含核心 AI Agent 流水线能力。
+    </p>
+  </div>
+</section>
+
+<!-- ==================== PRICING CARDS ==================== -->
+<section class="pb-16">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid md:grid-cols-3 gap-6 -mt-8">
+      <!-- Free -->
+      <div class="pricing-card rounded-2xl border border-[#1e293b] bg-[#111827] p-8 hover:border-[#10b981]/30">
+        <div class="flex items-center gap-3 mb-5">
+          <span class="text-2xl">🎯</span>
+          <div>
+            <h2 class="text-lg font-bold">Free</h2>
+            <p class="text-xs text-[#64748b]">个人开发者 · 开源爱好者</p>
+          </div>
+        </div>
+        <div class="mb-6">
+          <span class="text-4xl font-black">¥0</span>
+          <span class="text-[#64748b] text-sm ml-1">/月</span>
+        </div>
+        <ul class="space-y-3 text-sm text-[#94a3b8] mb-8 min-h-[200px]">
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            1 个项目
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            OpenSpec 需求管理
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            AI Agent 基础流水线
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            社区支持（GitHub Issues）
+          </li>
+        </ul>
+        <a href="/dashboard" class="block w-full text-center py-3 rounded-xl border border-[#1e293b] text-[#94a3b8] hover:border-[#10b981]/40 hover:text-white text-sm font-semibold transition-all">
+          免费开始
+        </a>
+      </div>
+
+      <!-- Pro (Featured) -->
+      <div class="pricing-card rounded-2xl border-2 border-[#10b981]/40 bg-[#111827] p-8 relative glow-green">
+        <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 px-5 py-1 rounded-full bg-gradient-to-r from-[#10b981] to-[#059669] text-white text-xs font-bold shadow-lg">
+          最受欢迎
+        </div>
+        <div class="flex items-center gap-3 mb-5">
+          <span class="text-2xl">🚀</span>
+          <div>
+            <h2 class="text-lg font-bold">Pro</h2>
+            <p class="text-xs text-[#64748b]">专业开发者 · 小团队</p>
+          </div>
+        </div>
+        <div class="mb-6">
+          <span class="text-4xl font-black text-[#e2e8f0]">¥199</span>
+          <span class="text-[#64748b] text-sm ml-1">/月</span>
+          <div class="text-xs text-[#64748b] mt-1">或 ¥1,999/年（节省17%）</div>
+        </div>
+        <ul class="space-y-3 text-sm text-[#94a3b8] mb-8 min-h-[200px]">
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            无限项目
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            SDD → DDD → TDD 全管线
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            三层 CI/CD 流水线
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            一键 ASPICE 合规包
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Docker 自托管部署
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            邮件技术支持
+          </li>
+        </ul>
+        <a href="/dashboard" class="block w-full text-center py-3 rounded-xl bg-gradient-to-r from-[#10b981] to-[#059669] text-white text-sm font-semibold hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all shadow-lg shadow-[#10b981]/20">
+          选择 Pro
+        </a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="pricing-card rounded-2xl border border-[#1e293b] bg-[#111827] p-8 hover:border-[#3b82f6]/30">
+        <div class="flex items-center gap-3 mb-5">
+          <span class="text-2xl">🏢</span>
+          <div>
+            <h2 class="text-lg font-bold">Enterprise</h2>
+            <p class="text-xs text-[#64748b]">中大型企业 · 组织级部署</p>
+          </div>
+        </div>
+        <div class="mb-6">
+          <span class="text-4xl font-black text-[#e2e8f0]">定制</span>
+          <span class="text-[#64748b] text-sm ml-1">/年</span>
+        </div>
+        <ul class="space-y-3 text-sm text-[#94a3b8] mb-8 min-h-[200px]">
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            多租户 + 组织管理
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            自定义 Agent 配置
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            私有部署 + Helm Chart
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            SSO / OAuth 集成
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            专属客户成功经理
+          </li>
+          <li class="flex items-start gap-2.5">
+            <svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            SLA 保障
+          </li>
+        </ul>
+        <a href="mailto:stefanji@example.com?subject=yuleOSH%20Enterprise%20咨询" class="block w-full text-center py-3 rounded-xl border border-[#3b82f6]/30 bg-[#3b82f6]/5 text-[#3b82f6] hover:bg-[#3b82f6]/10 text-sm font-semibold transition-all">
+          联系销售
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FREE VS PRO VS ENTERPRISE ==================== -->
+<section class="py-20 bg-[#0d111f]">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-12">
+      <span class="text-xs font-semibold tracking-widest uppercase text-[#10b981]">完整对比</span>
+      <h2 class="text-3xl sm:text-4xl font-black mt-3">功能对比</h2>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-[#1e293b]">
+            <th class="text-left py-4 px-4 text-[#94a3b8] font-medium w-1/3">功能</th>
+            <th class="text-center py-4 px-4 text-[#10b981] font-semibold w-1/5">Free</th>
+            <th class="text-center py-4 px-4 text-[#10b981] font-semibold w-1/5 glow-green">Pro</th>
+            <th class="text-center py-4 px-4 text-[#3b82f6] font-semibold w-1/5">Enterprise</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Projects -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">项目数量</td>
+            <td class="text-center py-4 px-4 text-[#94a3b8]">1 个</td>
+            <td class="text-center py-4 px-4 text-[#e2e8f0] font-medium">无限</td>
+            <td class="text-center py-4 px-4 text-[#e2e8f0] font-medium">无限</td>
+          </tr>
+          <!-- Requirements -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">OpenSpec 需求管理</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- AI Pipeline -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">AI Agent 流水线</td>
+            <td class="text-center py-4 px-4 text-[#94a3b8">基础版</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- SDD/DDD/TDD -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">SDD → DDD → TDD</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- CI/CD -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">三层 CI/CD 流水线</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">Layer 1 仅</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- ASPICE -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">一键 ASPICE 合规包</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- Docker -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">Docker 自托管</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- Multi-tenant -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">多租户 / 组织管理</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- Custom Agents -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">自定义 Agent 配置</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- Helm -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">Helm Chart K8s 部署</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- SSO -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">SSO / OAuth 集成</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- SLA -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">SLA 服务水平保障</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4 text-[#64748b]">—</td>
+            <td class="text-center py-4 px-4"><span class="text-[#10b981]">✓</span></td>
+          </tr>
+          <!-- Support -->
+          <tr class="comp-row border-b border-[#1e293b]/50">
+            <td class="py-4 px-4 text-[#e2e8f0]">技术支持</td>
+            <td class="text-center py-4 px-4 text-[#94a3b8]">社区</td>
+            <td class="text-center py-4 px-4 text-[#e2e8f0]">邮件</td>
+            <td class="text-center py-4 px-4 text-[#e2e8f0]">专属经理</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FAQ ==================== -->
+<section class="py-20 bg-[#0a0e17]">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-12">
+      <span class="text-xs font-semibold tracking-widest uppercase text-[#94a3b8]">常见问题</span>
+      <h2 class="text-3xl sm:text-4xl font-black mt-3">关于定价</h2>
+    </div>
+
+    <div class="space-y-3">
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          免费版有功能限制吗？
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          免费版限制 1 个项目，AI Agent 流水线为基础版（不包含完整的 SDD→DDD→TDD 管线），CI/CD 仅有 Layer 1。适合个人评估和开源项目试用。
+        </div>
+      </details>
+
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          Pro 版可以退款吗？
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          月付用户支持 7 天无理由退款。年付用户在首月内可全额退款。如需退款，请发邮件至我们的支持邮箱。
+        </div>
+      </details>
+
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          可以随时升级或降级吗？
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          可以。升级即时生效，按比例计算差价。降级将在当前计费周期结束后生效。
+        </div>
+      </details>
+
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          企业版支持私有化部署吗？
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          是的。Enterprise 版支持完全私有化部署，提供 Helm Chart 用于 Kubernetes 集群部署，支持 SSO/OAuth 身份认证集成，并配备专属客户成功经理。
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== CTA ==================== -->
+<section class="py-20 bg-[#0d111f] border-t border-[#1e293b]">
+  <div class="max-w-3xl mx-auto px-4 text-center">
+    <h2 class="text-3xl sm:text-4xl font-black mb-4">开始你的嵌入式AI开发之旅</h2>
+    <p class="text-[#94a3b8] mb-8">免费体验所有核心功能，无需信用卡</p>
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <a href="/dashboard" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#10b981] to-[#059669] text-white font-semibold text-sm shadow-lg shadow-[#10b981]/20 hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all">
+        免费开始使用
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+      </a>
+      <a href="https://github.com/stefanji/yuleOSH" target="_blank" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl border border-[#1e293b] text-[#94a3b8] hover:border-white/20 hover:text-white text-sm font-medium transition-all">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub 仓库
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer class="py-12 border-t border-[#1e293b] bg-[#0a0e17]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-lg font-black tracking-tight">
+          <span class="text-[#10b981]">yule</span><span class="text-[#3b82f6]">OSH</span>
+        </a>
+        <span class="text-xs text-[#64748b]">v0.1.0 · MIT License</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="/" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">首页</a>
+        <a href="/#features" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">功能</a>
+        <a href="/pricing" class="text-xs text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">定价</a>
+        <a href="https://github.com/stefanji/yuleOSH" target="_blank" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>
+      </div>
+    </div>
+    <div class="mt-6 text-center text-xs text-[#393e4a]">
+      Built for embedded developers. Open source and community driven.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
