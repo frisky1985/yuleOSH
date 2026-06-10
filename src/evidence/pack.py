@@ -18,8 +18,11 @@ import subprocess
 import sys
 import zipfile
 from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger("evidence.collector")
 
 
 class EvidenceCollector:
@@ -256,13 +259,23 @@ class EvidenceCollector:
             return {}
 
         coverage: dict[str, list[str]] = {}
+        failed_parse: list[str] = []
         for test_file in sorted(tests_dir.glob("test_*.py")):
-            keywords = self._parse_covers_from_file(str(test_file))
-            if keywords:
-                coverage[test_file.name] = keywords
+            try:
+                keywords = self._parse_covers_from_file(str(test_file))
+                if keywords:
+                    coverage[test_file.name] = keywords
+            except Exception as e:
+                failed_parse.append(f"{test_file.name}: {e}")
 
         self.test_coverage = coverage
         print(f"  📋 Collected test coverage from {len(coverage)} test file(s)")
+        if failed_parse:
+            print(f"  ⚠️  {len(failed_parse)} file(s) failed to parse:")
+            for fp in failed_parse[:5]:
+                print(f"     - {fp}")
+            if len(failed_parse) > 5:
+                print(f"     ... and {len(failed_parse) - 5} more")
         if not coverage:
             print("  ⚠️  No Covers: markers found in any test file")
         return coverage
@@ -363,8 +376,22 @@ class EvidenceCollector:
             keyword_matches: list[str] = []
             keyword_confidences: dict[str, float] = {}
             for test_file, covered_kws in self.test_coverage.items():
-                covered_lower = [k.lower() for k in covered_kws]
-                overlap = [ck for ck in covered_lower if ck in shall_keywords]
+                # Tokenize Covers keywords: split English words AND Chinese chars
+                covered_tokens: set[str] = set()
+                for ck in covered_kws:
+                    ck_lower = ck.lower()
+                    # Split on spaces/underscores for English words
+                    eng_parts = re.findall(r"[a-zA-Z0-9_]{2,}", ck_lower)
+                    covered_tokens.update(eng_parts)
+                    # Also extract Chinese character bigrams for CJK matching
+                    cjk = re.findall(r"[\u4e00-\u9fff]+", ck_lower)
+                    for cjk_phrase in cjk:
+                        covered_tokens.add(cjk_phrase)  # full phrase
+                        if len(cjk_phrase) >= 2:
+                            # Add bigrams for partial matching
+                            for i in range(len(cjk_phrase) - 1):
+                                covered_tokens.add(cjk_phrase[i:i+2])
+                overlap = covered_tokens & shall_keywords
                 if overlap:
                     keyword_matches.append(test_file)
                     confidence = min(1.0, len(overlap) / max(len(shall_keywords), 1))
@@ -507,8 +534,8 @@ class EvidenceCollector:
                     full = store.get_pipeline(latest_name)
                     if full and full.get("spec_path"):
                         return full["spec_path"]
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Store lookup for latest pipeline spec failed: %s", e)
 
         # Fallback: scan .osh/sessions/ on disk
         sessions_dir = Path(self.project_dir) / ".osh" / "sessions"
@@ -901,26 +928,46 @@ class EvidenceCollector:
 def _check_pipeline_not_running(project_dir: str) -> bool:
     """Check that no pipeline is currently writing to avoid race conditions.
 
+    Checks session status AND recent write activity in reviews/ci directories
+    to detect the window where pipeline is done but artifacts are still flushing.
+
     Returns True if it's safe to collect evidence (no running pipeline).
     """
-    sessions_dir = Path(project_dir) / ".osh" / "sessions"
-    if not sessions_dir.is_dir():
-        return True
+    import time as _time
+    _now = _time.time()
+    _grace_window = 5  # seconds — ignore writes older than this
 
-    # Check recent pipeline sessions for active/running status
-    for sf in sorted(
-        sessions_dir.rglob("session.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )[:3]:
-        try:
-            data = json.loads(sf.read_text())
-        except (json.JSONDecodeError, OSError):
-            continue
-        status = data.get("status", "")
-        if status in ("running", "in_progress"):
-            print(f"  ⚠️  Pipeline still running: {sf.parent.name} (status={status})")
-            return False
+    sessions_dir = Path(project_dir) / ".osh" / "sessions"
+    if sessions_dir.is_dir():
+        for sf in sorted(
+            sessions_dir.rglob("session.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[:3]:
+            try:
+                data = json.loads(sf.read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+            status = data.get("status", "")
+            if status in ("running", "in_progress"):
+                print(f"  ⚠️  Pipeline still running: {sf.parent.name} (status={status})")
+                return False
+
+    # Also check reviews/ and ci/ for recent writes (artifact flush window)
+    for subdir in ("reviews", "ci"):
+        d = Path(project_dir) / ".osh" / subdir
+        if d.is_dir():
+            try:
+                recent = max(
+                    (f.stat().st_mtime for f in d.rglob("*.json") if f.is_file()),
+                    default=0,
+                )
+                if (_now - recent) < _grace_window:
+                    print(f"  ⚠️  Recent writes in .osh/{subdir}/ ({_now - recent:.1f}s ago) — may be pipeline flushing")
+                    return False
+            except OSError:
+                pass
+
     return True
 
 
@@ -946,6 +993,8 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
         print(f"  ⏳ Waiting for pipeline to finish... ({_waited}s elapsed)")
         _time.sleep(_sleep)
         _waited += _sleep
+    if _waited >= _max_wait:
+        print(f"  ⚠️  Timed out waiting for pipeline (waited {_waited}s). Collecting anyway — data may be incomplete.")
 
     collector = EvidenceCollector(project_dir)
 
