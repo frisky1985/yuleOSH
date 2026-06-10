@@ -177,7 +177,8 @@ class SerialMonitor:
         if self._serial:
             try:
                 self._serial.close()
-            except Exception:
+            except Exception as e:
+                import logging; logging.getLogger("__name__").warning("%s", e)
                 log.exception("Error closing serial port %s", self.port)
             self._serial = None
         log.info("Serial monitor closed: %s", self.port)
@@ -418,7 +419,8 @@ class PipeSerialMonitor:
         if hasattr(self._pipe, "close"):
             try:
                 self._pipe.close()
-            except Exception:
+            except Exception as e:
+                import logging; logging.getLogger("__name__").warning("%s", e)
                 pass
         self._capture_thread.join(timeout=5.0)
 

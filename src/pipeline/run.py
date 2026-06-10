@@ -797,7 +797,8 @@ def step_claude_dev(session: PipelineSession) -> str:
                 n = len(f.read_text().splitlines())
                 test_lines += n
                 total_lines += n
-            except Exception:
+            except Exception as e:
+                import logging; logging.getLogger("__name__").warning("%s", e)
                 pass
 
         # --- Read spec content ---
@@ -1341,7 +1342,8 @@ def step_final_report(session: PipelineSession) -> str:
                 # Extract meaningful first line
                 first_line = content.split("\n", 1)[0].strip("# ").strip()
                 artifact_summaries[key] = first_line or "(binary/empty)"
-            except Exception:
+            except Exception as e:
+                import logging; logging.getLogger("__name__").warning("%s", e)
                 artifact_summaries[key] = "(cannot read)"
 
         system_prompt, user_prompt = build_final_report_prompt(
