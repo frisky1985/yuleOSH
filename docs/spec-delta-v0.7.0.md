@@ -59,18 +59,19 @@
 
 ---
 
-## 📦 P1 — 工程化补齐（下一波）
+## 📦 P1 — 工程化补齐 ✅ (已完成)
 
 ### I4: DB Migration 框架
-- Alembic 或纯 SQL migration 脚本
-- 支持 schema 版本演进
+- ✅ 内置 SQLite 迁移系统 v1-v5 (docs/db-migration.md)
+- ✅ 自动迁移 + 版本追踪 + CLI 命令
 
 ### I5: 发布打包
-- `pip install yuleosh` 完善
-- Docker Hub 自动构建
+- ✅ pyproject.toml v0.7.0 + classifiers + dev deps
+- ✅ Dockerfile 多阶段构建 (v0.7.0)
 
 ### I6: 真实 HIL 硬件测试
-- Mock → OpenOCD/JLink 真实连接
+- ✅ HIL Runner 支持 OpenOCD/JLink/PyOCD (src/cross/hil_runner.py)
+- ✅ 文档完整 (docs/hil-testing.md)
 
 ---
 
@@ -90,4 +91,4 @@
 | 时间 | 变更 | 内容 |
 |:-----|:-----|:-----|
 | 2026-06-09 | v0.6.1 | Pipeline重构 + 安全加固 + CLI argparse迁移（小克） |
-| 2026-06-10 | v0.7.0 P0 完成 | 小明完成 P0 三线补齐：T1.5 Prompt版本 + T2.2 竞态修复 + spec-delta 状态更新 + 10 新测试 |
+| 2026-06-10 | v0.7.0 P0+P1 完成 | P0 补齐 + P1 全交付：DB Migration文档 + pyproject 0.7.0 + Dockerfile v2 + HIL文档 + 856 tests |
