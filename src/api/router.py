@@ -24,6 +24,7 @@ from .apikeys import handle_apikeys
 from .wizard import handle_wizard
 from .webhooks import handle_webhooks
 from .audit import handle_audit
+from .auth import handle_auth
 
 
 # Resource routing map: resource_name -> handler function
@@ -41,6 +42,7 @@ ROUTES = {
     "apikeys": handle_apikeys,
     "webhooks": handle_webhooks,
     "audit": handle_audit,
+    "auth": handle_auth,
 }
 
 
