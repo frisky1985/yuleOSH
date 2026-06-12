@@ -1,0 +1,72 @@
+{
+  "index_version": 1,
+  "plugins": {
+    "esp32-blink": {
+      "versions": {
+        "1.0.0": {
+          "download_url": "https://hub.yuleai.app/plugins/esp32-blink-1.0.0.yuleosh-plugin",
+          "sha256": "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+          "manifest": {
+            "name": "esp32-blink",
+            "version": "1.0.0",
+            "type": "target",
+            "description": "ESP32 LED blink example",
+            "author": "yuleAI",
+            "entry": "main.py",
+            "min_yuleosh_version": "0.4.0",
+            "tags": ["esp32", "led", "blink"]
+          }
+        },
+        "0.9.0": {
+          "download_url": "https://hub.yuleai.app/plugins/esp32-blink-0.9.0.yuleosh-plugin",
+          "sha256": "abc123def456abc123def456abc123def456abc123def456abc123def456abc2",
+          "manifest": {
+            "name": "esp32-blink",
+            "version": "0.9.0",
+            "type": "target",
+            "description": "ESP32 LED blink example (legacy)",
+            "author": "yuleAI",
+            "entry": "main.py",
+            "min_yuleosh_version": "0.3.0",
+            "tags": ["esp32", "blink"]
+          }
+        }
+      }
+    },
+    "autosar-helper": {
+      "versions": {
+        "1.2.0": {
+          "download_url": "https://hub.yuleai.app/plugins/autosar-helper-1.2.0.yuleosh-plugin",
+          "sha256": "def456abc123def456abc123def456abc123def456abc123def456abc123def456",
+          "manifest": {
+            "name": "autosar-helper",
+            "version": "1.2.0",
+            "type": "skill",
+            "description": "AUTOSAR configuration assistant",
+            "author": "yuleAI",
+            "entry": "autosar.py",
+            "min_yuleosh_version": "0.4.0",
+            "tags": ["autosar", "arxml", "config"]
+          }
+        }
+      }
+    },
+    "zephyr-template": {
+      "versions": {
+        "2.1.0": {
+          "download_url": "https://hub.yuleai.app/plugins/zephyr-template-2.1.0.yuleosh-plugin",
+          "sha256": "789abc123def789abc123def789abc123def789abc123def789abc123def789abc",
+          "manifest": {
+            "name": "zephyr-template",
+            "version": "2.1.0",
+            "type": "template",
+            "description": "Zephyr RTOS project template",
+            "author": "zephyr-community",
+            "min_yuleosh_version": "0.4.0",
+            "tags": ["zephyr", "rtos", "template"]
+          }
+        }
+      }
+    }
+  }
+}

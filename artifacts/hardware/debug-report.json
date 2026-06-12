@@ -1,0 +1,15 @@
+{
+  "error": "No boot initialization messages detected in serial output",
+  "severity": "warning",
+  "error_type": "no_boot_output",
+  "registers": {},
+  "stack_trace": [],
+  "raw_logs": [],
+  "suggestions": [
+    "\u68c0\u67e5\u786c\u4ef6\u8fde\u63a5\u548c\u4f9b\u7535",
+    "\u786e\u8ba4\u5237\u5199\u7684\u56fa\u4ef6\u662f\u5426\u6b63\u786e",
+    "\u68c0\u67e5\u4e32\u53e3\u6ce2\u7279\u7387\u914d\u7f6e\u662f\u5426\u5339\u914d",
+    "\u68c0\u67e5 bootloader \u662f\u5426\u6b63\u786e\u8df3\u8f6c\u5230\u5e94\u7528\u7a0b\u5e8f"
+  ],
+  "matched_rules": []
+}

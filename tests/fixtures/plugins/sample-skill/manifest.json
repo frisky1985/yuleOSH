@@ -1,0 +1,26 @@
+{
+  "name": "sample-skill",
+  "version": "0.1.0",
+  "type": "skill",
+  "description": "A sample skill that combines plugins",
+  "author": "yuleOSH Test",
+  "entry": "main.py",
+  "min_yuleosh_version": "0.4.0",
+  "tags": ["sample", "test"],
+  "workflow": {
+    "version": "1",
+    "steps": [
+      {
+        "id": "step-1",
+        "plugin": "sample-target-plugin",
+        "inputs": {
+          "port": "$.port",
+          "baud": "$.baud"
+        }
+      }
+    ],
+    "outputs": {
+      "result": "$steps.step-1"
+    }
+  }
+}

@@ -15,58 +15,20 @@ from __future__ import annotations
 import os
 import re
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+# 导入共享工具函数
+from . import _XML_DECLARATION, _indent, TestCase
 
 # ──────────────────────────────────────────────────────────
-# XML 声明 & 辅助
+# CANoe 命名空间
 # ──────────────────────────────────────────────────────────
-
-_XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>\n'
 
 _CANOE_NS = "http://vector.com/canoe/testfeature"
-_NSMAP = {"": _CANOE_NS}
+_CANOE_PREFIX = "canoe"
 
-# Register namespace so ET won't produce ns0: prefixes
-ET.register_namespace("", _CANOE_NS)
-
-
-def _indent(elem: ET.Element, level: int = 0) -> None:
-    """Pretty-print an ElementTree — adds whitespace indentation in-place."""
-    indent_str = "  "
-    i = "\n" + level * indent_str
-    if len(elem):
-        if not elem.text or not elem.text.strip():
-            elem.text = i + indent_str
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-        for child in elem:
-            _indent(child, level + 1)
-        if not child.tail or not child.tail.strip():
-            child.tail = i
-    else:
-        if level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = i
-
-
-# ──────────────────────────────────────────────────────────
-# Test Case 输入模型（TypedDict 风格）
-# ──────────────────────────────────────────────────────────
-
-TestCase = Dict[str, Any]
-"""测试用例 dict 结构：:
-
-    {
-        "id": str,          # e.g. "TC_001"
-        "title": str,       # e.g. "CAN Bus Communication"
-        "group": str,       # e.g. "Smoke Tests"   (optional)
-        "group_id": str,    # e.g. "TG_001"         (optional)
-        "type": str,        # "PASS" | "FAIL" | "ERROR"
-        "description": str, # 测试描述 (optional)
-        "steps": list[dict],# 测试步骤 (optional)
-        "signals": list[dict], # 关联信号 (optional)
-        "capl": str,        # 自定义 CAPL 代码 (optional)
-    }
-"""
+# Register with unique prefix to avoid namespace collision with other adapters
+ET.register_namespace(_CANOE_PREFIX, _CANOE_NS)
 
 
 # ──────────────────────────────────────────────────────────
@@ -86,8 +48,9 @@ class VectorCANoeAdapter:
     CAPL scripts.
     """
 
-    def __init__(self, namespace: str = _CANOE_NS):
+    def __init__(self, namespace: str = _CANOE_NS, prefix: str = _CANOE_PREFIX):
         self._namespace = namespace
+        self._prefix = prefix
 
     # ── Public API ────────────────────────────────────────
 
@@ -251,16 +214,16 @@ class VectorCANoeAdapter:
 
         # Result
         if tc_type == "PASS":
-            lines.append("  TestStep(\"Result\", \"Test PASSED\");")
+            lines.append('  TestStep("Result", "Test PASSED");')
             lines.append("  testStepPass();")
         elif tc_type == "FAIL":
-            lines.append("  TestStep(\"Result\", \"Test FAILED (expected)\");")
+            lines.append('  TestStep("Result", "Test FAILED (expected)");')
             lines.append("  testStepFail();")
         elif tc_type == "ERROR":
-            lines.append("  TestStep(\"Result\", \"Test ERROR (expected)\");")
+            lines.append('  TestStep("Result", "Test ERROR (expected)");')
             lines.append("  testStepFail();")
         else:
-            lines.append("  TestStep(\"Result\", \"Test completed\");")
+            lines.append('  TestStep("Result", "Test completed");')
 
         lines.append("}")
         lines.append("")
