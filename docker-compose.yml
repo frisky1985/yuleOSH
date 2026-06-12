@@ -1,18 +1,51 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: yuleosh
+      POSTGRES_USER: yuleosh
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-yuleosh}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yuleosh -d yuleosh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@yuleosh.ai}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    profiles: ["dev"]  # only started with docker compose --profile dev
+
   yuleosh:
     image: frisky1985/yuleosh:1.0.0
     build: .
     ports:
       - "8080:8080"
     environment:
+      - YULEOSH_DB_URL=postgresql://yuleosh:${PG_PASSWORD:-yuleosh}@postgres:5432/yuleosh
       - YULEOSH_JWT_SECRET=${YULEOSH_JWT_SECRET}
       - YULEOSH_API_KEY=${YULEOSH_API_KEY:-}
       - YULEOSH_BASE_URL=${YULEOSH_BASE_URL:-http://localhost:8080}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
       - YULEOSH_NOTIFY_FEISHU_URL=${YULEOSH_NOTIFY_FEISHU_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - yuleosh_data:/app/.yuleosh
       - ./docs:/app/docs:ro
@@ -37,3 +70,4 @@ services:
 
 volumes:
   yuleosh_data:
+  pg_data:
