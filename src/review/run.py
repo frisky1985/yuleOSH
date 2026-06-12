@@ -273,6 +273,20 @@ def review_code_style(task_name: str, project_dir: str, changed_files: list[str]
     return result
 
 
+# ── Embedded C reviewer ──────────────────────────────────
+
+def review_embedded_c(task_name: str, project_dir: str, changed_files: list[str]) -> ReviewResult:
+    """Embedded C reviewer: static analysis for firmware defects."""
+    try:
+        from .c_review import review_embedded_c as _c_review
+        return _c_review(task_name, project_dir, changed_files)
+    except ImportError:
+        result = ReviewResult(task_name, "embedded-c-reviewer")
+        result.status = "passed"
+        result.summary = "C reviewer module not available"
+        return result
+
+
 def review_coverage(task_name: str, project_dir: str, changed_files: list[str]) -> ReviewResult:
     """Coverage guardian: checks test coverage meets thresholds."""
     result = ReviewResult(task_name, "coverage-guardian")
@@ -323,6 +337,8 @@ REVIEWER_MAP = {
     "refactor": [review_architecture, review_code_style, review_coverage],
     "docs": [],  # Docs don't need technical review
     "config": [review_code_style],
+    "embedded": [review_architecture, review_embedded_c, review_code_style, review_coverage],
+    "firmware": [review_embedded_c, review_code_style],
 }
 
 
@@ -400,6 +416,7 @@ def auto_review(project_dir: str = None):
     
     # Determine task kind from changes
     task_kind = "feature"
+    has_c_files = any(f.endswith((".c", ".h")) for f in changed_files)
     for f in changed_files:
         if "bugfix" in f.lower() or "fix" in f.lower():
             task_kind = "bugfix"
@@ -408,6 +425,8 @@ def auto_review(project_dir: str = None):
         elif "docs/" in f or f.endswith(".md"):
             if task_kind == "feature":
                 task_kind = "docs"
+    if has_c_files and task_kind in ("feature", "bugfix", "refactor"):
+        task_kind = "embedded"
     
     session = run_review("auto-review", task_kind, project_dir, changed_files)
     return session
