@@ -4,7 +4,7 @@
 """
 yuleOSH Plugin Registry — 插件市场注册表。
 
-从 GitHub / yuleAI-Hub / 自定义源拉取插件索引。
+从 GitHub Releases / 自定义源拉取插件索引。
 支持搜索、获取详情、下载安装包。
 """
 
@@ -68,8 +68,8 @@ class RegistryPluginEntry:
 
 DEFAULT_SOURCES: list[RegistrySource] = [
     RegistrySource(
-        name="yuleAI-Hub",
-        url="https://hub.yuleai.app/api/v1/plugins/index.json",
+        name="yuleOSH Registry",
+        url="https://github.com/frisky1985/yuleOSH/releases/plugins/index.json",
         enabled=True,
     ),
 ]
