@@ -1,0 +1,10 @@
+menu "yuleOSH Blinky Configuration"
+
+    config BLINK_GPIO
+        int "LED GPIO number"
+        range 0 39
+        default 2
+        help
+            GPIO pin number connected to the LED.
+
+endmenu
