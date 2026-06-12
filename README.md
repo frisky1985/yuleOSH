@@ -21,7 +21,7 @@
 <p align="center">
   <strong>Pricing</strong><br>
   ▶ <strong>Free:</strong> ¥0 — 3 projects, AI Code Review, ESP32 templates &nbsp;·&nbsp;
-  ▶ <strong>Pro:</strong> 定价请联系销售/mo (¥1,999/yr) — unlimited projects, full pipeline, HIL, Vector adapters &nbsp;·&nbsp;
+  ▶ <strong>Pro:</strong> 定价请联系销售/mo (定价请联系销售/yr) — unlimited projects, full pipeline, HIL, Vector adapters &nbsp;·&nbsp;
   ▶ <strong>Enterprise:</strong> 定价请联系销售/yr — on-prem, SAML, SLA, SOC 2
 </p>
 
