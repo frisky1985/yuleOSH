@@ -1,7 +1,7 @@
 <div align="center">
   <h1>yuleOSH</h1>
   <p><strong>AI-Powered Embedded Development Pipeline<br>
-  From Natural Language to CI/CD-Ready Firmware</strong></p>
+  From spec to hardware, fully automated.</strong></p>
 
   <!-- Badges -->
   <p>
@@ -15,6 +15,20 @@
     <img src="https://img.shields.io/badge/ASPICE-compliant-8A2BE2?style=flat-square" alt="ASPICE">
   </p>
 </div>
+
+---
+
+<p align="center">
+  <strong>Pricing</strong><br>
+  ▶ <strong>Free:</strong> ¥0 — 3 projects, AI Code Review, ESP32 templates &nbsp;·&nbsp;
+  ▶ <strong>Pro:</strong> ¥199/mo (¥1,999/yr) — unlimited projects, full pipeline, HIL, Vector adapters &nbsp;·&nbsp;
+  ▶ <strong>Enterprise:</strong> ¥98,000/yr — on-prem, SAML, SLA, SOC 2
+</p>
+
+<p align="center">
+  <code>pip install yuleosh</code> → you're running in 5 minutes.<br>
+  No NDA. No Sales Call. No License Negotiation.
+</p>
 
 ---
 

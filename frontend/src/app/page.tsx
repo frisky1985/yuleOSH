@@ -36,6 +36,7 @@ export default function LandingPage() {
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">功能</a>
               <a href="#how-it-works" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">工作流</a>
+              <Link href="/pricing" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">定价</Link>
               <Link href="/login" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">登录</Link>
               <Link href="/dashboard"
                 className="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
@@ -60,6 +61,7 @@ export default function LandingPage() {
             <div className="px-4 py-4 space-y-3">
               <a href="#features" onClick={() => setMobileOpen(false)} className="block text-sm text-[#94a3b8] hover:text-white transition-colors">功能</a>
               <a href="#how-it-works" onClick={() => setMobileOpen(false)} className="block text-sm text-[#94a3b8] hover:text-white transition-colors">工作流</a>
+              <Link href="/pricing" onClick={() => setMobileOpen(false)} className="block text-sm text-[#94a3b8] hover:text-white transition-colors">定价</Link>
               <Link href="/login" onClick={() => setMobileOpen(false)} className="block text-sm text-[#94a3b8] hover:text-white transition-colors">登录</Link>
               <Link href="/dashboard" onClick={() => setMobileOpen(false)}
                 className="block text-sm px-4 py-2 rounded-lg font-semibold bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white text-center"
@@ -85,13 +87,17 @@ export default function LandingPage() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight leading-[1.1] mb-6">
-              <span className="gradient-text">嵌入式AI开发</span><br />
-              <span className="text-[#e2e8f0]">全流程自动化平台</span>
+              <span className="gradient-text">AI-Powered Embedded</span><br />
+              <span className="text-[#e2e8f0]">Development Pipeline</span>
             </h1>
 
             <p className="text-lg sm:text-xl text-[#94a3b8] max-w-2xl mx-auto mb-10 leading-relaxed">
-              从需求管理到 CI/CD，AI Agent 编排全流程。<br className="hidden sm:block" />
-              <span className="text-[#722ed1]/80 font-medium">OpenSpec → SDD → DDD → TDD → 持续交付</span>
+              From natural language requirements to hardware-tested firmware.
+            </p>
+
+            <p className="text-sm text-[#64748b] max-w-lg mx-auto mb-10">
+              No NDA. No Sales Call. No License Negotiation.<br />
+              Just <code className="text-[#10b981] bg-[#10b981]/10 px-1.5 py-0.5 rounded text-xs">pip install yuleosh</code> and you&apos;re running in 5 minutes.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -319,6 +325,7 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-6">
               <a href="#features" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">功能</a>
+              <Link href="/pricing" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">定价</Link>
               <Link href="/login" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">登录</Link>
               <a href="https://github.com/stefanji/yuleOSH" target="_blank" rel="noreferrer" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>
             </div>

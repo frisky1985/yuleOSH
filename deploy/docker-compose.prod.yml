@@ -1,0 +1,216 @@
+# =============================================================================
+# yuleOSH — Production Docker Compose
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+# =============================================================================
+
+services:
+  # ── PostgreSQL 16 ────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: yuleosh
+      POSTGRES_USER: yuleosh
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5432:5432"   # localhost-only for backups/tools
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./deploy/scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yuleosh -d yuleosh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - yuleosh_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ── yuleOSH Python Backend ──────────────────────────────────────
+  yuleosh:
+    image: frisky1985/yuleosh:${YULEOSH_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"   # internal — exposed via Nginx only
+    environment:
+      - YULEOSH_DB_URL=postgresql://yuleosh:${PG_PASSWORD}@postgres:5432/yuleosh
+      - YULEOSH_JWT_SECRET=${YULEOSH_JWT_SECRET:?JWT secret is required}
+      - YULEOSH_API_KEY=${YULEOSH_API_KEY:-}
+      - YULEOSH_BASE_URL=${YULEOSH_BASE_URL:-https://yuleosh.io}
+      - YULEOSH_ENV=production
+      - YULEOSH_LOG_LEVEL=${YULEOSH_LOG_LEVEL:-info}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - YULEOSH_NOTIFY_FEISHU_URL=${YULEOSH_NOTIFY_FEISHU_URL:-}
+      - YULEOSH_NOTIFY_EMAIL_SMTP=${YULEOSH_NOTIFY_EMAIL_SMTP:-}
+      - YULEOSH_NOTIFY_EMAIL_USER=${YULEOSH_NOTIFY_EMAIL_USER:-}
+      - YULEOSH_NOTIFY_EMAIL_PASS=${YULEOSH_NOTIFY_EMAIL_PASS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - yuleosh_data:/app/.yuleosh
+    restart: unless-stopped
+    networks:
+      - yuleosh_net
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ── Next.js Frontend ────────────────────────────────────────────
+  frontend:
+    image: frisky1985/yuleosh-frontend:${FRONTEND_TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${YULEOSH_BASE_URL:-https://yuleosh.io}
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Next.js internal API proxy target (private backend)
+      - NEXT_API_PROXY=http://yuleosh:8080
+    depends_on:
+      - yuleosh
+    restart: unless-stopped
+    networks:
+      - yuleosh_net
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "http=require('http');http.get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ── Nginx (SSL Reverse Proxy) ────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - yuleosh
+    restart: unless-stopped
+    networks:
+      - yuleosh_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # ── Certbot (SSL auto-renewal) ──────────────────────────────────
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./deploy/ssl:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: >
+      sh -c "
+        trap exit TERM;
+        while true; do
+          certbot renew --webroot --webroot-path=/var/www/certbot --quiet;
+          sleep 12h;
+        done
+      "
+    networks:
+      - yuleosh_net
+
+  # ── Prometheus (Observability — optional) ───────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54
+    profiles: ["monitoring"]
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    restart: unless-stopped
+    networks:
+      - yuleosh_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # ── Grafana (Dashboards — optional) ─────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3
+    profiles: ["monitoring"]
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/monitoring/grafana-dashboard.json:/etc/grafana/provisioning/dashboards/yuleosh.json:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    restart: unless-stopped
+    networks:
+      - yuleosh_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+networks:
+  yuleosh_net:
+    driver: bridge
+    name: yuleosh_prod_net
+
+volumes:
+  pg_data:
+    driver: local
+  yuleosh_data:
+    driver: local
+  nginx_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  certbot_www:
+    driver: local
