@@ -9,6 +9,8 @@ setup(
     python_requires=">=3.10",
     install_requires=[
         "psycopg2-binary>=2.9",
+        "bcrypt>=4.1",
+        "pyjwt>=2.8",
     ],
     extras_require={
         "dev": ["pytest", "pytest-cov", "pytest-mock"],
