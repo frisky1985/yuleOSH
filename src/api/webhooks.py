@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """GitHub Webhook handler — receives push events and triggers CI.
 
 Endpoint: POST /api/v1/webhooks/github

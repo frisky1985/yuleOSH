@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """End-to-end tests for yuleOSH platform.
 
 Pipeline tests use mock LLM data instead of real API calls.

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for ci/run.py — boost coverage from 59% to 80%+ (v0.8.0 P0).
 
 Covers: CIResult, git helpers, file discovery, layer deps, error paths.

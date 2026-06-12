@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 dSPACE AutomationDesk Adapter — 将 yuleOSH Pipeline 产出的测试用例
 转化为 dSPACE AutomationDesk 兼容的 XML 格式。

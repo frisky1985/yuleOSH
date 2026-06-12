@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """First-run Wizard API handler."""
 
 from . import json_ok, json_error

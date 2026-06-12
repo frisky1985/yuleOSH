@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Extended tests for spec engine - CLI and edge cases."""
 import sys, os, json, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "spec"))

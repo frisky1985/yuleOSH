@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """yuleOSH Persistent Storage — auto-selects SQLite or PostgreSQL backend.
 
 Usage:

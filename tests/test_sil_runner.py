@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 Tests for the QEMU SIL Runner (v0.4.0 Iteration 1).
 

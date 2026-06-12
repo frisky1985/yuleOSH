@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Pre-save / CI check: detect mangled os.environ.get calls.
 
 Some tools strip `os.environ.get(` from content, leaving `***"KEY", "default")`.

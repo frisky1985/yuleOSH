@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Basic tests for CLI modules — stats and template.
 
 Covers: cli/stats.py and cli/template.py basic flows at ~60% coverage.

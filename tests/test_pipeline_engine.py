@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Unit tests for pipeline engine with mock LLM injection.
 
 Covers: pipeline, SDD, DDD, TDD, agent, orchestration, session, dependency injection

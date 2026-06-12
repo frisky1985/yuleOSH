@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for v0.7.0 cross-review fixes (Critical + Major findings)."""
 import json
 import os

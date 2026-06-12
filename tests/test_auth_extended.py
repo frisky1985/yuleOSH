@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for ui/auth.py — boost coverage from 33% to 80%+ (v0.8.0 P0).
 
 Covers: auth, session, API key, login page.

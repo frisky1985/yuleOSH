@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for v0.9.0 modules: async_runner, metering, stripe_gateway."""
 import os
 import sys

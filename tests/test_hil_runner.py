@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 Tests for the HIL (Hardware-in-the-Loop) Test Runner v0.5.0.
 

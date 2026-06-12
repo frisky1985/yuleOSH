@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Extended tests for evidence engine — bidirectional traceability & acceptance matrix.
 
 Covers: bidirectional traceability, requirement-to-test mapping, acceptance matrix,

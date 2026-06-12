@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 yuleOSH AI Resource Usage Predictor — estimates RAM, ROM, CPU usage,
 stack risk, and ISR latency for embedded firmware (ARM Cortex-M,

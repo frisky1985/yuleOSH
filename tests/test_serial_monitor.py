@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 Tests for the Serial Monitor (v0.5.0 Iteration 1-2).
 

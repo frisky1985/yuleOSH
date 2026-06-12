@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Multi-tenant Organization, Project & User Authentication for yuleOSH.
 
 v0.8.0: JWT + bcrypt password auth + rate limiting + security headers.

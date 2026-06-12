@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Healthcheck endpoint — comprehensive system health monitoring.
 
 Checks:

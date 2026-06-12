@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Extended tests for store — multi-tenant, sessions, spec cache, API keys, wizard, stats.
 
 Covers: record_activity, get_total_users, get_total_projects, get_usage_stats,

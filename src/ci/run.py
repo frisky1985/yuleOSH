@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 OSH CI Engine — Layers 1/2/2.5/3.
 

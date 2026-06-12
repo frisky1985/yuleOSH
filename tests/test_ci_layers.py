@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for A-03: CI layer dependency chain.
 
 Verifies that:

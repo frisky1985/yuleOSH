@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """yuleOSH PostgreSQL Store — production-grade multi-tenant storage.
 
 Replaces SQLite Store when YULEOSH_DB_URL starts with postgresql://

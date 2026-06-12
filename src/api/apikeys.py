@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """API Key management endpoints.
 
 POST   /api/v1/apikeys          — generate new key (returns full key once)

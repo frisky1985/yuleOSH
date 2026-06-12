@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for Pipeline error handling (A-02: hard errors, no silent degradation).
 
 Verifies:

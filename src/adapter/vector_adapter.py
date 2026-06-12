@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 Vector CANoe Adapter — 将 yuleOSH Pipeline 产出的测试用例
 转化为 Vector CANoe 兼容的 XML Test Feature 格式。

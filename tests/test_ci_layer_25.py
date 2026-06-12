@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for CI Layer 2.5 (Hardware-in-the-Loop).
 
 GIVEN the CI pipeline with HIL layer

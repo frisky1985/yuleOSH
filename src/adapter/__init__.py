@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 yuleOSH Adapter Module — Vector CANoe / dSPACE AutomationDesk 适配器。
 

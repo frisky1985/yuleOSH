@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Unit tests for src/llm/client.py — LLM API client.
 
 Tests the OpenAI-compatible chat completion client with mocked HTTP.

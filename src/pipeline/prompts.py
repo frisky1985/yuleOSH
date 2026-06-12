@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 OSH Pipeline Prompts — Centralized LLM prompt templates for all 10 pipeline steps.
 

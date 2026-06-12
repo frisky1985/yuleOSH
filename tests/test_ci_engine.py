@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for CI engine — includes A-01 blocking logic verification."""
 import sys, os, tempfile, json, subprocess, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))

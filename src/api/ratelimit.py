@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Simple in-memory rate limiter for API requests.
 
 Per-IP rate limiting using a sliding time window.

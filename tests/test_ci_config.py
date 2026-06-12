@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for CI configuration module — ci.config.
 
 GIVEN a yuleOSH project directory

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 Tests for SerialMonitor base class and PipeSerialMonitor edge cases (v0.6.0).
 """

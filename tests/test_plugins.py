@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 Tests for yuleOSH Plugin System — PluginManager, PluginSandbox, PluginRegistry, SkillManager.
 

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for JWT auth integration (v0.8.0)."""
 import os
 import sys

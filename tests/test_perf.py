@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Performance tests for yuleOSH pipeline and CI.
 
 These tests verify that core operations complete within time budgets.

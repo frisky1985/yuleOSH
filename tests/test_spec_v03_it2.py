@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for v0.3.0 Iteration 2 — Hierarchical IDs, status tracking, and impact analysis."""
 import sys, os, json, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "spec"))

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 yuleOSH Plugin Sandbox — 插件沙箱（安全执行）。
 

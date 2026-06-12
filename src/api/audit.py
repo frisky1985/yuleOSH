@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Request audit logging for yuleOSH API.
 
 Logs all API requests to an audit_log table in the SQLite store.

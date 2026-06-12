@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for T1.5 Prompt Version Management and T2.2 Race Condition Guard (v0.7.0)."""
 import json
 import os

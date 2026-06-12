@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 # yuleOSH TestGen — AI-powered test case generator from OpenSpec
 
 from .generator import TestGenerator, TestCase

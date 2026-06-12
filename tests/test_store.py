@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for SQLite persistent store."""
 import sys, os, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))

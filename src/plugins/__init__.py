@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 yuleOSH Plugin System — Plugin Manager, 本地加载/发现/安装/卸载。
 

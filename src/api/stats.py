@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Usage statistics endpoints — overview counts and trends.
 
 GET /api/v1/stats/overview — aggregated counts of everything

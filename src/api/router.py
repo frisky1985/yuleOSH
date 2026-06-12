@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """yuleOSH REST API v1 router — dispatches requests to handler modules.
 
 Mounted at /api/v1/ in the main server.

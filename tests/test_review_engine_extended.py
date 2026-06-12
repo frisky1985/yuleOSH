@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Extended tests for review engine — reviewer functions, session save/load, auto_review, main.
 
 Covers: review_architecture, review_domain_modeling, review_code_style, review_coverage,

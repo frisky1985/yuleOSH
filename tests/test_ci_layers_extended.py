@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """Tests for ci/run.py layer functions — boost from 62% to 75%+ (v0.8.0)."""
 import json
 import os

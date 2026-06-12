@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: MIT
+
 """
 Tests for VectorCANoeAdapter — 验证 CANoe XML Test Feature 生成。
 
