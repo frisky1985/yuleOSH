@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """yuleOSH REST API — modular route handlers.
 
 All endpoints return JSON:

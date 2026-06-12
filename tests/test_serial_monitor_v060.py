@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """
 Tests for SerialMonitor base class and PipeSerialMonitor edge cases (v0.6.0).
 """

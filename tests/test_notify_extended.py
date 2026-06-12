@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Tests for notify.py — boost coverage from 72% to 85%+ (v0.8.0 P0).
 
 Covers: notify config, webhook POST, error paths, pipeline/CI notifications.

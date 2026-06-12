@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Tests for auth_extended.py handlers — boost from 23% to 80%+ (v0.8.0 P0).
 
 Covers: signin, org_create, session_info, logout, project_list, project_create, org_info.

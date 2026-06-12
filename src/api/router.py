@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """yuleOSH REST API v1 router — dispatches requests to handler modules.
 
 Mounted at /api/v1/ in the main server.

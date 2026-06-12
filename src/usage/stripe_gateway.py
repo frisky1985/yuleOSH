@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """yuleOSH v0.9.0 — Stripe Payment Integration.
 
 Handles Stripe Checkout sessions and webhook events.

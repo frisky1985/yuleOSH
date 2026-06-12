@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Evidence endpoints — generate, list files, download compliance pack."""
 
 import os

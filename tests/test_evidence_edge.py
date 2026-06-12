@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Edge case tests for evidence engine — parse errors, no files, coverage modes, acceptance matrix format.
 
 Covers: _parse_covers_from_file syntax errors, _collect_test_coverage no markers message,

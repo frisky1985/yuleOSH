@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Server integration tests for v1.0.0 — e2e API flows.
 
 Manual run results (2026-06-10): 9/9 passed

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Tests for JWT auth integration (v0.8.0)."""
 import os
 import sys

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """
 Tests for the HIL (Hardware-in-the-Loop) Test Runner v0.5.0.
 

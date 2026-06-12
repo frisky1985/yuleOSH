@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Request audit logging for yuleOSH API.
 
 Logs all API requests to an audit_log table in the SQLite store.

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """yuleOSH REST API — Middleware: JWT auth requirement for handler injection.
 
 Provides `require_auth` decorator to protect API endpoints behind JWT bearer

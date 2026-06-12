@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """OSH Dashboard Server — lightweight HTTP server for the Web UI.
 
 Includes multi-tenant auth (organizations, projects, users) alongside

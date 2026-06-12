@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 # yuleOSH TestGen — AI-powered test case generator from OpenSpec
 
 from .generator import TestGenerator, TestCase

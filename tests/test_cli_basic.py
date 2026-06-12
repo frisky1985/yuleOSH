@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Basic tests for CLI modules — stats and template.
 
 Covers: cli/stats.py and cli/template.py basic flows at ~60% coverage.

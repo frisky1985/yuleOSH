@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """First-run Wizard API handler."""
 
 from . import json_ok, json_error

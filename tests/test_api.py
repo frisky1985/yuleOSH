@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """yuleOSH API module tests — direct handler calls, no HTTP server.
 
 Each test calls handler functions directly with mock data,

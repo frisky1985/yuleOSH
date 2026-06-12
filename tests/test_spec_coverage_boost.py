@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """Tests for spec/validate.py — boost from 82% to 90%+ (v0.8.0).
 
 Uses actual API: SpecRequirement, SpecScenario, SpecDocument, uppercase statuses.

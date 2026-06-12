@@ -1,0 +1,109 @@
+{
+  "name": "yuleosh-vscode",
+  "displayName": "yuleOSH",
+  "description": "AI-Powered Embedded Development Pipeline",
+  "version": "0.1.0",
+  "publisher": "frisky1985",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "yuleosh.runPipeline",
+        "title": "yuleOSH: Run Pipeline"
+      },
+      {
+        "command": "yuleosh.viewStatus",
+        "title": "yuleOSH: View Status"
+      },
+      {
+        "command": "yuleosh.openDashboard",
+        "title": "yuleOSH: Open Dashboard"
+      },
+      {
+        "command": "yuleosh.flashDevice",
+        "title": "yuleOSH: Flash Device"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "yuleosh-sidebar",
+          "title": "yuleOSH",
+          "icon": "$(circuit-board)"
+        }
+      ]
+    },
+    "views": {
+      "yuleosh-sidebar": [
+        {
+          "type": "tree",
+          "id": "yuleosh.pipelineView",
+          "name": "Pipeline Status"
+        },
+        {
+          "type": "tree",
+          "id": "yuleosh.reviewsView",
+          "name": "Recent Reviews"
+        },
+        {
+          "type": "tree",
+          "id": "yuleosh.actionsView",
+          "name": "Quick Actions"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "yuleOSH",
+      "properties": {
+        "yuleosh.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "yuleOSH backend server URL"
+        },
+        "yuleosh.autoReview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically trigger code review on save"
+        },
+        "yuleosh.defaultTarget": {
+          "type": "string",
+          "default": "esp32",
+          "enum": [
+            "esp32",
+            "esp8266",
+            "stm32",
+            "rp2040"
+          ],
+          "description": "Default target hardware for flashing"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.96.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^3.2.0",
+    "eslint": "^8.50.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  }
+}

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
 """yuleOSH usage metering and payment module — v0.9.0."""
 from .metering import (
     TIERS, TRIAL_DAYS,
