@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""yuleOSH Persistent Storage — SQLite-backed runtime data store."""
+"""yuleOSH Persistent Storage — auto-selects SQLite or PostgreSQL backend.
+
+Usage:
+    YULEOSH_DB_URL=postgresql://user:pass@host:5432/dbname  → PostgreSQL
+    YULEOSH_DB=/path/to/store.db or unset                  → SQLite (default)
+"""
 import json, os, sqlite3, threading
 from datetime import datetime
 from pathlib import Path
@@ -7,12 +12,20 @@ from typing import Optional
 
 
 class Store:
-    """SQLite-backed persistent store. Thread-safe, testable."""
+    """SQLite-backed persistent store. Thread-safe, testable.
+
+    Falls back to PostgresStore when YULEOSH_DB_URL starts with postgresql://
+    """
 
     _instances = {}
     _lock = threading.Lock()
 
     def __new__(cls, db_path: Optional[str] = None):
+        db_url = os.environ.get("YULEOSH_DB_URL", "")
+        if db_url.startswith("postgresql://"):
+            from src.store_pg import PostgresStore
+            return PostgresStore.__new__(PostgresStore, db_url)
+
         key = db_path or "default"
         with cls._lock:
             if key not in cls._instances:
