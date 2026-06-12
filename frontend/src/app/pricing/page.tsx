@@ -33,9 +33,9 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "¥199",
+    price: "¥299",
     period: "/月",
-    annual: "或 ¥1,999/年（节省 17%）",
+    annual: "或 ¥2,999/年（节省 17%）",
     description: "专业嵌入式开发者首选，全功能 Pipeline。",
     highlight: true,
     badge: "最受欢迎",
