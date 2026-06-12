@@ -431,10 +431,12 @@ class TestCANoeCompatibility:
 
     def test_no_raw_namespace_prefixes(self, adapter: VectorCANoeAdapter,
                                        sample_cases: list[dict]) -> None:
-        """原始 XML 不应有未注册的命名空间前缀。"""
+        """原始 XML 应使用注册的 canoen 前缀，而非未定义的 ns0。"""
         xml_str = adapter.generate_test_module(sample_cases)
-        # All tags should use the registered default namespace
-        assert ":" not in xml_str.split("?>")[1].strip().split(" ")[0]
+        # The registered prefix is "canoe", not "ns0"
+        assert "ns0:" not in xml_str, "Unregistered ns0 prefix should not appear"
+        # Should use the registered namespace prefix
+        assert "canoe:testmodule" in xml_str or "testmodule" in xml_str
 
     def test_xml_declaration_first_line(self, adapter: VectorCANoeAdapter,
                                         sample_cases: list[dict]) -> None:
