@@ -228,7 +228,7 @@ yuleosh help
 
 ## Related Projects
 
-- **yuleAI-Hub** — Parent monorepo: [github.com/frisky1985/yuleAI-Hub](https://github.com/frisky1985/yuleAI-Hub)
+
 
 ## Contributing
 
@@ -379,7 +379,7 @@ yuleosh help
 
 ## 相关项目
 
-- **yuleAI-Hub** — 父级仓库：[github.com/frisky1985/yuleAI-Hub](https://github.com/frisky1985/yuleAI-Hub)
+
 
 ## 参与贡献
 

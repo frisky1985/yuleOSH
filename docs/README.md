@@ -116,7 +116,6 @@
 
 ### 相关外部资源
 
-- **GitHub 仓库**: [github.com/frisky1985/yuleOSH](https://github.com/frisky1985/yuleOSH)
-- **父仓库**: [yuleAI-Hub](https://github.com/frisky1985/yuleAI-Hub)
+- **yuleOSH GitHub**: [github.com/frisky1985/yuleOSH](https://github.com/frisky1985/yuleOSH)
 
 > 文档仍在持续完善中，欢迎提交 PR 补充或修正！

@@ -5,7 +5,7 @@ from setuptools import setup, find_namespace_packages
 
 setup(
     name="yuleosh",
-    version="0.4.0",
+    version="1.0.0",
     description="嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体",
     packages=find_namespace_packages(include=["src", "src.*"]),
     py_modules=["yuleosh_cli"],
