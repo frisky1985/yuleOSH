@@ -16,7 +16,7 @@ from unittest import mock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from ui.auth_extended import (
+from yuleosh.ui.auth_extended import (
     handle_signin,
     handle_org_create,
     handle_session_info,
@@ -53,7 +53,7 @@ class TestRateLimit:
 
     def test_window_reset(self):
         """GIVEN expired window WHEN check THEN not blocked."""
-        from ui.auth_extended import _SIGNIN_RATE_LIMIT, _RATE_WINDOW_SECONDS
+        from yuleosh.ui.auth_extended import _SIGNIN_RATE_LIMIT, _RATE_WINDOW_SECONDS
         email = "reset@test.com"
         for _ in range(10):
             _check_rate_limit(email)

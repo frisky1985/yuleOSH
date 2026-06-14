@@ -32,18 +32,18 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from cross.target_config import (
+from yuleosh.cross.target_config import (
     TargetConfig,
     load_target_config,
     discover_targets,
 )
-from cross.sil_assert import (
+from yuleosh.cross.sil_assert import (
     SerialAssert,
     SilAssertionError,
     run_expect_script,
     ExpectScriptError,
 )
-from cross.sil_runner import (
+from yuleosh.cross.sil_runner import (
     MIN_QEMU_VERSION,
     MAX_QEMU_VERSION,
     QemuSilRunner,

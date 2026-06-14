@@ -152,7 +152,7 @@ def test_e2e_pipeline_run():
     Uses pre-recorded mock responses and a mock self-test handler
     to avoid recursive pytest invocation.
     """
-    from src.pipeline.run import run_pipeline, PIPELINE_STEPS
+    from yuleosh.pipeline.run import run_pipeline, PIPELINE_STEPS
 
     # Use real spec and project dir
     spec_path = os.path.join(PROJECT_DIR, "docs", "spec.md")
@@ -166,7 +166,7 @@ def test_e2e_pipeline_run():
         for key, agent, name, handler in PIPELINE_STEPS
     ]
 
-    with mock.patch("src.pipeline.run.PIPELINE_STEPS", patched_steps):
+    with mock.patch("yuleosh.pipeline.run.PIPELINE_STEPS", patched_steps):
         session = run_pipeline(
             spec_path,
             name="e2e-pipeline-run",
@@ -190,7 +190,7 @@ def test_e2e_pipeline_status():
 def test_e2e_pipeline_spec_check_only():
     """E2E: pipeline spec-check step works in isolation (no API key needed)."""
     spec_path = os.path.join(PROJECT_DIR, "docs", "spec.md")
-    from src.pipeline.run import PipelineSession, step_spec_check
+    from yuleosh.pipeline.run import PipelineSession, step_spec_check
 
     session = PipelineSession("test-spec-check", spec_path)
     result = step_spec_check(session)
@@ -217,7 +217,7 @@ def test_e2e_pipeline_full_flow():
 
     Verifies all 10 artifacts are generated with content.
     """
-    from src.pipeline.run import run_pipeline, PIPELINE_STEPS
+    from yuleosh.pipeline.run import run_pipeline, PIPELINE_STEPS
 
     spec_path = os.path.join(PROJECT_DIR, "docs", "spec.md")
     mock_llm = _make_mock_llm()
@@ -228,7 +228,7 @@ def test_e2e_pipeline_full_flow():
         for key, agent, name, handler in PIPELINE_STEPS
     ]
 
-    with mock.patch("src.pipeline.run.PIPELINE_STEPS", patched_steps):
+    with mock.patch("yuleosh.pipeline.run.PIPELINE_STEPS", patched_steps):
         session = run_pipeline(
             spec_path,
             name="e2e-full-flow",

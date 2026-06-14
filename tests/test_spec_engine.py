@@ -9,7 +9,7 @@ Scenario-Ref: 变更管理
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "spec"))
 
-from validate import parse_spec, validate_spec, SpecDocument
+from yuleosh.spec.validate import parse_spec, validate_spec, SpecDocument
 
 
 def test_parse_basic_spec():

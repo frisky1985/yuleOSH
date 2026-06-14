@@ -16,7 +16,7 @@ from unittest import mock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from ci.run import (
+from yuleosh.ci.run import (
     CIResult,
     git_commit_hash,
     get_changed_files,
@@ -207,7 +207,7 @@ class TestErrorHandling:
 
     def test_handle_stage_error_strict(self):
         """GIVEN strict mode WHEN _handle_stage_error THEN adds failed stage."""
-        from ci.run import CIResult as _CI, _handle_stage_error as _err
+        from yuleosh.ci.run import CIResult as _CI, _handle_stage_error as _err
         ci = _CI(layer=1, commit_hash="t")
         result = _err(ci, "test-stage", "fatal error", strict=True)
         assert result is False  # _handle_stage_error returns False even in strict

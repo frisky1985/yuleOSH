@@ -16,7 +16,7 @@ import io, contextlib
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from spec.validate import (
+from yuleosh.spec.validate import (
     SpecRequirement,
     SpecScenario,
     SpecDocument,

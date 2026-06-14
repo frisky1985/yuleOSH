@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from ci.config import (
+from yuleosh.ci.config import (
     CiConfig,
     CoverageConfig,
     HardwareTestConfig,

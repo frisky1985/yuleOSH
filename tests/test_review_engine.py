@@ -9,7 +9,7 @@ Scenario-Ref: SDD → DDD → TDD 全流程
 import sys, os, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "review"))
 
-from run import ReviewFinding, ReviewResult, ReviewSession
+from yuleosh.review.run import ReviewFinding, ReviewResult, ReviewSession
 
 def test_review_finding():
     """Test review finding creation."""

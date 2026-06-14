@@ -21,7 +21,7 @@ import pytest
 
 # Ensure we import the module under test without side effects
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from llm.client import (
+from yuleosh.llm.client import (
     _build_payload,
     _build_request,
     _do_request,

@@ -122,6 +122,13 @@ def cmd_review_task(task: str, kind: str = "feature"):
     run_review(task, kind, OSH_HOME, changed)
 
 
+def cmd_demo_uart(target_dir: str = None, do_build: bool = False, skip_cmake: bool = False):
+    """Create and run the STM32+ESP32 UART demo project."""
+    from src.cli.commands.demo_uart import cmd_demo_uart
+
+    sys.exit(cmd_demo_uart(target_dir, do_build, skip_cmake))
+
+
 def cmd_ci_run(layer: str):
     from src.ci.run import run_layer1, run_layer2, run_layer3
 
@@ -204,6 +211,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_stats = sub.add_parser("stats", help="Show project statistics")
     p_stats.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # demo
+    p_demo = sub.add_parser("demo", help="Create and run demo projects")
+    dsub = p_demo.add_subparsers(dest="demo_sub")
+    p_demo_uart = dsub.add_parser("uart", help="STM32F4 ↔ ESP32 UART communication demo")
+    p_demo_uart.add_argument("--dir", default=None, help="Target directory for the demo project")
+    p_demo_uart.add_argument("--build", action="store_true", help="Build and run the demo after creating it")
+    p_demo_uart.add_argument("--skip-cmake", action="store_true", help="Skip CMake environment check")
+
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
 
@@ -250,6 +265,12 @@ def main():
             cmd_review_auto()
         elif args.review_sub == "task":
             cmd_review_task(args.name, args.kind)
+        else:
+            parser.print_help()
+            sys.exit(1)
+    elif args.command == "demo":
+        if args.demo_sub == "uart":
+            cmd_demo_uart(args.dir, args.build, args.skip_cmake)
         else:
             parser.print_help()
             sys.exit(1)

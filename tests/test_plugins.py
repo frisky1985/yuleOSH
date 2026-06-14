@@ -18,10 +18,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pytest
 
-from plugins import PluginManager, PluginManifest, PluginInfo, Plugin
-from plugins.sandbox import PluginSandbox, SandboxViolation
-from plugins.registry import PluginRegistry, RegistrySource
-from skills import SkillManager, SkillManifest
+from yuleosh.plugins import PluginManager, PluginManifest, PluginInfo, Plugin
+from yuleosh.plugins.sandbox import PluginSandbox, SandboxViolation
+from yuleosh.plugins.registry import PluginRegistry, RegistrySource
+from yuleosh.skills import SkillManager, SkillManifest
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from ci.run import run_layer_25, _clear_ci_config_cache
+from yuleosh.ci.run import run_layer_25, _clear_ci_config_cache
 
 
 # ------------------------------------------------------------------

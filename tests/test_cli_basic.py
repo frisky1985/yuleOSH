@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "cli"))
 
 def test_count_source_lines_empty_project():
     """Test count_source_lines with empty project."""
-    from stats import count_source_lines
+    from yuleosh.cli.stats import count_source_lines
     with tempfile.TemporaryDirectory() as tmp:
         # Create src/ and tests/ empty dirs
         Path(tmp).joinpath("src").mkdir()
@@ -36,7 +36,7 @@ def test_count_source_lines_empty_project():
 
 def test_count_source_lines_with_files():
     """Test count_source_lines with actual Python files."""
-    from stats import count_source_lines
+    from yuleosh.cli.stats import count_source_lines
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "src"
         src.mkdir()
@@ -49,7 +49,7 @@ def test_count_source_lines_with_files():
 
 def test_count_tests_empty():
     """Test count_tests with no tests directory."""
-    from stats import count_tests
+    from yuleosh.cli.stats import count_tests
     with tempfile.TemporaryDirectory() as tmp:
         result = count_tests(tmp)
         assert result["test_files"] == 0
@@ -58,7 +58,7 @@ def test_count_tests_empty():
 
 def test_count_tests_with_functions():
     """Test count_tests identifies test functions."""
-    from stats import count_tests
+    from yuleosh.cli.stats import count_tests
     with tempfile.TemporaryDirectory() as tmp:
         tests = Path(tmp) / "tests"
         tests.mkdir()
@@ -79,7 +79,7 @@ def test_count_tests_with_functions():
 
 def test_compute_spec_coverage_no_spec():
     """Test compute_spec_coverage with no spec.md."""
-    from stats import compute_spec_coverage
+    from yuleosh.cli.stats import compute_spec_coverage
     with tempfile.TemporaryDirectory() as tmp:
         result = compute_spec_coverage(tmp)
         assert result["score"] == 0
@@ -88,7 +88,7 @@ def test_compute_spec_coverage_no_spec():
 
 def test_count_pipeline_runs_empty():
     """Test count_pipeline_runs with no sessions directory."""
-    from stats import count_pipeline_runs
+    from yuleosh.cli.stats import count_pipeline_runs
     with tempfile.TemporaryDirectory() as tmp:
         result = count_pipeline_runs(tmp)
         assert result["total_runs"] == 0
@@ -97,7 +97,7 @@ def test_count_pipeline_runs_empty():
 
 def test_count_pipeline_runs_with_data():
     """Test count_pipeline_runs with session data."""
-    from stats import count_pipeline_runs
+    from yuleosh.cli.stats import count_pipeline_runs
     with tempfile.TemporaryDirectory() as tmp:
         sess_dir = Path(tmp) / ".osh" / "sessions" / "sess-1"
         sess_dir.mkdir(parents=True)
@@ -115,7 +115,7 @@ def test_count_pipeline_runs_with_data():
 
 def test_count_ci_runs_empty():
     """Test count_ci_runs with no CI directory."""
-    from stats import count_ci_runs
+    from yuleosh.cli.stats import count_ci_runs
     with tempfile.TemporaryDirectory() as tmp:
         result = count_ci_runs(tmp)
         assert result["total_runs"] == 0
@@ -124,7 +124,7 @@ def test_count_ci_runs_empty():
 
 def test_count_ci_runs_with_data():
     """Test count_ci_runs with CI data."""
-    from stats import count_ci_runs
+    from yuleosh.cli.stats import count_ci_runs
     with tempfile.TemporaryDirectory() as tmp:
         ci_dir = Path(tmp) / ".osh" / "ci"
         ci_dir.mkdir(parents=True)
@@ -142,7 +142,7 @@ def test_count_ci_runs_with_data():
 
 def test_cmd_stats_json_output():
     """Test cmd_stats with to_json=True outputs valid JSON."""
-    from stats import cmd_stats
+    from yuleosh.cli.stats import cmd_stats
     with tempfile.TemporaryDirectory() as tmp:
         with patch("sys.stdout") as mock_stdout:
             result = cmd_stats(tmp, to_json=True)
@@ -156,17 +156,17 @@ def test_cmd_stats_json_output():
 
 def test_cmd_stats_default_dir():
     """Test cmd_stats uses current dir by default."""
-    from stats import cmd_stats
+    from yuleosh.cli.stats import cmd_stats
     result = cmd_stats(to_json=True)
     assert result is not None
 
 
 def test_stats_main_function():
     """Test stats main() entry point."""
-    from stats import main
+    from yuleosh.cli.stats import main
     test_args = ["stats.py", "--json"]
     with patch.object(sys, "argv", test_args):
-        with patch("stats.cmd_stats") as mock_cmd:
+        with patch("yuleosh.cli.stats.cmd_stats") as mock_cmd:
             mock_cmd.return_value = {}
             main()
             mock_cmd.assert_called_once()
@@ -174,11 +174,11 @@ def test_stats_main_function():
 
 def test_stats_main_with_dir():
     """Test stats main() with explicit directory."""
-    from stats import main
+    from yuleosh.cli.stats import main
     with tempfile.TemporaryDirectory() as tmp:
         test_args = ["stats.py", tmp, "--json"]
         with patch.object(sys, "argv", test_args):
-            with patch("stats.cmd_stats") as mock_cmd:
+            with patch("yuleosh.cli.stats.cmd_stats") as mock_cmd:
                 mock_cmd.return_value = {}
                 main()
                 mock_cmd.assert_called_once()
@@ -190,7 +190,7 @@ def test_stats_main_with_dir():
 
 def test_template_starter_init():
     """Test template init creates basic project structure."""
-    from template import cmd_template_init
+    from yuleosh.cli.template import cmd_template_init
     with tempfile.TemporaryDirectory() as tmp:
         proj_dir = cmd_template_init("test-project", parent_dir=tmp)
         assert proj_dir.exists()
@@ -207,7 +207,7 @@ def test_template_starter_init():
 
 def test_template_starter_init_with_existing():
     """Test template init exits cleanly when dir exists."""
-    from template import cmd_template_init
+    from yuleosh.cli.template import cmd_template_init
     with tempfile.TemporaryDirectory() as tmp:
         existing = Path(tmp) / "existing-proj"
         existing.mkdir()
@@ -220,11 +220,11 @@ def test_template_starter_init_with_existing():
 
 def test_template_main_init():
     """Test template main() with init command."""
-    from template import main
+    from yuleosh.cli.template import main
     with tempfile.TemporaryDirectory() as tmp:
         test_args = ["template.py", "init", "test-proj"]
         with patch.object(sys, "argv", test_args):
-            with patch("template.cmd_template_init") as mock_init:
+            with patch("yuleosh.cli.template.cmd_template_init") as mock_init:
                 mock_init.return_value = Path(tmp) / "test-proj"
                 main()
                 mock_init.assert_called_once()
@@ -232,7 +232,7 @@ def test_template_main_init():
 
 def test_template_main_unknown():
     """Test template main() with unknown command exits."""
-    from template import main
+    from yuleosh.cli.template import main
     test_args = ["template.py", "unknown"]
     with patch.object(sys, "argv", test_args):
         try:
@@ -244,7 +244,7 @@ def test_template_main_unknown():
 
 def test_template_main_no_args():
     """Test template main() with no args exits."""
-    from template import main
+    from yuleosh.cli.template import main
     test_args = ["template.py"]
     with patch.object(sys, "argv", test_args):
         try:
@@ -256,7 +256,7 @@ def test_template_main_no_args():
 
 def test_template_init_with_from_template():
     """Test template init with --from flag creates from template dir."""
-    from template import cmd_template_init
+    from yuleosh.cli.template import cmd_template_init
     with tempfile.TemporaryDirectory() as tmp:
         # Create a template dir
         template_dir = Path(tmp) / "templates" / "ble-sensor"
@@ -277,7 +277,7 @@ def test_template_init_with_from_template():
 
 def test_template_init_from_template_not_found():
     """Test template init with non-existent template exits."""
-    from template import cmd_template_init
+    from yuleosh.cli.template import cmd_template_init
     with tempfile.TemporaryDirectory() as tmp:
         try:
             cmd_template_init("proj", parent_dir=tmp,
@@ -289,7 +289,7 @@ def test_template_init_from_template_not_found():
 
 def test_print_stats_human():
     """Test _print_stats_human renders correctly (just call it)."""
-    from stats import _print_stats_human
+    from yuleosh.cli.stats import _print_stats_human
     stats = {
         "project": "test-proj",
         "project_dir": "/tmp",

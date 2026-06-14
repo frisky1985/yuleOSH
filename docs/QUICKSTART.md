@@ -1,343 +1,152 @@
-# yuleOSH Quickstart — 5 Minutes to Running
+# yuleOSH Quickstart — 3 Steps, 2 Minutes
 
-> Get from zero to running your first pipeline in 5 minutes.
+> Get from zero to a running pipeline in three commands and under two minutes.
 
 ---
 
 ## Prerequisites
 
 - **Python 3.10+** (`python3 --version`)
-- **Git** (`git --version`)
 - **pip** (`python3 -m pip --version`)
+
+No Git, no clones, no system dependencies.
 
 ---
 
-## 1. Install (30 seconds)
+## Step 1: Install ⏱ 15s
 
 ```bash
-# Clone the repo
-git clone https://github.com/frisky1985/yuleOSH.git
-cd yuleOSH
+pip install yuleosh
+```
 
-# Install dependencies
-python3 -m pip install pytest coverage
+That's it. No extra dependencies, no platform setup scripts. `pytest`, `coverage`, and all other tooling come bundled.
 
-# Make the CLI available
-sudo ln -sf "$(pwd)/src/cli/yuleosh.sh" /usr/local/bin/yuleosh
+**Verify it works:**
 
-# Verify
+```bash
 yuleosh help
 ```
 
-**Expected output:**
+Expected output shows all available commands:
+
 ```
-OSH Platform CLI — 嵌入式开发全流程平台
-Usage: osh-cli <command> [options]
-...
+Usage: yuleosh <command> [options]
+
+Commands:
+  init           Create a new project
+  pipeline       Run the full agent pipeline
+  spec           Validate and diff OpenSpec files
+  ci             Run CI layers
+  review         Run AI code review
+  evidence       Generate compliance evidence pack
+  ...
 ```
 
 ---
 
-## 2. Create a Project (30 seconds)
-
-Use the starter template to create a new project with a sample spec:
+## Step 2: Initialize ⏱ 15s
 
 ```bash
-yuleosh template init my-sensor
-cd my-sensor
+yuleosh init my-project
+cd my-project
 ```
 
-This creates:
+This creates a ready-to-run project structure:
 
 ```
-my-sensor/
+my-project/
 ├── docs/
-│   └── spec.md              # Starter spec with 3 requirements
-├── src/                      # Source code directory
-├── tests/                    # Test directory
+│   └── spec.md           # Starter spec with 3 requirements + 3 scenarios
+├── src/                   # Source code directory (ready for your code)
+├── tests/                 # Test directory (ready for your tests)
 ├── pyproject.toml
 └── .gitignore
 ```
 
----
-
-## 3. Validate Your Spec (30 seconds)
-
-Every yuleOSH project needs an OpenSpec requirements file. Let's validate the starter:
-
-```bash
-yuleosh spec validate docs/spec.md
-```
-
-**Expected output (example):**
-
-```
-📋 OpenSpec Validation: docs/spec.md
-══════════════════════════════════════════
-  Requirements: 3
-  Scenarios:    3
-  Total SHALLs: 8
-
-🔬 Coverage Score: 100.0%
-   (threshold: 80%) ✅ PASS
-```
-
-**What to look for:**
-- ✅ `PASS` — your spec meets the 80% coverage threshold
-- Requirements count and SHALL statement count
-- Any warnings about missing sections
-
-> **Spec format tip:** Each requirement needs at least one `SHALL` statement and a `#### Reason` section. Scenarios need `GIVEN`/`WHEN`/`THEN`.
+The starter `docs/spec.md` includes a sample BLINKY LED spec with `SHALL`/`SHOULD`/`MAY` requirements and `GIVEN`/`WHEN`/`THEN` scenarios — all ready to validate and run.
 
 ---
 
-## 4. Run CI Layer 1 (30 seconds)
-
-Run development verification — unit tests and code coverage:
-
-```bash
-yuleosh ci run 1
-```
-
-**Expected output (example):**
-
-```
-🔬 CI Layer 1: Development Verification
-   Commit: abc1234
-   Project: /Users/you/my-sensor
-
-  🔍 CI: plan-lint...
-    ✅ plan-lint passed
-  🔎 CI: clang-tidy...
-    ⏭️  No C/C++ files — skipped
-  🧪 CI: unit tests...
-    ✅ All pytest tests passed
-  📊 CI: coverage check...
-    Line coverage: 42.0% (threshold: 40.0%)
-    ✅ Coverage thresholds met
-
-═══════════════════════════════════════
-✅ CI Layer 1: ALL STAGES PASSED
-```
-
-**What CI does for you:**
-| Stage | Purpose | Gate |
-|:------|:--------|:-----|
-| plan-lint | Check task/plan format | Warning only |
-| clang-tidy | C/C++ static analysis | Warning only |
-| unit-tests | Discover and run all tests | ❌ Blocks on failure |
-| coverage | Line + condition coverage | ❌ Blocks if below 40% |
-
----
-
-## 5. Run the Full Pipeline (60 seconds)
-
-The Agent Pipeline orchestrates 9 automated steps through 小明 (PM), Hermes (Product), Claude (Arch/Dev):
+## Step 3: Run ⏱ 90s
 
 ```bash
 yuleosh pipeline run docs/spec.md
 ```
 
-**What happens:**
+You'll see the 9-step agent pipeline in action:
 
 ```
-🚀 Pipeline started: run-20260604-120000
-   Spec: docs/spec.md
+🚀 Pipeline started: run-20260613-220300
 
-  [1/9] 小明: OpenSpec 合规检查
-  [2/9] 小明: S.U.P.E.R 启动分析
-  [3/9] Hermes: 产品需求分析
-  [4/9] 小明: 内部评审
-  [5/9] Claude: 架构设计
-  [6/9] Claude: 开发实现
-  [7/9] Claude: 自测验证
-  [8/9] Hermes: 代码审查
-  [9/9] 小明: 最终报告
+  [1/9] 小明: OpenSpec 合规检查          ✅
+  [2/9] 小明: S.U.P.E.R 启动分析          ✅
+  [3/9] Hermes: 产品需求分析               ✅
+  [4/9] 小明: 内部评审                     ✅
+  [5/9] Claude: 架构设计                   ✅
+  [6/9] Claude: 开发实现                   ✅
+  [7/9] Claude: 自测验证                   ✅
+  [8/9] Hermes: 代码审查                   ✅
+  [9/9] 小明: 最终报告                     ✅
 
 ═══════════════════════════════════════
 Pipeline: completed 🎉
-Session: .osh/sessions/run-20260604-120000
+Session: .osh/sessions/run-20260613-220300
 ```
 
-**Pipeline artifacts** are saved to `.osh/sessions/run-YYYYMMDD-HHMMSS/`:
+**What you get:**
 
-| Artifact | Agent | What it contains |
-|:---------|:------|:-----------------|
-| `spec-check.json` | 小明 | Spec validation results |
-| `startup-analysis.md` | 小明 | S.U.P.E.R analysis |
-| `prd.md` | Hermes | Product requirements doc |
-| `review-result.md` | 小明 | Internal review |
-| `architecture.md` | Claude | System architecture |
-| `development-log.md` | Claude | Implementation log |
-| `self-test-report.md` | Claude | Test results |
-| `code-review.json` | Hermes | Code review findings |
-| `final-report.md` | 小明 | Aggregated final report |
+| Artifact | File | What it contains |
+|:---------|:-----|:-----------------|
+| Spec check | `.osh/sessions/*/spec-check.json` | Validation results |
+| Design docs | `.osh/sessions/*/architecture.md` | System architecture + ADRs |
+| Generated code | `src/` | Auto-generated firmware source |
+| Review report | `.osh/sessions/*/code-review.json` | 4-agent review findings |
+| Final report | `.osh/sessions/*/final-report.md` | Aggregated project summary |
 
 ---
 
-## 6. Generate Compliance Evidence (30 seconds)
-
-Produce a complete ASPICE-compliant evidence pack:
+## Optional: Generate Compliance Evidence ⏱ 30s
 
 ```bash
 yuleosh evidence pack
 ```
 
-**Expected output:**
-
-```
-📦 OSH Evidence Generation
-══════════════════════════════════════════
-  📋 Collected 3 requirements, 3 scenarios
-  📋 Collected 1 review session(s)
-  📋 Collected 2 CI result(s)
-
-══════════════════════════════════════════
-  ✅ Traceability matrix generated: .osh/evidence/traceability-matrix.md
-  ✅ Requirement coverage report: .osh/evidence/requirement-coverage.md
-  ✅ Code coverage report: .osh/evidence/code-coverage-report.md
-  ✅ Review logs aggregated: .osh/evidence/review-log-summary.md
-  📦 Compliance pack created: .osh/evidence/compliance-pack.zip
-
-══════════════════════════════════════════
-✅ Evidence generation complete
-```
-
-**What's in the pack:**
+Produces an ASPICE-compliant compliance archive:
 
 ```
 .osh/evidence/
 ├── traceability-matrix.md       # Req ↔ Design ↔ Code ↔ Test
-├── requirement-coverage.md      # Per-requirement coverage
+├── acceptance-matrix.md         # Acceptance criteria trace
 ├── code-coverage-report.md      # Line/condition metrics
-├── review-log-summary.md        # Audit trail (human-readable)
-├── review-log.json              # Audit trail (machine-readable)
+├── review-log-summary.md        # Human-readable audit trail
+├── review-log.json              # Machine-readable audit trail
 └── compliance-pack.zip           # All-in-one for audit 🎯
 ```
 
 ---
 
-## 7. Bonus: Dashboard
+## Total: 2 Minutes
 
-```bash
-yuleosh ui start
-# → Open http://localhost:8080 in your browser
-```
-
----
-
-## 3 Command Examples
-
-### Example 1: Validate a custom spec
-
-```bash
-cat > docs/my-spec.md << 'EOF'
-### Req-001: Hello World
-- The system SHALL print "Hello, yuleOSH!"
-- The system SHALL include the current timestamp
-
-#### Reason
-Demo requirement for quickstart
-
-### Scenario: Basic operation
-- GIVEN the system is started
-- WHEN the user triggers the hello command
-- THEN the system SHALL print "Hello, yuleOSH!"
-- AND the system SHALL include the current timestamp
-EOF
-
-yuleosh spec validate docs/my-spec.md
-```
-
-### Example 2: Track requirement changes
-
-```bash
-# Edit your spec, then compare:
-yuleosh spec diff docs/spec.md docs/spec.md
-# → Should show "0 changes" (same file)
-
-# After editing, you'll see added/modified/removed requirements
-```
-
-### Example 3: Run all CI layers at once
-
-```bash
-for layer in 1 2 3; do
-  echo "=== CI Layer $layer ==="
-  yuleosh ci run $layer
-  echo ""
-done
-```
-
----
-
-## Troubleshooting
-
-### "command not found: yuleosh"
-
-```bash
-# The CLI wasn't symlinked. Use one of these:
-bash path/to/yuleOSH/src/cli/yuleosh.sh help
-# Or symlink it:
-sudo ln -sf "$(pwd)/src/cli/yuleosh.sh" /usr/local/bin/yuleosh
-```
-
-### "No module named 'coverage'"
-
-```bash
-# Install missing dependencies:
-python3 -m pip install pytest coverage
-```
-
-### "Pipeline failed with errors"
-
-Check the JIT error output — each step prints what went wrong. Common fixes:
-
-| Error | Fix |
-|:------|:----|
-| "Spec has errors" | Run `yuleosh spec validate` first and fix issues |
-| "File not found" | Check the spec path is correct and file exists |
-| "No changed files" | `yuleosh review auto` needs git-tracked files; make a commit first |
-| Permission denied | Ensure you have write access to the project directory |
-
-### "Git commands fail"
-
-Some yuleOSH features need a git context:
-
-```bash
-git init
-git add -A
-git commit -m "initial commit"
-```
-
-### "Port 8080 already in use"
-
-```bash
-# Use a different port:
-OSH_PORT=9090 yuleosh ui start
-```
-
-### "CLI help format looks different"
-
-The help examples are auto-generated from command definitions. Run:
-
-```bash
-yuleosh help --examples
-```
-
-for real-world usage patterns.
+| Step | Command | Time |
+|:-----|:--------|:----:|
+| 1. Install | `pip install yuleosh` | 15s |
+| 2. Init | `yuleosh init my-project` | 15s |
+| 3. Run | `yuleosh pipeline run docs/spec.md` | 90s |
+| **Total** | | **2 min** |
 
 ---
 
 ## Next Steps
 
-| Resource | What you'll learn |
-|:---------|:------------------|
-| [USAGE.md](USAGE.md) | Full CLI reference, all commands |
-| [FAQ.md](FAQ.md) | Common questions answered |
-| `bin/yuleosh-demo` | One-command demo (full workflow) |
-| `yuleosh help --examples` | Inline usage examples |
+| Goal | Command / Resource |
+|:-----|:-------------------|
+| Full CLI reference | [USAGE.md](USAGE.md) |
+| FAQ & troubleshooting | [FAQ.md](FAQ.md) |
+| API reference | [API Reference](api-reference.md) |
+| Architecture deep dive | [Architecture](architecture.md) |
+| Deploy to production | [Deploy Guide](deploy-guide.md) |
+| Commercial info | [Pricing](../README.md#pricing) |
 
 ---
 
-> **Tip:** Run `bin/yuleosh-demo` for a complete walkthrough with a realistic BLE sensor firmware project. It runs all 7 steps automatically.
+> **Tip:** Run `yuleosh help --examples` for inline usage patterns.

@@ -13,7 +13,7 @@ from unittest import mock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from ui.auth import (
+from yuleosh.ui.auth import (
     API_KEY,
     AUTH_ENABLED,
     _sessions,
