@@ -1,5 +1,3 @@
-# Copyright (c) 2025 frisky1985
-# SPDX-License-Identifier: MIT
 
 """
 yuleOSH CI Configuration — load and validate `.yuleosh/ci-config.yaml`.
@@ -11,7 +9,6 @@ and HIL test configuration.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -212,3 +209,61 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
         cfg.hardware_test.mock = bool(hw_block.get("mock", False))
 
     return cfg
+
+
+# CI config cache (module-level, shared across all imports)
+_ci_config_cache: dict[str, "CiConfig"] = {}
+
+
+def _get_ci_config(project_dir: str = "") -> "CiConfig":
+    """Load and cache CI configuration from ``.yuleosh/ci-config.yaml``."""
+    if project_dir not in _ci_config_cache:
+        from yuleosh.ci.config import CiConfig, load_ci_config  # type: ignore[import-untyped]
+        _ci_config_cache[project_dir] = load_ci_config(project_dir)
+    return _ci_config_cache.get(project_dir)  # type: ignore[return-value]
+
+
+def _clear_ci_config_cache() -> None:
+    """Clear the CI config cache (used in tests)."""
+    _ci_config_cache.clear()
+
+
+# ------------------------------------------------------------------
+# Strict mode helpers
+# ------------------------------------------------------------------
+
+
+def is_strict() -> bool:
+    """Check if CI is running in strict mode (CI_STRICT=1).
+
+    In strict mode, missing tools cause pipeline failure instead of
+    silent skip.  Any stage with FileNotFoundError blocks the pipeline.
+    """
+    return os.environ.get("CI_STRICT", "0") == "1"
+
+
+def is_misra_fail_fast() -> bool:
+    """Check if MISRA_FAIL_FAST is active.
+
+    When enabled, MISRA/CppCheck or clang-tidy failures (non-zero exit)
+    block the pipeline immediately instead of producing warnings.
+    """
+    return os.environ.get("MISRA_FAIL_FAST", "0") == "1"
+
+
+# ------------------------------------------------------------------
+# Layer dependency configuration (A-03)
+# ------------------------------------------------------------------
+
+# Layer dependency chain: each layer lists its upstream dependencies.
+# L1 has no dependencies.  L2 depends on L1.  L2.5 depends on L1 and L2.
+# L3 depends on L1, L2, and L2.5.
+# Order: L1 → L2 → L2.5 → L3.
+layer_dependencies: dict[int, list[int]] = {
+    1: [],
+    2: [1],
+    25: [1, 2],
+    3: [1, 2, 25],
+}
+
+

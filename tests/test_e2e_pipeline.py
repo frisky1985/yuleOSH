@@ -91,8 +91,9 @@ def mock_subprocess_run():
 @pytest.fixture
 def mock_all_deps():
     """Disable store and notifications so pipeline runs purely in-memory + on-disk."""
-    with mock.patch("yuleosh.pipeline.run._store", None), \
-         mock.patch("yuleosh.pipeline.run._notify", None):
+    with mock.patch("yuleosh.pipeline.stages._store", None), \
+         mock.patch("yuleosh.pipeline.session._store", None), \
+         mock.patch("yuleosh.pipeline.orchestrator._notify", None):
         yield
 
 
@@ -173,7 +174,7 @@ class TestE2ENormal:
             }))
 
             # Mock git — don't patch _save_layer_result, let it persist for dep chain
-            with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
+            with mock.patch("yuleosh.ci.runner.git_commit_hash", return_value="abc1234"):
                 # L1 needs tests directory
                 tests_dir = tmp_path / "tests"
                 tests_dir.mkdir(exist_ok=True)
