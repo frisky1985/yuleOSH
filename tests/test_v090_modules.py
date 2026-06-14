@@ -18,13 +18,13 @@ class TestAsyncRunner:
     """GIVEN async pipeline runner WHEN submitted THEN status tracked."""
 
     def test_submit_returns_job_id(self):
-        from pipeline.async_runner import submit_pipeline, get_job_status
+        from yuleosh.pipeline.async_runner import submit_pipeline, get_job_status
         with tempfile.TemporaryDirectory() as td:
             job_id = submit_pipeline(td, layer=1)
             assert len(job_id) == 16
 
     def test_initial_status_not_failed(self):
-        from pipeline.async_runner import submit_pipeline, get_job_status
+        from yuleosh.pipeline.async_runner import submit_pipeline, get_job_status
         with tempfile.TemporaryDirectory() as td:
             job_id = submit_pipeline(td, layer=1)
             status = get_job_status(job_id)
@@ -32,7 +32,7 @@ class TestAsyncRunner:
             assert status["status"] in ("queued", "running")
 
     def test_list_jobs(self):
-        from pipeline.async_runner import submit_pipeline, list_jobs
+        from yuleosh.pipeline.async_runner import submit_pipeline, list_jobs
         with tempfile.TemporaryDirectory() as td:
             submit_pipeline(td, layer=1)
             submit_pipeline(td, layer=2)
@@ -40,7 +40,7 @@ class TestAsyncRunner:
             assert len(jobs) >= 2
 
     def test_get_stats(self):
-        from pipeline.async_runner import submit_pipeline, get_pipeline_stats
+        from yuleosh.pipeline.async_runner import submit_pipeline, get_pipeline_stats
         with tempfile.TemporaryDirectory() as td:
             submit_pipeline(td, layer=1)
             stats = get_pipeline_stats()

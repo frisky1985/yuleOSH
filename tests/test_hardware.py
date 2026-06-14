@@ -31,8 +31,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from hardware import HardwareDeployer
-from hardware.flasher import (
+from yuleosh.hardware import HardwareDeployer
+from yuleosh.hardware.flasher import (
     OpenOCDFlasher,
     JLinkFlasher,
     ESPToolFlasher,
@@ -41,9 +41,9 @@ from hardware.flasher import (
     ToolNotFoundError,
     HardwareNotFoundError,
 )
-from hardware.monitor import SerialMonitor, _MockSerial, PortNotFoundError
-from hardware.debugger import AIDebugger, DebugReport
-from hardware.integration import HardwareStep, StepResult
+from yuleosh.hardware.monitor import SerialMonitor, _MockSerial, PortNotFoundError
+from yuleosh.hardware.debugger import AIDebugger, DebugReport
+from yuleosh.hardware.integration import HardwareStep, StepResult
 
 
 # ===========================================================================

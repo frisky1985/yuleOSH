@@ -39,6 +39,9 @@
 
 | 文档 | 说明 |
 |:-----|:-----|
+| [spec-contract.md](spec-contract.md) | **Demo UART — SHALL 需求契约层** |
+| [acceptance-matrix-demo-uart.md](acceptance-matrix-demo-uart.md) | **Demo UART — 验收判定矩阵** |
+| [requirements-coverage-traceability.md](requirements-coverage-traceability.md) | **需求覆盖率追踪表（全模块 SHALL→测试映射）** |
 | [acceptance-matrix-v0.4.0.md](acceptance-matrix-v0.4.0.md) | v0.4.0 验收矩阵 |
 | [v0.2.0-acceptance-matrix.md](v0.2.0-acceptance-matrix.md) | v0.2.0 验收矩阵 |
 | [testability-review-v0.4.0.md](testability-review-v0.4.0.md) | v0.4.0 可测试性审查 |

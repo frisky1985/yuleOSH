@@ -22,11 +22,11 @@ import xml.etree.ElementTree as ET
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from adapter.dspace_adapter import (
+from yuleosh.adapter.dspace_adapter import (
     DSAPCEAutomationDeskAdapter,
     _AUTODESK_NS,
 )
-from adapter import (
+from yuleosh.adapter import (
     _XML_DECLARATION,
     get_adapter,
 )
@@ -511,7 +511,7 @@ class TestFactoryFunction:
         assert isinstance(adk, DSAPCEAutomationDeskAdapter)
 
     def test_create_canoe(self) -> None:
-        from adapter.vector_adapter import VectorCANoeAdapter
+        from yuleosh.adapter.vector_adapter import VectorCANoeAdapter
         canoe = get_adapter("canoe")
         assert isinstance(canoe, VectorCANoeAdapter)
 

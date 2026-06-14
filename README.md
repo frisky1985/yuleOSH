@@ -14,21 +14,21 @@
     <img src="https://img.shields.io/badge/coverage-86%25-yellow?style=flat-square" alt="Coverage">
     <img src="https://img.shields.io/badge/ASPICE-compliant-8A2BE2?style=flat-square" alt="ASPICE">
   </p>
+
+  <p>
+    <code>pip install yuleosh</code> → running in 2 minutes.<br>
+    No NDA. No Sales Call. No License Negotiation.
+  </p>
+
+  <p>
+    <a href="#quick-start">Quick Start</a> ·
+    <a href="#features">Features</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="#platforms">Platforms</a> ·
+    <a href="#pricing">Pricing</a> ·
+    <a href="#roadmap">Roadmap</a>
+  </p>
 </div>
-
----
-
-<p align="center">
-  <strong>Pricing</strong><br>
-  ▶ <strong>Free:</strong> ¥0 — 3 projects, AI Code Review, ESP32 templates &nbsp;·&nbsp;
-  ▶ <strong>Pro:</strong> 定价请联系销售/mo (定价请联系销售/yr) — unlimited projects, full pipeline, HIL, Vector adapters &nbsp;·&nbsp;
-  ▶ <strong>Enterprise:</strong> 定价请联系销售/yr — on-prem, SAML, SLA, SOC 2
-</p>
-
-<p align="center">
-  <code>pip install yuleosh</code> → you're running in 5 minutes.<br>
-  No NDA. No Sales Call. No License Negotiation.
-</p>
 
 ---
 
@@ -43,15 +43,121 @@
 
 ---
 
-# yuleOSH — AI-Powered Embedded Development Pipeline
+## 📋 Table of Contents
+
+- [What is yuleOSH?](#what-is-yuleosh)
+- [Demo](#demo)
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Supported Platforms](#supported-platforms)
+- [Directory Layout](#directory-layout)
+- [Production Deployment](#production-deployment)
+- [Pricing](#pricing)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+
+---
 
 ## What is yuleOSH?
 
-**yuleOSH** is an AI-powered embedded development pipeline that converts natural language requirements into complete, CI/CD-ready firmware projects. It replaces the manual, error-prone steps of requirements engineering, code generation, review, test planning, and compliance evidence collection with an automated agent pipeline.
+**yuleOSH** is an AI-powered embedded development pipeline that converts natural language requirements into complete, CI/CD-ready firmware projects. It replaces requirements engineering, code generation, review, test planning, and compliance evidence collection with an automated agent pipeline.
 
-**One sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with full ASPICE-compliant traceability — automatically.
+**In one sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with full ASPICE-compliant traceability — automatically.
 
-### Pipeline Architecture
+---
+
+## 🎬 Demo
+
+> ![2-min yuleOSH Demo](docs/demo.gif)
+> *Watch the full pipeline — spec → firmware → evidence — in under 2 minutes.*
+
+---
+
+## ⚡ Quick Demo — Try in 2 Steps
+
+> **零硬件、零配置、2 步看到 UART 串口输出。**
+> 无需 MCU 开发板，无需安装编译器，无需阅读文档。
+
+```bash
+# Step 1: Install (15 seconds)
+pip install yuleosh
+
+# Step 2: Run the UART demo (60 seconds)
+yuleosh demo uart
+cd uart-demo
+yuleosh pipeline run --mock docs/spec.md
+```
+
+**What you'll see:**
+```
+Hello from yuleOSH Demo UART
+demo UART ready — send characters to echo
+[yuleOSH] alive — 5s
+[yuleOSH] alive — 10s
+```
+
+### Try with real hardware
+```bash
+# Flash to ESP32 and watch live serial output
+pip install yuleosh
+yuleosh demo uart && cd uart-demo
+yuleosh ci run 2    # Cross-compile + flash
+```
+
+> 📖 Full spec: [docs/spec-contract.md](docs/spec-contract.md)
+> 📋 Acceptance matrix: [docs/acceptance-matrix-demo-uart.md](docs/acceptance-matrix-demo-uart.md)
+
+---
+
+## Quick Start
+
+```bash
+# Step 1: Install (15 seconds)
+pip install yuleosh
+
+# Step 2: Initialize a project (15 seconds)
+yuleosh init my-project
+
+# Step 3: Run the full pipeline (90 seconds)
+cd my-project
+yuleosh pipeline run docs/spec.md
+```
+
+**3 commands. 2 minutes. From zero to firmware.**
+
+---
+
+## Features
+
+### 🧠 OpenSpec Engine
+Structured requirements using RFC 2119 keywords (`SHALL`/`SHOULD`/`MAY`) with `GIVEN`/`WHEN`/`THEN` scenarios. Auto-validates, diffs, and traces every requirement through design → code → test.
+
+### 🔍 AI Code Review
+Parallel 4-agent review matrix covering architecture, domain correctness, coding style, and test coverage. Includes 8 embedded-C static analysis checks plus resource usage prediction (stack, heap, flash, RAM).
+
+### 🔧 Hardware-in-the-Loop
+Built-in adapters for **OpenOCD** (STM32), **JLink** (ARM Cortex-M), and **esptool** (ESP32). Auto-flash, serial monitor, and GDB debugging — one command away.
+
+### ☁️ SaaS Dashboard
+Next.js web dashboard with PostgreSQL multi-tenant storage, JWT authentication, org/project isolation, and real-time pipeline monitoring.
+
+### 📋 Compliance
+One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — ready for ASPICE / ISO 26262 audit.
+
+### Full Automation Pipeline
+```
+User Story → OpenSpec → SDD → DDD → Code Gen → Internal Review →
+Test Planning → Code Review → CI Run → Evidence Pack → Deployment
+```
+
+---
+
+## Architecture
+
+### 4-Layer Architecture
 
 ```
 [User Story / Spec] ──▶ [OpenSpec Engine] ──▶ [Agent Pipeline] ──▶ [Code Gen]
@@ -81,81 +187,47 @@
                                                                      └──────────────────┘
 ```
 
-## Key Features
+### Layer Details
 
-### OpenSpec规范驱动
-Requirements are written in a structured format using RFC 2119 keywords (`SHALL`/`SHOULD`/`MAY`) with `GIVEN`/`WHEN`/`THEN` scenarios. The spec engine validates, diffs, and traces every requirement through design → code → test.
+<details>
+<summary><strong>1. OpenSpec Engine</strong> — Spec parsing, validation, version diff, state machine</summary>
 
-### AI Code Review — 8 Embedded C Checks
-Parallel 4-agent review matrix covering architecture, domain correctness, coding style, and test coverage. Includes 8 embedded-C specific static analysis checks plus resource usage prediction (stack, heap, flash, RAM).
+- **Parser**: SHALL/SHOULD/MAY + GIVEN/WHEN/THEN
+- **Validator**: Hierarchical requirement IDs (SYS/SW/FEATURE)
+- **Differ**: Version-to-version delta with impact analysis
+- **State machine**: PROPOSED → APPROVED → IMPLEMENTED → VERIFIED
+- **Location**: `src/spec/`
+</details>
 
-### Hardware-in-the-Loop
-Built-in adapters for **OpenOCD** (STM32), **JLink** (ARM Cortex-M), and **esptool** (ESP32). Auto-flash, serial monitor, and GDB debugging are one command away.
+<details>
+<summary><strong>2. Agent Pipeline</strong> — 10-step LLM orchestration</summary>
 
-### SaaS-Ready Dashboard
-Next.js web dashboard with PostgreSQL multi-tenant storage, JWT authentication, org/project isolation, and real-time pipeline monitoring.
-
-### Full Automation Pipeline
-```
-User Story → OpenSpec → SDD → DDD → Code Gen → Internal Review → 
-Test Planning → Code Review → CI Run → Evidence Pack → Deployment
-```
-
-### ASPICE / ISO 26262 Compliance
-One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — ready for audit.
-
-## Quick Start
-
-```bash
-# Install
-pip install yuleosh
-
-# Initialize a project
-yuleosh init my-project
-
-# Run the full pipeline (spec → code → test → CI → evidence)
-yuleosh pipeline run
-
-# Or in Docker
-docker compose up -d
-```
-
-## Supported MCU / Platforms
-
-| Platform | Flash Tool | Debugger |
-|:---------|:-----------|:---------|
-| ESP32 / ESP32-S3 | esptool | idf-monitor + GDB |
-| STM32 (F4/H7/G0) | OpenOCD | OpenOCD + GDB |
-| Any ARM Cortex-M | JLinkExe | JLinkGDBServer |
-| Custom | Plugin API | Plugin API |
-
-## Architecture Overview
-
-yuleOSH is built on 4 core layers:
-
-### 1. OpenSpec Engine (`src/spec/`)
-- Parser: SHALL/SHOULD/MAY + GIVEN/WHEN/THEN
-- Validator: hierarchical requirement IDs (SYS/SW/FEATURE)
-- Differ: version-to-version delta with impact analysis
-- State machine: PROPOSED → APPROVED → IMPLEMENTED → VERIFIED
-
-### 2. Agent Pipeline (`src/pipeline/`, `src/llm/`)
 - 10-step orchestration: spec → SDD → DDD → code → test → review
 - LLM-agnostic client (OpenAI-compatible API)
 - Blocking review gates before each stage transition
 - S.U.P.E.R. startup analysis for new requirements
+- **Location**: `src/pipeline/`, `src/llm/`
+</details>
 
-### 3. CI/CD Engine (`src/ci/`)
-- **Layer 1 — Dev Verify:** unit tests + coverage gate + plan-lint on every commit
-- **Layer 2 — Integration:** cross-compilation + MISRA static analysis on MR
-- **Layer 2.5 — AI Review:** 4-agent parallel code review
-- **Layer 3 — System Verify:** system tests + evidence pack on release tag
+<details>
+<summary><strong>3. CI/CD Engine</strong> — 3-layer automated verification</summary>
 
-### 4. Hardware & Cross-Compilation (`src/cross/`, `src/hardware/`)
+- **Layer 1 — Dev Verify**: Unit tests + coverage gate + plan-lint on every commit
+- **Layer 2 — Integration**: Cross-compilation + MISRA static analysis on MR
+- **Layer 2.5 — AI Review**: 4-agent parallel code review
+- **Layer 3 — System Verify**: System tests + evidence pack on release tag
+- **Location**: `src/ci/`
+</details>
+
+<details>
+<summary><strong>4. Hardware & Cross-Compilation</strong> — MCU flashing, monitoring, debugging</summary>
+
 - Target configuration for MCU families
 - Flash, monitor, and debug orchestration
 - SIL (Software-in-the-Loop) runner with assertion checking
 - Extensible adapter architecture
+- **Location**: `src/cross/`, `src/hardware/`
+</details>
 
 ### Supporting Modules
 
@@ -165,10 +237,23 @@ yuleOSH is built on 4 core layers:
 | Review Engine | `src/review/` | 4-agent parallel review + resource predictor |
 | Test Generation | `src/testgen/` | Auto-generate test harness from spec scenarios |
 | Plugins | `src/plugins/` | Plugin registry + sandboxed execution |
-| Usage/Billing | `src/usage/` | Metering + Stripe gateway (for SaaS deployments) |
+| Usage/Billing | `src/usage/` | Metering + Stripe gateway (for SaaS) |
 | CLI | `src/cli/` | 12+ subcommands |
 | API | `src/api/` | REST API v1 with 14 resource handlers |
 | Dashboard UI | `frontend/` | Next.js web dashboard |
+
+---
+
+## Supported Platforms
+
+| Platform | Flash Tool | Debugger |
+|:---------|:-----------|:---------|
+| ESP32 / ESP32-S3 | esptool | idf-monitor + GDB |
+| STM32 (F4/H7/G0) | OpenOCD | OpenOCD + GDB |
+| Any ARM Cortex-M | JLinkExe | JLinkGDBServer |
+| Custom | Plugin API | Plugin API |
+
+---
 
 ## Directory Layout
 
@@ -201,6 +286,8 @@ yuleOSH/
 └── pyproject.toml     Python packaging
 ```
 
+---
+
 ## Production Deployment
 
 ### Docker Compose (Recommended)
@@ -213,7 +300,15 @@ export YULEOSH_API_KEY="your-secure-random-key"
 docker compose up -d
 ```
 
-### One-Line Install
+### pip Install (Standalone CLI)
+
+```bash
+pip install yuleosh
+yuleosh init my-project
+yuleosh pipeline run docs/spec.md
+```
+
+### One-Line Install (Full Suite)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/frisky1985/yuleOSH/main/install.sh | bash
@@ -229,6 +324,18 @@ yuleosh init .
 yuleosh help
 ```
 
+---
+
+## Pricing
+
+<p align="center">
+  ▶ <strong>Free:</strong> ¥0 — 个人开发者，3 个项目，基础 Pipeline &nbsp;·&nbsp;
+  ▶ <strong>Pro:</strong> 定价请联系销售/mo (定价请联系销售/yr) — 5-15 人团队锁定价，全功能 Pipeline，硬件在环，ASPICE 合规 &nbsp;·&nbsp;
+  ▶ <strong>Enterprise:</strong> 定价请联系销售/yr — 私有化部署，SAML，SLA，SOC 2
+</p>
+
+---
+
 ## Roadmap
 
 | Version | Focus | Status |
@@ -240,9 +347,7 @@ yuleosh help
 | v1.1.0 | Enterprise — RBAC, audit logging, SAML SSO | 📋 |
 | v1.2.0 | Cloud — multi-region, data residency, managed hosting | 📋 |
 
-## Related Projects
-
-
+---
 
 ## Contributing
 
@@ -266,25 +371,72 @@ Elastic License 2.0 — see [LICENSE](LICENSE) for details. Copyright (c) 2025 f
 
 # yuleOSH — AI驱动的嵌入式开发流水线
 
+## 📋 目录
+
+- [项目简介](#项目简介)
+- [快速开始](#快速开始)
+- [核心特性](#核心特性)
+- [架构](#架构)
+- [支持平台](#支持平台)
+- [目录结构](#目录结构)
+- [生产部署](#生产部署)
+- [定价](#定价)
+- [路线图](#路线图)
+- [参与贡献](#参与贡献)
+- [安全](#安全)
+- [许可证](#许可证)
+
+---
+
 ## 项目简介
 
 **yuleOSH** 是一个由AI驱动的嵌入式开发全流程流水线，将自然语言需求自动转化为完整、CI/CD就绪的固件工程。它用自动化代理流水线替代了需求工程、代码生成、审查、测试规划和合规证据收集中繁琐的人工环节。
 
 **一句话：** yuleOSH 接收需求描述，输出经过审查、测试、CI集成的固件，并附带完整的 ASPICE 合规追溯——全自动完成。
 
+---
+
+## 🎬 演示
+
+> ![2分钟 yuleOSH 演示](docs/demo.gif)
+> *观看完整流水线 — 需求→固件→证据 — 不到2分钟。*
+
+---
+
+## 快速开始
+
+```bash
+# 第一步：安装（15秒）
+pip install yuleosh
+
+# 第二步：初始化项目（15秒）
+yuleosh init my-project
+
+# 第三步：运行完整流水线（90秒）
+cd my-project
+yuleosh pipeline run docs/spec.md
+```
+
+**三行命令，两分钟，从零到固件。**
+
+---
+
 ## 核心特性
 
-### OpenSpec 规范驱动
-采用 RFC 2119 关键字（`SHALL`/`SHOULD`/`MAY`）配合 `GIVEN`/`WHEN`/`THEN` 场景编写需求，解析器自动验证、对比差异、追踪设计→代码→测试的全链路。
+### 🧠 OpenSpec 规范引擎
+结构化需求，使用 RFC 2119 关键字（`SHALL`/`SHOULD`/`MAY`）配合 `GIVEN`/`WHEN`/`THEN` 场景。自动验证、差异对比、全链路追溯。
 
-### AI 代码审查 — 8种嵌入式C检测
-四代理并行审查矩阵覆盖架构、领域正确性、代码风格和测试覆盖率。内置8项嵌入式C静态分析及资源使用预测（栈、堆、Flash、RAM）。
+### 🔍 AI 代码审查
+四代理并行审查矩阵覆盖架构、领域正确性、代码风格和测试覆盖率。8项嵌入式C静态分析 + 资源使用预测。
 
-### 硬件在环
+### 🔧 硬件在环
 内置 **OpenOCD**（STM32）、**JLink**（ARM Cortex-M）、**esptool**（ESP32）适配器。一条命令即可自动刷写、监视串口、启动GDB调试。
 
-### SaaS 就绪
+### ☁️ SaaS 管理面板
 Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目隔离 + 流水线实时监控。
+
+### 📋 合规审计
+一键生成追溯矩阵、验收矩阵和合规证据 ZIP 包——ASPICE / ISO 26262 审计就绪。
 
 ### 全自动流水线
 ```
@@ -292,26 +444,22 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 测试规划 → 代码审查 → CI运行 → 证据打包 → 部署
 ```
 
-### ASPICE / ISO 26262 合规
-一键生成追溯矩阵、验收矩阵和合规证据 ZIP 包——审计就绪。
+---
 
-## 快速开始
+## 架构
 
-```bash
-# 安装
-pip install yuleosh
-
-# 初始化项目
-yuleosh init my-project
-
-# 全流水线运行 (需求→代码→测试→CI→证据)
-yuleosh pipeline run
-
-# 或使用 Docker
-docker compose up -d
+```
+[用户需求] ──▶ [OpenSpec 引擎] ──▶ [代理流水线] ──▶ [代码生成]
+                                                    │
+                                                    ▼
+                                          验证 → CI → 硬件部署
 ```
 
-## 支持的 MCU / 平台
+四层架构细节参见英文版上方说明。
+
+---
+
+## 支持平台
 
 | 平台 | 刷写工具 | 调试器 |
 |:-----|:---------|:-------|
@@ -320,37 +468,24 @@ docker compose up -d
 | ARM Cortex-M 系列 | JLinkExe | JLinkGDBServer |
 | 自定义平台 | 插件 API | 插件 API |
 
-## 架构详解
-
-yuleOSH 基于四层架构构建：
-
-### 1. OpenSpec 引擎 (`src/spec/`)
-- 解析：SHALL/SHOULD/MAY + GIVEN/WHEN/THEN
-- 验证：分层需求编号（SYS/SW/FEATURE）
-- 对比：版本间差异分析
-- 状态机：PROPOSED → APPROVED → IMPLEMENTED → VERIFIED
-
-### 2. 代理流水线 (`src/pipeline/`, `src/llm/`)
-- 10步编排：需求 → 系统设计 → 详细设计 → 代码 → 测试 → 审查
-- LLM无关客户端（兼容 OpenAI API）
-- 每阶段间设阻断式审查关卡
-- S.U.P.E.R. 启动分析
-
-### 3. CI/CD 引擎 (`src/ci/`)
-- **第1层 — 开发验证**：每次提交运行单元测试 + 覆盖率检查 + 规范检查
-- **第2层 — 集成**：合并请求时交叉编译 + MISRA 静态分析
-- **第2.5层 — AI 审查**：四代理并行代码审查
-- **第3层 — 系统验证**：发版标签触发系统测试 + 证据打包
-
-### 4. 硬件与交叉编译 (`src/cross/`, `src/hardware/`)
-- MCU 系列目标配置
-- 刷写、监视、调试编排
-- SIL（软件在环）运行器 + 断言检查
-- 可扩展适配器架构
+---
 
 ## 目录结构
 
-参见英文版上方目录结构说明。
+```
+yuleOSH/
+├── src/          核心源码模块（spec/pipeline/ci/review/evidence 等）
+├── frontend/     Next.js SaaS 管理面板
+├── tests/        257+ 测试（全部通过）
+├── docs/         需求文档、指南、报告
+├── deploy/       生产部署配置
+├── Dockerfile    多阶段 Docker 构建
+├── docker-compose.yml  生产 Docker Compose
+├── install.sh    一键安装脚本
+└── pyproject.toml     Python 包配置
+```
+
+---
 
 ## 生产部署
 
@@ -364,7 +499,15 @@ export YULEOSH_API_KEY="your-secure-random-key"
 docker compose up -d
 ```
 
-### 一键安装
+### pip 安装（CLI 模式）
+
+```bash
+pip install yuleosh
+yuleosh init my-project
+yuleosh pipeline run docs/spec.md
+```
+
+### 一键安装（完整套件）
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/frisky1985/yuleOSH/main/install.sh | bash
@@ -380,6 +523,16 @@ yuleosh init .
 yuleosh help
 ```
 
+---
+
+## 定价
+
+▶ **Free:** ¥0 — 个人开发者，3 个项目，基础 Pipeline<br>
+▶ **Pro:** 定价请联系销售/mo (定价请联系销售/yr) — 5-15 人团队锁定价，全功能 Pipeline，硬件在环，ASPICE 合规<br>
+▶ **Enterprise:** 定价请联系销售/yr — 私有化部署，SAML，SLA，SOC 2
+
+---
+
 ## 路线图
 
 | 版本 | 重点 | 状态 |
@@ -391,9 +544,7 @@ yuleosh help
 | v1.1.0 | 企业版—RBAC、审计日志、SAML SSO | 📋 |
 | v1.2.0 | 云端—多区域、数据驻留、托管服务 | 📋 |
 
-## 相关项目
-
-
+---
 
 ## 参与贡献
 

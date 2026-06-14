@@ -5,7 +5,7 @@
 import sys, os, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from store import Store
+from yuleosh.store import Store
 
 
 def setup_function():

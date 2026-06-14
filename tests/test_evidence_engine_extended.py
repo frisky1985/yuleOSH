@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "evidence"))
 
-from pack import EvidenceCollector
+from yuleosh.evidence.pack import EvidenceCollector
 
 
 # ===================================================================
@@ -27,13 +27,13 @@ from pack import EvidenceCollector
 def _cleanup_store():
     """Reset Store singleton before and after each test to prevent state leakage."""
     try:
-        from store import Store
+        from yuleosh.store import Store
         Store.reset()
     except ImportError:
         pass
     yield
     try:
-        from store import Store
+        from yuleosh.store import Store
         Store.reset()
     except ImportError:
         pass
@@ -714,7 +714,7 @@ def _setup_pipeline_session(project_dir: str, session_name: str, spec_path: str)
 
     # Also write to SQLite store if available
     try:
-        from store import Store
+        from yuleosh.store import Store
         import sys
         # Point the Store to the temp directory
         old_db = os.environ.get("YULEOSH_DB")

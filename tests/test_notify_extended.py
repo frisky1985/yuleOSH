@@ -14,7 +14,7 @@ from urllib.error import URLError
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from notify import (
+from yuleosh.notify import (
     NotifyConfig,
     get_config,
     set_config,

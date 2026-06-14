@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "evidence"))
 
-from pack import EvidenceCollector
+from yuleosh.evidence.pack import EvidenceCollector
 
 
 # ===================================================================

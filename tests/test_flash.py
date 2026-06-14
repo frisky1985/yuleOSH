@@ -24,7 +24,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from cross.flash import (
+from yuleosh.cross.flash import (
     FlashRunner,
     FlashTool,
     FlashResult,
@@ -36,7 +36,7 @@ from cross.flash import (
     detect_hardware,
     _discover_tools,
 )
-from cross.target_config import TargetConfig
+from yuleosh.cross.target_config import TargetConfig
 
 
 # ===================================================================
