@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
-from yuleosh.pipeline.stages import PIPELINE_STEPS, _check_llm_key
+from yuleosh.pipeline.step_handlers import PIPELINE_STEPS, _check_llm_key
 
 log = logging.getLogger("pipeline.orchestrator")
 
