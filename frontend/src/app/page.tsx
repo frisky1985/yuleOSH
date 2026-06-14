@@ -87,8 +87,8 @@ export default function LandingPage() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight leading-[1.1] mb-6">
-              <span className="gradient-text">AI-Powered Embedded</span><br />
-              <span className="text-[#e2e8f0]">Development Pipeline</span>
+              <span className="gradient-text">AI 驱动的嵌入式</span><br />
+              <span className="text-[#e2e8f0]">开发全流程平台</span>
             </h1>
 
             <p className="text-lg sm:text-xl text-[#94a3b8] max-w-2xl mx-auto mb-10 leading-relaxed">
