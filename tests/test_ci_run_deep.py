@@ -977,7 +977,7 @@ class TestStaticAnalysis:
 
     def test_passes(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.stages._run_subprocess",
+        with mock.patch("yuleosh.ci.stage_utils._run_subprocess",
                         return_value=(True, "", "")):
             ci = CIResult(2, "abc")
             assert _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -985,7 +985,7 @@ class TestStaticAnalysis:
 
     def test_fails(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.stages._run_subprocess",
+        with mock.patch("yuleosh.ci.stage_utils._run_subprocess",
                         return_value=(False, "", "errors")):
             ci = CIResult(2, "abc")
             assert _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -993,7 +993,7 @@ class TestStaticAnalysis:
 
     def test_cmd_not_found(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.stages._run_subprocess",
+        with mock.patch("yuleosh.ci.stage_utils._run_subprocess",
                         return_value=(False, "", "Command not found: cppcheck")):
             ci = CIResult(2, "abc")
             r = _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -1002,7 +1002,7 @@ class TestStaticAnalysis:
 
     def test_timeout(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.stages._run_subprocess",
+        with mock.patch("yuleosh.ci.stage_utils._run_subprocess",
                         return_value=(False, "", "Command timed out")):
             ci = CIResult(2, "abc")
             r = _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -1889,7 +1889,7 @@ class TestEdgeCasesBranch:
     def test_static_analysis_strict_fail_mode(self, tmp_proj):
         """Cover static analysis failure with MISRA_FAIL_FAST."""
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.stages._run_subprocess",
+        with mock.patch("yuleosh.ci.stage_utils._run_subprocess",
                         return_value=(False, "", "issues found")):
             ci = CIResult(2, "abc")
             r = _static_analysis_stage(["/tmp/main.c"], tmp_proj, ci, misra_ff=True, strict=True)
@@ -2048,7 +2048,7 @@ class TestRemainingBranches:
         cfg = CiConfig()
         cfg.hardware_test = HardwareTestConfig(mock=False, boot_pattern="Boot Complete")
         with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.stages._run_hil_real_tests",
+            with mock.patch("yuleosh.ci.stage_utils._run_hil_real_tests",
                             side_effect=ValueError("hil error")):
                 result = run_layer_25(project_dir=tmp_proj)
                 assert result is True  # Exception is caught, all_passed stays True (strict=False)
@@ -2063,7 +2063,7 @@ class TestRemainingBranches:
         Path(tmp_proj, "tests", "hil").mkdir(parents=True)
         Path(tmp_proj, "tests", "hil", "test.yaml").write_text("test: 1")
         with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.stages._run_hil_real_tests",
+            with mock.patch("yuleosh.ci.stage_utils._run_hil_real_tests",
                             side_effect=ValueError("hil error")):
                 with mock.patch.dict(os.environ, {"CI_STRICT": "1"}):
                     result = run_layer_25(project_dir=tmp_proj)
@@ -2073,7 +2073,7 @@ class TestRemainingBranches:
         """Cover _integration_test_stage failure."""
         from yuleosh.ci.run import _integration_test_stage, CIResult
         Path(tmp_proj, "tests", "integration").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.stages._run_subprocess",
+        with mock.patch("yuleosh.ci.stage_utils._run_subprocess",
                         return_value=(False, "output", "error")):
             ci = CIResult(2, "abc")
             assert _integration_test_stage(tmp_proj, ci) is False
