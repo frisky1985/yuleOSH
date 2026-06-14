@@ -421,7 +421,7 @@ class TestHandleError:
 class TestRunSubprocess:
     def test_success(self):
         from yuleosh.ci.run import _run_subprocess
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "OK"
             ok, out, err = _run_subprocess(["make"], "/tmp", timeout=10)
@@ -430,7 +430,7 @@ class TestRunSubprocess:
 
     def test_failure(self):
         from yuleosh.ci.run import _run_subprocess
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stderr = "error"
             ok, _, err = _run_subprocess(["make"], "/tmp")
@@ -438,7 +438,7 @@ class TestRunSubprocess:
 
     def test_file_not_found(self):
         from yuleosh.ci.run import _run_subprocess
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
             ok, _, err = _run_subprocess(["missing"], "/tmp")
             assert ok is False
@@ -446,7 +446,7 @@ class TestRunSubprocess:
 
     def test_timeout(self):
         from yuleosh.ci.run import _run_subprocess
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("cmd", 30)):
             ok, _, err = _run_subprocess(["slow"], "/tmp")
             assert ok is False
@@ -454,7 +454,7 @@ class TestRunSubprocess:
 
     def test_generic_error(self):
         from yuleosh.ci.run import _run_subprocess
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=ValueError("bad")):
             ok, _, err = _run_subprocess(["broken"], "/tmp")
             assert ok is False
@@ -541,7 +541,7 @@ class TestRunClangTidy:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "main.c").write_text("int main() { return 0; }")
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = ""
             ci = CIResult(1, "abc")
@@ -551,7 +551,7 @@ class TestRunClangTidy:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "bad.c").write_text("int x=1;")
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stdout = "issues found"
             ci = CIResult(1, "abc")
@@ -561,7 +561,7 @@ class TestRunClangTidy:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "main.c").write_text("int main() { return 0; }")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {}, clear=True):
@@ -571,7 +571,7 @@ class TestRunClangTidy:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "main.c").write_text("int main() { return 0; }")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("clang-tidy", 30)):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {}, clear=True):
@@ -585,16 +585,16 @@ class TestRunClangTidy:
 class TestRunUnitTests:
     def test_no_tests_discovered(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 ci = CIResult(1, "abc")
                 assert run_unit_tests(tmp_proj, ci) is True
 
     def test_fallback_collect_fails(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 1
                 mrun.return_value.stdout = "failed"
                 ci = CIResult(1, "abc")
@@ -602,42 +602,42 @@ class TestRunUnitTests:
 
     def test_python_files_found_and_pass(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files",
+        with mock.patch("yuleosh.ci.stages.find_test_files",
                         return_value=["/tmp/tests/test_a.py"]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 ci = CIResult(1, "abc")
                 assert run_unit_tests(tmp_proj, ci) is True
 
     def test_python_file_fails(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files",
+        with mock.patch("yuleosh.ci.stages.find_test_files",
                         return_value=["/tmp/tests/test_bad.py"]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 1
                 ci = CIResult(1, "abc")
                 assert run_unit_tests(tmp_proj, ci) is False
 
     def test_pytest_not_found(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run",
                             side_effect=FileNotFoundError()):
                 ci = CIResult(1, "abc")
                 assert run_unit_tests(tmp_proj, ci) is False
 
     def test_pytest_timeout(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run",
                             side_effect=TimeoutExpired("pytest", 30)):
                 ci = CIResult(1, "abc")
                 assert run_unit_tests(tmp_proj, ci) is False
 
     def test_pytest_generic_error(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run",
                             side_effect=ValueError("strange")):
                 ci = CIResult(1, "abc")
                 assert run_unit_tests(tmp_proj, ci) is False
@@ -663,7 +663,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 92.0, "percent_covered_condition": 88.0}
         }))
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
                 ci = CIResult(1, "abc")
@@ -677,7 +677,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 42.0, "percent_covered_condition": 40.0}
         }))
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
                 ci = CIResult(1, "abc")
@@ -691,7 +691,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 92.0, "percent_covered_condition": 30.0}
         }))
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
                 ci = CIResult(1, "abc")
@@ -699,7 +699,7 @@ class TestRunCoverage:
 
     def test_run_fails(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         return_value=(False, "tool error")):
             ci = CIResult(1, "abc")
             assert run_coverage_check(tmp_proj, ci) is False
@@ -707,7 +707,7 @@ class TestRunCoverage:
     def test_json_decode_error(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
         Path(tmp_proj, "coverage.json").write_text("bad{json")
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         return_value=(True, "")):
             ci = CIResult(1, "abc")
             assert run_coverage_check(tmp_proj, ci) is False
@@ -717,7 +717,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 90.0, "percent_covered_condition": 85.0}
         }))
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config",
                             side_effect=ValueError("no config")):
@@ -817,7 +817,7 @@ class TestRunLayer1:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 92.0, "percent_covered_condition": 88.0}
         }))
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             assert run_layer1(project_dir=tmp_proj) is True
@@ -830,9 +830,9 @@ class TestRunLayer1:
 
     def test_stage_raises_exception(self, tmp_proj):
         from yuleosh.ci.run import run_layer1
-        with mock.patch("yuleosh.ci.run.run_plan_lint",
+        with mock.patch("yuleosh.ci.layers.run_plan_lint",
                         side_effect=ValueError("crash")):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer1(project_dir=tmp_proj) is False
@@ -872,7 +872,7 @@ class TestResolveCrossCompile:
         cross = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross).parent.mkdir(parents=True, exist_ok=True)
         Path(cross).write_text("int main() {}\n")
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             ci = CIResult(2, "abc")
             r = _resolve_cross_compile(tmp_proj, cross,
@@ -885,7 +885,7 @@ class TestResolveCrossCompile:
         cross = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross).parent.mkdir(parents=True, exist_ok=True)
         Path(cross).write_text("int main() {}\n")
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             ci = CIResult(2, "abc")
             r = _resolve_cross_compile(tmp_proj, cross,
@@ -897,7 +897,7 @@ class TestResolveCrossCompile:
         cross = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross).parent.mkdir(parents=True, exist_ok=True)
         Path(cross).write_text("int main() {}\n")
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stderr = "error"
             ci = CIResult(2, "abc")
@@ -910,7 +910,7 @@ class TestResolveCrossCompile:
         cross = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross).parent.mkdir(parents=True, exist_ok=True)
         Path(cross).write_text("int main() {}\n")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("make", 60)):
             ci = CIResult(2, "abc")
             r = _resolve_cross_compile(tmp_proj, cross,
@@ -922,7 +922,7 @@ class TestResolveCrossCompile:
         cross = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross).parent.mkdir(parents=True, exist_ok=True)
         Path(cross).write_text("int main() {}\n")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
             ci = CIResult(2, "abc")
             r = _resolve_cross_compile(tmp_proj, cross,
@@ -932,14 +932,14 @@ class TestResolveCrossCompile:
     def test_docker_cross_compile(self, tmp_proj):
         from yuleosh.ci.run import _cross_compile_via_docker
         ci = mock.MagicMock()
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             assert _cross_compile_via_docker(tmp_proj, ci) is True
 
     def test_docker_cross_fails(self, tmp_proj):
         from yuleosh.ci.run import _cross_compile_via_docker
         ci = mock.MagicMock()
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stderr = "build failed"
             assert _cross_compile_via_docker(tmp_proj, ci) is False
@@ -947,14 +947,14 @@ class TestResolveCrossCompile:
     def test_docker_timeout(self, tmp_proj):
         from yuleosh.ci.run import _cross_compile_via_docker
         ci = mock.MagicMock()
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("docker", 120)):
             assert _cross_compile_via_docker(tmp_proj, ci) is False
 
     def test_docker_not_installed(self, tmp_proj):
         from yuleosh.ci.run import _cross_compile_via_docker
         ci = mock.MagicMock()
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
             assert _cross_compile_via_docker(tmp_proj, ci) is False
 
@@ -977,7 +977,7 @@ class TestStaticAnalysis:
 
     def test_passes(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.run._run_subprocess",
+        with mock.patch("yuleosh.ci.stages._run_subprocess",
                         return_value=(True, "", "")):
             ci = CIResult(2, "abc")
             assert _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -985,7 +985,7 @@ class TestStaticAnalysis:
 
     def test_fails(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.run._run_subprocess",
+        with mock.patch("yuleosh.ci.stages._run_subprocess",
                         return_value=(False, "", "errors")):
             ci = CIResult(2, "abc")
             assert _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -993,7 +993,7 @@ class TestStaticAnalysis:
 
     def test_cmd_not_found(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.run._run_subprocess",
+        with mock.patch("yuleosh.ci.stages._run_subprocess",
                         return_value=(False, "", "Command not found: cppcheck")):
             ci = CIResult(2, "abc")
             r = _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -1002,7 +1002,7 @@ class TestStaticAnalysis:
 
     def test_timeout(self, tmp_proj):
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.run._run_subprocess",
+        with mock.patch("yuleosh.ci.stages._run_subprocess",
                         return_value=(False, "", "Command timed out")):
             ci = CIResult(2, "abc")
             r = _static_analysis_stage(["/tmp/main.c"], tmp_proj,
@@ -1019,7 +1019,7 @@ class TestIntegrationTests:
     def test_pass(self, tmp_proj):
         from yuleosh.ci.run import _integration_test_stage, CIResult
         Path(tmp_proj, "tests", "integration").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             ci = CIResult(2, "abc")
             assert _integration_test_stage(tmp_proj, ci) is True
@@ -1027,7 +1027,7 @@ class TestIntegrationTests:
     def test_fail(self, tmp_proj):
         from yuleosh.ci.run import _integration_test_stage, CIResult
         Path(tmp_proj, "tests", "integration").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stdout = "failure"
             ci = CIResult(2, "abc")
@@ -1036,7 +1036,7 @@ class TestIntegrationTests:
     def test_pytest_not_found(self, tmp_proj):
         from yuleosh.ci.run import _integration_test_stage, CIResult
         Path(tmp_proj, "tests", "integration").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
             ci = CIResult(2, "abc")
             assert _integration_test_stage(tmp_proj, ci) is False
@@ -1044,7 +1044,7 @@ class TestIntegrationTests:
     def test_timeout(self, tmp_proj):
         from yuleosh.ci.run import _integration_test_stage, CIResult
         Path(tmp_proj, "tests", "integration").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("pytest", 60)):
             ci = CIResult(2, "abc")
             assert _integration_test_stage(tmp_proj, ci) is False
@@ -1057,7 +1057,7 @@ class TestIntegrationTests:
 class TestRunLayer2:
     def test_all_passed(self, tmp_proj):
         from yuleosh.ci.run import run_layer2
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             assert run_layer2(project_dir=tmp_proj) is True
@@ -1074,7 +1074,7 @@ class TestRunLayer2:
         mock_sil_result.error = "failure"
         mock_sil_result.assertion_failures = []
         mock_sil_result.log = ["FAIL"]
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             with mock.patch("cross.sil_runner.sil_test",
                             return_value=mock_sil_result):
@@ -1204,7 +1204,7 @@ class TestRunLayer25:
 class TestRunLayer3:
     def test_no_e2e_no_pyproject(self, tmp_proj):
         from yuleosh.ci.run import run_layer3
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             assert run_layer3(project_dir=tmp_proj) is True
@@ -1214,14 +1214,14 @@ class TestRunLayer3:
         from yuleosh.ci.run import run_layer3
         Path(tmp_proj, "tests", "e2e").mkdir(parents=True)
         Path(tmp_proj, "pyproject.toml").write_text('[project]\nversion = "2.0.0"\n')
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             assert run_layer3(project_dir=tmp_proj) is True
 
     def test_e2e_fails(self, tmp_proj):
         from yuleosh.ci.run import run_layer3
         Path(tmp_proj, "tests", "e2e").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stdout = "fail"
             mrun.return_value.stderr = ""
@@ -1230,22 +1230,22 @@ class TestRunLayer3:
     def test_e2e_pytest_not_found(self, tmp_proj):
         from yuleosh.ci.run import run_layer3
         Path(tmp_proj, "tests", "e2e").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
-            with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
+            with mock.patch("yuleosh.ci.runner.git_commit_hash", return_value="abc1234"):
                 assert run_layer3(project_dir=tmp_proj) is False
 
     def test_e2e_timeout(self, tmp_proj):
         from yuleosh.ci.run import run_layer3
         Path(tmp_proj, "tests", "e2e").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("pytest", 120)):
-            with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
+            with mock.patch("yuleosh.ci.runner.git_commit_hash", return_value="abc1234"):
                 assert run_layer3(project_dir=tmp_proj) is False
 
     def test_evidence_error(self, tmp_proj):
         from yuleosh.ci.run import run_layer3
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             assert run_layer3(project_dir=tmp_proj) is True  # warning, not fatal  # warning, not fatal
@@ -1260,7 +1260,7 @@ class TestRunAll:
     def test_all_passes(self, tmp_proj):
         from yuleosh.ci.run import run_all
         from yuleosh.ci.run import git_commit_hash
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             with mock.patch("yuleosh.ci.run.check_layer_dependency",
@@ -1384,14 +1384,14 @@ class TestEdgeCasesBranch:
 
     def test_get_changed_files_empty(self):
         from yuleosh.ci.run import get_changed_files
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = ""
             assert get_changed_files() == []
 
     def test_get_changed_files_nonzero(self):
         from yuleosh.ci.run import get_changed_files
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stdout = ""
             assert get_changed_files() == []
@@ -1430,7 +1430,7 @@ class TestEdgeCasesBranch:
             "totals": {"percent_covered": 95.0, "percent_covered_condition": 90.0}
         }))
         with mock.patch.dict(os.environ, {"OSH_HOME": tmp_proj}):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer1() is True
@@ -1443,7 +1443,7 @@ class TestEdgeCasesBranch:
         }))
         fake_notify = mock.MagicMock()
         with mock.patch("yuleosh.ci.run._notify", fake_notify):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer1(project_dir=tmp_proj) is True
@@ -1456,7 +1456,7 @@ class TestEdgeCasesBranch:
         }))
         fake_notify = mock.MagicMock(side_effect=RuntimeError("notify fail"))
         with mock.patch("yuleosh.ci.run._notify", fake_notify):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 # coverage check passes, overall passes, notify error is logged
@@ -1467,7 +1467,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "bad.c").write_text("int x=1;")
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stdout = "issues"
             mrun.return_value.stderr = ""
@@ -1481,7 +1481,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "main.c").write_text("int main() { return 0; }")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {"CI_STRICT": "1"}):
@@ -1493,7 +1493,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "main.c").write_text("int main() { return 0; }")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("clang-tidy", 30)):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {"CI_STRICT": "1"}):
@@ -1502,8 +1502,8 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_fail(self, tmp_proj):
         """Cover unit tests where fallback collect-only fails."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run") as mrun:
                 # First call for collect-only
                 mrun.return_value.returncode = 0
                 # Fallthrough — it tries collect-only, then real run
@@ -1513,7 +1513,7 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_collect_then_fail(self, tmp_proj):
         """Cover collect-only succeeds but real run fails."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
             with mock.patch("yuleosh.ci.run.subprocess") as msub:
                 mock_res = mock.MagicMock()
                 mock_res.returncode = 0
@@ -1530,7 +1530,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_coverage_check, CIResult
         # Write invalid JSON to make _load_coverage_json fail
         Path(tmp_proj, "coverage.json").write_text("not valid json at all")
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         return_value=(True, "")):
             ci = CIResult(1, "abc")
             assert run_coverage_check(tmp_proj, ci) is False
@@ -1538,7 +1538,7 @@ class TestEdgeCasesBranch:
     def test_coverage_run_timeout(self, tmp_proj):
         """Cover coverage TimeoutExpired handler."""
         from yuleosh.ci.run import run_coverage_check, CIResult
-        with mock.patch("yuleosh.ci.run._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
                         side_effect=TimeoutExpired("coverage", 120)):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {}, clear=True):
@@ -1566,7 +1566,7 @@ class TestEdgeCasesBranch:
         cross = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross).parent.mkdir(parents=True, exist_ok=True)
         Path(cross).write_text("int main() {}")
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             # First call succeeds (make --version), second call times out
             mrun.side_effect = [
                 mock.MagicMock(returncode=0, stdout="", stderr=""),  # make --version
@@ -1581,7 +1581,7 @@ class TestEdgeCasesBranch:
         """Cover Docker cross-compile OSError."""
         from yuleosh.ci.run import _cross_compile_via_docker
         ci = mock.MagicMock()
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             # docker --version succeeds, then docker build && docker run throw OSError
             mrun.side_effect = [
                 mock.MagicMock(returncode=0),  # docker --version
@@ -1622,10 +1622,10 @@ class TestEdgeCasesBranch:
     def test_run_layer2_sil_error(self, tmp_proj):
         """Cover run_layer2 SIL tests error handler."""
         from yuleosh.ci.run import run_layer2
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
-            with mock.patch("yuleosh.ci.run.run_sil_tests",
+            with mock.patch("yuleosh.ci.layers.run_sil_tests",
                             side_effect=ValueError("sil crash")):
                 assert run_layer2(project_dir=tmp_proj) is False
 
@@ -1633,7 +1633,7 @@ class TestEdgeCasesBranch:
         """Cover run_layer2 memory safety ASan path."""
         from yuleosh.ci.run import run_layer2
         Path(tmp_proj, "tests", "asan").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             assert run_layer2(project_dir=tmp_proj) is True
@@ -1643,7 +1643,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_layer3
         Path(tmp_proj, "tests", "e2e").mkdir(parents=True)
         Path(tmp_proj, "pyproject.toml").write_text('[project]\nversion = "2.0.0"\n')
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             with mock.patch("evidence.pack.generate_evidence") as mgen:
@@ -1653,7 +1653,7 @@ class TestEdgeCasesBranch:
         """Cover run_layer3 e2e tests error handler."""
         from yuleosh.ci.run import run_layer3
         Path(tmp_proj, "tests", "e2e").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stdout = "fail"
             mrun.return_value.stderr = ""
@@ -1667,7 +1667,7 @@ class TestEdgeCasesBranch:
         mock_sp.returncode = 0
         mock_sp.stdout = "abc1234"
         mock_sp.stderr = ""
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             # git hash succeeds, e2e pytest call raises
             mrun.side_effect = [
                 mock_sp,  # git_commit_hash
@@ -1680,7 +1680,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_layer3
         fake_notify = mock.MagicMock()
         with mock.patch("yuleosh.ci.run._notify", fake_notify):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer3(project_dir=tmp_proj) is True
@@ -1691,7 +1691,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_layer3
         fake_notify = mock.MagicMock(side_effect=RuntimeError("notify fail"))
         with mock.patch("yuleosh.ci.run._notify", fake_notify):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer3(project_dir=tmp_proj) is True
@@ -1726,7 +1726,7 @@ class TestEdgeCasesBranch:
         """Cover run_layer3 default from OSH_HOME env."""
         from yuleosh.ci.run import run_layer3
         with mock.patch.dict(os.environ, {"OSH_HOME": tmp_proj}):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer3() is True
@@ -1795,7 +1795,7 @@ class TestEdgeCasesBranch:
         """Cover run_layer2 default from OSH_HOME env."""
         from yuleosh.ci.run import run_layer2
         with mock.patch.dict(os.environ, {"OSH_HOME": tmp_proj}):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer2() is True
@@ -1832,7 +1832,7 @@ class TestEdgeCasesBranch:
     def test_run_coverage_and_export_json_fail(self, tmp_proj):
         """Cover _run_coverage_and_export where coverage json export fails."""
         from yuleosh.ci.run import _run_coverage_and_export
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             # Second call returns non-zero
             mrun.side_effect = [
                 mock.MagicMock(returncode=0, stderr=""),  # coverage run
@@ -1845,8 +1845,8 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_collect_only_success(self, tmp_proj):
         """Cover unit tests fallback path where collect-only succeeds."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run") as mrun:
                 # Two calls: collect-only (0) then real run (0)
                 mrun.return_value.returncode = 0
                 ci = CIResult(1, "abc")
@@ -1855,8 +1855,8 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_collect_fail(self, tmp_proj):
         """Cover unit tests fallback: collect-only fails, no tests discovered."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run") as mrun:
                 # collect-only returns 0
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "collected 0 items"
@@ -1869,7 +1869,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "bad.c").write_text("int x=1;")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=FileNotFoundError()):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {}, clear=True):
@@ -1880,7 +1880,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "bad.c").write_text("int x=1;")
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=TimeoutExpired("clang-tidy", 30)):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {}, clear=True):
@@ -1889,7 +1889,7 @@ class TestEdgeCasesBranch:
     def test_static_analysis_strict_fail_mode(self, tmp_proj):
         """Cover static analysis failure with MISRA_FAIL_FAST."""
         from yuleosh.ci.run import _static_analysis_stage, CIResult
-        with mock.patch("yuleosh.ci.run._run_subprocess",
+        with mock.patch("yuleosh.ci.stages._run_subprocess",
                         return_value=(False, "", "issues found")):
             ci = CIResult(2, "abc")
             r = _static_analysis_stage(["/tmp/main.c"], tmp_proj, ci, misra_ff=True, strict=True)
@@ -1948,8 +1948,8 @@ class TestRemainingBranches:
     def test_unit_tests_fallback_run_fail(self, tmp_proj):
         """Cover unit tests fallback: collect succeeds but run fails."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.run.find_test_files", return_value=[]):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+            with mock.patch("subprocess.run") as mrun:
                 # collect-only succeeds, then real run fails
                 mrun.side_effect = [
                     mock.MagicMock(returncode=0, stdout="collected 5 items"),  # collect
@@ -1961,7 +1961,7 @@ class TestRemainingBranches:
     def test_run_layer3_evidence_warning(self, tmp_proj):
         """Cover run_layer3 evidence pack warning."""
         from yuleosh.ci.run import run_layer3
-        with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+        with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
             with mock.patch("evidence.pack.generate_evidence",
@@ -2048,7 +2048,7 @@ class TestRemainingBranches:
         cfg = CiConfig()
         cfg.hardware_test = HardwareTestConfig(mock=False, boot_pattern="Boot Complete")
         with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.run._run_hil_real_tests",
+            with mock.patch("yuleosh.ci.stages._run_hil_real_tests",
                             side_effect=ValueError("hil error")):
                 result = run_layer_25(project_dir=tmp_proj)
                 assert result is True  # Exception is caught, all_passed stays True (strict=False)
@@ -2063,7 +2063,7 @@ class TestRemainingBranches:
         Path(tmp_proj, "tests", "hil").mkdir(parents=True)
         Path(tmp_proj, "tests", "hil", "test.yaml").write_text("test: 1")
         with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.run._run_hil_real_tests",
+            with mock.patch("yuleosh.ci.stages._run_hil_real_tests",
                             side_effect=ValueError("hil error")):
                 with mock.patch.dict(os.environ, {"CI_STRICT": "1"}):
                     result = run_layer_25(project_dir=tmp_proj)
@@ -2073,7 +2073,7 @@ class TestRemainingBranches:
         """Cover _integration_test_stage failure."""
         from yuleosh.ci.run import _integration_test_stage, CIResult
         Path(tmp_proj, "tests", "integration").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run._run_subprocess",
+        with mock.patch("yuleosh.ci.stages._run_subprocess",
                         return_value=(False, "output", "error")):
             ci = CIResult(2, "abc")
             assert _integration_test_stage(tmp_proj, ci) is False
@@ -2085,7 +2085,7 @@ class TestRemainingBranches:
         cross_path = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross_path).parent.mkdir(parents=True, exist_ok=True)
         Path(cross_path).write_text("int main() {}")
-        with mock.patch("yuleosh.ci.run._resolve_cross_compile",
+        with mock.patch("yuleosh.ci.stages._resolve_cross_compile",
                         return_value=False):
             ci = CIResult(2, "abc")
             r = _cross_compile_stage(tmp_proj, cross_path,
@@ -2097,7 +2097,7 @@ class TestRemainingBranches:
         from yuleosh.ci.run import run_layer3
         fake_notify = mock.MagicMock()
         with mock.patch("yuleosh.ci.run._notify", fake_notify):
-            with mock.patch("yuleosh.ci.run.subprocess.run") as mrun:
+            with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 mrun.return_value.stdout = "abc1234"
                 assert run_layer3(project_dir=tmp_proj) is True
@@ -2216,7 +2216,7 @@ class TestRemainingBranches2:
         WHEN _integration_test_stage THEN returns False."""
         from yuleosh.ci.run import _integration_test_stage, CIResult
         Path(tmp_proj, "tests", "integration").mkdir(parents=True)
-        with mock.patch("yuleosh.ci.run.subprocess.run",
+        with mock.patch("subprocess.run",
                         side_effect=OSError("permission denied")):
             ci = CIResult(2, "abc")
             assert _integration_test_stage(tmp_proj, ci) is False

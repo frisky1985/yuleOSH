@@ -37,7 +37,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from yuleosh.pipeline.run import PipelineSession, PipelineStepError, _call_llm, _parse_spec
+from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+from yuleosh.pipeline.stages import _call_llm, _parse_spec
 
 log = logging.getLogger("pipeline.steps")
 
@@ -552,7 +553,7 @@ class HermesReviewStep(PipelineStep):
         )
 
     def process_result(self, session, content, result):
-        from yuleosh.pipeline.run import _try_parse_hermes_json
+        from yuleosh.pipeline.stages import _try_parse_hermes_json
 
         raw = content.strip()
         review = _try_parse_hermes_json(raw, session.name)
