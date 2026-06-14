@@ -69,9 +69,14 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.13'
+    - name: RTM Gate Check (ASPICE SWE.4)
+      run: |
+        bash docs/ci-rtm-check.sh 80 docs/spec.md tests/
+
     - name: Generate evidence pack
       run: |
         python -m yuleosh.evidence.pack || echo "Evidence pack requires API key, skipped"
+
     - name: Upload compliance pack
       uses: actions/upload-artifact@v4
       with:
