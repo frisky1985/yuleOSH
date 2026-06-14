@@ -158,7 +158,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {[
               { icon: <FileText className="w-5 h-5 text-[#722ed1]" />, color: "#722ed1", title: "OpenSpec 需求管理", desc: "基于 SHALL/SHOULD/MAY 语法的结构化需求定义。自动追溯矩阵，从需求到代码、测试的双向覆盖，支持增量变更（Delta）管理。" },
-              { icon: <Cpu className="w-5 h-5 text-[#1677ff]" />, color: "#1677ff", title: "AI Agent 编排流水线", desc: "三大 Agent（小明/Hermes/Claude）自动编排：审查需求→生成设计→编写代码→自我测试→代码审查→生成报告。全自动智能协作。" },
+              { icon: <Cpu className="w-5 h-5 text-[#1677ff]" />, color: "#1677ff", title: "AI 编排流水线", desc: "AI Agent 自动编排全流程：审查需求→生成设计→编写代码→自我测试→代码审查→生成报告。全过程无需人工介入。" },
               { icon: <GitBranch className="w-5 h-5 text-[#f59e0b]" />, color: "#f59e0b", title: "SDD → DDD → TDD 管线", desc: "从软件设计文档到详细设计文档再到测试驱动开发，逐层自动化推进。设计即代码，测试即文档，确保全过程可追溯。" },
               { icon: <Shield className="w-5 h-5 text-[#10b981]" />, color: "#10b981", title: "三层 CI/CD 流水线", desc: "Layer 1 开发验证 → Layer 2 集成验证 → Layer 3 系统验证。逐层推进，与 ASPICE 标准对齐（SWE.4 / SWE.5 / SWE.6）。" },
               { icon: <BarChart3 className="w-5 h-5 text-[#1677ff]" />, color: "#1677ff", title: "一键 ASPICE 合规包", desc: "自动生成合规审计证据包：追溯矩阵、覆盖率报告、审查日志。一键打包下载，直接用于 ASPICE 评估或客户审计。" },
