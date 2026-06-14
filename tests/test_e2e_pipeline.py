@@ -91,9 +91,8 @@ def mock_subprocess_run():
 @pytest.fixture
 def mock_all_deps():
     """Disable store and notifications so pipeline runs purely in-memory + on-disk."""
-    with mock.patch("yuleosh.pipeline.stages._store", None), \
-         mock.patch("yuleosh.pipeline.session._store", None), \
-         mock.patch("yuleosh.pipeline.orchestrator._notify", None):
+    with mock.patch("yuleosh.pipeline.run._store", None), \
+         mock.patch("yuleosh.pipeline.run._notify", None):
         yield
 
 
