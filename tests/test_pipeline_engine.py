@@ -134,14 +134,14 @@ def mock_llm_timeout():
 @pytest.fixture
 def session(spec_file, mock_llm):
     """Create a PipelineSession with mock LLM injected."""
-    from pipeline.run import PipelineSession
+    from yuleosh.pipeline.run import PipelineSession
     return PipelineSession("test-session", spec_file, llm_client=mock_llm)
 
 
 @pytest.fixture
 def session_with_json_llm(spec_file, mock_llm_json):
     """Create a session with a JSON-producing LLM for review steps."""
-    from pipeline.run import PipelineSession
+    from yuleosh.pipeline.run import PipelineSession
     return PipelineSession("test-json-session", spec_file, llm_client=mock_llm_json)
 
 
@@ -154,7 +154,7 @@ class TestPipelineSession:
     """Verify PipelineSession creation, state machine, and persistence."""
 
     def test_creation_default_state(self, spec_file):
-        from pipeline.run import PipelineSession
+        from yuleosh.pipeline.run import PipelineSession
         s = PipelineSession("create-test", spec_file)
         assert s.name == "create-test"
         assert s.status == "created"
@@ -165,7 +165,7 @@ class TestPipelineSession:
         assert s.llm_client is None
 
     def test_creation_with_llm_client(self, spec_file, mock_llm):
-        from pipeline.run import PipelineSession
+        from yuleosh.pipeline.run import PipelineSession
         s = PipelineSession("di-test", spec_file, llm_client=mock_llm)
         assert s.llm_client is mock_llm
 
@@ -248,7 +248,7 @@ class TestPipelineSession:
         assert d["steps"][0]["name"] == "test-step"
 
     def test_session_dir_created(self, spec_file):
-        from pipeline.run import PipelineSession
+        from yuleosh.pipeline.run import PipelineSession
         s = PipelineSession("dir-test", spec_file)
         assert s.session_dir.exists()
         assert s.session_dir.name == "dir-test"
@@ -271,7 +271,7 @@ class TestStepSpecCheck:
     """step_spec_check — OpenSpec validation (no LLM needed)."""
 
     def test_normal(self, tmp_path):
-        from pipeline.run import PipelineSession, step_spec_check, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_spec_check, PipelineStepError
 
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test\n")
@@ -287,7 +287,7 @@ class TestStepSpecCheck:
 
     def test_invalid_spec_returns_low_coverage(self, tmp_path, monkeypatch):
         """Invalid spec content should still pass validation with low coverage (no raise)."""
-        from pipeline.run import PipelineSession, step_spec_check
+        from yuleosh.pipeline.run import PipelineSession, step_spec_check
 
         spec_file = tmp_path / "bad-spec.md"
         spec_file.write_text("Just some random text with no spec structure\n")
@@ -302,7 +302,7 @@ class TestStepSpecCheck:
 
     def test_non_json_output(self, tmp_path, monkeypatch):
         """Should raise when subprocess returns non-JSON output."""
-        from pipeline.run import PipelineSession, step_spec_check, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_spec_check, PipelineStepError
 
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test\n")
@@ -317,7 +317,7 @@ class TestStepSpecCheck:
             )
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
-        with mock.patch("pipeline.run.subprocess.run", mock_run):
+        with mock.patch("yuleosh.pipeline.run.subprocess.run", mock_run):
             with pytest.raises(PipelineStepError, match="not valid JSON"):
                 step_spec_check(session)
 
@@ -326,7 +326,7 @@ class TestStepSuperAnalysis:
     """step_super_analysis — S.U.P.E.R analysis with mock LLM."""
 
     def test_normal(self, session):
-        from pipeline.run import step_super_analysis
+        from yuleosh.pipeline.run import step_super_analysis
 
         # Need a real spec file with content
         result = step_super_analysis(session)
@@ -336,14 +336,14 @@ class TestStepSuperAnalysis:
         assert "S.U.P.E.R" in content
 
     def test_llm_failure(self, spec_file, mock_llm_failure):
-        from pipeline.run import PipelineSession, step_super_analysis, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_super_analysis, PipelineStepError
 
         session = PipelineSession("super-fail", spec_file, llm_client=mock_llm_failure)
         with pytest.raises(PipelineStepError, match="LLM"):
             step_super_analysis(session)
 
     def test_llm_timeout(self, spec_file, mock_llm_timeout):
-        from pipeline.run import PipelineSession, step_super_analysis, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_super_analysis, PipelineStepError
 
         session = PipelineSession("super-timeout", spec_file, llm_client=mock_llm_timeout)
         with pytest.raises(PipelineStepError, match="LLM"):
@@ -354,7 +354,7 @@ class TestStepHermesPrd:
     """step_hermes_prd — PRD generation with mock LLM."""
 
     def test_normal(self, session):
-        from pipeline.run import step_hermes_prd
+        from yuleosh.pipeline.run import step_hermes_prd
 
         result = step_hermes_prd(session)
         assert result is not None
@@ -363,14 +363,14 @@ class TestStepHermesPrd:
         assert "PRD" in content
 
     def test_llm_failure(self, spec_file, mock_llm_failure):
-        from pipeline.run import PipelineSession, step_hermes_prd, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_hermes_prd, PipelineStepError
 
         session = PipelineSession("prd-fail", spec_file, llm_client=mock_llm_failure)
         with pytest.raises(PipelineStepError, match="LLM"):
             step_hermes_prd(session)
 
     def test_llm_timeout(self, spec_file, mock_llm_timeout):
-        from pipeline.run import PipelineSession, step_hermes_prd, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_hermes_prd, PipelineStepError
 
         session = PipelineSession("prd-timeout", spec_file, llm_client=mock_llm_timeout)
         with pytest.raises(PipelineStepError, match="LLM"):
@@ -381,7 +381,7 @@ class TestStepInternalReview:
     """step_internal_review — no LLM needed, artifact validation."""
 
     def test_normal(self, session):
-        from pipeline.run import step_internal_review
+        from yuleosh.pipeline.run import step_internal_review
 
         # Set up required artifacts
         for key in ["spec-check", "super-analysis", "prd"]:
@@ -394,7 +394,7 @@ class TestStepInternalReview:
         assert os.path.exists(result)
 
     def test_missing_artifacts(self, session):
-        from pipeline.run import step_internal_review, PipelineStepError
+        from yuleosh.pipeline.run import step_internal_review, PipelineStepError
 
         with pytest.raises(PipelineStepError, match="missing artifacts"):
             step_internal_review(session)
@@ -404,21 +404,21 @@ class TestStepClaudeArch:
     """step_claude_arch — Architecture design with mock LLM."""
 
     def test_normal(self, session):
-        from pipeline.run import step_claude_arch
+        from yuleosh.pipeline.run import step_claude_arch
 
         result = step_claude_arch(session)
         assert result is not None
         assert os.path.exists(result)
 
     def test_llm_failure(self, spec_file, mock_llm_failure):
-        from pipeline.run import PipelineSession, step_claude_arch, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_claude_arch, PipelineStepError
 
         session = PipelineSession("arch-fail", spec_file, llm_client=mock_llm_failure)
         with pytest.raises(PipelineStepError, match="LLM"):
             step_claude_arch(session)
 
     def test_llm_timeout(self, spec_file, mock_llm_timeout):
-        from pipeline.run import PipelineSession, step_claude_arch, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_claude_arch, PipelineStepError
 
         session = PipelineSession("arch-timeout", spec_file, llm_client=mock_llm_timeout)
         with pytest.raises(PipelineStepError, match="LLM"):
@@ -429,21 +429,21 @@ class TestStepClaudeDev:
     """step_claude_dev — Development planning with mock LLM."""
 
     def test_normal(self, session):
-        from pipeline.run import step_claude_dev
+        from yuleosh.pipeline.run import step_claude_dev
 
         result = step_claude_dev(session)
         assert result is not None
         assert os.path.exists(result)
 
     def test_llm_failure(self, spec_file, mock_llm_failure):
-        from pipeline.run import PipelineSession, step_claude_dev, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_claude_dev, PipelineStepError
 
         session = PipelineSession("dev-fail", spec_file, llm_client=mock_llm_failure)
         with pytest.raises(PipelineStepError, match="LLM"):
             step_claude_dev(session)
 
     def test_llm_timeout(self, spec_file, mock_llm_timeout):
-        from pipeline.run import PipelineSession, step_claude_dev, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_claude_dev, PipelineStepError
 
         session = PipelineSession("dev-timeout", spec_file, llm_client=mock_llm_timeout)
         with pytest.raises(PipelineStepError, match="LLM"):
@@ -454,7 +454,7 @@ class TestStepTestPlanning:
     """step_test_planning — Test planning with mock LLM (new step)."""
 
     def test_normal(self, session):
-        from pipeline.run import step_test_planning
+        from yuleosh.pipeline.run import step_test_planning
 
         # Set up prerequisite artifacts
         session.set_artifact("architecture", str(session.session_dir / "arch.md"))
@@ -470,21 +470,21 @@ class TestStepTestPlanning:
 
     def test_normal_without_artifacts(self, session):
         """Test planning should work even without architecture/dev plan artifacts."""
-        from pipeline.run import step_test_planning
+        from yuleosh.pipeline.run import step_test_planning
 
         result = step_test_planning(session)
         assert result is not None
         assert os.path.exists(result)
 
     def test_llm_failure(self, spec_file, mock_llm_failure):
-        from pipeline.run import PipelineSession, step_test_planning, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_test_planning, PipelineStepError
 
         session = PipelineSession("plan-fail", spec_file, llm_client=mock_llm_failure)
         with pytest.raises(PipelineStepError, match="LLM"):
             step_test_planning(session)
 
     def test_llm_timeout(self, spec_file, mock_llm_timeout):
-        from pipeline.run import PipelineSession, step_test_planning, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_test_planning, PipelineStepError
 
         session = PipelineSession("plan-timeout", spec_file, llm_client=mock_llm_timeout)
         with pytest.raises(PipelineStepError, match="LLM"):
@@ -495,7 +495,7 @@ class TestStepClaudeTest:
     """step_claude_test — Self-test runner (subprocess-based, no LLM)."""
 
     def test_normal(self, tmp_path, monkeypatch):
-        from pipeline.run import PipelineSession, step_claude_test
+        from yuleosh.pipeline.run import PipelineSession, step_claude_test
 
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Spec")
@@ -511,7 +511,7 @@ class TestStepHermesReview:
     """step_hermes_review — AI code review with mock JSON LLM."""
 
     def test_normal(self, session_with_json_llm, tmp_path):
-        from pipeline.run import step_hermes_review
+        from yuleosh.pipeline.run import step_hermes_review
 
         # Set up prerequisite artifacts
         for key in ["architecture", "development", "self-test", "prd"]:
@@ -531,14 +531,14 @@ class TestStepHermesReview:
         assert data["status"] == "passed"
 
     def test_llm_failure(self, spec_file, mock_llm_failure):
-        from pipeline.run import PipelineSession, step_hermes_review, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_hermes_review, PipelineStepError
 
         session = PipelineSession("review-fail", spec_file, llm_client=mock_llm_failure)
         with pytest.raises(PipelineStepError, match="LLM"):
             step_hermes_review(session)
 
     def test_llm_timeout(self, spec_file, mock_llm_timeout):
-        from pipeline.run import PipelineSession, step_hermes_review, PipelineStepError
+        from yuleosh.pipeline.run import PipelineSession, step_hermes_review, PipelineStepError
 
         session = PipelineSession("review-timeout", spec_file, llm_client=mock_llm_timeout)
         with pytest.raises(PipelineStepError, match="LLM"):
@@ -546,7 +546,7 @@ class TestStepHermesReview:
 
     def test_non_json_response_fallback(self, spec_file, mock_llm):
         """When Hermes gets non-JSON from LLM, should use fallback with retry status."""
-        from pipeline.run import PipelineSession, step_hermes_review
+        from yuleosh.pipeline.run import PipelineSession, step_hermes_review
 
         session = PipelineSession("review-nonjson", spec_file, llm_client=mock_llm)
         result = step_hermes_review(session)
@@ -560,7 +560,7 @@ class TestStepFinalReport:
     """step_final_report — Report generation (no LLM)."""
 
     def test_normal(self, session):
-        from pipeline.run import step_final_report
+        from yuleosh.pipeline.run import step_final_report
 
         session.add_step("spec-check", "小明", "check")
         session.start_step(0)
@@ -584,7 +584,7 @@ class TestParseSpec:
     """Unit tests for spec parsing utilities."""
 
     def test_parse_requirements(self, spec_file):
-        from pipeline.run import _parse_requirements
+        from yuleosh.pipeline.run import _parse_requirements
 
         reqs = _parse_requirements(spec_file)
         assert len(reqs) == 2
@@ -592,28 +592,28 @@ class TestParseSpec:
         assert len(reqs[0]["shall_statements"]) == 2
 
     def test_parse_requirements_file_not_found(self, tmp_path):
-        from pipeline.run import _parse_requirements
+        from yuleosh.pipeline.run import _parse_requirements
 
         path = tmp_path / "nonexistent.md"
         result = _parse_requirements(str(path))
         assert result == []
 
     def test_parse_scenarios(self, spec_file):
-        from pipeline.run import _parse_scenarios
+        from yuleosh.pipeline.run import _parse_scenarios
 
         scenarios = _parse_scenarios(spec_file)
         assert len(scenarios) >= 1
         assert "GIVEN" in scenarios[0]
 
     def test_parse_scenarios_file_not_found(self, tmp_path):
-        from pipeline.run import _parse_scenarios
+        from yuleosh.pipeline.run import _parse_scenarios
 
         path = tmp_path / "nonexistent.md"
         result = _parse_scenarios(str(path))
         assert result == []
 
     def test_parse_spec(self, spec_file):
-        from pipeline.run import _parse_spec
+        from yuleosh.pipeline.run import _parse_spec
 
         result = _parse_spec(spec_file)
         assert "requirements" in result
@@ -622,7 +622,7 @@ class TestParseSpec:
 
     def test_parse_requirements_handles_scenario_header_as_boundary(self, tmp_path):
         """_parse_requirements should stop collecting SHALLs when it hits a Scenario header."""
-        from pipeline.run import _parse_requirements
+        from yuleosh.pipeline.run import _parse_requirements
 
         sf = tmp_path / "spec.md"
         sf.write_text(
@@ -638,7 +638,7 @@ class TestParseSpec:
 
     def test_parse_requirements_no_shalls(self, tmp_path):
         """Requirements with no SHALL statements should have empty list."""
-        from pipeline.run import _parse_requirements
+        from yuleosh.pipeline.run import _parse_requirements
 
         sf = tmp_path / "spec.md"
         sf.write_text(
@@ -651,7 +651,7 @@ class TestParseSpec:
 
     def test_parse_multiple_requirements_with_scenarios_between(self, tmp_path):
         """Spec with requirements interrupted by scenario headers."""
-        from pipeline.run import _parse_requirements
+        from yuleosh.pipeline.run import _parse_requirements
 
         sf = tmp_path / "spec.md"
         sf.write_text(
@@ -666,7 +666,7 @@ class TestParseSpec:
 
     def test_parse_spec_cache_hit(self, spec_file, monkeypatch):
         """_parse_spec should use cached result when available."""
-        from pipeline.run import _parse_spec
+        from yuleosh.pipeline.run import _parse_spec
 
         # First call populates cache
         result1 = _parse_spec(spec_file)
@@ -679,20 +679,20 @@ class TestParseSpec:
 
     def test_get_spec_mtime(self, spec_file):
         """_get_spec_mtime should return file modification time."""
-        from pipeline.run import _get_spec_mtime
+        from yuleosh.pipeline.run import _get_spec_mtime
         mtime = _get_spec_mtime(spec_file)
         assert mtime > 0
 
     def test_get_spec_mtime_missing_file(self, tmp_path):
         """_get_spec_mtime on missing file should return 0."""
-        from pipeline.run import _get_spec_mtime
+        from yuleosh.pipeline.run import _get_spec_mtime
         mtime = _get_spec_mtime(str(tmp_path / "nope.md"))
         assert mtime == 0.0
 
     def test_parse_spec_missing_file_logs_warning(self, tmp_path, caplog):
         """_parse_spec on missing file should log warning."""
         import logging
-        from pipeline.run import _parse_spec
+        from yuleosh.pipeline.run import _parse_spec
 
         caplog.set_level(logging.WARNING)
         missing = str(tmp_path / "nonexistent-spec.md")
@@ -711,7 +711,7 @@ class TestStatusPipeline:
 
     def test_status_pipeline_no_sessions(self, monkeypatch, tmp_path):
         """status_pipeline with no sessions should report none."""
-        from pipeline.run import status_pipeline
+        from yuleosh.pipeline.run import status_pipeline
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
         # Create sessions dir explicitly to avoid FileNotFoundError
         (Path(str(tmp_path)) / ".osh" / "sessions").mkdir(parents=True, exist_ok=True)
@@ -720,7 +720,7 @@ class TestStatusPipeline:
 
     def test_status_pipeline_with_name(self, spec_file, tmp_path, monkeypatch):
         """status_pipeline with a specific name should list it."""
-        from pipeline.run import run_pipeline, status_pipeline
+        from yuleosh.pipeline.run import run_pipeline, status_pipeline
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
         session = run_pipeline(spec_file, name="status-test", llm_client=lambda s, u, **kw: {
@@ -732,7 +732,7 @@ class TestStatusPipeline:
 
     def test_status_pipeline_all(self, spec_file, tmp_path, monkeypatch):
         """status_pipeline listing all sessions should not crash."""
-        from pipeline.run import status_pipeline
+        from yuleosh.pipeline.run import status_pipeline
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
         (Path(str(tmp_path)) / ".osh" / "sessions").mkdir(parents=True, exist_ok=True)
         status_pipeline(None)
@@ -749,7 +749,7 @@ class TestMain:
 
     def test_main_no_args_exits(self, monkeypatch):
         """main() with no args should print usage and exit."""
-        from pipeline.run import main
+        from yuleosh.pipeline.run import main
         monkeypatch.setattr(sys, "argv", ["run.py"])
         with pytest.raises(SystemExit) as exc:
             main()
@@ -757,7 +757,7 @@ class TestMain:
 
     def test_main_status(self, monkeypatch, capsys, tmp_path):
         """main('status') should work."""
-        from pipeline.run import main
+        from yuleosh.pipeline.run import main
         monkeypatch.setattr(sys, "argv", ["run.py", "status"])
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
         # Create sessions dir so status_pipeline doesn't crash
@@ -768,7 +768,7 @@ class TestMain:
 
     def test_main_status_named(self, monkeypatch, capsys, tmp_path):
         """main('status', 'name') should work."""
-        from pipeline.run import main
+        from yuleosh.pipeline.run import main
         monkeypatch.setattr(sys, "argv", ["run.py", "status", "test-ses"])
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
         main()
@@ -785,7 +785,7 @@ class TestCallLlm:
     """Verify the _call_llm helper uses session.llm_client when available."""
 
     def test_uses_injected_client(self):
-        from pipeline.run import _call_llm
+        from yuleosh.pipeline.run import _call_llm
 
         class FakeSession:
             llm_client = None
@@ -800,7 +800,7 @@ class TestCallLlm:
 
     def test_falls_back_to_global(self, monkeypatch, spec_file):
         """When session.llm_client is None, _call_llm should use the module-level chat_completion."""
-        from pipeline.run import _call_llm, PipelineSession, chat_completion
+        from yuleosh.pipeline.run import _call_llm, PipelineSession, chat_completion
 
         result = mock.MagicMock()
         result.__name__ = "mock_chat"
@@ -808,7 +808,7 @@ class TestCallLlm:
         def mock_chat(*args, **kwargs):
             return {"content": "fallback", "usage": {}}
 
-        with mock.patch("pipeline.run.chat_completion", mock_chat):
+        with mock.patch("yuleosh.pipeline.run.chat_completion", mock_chat):
             session = PipelineSession("fallback-test", spec_file)
             # session.llm_client is None
             result = _call_llm(session, "system", "user")
@@ -829,7 +829,7 @@ class TestRunPipeline:
         Uses mock=True to bypass the early LLM key check and focus on testing
         that the pipeline fails deterministically when no LLM client is available.
         """
-        from pipeline.run import run_pipeline
+        from yuleosh.pipeline.run import run_pipeline
 
         monkeypatch.delenv("LLM_API_KEY", raising=False)
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
@@ -847,7 +847,7 @@ class TestRunPipeline:
         PIPELINE_STEPS is patched to replace ``step_claude_test`` with a mock
         that doesn't call pytest recursively.
         """
-        from pipeline.run import run_pipeline, PIPELINE_STEPS
+        from yuleosh.pipeline.run import run_pipeline, PIPELINE_STEPS
 
         project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         monkeypatch.setenv("OSH_HOME", project_dir)
@@ -904,7 +904,7 @@ class TestRunPipeline:
             for key, agent, name, handler in PIPELINE_STEPS
         ]
 
-        with mock.patch("pipeline.run.PIPELINE_STEPS", patched_steps):
+        with mock.patch("yuleosh.pipeline.run.PIPELINE_STEPS", patched_steps):
             session = run_pipeline(
                 spec_file,
                 name="test-full-inject",
@@ -928,7 +928,7 @@ class TestRunPipeline:
     def test_pipeline_generates_test_plan_with_traceability(self, spec_file, tmp_path, monkeypatch):
         """B-01: Full pipeline with mock LLM must generate test-plan.md
         containing a requirement traceability matrix."""
-        from pipeline.run import run_pipeline, PIPELINE_STEPS
+        from yuleosh.pipeline.run import run_pipeline, PIPELINE_STEPS
 
         project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         monkeypatch.setenv("OSH_HOME", project_dir)
@@ -994,7 +994,7 @@ class TestRunPipeline:
             for key, agent, name, handler in PIPELINE_STEPS
         ]
 
-        with mock.patch("pipeline.run.PIPELINE_STEPS", patched_steps):
+        with mock.patch("yuleosh.pipeline.run.PIPELINE_STEPS", patched_steps):
             session = run_pipeline(
                 spec_file,
                 name="test-b01-integration",
@@ -1043,7 +1043,7 @@ class TestRunPipeline:
     def test_pipeline_fails_on_llm_error(self, spec_file, mock_llm_failure,
                                           tmp_path, monkeypatch):
         """Pipeline should fail on LLM error, not silently degrade."""
-        from pipeline.run import run_pipeline
+        from yuleosh.pipeline.run import run_pipeline
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
 
@@ -1058,7 +1058,7 @@ class TestRunPipeline:
     def test_pipeline_handles_timeout(self, spec_file, mock_llm_timeout,
                                        tmp_path, monkeypatch):
         """Pipeline should handle LLM timeout gracefully."""
-        from pipeline.run import run_pipeline
+        from yuleosh.pipeline.run import run_pipeline
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
 
@@ -1080,7 +1080,7 @@ class TestTryParseHermesJson:
     """Extend existing _try_parse_hermes_json tests with additional edge cases."""
 
     def test_nested_braces(self):
-        from pipeline.run import _try_parse_hermes_json
+        from yuleosh.pipeline.run import _try_parse_hermes_json
 
         raw = 'Leading text {"a": {"b": {"c": 1}}, "status": "passed", "findings": [], "finding_breakdown": {"critical": 0, "major": 0, "minor": 0, "info": 0}, "summary": "nested braces test"}'
         result = _try_parse_hermes_json(raw, "test")
@@ -1088,7 +1088,7 @@ class TestTryParseHermesJson:
 
     def test_json_in_html_comment(self):
         """Edge case: JSON buried inside HTML-like comments."""
-        from pipeline.run import _try_parse_hermes_json
+        from yuleosh.pipeline.run import _try_parse_hermes_json
 
         raw = (
             "<!-- Review follows -->\n"
@@ -1100,7 +1100,7 @@ class TestTryParseHermesJson:
         assert result["summary"] == "html comment test"
 
     def test_trailing_text_after_json(self):
-        from pipeline.run import _try_parse_hermes_json
+        from yuleosh.pipeline.run import _try_parse_hermes_json
 
         raw = (
             '{"status": "passed", "findings": [], '
@@ -1113,7 +1113,7 @@ class TestTryParseHermesJson:
 
     def test_minimal_json(self):
         """Absolute minimal valid JSON with all required fields."""
-        from pipeline.run import _try_parse_hermes_json
+        from yuleosh.pipeline.run import _try_parse_hermes_json
 
         raw = (
             '{"status": "passed", "findings": [], '

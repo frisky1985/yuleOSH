@@ -1,5 +1,5 @@
 [run]
-source = src
+source = yuleosh
 branch = true
 
 [report]
@@ -10,5 +10,5 @@ exclude_lines =
 
 [paths]
 source =
-    src
-    */site-packages
+    src/yuleosh
+    */site-packages/yuleosh

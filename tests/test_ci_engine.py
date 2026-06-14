@@ -5,7 +5,7 @@
 import sys, os, tempfile, json, subprocess, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from ci.run import (
+from yuleosh.ci.run import (
     CIResult, find_test_files, run_layer1, run_layer2, run_layer3,
     run_clang_tidy, run_plan_lint, run_coverage_check, run_unit_tests,
     is_strict, is_misra_fail_fast,
@@ -168,7 +168,7 @@ def test_clang_tidy_tool_success_with_mock(monkeypatch, tmp_path):
             return subprocess.CompletedProcess(args[0], 0, "", "")
         return orig_run(*args, **kwargs)
 
-    monkeypatch.setattr("ci.run.subprocess.run", mock_run)
+    monkeypatch.setattr("yuleosh.ci.run.subprocess.run", mock_run)
     ci = CIResult(1, "test")
     result = run_clang_tidy(str(tmp_path), ci)
     assert result is True
