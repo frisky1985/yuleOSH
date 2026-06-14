@@ -214,62 +214,105 @@ export default function LandingPage() {
             ))}
           </div>
 
-          {/* V-Model Pipeline */}
+          {/* V-Model Pipeline — Three-phase vertical */}
           <div className="mt-16 gradient-border">
             <div className="bg-[#111827] rounded-2xl p-6 sm:p-8">
-              <h3 className="text-sm font-semibold text-[#94a3b8] mb-6 text-center tracking-wider uppercase">
-                Agent Pipeline 全流程 — ASPICE V-Model
+              <h3 className="text-sm font-semibold text-[#94a3b8] mb-8 text-center tracking-wider uppercase">
+                AI Pipeline 全流程 — ASPICE V-Model
               </h3>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(114,46,209,.1)", color: "#722ed1", border: "1px solid rgba(114,46,209,.2)" }}
-                >◢ 0. Req Analysis</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(114,46,209,.1)", color: "#722ed1", border: "1px solid rgba(114,46,209,.2)" }}
-                >1. Architecture</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(114,46,209,.1)", color: "#722ed1", border: "1px solid rgba(114,46,209,.2)" }}
-                >2. Detail Design</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(114,46,209,.1)", color: "#722ed1", border: "1px solid rgba(114,46,209,.2)" }}
-                >3. Implementation</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(22,119,255,.08)", color: "#1677ff", border: "1px solid rgba(22,119,255,.2)" }}
-                >4. Unit Tests</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(22,119,255,.08)", color: "#1677ff", border: "1px solid rgba(22,119,255,.2)" }}
-                >5. Static Analysis</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(22,119,255,.08)", color: "#1677ff", border: "1px solid rgba(22,119,255,.2)" }}
-                >6. Integration Tests</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(16,185,129,.08)", color: "#10b981", border: "1px solid rgba(16,185,129,.2)" }}
-                >7. System Tests</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(16,185,129,.08)", color: "#10b981", border: "1px solid rgba(16,185,129,.2)" }}
-                >8. Acceptance</span>
-                <ChevronDown className="w-3 h-3 rotate-[-90deg] text-[#1e293b]" />
-                <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "rgba(16,185,129,.08)", color: "#10b981", border: "1px solid rgba(16,185,129,.2)" }}
-                >9. Evidence & Report</span>
-              </div>
-              <div className="flex justify-center gap-6 mt-4">
-                <span className="text-xs text-[#64748b]"><span style={{ color: "#722ed1" }}>●</span> 设计</span>
-                <span className="text-xs text-[#64748b]"><span style={{ color: "#1677ff" }}>●</span> 验证</span>
-                <span className="text-xs text-[#64748b]"><span style={{ color: "#10b981" }}>●</span> 交付</span>
-              </div>
-              <div className="mt-6 grid grid-cols-3 gap-3 text-center text-xs text-[#64748b]">
-                <div><div className="font-medium text-[#722ed1] mb-1">Layer 1</div>开发验证 (SWE.4)</div>
-                <div><div className="font-medium text-[#1677ff] mb-1">Layer 2</div>集成验证 (SWE.5)</div>
-                <div><div className="font-medium text-[#10b981] mb-1">Layer 3</div>系统验证 (SWE.6)</div>
+              <div className="flex flex-col gap-6">
+                {/* Phase 1: Design */}
+                <div className="relative overflow-hidden rounded-xl"
+                  style={{ background: "linear-gradient(135deg, rgba(114,46,209,.08), rgba(114,46,209,.02))", border: "1px solid rgba(114,46,209,.15)" }}>
+                  <div className="absolute top-0 left-0 w-1 h-full" style={{ background: "linear-gradient(180deg, #722ed1, rgba(114,46,209,.3))" }} />
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ background: "#722ed1" }} />
+                        <span className="text-xs font-semibold text-[#722ed1] tracking-wider uppercase">Phase 1 · 设计层</span>
+                      </div>
+                      <span className="text-[10px] text-[#64748b]">Layer 1 · SWE.4</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(114,46,209,.12)", color: "#c084fc", border: "1px solid rgba(114,46,209,.2)" }}>需求分析</span>
+                      <ArrowRight className="w-3 h-3 text-[#334155]" />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(114,46,209,.12)", color: "#c084fc", border: "1px solid rgba(114,46,209,.2)" }}>架构设计</span>
+                      <ArrowRight className="w-3 h-3 text-[#334155]" />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(114,46,209,.12)", color: "#c084fc", border: "1px solid rgba(114,46,209,.2)" }}>详细设计</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(114,46,209,.06)", color: "#64748b" }}>Spec.md</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(114,46,209,.06)", color: "#64748b" }}>Architecture.md</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(114,46,209,.06)", color: "#64748b" }}>验收矩阵</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Phase 2: Verification */}
+                <div className="relative overflow-hidden rounded-xl"
+                  style={{ background: "linear-gradient(135deg, rgba(22,119,255,.08), rgba(22,119,255,.02))", border: "1px solid rgba(22,119,255,.15)" }}>
+                  <div className="absolute top-0 left-0 w-1 h-full" style={{ background: "linear-gradient(180deg, #1677ff, rgba(22,119,255,.3))" }} />
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ background: "#1677ff" }} />
+                        <span className="text-xs font-semibold text-[#1677ff] tracking-wider uppercase">Phase 2 · 验证层</span>
+                      </div>
+                      <span className="text-[10px] text-[#64748b]">Layer 2 · SWE.5</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(22,119,255,.12)", color: "#60a5fa", border: "1px solid rgba(22,119,255,.2)" }}>代码实现</span>
+                      <ArrowRight className="w-3 h-3 text-[#334155]" />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(22,119,255,.12)", color: "#60a5fa", border: "1px solid rgba(22,119,255,.2)" }}>单元测试</span>
+                      <ArrowRight className="w-3 h-3 text-[#334155]" />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(22,119,255,.12)", color: "#60a5fa", border: "1px solid rgba(22,119,255,.2)" }}>静态分析</span>
+                      <ArrowRight className="w-3 h-3 text-[#334155]" />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(22,119,255,.12)", color: "#60a5fa", border: "1px solid rgba(22,119,255,.2)" }}>集成测试</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(22,119,255,.06)", color: "#64748b" }}>Code</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(22,119,255,.06)", color: "#64748b" }}>Test Report</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(22,119,255,.06)", color: "#64748b" }}>Coverage</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Phase 3: Delivery */}
+                <div className="relative overflow-hidden rounded-xl"
+                  style={{ background: "linear-gradient(135deg, rgba(16,185,129,.08), rgba(16,185,129,.02))", border: "1px solid rgba(16,185,129,.15)" }}>
+                  <div className="absolute top-0 left-0 w-1 h-full" style={{ background: "linear-gradient(180deg, #10b981, rgba(16,185,129,.3))" }} />
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ background: "#10b981" }} />
+                        <span className="text-xs font-semibold text-[#10b981] tracking-wider uppercase">Phase 3 · 交付层</span>
+                      </div>
+                      <span className="text-[10px] text-[#64748b]">Layer 3 · SWE.6</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(16,185,129,.12)", color: "#34d399", border: "1px solid rgba(16,185,129,.2)" }}>系统测试</span>
+                      <ArrowRight className="w-3 h-3 text-[#334155]" />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(16,185,129,.12)", color: "#34d399", border: "1px solid rgba(16,185,129,.2)" }}>验收</span>
+                      <ArrowRight className="w-3 h-3 text-[#334155]" />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                        style={{ background: "rgba(16,185,129,.12)", color: "#34d399", border: "1px solid rgba(16,185,129,.2)" }}>证据包</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(16,185,129,.06)", color: "#64748b" }}>合规审计包</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(16,185,129,.06)", color: "#64748b" }}>追溯矩阵</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(16,185,129,.06)", color: "#64748b" }}>审查日志</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
