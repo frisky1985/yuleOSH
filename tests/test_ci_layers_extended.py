@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from ci.run import (
+from yuleosh.ci.run import (
     CIResult,
     _save_layer_result,
     _handle_stage_error,
@@ -38,49 +38,49 @@ class TestLayerFunctions:
 
     def test_run_layer1(self):
         with tempfile.TemporaryDirectory() as td:
-            with mock.patch("ci.run.subprocess.run") as m:
+            with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = ""
-                with mock.patch("ci.run.git_commit_hash", return_value="abc1234"):
-                    with mock.patch("ci.run._should_skip_coverage", return_value=True):
+                with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
+                    with mock.patch("yuleosh.ci.run._should_skip_coverage", return_value=True):
                         result = run_layer1(td)
                         assert result is True
 
     def test_run_layer2(self):
         with tempfile.TemporaryDirectory() as td:
-            with mock.patch("ci.run.subprocess.run") as m:
+            with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = "0 failed"
-                with mock.patch("ci.run.git_commit_hash", return_value="abc1234"):
-                    with mock.patch("ci.run._should_skip_coverage", return_value=True):
+                with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
+                    with mock.patch("yuleosh.ci.run._should_skip_coverage", return_value=True):
                         result = run_layer2(td)
                         assert result is True
 
     def test_run_layer3(self):
         with tempfile.TemporaryDirectory() as td:
-            with mock.patch("ci.run.subprocess.run") as m:
+            with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = "0 failed"
-                with mock.patch("ci.run.git_commit_hash", return_value="abc1234"):
+                with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
                     result = run_layer3(td)
                     assert result is True
 
     def test_run_all(self):
         with tempfile.TemporaryDirectory() as td:
-            with mock.patch("ci.run.subprocess.run") as m:
+            with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = "0 failed"
-                with mock.patch("ci.run.git_commit_hash", return_value="abc1234"):
-                    with mock.patch("ci.run._should_skip_coverage", return_value=True):
+                with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
+                    with mock.patch("yuleosh.ci.run._should_skip_coverage", return_value=True):
                         result = run_all(td)
                         assert result is True
 
     def test_run_layer_25(self):
         with tempfile.TemporaryDirectory() as td:
-            with mock.patch("ci.run.subprocess.run") as m:
+            with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = ""
-                with mock.patch("ci.run.git_commit_hash", return_value="abc1234"):
+                with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
                     result = run_layer_25(td)
                     assert result is True
 
@@ -102,7 +102,7 @@ class TestHilHelpers:
             script_dir = Path(td) / "scripts"
             script_dir.mkdir()
             (script_dir / "test.sh").write_text("#!/bin/bash\necho READY")
-            with mock.patch("ci.run.subprocess.run") as m:
+            with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = "READY\n0 failed"
                 stages = _run_hil_mock_tests(ci, hw_cfg, str(script_dir), "READY")
@@ -131,14 +131,14 @@ class TestCoverageAndSIL:
     def test_coverage_check_skip(self):
         with tempfile.TemporaryDirectory() as td:
             ci = CIResult(layer=1, commit_hash="x")
-            with mock.patch("ci.run._should_skip_coverage", return_value=True):
+            with mock.patch("yuleosh.ci.run._should_skip_coverage", return_value=True):
                 result = run_coverage_check(td, ci)
                 assert result is True
 
     def test_sil_tests_no_files(self):
         with tempfile.TemporaryDirectory() as td:
             ci = CIResult(layer=1, commit_hash="x")
-            with mock.patch("ci.run.subprocess.run") as m:
+            with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = "0 failed"
                 result = run_sil_tests(td, ci)

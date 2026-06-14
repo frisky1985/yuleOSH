@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # ---------------------------------------------------------------------------
 
 def test_pipeline_step_error_is_runtime_error():
-    from pipeline.run import PipelineStepError
+    from yuleosh.pipeline.run import PipelineStepError
     err = PipelineStepError("Something went wrong")
     assert isinstance(err, RuntimeError)
     assert str(err) == "Something went wrong"
@@ -37,7 +37,7 @@ def test_pipeline_step_error_is_runtime_error():
 
 def test_pipeline_step_error_raises_from_handler():
     """Simulate a step handler raising PipelineStepError."""
-    from pipeline.run import PipelineStepError
+    from yuleosh.pipeline.run import PipelineStepError
 
     def bad_handler(session):
         raise PipelineStepError("LLM API timeout")
@@ -52,7 +52,7 @@ def test_pipeline_step_error_raises_from_handler():
 
 def test_parse_spec_logs_cache_read_failure(tmp_path, caplog):
     """_parse_spec should log a warning if store cache read fails (not silent pass)."""
-    from pipeline.run import _parse_spec
+    from yuleosh.pipeline.run import _parse_spec
 
     spec_file = tmp_path / "spec.md"
     spec_file.write_text("# Test\n### Req-001\n- The system SHALL work\n")
@@ -66,7 +66,7 @@ def test_parse_spec_logs_cache_read_failure(tmp_path, caplog):
 
 def test_parse_requirements_logs_on_error(tmp_path, caplog):
     """_parse_requirements should log warning instead of silent pass on error."""
-    from pipeline.run import _parse_requirements
+    from yuleosh.pipeline.run import _parse_requirements
 
     caplog.set_level("WARNING")
 
@@ -82,7 +82,7 @@ def test_parse_requirements_logs_on_error(tmp_path, caplog):
 
 def test_parse_scenarios_logs_on_error(tmp_path, caplog):
     """_parse_scenarios should log warning instead of silent pass on error."""
-    from pipeline.run import _parse_scenarios
+    from yuleosh.pipeline.run import _parse_scenarios
 
     caplog.set_level("WARNING")
 
@@ -98,8 +98,8 @@ def test_parse_scenarios_logs_on_error(tmp_path, caplog):
 # ---------------------------------------------------------------------------
 
 def _import_try_parse_hermes_json():
-    """Import _try_parse_hermes_json from pipeline.run module."""
-    from pipeline.run import _try_parse_hermes_json
+    """Import _try_parse_hermes_json from yuleosh.pipeline.run module."""
+    from yuleosh.pipeline.run import _try_parse_hermes_json
     return _try_parse_hermes_json
 
 
@@ -181,7 +181,7 @@ def test_parse_hermes_json_preserves_raw_on_fallback():
 
 def test_step_hermes_review_wraps_non_json_in_error(tmp_path, monkeypatch):
     """When Hermes review gets non-JSON from LLM, it should wrap gracefully with retry status."""
-    from pipeline.run import step_hermes_review, PipelineSession, _try_parse_hermes_json
+    from yuleosh.pipeline.run import step_hermes_review, PipelineSession, _try_parse_hermes_json
 
     monkeypatch.setenv("OSH_HOME", str(tmp_path))
 
@@ -206,7 +206,7 @@ def test_step_hermes_review_wraps_non_json_in_error(tmp_path, monkeypatch):
     (src_dir / "main.py").write_text("x = 1")
 
     # Mock the LLM to return non-JSON
-    from pipeline.run import chat_completion
+    from yuleosh.pipeline.run import chat_completion
     original_chat = chat_completion
 
     def mock_llm(*args, **kwargs):
@@ -216,7 +216,7 @@ def test_step_hermes_review_wraps_non_json_in_error(tmp_path, monkeypatch):
             "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
         }
 
-    with mock.patch("pipeline.run.chat_completion", mock_llm):
+    with mock.patch("yuleosh.pipeline.run.chat_completion", mock_llm):
         result_path = step_hermes_review(session)
 
     # Should still produce a file
@@ -234,7 +234,7 @@ def test_step_hermes_review_wraps_non_json_in_error(tmp_path, monkeypatch):
 
 def test_pipeline_llm_failure_stops_pipeline(tmp_path, monkeypatch):
     """LLM API timeout should cause PipelineStepError, stopping pipeline."""
-    from pipeline.run import run_pipeline, PipelineStepError
+    from yuleosh.pipeline.run import run_pipeline, PipelineStepError
 
     monkeypatch.setenv("OSH_HOME", str(tmp_path))
 
@@ -245,7 +245,7 @@ def test_pipeline_llm_failure_stops_pipeline(tmp_path, monkeypatch):
     def failing_handler(session):
         raise PipelineStepError("LLM API timeout after 60s")
 
-    with mock.patch("pipeline.run.step_super_analysis", failing_handler):
+    with mock.patch("yuleosh.pipeline.run.step_super_analysis", failing_handler):
         session = run_pipeline(str(spec_file), name="test-llm-fail", mock=True)
 
     assert session.status == "failed"
@@ -259,7 +259,7 @@ def test_pipeline_llm_failure_stops_pipeline(tmp_path, monkeypatch):
 
 def test_json_decode_error_includes_raw_output():
     """JSONDecodeError in spec-check should include raw output preview."""
-    from pipeline.run import step_spec_check, PipelineSession, PipelineStepError
+    from yuleosh.pipeline.run import step_spec_check, PipelineSession, PipelineStepError
     import subprocess
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -279,7 +279,7 @@ def test_json_decode_error_includes_raw_output():
                 stderr="",
             )
 
-        with mock.patch("pipeline.run.subprocess.run", mock_run):
+        with mock.patch("yuleosh.pipeline.run.subprocess.run", mock_run):
             with pytest.raises(PipelineStepError) as exc_info:
                 step_spec_check(session)
 
@@ -295,7 +295,7 @@ def test_json_decode_error_includes_raw_output():
 
 def test_step_super_analysis_llm_failure_raises(tmp_path, monkeypatch):
     """LLM failure in super analysis should raise PipelineStepError, not silently degrade."""
-    from pipeline.run import step_super_analysis, PipelineSession, PipelineStepError, chat_completion
+    from yuleosh.pipeline.run import step_super_analysis, PipelineSession, PipelineStepError, chat_completion
 
     monkeypatch.setenv("OSH_HOME", str(tmp_path))
 
@@ -307,7 +307,7 @@ def test_step_super_analysis_llm_failure_raises(tmp_path, monkeypatch):
     def mock_chat_fail(*args, **kwargs):
         raise RuntimeError("API connection refused")
 
-    with mock.patch("pipeline.run.chat_completion", mock_chat_fail):
+    with mock.patch("yuleosh.pipeline.run.chat_completion", mock_chat_fail):
         with pytest.raises(PipelineStepError) as exc_info:
             step_super_analysis(session)
 
@@ -321,7 +321,7 @@ def test_step_super_analysis_llm_failure_raises(tmp_path, monkeypatch):
 
 def test_session_save_store_failure_logs_warning(tmp_path, caplog):
     """Session._save should log warning instead of silent pass when store fails."""
-    from pipeline.run import PipelineSession
+    from yuleosh.pipeline.run import PipelineSession
 
     caplog.set_level("WARNING")
 
