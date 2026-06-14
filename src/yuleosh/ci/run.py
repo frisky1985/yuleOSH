@@ -43,32 +43,33 @@ from yuleosh.ci.layers import (
 
 # Stages — re-export mutable state and functions
 import yuleosh.ci.stages as _stages
-find_test_files = _stages.find_test_files
 run_plan_lint = _stages.run_plan_lint
 run_clang_tidy = _stages.run_clang_tidy
 run_unit_tests = _stages.run_unit_tests
-_should_skip_coverage = _stages._should_skip_coverage
-_coverage_skip_reason = _stages._coverage_skip_reason
-_run_coverage_and_export = _stages._run_coverage_and_export
-_load_coverage_json = _stages._load_coverage_json
 run_coverage_check = _stages.run_coverage_check
 run_sil_tests = _stages.run_sil_tests
-_detect_hil_target = _stages._detect_hil_target
-_run_hil_mock_tests = _stages._run_hil_mock_tests
-_run_hil_real_tests = _stages._run_hil_real_tests
-_record_hil_results = _stages._record_hil_results
-_save_hil_report = _stages._save_hil_report
-_find_c_sources = _stages._find_c_sources
-_cross_compile_stage = _stages._cross_compile_stage
-_static_analysis_stage = _stages._static_analysis_stage
-_integration_test_stage = _stages._integration_test_stage
-_resolve_cross_compile = _stages._resolve_cross_compile
-_cross_compile_via_docker = _stages._cross_compile_via_docker
-_handle_stage_error = _stages._handle_stage_error
-_run_subprocess = _stages._run_subprocess
-get_cache_key_for_dir = _stages.get_cache_key_for_dir
-_test_file_cache = _stages._test_file_cache
-_test_file_cache_mtime = _stages._test_file_cache_mtime
+import yuleosh.ci.stage_utils as _sutils
+_detect_hil_target = _sutils._detect_hil_target
+_run_hil_mock_tests = _sutils._run_hil_mock_tests
+_run_hil_real_tests = _sutils._run_hil_real_tests
+_record_hil_results = _sutils._record_hil_results
+_save_hil_report = _sutils._save_hil_report
+_find_c_sources = _sutils._find_c_sources
+_cross_compile_stage = _sutils._cross_compile_stage
+_static_analysis_stage = _sutils._static_analysis_stage
+_integration_test_stage = _sutils._integration_test_stage
+_resolve_cross_compile = _sutils._resolve_cross_compile
+_cross_compile_via_docker = _sutils._cross_compile_via_docker
+_handle_stage_error = _sutils._handle_stage_error
+_run_subprocess = _sutils._run_subprocess
+get_cache_key_for_dir = _sutils.get_cache_key_for_dir
+_test_file_cache = _sutils._test_file_cache
+_test_file_cache_mtime = _sutils._test_file_cache_mtime
+find_test_files = _sutils.find_test_files
+_should_skip_coverage = _sutils._should_skip_coverage
+_coverage_skip_reason = _sutils._coverage_skip_reason
+_run_coverage_and_export = _sutils._run_coverage_and_export
+_load_coverage_json = _sutils._load_coverage_json
 
 # Config — re-export mutable state and functions
 import yuleosh.ci.config as _cfg

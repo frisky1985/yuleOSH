@@ -21,8 +21,11 @@ from yuleosh.ci.config import _get_ci_config, is_strict, is_misra_fail_fast, lay
 from yuleosh.ci.result import CIResult, timed_stage
 from yuleosh.ci.stages import (
     run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check, run_sil_tests,
+)
+from yuleosh.ci.stage_utils import (
     _detect_hil_target, _run_hil_mock_tests, _run_hil_real_tests, _record_hil_results, _save_hil_report,
     _find_c_sources, _cross_compile_stage, _static_analysis_stage, _integration_test_stage,
+    find_test_files,
 )
 
 log = logging.getLogger("ci.layers")
