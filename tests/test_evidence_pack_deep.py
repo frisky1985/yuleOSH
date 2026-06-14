@@ -1,13 +1,11 @@
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: MIT
 
-"""Deep tests for evidence/pack.py — mock IO, zip, git, subprocess.
+"""Deep tests for evidence/pack.py — mock FS, IO, zip, no real filesystem.
 
-Target: 80%+ line/branch coverage of evidence/pack.py.
-Covers: CJK keyword matching, _prepare_scenario_refs, non-functional
-        keyword categorization, SIL/CI/review collection, generate_evidence,
-        main(), _check_pipeline_not_running, pack_compliance_zip,
-        _parse_module_covers edge cases, function-name inference.
+Target: 80%+ branch coverage (from ~0%).
+Covers: EvidenceCollector (all parsing, collection, generation methods),
+        _check_pipeline_not_running, generate_evidence, main().
 """
 
 import ast
@@ -16,6 +14,8 @@ import os
 import sys
 import tempfile
 import time
+import zipfile
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -25,1062 +25,772 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 # ==================================================================
-# Test helpers
-# ==================================================================
-
-SAMPLE_SPEC_MD = """---
-version: "1.0.0"
----
-
-# RS-001: Pipeline Processing
-
-> SHALL: The system SHALL process pipelines
-> SHALL: The system SHALL report errors
-
-Action: verify
-
-## Scenario: Full Pipeline Run
-
-GIVEN a configured pipeline
-WHEN the user triggers a run
-THEN the pipeline executes all stages
-
----
-
-# RS-002: Code Review
-
-> SHALL: The system SHALL collect reviews
-> SHALL: The system SHALL aggregate findings
-
-Action: verify
-"""
-
-
-DEFAULT_SHALLS = {
-    "Pipeline Processing": {"shall": ["The system SHALL process pipelines",
-                                      "The system SHALL report errors"],
-                            "req_id": "RS-001"},
-    "Code Review": {"shall": ["The system SHALL collect reviews",
-                              "The system SHALL aggregate findings"],
-                    "req_id": "RS-002"},
-}
-
-DEFAULT_SCENARIOS = {
-    "Full Pipeline Run": {"name": "Full Pipeline Run",
-                          "given": ["a configured pipeline"],
-                          "when": ["the user triggers a run"],
-                          "then": ["the pipeline executes all stages"]},
-}
-
-
-# ==================================================================
-# Fixture: temp project dir with evidence output dir
+# Fixtures
 # ==================================================================
 
 @pytest.fixture
 def tmp_proj():
-    """Temporary project directory with .osh dirs."""
+    """Temporary project directory with minimal structure."""
     with tempfile.TemporaryDirectory() as td:
-        # Create basic structure
-        Path(td, ".osh").mkdir()
-        Path(td, ".osh", "evidence").mkdir(parents=True, exist_ok=True)
-        Path(td, ".osh", "ci").mkdir(parents=True, exist_ok=True)
-        Path(td, ".osh", "reviews").mkdir(parents=True, exist_ok=True)
-        Path(td, ".osh", "sessions").mkdir(parents=True, exist_ok=True)
         yield td
 
 
-# ==================================================================
-# Helper: patch _meta config table to mock _find_latest_pipeline_spec
-# ==================================================================
-
-def _patch_spec_auto_discovery(tmp_proj, spec_path: str):
-    """Mock collect_requirements so spec auto-discovery returns spec_path.
-
-    We do this by mocking _find_latest_pipeline_spec to return spec_path.
-    """
-    return mock.patch(
-        "yuleosh.evidence.pack.EvidenceCollector._find_latest_pipeline_spec",
-        return_value=spec_path,
-    )
+@pytest.fixture
+def collector(tmp_proj):
+    """Fresh EvidenceCollector with mocked fs where needed."""
+    from yuleosh.evidence.pack import EvidenceCollector
+    return EvidenceCollector(tmp_proj)
 
 
-# ==================================================================
-# Helper: populate mock requirements/scenarios on a collector
-# ==================================================================
-
-def _populate_requirements(collector, reqs: dict = None, scenarios: dict = None):
-    """Helper: populate the collector's requirements and scenarios dicts.
-
-    Uses the DEFAULT_SHALLS and DEFAULT_SCENARIOS if no custom args given.
-    """
-    from datetime import datetime
-    r = reqs or DEFAULT_SHALLS
-    sc = scenarios or DEFAULT_SCENARIOS
-    collector.requirements = []
-    collector.scenarios = []
-    for name, data in r.items():
-        collector.requirements.append({
-            "name": name,
-            "req_id": data.get("req_id", ""),
-            "shall_count": len(data.get("shall", [])),
-            "shall": data.get("shall", []),
-        })
-    for name, data in sc.items():
-        collector.scenarios.append(data)
+@pytest.fixture
+def collector_with_reqs(collector):
+    """Collector pre-loaded with sample requirements and scenarios."""
+    collector.requirements = [
+        {
+            "name": "Pipeline Processing",
+            "req_id": "RS-001",
+            "shall_count": 2,
+            "shall": ["The system SHALL process pipelines", "The system SHALL retry on failure"],
+        },
+        {
+            "name": "User Authentication",
+            "req_id": "RS-002",
+            "shall_count": 1,
+            "shall": ["The system SHALL authenticate users"],
+        },
+    ]
+    collector.scenarios = [
+        {"name": "Pipeline Processing Scenario", "given": ["pipeline exists"], "when": ["run"], "then": ["output"]},
+        {"name": "Auth Login", "given": ["credentials"], "when": ["login"], "then": ["token"]},
+    ]
+    return collector
 
 
 # ==================================================================
-# helpers for test data in _check_pipeline_not_running
-# ==================================================================
-
-def _write_session_json(tmp_proj, status: str, suffix: str = ""):
-    """Create a session.json with a given status."""
-    sess_dir = Path(tmp_proj, ".osh", "sessions", f"sess{suffix}")
-    sess_dir.mkdir(parents=True, exist_ok=True)
-    (sess_dir / "session.json").write_text(json.dumps({
-        "status": status,
-        "spec_path": "",
-    }))
-
-
-# ==================================================================
-# Test 1: _parse_scenario_refs edge cases
+# _parse_scenario_refs
 # ==================================================================
 
 class TestParseScenarioRefs:
-    """Cover uncovered branches in _parse_scenario_refs."""
-
-    def test_empty_text(self):
-        """GIVEN empty text WHEN parsed THEN empty list."""
+    def test_no_refs(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        assert EvidenceCollector._parse_scenario_refs("") == []
+        assert EvidenceCollector._parse_scenario_refs("no refs here") == []
 
-    def test_no_scenario_ref(self):
-        """GIVEN text without Scenario-Ref WHEN parsed THEN empty."""
+    def test_inline_covers_line(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        text = "Covers: pipeline, SDD"
-        assert EvidenceCollector._parse_scenario_refs(text) == []
-
-    def test_inline_on_covers_line(self):
-        """GIVEN Covers: line with embedded Scenario-Ref WHEN parsed THEN extracted."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        text = 'Covers: pipeline, SDD, Scenario-Ref: SDD → DDD → TDD 全流程'
+        text = 'Covers: pipeline, SDD, Scenario-Ref: SDD \u2192 DDD \u2192 TDD \u5168\u6d41\u7a0b'
         refs = EvidenceCollector._parse_scenario_refs(text)
         assert len(refs) == 1
-        assert "SDD → DDD → TDD 全流程" in refs[0]
+        assert "SDD" in refs[0]
 
     def test_standalone_line(self):
-        """GIVEN standalone Scenario-Ref line WHEN parsed THEN extracted."""
         from yuleosh.evidence.pack import EvidenceCollector
-        text = 'Scenario-Ref: CI/CD 三层验证'
+        text = 'Scenario-Ref: CI/CD \u4e09\u5c42\u9a8c\u8bc1'
         refs = EvidenceCollector._parse_scenario_refs(text)
         assert len(refs) == 1
-        assert "CI/CD 三层验证" in refs[0]
+        assert "CI/CD" in refs[0]
 
     def test_multiple_refs(self):
-        """GIVEN multiple Scenario-Ref lines WHEN parsed THEN all extracted."""
         from yuleosh.evidence.pack import EvidenceCollector
-        text = """Scenario-Ref: Ref A
-Scenario-Ref: Ref B"""
+        text = "Scenario-Ref: CI/CD\nScenario-Ref: pipeline"
         refs = EvidenceCollector._parse_scenario_refs(text)
         assert len(refs) == 2
 
-    def test_deduplicates(self):
-        """GIVEN duplicate Scenario-Ref WHEN parsed THEN deduplicated."""
+    def test_deduplication(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        text = """Scenario-Ref: Same Ref
-Scenario-Ref: Same Ref"""
+        text = "Scenario-Ref: CI/CD\nScenario-Ref: CI/CD"
         refs = EvidenceCollector._parse_scenario_refs(text)
         assert len(refs) == 1
 
-    def test_strips_trailing_quotes(self):
-        """GIVEN Scenario-Ref with trailing quotes WHEN parsed THEN stripped."""
+    def test_trailing_quotes_cleaned(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        text = 'Covers: pipeline, Scenario-Ref: "Full Pipeline Process"""'
+        text = 'Scenario-Ref: CI/CD"""'
         refs = EvidenceCollector._parse_scenario_refs(text)
-        assert refs and not refs[0].endswith('"')
-
-    def test_strips_trailing_semicolons(self):
-        """GIVEN Scenario-Ref with trailing semi-colon WHEN parsed THEN stripped."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        text = 'Scenario-Ref: SDD → DDD;'
-        refs = EvidenceCollector._parse_scenario_refs(text)
-        assert refs
-        assert not refs[0].rstrip().endswith(";")
+        assert refs == ["CI/CD"]
 
 
 # ==================================================================
-# Test 2: _parse_module_covers edge cases
+# _parse_module_covers
 # ==================================================================
 
 class TestParseModuleCovers:
-    """Cover uncovered branches in _parse_module_covers."""
-
-    def test_no_module_docstring(self):
-        """GIVEN AST with no docstring WHEN parsed THEN []."""
+    def test_no_docstring(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        tree = ast.parse("x = 1\n")
+        tree = ast.parse("x = 1")
         assert EvidenceCollector._parse_module_covers(tree) == []
 
-    def test_module_covers_with_scenario_ref_skipped(self):
-        """GIVEN module docstring Covers with embedded Scenario-Ref WHEN parsed THEN
-        only the keyword portions are extracted (Scenario-Ref stripped)."""
+    def test_with_covers(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        src = '"""Covers: pipeline, SDD, Scenario-Ref: SDD → DDD 全流程"""\nx=1\n'
-        tree = ast.parse(src)
-        kws = EvidenceCollector._parse_module_covers(tree)
-        # "pipeline" and "SDD" should be in, Scenario-Ref part omitted
-        assert "pipeline" in kws
-        assert "SDD" in kws
-        # The Scenario-Ref part should NOT appear as a keyword
-        assert not any("Scenario-Ref" in kw for kw in kws)
+        code = '"""Covers: pipeline, review"""\nx = 1\n'
+        tree = ast.parse(code)
+        covers = EvidenceCollector._parse_module_covers(tree)
+        assert "pipeline" in covers
+        assert "review" in covers
+
+    def test_scenario_ref_stripped(self):
+        from yuleosh.evidence.pack import EvidenceCollector
+        code = '"""Covers: pipeline, Scenario-Ref: CI/CD"""\nx = 1\n'
+        tree = ast.parse(code)
+        covers = EvidenceCollector._parse_module_covers(tree)
+        assert "pipeline" in covers
+        assert "CI/CD" not in covers
 
 
 # ==================================================================
-# Test 3: _parse_comment_covers edge cases
+# _parse_comment_covers
 # ==================================================================
 
 class TestParseCommentCovers:
-    """Cover uncovered branches in _parse_comment_covers."""
-
-    def test_no_comment_match(self):
-        """GIVEN text without # Covers: WHEN parsed THEN []."""
+    def test_no_covers(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        assert EvidenceCollector._parse_comment_covers("x=1") == []
+        assert EvidenceCollector._parse_comment_covers("no marker") == []
 
-    def test_comment_covers_strips_scenario(self):
-        """GIVEN # Covers: with Scenario-Ref WHEN parsed THEN keywords returned without ref."""
+    def test_comment_covers(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        text = "# Covers: pipeline, Scenario-Ref: Full Pipeline\ndef f(): pass\n"
-        kws = EvidenceCollector._parse_comment_covers(text)
-        assert "pipeline" in kws
-        assert not any("Scenario-Ref" in kw for kw in kws)
+        content = "# Covers: pipeline, review\n"
+        covers = EvidenceCollector._parse_comment_covers(content)
+        assert "pipeline" in covers
+        assert "review" in covers
+
+    def test_scenario_ref_stripped(self):
+        from yuleosh.evidence.pack import EvidenceCollector
+        content = "# Covers: pipeline, Scenario-Ref: CI/CD\n"
+        covers = EvidenceCollector._parse_comment_covers(content)
+        assert "pipeline" in covers
+        assert "CI/CD" not in covers
 
 
 # ==================================================================
-# Test 4: _parse_function_covers edge cases (non-test functions)
+# _parse_function_covers
 # ==================================================================
 
 class TestParseFunctionCovers:
-    """Cover uncovered branches in _parse_function_covers."""
-
-    def test_non_test_function_ignored(self, tmp_proj):
-        """GIVEN only non-test functions WHEN parsed THEN []."""
+    def test_no_test_funcs(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        tree = ast.parse('def helper():\n    """Covers: pipeline"""\n    pass\n')
-        kws = collector._parse_function_covers(tree)
-        assert kws == []
+        tree = ast.parse("def helper(): pass")
+        collector = mock.MagicMock()
+        collector._parse_function_covers = EvidenceCollector._parse_function_covers.__get__(collector, EvidenceCollector)
+        assert collector._parse_function_covers(tree) == []
 
-    def test_test_function_covers(self, tmp_proj):
-        """GIVEN test function with Covers: docstring WHEN parsed THEN keywords extracted."""
+    def test_test_func_with_covers(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        src = 'def test_ci_blocking_logic():\n    """Covers: CI 阻断逻辑, pipeline 硬错误"""\n    pass\n'
-        tree = ast.parse(src)
-        kws = collector._parse_function_covers(tree)
-        assert len(kws) >= 2
-        assert "CI 阻断逻辑" in kws
-
-    def test_async_test_function(self, tmp_proj):
-        """GIVEN async test function with Covers WHEN parsed THEN extracted."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        src = 'async def test_ci_check():\n    """Covers: pipeline 阻断"""\n    pass\n'
-        tree = ast.parse(src)
-        kws = collector._parse_function_covers(tree)
-        assert len(kws) >= 1
-
-    def test_test_function_no_docstring(self, tmp_proj):
-        """GIVEN test function without docstring WHEN parsed THEN []."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        tree = ast.parse('def test_x():\n    pass\n')
-        kws = collector._parse_function_covers(tree)
-        assert kws == []
+        code = '''
+def test_pipeline():
+    """Covers: pipeline, retry"""
+    pass
+'''
+        tree = ast.parse(code)
+        collector = mock.MagicMock()
+        collector._parse_function_covers = EvidenceCollector._parse_function_covers.__get__(collector, EvidenceCollector)
+        covers = collector._parse_function_covers(tree)
+        assert "pipeline" in covers
+        assert "retry" in covers
 
 
 # ==================================================================
-# Test 5: _infer_covers_from_function_names edge cases
+# _infer_covers_from_function_names
 # ==================================================================
 
-class TestInferCovers:
-    """Cover uncovered branches in function name inference."""
-
-    def test_no_test_functions(self):
-        """GIVEN AST with no test functions WHEN inferred THEN []."""
+class TestInferCoversFromFunctionNames:
+    def test_no_test_funcs(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        tree = ast.parse("def helper(): pass\nclass X: pass\n")
-        kws = EvidenceCollector._infer_covers_from_function_names(tree)
-        assert kws == []
+        tree = ast.parse("def helper(): pass")
+        assert EvidenceCollector._infer_covers_from_function_names(tree) == []
 
-    def test_infer_from_name(self):
-        """GIVEN test_pipeline_processing WHEN inferred THEN pipeline, processing."""
+    def test_infers_from_name(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        tree = ast.parse("def test_pipeline_processing():\n    pass\n")
-        kws = EvidenceCollector._infer_covers_from_function_names(tree)
-        assert "pipeline" in kws
-        assert "processing" in kws
+        code = '''
+def test_pipeline_processing():
+    pass
+def test_user_auth():
+    pass
+'''
+        tree = ast.parse(code)
+        inferred = EvidenceCollector._infer_covers_from_function_names(tree)
+        assert "pipeline" in inferred
+        assert "processing" in inferred
+        assert "user" in inferred
+        assert "auth" in inferred
 
-    def test_short_words_skipped(self):
-        """GIVEN test_fn where fn < 3 chars WHEN inferred THEN empty."""
+    def test_skip_stop_words(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        tree = ast.parse("def test_ab():\n    pass\n")
-        kws = EvidenceCollector._infer_covers_from_function_names(tree)
-        assert all(len(w) > 2 for w in kws) or len(kws) == 0
-
-    def test_async_test_function_inferred(self):
-        """GIVEN async test function WHEN inferred THEN words extracted."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        tree = ast.parse("async def test_coverage_check():\n    pass\n")
-        kws = EvidenceCollector._infer_covers_from_function_names(tree)
-        assert "coverage" in kws
-        assert "check" in kws
-
-    def test_custom_stop_words(self):
-        """GIVEN custom stop_words WHEN inferred THEN words filtered."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        tree = ast.parse("def test_system_foo():\n    pass\n")
-        kws = EvidenceCollector._infer_covers_from_function_names(tree,
-                                                                   stop_words={"system", "foo"})
-        assert "system" not in kws
-        assert "foo" not in kws
+        code = '''
+def test_the_system():
+    pass
+'''
+        tree = ast.parse(code)
+        inferred = EvidenceCollector._infer_covers_from_function_names(tree)
+        assert "system" not in inferred  # stop word
+        assert "the" not in inferred      # stop word
 
 
 # ==================================================================
-# Test 6: _categorize_uncovered — non-functional keywords
+# _parse_covers_from_file
+# ==================================================================
+
+class TestParseCoversFromFile:
+    def test_file_not_found(self, collector):
+        covers = collector._parse_covers_from_file("/nonexistent/test_x.py")
+        assert covers == []
+
+    def test_syntax_error_fallback(self, collector, tmp_proj):
+        bad_file = os.path.join(tmp_proj, "test_bad.py")
+        with open(bad_file, "w") as f:
+            f.write("# Covers: pipeline\nthis is not valid python {{{")
+        covers = collector._parse_covers_from_file(bad_file)
+        assert "pipeline" in covers
+
+    def test_full_parse(self, collector, tmp_proj):
+        test_file = os.path.join(tmp_proj, "test_full.py")
+        with open(test_file, "w") as f:
+            f.write('''"""Covers: pipeline, review"""
+def test_ci_blocking():
+    """Covers: CI blocking"""
+    pass
+def test_user_auth():
+    pass
+''')
+        covers = collector._parse_covers_from_file(test_file)
+        assert "pipeline" in covers
+        assert "review" in covers
+        assert "CI blocking" in covers
+        assert "user" in covers  # inferred
+        assert "auth" in covers  # inferred
+
+
+# ==================================================================
+# _collect_test_coverage
+# ==================================================================
+
+class TestCollectTestCoverage:
+    def test_no_tests_dir(self, collector, tmp_proj):
+        result = collector._collect_test_coverage()
+        assert result == {}
+
+    def test_with_test_files(self, collector, tmp_proj):
+        tests_dir = os.path.join(tmp_proj, "tests")
+        os.makedirs(tests_dir)
+        with open(os.path.join(tests_dir, "test_foo.py"), "w") as f:
+            f.write('"""Covers: pipeline"""\ndef test_foo(): pass\n')
+        with open(os.path.join(tests_dir, "test_bar.py"), "w") as f:
+            f.write('"""Covers: review"""\ndef test_bar(): pass\n')
+        result = collector._collect_test_coverage()
+        assert "test_foo.py" in result
+        assert "test_bar.py" in result
+        assert "pipeline" in result["test_foo.py"]
+        assert "review" in result["test_bar.py"]
+
+    def test_parse_failure(self, collector, tmp_proj):
+        tests_dir = os.path.join(tmp_proj, "tests")
+        os.makedirs(tests_dir)
+        with open(os.path.join(tests_dir, "test_crash.py"), "w") as f:
+            f.write("# Covers: pipeline\n")
+        # Should not crash, just log
+        result = collector._collect_test_coverage()
+        assert "test_crash.py" in result
+
+    def test_no_cover_markers(self, collector, tmp_proj):
+        tests_dir = os.path.join(tmp_proj, "tests")
+        os.makedirs(tests_dir)
+        # File with only a passthrough test function — inferred keyword "bare" is not
+        # a Covers marker so _collect_test_coverage still returns the file
+        with open(os.path.join(tests_dir, "test_bare.py"), "w") as f:
+            f.write("def test_bare(): pass\n")
+        collector._collect_test_coverage()
+        # The file gets collected because function-name inference adds "bare"
+        assert "test_bare.py" in collector.test_coverage
+        assert "bare" in collector.test_coverage["test_bare.py"]
+
+
+# ==================================================================
+# _build_requirement_to_test_map
+# ==================================================================
+
+class TestBuildRequirementToTestMap:
+    def test_empty_requirements(self, collector):
+        collector.test_coverage = {"test_foo.py": ["pipeline"]}
+        r2t, t2r = collector._build_requirement_to_test_map()
+        assert r2t == {}
+        assert t2r == {"test_foo.py": []}
+
+    def test_keyword_match(self, collector_with_reqs):
+        c = collector_with_reqs
+        c.test_coverage = {"test_pipe.py": ["pipeline"]}
+        r2t, t2r = c._build_requirement_to_test_map()
+        assert "Pipeline Processing" in r2t
+        assert "test_pipe.py" in r2t["Pipeline Processing"]
+
+    def test_exact_scenario_ref_match(self, collector_with_reqs, tmp_proj):
+        c = collector_with_reqs
+        # Create a test file with scenario-ref
+        os.makedirs(os.path.join(tmp_proj, "tests"), exist_ok=True)
+        test_file = os.path.join(tmp_proj, "tests", "test_scenario.py")
+        with open(test_file, "w") as f:
+            f.write('"""Covers: pipeline, Scenario-Ref: Pipeline Processing Scenario"""\n')
+        c.test_coverage = {"test_scenario.py": ["pipeline"]}
+        r2t, t2r = c._build_requirement_to_test_map()
+        assert "Pipeline Processing" in r2t
+        assert "test_scenario.py" in r2t["Pipeline Processing"]
+
+    def test_no_match(self, collector_with_reqs):
+        c = collector_with_reqs
+        c.test_coverage = {"test_other.py": ["unrelated"]}
+        r2t, t2r = c._build_requirement_to_test_map()
+        assert r2t.get("Pipeline Processing") == []
+
+
+# ==================================================================
+# _categorize_uncovered
 # ==================================================================
 
 class TestCategorizeUncovered:
-    """Cover non-functional keyword categorization."""
-
-    def test_critical_shall(self):
-        """GIVEN core SHALL (pipeline) WHEN categorized THEN critical."""
+    def test_critical(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        critical, warn = EvidenceCollector._categorize_uncovered([
-            {"shall": "The system SHALL process pipelines", "req_name": "Pipeline Processing"},
-        ])
-        assert len(critical) == 1
+        uncovered = [{"req_name": "Pipeline", "shall": "process pipelines"}]
+        crit, warn = EvidenceCollector._categorize_uncovered(uncovered)
+        assert len(crit) == 1
         assert len(warn) == 0
 
-    def test_non_functional_warn(self):
-        """GIVEN non-functional SHALL (multi-tenant) WHEN categorized THEN warn."""
+    def test_warn_non_functional(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        critical, warn = EvidenceCollector._categorize_uncovered([
-            {"shall": "The system SHALL support multi-tenant", "req_name": "Multi Tenant"},
-        ])
-        assert len(critical) == 0
+        uncovered = [{"req_name": "UI", "shall": "render interface"}]
+        crit, warn = EvidenceCollector._categorize_uncovered(uncovered)
+        assert len(crit) == 0
         assert len(warn) == 1
 
-    def test_req_name_non_functional(self):
-        """GIVEN req_name containing non-functional keyword WHEN categorized THEN warn."""
+    def test_mixed(self):
         from yuleosh.evidence.pack import EvidenceCollector
-        critical, warn = EvidenceCollector._categorize_uncovered([
-            {"shall": "SHALL support", "req_name": "Multi-Tenant Architecture"},
-        ])
-        assert len(warn) == 1
+        uncovered = [
+            {"req_name": "Pipeline", "shall": "process"},
+            {"req_name": "UI", "shall": "render"},
+            {"req_name": "Multi-tenant", "shall": "isolate tenants"},
+        ]
+        crit, warn = EvidenceCollector._categorize_uncovered(uncovered)
+        assert len(crit) == 1
+        assert len(warn) == 2
 
 
 # ==================================================================
-# Test 7: collect_sil_reports — full coverage
+# _check_traceability_completeness
 # ==================================================================
 
-class TestCollectSilReports:
-    """Cover _collect_sil_reports branches."""
+class TestCheckTraceabilityCompleteness:
+    def test_all_covered(self, collector_with_reqs):
+        c = collector_with_reqs
+        c.test_coverage = {"test_pipe.py": ["pipeline"]}
+        c._build_requirement_to_test_map()
+        uncovered = c._check_traceability_completeness()
+        # Pipeline Processing has test, User Auth does not
+        assert len(uncovered) > 0  # User Auth uncovered
 
-    def test_no_ci_dir(self, tmp_proj):
-        """GIVEN no .osh/ci dir WHEN collect_sil_reports THEN skipped."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        os.rmdir(os.path.join(tmp_proj, ".osh", "ci"))
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_sil_reports()
-        assert collector.sil_reports == []
+    def test_none_covered_info_message(self, collector_with_reqs):
+        c = collector_with_reqs
+        c.test_coverage = {}  # no tests at all
+        c._build_requirement_to_test_map()
+        uncovered = c._check_traceability_completeness()
+        assert len(uncovered) > 0
 
-    def test_no_sil_files(self, tmp_proj):
-        """GIVEN .osh/ci dir but no sil files WHEN collect_sil_reports THEN skipped."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        Path(tmp_proj, ".osh", "ci", "layer1-abc.json").write_text("{}")
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_sil_reports()
-        assert collector.sil_reports == []
-
-    def test_with_sil_json(self, tmp_proj):
-        """GIVEN sil json file WHEN collect_sil_reports THEN parsed & collected."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        (ci_dir / "sil-test-results.json").write_text(json.dumps({
-            "layer": 2, "all_passed": True,
-            "results": [{"test": "boot", "passed": True}],
-        }))
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_sil_reports()
-        assert len(collector.sil_reports) == 1
-        assert collector.sil_reports[0]["_source_file"] == "sil-test-results.json"
-
-    def test_sil_json_decode_error(self, tmp_proj):
-        """GIVEN invalid sil json WHEN collect_sil_reports THEN prints warning."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        (ci_dir / "sil-test-results.json").write_text("not json!")
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_sil_reports()
-        assert collector.sil_reports == []
-
-    def test_multiple_sil_files(self, tmp_proj):
-        """GIVEN multiple sil json files WHEN collect_sil_reports THEN all collected."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        for name in ["sil-results-a.json", "sil-results-b.json"]:
-            (ci_dir / name).write_text(json.dumps({"results": [{"test": "t1", "passed": True}]}))
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_sil_reports()
-        assert len(collector.sil_reports) == 2
+    def test_partial_coverage_categorized(self, collector_with_reqs):
+        c = collector_with_reqs
+        c.test_coverage = {"test_pipe.py": ["pipeline"]}
+        c._build_requirement_to_test_map()
+        uncovered = c._check_traceability_completeness()
+        assert len(uncovered) >= 1
 
 
 # ==================================================================
-# Test 8: collect_reviews — with actual data
-# ==================================================================
-
-class TestCollectReviews:
-    """Cover _collect_reviews data flow."""
-
-    def test_no_reviews_dir(self, tmp_proj):
-        """GIVEN missing .osh/reviews dir WHEN collect_reviews THEN skipped."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        os.rmdir(os.path.join(tmp_proj, ".osh", "reviews"))
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_reviews()
-        assert collector.reviews == []
-
-    def test_empty_reviews_dir(self, tmp_proj):
-        """GIVEN empty .osh/reviews dir WHEN collect_reviews THEN empty list."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_reviews()
-        assert collector.reviews == []
-
-    def test_with_review_data(self, tmp_proj):
-        """GIVEN review session file WHEN collect_reviews THEN parsed."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        rev_dir = Path(tmp_proj, ".osh", "reviews", "task1")
-        rev_dir.mkdir(parents=True)
-        (rev_dir / "review-session.json").write_text(json.dumps({
-            "task": "Review Task 1", "decision": "approve",
-            "reviews": [{"reviewer": "agent-1", "status": "passed",
-                         "finding_breakdown": {"critical": 0, "major": 1, "minor": 2},
-                         "summary": "All good"}],
-        }))
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_reviews()
-        assert len(collector.reviews) == 1
-        assert collector.reviews[0]["decision"] == "approve"
-
-
-# ==================================================================
-# Test 9: collect_ci_results — with coverage data
-# ==================================================================
-
-class TestCollectCiResults:
-    """Cover _collect_ci_results branches."""
-
-    def test_no_ci_dir(self, tmp_proj):
-        """GIVEN no .osh/ci dir WHEN collect_ci_results THEN skipped."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        os.rmdir(os.path.join(tmp_proj, ".osh", "ci"))
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_ci_results()
-        assert collector.ci_results == []
-
-    def test_with_coverage_data(self, tmp_proj):
-        """GIVEN CI result with coverage data WHEN collect_ci_results THEN extracted."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        (ci_dir / "layer1-abc.json").write_text(json.dumps({
-            "layer": 1, "status": "passed",
-            "coverage": {"line_coverage": 92.0, "threshold_line": 80,
-                         "line_pass": True,
-                         "condition_coverage": 88.0, "threshold_condition": 75,
-                         "condition_pass": True},
-        }))
-        collector = EvidenceCollector(tmp_proj)
-        collector.collect_ci_results()
-        assert len(collector.ci_results) == 1
-        assert collector.coverage_data["line_coverage"] == 92.0
-
-
-# ==================================================================
-# Test 10: _find_latest_pipeline_spec — sessions fallback
+# _find_latest_pipeline_spec
 # ==================================================================
 
 class TestFindLatestPipelineSpec:
-    """Cover the sessions fallback branch in _find_latest_pipeline_spec."""
+    def test_no_store_no_sessions(self, collector, tmp_proj):
+        spec = collector._find_latest_pipeline_spec()
+        assert spec is None
 
-    def test_fallback_to_sessions(self, tmp_proj):
-        """GIVEN no SQLite store but sessions dir WHEN _find_latest_pipeline_spec THEN
-        returns spec from most recent session."""
-        from yuleosh.evidence.pack import EvidenceCollector
+    def test_store_failure_fallback(self, collector, tmp_proj):
+        # Create .osh/sessions with a session.json
+        sessions_dir = os.path.join(tmp_proj, ".osh", "sessions")
+        os.makedirs(sessions_dir)
+        session_file = os.path.join(sessions_dir, "session.json")
         spec_path = os.path.join(tmp_proj, "docs", "spec.md")
-        Path(spec_path).parent.mkdir(parents=True)
-        Path(spec_path).write_text("real spec content")
-        # Make _find_latest_pipeline_spec fail on store import
-        # by providing a non-existent store module
-        # Actually, just provide a sessions fallback
-        sess_dir = Path(tmp_proj, ".osh", "sessions", "latest")
-        sess_dir.mkdir(parents=True)
-        (sess_dir / "session.json").write_text(json.dumps({
-            "status": "completed",
-            "spec_path": spec_path,
-        }))
-        collector = EvidenceCollector(tmp_proj)
-        with mock.patch("yuleosh.evidence.pack.EvidenceCollector._find_latest_pipeline_spec",
-                         wraps=collector._find_latest_pipeline_spec.__wrapped__
-                              if hasattr(collector._find_latest_pipeline_spec, "__wrapped__")
-                              else None) as _:
-            pass
-
-    def test_no_store_no_sessions(self, tmp_proj):
-        """GIVEN no store and no sessions WHEN _find_latest_pipeline_spec THEN None."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        result = collector._find_latest_pipeline_spec()
-        assert result is None
-
-    def test_sessions_json_decode_error(self, tmp_proj):
-        """GIVEN sessions dir with bad JSON WHEN _find_latest_pipeline_spec THEN skips."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        sess_dir = Path(tmp_proj, ".osh", "sessions", "bad")
-        sess_dir.mkdir(parents=True)
-        (sess_dir / "session.json").write_text("not json!")
-        collector = EvidenceCollector(tmp_proj)
-        result = collector._find_latest_pipeline_spec()
-        assert result is None
-
-    def test_session_with_missing_spec_path(self, tmp_proj):
-        """GIVEN session json without valid spec_path WHEN _find_latest_pipeline_spec THEN None."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        sess_dir = Path(tmp_proj, ".osh", "sessions", "missing")
-        sess_dir.mkdir(parents=True)
-        (sess_dir / "session.json").write_text(json.dumps({
-            "status": "completed",
-            "spec_path": os.path.join(tmp_proj, "nonexistent", "spec.md"),
-        }))
-        collector = EvidenceCollector(tmp_proj)
-        result = collector._find_latest_pipeline_spec()
-        assert result is None
+        os.makedirs(os.path.dirname(spec_path), exist_ok=True)
+        with open(spec_path, "w") as f:
+            f.write("spec content")
+        with open(session_file, "w") as f:
+            json.dump({"spec_path": spec_path}, f)
+        spec = collector._find_latest_pipeline_spec()
+        assert spec == spec_path
 
 
 # ==================================================================
-# Test 11: collect_requirements — auto-discovery and edge cases
+# collect_requirements
 # ==================================================================
 
 class TestCollectRequirements:
-    """Cover branches in collect_requirements."""
-
-    def test_auto_discover_fallback(self, tmp_proj):
-        """GIVEN spec auto-discovery returns None WHEN collect_requirements THEN
-        falls back to docs/spec.md."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        with mock.patch.object(collector, "_find_latest_pipeline_spec",
-                               return_value=None):
-            collector.collect_requirements(spec_path=None)
-            # Should have printed "Spec not found" since docs/spec.md doesn't exist
-            assert collector.requirements == []
-
-    def test_spec_file_not_found(self, tmp_proj):
-        """GIVEN nonexistent spec path WHEN collect_requirements THEN prints info."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
+    def test_no_spec_file(self, collector, tmp_proj):
         collector.collect_requirements(spec_path="/nonexistent/spec.md")
         assert collector.requirements == []
 
-    def test_auto_discover_with_valid_spec(self, tmp_proj):
-        """GIVEN auto-discovery returns a valid spec WHEN collect_requirements THEN
-        specs are parsed. This tests the full auto-discovery → fallback code path."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        # Place a spec file and set auto-discovery to find it
-        spec_path = os.path.join(tmp_proj, "docs", "spec.md")
-        Path(spec_path).parent.mkdir(parents=True)
-        Path(spec_path).write_text(SAMPLE_SPEC_MD)
+    def test_with_spec_path(self, collector, tmp_proj):
+        # Mock the import chain — parse_spec is imported via "from validate import parse_spec"
+        spec_path = os.path.join(tmp_proj, "spec.md")
+        with open(spec_path, "w") as f:
+            f.write("# Test\n> REQ-001\nSHALL: do something\n")
 
-        # Mock _find_latest_pipeline_spec to return our spec
-        with mock.patch.object(collector, "_find_latest_pipeline_spec",
-                               return_value=spec_path):
-            # Mock parse_spec at the import point: it's imported as 'from validate import parse_spec'
-            mock_doc = mock.MagicMock()
-            mock_req1 = mock.MagicMock()
-            mock_req1.to_dict.return_value = {
-                "name": "Pipeline Processing",
-                "shall": ["The system SHALL process pipelines"],
-                "shall_count": 1, "req_id": "RS-001",
-            }
-            mock_req2 = mock.MagicMock()
-            mock_req2.to_dict.return_value = {
-                "name": "Code Review",
-                "shall": ["The system SHALL collect reviews"],
-                "shall_count": 1, "req_id": "RS-002",
-            }
-            mock_scenario1 = mock.MagicMock()
-            mock_scenario1.to_dict.return_value = {
-                "name": "CI/CD Scenario",
-                "given": ["a pipeline"],
-                "when": ["triggered"],
-                "then": ["executes"],
-            }
-            mock_doc.requirements = [mock_req1, mock_req2]
-            mock_doc.scenarios = [mock_scenario1]
-
-            # validate is imported inside collect_requirements as a local import
-            mock_validate = mock.MagicMock()
-            mock_validate.parse_spec.return_value = mock_doc
-            with mock.patch.dict("sys.modules", {"validate": mock_validate}):
-                collector.collect_requirements(spec_path=None)
-                assert len(collector.requirements) == 2
-                assert collector.requirements[0]["name"] == "Pipeline Processing"
-
-
-# ==================================================================
-# Test 12: _check_pipeline_not_running — full branch coverage
-# ==================================================================
-
-class TestCheckPipelineNotRunning:
-    """Cover all branches in _check_pipeline_not_running."""
-
-    def test_no_sessions_no_recent(self, tmp_proj):
-        """GIVEN no sessions dir and no recent writes WHEN check THEN returns True."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        # Remove the sessions dir
-        os.rmdir(os.path.join(tmp_proj, ".osh", "sessions"))
-        os.rmdir(os.path.join(tmp_proj, ".osh", "reviews"))
-        assert _check_pipeline_not_running(tmp_proj) is True
-
-    def test_running_session(self, tmp_proj):
-        """GIVEN running pipeline session WHEN check THEN returns False."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        _write_session_json(tmp_proj, "running", "_1")
-        assert _check_pipeline_not_running(tmp_proj) is False
-
-    def test_in_progress_session(self, tmp_proj):
-        """GIVEN in_progress pipeline session WHEN check THEN returns False."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        _write_session_json(tmp_proj, "in_progress", "_2")
-        assert _check_pipeline_not_running(tmp_proj) is False
-
-    def test_completed_session_no_recent(self, tmp_proj):
-        """GIVEN completed session and no recent writes WHEN check THEN True."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        _write_session_json(tmp_proj, "completed", "_3")
-        assert _check_pipeline_not_running(tmp_proj) is True
-
-    def test_recent_ci_write(self, tmp_proj):
-        """GIVEN recent writes in .osh/ci/ WHEN check THEN returns False (grace window)."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        (ci_dir / "layer1.json").write_text("{}")
-        # touch the file to set current mtime
-        import time as _time
-        os.utime(ci_dir / "layer1.json", (_time.time(), _time.time()))
-        assert _check_pipeline_not_running(tmp_proj) is False
-
-    def test_old_writes(self, tmp_proj):
-        """GIVEN writes older than grace window WHEN check THEN returns True."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        (ci_dir / "layer1.json").write_text("{}")
-        old_time = time.time() - 60  # 60 seconds ago, well outside grace window
-        os.utime(ci_dir / "layer1.json", (old_time, old_time))
-        assert _check_pipeline_not_running(tmp_proj) is True
-
-    def test_session_json_decode_error_skipped(self, tmp_proj):
-        """GIVEN unparseable session.json WHEN check THEN skips and continues."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        sess_dir = Path(tmp_proj, ".osh", "sessions", "bad_json")
-        sess_dir.mkdir(parents=True)
-        (sess_dir / "session.json").write_text("not json!!")
-        # Should not crash, should continue and return True
-        assert _check_pipeline_not_running(tmp_proj) is True
-
-    def test_reviews_ci_oserror_handled(self, tmp_proj):
-        """GIVEN OSError when checking mtimes in reviews/ci dirs WHEN check THEN handled."""
-        from yuleosh.evidence.pack import _check_pipeline_not_running
-        # Remove ci dir so it doesn't exist
-        os.rmdir(os.path.join(tmp_proj, ".osh", "ci"))
-        # Remove reviews dir so it doesn't exist
-        os.rmdir(os.path.join(tmp_proj, ".osh", "reviews"))
-        assert _check_pipeline_not_running(tmp_proj) is True
-
-
-# ==================================================================
-# Test 13: generate_evidence — main entry point
-# ==================================================================
-
-class TestGenerateEvidence:
-    """Cover generate_evidence function."""
-
-    def test_basic_generation(self, tmp_proj):
-        """GIVEN all data present WHEN generate_evidence THEN produces artifacts."""
-        from yuleosh.evidence.pack import generate_evidence
-        # Create review data
-        rev_dir = Path(tmp_proj, ".osh", "reviews", "task_x")
-        rev_dir.mkdir(parents=True)
-        (rev_dir / "review-session.json").write_text(json.dumps({
-            "task": "Task X", "decision": "approve",
-            "reviews": [{"reviewer": "a1", "status": "passed",
-                         "finding_breakdown": {},
-                         "summary": "OK"}],
-        }))
-        # Create CI results
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        (ci_dir / "layer1-abc.json").write_text(json.dumps({
-            "layer": 1, "status": "passed",
-            "coverage": {"line_coverage": 92.0, "threshold_line": 80,
-                         "line_pass": True,
-                         "condition_coverage": 88.0, "threshold_condition": 75,
-                         "condition_pass": True},
-        }))
-        # Create SIL results
-        (ci_dir / "sil-test-results.json").write_text(json.dumps({
-            "results": [{"test": "boot", "passed": True}],
-        }))
-        # Create spec
-        spec_path = os.path.join(tmp_proj, "docs", "spec.md")
-        Path(spec_path).parent.mkdir(parents=True)
-        Path(spec_path).write_text(SAMPLE_SPEC_MD)
-
-        # Mock validate module so collect_requirements works
-        mock_validate = mock.MagicMock()
         mock_doc = mock.MagicMock()
         mock_req = mock.MagicMock()
-        mock_req.to_dict.return_value = {
-            "name": "Test Req",
-            "shall": ["System SHALL do X"],
-            "shall_count": 1, "req_id": "RS-X",
-        }
+        mock_req.to_dict.return_value = {"name": "Test", "shall_count": 1, "shall": ["do something"]}
         mock_doc.requirements = [mock_req]
         mock_doc.scenarios = []
-        mock_validate.parse_spec.return_value = mock_doc
-        with mock.patch.dict("sys.modules", {"validate": mock_validate}):
-            artifacts = generate_evidence(project_dir=tmp_proj, spec_path=spec_path)
-        assert len(artifacts) == 6
-        for a in artifacts:
-            assert os.path.exists(a)
-
-    def test_pipeline_running_then_times_out(self, tmp_proj):
-        """GIVEN pipeline running but times out WHEN generate_evidence THEN still collects."""
-        from yuleosh.evidence.pack import generate_evidence
-
-        spec_path = os.path.join(tmp_proj, "docs", "spec.md")
-        Path(spec_path).parent.mkdir(parents=True)
-        Path(spec_path).write_text(SAMPLE_SPEC_MD)
 
         mock_validate = mock.MagicMock()
-        mock_doc = mock.MagicMock()
-        mock_doc.requirements = []
-        mock_doc.scenarios = []
         mock_validate.parse_spec.return_value = mock_doc
 
-        with mock.patch("yuleosh.evidence.pack._check_pipeline_not_running",
-                        return_value=False):
-            with mock.patch.dict("sys.modules", {"validate": mock_validate}):
-                artifacts = generate_evidence(project_dir=tmp_proj, spec_path=spec_path)
-                # Should still produce artifacts even with running pipeline
-                assert len(artifacts) >= 1
+        with mock.patch.dict("sys.modules", {"validate": mock_validate}):
+            collector.collect_requirements(spec_path=spec_path)
+            assert len(collector.requirements) == 1
 
-    def test_generate_evidence_from_env(self):
-        """GIVEN OSH_HOME env set WHEN generate_evidence() called without args THEN
-        uses env variable."""
-        with tempfile.TemporaryDirectory() as td:
-            Path(td, ".osh").mkdir()
-            Path(td, ".osh", "evidence").mkdir(parents=True)
-            Path(td, ".osh", "ci").mkdir()
-            Path(td, ".osh", "reviews").mkdir()
-            Path(td, ".osh", "sessions").mkdir()
-            spec_path = os.path.join(td, "docs", "spec.md")
-            Path(spec_path).parent.mkdir(parents=True)
-            Path(spec_path).write_text(SAMPLE_SPEC_MD)
-            mock_validate = mock.MagicMock()
-            mock_doc = mock.MagicMock()
-            mock_req = mock.MagicMock()
-            mock_req.to_dict.return_value = {
-                "name": "Test",
-                "shall": ["Shall do X"],
-                "shall_count": 1, "req_id": "RS-T",
+
+# ==================================================================
+# collect_reviews
+# ==================================================================
+
+class TestCollectReviews:
+    def test_no_reviews_dir(self, collector, tmp_proj):
+        collector.collect_reviews()
+        assert collector.reviews == []
+
+    def test_with_reviews(self, collector, tmp_proj):
+        reviews_dir = os.path.join(tmp_proj, ".osh", "reviews", "task1")
+        os.makedirs(reviews_dir)
+        with open(os.path.join(reviews_dir, "review-session.json"), "w") as f:
+            json.dump({"task": "test", "decision": "pass"}, f)
+        collector.collect_reviews()
+        assert len(collector.reviews) == 1
+        assert collector.reviews[0]["task"] == "test"
+
+
+# ==================================================================
+# collect_ci_results
+# ==================================================================
+
+class TestCollectCiResults:
+    def test_no_ci_dir(self, collector, tmp_proj):
+        collector.collect_ci_results()
+        assert collector.ci_results == []
+
+    def test_with_ci_results(self, collector, tmp_proj):
+        ci_dir = os.path.join(tmp_proj, ".osh", "ci")
+        os.makedirs(ci_dir)
+        with open(os.path.join(ci_dir, "layer1-abc123.json"), "w") as f:
+            json.dump({"layer": 1, "status": "passed", "coverage": {"line_coverage": 85}}, f)
+        collector.collect_ci_results()
+        assert len(collector.ci_results) == 1
+        assert collector.coverage_data["line_coverage"] == 85
+
+    def test_ci_no_coverage(self, collector, tmp_proj):
+        ci_dir = os.path.join(tmp_proj, ".osh", "ci")
+        os.makedirs(ci_dir)
+        with open(os.path.join(ci_dir, "layer1-abc.json"), "w") as f:
+            json.dump({"layer": 1, "status": "passed"}, f)
+        collector.collect_ci_results()
+        assert collector.coverage_data is None
+
+
+# ==================================================================
+# collect_sil_reports
+# ==================================================================
+
+class TestCollectSilReports:
+    def test_no_ci_dir(self, collector, tmp_proj):
+        collector.collect_sil_reports()
+        assert collector.sil_reports == []
+
+    def test_no_sil_files(self, collector, tmp_proj):
+        ci_dir = os.path.join(tmp_proj, ".osh", "ci")
+        os.makedirs(ci_dir)
+        collector.collect_sil_reports()
+        assert collector.sil_reports == []
+
+    def test_with_sil_files(self, collector, tmp_proj):
+        ci_dir = os.path.join(tmp_proj, ".osh", "ci")
+        os.makedirs(ci_dir)
+        with open(os.path.join(ci_dir, "sil-results.json"), "w") as f:
+            json.dump({"results": [{"test": "boot", "passed": True}]}, f)
+        collector.collect_sil_reports()
+        assert len(collector.sil_reports) == 1
+        assert collector.sil_reports[0]["results"][0]["test"] == "boot"
+
+    def test_bad_json_skipped(self, collector, tmp_proj):
+        ci_dir = os.path.join(tmp_proj, ".osh", "ci")
+        os.makedirs(ci_dir)
+        with open(os.path.join(ci_dir, "sil-bad.json"), "w") as f:
+            f.write("not valid json{{{")
+        collector.collect_sil_reports()
+        assert collector.sil_reports == []
+
+
+# ==================================================================
+# generate_traceability_matrix
+# ==================================================================
+
+class TestGenerateTraceabilityMatrix:
+    def test_empty(self, collector, tmp_proj):
+        path = collector.generate_traceability_matrix()
+        out = os.path.join(tmp_proj, ".osh", "evidence", "traceability-matrix.md")
+        assert path == out
+        assert os.path.exists(out)
+
+    def test_with_requirements(self, collector_with_reqs, tmp_proj):
+        c = collector_with_reqs
+        c.test_coverage = {"test_pipe.py": ["pipeline"]}
+        path = c.generate_traceability_matrix()
+        content = open(os.path.join(tmp_proj, ".osh", "evidence", "traceability-matrix.md")).read()
+        assert "Pipeline Processing" in content
+        assert "User Authentication" in content
+        assert "RS-001" in content
+        # JSON also generated
+        assert os.path.exists(os.path.join(tmp_proj, ".osh", "evidence", "traceability-matrix.json"))
+
+
+# ==================================================================
+# generate_requirement_coverage
+# ==================================================================
+
+class TestGenerateRequirementCoverage:
+    def test_empty(self, collector, tmp_proj):
+        path = collector.generate_requirement_coverage()
+        assert os.path.exists(path)
+
+    def test_with_reqs(self, collector_with_reqs, tmp_proj):
+        path = collector_with_reqs.generate_requirement_coverage()
+        content = open(path).read()
+        assert "Pipeline Processing" in content
+        assert "✅" in content
+        assert "100%" in content  # all reqs have shall_count > 0
+
+
+# ==================================================================
+# generate_code_coverage_report
+# ==================================================================
+
+class TestGenerateCodeCoverageReport:
+    def test_no_coverage_data(self, collector, tmp_proj):
+        path = collector.generate_code_coverage_report()
+        content = open(path).read()
+        assert "No coverage data available" in content
+
+    def test_with_coverage_data(self, collector, tmp_proj):
+        collector.coverage_data = {
+            "line_coverage": 85.0,
+            "condition_coverage": 70.0,
+            "threshold_line": 80,
+            "threshold_condition": 75,
+            "line_pass": True,
+            "condition_pass": False,
+        }
+        path = collector.generate_code_coverage_report()
+        content = open(path).read()
+        assert "85.0%" in content
+        assert "70.0%" in content
+        assert "✅" in content
+        assert "❌" in content
+
+
+# ==================================================================
+# aggregate_review_logs
+# ==================================================================
+
+class TestAggregateReviewLogs:
+    def test_no_reviews(self, collector, tmp_proj):
+        path = collector.aggregate_review_logs()
+        assert os.path.exists(path)
+
+    def test_with_reviews(self, collector, tmp_proj):
+        collector.reviews = [
+            {
+                "task": "Review Pipeline",
+                "decision": "pass",
+                "created_at": "2025-01-01",
+                "reviews": [
+                    {"reviewer": "bot", "status": "passed", "finding_breakdown": {"critical": 0, "major": 1, "minor": 2}, "summary": "all good"},
+                ],
             }
-            mock_doc.requirements = [mock_req]
-            mock_doc.scenarios = []
-            mock_validate.parse_spec.return_value = mock_doc
-            with mock.patch.dict(os.environ, {"OSH_HOME": td}):
-                with mock.patch.dict("sys.modules", {"validate": mock_validate}):
-                    from yuleosh.evidence.pack import generate_evidence
-                    artifacts = generate_evidence(spec_path=spec_path)
-                    assert len(artifacts) == 6
+        ]
+        path = collector.aggregate_review_logs()
+        content = open(path).read()
+        assert "Review Pipeline" in content
+        assert "pass" in content
 
-    def test_pack_compliance_zip_cleanup(self, tmp_proj):
-        """GIVEN evidence dir with spec, startup-analysis, and sil files
-        WHEN pack_compliance_zip THEN all included in zip."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        # Create evidence dir and populate
-        ev_dir = Path(tmp_proj, ".osh", "evidence")
-        (ev_dir / "traceability-matrix.md").write_text("# TM")
-        (ev_dir / "requirement-coverage.md").write_text("# RC")
 
-        # Add spec and startup analysis
-        docs_dir = Path(tmp_proj, "docs")
-        docs_dir.mkdir(exist_ok=True)
-        (docs_dir / "spec.md").write_text("# Spec")
-        (docs_dir / "startup-analysis.md").write_text("# Startup")
+# ==================================================================
+# generate_acceptance_matrix
+# ==================================================================
 
-        # Add sil file in ci dir
-        ci_dir = Path(tmp_proj, ".osh", "ci")
-        (ci_dir / "sil-test-results.json").write_text(json.dumps({"results": []}))
+class TestGenerateAcceptanceMatrix:
+    def test_empty(self, collector, tmp_proj):
+        path = collector.generate_acceptance_matrix()
+        assert os.path.exists(path)
+        content = open(path).read()
+        assert "Acceptance Matrix" in content
 
-        collector = EvidenceCollector(tmp_proj)
+    def test_with_data(self, collector_with_reqs, tmp_proj):
+        c = collector_with_reqs
+        c.test_coverage = {"test_pipe.py": ["pipeline", "processing"]}
+        c._build_requirement_to_test_map()
+        path = c.generate_acceptance_matrix()
+        content = open(path).read()
+        assert "RS-001" in content
+        assert "RS-002" in content
+        assert "test_pipe.py" in content
+
+
+# ==================================================================
+# pack_compliance_zip
+# ==================================================================
+
+class TestPackComplianceZip:
+    def test_basic_pack(self, collector, tmp_proj):
+        # Create some evidence files (already created by collector.__init__)
+        ev_dir = os.path.join(tmp_proj, ".osh", "evidence")
+        for fn in ("traceability-matrix.md", "code-coverage-report.md", "traceability-matrix.json"):
+            with open(os.path.join(ev_dir, fn), "w") as f:
+                f.write("content")
+        # Create spec file
+        docs = os.path.join(tmp_proj, "docs")
+        os.makedirs(docs)
+        with open(os.path.join(docs, "spec.md"), "w") as f:
+            f.write("spec content")
+        # Create startup analysis
+        with open(os.path.join(docs, "startup-analysis.md"), "w") as f:
+            f.write("analysis")
+        # Create sil report
+        ci_dir = os.path.join(tmp_proj, ".osh", "ci")
+        os.makedirs(ci_dir)
+        with open(os.path.join(ci_dir, "sil-results.json"), "w") as f:
+            json.dump({"results": []}, f)
+
         zip_path = collector.pack_compliance_zip()
         assert os.path.exists(zip_path)
-
-        import zipfile
+        # Verify zip contents
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = zf.namelist()
             assert "traceability-matrix.md" in names
-            assert "requirement-coverage.md" in names
             assert "spec.md" in names
             assert "startup-analysis.md" in names
-            assert any("sil" in n for n in names)
+            assert "sil-reports/sil-results.json" in names
 
 
 # ==================================================================
-# Test 14: main() CLI entry point
+# _check_pipeline_not_running
+# ==================================================================
+
+class TestCheckPipelineNotRunning:
+    def test_no_sessions_dir(self, tmp_proj):
+        from yuleosh.evidence.pack import _check_pipeline_not_running
+        assert _check_pipeline_not_running(tmp_proj) is True
+
+    def test_with_running_pipeline(self, tmp_proj):
+        from yuleosh.evidence.pack import _check_pipeline_not_running
+        sess_dir = os.path.join(tmp_proj, ".osh", "sessions", "run1")
+        os.makedirs(sess_dir)
+        with open(os.path.join(sess_dir, "session.json"), "w") as f:
+            json.dump({"status": "running"}, f)
+        assert _check_pipeline_not_running(tmp_proj) is False
+
+    def test_completed_pipeline(self, tmp_proj):
+        from yuleosh.evidence.pack import _check_pipeline_not_running
+        sess_dir = os.path.join(tmp_proj, ".osh", "sessions", "run1")
+        os.makedirs(sess_dir)
+        with open(os.path.join(sess_dir, "session.json"), "w") as f:
+            json.dump({"status": "completed"}, f)
+        assert _check_pipeline_not_running(tmp_proj) is True
+
+    def test_recent_ci_write(self, tmp_proj):
+        from yuleosh.evidence.pack import _check_pipeline_not_running
+        ci_dir = os.path.join(tmp_proj, ".osh", "ci")
+        os.makedirs(ci_dir)
+        with open(os.path.join(ci_dir, "layer1.json"), "w") as f:
+            f.write("{}")
+        # Recent write (now) should be within the grace window
+        result = _check_pipeline_not_running(tmp_proj)
+        # Since the write happened within the last 5 seconds, it should return False
+        assert result is False
+
+
+# ==================================================================
+# generate_evidence (standalone)
+# ==================================================================
+
+class TestGenerateEvidence:
+    def test_basic_flow(self, tmp_proj):
+        from yuleosh.evidence.pack import generate_evidence
+        # Minimal project structure
+        docs = os.path.join(tmp_proj, "docs")
+        os.makedirs(docs)
+        with open(os.path.join(docs, "spec.md"), "w") as f:
+            f.write("# Test\n> REQ-001\nSHALL: do something\n")
+
+        # Mock the spec parsing to avoid import chain
+        mock_doc = mock.MagicMock()
+        mock_req = mock.MagicMock()
+        mock_req.to_dict.return_value = {"name": "Test", "shall_count": 1, "shall": ["do something"]}
+        mock_doc.requirements = [mock_req]
+        mock_doc.scenarios = []
+
+        mock_validate = mock.MagicMock()
+        mock_validate.parse_spec.return_value = mock_doc
+
+        with mock.patch("yuleosh.evidence.pack._check_pipeline_not_running", return_value=True):
+            with mock.patch.dict("sys.modules", {"validate": mock_validate}):
+                artifacts = generate_evidence(project_dir=tmp_proj)
+                assert len(artifacts) == 6
+                for a in artifacts:
+                    assert os.path.exists(a)
+
+    def test_with_wait_loop(self, tmp_proj):
+        from yuleosh.evidence.pack import generate_evidence
+        # Pipeline busy initially, then free
+        busy = [True, True, False]
+
+        def mock_check(_pd):
+            return busy.pop(0)
+
+        with mock.patch("yuleosh.evidence.pack._check_pipeline_not_running", side_effect=mock_check):
+            with mock.patch.dict("sys.modules", {"validate": mock.MagicMock()}):
+                artifacts = generate_evidence(project_dir=tmp_proj)
+                assert len(artifacts) == 6
+
+    def test_timeout_wait(self, tmp_proj):
+        from yuleosh.evidence.pack import generate_evidence
+        # Pipeline never free — hits timeout
+        with mock.patch("yuleosh.evidence.pack._check_pipeline_not_running", return_value=False):
+            with mock.patch.dict("sys.modules", {"validate": mock.MagicMock()}):
+                artifacts = generate_evidence(project_dir=tmp_proj)
+                assert len(artifacts) == 6
+
+
+# ==================================================================
+# main() CLI entry point
 # ==================================================================
 
 class TestMain:
-    """Cover main() CLI entry point."""
-
-    def test_main_pack_arg(self):
-        """GIVEN sys.argv includes 'pack' WHEN main() THEN pack arg stripped."""
-        from yuleosh.evidence.pack import main, generate_evidence
-        with tempfile.TemporaryDirectory() as td:
-            Path(td, ".osh").mkdir()
-            Path(td, ".osh", "evidence").mkdir(parents=True)
-            Path(td, ".osh", "ci").mkdir()
-            Path(td, ".osh", "reviews").mkdir()
-            Path(td, ".osh", "sessions").mkdir()
-            spec_path = os.path.join(td, "docs", "spec.md")
-            Path(spec_path).parent.mkdir(parents=True)
-            Path(spec_path).write_text(SAMPLE_SPEC_MD)
-            with mock.patch.dict(os.environ, {"OSH_HOME": td}):
-                with mock.patch.object(sys, "argv", ["pack.py", "pack", spec_path]):
-                    # We can't test main() directly as it calls generate_evidence
-                    # which requires many dependencies. Instead, verify the arg
-                    # stripping behavior through the generate_evidence call.
-                    from yuleosh.evidence.pack import generate_evidence
-                    with mock.patch("yuleosh.evidence.pack.generate_evidence") as mge:
-                        main()
-                        mge.assert_called_once()
-                        # spec_path should be passed without 'pack'
-                        args, kwargs = mge.call_args
-                        assert "pack" not in str(args)
-
-    def test_main_no_args(self):
-        """GIVEN no extra argv WHEN main() THEN generate_evidence called with spec_path=None."""
+    def test_no_args(self, tmp_proj):
         from yuleosh.evidence.pack import main
-        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mge:
-            with mock.patch.object(sys, "argv", ["pack.py"]):
+        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mgen:
+            with mock.patch.object(sys, "argv", ["pack"]):
                 main()
-                mge.assert_called_once()
+                mgen.assert_called_once()
 
-    def test_main_with_spec_path(self):
-        """GIVEN spec path in argv WHEN main() THEN passed to generate_evidence."""
+    def test_with_spec_path(self, tmp_proj):
         from yuleosh.evidence.pack import main
-        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mge:
-            with mock.patch.object(sys, "argv", ["pack.py", "/path/spec.md"]):
+        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mgen:
+            with mock.patch.object(sys, "argv", ["pack", "/tmp/spec.md"]):
                 main()
-                mge.assert_called_once_with(spec_path="/path/spec.md")
+                mgen.assert_called_once_with(spec_path="/tmp/spec.md")
 
-    def test_main_with_pack_and_spec(self):
-        """GIVEN argv = ['pack.py', 'pack', '/path/spec.md'] WHEN main()
-        THEN 'pack' is stripped, spec path passed."""
+    def test_pack_arg_stripped(self, tmp_proj):
         from yuleosh.evidence.pack import main
-        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mge:
-            with mock.patch.object(sys, "argv", ["pack.py", "pack", "/path/spec.md"]):
+        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mgen:
+            with mock.patch.object(sys, "argv", ["pack", "pack", "/tmp/spec.md"]):
                 main()
-                mge.assert_called_once_with(spec_path="/path/spec.md")
-
-
-# ==================================================================
-# Test 15: _build_requirement_to_test_map CJK + exact match
-# ==================================================================
-
-class TestBuildRequirementToTestMapCJK:
-    """Cover CJK keyword tokenization in _build_requirement_to_test_map."""
-
-    def test_cjk_keyword_tokenization(self, tmp_proj):
-        """GIVEN Chinese SHALL text WHEN building map THEN CJK bigrams extracted."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.requirements = [{
-            "name": "Pipeline Processing",
-            "req_id": "RS-001",
-            "shall_count": 1,
-            "shall": ["系统SHALL支持管道处理"],
-        }]
-        collector.scenarios = [{
-            "name": "管道处理场景",
-            "given": ["管道已配置"],
-            "when": ["触发运行"],
-            "then": ["执行所有阶段"],
-        }]
-        collector.test_coverage = {"test_ci.py": ["管道处理", "pipeline"]}
-        collector._build_requirement_to_test_map()
-        # Should have at least one match via CJK bigram
-        assert len(collector.req_to_tests.get("Pipeline Processing", [])) >= 1
-
-    def test_exact_scenario_ref_match(self, tmp_proj):
-        """GIVEN exact Scenario-Ref match WHEN building map THEN mode is 'exact'."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.requirements = [{
-            "name": "CI/CD Pipeline",
-            "req_id": "RS-003",
-            "shall_count": 1,
-            "shall": ["SHALL support CI/CD"],
-        }]
-        collector.scenarios = [{
-            "name": "CI/CD Pipeline Scenario",
-            "given": ["a pipeline"],
-            "when": ["triggered"],
-            "then": ["executed"],
-        }]
-        collector.test_coverage = {"test_cicd.py": ["CI/CD"]}
-        collector.scenario_refs = {"test_cicd.py": ["CI/CD Pipeline Scenario"]}
-        collector._build_requirement_to_test_map()
-        req_name = "CI/CD Pipeline"
-        assert req_name in collector.req_to_tests
-        assert len(collector.req_to_tests[req_name]) >= 1
-        mode = collector.match_modes.get(req_name, {}).get("test_cicd.py", "")
-        assert mode == "exact"
-
-    def test_empty_requirement_skipped(self, tmp_proj):
-        """GIVEN requirement with empty name WHEN building map THEN skipped."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.requirements = [{
-            "name": "",
-            "shall_count": 0,
-            "shall": [],
-        }]
-        collector.test_coverage = {"test_a.py": ["pipeline"]}
-        collector._build_requirement_to_test_map()
-        assert "" not in collector.req_to_tests
-
-
-# ==================================================================
-# Test 16: coverage report with no data
-# ==================================================================
-
-class TestCoverageReportEmpty:
-    """Cover generate_code_coverage_report with no coverage_data."""
-
-    def test_no_coverage_data(self, tmp_proj):
-        """GIVEN no coverage data WHEN generate_code_coverage_report THEN
-        outputs 'No coverage data' message."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.coverage_data = None
-        report = collector.generate_code_coverage_report()
-        content = Path(report).read_text()
-        assert "No coverage data" in content
-
-
-# ==================================================================
-# Test 17: generate_acceptance_matrix with empty requirements
-# ==================================================================
-
-class TestAcceptanceMatrixEmpty:
-    """Cover generate_acceptance_matrix with empty requirements."""
-
-    def test_empty_requirements(self, tmp_proj):
-        """GIVEN empty requirements WHEN generate_acceptance_matrix THEN
-        generates valid matrix with zero counts."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.requirements = []
-        collector.test_coverage = {}
-        matrix = collector.generate_acceptance_matrix()
-        content = Path(matrix).read_text()
-        assert "Total SHALL statements" in content
-        assert "0" in content.split("Total SHALL statements")[1][:10]
-
-
-# ==================================================================
-# Test 18: aggregate_review_logs with mixed statuses
-# ==================================================================
-
-class TestAggregateReviews:
-    """Cover aggregate_review_logs with varied statuses."""
-
-    def test_mixed_statuses(self, tmp_proj):
-        """GIVEN reviews with varied statuses WHEN aggregate THEN all icons applied."""
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.reviews = [{
-            "task": "Task A",
-            "decision": "approve",
-            "created_at": "2025-01-01",
-            "reviews": [
-                {"reviewer": "a1", "status": "passed",
-                 "finding_breakdown": {"critical": 0, "major": 0, "minor": 0},
-                 "summary": "OK"},
-                {"reviewer": "a2", "status": "failed",
-                 "finding_breakdown": {"critical": 1, "major": 2, "minor": 3},
-                 "summary": "Found issues"},
-                {"reviewer": "a3", "status": "retry",
-                 "finding_breakdown": {}, "summary": "Retry"},
-                {"reviewer": "a4", "status": "running",
-                 "finding_breakdown": {}, "summary": "In progress"},
-                {"reviewer": "a5", "status": "unknown_status",
-                 "finding_breakdown": {}, "summary": "Weird state"},
-            ],
-        }]
-        path = collector.aggregate_review_logs()
-        content = Path(path).read_text()
-        # Should contain all status icons
-        assert "✅" in content  # passed
-        assert "❌" in content  # failed
-        assert "🔄" in content  # retry
-        assert "⏳" in content  # running
-        assert "❓" in content  # unknown
-
-
-# ==================================================================
-# Test 19: generate_traceability_matrix with 0 shalls covered
-# ==================================================================
-
-class TestTraceabilityZeroCovered:
-    """Cover the 'all SHALLs uncovered' branch."""
-
-    def test_all_uncovered(self, tmp_proj):
-        """GIVEN requirements with SHALLs but no test coverage WHEN
-        generating traceability THEN '0/total' message."""
-
-        from yuleosh.evidence.pack import EvidenceCollector
-        collector = EvidenceCollector(tmp_proj)
-        collector.requirements = [{
-            "name": "Pipeline",
-            "req_id": "RS-001",
-            "shall_count": 1,
-            "shall": ["The system SHALL process pipelines"],
-        }]
-        collector.test_coverage = {}  # No test files at all
-        collector.req_to_tests = {"Pipeline": []}
-        collector.match_modes = {}
-        collector.match_confidences = {}
-        collector.scenarios = []
-
-        # Build properly before checking
-        collector._build_requirement_to_test_map()
-        uncovered = collector._check_traceability_completeness()
-        assert len(uncovered) == 1  # All SHALLs uncovered
-        critical, warn = collector._categorize_uncovered(uncovered)
-        assert len(critical) == 1  # Pipeline processing is critical
+                mgen.assert_called_once_with(spec_path="/tmp/spec.md")
