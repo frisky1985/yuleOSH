@@ -17,7 +17,7 @@ from unittest.mock import patch, MagicMock, PropertyMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "review"))
 
-from run import (
+from yuleosh.review.run import (
     ReviewFinding,
     ReviewResult,
     ReviewSession,
@@ -425,7 +425,7 @@ def test_main_auto():
     """Test main() with 'auto' command."""
     test_args = ["run.py", "auto"]
     with patch.object(sys, "argv", test_args):
-        with patch("run.auto_review") as mock_ar:
+        with patch("yuleosh.review.run.auto_review") as mock_ar:
             mock_ar.return_value = MagicMock()
             main()
 
@@ -434,7 +434,7 @@ def test_main_task():
     """Test main() with 'task' command."""
     test_args = ["run.py", "task", "my-task", "feature"]
     with patch.object(sys, "argv", test_args):
-        with patch("run.run_review") as mock_rr:
+        with patch("yuleosh.review.run.run_review") as mock_rr:
             mock_rr.return_value = MagicMock()
             with patch("subprocess.run") as mock_sp:
                 mock_sp.return_value.stdout = "src/x.py\n"
@@ -497,7 +497,7 @@ def test_review_architecture_async_function():
 def test_run_review_reviewer_error():
     """Test run_review handles reviewer exceptions gracefully."""
     with tempfile.TemporaryDirectory() as tmp:
-        with patch.dict("run.REVIEWER_MAP", {"feature": [lambda n, d, f: (_ for _ in ()).throw(ValueError("reviewer crashed"))]}):
+        with patch.dict("yuleosh.review.run.REVIEWER_MAP", {"feature": [lambda n, d, f: (_ for _ in ()).throw(ValueError("reviewer crashed"))]}):
             session = run_review("test-task", "feature", tmp, [])
             assert session.status == "completed"
             assert len(session.reviews) == 1
@@ -531,7 +531,7 @@ def test_main_task_default_kind():
     """Test main() 'task' command with default kind."""
     test_args = ["run.py", "task", "my-task"]
     with patch.object(sys, "argv", test_args):
-        with patch("run.run_review") as mock_rr:
+        with patch("yuleosh.review.run.run_review") as mock_rr:
             mock_rr.return_value = MagicMock()
             with patch("subprocess.run") as mock_sp:
                 mock_sp.return_value.stdout = "src/x.py\n"
