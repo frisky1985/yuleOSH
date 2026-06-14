@@ -2,7 +2,7 @@
 
 > **版本**: v1.0.1 | **状态**: APPROVED  
 > **维护人**: 小马 🐴 (质量架构师)  
-> **参考文档**: docs/aspice-readiness-assessment.md, docs/rtm-spec.md  
+> **参考文档**: project-docs/aspice-readiness-assessment.md, project-docs/rtm-spec.md  
 > **最后更新**: 2026-06-14  
 > **规范文体**: RFC 2119 (SHALL / SHOULD / MAY)
 
@@ -153,7 +153,7 @@
 4. RTM 检查 SHOULD:
    - 检查 SHOULD 覆盖率 ≥50%（仅警告，不阻塞）
    - 检查 Rogue 测试（未关联需求的测试）
-5. 验收矩阵 (`docs/acceptance-matrix-rtm.md`) SHALL 保持与 RTM 检查结果一致
+5. 验收矩阵 (`project-docs/acceptance-matrix-rtm.md`) SHALL 保持与 RTM 检查结果一致
 
 #### T-05: ASPICE 过程文档完善
 
@@ -342,7 +342,7 @@ ci/
 |:-------|:-----|:----|:--------:|
 | psycopg2 mock 方案确认 | 技术决策 | Sprint 1 W1 | ✅ 是 |
 | subprocess mock 库安装 | 工具安装 | Sprint 1 W1 | ✅ 是 |
-| rtm-spec.md 审批通过 | 文档 | Sprint 1 W0 | ⛔ 否 |
+| project-docs/rtm-spec.md 审批通过 | 文档 | Sprint 1 W0 | ⛔ 否 |
 
 ### 5.2 Sprint 2 依赖
 

@@ -71,7 +71,7 @@ jobs:
         python-version: '3.13'
     - name: RTM Gate Check (ASPICE SWE.4)
       run: |
-        bash docs/ci-rtm-check.sh 80 docs/spec.md tests/
+        bash docs/ci-rtm-check.sh 80 project-docs/spec.md tests/
 
     - name: Generate evidence pack
       run: |
