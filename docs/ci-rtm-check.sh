@@ -10,9 +10,9 @@
 #
 # Reference:
 #   - ASPICE SWE.4 (Software Unit Verification)
-#   - docs/rtm-spec.md (RTM 规范)
-#   - docs/acceptance-matrix-rtm.md (验收矩阵)
-#   - docs/aspice-readiness-assessment.md (ASPICE 评估)
+#   - project-docs/rtm-spec.md (RTM 规范)
+#   - project-docs/acceptance-matrix-rtm.md (验收矩阵)
+#   - project-docs/aspice-readiness-assessment.md (ASPICE 评估)
 #
 # Usage:
 #   bash docs/ci-rtm-check.sh                    # use defaults
@@ -34,10 +34,10 @@ echo ""
 
 # ---- Configuration ----
 SHALL_THRESHOLD=${1:-${SHALL_THRESHOLD:-80}}
-SPEC_FILE=${2:-${SPEC_FILE:-"docs/spec.md"}}
+SPEC_FILE=${2:-${SPEC_FILE:-"project-docs/spec.md"}}
 TEST_DIR=${3:-${TEST_DIR:-"tests/"}}
-ACCEPTANCE_MATRIX="${PROJECT_ROOT:-.}/docs/acceptance-matrix-rtm.md"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ACCEPTANCE_MATRIX="${PROJECT_ROOT}/project-docs/acceptance-matrix-rtm.md"
 
 echo "   Threshold:  ≥${SHALL_THRESHOLD}%"
 echo "   Spec:       ${SPEC_FILE}"
