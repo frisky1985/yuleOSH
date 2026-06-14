@@ -24,9 +24,9 @@ from unittest.mock import MagicMock, patch
 # Ensure src/testgen is on the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from testgen.generator import TestGenerator, TestCase
-from testgen.runner import TestRunner, TestReport, TestResult, CoverageReport
-from testgen.formatter import format_pytest, format_gotest, format_ceedling
+from yuleosh.testgen.generator import TestGenerator, TestCase
+from yuleosh.testgen.runner import TestRunner, TestReport, TestResult, CoverageReport
+from yuleosh.testgen.formatter import format_pytest, format_gotest, format_ceedling
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -579,25 +579,25 @@ class TestSanitize:
 
     def test_sanitize_basic(self):
         """Basic string sanitisation."""
-        from testgen.formatter import _sanitize
+        from yuleosh.testgen.formatter import _sanitize
         result = _sanitize("BLE starts advertising")
         assert result == "ble_starts_advertising"
 
     def test_sanitize_special_chars(self):
         """Special characters are replaced or removed."""
-        from testgen.formatter import _sanitize
+        from yuleosh.testgen.formatter import _sanitize
         result = _sanitize("Temp ±0.5°C / sensor")
         assert "per_" in result or "_" in result
 
     def test_sanitize_leading_digits(self):
         """Leading digits are stripped."""
-        from testgen.formatter import _sanitize
+        from yuleosh.testgen.formatter import _sanitize
         result = _sanitize("123 test case")
         assert result.startswith("test_")
 
     def test_sanitize_empty(self):
         """Empty string returns fallback name."""
-        from testgen.formatter import _sanitize
+        from yuleosh.testgen.formatter import _sanitize
         result = _sanitize("")
         assert result == "test_unnamed"
 
@@ -607,7 +607,7 @@ class TestCoverageReport:
 
     def test_coverage_report_to_dict(self):
         """to_dict produces expected keys."""
-        from testgen.runner import CoverageEntry
+        from yuleosh.testgen.runner import CoverageEntry
         entries = [
             CoverageEntry(req_id="RS-001", shall_text="shall advertise",
                           covered_by=["TC-001"], uncovered=False),

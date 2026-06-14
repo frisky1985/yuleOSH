@@ -14,7 +14,7 @@ from unittest import mock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from cross.serial_monitor import (
+from yuleosh.cross.serial_monitor import (
     PipeSerialMonitor,
     SerialMonitor,
     SerialMonitorTimeout,

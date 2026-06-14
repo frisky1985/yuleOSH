@@ -5,7 +5,7 @@
 import sys, os, json, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "spec"))
 
-from validate import (
+from yuleosh.spec.validate import (
     parse_spec,
     validate_spec,
     diff_specs,

@@ -18,7 +18,7 @@ from pathlib import Path
 # Ensure src is in path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from ci.run import (
+from yuleosh.ci.run import (
     CIResult,
     layer_dependencies,
     check_layer_dependency,
@@ -263,7 +263,7 @@ def test_run_all_l2_failure_blocks_l3(tmp_path):
 
 def test_l1_result_saved(tmp_path):
     """Running L1 should save a result file in .osh/ci/."""
-    from ci.run import run_layer1
+    from yuleosh.ci.run import run_layer1
     # Mocked run of L1 — we just check it saves a result
     # Create some test files so L1 doesn't immediately fail
     tests_dir = tmp_path / "tests"

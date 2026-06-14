@@ -10,6 +10,14 @@ authors = [{name = "frisky1985"}]
 license = {text = "MIT"}
 requires-python = ">=3.10"
 readme = "README.md"
+dependencies = [
+    "bcrypt>=4.1",
+    "pyjwt>=2.8",
+    "psycopg2-binary>=2.9",
+    "pyserial>=3.5",
+    "pyyaml>=6.0",
+    "stripe>=7.0",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -28,12 +36,16 @@ Repository = "https://github.com/frisky1985/yuleOSH"
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "pytest-mock"]
 
+[project.scripts]
+yuleosh = "yuleosh._entry:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.coverage.run]
-source = ["src"]
+source = ["yuleosh"]
 branch = true
 
-[tool.coverage.paths]
-source = ["src", "src/ui", "src/ci", "src/pipeline", "src/cross", "src/spec", "src/evidence", "src/cli", "src/api", "src/llm"]
-
-[project.scripts]
-yuleosh = "yuleosh_cli:main"
+[tool.coverage.report]
+fail_under = 70
+show_missing = true

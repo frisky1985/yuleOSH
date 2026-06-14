@@ -20,7 +20,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from adapter.vector_adapter import (
+from yuleosh.adapter.vector_adapter import (
     VectorCANoeAdapter,
     _CANOE_NS,
     _XML_DECLARATION,

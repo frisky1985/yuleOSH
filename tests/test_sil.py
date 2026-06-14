@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Module under test
-from sil import (
+from yuleosh.sil import (
     ModelConfig,
     Participant,
     SILKitAdapter,
@@ -22,7 +22,7 @@ from sil import (
     SimResult,
     SimStatus,
 )
-from sil.adapter import ParticipantState, SilTestConfig, SimReport
+from yuleosh.sil.adapter import ParticipantState, SilTestConfig, SimReport
 
 
 # ======================================================================

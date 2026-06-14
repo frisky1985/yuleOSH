@@ -22,14 +22,14 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from cross.hil_runner import (
+from yuleosh.cross.hil_runner import (
     HilTestRunner,
     HilTestResult,
     hil_test,
 )
-from cross.flash import FlashResult, FlashError, FlashRunner
-from cross.target_config import TargetConfig
-from cross.serial_monitor import SerialMonitorTimeout
+from yuleosh.cross.flash import FlashResult, FlashError, FlashRunner
+from yuleosh.cross.target_config import TargetConfig
+from yuleosh.cross.serial_monitor import SerialMonitorTimeout
 
 
 # ===================================================================

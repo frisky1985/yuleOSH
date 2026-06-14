@@ -19,13 +19,13 @@ class TestPromptVersionManagement:
 
     def test_prompt_versions_dict_exists(self):
         """GIVEN prompts module WHEN imported THEN PROMPT_VERSIONS dict exists."""
-        from pipeline.prompts import PROMPT_VERSIONS
+        from yuleosh.pipeline.prompts import PROMPT_VERSIONS
         assert isinstance(PROMPT_VERSIONS, dict)
         assert len(PROMPT_VERSIONS) >= 6
 
     def test_all_steps_have_semver(self):
         """GIVEN PROMPT_VERSIONS WHEN iterating keys THEN all values are semver."""
-        from pipeline.prompts import PROMPT_VERSIONS
+        from yuleosh.pipeline.prompts import PROMPT_VERSIONS
         for key, version in PROMPT_VERSIONS.items():
             parts = version.split(".")
             assert len(parts) == 3, f"{key} has non-semver: {version}"
@@ -34,7 +34,7 @@ class TestPromptVersionManagement:
 
     def test_get_prompt_versions_returns_copy(self):
         """GIVEN get_prompt_versions() WHEN called THEN returns a copy not reference."""
-        from pipeline.prompts import get_prompt_versions, PROMPT_VERSIONS
+        from yuleosh.pipeline.prompts import get_prompt_versions, PROMPT_VERSIONS
         copy = get_prompt_versions()
         assert copy == PROMPT_VERSIONS
         copy["test-key"] = "9.9.9"
@@ -42,13 +42,13 @@ class TestPromptVersionManagement:
 
     def test_get_prompt_version_known_key(self):
         """GIVEN a known step key WHEN get_prompt_version called THEN returns version."""
-        from pipeline.prompts import get_prompt_version
+        from yuleosh.pipeline.prompts import get_prompt_version
         v = get_prompt_version("super-analysis")
         assert v != "0.0.0"
 
     def test_get_prompt_version_unknown_key(self):
         """GIVEN an unknown step key WHEN get_prompt_version called THEN returns 0.0.0."""
-        from pipeline.prompts import get_prompt_version
+        from yuleosh.pipeline.prompts import get_prompt_version
         assert get_prompt_version("nonexistent") == "0.0.0"
 
 

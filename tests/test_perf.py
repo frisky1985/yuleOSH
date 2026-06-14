@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from pipeline.run import (
+from yuleosh.pipeline.run import (
     _parse_spec,
     PipelineSession,
     PIPELINE_STEPS,
@@ -27,7 +27,7 @@ from pipeline.run import (
     step_super_analysis,
     step_hermes_prd,
 )
-from ci.run import find_test_files, run_plan_lint, CIResult
+from yuleosh.ci.run import find_test_files, run_plan_lint, CIResult
 
 
 # ------------------------------------------------------------------

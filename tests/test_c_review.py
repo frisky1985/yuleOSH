@@ -22,13 +22,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from review.c_review import (
+from yuleosh.review.c_review import (
     review_embedded_c,
     _check_content,
     _llm_review_snippet,
 )
-from review.resource_predictor import predict_resources, predict_all_in_project
-from review.run import ReviewFinding, ReviewResult
+from yuleosh.review.resource_predictor import predict_resources, predict_all_in_project
+from yuleosh.review.run import ReviewFinding, ReviewResult
 
 
 # ══════════════════════════════════════════════════════════════

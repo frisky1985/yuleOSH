@@ -22,12 +22,9 @@ yuleosh.yourdomain.com {
     #     }
     #   }
 
-    # Reverse proxy to the yuleOSH container
-    reverse_proxy yuleosh:8080 {
-        # Forward the original Host header to the backend
+    # ── Route /api/* → backend (Python/FastAPI on port 8080)
+    reverse_proxy /api/* yuleosh:8080 {
         header_up Host {host}
-
-        # Forward the real client IP (Caddy sees the real IP)
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
@@ -36,6 +33,14 @@ yuleosh.yourdomain.com {
         health_uri /api/health
         health_interval 30s
         health_timeout 5s
+    }
+
+    # ── Everything else → frontend (Next.js on port 3000)
+    reverse_proxy yuleosh:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
     }
 
     # Security headers

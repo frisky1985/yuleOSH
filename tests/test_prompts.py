@@ -94,7 +94,7 @@ def sample_steps():
 
 class TestBuildSuperAnalysisPrompt:
     def test_returns_tuple_of_strings(self, sample_spec_content, sample_requirements, sample_scenarios):
-        from pipeline.prompts import build_super_analysis_prompt
+        from yuleosh.pipeline.prompts import build_super_analysis_prompt
 
         system, user = build_super_analysis_prompt(
             spec_content=sample_spec_content,
@@ -108,7 +108,7 @@ class TestBuildSuperAnalysisPrompt:
         assert len(user) > 0
 
     def test_system_prompt_contains_super_keywords(self, sample_spec_content, sample_requirements, sample_scenarios):
-        from pipeline.prompts import build_super_analysis_prompt
+        from yuleosh.pipeline.prompts import build_super_analysis_prompt
 
         system, _ = build_super_analysis_prompt(
             spec_content=sample_spec_content,
@@ -121,7 +121,7 @@ class TestBuildSuperAnalysisPrompt:
         assert "Priority" in system
 
     def test_user_prompt_contains_spec_content(self, sample_spec_content, sample_requirements, sample_scenarios):
-        from pipeline.prompts import build_super_analysis_prompt
+        from yuleosh.pipeline.prompts import build_super_analysis_prompt
 
         _, user = build_super_analysis_prompt(
             spec_content=sample_spec_content,
@@ -134,7 +134,7 @@ class TestBuildSuperAnalysisPrompt:
         assert "SHALL statements: 4" in user
 
     def test_handles_empty_requirements(self, sample_spec_content):
-        from pipeline.prompts import build_super_analysis_prompt
+        from yuleosh.pipeline.prompts import build_super_analysis_prompt
 
         system, user = build_super_analysis_prompt(
             spec_content=sample_spec_content,
@@ -148,7 +148,7 @@ class TestBuildSuperAnalysisPrompt:
 
     def test_token_efficiency(self, sample_spec_content, sample_requirements, sample_scenarios):
         """Prompt should not exceed reasonable token limits."""
-        from pipeline.prompts import build_super_analysis_prompt
+        from yuleosh.pipeline.prompts import build_super_analysis_prompt
 
         system, user = build_super_analysis_prompt(
             spec_content=sample_spec_content,
@@ -167,7 +167,7 @@ class TestBuildSuperAnalysisPrompt:
 
 class TestBuildPrdPrompt:
     def test_returns_tuple_of_strings(self, sample_spec_content, sample_requirements, sample_scenarios):
-        from pipeline.prompts import build_prd_prompt
+        from yuleosh.pipeline.prompts import build_prd_prompt
 
         system, user = build_prd_prompt(
             spec_content=sample_spec_content,
@@ -181,7 +181,7 @@ class TestBuildPrdPrompt:
         assert len(user) > 0
 
     def test_system_prompt_contains_prd_sections(self, sample_spec_content, sample_requirements, sample_scenarios):
-        from pipeline.prompts import build_prd_prompt
+        from yuleosh.pipeline.prompts import build_prd_prompt
 
         system, _ = build_prd_prompt(
             spec_content=sample_spec_content,
@@ -195,7 +195,7 @@ class TestBuildPrdPrompt:
         assert "Out of Scope" in system
 
     def test_includes_super_analysis_when_provided(self, sample_spec_content, sample_requirements, sample_scenarios):
-        from pipeline.prompts import build_prd_prompt
+        from yuleosh.pipeline.prompts import build_prd_prompt
 
         _, user = build_prd_prompt(
             spec_content=sample_spec_content,
@@ -208,7 +208,7 @@ class TestBuildPrdPrompt:
         assert "Test analysis content" in user
 
     def test_handles_empty_super_analysis(self, sample_spec_content, sample_requirements, sample_scenarios):
-        from pipeline.prompts import build_prd_prompt
+        from yuleosh.pipeline.prompts import build_prd_prompt
 
         _, user = build_prd_prompt(
             spec_content=sample_spec_content,
@@ -220,7 +220,7 @@ class TestBuildPrdPrompt:
         assert "S.U.P.E.R. Analysis" not in user  # Should not include when empty
 
     def test_handles_empty_requirements(self, sample_spec_content):
-        from pipeline.prompts import build_prd_prompt
+        from yuleosh.pipeline.prompts import build_prd_prompt
 
         system, user = build_prd_prompt(
             spec_content=sample_spec_content,
@@ -237,7 +237,7 @@ class TestBuildPrdPrompt:
 
 class TestBuildArchitecturePrompt:
     def test_returns_tuple_of_strings(self, sample_spec_content, sample_source_files):
-        from pipeline.prompts import build_architecture_prompt
+        from yuleosh.pipeline.prompts import build_architecture_prompt
 
         system, user = build_architecture_prompt(
             spec_content=sample_spec_content,
@@ -255,7 +255,7 @@ class TestBuildArchitecturePrompt:
         assert len(user) > 0
 
     def test_system_prompt_contains_architecture_keywords(self, sample_spec_content):
-        from pipeline.prompts import build_architecture_prompt
+        from yuleosh.pipeline.prompts import build_architecture_prompt
 
         system, _ = build_architecture_prompt(
             spec_content=sample_spec_content,
@@ -271,7 +271,7 @@ class TestBuildArchitecturePrompt:
         assert "ADR" in system or "design" in system.lower()
 
     def test_user_prompt_contains_tech_stack(self, sample_spec_content):
-        from pipeline.prompts import build_architecture_prompt
+        from yuleosh.pipeline.prompts import build_architecture_prompt
 
         _, user = build_architecture_prompt(
             spec_content=sample_spec_content,
@@ -287,7 +287,7 @@ class TestBuildArchitecturePrompt:
         assert "React" in user
 
     def test_handles_empty_source(self, sample_spec_content):
-        from pipeline.prompts import build_architecture_prompt
+        from yuleosh.pipeline.prompts import build_architecture_prompt
 
         system, user = build_architecture_prompt(
             spec_content=sample_spec_content,
@@ -303,7 +303,7 @@ class TestBuildArchitecturePrompt:
         assert isinstance(user, str)
 
     def test_handles_empty_tech_stack_defaults_to_python(self, sample_spec_content):
-        from pipeline.prompts import build_architecture_prompt
+        from yuleosh.pipeline.prompts import build_architecture_prompt
 
         _, user = build_architecture_prompt(
             spec_content=sample_spec_content,
@@ -324,7 +324,7 @@ class TestBuildArchitecturePrompt:
 
 class TestBuildDevelopmentPrompt:
     def test_returns_tuple_of_strings(self, sample_spec_content):
-        from pipeline.prompts import build_development_prompt
+        from yuleosh.pipeline.prompts import build_development_prompt
 
         system, user = build_development_prompt(
             spec_content=sample_spec_content,
@@ -336,7 +336,7 @@ class TestBuildDevelopmentPrompt:
         assert len(user) > 0
 
     def test_system_prompt_contains_development_keywords(self, sample_spec_content):
-        from pipeline.prompts import build_development_prompt
+        from yuleosh.pipeline.prompts import build_development_prompt
 
         system, _ = build_development_prompt(
             spec_content=sample_spec_content,
@@ -347,7 +347,7 @@ class TestBuildDevelopmentPrompt:
         assert "Tech Debt" in system or "Risk Assessment" in system
 
     def test_includes_optional_artifacts(self, sample_spec_content):
-        from pipeline.prompts import build_development_prompt
+        from yuleosh.pipeline.prompts import build_development_prompt
 
         _, user = build_development_prompt(
             spec_content=sample_spec_content,
@@ -361,7 +361,7 @@ class TestBuildDevelopmentPrompt:
         assert "S.U.P.E.R" in user
 
     def test_handles_missing_optional_artifacts(self, sample_spec_content):
-        from pipeline.prompts import build_development_prompt
+        from yuleosh.pipeline.prompts import build_development_prompt
 
         _, user = build_development_prompt(
             spec_content=sample_spec_content,
@@ -375,7 +375,7 @@ class TestBuildDevelopmentPrompt:
         assert "S.U.P.E.R. Analysis" not in user
 
     def test_includes_project_metrics(self, sample_spec_content):
-        from pipeline.prompts import build_development_prompt
+        from yuleosh.pipeline.prompts import build_development_prompt
 
         _, user = build_development_prompt(
             spec_content=sample_spec_content,
@@ -399,7 +399,7 @@ class TestBuildDevelopmentPrompt:
 
 class TestBuildTestPlanningPrompt:
     def test_returns_tuple_of_strings(self, sample_spec_content, sample_requirements):
-        from pipeline.prompts import build_test_planning_prompt
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
 
         system, user = build_test_planning_prompt(
             spec_content=sample_spec_content,
@@ -411,7 +411,7 @@ class TestBuildTestPlanningPrompt:
         assert len(user) > 0
 
     def test_system_prompt_contains_test_keywords(self, sample_spec_content, sample_requirements):
-        from pipeline.prompts import build_test_planning_prompt
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
 
         system, _ = build_test_planning_prompt(
             spec_content=sample_spec_content,
@@ -422,7 +422,7 @@ class TestBuildTestPlanningPrompt:
         assert "Coverage" in system
 
     def test_user_prompt_maps_all_requirements(self, sample_spec_content, sample_requirements):
-        from pipeline.prompts import build_test_planning_prompt
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
 
         _, user = build_test_planning_prompt(
             spec_content=sample_spec_content,
@@ -433,7 +433,7 @@ class TestBuildTestPlanningPrompt:
         assert "SHALL" in user
 
     def test_includes_optional_artifacts(self, sample_spec_content, sample_requirements):
-        from pipeline.prompts import build_test_planning_prompt
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
 
         _, user = build_test_planning_prompt(
             spec_content=sample_spec_content,
@@ -445,7 +445,7 @@ class TestBuildTestPlanningPrompt:
         assert "Development Plan" in user
 
     def test_handles_empty_requirements(self, sample_spec_content):
-        from pipeline.prompts import build_test_planning_prompt
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
 
         system, user = build_test_planning_prompt(
             spec_content=sample_spec_content,
@@ -456,7 +456,7 @@ class TestBuildTestPlanningPrompt:
 
     def test_covers_all_shalls_clause(self, sample_spec_content, sample_requirements):
         """Verify the prompt asks LLM to cover ALL SHALL statements."""
-        from pipeline.prompts import build_test_planning_prompt
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
 
         _, user = build_test_planning_prompt(
             spec_content=sample_spec_content,
@@ -474,7 +474,7 @@ class TestBuildTestPlanningPrompt:
 
 class TestBuildCodeReviewPrompt:
     def test_returns_tuple_of_strings(self, sample_spec_content, sample_source_files):
-        from pipeline.prompts import build_code_review_prompt
+        from yuleosh.pipeline.prompts import build_code_review_prompt
 
         system, user = build_code_review_prompt(
             spec_content=sample_spec_content,
@@ -488,7 +488,7 @@ class TestBuildCodeReviewPrompt:
         assert isinstance(user, str)
 
     def test_system_prompt_requires_json_output(self, sample_spec_content, sample_source_files):
-        from pipeline.prompts import build_code_review_prompt
+        from yuleosh.pipeline.prompts import build_code_review_prompt
 
         system, _ = build_code_review_prompt(
             spec_content=sample_spec_content,
@@ -503,7 +503,7 @@ class TestBuildCodeReviewPrompt:
         assert "severity" in system
 
     def test_user_prompt_contains_session_info(self, sample_spec_content, sample_source_files):
-        from pipeline.prompts import build_code_review_prompt
+        from yuleosh.pipeline.prompts import build_code_review_prompt
 
         _, user = build_code_review_prompt(
             spec_content=sample_spec_content,
@@ -517,7 +517,7 @@ class TestBuildCodeReviewPrompt:
         assert "2024-01-01" in user
 
     def test_handles_empty_artifacts(self, sample_spec_content, sample_source_files):
-        from pipeline.prompts import build_code_review_prompt
+        from yuleosh.pipeline.prompts import build_code_review_prompt
 
         system, user = build_code_review_prompt(
             spec_content=sample_spec_content,
@@ -531,7 +531,7 @@ class TestBuildCodeReviewPrompt:
         assert isinstance(user, str)
 
     def test_handles_empty_source_files(self, sample_spec_content):
-        from pipeline.prompts import build_code_review_prompt
+        from yuleosh.pipeline.prompts import build_code_review_prompt
 
         system, user = build_code_review_prompt(
             spec_content=sample_spec_content,
@@ -551,7 +551,7 @@ class TestBuildCodeReviewPrompt:
 
 class TestBuildFinalReportPrompt:
     def test_returns_tuple_of_strings(self, sample_steps):
-        from pipeline.prompts import build_final_report_prompt
+        from yuleosh.pipeline.prompts import build_final_report_prompt
 
         system, user = build_final_report_prompt(
             session_name="test-session",
@@ -568,7 +568,7 @@ class TestBuildFinalReportPrompt:
         assert len(user) > 0
 
     def test_system_prompt_contains_report_sections(self, sample_steps):
-        from pipeline.prompts import build_final_report_prompt
+        from yuleosh.pipeline.prompts import build_final_report_prompt
 
         system, _ = build_final_report_prompt(
             session_name="test-session",
@@ -584,7 +584,7 @@ class TestBuildFinalReportPrompt:
         assert "Next Steps" in system
 
     def test_user_prompt_contains_pipeline_status(self, sample_steps):
-        from pipeline.prompts import build_final_report_prompt
+        from yuleosh.pipeline.prompts import build_final_report_prompt
 
         _, user = build_final_report_prompt(
             session_name="test-session",
@@ -601,7 +601,7 @@ class TestBuildFinalReportPrompt:
         assert "1 failed" in user
 
     def test_includes_errors_when_present(self, sample_steps):
-        from pipeline.prompts import build_final_report_prompt
+        from yuleosh.pipeline.prompts import build_final_report_prompt
 
         _, user = build_final_report_prompt(
             session_name="test-with-errors",
@@ -616,7 +616,7 @@ class TestBuildFinalReportPrompt:
         assert "Validation failed" in user
 
     def test_handles_empty_artifacts(self, sample_steps):
-        from pipeline.prompts import build_final_report_prompt
+        from yuleosh.pipeline.prompts import build_final_report_prompt
 
         system, user = build_final_report_prompt(
             session_name="test-session",
@@ -637,7 +637,7 @@ class TestBuildFinalReportPrompt:
 
 class TestBuildInternalReviewPrompt:
     def test_returns_tuple_of_strings(self, sample_spec_content):
-        from pipeline.prompts import build_internal_review_prompt
+        from yuleosh.pipeline.prompts import build_internal_review_prompt
 
         system, user = build_internal_review_prompt(
             session_name="test-session",
@@ -652,7 +652,7 @@ class TestBuildInternalReviewPrompt:
         assert len(user) > 0
 
     def test_system_prompt_contains_review_criteria(self, sample_spec_content):
-        from pipeline.prompts import build_internal_review_prompt
+        from yuleosh.pipeline.prompts import build_internal_review_prompt
 
         system, _ = build_internal_review_prompt(
             session_name="test-session",
@@ -668,7 +668,7 @@ class TestBuildInternalReviewPrompt:
         assert "PASS" in system or "FAIL" in system or "WARN" in system
 
     def test_user_prompt_contains_artifact_list(self, sample_spec_content):
-        from pipeline.prompts import build_internal_review_prompt
+        from yuleosh.pipeline.prompts import build_internal_review_prompt
 
         _, user = build_internal_review_prompt(
             session_name="test-session",
@@ -681,7 +681,7 @@ class TestBuildInternalReviewPrompt:
         assert "PRD document" in user
 
     def test_handles_empty_artifacts(self, sample_spec_content):
-        from pipeline.prompts import build_internal_review_prompt
+        from yuleosh.pipeline.prompts import build_internal_review_prompt
 
         system, user = build_internal_review_prompt(
             session_name="test-session",
