@@ -34,12 +34,8 @@ from yuleosh.pipeline.step_handlers.review import (
 from yuleosh.pipeline.stages import _check_llm_key
 
 # Lazy import for step class registry
+# Sprint 3 eliminated the dual-path; always use legacy step functions
 _have_step_classes = False
-try:
-    from yuleosh.pipeline.steps import get_step_instance  # noqa: E402
-    _have_step_classes = True
-except ImportError:
-    pass
 
 
 __all__ = [
