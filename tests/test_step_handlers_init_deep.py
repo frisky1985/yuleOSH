@@ -5,19 +5,15 @@
 Deep coverage tests for step_handlers/__init__.py — branches not covered by
 existing tests.
 
-Target: __init__.py from 70% → ≥80%
+Target: __init__.py — verify PIPELINE_STEPS structure, _resolve_handler
+fallback (always uses legacy_fn since Sprint 3 hardcoded
+_have_step_classes = False), and re-exports.
 
-Covers:
-  - _have_step_classes = True path (when get_step_instance import succeeds)
-  - _have_step_classes = False path (when get_step_instance import fails)
-  - _resolve_handler with both paths
-  - PIPELINE_STEPS structure validation
-
-Note: Since the module imports happen at module load time, we need to use
-importlib.reload after patching to test both branches.
+Note: __init__.py has _have_step_classes = False (Sprint 3 eliminated
+the dual-path). The if _have_step_classes block in _resolve_handler
+is dead code.
 """
 
-import importlib
 import sys
 from pathlib import Path
 from unittest import mock
@@ -27,113 +23,85 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
-# ===================================================================
-# _have_step_classes path tests
-# ===================================================================
-
-
-class TestHaveStepClassesTrue:
-    """GIVEN yuleosh.pipeline.step_classes.get_step_instance can be imported
-    WHEN step_handlers.__init__ loads
-    THEN _have_step_classes = True."""
-
-    def setup_method(self):
-        # Ensure the module is cleared so it gets re-imported
-        for mod in list(sys.modules.keys()):
-            if "step_handlers" in mod:
-                del sys.modules[mod]
+class TestHaveStepClassesAlwaysFalse:
+    """GIVEN Sprint 3 hardcoded _have_step_classes = False
+    THEN the dual-path is eliminated."""
 
     def test_have_step_classes_always_false(self):
-        """Sprint 3 eliminated dual-path; _have_step_classes is always False."""
         from yuleosh.pipeline.step_handlers import _have_step_classes
         assert _have_step_classes is False
 
-    def test_resolve_handler_returns_legacy_function(self):
-        """GIVEN _have_step_classes always False
+    def test_resolve_handler_always_returns_legacy(self):
+        """GIVEN Sprint 3 simplified _resolve_handler
         WHEN _resolve_handler is called
-        THEN it always returns legacy_fn."""
-        from yuleosh.pipeline.step_handlers import _resolve_handler
-        def dummy_fn():
-            pass
-
-        result = _resolve_handler("super-analysis", dummy_fn)
-        # Should return dummy_fn (legacy path) since _have_step_classes is False
-        assert result is dummy_fn
-
-    def test_resolve_handler_fallback_to_legacy(self):
-        """GIVEN _have_step_classes=True but get_step_instance returns None
-        WHEN _resolve_handler is called
-        THEN it falls back to legacy_fn."""
+        THEN it returns legacy_fn (no dual-path logic)."""
         from yuleosh.pipeline.step_handlers import _resolve_handler
 
         def dummy_fn():
             return "legacy"
 
-        result = _resolve_handler("nonexistent-step-key", dummy_fn)
+        result = _resolve_handler("super-analysis", dummy_fn)
         assert result is dummy_fn
 
-    def test_pipeline_steps_structure(self):
-        """PIPELINE_STEPS has 10 entries with correct shape."""
+        result = _resolve_handler("nonexistent-step", dummy_fn)
+        assert result is dummy_fn
+
+
+class TestPipelineStepsStructure:
+    """PIPELINE_STEPS has correct structure and count."""
+
+    def test_pipeline_steps_has_10_entries(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         assert len(PIPELINE_STEPS) == 10
+
+    def test_each_entry_has_4_elements(self):
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         for entry in PIPELINE_STEPS:
             assert len(entry) == 4
-            step_key, agent, description, handler = entry
-            assert isinstance(step_key, str)
-            assert isinstance(agent, str)
-            assert isinstance(description, str)
-            assert callable(handler)
 
-    def test_spec_check_is_function(self):
-        """step_spec_check is a plain function (not wrapped by _resolve_handler)."""
+    def test_handlers_are_callable(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
-        step_key, agent, desc, handler = PIPELINE_STEPS[0]
-        assert step_key == "spec-check"
-        assert agent == "小明"
-        assert callable(handler)
+        for step_key, agent, desc, handler in PIPELINE_STEPS:
+            assert callable(handler), f"{step_key} handler is not callable"
 
-    def test_internal_review_is_function(self):
-        """step_internal_review is a plain function."""
+    def test_step_keys(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
-        step_key, agent, desc, handler = PIPELINE_STEPS[3]
-        assert step_key == "internal-review"
-        assert callable(handler)
+        keys = [e[0] for e in PIPELINE_STEPS]
+        expected = [
+            "spec-check", "super-analysis", "prd", "internal-review",
+            "architecture", "development", "test-planning",
+            "self-test", "code-review", "final-report",
+        ]
+        assert keys == expected
 
-    def test_self_test_is_function(self):
-        """step_claude_test is a plain function."""
+    def test_agents(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
-        step_key, agent, desc, handler = PIPELINE_STEPS[7]
-        assert step_key == "self-test"
-        assert callable(handler)
+        agents = {e[1] for e in PIPELINE_STEPS}
+        assert agents == {"小明", "Claude", "Hermes"}
 
-    def test_resolve_handler_nonexistent_returns_legacy(self):
-        """_resolve_handler returns legacy_fn for unknown step_key."""
-        from yuleosh.pipeline.step_handlers import _resolve_handler
-        legacy = lambda: "hello"
-        result = _resolve_handler("does-not-exist-12345", legacy)
-        assert result is legacy
+    def test_internal_review_is_unresolved_fn(self):
+        """step_internal_review and step_claude_test are plain functions."""
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+        from yuleosh.pipeline.step_handlers.analysis import step_internal_review
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
+        for key, _, _, handler in PIPELINE_STEPS:
+            if key == "internal-review":
+                assert handler is step_internal_review
+            if key == "self-test":
+                assert handler is step_claude_test
 
-class TestHaveStepClassesAlwaysFalse:
-    """_have_step_classes is always False after Sprint 3 dual-path elimination."""
+    def test_unresolved_steps_use_legacy_fns(self):
+        """Steps wrapped in _resolve_handler use legacy functions."""
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+        from yuleosh.pipeline.step_handlers.analysis import step_super_analysis
+        from yuleosh.pipeline.step_handlers.execution import step_claude_arch
 
-    def test_have_step_classes_always_false(self):
-        """_have_step_classes is unconditionally False."""
-        from yuleosh.pipeline.step_handlers import _have_step_classes
-        assert _have_step_classes is False
-
-    def test_resolve_handler_always_returns_legacy(self):
-        """_resolve_handler always returns legacy_fn when _have_step_classes is False."""
-        from yuleosh.pipeline.step_handlers import _resolve_handler
-
-        legacy = lambda: "fallback"
-        result = _resolve_handler("super-analysis", legacy)
-        assert result is legacy
-
-
-# ===================================================================
-# Module re-exports
-# ===================================================================
+        for key, _, _, handler in PIPELINE_STEPS:
+            if key == "super-analysis":
+                assert handler is step_super_analysis
+            if key == "architecture":
+                assert handler is step_claude_arch
 
 
 class TestModuleReExports:
@@ -168,3 +136,35 @@ class TestModuleReExports:
         assert isinstance(PIPELINE_STEPS, list)
         assert callable(_check_llm_key) or _check_llm_key is None
         assert callable(_resolve_handler)
+
+    def test_submodules_reachable(self):
+        """Direct submodule imports work."""
+        from yuleosh.pipeline.step_handlers import spec as _spec
+        assert callable(_spec.step_spec_check)
+
+        from yuleosh.pipeline.step_handlers import analysis as _analysis
+        assert callable(_analysis.step_super_analysis)
+
+        from yuleosh.pipeline.step_handlers import execution as _exec
+        assert callable(_exec.step_claude_arch)
+
+        from yuleosh.pipeline.step_handlers import review as _review
+        assert callable(_review.step_hermes_review)
+
+    def test_run_shim_re_exports(self):
+        """Backward-compatible re-exports from run.py work."""
+        from yuleosh.pipeline.run import (
+            step_spec_check,
+            step_super_analysis,
+            step_hermes_prd,
+            step_internal_review,
+            step_claude_arch,
+            step_claude_dev,
+            step_test_planning,
+            step_claude_test,
+            step_hermes_review,
+            step_final_report,
+            PIPELINE_STEPS,
+        )
+        assert callable(step_spec_check)
+        assert len(PIPELINE_STEPS) == 10
