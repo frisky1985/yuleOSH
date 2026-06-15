@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 /* ─────────────────────── Client-side Mock Data ─────────────────────── */
 
@@ -55,8 +55,10 @@ export default function DemoPage() {
     }))
   );
   const [currentIdx, setCurrentIdx] = useState(-1);
+  const idxRef = useRef(0);
 
   const runPipeline = useCallback(() => {
+    idxRef.current = 0;
     setPhase('running');
     setCurrentIdx(-1);
     setSteps(STEP_DEFS.map((s) => ({
@@ -69,8 +71,8 @@ export default function DemoPage() {
   useEffect(() => {
     if (phase !== 'running') return;
 
-    let idx = 0;
     const tick = () => {
+      const idx = idxRef.current;
       if (idx >= STEP_DEFS.length) {
         setPhase('complete');
         return;
@@ -94,7 +96,7 @@ export default function DemoPage() {
               : s
           )
         );
-        idx++;
+        idxRef.current = idx + 1;
         setTimeout(tick, 300);
       }, dur);
     };
