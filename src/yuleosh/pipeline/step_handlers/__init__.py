@@ -56,11 +56,7 @@ __all__ = [
 
 
 def _resolve_handler(step_key: str, legacy_fn) -> callable:
-    """Use the refactored PipelineStep class if available, else fall back."""
-    if _have_step_classes:
-        instance = get_step_instance(step_key)
-        if instance is not None:
-            return instance
+    """Return the legacy step function (Sprint 3 eliminated the dual-path)."""
     return legacy_fn
 
 
