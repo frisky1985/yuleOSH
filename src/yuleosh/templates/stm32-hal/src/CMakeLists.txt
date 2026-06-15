@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(app C ASM)
+set(CMAKE_C_STANDARD 11)
+set(STM32_CHIP STM32F407xx)
+add_definitions(-D${STM32_CHIP})
+add_executable(app.elf src/main.c)

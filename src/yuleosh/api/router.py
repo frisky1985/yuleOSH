@@ -28,6 +28,8 @@ from .wizard import handle_wizard
 from .webhooks import handle_webhooks
 from .audit import handle_audit
 from .auth import handle_auth
+from .demo import handle_demo
+from .preview import handle_preview
 
 
 # Resource routing map: resource_name -> handler function
@@ -46,6 +48,8 @@ ROUTES = {
     "webhooks": handle_webhooks,
     "audit": handle_audit,
     "auth": handle_auth,
+    "demo": handle_demo,
+    "preview": handle_preview,
 }
 
 

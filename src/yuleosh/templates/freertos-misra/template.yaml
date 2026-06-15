@@ -1,0 +1,14 @@
+name: freertos-misra
+version: 1.0.0
+description: FreeRTOS project with MISRA-C 2012 static analysis enabled
+platforms: [arm, stm32, esp32]
+tags: [rtos, freertos, misra, safety, static-analysis]
+spec_sections:
+  - System Requirements
+  - Software Requirements
+  - MISRA Compliance
+  - RTOS Configuration
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, misra-analysis, system-verification]
+  ci_layers: [L1, L2, L3]

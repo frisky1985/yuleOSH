@@ -1,0 +1,15 @@
+name: esp32-idf
+version: 1.0.0
+description: ESP32-IDF project template with Wi-Fi/BLE framework placeholders
+platforms: [esp32, xtensa]
+tags: [esp32, idf, wifi, ble, iot]
+spec_sections:
+  - System Requirements
+  - Software Requirements
+  - Wi-Fi Configuration
+  - BLE Configuration
+  - OTA Update
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, flash-debug, system-verification]
+  ci_layers: [L1, L2, L3]

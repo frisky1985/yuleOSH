@@ -1,0 +1,13 @@
+name: generic-python
+version: 1.0.0
+description: Generic Python project template for yuleOSH pipeline tooling
+platforms: [generic]
+tags: [python, tooling, automation]
+spec_sections:
+  - System Requirements
+  - Software Requirements
+  - API Specification
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, system-verification]
+  ci_layers: [L1, L2]

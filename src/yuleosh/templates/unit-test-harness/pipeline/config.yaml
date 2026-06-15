@@ -1,0 +1,24 @@
+# yuleOSH Pipeline Configuration — Unit Test Harness
+steps:
+  - id: spec-parse
+    name: Spec Parsing
+    handler: spec_parse
+  - id: requirements-analysis
+    name: Requirements Analysis
+    handler: super_analysis
+  - id: test-plan
+    name: Test Plan Generation
+    handler: test_planning
+  - id: code-gen
+    name: Test Code Generation
+    handler: claude_dev
+  - id: unit-test
+    name: Run Unit Tests
+    handler: ci_layer1
+  - id: coverage-report
+    name: Coverage Report Generation
+    handler: coverage_report
+ci_layers:
+  L1: {unit_test: true, coverage: true}
+review_gates:
+  - {type: test_review, before: unit-test}

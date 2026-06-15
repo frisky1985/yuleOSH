@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(app C)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic")
+add_executable(app.elf src/main.c)
+target_include_directories(app.elf PRIVATE src)

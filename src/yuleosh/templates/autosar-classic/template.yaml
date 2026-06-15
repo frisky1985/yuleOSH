@@ -1,0 +1,15 @@
+name: autosar-classic
+version: 1.0.0
+description: AUTOSAR Classic Platform project template with ARXML and RTE configuration
+platforms: [arm, stm32, renesas]
+tags: [autosar, automotive, ecu, safety, aspice]
+spec_sections:
+  - System Requirements
+  - Software Requirements (SW-C)
+  - RTE Configuration
+  - BSW Configuration
+  - ARXML Definitions
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]

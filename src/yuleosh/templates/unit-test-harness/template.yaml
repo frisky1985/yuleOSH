@@ -1,0 +1,13 @@
+name: unit-test-harness
+version: 1.0.0
+description: C unit test framework skeleton with Unity/CMock test configuration
+platforms: [generic]
+tags: [testing, unit-test, unity, cmock, skeleton]
+spec_sections:
+  - Test Requirements
+  - Test Harness Configuration
+  - Mock Specifications
+  - Coverage Targets
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, test-plan, code-gen, unit-test, coverage-report]
+  ci_layers: [L1]

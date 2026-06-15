@@ -1,0 +1,42 @@
+# yuleOSH Pipeline Configuration — STM32 HAL
+steps:
+  - id: spec-parse
+    name: Spec Parsing
+    handler: spec_parse
+  - id: requirements-analysis
+    name: Requirements Analysis
+    handler: super_analysis
+  - id: sdd
+    name: System Design Document
+    handler: hermes_prd
+  - id: code-gen
+    name: Code Generation
+    handler: claude_dev
+  - id: internal-review
+    name: Internal Review
+    handler: internal_review
+  - id: test-plan
+    name: Test Plan Generation
+    handler: test_planning
+  - id: code-review
+    name: Code Review
+    handler: hermes_review
+  - id: unit-test
+    name: CI Layer 1
+    handler: ci_layer1
+  - id: cross-compile
+    name: CI Layer 2
+    handler: ci_layer2
+  - id: flash-debug
+    name: OpenOCD Flash + Debug
+    handler: flash_debug
+  - id: system-verification
+    name: CI Layer 3
+    handler: ci_layer3
+ci_layers:
+  L1: {unit_test: true, linter: true}
+  L2: {cross_compile: true, static_analysis: true}
+  L3: {flash: true, hardware_test: true, evidence_pack: true}
+review_gates:
+  - {type: internal, before: code-gen}
+  - {type: hal_review, before: flash-debug}
