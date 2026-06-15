@@ -38,6 +38,13 @@ export default function LandingPage() {
               <a href="#how-it-works" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">工作流</a>
               <Link href="/pricing" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">定价</Link>
               <Link href="/login" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">登录</Link>
+              <Link href="/demo"
+                className="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
+                  bg-gradient-to-r from-[#10b981] to-[#1677ff] text-white
+                  hover:from-[#10b981]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#10b981]/20 transition-all"
+              >
+                🎮 Try Demo
+              </Link>
               <Link href="/dashboard"
                 className="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
                   bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
@@ -107,7 +114,7 @@ export default function LandingPage() {
                   hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>立即体验 Dashboard</span>
+                <span>🎮 体验 Demo</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </Link>
               <a href="#how-it-works"
