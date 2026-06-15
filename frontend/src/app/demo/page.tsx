@@ -102,9 +102,11 @@ export default function DemoPage() {
     tick();
   }, [phase]);
 
+  const completed = steps.filter((s) => s.status === 'completed').length;
+  const running = steps.filter((s) => s.status === 'running').length;
   const progress =
     steps.length > 0
-      ? Math.round((steps.filter((s) => s.status === 'completed').length / steps.length) * 100)
+      ? Math.round(((completed + running) / steps.length) * 100)
       : 0;
 
   /* ────── Render ────── */
