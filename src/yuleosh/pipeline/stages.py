@@ -8,6 +8,10 @@ PIPELINE_STEPS definition, and utility decorators.
 
 Import chain:  orchestrator -> stages -> session
                steps -> stages (for _call_llm, _parse_spec)
+
+Exports:
+  timed_step, _call_llm, _parse_spec, _parse_requirements, _parse_scenarios
+  _get_spec_mtime, _check_llm_key, _try_parse_hermes_json
 """
 
 import functools
@@ -25,16 +29,6 @@ from typing import Callable, Optional
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.llm.client import chat_completion
-from yuleosh.pipeline.prompts import (
-    build_super_analysis_prompt,
-    build_prd_prompt,
-    build_architecture_prompt,
-    build_development_prompt,
-    build_test_planning_prompt,
-    build_code_review_prompt,
-    build_final_report_prompt,
-    build_internal_review_prompt,
-)
 
 log = logging.getLogger("pipeline.stages")
 
@@ -52,6 +46,18 @@ finally:
         sys.path.remove(_p)
 
 _llm_client = chat_completion
+
+
+__all__ = [
+    "timed_step",
+    "_call_llm",
+    "_get_spec_mtime",
+    "_parse_spec",
+    "_parse_requirements",
+    "_parse_scenarios",
+    "_check_llm_key",
+    "_try_parse_hermes_json",
+]
 
 
 def timed_step(handler):
@@ -94,8 +100,14 @@ def _call_llm(
 
     This is the single point of dependency injection for LLM calls in pipeline steps.
     Tests can inject a mock via ``PipelineSession(llm_client=mock_fn)``.
+
+    For backward-compatible test mock paths, the global fallback is looked up
+    through the ``run`` shim module at call time (deferred import avoids cycles).
     """
-    client = session.llm_client if session.llm_client is not None else chat_completion
+    # Deferred import from the run shim so that test mocks on
+    # yuleosh.pipeline.run.chat_completion take effect.
+    from yuleosh.pipeline.run import chat_completion as _fallback
+    client = session.llm_client if session.llm_client is not None else _fallback
     return client(system_prompt, user_prompt, **kwargs)
 
 
@@ -189,3 +201,122 @@ def _parse_scenarios(spec_path: str) -> list[str]:
     except Exception as e:
         log.warning(f"Failed to parse scenarios from {spec_path}: {e}")
     return scenarios
+
+
+def _check_llm_key() -> str | None:
+    """Check for a valid LLM API key in environment variables.
+
+    Returns the key if found, or None if neither LLM_API_KEY nor
+    OPENAI_API_KEY is set.
+    """
+    key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if not key:
+        print("""
+❌ LLM API key not found
+
+yuleOSH's pipeline requires an LLM API key to run AI agent steps.
+Set one of these environment variables:
+
+    export LLM_API_KEY=sk-...    # OpenAI/OpenAI-compatible API
+    export OPENAI_API_KEY=sk-... # OpenAI
+
+Then re-run: yuleosh pipeline run <spec>
+
+\U0001f4a1 For demo/testing without a real LLM, use the --mock flag:
+    yuleosh pipeline run --mock docs/spec.md
+""")
+    return key
+
+
+def _try_parse_hermes_json(raw: str, session_name: str) -> dict:
+    """Parse Hermes review JSON from LLM output with robust fallback.
+
+    Supports common format deviations:
+      - Markdown ```json code fences
+      - Leading/trailing explanatory text
+      - Missing required fields (fills in defaults)
+      - Pre/post whitespace
+      - Multiple code blocks (uses the first valid JSON block)
+
+    Returns a valid review dict in all cases (with status='retry' if
+    parsing ultimately fails, including raw output for debugging).
+    """
+    json_str = raw.strip()
+    raw_preview_500 = raw[:500]
+
+    # Try bare JSON first
+    if json_str.startswith("{") and json_str.endswith("}"):
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass  # Fall through to fence stripping
+
+    # Strip markdown fences: ```json ... ``` or ``` ... ```
+    if "```" in json_str:
+        # Collect all fenced blocks
+        blocks = []
+        in_fence = False
+        current = []
+        for line in json_str.split("\n"):
+            if line.strip().startswith("```"):
+                if in_fence:
+                    # End of a fenced block
+                    blocks.append("\n".join(current))
+                    current = []
+                    in_fence = False
+                else:
+                    in_fence = True
+                    # Skip the opening fence (optionally with "json" after)
+                    lang = line.strip().lstrip("```").strip().lower()
+                    if lang and lang != "json":
+                        # It's a non-JSON code block, skip content
+                        in_fence = False
+                    current = []
+            elif in_fence:
+                current.append(line)
+
+        for block in blocks:
+            block = block.strip()
+            try:
+                return json.loads(block)
+            except json.JSONDecodeError:
+                continue
+
+    # If we have leading text before a JSON block, try to find { ... }
+    brace_start = json_str.find("{")
+    if brace_start >= 0:
+        # Find matching closing brace
+        depth = 0
+        for i in range(brace_start, len(json_str)):
+            if json_str[i] == "{":
+                depth += 1
+            elif json_str[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = json_str[brace_start:i+1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        continue
+
+    # Final fallback: return retry status with raw output embedded
+    log.warning(f"Could not parse Hermes review JSON. Raw output (first 500 chars): {raw_preview_500}")
+    return {
+        "session": session_name,
+        "reviewer": "Hermes",
+        "timestamp": datetime.now().isoformat(),
+        "status": "retry",
+        "_raw_llm_output": raw,
+        "findings": [{
+            "severity": "major",
+            "category": "reviewer-error",
+            "file": "",
+            "line": None,
+            "message": (
+                f"LLM review output was not valid JSON. "
+                f"Raw output (first 500 chars): {raw_preview_500}"
+            ),
+        }],
+        "finding_breakdown": {"critical": 0, "major": 1, "minor": 0, "info": 0},
+        "summary": f"LLM review could not be parsed \u2014 check raw output.",
+    }

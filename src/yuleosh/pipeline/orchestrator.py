@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
-from yuleosh.pipeline.step_handlers import PIPELINE_STEPS, _check_llm_key
 
 log = logging.getLogger("pipeline.orchestrator")
 
@@ -46,9 +45,13 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         mock: If True, skip LLM key check (for demo/testing).
     """
 
+    # Deferred import from run shim so that test mocks on
+    # yuleosh.pipeline.run.PIPELINE_STEPS and run._check_llm_key take effect.
+    from yuleosh.pipeline.run import PIPELINE_STEPS as _steps, _check_llm_key as _check_key
+
     # Check for LLM API key before starting (skip when a mock/injected client is provided)
     if not mock and llm_client is None:
-        key = _check_llm_key()
+        key = _check_key()
         if not key:
             sys.exit(1)
     
@@ -64,13 +67,13 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         
         log.info(f"Pipeline starting: {name}, spec={spec_path}")
         
-        for step_key, agent, step_name, handler in PIPELINE_STEPS:
+        for step_key, agent, step_name, handler in _steps:
             step_idx = len(session.steps)
             session.add_step(step_key, agent, step_name)
             session.start_step(step_idx)
             
-            print(f"  [{step_idx+1}/{len(PIPELINE_STEPS)}] {agent}: {step_name}")
-            log.info(f"Step {step_idx+1}/{len(PIPELINE_STEPS)}: [{agent}] {step_name}")
+            print(f"  [{step_idx+1}/{len(_steps)}] {agent}: {step_name}")
+            log.info(f"Step {step_idx+1}/{len(_steps)}: [{agent}] {step_name}")
             
             try:
                 # Set status to completed before the final report step
@@ -135,7 +138,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 _notify(
                     name=session.name,
                     status=session.status,
-                    total_steps=len(PIPELINE_STEPS),
+                    total_steps=len(_steps),
                     completed_steps=sum(1 for s in session.steps if s.get("status") == "completed"),
                     errors=session.errors,
                 )
