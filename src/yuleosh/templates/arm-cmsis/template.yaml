@@ -1,0 +1,15 @@
+name: arm-cmsis
+version: 1.0.0
+description: ARM Cortex-M bare-metal project template with CMSIS-Core support
+platforms: [arm, cortex-m]
+tags: [arm, cmsis, cortex-m, bare-metal]
+spec_sections:
+  - System Requirements
+  - Software Requirements
+  - CMSIS-Core Configuration
+  - Startup Code
+  - Linker Script
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]

@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.16)
+project(unit_tests C)
+set(CMAKE_C_STANDARD 11)
+enable_testing()
+add_executable(test_runner src/main.c)
+add_test(NAME unit_tests COMMAND test_runner)

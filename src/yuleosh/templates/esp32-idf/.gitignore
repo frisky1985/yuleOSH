@@ -1,0 +1,11 @@
+build/
+*.o
+*.elf
+*.hex
+*.bin
+*.map
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+.venv/

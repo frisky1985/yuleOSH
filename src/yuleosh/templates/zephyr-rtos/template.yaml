@@ -1,0 +1,15 @@
+name: zephyr-rtos
+version: 1.0.0
+description: Zephyr RTOS embedded project template with device tree and Kconfig support
+platforms: [arm, x86, riscv]
+tags: [rtos, zephyr, embedded, iot]
+spec_sections:
+  - System Requirements
+  - Software Requirements
+  - Hardware Requirements
+  - Device Tree Configuration
+  - Kconfig Configuration
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, system-verification]
+  ci_layers: [L1, L2, L3]

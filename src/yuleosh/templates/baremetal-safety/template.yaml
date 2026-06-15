@@ -1,0 +1,16 @@
+name: baremetal-safety
+version: 1.0.0
+description: Safety-critical bare-metal project template with ISO 26262 ASIL-B framework
+platforms: [arm, cortex-m, generic]
+tags: [safety, asil-b, iso-26262, bare-metal, watchdog]
+spec_sections:
+  - System Requirements
+  - Software Requirements
+  - Safety Requirements
+  - Watchdog Configuration
+  - ECC Memory Framework
+  - Fault Detection
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, safety-review, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]

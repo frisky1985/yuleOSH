@@ -7,6 +7,8 @@ yuleOSH — Embedded AI Development Platform CLI
 
 Usage:
     yuleosh init [dir]                       — Initialize project
+    yuleosh project init [--template <name>] — Initialize project from template
+    yuleosh template list                    — List available templates
     yuleosh template init <project-name>     — Create new project from starter template
     yuleosh spec validate <file>             — Validate OpenSpec spec
     yuleosh spec diff <old> <new>            — Diff two specs
@@ -21,7 +23,9 @@ Usage:
 """
 
 import argparse
+import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -30,9 +34,157 @@ OSH_HOME = os.environ.get(
     os.path.dirname(os.path.abspath(__file__)),
 )
 
+# Ensure src/ is importable
+SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 
 def ensure_osh_home():
     os.environ.setdefault("OSH_HOME", OSH_HOME)
+
+
+# ── Template commands (TG-REQ-003, TG-REQ-004) ──────────────────────────
+
+def cmd_template_list():
+    """List all available templates in a formatted table (TG-REQ-004)."""
+    from yuleosh.templates import list_templates
+
+    templates = list_templates()
+    if not templates:
+        print("No templates found.")
+        return
+
+    print(f"\n{'Name':<22} {'Version':<10} {'Description'}")
+    print(f"{'-'*22} {'-'*10} {'-'*50}")
+    for t in templates:
+        desc = t.get("description", "")
+        if len(desc) > 50:
+            desc = desc[:47] + "..."
+        platforms = ", ".join(t.get("platforms", []))
+        version = t.get("version", "")
+
+        print(f"{t['name']:<22} {version:<10} {desc}")
+    print(f"\n{len(templates)} template(s) available.\n")
+
+
+def cmd_template_init(project_name: str, parent_dir: str = ".", template_name: str | None = None):
+    """Create a new project from a built-in or user template (TG-REQ-003)."""
+    from yuleosh.templates import resolve_template, get_template_dir
+
+    if template_name:
+        # Resolve template via search priority
+        tpl = resolve_template(template_name, project_root=parent_dir)
+        if tpl is None:
+            print(f"Error: template '{template_name}' not found.", file=sys.stderr)
+            sys.exit(1)
+
+        tpl_dir = get_template_dir(tpl)
+        if tpl_dir is None:
+            print(f"Error: template '{template_name}' directory not found.", file=sys.stderr)
+            sys.exit(1)
+
+        project_dir = Path(parent_dir) / project_name
+
+        if project_dir.exists():
+            print(f"Error: Directory already exists: {project_dir}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"📦 Creating project '{project_name}' from template '{template_name}'...")
+
+        # Copy template files (spec, pipeline, src)
+        specs_src = tpl_dir / "specs"
+        pipeline_src = tpl_dir / "pipeline"
+        src_src = tpl_dir / "src"
+        gitignore_src = tpl_dir / ".gitignore"
+        template_yaml = tpl_dir / "template.yaml"
+
+        # Create directories
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy specs/spec.md -> docs/spec.md
+        if specs_src.exists():
+            (project_dir / "docs").mkdir(exist_ok=True)
+            shutil.copy2(str(specs_src / "spec.md"), str(project_dir / "docs" / "spec.md"))
+
+        # Copy pipeline/config.yaml -> pipeline/config.yaml
+        if pipeline_src.exists():
+            (project_dir / "pipeline").mkdir(exist_ok=True)
+            shutil.copy2(str(pipeline_src / "config.yaml"), str(project_dir / "pipeline" / "config.yaml"))
+
+        # Copy src/ skeleton
+        if src_src.exists():
+            shutil.copytree(str(src_src), str(project_dir / "src"), dirs_exist_ok=True)
+
+        # Copy .gitignore
+        if gitignore_src.exists():
+            shutil.copy2(str(gitignore_src), str(project_dir / ".gitignore"))
+
+        # Generate yuleosh.yaml project config with template metadata
+        yuleosh_config = {
+            "project": project_name,
+            "template": template_name,
+            "template_version": tpl.get("version", "1.0.0"),
+            "created_with": "yuleosh",
+            "generated_at": __import__("datetime").datetime.now().isoformat(),
+        }
+        (project_dir / "yuleosh.yaml").write_text(
+            json.dumps(yuleosh_config, indent=2, ensure_ascii=False)
+        )
+
+        # Create tests/ placeholder
+        (project_dir / "tests").mkdir(exist_ok=True)
+        (project_dir / "tests" / ".gitkeep").write_text("")
+
+        print(f"\n✅ Project '{project_name}' initialized from template '{template_name}'")
+        print(f"   Location: {project_dir}")
+        print(f"   ├── docs/spec.md")
+        print(f"   ├── pipeline/config.yaml")
+        print(f"   ├── src/")
+        print(f"   ├── tests/")
+        print(f"   ├── .gitignore")
+        print(f"   └── yuleosh.yaml")
+        print()
+        print(f"   Next steps:")
+        print(f"   1. Edit docs/spec.md with your requirements")
+        print(f"   2. Run: yuleosh spec validate docs/spec.md")
+        print(f"   3. Run: yuleosh ci run 1")
+        print()
+
+    else:
+        # Interactive mode — show list and prompt
+        _interactive_template_init(project_name, parent_dir)
+
+
+def _interactive_template_init(project_name: str, parent_dir: str = "."):
+    """Interactive template selection (TG-REQ-003C)."""
+    from yuleosh.templates import list_templates
+
+    templates = list_templates(project_root=parent_dir)
+    if not templates:
+        print("No templates available.", file=sys.stderr)
+        sys.exit(1)
+
+    print("\nAvailable templates:")
+    for i, t in enumerate(templates, 1):
+        desc = t.get("description", "")
+        print(f"  {i}. {t['name']} — {desc}")
+
+    print()
+    try:
+        choice = input("Select a template (1-{}): ".format(len(templates))).strip()
+        idx = int(choice) - 1
+        if idx < 0 or idx >= len(templates):
+            raise ValueError
+    except (ValueError, EOFError):
+        print("Invalid selection.", file=sys.stderr)
+        sys.exit(1)
+
+    selected = templates[idx]
+    cmd_template_init(project_name, parent_dir, selected["name"])
+
+
+# ── Existing commands ──────────────────────────────────────────────────
 
 
 def cmd_init(dir_path: str = "."):
@@ -51,17 +203,9 @@ def cmd_init(dir_path: str = "."):
     print(f"✅ Initialized yuleOSH project at {target}")
 
 
-def cmd_template_init(project_name: str):
-    """Create a new project from the starter template."""
-    from src.cli.template import cmd_template_init
-
-    cmd_template_init(project_name, os.getcwd())
-
-
 def cmd_spec_validate(filepath: str):
-    from src.spec.validate import parse_spec, validate_spec
+    from yuleosh.spec.validate import parse_spec, validate_spec
 
-    # Use the API directly instead of mutating sys.argv
     try:
         doc = parse_spec(filepath)
         issues = validate_spec(doc)
@@ -79,11 +223,10 @@ def cmd_spec_validate(filepath: str):
 
 
 def cmd_spec_diff(old: str, new: str):
-    from src.spec.validate import diff_specs
+    from yuleosh.spec.validate import diff_specs
 
     try:
         result = diff_specs(old, new)
-        import json
         print(json.dumps(result, indent=2, ensure_ascii=False))
     except Exception as e:
         print(f"❌ Spec diff failed: {e}", file=sys.stderr)
@@ -91,28 +234,27 @@ def cmd_spec_diff(old: str, new: str):
 
 
 def cmd_pipeline_run(spec_path: str, mock: bool = False):
-    from src.pipeline.run import run_pipeline
+    from yuleosh.pipeline.run import run_pipeline
 
     session = run_pipeline(spec_path, mock=mock)
     sys.exit(0 if session.status == "completed" else 1)
 
 
 def cmd_pipeline_status(name: str = None):
-    from src.pipeline.run import status_pipeline
+    from yuleosh.pipeline.run import status_pipeline
 
     status_pipeline(name)
 
 
 def cmd_review_auto():
-    from src.review.run import auto_review
+    from yuleosh.review.run import auto_review
 
     auto_review()
 
 
 def cmd_review_task(task: str, kind: str = "feature"):
     import subprocess
-
-    from src.review.run import run_review
+    from yuleosh.review.run import run_review
 
     result = subprocess.run(
         ["git", "diff", "--name-only", "HEAD"],
@@ -125,12 +267,11 @@ def cmd_review_task(task: str, kind: str = "feature"):
 def cmd_demo_uart(target_dir: str = None, do_build: bool = False, skip_cmake: bool = False):
     """Create and run the STM32+ESP32 UART demo project."""
     from src.cli.commands.demo_uart import cmd_demo_uart
-
     sys.exit(cmd_demo_uart(target_dir, do_build, skip_cmake))
 
 
 def cmd_ci_run(layer: str):
-    from src.ci.run import run_layer1, run_layer2, run_layer3
+    from yuleosh.ci.run import run_layer1, run_layer2, run_layer3
 
     layers = {"1": run_layer1, "2": run_layer2, "3": run_layer3}
     handler = layers.get(layer)
@@ -143,16 +284,16 @@ def cmd_ci_run(layer: str):
 
 
 def cmd_evidence_pack():
-    from src.evidence.pack import generate_evidence
-
+    from yuleosh.evidence.pack import generate_evidence
     generate_evidence()
 
 
 def cmd_stats(json_output: bool = False):
-    from src.cli.stats import cmd_stats
-
+    from yuleosh.cli.stats import cmd_stats
     cmd_stats(to_json=json_output)
 
+
+# ── Parser ──────────────────────────────────────────────────────────────
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build the argument parser for the yuleOSH CLI."""
@@ -166,10 +307,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p_init = sub.add_parser("init", help="Initialize a yuleOSH project directory")
     p_init.add_argument("dir", nargs="?", default=".", help="Project directory")
 
+    # project
+    p_project = sub.add_parser("project", help="Project management")
+    pjsub = p_project.add_subparsers(dest="project_sub")
+    p_proj_init = pjsub.add_parser("init", help="Initialize project from template")
+    p_proj_init.add_argument("--template", "-t", default=None, help="Template name")
+    p_proj_init.add_argument("project_dir", nargs="?", default=None, help="Target project directory")
+
     # template
     p_template = sub.add_parser("template", help="Project template management")
     tsub = p_template.add_subparsers(dest="template_sub")
+    tsub.add_parser("list", help="List all available templates")
     p_template_init = tsub.add_parser("init", help="Create project from template")
+    p_template_init.add_argument("--from", dest="from_template", default=None, help="Template name or path")
     p_template_init.add_argument("project_name", help="Project name")
 
     # spec
@@ -225,6 +375,8 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# ── Dispatch ────────────────────────────────────────────────────────────
+
 def main():
     ensure_osh_home()
 
@@ -238,12 +390,27 @@ def main():
     # Dispatch
     if args.command == "init":
         cmd_init(args.dir)
-    elif args.command == "template":
-        if args.template_sub == "init":
-            cmd_template_init(args.project_name)
+
+    elif args.command == "project":
+        if args.project_sub == "init":
+            # Determine project directory name
+            template_name = args.template
+            project_dir = args.project_dir or (template_name + "-project" if template_name else "my-project")
+            cmd_template_init(project_dir, parent_dir=".", template_name=template_name)
         else:
             parser.print_help()
             sys.exit(1)
+
+    elif args.command == "template":
+        if args.template_sub == "list":
+            cmd_template_list()
+        elif args.template_sub == "init":
+            template_name = getattr(args, "from_template", None)
+            cmd_template_init(args.project_name, parent_dir=".", template_name=template_name)
+        else:
+            parser.print_help()
+            sys.exit(1)
+
     elif args.command == "spec":
         if args.spec_sub == "validate":
             cmd_spec_validate(args.file)
@@ -252,6 +419,7 @@ def main():
         else:
             parser.print_help()
             sys.exit(1)
+
     elif args.command == "pipeline":
         if args.pipeline_sub == "run":
             cmd_pipeline_run(args.spec, mock=args.mock)
@@ -260,6 +428,7 @@ def main():
         else:
             parser.print_help()
             sys.exit(1)
+
     elif args.command == "review":
         if args.review_sub == "auto":
             cmd_review_auto()
@@ -268,24 +437,29 @@ def main():
         else:
             parser.print_help()
             sys.exit(1)
+
     elif args.command == "demo":
         if args.demo_sub == "uart":
             cmd_demo_uart(args.dir, args.build, args.skip_cmake)
         else:
             parser.print_help()
             sys.exit(1)
+
     elif args.command == "ci":
         if args.ci_sub == "run":
             cmd_ci_run(args.layer)
         else:
             parser.print_help()
             sys.exit(1)
+
     elif args.command == "evidence":
         cmd_evidence_pack()
+
     elif args.command == "stats":
         cmd_stats(json_output=args.json)
+
     elif args.command == "ui":
-        from src.ui.server import main as ui_main
+        from yuleosh.ui.server import main as ui_main
         ui_main()
 
 

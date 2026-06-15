@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.16)
+project(app C)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-m4 -mthumb -Wall -Wextra -Werror")
+add_compile_definitions(SAFETY_ASIL_B)
+add_executable(app.elf src/main.c)
