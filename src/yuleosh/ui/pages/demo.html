@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>yuleOSH · 交互式演示</title>
+<title>yuleOSH · Mock Pipeline Demo</title>
 <style>
 :root {
   --bg: #0a0e17;
@@ -41,439 +41,241 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
 }
 .header h1 { font-size: 18px; font-weight: 800; }
 .header h1 span.green { color: var(--green); }
 .header h1 span.blue { color: var(--blue); }
-.header h1 span.yellow { color: var(--yellow); }
-.header .badge {
-  font-size: 11px; padding: 4px 12px; border-radius: 12px;
-  background: rgba(6,182,212,.15); color: var(--cyan); border: 1px solid rgba(6,182,212,.3);
+.header .nav-links { display: flex; align-items: center; gap: 16px; }
+.header .nav-links a {
+  font-size: 13px; color: var(--text2); text-decoration: none; transition: color 0.2s;
 }
-.header .badge:hover {
-  background: rgba(6,182,212,.25);
+.header .nav-links a:hover { color: var(--text); }
+.header .btn-try-now {
+  font-size: 13px; padding: 7px 18px; border-radius: 8px; font-weight: 600;
+  background: linear-gradient(135deg, var(--green), #059669); color: #fff; text-decoration: none;
+  transition: all 0.2s; box-shadow: 0 0 16px rgba(16,185,129,.2);
 }
+.header .btn-try-now:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgba(16,185,129,.3); }
 
-/* Demo Container */
-.demo-container {
+/* Container */
+.container {
   width: 100%;
-  max-width: 860px;
+  max-width: 900px;
   padding: 32px 20px;
   flex: 1;
-  display: flex;
-  flex-direction: column;
 }
 
-/* Progress Bar */
-.progress-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  margin-bottom: 36px;
-  user-select: none;
-}
-.progress-step {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  background: var(--surface2);
-  color: var(--text2);
-  border: 2px solid var(--border);
-  transition: all 0.4s ease;
-  position: relative;
-  cursor: default;
-  z-index: 2;
-}
-.progress-step.active {
-  background: var(--blue);
-  color: #fff;
-  border-color: #60a5fa;
-  box-shadow: 0 0 16px rgba(59,130,246,.4);
-  transform: scale(1.1);
-}
-.progress-step.done {
-  background: rgba(16,185,129,.15);
-  color: var(--green);
-  border-color: var(--green);
-}
-.progress-step-label {
-  position: absolute;
-  top: 42px;
-  font-size: 10px;
-  color: var(--text2);
-  font-weight: 400;
-  white-space: nowrap;
-}
-.progress-step.active .progress-step-label { color: var(--blue); }
-.progress-step.done .progress-step-label { color: var(--green); }
-.progress-line {
-  width: 52px;
-  height: 2px;
-  background: var(--border);
-  transition: background 0.5s ease;
-  z-index: 1;
-}
-.progress-line.done { background: var(--green); }
-.progress-text {
+/* Start Screen */
+.start-screen {
   text-align: center;
-  font-size: 12px;
-  color: var(--text2);
-  margin-top: 20px;
-  margin-bottom: 4px;
+  padding: 60px 20px;
 }
+.start-screen .logo-icon { font-size: 56px; margin-bottom: 16px; }
+.start-screen h2 { font-size: 28px; font-weight: 800; margin-bottom: 10px; }
+.start-screen h2 .gradient {
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.start-screen p { color: var(--text2); font-size: 15px; line-height: 1.7; margin-bottom: 28px; max-width: 560px; margin-left: auto; margin-right: auto; }
+.start-screen .features { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 32px; }
+.start-screen .features span { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 5px; }
+.start-screen .features span .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 
-/* Step Panel */
-.step-panel {
-  display: none;
+.btn-start {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 36px; border: none; border-radius: 12px; font-weight: 700; font-size: 16px;
+  background: linear-gradient(135deg, var(--green), #059669); color: #fff; cursor: pointer;
+  transition: all 0.3s; box-shadow: 0 0 30px rgba(16,185,129,.25);
+}
+.btn-start:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(16,185,129,.35); }
+.btn-start:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Pipeline Screen (hidden initially) */
+.pipeline-screen { display: none; }
+
+/* Progress Overview */
+.progress-overview {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 32px 28px;
-  animation: fadeSlideIn 0.45s ease;
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 20px;
 }
-.step-panel.active { display: block; }
-@keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(18px); }
-  to { opacity: 1; transform: translateY(0); }
+.progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.progress-header .title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.progress-header .title .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); animation: pulse 1.5s ease infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.progress-header .status-badge {
+  font-size: 11px; padding: 4px 12px; border-radius: 12px; font-weight: 600;
 }
+.status-badge.running { background: rgba(245,158,11,.15); color: var(--yellow); border: 1px solid rgba(245,158,11,.3); }
+.status-badge.completed { background: rgba(16,185,129,.15); color: var(--green); border: 1px solid rgba(16,185,129,.3); }
 
-.step-title {
-  font-size: 22px;
-  font-weight: 800;
-  margin-bottom: 10px;
-  background: linear-gradient(135deg, var(--blue), var(--purple));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.progress-bar-bg {
+  width: 100%; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-bottom: 8px;
 }
-.step-desc {
-  color: var(--text2);
-  font-size: 14px;
-  line-height: 1.7;
-  margin-bottom: 24px;
+.progress-bar-fill {
+  height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--green), var(--blue));
+  transition: width 0.6s ease; width: 0%;
 }
+.progress-label { font-size: 12px; color: var(--text2); text-align: right; }
 
-.btn-row {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 28px;
-}
-.btn {
-  padding: 10px 24px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-primary {
-  background: var(--blue);
-  color: #fff;
-}
-.btn-primary:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,130,246,.3); }
-.btn-ghost {
-  background: var(--surface2);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-.btn-ghost:hover { border-color: var(--blue); }
-.btn-success {
-  background: var(--green);
-  color: #fff;
-}
-.btn-success:hover { background: #059669; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(16,185,129,.3); }
-
-/* Step 1: Welcome Cards */
-.philosophy-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 16px;
-  margin: 16px 0;
-}
-@media (max-width: 640px) { .philosophy-grid { grid-template-columns: 1fr; } }
-.philosophy-card {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px 16px;
-  text-align: center;
-  transition: all 0.3s;
-}
-.philosophy-card:hover {
-  border-color: var(--blue);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 24px rgba(0,0,0,.3);
-}
-.philosophy-card .icon {
-  font-size: 32px;
-  margin-bottom: 10px;
-}
-.philosophy-card h3 {
-  font-size: 14px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.philosophy-card p {
-  font-size: 12px;
-  color: var(--text2);
-  line-height: 1.5;
-}
-
-/* Step 2: Spec Animation */
-.spec-showcase {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px;
-  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  overflow-x: auto;
-  margin-bottom: 12px;
-}
-.spec-showcase .keyword { color: var(--purple); }
-.spec-showcase .string { color: var(--green); }
-.spec-showcase .comment { color: var(--text2); }
-.spec-showcase .number { color: var(--yellow); }
-.spec-showcase .operator { color: var(--cyan); }
-.spec-line {
-  opacity: 0;
-  animation: typeLine 0.5s ease forwards;
-}
-.spec-line:nth-child(1) { animation-delay: 0.1s; }
-.spec-line:nth-child(2) { animation-delay: 0.25s; }
-.spec-line:nth-child(3) { animation-delay: 0.4s; }
-.spec-line:nth-child(4) { animation-delay: 0.55s; }
-.spec-line:nth-child(5) { animation-delay: 0.7s; }
-.spec-line:nth-child(6) { animation-delay: 0.85s; }
-.spec-line:nth-child(7) { animation-delay: 1.0s; }
-.spec-line:nth-child(8) { animation-delay: 1.15s; }
-.spec-line:nth-child(9) { animation-delay: 1.3s; }
-.spec-line:nth-child(10) { animation-delay: 1.45s; }
-.spec-line:nth-child(11) { animation-delay: 1.6s; }
-.spec-line:nth-child(12) { animation-delay: 1.75s; }
-.spec-line:nth-child(13) { animation-delay: 1.9s; }
-.spec-line:nth-child(14) { animation-delay: 2.05s; }
-.spec-line:nth-child(15) { animation-delay: 2.2s; }
-@keyframes typeLine {
-  0% { opacity: 0; transform: translateX(-6px); }
-  100% { opacity: 1; transform: translateX(0); }
-}
-
-.spec-badge {
-  display: inline-block;
-  background: rgba(139,92,246,.15);
-  color: var(--purple);
-  border: 1px solid rgba(139,92,246,.3);
-  border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
-/* Step 3: Pipeline Animation */
-.pipeline-9 {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin: 16px 0;
-  position: relative;
-}
-.pipe-node {
-  flex: 1;
-  min-width: 80px;
-  padding: 14px 8px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  text-align: center;
-  font-size: 11px;
-  font-weight: 600;
-  transition: all 0.5s ease;
-  position: relative;
-  opacity: 0;
-  transform: translateX(-10px);
-}
-.pipe-node.show {
-  opacity: 1;
-  transform: translateX(0);
-}
-.pipe-node:first-child { border-radius: 8px 0 0 8px; }
-.pipe-node:last-child { border-radius: 0 8px 8px 0; }
-.pipe-node:not(:last-child) { border-right: none; }
-.pipe-node.done {
-  background: rgba(16,185,129,.12);
-  border-color: var(--green);
-  color: var(--green);
-}
-.pipe-node.done ~ .pipe-node { border-left-color: var(--border); }
-.pipe-node.active {
-  background: rgba(245,158,11,.12);
-  border-color: var(--yellow);
-  color: var(--yellow);
-  box-shadow: 0 0 20px rgba(245,158,11,.2);
-  z-index: 2;
-}
-.pipe-node .emoji-icon { font-size: 20px; margin-bottom: 4px; }
-.pipe-node .node-label { font-size: 10px; color: var(--text2); margin-top: 2px; }
-.pipe-node.done .node-label { color: rgba(16,185,129,.7); }
-.pipe-node.active .node-label { color: rgba(245,158,11,.7); }
-.pipe-arrow {
-  font-size: 10px;
-  color: var(--text2);
-  align-self: center;
-  padding: 0 2px;
-}
-
-/* Step 4: CI Visualization */
-.ci-vis {
+/* Step List */
+.step-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  margin: 16px 0;
-}
-.ci-layer {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 18px;
-  opacity: 0;
-  transform: translateY(12px);
-  transition: all 0.6s ease;
-}
-.ci-layer.show { opacity: 1; transform: translateY(0); }
-.ci-layer:nth-child(2) { transition-delay: 0.15s; }
-.ci-layer:nth-child(3) { transition-delay: 0.3s; }
-.ci-layer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.ci-layer-header h3 { font-size: 13px; font-weight: 700; }
-.ci-layer-header .layers-badge {
-  font-size: 10px; padding: 2px 10px; border-radius: 10px;
-  background: rgba(59,130,246,.15); color: var(--blue); border: 1px solid rgba(59,130,246,.3);
-}
-.ci-stage-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.ci-stage {
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 11px;
-  background: rgba(16,185,129,.1);
-  border: 1px solid rgba(16,185,129,.3);
-  color: var(--green);
-  display: flex;
-  align-items: center;
   gap: 4px;
-  opacity: 0;
-  animation: fadeInStage 0.4s ease forwards;
+  margin-bottom: 20px;
 }
-.ci-layer:nth-child(1) .ci-stage:nth-child(1) { animation-delay: 0.2s; }
-.ci-layer:nth-child(1) .ci-stage:nth-child(2) { animation-delay: 0.35s; }
-.ci-layer:nth-child(1) .ci-stage:nth-child(3) { animation-delay: 0.5s; }
-.ci-layer:nth-child(1) .ci-stage:nth-child(4) { animation-delay: 0.65s; }
-.ci-layer:nth-child(2) .ci-stage:nth-child(1) { animation-delay: 0.5s; }
-.ci-layer:nth-child(2) .ci-stage:nth-child(2) { animation-delay: 0.65s; }
-.ci-layer:nth-child(2) .ci-stage:nth-child(3) { animation-delay: 0.8s; }
-.ci-layer:nth-child(2) .ci-stage:nth-child(4) { animation-delay: 0.95s; }
-.ci-layer:nth-child(3) .ci-stage:nth-child(1) { animation-delay: 0.8s; }
-.ci-layer:nth-child(3) .ci-stage:nth-child(2) { animation-delay: 0.95s; }
-.ci-layer:nth-child(3) .ci-stage:nth-child(3) { animation-delay: 1.1s; }
-@keyframes fadeInStage {
-  0% { opacity: 0; transform: scale(0.9); }
-  100% { opacity: 1; transform: scale(1); }
-}
-.ci-stage.skipped { opacity: 0.4; background: var(--surface2); border-color: var(--border); color: var(--text2); }
-.ci-layer-desc {
-  font-size: 11px;
-  color: var(--text2);
-  margin-top: 8px;
-  line-height: 1.5;
-}
-
-/* Step 5: Evidence Pack */
-.evidence-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.step-item {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  margin: 16px 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: all 0.4s ease;
 }
-@media (max-width: 480px) { .evidence-grid { grid-template-columns: 1fr; } }
-.evidence-item {
+.step-item.pending { opacity: 0.5; }
+.step-item.running {
+  border-color: var(--yellow);
+  background: rgba(245,158,11,.06);
+  box-shadow: 0 0 20px rgba(245,158,11,.08);
+}
+.step-item.done {
+  border-color: rgba(16,185,129,.3);
+  background: rgba(16,185,129,.05);
+}
+.step-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; flex-shrink: 0;
+  transition: all 0.4s ease;
+}
+.step-item.pending .step-icon { background: var(--surface2); color: var(--text2); border: 2px solid var(--border); }
+.step-item.running .step-icon {
+  background: rgba(245,158,11,.15); color: var(--yellow); border: 2px solid var(--yellow);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.step-item.done .step-icon {
+  background: rgba(16,185,129,.15); color: var(--green); border: 2px solid var(--green);
+}
+.step-info { flex: 1; min-width: 0; }
+.step-name { font-size: 14px; font-weight: 600; }
+.step-item.running .step-name { color: var(--yellow); }
+.step-item.done .step-name { color: var(--green); }
+.step-desc { font-size: 11px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Report Section */
+.report-section {
+  display: none;
+  margin-top: 20px;
+}
+.report-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  animation: fadeUp 0.5s ease;
+}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.report-title {
+  font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 20px;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.report-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.metric-card {
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
+  text-align: center;
   transition: all 0.3s;
-  opacity: 0;
-  animation: fadeCard 0.5s ease forwards;
 }
-.evidence-item:nth-child(1) { animation-delay: 0.1s; }
-.evidence-item:nth-child(2) { animation-delay: 0.2s; }
-.evidence-item:nth-child(3) { animation-delay: 0.3s; }
-.evidence-item:nth-child(4) { animation-delay: 0.4s; }
-.evidence-item:nth-child(5) { animation-delay: 0.5s; }
-.evidence-item:nth-child(6) { animation-delay: 0.6s; }
-@keyframes fadeCard {
-  0% { opacity: 0; transform: translateY(8px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-.evidence-item:hover {
-  border-color: var(--green);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0,0,0,.3);
-}
-.evidence-item .file-icon { font-size: 24px; margin-bottom: 6px; }
-.evidence-item .file-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-.evidence-item .file-desc { font-size: 11px; color: var(--text2); line-height: 1.4; }
-.evidence-item .file-size { font-size: 10px; color: var(--text2); margin-top: 6px; }
-.evidence-item.featured { border-color: var(--yellow); background: rgba(245,158,11,.08); }
-.evidence-item.featured .file-name { color: var(--yellow); }
+.metric-card:hover { border-color: var(--green); transform: translateY(-2px); }
+.metric-icon { font-size: 24px; margin-bottom: 6px; }
+.metric-value { font-size: 22px; font-weight: 800; color: var(--green); }
+.metric-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
 
-/* Step 6: Summary */
-.summary-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0;
-}
-@media (max-width: 480px) { .summary-grid { grid-template-columns: 1fr; } }
-.summary-card {
+.report-compliance {
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 18px;
-  text-align: center;
-  transition: all 0.3s;
-  opacity: 0;
-  animation: fadeCard 0.5s ease forwards;
+  padding: 16px 20px;
+  margin-bottom: 20px;
 }
-.summary-card:nth-child(1) { animation-delay: 0.1s; }
-.summary-card:nth-child(2) { animation-delay: 0.2s; }
-.summary-card:nth-child(3) { animation-delay: 0.3s; }
-.summary-card:nth-child(4) { animation-delay: 0.4s; }
-.summary-card .stat-icon { font-size: 28px; margin-bottom: 6px; }
-.summary-card .stat-val { font-size: 20px; font-weight: 800; color: var(--green); }
-.summary-card .stat-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.report-compliance h3 { font-size: 13px; font-weight: 700; margin-bottom: 10px; color: var(--text); }
+.compliance-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; font-size: 13px;
+}
+.compliance-item .label { color: var(--text2); }
+.compliance-item .value.pass { color: var(--green); font-weight: 600; }
+.compliance-item .value.warn { color: var(--yellow); font-weight: 600; }
 
-/* Step 6 CTA */
-.cta-section {
-  text-align: center;
-  padding: 20px;
+.report-summary {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.8;
+  padding: 16px;
+  background: var(--surface2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+  white-space: pre-wrap;
 }
+
+/* CTA Register */
+.cta-register {
+  text-align: center;
+  padding: 28px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-top: 20px;
+  animation: fadeUp 0.6s ease 0.3s both;
+}
+.cta-register h3 {
+  font-size: 20px; font-weight: 800; margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--yellow), var(--orange));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.cta-register p { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+.cta-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 12px 28px; border: none; border-radius: 10px; font-weight: 600; font-size: 14px;
+  background: linear-gradient(135deg, var(--green), #059669); color: #fff; cursor: pointer;
+  text-decoration: none; transition: all 0.2s; box-shadow: 0 0 20px rgba(16,185,129,.2);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 28px rgba(16,185,129,.3); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 12px 28px; border: 1px solid var(--border); border-radius: 10px; font-weight: 600; font-size: 14px;
+  background: var(--surface2); color: var(--text2); cursor: pointer;
+  text-decoration: none; transition: all 0.2s;
+}
+.btn-secondary:hover { border-color: var(--blue); color: var(--text); }
+
+/* Error state */
+.error-state {
+  text-align: center; padding: 40px;
+}
+.error-state .error-icon { font-size: 48px; margin-bottom: 12px; }
+.error-state h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: var(--red); }
+.error-state p { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
 
 /* Footer */
 .footer {
@@ -485,429 +287,299 @@ body {
   border-top: 1px solid var(--border);
 }
 
-/* Floating particles background */
-.particles {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  pointer-events: none;
-  z-index: 0;
-  overflow: hidden;
-}
-.particle {
-  position: absolute;
-  width: 3px; height: 3px;
-  background: var(--blue);
-  border-radius: 50%;
-  opacity: 0.15;
-  animation: floatUp linear infinite;
-}
-@keyframes floatUp {
-  0% { transform: translateY(100vh) scale(0); opacity: 0; }
-  10% { opacity: 0.15; }
-  90% { opacity: 0.08; }
-  100% { transform: translateY(-100px) scale(1); opacity: 0; }
-}
+/* Step artifacts toggle */
+.artifacts { font-size: 11px; color: var(--text2); margin-top: 4px; display: none; }
+.step-item.done .artifacts { display: block; }
+.artifacts span { display: inline-block; margin-right: 8px; }
+.artifacts span::before { content: '📎 '; }
 </style>
 </head>
 <body>
 
-<div class="particles" id="particles"></div>
-
 <div class="header">
-  <h1><span class="green">🔱 OSH</span><span class="blue">-Fusion</span> <span style="font-weight:400;font-size:13px;color:var(--text2)">交互式演示</span></h1>
-  <a href="/" class="badge" style="text-decoration:none;">← 回到首页</a>
+  <h1><span class="green">yule</span><span class="blue">OSH</span> <span style="font-weight:400;font-size:13px;color:var(--text2)">· Demo Pipeline</span></h1>
+  <div class="nav-links">
+    <a href="/">首页</a>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/pricing">定价</a>
+    <a href="/demo" class="btn-try-now">Try Demo</a>
+  </div>
 </div>
 
-<div class="demo-container" style="position:relative;z-index:1;">
+<div class="container">
 
-  <!-- Progress -->
-  <div class="progress-text">第 <span id="stepNum">1</span> / 6 步</div>
-  <div class="progress-bar" id="progressBar">
-    <div class="progress-step active" id="pdot1"><span>1</span><span class="progress-step-label">欢迎</span></div>
-    <div class="progress-line" id="pline1"></div>
-    <div class="progress-step" id="pdot2"><span>2</span><span class="progress-step-label">写规范</span></div>
-    <div class="progress-line" id="pline2"></div>
-    <div class="progress-step" id="pdot3"><span>3</span><span class="progress-step-label">跑流水线</span></div>
-    <div class="progress-line" id="pline3"></div>
-    <div class="progress-step" id="pdot4"><span>4</span><span class="progress-step-label">看CI</span></div>
-    <div class="progress-line" id="pline4"></div>
-    <div class="progress-step" id="pdot5"><span>5</span><span class="progress-step-label">出证据</span></div>
-    <div class="progress-line" id="pline5"></div>
-    <div class="progress-step" id="pdot6"><span>6</span><span class="progress-step-label">完成</span></div>
+  <!-- Start Screen -->
+  <div class="start-screen" id="startScreen">
+    <div class="logo-icon">🚀</div>
+    <h2><span class="gradient">yuleOSH</span> Mock Pipeline Demo</h2>
+    <p>
+      零配置体验嵌入式 AI 开发全流程。<br>
+      点击下方按钮，触发包含 10 个步骤的模拟 Pipeline。
+    </p>
+    <div class="features">
+      <span><span class="dot" style="background:var(--green)"></span> 10 步骤全流程</span>
+      <span><span class="dot" style="background:var(--blue)"></span> 三层 CI 验证</span>
+      <span><span class="dot" style="background:var(--yellow)"></span> 实时进度展示</span>
+      <span><span class="dot" style="background:var(--purple)"></span> 最终报告 + 证据包</span>
+    </div>
+    <button class="btn-start" id="btnStart" onclick="startDemo()">
+      ▶ 启动 Mock Pipeline
+    </button>
   </div>
 
-  <!-- Step 1: 欢迎 -->
-  <div class="step-panel active" id="step1">
-    <div class="step-title">🚀 欢迎来到 yuleOSH</div>
-    <div class="step-desc">
-      yuleOSH 是开源规范驱动开发平台，将需求、开发、CI、审计合为一体。<br>
-      零配置开始，三步之内跑通第一个流水线。
-    </div>
-    <div class="philosophy-grid">
-      <div class="philosophy-card">
-        <div class="icon">📋</div>
-        <h3>OpenSpec</h3>
-        <p>Gherkin 语法书写需求规范，自动化验证覆盖率与一致性</p>
-      </div>
-      <div class="philosophy-card">
-        <div class="icon">⚡</div>
-        <h3>S.U.P.E.R.</h3>
-        <p>AI Agent 驱动的 9 步流水线，从规范到交付全自动</p>
-      </div>
-      <div class="philosophy-card">
-        <div class="icon">🔗</div>
-        <h3>Harness Engineering</h3>
-        <p>三层 CI + 审计追溯矩阵，让合规成为开发的一部分</p>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="nextStep()">下一步 →</button>
-    </div>
-  </div>
+  <!-- Pipeline Screen -->
+  <div class="pipeline-screen" id="pipelineScreen">
 
-  <!-- Step 2: 写规范 -->
-  <div class="step-panel" id="step2">
-    <div class="step-title">📝 用 OpenSpec 写规范</div>
-    <div class="step-desc">
-      OpenSpec 基于 Gherkin 语法，让需求可读、可测、可追溯。
-      每个 <code style="color:var(--purple)">SHALL</code> 都是一个可验证的承诺。
-    </div>
-    <div class="spec-badge">📄 OpenSpec 示例</div>
-    <div class="spec-showcase">
-      <div class="spec-line"><span class="comment">## 需求: 用户认证</span></div>
-      <div class="spec-line"><span class="keyword">- 系统 SHALL</span> 支持邮箱密码登录</div>
-      <div class="spec-line"><span class="keyword">- 系统 SHALL</span> 会话有效期不超过 24h</div>
-      <div class="spec-line"><span class="comment"></span></div>
-      <div class="spec-line"><span class="comment">#### 原因</span></div>
-      <div class="spec-line">用户信息安全是基石</div>
-      <div class="spec-line"><span class="comment"></span></div>
-      <div class="spec-line"><span class="comment">## 场景: 登录成功</span></div>
-      <div class="spec-line"><span class="keyword">- GIVEN</span> 用户已注册</div>
-      <div class="spec-line"><span class="keyword">- WHEN</span> 输入正确密码</div>
-      <div class="spec-line"><span class="keyword">- THEN</span> 系统返回 token</div>
-      <div class="spec-line"><span class="keyword">- AND</span> 创建新会话</div>
-      <div class="spec-line"><span class="comment"></span></div>
-      <div class="spec-line"><span style="color:var(--green)">✅ 覆盖率: 100% · 需求数: 7 · 场景数: 3</span></div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-ghost" onclick="prevStep()">← 上一步</button>
-      <button class="btn btn-primary" onclick="nextStep()">下一步 →</button>
-    </div>
-  </div>
-
-  <!-- Step 3: 跑流水线 -->
-  <div class="step-panel" id="step3">
-    <div class="step-title">⚡ S.U.P.E.R. 9 步流水线</div>
-    <div class="step-desc">
-      从规范到交付，AI Agent 自动走完 9 个步骤。点击播放查看动画流水。
-    </div>
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <button class="btn btn-primary" onclick="animatePipeline()" id="pipelinePlayBtn">▶ 播放流水线</button>
-      <span style="font-size:12px;color:var(--text2);align-self:center" id="pipelineStatus">点击按钮开始动画</span>
-    </div>
-    <div class="pipeline-9" id="pipeline9">
-      <div class="pipe-node" data-idx="0"><div class="emoji-icon">📋</div>规范检查<div class="node-label">Spec Check</div></div>
-      <div class="pipe-node" data-idx="1"><div class="emoji-icon">🧠</div>S.U.P.E.R.<div class="node-label">AI 分析</div></div>
-      <div class="pipe-node" data-idx="2"><div class="emoji-icon">📄</div>PRD 生成<div class="node-label">Hermes</div></div>
-      <div class="pipe-node" data-idx="3"><div class="emoji-icon">🔍</div>审查<div class="node-label">Review</div></div>
-      <div class="pipe-node" data-idx="4"><div class="emoji-icon">🏗️</div>架构设计<div class="node-label">Arch</div></div>
-      <div class="pipe-node" data-idx="5"><div class="emoji-icon">💻</div>开发编码<div class="node-label">Develop</div></div>
-      <div class="pipe-node" data-idx="6"><div class="emoji-icon">🧪</div>自测试<div class="node-label">Self-Test</div></div>
-      <div class="pipe-node" data-idx="7"><div class="emoji-icon">👀</div>代码审查<div class="node-label">Code Review</div></div>
-      <div class="pipe-node" data-idx="8"><div class="emoji-icon">📊</div>报告生成<div class="node-label">Report</div></div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-ghost" onclick="prevStep()">← 上一步</button>
-      <button class="btn btn-primary" onclick="nextStep()" id="step3Next">下一步 →</button>
-    </div>
-  </div>
-
-  <!-- Step 4: 看 CI -->
-  <div class="step-panel" id="step4">
-    <div class="step-title">🔬 CI 三层可视化</div>
-    <div class="step-desc">
-      yuleOSH 将 CI 分为三层：从基础单元测试到端到端审计，逐层保障质量。
-    </div>
-    <div style="margin-bottom:16px">
-      <button class="btn btn-primary" onclick="animateCI()" id="ciPlayBtn">▶ 展示 CI 层级</button>
-    </div>
-    <div class="ci-vis" id="ciVis">
-      <div class="ci-layer" id="ciLayer1">
-        <div class="ci-layer-header">
-          <h3>🟢 Layer 1 — 基础验证</h3>
-          <span class="layers-badge">passed</span>
+    <!-- Progress -->
+    <div class="progress-overview">
+      <div class="progress-header">
+        <div class="title">
+          <span>⚙️ Pipeline</span>
+          <span class="pulse" id="pulseDot"></span>
         </div>
-        <div class="ci-stage-row">
-          <div class="ci-stage">✅ plan-lint</div>
-          <div class="ci-stage">✅ clang-tidy</div>
-          <div class="ci-stage">✅ unit-tests</div>
-          <div class="ci-stage">✅ coverage 82%</div>
-        </div>
-        <div class="ci-layer-desc">代码规范检查 + 单元测试 + 覆盖率 ≥ 80%</div>
+        <span class="status-badge running" id="statusBadge">⏳ 运行中</span>
       </div>
-      <div class="ci-layer" id="ciLayer2">
-        <div class="ci-layer-header">
-          <h3>🟡 Layer 2 — 集成验证</h3>
-          <span class="layers-badge" style="background:rgba(245,158,11,.15);color:var(--yellow);border-color:rgba(245,158,11,.3)">skipped</span>
-        </div>
-        <div class="ci-stage-row">
-          <div class="ci-stage skipped">⏭️ cross-compile</div>
-          <div class="ci-stage skipped">⏭️ static-analysis</div>
-          <div class="ci-stage skipped">⏭️ integration-tests</div>
-          <div class="ci-stage skipped">⏭️ memory-safety</div>
-        </div>
-        <div class="ci-layer-desc">跨平台编译 + 静态分析 + 集成测试（按需启用）</div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressFill"></div>
       </div>
-      <div class="ci-layer" id="ciLayer3">
-        <div class="ci-layer-header">
-          <h3>🔵 Layer 3 — 审计验证</h3>
-          <span class="layers-badge" style="background:rgba(16,185,129,.15);color:var(--green);border-color:rgba(16,185,129,.3)">passed</span>
+      <div class="progress-label" id="progressLabel">0 / 10 步完成</div>
+    </div>
+
+    <!-- Steps -->
+    <div class="step-list" id="stepList"></div>
+
+    <!-- Report -->
+    <div class="report-section" id="reportSection">
+      <div class="report-card" id="reportCard">
+        <div class="report-title">✅ Pipeline 完成</div>
+        <div class="report-metrics" id="reportMetrics"></div>
+        <div class="report-compliance" id="reportCompliance"></div>
+        <div class="report-summary" id="reportSummary"></div>
+      </div>
+
+      <!-- Registration CTA -->
+      <div class="cta-register">
+        <h3>🎯 立即注册，开启真实验证</h3>
+        <p>
+          Mock Pipeline 跑通了！<br>
+          注册 yuleOSH 即可体验真实 AI Agent 编排、三层 CI/CD 和 ASPICE 合规包生成。
+        </p>
+        <div class="cta-buttons">
+          <a href="/dashboard" class="btn-primary">🚀 立即注册 →</a>
+          <a href="/" class="btn-secondary">← 回到首页了解更多</a>
         </div>
-        <div class="ci-stage-row">
-          <div class="ci-stage">✅ e2e-tests</div>
-          <div class="ci-stage">✅ version-check</div>
-          <div class="ci-stage">✅ evidence-pack</div>
-        </div>
-        <div class="ci-layer-desc">端到端测试 + 版本校验 + 证据包生成</div>
       </div>
     </div>
-    <div class="btn-row">
-      <button class="btn btn-ghost" onclick="prevStep()">← 上一步</button>
-      <button class="btn btn-primary" onclick="nextStep()">下一步 →</button>
+
+    <!-- Error -->
+    <div class="error-state" id="errorState" style="display:none">
+      <div class="error-icon">⚠️</div>
+      <h3>Pipeline 启动失败</h3>
+      <p id="errorMsg">无法连接到 API。请检查服务是否正常运行。</p>
+      <button class="btn-primary" onclick="location.reload()">重试</button>
     </div>
+
   </div>
 
-  <!-- Step 5: 出证据 -->
-  <div class="step-panel" id="step5">
-    <div class="step-title">📦 合规证据包</div>
-    <div class="step-desc">
-      每段代码、每次审查、每个测试 — 全链路追溯，一键导出审计包。
-    </div>
-    <div class="evidence-grid">
-      <div class="evidence-item">
-        <div class="file-icon">📄</div>
-        <div class="file-name">traceability-matrix.md</div>
-        <div class="file-desc">需求↔设计↔代码↔测试 全追溯</div>
-        <div class="file-size">868 B</div>
-      </div>
-      <div class="evidence-item">
-        <div class="file-icon">📊</div>
-        <div class="file-name">requirement-coverage.md</div>
-        <div class="file-desc">需求覆盖率报告</div>
-        <div class="file-size">475 B</div>
-      </div>
-      <div class="evidence-item">
-        <div class="file-icon">📉</div>
-        <div class="file-name">code-coverage-report.md</div>
-        <div class="file-desc">代码覆盖率 82.1%</div>
-        <div class="file-size">255 B</div>
-      </div>
-      <div class="evidence-item">
-        <div class="file-icon">📋</div>
-        <div class="file-name">review-log-summary.md</div>
-        <div class="file-desc">Agent 审查汇总</div>
-        <div class="file-size">1.0 KB</div>
-      </div>
-      <div class="evidence-item">
-        <div class="file-icon">📜</div>
-        <div class="file-name">review-log.json</div>
-        <div class="file-desc">原始审查记录 JSON</div>
-        <div class="file-size">22 KB</div>
-      </div>
-      <div class="evidence-item featured">
-        <div class="file-icon">🎯</div>
-        <div class="file-name">compliance-pack.zip</div>
-        <div class="file-desc" style="color:var(--yellow);">一键审计包</div>
-        <div class="file-size">7.1 KB</div>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-ghost" onclick="prevStep()">← 上一步</button>
-      <button class="btn btn-primary" onclick="nextStep()">下一步 →</button>
-    </div>
-  </div>
-
-  <!-- Step 6: 完成 -->
-  <div class="step-panel" id="step6">
-    <div class="step-title" style="text-align:center;background:linear-gradient(135deg, var(--green), var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">🎉 完成！yuleOSH 一览</div>
-    <div class="step-desc" style="text-align:center;">
-      你已经看完了 yuleOSH 的完整工作流。这里是整个平台的数据一览：
-    </div>
-    <div class="summary-grid">
-      <div class="summary-card">
-        <div class="stat-icon">📋</div>
-        <div class="stat-val">7</div>
-        <div class="stat-label">规范需求</div>
-      </div>
-      <div class="summary-card">
-        <div class="stat-icon">🚀</div>
-        <div class="stat-val">9</div>
-        <div class="stat-label">流水线步骤</div>
-      </div>
-      <div class="summary-card">
-        <div class="stat-icon">🔬</div>
-        <div class="stat-val">3</div>
-        <div class="stat-label">CI 层级</div>
-      </div>
-      <div class="summary-card">
-        <div class="stat-icon">📦</div>
-        <div class="stat-val">6</div>
-        <div class="stat-label">证据文件</div>
-      </div>
-    </div>
-    <div class="cta-section">
-      <p style="color:var(--text2);margin-bottom:20px;font-size:13px;">
-        零配置、零登录，yuleOSH 随时可以开始。去 Dashboard 看看真实数据吧！
-      </p>
-      <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-        <a href="/dashboard" class="btn btn-success" style="text-decoration:none;font-size:15px;padding:12px 32px;">
-          🚀 前往 Dashboard
-        </a>
-        <a href="/welcome" class="btn btn-ghost" style="text-decoration:none;font-size:15px;padding:12px 32px;">
-          📝 快速开始向导
-        </a>
-      </div>
-      <p style="margin-top:20px;font-size:12px;color:var(--text2);">
-        <a href="/health" style="color:var(--blue);">查看系统状态</a> · 开源 · MIT License
-      </p>
-    </div>
-  </div>
 </div>
 
 <div class="footer">
-  🔱 OSH-Fusion · yuleOSH v0.1.0 · Interactive Demo
+  yuleOSH v0.1.0 · Mock Pipeline Demo · <a href="/" style="color:var(--blue);text-decoration:none;">回到首页</a>
 </div>
 
 <script>
-(function() {
-  let currentStep = 1;
-  const totalSteps = 6;
+const API_BASE = '/api/v1/demo/pipeline';
 
-  window.nextStep = function() {
-    if (currentStep < totalSteps) {
-      goStep(currentStep + 1);
+// Pipeline step emoji mapping
+const STEP_ICONS = {
+  'spec-parse': '📋',
+  'requirements-analysis': '🔍',
+  'sdd': '📐',
+  'code-gen': '💻',
+  'internal-review': '🔎',
+  'test-plan': '🧪',
+  'code-review': '👀',
+  'ci-layer1': '🟢',
+  'ci-layer2': '🟡',
+  'ci-layer3': '🔵',
+};
+const DEFAULT_ICON = '⚡';
+
+let pipelineData = null;
+let currentStep = -1;
+let animationTimer = null;
+
+async function startDemo() {
+  const btn = document.getElementById('btnStart');
+  btn.disabled = true;
+  btn.textContent = '⏳ 启动中...';
+
+  try {
+    const resp = await fetch(API_BASE);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    if (!data.ok) throw new Error(data.error || 'API 返回错误');
+
+    // Show pipeline screen
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('pipelineScreen').style.display = 'block';
+
+    pipelineData = data.data;
+    renderAllSteps(pipelineData);
+    animatePipeline(pipelineData);
+
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = '▶ 重试';
+    document.getElementById('errorMsg').textContent = err.message || '无法连接到 API。请检查服务是否正常运行。';
+    document.getElementById('pipelineScreen').style.display = 'block';
+    document.getElementById('errorState').style.display = 'block';
+  }
+}
+
+function renderAllSteps(data) {
+  const list = document.getElementById('stepList');
+  list.innerHTML = '';
+
+  data.steps.forEach((step, idx) => {
+    const icon = STEP_ICONS[step.id] || DEFAULT_ICON;
+    const div = document.createElement('div');
+    div.className = 'step-item pending';
+    div.id = `step-${idx}`;
+    div.innerHTML = `
+      <div class="step-icon">${icon}</div>
+      <div class="step-info">
+        <div class="step-name">${idx + 1}. ${step.name}</div>
+        <div class="step-desc" id="stepDesc-${idx}">等待执行...</div>
+        <div class="artifacts" id="stepArtifacts-${idx}"></div>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function animatePipeline(data) {
+  const steps = data.steps;
+  let idx = 0;
+
+  function advance() {
+    if (idx >= steps.length) {
+      // All done
+      showCompleted();
+      return;
     }
-  };
 
-  window.prevStep = function() {
-    if (currentStep > 1) {
-      goStep(currentStep - 1);
+    const step = steps[idx];
+
+    // Mark current as running
+    const el = document.getElementById(`step-${idx}`);
+    if (el) {
+      el.className = 'step-item running';
+      document.getElementById(`stepDesc-${idx}`).textContent = step.output_summary || '运行中...';
     }
-  };
 
-  function goStep(n) {
-    // Hide all panels
-    document.querySelectorAll('.step-panel').forEach(el => el.classList.remove('active'));
-    // Show target
-    document.getElementById('step' + n).classList.add('active');
+    // Update progress
+    updateProgress(idx, steps.length);
 
-    // Update progress dots
-    for (let i = 1; i <= totalSteps; i++) {
-      const dot = document.getElementById('pdot' + i);
-      const line = document.getElementById('pline' + i);
-      dot.classList.remove('active', 'done');
-      if (i < n) {
-        dot.classList.add('done');
-        if (line) line.classList.add('done');
-      } else if (i === n) {
-        dot.classList.add('active');
-        if (line) line.classList.remove('done');
-      } else {
-        if (line) line.classList.remove('done');
+    // Animate for this step's duration, then mark done
+    const duration = step.duration_ms || 1500;
+
+    // Clear any existing timer and wait
+    if (animationTimer) clearTimeout(animationTimer);
+
+    animationTimer = setTimeout(() => {
+      // Mark as done
+      if (el) {
+        el.className = 'step-item done';
       }
-    }
 
-    currentStep = n;
-    document.getElementById('stepNum').textContent = n;
+      // Show artifacts
+      if (step.artifacts) {
+        const artEl = document.getElementById(`stepArtifacts-${idx}`);
+        if (artEl) {
+          artEl.textContent = Object.entries(step.artifacts)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' · ');
+        }
+      }
 
-    // Auto-trigger animations on relevant steps
-    if (n === 3) animatePipeline();
-    if (n === 4) animateCI();
+      idx++;
+      advance();
+    }, Math.min(duration, 2000)); // cap at 2s per step for demo pacing
   }
 
-  window.goStep = goStep;
+  advance();
+}
 
-  // Particle background
-  function createParticles() {
-    const container = document.getElementById('particles');
-    for (let i = 0; i < 30; i++) {
-      const p = document.createElement('div');
-      p.className = 'particle';
-      p.style.left = Math.random() * 100 + '%';
-      p.style.width = (2 + Math.random() * 3) + 'px';
-      p.style.height = p.style.width;
-      p.style.animationDuration = (15 + Math.random() * 25) + 's';
-      p.style.animationDelay = (Math.random() * 20) + 's';
-      container.appendChild(p);
-    }
+function updateProgress(current, total) {
+  const pct = Math.round((current / total) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `${current} / ${total} 步完成`;
+}
+
+function showCompleted() {
+  const pct = 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `${pipelineData.total_steps} / ${pipelineData.total_steps} 步完成 ✅`;
+
+  // Update status
+  document.getElementById('statusBadge').className = 'status-badge completed';
+  document.getElementById('statusBadge').textContent = '✅ 已完成';
+  document.getElementById('pulseDot').style.display = 'none';
+
+  // Show report
+  if (pipelineData.final_report) {
+    showReport(pipelineData.final_report);
   }
-  createParticles();
+}
 
-  // Pipeline animation
-  let pipelineAnimating = false;
-  window.animatePipeline = function() {
-    if (pipelineAnimating) return;
-    pipelineAnimating = true;
+function showReport(report) {
+  document.getElementById('reportSection').style.display = 'block';
 
-    const nodes = document.querySelectorAll('.pipe-node');
-    const playBtn = document.getElementById('pipelinePlayBtn');
-    const status = document.getElementById('pipelineStatus');
+  // Metrics
+  const metrics = [
+    { icon: '📊', value: report.coverage_prediction || 'N/A', label: '覆盖率预测' },
+    { icon: '⭐', value: report.review_score || 'N/A', label: '审查评分' },
+    { icon: '📐', value: pipelineData.total_steps || '10', label: '流水线步骤' },
+    { icon: '📦', value: '6', label: '证据文件' },
+  ];
 
-    // Reset
-    nodes.forEach(n => { n.classList.remove('show', 'done', 'active'); });
-    playBtn.disabled = true;
-    playBtn.textContent = '⏳ 播放中...';
-    status.textContent = '流水线运行中...';
+  const metricsEl = document.getElementById('reportMetrics');
+  metricsEl.innerHTML = metrics.map(m => `
+    <div class="metric-card">
+      <div class="metric-icon">${m.icon}</div>
+      <div class="metric-value">${m.value}</div>
+      <div class="metric-label">${m.label}</div>
+    </div>
+  `).join('');
 
-    nodes.forEach((node, idx) => {
-      setTimeout(() => {
-        node.classList.add('show');
-        node.classList.add('active');
-        status.textContent = `第 ${idx + 1}/9 步: ${node.textContent.trim().split('\\n')[0] || node.innerText.trim().split('\\n')[0]}`;
+  // Compliance gates
+  if (report.compliance_gates) {
+    const compEl = document.getElementById('reportCompliance');
+    const gates = report.compliance_gates;
+    compEl.innerHTML = `
+      <h3>🔐 合规检查</h3>
+      ${Object.entries(gates).map(([key, val]) => {
+        const pass = typeof val === 'string' && val.toLowerCase().includes('pass');
+        return `
+          <div class="compliance-item">
+            <span class="label">${key}</span>
+            <span class="value ${pass ? 'pass' : 'warn'}">${val}</span>
+          </div>
+        `;
+      }).join('')}
+    `;
+  }
 
-        // Mark previous as done
-        for (let i = 0; i < idx; i++) {
-          nodes[i].classList.remove('active');
-          nodes[i].classList.add('done');
-        }
-
-        if (idx === nodes.length - 1) {
-          setTimeout(() => {
-            nodes.forEach(n => {
-              n.classList.remove('active');
-              n.classList.add('done');
-            });
-            playBtn.disabled = false;
-            playBtn.textContent = '▶ 重新播放';
-            status.textContent = '✅ 9 步全部完成！';
-            pipelineAnimating = false;
-          }, 600);
-        }
-      }, idx * 400);
-    });
-  };
-
-  // CI animation
-  window.animateCI = function() {
-    const layers = document.querySelectorAll('.ci-layer');
-    const btn = document.getElementById('ciPlayBtn');
-    btn.disabled = true;
-    btn.textContent = '⏳ 展示中...';
-
-    layers.forEach((layer, idx) => {
-      setTimeout(() => {
-        layer.classList.add('show');
-        if (idx === layers.length - 1) {
-          setTimeout(() => {
-            btn.disabled = false;
-            btn.textContent = '▶ 重新展示';
-          }, 400);
-        }
-      }, idx * 500);
-    });
-  };
-})();
+  // Summary
+  if (report.summary) {
+    document.getElementById('reportSummary').textContent = report.summary
+      .replace(/\\n/g, '\n')
+      .replace(/\*\*/g, '')
+      .trim();
+  }
+}
 </script>
 </body>
 </html>
