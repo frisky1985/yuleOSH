@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useReducer, useEffect, useCallback } from 'react';
 
 /* ─────────────────────── Client-side Mock Data ─────────────────────── */
 
@@ -41,74 +41,125 @@ interface Step {
   duration: number;
 }
 
-type Phase = 'idle' | 'running' | 'complete' | 'error';
+type Phase = 'idle' | 'running' | 'complete';
+
+/* ─────────────────────── Reducer ─────────────────────── */
+
+interface State {
+  phase: Phase;
+  steps: Step[];
+}
+
+type Action =
+  | { type: 'START' }
+  | { type: 'MARK_RUNNING'; index: number }
+  | { type: 'MARK_COMPLETED'; index: number; summary: string }
+  | { type: 'FINISH' };
+
+function initState(): State {
+  return {
+    phase: 'idle',
+    steps: STEP_DEFS.map((s) => ({ ...s, status: 'pending' as const, summary: '' })),
+  };
+}
+
+/** Reset everything and immediately enter running phase. */
+function resetAndRun(): State {
+  return {
+    phase: 'running',
+    steps: STEP_DEFS.map((s) => ({ ...s, status: 'pending' as const, summary: '' })),
+  };
+}
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'START':
+      return resetAndRun();
+
+    case 'MARK_RUNNING':
+      return {
+        ...state,
+        phase: 'running',
+        steps: state.steps.map((s, i) =>
+          i === action.index ? { ...s, status: 'running' as const } : i < action.index ? { ...s, status: 'completed' as const } : { ...s, status: 'pending' as const }
+        ),
+      };
+
+    case 'MARK_COMPLETED':
+      return {
+        ...state,
+        steps: state.steps.map((s, i) =>
+          i === action.index
+            ? { ...s, status: 'completed' as const, summary: action.summary }
+            : s
+        ),
+      };
+
+    case 'FINISH':
+      return { ...state, phase: 'complete' as const };
+
+    default:
+      return state;
+  }
+}
 
 /* ─────────────────────── Component ─────────────────────── */
 
 export default function DemoPage() {
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [steps, setSteps] = useState<Step[]>(() =>
-    STEP_DEFS.map((s) => ({
-      ...s,
-      status: 'pending' as const,
-      summary: '',
-    }))
-  );
-  const [currentIdx, setCurrentIdx] = useState(-1);
-  const idxRef = useRef(0);
+  const [state, dispatch] = useReducer(reducer, undefined, initState);
+  const { phase, steps } = state;
 
-  const runPipeline = useCallback(() => {
-    idxRef.current = 0;
-    setPhase('running');
-    setCurrentIdx(-1);
-    setSteps(STEP_DEFS.map((s) => ({
-      ...s,
-      status: 'pending' as const,
-      summary: '',
-    })));
-  }, []);
-
+  /* ── Pipeline runner: driven by a single step index via setInterval ── */
   useEffect(() => {
     if (phase !== 'running') return;
 
-    const tick = () => {
-      const idx = idxRef.current;
-      if (idx >= STEP_DEFS.length) {
-        setPhase('complete');
+    let currentStep = 0;
+    let runningTimer: ReturnType<typeof setTimeout>;
+    let gapTimer: ReturnType<typeof setTimeout>;
+
+    function scheduleNext() {
+      if (currentStep >= STEP_DEFS.length) {
+        dispatch({ type: 'FINISH' });
         return;
       }
 
-      setCurrentIdx(idx);
+      // 1) Mark step as running immediately
+      dispatch({ type: 'MARK_RUNNING', index: currentStep });
 
-      // Mark current as running
-      setSteps((prev) => prev.map((s, i) => ({
-        ...s,
-        status: i === idx ? 'running' as const : s.status,
-      })));
+      const dur = STEP_DEFS[currentStep].duration;
 
-      // Mark completed after duration
-      const dur = STEP_DEFS[idx].duration;
-      setTimeout(() => {
-        setSteps((prev) =>
-          prev.map((s, i) =>
-            i === idx
-              ? { ...s, status: 'completed' as const, summary: OUTRO_SUMMARIES[s.id] || '' }
-              : s
-          )
-        );
-        idxRef.current = idx + 1;
-        setTimeout(tick, 300);
+      // 2) After its duration, mark completed
+      runningTimer = setTimeout(() => {
+        dispatch({
+          type: 'MARK_COMPLETED',
+          index: currentStep,
+          summary: OUTRO_SUMMARIES[STEP_DEFS[currentStep].id] || '',
+        });
+
+        currentStep++;
+        // 3) Small gap before next step
+        gapTimer = setTimeout(scheduleNext, 300);
       }, dur);
-    };
+    }
 
-    tick();
+    scheduleNext();
+
+    return () => {
+      clearTimeout(runningTimer);
+      clearTimeout(gapTimer);
+    };
   }, [phase]);
 
+  const handleStart = useCallback(() => {
+    dispatch({ type: 'START' });
+  }, []);
+
+  /* ── Compute derived values ── */
   const completed = steps.filter((s) => s.status === 'completed').length;
-  const running = steps.filter((s) => s.status === 'running').length;
+  const currentlyRunning = steps.filter((s) => s.status === 'running').length;
   const progress =
     steps.length > 0
-      ? Math.round(((completed + running) / steps.length) * 100)
+      ? Math.round(((completed + currentlyRunning) / steps.length) * 100)
       : 0;
 
   /* ────── Render ────── */
@@ -132,7 +183,7 @@ export default function DemoPage() {
             <h2 className="text-2xl font-bold mb-4">准备好体验了吗？</h2>
             <p className="text-gray-400 mb-8">点击下方按钮启动模拟 Pipeline，看看 AI 如何全流程自动编排。</p>
             <button
-              onClick={runPipeline}
+              onClick={handleStart}
               className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-xl font-semibold text-lg transition shadow-lg shadow-purple-500/20"
             >
               🎮 启动 Demo
@@ -140,7 +191,7 @@ export default function DemoPage() {
           </div>
         )}
 
-        {/* Running state */}
+        {/* Running or Complete state */}
         {(phase === 'running' || phase === 'complete') && (
           <>
             {/* Progress bar */}
@@ -152,7 +203,7 @@ export default function DemoPage() {
             </div>
 
             <div className="flex justify-between text-sm text-gray-500 mb-8">
-              <span>{steps.filter((s) => s.status === 'completed').length}/{steps.length} 步骤完成</span>
+              <span>{completed}/{steps.length} 步骤完成</span>
               <span className={phase === 'complete' ? 'text-green-400' : 'text-blue-400'}>
                 {phase === 'complete' ? '✅ 已完成' : '⏳ 运行中...'}
               </span>
@@ -195,7 +246,7 @@ export default function DemoPage() {
             {phase === 'complete' && (
               <div className="text-center mb-6">
                 <button
-                  onClick={runPipeline}
+                  onClick={handleStart}
                   className="px-6 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm transition"
                 >
                   🔄 重新播放
@@ -219,7 +270,7 @@ export default function DemoPage() {
                     查看定价 →
                   </a>
                   <button
-                    onClick={runPipeline}
+                    onClick={handleStart}
                     className="px-8 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl font-semibold transition"
                   >
                     重新运行
