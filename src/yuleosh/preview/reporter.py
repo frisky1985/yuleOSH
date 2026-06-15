@@ -10,6 +10,9 @@ assessment report format defined in the spec:
   - Coverage prediction
   - Compliance risk
   - Recommended pipeline config
+  - Documentation quality
+  - Estimated effort
+  - Maturity rating
 """
 
 import time
@@ -23,8 +26,10 @@ def build_assessment_report(analysis: dict) -> dict:
         analysis: Output from analyzer.analyze_directory()
 
     Returns:
-        dict with sections: coverage_prediction, compliance_risks,
-                            recommended_pipeline
+        dict with sections: project_summary, coverage_prediction,
+                            compliance_risks, recommended_pipeline,
+                            documentation_quality, estimated_effort,
+                            maturity_rating
     """
     report = {
         "generated_at": time.time(),
@@ -37,9 +42,13 @@ def build_assessment_report(analysis: dict) -> dict:
 
 
 def _build_project_summary(analysis: dict) -> dict:
-    """Build project summary section."""
+    """Build project summary section with enhanced metrics."""
     fs = analysis.get("file_summary", {})
     frameworks = [f["name"] for f in analysis.get("detected_frameworks", [])]
+    doc = analysis.get("documentation_quality", {})
+    effort = analysis.get("estimated_effort", {})
+    maturity = analysis.get("maturity_rating", {})
+    by_lang = fs.get("by_language", {})
 
     return {
         "total_files": fs.get("total_files", 0),
@@ -50,6 +59,15 @@ def _build_project_summary(analysis: dict) -> dict:
         "detected_frameworks": frameworks,
         "test_framework": analysis.get("test_infrastructure", {}).get("detected_framework", "none"),
         "test_density": analysis.get("test_infrastructure", {}).get("test_density", 0),
+        # v2 additions
+        "primary_language": by_lang.get("primary_language", "Unknown"),
+        "language_distribution": by_lang.get("distribution", {}),
+        "documentation_score": doc.get("doc_score", 0),
+        "has_readme": doc.get("has_readme", False),
+        "comment_to_code_ratio": doc.get("comment_to_code_ratio", 0),
+        "estimated_effort_hours": effort.get("estimated_person_hours", 0),
+        "maturity_rating": maturity.get("rating", "unknown"),
+        "maturity_score": maturity.get("score", 0),
     }
 
 
