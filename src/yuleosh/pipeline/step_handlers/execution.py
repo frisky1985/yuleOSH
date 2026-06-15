@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: MIT
+# 500-line guardrail: current 498 lines (2026-06-15). Monitor growth and split if reaching 500.
 
 """
 Execution step handlers — architecture, development, test planning, self-test.
