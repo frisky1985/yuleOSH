@@ -1,5 +1,5 @@
 [run]
-source = yuleosh
+source = src/yuleosh
 branch = true
 
 [report]
