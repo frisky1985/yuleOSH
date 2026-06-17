@@ -165,17 +165,12 @@ class SerialMonitor:
                 "  Install: pip install pyserial"
             )
             self._serial = _MockSerial(self.port)
-        except FileNotFoundError as exc:
-            raise PortNotFoundError(
-                f"Serial port not found: {self.port}\n"
-                f"  Check connection with: ls {self.port.rsplit('/', 1)[0]}"
-            ) from exc
-        except OSError as exc:
-            raise PortNotFoundError(
-                f"Cannot open {self.port}: {exc}\n"
-                f"  Try: sudo chmod 666 {self.port}"
-                if "Permission denied" in str(exc) else str(exc)
-            ) from exc
+        except (FileNotFoundError, OSError) as exc:
+            log.warning(
+                "Serial port %s not accessible (%s). Falling back to mock serial.",
+                self.port, exc,
+            )
+            self._serial = _MockSerial(self.port)
 
     def _close_serial(self):
         if self._serial:

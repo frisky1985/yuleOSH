@@ -8,7 +8,6 @@ Includes multi-tenant auth (organizations, projects, users) alongside
 the original API-key based auth and all original dashboard routes.
 """
 import gzip
-import hashlib
 import http.server
 import json
 import os
@@ -25,50 +24,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from yuleosh.store import Store
 
-
-# ------------------------------------------------------------------
-# Caching & compression helpers
-# ------------------------------------------------------------------
-
-
-def _compute_etag(content: bytes) -> str:
-    """Return a weak ETag for the given content."""
-    return f'W/"{hashlib.md5(content).hexdigest()}"'
-
-
-def _format_http_datetime(timestamp: float) -> str:
-    """Format a Unix timestamp as an HTTP-date string (RFC 7231)."""
-    import datetime as dt
-    return dt.datetime.fromtimestamp(timestamp, tz=dt.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-
-def _parse_http_datetime(date_str: str) -> float:
-    """Parse an HTTP-date string back to a Unix timestamp."""
-    import datetime as dt
-    for fmt in ("%a, %d %b %Y %H:%M:%S GMT", "%a, %d %b %Y %H:%M:%S %Z"):
-        try:
-            parsed = dt.datetime.strptime(date_str.strip(), fmt)
-            return parsed.replace(tzinfo=dt.timezone.utc).timestamp()
-        except ValueError:
-            pass
-    return 0.0
-
-
-def _send_gzipped_json(handler, data: dict, status: int = 200):
-    """Send a JSON response with gzip compression and CORS headers."""
-    body = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
-    accept_encoding = handler.headers.get("Accept-Encoding", "")
-    if "gzip" in accept_encoding and len(body) > 512:
-        body_gz = gzip.compress(body)
-        handler.send_response(status)
-        handler.send_header("Content-Type", "application/json")
-        handler.send_header("Content-Encoding", "gzip")
-        handler.send_header("Access-Control-Allow-Origin", "*")
-        handler.send_header("Content-Length", str(len(body_gz)))
-        handler.end_headers()
-        handler.wfile.write(body_gz)
-    else:
-        handler._json_response(data, status)
+# Caching, compression & security helpers extracted to routes/helpers
+from yuleosh.ui.routes.helpers import (
+    _compute_etag,
+    _format_http_datetime,
+    _parse_http_datetime,
+    _send_gzipped_json,
+    _send_security_headers,
+)
 
 # Add parent dir to path for auth import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -251,6 +214,13 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         # Tenant auth pages (no legacy auth required)
         if path == "/login":
             self._serve_page("login.html", {"msg": ""})
+            self._log_audit()
+            return
+        if path == "/register":
+            # Redirect to login with register mode
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.end_headers()
             self._log_audit()
             return
         if path == "/org/setup":
@@ -742,10 +712,16 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         sys.stderr.write(f"[OSH UI] {args[0]}\n")
 
 
-def main():
+def main(port: int | None = None):
+    """Start the OSH Dashboard server.
+
+    Args:
+        port: Optional port override (overrides OSH_PORT env / default 8080).
+    """
     cleanup_sessions()
 
-    server = http.server.HTTPServer(("0.0.0.0", PORT), OSHHandler)
+    actual_port = port if port is not None else PORT
+    server = http.server.HTTPServer(("0.0.0.0", actual_port), OSHHandler)
 
     if AUTH_ENABLED:
         print(f"🔐 Legacy auth enabled (YULEOSH_API_KEY set)")
@@ -785,8 +761,8 @@ def main():
     print(f"""
 🚀 yuleOSH Dashboard
    ────────────────────────────────────
-   Dashboard:   http://localhost:{PORT}/
-   API v1:      http://localhost:{PORT}/api/v1/
+   Dashboard:   http://localhost:{actual_port}/
+   API v1:      http://localhost:{actual_port}/api/v1/
 
    API Endpoints:""")
     for route, desc in api_routes:
@@ -829,7 +805,7 @@ def main():
                 self._json_response({"error": "Invalid session"}, 401)
                 return
             store = Store()
-            from usage.metering import get_usage_summary
+            from yuleosh.usage.metering import get_usage_summary
             summary = get_usage_summary(store, user["org_id"])
             self._json_response(summary)
         except Exception as e:
