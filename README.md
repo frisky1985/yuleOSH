@@ -1,17 +1,19 @@
 <div align="center">
   <h1>yuleOSH</h1>
-  <p><strong>AI-Powered Embedded Development Pipeline<br>
-  From spec to hardware, fully automated.</strong></p>
+  <p><strong>一站式 ASPICE 合规开发平台<br>
+  AI-Powered Embedded Development Pipeline<br>
+  Automotive SPICE compliant out of the box.</strong></p>
 
   <!-- Badges -->
   <p>
     <a href="https://github.com/frisky1985/yuleOSH/actions">
-      <img src="https://img.shields.io/badge/CI-L1%20L2%20L3%20Passing-brightgreen?style=flat-square" alt="CI">
+      <img src="https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square" alt="CI">
     </a>
     <img src="https://img.shields.io/badge/version-1.0.0-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-%E2%89%A53.10-ff69b4?style=flat-square" alt="Python">
-    <img src="https://img.shields.io/badge/coverage-86%25-yellow?style=flat-square" alt="Coverage">
+    <img src="https://img.shields.io/badge/tests-3400%2B%20passing-brightgreen?style=flat-square" alt="Tests">
+    <img src="https://img.shields.io/badge/coverage-11.45%25-red?style=flat-square" alt="Coverage">
     <img src="https://img.shields.io/badge/ASPICE-compliant-8A2BE2?style=flat-square" alt="ASPICE">
   </p>
 
@@ -24,7 +26,7 @@
     <a href="#quick-start">Quick Start</a> ·
     <a href="#features">Features</a> ·
     <a href="#architecture">Architecture</a> ·
-    <a href="#platforms">Platforms</a> ·
+    <a href="#supported-platforms">Platforms</a> ·
     <a href="#pricing">Pricing</a> ·
     <a href="#roadmap">Roadmap</a>
   </p>
@@ -32,28 +34,20 @@
 
 ---
 
-> **🇬🇧 English** · [🇨🇳 中文](#yuleosh-ai驱动的嵌入式开发流水线)
-
-<p align="center">
-  <img src="https://img.shields.io/badge/status-production%20ready-success?style=for-the-badge" alt="Status">
-  <img src="https://img.shields.io/badge/architecture-4%20layer-blue?style=for-the-badge" alt="Architecture">
-  <img src="https://img.shields.io/badge/tests-988%20passing-success?style=for-the-badge" alt="Tests">
-  <img src="https://img.shields.io/badge/platforms-STM32%20%7C%20ESP32%20%7C%20ARM-success?style=for-the-badge" alt="Platforms">
-</p>
+> **🇬🇧 English** · [🇨🇳 中文](#yuleosh-一站式-aspice-合规开发平台)
 
 ---
 
 ## 📋 Table of Contents
 
 - [What is yuleOSH?](#what-is-yuleosh)
-- [Demo](#demo)
 - [Quick Start](#quick-start)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Supported Platforms](#supported-platforms)
 - [Directory Layout](#directory-layout)
 - [Production Deployment](#production-deployment)
-- [Pricing](#pricing)
+- [Pricing & Editions](#pricing--editions)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [Security](#security)
@@ -63,56 +57,13 @@
 
 ## What is yuleOSH?
 
-**yuleOSH** is an AI-powered embedded development pipeline that converts natural language requirements into complete, CI/CD-ready firmware projects. It replaces requirements engineering, code generation, review, test planning, and compliance evidence collection with an automated agent pipeline.
+**yuleOSH** is a one-stop ASPICE-compliant embedded development platform powered by AI. It converts natural language requirements into complete, CI/CD-ready firmware projects with full Automotive SPICE traceability — automatically.
 
-**In one sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with full ASPICE-compliant traceability — automatically.
-
----
-
-## 🎬 Demo
-
-> ![2-min yuleOSH Demo](docs/demo.gif)
-> *Watch the full pipeline — spec → firmware → evidence — in under 2 minutes.*
+**In one sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with full ASPICE-compliant traceability — all in under 2 minutes.
 
 ---
 
-## ⚡ Quick Demo — Try in 2 Steps
-
-> **零硬件、零配置、2 步看到 UART 串口输出。**
-> 无需 MCU 开发板，无需安装编译器，无需阅读文档。
-
-```bash
-# Step 1: Install (15 seconds)
-pip install yuleosh
-
-# Step 2: Run the UART demo (60 seconds)
-yuleosh demo uart
-cd uart-demo
-yuleosh pipeline run --mock docs/spec.md
-```
-
-**What you'll see:**
-```
-Hello from yuleOSH Demo UART
-demo UART ready — send characters to echo
-[yuleOSH] alive — 5s
-[yuleOSH] alive — 10s
-```
-
-### Try with real hardware
-```bash
-# Flash to ESP32 and watch live serial output
-pip install yuleosh
-yuleosh demo uart && cd uart-demo
-yuleosh ci run 2    # Cross-compile + flash
-```
-
-> 📖 Full spec: [docs/spec-contract.md](docs/spec-contract.md)
-> 📋 Acceptance matrix: [docs/acceptance-matrix-demo-uart.md](docs/acceptance-matrix-demo-uart.md)
-
----
-
-## Quick Start
+## ⚡ Quick Start — 3 Commands
 
 ```bash
 # Step 1: Install (15 seconds)
@@ -122,11 +73,29 @@ pip install yuleosh
 yuleosh init my-project
 
 # Step 3: Run the full pipeline (90 seconds)
-cd my-project
-yuleosh pipeline run docs/spec.md
+cd my-project && yuleosh pipeline run docs/spec.md
 ```
 
-**3 commands. 2 minutes. From zero to firmware.**
+**3 commands. 2 minutes. From zero to firmware.**  
+No MCU board, no compiler setup, no document reading required.
+
+---
+
+## 🎬 Demo — Try the UART Demo
+
+```bash
+pip install yuleosh
+yuleosh demo uart
+cd uart-demo && yuleosh pipeline run --mock docs/spec.md
+```
+
+Output you'll see:
+```
+Hello from yuleOSH Demo UART
+demo UART ready — send characters to echo
+[yuleOSH] alive — 5s
+[yuleOSH] alive — 10s
+```
 
 ---
 
@@ -196,7 +165,7 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 - **Validator**: Hierarchical requirement IDs (SYS/SW/FEATURE)
 - **Differ**: Version-to-version delta with impact analysis
 - **State machine**: PROPOSED → APPROVED → IMPLEMENTED → VERIFIED
-- **Location**: `src/spec/`
+- **Location**: `src/yuleosh/spec/`
 </details>
 
 <details>
@@ -206,7 +175,7 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 - LLM-agnostic client (OpenAI-compatible API)
 - Blocking review gates before each stage transition
 - S.U.P.E.R. startup analysis for new requirements
-- **Location**: `src/pipeline/`, `src/llm/`
+- **Location**: `src/yuleosh/pipeline/`, `src/yuleosh/llm/`
 </details>
 
 <details>
@@ -216,7 +185,7 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 - **Layer 2 — Integration**: Cross-compilation + MISRA static analysis on MR
 - **Layer 2.5 — AI Review**: 4-agent parallel code review
 - **Layer 3 — System Verify**: System tests + evidence pack on release tag
-- **Location**: `src/ci/`
+- **Location**: `src/yuleosh/ci/`
 </details>
 
 <details>
@@ -226,21 +195,22 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 - Flash, monitor, and debug orchestration
 - SIL (Software-in-the-Loop) runner with assertion checking
 - Extensible adapter architecture
-- **Location**: `src/cross/`, `src/hardware/`
+- **Location**: `src/yuleosh/cross/`, `src/yuleosh/hardware/`
 </details>
 
 ### Supporting Modules
 
 | Module | Path | Purpose |
 |:-------|:-----|:--------|
-| Evidence Engine | `src/evidence/` | Traceability matrix + acceptance matrix + compliance ZIP |
-| Review Engine | `src/review/` | 4-agent parallel review + resource predictor |
-| Test Generation | `src/testgen/` | Auto-generate test harness from spec scenarios |
-| Plugins | `src/plugins/` | Plugin registry + sandboxed execution |
-| Usage/Billing | `src/usage/` | Metering + Stripe gateway (for SaaS) |
-| CLI | `src/cli/` | 12+ subcommands |
-| API | `src/api/` | REST API v1 with 14 resource handlers |
+| Evidence Engine | `src/yuleosh/evidence/` | Traceability matrix + acceptance matrix + compliance ZIP |
+| Review Engine | `src/yuleosh/review/` | 4-agent parallel review + resource predictor |
+| Test Generation | `src/yuleosh/testgen/` | Auto-generate test harness from spec scenarios |
+| Plugins | `src/yuleosh/plugins/` | Plugin registry + sandboxed execution |
+| Usage/Billing | `src/yuleosh/usage/` | Metering + Stripe gateway (for SaaS) |
+| CLI | `src/yuleosh/cli/` | 12+ subcommands |
+| API | `src/yuleosh/api/` | REST API v1 with 14 resource handlers |
 | Dashboard UI | `frontend/` | Next.js web dashboard |
+| Preview | `src/yuleosh/preview/` | Pre-pipeline analysis & scoring |
 
 ---
 
@@ -259,7 +229,7 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 
 ```
 yuleOSH/
-├── src/
+├── src/yuleosh/
 │   ├── spec/          OpenSpec parser, validator, differ
 │   ├── pipeline/      Agent pipeline orchestrator (10 steps)
 │   ├── ci/            3-layer CI/CD with dependency chaining
@@ -274,13 +244,13 @@ yuleOSH/
 │   ├── ui/            Dashboard server (auth, routes)
 │   ├── cli/           CLI subcommands
 │   ├── usage/         Metering + billing integration
+│   ├── preview/       Pre-pipeline analysis & scoring
 │   └── store.py       Multi-tenant SQLite/PostgreSQL backend
 ├── frontend/          Next.js SaaS dashboard
-├── tests/             257+ tests (all passing)
+├── tests/             250+ tests (all passing)
 ├── docs/              Specifications, guides, reports
 ├── deploy/            Production deployment configs
 ├── Dockerfile         Multi-stage production Dockerfile
-├── Dockerfile.cross   ARM/RISC-V cross-compilation image
 ├── docker-compose.yml Production Docker Compose
 ├── install.sh         One-line production install
 └── pyproject.toml     Python packaging
@@ -295,9 +265,9 @@ yuleOSH/
 ```bash
 git clone https://github.com/frisky1985/yuleOSH.git
 cd yuleOSH
-mkdir -p projects .yuleosh
-export YULEOSH_API_KEY="your-secure-random-key"
-docker compose up -d
+cp deploy/.env.production.example deploy/.env.production
+# Edit deploy/.env.production with your secrets
+docker compose -f deploy/docker-compose.yml up -d
 ```
 
 ### pip Install (Standalone CLI)
@@ -326,13 +296,17 @@ yuleosh help
 
 ---
 
-## Pricing
+## Pricing & Editions
 
-<p align="center">
-  ▶ <strong>Free:</strong> ¥0 — 个人开发者，3 个项目，基础 Pipeline &nbsp;·&nbsp;
-  ▶ <strong>Pro:</strong> ¥299/mo (¥2,999/yr) — 5-15 人团队锁定价，全功能 Pipeline，硬件在环，ASPICE 合规 &nbsp;·&nbsp;
-  ▶ <strong>Enterprise:</strong> ¥98,000/yr — 私有化部署，SAML，SLA，SOC 2
-</p>
+yuleOSH offers three editions tailored to different needs. See the full **[Edition Matrix →](docs/edition-matrix.md)** for a detailed feature comparison.
+
+| Edition | Price | Best For |
+|:--------|:------|:---------|
+| **Community** (MIT) | ¥0 | Individual developers, open-source projects |
+| **SaaS Pro** | ¥999/mo (¥9,999/yr) | Embedded teams needing full pipeline |
+| **Enterprise** | ¥99,800/yr+ | Large organizations needing private deployment + ASPICE consulting |
+
+> 📖 [Full Edition Matrix →](docs/edition-matrix.md) — Detailed feature comparison across all editions.
 
 ---
 
@@ -369,7 +343,7 @@ MIT License — see [LICENSE](LICENSE) for details. Copyright (c) 2025 frisky198
 
 ---
 
-# yuleOSH — AI驱动的嵌入式开发流水线
+# yuleOSH — 一站式 ASPICE 合规开发平台
 
 ## 📋 目录
 
@@ -380,7 +354,7 @@ MIT License — see [LICENSE](LICENSE) for details. Copyright (c) 2025 frisky198
 - [支持平台](#支持平台)
 - [目录结构](#目录结构)
 - [生产部署](#生产部署)
-- [定价](#定价)
+- [定价与版本](#定价与版本)
 - [路线图](#路线图)
 - [参与贡献](#参与贡献)
 - [安全](#安全)
@@ -390,16 +364,9 @@ MIT License — see [LICENSE](LICENSE) for details. Copyright (c) 2025 frisky198
 
 ## 项目简介
 
-**yuleOSH** 是一个由AI驱动的嵌入式开发全流程流水线，将自然语言需求自动转化为完整、CI/CD就绪的固件工程。它用自动化代理流水线替代了需求工程、代码生成、审查、测试规划和合规证据收集中繁琐的人工环节。
+**yuleOSH** 是一站式 ASPICE 合规开发平台，由 AI 驱动，将自然语言需求自动转化为完整、CI/CD就绪的固件工程，开箱即支持 Automotive SPICE 合规追溯。它用自动化代理流水线替代了需求工程、代码生成、审查、测试规划和合规证据收集中繁琐的人工环节。
 
 **一句话：** yuleOSH 接收需求描述，输出经过审查、测试、CI集成的固件，并附带完整的 ASPICE 合规追溯——全自动完成。
-
----
-
-## 🎬 演示
-
-> ![2分钟 yuleOSH 演示](docs/demo.gif)
-> *观看完整流水线 — 需求→固件→证据 — 不到2分钟。*
 
 ---
 
@@ -413,8 +380,7 @@ pip install yuleosh
 yuleosh init my-project
 
 # 第三步：运行完整流水线（90秒）
-cd my-project
-yuleosh pipeline run docs/spec.md
+cd my-project && yuleosh pipeline run docs/spec.md
 ```
 
 **三行命令，两分钟，从零到固件。**
@@ -474,15 +440,15 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 
 ```
 yuleOSH/
-├── src/          核心源码模块（spec/pipeline/ci/review/evidence 等）
-├── frontend/     Next.js SaaS 管理面板
-├── tests/        257+ 测试（全部通过）
-├── docs/         需求文档、指南、报告
-├── deploy/       生产部署配置
-├── Dockerfile    多阶段 Docker 构建
+├── src/yuleosh/    核心源码模块
+├── frontend/       Next.js SaaS 管理面板
+├── tests/          250+ 测试（全部通过）
+├── docs/           需求文档、指南、报告
+├── deploy/         生产部署配置
+├── Dockerfile      多阶段 Docker 构建
 ├── docker-compose.yml  生产 Docker Compose
-├── install.sh    一键安装脚本
-└── pyproject.toml     Python 包配置
+├── install.sh      一键安装脚本
+└── pyproject.toml  Python 包配置
 ```
 
 ---
@@ -494,9 +460,9 @@ yuleOSH/
 ```bash
 git clone https://github.com/frisky1985/yuleOSH.git
 cd yuleOSH
-mkdir -p projects .yuleosh
-export YULEOSH_API_KEY="your-secure-random-key"
-docker compose up -d
+cp deploy/.env.production.example deploy/.env.production
+# 编辑 deploy/.env.production 填入密钥
+docker compose -f deploy/docker-compose.yml up -d
 ```
 
 ### pip 安装（CLI 模式）
@@ -525,11 +491,17 @@ yuleosh help
 
 ---
 
-## 定价
+## 定价与版本
 
-▶ **Free:** ¥0 — 个人开发者，3 个项目，基础 Pipeline<br>
-▶ **Pro:** ¥299/mo (¥2,999/yr) — 5-15 人团队锁定价，全功能 Pipeline，硬件在环，ASPICE 合规<br>
-▶ **Enterprise:** ¥98,000/yr — 私有化部署，SAML，SLA，SOC 2
+yuleOSH 提供三个版本。完整功能对比详见 **[版本分界线 · 功能矩阵 →](docs/edition-matrix.md)**。
+
+| 版本 | 定价 | 适用场景 |
+|:-----|:-----|:---------|
+| **社区版** (MIT) | ¥0 | 个人开发者、开源项目 |
+| **SaaS Pro** | ¥999/月 (¥9,999/年) | 嵌入式团队，全功能流水线 |
+| **企业版** | ¥99,800/年起 | 大型企业，私有化部署 + ASPICE 咨询 |
+
+> 📖 [完整版本矩阵 →](docs/edition-matrix.md)
 
 ---
 
