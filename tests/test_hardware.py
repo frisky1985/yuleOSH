@@ -472,9 +472,8 @@ class TestSerialMonitor:
             data = mock_serial.readline()
             assert data == f"Line {i}\n".encode("utf-8")
 
-    def test_port_not_found(self, monkeypatch):
-        """测试串口不存在时的错误处理。"""
-        # 模拟 pyserial import 可用但串口设备不存在
+    def test_port_not_found_falls_back_to_mock(self, monkeypatch):
+        """测试串口不存在时自动降级到 MockSerial。"""
         import builtins
         original_import = builtins.__import__
 
@@ -495,8 +494,13 @@ class TestSerialMonitor:
         monkeypatch.setattr("sys.platform", "linux")
         monkeypatch.setattr(os.path, "exists", lambda p: True)
 
-        with pytest.raises(PortNotFoundError):
-            SerialMonitor("/dev/nonexistent_port_xyz", 115200).start()
+        mon = SerialMonitor("/dev/nonexistent_port_xyz", 115200)
+        mon.start()
+        assert mon.is_running
+        assert mon._serial is not None
+        from yuleosh.hardware.monitor import _MockSerial
+        assert isinstance(mon._serial, _MockSerial), f"Expected _MockSerial, got {type(mon._serial)}"
+        mon.stop()
 
 
 # ===========================================================================
