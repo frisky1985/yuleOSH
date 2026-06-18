@@ -231,6 +231,135 @@ def _check_vector_table_alignment(content: str, path: Path) -> list[LinkerFindin
     return findings
 
 
+def _check_lma_vma_difference(content: str, path: Path) -> list[LinkerFinding]:
+    """Check if .data section has AT> for LMA/VMA separation (ARM XIP)."""
+    findings = []
+    # ARM XIP architectures require .data to have AT> to specify load address (LMA) in Flash
+    # VMA is in RAM, LMA is in Flash
+    if re.search(r'\.data\s*:', content, re.IGNORECASE):
+        if not re.search(r'AT\s*[>]', content, re.IGNORECASE):
+            findings.append({
+                "severity": "major",
+                "category": "lma_vma",
+                "file": str(path),
+                "message": (
+                    ".data section found without AT> (load address) specification — "
+                    "on ARM XIP architectures, .data must have AT> to set LMA (Flash) "
+                    "separate from VMA (RAM); without it, the .data copy loop may read "
+                    "from the wrong address"
+                ),
+            })
+        else:
+            findings.append({
+                "severity": "info",
+                "category": "lma_vma",
+                "file": str(path),
+                "message": ".data section specifies AT> load address — LMA/VMA separation confirmed",
+            })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "lma_vma",
+            "file": str(path),
+            "message": "No .data section found — LMA/VMA check skipped",
+        })
+    return findings
+
+
+def _check_heap_stack_overlap(content: str, path: Path) -> list[LinkerFinding]:
+    """Check if .heap and .stack share the same memory region without separator."""
+    findings = []
+
+    # Find memory regions
+    regions = []
+    region_pat = r"(?P<name>\w+)\s*:\s*ORIGIN\s*=\s*(?P<origin>\S+)\s*,\s*LENGTH\s*=\s*(?P<length>\S+)"
+    for m in re.finditer(region_pat, content, re.IGNORECASE):
+        regions.append(m.group("name").upper())
+
+    # Find which region heap and stack belong to (look for OVERLAY or section placement)
+    # Check if both .heap and .stack are defined
+    has_heap = bool(re.search(r'\.heap', content))
+    has_stack = bool(re.search(r'\.stack', content))
+
+    if has_heap and has_stack:
+        # Extract the memory region names used by heap and stack
+        heap_region = None
+        stack_region = None
+
+        # Look for region placement after >
+        heap_m = re.search(r'\.heap\s*:.*?[>](\w+)', content, re.IGNORECASE | re.DOTALL)
+        if heap_m:
+            heap_region = heap_m.group(1).upper()
+
+        stack_m = re.search(r'\.stack\s*:.*?[>](\w+)', content, re.IGNORECASE | re.DOTALL)
+        if stack_m:
+            stack_region = stack_m.group(1).upper()
+
+        # If explicit region placement differs, no overlap risk
+        if heap_region and stack_region and heap_region != stack_region:
+            findings.append({
+                "severity": "info",
+                "category": "heap_stack",
+                "file": str(path),
+                "message": f".heap and .stack in different regions ({heap_region} vs {stack_region}) — "
+                           f"no overlap risk",
+            })
+            return findings
+
+        # Check if there's a separator / fill / guard pattern between them
+        # Look for NOLOAD sections or fill values that act as a guard
+        has_guard = bool(re.search(
+            r'FILL\s*\(|NOLOAD|PROVIDE\s*\(\s*__.*guard|__heap_limit|__stack_limit|__heap_stack_gap',
+            content, re.IGNORECASE))
+
+        # Check if there is a gap defined between heap end and stack start
+        gap_patterns = [
+            r'__heap_size\s*=\s*(\d+)',
+            r'__stack_size\s*=\s*(\d+)',
+        ]
+        heap_sizes = []
+        for pat in gap_patterns:
+            for m in re.finditer(pat, content, re.IGNORECASE):
+                heap_sizes.append(int(m.group(1)))
+
+        if heap_region or stack_region or (has_heap and has_stack and not has_guard):
+            findings.append({
+                "severity": "minor",
+                "category": "heap_stack",
+                "file": str(path),
+                "message": (
+                    ".heap and .stack share the same memory region — "
+                    "if they expand toward each other without a guard/separator, "
+                    "heap overflow can corrupt the stack (or vice versa). "
+                    "Consider adding a fill region or guard gap between them."
+                ),
+            })
+        else:
+            findings.append({
+                "severity": "info",
+                "category": "heap_stack",
+                "file": str(path),
+                "message": ".heap and .stack defined with guard separation",
+            })
+
+    elif has_heap:
+        findings.append({
+            "severity": "info",
+            "category": "heap_stack",
+            "file": str(path),
+            "message": ".heap defined but no .stack section — stack may be in a separate region",
+        })
+    elif has_stack:
+        findings.append({
+            "severity": "info",
+            "category": "heap_stack",
+            "file": str(path),
+            "message": ".stack defined but no .heap section — heap may use dynamic mechanism",
+        })
+
+    return findings
+
+
 def _check_memory_regions(content: str, path: Path) -> list[LinkerFinding]:
     """Check ROM / RAM address ranges for reasonableness."""
     findings = []
@@ -335,6 +464,8 @@ def _static_linker_review(project_dir: Path) -> list[LinkerFinding]:
         all_findings.extend(_check_section_definitions(content, script))
         all_findings.extend(_check_vector_table_alignment(content, script))
         all_findings.extend(_check_memory_regions(content, script))
+        all_findings.extend(_check_lma_vma_difference(content, script))
+        all_findings.extend(_check_heap_stack_overlap(content, script))
 
     return all_findings
 

@@ -38,6 +38,7 @@ from yuleosh.pipeline.step_handlers.review_arch import step_review_arch
 from yuleosh.pipeline.step_handlers.review_code import step_review_code
 from yuleosh.pipeline.step_handlers.review_selftest import step_review_selftest
 from yuleosh.pipeline.step_handlers.test_integration import step_integration_test
+from yuleosh.pipeline.step_handlers.test_qualification import step_test_qualification
 from yuleosh.pipeline.step_handlers.review_devplan import step_review_devplan
 from yuleosh.pipeline.step_handlers.review_linker import step_review_linker
 from yuleosh.pipeline.step_handlers.review_startup import step_review_startup
@@ -78,6 +79,7 @@ __all__ = [
     "step_review_startup",
     "step_review_rtos",
     "step_review_memory",
+    "step_test_qualification",
     "PIPELINE_STEPS",
     "_check_llm_key",
     "_resolve_handler",
@@ -143,5 +145,6 @@ PIPELINE_STEPS = [
     ("review-memory", "小克", "内存安全审查", step_review_memory),
 
     # ── Right side: SWE.6 Qualification Testing ─────
+    ("test-qualification", "小明", "合格性测试", step_test_qualification),
     ("final-report", "小明", "最终报告", step_final_report),
 ]
