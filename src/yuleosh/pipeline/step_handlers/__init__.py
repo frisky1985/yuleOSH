@@ -37,6 +37,7 @@ from yuleosh.pipeline.step_handlers.review_test_coverage import step_review_test
 from yuleosh.pipeline.step_handlers.review_arch import step_review_arch
 from yuleosh.pipeline.step_handlers.review_code import step_review_code
 from yuleosh.pipeline.step_handlers.review_selftest import step_review_selftest
+from yuleosh.pipeline.step_handlers.test_integration import step_integration_test
 from yuleosh.pipeline.step_handlers.review_devplan import step_review_devplan
 from yuleosh.pipeline.stages import _check_llm_key
 
@@ -57,6 +58,7 @@ __all__ = [
     "step_review_arch",
     "step_review_code",
     "step_review_selftest",
+    "step_integration_test",
     "step_hermes_review",
     "step_final_report",
     "step_review_prd",
@@ -113,6 +115,7 @@ PIPELINE_STEPS = [
     ("self-test-review", "小克", "自测结果审查", step_review_selftest),
 
     # ── Right side: SWE.5 Integration Testing ───────
+    ("integration-test", "小克", "接口集成测试", step_integration_test),
     ("code-review", "Hermes", "集成代码审查",
      _resolve_handler("code-review", step_hermes_review)),
     ("misra-review", "小马", "MISRA 合规审查",
