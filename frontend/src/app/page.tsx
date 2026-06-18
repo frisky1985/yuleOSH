@@ -48,7 +48,7 @@ export default function LandingPage() {
                   hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
               >
                 <Sparkles className="w-4 h-4" />
-                开始免费试用
+                免费试用
               </Link>
               <Link href="/demo"
                 className="text-sm inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
@@ -78,7 +78,7 @@ export default function LandingPage() {
                 className="block text-sm px-4 py-3 rounded-lg font-semibold bg-gradient-to-r from-[#10b981] to-[#059669] text-white text-center"
               >
                 <Sparkles className="w-4 h-4 inline-block mr-1" />
-                开始免费试用
+                免费试用
               </Link>
               <Link href="/dashboard" onClick={() => setMobileOpen(false)}
                 className="block text-sm px-4 py-2 rounded-lg font-semibold bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white text-center"
@@ -403,7 +403,7 @@ export default function LandingPage() {
               <ul className="space-y-2 text-xs text-[#94a3b8] flex-1">
                 <li className="flex items-start gap-2">
                   <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
-                  基础 Pipeline · 3 项目
+                  1-3 人 · 基础 Pipeline · 3 项目
                 </li>
                 <li className="flex items-start gap-2">
                   <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
@@ -492,7 +492,7 @@ export default function LandingPage() {
                   ASPICE 现场检查 CL1-CL3
                 </li>
               </ul>
-              <a href="mailto:sales@yuleosh.com" className="mt-4 block w-full text-center py-2 rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 text-[#f59e0b] hover:bg-[#f59e0b]/10 text-xs font-semibold transition-all">联系 Enterprise</a>
+              <a href="mailto:sales@yuleosh.com" className="mt-4 block w-full text-center py-2 rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 text-[#f59e0b] hover:bg-[#f59e0b]/10 text-xs font-semibold transition-all">联系销售</a>
             </div>
           </div>
 
@@ -530,7 +530,7 @@ export default function LandingPage() {
               已有账号？登录
               <ChevronRight className="w-3.5 h-3.5" />
             </Link>
-            <a href="https://github.com/stefanji/yuleOSH" target="_blank" rel="noreferrer"
+            <a href="https://github.com/frisky1985/yuleOSH" target="_blank" rel="noreferrer"
               className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl border border-[#1e293b] text-[#94a3b8] hover:border-white/20 hover:text-white text-sm font-medium transition-all"
             >
               <GithubIcon className="w-4 h-4" />
@@ -559,8 +559,8 @@ export default function LandingPage() {
               <a href="#features" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">功能</a>
               <Link href="/pricing" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">定价</Link>
               <Link href="/login" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">登录</Link>
-              <Link href="/register" className="text-xs text-[#10b981] hover:text-[#10b981]/80 transition-colors font-medium">免费试用</Link>
-              <a href="https://github.com/stefanji/yuleOSH" target="_blank" rel="noreferrer" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>
+              <Link href="/register" className="text-xs text-[#10b981] hover:text-[#10b981]/80 transition-colors font-medium">免费开始试用</Link>
+              <a href="https://github.com/frisky1985/yuleOSH" target="_blank" rel="noreferrer" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>
             </div>
           </div>
           <div className="mt-6 text-center text-xs text-[#393e4a]">
