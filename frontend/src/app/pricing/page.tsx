@@ -246,12 +246,6 @@ export default function PricingPage() {
                   </div>
                 ))}
               </div>
-                  <div key={i} className="flex items-start gap-2.5 text-sm text-[#cbd5e1]">
-                    <Check className="w-4 h-4 mt-0.5 shrink-0 text-[#f59e0b]" />
-                    <span>{feature}</span>
-                  </div>
-                ))}
-              </div>
               <a
                 href="mailto:sales@yuleosh.com"
                 className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm

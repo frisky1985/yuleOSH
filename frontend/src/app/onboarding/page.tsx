@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight, ArrowLeft, Check, Sparkles, FileText, Play, Eye,
-  Loader2, Rocket, ChevronRight, Github,
+  Loader2, Rocket, ChevronRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -213,7 +213,7 @@ export default function OnboardingPage() {
 
         {/* Progress Bar */}
         <div className="mb-10">
-          <Progress value={progressPct} className="h-1.5 bg-[#1e293b]" indicatorClassName="bg-gradient-to-r from-[#10b981] to-[#1677ff]" />
+          <Progress value={progressPct} className="h-1.5 bg-[#1e293b] [&>[data-slot=progress-indicator]]:bg-gradient-to-r [&>[data-slot=progress-indicator]]:from-[#10b981] [&>[data-slot=progress-indicator]]:to-[#1677ff]" />
           <div className="flex justify-between mt-2">
             {STEPS.map((s) => (
               <span key={s.num} className={`text-[10px] uppercase tracking-wider ${
