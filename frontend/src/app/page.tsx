@@ -375,6 +375,25 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
+
+          {/* Pipeline Demo CTA */}
+          <div className="mt-8 text-center">
+            <Link
+              href="/demo"
+              className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl font-semibold text-sm
+                bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
+                hover:from-[#722ed1]/90 hover:to-[#1677ff]/90
+                shadow-lg shadow-[#722ed1]/20
+                transition-all group"
+            >
+              <Play className="w-4 h-4" />
+              查看 Pipeline 演示
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+            </Link>
+            <p className="text-xs text-[#64748b] mt-3">
+              无需注册，直接体验 AI Agent 全自动流水线的完整运行过程。
+            </p>
+          </div>
         </div>
       </section>
 
