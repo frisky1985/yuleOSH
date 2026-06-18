@@ -39,7 +39,16 @@ from yuleosh.pipeline.step_handlers.review_code import step_review_code
 from yuleosh.pipeline.step_handlers.review_selftest import step_review_selftest
 from yuleosh.pipeline.step_handlers.test_integration import step_integration_test
 from yuleosh.pipeline.step_handlers.review_devplan import step_review_devplan
+from yuleosh.pipeline.step_handlers.review_linker import step_review_linker
+from yuleosh.pipeline.step_handlers.review_startup import step_review_startup
+from yuleosh.pipeline.step_handlers.review_rtos import step_review_rtos
+from yuleosh.pipeline.step_handlers.review_memory import step_review_memory
 from yuleosh.pipeline.stages import _check_llm_key
+
+
+# Lazy import for step class registry
+# Sprint 3 eliminated the dual-path; always use legacy step functions
+_have_step_classes = False
 
 # Lazy import for step class registry
 # Sprint 3 eliminated the dual-path; always use legacy step functions
@@ -65,6 +74,10 @@ __all__ = [
     "step_review_misra_ci",
     "step_review_devplan",
     "step_review_test_coverage",
+    "step_review_linker",
+    "step_review_startup",
+    "step_review_rtos",
+    "step_review_memory",
     "PIPELINE_STEPS",
     "_check_llm_key",
     "_resolve_handler",
@@ -122,6 +135,12 @@ PIPELINE_STEPS = [
      _resolve_handler("misra-review", step_review_misra_ci)),
     ("coverage-review", "小马", "测试覆盖审查",
      _resolve_handler("coverage-review", step_review_test_coverage)),
+
+    # ── Embedded review steps (SWE.5) ────────────────
+    ("review-linker", "小克", "链接脚本审查", step_review_linker),
+    ("review-startup", "小克", "启动代码审查", step_review_startup),
+    ("review-rtos", "小克", "RTOS 配置审查", step_review_rtos),
+    ("review-memory", "小克", "内存安全审查", step_review_memory),
 
     # ── Right side: SWE.6 Qualification Testing ─────
     ("final-report", "小明", "最终报告", step_final_report),
