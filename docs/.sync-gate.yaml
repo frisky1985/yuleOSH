@@ -1,0 +1,53 @@
+# 文档同步门禁规则 (Doc Sync Gate)
+# ================================
+# 当代码修改时，对应文档必须同步更新。
+# 此文件由 CLI 命令 `yuleosh audit sync-check` 读取。
+
+tracking:
+  - code_path: "src/yuleosh/ci/stages.py"
+    docs: ["docs/misra-verification-plan.md", "docs/pipeline-optimization-plan.md"]
+    reason: "CI 阶段变更必须同步更新验证计划"
+
+  - code_path: "misra-rules.yaml"
+    docs: ["specs/misra-c2023-spec.md"]
+    reason: "MISRA 规则变更必须同步更新规范文档"
+
+  - code_path: "src/yuleosh/ci/gcov_coverage.py"
+    docs: ["docs/ci/c-coverage.md", "docs/swe-verification-plan.md"]
+    reason: "C 覆盖率模块变更必须同步更新 SWE.4 验证计划"
+
+  - code_path: "src/yuleosh/ci/config.py"
+    docs: ["docs/ci/configuration.md"]
+    reason: "CI 配置变更必须同步更新配置文档"
+
+  - code_path: "src/yuleosh/ci/layers.py"
+    docs: ["docs/pipeline-optimization-plan.md"]
+    reason: "CI 层编排变更必须同步更新优化计划"
+
+  - code_path: "src/yuleosh/ci/runner.py"
+    docs: ["docs/ci/runner.md"]
+    reason: "CI 执行器变更必须同步更新运行器文档"
+
+  - code_path: "yuleosh_cli.py"
+    docs: ["README.md"]
+    reason: "CLI 命令变更必须同步更新 README 使用说明"
+
+  - code_path: "src/yuleosh/evidence/pack.py"
+    docs: ["docs/evidence/evidence-pack.md"]
+    reason: "审计证据模块变更必须同步更新证据文档"
+
+  - code_path: "src/yuleosh/evidence/compliance.py"
+    docs: ["docs/evidence/compliance-checklist.md"]
+    reason: "合规性检查模块变更必须同步更新合规清单"
+
+  - code_path: "src/yuleosh/pipeline/stages.py"
+    docs: ["docs/pipeline-optimization-plan.md"]
+    reason: "流水线阶段变更必须同步优化计划"
+
+  - code_path: "src/yuleosh/ci/misra_report.py"
+    docs: ["docs/misra-verification-plan.md"]
+    reason: "MISRA 报告模块变更必须同步验证计划"
+
+  - code_path: "src/yuleosh/alm/traceability.py"
+    docs: ["docs/alm/traceability.md"]
+    reason: "追溯矩阵模块变更必须同步 ALM 文档"

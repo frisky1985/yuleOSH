@@ -41,6 +41,7 @@ venv/
 
 # Runtime data (persistent DB, session state)
 .yuleosh/
+!.yuleosh/ci-config.yaml
 
 # Dogfooding — local-only self-referential projects
 self/
