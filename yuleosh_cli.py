@@ -371,7 +371,54 @@ def cmd_evidence_pack():
     generate_evidence()
 
 
-def cmd_audit_evidence(output_dir: str | None = None):
+def _cmd_coverage_c(build_dir: str = ".", src_dir: str = "src"):
+    """Run C/C++ coverage report via gcov/lcov (``yuleosh coverage c``)."""
+    from yuleosh.ci.gcov_coverage import generate_c_coverage_report
+
+    print(f"\n  📊 C/C++ Coverage (gcov/lcov)")
+    print(f"  {'=' * 50}")
+    print(f"  Build dir: {build_dir}")
+    print(f"  Source dir: {src_dir}")
+    print()
+
+    json_path = generate_c_coverage_report(build_dir=build_dir)
+    if json_path:
+        print(f"  ✅ C/C++ coverage report generated")
+        print(f"  📍 JSON: {json_path}")
+
+        # Try to load and print summary
+        import json as _json
+        try:
+            with open(json_path) as f:
+                report = _json.load(f)
+            print(f"  Line rate:   {report.get('line_rate', 'N/A')}%")
+            print(f"  Branch rate: {report.get('branch_rate', 'N/A')}%")
+            print(f"  Files:       {report.get('total_files', 0)}")
+        except Exception:
+            pass
+    else:
+        print(f"  ❌ C/C++ coverage generation failed")
+        print(f"  💡 Ensure lcov/genhtml are installed and build/ has .gcda/.gcno files")
+        sys.exit(1)
+
+
+def cmd_audit_sync_check(project_dir: str, base_ref: str = "HEAD", save: bool = True):
+    """Run doc sync gate check (``yuleosh audit sync-check``)."""
+    from yuleosh.ci.sync_check import run_sync_check, save_sync_evidence, print_sync_result
+
+    result = run_sync_check(project_dir, base_ref=base_ref)
+
+    if save:
+        path = save_sync_evidence(project_dir, result)
+        result["_evidence_path"] = path
+
+    print_sync_result(result)
+
+    if result.get("status") == "failed":
+        sys.exit(1)
+
+
+def cmd_audit_evidence(output_dir: str | None = None, create_zip: bool = True):
     """Generate CL2 audit evidence bundle.
 
     Collects all CI results, doc sync reports, C coverage reports,
@@ -382,9 +429,12 @@ def cmd_audit_evidence(output_dir: str | None = None):
     - All CI layer results (.osh/ci/layer*.json)
     - C/C++ coverage report (.yuleosh/reports/c-coverage.json)
     - Doc sync gate evidence
-    - MISRA compliance report
+    - MISRA compliance report and trend
+    - Traceability report (LRM / LRT)
+    - Review reports
     - Latest pipeline run status
-    - Overall audit summary
+    - Overall audit summary (audit-manifest.json)
+    - Zipped archive (.yuleosh/audit-evidence-{date}.zip)
     """
     import json
     import shutil
@@ -549,6 +599,70 @@ def cmd_audit_evidence(output_dir: str | None = None):
         except OSError as e:
             print(f"   ⚠️  Cannot copy CI config: {e}")
 
+    # 9. Collect traceability report (E13 requirement)
+    traceability_report = project_dir / ".yuleosh" / "reports" / "traceability-report.json"
+    if traceability_report.exists():
+        try:
+            data = json.loads(traceability_report.read_text())
+            evidence["artifacts"].append({
+                "type": "traceability-report",
+                "source": str(traceability_report),
+                "coverage_summary": data.get("coverage_summary", {}),
+            })
+            shutil.copy2(str(traceability_report), str(out_path / "traceability-report.json"))
+            print(f"   📋 Traceability Report: collected")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"   ⚠️  Cannot read traceability report: {e}")
+    else:
+        print("   ⏭️  No traceability report")
+
+    # 10. Collect LRM / LRT matrix
+    lrt_path = project_dir / ".yuleosh" / "reports" / "lrt-matrix.json"
+    if lrt_path.exists():
+        try:
+            shutil.copy2(str(lrt_path), str(out_path / "lrt-matrix.json"))
+            evidence["artifacts"].append({
+                "type": "lrt-matrix",
+                "source": str(lrt_path),
+            })
+            print(f"   📋 LRT Matrix: collected")
+        except OSError as e:
+            print(f"   ⚠️  Cannot copy LRT matrix: {e}")
+    else:
+        print("   ⏭️  No LRT matrix")
+
+    # 11. Collect review reports
+    review_dir = project_dir / ".yuleosh" / "reports" / "reviews"
+    if review_dir.exists():
+        review_files = sorted(review_dir.glob("*.json"))
+        if review_files:
+            rev_out = out_path / "reviews"
+            rev_out.mkdir(parents=True, exist_ok=True)
+            for rf in review_files:
+                try:
+                    shutil.copy2(str(rf), str(rev_out / rf.name))
+                    evidence["artifacts"].append({
+                        "type": "review-report",
+                        "source": str(rf),
+                    })
+                except OSError as e:
+                    print(f"   ⚠️  Cannot copy review report {rf.name}: {e}")
+            print(f"   📝 Review Reports: {len(review_files)} file(s)")
+    else:
+        print("   ⏭️  No review reports")
+
+    # 12. Collect everything in evidence_dir (not just zips)
+    if evidence_dir.exists():
+        for ev_file in sorted(evidence_dir.glob("*.*")):
+            try:
+                shutil.copy2(str(ev_file), str(out_path / ev_file.name))
+                evidence["artifacts"].append({
+                    "type": "evidence-artifact",
+                    "source": str(ev_file),
+                })
+            except OSError:
+                pass
+
     # Write audit manifest
     manifest_path = out_path / "audit-manifest.json"
     with open(manifest_path, "w") as f:
@@ -559,6 +673,34 @@ def cmd_audit_evidence(output_dir: str | None = None):
     print(f"   Location: {out_path}/")
     print(f"   Artifacts collected: {len(evidence['artifacts'])}")
     print(f"   Manifest: {manifest_path}")
+
+    # E13: Create zip archive
+    if create_zip:
+        import zipfile
+        date_str = datetime.now().strftime("%Y%m%d")
+        zip_path = project_dir / ".yuleosh" / f"audit-evidence-{date_str}.zip"
+
+        print(f"\n   📦 Packaging evidence into: {zip_path}")
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for item in out_path.rglob("*"):
+                if item.is_file():
+                    arcname = str(item.relative_to(out_path))
+                    zf.write(str(item), arcname)
+
+        evidence["zip_path"] = str(zip_path)
+        zip_size = zip_path.stat().st_size
+        print(f"   ✅ Audit evidence archive created ({zip_size:,} bytes)")
+
+        # Update manifest to include zip info
+        evidence["artifacts"].append({
+            "type": "audit-evidence-zip",
+            "source": str(zip_path),
+            "size_bytes": zip_size,
+        })
+        with open(manifest_path, "w") as f:
+            json.dump(evidence, f, indent=2)
+
     print()
 
     return evidence
@@ -1182,12 +1324,32 @@ def _build_parser() -> argparse.ArgumentParser:
     p_trace_matrix.add_argument("--spec", default=None, help="Path to spec file")
 
     # misra
+    # coverage
+    p_coverage = sub.add_parser("coverage", help="Code coverage management")
+    csub = p_coverage.add_subparsers(dest="coverage_sub")
+    p_coverage_c = csub.add_parser("c", help="Generate C/C++ code coverage report via gcov/lcov")
+    p_coverage_c.add_argument("--build-dir", default=".",
+                               help="Build directory containing .gcda/.gcno files")
+    p_coverage_c.add_argument("--src-dir", default="src",
+                               help="Source directory for filtering")
+
     # audit
     p_audit = sub.add_parser("audit", help="CL2 audit evidence management")
     asub = p_audit.add_subparsers(dest="audit_sub")
-    p_audit_evidence = asub.add_parser("evidence", help="Generate CL2 audit evidence bundle")
+    p_audit_evidence = asub.add_parser("evidence", help="Generate CL2 audit evidence bundle (with ZIP export)")
     p_audit_evidence.add_argument("--output-dir", "-o", default=None,
                                    help="Output directory for audit bundle (default: .yuleosh/audit/)")
+    p_audit_evidence.add_argument("--zip", action="store_true", default=True,
+                                   help="Package evidence into a .zip archive (default: true)")
+    p_audit_evidence.add_argument("--no-zip", action="store_false", dest="zip",
+                                   help="Skip .zip packaging")
+    p_audit_sync = asub.add_parser("sync-check", help="Doc sync gate — verify docs updated with code")
+    p_audit_sync.add_argument("--project-dir", default=OSH_HOME,
+                               help="Project root directory")
+    p_audit_sync.add_argument("--base-ref", default="HEAD",
+                               help="Git base reference for diff (default: HEAD)")
+    p_audit_sync.add_argument("--save", action="store_true", default=True,
+                               help="Save evidence to .yuleosh/reports/docsync-evidence.json")
 
     # misra
     p_misra = sub.add_parser("misra", help="MISRA C:2023 compliance management")
@@ -1298,6 +1460,13 @@ def main():
             parser.print_help()
             sys.exit(1)
 
+    elif args.command == "coverage":
+        if args.coverage_sub == "c":
+            _cmd_coverage_c(args.build_dir, args.src_dir)
+        else:
+            parser.print_help()
+            sys.exit(1)
+
     elif args.command == "demo":
         if args.demo_sub == "quick":
             from yuleosh.api.demo_quick import main as demo_quick_main
@@ -1320,7 +1489,13 @@ def main():
 
     elif args.command == "audit":
         if args.audit_sub == "evidence":
-            cmd_audit_evidence(output_dir=args.output_dir)
+            cmd_audit_evidence(output_dir=args.output_dir, create_zip=getattr(args, "zip", True))
+        elif args.audit_sub == "sync-check":
+            cmd_audit_sync_check(
+                project_dir=getattr(args, "project_dir", OSH_HOME),
+                base_ref=getattr(args, "base_ref", "HEAD"),
+                save=getattr(args, "save", True),
+            )
         else:
             parser.print_help()
             sys.exit(1)
