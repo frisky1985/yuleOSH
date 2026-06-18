@@ -3,7 +3,7 @@
 > **版本**: 1.0.0
 > **作者**: 小马 🐴（质量架构师）
 > **关联 Spec**: `specs/misra-c2023-spec.md`
-> **专家评审对应**: 老陈 G-01 ~ G-19 全覆盖
+> **专家评审对应**: 老陈 G-01 ~ G-19 全覆盖 + Pipeline 优化 G-18 ~ G-30
 
 ---
 
@@ -181,7 +181,7 @@
 | ALM 集成 | G-13 | Advisory | 预留接口（桩实现） | ✅ |
 | 误报率基准 | G-10 | Advisory | Benchmark 需后续迭代 | ⚠️ |
 
-### G-01 ~ G-19 覆盖总表
+### G-01 ~ G-30 覆盖总表
 
 | 编号 | 缺口项 | 原始建议工作量 | 实施状态 | 验收状态 | 对应验收节 |
 |:----|:-------|:--------------|:---------|:--------|:----------|
@@ -203,7 +203,19 @@
 | **G-16** | MCU 特定规则扩展包 | Nice-to-have | ❌ 未开始 | — | — |
 | **G-17** | 安全/性能/测试 Profile 切换 | Nice-to-have | ❌ 未开始 | — | — |
 
-### 最终验收判定
+| **G-18** | 嵌入式 C 单元测试框架集成 | Pipeline P0 | ❌ 未开始 | ← 见 pipeline-optimization-plan.md P0-01 |
+| **G-19** | 链接脚本/内存布局审查 | Pipeline P0 | ❌ 未开始 | ← P0-02 |
+| **G-20** | 启动代码/中断向量表审查 | Pipeline P0 | ❌ 未开始 | ← P0-03 |
+| **G-21** | SWE.6 合格性测试完整化 | Pipeline P0 | ❌ 未开始 | ← P0-04 |
+| **G-22** | Pipeline Profile 切换机制 | Pipeline P0 | ❌ 未开始 | ← P0-05 |
+| **G-23** | 堆栈使用分析 | Pipeline P1 | ❌ 未开始 | ← P1-01 |
+| **G-24** | RTOS 任务配置审查 | Pipeline P1 | ❌ 未开始 | ← P1-02 |
+| **G-25** | 外设寄存器 (MMIO) 配置审查 | Pipeline P1 | ❌ 未开始 | ← P1-03 |
+| **G-26** | MISRA 增量模式 L1+L2 双重优化 | Pipeline P1 | ❌ 未开始 | ← P1-04 |
+| **G-27** | HAL 接口契约检查 | Pipeline P2 | ❌ 未开始 | ← P2-01 |
+| **G-28** | BSP 板级支持包验证 | Pipeline P2 | ❌ 未开始 | ← P2-02 |
+| **G-29** | 编译输出验证 (.map / binary size) | Pipeline P2 | ❌ 未开始 | ← P2-03 |
+| **G-30** | 低功耗 / 能效审查 | Pipeline P2 | ❌ 未开始 | ← P2-04 |
 
 | 判定 | 依据 |
 |:----|:------|
@@ -215,4 +227,46 @@
 ---
 
 *本文档是 misra-c2023-spec.md 的验收执行视图，供测试团队和小克 👨‍💻 使用。*
-*最终版更新: 2026-06-18 — G-01~G-19 全覆盖，状态标记为 pass/fail。*
+*最终版更新: 2026-06-18 — G-01~G-19 全覆盖（MISRA）+ G-18~G-30 新增（Pipeline 优化），状态标记为 pass/fail。*
+
+
+## 14. Pipeline 优化验收 (G-18 ~ G-30) ← NEW
+
+| # | 验收项 | SHALL ID | 优先级 | 验证方法 | 通过标准 | 状态 |
+|:-:|:-------|:---------|:------:|:---------|:---------|:----:|
+| 14.1 | C 单元测试框架 step handler 存在 (Unity/Ceedling) | SWE-PLN-CUT1 | P0 | 检查 L1 层 CI 配置 | code-c-unit-tests step handler 在 L1 层注册并运行 | ❌ |
+| 14.2 | C 单元测试使用专用框架 | SWE-PLN-CUT2 | P0 | 检查测试输出 | 测试框架为 Unity/Ceedling/CMocka 之一 | ❌ |
+| 14.3 | C 测试覆盖率由 gcov/lcov 生成 | SWE-PLN-CUT3 | P0 | 检查 CI 输出 | coverage 报告包含 C 源文件的行/分支覆盖率 | ❌ |
+| 14.4 | 链接脚本审查 step handler 存在 | SWE-PLN-LK1 | P0 | 检查 L2 层 CI 配置 | code-linker-script-review 在 L2 层注册并运行 | ❌ |
+| 14.5 | 链接脚本覆盖内存区域/栈/向量表 | SWE-PLN-LK2 | P0 | 审查 Agent 输出 | Agent 报告包含 MEMORY 区域、stack/heap、segment placement 检查 | ❌ |
+| 14.6 | 启动代码审查 step handler 存在 | SWE-PLN-STUP1 | P0 | 检查 L2.5 层 CI 配置 | code-startup-review 在 L2.5 层注册并运行 | ❌ |
+| 14.7 | 启动审查覆盖向量表/BSS/data/SystemInit/FPU | SWE-PLN-STUP2 | P0 | 审查 Agent 输出 | Agent 报告包含向量表、BSS 清零、data 复制、SystemInit、FPU 使能检查 | ❌ |
+| 14.8 | SWE.6 合格性测试规范定义步骤存在 | SWE-PLN-SWE6-1 | P0 | 检查 Pipeline 步骤定义 | code-swe6-qualification-plan 步骤在 Pipeline 中注册 | ❌ |
+| 14.9 | L3 合格性测试执行步骤存在 | SWE-PLN-SWE6-2 | P0 | 检查 L3 层 CI 配置 | code-swe6-qualification-exec 在 L3 层注册并运行 | ❌ |
+| 14.10 | 合格性测试报告含规范↔结果追溯链 | SWE-PLN-SWE6-3 | P0 | 审查报告输出 | final-report 包含测试规范到测试用例到测试结果的追溯表格 | ❌ |
+| 14.11 | Pipeline 支持 ≥2 种 Profile 切换 | SWE-PLN-PROF1 | P0 | 运行 yuleosh config profile list | 输出包含 general 和 embedded 两个 profile | ❌ |
+| 14.12 | Profile 通过 ci-config.yaml 声明 | SWE-PLN-PROF2 | P0 | 检查配置解析 | ci-config.yaml 的 pipeline.profile 字段影响 step handler 选择 | ❌ |
+| 14.13 | Pipeline 启动时校验 Profile 完整性 | SWE-PLN-PROF3 | P0 | 运行缺失 step 的 profile | Pipeline 在启动阶段报告 profile 检查失败并阻断 | ❌ |
+| 14.14 | L2 堆栈使用分析步骤存在 | SWE-PLN-STACK1 | P1 | 检查 L2 层 CI 配置 | code-stack-analysis step handler 在 L2 层注册并运行 | ❌ |
+| 14.15 | 堆栈使用 ≥95% 阻断 | SWE-PLN-STACK2 | P1 | 注入高堆栈使用率测试 | 堆栈使用 ≥95% → stage status=failed | ❌ |
+| 14.16 | RTOS 配置审查 step handler 存在 | SWE-PLN-RTOS1 | P1 | 检查 L2 层 CI 配置 | code-rtos-config-review 在 L2 层注册并运行 | ❌ |
+| 14.17 | RTOS 审查覆盖优先级/IPC/assert | SWE-PLN-RTOS2 | P1 | 审查 Agent 输出 | Agent 报告包含 configMINIMAL_STACK_SIZE、优先级分布、IPC 超时、configASSERT | ❌ |
+| 14.18 | MMIO 配置审查 step handler 存在 | SWE-PLN-MMIO1 | P1 | 检查 L2.5 层 CI 配置 | code-mmio-config-review 在 L2.5 层注册并运行 | ❌ |
+| 14.19 | MMIO 审查覆盖时钟/GPIO/NVIC/DMA | SWE-PLN-MMIO2 | P1 | 审查 Agent 输出 | Agent 报告包含时钟使能、GPIO 复用、NVIC 优先级、DMA 映射 | ❌ |
+| 14.20 | L1 MISRA delta 模式 | SWE-PLN-MSR-D1 | P1 | 提交含 MISRA 违规的修改文件 | L1 仅报告修改文件中的 MISRA 违规，不扫描全量 | ❌ |
+| 14.21 | L2 MISRA 全量+零增量阻断 | SWE-PLN-MSR-D2 | P1 | 与 baseline 对比 | 新增 Required 违规 → Pipeline 阻断 | ❌ |
+| 14.22 | MISRA delta 阻断新增 Required 违规 | SWE-PLN-MSR-D3 | P1 | 注入新 Required 违规 | Pipeline 在 delta 模式下阻断新增 Required 违规 | ❌ |
+
+### 14.x Pipeline 优化汇总
+
+| # | 优先级 | 数量 | 当前状态 |
+|:-:|:------:|:----:|:---------|
+| P0-01~P0-05 | 🔴 P0 必须 | 5 | ❌ 0/5 完成 |
+| P1-01~P1-04 | 🟡 P1 重要 | 9 | ❌ 0/9 完成 |
+| P2-01~P2-04 | 🟢 P2 加分 | 4 | ❌ 0/4 完成 |
+
+> **本验收节对应 docs/pipeline-optimization-plan.md。** 所有 P0 项必须在下个 Milestone 完成后方可通过版本验收。
+
+---
+
+*本文档 Pipeline 优化节由小马 🐴 于 2026-06-18 基于老陈审查报告新增。Pipeline 优化节引用 docs/pipeline-optimization-plan.md*
