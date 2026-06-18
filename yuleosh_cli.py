@@ -375,6 +375,55 @@ def cmd_stats(json_output: bool = False):
     cmd_stats(to_json=json_output)
 
 
+# ── Traceability Commands ───────────────────────────────────────────────
+
+
+def cmd_traceability_report(args):
+    """Generate full traceability report (Requirement ↔ Code ↔ Test ↔ Review)."""
+    from yuleosh.alm.traceability import generate_traceability_report
+
+    project_dir = getattr(args, "project_dir", OSH_HOME)
+    spec_path = getattr(args, "spec", None)
+
+    report = generate_traceability_report(
+        project_dir=project_dir,
+        spec_path=spec_path,
+        output_dir=os.path.join(project_dir, ".yuleosh", "reports"),
+    )
+
+    summary = report.get("coverage_summary", {})
+    print(f"\n  📊 追溯完整性报告")
+    print(f"  {'─' * 50}")
+    print(f"  需求总数:        {summary.get('requirements_total', 'N/A')}")
+    print(f"  测试覆盖率:      {summary.get('test_coverage_pct', 0):.1f}%")
+    print(f"  代码覆盖率:      {summary.get('code_coverage', 'N/A')}")
+    print(f"  评审覆盖率:      {summary.get('review_coverage', 'N/A')}")
+    print(f"  覆盖缺口数:      {summary.get('total_gaps', 0)}")
+    print(f"  孤立测试文件:    {summary.get('orphaned_tests', 0)}")
+
+    recs = report.get("recommendations", [])
+    if recs:
+        print()
+        for r in recs:
+            print(f"  {r}")
+
+    report_path = os.path.join(project_dir, ".yuleosh", "reports", "traceability-report.json")
+    print(f"\n  完整报告: {report_path}\n")
+
+
+def cmd_traceability_matrix(args):
+    """Generate LRM / LRT matrix as JSON."""
+    from yuleosh.alm.traceability import generate_lrm, generate_lrt
+
+    project_dir = getattr(args, "project_dir", OSH_HOME)
+    spec_path = getattr(args, "spec", None)
+
+    generate_lrm(project_dir, spec_path)
+    lrt = generate_lrt(project_dir, spec_path)
+
+    print(json.dumps(lrt, indent=2, ensure_ascii=False, default=str))
+
+
 # ── MISRA Deviate Commands ─────────────────────────────────────────────
 
 
@@ -855,6 +904,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_demo_uart.add_argument("--build", action="store_true", help="Build and run the demo after creating it")
     p_demo_uart.add_argument("--skip-cmake", action="store_true", help="Skip CMake environment check")
 
+    # traceability
+    p_trace = sub.add_parser("traceability", help="Traceability matrix management")
+    tsub = p_trace.add_subparsers(dest="traceability_sub")
+    p_trace_report = tsub.add_parser("report", help="Generate full traceability report")
+    p_trace_report.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_trace_report.add_argument("--spec", default=None, help="Path to spec file")
+    p_trace_matrix = tsub.add_parser("matrix", help="Generate LRM/LRT matrix (JSON output)")
+    p_trace_matrix.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_trace_matrix.add_argument("--spec", default=None, help="Path to spec file")
+
     # misra
     p_misra = sub.add_parser("misra", help="MISRA C:2023 compliance management")
     msub = p_misra.add_subparsers(dest="misra_sub")
@@ -983,6 +1042,15 @@ def main():
 
     elif args.command == "evidence":
         cmd_evidence_pack()
+
+    elif args.command == "traceability":
+        if args.traceability_sub == "report":
+            cmd_traceability_report(args)
+        elif args.traceability_sub == "matrix":
+            cmd_traceability_matrix(args)
+        else:
+            parser.print_help()
+            sys.exit(1)
 
     elif args.command == "stats":
         cmd_stats(json_output=args.json)
