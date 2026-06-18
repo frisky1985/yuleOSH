@@ -801,3 +801,69 @@ misra-c2023-22.2:
   severity: "required"
   category: "资源 (Resources)"
   description: "不应使用安全子集外的 C 标准库"
+
+# =============================================================================
+# Directives (Dir 系列)
+# MISRA C:2023 Directives are not rules but are equally important for
+# safe embedded development. Dir entries are prefixed with "misra-c2023-dir".
+# =============================================================================
+
+misra-c2023-dir-4.1:
+  title: "运行时边界检查"
+  severity: "required"
+  category: "runtime behavior"
+  description: "程序应确保所有数组引用、指针运算和内存访问都在有效边界内"
+
+misra-c2023-dir-4.2:
+  title: "避免未定义行为"
+  severity: "required"
+  category: "language safety"
+  description: "不得依赖任何未定义或未指定行为"
+
+misra-c2023-dir-4.3:
+  title: "汇编代码约束"
+  severity: "advisory"
+  category: "assembly"
+  description: "汇编代码应封装在内联函数或汇编模块中，不得散布在 C 代码中"
+
+misra-c2023-dir-4.4:
+  title: "Unicode/字符编码约束"
+  severity: "advisory"
+  category: "portability"
+  description: "源文件字符集和字符串字面量的编码应一致声明"
+
+misra-c2023-dir-4.5:
+  title: "char 类型使用约束"
+  severity: "required"
+  category: "type safety"
+  description: "char 类型仅用于字符数据；不得用于数值计算或布尔判断"
+
+misra-c2023-dir-4.6:
+  title: "size_t / ptrdiff_t 使用"
+  severity: "advisory"
+  category: "portability"
+  description: "数组下标和指针差值应使用 size_t / ptrdiff_t 类型"
+
+misra-c2023-dir-4.7:
+  title: "setjmp / longjmp 约束"
+  severity: "required"
+  category: "control flow"
+  description: "setjmp 和 longjmp 不得用于错误处理或异常流，应使用结构化错误处理替代"
+
+misra-c2023-dir-4.8:
+  title: "宏定义约束"
+  severity: "advisory"
+  category: "preprocessing"
+  description: "宏替换应尽量避免副作用和多次求值"
+
+misra-c2023-dir-4.9:
+  title: "条件编译完整性"
+  severity: "required"
+  category: "preprocessing"
+  description: "条件编译指令（#if / #ifdef / #ifndef）应确保所有分支都有明确定义且编译通过"
+
+misra-c2023-dir-4.10:
+  title: "诊断信息保留"
+  severity: "advisory"
+  category: "build"
+  description: "预处理、编译和链接阶段的所有诊断信息（warning/error）应保留在构建日志中"

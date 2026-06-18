@@ -384,7 +384,8 @@ def run_sil_tests(project_dir: str, ci: CIResult) -> bool:
         print(f"    \u274c {reason}")
         return False
 
-def run_misra_check(project_dir: str, ci: CIResult) -> bool:
+def run_misra_check(project_dir: str, ci: CIResult,
+                    target_files: list[str] | None = None) -> bool:
     """Run MISRA C:2023 static analysis via cppcheck --addon=misra.
 
     Parses output through misra_report.py, saves structured report
@@ -393,6 +394,20 @@ def run_misra_check(project_dir: str, ci: CIResult) -> bool:
 
     Configuration is read from ``.yuleosh/ci-config.yaml`` (misra block).
     Falls back to cppcheck --std=c11 --addon=misra when no config file.
+
+    When ``target_files`` is provided, only those files are checked
+    (incremental / delta mode).  When omitted, ``git diff HEAD~1`` is
+    used to auto-detect changed C/C++ files in the repo; if the repo
+    is not a git checkout, all source files are checked (full mode).
+
+    Parameters
+    ----------
+    project_dir : str
+        Root path of the project.
+    ci : CIResult
+        CI result accumulator.
+    target_files : list[str] | None
+        Explicit list of files to check.  None = auto-detect.
 
     Returns True if passed/acceptable violations, False if blocked.
     """
@@ -411,27 +426,65 @@ def run_misra_check(project_dir: str, ci: CIResult) -> bool:
         print("    ⏭️  MISRA check disabled — skipped")
         return True
 
-    fail_on_violation = misra_cfg.fail_on_violation if misra_cfg else False
+    fail_on_violation = misra_cfg.fail_on_violation if misra_cfg else True
+    fail_on_advisory = misra_cfg.fail_on_advisory if misra_cfg else False
     fail_threshold = misra_cfg.fail_threshold if misra_cfg else 10
+    violations_per_kloc = misra_cfg.violations_per_kloc if misra_cfg else 2.0
     addon = misra_cfg.addon if misra_cfg else "misra"
     cppcheck_std = misra_cfg.cppcheck_std if misra_cfg else "c11"
     suppress_rules = misra_cfg.suppress_rules if misra_cfg else []
     strict = is_strict()
 
-    # Find C/C++ source files
-    c_files = []
-    src_dir = os.path.join(project_dir, "src")
-    if os.path.isdir(src_dir):
-        for root, dirs, files in os.walk(src_dir):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
-            for f in files:
-                if f.endswith((".c", ".cpp")):
-                    c_files.append(os.path.join(root, f))
+    # --- Determine which files to check (delta / full) ---
+    # If target_files is given explicitly, use those (delta mode).
+    # Otherwise, try git diff to find changed files; fall back to full scan.
+    is_delta = False
+    c_files: list[str] = []
+
+    if target_files is not None:
+        # Explicit list — use exactly what was passed
+        c_files = [f for f in target_files
+                   if f.endswith((".c", ".cpp")) and os.path.isfile(
+                       os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
+        is_delta = True
+    else:
+        # Try git diff for auto-delta
+        try:
+            git_result = subprocess.run(
+                ["git", "diff", "--name-only", "HEAD~1"],
+                capture_output=True, text=True, timeout=10,
+                cwd=project_dir,
+            )
+            if git_result.returncode == 0:
+                changed_files = [f.strip() for f in git_result.stdout.splitlines() if f.strip()]
+                c_files = [
+                    os.path.join(project_dir, f) if not os.path.isabs(f) else f
+                    for f in changed_files
+                    if f.endswith((".c", ".cpp"))
+                ]
+                if c_files:
+                    is_delta = True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Fall back to full scan
+        if not c_files:
+            src_dir = os.path.join(project_dir, "src")
+            if os.path.isdir(src_dir):
+                for root, dirs, files in os.walk(src_dir):
+                    dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+                    for f in files:
+                        if f.endswith((".c", ".cpp")):
+                            c_files.append(os.path.join(root, f))
 
     if not c_files:
         ci.add_stage("misra-check", "skipped", "No C/C++ source files found")
         print("    ⏭️  No C/C++ source files — skipped")
         return True
+
+    # Print mode header
+    mode_label = "增量检查" if is_delta else "全量检查"
+    print(f"    📋 Mode: {mode_label} ({len(c_files)} file(s))")
 
     # Build suppression arguments
     suppress_args = []
@@ -506,11 +559,32 @@ def run_misra_check(project_dir: str, ci: CIResult) -> bool:
 
     total_violations = summary["total_violations"]
 
-    # Determine pass/fail
+    # --- Determine pass/fail with enhanced rules (G-09) ---
     if total_violations == 0:
         ci.add_stage("misra-check", "passed", "No MISRA violations")
         print("    ✅ MISRA check passed — no violations")
         return True
+
+    # Count required vs advisory violations from enriched groups
+    required_count = 0
+    advisory_count = 0
+    for g in groups.values():
+        sev = g.get("severity_category", "").lower()
+        if sev == "required":
+            required_count += g["count"]
+        elif sev == "advisory":
+            advisory_count += g["count"]
+
+    # Estimate KLOC from checked files
+    estimated_kloc = 0
+    try:
+        for cf in c_files:
+            if os.path.isfile(cf):
+                with open(cf) as _fh:
+                    estimated_kloc += sum(1 for _ in _fh)
+        estimated_kloc /= 1000.0
+    except Exception:
+        estimated_kloc = 0
 
     # Save raw output for debugging
     misra_dir = Path(project_dir) / ".yuleosh" / "reports"
@@ -518,14 +592,56 @@ def run_misra_check(project_dir: str, ci: CIResult) -> bool:
     raw_path = misra_dir / "misra-raw-output.txt"
     raw_path.write_text(output)
 
-    detail = str(total_violations) + " MISRA violation(s) found (see .yuleosh/reports/misra-report.json)"
+    # Blocking checks (in order of severity)
+    should_block = False
+    block_reasons = []
 
-    if fail_on_violation or (strict and total_violations >= fail_threshold):
-        ci.add_stage("misra-check", "failed", detail)
-        print("    ❌ MISRA check FAILED: " + detail)
+    # 1. Required violations with fail_on_violation
+    if fail_on_violation and required_count > 0:
+        should_block = True
+        block_reasons.append(f"{required_count} Required violation(s) (fail_on_violation=True)")
+
+    # 2. Total violations >= fail_threshold
+    if fail_threshold > 0 and total_violations >= fail_threshold:
+        should_block = True
+        block_reasons.append(f"{total_violations} violation(s) >= threshold {fail_threshold}")
+
+    # 3. Violations per KLOC exceeded
+    if violations_per_kloc > 0 and estimated_kloc > 0:
+        actual_vpkloc = total_violations / estimated_kloc
+        if actual_vpkloc > violations_per_kloc:
+            should_block = True
+            block_reasons.append(
+                f"{actual_vpkloc:.1f} violations/kloc > limit {violations_per_kloc}"
+            )
+
+    # Advisory-blocking (separate flag)
+    if fail_on_advisory and advisory_count > 0:
+        should_block = True
+        block_reasons.append(f"{advisory_count} Advisory violation(s) (fail_on_advisory=True)")
+
+    detail = (
+        f"{total_violations} MISRA violation(s) "
+        f"({required_count} required, {advisory_count} advisory) — "
+        f"see .yuleosh/reports/misra-report.json"
+    )
+
+    if should_block:
+        ci.add_stage("misra-check", "failed", "; ".join(block_reasons))
+        print(f"    ❌ MISRA check FAILED: {detail}")
+        for br in block_reasons:
+            print(f"        • {br}")
         return False
 
-    ci.add_stage("misra-check", "warning", detail)
-    print("    ⚠️  MISRA check: " + detail + " (below threshold " + str(fail_threshold) + ", not blocking)")
-    print("    📍 Full report: .yuleosh/reports/misra-report.json")
+    # Advisory violations over threshold → warning but don't block
+    if advisory_count > 0 and not fail_on_advisory:
+        ci.add_stage("misra-check", "warning", detail)
+        print(f"    ⚠️  MISRA check: {detail}")
+        print(f"        Advisory violations ({advisory_count}) do not block pipeline")
+        print(f"    📍 Full report: .yuleosh/reports/misra-report.json")
+        return True
+
+    ci.add_stage("misra-check", "passed", detail)
+    print(f"    ✅ MISRA check: {detail}")
+    print(f"    📍 Full report: .yuleosh/reports/misra-report.json")
     return True
