@@ -1,5 +1,5 @@
 1:"$Sreact.fragment"
 2:I[97367,["/yuleOSH/_next/static/chunks/05-c3ty_6dwfk.js","/yuleOSH/_next/static/chunks/14mrh2-p_w84d.js"],"OutletBoundary"]
 3:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"min-h-screen bg-gray-50 p-8","children":["$","h1",null,{"className":"text-2xl font-bold","children":["Project ","$undefined"]}]}],null,["$","$L2",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@4"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"XWa8nPAjbJ4E_T9i9c7Wi"}
+0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"min-h-screen bg-gray-50 p-8","children":["$","h1",null,{"className":"text-2xl font-bold","children":["Project ","$undefined"]}]}],null,["$","$L2",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@4"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"D_kkzMMOruLndCmN9F0Ny"}
 4:null

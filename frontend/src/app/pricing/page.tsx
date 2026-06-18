@@ -12,8 +12,19 @@ type Locale = "zh-CN" | "en";
 const LOCALE_KEY = "yuleOSH_locale";
 
 function useLocale(): [Locale, () => void] {
-  const [locale, setLocale] = useState<Locale>("zh-CN");
-  const toggle = () => setLocale((l) => (l === "zh-CN" ? "en" : "zh-CN"));
+  const [locale, setLocale] = useState<Locale>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem(LOCALE_KEY) as Locale) || "zh-CN";
+    }
+    return "zh-CN";
+  });
+  const toggle = () => setLocale((l) => {
+    const next: Locale = l === "zh-CN" ? "en" : "zh-CN";
+    if (typeof window !== "undefined") {
+      localStorage.setItem(LOCALE_KEY, next);
+    }
+    return next;
+  });
   return [locale, toggle];
 }
 
@@ -106,7 +117,7 @@ const zh = {
     items: [
       {
         q: "可以先试用 Pro 再付费吗？",
-        a: "当然！从 Free 版开始，无需绑定信用卡。随时可通过 Dashboard 升级至 Pro。",
+        a: "当然！Pro 首月免费试用，无需绑定信用卡。随时可通过 Dashboard 升级，不满意在第一个月内取消即可，无任何费用。",
       },
       {
         q: "Pro 支持哪些硬件适配器？",
@@ -229,7 +240,7 @@ const en: typeof zh = {
   faq: {
     title: "Frequently Asked Questions",
     items: [
-      { q: "Can I try Pro before buying?", a: "Yes! Start with Free — no credit card required. Upgrade anytime via the dashboard." },
+      { q: "Can I try Pro before buying?", a: "Yes! Start with a free month of Pro — no credit card required. Upgrade via the dashboard anytime. Not satisfied? Just cancel within the first month at no cost." },
       { q: "What hardware adapters does Pro support?", a: "OpenOCD (STM32), JLink (ARM Cortex-M), esptool (ESP32), Vector CANoe/dSPACE for automotive. More on the way." },
       { q: "What's the difference between Team and Pro?", a: "Team is ¥199/mo for 3-10 person teams with the full pipeline and basic compliance. Pro is ¥999/mo for unlimited members, HIL, multi-tenant, plugin marketplace, advanced evidence packs, and 48h support." },
       { q: "Can I cancel anytime?", a: "Yes. No lock-in, no cancellation fees. Your data stays accessible on the Free tier after cancellation." },
@@ -341,7 +352,8 @@ export default function PricingPage() {
               </>
             )}
           </h1>
-          <p className="text-lg text-[#94a3b8] max-w-2xl mx-auto mb-4">{t.hero.sub}</p>
+          {/* English uses hero.sub inside the h1; only show sub paragraph for non-English */}
+          {locale !== "en" && <p className="text-lg text-[#94a3b8] max-w-2xl mx-auto mb-4">{t.hero.sub}</p>}
           <p className="text-sm text-[#64748b] max-w-xl mx-auto">
             {t.hero.desc}
             <code className="text-[#10b981] bg-[#10b981]/10 px-1.5 py-0.5 rounded text-xs mx-1">{t.hero.code}</code>
@@ -353,7 +365,7 @@ export default function PricingPage() {
       {/* Pricing Cards - 4 tiers */}
       <section className="py-16 bg-[#0d111f]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-4 lg:gap-6 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-4 lg:gap-6 max-w-5xl mx-auto place-items-center">
             {t.plans.map((plan, idx) => {
               const isPro = plan.name === "Pro";
               const planKey = plan.name.toLowerCase();
