@@ -76,6 +76,33 @@ class MisraDeviation:
 
 
 @dataclass
+class AlmConfig:
+    """ALM (Application Lifecycle Management) integration configuration.
+
+    Attributes
+    ----------
+    enabled : bool
+        Whether ALM integration is active.
+    backend : str
+        ALM system type: ``"jira"`` | ``"polarion"`` | ``"codebeamer"``.
+    url : str
+        Base URL of the ALM instance.
+    project_key : str
+        Project key or space name in the ALM system.
+    api_token : str
+        API token or password for authentication.
+        Reading from environment variables (e.g. ``ALM_API_TOKEN``) is
+        strongly recommended over hard-coding.
+    """
+
+    enabled: bool = False
+    backend: str = ""  # "jira" | "polarion" | "codebeamer"
+    url: str = ""
+    project_key: str = ""
+    api_token: str = ""  # 从环境变量读取更安全
+
+
+@dataclass
 class MisraConfig:
     """MISRA C:2023 static analysis configuration (A-03)."""
 
@@ -91,6 +118,7 @@ class MisraConfig:
     rule_overrides: list[MisraRuleOverride] = field(default_factory=list)
     deviations: list[MisraDeviation] = field(default_factory=list)
     _deviation_raw: list[dict] = field(default_factory=list)  # preserve raw YAML order for writing
+    alm: AlmConfig = field(default_factory=AlmConfig)
 
 
 @dataclass
@@ -284,6 +312,19 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
                     dev_raw_list.append(d)
             cfg.misra.deviations = dev_list
             cfg.misra._deviation_raw = dev_raw_list
+
+        # ALM block (nested under misra)
+        alm_block = misra_block.get("alm", {})
+        if isinstance(alm_block, dict):
+            cfg.misra.alm.enabled = bool(alm_block.get("enabled", False))
+            cfg.misra.alm.backend = str(alm_block.get("backend", ""))
+            cfg.misra.alm.url = str(alm_block.get("url", ""))
+            cfg.misra.alm.project_key = str(alm_block.get("project_key", ""))
+            # API token may come from config or from env var for safety
+            cfg.misra.alm.api_token = str(alm_block.get("api_token", ""))
+            env_token = os.environ.get("ALM_API_TOKEN", "")
+            if env_token:
+                cfg.misra.alm.api_token = env_token
 
     # Hardware test block
     hw_block = raw.get("hardware_test", {})

@@ -513,6 +513,202 @@ def _interactive_add_deviation(project_dir: str) -> None:
         sys.exit(1)
 
 
+# ── MISRA Trend Command ────────────────────────────────────────────────
+
+
+def cmd_misra_trend(args):
+    """Handle ``yuleosh misra trend`` — display or export trend data."""
+    from yuleosh.ci.misra_trend import show_trend
+
+    project_dir = OSH_HOME
+    result = show_trend(
+        project_dir,
+        lines=args.lines,
+        days=args.days,
+        as_json=args.json,
+    )
+    print(result)
+
+
+# ── MISRA Report Command ───────────────────────────────────────────────
+
+
+def cmd_misra_report(args):
+    """Handle ``yuleosh misra report`` — read latest report and output."""
+    report_dir = Path(OSH_HOME) / ".yuleosh" / "reports"
+
+    # Determine format
+    output_format = getattr(args, "format", "summary")
+
+    json_path = report_dir / "misra-report.json"
+    md_path = report_dir / "misra-report.md"
+
+    if not json_path.exists():
+        print(f"No MISRA report found. Run CI first: yuleosh ci run 1", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        report = json.loads(json_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error reading report: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if output_format == "html":
+        _render_misra_report_html(report)
+    elif output_format == "json":
+        print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+    elif output_format == "markdown":
+        if md_path.exists():
+            print(md_path.read_text(encoding="utf-8"))
+        else:
+            print("Markdown report not available.", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # summary (default)
+        _print_misra_report_summary(report)
+
+
+def _print_misra_report_summary(report: dict) -> None:
+    """Print a human-readable summary of the MISRA report."""
+    summary = report.get("summary", {})
+    generated = report.get("generated_at", "")[:19]
+
+    print(f"\n  📊 MISRA C:2023 Compliance Report")
+    print(f"  {'─' * 50}")
+    print(f"  Generated: {generated}")
+    print(f"  Tool:      {report.get('tool', 'cppcheck')}")
+    print()
+    print(f"  Total violations:   {summary.get('total_violations', 0)}")
+    print(f"  Rules violated:    {summary.get('total_rules_violated', 0)}")
+    print(f"  Files affected:    {len(summary.get('unique_files', []))}")
+    print()
+
+    sev_counts = summary.get("severity_counts", {})
+    if sev_counts:
+        print(f"  Severity breakdown:")
+        for sev in ["error", "warning", "style", "performance", "portability", "information"]:
+            count = sev_counts.get(sev, 0)
+            if count:
+                icon = {"error": "❌", "warning": "⚠️", "style": "🎨", "performance": "⚡",
+                        "portability": "🔗", "information": "ℹ️"}.get(sev, "•")
+                print(f"    {icon} {sev}: {count}")
+
+    print()
+    per_file = summary.get("per_file_counts", {})
+    if per_file:
+        print(f"  Files with violations:")
+        for fname, count in sorted(per_file.items(), key=lambda x: -x[1])[:10]:
+            print(f"    • {fname}: {count}")
+        if len(per_file) > 10:
+            print(f"    ... and {len(per_file) - 10} more file(s)")
+    print()
+
+    # Groups (top rules)
+    groups = report.get("groups", {})
+    if groups:
+        print(f"  Top violated rules:")
+        sorted_groups = sorted(groups.items(), key=lambda x: -x[1].get("count", 0))[:5]
+        for rule_id, g in sorted_groups:
+            title = g.get("title", "")
+            sev = g.get("severity_category", "unknown")
+            sev_icon = {"required": "🔴", "advisory": "🟡", "unknown": "⚪"}.get(sev, "⚪")
+            print(f"    {sev_icon} {rule_id}: {g.get('count', 0)} — {title}")
+    print()
+
+    summary_path = Path(OSH_HOME) / ".yuleosh" / "reports" / "misra-report.json"
+    print(f"  Full report: {summary_path}")
+    print()
+
+
+def _render_misra_report_html(report: dict) -> None:
+    """Render MISRA report as a simple HTML page to stdout."""
+    summary = report.get("summary", {})
+    generated = report.get("generated_at", "")[:19]
+    total_v = summary.get("total_violations", 0)
+    rules_v = summary.get("total_rules_violated", 0)
+    files_n = len(summary.get("unique_files", []))
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MISRA C:2023 — Compliance Report</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #333; }}
+  h1 {{ color: #1a1a2e; border-bottom: 3px solid #e94560; padding-bottom: 0.5rem; }}
+  h2 {{ color: #16213e; margin-top: 2rem; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; }}
+  th, td {{ border: 1px solid #ddd; padding: 8px 12px; text-align: left; }}
+  th {{ background: #f5f5f5; font-weight: 600; }}
+  .summary-card {{ background: #f8f9fa; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; display: flex; gap: 2rem; }}
+  .stat {{ text-align: center; }}
+  .stat-value {{ font-size: 2rem; font-weight: 700; color: #e94560; }}
+  .stat-label {{ font-size: 0.85rem; color: #666; }}
+  .severity-required {{ color: #d32f2f; }}
+  .severity-advisory {{ color: #f57c00; }}
+  footer {{ margin-top: 3rem; font-size: 0.85rem; color: #999; border-top: 1px solid #eee; padding-top: 1rem; }}
+</style>
+</head>
+<body>
+<h1>🔍 MISRA C:2023 Compliance Report</h1>
+<p>Generated: {generated} | Tool: {report.get('tool', 'cppcheck')}</p>
+<div class="summary-card">
+  <div class="stat"><div class="stat-value">{total_v}</div><div class="stat-label">Total Violations</div></div>
+  <div class="stat"><div class="stat-value">{rules_v}</div><div class="stat-label">Rules Violated</div></div>
+  <div class="stat"><div class="stat-value">{files_n}</div><div class="stat-label">Files Affected</div></div>
+</div>
+"""
+
+    # Severity breakdown
+    sev_counts = summary.get("severity_counts", {})
+    if sev_counts:
+        html += "<h2>Severity Breakdown</h2>\n<table>\n<tr><th>Severity</th><th>Count</th></tr>\n"
+        for sev in ["error", "warning", "style", "performance", "portability", "information"]:
+            count = sev_counts.get(sev, 0)
+            if count:
+                html += f"<tr><td>{sev}</td><td>{count}</td></tr>\n"
+        html += "</table>\n"
+
+    # Per-file
+    per_file = summary.get("per_file_counts", {})
+    if per_file:
+        html += "<h2>Files with Violations</h2>\n<table>\n<tr><th>File</th><th>Violations</th></tr>\n"
+        for fname, count in sorted(per_file.items(), key=lambda x: -x[1])[:20]:
+            html += f"<tr><td>{fname}</td><td>{count}</td></tr>\n"
+        html += "</table>\n"
+
+    # Groups
+    groups = report.get("groups", {})
+    if groups:
+        html += "<h2>Violations by Rule</h2>\n"
+        sorted_groups = sorted(groups.items(), key=lambda x: -x[1].get("count", 0))
+        for rule_id, g in sorted_groups:
+            title = g.get("title", "")
+            sev = g.get("severity_category", "unknown")
+            count = g.get("count", 0)
+            sev_class = f"severity-{sev}" if sev in ("required", "advisory") else ""
+            html += f"<h3 class=\"{sev_class}\">{rule_id}: {title}</h3>\n"
+            html += f"<p>Count: {count} | Severity: {sev}</p>\n"
+            html += "<table>\n<tr><th>File</th><th>Line</th><th>Column</th><th>Message</th></tr>\n"
+            for v in g.get("violations", [])[:20]:
+                msg = v.get("message", "")[:80]
+                html += f"<tr><td>{v.get('file', '')}</td><td>{v.get('line', '')}</td><td>{v.get('col', '')}</td><td>{msg}</td></tr>\n"
+            html += "</table>\n"
+
+    html += """
+<footer>
+  Report generated by yuleOSH MISRA Report Formatter
+</footer>
+</body>
+</html>
+"""
+
+    html_path = Path(OSH_HOME) / ".yuleosh" / "reports" / "misra-report.html"
+    html_path.write_text(html, encoding="utf-8")
+    print(f"HTML report saved to: {html_path}")
+
+
 # ── Parser ──────────────────────────────────────────────────────────────
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -595,6 +791,23 @@ def _build_parser() -> argparse.ArgumentParser:
     # misra
     p_misra = sub.add_parser("misra", help="MISRA C:2023 compliance management")
     msub = p_misra.add_subparsers(dest="misra_sub")
+
+    # misra trend
+    p_misra_trend = msub.add_parser("trend", help="Show MISRA violation trend")
+    p_misra_trend.add_argument("--json", action="store_true", help="Output as JSON")
+    p_misra_trend.add_argument("--days", type=int, default=0, help="Filter entries within N days")
+    p_misra_trend.add_argument("--lines", "-n", type=int, default=30, help="Number of entries to show")
+
+    # misra report
+    p_misra_report = msub.add_parser("report", help="Show MISRA compliance report")
+    p_misra_report.add_argument(
+        "--format", "-f",
+        choices=["summary", "json", "markdown", "html"],
+        default="summary",
+        help="Output format (default: summary)",
+    )
+
+    # misra deviate
     p_misra_deviate = msub.add_parser("deviate", help="Manage deviation records")
     mdev = p_misra_deviate.add_subparsers(dest="deviate_sub")
     # deviate list
@@ -701,7 +914,11 @@ def main():
         cmd_stats(json_output=args.json)
 
     elif args.command == "misra":
-        if args.misra_sub == "deviate":
+        if args.misra_sub == "trend":
+            cmd_misra_trend(args)
+        elif args.misra_sub == "report":
+            cmd_misra_report(args)
+        elif args.misra_sub == "deviate":
             cmd_misra_deviate(args)
         else:
             parser.print_help()
