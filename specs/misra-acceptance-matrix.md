@@ -269,6 +269,16 @@
 | 14.20 | L1 MISRA delta 模式 | SWE-PLN-MSR-D1 | P1 | 提交含 MISRA 违规的修改文件 | L1 仅报告修改文件中的 MISRA 违规，不扫描全量 | ❌ |
 | 14.21 | L2 MISRA 全量+零增量阻断 | SWE-PLN-MSR-D2 | P1 | 与 baseline 对比 | 新增 Required 违规 → Pipeline 阻断 | ❌ |
 | 14.22 | MISRA delta 阻断新增 Required 违规 | SWE-PLN-MSR-D3 | P1 | 注入新 Required 违规 | Pipeline 在 delta 模式下阻断新增 Required 违规 | ❌ |
+| 14.23 | BSP 板级支持包 step handler 存在 | — | 🟢 P2 | 检查 L2.5 层 CI 配置 | `bsp-validation` step handler 在 L2.5 层注册并运行 | 🏗️ G-42 实施中 |
+| 14.24 | BSP 描述文件与硬件原理图一致性验证 | — | 🟢 P2 | Agent 审查输出 | 验证 bsp-<board>.yaml 中 pin-mux/clock 配置与原理图一致 | 🏗️ G-42 实施中 |
+| 14.25 | 跨板配置漂移自动检测 | — | 🟢 P2 | 注入多板配置差异 | BSP 变更后检测到跨板（STM32F4/STM32H7/ESP32）配置漂移并告警 | 🏗️ G-42 实施中 |
+| 14.26 | 编译输出验证 step handler 存在 | — | 🟢 P2 | 检查 L2 层 CI 配置 | `build-output-check` step handler 在 L2 层注册并运行 | 🏗️ G-43 实施中 |
+| 14.27 | .map 文件解析各区段尺寸 | — | 🟢 P2 | 运行构建后检查 | 从 `.map` 提取 .text/.data/.bss/.stack/.heap 各区段具体尺寸 | 🏗️ G-43 实施中 |
+| 14.28 | 区段尺寸 diff 对比（与上一次成功构建） | — | 🟢 P2 | 连续两次构建后检查 | 输出本次 vs 上次各区段尺寸变化（±bytes，±%） | 🏗️ G-43 实施中 |
+| 14.29 | 各区段增长告警门禁 | — | 🟢 P2 | 注入大代码变更 | `.text +10%` → warning；`.text +20%` → blocking | 🏗️ G-43 实施中 |
+| 14.30 | 低功耗审查 step handler 存在 | — | 🟢 P2 | 检查 L2.5 层 CI 配置 | `power-review` step handler 在 L2.5 层注册并运行 | 🏗️ G-44 实施中 |
+| 14.31 | Agent 审查覆盖看门狗/休眠/唤醒/时钟门控 | — | 🟢 P2 | Agent 审查输出 | Agent 报告包含 IWDG/WWDG 周期、休眠模式路径、RTC 唤醒、RCC 时钟门控、未用外设时钟禁用 | 🏗️ G-44 实施中 |
+| 14.32 | 低功耗审查报告含风险等级评估 | — | 🟢 P2 | 审查报告输出 | 每条发现标记 🟢/🟡/🔴 风险等级，汇总功耗风险区域 | 🏗️ G-44 实施中 |
 
 ### 14.x Pipeline 优化汇总（Sprint A — 目标 87+）
 
@@ -281,7 +291,7 @@
 | G-46 (追溯短期) | 🔴 P0 | 4 | ✅ 引擎已就位；🏗️ **L2 handler 待 Sprint A** |
 | G-33 (Profile 切换) | 🔴 P0 | 3 | 🏗️ **Sprint A — 架构+首次实现** |
 | P1-01~P1-04 | 🟡 P1 | 9 | 🏗️ 3/4 进行中（堆栈/MMIO/MISRA增量） |
-| P2-01~P2-04 | 🟢 P2 | 4 | 🗓️ Sprint B+ |
+| P2-01~P2-04 | 🟢 P2 | 4 | 🏗️ Sprint A/B (G-42/G-43/G-44 实施中) |
 
 > **本验收节对应 docs/pipeline-optimization-plan.md。** Sprint A 目标 87+/100，P0 全部闭环为硬门槛。
 
