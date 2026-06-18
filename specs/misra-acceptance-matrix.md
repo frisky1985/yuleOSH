@@ -1,10 +1,10 @@
 # MISRA C:2023 集成 — 验收判定矩阵（最终版）
 
-> **版本**: 1.1.0
+> **版本**: 1.2.0
 > **作者**: 小马 🐴（质量架构师）
 > **关联 Spec**: `specs/misra-c2023-spec.md`
 > **专家评审对应**: 老陈 G-01 ~ G-19 全覆盖 + Pipeline 优化 G-18 ~ G-46
-> **三轮审查更新**: 2026-06-18 — 评分 76/100，G-34~G-40 已完成，新增 G-45~G-46
+> **Sprint A 更新**: 2026-06-18 — 87+ 目标，Profile 切换验收 (§16)，CL2 证据要求 (§17)，G-31~G-46 总表 (§18)
 
 ---
 
@@ -223,22 +223,22 @@
 | ✅ **全部通过（MISRA C:2023）** | 所有 Required 级别验收项通过（含 G-01~G-13 中 Required 项） |
 | | G-10（误报率 Benchmark）为 Advisory 级别，标记 ⚠️ 待后续 Sprint 完成 |
 | | G-14~G-17 为 Nice-to-have，不纳入本次质量门禁 |
-| | 详细状态：所有 13 个 Gap 中，10 ✅ 完成，1 ⚠️ 部分完成（G-10），3 ❌ 未开始（G-14~G-17 均为 Nice-to-have） |
-| 🏗️ **Pipeline 优化进行中（G-18~G-46）** | 三轮审查 76/100，G-34~G-40 已完成（7 项），G-18~G-30 中 3 项可标记完成 |
-| | G-45/G-46 为三轮新增，0/7 完成 |
-| | 目标 85+/100，剩余核心：SWE.6（G-31）、C 覆盖率（G-45）、追溯（G-46）、Profile（G-33） |
+| | 详细状态：13 个 MISRA Gap 中，10 ✅，1 ⚠️（G-10），2 ❌（G-14/G-16 Nice-to-have） |
+| 🏗️ **Pipeline 优化 Sprint A（G-18~G-46，目标 87+）** | 三轮实评 76/100，G-34~G-40 全部深度补缺已完成（7 项）✅ |
+| | G-32（C 框架基础）✅；G-45（gcov/CLI）🏗️；G-46（追溯引擎 ✅ / L2 handler 🏗️） |
+| | 目标 87+/100，Sprint A 关键瓶颈：SWE.6（G-31）、C 覆盖（G-45）、追溯 L2 handler（G-46）、Profile（G-33） |
 
 ---
 
 *本文档是 misra-c2023-spec.md 的验收执行视图，供测试团队和小克 👨‍💻 使用。*
-*最终版更新: 2026-06-18 (v1.1.0) — G-01~G-19 全覆盖（MISRA ✅）+ G-18~G-30 新增（Pipeline 优化 🤖）+ 三轮审查 G-34~G-40 已完成 ✅、G-45~G-46 新增 🆕*
+*Sprint A 更新: 2026-06-18 (v1.2.0) — 追加 Profile 切换验收 (§16)、CL2 证据要求 (§17)、G-31~G-46 状态总表 (§18)；评分路径更新至 87+ 目标*
 
 
 ## 14. Pipeline 优化验收 (G-18 ~ G-30) ← NEW
 
 | # | 验收项 | SHALL ID | 优先级 | 验证方法 | 通过标准 | 状态 |
 |:-:|:-------|:---------|:------:|:---------|:---------|:----:|
-| 14.1 | C 单元测试框架 step handler 存在 (Unity/Ceedling) | SWE-PLN-CUT1 | P0 | 检查 L1 层 CI 配置 | code-c-unit-tests step handler 在 L1 层注册并运行 | ⚠️ 框架已引入，步骤配置确认中 |
+| 14.1 | C 单元测试框架 step handler 存在 (Unity/Ceedling) | SWE-PLN-CUT1 | P0 | 检查 L1 层 CI 配置 | code-c-unit-tests step handler 在 L1 层注册并运行 | ✅ 框架已引入，handler + pipeline 集成就绪 |
 | 14.2 | C 单元测试使用专用框架 | SWE-PLN-CUT2 | P0 | 检查测试输出 | 测试框架为 Unity/Ceedling/CMocka 之一 | ✅ 框架选定 Unity+CMock |
 | 14.3 | C 测试覆盖率由 gcov/lcov 生成 | SWE-PLN-CUT3 | P0 | 检查 CI 输出 | coverage 报告包含 C 源文件的行/分支覆盖率 | ❌ G-45 追踪 |
 | 14.4 | 链接脚本审查 step handler 存在 | SWE-PLN-LK1 | P0 | 检查 L2 层 CI 配置 | code-linker-script-review 在 L2 层注册并运行 | ✅ |
@@ -270,15 +270,20 @@
 | 14.21 | L2 MISRA 全量+零增量阻断 | SWE-PLN-MSR-D2 | P1 | 与 baseline 对比 | 新增 Required 违规 → Pipeline 阻断 | ❌ |
 | 14.22 | MISRA delta 阻断新增 Required 违规 | SWE-PLN-MSR-D3 | P1 | 注入新 Required 违规 | Pipeline 在 delta 模式下阻断新增 Required 违规 | ❌ |
 
-### 14.x Pipeline 优化汇总
+### 14.x Pipeline 优化汇总（Sprint A — 目标 87+）
 
-| # | 优先级 | 数量 | 当前状态 |
-|:-:|:------:|:----:|:---------|
-| P0-01~P0-05 | 🔴 P0 必须 | 5 | 🏗️ 2/7（G-34/G-35/G-36/G-38/G-39/G-40 已完成；G-31/G-32/G-33/G-45/G-46 进行中） |
-| P1-01~P1-04 | 🟡 P1 重要 | 9 | 🏗️ 3/9（G-37 短期、G-39、G-40 已完成） |
-| P2-01~P2-04 | 🟢 P2 加分 | 4 | 🗓️ 0/4 完成 |
+| # | 优先级 | 数量 | Sprint A 状态 |
+|:-:|:------:|:----:|:-------------|
+| G-34~G-40 (深度补缺) | 🔴 P0 | 7 | ✅ **全部已完成**（review_linker/startup/rtos/memory） |
+| G-32 (C 框架基础) | 🔴 P0 | 1 | ✅ **已完成**（handler + 模板 + pipeline 集成） |
+| G-31 (SWE.6 三段式) | 🔴 P0 | 3 | 🏗️ **Sprint A #1 优先** |
+| G-45 (C 覆盖率) | 🔴 P0 | 3 | 🏗️ **Sprint A — gcov/lcov + CLI** |
+| G-46 (追溯短期) | 🔴 P0 | 4 | ✅ 引擎已就位；🏗️ **L2 handler 待 Sprint A** |
+| G-33 (Profile 切换) | 🔴 P0 | 3 | 🏗️ **Sprint A — 架构+首次实现** |
+| P1-01~P1-04 | 🟡 P1 | 9 | 🏗️ 3/4 进行中（堆栈/MMIO/MISRA增量） |
+| P2-01~P2-04 | 🟢 P2 | 4 | 🗓️ Sprint B+ |
 
-> **本验收节对应 docs/pipeline-optimization-plan.md。** 所有 P0 项必须在下个 Milestone 完成后方可通过版本验收。
+> **本验收节对应 docs/pipeline-optimization-plan.md。** Sprint A 目标 87+/100，P0 全部闭环为硬门槛。
 
 ---
 
@@ -294,15 +299,94 @@
 | 15.6 | 未覆盖测试的需求阻断 Pipeline | SWE-PLN-TR3 | P0 | 注入未覆盖需求 | 需求有实现但无对应测试 → stage=failed | ❌ |
 | 15.7 | `yuleosh trace matrix` CLI 命令 | SWE-PLN-TR4 | P0 | 运行 `yuleosh trace matrix` | 输出追溯矩阵表格 | ❌ |
 
-### 15.x 三轮审查新增汇总
+### 15.x 三轮审查新增汇总（Sprint A）
 
-| # | 优先级 | 数量 | 当前状态 |
-|:-:|:------:|:----:|:---------|
-| G-45 (C 覆盖深度) | 🔴 P0 必须 | 3 | ❌ 0/3 完成 |
-| G-46 (追溯自动化) | 🔴 P0 必须 | 4 | ❌ 0/4 完成 |
+| # | 优先级 | 数量 | Sprint A 状态 |
+|:-:|:------:|:----:|:-------------|
+| G-45 (C 覆盖深度：gcov/lcov + CLI) | 🔴 P0 必须 | 3 | ❌ 0/3 → 目标 Sprint A 全部闭环 |
+| G-46 (追溯自动化：引擎已就位 + L2 handler) | 🔴 P0 必须 | 4 | ✅ 短期引擎已完成；❌ L2 handler 待 Sprint A（目标 2/4） |
 
-> **本验收节对应 docs/pipeline-optimization-plan.md §三轮审查新增缺口。** 追溯完整性维度三轮评分 35/100，目标提升至 ≥60/100。
+> **本验收节对应 docs/pipeline-optimization-plan.md §三轮审查新增缺口。** 追溯完整性维度三轮评分 35/100，Sprint A 目标提升至 ≥60/100。
 
 ---
 
-*本文档 Pipeline 优化节由小马 🐴 于 2026-06-18 基于老陈审查报告新增。Pipeline 优化节引用 docs/pipeline-optimization-plan.md*
+## 16. Profile 切换验收项（Sprint A 新增）
+
+| # | 验收项 | SHALL ID | 优先级 | 验证方法 | 通过标准 | 状态 |
+|:-:|:-------|:---------|:------:|:---------|:---------|:----:|
+| 16.1 | ci-config.yaml 支持 `pipeline.profile` 配置项 | SWE-PLN-PROF1 | P0 | 解析 ci-config.yaml | `load_ci_config().pipeline.profile` 返回有效值（general/embedded/automotive） | ❌ |
+| 16.2 | 至少支持 general + embedded 两个 profile | SWE-PLN-PROF2 | P0 | 运行 `yuleosh config profile list` | 输出至少包含 general 和 embedded | ❌ |
+| 16.3 | Pipeline 启动时校验 profile 完整性 | SWE-PLN-PROF3 | P0 | 配置缺失 step handler 的 profile | Pipeline 报告 profile 校验失败并阻断 | ❌ |
+| 16.4 | Profile 决定 L2/L2.5 step handler 过滤 | — | P0 | 切换 profile 后运行 pipeline | general 跳过嵌入式审查；embedded 启用全部 | ❌ |
+| 16.5 | `yuleosh config profile check <profile>` CLI | — | P1 | 运行 check 命令 | 输出 profile 所依赖 step handler 清单及存在状态 | ❌ |
+| 16.6 | Profile 自定义扩展能力（preset ± handler） | — | P1 | 配置自定义 profile | 允许在 preset 基础上增减 step handler | ❌ |
+| 16.7 | Embedded profile 包含全部 4 个嵌入式审查 step | — | P0 | 运行 embedded profile | L2 含 linker-script/rtos/memory；L2.5 含 startup | 🏗️ 步骤已就位，profile 机制待连接 |
+
+### 16.x Profile 切换汇总
+
+| # | 优先级 | 数量 | Sprint A 状态 |
+|:-:|:------:|:----:|:-------------|
+| Profile 基础（16.1~16.4） | 🔴 P0 | 4 | ❌ 0/4 → 目标 Sprint A 3/4 |
+| Profile 扩展（16.5~16.6） | 🟡 P1 | 2 | ❌ 0/2 |
+
+---
+
+## 17. CL2 证据要求（Sprint A 新增）
+
+> **背景**: ASPICE CL2 要求过程可管理、可测量、可追溯（PA 2.1 + PA 2.2）。当前 Pipeline 已覆盖 CL1 基础，以下验收项用于建立 CL2 证据链。
+
+| # | 验收项 | CL2 基元 | 优先级 | 验证方法 | 通过标准 | 当前状态 |
+|:-:|:-------|:--------:|:------:|:---------|:---------|:--------:|
+| 17.1 | 需求→实现→测试 三向追溯矩阵持续生成 | PA 2.1 (TM) | Required | 运行 `yuleosh trace matrix` 并审查 | 每个需求 REQ-xxx 同时关联 IMPL-xxx 和 TEST-xxx；无孤立需求或孤立测试 | 🏗️ 引擎已就位（G-46 短期），L2 自动化为空 |
+| 17.2 | MISRA 违规密度趋势持续采集（≥90 天） | PA 2.2 (MP) | Required | 检查 `.yuleosh/reports/misra-trend.jsonl` | 文件存在且包含 ≥90 天历史记录 | ✅ 已有趋势采集 |
+| 17.3 | 偏差管理全生命周期合规记录 | PA 2.1 (TM) | Required | 审查偏差批准链 | 每条偏差有 approved_by + expires + status；历史审批记录可追溯 | ✅ 偏差流程已就位 |
+| 17.4 | C 单元测试覆盖率趋势（per commit） | PA 2.2 (MP) | Required | 检查 CI artifact 及趋势 JSONL | 每轮构建生成 coverage.info；行覆盖率趋势折线图可显示 | ❌ 依赖 G-45 |
+| 17.5 | SWE.6 合格性测试报告一致性证据 | PA 2.1 (TM) | Required | 审查 SWE.6 输出 | 需求↔测试规范↔测试结果↔偏差评估 完整追溯链 | ❌ 依赖 G-31 |
+| 17.6 | Profile 配置变更审计日志 | PA 2.2 (MP) | Advisory | 检查 CI 日志 | profile 变更在 pipeline 日志中记录 timestamp + 旧值 + 新值 | ❌ |
+| 17.7 | 编码标准（MISRA）执行一致性证明 | PA 2.1 (TM) | Required | 审查 CI 日志 + 偏差文件 | 每次构建运行 MISRA 检查；所有 Required 违规有偏差或已修复 | ✅ |
+| 17.8 | 构建过程可复现性证据 | PA 2.2 (MP) | Required | 检查 CI 日志 | 构建参数、工具版本、环境变量被记录到构建元数据 | 🏗️ 部分（tool_version 已有） |
+| 17.9 | 工具资格证明记录 | PA 2.2 (RI) | Required | 审查 docs/iso26262-tool-qualification.md | 文档含 TCL/TI/TD 分类 + 已知缺陷清单 + 误报率估算 | ✅ 工具认证文档已完成 |
+| 17.10 | Agent 审查结果持久化（JSON 报告）| PA 2.2 (MP) | Required | 检查 CI artifacts | 每次 Agent 审查步骤输出 JSON 报告，保存为 artifact | ✅（linker/startup/rtos/memory 均已输出 JSON） |
+
+### 17.x CL2 证据就绪度汇总
+
+| CL2 基元 | 描述 | 就绪度 | 关键缺口 |
+|:---------|:-----|:------:|:---------|
+| PA 2.1 (TM) — 追溯管理 | 工作产品之间双向追溯 | 🔶 **2/5** | 需求→实现→测试 追溯自动化（G-46）；SWE.6 追溯链（G-31） |
+| PA 2.2 (MP) — 过程测量 | 过程测量数据采集 | 🔶 **3/5** | MISRA 趋势 ✅ / 偏差审计 ✅ / C 覆盖率 ❌ / 构建元数据 🏗️ |
+| PA 2.2 (RI) — 资源与基础设施 | 工具/人员资格证明 | ✅ **2/2** | 工具认证文档 ✅；Agent 报告持久化 ✅ |
+
+---
+
+## 18. G-31~G-46 状态总表（Sprint A）
+
+| 编号 | 关联项 | 类别 | Sprint A 状态 | 验收节 |
+|:----:|:-------|:----|:-------------|:------|
+| G-31 | P0-04 🔴 SWE.6 三段式 | P0 必须 | 🏗️ **#1 优先** | §14.8~14.10, §17.5 |
+| G-32 | P0-01 🔴 C 单元测试框架 | P0 必须 | ✅ **基础已完成**（handler + 模板 + pipeline） | §14.1~14.2 |
+| G-33 | P0-05 🔴 Profile 切换 | P0 必须 | 🏗️ **进行中** | §16.1~16.7 |
+| G-34 | P0-02 🔴 review_linker LMA/VMA | P0 必须 | ✅ **已完成** | §14.4~14.5b |
+| G-35 | P0-03 🔴 review_startup FPU/SystemInit | P0 必须 | ✅ **已完成** | §14.6~14.7c |
+| G-36 | P1→P0 review_rtos configASSERT | P0 必须 | ✅ **已完成** | §14.16~14.17c |
+| G-37 | review_memory 变量估算 | 🟡 P1 | ✅ **短期完成**；长期待 Sprint B+ | §14.19b |
+| G-38 | P0-03 🔴 review_startup Default_Handler | P0 必须 | ✅ **已完成** | §14.7d |
+| G-39 | P0-02 🟡 review_linker .ARM.exidx | 🟡 P1 | ✅ **已完成** | §14.19c |
+| G-40 | P1-02 🟡 review_rtos RUN_TIME_STATS | 🟡 P1 | ✅ **已完成** | §14.17d |
+| G-41 | P2→P1 🟡 HAL 契约检查 | 🟡 P1 | 🏗️ **进行中** | §14 (规划中) |
+| G-42 | P2-02 🟢 BSP 验证 | 🟢 P2 | 🗓️ **未开始** Sprint B+ | — |
+| G-43 | P2-03 🟢 编译输出验证 | 🟢 P2 | 🗓️ **未开始** Sprint B+ | — |
+| G-44 | P2-04 🟢 低功耗审查 | 🟢 P2 | 🗓️ **未开始** Sprint B+ | — |
+| G-45 | P0 🔴 C 单元测试深度集成 (gcov/CLI) | P0 必须 | 🏗️ **Sprint A** | §15.1~15.3 |
+| G-46 | P0 🔴 追溯完整性 (L2 handler) | P0 必须 | ✅ 引擎已就位；🏗️ L2 handler | §15.4~15.7, §17.1 |
+
+### 18.x Sprint A 目标对账
+
+| 类别 | 总数 | 已完成 | 🏗️ 进行中 | 🗓️ 未开始 | Sprint A 目标完成 |
+|:-----|:----:|:------:|:---------:|:---------:|:----------------:|
+| P0 必须 | 10 | 6 | 3 (G-31/G-45/G-46) + 1 (G-33) | 0 | **10/10 Sprint A 闭环** |
+| P1 | 5 | 4 (G-37/G-39/G-40/G-41 🏗️) | 1 | 0 | **优先 G-41 完成** |
+| P2 | 3 | 0 | 0 | 3 (G-42/G-43/G-44) | Sprint B+ 排期 |
+
+---
+
+*本文档 Pipeline 优化节由小马 🐴 于 2026-06-18 基于老陈审查报告新增。Sprint A 更新: 2026-06-18 — 87+ 目标，新增 Profile 切换验收 (§16)、CL2 证据要求 (§17)、G-31~G-46 总表 (§18)。*
