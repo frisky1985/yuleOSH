@@ -1445,12 +1445,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # misra deviate
     
-    p_kpi = sub.add_parser("kpi", help="KPI baseline management")
-    ksub = p_kpi.add_subparsers(dest="kpi_sub", required=True)
-    p_kpi_status = ksub.add_parser("status", help="Show current KPI dashboard")
-    p_kpi_baseline_save = ksub.add_parser("baseline-save", help="Save current state as KPI baseline")
-    p_kpi_baseline_compare = ksub.add_parser("baseline-compare", help="Compare current state against baseline")
-
     p_misra_deviate = msub.add_parser("deviate", help="Manage deviation records")
     mdev = p_misra_deviate.add_subparsers(dest="deviate_sub")
     # deviate list
@@ -1484,56 +1478,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 # ── Dispatch ────────────────────────────────────────────────────────────
-
-
-def cmd_kpi_status():
-    """Show current KPI dashboard."""
-    from yuleosh.ci.misra_trend import show_trend
-    from yuleosh.ci.coverage_trend import show_coverage_trend
-    print()
-    print("=== MISRA Violation Trend ===")
-    print(show_trend(lines=5))
-    print()
-    print("=== Coverage Trend ===")
-    print(show_coverage_trend(lines=5))
-
-
-def cmd_kpi_baseline_save():
-    """Save current state as KPI baseline."""
-    import json, os
-    from datetime import datetime
-    from pathlib import Path
-    
-    reports_dir = Path(os.environ.get("OSH_HOME", ".")) / ".yuleosh" / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    
-    baseline = {
-        "timestamp": datetime.now().isoformat(),
-        "type": "kpi-baseline",
-        "version": "1.0",
-    }
-    
-    path = reports_dir / f"kpi-baseline-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-    with open(path, "w") as f:
-        json.dump(baseline, f, indent=2)
-    print(f"✅ KPI baseline saved: {path}")
-
-
-def cmd_kpi_baseline_compare():
-    """Compare current state against baseline."""
-    import json
-    from pathlib import Path
-    
-    reports_dir = Path(".") / ".yuleosh" / "reports"
-    baselines = list(reports_dir.glob("kpi-baseline-*.json"))
-    if not baselines:
-        print("❌ No KPI baseline found. Run 'yuleosh kpi baseline-save' first.")
-        return
-    
-    latest = max(baselines, key=lambda p: p.stat().st_mtime)
-    with open(latest) as f:
-        baseline = json.load(f)
-    print(f"📊 KPI Baseline: {baseline.get('timestamp', 'unknown')}")
 
 
 def main():
@@ -1648,6 +1592,10 @@ def main():
             parser.print_help()
             sys.exit(1)
 
+    elif args.command == "stats":
+        cmd_stats(json_output=args.json)
+
+    
     elif args.command == "kpi":
         if args.kpi_sub == "status":
             cmd_kpi_status(args)
@@ -1662,18 +1610,6 @@ def main():
         else:
             parser.print_help()
             sys.exit(1)
-
-    elif args.command == "stats":
-        cmd_stats(json_output=args.json)
-
-    
-    elif args.command == "kpi":
-        if args.kpi_sub == "status":
-            cmd_kpi_status()
-        elif args.kpi_sub == "baseline-save":
-            cmd_kpi_baseline_save()
-        elif args.kpi_sub == "baseline-compare":
-            cmd_kpi_baseline_compare()
 
     elif args.command == "misra":
         if args.misra_sub == "trend":
