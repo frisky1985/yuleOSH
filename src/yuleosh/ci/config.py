@@ -146,6 +146,7 @@ class CoverageConfig:
     threshold_condition: float = DEFAULT_COVERAGE_THRESHOLD_COND
     strict: bool = DEFAULT_STRICT
     module_thresholds: dict[str, float] = field(default_factory=dict)
+    c_fail_under: int = 70  # Minimum C line coverage % to pass the gate
 
     @property
     def effective_line(self) -> float:
@@ -272,6 +273,7 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
             cov_block.get("threshold_condition", DEFAULT_COVERAGE_THRESHOLD_COND)
         )
         cfg.coverage.strict = bool(cov_block.get("strict", DEFAULT_STRICT))
+        cfg.coverage.c_fail_under = int(cov_block.get("c_fail_under", 70))
         module_thresholds = cov_block.get("module_thresholds", {})
         if isinstance(module_thresholds, dict):
             cfg.coverage.module_thresholds = {

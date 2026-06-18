@@ -418,6 +418,19 @@ def cmd_audit_sync_check(project_dir: str, base_ref: str = "HEAD", save: bool = 
         sys.exit(1)
 
 
+def _cmd_coverage_trend(args):
+    """Show coverage trend (``yuleosh coverage trend``)."""
+    from yuleosh.ci.coverage_trend import show_coverage_trend
+
+    result = show_coverage_trend(
+        OSH_HOME,
+        days=getattr(args, "days", 30),
+        lines=getattr(args, "lines", 50),
+        as_json=getattr(args, "json", False),
+    )
+    print(result)
+
+
 def cmd_audit_evidence(output_dir: str | None = None, create_zip: bool = True):
     """Generate CL2 audit evidence bundle.
 
@@ -1332,6 +1345,13 @@ def _build_parser() -> argparse.ArgumentParser:
                                help="Build directory containing .gcda/.gcno files")
     p_coverage_c.add_argument("--src-dir", default="src",
                                help="Source directory for filtering")
+    p_coverage_trend = csub.add_parser("trend", help="Show coverage trend over time")
+    p_coverage_trend.add_argument("--days", type=int, default=30,
+                                   help="Filter entries within N days (default 30)")
+    p_coverage_trend.add_argument("--lines", "-n", type=int, default=50,
+                                   help="Number of entries to show")
+    p_coverage_trend.add_argument("--json", action="store_true",
+                                   help="Output as JSON")
 
     # audit
     p_audit = sub.add_parser("audit", help="CL2 audit evidence management")
@@ -1463,6 +1483,8 @@ def main():
     elif args.command == "coverage":
         if args.coverage_sub == "c":
             _cmd_coverage_c(args.build_dir, args.src_dir)
+        elif args.coverage_sub == "trend":
+            _cmd_coverage_trend(args)
         else:
             parser.print_help()
             sys.exit(1)
