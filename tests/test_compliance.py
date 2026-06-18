@@ -478,7 +478,7 @@ def test_misra_config_dataclass():
     cfg = MisraConfig()
     assert cfg.enabled is True
     assert cfg.addon == "misra"
-    assert cfg.fail_on_violation is False
+    assert cfg.fail_on_violation is True
     assert cfg.fail_threshold == 10
     assert cfg.cppcheck_std == "c11"
     assert cfg.suppress_rules == []

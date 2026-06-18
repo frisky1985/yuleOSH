@@ -315,8 +315,15 @@ def save_report(
     summary: dict,
     rule_defs: dict,
     output_dir: str | Path,
+    deviations: list[tuple[str, str]] | None = None,
 ) -> tuple[Path, Path, Path]:
     """Save JSON, Markdown, and traceability matrix reports to disk.
+
+    Parameters
+    ----------
+    deviations : list[tuple[str, str]] | None
+        List of (rule_id, file_pattern) tuples for deviation matching.
+        Matched violations get fix_status="acknowledged" in traceability.
 
     Returns tuple of (json_path, md_path, trace_path).
     """
@@ -333,9 +340,9 @@ def save_report(
     md_content = generate_markdown_report(violations, groups, summary, rule_defs)
     md_path.write_text(md_content, encoding="utf-8")
 
-    # Traceability matrix (JSON)
+    # Traceability matrix (JSON) with deviation support
     trace_path = out_dir / "misra-traceability.json"
-    trace_data = generate_traceability_matrix(violations, rule_defs)
+    trace_data = generate_traceability_matrix(violations, rule_defs, deviations=deviations)
     trace_path.write_text(
         json.dumps(
             {
@@ -367,9 +374,28 @@ def print_summary(summary: dict) -> None:
     print()
 
 
+def _match_deviation(
+    rule_id: str,
+    file_path: str,
+    deviations: list[tuple[str, str]],
+) -> tuple[bool, dict | None]:
+    """Check if a violation matches any deviation record.
+
+    Returns (matched, deviation_info) where deviation_info contains
+    the matched deviation details if found.
+    """
+    import fnmatch
+    for dev_rule, dev_pattern in deviations:
+        if dev_rule == rule_id or (dev_rule and rule_id.endswith(dev_rule.split("-")[-1] if "-" in dev_rule else dev_rule)):
+            if fnmatch.fnmatch(file_path, dev_pattern):
+                return True, {"deviation_rule": dev_rule, "file_pattern": dev_pattern}
+    return False, None
+
+
 def generate_traceability_matrix(
     violations: list[dict],
     rule_defs: dict,
+    deviations: list[tuple[str, str]] | None = None,
 ) -> list[dict]:
     """Build traceability: Rule ID → File:Line → Spec Ref → Fix Status.
 
@@ -383,15 +409,22 @@ def generate_traceability_matrix(
       - spec_ref: str (from rule_defs, or "" if unknown)
       - check_method: str (from rule_defs, or "" if unknown)
       - auto_checkable: bool (from rule_defs, default True)
-      - fix_status: str ("unresolved" | "deviation" | "suppressed")
+      - fix_status: str ("unresolved" | "acknowledged" | "suppressed")
+      - deviation_ref: dict | None (matched deviation details, if any)
     """
+    deviations = deviations or []
     traceability = []
     for v in violations:
         rid = v.get("rule_id", "unknown")
         defn = rule_defs.get(rid, {})
-        traceability.append({
+        file_path = v.get("file", "")
+
+        matched, dev_info = _match_deviation(rid, file_path, deviations)
+        fix_status = "acknowledged" if matched else "unresolved"
+
+        entry = {
             "rule_id": rid,
-            "file": v.get("file", ""),
+            "file": file_path,
             "line": v.get("line", 0),
             "col": v.get("col", 0),
             "severity": v.get("severity", ""),
@@ -399,8 +432,11 @@ def generate_traceability_matrix(
             "spec_ref": defn.get("spec_ref", ""),
             "check_method": defn.get("check_method", ""),
             "auto_checkable": bool(defn.get("auto_checkable", True)),
-            "fix_status": "unresolved",
-        })
+            "fix_status": fix_status,
+        }
+        if matched:
+            entry["deviation_ref"] = dev_info
+        traceability.append(entry)
     return traceability
 
 
@@ -408,23 +444,33 @@ def generate_fix_tasks(
     project_dir: str,
     violations: list[dict],
     rule_defs: dict,
+    deviations: list[tuple[str, str]] | None = None,
 ) -> list[str]:
     """Generate fix task .md files for each unresolved violation.
 
     Creates one .md file per violated rule under
     ``.yuleosh/fix-tasks/misra-{rule_id}.md``.
 
+    Violations matching deviation records are excluded from fix tasks
+    since they are already "acknowledged".
+
     Returns list of file paths created.
     """
     from datetime import datetime
 
+    deviations = deviations or []
     fix_dir = Path(project_dir) / ".yuleosh" / "fix-tasks"
     fix_dir.mkdir(parents=True, exist_ok=True)
 
-    # Group violations by rule_id
+    # Group violations by rule_id, skipping acknowledged ones
     rule_groups: dict[str, list[dict]] = {}
     for v in violations:
         rid = v.get("rule_id", "unknown")
+        file_path = v.get("file", "")
+        # Skip deviations-acknowledged violations
+        matched, _ = _match_deviation(rid, file_path, deviations)
+        if matched:
+            continue
         rule_groups.setdefault(rid, []).append(v)
 
     created_files: list[str] = []

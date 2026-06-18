@@ -1139,3 +1139,307 @@ misra-c2023-dir-4.10:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+misra-c2023-dir-4.11:
+  title: 存储器映射寄存器指针有效性
+  severity: required
+  category: runtime behavior
+  description: 指向存储器映射寄存器的指针应确保其引用的地址有效且与硬件文档一致
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+misra-c2023-dir-4.12:
+  title: 动态内存分配限制
+  severity: required
+  category: runtime safety
+  description: 动态内存分配（malloc/calloc/realloc/free）仅允许在初始化阶段使用，运行时不得分配
+  spec_ref: SWE-MISRA-DEV2
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-dir-4.13:
+  title: 静态分析置信度要求
+  severity: advisory
+  category: analysis
+  description: 应对关键安全代码执行静态分析，确保分析结果达到足够的置信度等级
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+misra-c2023-dir-4.14:
+  title: 防御性编程实施
+  severity: required
+  category: design
+  description: 应对所有外部输入（函数参数、I/O数据、传感器值）执行有效性验证，实现防御性编程
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+misra-c2023-1.4:
+  title: 单元测试充分性审查
+  severity: required
+  category: 环境 (Environment)
+  description: 对已执行的单元测试结果进行审查，确保代码覆盖率满足安全需求
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: manual
+  auto_checkable: false
+misra-c2023-3.2:
+  title: 行号指令正确性
+  severity: required
+  category: 预处理 (Preprocessing)
+  description: #line 指令应确保其引用的文件和行号是正确的，不得误导诊断信息位置
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-4.2:
+  title: 禁止三字符组
+  severity: required
+  category: 字符集
+  description: 源代码中不得使用三字符组（trigraph sequences），应根据C标准在编译器层面禁用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-5.10:
+  title: 标识符作用域辨析
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 不同作用域的标识符不得隐藏外层作用域的同名标识符
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-6.3:
+  title: typedef 类型使用
+  severity: advisory
+  category: 类型 (Types)
+  description: typedef 定义的类型应优先于底层基本类型使用，禁止混用本质类型和 typedef 别名
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-7.3:
+  title: 常数字面量后缀约束
+  severity: required
+  category: 字面量 (Literals)
+  description: 所有非常整数字面量和浮点字面量应带有明确的后缀以指定其类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-7.4:
+  title: 不应使用字符串字面量作为条件表达式
+  severity: required
+  category: 字面量 (Literals)
+  description: 字符串字面量不得用作条件表达式或布尔上下文中的操作数
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-8.13:
+  title: const 限定指针参数
+  severity: advisory
+  category: 声明 (Declarations)
+  description: 指向仅读取而不修改的数据的指针参数应声明为指向 const 的指针
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-8.14:
+  title: restrict 限定使用约束
+  severity: required
+  category: 声明 (Declarations)
+  description: restrict 关键字仅应在满足 restrict 语义的指针参数上使用，不得滥用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-9.6:
+  title: designated initializers 约束
+  severity: advisory
+  category: 初始化 (Initialization)
+  description: 指定初始化器（designated initializers）应确保初始化所有成员，且不得混合使用指定和顺序初始化
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-11.9:
+  title: void* 指针算术禁止
+  severity: required
+  category: 指针 (Pointer)
+  description: 不得对 void* 类型的指针执行算术运算，void* 的大小未定义
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-12.3:
+  title: sizeof 操作数约束
+  severity: advisory
+  category: 表达式 (Expressions)
+  description: sizeof 操作符不应应用于具有副作用的表达式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-12.4:
+  title: 表达式求值顺序不依赖
+  severity: required
+  category: 表达式 (Expressions)
+  description: 不得依赖于 C 标准未定义的表达式求值顺序
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-12.5:
+  title: 逗号表达式约束
+  severity: required
+  category: 表达式 (Expressions)
+  description: 逗号运算符不得用于除 for 循环控制表达式之外的场景
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-13.4:
+  title: 赋值操作符评估顺序
+  severity: required
+  category: 副作用 (Side Effects)
+  description: 复合赋值操作符（+=, -= 等）及其操作数的求值顺序不得依赖于未定义行为
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-13.5:
+  title: 逻辑与/或的短路求值
+  severity: required
+  category: 副作用 (Side Effects)
+  description: 逻辑与（&&）和逻辑或（||）的短路求值行为不应被依赖来保护其他操作数中的副作用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-13.6:
+  title: sizeof 不得包含副作用
+  severity: required
+  category: 副作用 (Side Effects)
+  description: sizeof 操作符的操作数中不应包含会产生副作用的表达式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-15.8:
+  title: switch 条件类型约束
+  severity: required
+  category: 控制流 (Control Flow)
+  description: switch 语句的条件表达式应仅使用本质类型（essential type），且每个 case 标签应为同一类型的常量
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-16.7:
+  title: 无参函数指针类型
+  severity: required
+  category: 函数 (Functions)
+  description: 声明无参函数指针时，应显式使用 void 参数列表，而非空括号
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-18.9:
+  title: 指针算术与数组边界
+  severity: required
+  category: 指针/数组 (Pointer/Array)
+  description: 指针算术运算的结果必须确保指向同一数组对象或其后一位
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-19.3:
+  title: 头文件包含守卫
+  severity: required
+  category: 预处理 (Preprocessing)
+  description: 所有头文件应使用 #ifndef / #define / #endif 包含守卫来防止重复包含
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-21.19:
+  title: locale.h 函数约束
+  severity: advisory
+  category: 标准库 (Standard Libraries)
+  description: locale.h 中的 setlocale 和 localeconv 等函数不应在运行时动态修改区域设置
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-21.20:
+  title: signal.h 函数约束
+  severity: required
+  category: 标准库 (Standard Libraries)
+  description: signal 处理函数应遵循严格的限制：仅能调用 signal 本身或写入 volatile sig_atomic_t 变量
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-21.21:
+  title: stdlib.h system 约束
+  severity: required
+  category: 标准库 (Standard Libraries)
+  description: system() 函数不得在生产代码中使用，其行为依赖于外部环境且不可控
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-21.22:
+  title: at_quick_exit 约束
+  severity: advisory
+  category: 标准库 (Standard Libraries)
+  description: at_quick_exit 注册的函数应满足与 atexit 相同的限制条件
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.3:
+  title: 文件打开模式验证
+  severity: required
+  category: 资源 (Resources)
+  description: fopen/freopen 的文件打开模式字符串应为有效且预期的模式，不得使用二进制模式以外的模式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.4:
+  title: 文件关闭确认
+  severity: required
+  category: 资源 (Resources)
+  description: 所有打开的文件应在关闭前检查 fclose 的返回值以确认成功关闭
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.5:
+  title: 文件访问方式检查
+  severity: required
+  category: 资源 (Resources)
+  description: 文件操作（fread/fwrite/fprintf/fscanf）前应验证文件是以正确的访问模式打开的
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.6:
+  title: EOF 比较约束
+  severity: required
+  category: 资源 (Resources)
+  description: 从 fgetc/getc 等函数获取的字符值在与 EOF 比较时应使用 int 类型而非 char
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.7:
+  title: fgetpos/fsetpos 返回值检查
+  severity: required
+  category: 资源 (Resources)
+  description: fgetpos 和 fsetpos 的返回值应始终检查以确保文件定位操作成功
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.8:
+  title: setvbuf 参数约束
+  severity: required
+  category: 资源 (Resources)
+  description: setvbuf 应在流上执行任何其他操作之前调用，且其缓冲区和大小参数应有效
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.9:
+  title: fprintf/fscanf 格式字符串约束
+  severity: required
+  category: 资源 (Resources)
+  description: fprintf/fscanf 的格式字符串应与对应的参数类型严格匹配，不得使用不可控的格式字符串
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.10:
+  title: 临时文件使用约束
+  severity: required
+  category: 资源 (Resources)
+  description: tmpfile/tmpnam 使用前需确认其安全性，tmpnam 的缓冲区不能为 NULL
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+misra-c2023-22.11:
+  title: remove/rename 返回值检查
+  severity: required
+  category: 资源 (Resources)
+  description: remove 和 rename 的返回值应始终检查，确保文件操作成功
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
