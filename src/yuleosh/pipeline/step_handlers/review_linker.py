@@ -266,6 +266,129 @@ def _check_lma_vma_difference(content: str, path: Path) -> list[LinkerFinding]:
     return findings
 
 
+def _check_arm_exception_tables(content: str, path: Path) -> list[LinkerFinding]:
+    """Check for .ARM.exidx and .ARM.extab exception table sections.
+
+    ARM ELF exception tables (.ARM.exidx and .ARM.extab) are required for
+    C++ exception handling and for backtrace/unwind support.  In safety-critical
+    embedded firmware these sections SHOULD be absent (no exceptions), but
+    when present they MUST be properly placed in a non-volatile region.
+
+    Missing .ARM.exidx reference means the linker will not produce unwind
+    tables, causing abort() on any C++ exception thrown.  Conversely, in
+    C-only codebases it is normal to omit them entirely — the check flags
+    the absence as info, not a defect.
+    """
+    findings = []
+
+    # Check for explicit .ARM.exidx section definition
+    has_exidx = bool(re.search(r'\.ARM\.exidx', content))
+    has_extab = bool(re.search(r'\.ARM\.extab', content))
+
+    # Detect C++ runtime references that imply exception tables are needed
+    cpp_runtime_refs = [
+        r'__gxx_personality',
+        r'__gnu_unwind',
+        r'__cxa_',
+        r'__exidx_start',
+        r'__exidx_end',
+    ]
+    has_cpp_ref = any(re.search(p, content, re.IGNORECASE) for p in cpp_runtime_refs)
+
+    if has_exidx:
+        # Check placement — should be in ROM/Flash (not RAM)
+        exidx_region = None
+        # Look for .ARM.exidx in a SECTIONS block
+        # Typical: .ARM.exidx : { *(.ARM.exidx* ) } > FLASH
+        exidx_m = re.search(r'\.ARM\.exidx\s*:.*?[>]?(\w+)',
+                            content, re.IGNORECASE | re.DOTALL)
+        if exidx_m:
+            exidx_region = exidx_m.group(1).upper()
+
+        # Check if placed in a read-only / flash region
+        flash_like = ['FLASH', 'ROM', 'EROM', 'FALSH', 'BANK']
+        in_flash = any(r in (exidx_region or '') for r in flash_like)
+
+        if in_flash:
+            findings.append({
+                "severity": "info",
+                "category": "arm_exception",
+                "file": str(path),
+                "message": (
+                    f".ARM.exidx section defined and placed in {exidx_region} — "
+                    "correct for ARM exception tables; verify table size does not "
+                    "exceed available flash region"
+                ),
+            })
+        elif exidx_region:
+            findings.append({
+                "severity": "major",
+                "category": "arm_exception",
+                "file": str(path),
+                "message": (
+                    f".ARM.exidx section placed in {exidx_region} — "
+                    "ARM exception tables MUST be in a read-only region (Flash/ROM), "
+                    "not RAM; execution will fail if tables are in writeable memory"
+                ),
+            })
+        else:
+            findings.append({
+                "severity": "info",
+                "category": "arm_exception",
+                "file": str(path),
+                "message": (
+                    ".ARM.exidx section defined but no explicit placement region "
+                    "detected — verify it defaults to a read-only region"
+                ),
+            })
+
+        # Also check for matching .ARM.extab
+        if has_extab:
+            findings.append({
+                "severity": "info",
+                "category": "arm_exception",
+                "file": str(path),
+                "message": (
+                    ".ARM.extab also present — C++ exception table data "
+                    "will be available for frame unwinding"
+                ),
+            })
+        else:
+            findings.append({
+                "severity": "info",
+                "category": "arm_exception",
+                "file": str(path),
+                "message": (
+                    ".ARM.exidx present without .ARM.extab — compact model "
+                    "(no exception-handling data) or table references only"
+                ),
+            })
+    elif has_cpp_ref:
+        findings.append({
+            "severity": "critical",
+            "category": "arm_exception",
+            "file": str(path),
+            "message": (
+                "C++ personality/unwind references detected (__gxx_personality, "
+                "__cxa_, __gnu_unwind) but no .ARM.exidx section found — "
+                "linker will fail to produce exception tables; C++ exceptions "
+                "will cause abort()"
+            ),
+        })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "arm_exception",
+            "file": str(path),
+            "message": (
+                "No .ARM.exidx section — expected for C-only firmware; "
+                "no ARM exception table required"
+            ),
+        })
+
+    return findings
+
+
 def _check_heap_stack_overlap(content: str, path: Path) -> list[LinkerFinding]:
     """Check if .heap and .stack share the same memory region without separator."""
     findings = []
@@ -465,6 +588,7 @@ def _static_linker_review(project_dir: Path) -> list[LinkerFinding]:
         all_findings.extend(_check_vector_table_alignment(content, script))
         all_findings.extend(_check_memory_regions(content, script))
         all_findings.extend(_check_lma_vma_difference(content, script))
+        all_findings.extend(_check_arm_exception_tables(content, script))
         all_findings.extend(_check_heap_stack_overlap(content, script))
 
     return all_findings

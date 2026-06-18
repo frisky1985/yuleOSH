@@ -452,6 +452,113 @@ def _check_default_handler_weak(content: str, path: Path) -> list[StartupFinding
     return findings
 
 
+def _check_cpp_constructors(content: str, path: Path) -> list[StartupFinding]:
+    """Check for C++ static constructor/destructor support in startup code.
+
+    In embedded C++: __attribute__((constructor)) and __attribute__((destructor))
+    functions are called before main() and after main() returns, respectively.
+    The linker places function pointers into .init_array / .fini_array sections
+    which the startup code must iterate over.
+
+    A startup file that:
+    - Contains .init_array references → likely C++ with constructors
+    - Lacks the iteration loop → constructors will NOT run
+    """
+    findings = []
+
+    # Detect C++ constructor/destructor attributes or sections
+    has_init_array = bool(re.search(r'\.init_array', content))
+    has_fini_array = bool(re.search(r'\.fini_array', content))
+    has_ctor_attr = bool(re.search(r'__attribute__\s*\(\s*\(\s*constructor\s*\)', content))
+    has_dtor_attr = bool(re.search(r'__attribute__\s*\(\s*\(\s*destructor\s*\)', content))
+    has_ctor_prio = bool(re.search(r'__attribute__\s*\(\s*\(\s*constructor\s*\(\s*\d+\s*\)', content))
+
+    # Detect the iteration loop for .init_array / .fini_array
+    # Typical pattern: for (p = __init_array_start; p < __init_array_end; p++) or ARM equivalent
+    init_loop_patterns = [
+        r'__init_array_start',
+        r'__init_array_end',
+        r'__fini_array_start',
+        r'__fini_array_end',
+        r'_init\s*:',
+        r'__libc_init_array',
+        r'call\s+__libc_init_array',
+        r'bl\s+__libc_init_array',
+    ]
+    has_init_loop = any(re.search(p, content) for p in init_loop_patterns)
+
+    # Count constructor-like patterns
+    cpp_count = sum([has_init_array, has_fini_array, has_ctor_attr, has_dtor_attr, has_ctor_prio])
+
+    if cpp_count > 0:
+        if has_init_array and has_init_loop:
+            findings.append({
+                "severity": "info",
+                "category": "cpp_constructors",
+                "file": str(path),
+                "message": (
+                    ".init_array section with iteration loop found — "
+                    "C++ static constructors will execute before main()"
+                ),
+            })
+            if has_fini_array:
+                fini_loop = bool(re.search(r'__fini_array_start|__fini_array_end', content))
+                if fini_loop:
+                    findings.append({
+                        "severity": "info",
+                        "category": "cpp_constructors",
+                        "file": str(path),
+                        "message": (
+                            ".fini_array section with iteration loop found — "
+                            "C++ static destructors will execute after main() returns"
+                        ),
+                    })
+                else:
+                    findings.append({
+                        "severity": "minor",
+                        "category": "cpp_constructors",
+                        "file": str(path),
+                        "message": (
+                            ".fini_array section found but no iteration loop — "
+                            "C++ static destructors will NOT run after main() returns"
+                        ),
+                    })
+        elif has_init_array and not has_init_loop:
+            findings.append({
+                "severity": "critical",
+                "category": "cpp_constructors",
+                "file": str(path),
+                "message": (
+                    ".init_array section found but NO iteration loop — "
+                    "C++ static constructors will NOT execute before main(); "
+                    "add __libc_init_array or manual .init_array traversal"
+                ),
+            })
+        elif has_ctor_attr or has_dtor_attr or has_ctor_prio:
+            findings.append({
+                "severity": "major",
+                "category": "cpp_constructors",
+                "file": str(path),
+                "message": (
+                    "__attribute__((constructor/destructor)) detected but no "
+                    ".init_array / .fini_array section or iteration loop found — "
+                    "static constructor/destructor functions will NOT be called"
+                ),
+            })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "cpp_constructors",
+            "file": str(path),
+            "message": (
+                "No C++ static constructor/destructor references detected — "
+                "expected for C-only firmware"
+            ),
+        })
+
+    return findings
+
+
 def _check_interrupt_state(content: str, path: Path) -> list[StartupFinding]:
     """Check if interrupts are properly managed before main()."""
     findings = []
@@ -526,6 +633,7 @@ def _static_startup_review(project_dir: Path) -> list[StartupFinding]:
         all_findings.extend(_check_data_copy(content, f))
         all_findings.extend(_check_clock_config(content, f))
         all_findings.extend(_check_main_call(content, f))
+        all_findings.extend(_check_cpp_constructors(content, f))
         all_findings.extend(_check_interrupt_state(content, f))
         all_findings.extend(_check_fpu_enable(content, f))
         all_findings.extend(_check_system_init_timing(content, f))
