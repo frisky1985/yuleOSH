@@ -180,7 +180,7 @@
 | 11.7 | 适配器注册表 | **G-13** | 检查 alm/__init__.py | pytest | `_ADAPTER_REGISTRY` 包含 jira, polarion 两个条目 | ✅ |
 | 11.8 | `list_available_adapters()` 函数 | **G-13** | 检查 alm/__init__.py | pytest | `list_available_adapters()` 返回 `["jira", "polarion"]` | ✅ |
 | 11.9 | `AlmConnection` data class | **G-13** | 检查 alm/__init__.py | pytest | `AlmConnection` 含 url, api_token, project_key, timeout_s 字段 | ✅ |
-| 11.10 | `DeviationTicket` data class | **G-13** | 检查 alm/__init__.py | pytest | `DeviationTicket` 含 rule_id, file_pattern, reason, approved_by, expires, status, alm_ticket_id, alm_url 字段 | ✅ |
+| 11.10 | `DeviationTicket` data class (含 ALM 字段) | **G-13** | 检查 alm/__init__.py / config.py | pytest | `DeviationTicket` 或 `MisraDeviation` 含 rule_id, file_pattern, reason, approved_by, expires, status, alm_ticket_id, alm_url 字段 | ❌ `MisraDeviation` (config.py) 缺 alm_ticket_id/alm_url; `DeviationTicket` 类不存在 |
 
 ## 12. 误报率量化基准验收 (G-10) ⚠️
 
@@ -602,11 +602,11 @@ Sprint B+: 34+ 7=41/41 → 100% ✅ CL2 就绪
 | **E04** | 覆盖趋势追踪与基线 | P0 | §17.4, §7.1 趋势字段; §20 PA 2.2 MP | §9.4 | ❌ |
 | **E05** | 文档 YAML Schema 验证 | P0 | §8.3 (文档校验) — 新增 §21.2 | §10.1 | ❌ |
 | **E06** | 文档状态门禁（MR 阻塞） | P0 | §8.4 (门禁定义) — 新增 §21.2 | §10.2~§10.3 | ❌ |
-| **E07** | 文档差异自动检测 | P1 | — 新增 §21.2 | §10.4 | ❌ |
+| **E07** | 文档差异自动检测 | P1 | §21.3 (21.2.8~21.2.9) | §10.4 | ❌ `sync_check.py` (322行, CLI 就绪) 待 CI pipeline 集成 |
 | **E08** | 过程性能基线 — 首次数据采集 | P0 | §5.1 (KPI); §20 PA 2.2 MP | §9.4.3 | ❌ |
 | **E09** | 过程性能基线 — 4 周数据与发布 | P0 | §5.1; §20 PA 2.2 MP | §9.4.3 | ❌ |
 | **E10** | 偏差管理 CLI + 审批链 | P0 | §3.6~§3.13; §4.2 (CL2 偏差字段) | §4 | ✅ (已有) |
-| **E11** | ALM 集成适配（Jira/Polarion） | P1 | §11.1~§11.10; §4.2 ALM 字段 | §4.2 | ✅ (stub) |
+| **E11** | ALM 集成适配（Jira/Polarion） | P1 | §11.1~§11.10; §4.2 ALM 字段 | §4.2 | ⚠️ (stub 就位，§11.10 DeviationTicket 缺 ALM 字段) |
 | **E12** | 验证计划文档更新 | P0 | §8.1~§8.8; §17 CL2 证据 | **本文档** | ✅ 已更新 v2.1 |
 | **E13** | 审计证据包自动生成 | P0 | §22.1~§22.2 (G-50 证据 CLI) | §7.2~§7.3 | ❌ |
 
@@ -653,8 +653,8 @@ Sprint B+: 34+ 7=41/41 → 100% ✅ CL2 就绪
 | 21.2.5 | 关键模块代码变更→文档未更新→MR 阻断 | E06 | P0 | 注入关键模块代码变更 | MR 变更 src/ 下关键模块路径但 docs/ 未变化 → CI FAILED | ❌ |
 | 21.2.6 | 非关键模块变更→文档未更新→WARNING | E06 | P0 | 注入非关键模块代码变更 | MR 变更非关键路径 → CI WARNING + MR 评论提醒 | ❌ |
 | 21.2.7 | 文档同步豁免经偏差管理 | E06 | P0 | 通过 `yuleosh misra deviate` 创建豁免 | 有效偏差 → 门禁不阻断; 偏差记录审计链完整 | ❌ |
-| 21.2.8 | 代码-文档指纹对比存在 | E07 | P1 | 检查 CI 日志 | CI 运行指纹对比; 新增/删除/修改 API 均被检出 | ❌ |
-| 21.2.9 | 差异报告自动评论 MR | E07 | P1 | 运行 MR 后检查评论 | MR 自动评论含具体行号和差异内容 | ❌ |
+| 21.2.8 | 代码-文档指纹对比存在 | E07 | P1 | 检查 CI 日志 | CI 运行指纹对比; 新增/删除/修改 API 均被检出 | ❌ sync_check.py 就绪 (322行, CLI), 待 CI pipeline 集成 |
+| 21.2.9 | 差异报告自动评论 MR | E07 | P1 | 运行 MR 后检查评论 | MR 自动评论含具体行号和差异内容 | ❌ 需 CI 集成前置 (21.2.8) |
 
 ### 21.4 新增验收项 — 过程性能基线（对应 E08~E09）
 
@@ -687,11 +687,11 @@ Sprint B+: 34+ 7=41/41 → 100% ✅ CL2 就绪
 | **E04** 趋势追踪 | 1 | 0 | 1 | P0 | 0% |
 | **E05** Schema 验证 | 3 | 0 | 3 | P0 | 0% |
 | **E06** 文档门禁 | 4 | 0 | 4 | P0 | 0% |
-| **E07** 差异检测 | 2 | 0 | 2 | P1 | 0% |
+| **E07** 差异检测 | 2 | 0 | 2 | P1 | 0% (sync_check.py 代码就绪，待 CI pipeline 集成 + MR 评论) |
 | **E08** KPI 采集 | 3 | 0 | 3 | P0 | 0% |
 | **E09** 4 周基线 | 3 | 0 | 3 | P0 | 0% |
 | **E10** 偏差管理 | ✅ 已有 | — | — | P0 | 100% (已有覆盖) |
-| **E11** ALM 集成 | ✅ 已有 | — | — | P1 | 100% (stub) |
+| **E11** ALM 集成 | ⚠️ 已有 | — | — | P1 | 90% (stub 就位; DeviationTicket 缺 ALM 字段 §11.10 ❌) |
 | **E12** 验证计划 | ✅ 已更新 | — | — | P0 | 100% |
 | **E13** 证据包 | 5 | 0 | 5 | P0 | 0% |
 | **合计（新增）** | **25** | **0** | **25** | — | **0%** |
@@ -719,7 +719,7 @@ E11 ──→ E13 (ALM → 证据包)
 ### 附加说明
 
 1. **E10（偏差管理）** 在本矩阵 §3 和 §4 已完整覆盖，本条映射仅为确认对齐
-2. **E11（ALM 集成）** 在本矩阵 §11 已有 stub 适配器覆盖
+2. **E11（ALM 集成）** 在本矩阵 §11 已有 stub 适配器覆盖；§11.10 `DeviationTicket` 缺 ALM 字段待补
 3. **E12（验证计划）** 已通过本版本更新完成（`docs/misra-verification-plan.md v2.1`）
 4. **新增验收项（§21.2~§21.5）** 共 32 项（§21.2 E03/E04: 13 项 + §21.3 E05~E07: 9 项 + §21.4 E08~E09: 6 项 + §21.5 E13: 5 项），需纳入 Sprint 计划
 5. 本映射让审计师可以直接从 cl2-audit-plan.md 追溯到验收矩阵的具体行号
@@ -729,4 +729,4 @@ E11 ──→ E13 (ALM → 证据包)
 ---
 
 *版本历史: ... → v1.3 → v1.4（CL2 审计计划验收映射 §21 新增）→ v1.5（E03/E04 验收项 §21.2 新增，同步 pipeline-optimization-plan.md 附录C~F）*
-*最终版更新: 2026-06-18 (v1.5)*
+*最终版更新: 2026-06-18 (v1.6 — E07/E11 小克 CL2 审查结果同步: yaml_validator CI 集成 ✅, sync_check 代码就绪待 CI, DeviationTicket ALM 字段缺漏)*
