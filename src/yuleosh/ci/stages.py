@@ -433,6 +433,8 @@ def run_misra_check(project_dir: str, ci: CIResult,
     addon = misra_cfg.addon if misra_cfg else "misra"
     cppcheck_std = misra_cfg.cppcheck_std if misra_cfg else "c11"
     suppress_rules = misra_cfg.suppress_rules if misra_cfg else []
+    rule_overrides = misra_cfg.rule_overrides if misra_cfg else []
+    deviations = misra_cfg.deviations if misra_cfg else []
     strict = is_strict()
 
     # --- Determine which files to check (delta / full) ---
@@ -486,11 +488,14 @@ def run_misra_check(project_dir: str, ci: CIResult,
     mode_label = "增量检查" if is_delta else "全量检查"
     print(f"    📋 Mode: {mode_label} ({len(c_files)} file(s))")
 
-    # Build suppression arguments
+    # Build suppression arguments from config + rule_overrides
     suppress_args = []
     for rule_id in suppress_rules:
         suppress_args.append("--suppress=misra-c2023-" + rule_id)
         suppress_args.append("--suppress=misra-c2012-" + rule_id)
+    for override in rule_overrides:
+        if not override.enabled and override.rule_id:
+            suppress_args.append("--suppress=" + override.rule_id)
 
     # Construct cppcheck command
     cmd = [
@@ -543,16 +548,31 @@ def run_misra_check(project_dir: str, ci: CIResult,
         summary = compute_summary_stats(violations, groups)
 
         output_dir = Path(project_dir) / ".yuleosh" / "reports"
-        save_report(violations, groups, summary, rule_defs, output_dir)
+        save_report(violations, groups, summary, rule_defs, output_dir,
+                    deviations=deviations_used)
 
         # --- Generate traceability matrix and fix tasks (MISRA loop closure) ---
         if violations:
             print_summary(summary)
-            trace_matrix = generate_traceability_matrix(violations, rule_defs)
+            # Apply deviations: mark matching violations as "acknowledged"
+            deviations_used = []
+            for dev in deviations:
+                if dev.rule_id and dev.file_pattern:
+                    deviations_used.append((dev.rule_id, dev.file_pattern))
+
+            trace_matrix = generate_traceability_matrix(
+                violations, rule_defs, deviations=deviations_used
+            )
             print(f"    📋 Traceability: {len(trace_matrix)} entries")
 
+            # Report deviation info
+            if deviations:
+                print(f"    📋 Deviations configured: {len(deviations)}")
+                for dev in deviations:
+                    print(f"      - {dev.rule_id} on {dev.file_pattern}: {dev.reason} (by {dev.approved_by}, expires {dev.expires})")
+
             try:
-                fix_files = generate_fix_tasks(project_dir, violations, rule_defs)
+                fix_files = generate_fix_tasks(project_dir, violations, rule_defs, deviations=deviations_used)
                 print(f"    🔧 Fix tasks created: {len(fix_files)} file(s)")
             except Exception as fix_e:
                 log.warning("Failed to generate MISRA fix tasks: %s", fix_e)
