@@ -495,6 +495,106 @@ def _check_circular_buffers(source_files: list[Path], project_dir: Path) -> list
     return findings
 
 
+def _check_alloca_vla(source_files: list[Path], project_dir: Path) -> list[MemoryFinding]:
+    """Detect alloca() and variable-length array (VLA) usage.
+
+    Both are forbidden in MISRA C and embedded safety contexts:
+    - alloca() allocates on the stack with no size limit — can cause
+      silent stack overflow.
+    - VLAs (variable-length arrays) use runtime-determined sizes that
+      the compiler cannot validate for stack bounds.
+    """
+    findings = []
+    alloca_files: list[tuple[str, int, str]] = []
+    vla_files: list[tuple[str, int, str]] = []
+
+    for f in source_files:
+        if f.suffix not in (".c", ".cpp", ".h", ".hpp"):
+            continue
+        try:
+            content = f.read_text(errors="replace")
+        except OSError:
+            continue
+
+        rel_path = str(Path(f).relative_to(project_dir))
+        lines = content.split("\n")
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//") or stripped.startswith("/*"):
+                continue
+
+            # alloca() detection
+            if re.search(r'\balloca\s*\(', stripped):
+                alloca_files.append((rel_path, i, stripped[:100]))
+
+            # VLA detection — look for array declarations with non-constant sizes
+            # Pattern: type name[expr] where expr contains a variable/expression
+            # Exclude: static arrays with literal sizes, function parameters
+            vla_pattern = re.compile(
+                r'(?:int|char|short|long|float|double|'
+                r'uint8_t|uint16_t|uint32_t|uint64_t|'
+                r'int8_t|int16_t|int32_t|int64_t|'
+                r'bool|size_t|uint8|uint16|uint32)'
+                r'\s+'                           # type
+                r'\w+'                             # name
+                r'\s*\['                           # [
+                r'(?!\s*\d+\s*\])'               # not a literal size
+                r'(?!\s*\])'                      # not empty []
+                r'[^\]]+'                          # expression inside
+                r'\]'
+                r'\s*(?:=|;)'                      # assignment or semicolon
+            )
+            if vla_pattern.search(stripped):
+                vla_files.append((rel_path, i, stripped[:100]))
+
+    if alloca_files:
+        details = "; ".join(f"{f}:L{l}" for f, l, _ in alloca_files[:10])
+        findings.append({
+            "severity": "critical" if len(alloca_files) > 2 else "major",
+            "category": "alloca",
+            "file": str(project_dir),
+            "message": (
+                f"alloca() detected in {len(alloca_files)} location(s): "
+                f"{details} — alloca() allocates on the stack with no "
+                f"failure indication; stack overflow may go undetected; "
+                f"use static buffers instead"
+            ),
+            "details": alloca_files,
+        })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "alloca",
+            "file": str(project_dir),
+            "message": "No alloca() usage detected — good embedded practice",
+        })
+
+    if vla_files:
+        details = "; ".join(f"{f}:L{l}" for f, l, _ in vla_files[:10])
+        findings.append({
+            "severity": "critical" if len(vla_files) > 3 else "major",
+            "category": "vla",
+            "file": str(project_dir),
+            "message": (
+                f"VLA (variable-length array) detected in {len(vla_files)} "
+                f"location(s): {details} — VLA sizes are determined at "
+                f"runtime and cannot be bounds-checked at compile time; "
+                f"they are forbidden by MISRA C:2023 Rule 18.8"
+            ),
+            "details": vla_files,
+        })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "vla",
+            "file": str(project_dir),
+            "message": "No VLA (variable-length array) usage detected — MISRA C:2023 Rule 18.8 compliant",
+        })
+
+    return findings
+
+
 def _check_stack_protection(source_files: list[Path], project_dir: Path) -> list[MemoryFinding]:
     """Check for stack canary / stack protection mechanisms."""
     findings = []
@@ -567,6 +667,7 @@ def _static_memory_review(project_dir: Path) -> list[MemoryFinding]:
     all_findings.extend(_check_global_variables(source_files, project_dir))
     all_findings.extend(_check_static_recursion(source_files, project_dir))
     all_findings.extend(_check_circular_buffers(source_files, project_dir))
+    all_findings.extend(_check_alloca_vla(source_files, project_dir))
     all_findings.extend(_check_stack_protection(source_files, project_dir))
 
     return all_findings

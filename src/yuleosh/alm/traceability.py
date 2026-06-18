@@ -33,10 +33,14 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
     """Extract SHALL statements from a specification file (markdown).
 
     Returns list of dicts with keys:
-      - id:        Auto-generated SHALL-{n} identifier
-      - statement: The full SHALL text
-      - line:      Line number in the spec file
-      - section:   Section heading (if available)
+      - id:          Auto-generated SHALL-{n} identifier
+      - req_id:      Spec-defined ID (e.g. SWE-MISRA-S1) if available
+      - statement:   The full SHALL text
+      - line:        Line number in the spec file
+      - section:     Section heading (if available)
+
+    Spec-defined IDs are parsed from patterns like ``**SWE-MISRA-S1**: ...``
+    on the same line as the SHALL keyword.
     """
     spec_file = Path(spec_path)
     if not spec_file.exists():
@@ -52,6 +56,9 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
     lines = text.split("\n")
     shall_statements = []
     current_section = ""
+
+    # Pattern to match spec-defined IDs like **SWE-MISRA-S1**:
+    spec_id_pattern = re.compile(r'\*\*(\w[\w-]+)\*\*\s*:')
 
     shall_pattern = re.compile(
         r'(?:SHALL|shall|MUST|must)\s+(?:not\s+)?'
@@ -75,8 +82,15 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
             statement = re.sub(r"^[\s]*[-*+]\s+", "", statement)
             statement = re.sub(r"^\d+[.)]\s+", "", statement)
 
+            # Parse spec-defined ID from **ID**: prefix
+            req_id = None
+            spec_id_match = spec_id_pattern.match(stripped)
+            if spec_id_match:
+                req_id = spec_id_match.group(1)
+
             shall_statements.append({
                 "id": f"SHALL-{len(shall_statements) + 1}",
+                "req_id": req_id,
                 "statement": statement,
                 "line": idx,
                 "section": current_section,
@@ -309,8 +323,9 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         # Find reviews that reference this requirement
         matching_reviews = _find_reviews_for_requirement(reviews, req_id, shall["statement"])
 
-        requirements.append({
+            requirements.append({
             "id": req_id,
+            "req_id": shall.get("req_id"),
             "statement": shall["statement"],
             "section": shall.get("section", ""),
             "code_files": matching_code,
@@ -319,6 +334,7 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
             "has_code": len(matching_code) > 0,
             "has_test": len(matching_tests) > 0,
             "has_review": len(matching_reviews) > 0,
+            "step_handlers": _find_step_handlers_for_requirement(project_dir, req_id, shall),
         })
 
     # Summary
@@ -486,6 +502,67 @@ def generate_traceability_report(project_dir: str,
 # ═══════════════════════════════════════════════════════════════════════
 # Internal helpers
 # ═══════════════════════════════════════════════════════════════════════
+
+
+def _find_step_handlers_for_requirement(project_dir: str, req_id: str,
+                                              shall: dict) -> list[dict]:
+    """Find step handler reports that reference a given requirement.
+
+    Scans .yuleosh/sessions/ for JSON reports from pipeline step handlers
+    that contain a ``req_ids`` or ``spec_ref`` field matching the req_id
+    or SHALL id.
+    """
+    sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    if not sessions_dir.exists():
+        return []
+
+    matching = []
+    req_id_pattern = re.compile(re.escape(req_id))
+    shall_id_pattern = re.compile(re.escape(shall["id"]))
+
+    for session_dir in sorted(sessions_dir.iterdir()):
+        if not session_dir.is_dir():
+            continue
+        for report_file in session_dir.glob("*.json"):
+            try:
+                data = json.loads(report_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            if not isinstance(data, dict):
+                continue
+
+            # Check req_ids field in step handler report
+            report_req_ids = data.get("req_ids", [])
+            if isinstance(report_req_ids, list):
+                if req_id in report_req_ids or shall["id"] in report_req_ids:
+                    matching.append({
+                        "session": session_dir.name,
+                        "step": data.get("step", report_file.stem),
+                        "file": str(report_file),
+                    })
+                    continue
+
+            # Check spec_ref field
+            spec_ref = data.get("spec_ref", "")
+            if isinstance(spec_ref, str) and (req_id in spec_ref or shall["id"] in spec_ref):
+                matching.append({
+                    "session": session_dir.name,
+                    "step": data.get("step", report_file.stem),
+                    "file": str(report_file),
+                })
+                continue
+
+            # Scan full JSON text for req_id
+            text = json.dumps(data)
+            if req_id_pattern.search(text) or shall_id_pattern.search(text):
+                matching.append({
+                    "session": session_dir.name,
+                    "step": data.get("step", report_file.stem),
+                    "file": str(report_file),
+                })
+
+    return matching
 
 
 def _scan_comments_for_requirements(src_dir: Path, shalls: list[dict]) -> dict:
