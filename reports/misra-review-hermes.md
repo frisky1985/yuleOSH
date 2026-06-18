@@ -672,3 +672,407 @@ misra-c2023-dir-4.2:
 | Dir 4.2 去重 | 🔴 **Blocked** | 虽已提出，但 commit 中未修复，内容仍重复 |
 | 验收矩阵更新 | 🟡 **Not blocked** | 建议已给出，待小克确认后正式更新 |
 | CI 追溯输出 | 🔴 **Blocked** | 依赖 spec_ref 就位后才能实现 |
+| check 字段完整性 | SWE-MISRA-TR2 | 解析 misra-rules.yaml | pytest | 每条规则有非空 `check` 字段，值 ∈ {cppcheck, clang-tidy, manual, ai} |
+| 修复任务自动生成 | SWE-MISRA-TR3 | 运行 CI 产生违规后检查 `.yuleosh/tasks/` | pytest | Required 违规自动生成修复任务 JSON，含规则 ID、文件路径、行号、建议修复 |
+| 修复任务优先级排序 | SWE-MISRA-TR3 | 检查生成的修复任务 JSON | pytest | 任务按 severity 排序，Required+error 标记为 high priority |
+| CI 报告含追溯信息 | SWE-MISRA-TR4 | 运行 CI 后检查 JSON 报告 | CI 日志 | JSON 报告包含 `traceability.specs` 节，列出各 Spec ID 的规则覆盖状态 |
+| CI 报告含 commit 哈希 | SWE-MISRA-TR4 | 运行 CI 后检查 JSON | pytest | JSON 报告 meta 中包含 commit hash，可回溯到代码版本 |
+| Spec→规则→检查→违规→修复 完整追溯 | SWE-MISRA-TR5 | 端到端验证：模拟违规触发完整链路 | 集成测试 | 从 Spec SHALL ID 出发，能找到对应规则、检查结果、违规报告和修复任务 |
+
+#### 验收级别
+
+| 验收项 | 级别 | 说明 |
+|:-------|:----:|:-----|
+| SWE-MISRA-TR1 | Required | 追溯矩阵输出是 ASPICE SWE.4 的基本要求 |
+| SWE-MISRA-TR2 | Required | spec_ref 和 check 字段完整性确保每条规则可追溯 |
+| SWE-MISRA-TR3 | Advisory | 修复任务自动生成是效率提升，不阻碍流水线 |
+| SWE-MISRA-TR4 | Required | CI 报告含追溯信息是审计的基本要求 |
+| SWE-MISRA-TR5 | Advisory | 端到端追溯是成熟度目标，初期可接受手工验证 |
+
+---
+
+### 6.5 总结：Loop 2 审查结论
+
+#### 追溯链完成度：15% ❌ 未达标
+
+| 环节 | 完成度 | 下一步 |
+|:-----|:------:|:-------|
+| Spec→规则映射 (spec_ref) | 0% | P0：misra-rules.yaml 全部规则加 spec_ref 和 check 字段 |
+| 规则→检查→违规 | 60% | 检查工具链已就绪，违规报告已 JSON 化 |
+| 违规→修复任务 | 0% | P1：misra_report.py 新增 fix_tasks 生成 |
+| CI 追溯输出 | 0% | P0：JSON 报告新增 traceability.specs 和 commit hash |
+| Dir 4.2 去重 | 0% | P0：修正 Dir 4.2 描述，避免与 Rule 1.2 重复 |
+
+#### 需要小克 👨‍💻 响应的 5 个问题
+
+1. **spec_ref schema**: 每条规则加 `spec_ref` 字段，值用什么格式？建议 `spec_ref: "SWE-MISRA-CFG1"` 引用 spec 中的 SHALL ID
+2. **check 字段**: 是否所有规则加 `check` 字段，还是只加非 cppcheck 默认的？建议全员加，default=`cppcheck`
+3. **Dir 4.2 修正**: 上次 Loop 1 已提重复问题，这次确认仍未修复。请将 Dir 4.2 改为聚焦动态内存使用约束
+4. **修复任务输出格式**: 建议用 YAML/JSON 两种格式，方便不同消费方（人类读 YAML，工具读 JSON）
+5. **验收矩阵更新**: 我已在 Section 6.4 给出建议，收到你确认后正式更新 `specs/misra-acceptance-matrix.md`
+
+#### Blocking 状态
+
+| 项目 | 是否 Blocked | 原因 |
+|:-----|:------------|:-----|
+| 追溯链 | 🔴 **Blocked** | misra-rules.yaml 无 spec_ref → 无法链接 Spec→规则→违规→修复 完整链 |
+| Dir 4.2 去重 | 🔴 **Blocked** | 虽已提出，但 commit 中未修复，内容仍重复 |
+| 验收矩阵更新 | 🟡 **Not blocked** | 建议已给出，待小克确认后正式更新 |
+| CI 追溯输出 | 🔴 **Blocked** | 依赖 spec_ref 就位后才能实现 |
+
+---
+
+## 7. Loop 3 — MISRA KPI/趋势 + 偏差 CLI + 验证计划审查
+
+> **审查范围**: 小克新创建的 3 项 MISRA 产出
+> **审查人**: 小马 🐴
+> **日期**: 2026-06-18 (第3轮)
+>
+> - MISRA KPI/趋势跟踪 (`src/yuleosh/ci/misra_trend.py`)
+> - 偏差 CLI 命令 (`yuleosh misra deviate`)
+> - MISRA 验证计划文档 (`docs/misra-verification-plan.md`)
+
+---
+
+### 7.1 MISRA KPI/趋势跟踪审查 (`misra_trend.py`)
+
+#### 文件状态
+
+| 项目 | 状态 |
+|:-----|:----:|
+| 文件存在 | ✅ 已创建 (untracked) |
+| 位置 | `src/yuleosh/ci/misra_trend.py` |
+| 集成到 `stages.py` | ❌ 未集成 — 未在 `run_misra_check()` 中调用 `append_entry()` |
+| 单元测试 | ❌ 暂无 |
+
+#### 代码设计审查
+
+| 维度 | 评价 | 问题/建议 |
+|:-----|:-----|:---------|
+| **输出格式** | ✅ JSONL — 追加写，适合趋势累积，空间效率高 | — |
+| **时间戳** | ✅ ISO 8601 `datetime.now().isoformat()` | — |
+| **可读性** | ✅ `show_trend()` 输出 Markdown 表格，可直接嵌入报告 | — |
+| **批量查询** | ✅ 支持 N 条最近记录显示 | — |
+| **密度计算** | ✅ `get_violations_per_kloc()` — 与 config 中的阈值联动 | — |
+| **CI 摘要** | ✅ `_print_trend_summary()` 提供简明趋势摘要 | — |
+
+#### 关键发现
+
+| # | 发现 | 严重度 | 位置 | 建议 |
+|:-:|:-----|:------:|:-----|:-----|
+| T-01 | `append_entry()` 未被 `stages.py` 中的 `run_misra_check()` 调用 | **P0** | `misra_trend.py:62` / `stages.py` | 在 `run_misra_check()` 保存报告后追加 trend entry |
+| T-02 | 缺少 `delta_kloc` 字段 — 增量模式下 KLOC 应为 delta 值而非全量 | **P1** | `misra_trend.py:60` | 新增字段 `delta_kloc` 和 `delta_files`，在 delta 模式下使用 |
+| T-03 | 缺少违规密度阈值触发标志 | **P2** | 整体设计 | 增加 `breached_threshold: bool` 字段，当 density > `violations_per_kloc` 时标记 |
+| T-04 | `show_trend()` 未格式化 KLOC 列 | **P2** | `misra_trend.py:77-140` | 建议增加 KLOC 密度列为可选项 |
+| T-05 | `_print_trend_summary()` 方向指示逻辑复杂 | **P2** | `misra_trend.py:175-177` | 单行三元嵌套 `if-else` 可读性差，建议提取为小函数 |
+| T-06 | 无单元测试 | **P1** | `tests/` | 需要至少覆盖：`append_entry` → `show_trend` → 积分验证 |
+
+#### 建议集成到 stages.py 的代码
+
+```python
+# 在 run_misra_check() 尾部，save_report() 之后追加
+from yuleosh.ci.misra_trend import append_entry
+
+append_entry(
+    project_dir=project_dir,
+    total_violations=summary.get("total", 0),
+    required=summary.get("required", 0),
+    advisory=summary.get("advisory", 0),
+    files_checked=len(c_files),
+    is_delta=(check_mode == "delta"),
+    commit=get_git_short_hash(project_dir),
+)
+```
+
+---
+
+### 7.2 偏差 CLI 命令审查 (`yuleosh misra deviate`)
+
+#### 文件状态
+
+| 项目 | 状态 |
+|:-----|:----:|
+| CLI 命令 `yuleosh misra deviate` | ❌ **尚未创建** — 无对应命令实现 |
+| 偏差 dataclass | ✅ 存在 (`src/yuleosh/ci/config.py:MisraDeviation`) |
+| 偏差配置文件解析 | ✅ 存在 (`config.py:_parse_ci_config()` → deviations 解析) |
+| 偏差在 CI 中的应用 | ✅ 存在 (`stages.py:run_misra_check()` → 偏差过滤) |
+| 偏差在报告中的标记 | ✅ 存在 (`misra_report.py:_match_deviation()` → 标记 acknowledged) |
+| `docs/misra-deviations.md` | ❌ **尚未创建** — 被 spec SWE-MISRA-DEV1 引用 |
+
+**结论**: 偏差的**运行时支持**（dataclass → 配置解析 → CI 实现 → 报告标记）已就绪，但**用户界面层**（CLI 命令）和**文档**缺失。
+
+---
+
+#### 命令设计建议
+
+##### 推荐命令结构
+
+```
+yuleosh misra deviate --help
+
+Usage:
+  yuleosh misra deviate list                          — 列出所有偏差
+  yuleosh misra deviate add <rule-id> <file-pattern>   — 添加新偏差
+    [--reason "..."]
+    [--approved-by <name>]
+    [--expires YYYY-MM-DD]
+  yuleosh misra deviate approve <rule-id> <file>       — 批准待审批偏差
+  yuleosh misra deviate reject <rule-id> <file>        — 拒绝偏差
+  yuleosh misra deviate export                         — 导出偏差为 YAML/JSON
+```
+
+##### 子命令详情
+
+| 子命令 | 参数 | 动作 | 权限要求 |
+|:-------|:-----|:-----|:---------|
+| `list` | `[--status pending|approved|rejected]` | 列出当前偏差清单 | 无（只读） |
+| `add` | `<rule-id>` `<file-pattern>` `[--reason]` | 在 ci-config.yaml 中添加偏差记录 | 写权限（project owner） |
+| `approve` | `<rule-id>` `<file>` | 将偏差状态从 pending → approved | **需 QA lead 或架构师** |
+| `reject` | `<rule-id>` `<file>` | 将偏差状态从 pending → rejected | **需 QA lead 或架构师** |
+| `export` | `--format yaml|json` | 导出偏差报告，支持合规审计 | 无 |
+
+##### 偏差记录数据模型（已有）
+
+```python
+@dataclass
+class MisraDeviation:
+    rule_id: str = ""           # 例如 "misra-c2023-10.1"
+    file_pattern: str = ""      # 例如 "src/legacy/*.c"
+    reason: str = ""            # 偏差理由
+    approved_by: str = ""       # 审批人
+    expires: str = ""           # 过期日，如 "2026-09-30"
+    status: str = "pending"     # pending | approved | rejected
+```
+
+#### 权限控制设计
+
+**谁可以做什么？**
+
+| 操作 | 允许角色 | 建议实现方式 |
+|:-----|:---------|:------------|
+| `list` | 所有人 | 读 ci-config.yaml 的 deviations 段 |
+| `add` | Project Owner, Developer | 修改 ci-config.yaml 追加 dev 条目（status=pending） |
+| `approve` | **QA Lead, 架构师, 质量负责人** | 修改 ci-config.yaml 中 status=approved |
+| `reject` | QA Lead, 架构师 | 修改 ci-config.yaml 中 status=rejected |
+| `export` | 所有人（审计用） | 读取 deviations 输出 YAML/JSON |
+
+**关键控制点**:
+
+1. 🔴 `approve` 和 `reject` 不能无限制开放 — 至少需要文件写权限 + 角色检测
+2. ⚠️ 偏差有 **过期时间**（`expires` 字段），过期后自动失效（CI 中不再标记为 acknowledged）
+3. 🟡 建议在 `deviate approve` 执行时记录审批者的 git commit author，以提供审计轨迹
+4. 🔴 `deviate add` 直接写入 `ci-config.yaml` — 需要确保 YAML 格式不被破坏
+
+#### 文件输出位置
+
+- 偏差配置 SHALL 存储在 `.yuleosh/ci-config.yaml` 的 `misra.deviations` 段（已有）
+- `docs/misra-deviations.md` 文档 SHOULD 同步生成（CLI `export` 命令输出 Markdown 版本）
+
+#### 检查结果
+
+| 检查项 | 结论 | 说明 |
+|:-------|:----:|:-----|
+| 命令设计直观？ | **NA** | 命令尚未实现。建议见上 |
+| 权限控制合理？ | **NA** | 同上。核心建议：approve/reject 需要 QA lead 权限 |
+| 偏差过期机制？ | ✅ | `expires` 字段已有，CI 运行中需要实现过期检查 |
+| 偏差审计轨迹？ | ⚠️ 部分 | YAML 配置本身可 git 跟踪；但 CI 报告中无偏差使用记录 |
+| docs/misra-deviations.md 存在？ | ❌ | 尚未创建，被 spec 引用但无文件 |
+
+---
+
+### 7.3 MISRA 验证计划审查 (`docs/misra-verification-plan.md`)
+
+#### 文件状态
+
+| 项目 | 状态 |
+|:-----|:----:|
+| `docs/misra-verification-plan.md` | ❌ **尚未创建** |
+| Spec 中引用位置 | `specs/misra-c2023-spec.md` §5 (ASPICE SWE.4/SWE.5 映射) |
+
+**结论**: 验证计划文档需要创建。以下是我建议的内容框架和审查基准。
+
+---
+
+#### 建议内容框架
+
+```markdown
+# MISRA C:2023 验证计划
+
+> 版本: 1.0.0-draft
+> 关联 Spec: specs/misra-c2023-spec.md
+> 关联验收矩阵: specs/misra-acceptance-matrix.md
+
+## 1. 范围
+- 覆盖 yuleOSH 的 MISRA C:2023 静态检查集成
+- 不包括 MISRA 规则的手动审核（由人工审查流程覆盖）
+
+## 2. 角色与职责
+
+| 角色 | 职责 | 负责人 |
+|:-----|:-----|:-------|
+| 质量架构师 | 定义规则集、验收标准、审查报告 | 小马 🐴 |
+| 开发者 | 实施规则检查、修复违规、申请偏差 | 小克 👨‍💻 |
+| 项目负责人 | 批准偏差、裁定争议 | 小明 🧑‍💼 |
+| CI/CD 维护者 | 维护检查工具链、更新 YAML 配置 | 小克 👨‍💻 |
+| 审计员 | 验证验证计划执行、检查追溯链完整性 | 小马 🐴 / 外部审计 |
+
+## 3. 验证活动
+
+| 验证活动 | 执行者 | 频率 | 输入 | 输出 |
+|:---------|:-------|:----|:-----|:-----|
+| MISRA 静态分析 (Layer 2) | CI (自动) | 每次提交 | misra-rules.yaml, cppcheck | misra-report.json |
+| 趋势 KPI 跟踪 | CI (自动) | 每次提交 | misra-report.json | misra-trend.jsonl |
+| 偏差审批 | 质量架构师 | PR 时 | docs/misra-deviations.md | 批准/拒绝签名 |
+| MISRA 合规审查 | 质量架构师 | 每次 Sprint 结束 | misra-trend JSONL | 审查报告 |
+| 追溯矩阵一致性 | 质量架构师 | 每次 Sprint 结束 | misra-report + spec | 追溯矩阵报告 |
+| 外部审计 | 第三方 | 按项目里程碑 | 所有 MISRA 证据 | 审计报告 |
+
+## 4. 门禁 (Gates)
+
+| 门禁 | 通过条件 | 阻断行为 |
+|:-----|:---------|:---------|
+| G1 — CI 静态分析 | Required 违规 ≤ max_warnings (默认 100) | Pipeline 标记 warning / failed |
+| G2 — Required 偏差 | 所有 Required 违规需有对应偏差记录或已修复 | Code Review 不通过直到解决 |
+| G3 — 趋势恶化 | 最近 5 次 Required 均值环比 ≤ +20% | Sprint 审查中讨论，不自动阻断 |
+| G4 — 追溯链 | misra-report.json 含完整 traceability 节 | SWE.4/SWE.5 合规证据不完整 |
+| G5 — 偏差过期 | 偏差 expires 日期在有效期内 | CI 报告标记过期偏差 |
+
+## 5. ASPICE SWE.4/SWE.5 映射
+
+| ASPICE BP | 验证活动 | 覆盖状态 |
+|:----------|:---------|:---------|
+| SWE.4.BP1: 开发软件单元验证规范 | MISRA 规则集定义 (misra-rules.yaml) | ✅ 已覆盖 |
+| SWE.4.BP2: 记录验证结果 | misra-report.json, misra-trend.jsonl | ⚠️ 趋势已实现，验证记录需完善 |
+| SWE.5.BP2: 验证集成策略 | CI Layer 2 MISRA 检查执行 | ✅ 已覆盖 |
+| SWE.5.BP3: 记录集成测试结果 | 追溯矩阵 JSON (traceability 节) | ⚠️ traceability 节已实现但未含 spec_ref |
+| SWE.6.BP2: 发布前验证 | MISRA_FAIL_FAST 阻断逻辑 | ✅ 已覆盖 |
+| SWE.6.BP3: 记录验证证据 | .osh/evidence/ 自动归档 | ⚠️ 已部分实现 (fix_tasks) |
+
+## 6. 风险与缓解措施
+
+| 风险 | 概率 | 影响 | 缓解措施 |
+|:-----|:----:|:----:|:---------|
+| cppcheck 不支持全部 C:2023 规则 | 高 | 中 | 标记规则 check_method=manual，配合人工审查 |
+| 偏差泛滥（过多批准） | 中 | 高 | expires 机制 + 偏差数量上限（默认 ≤20 条活跃偏差） |
+| 趋势数据丢失 | 低 | 中 | misra-trend.jsonl 纳入证据打包 |
+| 门禁被绕过 | 低 | 高 | CI 强制执行 MISRA 检查 stage，无法跳过 |
+
+## 7. 验收准则（引用验收矩阵）
+
+见 specs/misra-acceptance-matrix.md §7 (MISRA KPI/趋势), §8 (偏差 CLI), §9 (验证计划文档验收)。
+```
+
+---
+
+#### 审查对照表
+
+| 检查维度 | 结论 | 说明 |
+|:---------|:----:|:-----|
+| **角色定义清晰？** | ⚠️ 预审 OK | 文档尚未创建。建议框架中角色划分明确（质量架构师=小马、开发者=小克、项目负责人=小明） |
+| **频率/门禁合理？** | ⚠️ 预审 OK | 建议 G1~G5 门禁逐级递进：自动→审查→Sprint→审计。趋势恶化不自动阻断但需讨论 |
+| **ASPICE SWE.4 对齐？** | ⚠️ 预审 OK | SWE.4.BP1/BP2 通过 misra-rules.yaml 和 JSON 报告覆盖；SWE.5.BP3 需 traceability 节补完 |
+| **ASPICE SWE.5 对齐？** | ⚠️ 预审 OK | SWE.5.BP2/BP3 通过 CI MISRA 检查覆盖；SWE.5.BP3 因缺少 spec_ref 还不完整 |
+| **门禁阈值明确？** | ⚠️ 需确认 | `max_warnings=100` 和 `violations_per_kloc=2.0` 已在 config.py 定义，需与验证计划一致 |
+| **偏差审批流程？** | ❌ 缺失 | 验证计划未收尾：偏差如何提交、审批路径、过期后如何处理 |
+| **文档状态** | ❌ 尚未创建 | P0 待小克创建，参考以上框架 |
+
+---
+
+### 7.4 验收矩阵追加项
+
+**文件**: `specs/misra-acceptance-matrix.md`
+
+**操作**: 追加以下 3 个新章节（§7 MISRA KPI/趋势, §8 偏差 CLI, §9 验证计划文档验收）
+
+---
+
+#### §7 新增：MISRA KPI/趋势 验收
+
+| 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 |
+|:-------|:---------|:---------|:---------|:---------|
+| misra_trend.py 文件存在 | SWE-MISRA-KPI1 | 检查文件是否存在 | `ls` | `src/yuleosh/ci/misra_trend.py` 存在 |
+| 趋势文件 JSONL 格式 | SWE-MISRA-KPI1 | 解析 `.yuleosh/reports/misra-trend.jsonl` | pytest | 每行是有效 JSON，含 timestamp, total_violations, required, advisory |
+| 趋势集成到 CI | SWE-MISRA-KPI2 | 运行 CI 后检查 trend 文件 | CI 日志 | `run_misra_check()` 输出中包含 `append_entry()` 调用痕迹 |
+| 趋势 Markdown 表格 | SWE-MISRA-KPI2 | 调用 show_trend() | pytest | 返回格式正确的 Markdown 表格，每行含 #/时间戳/总违规/Required/Advisory/文件数/增量/Commit |
+| 密度计算正确 | SWE-MISRA-KPI3 | 输入已知 violation 和 KLOC | pytest | `get_violations_per_kloc(10, 5.0)` = 2.0; `(0, 5.0)` = 0.0; `(10, 0)` = 0.0 |
+
+#### §8 新增：偏差 CLI 验收
+
+| 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 |
+|:-------|:---------|:---------|:---------|:---------|
+| `yuleosh misra deviate list` 命令 | SWE-MISRA-DEVCLI1 | 运行命令 | CLI 测试 | 输出偏差清单表格，含 rule_id, file_pattern, reason, approved_by, expires, status |
+| `yuleosh misra deviate add` 命令 | SWE-MISRA-DEVCLI2 | 运行 `add` 后检查 ci-config.yaml | pytest | ci-config.yaml 的 `misra.deviations` 新增对应条目，status= |
+| `yuleosh misra deviate approve` 命令 | SWE-MISRA-DEVCLI3 | 运行 `approve` 后检查 ci-config.yaml | pytest | 对应偏差条目 status → approved, approved_by 更新 |
+| `yuleosh misra deviate reject` 命令 | SWE-MISRA-DEVCLI3 | 运行 `reject` 后检查 ci-config.yaml | pytest | 对应偏差条目 status → rejected |
+| `yuleosh misra deviate export` 命令 | SWE-MISRA-DEVCLI4 | 运行 export | CLI 测试 | 输出 YAML/JSON 格式，内容与 ci-config.yaml 一致 |
+| 偏差 CI 过滤 | SWE-MISRA-DEVCLI5 | 配置偏差后运行 CI | CI 日志 | 匹配偏差的违规在报告中标记为 "acknowledged" 而非新增违规 |
+| docs/misra-deviations.md 存在 | SWE-MISRA-DEVCLI6 | 检查文件 | `ls` | 文件存在，至少包含表头和示例条目 |
+
+#### §9 新增：验证计划文档验收
+
+| 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 |
+|:-------|:---------|:---------|:---------|:---------|
+| 文档存在 | SWE-MISRA-VP1 | 检查文件 | `ls` | `docs/misra-verification-plan.md` 存在 |
+| 角色定义 | SWE-MISRA-VP1 | 审查文档 | 人工审查 | 至少定义 3 个角色（质量架构师、开发者、项目负责人），职责描述清晰 |
+| 验证活动 | SWE-MISRA-VP1 | 审查文档 | 人工审查 | 至少列出 4 项验证活动，每项定义了执行者、频率、输入、输出 |
+| 门禁定义 | SWE-MISRA-VP2 | 审查文档 | 人工审查 | 至少定义 3 个门禁，每个门禁有通过条件和阻断行为 |
+| ASPICE SWE.4 映射 | SWE-MISRA-VP3 | 审查文档 | 人工审查 | 至少有 SWE.4 BP1/BP2 的映射说明 |
+| ASPICE SWE.5 映射 | SWE-MISRA-VP3 | 审查文档 | 人工审查 | 至少有 SWE.5 BP2/BP3 的映射说明 |
+| SWE.6 映射 | SWE-MISRA-VP3 | 审查文档 | 人工审查 | 至少有 SWE.6 BP2/BP3 的映射说明 |
+| 风险与缓解 | SWE-MISRA-VP4 | 审查文档 | 人工审查 | 至少列出 3 个风险项，每个含概率/影响/缓解措施 |
+
+#### 验收层次矩阵
+
+| 新验收项 | SHALL ID | 级别 | 解释 |
+|:---------|:---------|:----:|:-----|
+| KPI 文件存在 | SWE-MISRA-KPI1 | Required | 趋势跟踪是检测质量变化的基础 |
+| 趋势 CI 集成 | SWE-MISRA-KPI2 | Required | 自动记录趋势是 CI 的必要功能 |
+| 密度计算 | SWE-MISRA-KPI3 | Advisory | KPI 计算正确性，不影响流水线阻断 |
+| 偏差 CLI list | SWE-MISRA-DEVCLI1 | Required | 查看偏差是日常开发刚需 |
+| 偏差 CLI add | SWE-MISRA-DEVCLI2 | Required | 添加偏差是流程入口 |
+| 偏差 CLI approve/reject | SWE-MISRA-DEVCLI3 | Required | 审批控制是合规核心 |
+| 偏差 CLI export | SWE-MISRA-DEVCLI4 | Advisory | 导出用于审计，可接受手工替代 |
+| 偏差 CI 过滤 | SWE-MISRA-DEVCLI5 | Required | 偏差必须实际生效 |
+| 偏差文档 | SWE-MISRA-DEVCLI6 | Required | 被 spec 直接引用（SWE-MISRA-DEV1） |
+| 验证计划文档 | SWE-MISRA-VP1 | Required | 验证计划是 ASPICE SWE 过程的基础文档 |
+| 门禁定义 | SWE-MISRA-VP2 | Required | 门禁是质量控制的核心机制 |
+| ASPICE 映射 | SWE-MISRA-VP3 | Required | 映射说明是 ASPICE 合规的证据 |
+| 风险管理 | SWE-MISRA-VP4 | Advisory | 风险管理是成熟度要求 |
+
+---
+
+### 7.5 全局状态汇总
+
+| 交付项 | 状态 | 优先级 | 说明 |
+|:-------|:----:|:------:|:-----|
+| `misra_trend.py` | ✅ 已创建 + 需集成 | P1 | 代码质量好，需集成到 stages.py + 加测试 |
+| 偏差 CLI (`yuleosh misra deviate`) | ❌ 未创建 | P1 | 运行时层就绪，缺用户界面 |
+| `docs/misra-deviations.md` | ❌ 未创建 | P0 | 被 spec SWE-MISRA-DEV1 引用但不存在 |
+| `docs/misra-verification-plan.md` | ❌ 未创建 | P1 | 本文提供建议框架 |
+| 验收矩阵更新 | 📋 已撰写 | P1 | 3 个新章节待小克确认后正式追加到 `specs/misra-acceptance-matrix.md` |
+| 追溯链 (spec_ref) | ✅ 已修复 | — | 本轮发现 misra-rules.yaml 已包含 spec_ref 和 check_method 字段 ✅ |
+| Dir 4.2 重复 | ✅ 已修复 | — | 本轮确认 misra-rules.yaml 中 Dir 4.2 已改为动态内存约束 ✅ |
+
+#### 乐观发现
+
+本轮审查中发现两个积极进展：
+
+1. **misra-rules.yaml 已补全 spec_ref 和 check_method**: 相较于 Loop 2 提出的 "spec_ref 缺失" 问题，最新 commit (32b5d2a0) 的 `misra-rules.yaml` 全部 142 条规则均包含 `spec_ref` 和 `check_method` 字段 ✅
+2. **Dir 4.2 重复问题已修复**: 对比上一轮审查，本轮 `misra-rules.yaml` 中 Dir 4.2 的描述已改为动态内存使用约束，不再与 Rule 1.2 重复 ✅
+
+这意味着 Loop 2 中标记的 Blocking 状态已被小克 👨‍💻 解决。
+
+#### 剩余待办
+
+| 优先级 | 事项 | 负责人 |
+|:------:|:-----|:------|
+| P0 | 创建 `docs/misra-deviations.md` | 小克 |
+| P1 | 集成 `misra_trend.py` 到 `stages.py` | 小克 |
+| P1 | 实现 `yuleosh misra deviate` CLI 命令 | 小克 |
+| P1 | 创建 `docs/misra-verification-plan.md` | 小克 |
+| P1 | 为 `misra_trend.py` 编写单元测试 | 小克 |
+| P2 | 正式追加验收矩阵 §7/§8/§9 | 小马（待小克确认后） |
+
+---
+
+*Loop 3 审查完毕 | 小马 🐴 | 2026-06-18 17:42 CST*

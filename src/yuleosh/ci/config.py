@@ -72,6 +72,7 @@ class MisraDeviation:
     reason: str = ""
     approved_by: str = ""
     expires: str = ""  # ISO date, e.g. "2026-09-30"
+    status: str = "pending"  # pending | approved | rejected
 
 
 @dataclass
@@ -89,6 +90,7 @@ class MisraConfig:
     rule_texts_path: str = ""
     rule_overrides: list[MisraRuleOverride] = field(default_factory=list)
     deviations: list[MisraDeviation] = field(default_factory=list)
+    _deviation_raw: list[dict] = field(default_factory=list)  # preserve raw YAML order for writing
 
 
 @dataclass
@@ -268,6 +270,7 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
         deviations_block = misra_block.get("deviations", [])
         if isinstance(deviations_block, list):
             dev_list: list[MisraDeviation] = []
+            dev_raw_list: list[dict] = []
             for d in deviations_block:
                 if isinstance(d, dict):
                     dev_list.append(MisraDeviation(
@@ -276,8 +279,11 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
                         reason=str(d.get("reason", "")),
                         approved_by=str(d.get("approved_by", "")),
                         expires=str(d.get("expires", "")),
+                        status=str(d.get("status", "pending")),
                     ))
+                    dev_raw_list.append(d)
             cfg.misra.deviations = dev_list
+            cfg.misra._deviation_raw = dev_raw_list
 
     # Hardware test block
     hw_block = raw.get("hardware_test", {})
@@ -364,5 +370,81 @@ layer_dependencies: dict[int, list[int]] = {
     25: [1, 2],
     3: [1, 2, 25],
 }
+
+
+# ------------------------------------------------------------------
+# Deviation YAML helpers
+# ------------------------------------------------------------------
+
+
+def _deviations_to_yaml_dicts(deviations: list[MisraDeviation]) -> list[dict]:
+    """Convert MisraDeviation list to YAML-serializable dict list.
+
+    Preserves the field order expected by ci-config.yaml:
+    rule, file, reason, approved_by, expires, status.
+    """
+    result: list[dict] = []
+    for d in deviations:
+        result.append({
+            "rule": d.rule_id,
+            "file": d.file_pattern,
+            "reason": d.reason,
+            "approved_by": d.approved_by,
+            "expires": d.expires,
+            "status": d.status,
+        })
+    return result
+
+
+def update_deviation_status(
+    project_dir: str,
+    rule_id: str,
+    file_pattern: str,
+    new_status: str,
+) -> bool:
+    """Update the status of a deviation record in ci-config.yaml.
+
+    This performs an in-memory update via PyYAML and writes the file back,
+    preserving all other fields.  Returns True on success, False if the
+    deviation is not found or YAML write fails.
+    """
+    import yaml
+
+    path = Path(project_dir) / DEFAULT_CI_CONFIG_PATH
+    if not path.exists():
+        return False
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except yaml.YAMLError:
+        return False
+
+    # Navigate to deviations list
+    misra_block = raw.get("misra", {})
+    if not isinstance(misra_block, dict):
+        return False
+
+    deviations = misra_block.get("deviations", [])
+    if not isinstance(deviations, list):
+        return False
+
+    found = False
+    for d in deviations:
+        if isinstance(d, dict) and d.get("rule") == rule_id and d.get("file") == file_pattern:
+            d["status"] = new_status
+            found = True
+            break
+
+    if not found:
+        return False
+
+    # Write back
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.dump(raw, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        return True
+    except (yaml.YAMLError, OSError):
+        return False
 
 

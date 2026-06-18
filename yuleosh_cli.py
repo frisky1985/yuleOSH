@@ -375,6 +375,144 @@ def cmd_stats(json_output: bool = False):
     cmd_stats(to_json=json_output)
 
 
+# ── MISRA Deviate Commands ─────────────────────────────────────────────
+
+
+def cmd_misra_deviate(args):
+    """Handle ``yuleosh misra deviate`` subcommands.
+
+    Reads/Writes deviations from/to ``.yuleosh/ci-config.yaml``.
+    """
+    from yuleosh.ci.config import (
+        load_ci_config, update_deviation_status, _deviations_to_yaml_dicts,
+    )
+
+    project_dir = OSH_HOME
+    cfg = load_ci_config(project_dir)
+    deviations = cfg.misra.deviations if cfg else []
+
+    sub = args.deviate_sub
+
+    if sub == "list":
+        if not deviations:
+            print("No deviation records found.")
+            return
+        print(f"\n{'#':<3} {'Rule ID':<28} {'File Pattern':<30} {'Status':<12} {'Approved By':<16} {'Expires':<14}")
+        print("-" * 105)
+        for idx, d in enumerate(deviations, 1):
+            print(f"{idx:<3} {d.rule_id:<28} {d.file_pattern:<30} {d.status:<12} {d.approved_by:<16} {d.expires:<14}")
+        print()
+
+    elif sub == "approve":
+        dev_id = args.dev_id
+        rule, file_pat = _parse_dev_id(dev_id)
+        if not rule and not file_pat:
+            print(f"Error: invalid dev_id format '{dev_id}' — expected 'rule_id:file_pattern'", file=sys.stderr)
+            sys.exit(1)
+        # Find the deviation by rule_id only (file_pattern may have glob chars)
+        matched = [d for d in deviations if d.rule_id == rule]
+        if not matched:
+            print(f"Error: deviation for rule '{rule}' not found", file=sys.stderr)
+            sys.exit(1)
+        # Update via YAML write
+        target_file = file_pat or matched[0].file_pattern
+        ok = update_deviation_status(project_dir, rule, target_file, "approved")
+        if ok:
+            print(f"✅ Deviation {rule}:{target_file} → APPROVED")
+        else:
+            print(f"Error: failed to update deviation '{dev_id}'", file=sys.stderr)
+            sys.exit(1)
+
+    elif sub == "reject":
+        dev_id = args.dev_id
+        rule, file_pat = _parse_dev_id(dev_id)
+        if not rule and not file_pat:
+            print(f"Error: invalid dev_id format '{dev_id}' — expected 'rule_id:file_pattern'", file=sys.stderr)
+            sys.exit(1)
+        matched = [d for d in deviations if d.rule_id == rule]
+        if not matched:
+            print(f"Error: deviation for rule '{rule}' not found", file=sys.stderr)
+            sys.exit(1)
+        target_file = file_pat or matched[0].file_pattern
+        ok = update_deviation_status(project_dir, rule, target_file, "rejected")
+        if ok:
+            print(f"✅ Deviation {rule}:{target_file} → REJECTED")
+        else:
+            print(f"Error: failed to update deviation '{dev_id}'", file=sys.stderr)
+            sys.exit(1)
+
+    elif sub == "add":
+        _interactive_add_deviation(project_dir)
+
+    else:
+        print(f"Unknown deviate subcommand: {sub}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _parse_dev_id(dev_id: str) -> tuple[str, str]:
+    """Parse a dev_id string 'rule_id:file_pattern' into its components."""
+    if ":" in dev_id:
+        parts = dev_id.split(":", 1)
+        return parts[0].strip(), parts[1].strip()
+    # Try matching by rule_id alone
+    return dev_id.strip(), ""
+
+
+def _interactive_add_deviation(project_dir: str) -> None:
+    """Interactive prompt to add a new deviation to ci-config.yaml."""
+    import yaml
+    from pathlib import Path
+
+    config_path = Path(project_dir) / ".yuleosh" / "ci-config.yaml"
+    if not config_path.exists():
+        print(f"Error: config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n📝 Add a new MISRA deviation:")
+    try:
+        rule = input("  Rule ID (e.g. misra-c2023-17.7): ").strip()
+        file_pat = input("  File pattern (e.g. src/legacy/*.c): ").strip()
+        reason = input("  Reason for deviation: ").strip()
+        approved_by = input("  Approved by: ").strip()
+        expires = input("  Expires (ISO date, e.g. 2026-09-30): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nCancelled.")
+        sys.exit(1)
+
+    if not rule or not file_pat:
+        print("Error: rule_id and file_pattern are required.", file=sys.stderr)
+        sys.exit(1)
+
+    new_entry = {
+        "rule": rule,
+        "file": file_pat,
+        "reason": reason or "(not specified)",
+        "approved_by": approved_by or "(not specified)",
+        "expires": expires or "2099-12-31",
+        "status": "pending",
+    }
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        print(f"Error: failed to parse config: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Ensure deviations list exists
+    misra_block = raw.setdefault("misra", {})
+    deviations = misra_block.setdefault("deviations", [])
+    deviations.append(new_entry)
+
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(raw, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        print(f"✅ Deviation added: {rule}:{file_pat} (status: pending)")
+    except OSError as e:
+        print(f"Error: failed to write config: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 # ── Parser ──────────────────────────────────────────────────────────────
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -453,6 +591,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p_demo_uart.add_argument("--dir", default=None, help="Target directory for the demo project")
     p_demo_uart.add_argument("--build", action="store_true", help="Build and run the demo after creating it")
     p_demo_uart.add_argument("--skip-cmake", action="store_true", help="Skip CMake environment check")
+
+    # misra
+    p_misra = sub.add_parser("misra", help="MISRA C:2023 compliance management")
+    msub = p_misra.add_subparsers(dest="misra_sub")
+    p_misra_deviate = msub.add_parser("deviate", help="Manage deviation records")
+    mdev = p_misra_deviate.add_subparsers(dest="deviate_sub")
+    # deviate list
+    mdev.add_parser("list", help="List all deviation records")
+    # deviate approve <id>
+    p_misra_dev_approve = mdev.add_parser("approve", help="Approve a deviation")
+    p_misra_dev_approve.add_argument("dev_id", help="Deviation ID (rule_id:file_pattern)")
+    # deviate reject <id>
+    p_misra_dev_reject = mdev.add_parser("reject", help="Reject a deviation")
+    p_misra_dev_reject.add_argument("dev_id", help="Deviation ID (rule_id:file_pattern)")
+    # deviate add
+    mdev.add_parser("add", help="Interactive add a deviation")
 
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
@@ -545,6 +699,13 @@ def main():
 
     elif args.command == "stats":
         cmd_stats(json_output=args.json)
+
+    elif args.command == "misra":
+        if args.misra_sub == "deviate":
+            cmd_misra_deviate(args)
+        else:
+            parser.print_help()
+            sys.exit(1)
 
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main

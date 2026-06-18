@@ -33,6 +33,21 @@ from yuleosh.ci.stage_utils import (
 
 log = logging.getLogger("ci.stages")
 
+
+def _get_git_commit(project_dir: str) -> str:
+    """Get short git commit hash from the project directory."""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=10, cwd=project_dir,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
+
 def run_plan_lint(project_dir: str, ci: CIResult) -> bool:
     """Run plan-lint: check task kind and T00 three-step format."""
     print("  🔍 CI: plan-lint...")
@@ -548,17 +563,19 @@ def run_misra_check(project_dir: str, ci: CIResult,
         summary = compute_summary_stats(violations, groups)
 
         output_dir = Path(project_dir) / ".yuleosh" / "reports"
+
+        # Apply deviations: mark matching violations as "acknowledged"
+        deviations_used: list[tuple[str, str]] = []
+        for dev in deviations:
+            if dev.rule_id and dev.file_pattern:
+                deviations_used.append((dev.rule_id, dev.file_pattern))
+
         save_report(violations, groups, summary, rule_defs, output_dir,
                     deviations=deviations_used)
 
         # --- Generate traceability matrix and fix tasks (MISRA loop closure) ---
         if violations:
             print_summary(summary)
-            # Apply deviations: mark matching violations as "acknowledged"
-            deviations_used = []
-            for dev in deviations:
-                if dev.rule_id and dev.file_pattern:
-                    deviations_used.append((dev.rule_id, dev.file_pattern))
 
             trace_matrix = generate_traceability_matrix(
                 violations, rule_defs, deviations=deviations_used
@@ -661,6 +678,24 @@ def run_misra_check(project_dir: str, ci: CIResult,
         f"({required_count} required, {advisory_count} advisory) — "
         f"see .yuleosh/reports/misra-report.json"
     )
+
+    # ── Append trend entry ─────────────────────────────────────────
+    try:
+        from yuleosh.ci.misra_trend import append_entry, _print_trend_summary
+        commit = _get_git_commit(project_dir)
+        append_entry(
+            project_dir=project_dir,
+            total_violations=total_violations,
+            required=required_count,
+            advisory=advisory_count,
+            files_checked=len(c_files),
+            is_delta=is_delta,
+            commit=commit,
+        )
+        _print_trend_summary(project_dir)
+    except Exception as trend_e:
+        log.debug("MISRA trend append skipped: %s", trend_e)
+    # ────────────────────────────────────────────────────────────────
 
     if should_block:
         ci.add_stage("misra-check", "failed", "; ".join(block_reasons))
