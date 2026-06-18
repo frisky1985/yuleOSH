@@ -1,80 +1,71 @@
-# yuleOSH Pipeline 完整性 — 专家审查简报
+# yuleOSH Pipeline 完整性审查 (二轮)
 
-> **审查人**: 老陈 👨‍🏫（前博世资深架构师）+ 嵌入式行业专家
-> **审查版本**: v1.2.0 (commit ba3d026f)
-> **审查范围**: Pipeline 全流程 V-Model 对齐 + Agent 审查覆盖率
+> **审查人**: 老陈 👨‍🏫（前博世资深架构师）
+> **审查版本**: v1.2.1 (commit 208deb2b)
+> **本轮新增**: 4 个嵌入式审查步骤 (17→21步)
 
 ## 背景
 
-yuleOSH 已完成从简单 CI/CD 到完整 ASPICE V-Model 对齐的 Pipeline 重构。
+一审查出评分 58/100，最大短板在嵌入式特色缺失。本轮已补 4 个嵌入式审查 handler：
 
-### Pipeline 流程 (17步)
+### Pipeline 流程 (21步)
 
 ```
 左侧: SWE.1~SWE.3 (规约阶段)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- 1. OpenSpec 合规检查     小明    SWE.1
- 2. S.U.P.E.R 启动分析    小明    SWE.1
- 3. 产品需求分析          小马    SWE.1
- 4. PRD 质量审查          小马    SWE.1  ← Agent 审查
- 5. 架构设计              小克    SWE.2
- 6. 架构审查              小克    SWE.2  ← Agent 审查
- 7. 开发计划与代码实现    小克    SWE.3
- 8. 开发计划审查          小克    SWE.3  ← Agent 审查
- 9. 代码实现预审          小克    SWE.3  ← Agent 审查
-10. 测试规划              小克    SWE.3
-11. 自测验证              小克    SWE.4
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 1. OpenSpec 合规检查      小明  SWE.1
+ 2. S.U.P.E.R 启动分析     小明  SWE.1
+ 3. 产品需求分析           小马  SWE.1
+ 4. PRD 质量审查           小马  SWE.1  ← Agent
+ 5. 架构设计               Claude SWE.2
+ 6. 架构审查               小克  SWE.2  ← Agent
+ 7. 开发计划与代码实现      小克  SWE.3
+ 8. 开发计划审查           小克  SWE.3  ← Agent
+ 9. 代码实现预审           小克  SWE.3  ← Agent
+10. 测试规划               小克  SWE.3
+11. 自测验证               小克  SWE.4
 
 右侧: SWE.4~SWE.6 (验证阶段)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-12. 自测结果审查          小克    SWE.4  ← Agent 审查
-13. 接口集成测试          小克    SWE.5  ← Agent 审查
-14. 集成代码审查          小马    SWE.5  ← Agent 审查
-15. MISRA 合规审查        小马    SWE.5  ← Agent 审查
-16. 测试覆盖审查          小马    SWE.5  ← Agent 审查
-17. 最终报告              小明    SWE.6
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+12. 自测结果审查           小克  SWE.4  ← Agent
+13. 接口集成测试           小克  SWE.5  ← Agent
+14. 集成代码审查           小马  SWE.5  ← Agent
+15. MISRA 合规审查         小马  SWE.5  ← Agent
+16. 测试覆盖审查           小马  SWE.5  ← Agent
+17. 链接脚本审查           小克  SWE.5  ← ★ NEW ★
+18. 启动代码审查           小克  SWE.5  ← ★ NEW ★
+19. RTOS 配置审查          小克  SWE.5  ← ★ NEW ★
+20. 内存安全审查           小克  SWE.5  ← ★ NEW ★
+21. 最终报告               小明  SWE.6
 ```
 
-### CI 层
-- Layer 1: plan-lint + clang-tidy + MISRA + unit-test + coverage
-- Layer 2: SIL 集成测试
-- Layer 2.5: HIL 硬件在环测试
-- Layer 3: 系统验证
+### 本轮新增的 4 个嵌入式审查
 
-### MISRA C:2023
-- 180条规则全覆盖 (100%)
-- 项目级可配置 + 偏差管理
-- 增量检查 (delta check)
-- KPI 趋势跟踪
+- **链接脚本审查** (review_linker): 栈/堆大小、段对齐、中断向量表地址、ROM/RAM 范围
+- **启动代码审查** (review_startup): Reset_Handler、栈初始化、.bss清零、时钟配置
+- **RTOS 配置审查** (review_rtos): 任务优先级、堆栈分配、中断优先级、看门狗、互斥量
+- **内存安全审查** (review_memory): 全局变量大小、动态内存、static递归、缓冲区边界
 
-## 请专家重点审查
+### 优化路径文档
 
-1. **V-Model 完整性**
-   - SWE.1~SWE.6 的左右侧映射是否完整？
-   - 是否有缺失的关键验证环节？
-   
-2. **Agent 审查覆盖**
-   - 9 个审查节点是否覆盖了关键风险点？
-   - 有没有该审查但漏掉的地方？
+`docs/pipeline-optimization-plan.md` 已创建，规划了 3 个 Sprint：
+- Sprint 1 (本轮): 嵌入式审查 4个 + C单元测试框架 + SWE.6 → 目标评分 72/100
+- Sprint 2: 堆栈分析 + MMIO + MISRA L2 → 82/100
+- Sprint 3: HAL + BSP + 编译输出 → 85+/100
 
-3. **嵌入式行业特殊性**
-   - 对于嵌入式 C 开发（FreeRTOS/STM32/ESP32/AUTOSAR），这个 Pipeline 够用吗？
-   - 少了什么嵌入式特有的验证环节？
+## 请专家二轮审查
 
-4. **ASPICE 审计就绪度**
-   - 如果明天就做 ASPICE 审计，能过 CL1 吗？
-   - CL2 还差什么？
-   
-5. **CI 层分层**
-   - L1~L3 的分层合理吗？
-   - MISRA 在 L1 是否合适（还是应该在 L1 + L2 都跑）？
-
-6. **改进建议**
-   - 最应该优先改进的 3 件事
+1. **嵌入式审查质量**: 新增的 4 个 handler 覆盖了关键点吗？还有遗漏？
+2. **V-Model 完整性**: 21 步的左右侧对齐是否更好了？
+3. **优化路径**: 3 个 Sprint 的规划合理吗？优先级对吗？
+4. **评分复评**: 从 58 开始，现在能给多少？
+5. **最该干的三件事**: 和上次比有没有变化？
 
 ## 参考文件
-- `src/yuleosh/pipeline/step_handlers/__init__.py` (PIPELINE_STEPS)
-- `src/yuleosh/pipeline/orchestrator.py` (run_pipeline)
-- `src/yuleosh/ci/layers.py` (CI layers)
-- `src/yuleosh/ci/stages.py` (CI stages)
-- `reports/expert-assessment-laochen-misra.md` (上一轮 MISRA 专家审查)
+- `src/yuleosh/pipeline/step_handlers/__init__.py`
+- `src/yuleosh/pipeline/step_handlers/review_linker.py`
+- `src/yuleosh/pipeline/step_handlers/review_startup.py`
+- `src/yuleosh/pipeline/step_handlers/review_rtos.py`
+- `src/yuleosh/pipeline/step_handlers/review_memory.py`
+- `docs/pipeline-optimization-plan.md`
+- `reports/expert-pipeline-assessment.md` (一轮审查)

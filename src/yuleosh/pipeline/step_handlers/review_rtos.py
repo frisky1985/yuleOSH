@@ -320,6 +320,193 @@ def _check_hooks_and_watchdog(content: str, path: Path) -> list[RtosFinding]:
     return findings
 
 
+def _check_config_assert(content: str, path: Path) -> list[RtosFinding]:
+    """Check configASSERT definition (critical for debug builds).
+
+    FreeRTOS 10+ recommends defining configASSERT(x) to catch API misuse
+    and internal consistency errors during development.
+    """
+    findings = []
+
+    # configASSERT is defined via #define, not a standard config macro
+    # Look for it as a macro or function definition
+    assert_found = False
+
+    # Explicit #define configASSERT
+    if re.search(r'#\s*define\s+configASSERT', content):
+        assert_found = True
+        # Check if it's a no-op (empty body) or actual assertion
+        assert_body = re.search(
+            r'#\s*define\s+configASSERT\s*\((.*?)\)(.*?)(?:(?:\r?\n)|$)',
+            content, re.DOTALL)
+        if assert_body:
+            body = assert_body.group(2).strip()
+            if not body or body == '' or body.startswith('(') and body.endswith(')'):
+                findings.append({
+                    "severity": "minor",
+                    "category": "config_assert",
+                    "file": str(path),
+                    "message": (
+                        "configASSERT defined as no-op (empty) — "
+                        "assertions will not fire; recommend using "
+                        "configASSERT(x) with vAssertCalled() for debug builds"
+                    ),
+                })
+            elif 'vAssertCalled' in body or 'assert' in body.lower():
+                findings.append({
+                    "severity": "info",
+                    "category": "config_assert",
+                    "file": str(path),
+                    "message": (
+                        "configASSERT defined with assertion handler "
+                        "(vAssertCalled/assert) — proper debug support"
+                    ),
+                })
+            else:
+                findings.append({
+                    "severity": "info",
+                    "category": "config_assert",
+                    "file": str(path),
+                    "message": f"configASSERT defined: {body[:80]}...",
+                })
+
+    if not assert_found:
+        # Check for configUSE_RECORDER or similar debug features
+        findings.append({
+            "severity": "minor",
+            "category": "config_assert",
+            "file": str(path),
+            "message": (
+                "configASSERT not defined — recommend defining configASSERT(x) "
+                "for FreeRTOS 10+ to catch API misuse and internal errors "
+                "during development; use '#define configASSERT(x) vAssertCalled()' "
+                "pattern"
+            ),
+        })
+
+    return findings
+
+
+def _check_stack_overflow_hook(content: str, path: Path) -> list[RtosFinding]:
+    """Check configCHECK_FOR_STACK_OVERFLOW setting.
+
+    Method 1 (value=1): Check stack pointer on context switch
+    Method 2 (value=2): Fill canary pattern at task creation, verify on switch
+    """
+    findings = []
+
+    val_str = _parse_config_macro("configCHECK_FOR_STACK_OVERFLOW", content)
+
+    if val_str is None:
+        findings.append({
+            "severity": "minor",
+            "category": "stack_overflow",
+            "file": str(path),
+            "message": (
+                "configCHECK_FOR_STACK_OVERFLOW not defined — "
+                "task stack overflow detection is disabled; "
+                "recommend setting to 1 (method 1: stack pointer check) "
+                "or 2 (method 2: canary fill + check) for production safety"
+            ),
+        })
+        return findings
+
+    try:
+        val = int(val_str, 0)
+        if val == 0:
+            findings.append({
+                "severity": "minor",
+                "category": "stack_overflow",
+                "file": str(path),
+                "message": (
+                    "configCHECK_FOR_STACK_OVERFLOW=0 — stack overflow "
+                    "detection disabled; enable for safer production operation"
+                ),
+            })
+        elif val == 1:
+            # Also need vApplicationStackOverflowHook defined somewhere
+            findings.append({
+                "severity": "info",
+                "category": "stack_overflow",
+                "file": str(path),
+                "message": (
+                    "configCHECK_FOR_STACK_OVERFLOW=1 (method 1) — "
+                    "stack pointer checked on context switch; "
+                    "ensure vApplicationStackOverflowHook() is implemented"
+                ),
+            })
+        elif val == 2:
+            findings.append({
+                "severity": "info",
+                "category": "stack_overflow",
+                "file": str(path),
+                "message": (
+                    "configCHECK_FOR_STACK_OVERFLOW=2 (method 2) — "
+                    "canary pattern fill + verification on switch; "
+                    "more reliable than method 1, small performance cost"
+                ),
+            })
+        else:
+            findings.append({
+                "severity": "info",
+                "category": "stack_overflow",
+                "file": str(path),
+                "message": f"configCHECK_FOR_STACK_OVERFLOW={val_str}",
+            })
+    except ValueError:
+        findings.append({
+            "severity": "info",
+            "category": "stack_overflow",
+            "file": str(path),
+            "message": f"configCHECK_FOR_STACK_OVERFLOW={val_str}",
+        })
+
+    return findings
+
+
+def _check_run_time_stats(content: str, path: Path) -> list[RtosFinding]:
+    """Check configGENERATE_RUN_TIME_STATS and related timing stats."""
+    findings = []
+
+    val_str = _parse_config_macro("configGENERATE_RUN_TIME_STATS", content)
+
+    if val_str is None or val_str == "0":
+        findings.append({
+            "severity": "info",
+            "category": "run_time_stats",
+            "file": str(path),
+            "message": (
+                "configGENERATE_RUN_TIME_STATS not defined or disabled — "
+                "task run-time profiling unavailable; enable for performance "
+                "debugging and CPU utilization analysis"
+            ),
+        })
+        return findings
+
+    # Check for the required timer setup macros
+    use_trace = _parse_config_macro("configUSE_TRACE_FACILITY", content)
+    use_stats = _parse_config_macro("configUSE_STATS_FORMATTING_FUNCTIONS", content)
+
+    details = []
+    if use_trace and use_trace != "0":
+        details.append("configUSE_TRACE_FACILITY enabled")
+    if use_stats and use_stats != "0":
+        details.append("configUSE_STATS_FORMATTING_FUNCTIONS enabled")
+
+    findings.append({
+        "severity": "info",
+        "category": "run_time_stats",
+        "file": str(path),
+        "message": (
+            f"configGENERATE_RUN_TIME_STATS={val_str} — "
+            f"task CPU utilization stats enabled; "
+            f"{' '.join(details) if details else 'verify portGET_RUN_TIME_COUNTER_VALUE() is defined'}"
+        ),
+    })
+
+    return findings
+
+
 def _check_mutex_and_semaphore(content: str, path: Path) -> list[RtosFinding]:
     """Check mutual exclusion and synchronization configuration."""
     findings = []
@@ -414,6 +601,9 @@ def _static_rtos_review(project_dir: Path) -> list[RtosFinding]:
         all_findings.extend(_check_interrupt_priority(content, f))
         all_findings.extend(_check_hooks_and_watchdog(content, f))
         all_findings.extend(_check_mutex_and_semaphore(content, f))
+        all_findings.extend(_check_config_assert(content, f))
+        all_findings.extend(_check_stack_overflow_hook(content, f))
+        all_findings.extend(_check_run_time_stats(content, f))
 
     return all_findings
 
