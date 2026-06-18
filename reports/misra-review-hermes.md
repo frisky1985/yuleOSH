@@ -188,3 +188,190 @@ def test_compliance_checker_init_default():
 ---
 
 *审查完毕。问题直接写出，欢迎小克 👨‍💻 交流。*
+
+---
+
+## 5. 后续修复审查（2026-06-18 第2轮）
+
+> **审查范围**: 小克正在执行的 4 项修复
+> - Fix A: 增量检查 (delta check)
+> - Fix B: Dir 系列规则补齐
+> - Fix C: MisraConfig 默认值优化
+> - Fix D: 工具依赖自动安装 (yuleosh init)
+> **审查基准**: working tree 未提交变更（`git diff HEAD`）
+
+---
+
+### 5.1 Fix B: Dir 系列规则审查
+
+**文件**: `misra-rules.yaml` — 新增 `misra-c2023-dir-4.1` ~ `misra-c2023-dir-4.10`
+
+#### 编号正确性
+
+| 规则 ID | MISRA C:2023 对应 | 问题 |
+|:--------|:------------------|:-----|
+| `misra-c2023-dir-4.1` | Dir 4.1 (Runtime failure detection) | ✅ 编号正确，描述合理 |
+| `misra-c2023-dir-4.2` | 实际应为 Dir 4.2 (Use of dynamic memory/heap) | 🚨 **与 misra-c2023-1.2 重复**："避免未定义行为" 已是 Rule 1.2 的内容。Dir 4.2 应聚焦**动态内存使用约束**（如 malloc/free 约束） |
+| `misra-c2023-dir-4.3` | Dir 4.3 (Assembly language) | ✅ 编号正确 |
+| `misra-c2023-dir-4.4` | Dir 4.4 (Unicode encodings) | ✅ 编号正确 |
+| `misra-c2023-dir-4.5` | Dir 4.5 (char type) | ✅ 编号正确 |
+| `misra-c2023-dir-4.6` | Dir 4.6 (size_t/ptrdiff_t) | ✅ 编号正确 |
+| `misra-c2023-dir-4.7` | Dir 4.7 (setjmp/longjmp) | ⚠️ **与 misra-c2023-21.8 重复**：Rule 21.8 已覆盖 "Setjmp and longjmp should not be used"。Dir 4.7 应更聚焦**异常控制流约束**而非重复规则内容 |
+| `misra-c2023-dir-4.8` | Dir 4.8 (Macros) | ✅ 编号正确 |
+| `misra-c2023-dir-4.9` | Dir 4.9 (Conditional compilation) | ✅ 编号正确 |
+| `misra-c2023-dir-4.10` | Dir 4.10 (Diagnostic information) | ✅ 编号正确 |
+
+> **共性问题**: 缺少 Dir 1.1（ISO C standard compliance documentation）、Dir 2.1（Documentation requirements）、Dir 3.1（Include file documentation），这些在 MISRA C:2023 中也有定义。
+
+#### 描述聚焦度
+
+| 规则 ID | 当前描述 | 问题 | 建议修正 |
+|:--------|:---------|:-----|:---------|
+| Dir 4.1 | "程序应确保所有数组引用、指针运算和内存访问都在有效边界内" | ❌ 描述违反目标而非违反场景 | "数组索引越界、指针运算超出有效范围或内存访问越界" |
+| Dir 4.3 | "汇编代码应封装在内联函数或汇编模块中，不得散布在 C 代码中" | ✅ 明确违反场景 | — |
+| Dir 4.5 | "char 类型仅用于字符数据；不得用于数值计算或布尔判断" | ✅ 明确违反场景 | — |
+| Dir 4.9 | "条件编译指令（#if / #ifdef / #ifndef）应确保所有分支都有明确定义且编译通过" | ⚠️ 偏目标描述 | "条件编译分支缺少明确定义或存在分支无法编译通过" |
+
+#### Severity 评级
+
+| 规则 ID | 当前 Severity | 评估 |
+|:--------|:-------------|:-----|
+| Dir 4.1 | required | ✅ 合理 — 边界安全是安全关键系统的核心 |
+| Dir 4.2 | required | ✅ (若修正为动态内存约束，required 合理) |
+| Dir 4.3 | advisory | ⚠️ 争议 — 在安全关键系统中汇编使用需要严格审查，建议 required |
+| Dir 4.4 | advisory | ✅ 合理 — 编码一致性问题更适合 advisory |
+| Dir 4.5 | required | ✅ 合理 |
+| Dir 4.6 | advisory | ✅ 合理 — 最佳实践性建议 |
+| Dir 4.7 | required | ✅ 合理 |
+| Dir 4.8 | advisory | ✅ 合理 |
+| Dir 4.9 | required | ✅ 合理 |
+| Dir 4.10 | advisory | ✅ 合理 |
+
+**审查结论**: 目录结构正确，但 Dir 4.2 内容需要修正（避免与 Rule 1.2 重复），Dir 4.7 应与 Rule 21.8 区分聚焦点。
+
+---
+
+### 5.2 Fix A: Delta Check 实现审查
+
+**文件**: `src/yuleosh/ci/stages.py` — `run_misra_check()` 函数（working tree 版本）
+
+#### 已实现功能
+
+| 特性 | 状态 | 说明 |
+|:-----|:------|:-----|
+| `target_files` 参数 | ✅ | 外部调用可传入指定文件列表 |
+| `git diff --name-only HEAD~1` 自动检测 | ✅ | 无指定文件时自动获取变更 |
+| Delta/Full 模式标签 | ✅ | "增量检查" / "全量检查" 显式标记 |
+| Fallback 到全量扫描 | ✅ | git 命令失败时回退到 `os.walk(src/)` |
+
+#### 安全隐患
+
+| # | 问题 | 严重度 | 说明 | 建议 |
+|:-:|:-----|:------|:-----|:-----|
+| D-01 | `git diff HEAD~1` 在首次 commit 场景失败时被吞掉 | **major** | `try/except` 捕获了 `FileNotFoundError` 和 `TimeoutExpired`，但 `HEAD~1` 失败时 git 返回 `returncode=128` + stderr，不会被任何 except 分支捕获。`git_result.returncode == 0` 为 False 后进入 fallback ✅，但 stderr 会被打印到用户终端或日志 | 确认 `subprocess.run()` 的 stderr 不会污染用户输出；考虑在 fallback 时加一个静默提示 |
+| D-02 | Delta 模式下路径不一致 | **minor** | `changed_files` 是 git 工作树相对路径（如 `src/main.c`），拼接 `os.path.join(project_dir, f)` 后可能与 `os.walk` 产生的绝对路径不一致。报告中的 `file` 字段路径格���不一致 | 统一使用相对于 `project_dir` 的路径，或在 delta 模式添加路径规范化 |
+| D-03 | Delta 报告未标记增量 | **minor** | `misra-report.json` 的 `generated_at` 和文件内容不标记这是增量模式的结果。后续审计无法区分增量/全量报告 | 在 JSON 报告 `meta` 中添加 `check_mode: "delta" | "full"` |
+| D-04 | KLOC 估算在 delta 下失真 | **minor** | `violations_per_kloc: 2.0` 在 delta 模式下只计算几个文件的 KLOC，可能被少量违规触发阻断 | Delta 模式下应禁用 KLOC 密度检查，或改用全量 KLOC 作分母 |
+
+**审查结论**: Delta 检查的架构设计合理。D-02~D-04 是 minor 问题可后期优化。D-01 需要确认 fallback 行为是否干净。
+
+---
+
+### 5.3 Fix C: MisraConfig 默认值优化审查
+
+**文件**: `src/yuleosh/ci/config.py` (working tree diff)
+
+#### 默认值变更对比
+
+| 字段 | 旧默认值 (HEAD) | 新默认值 (working tree) | 审查意见 |
+|:-----|:---------------|:-----------------------|:---------|
+| `fail_on_violation` | `False` | `True` | ⚠️ **合理但需要谨慎**：任何 violation 就阻断是安全关键系统的正确行为，但会破坏现有没有 MISRA 合规的项目。建议配合 `fail_threshold` 使用 |
+| `fail_on_advisory` | — (新增) | `False` | ✅ 合理 — Advisory 不应阻断流水线 |
+| `fail_threshold` | `10` | `10` (不变) | ✅ 合理 — 允许少量违规 |
+| `violations_per_kloc` | — (新增) | `2.0` | ⚠️ **对嵌入 C 项目偏低**：嵌入式项目（特别是自动生成的 HAL 代码）KLOC 密度高，2.0 可能太严格。评估值：1 KLOC 允许 2 条违规，100 KLOC 项目允许 200 条 — 对于安全关键项目合理，但对早期项目可能严格 |
+
+#### 影响分析
+
+| 影响维度 | 详细说明 |
+|:---------|:---------|
+| **现有用户** | `fail_on_violation` 从 False → True 是 breaking change。已有 CI 配置的项目如果没有显式设置 `fail_on_violation: false`，升级后将突然阻断 |
+| **新项目** | `fail_on_violation=True` 是新项目的好默认值 — 符合安全关键开发的"从严"原则 |
+| **迁移策略** | 建议在 CHANGELOG 中注明，并在 yuleosh init 生成的默认 ci-config.yaml 中包含显式的 MISRA 配置段 |
+
+**审查结论**: 默认值优化方向正确。`fail_on_violation=True` 和 `violations_per_kloc=2.0` 对于嵌入式安全关键场景合理。需要配合 CHANGELOG 和迁移指南提供给现有用户。
+
+---
+
+### 5.4 Fix D: 工具依赖自动安装审查
+
+**文件**: `yuleosh_cli.py` — `cmd_init()` 函数
+
+#### 当前实现
+
+```python
+def cmd_init(dir_path: str = "."):
+    target = Path(dir_path)
+    dirs = [target / "specs", target / "tasks", target / "src",
+            target / "docs", target / "evidence", target / ".osh"]
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+    print(f"✅ Initialized yuleOSH project at {target}")
+```
+
+当前 `cmd_init()` **仅创建目录结构，没有任何工具安装逻辑**。
+
+#### 需要的改进
+
+| # | 建议 | 优先级 | 说明 |
+|:-:|:-----|:-------|:-----|
+| I-01 | **添加工具依赖检测** | P0 | 检查 cppcheck、clang-tidy、pytest、coverage 是否已安装 |
+| I-02 | **跨平台安装命令** | P0 | macOS: `brew install cppcheck`；Linux: `apt install cppcheck clang-tidy`；提供友好提示而非自动安装 |
+| I-03 | **安装失败不应阻断** | P0 | 检测结果应以 warning 形式输出，项目初始化应始终成功 |
+| I-04 | **输出信息友好** | P1 | 显示检查结果表格，缺失的工具给出安装命令，已安装的工具显示版本号 |
+
+#### 示例实现（建议）
+
+```python
+def cmd_init(dir_path: str = "."):
+    """Initialize a new yuleOSH project directory."""
+    target = Path(dir_path)
+    dirs = [target / "specs", ...]
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+    print(f"✅ Initialized yuleOSH project at {target}")
+
+    # Tool dependency check
+    tools = ["cppcheck", "clang-tidy", "pytest", "git"]
+    print("\n  🔧 Tool dependency check:")
+    all_ok = True
+    for tool in tools:
+        if _check_tool_installed(tool):
+            print(f"    ✅ {tool} — installed")
+        else:
+            print(f"    ⚠️  {tool} — NOT installed")
+            print(f"       → Install: {_install_hint(tool)}")
+            all_ok = False
+    if not all_ok:
+        print("\n  ⚠️  Some tools are missing. CI stages requiring them will be skipped.")
+```
+
+**审查结论**: 工具自动安装尚未实现。建议在 `cmd_init()` 尾部添加友好的依赖检测（P0），安装逻辑以提示为主而非自动执行（避免强制安装失败阻断流程）。
+
+---
+
+### 5.5 总评：4 项 Fix 审查汇总
+
+| Fix | 状态 | 关键发现 | 建议处理 |
+|:----|:-----|:---------|:---------|
+| **A: Delta Check** | ⚠️ 已实现但需修复 | D-01 ~ D-04 需要处理 | 路径一致性、报告标记、KLOC 在 delta 模式下禁用 |
+| **B: Dir 系列规则** | ⚠️ 需修正 | Dir 4.2 与 Rule 1.2 重复；Dir 4.7 与 Rule 21.8 重复；部分描述偏目标 | 修正 Dir 4.2 内容为动态内存约束；优化描述聚焦违反场景 |
+| **C: 默认值优化** | ✅ 方向正确 | `fail_on_violation=True` + `violations_per_kloc=2.0` 合理 | 添加 CHANGELOG；在模板 ci-config.yaml 中显式配置 MISRA |
+| **D: 工具自动安装** | ❌ 尚未实现 | `cmd_init()` 仅创建目录 | 实现依赖检测 + 跨平台安装提示；检查失败不阻断初始化 |
+
+#### 需要小克 👨‍💻 确认的 5 个问题
+
+1. **Dir 4.2 修正**: 当前内容与 Rule 1.2 重复，是否需要改为聚焦动态内存使用约束（MISRA C:2023 Dir 4.2 实际内容）？
+2. **Delta KLOC**: `violations_per_kloc` 在增量模式下是否应该禁用？
+3. **迁移计划**: `fail_on_violation=True` 的 breaking change 是否需要版本号 bump？
+4. **首次 commit 场景**: 你测试过 `git diff HEAD~1` 在全新仓库的行为吗？
+5. **工具安装策略**: 是自动安装（`brew install` / `apt install`）还是仅提示？

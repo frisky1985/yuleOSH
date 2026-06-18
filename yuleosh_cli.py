@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,6 +39,11 @@ OSH_HOME = os.environ.get(
 SRC_DIR = Path(__file__).resolve().parent / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+
+# ANSI color constants for CLI output
+_GREEN = "\033[92m"
+_YELLOW = "\033[93m"
+_RESET = "\033[0m"
 
 
 def ensure_osh_home():
@@ -145,10 +151,24 @@ def cmd_template_init(project_name: str, parent_dir: str = ".", template_name: s
         print(f"   ├── .gitignore")
         print(f"   └── yuleosh.yaml")
         print()
+        # Tool chain status
+        _ensure_tool_deps()
+
+        available_stages = []
+        if shutil.which("cppcheck"):
+            available_stages.append("L1: misra-check")
+        if shutil.which("python3") or shutil.which("python"):
+            available_stages.append("L1: unit-tests")
+        available_stages.append("L1: plan-lint")
+
+        print(f"   {_GREEN}Available tool chain:{_RESET}")
+        for stage_name in available_stages:
+            print(f"     • {stage_name}")
+        print()
         print(f"   Next steps:")
         print(f"   1. Edit docs/spec.md with your requirements")
         print(f"   2. Run: yuleosh spec validate docs/spec.md")
-        print(f"   3. Run: yuleosh ci run 1")
+        print(f"   3. Run: yuleosh ci run 1    # Verify L1 CI")
         print()
 
     else:
@@ -187,8 +207,52 @@ def _interactive_template_init(project_name: str, parent_dir: str = "."):
 # ── Existing commands ──────────────────────────────────────────────────
 
 
+def _ensure_tool_deps():
+    """Check tool dependencies (cppcheck) and suggest install commands.
+
+    Prints green ✅ for available tools and yellow ⚠️ with install
+    commands for missing tools.  Does NOT block init on missing tools.
+    """
+    print("  🔧 Tool dependency check...")
+
+    # Check cppcheck
+    cppcheck_version = None
+    cppcheck_path = shutil.which("cppcheck")
+    if cppcheck_path:
+        try:
+            result = subprocess.run(
+                ["cppcheck", "--version"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                cppcheck_version = result.stdout.strip() or result.stderr.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    if cppcheck_version:
+        print(f"    {_GREEN}✅{_RESET} cppcheck — {cppcheck_version}")
+    else:
+        install_cmds = []
+        if shutil.which("brew"):
+            install_cmds.append("brew install cppcheck")
+        if shutil.which("apt-get"):
+            install_cmds.append("sudo apt-get install -y cppcheck")
+        if shutil.which("pip3"):
+            install_cmds.append("pip3 install cppcheck")
+
+        if install_cmds:
+            print(f"    {_YELLOW}⚠️  cppcheck not found{_RESET}")
+            for cmd in install_cmds:
+                print(f"       Try: {cmd}")
+        else:
+            print(f"    {_YELLOW}⚠️  cppcheck not found — install manually from https://cppcheck.sourceforge.io/{_RESET}")
+
+
 def cmd_init(dir_path: str = "."):
     """Initialize a new yuleOSH project directory."""
+    # Tool dependency check
+    _ensure_tool_deps()
+
     target = Path(dir_path)
     dirs = [
         target / "specs",
@@ -200,7 +264,25 @@ def cmd_init(dir_path: str = "."):
     ]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
+
+    # Available CI stages
+    available_stages = []
+    if shutil.which("cppcheck"):
+        available_stages.append("L1: misra-check")
+    if shutil.which("python3") or shutil.which("python"):
+        available_stages.append("L1: unit-tests")
+    available_stages.append("L1: plan-lint")
+
     print(f"✅ Initialized yuleOSH project at {target}")
+    print()
+    print(f"   {_GREEN}Available tool chain:{_RESET}")
+    for stage_name in available_stages:
+        print(f"     • {stage_name}")
+    print()
+    print(f"   Next steps:")
+    print(f"   1. Add your source code to src/")
+    print(f"   2. Run: yuleosh ci run 1    # Verify L1 CI")
+    print()
 
 
 def cmd_spec_validate(filepath: str):
