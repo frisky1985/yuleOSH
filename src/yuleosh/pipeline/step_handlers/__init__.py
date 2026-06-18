@@ -45,6 +45,9 @@ from yuleosh.pipeline.step_handlers.review_linker import step_review_linker
 from yuleosh.pipeline.step_handlers.review_startup import step_review_startup
 from yuleosh.pipeline.step_handlers.review_rtos import step_review_rtos
 from yuleosh.pipeline.step_handlers.review_memory import step_review_memory
+from yuleosh.pipeline.step_handlers.review_bsp import step_review_bsp
+from yuleosh.pipeline.step_handlers.review_build import step_review_build
+from yuleosh.pipeline.step_handlers.review_power import step_review_power
 from yuleosh.pipeline.stages import _check_llm_key
 
 
@@ -146,6 +149,12 @@ PIPELINE_STEPS = [
     ("review-startup", "小克", "启动代码审查", step_review_startup),
     ("review-rtos", "小克", "RTOS 配置审查", step_review_rtos),
     ("review-memory", "小克", "内存安全审查", step_review_memory),
+
+    # ── P2: Embedded Special Focus ─────────────────
+    ("review-bsp", "小克", "BSP 板级支持包验证", step_review_bsp),
+    ("review-build", "小克", "编译输出验证", step_review_build),
+    ("review-power", "小克", "低功耗审查", step_review_power),
+
 
     # ── Right side: SWE.6 Qualification Testing ─────
     ("test-qualification", "小明", "合格性测试", step_test_qualification),
