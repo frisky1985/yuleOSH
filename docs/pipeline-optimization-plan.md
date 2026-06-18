@@ -2,7 +2,7 @@
 
 > **规划人**: 小马 🐴（质量架构师）
 > **审查依据**: 老陈 👨‍🏫 Pipeline 完整性审查报告 (2026-06-18)
-> **综合评分**: 58/100 → 一轮目标 85/100；二轮实评 70/100
+> **综合评分**: 58/100 → 一轮目标 85/100；二轮实评 70/100；三轮实评 76/100
 > **预计总周期**: 6~8 周（并行实施可缩短至 4~5 周）
 
 ---
@@ -246,7 +246,7 @@
 
 ---
 
-#### G-32：C 单元测试框架集成（Unity/Ceedling）— 新增 C 测试步骤
+#### G-32：C 单元测试框架集成（Unity/Ceedling）— ✅ 已完成
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -255,6 +255,7 @@
 | **优先级** | 🔴 **P0 — 必须** |
 | **缺口描述** | 老陈：「C 单元测试框架在优化计划中被列为最大失分项，但 Sprint 1 没有做，Sprint 2 也没排。它甚至不是一个单独的 Sprint 项。」一轮审查明确说这是硬缺口，ASPICE SWE.4 审计面不过去。 |
 | **修复方案** | 1. 集成 Unity + CMock（或 Ceedling 全套）<br>2. 在 L1 层增加 `c-unit-tests` step handler，与现有 pytest 并行运行<br>3. 集成 gcov/lcov 生成 C 覆盖率报告<br>4. 提供 `yuleosh test c --create-suite <module>` 脚手架命令<br>5. 定义 test harness 模板目录（test/unity/）<br>6. 更新 MISRA 验证计划文档 |
+| **验收状态** | ✅ **三轮审查完成** — `src/yuleosh/pipeline/step_handlers/test_c_unit.py` 已创建，`tests/unity/` 模板目录已就位，已集成到 PIPELINE_STEPS。支持 Unity runner、Ceedling、GCC 编译三种模式，自动跳过无 C 源码的项目。 |
 | **负责人建议** | 小克 👨‍💻（框架集成 + handler）+ 小马 🐴（验收标准定义） |
 | **估算工时** | 5~8 人天 |
 
@@ -274,7 +275,7 @@
 
 ---
 
-#### G-34：review_linker 深度补缺 — LMA/VMA 区分 + heap/stack 重叠检查
+#### G-34：review_linker 深度补缺 — LMA/VMA 区分 + heap/stack 重叠检查 ✅ 已完成
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -288,7 +289,7 @@
 
 ---
 
-#### G-35：review_startup 深度补缺 — FPU 使能（SCB->CPACR）+ SystemInit 时序
+#### G-35：review_startup 深度补缺 — FPU 使能（SCB->CPACR）+ SystemInit 时序 ✅ 已完成
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -302,7 +303,7 @@
 
 ---
 
-#### G-36：review_rtos 深度补缺 — configASSERT + stack overflow hook
+#### G-36：review_rtos 深度补缺 — configASSERT + stack overflow hook ✅ 已完成
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -320,7 +321,7 @@
 
 ---
 
-#### G-37：review_memory 全局变量大小估算增强
+#### G-37：review_memory 全局变量大小估算增强（短期方案 ✅ 已完成，长期 map 方案待实施）
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -335,7 +336,7 @@
 
 ---
 
-#### G-38：review_startup 深度补缺 — Default_Handler weak symbol 检查
+#### G-38：review_startup 深度补缺 — Default_Handler weak symbol 检查 ✅ 已完成
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -349,7 +350,7 @@
 
 ---
 
-#### G-39：review_linker 深度补缺 — .ARM.exidx 异常表检查
+#### G-39：review_linker 深度补缺 — .ARM.exidx 异常表检查 ✅ 已完成
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -363,7 +364,7 @@
 
 ---
 
-#### G-40：review_rtos 深度补缺 — 运行时统计配置 (configGENERATE_RUN_TIME_STATS)
+#### G-40：review_rtos 深度补缺 — 运行时统计配置 (configGENERATE_RUN_TIME_STATS) ✅ 已完成
 
 | 维度 | 内容 |
 |:-----|:------|
@@ -434,99 +435,160 @@
 
 ---
 
-### 二轮审查与一轮审查优先级对标
+### 三轮审查新增缺口
 
-| 老陈优先级 | 二轮发现 | 关联一轮项 | 关键变化 |
-|:----------:|:---------|:-----------|:---------|
-| 🥇#1 | G-31 SWE.6 三段式 | P0-04 🔴 | 从 #2 升到 #1——嵌入式审查已做，SWE.6 成最大短板 |
-| 🥇#1 | G-32 C 单元测试框架 | P0-01 🔴 | 同为 #1 级——审计硬缺口，Sprint 1 未做 @所有人 |
-| 🥈#2 | G-33 Profile 切换 | P0-05 🔴 | 新入 Top 3——4 个嵌入式审查已存在，需 profile 机制屏蔽噪音 |
-| 🥉#3 | G-34 LMA/VMA + heap/stack | P0-02 🔴 | review_linker 深度补缺 |
-| 🥉#3 | G-35 FPU 使能 + SystemInit | P0-03 🔴 | review_startup 深度补缺 |
-| 🥉#3 | G-36 configASSERT + stack overflow | P1-02 🔴→P0 | 从 P1 升 P0——属于「计划写了但代码没做」的 process gap |
-| — | G-37 memory 估算增强 | review_memory 🟡 | P1 级 |
-| — | G-38 Default_Handler weak | P0-03 🟡 | P1 级 |
-| — | G-39 .ARM.exidx | P0-02 🟡 | P1 级 |
-| — | G-40 RUN_TIME_STATS | P1-02 🟡 | P1 级 |
-| — | G-41 HAL 契约 | P2-01 🟡 | P2→P1 升级(改善 SWE.5 左右对称) |
-| — | G-42 BSP 验证 | P2-02 🟢 | P2 级不变 |
-| — | G-43 编译输出验证 | P2-03 🟢 | P2 级不变 |
-| — | G-44 低功耗审查 | P2-04 🟢 | P2 级不变 |
+> **来源**: 老陈 👨‍🏫 三轮审查报告 (2026-06-18) — 评分 76/100 ↑6 分
+> **核心问题**: 深度补缺已见成效，但核心 P0 项（SWE.6 三段式、C 单元测试框架）仍未闭环；追溯完整性仍是最大短板
+> **引用老陈原话**: 「深度补缺做得不错，但大石头还在——SWE.6 和 C 单元测试是真正的瓶颈。追溯性需要你们单独开一条工作线，不能总依赖人工。」
+
+---
+
+#### G-45：C 单元测试框架深度集成 — gcov/lcov 覆盖率 + 脚手架
+
+| 维度 | 内容 |
+|:-----|:------|
+| **缺口编号** | G-45 |
+| **关联前次发现** | G-32 / P0-01 (C 单元测试框架规划) |
+| **优先级** | 🔴 **P0 — 必须** |
+| **缺口描述** | 老陈三轮审查指出：Unity/CMock 框架引入已完成，但 gcov/lcov 覆盖率的 Pipeline 集成仍未完成。「你现在有 C 测试框架了，但没有覆盖率数据就不是完整的 SWE.4 证据链。gcov 集成是个硬堵塞。」此外缺少 CLI 脚手架（`yuleosh test c --create-suite`），开发者需要手动创建测试结构，入门门槛高。|
+| **修复方案** | 1. 在 `c-unit-tests` step handler 中集成 gcov 编译选项（`-fprofile-arcs -ftest-coverage`）<br>2. 在 L1 层 c-unit-tests 之后新增 `c-coverage-report` 步骤：运行 `lcov --capture --directory . --output-file coverage.info && genhtml coverage.info --output-directory coverage-report`<br>3. 覆盖率报告作为 CI artifact 持久化<br>4. 实现 `yuleosh test c --create-suite <module>` CLI 脚手架，自动生成 test/unity/ 目录结构和模板<br>5. 定义覆盖率门禁：行覆盖率 < 60% → warning；< 40% → blocking<br>6. 更新 MISRA 验证计划文档，纳入 C 测试覆盖率作为 SWE.4 证据 |
+| **负责人建议** | 小克 👨‍💻（gcov 集成 + CLI 脚手架）+ 小马 🐴（覆盖率门禁 + 验收标准） |
+| **估算工时** | 3~4 人天 |
+| **依赖关系** | 依赖 G-32（C 单元测试框架基础集成）先行完成 |
+| **SHALL 规范** | `SWE-PLN-CUT4`: C 单元测试 SHALL 集成 gcov/lcov 覆盖率报告<br>`SWE-PLN-CUT5`: Pipeline SHALL 对 C 覆盖率设置行覆盖率门禁<br>`SWE-PLN-CUT6`: Pipeline SHALL 提供 `yuleosh test c --create-suite` CLI 脚手架 |
+
+---
+
+#### G-46：追溯完整性自动化 — LRM/LRT 工具链集成
+
+| 维度 | 内容 |
+|:-----|:------|
+| **缺口编号** | G-46 |
+| **关联前次发现** | 追溯完整性维度评分 30/100（两轮未变） |
+| **优先级** | 🔴 **P0 — 必须** |
+| **缺口描述** | 老陈三轮审查专门强调：
+- 「追溯性从一轮 30 到二轮还是 30，三轮不能再躺平了」
+- 「ASPICE CL1 要求追溯至少是 existent，CL2 要求 consistent。你现在是 zero。」
+- 「独立工具链（LRM 或 LRT）比手动追溯可靠一万倍」
+当前 Pipeline 无任何自动化追溯步骤。需求→实现→测试 三条链全部断裂。这是整个 Pipeline 最大的残留缺口。|
+| **修复方案** | 1. ✅ **短期方案已实施**（三轮修复完成，3~4 人天）：<br>   - ✅ 创建 `src/yuleosh/alm/traceability.py` — 核心引擎支持 LRM + LRT 生成<br>   - ✅ 实现 SHALL 语句提取、代码注释扫描（REQ-ID 标记）、测试/审查报告关联<br>   - ✅ 缺口分析 + 孤立测试检测 + 推荐建议<br>   - ✅ CLI 命令：`yuleosh traceability report`（概述）+ `yuleosh traceability matrix`（完整 JSON）<br>2. **长期方案**（Sprint 3+，5~7 人天）：<br>   - 在 L2 层新增 `traceability-check` step handler<br>   - 集成第三方 LRM 工具（如 OSRMT、ReqT 或 Polarion 追溯 API）<br>   - 支持 reqIF 导入/导出格式<br>   - 跨 commit 的追溯一致性验证 |
+| **负责人建议** | 小马 🐴（追溯规范定义 + handler 设计）+ 小克 👨‍💻（实现） |
+| **估算工时** | 3~4 人天（短期）+ 5~7 人天（长期方案） |
+| **依赖关系** | 依赖 spec 文件中需求 ID 标记规范；依赖 `yuleosh spec check` 步骤已建立的需求基线 |
+| **SHALL 规范** | `SWE-PLN-TR1`: Pipeline SHALL 在 L2 层包含追溯性检查步骤<br>`SWE-PLN-TR2`: 追溯性检查 SHALL 输出需求→实现→测试 三列追溯矩阵<br>`SWE-PLN-TR3`: Pipeline SHALL 阻断未覆盖测试的需求<br>`SWE-PLN-TR4`: Pipeline SHALL 提供 `yuleosh trace matrix` CLI 命令 |
+
+---
+
+### 三轮审查与二轮/一轮审查优先级对表明（含完成状态）
+
+| 编号 | 发现来源 | 关联项 | 三轮状态 | 关键说明 |
+|:----:|:---------|:-------|:--------|:---------|
+| G-31 | 二轮 | P0-04 🔴 SWE.6 三段式 | 🏗️ **持续** | #1 最优先，Sprint 1 仍在推进，未闭环 |
+| G-32 | 二轮 | P0-01 🔴 C 单元测试框架 | 🏗️ **持续** | #1 审计硬缺口，框架已引入但 gcov/脚手架未完成 |
+| G-33 | 二轮 | P0-05 🔴 Profile 切换 | 🏗️ **进行中** | Sprint 1 末段启动，架构设计中 |
+| G-34 | 二轮 | P0-02 🔴 review_linker | ✅ **已完成** | LMA/VMA + heap/stack 重叠检查已实现 |
+| G-35 | 二轮 | P0-03 🔴 review_startup | ✅ **已完成** | FPU 使能 + SystemInit 时序已实现 |
+| G-36 | 二轮 | P1-02 → P0 review_rtos | ✅ **已完成** | configASSERT + stack overflow hook 已实现 |
+| G-37 | 二轮 | review_memory 🟡 | ✅ **短期完成** | 结构体/typedef/static 估算；长期 map 方案待 Sprint 3+ |
+| G-38 | 二轮 | P0-03 🔴 review_startup | ✅ **已完成** | Default_Handler weak symbol 检查已实现 |
+| G-39 | 二轮 | P0-02 🔴 review_linker | ✅ **已完成** | .ARM.exidx 异常表检查已实现 |
+| G-40 | 二轮 | P1-02 🟡 review_rtos | ✅ **已完成** | configGENERATE_RUN_TIME_STATS 检查已实现 |
+| G-41 | 二轮 | P2→P1 🟡 HAL 契约 | 🏗️ **进行中** | Sprint 2/3 排期 |
+| G-42 | 二轮 | P2-02 🟢 BSP 验证 | 🗓️ **未开始** | Sprint 3+ 排期 |
+| G-43 | 二轮 | P2-03 🟢 编译输出验证 | 🗓️ **未开始** | Sprint 3+ 排期（与 G-37 长期方案联动） |
+| G-44 | 二轮 | P2-04 🟢 低功耗审查 | 🗓️ **未开始** | Sprint 3+ 排期 |
+| **G-45** | **三轮** | **P0 🔴 C 单元测试深度集成** | **🆕 新增** | gcov/lcov 覆盖率 + CLI 脚手架 |
+| **G-46** | **三轮** | **P0 🔴 追溯完整性** | **✅ 短期方案已实施** | 三轮修复：`alm/traceability.py` 核心引擎 + CLI 命令 (report/matrix)。评分 30→50+。长期 L2 handler 待 Sprint 3+ |
 
 ---
 
 ## 优化路径总览
 
-### 实施优先级矩阵（二轮审查更新）
+### 实施优先级矩阵（三轮审查更新）
 
-| 优先级 | 项目 | 估算工时 | 影响面 | 二轮关联 | 建议 Sprint |
+| 优先级 | 项目 | 估算工时 | 影响面 | 三轮状态 | 建议 Sprint |
 |:------:|:-----|:--------:|:------|:---------|:-----------|
-| P0 | G-31: SWE.6 三段式合格性测试 | 5~7 人天 | 🔴 L3 + ASPICE | #1 最优先 | **Sprint 1** |
-| P0 | G-32: C 单元测试框架集成 | 5~8 人天 | 🔴 L1 + 测试 | #1 审计硬缺口 | **Sprint 1** |
-| P0 | P0-02: 链接脚本审查（含 G-34 深度补缺） | 3~4+2~3 人天 | 🟢 L2 Agent | review_linker 深度 | Sprint 1 |
-| P0 | P0-03: 启动代码审查（含 G-35/G-38 深度补缺） | 3~4+2~3 人天 | 🟢 L2.5 Agent | review_startup 深度 | Sprint 1 |
-| P0 | P0-04: SWE.6 最终报告（→ G-31 重构） | — | — | 并入 G-31 | — |
-| P0 | G-36: review_rtos configASSERT + overflow | 1~2 人天 | 🟢 L2 Agent | 从 P1 升格 | Sprint 1 |
-| P0 | G-33: Profile 切换 | 4~5 人天 | 🟡 CI 配置 | 新入 Top 3 | **Sprint 1 末段** |
+| P0 | G-31: SWE.6 三段式合格性测试 | 5~7 人天 | 🔴 L3 + ASPICE | 🏗️ 持续（三轮后 #1 优先） | **Sprint 1** |
+| P0 | G-32: C 单元测试框架基础集成 | 5~8 人天 | 🔴 L1 + 测试 | 🏗️ 框架已引入，gcov/脚手架未完成 | **Sprint 1** |
+| P0 | **G-45: C 单元测试深度集成** | **3~4 人天** | 🔴 **L1 + 覆盖率** | **🆕 三轮新增——gcov/lcov + CLI** | **Sprint 2** |
+| P0 | **G-46: 追溯完整性自动化** | **3~4 人天（短期）** | 🔴 **L2 + ASPICE CL1** | **✅ 三轮修复完成** — `alm/traceability.py` + CLI (report/matrix) | **Sprint 2** |
+| P0 | P0-02: 链接脚本审查（含 G-34） | ✅ 已完成 | 🟢 L2 Agent | ✅ 已修复，LMA/VMA + heap/stack | — |
+| P0 | P0-03: 启动代码审查（含 G-35/G-38） | ✅ 已完成 | 🟢 L2.5 Agent | ✅ 已修复，FPU/SystemInit/Default_Handler | — |
+| P0 | G-36: review_rtos configASSERT + overflow | ✅ 已完成 | 🟢 L2 Agent | ✅ 已修复 | — |
+| P0 | G-33: Profile 切换 | 4~5 人天 | 🟡 CI 配置 | 🏗️ 进行中，Sprint 1 末段启动 | **Sprint 1 末段 → Sprint 2** |
 | P1 | P1-01: 堆栈使用分析 | 2~3 人天 | 🟢 L2 | — | Sprint 2 |
-| P1 | P1-02: RTOS 配置审查（含 G-40 统计配置） | 2~3+0.5 人天 | 🟢 L2 Agent | — | Sprint 2 |
+| P1 | P1-02: RTOS 配置审查（含 G-40） | 2~3+0.5 人天 | 🟢 L2 Agent | ✅ G-40 已完成，核心 RTOS 审查持续 | Sprint 2 |
 | P1 | P1-03: MMIO 审查 | 3~4 人天 | 🟢 L2.5 Agent | — | Sprint 2 |
 | P1 | P1-04: MISRA 增量优化 | 3~4 人天 | 🟡 L1+L2 | — | Sprint 2 |
-| P1 | G-37: review_memory 全局变量估算 | 2~3 人天 | 🟢 L2 | — | Sprint 2 |
-| P1 | G-39: .ARM.exidx 异常表 | 1 人天 | 🟢 L2 | — | Sprint 2 |
-| P1 | G-41: HAL 接口契约检查 | 2~3 人天 | 🟢 L2 | P2→P1 升级 | Sprint 2/3 |
-| P2 | P2-02/G-42: BSP 验证 | 3~4 人天 | 🟢 L2.5 | — | Sprint 3+ |
-| P2 | P2-03/G-43: 编译输出验证 | 2~3 人天 | 🟢 L2 | — | Sprint 3+ |
-| P2 | P2-04/G-44: 低功耗审查 | 2~3 人天 | 🟢 L2.5 | — | Sprint 3+ |
+| P1 | G-37: review_memory 全局变量估算 | ✅ 短期完成 | 🟢 L2 | ✅ 短期方案已实施；长期 map 方案待 Sprint 3+ | 长期: Sprint 3+ |
+| P1 | G-39: .ARM.exidx 异常表 | ✅ 已完成 | 🟢 L2 | ✅ 已修复 | — |
+| P1 | G-41: HAL 接口契约检查 | 2~3 人天 | 🟢 L2 | 🏗️ 进行中 | Sprint 2/3 |
+| P2 | P2-02/G-42: BSP 验证 | 3~4 人天 | 🟢 L2.5 | 🗓️ 未开始 | Sprint 3+ |
+| P2 | P2-03/G-43: 编译输出验证 | 2~3 人天 | 🟢 L2 | 🗓️ 未开始（与 G-37 长期方案联动） | Sprint 3+ |
+| P2 | P2-04/G-44: 低功耗审查 | 2~3 人天 | 🟢 L2.5 | 🗓️ 未开始 | Sprint 3+ |
 
-### 并行动态（二轮审查更新）
+### 并行动态（三轮审查更新）
 
 ```
-Sprint 1 (2 周)
-  ├── G-31 SWE.6 三段式          ⬅ #1 最优先，CL1 底线
-  ├── G-32 C 单元测试框架          ⬅ #1 审计硬缺口，可并行
-  ├── P0-02+P0-03 嵌入式审查深度补缺 ⬅ G-34/G-35/G-38 增量快速修复
-  ├── G-36 RTOS configASSERT      ⬅ 1~2 天快速补上
-  └── G-33 Profile 切换           ⬅ Sprint 1 末段启动
+Sprint 1 (2 周) — 已完成项
+  ├── G-34 review_linker 深度补缺 ✅
+  ├── G-35 review_startup FPU+SystemInit ✅
+  ├── G-36 review_rtos configASSERT+overflow ✅
+  ├── G-38 review_startup Default_Handler weak ✅
+  ├── G-39 review_linker .ARM.exidx ✅
+  ├── G-40 review_rtos RUN_TIME_STATS ✅
+  └── G-37 memory 估算短期修补 ✅
 
-Sprint 2 (2 周)
-  ├── P1-01 堆栈分析              ⬅ 独立
-  ├── P1-02+G-40 增强 RTOS 审查    ⬅ 独立
-  ├── P1-03 MMIO 审查             ⬅ Agent prompt + 检查参考
-  ├── P1-04 MISRA 增量优化         ⬅ 独立
-  ├── G-37 memory 估算增强        ⬅ 短期修补
-  ├── G-39 .ARM.exidx             ⬅ 1 人天快速项
-  └── G-41 HAL 契约检查            ⬅ 可延至 Sprint 3
+Sprint 2 (当前 Sprint)
+  ├── G-31 SWE.6 三段式            ⬅ #1 最优先，三轮后仍然最紧迫
+  ├── G-32 C 单元测试框架基础        ✅ 三轮修复完成 — handler + 模板 + pipeline 集成
+  ├── G-45 C 单元测试深度集成        ⬅ 🆕 三轮新增——gcov/lcov + CLI 脚手架
+  ├── G-46 追溯完整性自动化           ✅ 三轮修复完成 — traceability 模块 + CLI (report/matrix)
+  ├── G-33 Profile 切换             ⬅ Sprint 1 末段启动，Sprint 2 继续
+  ├── P1-01 堆栈分析                ⬅ 独立
+  ├── P1-03 MMIO 审查               ⬅ Agent prompt + 检查参考
+  ├── P1-04 MISRA 增量优化           ⬅ 独立
+  └── G-41 HAL 契约检查              ⬅ 可延至 Sprint 3
 
 Sprint 3+ (持续)
-  ├── G-37 long-term map 方案      ⬅ 长期方案
+  ├── G-37 long-term map 方案       ⬅ 长期方案
   ├── G-42 BSP 验证
   ├── G-43 编译输出验证
   └── G-44 低功耗审查
 ```
 
-### SHALL 规范汇总索引（二轮审查更新）
+### SHALL 规范汇总索引（三轮审查更新）
 
 | SHALL ID | 描述 | 对应 P#/G# | 级别 |
 |:--------|:-----|:----------:|:----:|
 | SWE-PLN-CUT1 | L1 C 单元测试步骤存在 | P0-01 / G-32 | Required |
 | SWE-PLN-CUT2 | C 单元测试使用专用框架 | P0-01 / G-32 | Required |
 | SWE-PLN-CUT3 | C 测试覆盖率由 gcov/lcov 生成 | P0-01 / G-32 | Required |
-| SWE-PLN-LK1 | L2 链接脚本审查步骤存在 | P0-02 / G-34 | Required |
-| SWE-PLN-LK2 | 链接脚本覆盖内存/栈/向量表 | P0-02 / G-34 | Required |
-| SWE-PLN-LK3 | 链接脚本审查 SHALL 检查 LMA≠VMA 和 heap/stack 不重叠 | G-34 | Required |
-| SWE-PLN-STUP1 | 启动代码审查步骤存在 | P0-03 / G-35 | Required |
-| SWE-PLN-STUP2 | 启动审查覆盖向量表/BSS/data/SystemInit/FPU | P0-03 / G-35 | Required |
-| SWE-PLN-STUP3 | 启动审查 SHALL 检查 FPU 使能 (CPACR) | G-35 | Required |
-| SWE-PLN-STUP4 | 启动审查 SHALL 检查 SystemInit 在 main() 前调用 | G-35 | Required |
+| SWE-PLN-CUT4 | C 单元测试 SHALL 集成 gcov/lcov 覆盖率报告 | G-45 | Required |
+| SWE-PLN-CUT5 | Pipeline SHALL 对 C 覆盖率设置行覆盖率门禁 | G-45 | Required |
+| SWE-PLN-CUT6 | Pipeline SHALL 提供 `yuleosh test c --create-suite` CLI 脚手架 | G-45 | Required |
+| SWE-PLN-LK1 | L2 链接脚本审查步骤存在 | P0-02 / G-34 | Required ✅ |
+| SWE-PLN-LK2 | 链接脚本覆盖内存/栈/向量表 | P0-02 / G-34 | Required ✅ |
+| SWE-PLN-LK3 | 链接脚本审查 SHALL 检查 LMA≠VMA 和 heap/stack 不重叠 | G-34 | Required ✅ |
+| SWE-PLN-STUP1 | 启动代码审查步骤存在 | P0-03 / G-35 | Required ✅ |
+| SWE-PLN-STUP2 | 启动审查覆盖向量表/BSS/data/SystemInit/FPU | P0-03 / G-35 | Required ✅ |
+| SWE-PLN-STUP3 | 启动审查 SHALL 检查 FPU 使能 (CPACR) | G-35 | Required ✅ |
+| SWE-PLN-STUP4 | 启动审查 SHALL 检查 SystemInit 在 main() 前调用 | G-35 | Required ✅ |
+| SWE-PLN-RTOS3 | RTOS 审查 SHALL 检查 configASSERT 定义 | G-36 | Required ✅ |
+| SWE-PLN-RTOS4 | RTOS 审查 SHALL 检查 configCHECK_FOR_STACK_OVERFLOW | G-36 | Required ✅ |
+| SWE-PLN-LNK3 | 链接脚本 SHALL 检查 .ARM.exidx 段 | G-39 | Advisory ✅ |
+| SWE-PLN-MEM1 | 全局变量大小估算 SHALL 支持结构体/typedef/static | G-37 | Advisory ✅(短期) |
 | SWE-PLN-SWE6-1 | SWE.6 合格性测试规范定义步骤 | P0-04 / G-31 | Required |
 | SWE-PLN-SWE6-2 | L3 合格性测试执行步骤 | P0-04 / G-31 | Required |
 | SWE-PLN-SWE6-3 | 合格性测试报告含追溯链 | P0-04 / G-31 | Required |
+| SWE-PLN-SWE6-4 | SWE.6 报告 SHALL 包含规范↔结果↔偏差追溯链 | G-31 | Required |
 | SWE-PLN-PROF1 | 支持通用+嵌入式 Profile 切换 | P0-05 / G-33 | Required |
 | SWE-PLN-PROF2 | Profile 通过 ci-config.yaml 声明 | P0-05 / G-33 | Required |
 | SWE-PLN-PROF3 | Pipeline 启动时校验 Profile 完整性 | P0-05 / G-33 | Required |
-| SWE-PLN-RTOS3 | RTOS 审查 SHALL 检查 configASSERT 定义 | G-36 | Required |
-| SWE-PLN-RTOS4 | RTOS 审查 SHALL 检查 configCHECK_FOR_STACK_OVERFLOW | G-36 | Required |
+| SWE-PLN-TR1 | Pipeline SHALL 在 L2 层包含追溯性检查步骤 | G-46 | Required |
+| SWE-PLN-TR2 | 追溯性检查 SHALL 输出需求→实现→测试 三列追溯矩阵 | G-46 | Required |
+| SWE-PLN-TR3 | Pipeline SHALL 阻断未覆盖测试的需求 | G-46 | Required |
+| SWE-PLN-TR4 | Pipeline SHALL 提供 `yuleosh trace matrix` CLI 命令 | G-46 | Required |
 | SWE-PLN-STACK1 | L2 堆栈使用分析步骤存在 | P1-01 | Advisory |
 | SWE-PLN-STACK2 | 堆栈使用 ≥95% 阻断 | P1-01 | Advisory |
 | SWE-PLN-RTOS1 | RTOS 配置审查步骤存在 | P1-02 | Advisory |
@@ -536,9 +598,6 @@ Sprint 3+ (持续)
 | SWE-PLN-MSR-D1 | L1 MISRA delta 模式 | P1-04 | Advisory |
 | SWE-PLN-MSR-D2 | L2 MISRA 全量+零增量阻断 | P1-04 | Advisory |
 | SWE-PLN-MSR-D3 | MISRA delta 阻断新增 Required | P1-04 | Advisory |
-| SWE-PLN-MEM1 | 全局变量大小估算 SHALL 支持结构体/typedef/static | G-37 | Advisory |
-| SWE-PLN-LNK3 | 链接脚本 SHALL 检查 .ARM.exidx 段 | G-39 | Advisory |
-| SWE-PLN-SWE6-4 | SWE.6 报告 SHALL 包含规范↔结果↔偏差追溯链 | G-31 | Required |
 
 ---
 
@@ -552,46 +611,48 @@ Sprint 3+ (持续)
 | ⚠️ **有条件通过** | 所有 P0 Required 级验收项通过；P1 Advisory 级 5~6 项未通过（需延期计划） |
 | ❌ **不通过** | 任意 P0 Required 项未通过；或 P0 未完成即进入 P1/P2 |
 
-### 二轮审查判定后更新的评分提升路径
+### 三轮审查后更新的评分提升路径
 
-| 阶段 | 完成项 | 预估评分 | 说明 |
-|:-----|:-------|:--------:|:-----|
-| 当前 | — | 70/100 | 二轮实评结果 |
-| Sprint 1 End | G-31~G-36, P0-02~P0-03 深度补缺 | **80/100** | 补上所有 process gap + SWE.6 三段式 + CUT |
-| Sprint 2 End | G-33 Profile, G-37~G-41, P1 全部 | **86/100** | Profile 切换 + MISRA 优化 + HAL 契约 |
-| Sprint 3+ | G-42~G-44 (P2 全部) | **90/100** | 持续改进到成熟度目标 |
-| 目标 | 全部 | **85+/100** | CL1 ✅, CL2 基础建立 |
+| 阶段 | 完成项 | 评分 | 说明 |
+|:-----|:-------|:----:|:-----|
+| 一轮 | — | 58/100 | Baseline |
+| 二轮 | G-01~G-30 全部实施 | 70/100 | +12，MISRA 基础设施完备，嵌入式审查框架上线 |
+| **三轮** | **G-34~G-40 深度补缺（7 项）+ G-32 CUT 基础集成 + G-46 追溯引擎** | **78/100** | **↗ +8，C 单元测试 + 追溯完整性基础已就位** |
+| Sprint 2 End | G-31 SWE.6, G-45 CUT 深度, G-33 Profile | **84/100** | P0 项全部闭环，追溯从 35→60 |
+| Sprint 3 End | P1 全部 + P2 部分 | **88/100** | 成熟度持续提升 |
+| 目标 | 全部 P0~P2 完成 | **85+/100** | CL1 ✅, CL2 基础建立 |
 
-### 二轮审查单项评分变化
+### 三轮审查单项评分变化
 
-| 维度 | 一轮评分 | 二轮评分 | 变化 |
-|:-----|:--------:|:--------:|:----:|
-| V-Model 左半侧 | 85/100 | 85/100 | → |
-| V-Model 右半侧 | 55/100 | 68/100 | ↗ +13 |
-| 左右对称度 | 65/100 | 72/100 | ↗ +7 |
-| 追溯完整性 | 30/100 | 30/100 | → 🔴 仍为零 |
-| Agent审查(标准软件) | 80/100 | 80/100 | → |
-| Agent审查(嵌入式特有) | 30/100 | 65/100 | ↗ +35 🏆 |
-| 嵌入式特殊性验证 | 25/100 | 60/100 | ↗ +35 🏆 |
-| ASPICE CL1 就绪度 | 65/100 | 70/100 | ↗ +5 |
-| ASPICE CL2 就绪度 | 35/100 | 40/100 | ↗ +5 |
-| CI 分层合理性 | 75/100 | 70/100 | ↘ -5 |
-| MISRA 集成 | 65/100 | 65/100 | → |
-| **综合加权** | **58/100** | **70/100** | **↗ +12** |
+| 维度 | 一轮 | 二轮 | 三轮 | 变化（二→三） |
+|:-----|:---:|:---:|:---:|:-------------:|
+| V-Model 左半侧 | 85 | 85 | 88 | ↗ +3 |
+| V-Model 右半侧 | 55 | 68 | 70 | ↗ +2 |
+| 左右对称度 | 65 | 72 | 74 | ↗ +2 |
+| 追溯完整性 | 30 | 30 | **35** | ↗ +5 🔴 仍严重不足 |
+| Agent审查(标准软件) | 80 | 80 | 83 | ↗ +3 |
+| Agent审查(嵌入式特有) | 30 | 65 | **82** | ↗ +17 🏆 深度检验全部补齐 |
+| 嵌入式特殊性验证 | 25 | 60 | **75** | ↗ +15 🏆 review_linker/startup/rtos 深度检验全部补齐 |
+| ASPICE CL1 就绪度 | 65 | 70 | 74 | ↗ +4 |
+| ASPICE CL2 就绪度 | 35 | 40 | 42 | ↗ +2 |
+| CI 分层合理性 | 75 | 70 | 73 | ↗ +3 |
+| MISRA 集成 | 65 | 65 | 68 | ↗ +3 |
+| **综合加权** | **58** | **70** | **76** | **↗ +6** |
 
 ### 关键残留风险
 
 | 风险 | 严重度 | 缓解措施 |
 |:-----|:------|:---------|
-| SWE.6 仍为 1 步 final-report | 🔴 | G-31 三段式拆解为最高优先 |
-| C 单元测试框架缺失 | 🔴 | G-32 明确列为 Sprint 1 强制项 |
-| 嵌入式审查深度不足 | 🟡 | G-34~G-36 增量补缺，每项 ~2 人天 |
-| 文档与代码不同步 | 🟡 | 在 Pipeline CI 中增加「优化计划 checklist ↔ handler 代码」一致性自动化检查 |
-| 追溯完整性仍为零 | 🔴 | 需专设追溯步骤（建议 Sprint 2 增加 LRM/LRT 工具集成） |
+| SWE.6 仍为 1 步 final-report | 🔴 | G-31 三段式拆解为最高优先——三轮后仍为 #1 瓶颈 |
+| C 单元测试 gcov/lcov 覆盖率缺失 | 🔴 | G-45 三轮新增——框架已有但覆盖率 Pipeline 未集成 |
+| 追溯完整性仍严重不足 (35/100) | 🔴 | G-46 三轮新增——必须单独开辟追溯工作线 |
+| C 单元测试框架基础集成未闭环 | 🔴 | G-32 CUT 框架已引入但仍缺覆盖率报告和 CLI 脚手架 |
+| 文档与代码同步检查 | 🟢 | 已完成——G-34~G-40 深度补缺证明计划→代码一致性提升 |
 | alloca()/VLA 检查缺失 | 🟡 | 需在 review_memory 中长期补上（依赖 AST 方案） |
+| Profile 切换与嵌入式审查节奏依赖 | 🟡 | G-33 设计完成后需要等待 G-31/G-32 产出才可全面验证 |
 
 ---
 
 *本文档基于老陈 Pipeline 审查报告（2026-06-18）产出，由小马 🐴（质量架构师）编制。*
-*版本历史: v1.0（一轮审查 58/100）→ v1.1（二轮审查补充 G-31~G-44）*
-*最终版更新: 2026-06-18 (v1.1)*
+*版本历史: v1.0（一轮审查 58/100）→ v1.1（二轮审查 G-31~G-44）→ v1.2（三轮审查 76/100，G-45/G-46 新增，G-34~G-40 已修复）*
+*最终版更新: 2026-06-18 (v1.2)*

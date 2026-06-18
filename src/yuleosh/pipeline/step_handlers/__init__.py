@@ -39,6 +39,7 @@ from yuleosh.pipeline.step_handlers.review_code import step_review_code
 from yuleosh.pipeline.step_handlers.review_selftest import step_review_selftest
 from yuleosh.pipeline.step_handlers.test_integration import step_integration_test
 from yuleosh.pipeline.step_handlers.test_qualification import step_test_qualification
+from yuleosh.pipeline.step_handlers.test_c_unit import step_c_unit_test
 from yuleosh.pipeline.step_handlers.review_devplan import step_review_devplan
 from yuleosh.pipeline.step_handlers.review_linker import step_review_linker
 from yuleosh.pipeline.step_handlers.review_startup import step_review_startup
@@ -80,6 +81,7 @@ __all__ = [
     "step_review_rtos",
     "step_review_memory",
     "step_test_qualification",
+    "step_c_unit_test",
     "PIPELINE_STEPS",
     "_check_llm_key",
     "_resolve_handler",
@@ -128,6 +130,7 @@ PIPELINE_STEPS = [
     # ── Right side: SWE.4 Unit Testing ──────────────
     ("self-test", "Claude", "自测验证", step_claude_test),
     ("self-test-review", "小克", "自测结果审查", step_review_selftest),
+    ("c-unit-test", "小克", "C 单元测试 (Unity)", step_c_unit_test),
 
     # ── Right side: SWE.5 Integration Testing ───────
     ("integration-test", "小克", "接口集成测试", step_integration_test),
