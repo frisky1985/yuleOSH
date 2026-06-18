@@ -11,6 +11,7 @@ misra-c2023-1.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-1.2:
   title: No reliance on undefined or unspecified behavior
   severity: required
@@ -19,6 +20,7 @@ misra-c2023-1.2:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-1.3:
   title: No violation of syntax or constraints
   severity: required
@@ -27,6 +29,7 @@ misra-c2023-1.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-2.1:
   title: Source files shall only contain legal C constructs
   severity: required
@@ -35,6 +38,7 @@ misra-c2023-2.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-2.2:
   title: Source code shall not contain dead code
   severity: required
@@ -43,6 +47,7 @@ misra-c2023-2.2:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-2.3:
   title: Source code shall not contain unused type declarations
   severity: advisory
@@ -51,6 +56,7 @@ misra-c2023-2.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-2.4:
   title: Source code shall not contain unused tag declarations
   severity: advisory
@@ -59,6 +65,7 @@ misra-c2023-2.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-2.5:
   title: Source code shall not contain unused macro declarations
   severity: advisory
@@ -67,6 +74,7 @@ misra-c2023-2.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-2.6:
   title: Source code shall not contain labels not referenced
   severity: required
@@ -75,6 +83,7 @@ misra-c2023-2.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-2.7:
   title: Source code shall not contain functions not called
   severity: required
@@ -83,6 +92,7 @@ misra-c2023-2.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-3.1:
   title: Character sequences in comments shall not begin with /*
   severity: required
@@ -91,6 +101,7 @@ misra-c2023-3.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-4.1:
   title: Octal and hex escape sequences shall be terminated
   severity: required
@@ -99,6 +110,7 @@ misra-c2023-4.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.1:
   title: Identifiers shall be distinct from keywords
   severity: required
@@ -107,6 +119,7 @@ misra-c2023-5.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.2:
   title: Identifiers in same scope shall be distinct
   severity: required
@@ -115,6 +128,7 @@ misra-c2023-5.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.3:
   title: Typedef names shall not be reused
   severity: required
@@ -123,6 +137,7 @@ misra-c2023-5.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.4:
   title: Macro identifiers shall be distinct
   severity: required
@@ -131,6 +146,7 @@ misra-c2023-5.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.5:
   title: Identifiers shall be distinct from macro names
   severity: required
@@ -139,6 +155,7 @@ misra-c2023-5.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.6:
   title: Typedef names shall be unique identifiers
   severity: required
@@ -147,6 +164,7 @@ misra-c2023-5.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.7:
   title: Identifiers shall not rely on significance of characters
   severity: required
@@ -155,6 +173,7 @@ misra-c2023-5.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.8:
   title: Identifiers in external scope shall be distinct
   severity: required
@@ -163,6 +182,7 @@ misra-c2023-5.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.9:
   title: Identifiers of internal linkage shall be unique
   severity: required
@@ -171,6 +191,7 @@ misra-c2023-5.9:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-6.1:
   title: Bit fields shall only be of appropriate types
   severity: required
@@ -179,6 +200,7 @@ misra-c2023-6.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-6.2:
   title: Single-bit named bit fields shall be of unsigned type
   severity: required
@@ -187,6 +209,7 @@ misra-c2023-6.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-7.1:
   title: Octal constants shall not be used
   severity: required
@@ -195,6 +218,7 @@ misra-c2023-7.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-7.2:
   title: U or u suffix on unsigned integer constants
   severity: required
@@ -203,6 +227,7 @@ misra-c2023-7.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.1:
   title: Types shall be explicitly specified
   severity: required
@@ -211,6 +236,7 @@ misra-c2023-8.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.2:
   title: Function types shall be in prototype form
   severity: required
@@ -219,6 +245,7 @@ misra-c2023-8.2:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.3:
   title: Objects declared at file scope shall have external linkage
   severity: required
@@ -227,6 +254,7 @@ misra-c2023-8.3:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.4:
   title: Compatible declaration shall be visible
   severity: required
@@ -235,6 +263,7 @@ misra-c2023-8.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.5:
   title: External definitions shall be declared in header files
   severity: required
@@ -243,6 +272,7 @@ misra-c2023-8.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.6:
   title: Identifier shall be defined
   severity: required
@@ -251,6 +281,7 @@ misra-c2023-8.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.7:
   title: Functions and objects should not be defined with external linkage
   severity: advisory
@@ -259,6 +290,7 @@ misra-c2023-8.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.8:
   title: Static storage class specifier in declarations
   severity: required
@@ -267,6 +299,7 @@ misra-c2023-8.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.9:
   title: Internal linkage objects shall have static storage
   severity: required
@@ -275,6 +308,7 @@ misra-c2023-8.9:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.10:
   title: Static objects shall not exceed reasonable size
   severity: required
@@ -283,6 +317,7 @@ misra-c2023-8.10:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.11:
   title: External arrays shall have explicit size or initializer
   severity: required
@@ -291,6 +326,7 @@ misra-c2023-8.11:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.12:
   title: Array dimensions should be explicit
   severity: advisory
@@ -299,6 +335,7 @@ misra-c2023-8.12:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-9.1:
   title: All automatic objects shall be initialized before use
   severity: required
@@ -307,6 +344,7 @@ misra-c2023-9.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-9.2:
   title: Braces in initializer lists
   severity: required
@@ -315,6 +353,7 @@ misra-c2023-9.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-9.3:
   title: Designated initializers shall not be mixed
   severity: required
@@ -323,6 +362,7 @@ misra-c2023-9.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-9.4:
   title: Elements referenced in an initializer shall be available
   severity: required
@@ -331,6 +371,7 @@ misra-c2023-9.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-9.5:
   title: Designated initializers for arrays shall be in order
   severity: required
@@ -339,6 +380,7 @@ misra-c2023-9.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.1:
   title: Operands shall not be of inappropriate type
   severity: required
@@ -347,6 +389,7 @@ misra-c2023-10.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.2:
   title: MISRA expressions of composite essential type
   severity: required
@@ -355,6 +398,7 @@ misra-c2023-10.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.3:
   title: Complex integer types shall not be used
   severity: required
@@ -363,6 +407,7 @@ misra-c2023-10.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.4:
   title: Complex floating types shall not be used
   severity: required
@@ -371,6 +416,7 @@ misra-c2023-10.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.5:
   title: Expression evaluation not affected by operator precedence
   severity: advisory
@@ -379,6 +425,7 @@ misra-c2023-10.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.6:
   title: Composite expression used as operand of further operators
   severity: required
@@ -387,6 +434,7 @@ misra-c2023-10.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.7:
   title: Essential type model - expressions
   severity: required
@@ -395,6 +443,7 @@ misra-c2023-10.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-10.8:
   title: Casting should not remove const/volatile
   severity: required
@@ -403,6 +452,7 @@ misra-c2023-10.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.1:
   title: Conversions shall not be performed between pointers
   severity: required
@@ -411,6 +461,7 @@ misra-c2023-11.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.2:
   title: Pointer conversions to/from integer types
   severity: required
@@ -419,6 +470,7 @@ misra-c2023-11.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.3:
   title: Cast of pointer to integer type
   severity: required
@@ -427,6 +479,7 @@ misra-c2023-11.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.4:
   title: Cast of integer to pointer type
   severity: required
@@ -435,6 +488,7 @@ misra-c2023-11.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.5:
   title: Pointer to void shall not be converted to pointer to object
   severity: required
@@ -443,6 +497,7 @@ misra-c2023-11.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.6:
   title: Cast between pointer to object and pointer to function
   severity: required
@@ -451,6 +506,7 @@ misra-c2023-11.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.7:
   title: Cast between pointer to object and non-integer arithmetic type
   severity: required
@@ -459,6 +515,7 @@ misra-c2023-11.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.8:
   title: Pointer arithmetic limited to array elements
   severity: required
@@ -467,6 +524,7 @@ misra-c2023-11.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-12.1:
   title: Expression precedence with parentheses
   severity: required
@@ -475,6 +533,7 @@ misra-c2023-12.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-12.2:
   title: Value of expression shall be of appropriate essential type
   severity: required
@@ -483,6 +542,7 @@ misra-c2023-12.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-13.1:
   title: Side effects in initializer lists
   severity: required
@@ -491,6 +551,7 @@ misra-c2023-13.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-13.2:
   title: Side effects of called functions shall not depend on evaluation order
   severity: required
@@ -499,6 +560,7 @@ misra-c2023-13.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-13.3:
   title: Full expression with side effects shall not be discarded
   severity: required
@@ -507,6 +569,7 @@ misra-c2023-13.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-14.1:
   title: Loop counter shall be of appropriate type
   severity: required
@@ -515,6 +578,7 @@ misra-c2023-14.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-14.2:
   title: For loop shall contain well-formed expressions
   severity: required
@@ -523,6 +587,7 @@ misra-c2023-14.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-14.3:
   title: Loop counter shall not be modified in body
   severity: required
@@ -531,6 +596,7 @@ misra-c2023-14.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-14.4:
   title: Controlling expressions shall be essentially Boolean
   severity: required
@@ -539,6 +605,7 @@ misra-c2023-14.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.1:
   title: Goto statement shall not be used
   severity: required
@@ -547,6 +614,7 @@ misra-c2023-15.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.2:
   title: Goto statement should not be used
   severity: advisory
@@ -555,6 +623,7 @@ misra-c2023-15.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.3:
   title: Labels not part of switch case shall be avoided
   severity: required
@@ -563,6 +632,7 @@ misra-c2023-15.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.4:
   title: Single point of exit
   severity: advisory
@@ -571,6 +641,7 @@ misra-c2023-15.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.5:
   title: Function shall not have multiple return statements
   severity: advisory
@@ -579,6 +650,7 @@ misra-c2023-15.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.6:
   title: If-else-if chain shall terminate with else
   severity: required
@@ -587,6 +659,7 @@ misra-c2023-15.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.7:
   title: All if-else constructs shall be terminated
   severity: required
@@ -595,6 +668,7 @@ misra-c2023-15.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-16.1:
   title: Switch shall be well-formed
   severity: required
@@ -603,6 +677,7 @@ misra-c2023-16.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-16.2:
   title: Switch expression shall be essentially Boolean or essentially enum
   severity: required
@@ -611,6 +686,7 @@ misra-c2023-16.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-16.3:
   title: Body of switch shall be a compound statement
   severity: required
@@ -619,6 +695,7 @@ misra-c2023-16.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-16.4:
   title: Every switch clause shall terminate with break
   severity: required
@@ -627,6 +704,7 @@ misra-c2023-16.4:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-16.5:
   title: No more than one default clause
   severity: required
@@ -635,6 +713,7 @@ misra-c2023-16.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-16.6:
   title: Default label shall be present
   severity: required
@@ -643,6 +722,7 @@ misra-c2023-16.6:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.1:
   title: Function parameters shall not exceed a maximum
   severity: required
@@ -651,6 +731,7 @@ misra-c2023-17.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.2:
   title: Functions shall not call themselves directly
   severity: required
@@ -659,6 +740,7 @@ misra-c2023-17.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.3:
   title: Functions shall not call themselves indirectly
   severity: required
@@ -667,6 +749,7 @@ misra-c2023-17.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.4:
   title: Functions shall not exceed maximum length
   severity: advisory
@@ -675,6 +758,7 @@ misra-c2023-17.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.5:
   title: Function parameter type shall be declared
   severity: required
@@ -683,6 +767,7 @@ misra-c2023-17.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.6:
   title: Declaration of an array parameter
   severity: required
@@ -691,6 +776,7 @@ misra-c2023-17.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.7:
   title: 返回值必须被使用
   severity: required
@@ -699,6 +785,7 @@ misra-c2023-17.7:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-17.8:
   title: Boolean arguments for bool parameter
   severity: required
@@ -707,6 +794,7 @@ misra-c2023-17.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.1:
   title: Pointer arithmetic on array without subscript
   severity: required
@@ -715,6 +803,7 @@ misra-c2023-18.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.2:
   title: Subtraction between pointers only for same array
   severity: required
@@ -723,6 +812,7 @@ misra-c2023-18.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.3:
   title: Relational operators on pointers
   severity: required
@@ -731,6 +821,7 @@ misra-c2023-18.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.4:
   title: + - += -= shall not be applied to pointer to void
   severity: required
@@ -739,6 +830,7 @@ misra-c2023-18.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.5:
   title: Address of array shall not be assigned
   severity: required
@@ -747,6 +839,7 @@ misra-c2023-18.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.6:
   title: Array indexing shall be within bounds
   severity: required
@@ -755,6 +848,7 @@ misra-c2023-18.6:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.7:
   title: Flexible array members should not be used
   severity: required
@@ -763,6 +857,7 @@ misra-c2023-18.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.8:
   title: Variable-length arrays should not be used
   severity: required
@@ -771,6 +866,7 @@ misra-c2023-18.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-19.1:
   title: Object shall not be assigned or copied overlapping
   severity: required
@@ -779,6 +875,7 @@ misra-c2023-19.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-19.2:
   title: Union shall not overlap in confusing way
   severity: required
@@ -787,6 +884,7 @@ misra-c2023-19.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.1:
   title: '#include directives in source files'
   severity: required
@@ -795,6 +893,7 @@ misra-c2023-20.1:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.2:
   title: '#include directives for standard headers'
   severity: required
@@ -803,6 +902,7 @@ misra-c2023-20.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.3:
   title: '#include shall not be within comments'
   severity: required
@@ -811,6 +911,7 @@ misra-c2023-20.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.4:
   title: Recursive macro definitions
   severity: required
@@ -819,6 +920,7 @@ misra-c2023-20.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.5:
   title: '#undef should not be used'
   severity: advisory
@@ -827,6 +929,7 @@ misra-c2023-20.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.6:
   title: Macros should expand to complete syntactic units
   severity: required
@@ -835,6 +938,7 @@ misra-c2023-20.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.7:
   title: Function-like macro shall not be used
   severity: required
@@ -843,6 +947,7 @@ misra-c2023-20.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.8:
   title: 'Control expression in #if shall be constant'
   severity: required
@@ -851,6 +956,7 @@ misra-c2023-20.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.9:
   title: Preprocessor operators shall not be misused
   severity: required
@@ -859,6 +965,7 @@ misra-c2023-20.9:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.10:
   title: '# and ## operators should not be used'
   severity: advisory
@@ -867,6 +974,7 @@ misra-c2023-20.10:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.11:
   title: 'Layout of #if chain should follow rules'
   severity: advisory
@@ -875,6 +983,7 @@ misra-c2023-20.11:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.12:
   title: '#line should not be used'
   severity: advisory
@@ -883,6 +992,7 @@ misra-c2023-20.12:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.13:
   title: '#error directive shall be used'
   severity: required
@@ -891,6 +1001,7 @@ misra-c2023-20.13:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-20.14:
   title: '#pragma should not be used'
   severity: advisory
@@ -899,6 +1010,7 @@ misra-c2023-20.14:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-21.1:
   title: '#define and #undef for reserved identifiers'
   severity: required
@@ -907,6 +1019,7 @@ misra-c2023-21.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV2
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.2:
   title: Reserved identifiers shall not be declared
   severity: required
@@ -915,6 +1028,7 @@ misra-c2023-21.2:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.3:
   title: Memory allocation functions should not be used
   severity: advisory
@@ -923,6 +1037,7 @@ misra-c2023-21.3:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.4:
   title: Standard library output functions should not be used
   severity: advisory
@@ -931,6 +1046,7 @@ misra-c2023-21.4:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.5:
   title: Standard library input functions should not be used
   severity: advisory
@@ -939,6 +1055,7 @@ misra-c2023-21.5:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.6:
   title: <stdlib.h> functions should not be used
   severity: advisory
@@ -947,6 +1064,7 @@ misra-c2023-21.6:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.7:
   title: Signal handling functions should not be used
   severity: advisory
@@ -955,6 +1073,7 @@ misra-c2023-21.7:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.8:
   title: Setjmp and longjmp should not be used
   severity: advisory
@@ -963,6 +1082,7 @@ misra-c2023-21.8:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.9:
   title: Time and date functions should not be used
   severity: advisory
@@ -971,6 +1091,7 @@ misra-c2023-21.9:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.10:
   title: Standard library abort functions should not be used
   severity: advisory
@@ -979,6 +1100,7 @@ misra-c2023-21.10:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.11:
   title: Standard library <stdarg.h> should not be used
   severity: advisory
@@ -987,6 +1109,7 @@ misra-c2023-21.11:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.12:
   title: Exception handling <fenv.h> should not be used
   severity: advisory
@@ -995,6 +1118,7 @@ misra-c2023-21.12:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.13:
   title: <math.h> functions should not be used without care
   severity: advisory
@@ -1003,6 +1127,7 @@ misra-c2023-21.13:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.14:
   title: errno should not be used in expressions
   severity: required
@@ -1011,6 +1136,7 @@ misra-c2023-21.14:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.15:
   title: Locale should not be set
   severity: advisory
@@ -1019,6 +1145,7 @@ misra-c2023-21.15:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.16:
   title: Use of atexit should be avoided
   severity: advisory
@@ -1027,6 +1154,7 @@ misra-c2023-21.16:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.17:
   title: Offsetof macro should not be used
   severity: advisory
@@ -1035,6 +1163,7 @@ misra-c2023-21.17:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-21.18:
   title: Bounds of standard library functions
   severity: required
@@ -1043,6 +1172,7 @@ misra-c2023-21.18:
   spec_ref: SWE-MISRA-S1
   check_method: clang-tidy
   auto_checkable: true
+  mcu: all
 misra-c2023-22.1:
   title: Dynamic heap memory should not be used
   severity: required
@@ -1051,6 +1181,7 @@ misra-c2023-22.1:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.2:
   title: C libraries not in safe subset
   severity: required
@@ -1059,6 +1190,7 @@ misra-c2023-22.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-dir-4.1:
   title: 运行时边界检查
   severity: required
@@ -1067,6 +1199,7 @@ misra-c2023-dir-4.1:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.2:
   title: 调用标准库的运行时边界约束
   severity: required
@@ -1075,6 +1208,7 @@ misra-c2023-dir-4.2:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.3:
   title: 汇编代码约束
   severity: advisory
@@ -1083,6 +1217,7 @@ misra-c2023-dir-4.3:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.4:
   title: Unicode/字符编码约束
   severity: advisory
@@ -1091,6 +1226,7 @@ misra-c2023-dir-4.4:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.5:
   title: char 类型使用约束
   severity: required
@@ -1099,6 +1235,7 @@ misra-c2023-dir-4.5:
   spec_ref: SWE-MISRA-DEV2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-dir-4.6:
   title: size_t / ptrdiff_t 使用
   severity: advisory
@@ -1107,6 +1244,7 @@ misra-c2023-dir-4.6:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.7:
   title: setjmp / longjmp 约束
   severity: required
@@ -1115,6 +1253,7 @@ misra-c2023-dir-4.7:
   spec_ref: SWE-MISRA-DEV2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-dir-4.8:
   title: 宏定义约束
   severity: advisory
@@ -1123,6 +1262,7 @@ misra-c2023-dir-4.8:
   spec_ref: SWE-MISRA-DEV2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-dir-4.9:
   title: 条件编译完整性
   severity: required
@@ -1131,6 +1271,7 @@ misra-c2023-dir-4.9:
   spec_ref: SWE-MISRA-DEV2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-dir-4.10:
   title: 诊断信息保留
   severity: advisory
@@ -1139,6 +1280,7 @@ misra-c2023-dir-4.10:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.11:
   title: 存储器映射寄存器指针有效性
   severity: required
@@ -1147,6 +1289,7 @@ misra-c2023-dir-4.11:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.12:
   title: 动态内存分配限制
   severity: required
@@ -1155,6 +1298,7 @@ misra-c2023-dir-4.12:
   spec_ref: SWE-MISRA-DEV2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-dir-4.13:
   title: 静态分析置信度要求
   severity: advisory
@@ -1163,6 +1307,7 @@ misra-c2023-dir-4.13:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-dir-4.14:
   title: 防御性编程实施
   severity: required
@@ -1171,6 +1316,7 @@ misra-c2023-dir-4.14:
   spec_ref: SWE-MISRA-DEV2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-1.4:
   title: 单元测试充分性审查
   severity: required
@@ -1179,14 +1325,16 @@ misra-c2023-1.4:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: manual
   auto_checkable: false
+  mcu: all
 misra-c2023-3.2:
   title: 行号指令正确性
   severity: required
   category: 预处理 (Preprocessing)
-  description: #line 指令应确保其引用的文件和行号是正确的，不得误导诊断信息位置
+  description: null
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-4.2:
   title: 禁止三字符组
   severity: required
@@ -1195,6 +1343,7 @@ misra-c2023-4.2:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-5.10:
   title: 标识符作用域辨析
   severity: required
@@ -1203,6 +1352,7 @@ misra-c2023-5.10:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-6.3:
   title: typedef 类型使用
   severity: advisory
@@ -1211,6 +1361,7 @@ misra-c2023-6.3:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-7.3:
   title: 常数字面量后缀约束
   severity: required
@@ -1219,6 +1370,7 @@ misra-c2023-7.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-7.4:
   title: 不应使用字符串字面量作为条件表达式
   severity: required
@@ -1227,6 +1379,7 @@ misra-c2023-7.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.13:
   title: const 限定指针参数
   severity: advisory
@@ -1235,6 +1388,7 @@ misra-c2023-8.13:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-8.14:
   title: restrict 限定使用约束
   severity: required
@@ -1243,6 +1397,7 @@ misra-c2023-8.14:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-9.6:
   title: designated initializers 约束
   severity: advisory
@@ -1251,6 +1406,7 @@ misra-c2023-9.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-11.9:
   title: void* 指针算术禁止
   severity: required
@@ -1259,6 +1415,7 @@ misra-c2023-11.9:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-12.3:
   title: sizeof 操作数约束
   severity: advisory
@@ -1267,6 +1424,7 @@ misra-c2023-12.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-12.4:
   title: 表达式求值顺序不依赖
   severity: required
@@ -1275,6 +1433,7 @@ misra-c2023-12.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-12.5:
   title: 逗号表达式约束
   severity: required
@@ -1283,6 +1442,7 @@ misra-c2023-12.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-13.4:
   title: 赋值操作符评估顺序
   severity: required
@@ -1291,6 +1451,7 @@ misra-c2023-13.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-13.5:
   title: 逻辑与/或的短路求值
   severity: required
@@ -1299,6 +1460,7 @@ misra-c2023-13.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-13.6:
   title: sizeof 不得包含副作用
   severity: required
@@ -1307,6 +1469,7 @@ misra-c2023-13.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-15.8:
   title: switch 条件类型约束
   severity: required
@@ -1315,6 +1478,7 @@ misra-c2023-15.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-16.7:
   title: 无参函数指针类型
   severity: required
@@ -1323,6 +1487,7 @@ misra-c2023-16.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-18.9:
   title: 指针算术与数组边界
   severity: required
@@ -1331,14 +1496,16 @@ misra-c2023-18.9:
   spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-19.3:
   title: 头文件包含守卫
   severity: required
   category: 预处理 (Preprocessing)
-  description: 所有头文件应使用 #ifndef / #define / #endif 包含守卫来防止重复包含
+  description: 所有头文件应使用
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-21.19:
   title: locale.h 函数约束
   severity: advisory
@@ -1347,6 +1514,7 @@ misra-c2023-21.19:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-21.20:
   title: signal.h 函数约束
   severity: required
@@ -1355,6 +1523,7 @@ misra-c2023-21.20:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-21.21:
   title: stdlib.h system 约束
   severity: required
@@ -1363,6 +1532,7 @@ misra-c2023-21.21:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-21.22:
   title: at_quick_exit 约束
   severity: advisory
@@ -1371,6 +1541,7 @@ misra-c2023-21.22:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.3:
   title: 文件打开模式验证
   severity: required
@@ -1379,6 +1550,7 @@ misra-c2023-22.3:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.4:
   title: 文件关闭确认
   severity: required
@@ -1387,6 +1559,7 @@ misra-c2023-22.4:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.5:
   title: 文件访问方式检查
   severity: required
@@ -1395,6 +1568,7 @@ misra-c2023-22.5:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.6:
   title: EOF 比较约束
   severity: required
@@ -1403,6 +1577,7 @@ misra-c2023-22.6:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.7:
   title: fgetpos/fsetpos 返回值检查
   severity: required
@@ -1411,6 +1586,7 @@ misra-c2023-22.7:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.8:
   title: setvbuf 参数约束
   severity: required
@@ -1419,6 +1595,7 @@ misra-c2023-22.8:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.9:
   title: fprintf/fscanf 格式字符串约束
   severity: required
@@ -1427,6 +1604,7 @@ misra-c2023-22.9:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.10:
   title: 临时文件使用约束
   severity: required
@@ -1435,6 +1613,7 @@ misra-c2023-22.10:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
 misra-c2023-22.11:
   title: remove/rename 返回值检查
   severity: required
@@ -1443,3 +1622,49 @@ misra-c2023-22.11:
   spec_ref: SWE-MISRA-S1
   check_method: cppcheck
   auto_checkable: true
+  mcu: all
+mcu-arm-1:
+  title: 中断优先级分组
+  severity: required
+  category: mcu-specific
+  description: ARM Cortex-M NVIC 中断优先级分组必须使用确定的优先级分组，不得使用不确定的优先级分组配置
+  mcu: arm
+  spec_ref: SWE-MISRA-MCU1
+  check_method: manual
+  auto_checkable: false
+mcu-arm-2:
+  title: 中断嵌套保护
+  severity: required
+  category: mcu-specific
+  description: ARM Cortex-M 中断服务程序必须进行嵌套保护，确保不会出现优先级反转问题
+  mcu: arm
+  spec_ref: SWE-MISRA-MCU2
+  check_method: manual
+  auto_checkable: false
+mcu-esp32-1:
+  title: ISR 函数属性
+  severity: required
+  category: mcu-specific
+  description: ESP32 ISR 必须使用 IRAM_ATTR 属性，确保中断服务程序运行在 IRAM 中以防止闪存缓存缺失
+  mcu: esp32
+  spec_ref: SWE-MISRA-MCU3
+  check_method: manual
+  auto_checkable: false
+mcu-esp32-2:
+  title: FreeRTOS 任务栈大小检查
+  severity: advisory
+  category: mcu-specific
+  description: ESP32 FreeRTOS 任务应设置合理的栈大小，并在运行时使用 uxTaskGetStackHighWaterMark 进行栈溢出检查
+  mcu: esp32
+  spec_ref: SWE-MISRA-MCU4
+  check_method: cppcheck
+  auto_checkable: false
+mcu-riscv-1:
+  title: RISC-V 内存屏障
+  severity: required
+  category: mcu-specific
+  description: RISC-V 多核系统中访问共享内存时需要使用 fence 指令确保内存序正确性
+  mcu: riscv
+  spec_ref: SWE-MISRA-MCU5
+  check_method: manual
+  auto_checkable: false
