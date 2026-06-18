@@ -16,7 +16,6 @@ import {
   Sparkles,
   BarChart3,
   Star,
-  Github,
   Users,
   Zap,
   CheckCircle,
