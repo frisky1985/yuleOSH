@@ -76,6 +76,21 @@ class MisraDeviation:
 
 
 @dataclass
+class MisraProfile:
+    """A named MISRA profile with rule overrides and deviations.
+
+    Profiles allow quick switching between different compliance modes:
+    - "safety": Strictest, all rules enabled (default)
+    - "performance": Relaxed rules for performance-critical code
+    - "testing": Relaxed rules for test / non-production code
+    """
+    name: str = ""
+    rule_overrides: list[MisraRuleOverride] = field(default_factory=list)
+    deviations: list[MisraDeviation] = field(default_factory=list)
+    severity_map: dict = field(default_factory=dict)
+
+
+@dataclass
 class AlmConfig:
     """ALM (Application Lifecycle Management) integration configuration.
 
@@ -119,6 +134,8 @@ class MisraConfig:
     deviations: list[MisraDeviation] = field(default_factory=list)
     _deviation_raw: list[dict] = field(default_factory=list)  # preserve raw YAML order for writing
     alm: AlmConfig = field(default_factory=AlmConfig)
+    active_profile: str = "safety"  # "safety" | "performance" | "testing"
+    profiles: dict[str, MisraProfile] = field(default_factory=dict)
 
 
 @dataclass
@@ -275,6 +292,41 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
         if isinstance(suppress, list):
             cfg.misra.suppress_rules = [str(s) for s in suppress]
         cfg.misra.rule_texts_path = str(misra_block.get("rule_texts_path", ""))
+        cfg.misra.active_profile = str(misra_block.get("active_profile", "safety"))
+
+        # Parse profiles block
+        profiles_block = misra_block.get("profiles", {})
+        if isinstance(profiles_block, dict):
+            parsed_profiles: dict[str, MisraProfile] = {}
+            for prof_name, prof_cfg in profiles_block.items():
+                if not isinstance(prof_cfg, dict):
+                    continue
+                ovr_list: list[MisraRuleOverride] = []
+                for ovr in prof_cfg.get("rule_overrides", []):
+                    if isinstance(ovr, dict):
+                        ovr_list.append(MisraRuleOverride(
+                            rule_id=str(ovr.get("rule", "")),
+                            enabled=bool(ovr.get("enabled", True)),
+                            severity_override=str(ovr.get("severity", "")),
+                        ))
+                dev_list: list[MisraDeviation] = []
+                for d in prof_cfg.get("deviations", []):
+                    if isinstance(d, dict):
+                        dev_list.append(MisraDeviation(
+                            rule_id=str(d.get("rule", "")),
+                            file_pattern=str(d.get("file", "")),
+                            reason=str(d.get("reason", "")),
+                            approved_by=str(d.get("approved_by", "")),
+                            expires=str(d.get("expires", "")),
+                            status=str(d.get("status", "pending")),
+                        ))
+                parsed_profiles[prof_name] = MisraProfile(
+                    name=str(prof_cfg.get("name", "")),
+                    rule_overrides=ovr_list,
+                    deviations=dev_list,
+                    severity_map=prof_cfg.get("severity_map", {}),
+                )
+            cfg.misra.profiles = parsed_profiles
 
         # Parse rule_overrides
         rules_block = misra_block.get("rules", {})

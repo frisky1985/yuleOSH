@@ -1,16 +1,146 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 import { PipelineManager } from './pipeline';
 import { PipelineTreeDataProvider, ReviewsTreeDataProvider, ActionsTreeDataProvider } from './treeView';
 import { StatusBarManager } from './status';
 
 let pipelineManager: PipelineManager;
 let statusBarManager: StatusBarManager;
+let misraDiagnosticCollection: vscode.DiagnosticCollection;
+
+// ── MISRA Report Diagnostics (G-14) ──────────────────────────────────
+
+function loadMisraReport(workspaceRoot: string): any | null {
+  const reportPath = path.join(workspaceRoot, '.yuleosh', 'reports', 'misra-report.json');
+  try {
+    if (fs.existsSync(reportPath)) {
+      const content = fs.readFileSync(reportPath, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch (err) {
+    console.error('Failed to load MISRA report:', err);
+  }
+  return null;
+}
+
+function updateMisraDiagnostics(workspaceRoot: string): void {
+  const report = loadMisraReport(workspaceRoot);
+  if (!report) {
+    console.log('No MISRA report found; clearing diagnostics');
+    misraDiagnosticCollection.clear();
+    return;
+  }
+
+  const violations: any[] = report.violations_raw || [];
+  if (violations.length === 0) {
+    misraDiagnosticCollection.clear();
+    return;
+  }
+
+  // Group diagnostics by file
+  const fileDiagnostics = new Map<string, vscode.Diagnostic[]>();
+
+  for (const v of violations) {
+    const filePath = v.file || '';
+    // Resolve relative file paths against workspace root
+    const absPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(workspaceRoot, filePath);
+
+    const line = Math.max(0, (v.line || 1) - 1); // VS Code uses 0-based
+    const col = Math.max(0, (v.col || 0) - 1);
+    const range = new vscode.Range(line, col, line, col + 1);
+
+    const ruleId = v.rule_id || 'unknown';
+    const message = `[${ruleId}] ${v.message || 'MISRA violation'}`;
+
+    const severityMap: Record<string, vscode.DiagnosticSeverity> = {
+      'error': vscode.DiagnosticSeverity.Error,
+      'warning': vscode.DiagnosticSeverity.Warning,
+      'style': vscode.DiagnosticSeverity.Information,
+      'information': vscode.DiagnosticSeverity.Information,
+      'performance': vscode.DiagnosticSeverity.Warning,
+    };
+    const severity = severityMap[v.severity] ?? vscode.DiagnosticSeverity.Warning;
+
+    const diagnostic = new vscode.Diagnostic(range, message, severity);
+    diagnostic.source = 'yuleOSH MISRA';
+    diagnostic.code = ruleId;
+    diagnostic.tags = severity === vscode.DiagnosticSeverity.Error
+      ? [vscode.DiagnosticTag.Unnecessary]
+      : [];
+
+    // Add rule details as hover-friendly information
+    diagnostic.relatedInformation = [
+      new vscode.DiagnosticRelatedInformation(
+        new vscode.Location(vscode.Uri.file(absPath), range),
+        `Rule: ${ruleId} | Line: ${v.line}`
+      ),
+    ];
+
+    if (!fileDiagnostics.has(absPath)) {
+      fileDiagnostics.set(absPath, []);
+    }
+    fileDiagnostics.get(absPath)!.push(diagnostic);
+  }
+
+  // Apply to collection
+  misraDiagnosticCollection.clear();
+  for (const [filePath, diags] of fileDiagnostics) {
+    const uri = vscode.Uri.file(filePath);
+    misraDiagnosticCollection.set(uri, diags);
+  }
+
+  const diagCount = violations.length;
+  vscode.window.showInformationMessage(
+    `yuleOSH: ${diagCount} MISRA violation(s) loaded in Problems panel`,
+    'Open Report'
+  ).then(selection => {
+    if (selection === 'Open Report') {
+      const reportUri = vscode.Uri.file(
+        path.join(workspaceRoot, '.yuleosh', 'reports', 'misra-report.md')
+      );
+      vscode.commands.executeCommand('markdown.showPreview', reportUri);
+    }
+  });
+}
+
+// ── Activation ────────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('yuleOSH extension activating...');
 
   // Initialize core manager
   pipelineManager = new PipelineManager();
+
+  // Initialize MISRA diagnostics collection
+  misraDiagnosticCollection = vscode.languages.createDiagnosticCollection('yuleosh-misra');
+  context.subscriptions.push(misraDiagnosticCollection);
+
+  // Register a hover provider for rule details
+  const hoverProvider = vscode.languages.registerHoverProvider(
+    { scheme: 'file', language: 'c', pattern: '**/*.{c,h,cpp,hpp}' },
+    {
+      provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | null {
+        const diags = misraDiagnosticCollection.get(document.uri);
+        if (!diags) return null;
+
+        for (const diag of diags) {
+          if (diag.range.contains(position)) {
+            const markdown = new vscode.MarkdownString();
+            markdown.appendCodeblock(diag.message, 'text');
+            if (diag.code) {
+              markdown.appendText(`Rule: ${diag.code}`);
+            }
+            return new vscode.Hover(markdown);
+          }
+        }
+        return null;
+      }
+    }
+  );
+  context.subscriptions.push(hoverProvider);
 
   // --- Register Tree View Providers ---
 
@@ -54,6 +184,10 @@ export function activate(context: vscode.ExtensionContext) {
             progress.report({ increment: 100 });
             pipelineProvider.refresh();
             statusBarManager.updateStatus(pipelineManager.getStatus());
+
+            // After pipeline run, load MISRA diagnostics
+            updateMisraDiagnostics(workspaceFolder);
+
             if (result.success) {
               vscode.window.showInformationMessage('yuleOSH: Pipeline completed successfully!');
             } else {
@@ -134,11 +268,24 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // Register MISRA load diagnostics command
+  const loadMisraDiagCmd = vscode.commands.registerCommand(
+    'yuleosh.loadMisraDiagnostics',
+    async () => {
+      const workspaceFolder = getWorkspaceFolder();
+      if (!workspaceFolder) return;
+
+      updateMisraDiagnostics(workspaceFolder);
+      vscode.window.showInformationMessage('yuleOSH: MISRA diagnostics refreshed');
+    }
+  );
+
   context.subscriptions.push(
     runPipelineCmd,
     viewStatusCmd,
     openDashboardCmd,
-    flashDeviceCmd
+    flashDeviceCmd,
+    loadMisraDiagCmd
   );
 
   // --- Initialize Status Bar ---
@@ -158,6 +305,12 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.executeCommand('yuleosh.runPipeline');
     });
     context.subscriptions.push(saveHandler);
+  }
+
+  // --- Load existing MISRA report on activation ---
+  const workspaceRoot = getWorkspaceFolder();
+  if (workspaceRoot) {
+    setTimeout(() => updateMisraDiagnostics(workspaceRoot), 1000);
   }
 
   console.log('yuleOSH extension activated');

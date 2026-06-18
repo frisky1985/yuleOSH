@@ -1,0 +1,24 @@
+# MISRA Benchmark Expected Results
+# Format: file -> [expected rule IDs] (MISRA C:2023 naming)
+# Actual cppcheck reporting uses misra-c2012-* naming; test harness normalizes.
+
+known_positives:
+  misra_8_4_no_prototype.c: [misra-c2023-8.4]
+  misra_10_1_inappropriate_ops.c: [misra-c2023-10.4]
+  misra_10_3_narrowing.c: [misra-c2023-10.3]
+  misra_11_4_ptr_cast.c: [misra-c2023-11.4]
+  misra_12_1_precedence.c: [misra-c2023-12.1]
+  misra_12_3_comma.c: [misra-c2023-12.3]
+  misra_14_4_boolean.c: [misra-c2023-14.4]
+  misra_15_5_multiple_return.c: [misra-c2023-15.5]
+  misra_16_4_switch.c: [misra-c2023-16.4]
+  misra_17_7_return_unused.c: [misra-c2023-17.7]
+  misra_21_3_malloc.c: [misra-c2023-21.3, misra-c2023-10.4]
+  misra_21_6_stdio.c: [misra-c2023-21.6, misra-c2023-17.7]
+
+clean_code:
+  clean_basic.c: []
+  clean_control_flow.c: []
+  clean_functions.c: []
+  clean_loops.c: []
+  clean_types.c: []
