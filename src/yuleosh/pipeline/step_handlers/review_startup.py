@@ -244,6 +244,214 @@ def _check_main_call(content: str, path: Path) -> list[StartupFinding]:
     return findings
 
 
+def _check_fpu_enable(content: str, path: Path) -> list[StartupFinding]:
+    """Check FPU enable (SCB->CPACR) for Cortex-M4/M7/M33.
+
+    Cortex-M4/M7/M33 with hardware FPU must set SCB->CPACR = 0xF00000
+    (Full Access) in SystemInit or early startup code, otherwise FPU
+    instructions will trigger a hard fault.
+    """
+    findings = []
+
+    has_fpu_setup = bool(re.search(
+        r'CPACR|FPU|__FPU_USED|FPU_ENABLE|SCB->CPACR|SCB_CPACR|CPACR_ENABLE',
+        content, re.IGNORECASE))
+
+    # Also detect Cortex-M4/M7/M33 core references (indicating FPU-capable part)
+    has_fpu_capable_core = bool(re.search(
+        r'Cortex-M4|Cortex-M7|Cortex-M33|CM4|CM7|CM33|cortex_m4|cortex_m7|cortex_m33',
+        content, re.IGNORECASE))
+
+    if has_fpu_setup:
+        # Check for actual CPACR register write
+        cpacr_write = bool(re.search(
+            r'CPACR\s*[:=]|0xF00000|0xF000F000', content, re.IGNORECASE))
+        if cpacr_write:
+            findings.append({
+                "severity": "info",
+                "category": "fpu",
+                "file": str(path),
+                "message": "FPU enabled (SCB->CPACR write detected) — full access granted",
+            })
+        else:
+            findings.append({
+                "severity": "info",
+                "category": "fpu",
+                "file": str(path),
+                "message": "FPU-related symbols found (CPACR/FPU) — verify SCB->CPACR = 0xF00000",
+            })
+    elif has_fpu_capable_core:
+        findings.append({
+            "severity": "critical",
+            "category": "fpu",
+            "file": str(path),
+            "message": (
+                "Cortex-M4/M7/M33 core detected but no FPU enable found — "
+                "SCB->CPACR must be set to 0xF00000 (Full Access) in SystemInit "
+                "or startup code; FPU instructions will trigger hard fault otherwise"
+            ),
+        })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "fpu",
+            "file": str(path),
+            "message": "No FPU-capable core or FPU config detected — FPU check skipped",
+        })
+
+    return findings
+
+
+def _check_system_init_timing(content: str, path: Path) -> list[StartupFinding]:
+    """Check that SystemInit is called before main() (between BSS clear and main call)."""
+    findings = []
+
+    has_system_init = bool(re.search(r'SystemInit', content))
+    has_main_call = bool(re.search(r'\bmain\b', content))
+    has_bss_clear = bool(
+        re.search(r'__bss_start|__bss_end|zerobss|bss.*clear|bss.*zero', content, re.IGNORECASE)
+    )
+
+    if has_system_init and has_main_call:
+        # Naive ordering check: find positions of SystemInit and main calls
+        # SystemInit should appear before main() in the same file
+        sysinit_positions = [m.start() for m in re.finditer(r'SystemInit', content)]
+        main_positions = [m.start() for m in re.finditer(r'\bmain\b', content)]
+
+        # Also check SystemInit appears after BSS clear
+        bss_positions = [
+            m.start() for m in re.finditer(
+                r'__bss_start|__bss_end|zerobss|bss.*clear', content, re.IGNORECASE)
+        ]
+
+        if sysinit_positions and main_positions:
+            last_sysinit = max(sysinit_positions)
+            first_main = min(main_positions)
+
+            if last_sysinit < first_main:
+                # Check SystemInit is also after BSS clear
+                after_bss = True
+                if bss_positions:
+                    last_bss = max(bss_positions)
+                    if last_sysinit < last_bss:
+                        after_bss = False
+                        findings.append({
+                            "severity": "minor",
+                            "category": "system_init_timing",
+                            "file": str(path),
+                            "message": (
+                                "SystemInit appears before BSS zero-initialization — "
+                                "clock/peripheral init may run before globals are zeroed; "
+                                "consider moving SystemInit after BSS clear"
+                            ),
+                        })
+
+                if after_bss:
+                    findings.append({
+                        "severity": "info",
+                        "category": "system_init_timing",
+                        "file": str(path),
+                        "message": (
+                            "SystemInit called after BSS clear and before main() — "
+                            "timing order correct"
+                        ),
+                    })
+            else:
+                findings.append({
+                    "severity": "minor",
+                    "category": "system_init_timing",
+                    "file": str(path),
+                    "message": (
+                        "SystemInit appears after main() call in source ordering — "
+                        "verify SystemInit is invoked before main() at runtime "
+                        "(may be called via pre-main init array)"
+                    ),
+                })
+
+    elif has_system_init and not has_main_call:
+        findings.append({
+            "severity": "info",
+            "category": "system_init_timing",
+            "file": str(path),
+            "message": "SystemInit found but no main() call in this file — check caller for correct timing",
+        })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "system_init_timing",
+            "file": str(path),
+            "message": "SystemInit not found in this file — may be in a separate system_*.c",
+        })
+
+    return findings
+
+
+def _check_default_handler_weak(content: str, path: Path) -> list[StartupFinding]:
+    """Check that ISR handlers have WEAK attribute or ALIAS to Default_Handler."""
+    findings = []
+
+    has_default_handler = bool(re.search(r'Default_Handler', content))
+    has_weak_attribute = bool(re.search(r'\.weak|WEAK|__attribute__\s*\(\s*weak', content, re.IGNORECASE))
+    has_alias = bool(re.search(r'ALIAS|__attribute__\s*\(\s*alias', content, re.IGNORECASE))
+
+    if has_default_handler:
+        # Find all ISR vector entries and count how many have WEAK
+        isr_entries = list(re.finditer(
+            r'\.word\s+(\w+_Handler|\w+_IRQHandler)', content, re.IGNORECASE))
+        weak_keywords = [m.start() for m in re.finditer(r'\.weak|WEAK', content, re.IGNORECASE)]
+
+        if isr_entries:
+            total_isrs = len(isr_entries)
+            # Check for WEAK before Default_Handler
+            dh_positions = [m.start() for m in re.finditer(r'Default_Handler', content)]
+
+            # Count ISR entries that point to Default_Handler vs unique handlers
+            unique_handlers = set(m.group(1) for m in isr_entries)
+            if 'Default_Handler' in unique_handlers:
+                unique_handlers.remove('Default_Handler')
+
+            if has_weak_attribute:
+                findings.append({
+                    "severity": "info",
+                    "category": "default_handler",
+                    "file": str(path),
+                    "message": (
+                        f"Default_Handler found with WEAK attribute — "
+                        f"{total_isrs} ISR vector entries, {len(unique_handlers)} unique handlers"
+                    ),
+                })
+            elif has_alias:
+                findings.append({
+                    "severity": "info",
+                    "category": "default_handler",
+                    "file": str(path),
+                    "message": (
+                        f"Default_Handler with ALIAS found — "
+                        f"{total_isrs} ISR vector entries"
+                    ),
+                })
+            else:
+                findings.append({
+                    "severity": "minor",
+                    "category": "default_handler",
+                    "file": str(path),
+                    "message": (
+                        f"Default_Handler found but no WEAK/ALIAS attribute detected — "
+                        f"unimplemented ISRs may cause linker errors; all unused "
+                        f"interrupt handlers should be WEAK or aliased to Default_Handler"
+                    ),
+                })
+    else:
+        findings.append({
+            "severity": "info",
+            "category": "default_handler",
+            "file": str(path),
+            "message": "No Default_Handler found — may be defined in a different file",
+        })
+
+    return findings
+
+
 def _check_interrupt_state(content: str, path: Path) -> list[StartupFinding]:
     """Check if interrupts are properly managed before main()."""
     findings = []
@@ -319,6 +527,9 @@ def _static_startup_review(project_dir: Path) -> list[StartupFinding]:
         all_findings.extend(_check_clock_config(content, f))
         all_findings.extend(_check_main_call(content, f))
         all_findings.extend(_check_interrupt_state(content, f))
+        all_findings.extend(_check_fpu_enable(content, f))
+        all_findings.extend(_check_system_init_timing(content, f))
+        all_findings.extend(_check_default_handler_weak(content, f))
 
     return all_findings
 

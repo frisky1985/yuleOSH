@@ -100,13 +100,184 @@ def _check_dynamic_allocation(source_files: list[Path], project_dir: Path) -> li
     return findings
 
 
+def _find_map_files(project_dir: Path) -> list[Path]:
+    """Discover linker map files (compiler output) in the project tree."""
+    patterns = ["**/*.map", "**/*.elf", "**/*.out"]
+    found: list[Path] = []
+    for pat in patterns:
+        for p in project_dir.glob(pat):
+            if p.is_file() and not p.name.startswith("."):
+                found.append(p)
+    return found
+
+
+def _analyze_map_file(map_path: Path) -> dict:
+    """Extract section size info from a linker map file.
+
+    Parses common map file formats (GNU ld, ARMCC) to extract
+    .text / .data / .bss / .noinit section sizes.
+    """
+    result = {
+        "text": 0,
+        "data": 0,
+        "bss": 0,
+        "noinit": 0,
+        "total_ram": 0,
+        "source": str(map_path),
+    }
+
+    try:
+        content = map_path.read_text(errors="replace")
+    except OSError:
+        return result
+
+    # GNU ld map file format:
+    # .text      0x08001000      0x1a34  ...
+    # .data      0x20000000      0x0024  ...
+    # .bss       0x20000024      0x0200  ...
+    section_re = re.compile(
+        r'^\s*\.(text|data|bss|noinit|sbss|sdata|bss\.*|noinit\.*)\s+'
+        r'0x[0-9a-fA-F]+\s+'
+        r'(0x[0-9a-fA-F]+|\d+)\s',
+        re.MULTILINE
+    )
+
+    for m in section_re.finditer(content):
+        sec_name = m.group(1).lower()
+        size_str = m.group(2)
+        try:
+            size = int(size_str, 16) if 'x' in size_str.lower() else int(size_str)
+        except ValueError:
+            continue
+
+        if sec_name == 'text':
+            result['text'] += size
+        elif sec_name in ('data', 'sdata'):
+            result['data'] += size
+        elif sec_name in ('bss', 'sbss', 'bss.*'):
+            result['bss'] += size
+        elif 'noinit' in sec_name:
+            result['noinit'] += size
+
+    # ARMCC scatter-loading map format:
+    #   Execution Region ER_RW (Base: 0x20000000, Size: 0x00000024, ...)
+    if result['data'] == 0 and result['bss'] == 0:
+        armcc_re = re.compile(
+            r'Execution Region\s+\w+\s+\(Base:\s+0x[0-9a-fA-F]+,\s+'
+            r'Size:\s+(0x[0-9a-fA-F]+|\d+)',
+            re.IGNORECASE
+        )
+        # This is approximate — ARMCC format varies
+        total = 0
+        for m in armcc_re.finditer(content):
+            sz_str = m.group(1)
+            try:
+                sz = int(sz_str, 16) if 'x' in sz_str.lower() else int(sz_str)
+            except ValueError:
+                continue
+            # Assume first matching region is RW (data+bss)
+            if total == 0:
+                result['data'] = sz  # approximate
+            total += sz
+
+    result['total_ram'] = result['data'] + result['bss'] + result['noinit']
+    return result
+
+
 def _check_global_variables(
     source_files: list[Path], project_dir: Path,
 ) -> list[MemoryFinding]:
-    """Estimate total global variable size (rough heuristic)."""
+    """Estimate total global variable size using source heuristics + map file analysis.
+
+    Two-tier approach:
+    1. Direct map file analysis (most accurate) — extracts .data + .bss + .noinit sizes
+    2. Source-level heuristic fallback (catches ~20-30% when no map file available)
+    """
     findings = []
 
-    # Heuristic: look for non-const global/static variable definitions
+    # ── Tier 1: Map file analysis ──
+    map_files = _find_map_files(project_dir)
+    map_result = None
+    for mf in map_files:
+        log.info(f"  Analyzing map file: {mf}")
+        result = _analyze_map_file(mf)
+        if result['total_ram'] > 0:
+            map_result = result
+            break
+
+    if map_result and map_result['total_ram'] > 0:
+        total_ram_used = map_result['total_ram']
+        findings.append({
+            "severity": "info",
+            "category": "global_size",
+            "file": str(project_dir),
+            "message": (
+                f"[Map file analysis] Global variable memory usage: "
+                f".data={map_result['data']} bytes, "
+                f".bss={map_result['bss']} bytes, "
+                f".noinit={map_result['noinit']} bytes, "
+                f"total RAM={total_ram_used} bytes ({total_ram_used / 1024:.1f} KB) "
+                f"from {map_result['source']}"
+            ),
+            "details": map_result,
+        })
+
+        # Try to estimate RAM capacity from linker scripts
+        linker_scripts = list(project_dir.glob("**/*.ld")) + list(project_dir.glob("**/*.lds"))
+        ram_capacity = 0
+        for ls in linker_scripts:
+            try:
+                ls_content = ls.read_text()
+                ram_matches = re.finditer(
+                    r"(?:RAM|SRAM|DTCM|CCM)\w*\s*:.*LENGTH\s*=\s*(0x[0-9a-fA-F]+|\d+)",
+                    ls_content, re.IGNORECASE)
+                for rm in ram_matches:
+                    sz_str = rm.group(1)
+                    try:
+                        sz = int(sz_str, 16) if 'x' in sz_str.lower() else int(sz_str)
+                        ram_capacity += sz
+                    except ValueError:
+                        pass
+            except OSError:
+                pass
+
+        if ram_capacity > 0:
+            usage_pct = (total_ram_used / ram_capacity) * 100
+            if usage_pct > 90:
+                findings.append({
+                    "severity": "critical",
+                    "category": "global_size",
+                    "file": str(project_dir),
+                    "message": (
+                        f"Global variable RAM usage ({total_ram_used} bytes / {ram_capacity} bytes, "
+                        f"{usage_pct:.1f}%) exceeds 90% of available RAM — "
+                        f"high risk of stack/heap collision; consider reducing .bss/.data size"
+                    ),
+                })
+            elif usage_pct > 70:
+                findings.append({
+                    "severity": "major",
+                    "category": "global_size",
+                    "file": str(project_dir),
+                    "message": (
+                        f"Global variable RAM usage ({total_ram_used} bytes / {ram_capacity} bytes, "
+                        f"{usage_pct:.1f}%) exceeds 70% — may limit stack and heap space"
+                    ),
+                })
+            else:
+                findings.append({
+                    "severity": "info",
+                    "category": "global_size",
+                    "file": str(project_dir),
+                    "message": (
+                        f"RAM capacity: {ram_capacity} bytes ({ram_capacity / 1024:.1f} KB), "
+                        f"usage: {usage_pct:.1f}%"
+                    ),
+                })
+
+        return findings
+
+    # ── Tier 2: Source-level heuristic fallback ──
     # This is a best-effort pattern scan, not a linker-map analysis.
     total_global_size = 0
     large_vars: list[tuple[str, int, str, int]] = []  # (file, line, name, size)
