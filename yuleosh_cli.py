@@ -1462,6 +1462,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kpi = sub.add_parser("kpi", help="KPI 基线管理")
     ksub = p_kpi.add_subparsers(dest="kpi_sub")
     p_kpi_status = ksub.add_parser("status", help="Show current KPI dashboard")
+    p_kpi_baseline_save = ksub.add_parser("baseline-save", help="Save current state as KPI baseline")
+    p_kpi_baseline_compare = ksub.add_parser("baseline-compare", help="Compare current state against baseline")
     p_kpi_status.add_argument("--json", action="store_true", help="Output as JSON")
     p_kpi_baseline = ksub.add_parser("baseline", help="KPI baseline commands")
     bsub = p_kpi_baseline.add_subparsers(dest="baseline_sub")
@@ -1601,6 +1603,7 @@ def main():
             cmd_kpi_status(args)
         elif args.kpi_sub == "baseline":
             if args.baseline_sub == "save":
+    elif args.kpi_sub == "baseline-save":
                 cmd_kpi_baseline_save(args)
             elif args.baseline_sub == "compare":
                 cmd_kpi_baseline_compare(args)
