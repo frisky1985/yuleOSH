@@ -113,7 +113,7 @@ class TestSessionSig:
         """GIVEN same token WHEN _session_sig called twice THEN same result."""
         with mock.patch.dict(os.environ, {"YULEOSH_API_KEY": "test-key-123"}):
             # Need to re-import to pick up new API_KEY
-            import ui.auth as auth_mod
+            import yuleosh.ui.auth as auth_mod
             auth_mod.API_KEY = "test-key-123"
             sig1 = auth_mod._session_sig("token123")
             sig2 = auth_mod._session_sig("token123")
@@ -132,27 +132,27 @@ class TestAuthentication:
 
     def test_authenticated_when_auth_disabled(self):
         """GIVEN no API_KEY set WHEN is_authenticated THEN always True."""
-        with mock.patch("ui.auth.AUTH_ENABLED", False):
+        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", False):
             assert is_authenticated({}) is True
             assert is_authenticated({"x-api-key": "anything"}) is True
 
     def test_authenticated_with_valid_api_key_header(self):
         """GIVEN API key in header WHEN matches THEN authenticated."""
-        with mock.patch("ui.auth.AUTH_ENABLED", True), \
-             mock.patch("ui.auth.API_KEY", "secret-key"):
+        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             mock.patch("yuleosh.ui.auth.API_KEY", "secret-key"):
             assert is_authenticated({"x-api-key": "secret-key"}) is True
 
     def test_authenticated_with_wrong_api_key(self):
         """GIVEN wrong API key WHEN check THEN not authenticated."""
-        with mock.patch("ui.auth.AUTH_ENABLED", True), \
-             mock.patch("ui.auth.API_KEY", "secret-key"):
+        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             mock.patch("yuleosh.ui.auth.API_KEY", "secret-key"):
             assert is_authenticated({"x-api-key": "wrong-key"}) is False
 
     def test_authenticated_with_valid_session_cookie(self):
         """GIVEN valid session cookie WHEN check THEN authenticated."""
-        with mock.patch("ui.auth.AUTH_ENABLED", True), \
-             mock.patch("ui.auth.API_KEY", "session-test-key"):
-            import ui.auth as auth_mod
+        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             mock.patch("yuleosh.ui.auth.API_KEY", "session-test-key"):
+            import yuleosh.ui.auth as auth_mod
             auth_mod.API_KEY = "session-test-key"
             token, cookie_val = auth_mod.create_session()
             headers = {"cookie": f"osh_session={cookie_val}"}
@@ -161,9 +161,9 @@ class TestAuthentication:
 
     def test_authenticated_with_expired_session_cookie(self):
         """GIVEN expired session cookie WHEN check THEN not authenticated."""
-        with mock.patch("ui.auth.AUTH_ENABLED", True), \
-             mock.patch("ui.auth.API_KEY", "expired-test-key"):
-            import ui.auth as auth_mod
+        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             mock.patch("yuleosh.ui.auth.API_KEY", "expired-test-key"):
+            import yuleosh.ui.auth as auth_mod
             auth_mod.API_KEY = "expired-test-key"
             token, cookie_val = auth_mod.create_session()
             auth_mod._sessions[token] = time.time() - 99999
@@ -173,14 +173,14 @@ class TestAuthentication:
 
     def test_authenticated_no_headers(self):
         """GIVEN auth enabled but no headers WHEN check THEN not authenticated."""
-        with mock.patch("ui.auth.AUTH_ENABLED", True), \
-             mock.patch("ui.auth.API_KEY", "some-key"):
+        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             mock.patch("yuleosh.ui.auth.API_KEY", "some-key"):
             assert is_authenticated({}) is False
 
     def test_authenticated_no_api_key_in_header(self):
         """GIVEN auth enabled, headers present but no x-api-key WHEN check THEN not auth."""
-        with mock.patch("ui.auth.AUTH_ENABLED", True), \
-             mock.patch("ui.auth.API_KEY", "some-key"):
+        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             mock.patch("yuleosh.ui.auth.API_KEY", "some-key"):
             assert is_authenticated({"user-agent": "test"}) is False
 
 
@@ -216,7 +216,7 @@ class TestLoginPage:
         """GIVEN YULEOSH_API_KEY set WHEN AUTH_ENABLED THEN true."""
         with mock.patch.dict(os.environ, {"YULEOSH_API_KEY": "test-key"}):
             import importlib
-            import ui.auth as auth_mod
+            import yuleosh.ui.auth as auth_mod
             auth_mod.API_KEY = "test-key"
             auth_mod.AUTH_ENABLED = True
             assert auth_mod.AUTH_ENABLED is True
@@ -225,6 +225,6 @@ class TestLoginPage:
 
     def test_validate_session_exception_safe(self):
         """GIVEN exception during validation WHEN validate_session THEN returns False."""
-        with mock.patch("ui.auth._sessions", {}), \
-             mock.patch("ui.auth._session_sig", side_effect=RuntimeError("boom")):
+        with mock.patch("yuleosh.ui.auth._sessions", {}), \
+             mock.patch("yuleosh.ui.auth._session_sig", side_effect=RuntimeError("boom")):
             assert validate_session("any.cookie") is False

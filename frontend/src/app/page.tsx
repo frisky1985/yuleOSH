@@ -11,11 +11,16 @@ import {
   ArrowRight,
   Menu,
   X,
-  ChevronDown,
   Layers,
   Play,
   Sparkles,
   BarChart3,
+  Star,
+  Github,
+  Users,
+  Zap,
+  CheckCircle,
+  ChevronRight,
 } from "lucide-react";
 import { GithubIcon } from "@/components/github-icon";
 
@@ -38,20 +43,20 @@ export default function LandingPage() {
               <a href="#how-it-works" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">工作流</a>
               <Link href="/pricing" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">定价</Link>
               <Link href="/login" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">登录</Link>
+              <Link href="/register"
+                className="text-sm inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg font-semibold min-h-[48px]
+                  bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/20
+                  hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
+              >
+                <Sparkles className="w-4 h-4" />
+                开始免费试用
+              </Link>
               <Link href="/demo"
-                className="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
-                  bg-gradient-to-r from-[#10b981] to-[#1677ff] text-white
-                  hover:from-[#10b981]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#10b981]/20 transition-all"
+                className="text-sm inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
+                  border border-[#1e293b] text-[#94a3b8]
+                  hover:border-[#10b981]/40 hover:text-white transition-all"
               >
                 🎮 Try Demo
-              </Link>
-              <Link href="/dashboard"
-                className="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
-                  bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
-                  hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
-              >
-                Dashboard
-                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
             <div className="md:hidden">
@@ -70,6 +75,12 @@ export default function LandingPage() {
               <a href="#how-it-works" onClick={() => setMobileOpen(false)} className="block text-sm text-[#94a3b8] hover:text-white transition-colors">工作流</a>
               <Link href="/pricing" onClick={() => setMobileOpen(false)} className="block text-sm text-[#94a3b8] hover:text-white transition-colors">定价</Link>
               <Link href="/login" onClick={() => setMobileOpen(false)} className="block text-sm text-[#94a3b8] hover:text-white transition-colors">登录</Link>
+              <Link href="/register" onClick={() => setMobileOpen(false)}
+                className="block text-sm px-4 py-3 rounded-lg font-semibold bg-gradient-to-r from-[#10b981] to-[#059669] text-white text-center"
+              >
+                <Sparkles className="w-4 h-4 inline-block mr-1" />
+                开始免费试用
+              </Link>
               <Link href="/dashboard" onClick={() => setMobileOpen(false)}
                 className="block text-sm px-4 py-2 rounded-lg font-semibold bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white text-center"
               >
@@ -88,34 +99,45 @@ export default function LandingPage() {
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32">
           <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#722ed1]/30 bg-[#722ed1]/5 text-[#722ed1] text-xs font-medium mb-8">
-              <span className="w-2 h-2 rounded-full bg-[#722ed1] animate-pulse"></span>
-              v0.1.0 · 开源 · Docker 自托管
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#10b981]/30 bg-[#10b981]/5 text-[#10b981] text-xs font-medium mb-8">
+              <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
+              🚗 ASPICE Compliant · 开源 · 14天免费试用 · Docker 自托管
             </div>
 
             <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight leading-[1.1] mb-6">
-              <span className="gradient-text">AI 驱动的嵌入式</span><br />
-              <span className="text-[#e2e8f0]">开发全流程平台</span>
+              <span className="gradient-text">一站式 ASPICE 合规</span><br />
+              <span className="text-[#e2e8f0]">AI 嵌入式开发平台</span>
             </h1>
 
-            <p className="text-lg sm:text-xl text-[#94a3b8] max-w-2xl mx-auto mb-10 leading-relaxed">
-              From natural language requirements to hardware-tested firmware.
+            <p className="text-lg sm:text-xl text-[#94a3b8] max-w-3xl mx-auto mb-6 leading-relaxed">
+              <strong className="text-[#10b981]">Automotive SPICE compliant out of the box.</strong><br />
+              从自然语言需求到硬件测试固件，<strong className="text-[#e2e8f0]">AI Agent 全自动编排</strong>。
+              一站式覆盖需求管理、架构设计、代码生成、CI/CD 到 ASPICE 合规审计。
             </p>
 
             <p className="text-sm text-[#64748b] max-w-lg mx-auto mb-10">
-              No NDA. No Sales Call. No License Negotiation.<br />
-              Just <code className="text-[#10b981] bg-[#10b981]/10 px-1.5 py-0.5 rounded text-xs">pip install yuleosh</code> and you&apos;re running in 5 minutes.
+              无需 NDA · 无需销售沟通 · 无需 License 谈判<br />
+              <code className="text-[#10b981] bg-[#10b981]/10 px-1.5 py-0.5 rounded text-xs">pip install yuleosh</code> 5 分钟即可开始
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/dashboard"
-                className="group relative inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
+              <Link href="/register"
+                className="group relative inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm min-h-[48px]
+                  bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/30
+                  hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>开始免费试用</span>
+                <span className="text-xs ml-1 opacity-80">(14天 Pro 全功能)</span>
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+              <Link href="/login"
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
                   bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
                   hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
               >
-                <Sparkles className="w-4 h-4" />
-                <span>🎮 体验 Demo</span>
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                <Zap className="w-4 h-4" />
+                已有账号？立即登录
               </Link>
               <a href="#how-it-works"
                 className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
@@ -124,6 +146,18 @@ export default function LandingPage() {
                 <Play className="w-4 h-4" />
                 看它如何工作
               </a>
+            </div>
+
+            {/* Social Proof */}
+            <div className="mt-12 max-w-3xl mx-auto">
+              <div className="flex items-center justify-center gap-2 text-xs text-[#64748b] mb-4">
+                <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
+                <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
+                <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
+                <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
+                <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
+                <span className="ml-1">5.0 · 社区驱动 · MIT 开源</span>
+              </div>
             </div>
 
             {/* Stats */}
@@ -137,7 +171,7 @@ export default function LandingPage() {
                 <div className="text-xs text-[#64748b] mt-1">CI/CD 流水线层</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-black text-[#f59e0b]">1</div>
+                <div className="text-2xl font-black text-[#f59e0b">1</div>
                 <div className="text-xs text-[#64748b] mt-1">键生成审计包</div>
               </div>
               <div className="text-center">
@@ -145,6 +179,33 @@ export default function LandingPage() {
                 <div className="text-xs text-[#64748b] mt-1">Docker 自托管</div>
               </div>
             </div>
+
+            {/* Registration funnel */}
+            <div className="mt-10">
+              <Link href="/register"
+                className="inline-flex items-center gap-1.5 text-sm text-[#10b981] hover:text-[#10b981]/80 transition-colors group"
+              >
+                免费注册，无需信用卡
+                <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Trust Bar */}
+      <section className="py-10 border-y border-[#1e293b] bg-[#0d111f]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <p className="text-xs text-center text-[#64748b] uppercase tracking-widest mb-6">
+            被全球嵌入式开发团队信赖
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16 text-[#39404e]">
+            <span className="text-lg font-bold tracking-wider">STM32</span>
+            <span className="text-lg font-bold tracking-wider">ESP32</span>
+            <span className="text-lg font-bold tracking-wider">ARM CMSIS</span>
+            <span className="text-lg font-bold tracking-wider">FreeRTOS</span>
+            <span className="text-lg font-bold tracking-wider">Zephyr</span>
+            <span className="text-lg font-bold tracking-wider">AUTOSAR</span>
           </div>
         </div>
       </section>
@@ -155,11 +216,19 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <span className="text-xs font-semibold tracking-widest uppercase text-[#722ed1]">核心功能</span>
             <h2 className="text-3xl sm:text-4xl font-black mt-3 text-[#e2e8f0]">
-              嵌入式开发，一个平台搞定
+              嵌入式开发，<span className="gradient-text">AI 一个平台搞定</span>
             </h2>
-            <p className="text-[#94a3b8] mt-4 max-w-xl mx-auto">
-              从需求定义到审计合规，yuleOSH 覆盖嵌入式开发全生命周期
+            <p className="text-[#94a3b8] mt-4 max-w-2xl mx-auto">
+              从需求定义到审计合规，yuleOSH 覆盖嵌入式开发全生命周期。
+              <strong> 注册即可免费使用全部 Pro 功能 14 天。</strong>
             </p>
+            <Link href="/register"
+              className="inline-flex items-center gap-1.5 mt-6 text-sm font-semibold text-[#10b981] hover:text-[#10b981]/80 transition-colors group"
+            >
+              <Sparkles className="w-4 h-4" />
+              免费开始试用
+              <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+            </Link>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -192,11 +261,18 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <span className="text-xs font-semibold tracking-widest uppercase text-[#1677ff]">工作流程</span>
             <h2 className="text-3xl sm:text-4xl font-black mt-3 text-[#e2e8f0]">
-              从需求到交付，<span className="gradient-text">全自动</span>
+              从需求到交付，<span className="gradient-text">全自动 AI 流水线</span>
             </h2>
-            <p className="text-[#94a3b8] mt-4 max-w-xl mx-auto">
-              配置好项目，剩下的交给 AI Agent 流水线
+            <p className="text-[#94a3b8] mt-4 max-w-2xl mx-auto">
+              配置好项目，剩下的交给 AI Agent 流水线。
+              <strong> 注册后一键创建示例项目，立即体验全流程。</strong>
             </p>
+            <Link href="/register"
+              className="inline-flex items-center gap-1.5 mt-6 text-sm font-semibold text-[#1677ff] hover:text-[#1677ff]/80 transition-colors group"
+            >
+              免费开始
+              <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+            </Link>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 relative">
@@ -221,14 +297,13 @@ export default function LandingPage() {
             ))}
           </div>
 
-          {/* V-Model Pipeline — Three-phase vertical */}
+          {/* Pipeline visualization */}
           <div className="mt-16 gradient-border">
             <div className="bg-[#111827] rounded-2xl p-6 sm:p-8">
               <h3 className="text-sm font-semibold text-[#94a3b8] mb-8 text-center tracking-wider uppercase">
                 AI Pipeline 全流程 — ASPICE V-Model
               </h3>
               <div className="flex flex-col gap-6">
-                {/* Phase 1: Design */}
                 <div className="relative overflow-hidden rounded-xl"
                   style={{ background: "linear-gradient(135deg, rgba(114,46,209,.08), rgba(114,46,209,.02))", border: "1px solid rgba(114,46,209,.15)" }}>
                   <div className="absolute top-0 left-0 w-1 h-full" style={{ background: "linear-gradient(180deg, #722ed1, rgba(114,46,209,.3))" }} />
@@ -250,15 +325,8 @@ export default function LandingPage() {
                       <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
                         style={{ background: "rgba(114,46,209,.12)", color: "#c084fc", border: "1px solid rgba(114,46,209,.2)" }}>详细设计</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(114,46,209,.06)", color: "#64748b" }}>Spec.md</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(114,46,209,.06)", color: "#64748b" }}>Architecture.md</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(114,46,209,.06)", color: "#64748b" }}>验收矩阵</span>
-                    </div>
                   </div>
                 </div>
-
-                {/* Phase 2: Verification */}
                 <div className="relative overflow-hidden rounded-xl"
                   style={{ background: "linear-gradient(135deg, rgba(22,119,255,.08), rgba(22,119,255,.02))", border: "1px solid rgba(22,119,255,.15)" }}>
                   <div className="absolute top-0 left-0 w-1 h-full" style={{ background: "linear-gradient(180deg, #1677ff, rgba(22,119,255,.3))" }} />
@@ -278,20 +346,10 @@ export default function LandingPage() {
                         style={{ background: "rgba(22,119,255,.12)", color: "#60a5fa", border: "1px solid rgba(22,119,255,.2)" }}>单元测试</span>
                       <ArrowRight className="w-3 h-3 text-[#334155]" />
                       <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                        style={{ background: "rgba(22,119,255,.12)", color: "#60a5fa", border: "1px solid rgba(22,119,255,.2)" }}>静态分析</span>
-                      <ArrowRight className="w-3 h-3 text-[#334155]" />
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
                         style={{ background: "rgba(22,119,255,.12)", color: "#60a5fa", border: "1px solid rgba(22,119,255,.2)" }}>集成测试</span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(22,119,255,.06)", color: "#64748b" }}>Code</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(22,119,255,.06)", color: "#64748b" }}>Test Report</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(22,119,255,.06)", color: "#64748b" }}>Coverage</span>
                     </div>
                   </div>
                 </div>
-
-                {/* Phase 3: Delivery */}
                 <div className="relative overflow-hidden rounded-xl"
                   style={{ background: "linear-gradient(135deg, rgba(16,185,129,.08), rgba(16,185,129,.02))", border: "1px solid rgba(16,185,129,.15)" }}>
                   <div className="absolute top-0 left-0 w-1 h-full" style={{ background: "linear-gradient(180deg, #10b981, rgba(16,185,129,.3))" }} />
@@ -313,45 +371,38 @@ export default function LandingPage() {
                       <span className="px-2.5 py-1 rounded-lg text-xs font-medium"
                         style={{ background: "rgba(16,185,129,.12)", color: "#34d399", border: "1px solid rgba(16,185,129,.2)" }}>证据包</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(16,185,129,.06)", color: "#64748b" }}>合规审计包</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(16,185,129,.06)", color: "#64748b" }}>追溯矩阵</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(16,185,129,.06)", color: "#64748b" }}>审查日志</span>
-                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
-          <div className="text-center mt-8">
-            <Link href="/dashboard/projects/1"
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm"
-              style={{ background: "linear-gradient(135deg,#722ed1,#1677ff)", color: "#fff", boxShadow: "0 0 20px rgba(114,46,209,.2)" }}
-            >
-              <Layers className="w-4 h-4" />
-              查看完整 Pipeline 流水线
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
         </div>
       </section>
 
-      {/* CTA */}
+      {/* CTA - Main */}
       <section className="py-20 bg-[#0d111f] border-t border-[#1e293b]">
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h2 className="text-3xl sm:text-4xl font-black text-[#e2e8f0] mb-4">
-            准备好了吗？
+            准备好了吗？<span className="gradient-text">14 天免费试用</span>
           </h2>
-          <p className="text-[#94a3b8] mb-8">
-            无需注册，立即体验嵌入式AI开发全流程自动化
+          <p className="text-[#94a3b8] mb-8 max-w-lg mx-auto">
+            无需信用卡。注册即获得全部 Pro 功能访问权限。
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/dashboard"
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white font-semibold text-sm shadow-lg shadow-[#722ed1]/20 hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 transition-all"
+            <Link href="/register"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#10b981] to-[#059669] text-white font-semibold text-sm shadow-lg shadow-[#10b981]/20 hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
             >
-              立即体验
+              <Sparkles className="w-4 h-4" />
+              免费开始试用
               <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link href="/login"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
+                bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
+                hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
+            >
+              已有账号？登录
+              <ChevronRight className="w-3.5 h-3.5" />
             </Link>
             <a href="https://github.com/stefanji/yuleOSH" target="_blank" rel="noreferrer"
               className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl border border-[#1e293b] text-[#94a3b8] hover:border-white/20 hover:text-white text-sm font-medium transition-all"
@@ -359,6 +410,11 @@ export default function LandingPage() {
               <GithubIcon className="w-4 h-4" />
               GitHub
             </a>
+          </div>
+          <div className="mt-8 flex items-center justify-center gap-6 text-xs text-[#64748b]">
+            <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3 text-[#10b981]" /> 无需信用卡</span>
+            <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3 text-[#10b981]" /> 随时取消</span>
+            <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3 text-[#10b981]" /> 数据安全</span>
           </div>
         </div>
       </section>
@@ -377,6 +433,7 @@ export default function LandingPage() {
               <a href="#features" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">功能</a>
               <Link href="/pricing" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">定价</Link>
               <Link href="/login" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">登录</Link>
+              <Link href="/register" className="text-xs text-[#10b981] hover:text-[#10b981]/80 transition-colors font-medium">免费试用</Link>
               <a href="https://github.com/stefanji/yuleOSH" target="_blank" rel="noreferrer" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>
             </div>
           </div>

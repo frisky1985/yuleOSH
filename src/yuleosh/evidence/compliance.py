@@ -1,0 +1,175 @@
+"""
+yuleOSH Evidence Engine — Compliance pack generation and CLI.
+
+Provides the top-level ``generate_evidence()`` function, the CLI ``main()``
+entry point, the race-condition guard ``_check_pipeline_not_running()``,
+and the ``pack_compliance_zip()`` function that bundles evidence into a
+ZIP archive suitable for ASPICE audit.
+"""
+
+import json
+import logging
+import os
+import sys
+import time as _time
+from pathlib import Path
+from typing import Optional
+import zipfile
+
+log = logging.getLogger("evidence.collector")
+
+
+def pack_compliance_zip(collector: "EvidenceCollector") -> str:
+    """Create compliance pack ZIP for ASPICE audit.
+
+    Includes all generated evidence files, the requirements spec,
+    startup analysis, and any SIL test reports found in
+    ``.osh/ci/``.
+
+    Args:
+        collector: An ``EvidenceCollector`` instance that has already
+            collected data and generated reports.
+
+    Returns:
+        Path to the created ZIP file.
+    """
+    zip_path = collector.evidence_dir / "compliance-pack.zip"
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Add all generated evidence files
+        for f in collector.evidence_dir.iterdir():
+            if f.suffix in (".md", ".json") and f.name != "compliance-pack.zip":
+                zf.write(f, arcname=f.name)
+
+        # Add spec file
+        spec_path = os.path.join(collector.project_dir, "docs", "spec.md")
+        if os.path.exists(spec_path):
+            zf.write(spec_path, arcname="spec.md")
+
+        # Add startup analysis
+        sa_path = os.path.join(collector.project_dir, "docs", "startup-analysis.md")
+        if os.path.exists(sa_path):
+            zf.write(sa_path, arcname="startup-analysis.md")
+
+        # Include SIL test reports from .osh/ci/*sil*.json
+        ci_dir = Path(collector.project_dir) / ".osh" / "ci"
+        if ci_dir.exists():
+            for sil_file in sorted(ci_dir.glob("*sil*.json")):
+                zf.write(sil_file, arcname=f"sil-reports/{sil_file.name}")
+
+    print(f"  📦 Compliance pack created: {zip_path}")
+    return str(zip_path)
+
+
+def _check_pipeline_not_running(project_dir: str) -> bool:
+    """Check that no pipeline is currently writing to avoid race conditions.
+
+    Checks session status AND recent write activity in reviews/ci directories
+    to detect the window where pipeline is done but artifacts are still flushing.
+
+    Returns True if it's safe to collect evidence (no running pipeline).
+    """
+    sessions_dir = Path(project_dir) / ".osh" / "sessions"
+    if sessions_dir.is_dir():
+        for sf in sorted(
+            sessions_dir.rglob("session.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[:3]:
+            try:
+                data = json.loads(sf.read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+            status = data.get("status", "")
+            if status in ("running", "in_progress"):
+                print(f"  ⚠️  Pipeline still running: {sf.parent.name} (status={status})")
+                return False
+
+    # Also check reviews/ and ci/ for recent writes (artifact flush window)
+    for subdir in ("reviews", "ci"):
+        d = Path(project_dir) / ".osh" / subdir
+        if d.is_dir():
+            try:
+                recent = max(
+                    (f.stat().st_mtime for f in d.rglob("*.json") if f.is_file()),
+                    default=0,
+                )
+                if (_time.time() - recent) < 5:  # 5-second grace window
+                    print(f"  ⚠️  Recent writes in .osh/{subdir}/ ({_time.time() - recent:.1f}s ago) — may be pipeline flushing")
+                    return False
+            except OSError:
+                pass
+
+    return True
+
+
+def generate_evidence(project_dir: str = None, spec_path: str = None):
+    """Generate full evidence chain.
+
+    Args:
+        project_dir: Root directory of the project. Defaults to OSH_HOME env or cwd.
+        spec_path: Optional explicit spec file path. Defaults to docs/spec.md under project_dir.
+    """
+    if project_dir is None:
+        project_dir = os.environ.get("OSH_HOME", os.getcwd())
+
+    print(f"\n📦 OSH Evidence Generation")
+    print(f"{'='*50}")
+
+    # Race condition guard: wait if pipeline is still running
+    _max_wait = 30  # seconds
+    _waited = 0
+    while not _check_pipeline_not_running(project_dir) and _waited < _max_wait:
+        _sleep = min(2, _max_wait - _waited)
+        print(f"  ⏳ Waiting for pipeline to finish... ({_waited}s elapsed)")
+        _time.sleep(_sleep)
+        _waited += _sleep
+    if _waited >= _max_wait:
+        print(f"  ⚠️  Timed out waiting for pipeline (waited {_waited}s). Collecting anyway — data may be incomplete.")
+
+    from yuleosh.evidence.generator import EvidenceCollector
+
+    collector = EvidenceCollector(project_dir)
+
+    collector.collect_requirements(spec_path=spec_path)
+    collector.collect_reviews()
+    collector.collect_ci_results()
+    collector.collect_sil_reports()
+
+    print(f"\n{'='*50}")
+
+    artifacts = []
+    artifacts.append(collector.generate_traceability_matrix())
+    artifacts.append(collector.generate_requirement_coverage())
+    artifacts.append(collector.generate_code_coverage_report())
+    artifacts.append(collector.generate_acceptance_matrix())
+    artifacts.append(collector.aggregate_review_logs())
+    artifacts.append(pack_compliance_zip(collector))
+
+    print(f"\n{'='*50}")
+    print(f"✅ Evidence generation complete")
+    print(f"   Output: {collector.evidence_dir}")
+    print(f"   Artifacts: {len(artifacts)}")
+    print(f"   - traceability-matrix.md + traceability-matrix.json")
+    print(f"   - requirement-coverage.md")
+    print(f"   - code-coverage-report.md")
+    print(f"   - review-log-summary.md + review-log.json")
+    print(f"   - acceptance-matrix.md")
+    print(f"   - sil-reports/ (in compliance-pack.zip) 🖥")
+    print(f"   - compliance-pack.zip 🎯")
+    print()
+
+    return artifacts
+
+
+def main():
+    """CLI entry point for evidence generation."""
+    spec_path = None
+    args = [a for a in sys.argv[1:] if a != "pack"]
+    if args:
+        spec_path = args[0]
+    generate_evidence(spec_path=spec_path)
+
+
+if __name__ == "__main__":
+    main()

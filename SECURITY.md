@@ -77,6 +77,31 @@ This security policy covers:
 - Regularly rotate API keys
 - Audit plugin code before installing
 
+## Automated Security Scanning
+
+yuleOSH uses automated security scanning in its CI pipeline to catch vulnerabilities early:
+
+### Static Analysis (SAST)
+
+- **CodeQL**: Runs on every PR push and weekly schedule
+  - Covers: JavaScript/TypeScript (frontend), Python (backend), C/C++ (embedded code)
+  - Query suites: `security-extended`, `security-and-quality`
+  - Results are visible in GitHub Security tab
+  - PR blocking: Critical/High findings block merge
+
+### Dependency Scanning
+
+- **Dependabot**: Continuously monitors dependency manifests
+  - Covers: `requirements.txt`, `package.json`, `Cargo.toml`
+  - Auto-creates PRs for vulnerable dependencies
+  - Severity thresholds: Critical/High → auto-PR within 24h, Medium → within 7 days
+
+### CI Security Gates
+
+- All security scan results are visible in the Security tab of the GitHub repository
+- Critical findings generate an alert to `security@yuleosh.com`
+- See [`docs/launch-checklist.md`](docs/launch-checklist.md) Section 11 for the full security launch checklist
+
 ## Thanks
 
 We appreciate the security research community helping us keep yuleOSH safe. ❤️

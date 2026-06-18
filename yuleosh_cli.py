@@ -364,6 +364,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # demo
     p_demo = sub.add_parser("demo", help="Create and run demo projects")
     dsub = p_demo.add_subparsers(dest="demo_sub")
+    p_demo_quick = dsub.add_parser("quick", help="Quick pipeline from one-line requirement")
+    p_demo_quick.add_argument("requirement", help="One-line user requirement (e.g. '写一个刹车灯控制')")
+    p_demo_quick.add_argument("--dir", default=".", help="Working directory for the demo")
     p_demo_uart = dsub.add_parser("uart", help="STM32F4 ↔ ESP32 UART communication demo")
     p_demo_uart.add_argument("--dir", default=None, help="Target directory for the demo project")
     p_demo_uart.add_argument("--build", action="store_true", help="Build and run the demo after creating it")
@@ -439,7 +442,10 @@ def main():
             sys.exit(1)
 
     elif args.command == "demo":
-        if args.demo_sub == "uart":
+        if args.demo_sub == "quick":
+            from yuleosh.api.demo_quick import main as demo_quick_main
+            demo_quick_main(args.requirement, args.dir)
+        elif args.demo_sub == "uart":
             cmd_demo_uart(args.dir, args.build, args.skip_cmake)
         else:
             parser.print_help()

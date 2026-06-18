@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yuleosh"
-version = "1.0.0"
+version = "1.0.1"
 description = "嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体"
 authors = [{name = "frisky1985"}]
 license = {text = "MIT"}
@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 readme = "README.md"
 dependencies = [
     "bcrypt>=4.1",
-    "pyjwt>=2.8",
+    "pyjwt>=2.13.0",
     "psycopg2-binary>=2.9",
     "pyserial>=3.5",
     "pyyaml>=6.0",

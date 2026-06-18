@@ -395,7 +395,7 @@ class Store:
         now_str = now.isoformat(sep=" ")
         exp_str = expires.isoformat(sep=" ")
         self.conn.execute(
-            "INSERT INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
             (user_id, token, now_str, exp_str)
         )
         self.conn.commit()
@@ -493,8 +493,12 @@ class Store:
         row = cur.fetchone()
         return row is not None and row["value"] == "1"
 
-    def complete_wizard(self):
-        """Mark the first-run wizard as completed."""
+    def complete_wizard(self, org_id: int = 0):
+        """Mark the first-run wizard as completed.
+
+        Args:
+            org_id: Organization ID for audit trail (default 0).
+        """
         self.conn.execute(
             "INSERT OR REPLACE INTO _meta (key, value) VALUES ('wizard_completed', '1')"
         )

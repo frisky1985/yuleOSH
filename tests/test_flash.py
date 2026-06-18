@@ -532,7 +532,7 @@ class TestFlashRunnerInit:
         """WHEN string target name THEN resolves config via YAML."""
         # Mock load_target_config
         with mock.patch(
-            "cross.flash.load_target_config_safe",
+            "yuleosh.cross.flash.load_target_config_safe",
             return_value=arm_target_config,
         ):
             # Mock tool availability
@@ -562,7 +562,7 @@ class TestFlashRunnerInit:
     def test_init_missing_target(self):
         """WHEN target YAML not found THEN FlashError."""
         with mock.patch(
-            "cross.flash.load_target_config_safe",
+            "yuleosh.cross.flash.load_target_config_safe",
             side_effect=FlashError("Target 'bogus' not found"),
         ):
             with pytest.raises(FlashError, match="not found"):
@@ -722,7 +722,7 @@ class TestFlashEdgeCases:
     def test_invalid_target_string(self):
         """WHEN target string doesn't resolve THEN FlashError."""
         with mock.patch(
-            "cross.flash.load_target_config_safe",
+            "yuleosh.cross.flash.load_target_config_safe",
             side_effect=FlashError("not found"),
         ):
             with pytest.raises(FlashError):

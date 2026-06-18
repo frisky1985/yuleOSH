@@ -19,60 +19,60 @@ const plans = [
     name: "Free",
     price: "¥0",
     period: "forever",
-    description: "个人开发者入门首选。适合 1-3 人独立探索嵌入式 AI 流水线。",
+    description: "个人开发者入门首选。适合 1-3 人独立探索嵌入式 AI 开发与 ASPICE 合规。",
     highlight: false,
     features: [
       "基础 Pipeline（Spec → Code → Test → CI）",
       "3 个项目限制",
       "AI Code Review 基础规则",
-      "ESP32 / STM32 模板",
+      "ESP32 / STM32 模板 + QEMU SIL",
       "社区支持（GitHub Issues）",
     ],
-    cta: "Get Started",
-    ctaHref: "/login",
+    cta: "免费开始",
+    ctaHref: "/register",
     ctaVariant: "outline" as const,
   },
   {
     name: "Pro",
-    price: "¥299",
+    price: "¥999",
     period: "/月",
-    annual: "或 ¥2,999/年（节省 17%）",
-    description: "5-15 人嵌入式团队锁定价，全功能 Pipeline。不按人头计费。",
+    annual: "年付 ¥9,999 · 首月免费试用",
+    description: "团队全功能版，面向需要 ASPICE 合规与 CI/CD 自动化的嵌入式团队。",
     highlight: true,
-    badge: "团队锁定价",
+    badge: "首月免费试用",
     features: [
-      "无限项目 · 无限成员（5-15人团队）",
+      "无限项目 · 无限成员",
       "SDD → DDD → TDD 全管线",
-      "三层 CI/CD 流水线",
-      "全部 AI Code Review（8 种检测 + 资源预测）",
-      "硬件在环（OpenOCD / JLink 刷写 + 调试）",
-      "Vector / dSPACE 适配器",
-      "一键 ASPICE 合规包",
+      "三层 CI/CD 流水线 + SIL 集成",
+      "全部 AI Code Review + 并行 4-Agent 矩阵",
+      "硬件在环（OpenOCD / JLink / esptool）",
+      "多租户隔离 + 插件市场",
+      "一键 ASPICE 合规包（追溯矩阵 + 验收矩阵）",
+      "高级证据包 + 自定义审计报告",
       "共享工作空间 + 团队仪表盘",
-      "专属团队支持（微信 / 邮件 / 企业微信）",
-      "优先功能请求",
+      "技术邮件支持 48h 响应",
     ],
-    cta: "选择 Pro",
-    ctaHref: "/login",
+    cta: "免费开始试用 Pro",
+    ctaHref: "/register?plan=pro",
     ctaVariant: "default" as const,
   },
 ];
 
 const enterprise = {
   name: "Enterprise",
-  price: "¥98,000",
-  period: "/年",
-  description: "面向需要私有化部署的企业级团队。",
+  price: "¥99,800",
+  period: "/月起",
+  description: "面向需要私有化部署 + ASPICE 认证咨询的企业级团队。",
   features: [
-    "私有化部署（Docker / K8s）",
-    "SAML / LDAP SSO",
-    "SLA 99.9% 可用性保障",
+    "私有化部署（Docker / K8s + Helm）",
+    "SAML / LDAP SSO + RBAC",
+    "SLA 99.95% 可用性保障",
     "专属客户成功经理",
-    "SOC 2 合规报告",
-    "年度安全审计",
+    "HIL 适配器定制（Vector/dSPACE/自定义）",
+    "SOC 2 / ISO 27001 合规",
   ],
   cta: "咨询 Enterprise",
-  ctaHref: "mailto:stefanji@example.com?subject=yuleOSH%20Enterprise%20咨询",
+  ctaHref: "mailto:sales@yuleosh.com?subject=yuleOSH%20Enterprise%20咨询",
 };
 
 export default function PricingPage() {
@@ -92,15 +92,11 @@ export default function PricingPage() {
             <div className="hidden md:flex items-center gap-8">
               <Link href="/" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">首页</Link>
               <Link href="/pricing" className="text-sm text-[#e2e8f0] font-medium transition-colors">定价</Link>
-              <Link href="/login" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">登录</Link>
-              <Link href="/dashboard"
-                className="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
-                  bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
-                  hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
-              >
-                Dashboard
-                <ArrowRight className="w-3.5 h-3.5" />
+              <Link href="/register" className="text-sm inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg font-semibold min-h-[42px] bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/20 hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all">
+                <Sparkles className="w-3.5 h-3.5" />
+                开始免费试用
               </Link>
+              <Link href="/login" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">登录</Link>
             </div>
             <div className="md:hidden">
               <button onClick={() => setMobileOpen(!mobileOpen)}
@@ -220,24 +216,36 @@ export default function PricingPage() {
           <div className="gradient-border rounded-2xl">
             <div className="bg-[#111827] rounded-2xl p-8 sm:p-12 text-center">
               <Badge variant="outline" className="mb-4 border-[#f59e0b]/30 text-[#f59e0b] bg-[#f59e0b]/5">
-                Enterprise
+                Enterprise + ASPICE Consulting
               </Badge>
               <h2 className="text-3xl sm:text-4xl font-black text-[#e2e8f0] mb-4">
                 Need something <span className="gradient-text">more powerful</span>?
               </h2>
-              <p className="text-[#94a3b8] max-w-lg mx-auto mb-8 leading-relaxed">
+              <p className="text-[#94a3b8] max-w-2xl mx-auto mb-4 leading-relaxed">
                 Custom pricing for organizations that need private deployment, advanced security,
-                and dedicated support.
+                dedicated support, and end-to-end ASPICE certification readiness.
               </p>
-              <div className="grid sm:grid-cols-2 gap-4 max-w-xl mx-auto mb-10 text-left">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/20 text-[#f59e0b] text-sm font-semibold mb-8">
+                <span className="w-2 h-2 rounded-full bg-[#f59e0b] animate-pulse"></span>
+                Option: <strong>¥298K/年</strong> ASPICE Consulting Package — 现场检查 + 定制证据包
+              </div>
+              <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto mb-10 text-left">
                 {[
-                  "私有化部署（On-Premise）",
-                  "SAML / LDAP SSO",
+                  "私有化部署（On-Premise + K8s Helm）",
+                  "SAML / LDAP SSO + RBAC",
                   "SLA 保障（99.95% uptime）",
-                  "专属客户成功经理",
+                  "专属客户成功经理 + 现场支持",
                   "SOC 2 / ISO 27001 合规",
-                  "自定义审计报告",
+                  "HIL 适配器定制（Vector/dSPACE 等）",
+                  "ASPICE 现场检查（CL1-CL3）",
+                  "定制合规证据包（客户审计就绪）",
                 ].map((feature, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-sm text-[#cbd5e1]">
+                    <Check className="w-4 h-4 mt-0.5 shrink-0 text-[#f59e0b]" />
+                    <span>{feature}</span>
+                  </div>
+                ))}
+              </div>
                   <div key={i} className="flex items-start gap-2.5 text-sm text-[#cbd5e1]">
                     <Check className="w-4 h-4 mt-0.5 shrink-0 text-[#f59e0b]" />
                     <span>{feature}</span>
@@ -314,11 +322,11 @@ export default function PricingPage() {
             No NDA. No Sales Call. No License Negotiation.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/login"
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white font-semibold text-sm shadow-lg shadow-[#722ed1]/20 hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 transition-all"
+            <Link href="/register"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#10b981] to-[#059669] text-white font-semibold text-sm shadow-lg shadow-[#10b981]/20 hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
             >
               <Sparkles className="w-4 h-4" />
-              Get Started Free
+              免费开始试用
               <ArrowRight className="w-4 h-4" />
             </Link>
             <a href="https://github.com/stefanji/yuleOSH" target="_blank" rel="noreferrer"
@@ -342,6 +350,7 @@ export default function PricingPage() {
               <span className="text-xs text-[#64748b]">v0.1.0 · MIT License</span>
             </div>
             <div className="flex items-center gap-6">
+              <Link href="/register" className="text-xs text-[#10b981] hover:text-[#10b981]/80 transition-colors font-medium">免费试用</Link>
               <Link href="/" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">首页</Link>
               <Link href="/login" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">登录</Link>
               <a href="https://github.com/stefanji/yuleOSH" target="_blank" rel="noreferrer" className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>

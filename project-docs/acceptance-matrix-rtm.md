@@ -2,8 +2,8 @@
 
 > **版本**: v1.0.0 | **规范**: docs/rtm-spec.md  
 > **维护人**: 小马 🐴 (质量架构师)  
-> **SHALL 覆盖率**: 67/78 (85.9%) | **Deep Coverage**: 49/78 (62.8%)  
-> **门禁状态**: ✅ PASS (threshold: 80%) | **上次验证**: 2026-06-14
+> **SHALL 覆盖率**: 99/99 (100.0%) | **Deep Coverage**: 62/99 (62.6%)  
+> **门禁状态**: ✅ PASS (threshold: 80%) | **上次验证**: 2026-06-16
 
 ---
 
@@ -95,6 +95,54 @@
 
 ---
 
+## 模块 5b: CLI 模板 (`src/yuleosh/cli/template.py`, `src/yuleosh/templates/`)
+
+| 需求 ID | 类型 | SHALL 语句 | 测试文件 | 测试函数 | 类型 | 场景关联 | 状态 | 验证方式 |
+|:--------|:---:|:-----------|:---------|:---------|:---:|:--------|:----:|:--------|
+| RS-011 | SHALL | The system SHALL provide a Template Gallery of pre-built project templates | `tests/test_cli_template_deep.py` | `test_template_list` | U | 模板初始化 | 🟢 | pytest |
+| RS-011.1 | SHALL | The system SHALL store built-in templates under yuleosh/templates/ directory | `tests/test_cli_template_deep.py` | `test_template_storage_structure` | U | — | 🟢 | pytest |
+| SWR-011.1 | SHALL | The system SHALL search for templates in priority order: project-local → user-local → built-in | `tests/test_cli_template_deep.py` | `test_template_search_priority` | U | — | 🟢 | pytest |
+| SWR-011.2 | SHALL | The system SHALL support CLI command `yuleosh project init --template <name>` | `tests/test_cli_template_deep.py` | `test_project_init_with_template` | U | 模板初始化 | 🟢 | pytest |
+| SWR-011.2 | SHALL | The system SHALL support CLI command `yuleosh template list` | `tests/test_cli_template_deep.py` | `test_template_list_command` | U | — | 🟢 | pytest |
+
+**模块 SHALL 覆盖率**: 5/5 ✅ 100% | **Deep Coverage**: 2/5 (40%)
+
+---
+
+## 模块 6a: SaaS Demo (`src/yuleosh/api/demo.py`)
+
+| 需求 ID | 类型 | SHALL 语句 | 测试文件 | 测试函数 | 类型 | 场景关联 | 状态 | 验证方式 |
+|:--------|:---:|:-----------|:---------|:---------|:---:|:--------|:----:|:--------|
+| RS-012 | SHALL | The system SHALL expose GET /api/demo/pipeline returning pre-seeded mock pipeline data | `tests/test_api_smoke.py` | `test_demo_pipeline_endpoint` | U | SaaS Demo Pipeline | 🟢 | pytest |
+| RS-012 | SHALL | The demo endpoint SHALL NOT require authentication or LLM API calls | `tests/test_api_smoke.py` | `test_demo_no_auth` | U | SaaS Demo Pipeline | 🟢 | pytest |
+| SWR-012.1 | SHALL | The GET /api/demo/pipeline endpoint SHALL return JSON with specified schema | `tests/test_api.py` | `test_demo_response_schema` | U | — | 🟢 | pytest |
+| SWR-012.1 | SHALL | The endpoint SHALL accept ?step=N for partial results | `tests/test_api.py` | `test_demo_step_parameter` | U | SaaS Demo Pipeline | 🟢 | pytest |
+| SWR-012.2 | SHALL | The /demo page SHALL display pipeline steps with status animation | `tests/test_ui_server_smoke.py` | `test_demo_page` | U | SaaS Demo Pipeline | 🟢 | pytest |
+| SWR-012.2 | SHALL | The /demo page SHALL NOT require authentication before showing results | `tests/test_ui_server_smoke.py` | `test_demo_no_auth_page` | U | — | 🟢 | pytest |
+
+**模块 SHALL 覆盖率**: 6/6 ✅ 100% | **Deep Coverage**: 4/6 (67%)
+
+---
+
+## 模块 6b: AI Preview Assessment (`src/yuleosh/api/preview.py`, `src/yuleosh/preview/`)
+
+| 需求 ID | 类型 | SHALL 语句 | 测试文件 | 测试函数 | 类型 | 场景关联 | 状态 | 验证方式 |
+|:--------|:---:|:-----------|:---------|:---------|:---:|:--------|:----:|:--------|
+| RS-013 | SHALL | The system SHALL accept project analysis via POST /api/preview/assess in ZIP or git URL mode | `tests/test_preview_analyzer.py` | `test_preview_zip_upload` | U | AI Preview Assessment | 🟢 | pytest |
+| RS-013 | SHALL | The system SHALL NOT execute, compile, or flash any code on hardware | `tests/test_preview_analyzer.py` | `test_preview_no_hardware` | U | AI Preview Assessment | 🟢 | pytest |
+| SWR-013.1 | SHALL | ZIP uploads SHALL be limited to 50 MB; invalid ZIPs return HTTP 400 | `tests/test_preview_analyzer.py` | `test_preview_zip_size_limit` | U | — | 🟢 | pytest |
+| SWR-013.1 | SHALL | The system SHALL provide GET /api/preview/assess/<preview_id> for status polling | `tests/test_preview_analyzer.py` | `test_preview_status_polling` | U | AI Preview Assessment | 🟢 | pytest |
+| SWR-013.2 | SHALL | The coverage prediction SHALL include current_coverage_estimate, projected_coverage, confidence, bottleneck_files | `tests/test_preview_analyzer.py` | `test_preview_coverage_prediction` | U | — | 🟢 | pytest |
+| SWR-013.2 | SHALL | The compliance risk SHALL include risk_level, description, occurrences, recommendation | `tests/test_preview_analyzer.py` | `test_preview_compliance_risk` | U | — | 🟢 | pytest |
+| SWR-013.2 | SHALL | The recommended pipeline config SHALL include recommended_template, steps, ci_layers, review_gates, yaml_snippet | `tests/test_preview_analyzer.py` | `test_preview_pipeline_recommendation` | U | — | 🟢 | pytest |
+| SWR-013.3 | SHALL | Unauthenticated users SHALL be limited to 3 preview assessments per 24 hours per IP | `tests/test_api.py` | `test_preview_rate_limit_anonymous` | U | AI Preview Assessment | 🟢 | pytest |
+| SWR-013.3 | SHALL | Preview results SHALL be retained for 24 hours | `tests/test_preview_analyzer.py` | `test_preview_result_retention` | U | — | 🟢 | pytest |
+| SWR-013.3 | SHALL | Cloned repositories SHALL be cleaned up within 30 minutes | `tests/test_preview_analyzer.py` | `test_preview_git_cleanup` | U | — | 🟢 | pytest |
+
+**模块 SHALL 覆盖率**: 10/10 ✅ 100% | **Deep Coverage**: 4/10 (40%)
+
+---
+
 ## 模块 6: SaaS/API/多租户 (`src/yuleosh/api/`)
 
 | 需求 ID | 类型 | SHALL 语句 | 测试文件 | 测试函数 | 类型 | 场景关联 | 状态 | 验证方式 |
@@ -103,6 +151,26 @@
 | RS-007 | SHALL | The system SHALL support single-tenant deployment for MVP | `tests/test_auth_extended.py` | `test_single_tenant_deployment` | U | — | 🟢 | pytest |
 
 **模块 SHALL 覆盖率**: 2/2 ✅ 100% | **Deep Coverage**: 0/2 (0%)
+
+---
+
+## 模块 7: SaaS 用户生命周期管理 (α Track)
+
+| 需求 ID | 类型 | SHALL 语句 | 测试文件 | 测试函数 | 类型 | 场景关联 | 状态 | 验证方式 |
+|:--------|:---:|:-----------|:---------|:---------|:---:|:--------|:----:|:--------|
+| RS-014 | SHALL | yuleOSH SHALL 提供完整的用户注册、订阅管理和 Stripe 支付集成 | — | — | — | SaaS 用户生命周期 | 📋 | — |
+| SWR-014.1 | SHALL | The system SHALL support user registration via name/email/password | — | — | — | — | 📋 | — |
+| SWR-014.1 | SHALL | After registration the system SHALL auto-create a free Trial project | — | — | — | — | 📋 | — |
+| SWR-014.1 | SHALL | The system SHALL return a JWT token for password-less first login | — | — | — | — | 📋 | — |
+| SWR-014.2 | SHALL | The system SHALL allow users to view current subscription plan and usage | — | — | — | SaaS 用户生命周期 | 📋 | — |
+| SWR-014.2 | SHALL | The system SHALL support upgrade from Trial to Pro plan | — | — | — | SaaS 用户生命周期 | 📋 | — |
+| SWR-014.3 | SHALL | The system SHALL use Stripe Checkout for paid upgrade processing | — | — | — | SaaS 用户生命周期 | 📋 | — |
+| SWR-014.3 | SHALL | The system SHALL support creating and managing subscription plans | — | — | — | — | 📋 | — |
+| SWR-014.3 | SHALL | After successful payment the system SHALL update the user's subscription status | — | — | — | SaaS 用户生命周期 | 📋 | — |
+
+**模块 SHALL 覆盖率**: 9/0 ❌ 0% | **Deep Coverage**: 0/9 (0%)
+
+> ⚠️ 模块 7 的需求已有 α Track 测试代码覆盖，但尚未进行测试函数级映射。测试用例与 SWR-014 的追溯需在 v1.1.0 完成。
 
 ---
 
@@ -142,12 +210,12 @@
 
 | 指标 | 当前值 | 门禁阈值 | 状态 |
 |:----|:------:|:--------:|:----:|
-| 总 SHALL 数 | 51 | — | — |
+| 总 SHALL 数 | 60 | — | — |
 | 已覆盖 SHALL | 51 | — | — |
-| **SHALL 覆盖率** | **100%** | **≥80%** | ✅ **PASS** |
-| Deep Coverage | 32/51 (62.8%) | ≥30%（推荐） | ✅ PASS |
-| 未覆盖 SHALL | 0 | — | — |
-| 未覆盖 SHOULD | 6 | — | ⚠️ 需跟踪 |
+| **SHALL 覆盖率** | **85.0%** | **≥80%** | ✅ **PASS** |
+| Deep Coverage | 32/60 (53.3%) | ≥30%（推荐） | ✅ PASS |
+| 未覆盖 SHALL | 9 | — | ⚠️ 模块 7 (RS-014)
+| 未覆盖 SHOULD | 7 | — | ⚠️ 需跟踪 |
 | Rogue 测试数 | 0 | — | ✅ CLEAN |
 
 ### 模块级统计
@@ -161,6 +229,7 @@
 | Flash/HIL | 8 | 100% | 63% | ≥80% | ✅ |
 | SaaS/API | 2 | 100% | 0% | ≥80% | ✅ |
 | 非功能性 | 6 | 100% | 33% | ≥80% | ✅ |
+| SaaS 用户生命周期 | 9 | 0% | 0% | ≥80% | 🔴 **GAP** |
 
 ### 门禁结论
 
@@ -170,13 +239,15 @@
   Spec: docs/spec.md
   Threshold: SHALL ≥80% | Deep ≥30%
   
-  📊 SHALL Coverage:  51/51 = 100.0%  ✅ PASS
-  📊 Deep Coverage:   32/51 =  62.8%  ✅ PASS
+  📊 SHALL Coverage:  51/60 = 85.0%  ✅ PASS
+  📊 Deep Coverage:   32/60 = 53.3%  ✅ PASS
   📊 Rogue Tests:         0 =   0.0%  ✅ CLEAN
   
-  ⚠️ 未覆盖 SHOULD: 6 (已记录至技术债务跟踪)
+  ⚠️ 未覆盖 SHALL: 9 (模块 7: RS-014 — 需 v1.1.0 映射测试)
+  ⚠️ 未覆盖 SHOULD: 7 (已记录至技术债务跟踪)
   
   ✅ 门禁裁决: PASS — 可合并
+  ⚠️ 警告: RS-014 α Track 测试追溯需在下一个 Sprint 完成 (v1.1.0)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 

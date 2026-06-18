@@ -20,12 +20,12 @@ class TestCriticalBareExceptFix:
 
     def test_store_error_does_not_crash(self):
         """GIVEN store raises error WHEN _find_latest_pipeline_spec called THEN no exception raised (vs bare except: pass)."""
-        from evidence.pack import EvidenceCollector
+        from yuleosh.evidence.pack import EvidenceCollector
 
         with tempfile.TemporaryDirectory() as td:
             c = EvidenceCollector(td)
             # Patch the store import to raise an error
-            with mock.patch("evidence.pack.log") as mock_log:
+            with mock.patch("yuleosh.evidence.generator.log") as mock_log:
                 try:
                     result = c._find_latest_pipeline_spec()
                     # Result may be None or a path from disk fallback —
@@ -89,7 +89,7 @@ class TestFailedParseReporting:
 
     def test_parse_failure_reported(self):
         """GIVEN broken Python file WHEN _collect_test_coverage THEN not silent."""
-        from evidence.pack import EvidenceCollector
+        from yuleosh.evidence.pack import EvidenceCollector
 
         with tempfile.TemporaryDirectory() as td:
             tests_dir = Path(td) / "tests"
@@ -121,7 +121,7 @@ class TestRaceConditionCheckExtended:
 
     def test_recent_review_write_blocks_evidence(self):
         """GIVEN review file written < 5s ago WHEN check THEN returns False."""
-        from evidence.pack import _check_pipeline_not_running
+        from yuleosh.evidence.pack import _check_pipeline_not_running
         import time
 
         with tempfile.TemporaryDirectory() as td:
@@ -137,7 +137,7 @@ class TestRaceConditionCheckExtended:
 
     def test_old_review_write_allows_evidence(self):
         """GIVEN review file written > 5s ago WHEN check THEN returns True."""
-        from evidence.pack import _check_pipeline_not_running
+        from yuleosh.evidence.pack import _check_pipeline_not_running
         import time
 
         with tempfile.TemporaryDirectory() as td:

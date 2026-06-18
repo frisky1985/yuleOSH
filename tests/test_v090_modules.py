@@ -51,7 +51,7 @@ class TestMetering:
     """GIVEN usage metering WHEN checking THEN tier limits enforced."""
 
     def test_tiers_exist(self):
-        from usage.metering import TIERS
+        from yuleosh.usage.metering import TIERS
         assert "community" in TIERS
         assert "pro" in TIERS
         assert "enterprise" in TIERS
@@ -60,23 +60,23 @@ class TestMetering:
 
     def test_check_tier_limit_allowed(self):
         """GIVEN below limit WHEN check THEN allowed."""
-        with mock.patch("usage.metering.get_org_tier", return_value="pro"):
+        with mock.patch("yuleosh.usage.metering.get_org_tier", return_value="pro"):
             with mock.patch.object(mock.MagicMock(), "get_monthly_usage", return_value={"project_count": 5}) as m:
                 result = {"allowed": True, "limit": 10, "used": 5, "message": ""}
                 # Mock check_tier_limit to return the expected result
-                with mock.patch("usage.metering.check_tier_limit", return_value=result):
+                with mock.patch("yuleosh.usage.metering.check_tier_limit", return_value=result):
                     r = result
                     assert r["allowed"] is True
 
     def test_trial_status_not_in_trial(self):
         """GIVEN old org WHEN trial check THEN not in trial."""
-        from usage.metering import get_trial_status, TRIAL_DAYS
+        from yuleosh.usage.metering import get_trial_status, TRIAL_DAYS
         # Without a real store, test the function structure
         assert TRIAL_DAYS == 14
 
     def test_get_usage_summary(self):
         """GIVEN usage WHEN summarized THEN has tier info."""
-        from usage.metering import get_usage_summary
+        from yuleosh.usage.metering import get_usage_summary
         # Mock store
         store = mock.MagicMock()
         store.get_monthly_usage.return_value = {"project_count": 2, "pipeline_runs": 5, "llm_tokens": 100, "storage_mb": 20}
@@ -92,16 +92,16 @@ class TestStripeGateway:
     """GIVEN Stripe gateway WHEN not configured THEN appropriate errors."""
 
     def test_is_configured_false_by_default(self):
-        from usage.stripe_gateway import is_stripe_configured
+        from yuleosh.usage.stripe_gateway import is_stripe_configured
         assert is_stripe_configured() is False
 
     def test_create_session_not_configured(self):
-        from usage.stripe_gateway import create_checkout_session
+        from yuleosh.usage.stripe_gateway import create_checkout_session
         r = create_checkout_session(org_id=1, tier="pro", email="x@y.com", org_slug="test")
         assert "error" in r
         assert "not configured" in r["error"]
 
     def test_handle_webhook_not_configured(self):
-        from usage.stripe_gateway import handle_stripe_webhook
+        from yuleosh.usage.stripe_gateway import handle_stripe_webhook
         r = handle_stripe_webhook(b"{}", "sig123")
         assert r["status"] == "error"

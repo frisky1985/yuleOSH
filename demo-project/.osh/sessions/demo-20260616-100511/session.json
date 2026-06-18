@@ -1,0 +1,133 @@
+{
+  "name": "demo-20260616-100511",
+  "spec_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/docs/spec.md",
+  "status": "completed",
+  "current_step": 9,
+  "created_at": "2026-06-16T10:05:11.001134",
+  "updated_at": "2026-06-16T10:05:11.573827",
+  "steps": [
+    {
+      "step": 1,
+      "name": "spec-check",
+      "agent": "Agent",
+      "action": "spec-check",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.001343",
+      "completed_at": "2026-06-16T10:05:11.045068",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/spec-check.json",
+      "errors": []
+    },
+    {
+      "step": 2,
+      "name": "super-analysis",
+      "agent": "Agent",
+      "action": "super-analysis",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.045104",
+      "completed_at": "2026-06-16T10:05:11.052098",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/startup-analysis.md",
+      "errors": []
+    },
+    {
+      "step": 3,
+      "name": "prd",
+      "agent": "Agent",
+      "action": "prd",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.052112",
+      "completed_at": "2026-06-16T10:05:11.052430",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/prd.md",
+      "errors": []
+    },
+    {
+      "step": 4,
+      "name": "internal-review",
+      "agent": "Agent",
+      "action": "internal-review",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.052437",
+      "completed_at": "2026-06-16T10:05:11.052738",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/review-result.md",
+      "errors": []
+    },
+    {
+      "step": 5,
+      "name": "architecture",
+      "agent": "Agent",
+      "action": "architecture",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.052744",
+      "completed_at": "2026-06-16T10:05:11.053087",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/architecture.md",
+      "errors": []
+    },
+    {
+      "step": 6,
+      "name": "development",
+      "agent": "Agent",
+      "action": "development",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.053093",
+      "completed_at": "2026-06-16T10:05:11.072466",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/development-plan.md",
+      "errors": []
+    },
+    {
+      "step": 7,
+      "name": "test-planning",
+      "agent": "Agent",
+      "action": "test-planning",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.072490",
+      "completed_at": "2026-06-16T10:05:11.072888",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/test-plan.md",
+      "errors": []
+    },
+    {
+      "step": 8,
+      "name": "self-test",
+      "agent": "Agent",
+      "action": "self-test",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.072895",
+      "completed_at": "2026-06-16T10:05:11.572074",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/self-test-report.md",
+      "errors": []
+    },
+    {
+      "step": 9,
+      "name": "code-review",
+      "agent": "Agent",
+      "action": "code-review",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.572113",
+      "completed_at": "2026-06-16T10:05:11.573226",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/code-review.json",
+      "errors": []
+    },
+    {
+      "step": 10,
+      "name": "final-report",
+      "agent": "Agent",
+      "action": "final-report",
+      "status": "completed",
+      "started_at": "2026-06-16T10:05:11.573233",
+      "completed_at": "2026-06-16T10:05:11.573825",
+      "output_path": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/final-report.md",
+      "errors": []
+    }
+  ],
+  "artifacts": {
+    "spec-check": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/spec-check.json",
+    "super-analysis": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/startup-analysis.md",
+    "prd": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/prd.md",
+    "internal-review": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/review-result.md",
+    "architecture": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/architecture.md",
+    "development": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/development-plan.md",
+    "test-planning": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/test-plan.md",
+    "self-test": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/self-test-report.md",
+    "code-review": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/code-review.json",
+    "final-report": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/.osh/sessions/demo-20260616-100511/final-report.md"
+  },
+  "errors": []
+}

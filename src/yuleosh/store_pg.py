@@ -661,7 +661,12 @@ class PostgresStore:
             row = cur.fetchone()
             return row is not None and row[0] == "1"
 
-    def complete_wizard(self):
+    def complete_wizard(self, org_id: int = 0):
+        """Mark the first-run wizard as completed.
+
+        Args:
+            org_id: Organization ID for audit trail (default 0).
+        """
         with self.conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO _meta (key, value) VALUES ('wizard_completed', '1') "
