@@ -1,0 +1,803 @@
+# yuleOSH MISRA C:2023 Rule Definitions
+# Core rules covering TOP 20+ most commonly violated rules in embedded C.
+# Format derived from MISRA C:2023 specifications.
+# Used by ci/misra_report.py for report formatting and by
+# ci/stages.py for run_misra_check() violation parsing.
+
+meta:
+  standard: "MISRA C"
+  version: "2023"
+  description: "MISRA C:2023 Guidelines for the use of the C language in critical systems"
+  source: "MISRA Consortium"
+
+misra-c2023-1.1:
+  title: "ISO C standard compliance"
+  severity: "required"
+  category: "环境 (Environment)"
+  description: "所有代码应符合 ISO C 标准，不得使用编译器扩展"
+
+misra-c2023-1.2:
+  title: "No reliance on undefined or unspecified behavior"
+  severity: "required"
+  category: "环境 (Environment)"
+  description: "不得依赖未定义或未指定的行为"
+
+misra-c2023-1.3:
+  title: "No violation of syntax or constraints"
+  severity: "required"
+  category: "环境 (Environment)"
+  description: "不得违反 C 标准的语法或约束规则"
+
+misra-c2023-2.1:
+  title: "Source files shall only contain legal C constructs"
+  severity: "required"
+  category: "未分类 (Uncategorized)"
+  description: "源文件应仅包含合法的 C 语言结构"
+
+misra-c2023-2.2:
+  title: "Source code shall not contain dead code"
+  severity: "required"
+  category: "未分类 (Uncategorized)"
+  description: "源代码不得包含死代码（无法到达的代码）"
+
+misra-c2023-2.3:
+  title: "Source code shall not contain unused type declarations"
+  severity: "advisory"
+  category: "未分类 (Uncategorized)"
+  description: "源代码不得包含未使用的类型声明"
+
+misra-c2023-2.4:
+  title: "Source code shall not contain unused tag declarations"
+  severity: "advisory"
+  category: "未分类 (Uncategorized)"
+  description: "源代码不得包含未使用的标记声明"
+
+misra-c2023-2.5:
+  title: "Source code shall not contain unused macro declarations"
+  severity: "advisory"
+  category: "未分类 (Uncategorized)"
+  description: "源代码不得包含未使用的宏定义"
+
+misra-c2023-2.6:
+  title: "Source code shall not contain labels not referenced"
+  severity: "required"
+  category: "未分类 (Uncategorized)"
+  description: "源代码不得包含未引用的标签"
+
+misra-c2023-2.7:
+  title: "Source code shall not contain functions not called"
+  severity: "required"
+  category: "未分类 (Uncategorized)"
+  description: "源代码不得包含未被调用的函数"
+
+misra-c2023-3.1:
+  title: "Character sequences in comments shall not begin with /*"
+  severity: "required"
+  category: "注释 (Comments)"
+  description: "注释内的字符序列不能以 /* 开头，以防止嵌套注释"
+
+misra-c2023-4.1:
+  title: "Octal and hex escape sequences shall be terminated"
+  severity: "required"
+  category: "字符集 (Character Sets)"
+  description: "八进制和十六进制转义序列必须正确终止"
+
+misra-c2023-5.1:
+  title: "Identifiers shall be distinct from keywords"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "标识符必须与关键字区分"
+
+misra-c2023-5.2:
+  title: "Identifiers in same scope shall be distinct"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "同一作用域内的标识符应唯一"
+
+misra-c2023-5.3:
+  title: "Typedef names shall not be reused"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "typedef 名称不得重复使用"
+
+misra-c2023-5.4:
+  title: "Macro identifiers shall be distinct"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "宏标识符应唯一"
+
+misra-c2023-5.5:
+  title: "Identifiers shall be distinct from macro names"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "标识符应与宏名称区分"
+
+misra-c2023-5.6:
+  title: "Typedef names shall be unique identifiers"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "typedef 名称应是唯一标识符"
+
+misra-c2023-5.7:
+  title: "Identifiers shall not rely on significance of characters"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "标识符不应依赖于区分大小写以外的字符区分"
+
+misra-c2023-5.8:
+  title: "Identifiers in external scope shall be distinct"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "外部作用域的标识符应唯一"
+
+misra-c2023-5.9:
+  title: "Identifiers of internal linkage shall be unique"
+  severity: "required"
+  category: "标识符 (Identifiers)"
+  description: "内部链接的标识符应唯一"
+
+misra-c2023-6.1:
+  title: "Bit fields shall only be of appropriate types"
+  severity: "required"
+  category: "类型 (Types)"
+  description: "位域仅应使用适当的类型"
+
+misra-c2023-6.2:
+  title: "Single-bit named bit fields shall be of unsigned type"
+  severity: "required"
+  category: "类型 (Types)"
+  description: "单比特位域必须是无符号类型"
+
+misra-c2023-7.1:
+  title: "Octal constants shall not be used"
+  severity: "required"
+  category: "字面量 (Literals)"
+  description: "不得使用八进制常量"
+
+misra-c2023-7.2:
+  title: "U or u suffix on unsigned integer constants"
+  severity: "required"
+  category: "字面量 (Literals)"
+  description: "无符号整数常量应使用 U 或 u 后缀"
+
+misra-c2023-8.1:
+  title: "Types shall be explicitly specified"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "类型应被显式指定"
+
+misra-c2023-8.2:
+  title: "Function types shall be in prototype form"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "函数类型应使用原型形式声明"
+
+misra-c2023-8.3:
+  title: "Objects declared at file scope shall have external linkage"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "文件作用域对象应具有外部链接或使用 static"
+
+misra-c2023-8.4:
+  title: "Compatible declaration shall be visible"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "兼容声明应对所有 translation units 可见"
+
+misra-c2023-8.5:
+  title: "External definitions shall be declared in header files"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "外部定义应在头文件中声明"
+
+misra-c2023-8.6:
+  title: "Identifier shall be defined"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "标识符必须被定义"
+
+misra-c2023-8.7:
+  title: "Functions and objects should not be defined with external linkage"
+  severity: "advisory"
+  category: "声明 (Declarations)"
+  description: "除非必要，函数和对象不应使用外部链接定义（优先用 static）"
+
+misra-c2023-8.8:
+  title: "Static storage class specifier in declarations"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "内部链接的函数和对象应使用 static 声明"
+
+misra-c2023-8.9:
+  title: "Internal linkage objects shall have static storage"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "内部链接的对象应具有静态存储期"
+
+misra-c2023-8.10:
+  title: "Static objects shall not exceed reasonable size"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "静态对象不应超过合理大小"
+
+misra-c2023-8.11:
+  title: "External arrays shall have explicit size or initializer"
+  severity: "required"
+  category: "声明 (Declarations)"
+  description: "外部数组应具有显式大小或初始化器"
+
+misra-c2023-8.12:
+  title: "Array dimensions should be explicit"
+  severity: "advisory"
+  category: "声明 (Declarations)"
+  description: "数组维度应是显式的"
+
+misra-c2023-9.1:
+  title: "All automatic objects shall be initialized before use"
+  severity: "required"
+  category: "初始化 (Initialization)"
+  description: "所有自动存储期对象在使用前应被赋值"
+
+misra-c2023-9.2:
+  title: "Braces in initializer lists"
+  severity: "required"
+  category: "初始化 (Initialization)"
+  description: "初始化列表中的括号应正确匹配"
+
+misra-c2023-9.3:
+  title: "Designated initializers shall not be mixed"
+  severity: "required"
+  category: "初始化 (Initialization)"
+  description: "不得混用指定初始化和位置初始化"
+
+misra-c2023-9.4:
+  title: "Elements referenced in an initializer shall be available"
+  severity: "required"
+  category: "初始化 (Initialization)"
+  description: "初始化器中引用的元素应可用"
+
+misra-c2023-9.5:
+  title: "Designated initializers for arrays shall be in order"
+  severity: "required"
+  category: "初始化 (Initialization)"
+  description: "数组的指定初始化器应按顺序"
+
+misra-c2023-10.1:
+  title: "Operands shall not be of inappropriate type"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "操作数不得具有不适当的本质类型"
+
+misra-c2023-10.2:
+  title: "MISRA expressions of composite essential type"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "复合本质类型的 MISRA 表达式"
+
+misra-c2023-10.3:
+  title: "Complex integer types shall not be used"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "复整数类型不得使用"
+
+misra-c2023-10.4:
+  title: "Complex floating types shall not be used"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "复浮点类型不得使用"
+
+misra-c2023-10.5:
+  title: "Expression evaluation not affected by operator precedence"
+  severity: "advisory"
+  category: "基本类型 (Essential Types)"
+  description: "表达式求值不应受优先级和求值顺序影响"
+
+misra-c2023-10.6:
+  title: "Composite expression used as operand of further operators"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "复合表达式用作运算符的操作数应加括号"
+
+misra-c2023-10.7:
+  title: "Essential type model - expressions"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "如果复合表达式用作更大的表达式操作数，应加括号明确"
+
+misra-c2023-10.8:
+  title: "Casting should not remove const/volatile"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "强制类型转换不应移除 const 或 volatile 限定"
+
+misra-c2023-11.1:
+  title: "Conversions shall not be performed between pointers"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "函数指针和对象指针之间不得进行转换"
+
+misra-c2023-11.2:
+  title: "Pointer conversions to/from integer types"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "指针和整数类型之间的转换应受限"
+
+misra-c2023-11.3:
+  title: "Cast of pointer to integer type"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "将指针转换为整数类型应谨慎"
+
+misra-c2023-11.4:
+  title: "Cast of integer to pointer type"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "将整数转换为指针类型应谨慎"
+
+misra-c2023-11.5:
+  title: "Pointer to void shall not be converted to pointer to object"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "void 指针不应转换为对象指针（除赋值）"
+
+misra-c2023-11.6:
+  title: "Cast between pointer to object and pointer to function"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "对象指针和函数指针之间不得进行转换"
+
+misra-c2023-11.7:
+  title: "Cast between pointer to object and non-integer arithmetic type"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "对象指针和非整数算术类型之间不得进行转换"
+
+misra-c2023-11.8:
+  title: "Pointer arithmetic limited to array elements"
+  severity: "required"
+  category: "指针类型转换 (Pointer Type Conversions)"
+  description: "指针算术仅限于数组元素"
+
+misra-c2023-12.1:
+  title: "Expression precedence with parentheses"
+  severity: "required"
+  category: "表达式 (Expressions)"
+  description: "应使用括号明确表达式的运算符优先级"
+
+misra-c2023-12.2:
+  title: "Value of expression shall be of appropriate essential type"
+  severity: "required"
+  category: "表达式 (Expressions)"
+  description: "表达式的值应具有适当的本质类型"
+
+misra-c2023-13.1:
+  title: "Side effects in initializer lists"
+  severity: "required"
+  category: "副作用 (Side Effects)"
+  description: "初始化列表中不应有副作用"
+
+misra-c2023-13.2:
+  title: "Side effects of called functions shall not depend on evaluation order"
+  severity: "required"
+  category: "副作用 (Side Effects)"
+  description: "被调用函数的副作用不应依赖于求值顺序"
+
+misra-c2023-13.3:
+  title: "Full expression with side effects shall not be discarded"
+  severity: "required"
+  category: "副作用 (Side Effects)"
+  description: "具有副作用的完整表达式不应被丢弃"
+
+misra-c2023-14.1:
+  title: "Loop counter shall be of appropriate type"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "循环计数器应具有适当类型"
+
+misra-c2023-14.2:
+  title: "For loop shall contain well-formed expressions"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "for 循环应包含完整的三个表达式"
+
+misra-c2023-14.3:
+  title: "Loop counter shall not be modified in body"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "循环计数器不应在循环体中修改"
+
+misra-c2023-14.4:
+  title: "Controlling expressions shall be essentially Boolean"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "控制表达式应为本质布尔类型"
+
+misra-c2023-15.1:
+  title: "Goto statement shall not be used"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "不应使用 goto 语句"
+
+misra-c2023-15.2:
+  title: "Goto statement should not be used"
+  severity: "advisory"
+  category: "控制流 (Control Flow)"
+  description: "建议不要使用 goto 语句"
+
+misra-c2023-15.3:
+  title: "Labels not part of switch case shall be avoided"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "不在 switch 中的标签不应使用"
+
+misra-c2023-15.4:
+  title: "Single point of exit"
+  severity: "advisory"
+  category: "控制流 (Control Flow)"
+  description: "函数应有单一退出点"
+
+misra-c2023-15.5:
+  title: "Function shall not have multiple return statements"
+  severity: "advisory"
+  category: "控制流 (Control Flow)"
+  description: "函数不应有多个 return 语句"
+
+misra-c2023-15.6:
+  title: "If-else-if chain shall terminate with else"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "if-else-if 链应以 else 子句终止"
+
+misra-c2023-15.7:
+  title: "All if-else constructs shall be terminated"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "所有 if-else 结构应有 complete 形式"
+
+misra-c2023-16.1:
+  title: "Switch shall be well-formed"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "switch 语句应格式正确"
+
+misra-c2023-16.2:
+  title: "Switch expression shall be essentially Boolean or essentially enum"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "switch 表达式应为本质布尔或枚举类型"
+
+misra-c2023-16.3:
+  title: "Body of switch shall be a compound statement"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "switch 主体应为复合语句（花括号）"
+
+misra-c2023-16.4:
+  title: "Every switch clause shall terminate with break"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "每个 switch case 应以 break 终止"
+
+misra-c2023-16.5:
+  title: "No more than one default clause"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "switch 中应最多有一个 default 标签"
+
+misra-c2023-16.6:
+  title: "Default label shall be present"
+  severity: "required"
+  category: "控制流 (Control Flow)"
+  description: "switch 语句应包含 default 标签"
+
+misra-c2023-17.1:
+  title: "Function parameters shall not exceed a maximum"
+  severity: "required"
+  category: "函数 (Functions)"
+  description: "函数参数数量不应超过限制（通常 6 个）"
+
+misra-c2023-17.2:
+  title: "Functions shall not call themselves directly"
+  severity: "required"
+  category: "函数 (Functions)"
+  description: "函数不应直接递归调用自身"
+
+misra-c2023-17.3:
+  title: "Functions shall not call themselves indirectly"
+  severity: "required"
+  category: "函数 (Functions)"
+  description: "函数不应间接递归调用自身"
+
+misra-c2023-17.4:
+  title: "Functions shall not exceed maximum length"
+  severity: "advisory"
+  category: "函数 (Functions)"
+  description: "函数不应超过最大长度"
+
+misra-c2023-17.5:
+  title: "Function parameter type shall be declared"
+  severity: "required"
+  category: "函数 (Functions)"
+  description: "函数参数类型必须声明"
+
+misra-c2023-17.6:
+  title: "Declaration of an array parameter"
+  severity: "required"
+  category: "函数 (Functions)"
+  description: "数组参数的声明"
+
+misra-c2023-17.7:
+  title: "返回值必须被使用"
+  severity: "required"
+  category: "函数行为"
+  description: "调用具有返回值的函数，其返回值应被检查或使用"
+
+misra-c2023-17.8:
+  title: "Boolean arguments for bool parameter"
+  severity: "required"
+  category: "函数 (Functions)"
+  description: "布尔型参数应使用 bool 类型"
+
+misra-c2023-18.1:
+  title: "Pointer arithmetic on array without subscript"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "避免直接对数组执行指针算术"
+
+misra-c2023-18.2:
+  title: "Subtraction between pointers only for same array"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "指针相减仅限于同一数组的元素之间"
+
+misra-c2023-18.3:
+  title: "Relational operators on pointers"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "关系运算符应用于指针时应指向同一数组"
+
+misra-c2023-18.4:
+  title: "+ - += -= shall not be applied to pointer to void"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "+ - += -= 不应用于 void 指针"
+
+misra-c2023-18.5:
+  title: "Address of array shall not be assigned"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "数组地址不应被赋值"
+
+misra-c2023-18.6:
+  title: "Array indexing shall be within bounds"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "数组索引应在边界内"
+
+misra-c2023-18.7:
+  title: "Flexible array members should not be used"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "不应使用灵活数组成员"
+
+misra-c2023-18.8:
+  title: "Variable-length arrays should not be used"
+  severity: "required"
+  category: "指针与数组 (Pointers & Arrays)"
+  description: "不应使用变长数组 (VLA)"
+
+misra-c2023-19.1:
+  title: "Object shall not be assigned or copied overlapping"
+  severity: "required"
+  category: "覆盖存储 (Overlapping Storage)"
+  description: "对象不应被重叠地赋值或复制"
+
+misra-c2023-19.2:
+  title: "Union shall not overlap in confusing way"
+  severity: "required"
+  category: "覆盖存储 (Overlapping Storage)"
+  description: "union 不应以混淆的方式重叠"
+
+misra-c2023-20.1:
+  title: "#include directives in source files"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "#include 指令的格式应符合规范"
+
+misra-c2023-20.2:
+  title: "#include directives for standard headers"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "标准头文件的包含"
+
+misra-c2023-20.3:
+  title: "#include shall not be within comments"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "#include 不应出现在注释内"
+
+misra-c2023-20.4:
+  title: "Recursive macro definitions"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "不应有递归宏定义"
+
+misra-c2023-20.5:
+  title: "#undef should not be used"
+  severity: "advisory"
+  category: "预处理器 (Preprocessing)"
+  description: "不应使用 #undef"
+
+misra-c2023-20.6:
+  title: "Macros should expand to complete syntactic units"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "宏应展开为完整的语法单元"
+
+misra-c2023-20.7:
+  title: "Function-like macro shall not be used"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "不应使用类函数宏"
+
+misra-c2023-20.8:
+  title: "Control expression in #if shall be constant"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "#if 中的控制表达式应为常量"
+
+misra-c2023-20.9:
+  title: "Preprocessor operators shall not be misused"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "预处理器运算符不应误用"
+
+misra-c2023-20.10:
+  title: "# and ## operators should not be used"
+  severity: "advisory"
+  category: "预处理器 (Preprocessing)"
+  description: "不应使用 # 和 ## 运算符"
+
+misra-c2023-20.11:
+  title: "Layout of #if chain should follow rules"
+  severity: "advisory"
+  category: "预处理器 (Preprocessing)"
+  description: "#if 链的布局应遵循规范"
+
+misra-c2023-20.12:
+  title: "#line should not be used"
+  severity: "advisory"
+  category: "预处理器 (Preprocessing)"
+  description: "不应使用 #line 指令"
+
+misra-c2023-20.13:
+  title: "#error directive shall be used"
+  severity: "required"
+  category: "预处理器 (Preprocessing)"
+  description: "#error 指令的使用"
+
+misra-c2023-20.14:
+  title: "#pragma should not be used"
+  severity: "advisory"
+  category: "预处理器 (Preprocessing)"
+  description: "不应使用 #pragma 指令"
+
+misra-c2023-21.1:
+  title: "#define and #undef for reserved identifiers"
+  severity: "required"
+  category: "标准库 (Standard Library)"
+  description: "#define 和 #undef 不应作用于保留标识符"
+
+misra-c2023-21.2:
+  title: "Reserved identifiers shall not be declared"
+  severity: "required"
+  category: "标准库 (Standard Library)"
+  description: "不应声明保留标识符"
+
+misra-c2023-21.3:
+  title: "Memory allocation functions should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应使用内存分配函数 (malloc/free)"
+
+misra-c2023-21.4:
+  title: "Standard library output functions should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应使用标准库输出函数 (printf/puts)"
+
+misra-c2023-21.5:
+  title: "Standard library input functions should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应使用标准库输入函数 (scanf/gets)"
+
+misra-c2023-21.6:
+  title: "<stdlib.h> functions should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "<stdlib.h> 的函数不应使用（atoi/atof/exit等）"
+
+misra-c2023-21.7:
+  title: "Signal handling functions should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "信号处理函数不应使用"
+
+misra-c2023-21.8:
+  title: "Setjmp and longjmp should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应使用 setjmp/longjmp"
+
+misra-c2023-21.9:
+  title: "Time and date functions should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "时间日期函数不应使用"
+
+misra-c2023-21.10:
+  title: "Standard library abort functions should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "标准库中止函数不应使用"
+
+misra-c2023-21.11:
+  title: "Standard library <stdarg.h> should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应使用可变参数宏"
+
+misra-c2023-21.12:
+  title: "Exception handling <fenv.h> should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应使用 <fenv.h>"
+
+misra-c2023-21.13:
+  title: "<math.h> functions should not be used without care"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应未经考虑使用 <math.h> 函数"
+
+misra-c2023-21.14:
+  title: "errno should not be used in expressions"
+  severity: "required"
+  category: "标准库 (Standard Library)"
+  description: "errno 在表达式中不应被使用"
+
+misra-c2023-21.15:
+  title: "Locale should not be set"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应设置区域设置"
+
+misra-c2023-21.16:
+  title: "Use of atexit should be avoided"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "应避免使用 atexit"
+
+misra-c2023-21.17:
+  title: "Offsetof macro should not be used"
+  severity: "advisory"
+  category: "标准库 (Standard Library)"
+  description: "不应使用 offsetof 宏"
+
+misra-c2023-21.18:
+  title: "Bounds of standard library functions"
+  severity: "required"
+  category: "标准库 (Standard Library)"
+  description: "标准库函数的边界条件"
+
+misra-c2023-22.1:
+  title: "Dynamic heap memory should not be used"
+  severity: "required"
+  category: "资源 (Resources)"
+  description: "不应使用动态堆内存"
+
+misra-c2023-22.2:
+  title: "C libraries not in safe subset"
+  severity: "required"
+  category: "资源 (Resources)"
+  description: "不应使用安全子集外的 C 标准库"
