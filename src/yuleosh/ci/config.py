@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import json
+
 log = logging.getLogger("ci.config")
 
 # ------------------------------------------------------------------
@@ -34,11 +36,25 @@ DEFAULT_LAYER_DEPENDENCIES: dict[int, list[int]] = {
 DEFAULT_COVERAGE_THRESHOLD_LINE = 85.0
 DEFAULT_COVERAGE_THRESHOLD_COND = 80.0
 DEFAULT_STRICT = False
+DEFAULT_MISRA_ADDON = "misra"  # misra-c-2023 | misra-c-2012
 
 
 # ------------------------------------------------------------------
 # Dataclasses
 # ------------------------------------------------------------------
+
+
+@dataclass
+class MisraConfig:
+    """MISRA C:2023 static analysis configuration (A-03)."""
+
+    enabled: bool = True
+    addon: str = DEFAULT_MISRA_ADDON  # 'misra' or 'misra-c-2023' or 'misra-c-2012'
+    fail_on_violation: bool = False
+    fail_threshold: int = 10
+    cppcheck_std: str = "c11"
+    suppress_rules: list = field(default_factory=list)
+    rule_texts_path: str = ""
 
 
 @dataclass
@@ -85,6 +101,7 @@ class CiConfig:
     )
     coverage: CoverageConfig = field(default_factory=CoverageConfig)
     hardware_test: HardwareTestConfig = field(default_factory=HardwareTestConfig)
+    misra: MisraConfig = field(default_factory=MisraConfig)
 
 
 # ------------------------------------------------------------------
@@ -179,6 +196,19 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
             cfg.coverage.module_thresholds = {
                 k: float(v) for k, v in module_thresholds.items()
             }
+
+    # MISRA block
+    misra_block = raw.get("misra", {})
+    if isinstance(misra_block, dict):
+        cfg.misra.enabled = bool(misra_block.get("enabled", True))
+        cfg.misra.addon = str(misra_block.get("addon", DEFAULT_MISRA_ADDON))
+        cfg.misra.fail_on_violation = bool(misra_block.get("fail_on_violation", False))
+        cfg.misra.fail_threshold = int(misra_block.get("fail_threshold", 10))
+        cfg.misra.cppcheck_std = str(misra_block.get("cppcheck_std", "c11"))
+        suppress = misra_block.get("suppress_rules", [])
+        if isinstance(suppress, list):
+            cfg.misra.suppress_rules = [str(s) for s in suppress]
+        cfg.misra.rule_texts_path = str(misra_block.get("rule_texts_path", ""))
 
     # Hardware test block
     hw_block = raw.get("hardware_test", {})

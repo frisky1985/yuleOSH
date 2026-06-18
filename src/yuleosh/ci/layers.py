@@ -21,6 +21,7 @@ from yuleosh.ci.config import _get_ci_config, is_strict, is_misra_fail_fast, lay
 from yuleosh.ci.result import CIResult, timed_stage
 from yuleosh.ci.stages import (
     run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check, run_sil_tests,
+    run_misra_check,
 )
 from yuleosh.ci.stage_utils import (
     _detect_hil_target, _run_hil_mock_tests, _run_hil_real_tests, _record_hil_results, _save_hil_report,
@@ -108,6 +109,7 @@ def run_layer1(project_dir: Optional[str] = None):
     stages = [
         ("plan-lint", run_plan_lint),
         ("clang-tidy", run_clang_tidy),
+        ("misra-check", run_misra_check),
         ("unit-tests", run_unit_tests),
         ("coverage", run_coverage_check),
     ]
