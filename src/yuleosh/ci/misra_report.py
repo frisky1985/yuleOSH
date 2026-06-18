@@ -24,6 +24,7 @@ import os
 import re
 import sys
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -34,6 +35,93 @@ except ImportError:
     yaml = None  # type: ignore[assignment]
 
 log = logging.getLogger("ci.misra_report")
+
+
+# ------------------------------------------------------------------
+# Multi-tool result types (G-15)
+# ------------------------------------------------------------------
+
+
+@dataclass
+class ToolResult:
+    """Result from a single MISRA analysis tool.
+
+    Attributes
+    ----------
+    tool_name : str
+        Tool identifier: "cppcheck" | "clang-tidy" | "ai-review" | etc.
+    violations : list[dict]
+        Parsed violation dicts (same format as parse_cppcheck_output returns).
+    status : str
+        Execution status: "passed" | "failed" | "skipped".
+    """
+    tool_name: str = ""
+    violations: list[dict] = field(default_factory=list)
+    status: str = "skipped"
+
+
+def merge_tool_results(results: list[ToolResult]) -> dict:
+    """Merge multiple tool results into a unified report.
+
+    Deduplicates same rule/file/line/col combinations across tools,
+    tags each violation with its source tool(s), and computes combined
+    statistics.
+
+    Parameters
+    ----------
+    results : list[ToolResult]
+        Tool results from cppcheck, clang-tidy, AI-review, etc.
+
+    Returns
+    -------
+    dict with keys:
+        - merged_violations: list of unified violation dicts
+        - combined_stats: combined summary statistics
+        - tool_contributions: per-tool violation counts
+    """
+    seen: dict[tuple, dict] = {}
+    tool_contributions: dict[str, int] = {}
+
+    for tr in results:
+        tool_contributions[tr.tool_name] = tool_contributions.get(tr.tool_name, 0) + len(tr.violations)
+        for v in tr.violations:
+            # Dedup key: (rule_id, file, line, col)
+            key = (v.get("rule_id", ""), v.get("file", ""), v.get("line", 0), v.get("col", 0))
+            if key in seen:
+                # Merge tags — append tool if not already listed
+                existing = seen[key]
+                tools_set = set(existing.get("_tools", [tr.tool_name]))
+                tools_set.add(tr.tool_name)
+                existing["_tools"] = sorted(tools_set)
+            else:
+                v["_tools"] = [tr.tool_name]
+                seen[key] = v
+
+    merged = list(seen.values())
+
+    # Combined stats
+    total_violations = len(merged)
+    severity_counts: dict[str, int] = defaultdict(int)
+    unique_files: set[str] = set()
+
+    for v in merged:
+        sev = v.get("severity", "unknown")
+        severity_counts[sev] += 1
+        fname = v.get("file", "")
+        if fname:
+            unique_files.add(fname)
+
+    return {
+        "merged_violations": merged,
+        "combined_stats": {
+            "total_violations": total_violations,
+            "total_tools": len(results),
+            "severity_counts": dict(severity_counts),
+            "unique_files": sorted(unique_files),
+        },
+        "tool_contributions": tool_contributions,
+        "tool_statuses": {tr.tool_name: tr.status for tr in results},
+    }
 
 # Default paths
 # misra-rules.yaml lives at the workspace root (4 levels up: ci/ → yuleosh/ → src/ → workspace)
@@ -330,7 +418,7 @@ def save_report(
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # JSON
+    # JSON (multi-tool aware if merge_result is provided)
     json_path = out_dir / "misra-report.json"
     json_content = generate_json_report(violations, groups, summary)
     json_path.write_text(json_content, encoding="utf-8")
@@ -357,6 +445,74 @@ def save_report(
 
     log.info("MISRA report saved: %s, %s, %s", json_path, md_path, trace_path)
     return json_path, md_path, trace_path
+
+
+def save_merged_report(
+    merge_result: dict,
+    rule_defs: dict,
+    output_dir: str | Path,
+) -> tuple[Path, Path]:
+    """Save a multi-tool merged report to disk.
+
+    Parameters
+    ----------
+    merge_result : dict
+        Output from merge_tool_results().
+    rule_defs : dict
+        Rule definitions from load_rule_definitions().
+    output_dir : str | Path
+        Output directory.
+
+    Returns tuple of (json_path, md_path).
+    """
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    report = {
+        "generated_at": datetime.now().isoformat(),
+        "standard": "MISRA C:2023",
+        "multi_tool": True,
+        "tool_statuses": merge_result.get("tool_statuses", {}),
+        "tool_contributions": merge_result.get("tool_contributions", {}),
+        "combined_stats": merge_result.get("combined_stats", {}),
+        "merged_violations": merge_result.get("merged_violations", []),
+    }
+
+    json_path = out_dir / "misra-report-merged.json"
+    json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+
+    md_lines = [
+        "# MISRA C:2023 Multi-Tool Compliance Report",
+        "",
+        f"> Generated: {datetime.now().isoformat()}",
+        "",
+        "## Tool Summary",
+        "",
+        "| Tool | Status | Violations |",
+        "|:----|:------|:----------|",
+    ]
+    for tool_name, status in sorted(merge_result.get("tool_statuses", {}).items()):
+        count = merge_result.get("tool_contributions", {}).get(tool_name, 0)
+        md_lines.append(f"| {tool_name} | {status} | {count} |")
+
+    stats = merge_result.get("combined_stats", {})
+    md_lines.extend([
+        "",
+        "## Combined Summary",
+        "",
+        f"| Metric | Value |",
+        f"|:-------|------:|",
+        f"| Total Unique Violations | {stats.get('total_violations', 0)} |",
+        f"| Files Affected | {len(stats.get('unique_files', []))} |",
+        f"| Tools Used | {stats.get('total_tools', 0)} |",
+        "",
+    ])
+
+    md_path = out_dir / "misra-report-merged.md"
+    md_path.write_text("\n".join(md_lines), encoding="utf-8")
+
+    log.info("Merged MISRA report saved: %s, %s", json_path, md_path)
+    return json_path, md_path
 
 
 def print_summary(summary: dict) -> None:

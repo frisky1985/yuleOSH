@@ -530,6 +530,73 @@ def cmd_misra_trend(args):
     print(result)
 
 
+# ── MISRA Profile Commands (G-17) ────────────────────────────────────────
+
+
+def cmd_misra_profile_list():
+    """List available MISRA profiles."""
+    from yuleosh.ci.config import load_ci_config
+
+    cfg = load_ci_config(OSH_HOME)
+    profiles = cfg.misra.profiles
+    active = cfg.misra.active_profile
+
+    if not profiles:
+        print("No MISRA profiles configured.")
+        return
+
+    print(f"\n  📋 MISRA Profiles (active: {active})")
+    print(f"  {'=' * 50}")
+    for prof_name, prof in sorted(profiles.items()):
+        marker = "👉" if prof_name == active else "  "
+        ovr_count = len(prof.rule_overrides)
+        dev_count = len(prof.deviations)
+        print(f"  {marker} {prof_name:15s}  {prof.name}")
+        if ovr_count > 0:
+            print(f"        Rule overrides: {ovr_count}")
+        if dev_count > 0:
+            print(f"        Deviations:     {dev_count}")
+    print()
+
+
+def cmd_misra_profile_set(name: str):
+    """Switch active MISRA profile."""
+    from yuleosh.ci.config import load_ci_config
+
+    cfg = load_ci_config(OSH_HOME)
+    profiles = cfg.misra.profiles
+
+    if not profiles:
+        print("No MISRA profiles configured.")
+        return
+
+    if name not in profiles:
+        print(f"Profile '{name}' not found. Available: {', '.join(profiles.keys())}")
+        return
+
+    # Update ci-config.yaml
+    import yaml
+
+    config_path = Path(OSH_HOME) / ".yuleosh" / "ci-config.yaml"
+    if not config_path.exists():
+        print(f"Config file not found: {config_path}")
+        return
+
+    try:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        print("Failed to parse config YAML.")
+        return
+
+    misra_raw = raw.setdefault("misra", {})
+    misra_raw["active_profile"] = name
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        yaml.dump(raw, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    print(f"✅ Switched to profile: {name} ({profiles[name].name})")
+
+
 # ── MISRA Report Command ───────────────────────────────────────────────
 
 
@@ -807,6 +874,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output format (default: summary)",
     )
 
+    # misra profile (G-17)
+    p_misra_profile = msub.add_parser("profile", help="Manage MISRA profiles")
+    mprof = p_misra_profile.add_subparsers(dest="profile_sub")
+    mprof.add_parser("list", help="List available profiles")
+    p_misra_prof_set = mprof.add_parser("set", help="Switch active profile")
+    p_misra_prof_set.add_argument("name", help="Profile name (safety|performance|testing)")
+
     # misra deviate
     p_misra_deviate = msub.add_parser("deviate", help="Manage deviation records")
     mdev = p_misra_deviate.add_subparsers(dest="deviate_sub")
@@ -920,6 +994,14 @@ def main():
             cmd_misra_report(args)
         elif args.misra_sub == "deviate":
             cmd_misra_deviate(args)
+        elif args.misra_sub == "profile":
+            if args.profile_sub == "list":
+                cmd_misra_profile_list()
+            elif args.profile_sub == "set":
+                cmd_misra_profile_set(args.name)
+            else:
+                parser.print_help()
+                sys.exit(1)
         else:
             parser.print_help()
             sys.exit(1)
