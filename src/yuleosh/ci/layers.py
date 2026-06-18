@@ -22,7 +22,7 @@ from yuleosh.ci.result import CIResult, timed_stage
 from yuleosh.ci.stages import (
     run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check,
     run_c_coverage, run_sil_tests,
-    run_misra_check,
+    run_misra_check, run_yaml_validation,
 )
 from yuleosh.ci.stage_utils import (
     _detect_hil_target, _run_hil_mock_tests, _run_hil_real_tests, _record_hil_results, _save_hil_report,

@@ -89,6 +89,39 @@
 | 6.9 | 报告 CLI — `yuleosh misra report` | **G-12** | 运行 `yuleosh misra report` | CLI 测试 | 输出 summary 格式的违规总结 | ✅ |
 | 6.10 | 报告 CLI — 多种格式 | **G-12** | 运行 `yuleosh misra report --format json|markdown|html` | CLI 测试 | 输出 JSON/Markdown/HTML 格式报告 | ✅ |
 | 6.11 | KPI 违规密度 limit | SWE-MISRA-KPI3 | CI 配置 `violations_per_kloc` | CI 日志 | 密度超限时 stage status="warning" | ✅ |
+| 6.12 | coverage_trend.py 文件存在 | SWE-MISRA-KPI4 | 检查文件 | `ls` | `src/yuleosh/ci/coverage_trend.py` 存在 | ✅ |
+| 6.13 | coverage_trend CLI — `yuleosh coverage trend` | — | 运行 `yuleosh coverage trend --lines 5` | CLI 测试 | 输出 Markdown 表格含最近覆盖趋势 | ✅ |
+| 6.14 | coverage_trend CLI — JSON 输出 | — | 运行 `yuleosh coverage trend --json` | CLI 测试 | 输出 JSON 格式趋势数据 | ✅ |
+
+### 6.x 统一 KPI 基线（E08~E09）新增验收项
+
+> **来源**: CL2 审计计划 E08（首次数据采集）· E09（4 周基线发布）
+> **关联文档**: `docs/pipeline-optimization-plan.md 附录 D`
+> **依赖**: 需要创建 `src/yuleosh/ci/kpi_trend.py` 模块和 `yuleosh kpi` CLI
+
+| # | 验收项 | 归属 | 优先级 | 验证方法 | 通过标准 | 状态 |
+|:-:|:-------|:----:|:------:|:---------|:---------|:----:|
+| 6.15 | kpi_trend.py 模块存在 | E08 | P0 | 检查文件 | `src/yuleosh/ci/kpi_trend.py` 存在，包含 `record_kpi()` 和 `show_kpi_trend()` | ❌ |
+| 6.16 | kpi-trend.jsonl 文件写入 | E08 | P0 | 运行 CI 后检查 | `.yuleosh/reports/kpi-trend.jsonl` 存在，每行含 timestamp, build_id, build_success_rate, test_pass_rate, c_line_coverage, misra_violations_per_kloc, misra_required_count, build_duration_sec, agent_review_pass_rate | ❌ |
+| 6.17 | `yuleosh kpi status` CLI 命令 | E08 | P0 | 运行命令 | 输出最近一次构建的全量 KPI 仪表盘摘要 | ❌ |
+| 6.18 | `yuleosh kpi trend --kpi <name>` CLI | E08 | P0 | 运行命令 | 输出单个 KPI 指标趋势表格 | ❌ |
+| 6.19 | `yuleosh kpi baseline save` CLI | E08 | P0 | 运行命令 | 创建基线快照文件 `.yuleosh/reports/kpi-baseline-<date>.json` | ❌ |
+| 6.20 | `yuleosh kpi baseline list` CLI | E08 | P1 | 运行命令 | 显示基线版本历史 | ❌ |
+| 6.21 | `yuleosh kpi baseline diff <v1> <v2>` CLI | E08 | P1 | 运行命令 | 输出两个基线版本的指标差异 | ❌ |
+| 6.22 | CI 自动采集 KPI | E08 | P0 | 运行全 CI 后检查 | kpi-trend.jsonl 追加新记录；CI 输出中包含 KPI 摘要 | ❌ |
+| 6.23 | 覆盖 ≥20 个有效数据点 | E09 | P0 | 检查记录数 | kpi-trend.jsonl 含 ≥20 条记录 | ❌ |
+| 6.24 | 正式基线文档发布 | E09 | P0 | 检查文档 | `docs/metrics/process-performance-baseline-v1.0.md` 含均值/P50/P90/UCL/LCL | ❌ |
+| 6.25 | KPI 门禁告警联动 | E09 | P0 | 注入超限数据 | KPI 连续 3 次触及 UCL/LCL → CI 告警 | ❌ |
+
+#### 6.x 汇总
+
+| 优先级 | 数量 | Sprint A 目标 |
+|:------:|:----:|:-------------|
+| P0 | 7 (6.15~6.19, 6.22, 6.23) | Sprint A-m4: 启动 E08 首次采集 |
+| P1 | 2 (6.20~6.21) | Sprint B |
+| P0 | 2 (6.24~6.25) | Sprint B (E09 基线发布) |
+
+---
 
 ## 7. 双向追溯验收 ✅
 
