@@ -107,11 +107,21 @@ class PolarionAdapter(AlmBackend):
 register_adapter("jira", JiraAdapter)
 register_adapter("polarion", PolarionAdapter)
 
+# Re-export standalone backends (E11)
+from yuleosh.alm.jira import JiraBackend
+from yuleosh.alm.polarion import PolarionBackend
+
+# Register standalone backends in the factory
+register_adapter("jira", JiraBackend)
+register_adapter("polarion", PolarionBackend)
+
 __all__ = [
     "AlmBackend",
     "AlmTicket",
     "JiraAdapter",
     "PolarionAdapter",
+    "JiraBackend",
+    "PolarionBackend",
     "create_adapter",
     "list_available_adapters",
     "register_adapter",
