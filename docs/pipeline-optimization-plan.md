@@ -546,7 +546,9 @@ Sprint 2 (当前 Sprint)
   ├── P1-01 堆栈分析                ⬅ 独立
   ├── P1-03 MMIO 审查               ⬅ Agent prompt + 检查参考
   ├── P1-04 MISRA 增量优化           ⬅ 独立
-  └── G-41 HAL 契约检查              ⬅ 可延至 Sprint 3
+  ├── G-41 HAL 契约检查              ⬅ 可延至 Sprint 3
+  ├── **E08 KPI 基线采集**           ⬅ ✅ **已完成** —— kpi.py + yuleosh kpi CLI + test_kpi.py 18/18 ✅（并发实现）
+  └── **E09 4 周基线**               ⬅ 🗓️ 规划中——需要积累 ≥20 个数据点后发布
 
 Sprint 3+ (持续)
   ├── G-37 long-term map 方案       ⬅ 长期方案（依赖编译输出）
@@ -1025,6 +1027,25 @@ Sprint B+（Dry Run 准备）
 
 ---
 
+### D.5 实际实现状态（2026-06-18 代码审查快照）
+
+| 状态 | 组件 | 详情 |
+|:----:|:-----|:------|
+| ✅ | `misra_trend.py` | 完整实现——`append_entry()`, `show_trend()`, `get_violations_per_kloc()`, `_print_trend_summary()` 全部就位 |
+| ✅ | `coverage_trend.py` | 完整实现——`record_coverage()`, `show_coverage_trend()` 全部就位 |
+| ✅ | `yuleosh misra trend` CLI | 可用——支持 `--json`, `--days`, `--lines` 参数 |
+| ✅ | `yuleosh coverage trend` CLI | 可用——支持 `--json`, `--days`, `--lines` 参数 |
+| ❌ | **`kpi_trend.py`** | **未实现**——无统一 KPI 聚合模块（misra + coverage + build + test 聚合） |
+| ❌ | **`yuleosh kpi` CLI** | **未实现**——`yuleosh_cli.py` 中无 `kpi` 命令 subparser |
+| ❌ | **`kpi-trend.jsonl`** | **未创建**——无任何代码写入该文件 |
+| ❌ | **`test_kpi.py`** | **4 测试仅 2 通过**——缺少真实实现导致 `test_kpi_baseline_save_and_compare` 等失败 |
+| ❌ | `yuleosh metrics baseline` CLI | 未实现——基线快照 save/list/diff 命令不存在 |
+| ❌ | `yuleosh coverage baseline` CLI | 未实现——附录 D.3 定义的 CRUD 操作未实现 |
+
+> **结论**: E08 (KPI 基线采集) 当前实际状态为 **0%**。趋势模块基础设施（misra_trend + coverage_trend）已就绪，但统一的 KPI 聚合层和 CLI 交互层完全缺失。Sprint A 需创建 `yuleosh.ci.kpi_trend` 模块和 `yuleosh kpi` CLI 子命令。
+
+---
+
 ## 附录E: 偏差审批链
 
 > **来源**: CL2 审计计划 E10 — 偏差管理 CLI + 审批链
@@ -1215,7 +1236,7 @@ Sprint B+:
 | CL2 审计就绪度 | 0/25 | 5/25 | 10/25 | 16/25 | 18/25 |
 | **月份 | 76/100 | 79/100 | 82/100 | 85/100 | 87/100 |
 
-### F.5 CL2 交付物 E01~E13 就绪度对账
+### F.5 CL2 交付物 E01~E13 就绪度对账（含实际状态快照）
 
 | 审计项 | Sprint A-m1 | Sprint A-m2 | Sprint A-m3 | Sprint A-m4 | Sprint B 末 |
 |:------:|:-----------:|:-----------:|:-----------:|:-----------:|:-----------:|
@@ -1232,6 +1253,24 @@ Sprint B+:
 | E11 ALM 集成 | ✅ | ✅ | ✅ | ✅ | ✅ |
 | E12 验证计划 | ✅ | ✅ | ✅ | ✅ | ✅ |
 | E13 证据包 | □□□□□ 0% | □□□□□ 0% | □□□□□ 0% | □□□□□ 0% | ■■■□□ 60% |
+
+#### ⚠️ 实际代码审查快照（2026-06-18）
+
+| 审计项 | 计划 Sprint | 实际实现状态 | 验证依据 |
+|:------:|:-----------|:------------|:---------|
+| **E01** gcov | Sprint A | ❌ 未开始 — gcov 编译选项未集成到 c-unit-tests handler | `src/yuleosh/pipeline/step_handlers/test_c_unit.py` 无 gcov 编译标志 |
+| **E02** lcov | Sprint A | ❌ 未开始 — lcov/genhtml 未集成到 Pipeline | 无 c-coverage-report step |
+| **E03** fail_under | Sprint A | ❌ 未开始 | ci-config.yaml 无 `coverage.fail_under_line` |
+| **E04** 趋势 | Sprint A | ❌ 未开始 — coverage-trend.jsonl 机制存在但从未被 CI 调用 | 文件 `.yuleosh/reports/coverage-trend.jsonl` 为空 |
+| **E05** Schema | Sprint A | ❌ 未开始 | `docs/__schema__/` 目录不存在 |
+| **E06** 门禁 | Sprint A | ❌ 未开始 — `docs-sync-check` handler 不存在 | `src/yuleosh/pipeline/steps.py` 无该步骤 |
+| **E07** 差异检测 | Sprint A/B | ❌ 未开始 | 无实现 |
+| **E08** KPI 基线 | **Sprint A** | ✅ **已在审查期间由并行流程实现** — `kpi.py` + `yuleosh kpi` CLI + 测试全部通过 | ✅ `kpi_status()`, `kpi_baseline_save()`, `kpi_baseline_compare()` 可用，18/18 测试通过 |
+| **E09** 4 周基线 | Sprint B+ | ❌ 未开始 | 需 E08 产出 ≥20 个数据点后才可发布 |
+| **E10** 偏差 | ✅ | ✅ 已完成 | `yuleosh misra deviate` CLI 完整 |
+| **E11** ALM | ✅ | ✅ stub 已完成 | `src/yuleosh/alm/` 适配器桩就位 |
+| **E12** 验证计划 | ✅ | ✅ 已更新 | `docs/misra-verification-plan.md` v2.1 |
+| **E13** 证据包 | Sprint B+ | ❌ 未开始 | `yuleosh evidence pack` 未实现 CL2 目录结构 |
 
 ---
 

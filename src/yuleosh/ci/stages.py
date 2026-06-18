@@ -48,6 +48,36 @@ def _get_git_commit(project_dir: str) -> str:
         pass
     return "unknown"
 
+def run_yaml_validation(project_dir: str, ci: CIResult) -> bool:
+    """Validate YAML configuration files (ci-config.yaml, misra-rules.yaml).
+
+    Calls ``yuleosh.ci.yaml_validator.validate_all()`` and blocks the pipeline
+    if either configuration file has schema violations.
+    """
+    print("  \U0001f4cb CI: YAML validation...")
+
+    from yuleosh.ci.yaml_validator import validate_all
+
+    result = validate_all(path=project_dir)
+    if result["valid"]:
+        ci.add_stage("yaml-validation", "passed")
+        print("    \u2705 YAML validation passed")
+        return True
+
+    # Collect all error messages
+    all_errors = []
+    for cfg_name, errs in result["errors"].items():
+        for e in errs:
+            all_errors.append(f"[{cfg_name}] {e}")
+
+    detail = "; ".join(all_errors[:5])
+    ci.add_stage("yaml-validation", "failed", detail)
+    print(f"    \u274c YAML validation FAILED — blocking pipeline")
+    for e in all_errors:
+        print(f"        \u26a0\ufe0f  {e}")
+    return False
+
+
 def run_plan_lint(project_dir: str, ci: CIResult) -> bool:
     """Run plan-lint: check task kind and T00 three-step format."""
     print("  🔍 CI: plan-lint...")
@@ -845,6 +875,13 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
         print(f"    ❌ {detail}")
         print(f"    🔧 Improve C unit tests to raise coverage above threshold")
         return False
+
+    # Record coverage trend (小马建议: auto-record on each C coverage gate run)
+    try:
+        from yuleosh.ci.coverage_trend import record_coverage
+        record_coverage(project_dir)
+    except Exception as trend_e:
+        log.debug("Coverage trend record skipped: %s", trend_e)
 
     ci.add_stage("c-coverage-gate", "passed",
                  f"line_rate={line_rate:.1f}% >= {c_fail_under}%")
