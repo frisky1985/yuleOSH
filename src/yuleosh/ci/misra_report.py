@@ -314,10 +314,10 @@ def save_report(
     summary: dict,
     rule_defs: dict,
     output_dir: str | Path,
-) -> tuple[Path, Path]:
-    """Save JSON and Markdown reports to disk.
+) -> tuple[Path, Path, Path]:
+    """Save JSON, Markdown, and traceability matrix reports to disk.
 
-    Returns tuple of (json_path, md_path).
+    Returns tuple of (json_path, md_path, trace_path).
     """
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -332,8 +332,23 @@ def save_report(
     md_content = generate_markdown_report(violations, groups, summary, rule_defs)
     md_path.write_text(md_content, encoding="utf-8")
 
-    log.info("MISRA report saved: %s, %s", json_path, md_path)
-    return json_path, md_path
+    # Traceability matrix (JSON)
+    trace_path = out_dir / "misra-traceability.json"
+    trace_data = generate_traceability_matrix(violations, rule_defs)
+    trace_path.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now().isoformat(),
+                "total_entries": len(trace_data),
+                "traceability": trace_data,
+            },
+            indent=2, ensure_ascii=False, default=str,
+        ),
+        encoding="utf-8",
+    )
+
+    log.info("MISRA report saved: %s, %s, %s", json_path, md_path, trace_path)
+    return json_path, md_path, trace_path
 
 
 def print_summary(summary: dict) -> None:
@@ -349,6 +364,115 @@ def print_summary(summary: dict) -> None:
                     "portability": "🔗", "information": "ℹ️"}.get(sev, "•")
             print(f"       {icon} {sev}: {count}")
     print()
+
+
+def generate_traceability_matrix(
+    violations: list[dict],
+    rule_defs: dict,
+) -> list[dict]:
+    """Build traceability: Rule ID → File:Line → Spec Ref → Fix Status.
+
+    Returns a list of dicts, one per violation, with:
+      - rule_id: str
+      - file: str
+      - line: int
+      - col: int
+      - severity: str
+      - message: str
+      - spec_ref: str (from rule_defs, or "" if unknown)
+      - check_method: str (from rule_defs, or "" if unknown)
+      - auto_checkable: bool (from rule_defs, default True)
+      - fix_status: str ("unresolved" | "deviation" | "suppressed")
+    """
+    traceability = []
+    for v in violations:
+        rid = v.get("rule_id", "unknown")
+        defn = rule_defs.get(rid, {})
+        traceability.append({
+            "rule_id": rid,
+            "file": v.get("file", ""),
+            "line": v.get("line", 0),
+            "col": v.get("col", 0),
+            "severity": v.get("severity", ""),
+            "message": v.get("message", ""),
+            "spec_ref": defn.get("spec_ref", ""),
+            "check_method": defn.get("check_method", ""),
+            "auto_checkable": bool(defn.get("auto_checkable", True)),
+            "fix_status": "unresolved",
+        })
+    return traceability
+
+
+def generate_fix_tasks(
+    project_dir: str,
+    violations: list[dict],
+    rule_defs: dict,
+) -> list[str]:
+    """Generate fix task .md files for each unresolved violation.
+
+    Creates one .md file per violated rule under
+    ``.yuleosh/fix-tasks/misra-{rule_id}.md``.
+
+    Returns list of file paths created.
+    """
+    from datetime import datetime
+
+    fix_dir = Path(project_dir) / ".yuleosh" / "fix-tasks"
+    fix_dir.mkdir(parents=True, exist_ok=True)
+
+    # Group violations by rule_id
+    rule_groups: dict[str, list[dict]] = {}
+    for v in violations:
+        rid = v.get("rule_id", "unknown")
+        rule_groups.setdefault(rid, []).append(v)
+
+    created_files: list[str] = []
+    for rule_id, vs in sorted(rule_groups.items()):
+        defn = rule_defs.get(rule_id, {})
+        title = defn.get("title", rule_id)
+        spec_ref = defn.get("spec_ref", "")
+        severity = defn.get("severity", "unknown")
+
+        lines = [
+            f"# MISRA Fix Task: {rule_id}",
+            "",
+            f"> Generated: {datetime.now().isoformat()}",
+            f"> Severity: {severity}",
+            f"> Spec Ref: {spec_ref}",
+            "",
+            f"## Rule: {title}",
+            "",
+            f"{defn.get('description', '')}",
+            "",
+            "## Violations",
+            "",
+            "| # | File | Line | Col | Message |",
+            "|--:|:-----|:----|:----|:--------|",
+        ]
+        for idx, v in enumerate(vs, 1):
+            msg = v.get("message", "")[:80]
+            lines.append(f"| {idx} | `{v.get('file', '')}` | {v.get('line', 0)} | {v.get('col', 0)} | {msg} |")
+
+        lines.extend([
+            "",
+            "## Fix Checklist",
+            "",
+            "- [ ] Understand the violation context",
+            "- [ ] Apply fix to source code",
+            "- [ ] Re-run MISRA check to verify fix",
+            "- [ ] Update traceability matrix",
+            "- [ ] Document deviation if fix is not feasible",
+            "",
+            "---",
+            "*Generated by yuleOSH MISRA fix-task generator*",
+        ])
+
+        file_path = fix_dir / f"misra-{rule_id}.md"
+        file_path.write_text("\n".join(lines), encoding="utf-8")
+        created_files.append(str(file_path))
+        log.info("MISRA fix task created: %s", file_path)
+
+    return created_files
 
 
 # ------------------------------------------------------------------
@@ -421,12 +545,15 @@ def main():
         print(generate_markdown_report(violations, groups, summary, rule_defs))
     else:
         # Save reports and print summary
-        json_path, md_path = save_report(violations, groups, summary, rule_defs, args.output_dir)
+        json_path, md_path, trace_path = save_report(
+            violations, groups, summary, rule_defs, args.output_dir
+        )
         if not args.quiet:
             print_summary(summary)
             print(f"  Reports saved:")
             print(f"    JSON: {json_path}")
             print(f"    MD:   {md_path}")
+            print(f"    Trace: {trace_path}")
 
 
 if __name__ == "__main__":

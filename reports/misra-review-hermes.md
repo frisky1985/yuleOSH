@@ -375,3 +375,300 @@ def cmd_init(dir_path: str = "."):
 3. **迁移计划**: `fail_on_violation=True` 的 breaking change 是否需要版本号 bump？
 4. **首次 commit 场景**: 你测试过 `git diff HEAD~1` 在全新仓库的行为吗？
 5. **工具安装策略**: 是自动安装（`brew install` / `apt install`）还是仅提示？
+
+---
+
+## 6. Loop 2 — 追溯链 + 验证计划审查
+
+> **审查范围**: 追溯链实现（spec_ref → 规则 → 检查 → 违规 → 修复）
+> **代码基线**: commit `b7fec371` (2026-06-18 16:41)
+> **审查人**: 小马 🐴
+
+---
+
+### 6.1 追溯链总体现状
+
+| 追溯环节 | 预期 | 现状 | 缺口 |
+|:---------|:-----|:-----|:-----|
+| Spec SHALL → 规则 | 每条规则有 `spec_ref` 指向 SWE-MISRA-* ID | ❌ 未实现 — misra-rules.yaml 无 spec_ref 字段 | **Critical** |
+| 规则 → 检查工具 | 检查工具字段确定检查方式 | ⚠️ 部分实现 — `check:` 字段缺失；仅有 severity/category | **Major** |
+| 检查 → 违规报告 | misra_report.py 生成 JSON 报告含规则 ID | ✅ 已实现 — report JSON 含 rule_id, file, line, severity | — |
+| 违规 → 修复任务 | 自动生成修复任务（Issue/Ticket） | ❌ 未实现 — 无 auto-fix task 生成逻辑 | **Major** |
+| CI 报告含追溯信息 | 报告输出含 spec_ref 链接 | ❌ 未实现 — 报告不含 spec_ref 或上游需求 ID | **Major** |
+
+**总体结论**: 追溯链当前只有「检查→违规」两环有基础实现，缺失前端（Spec→规则）和后端（违规→修复），也未在输出中建立追溯关系。
+
+---
+
+### 6.2 详细审查
+
+#### 6.2.1 misra-rules.yaml 缺 spec_ref
+
+**文件**: `misra-rules.yaml`
+
+问题：142 条规则中**无一存在 `spec_ref` 字段**。
+
+当前每条规则的 schema：
+```yaml
+misra-c2023-10.1:
+  title: "Operands shall not be of inappropriate type"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "操作数不得具有不适当的本质类型"
+```
+
+预期 schema 应补充：
+```yaml
+misra-c2023-10.1:
+  title: "Operands shall not be of inappropriate type"
+  severity: "required"
+  category: "基本类型 (Essential Types)"
+  description: "操作数不得具有不适当的本质类型"
+  spec_ref: "SWE-MISRA-CFG1"   # ← 新增
+  check: "cppcheck"            # ← 新增
+  rationale: "..."              # ← 新增（引用现有但补齐）
+```
+
+**影响分析**:
+
+| 影响 | 说明 |
+|:-----|:-----|
+| ASPICE SWE.4 BP2 | 追溯链断裂：审计时无法证明哪些规则覆盖哪些 spec 需求 |
+| 变更影响分析 | 无法回答「如果修改 spec 需求 X，受影响的是哪条规则？」 |
+| 合规证据 | 无法自动生成 Spec→Rule 的追溯矩阵报告 |
+
+**修复要求**:
+- P0: 每条 Required 规则加 `spec_ref` 指向 `specs/misra-c2023-spec.md` 中的 SHALL ID
+- P0: 每条规则加 `check` 字段（`cppcheck` / `clang-tidy` / `manual` / `ai`）
+- P1: 每条规则加 `rationale` 字段（部分已有，需补齐）
+
+**Spec→Rule 映射建议**:
+
+| Spec ID | 关联规则范围 | 说明 |
+|:--------|:-------------|:-----|
+| SWE-MISRA-S1 | 全部规则 | CI 阶段执行所有规则的检查 |
+| SWE-MISRA-S2 | 全部规则 | 所有规则的违规结果需纳入 JSON 报告 |
+| SWE-MISRA-CFG1 | 全部规则 | misra-rules.yaml 定义所有启用的规则 |
+| SWE-MISRA-CFG2 | TOP 20 规则 | 指定规则默认启用且不可禁用 |
+
+**TOP 20 需加 spec_ref**: `spec_ref: "SWE-MISRA-CFG2"`
+
+---
+
+#### 6.2.2 misra_report.py 未生成追溯矩阵 JSON
+
+**文件**: `src/yuleosh/ci/misra_report.py`
+
+当前 `generate_json_report()` 的输出 schema：
+```json
+{
+  "generated_at": "...",
+  "tool": "cppcheck --addon=misra",
+  "standard": "MISRA C:2023",
+  "summary": {...},
+  "violations_raw": [...],
+  "groups": {...}
+}
+```
+
+**缺失字段**:
+
+❌ 无 `traceability` 节 — 未将违规通过 rule_id 关联到 spec_ref
+❌ 无 `spec_ref` 回链 — 每个违规无法追溯到 Spec 需求
+❌ 无法回答「当前 CI 运行中，spec SWE-MISRA-CFG1 覆盖的规则有哪些违规？」
+
+**修复建议**:
+
+在报告中新增 traceability 节:
+
+```python
+def generate_traceability_section(violations, rule_defs):
+    """Generate traceability linking violations → rules → spec_refs."""
+    spec_coverage = defaultdict(lambda: {"total": 0, "violated": 0, "violations": []})
+    for v in violations:
+        rid = v.get("rule_id")
+        defn = rule_defs.get(rid, {})
+        spec_ref = defn.get("spec_ref", "unknown")
+        # ...
+```
+
+并在 JSON 和 Markdown 报告中输出：
+```json
+{
+  "traceability": {
+    "specs": {
+      "SWE-MISRA-S1": {
+        "total_rules": 142,
+        "violated_rules": 3,
+        "violations_count": 12
+      },
+      "SWE-MISRA-CFG2": {
+        "total_rules": 20,
+        "violated_rules": 1,
+        "violations_count": 5
+      }
+    }
+  }
+}
+```
+
+---
+
+#### 6.2.3 缺陷自动生成修复任务 — 未实现
+
+**现状**: 无任何「违规→修复任务」的自动生成逻辑。
+
+**预期能力**:
+
+| 触发条件 | 生成目标 | 包含内容 |
+|:---------|:---------|:---------|
+| MISRA 违规出现在 Required 规则 | GitHub Issue / 本地 task 文件 | 规则 ID、违规文件/行号、建议修复方式 |
+| 违规计数超过 `max_warnings` | CI Warning 报告 | 超额警告、Top-10 违规规则 |
+| 新出现的历史未见的违规 | PR 评论注释 | 标记新增违规，与基线 diff |
+
+**修复建议（最小实现）**:
+
+1. 在 `misra_report.py` 中添加 `generate_fix_tasks()` 函数
+2. 输出 `.yuleosh/tasks/misra-fix-{timestamp}.json`
+3. 按严重度排序，Required + error 级别的违规生成修复建议
+4. 建议格式：
+
+```json
+{
+  "fix_tasks": [
+    {
+      "rule_id": "misra-c2023-10.1",
+      "severity": "required",
+      "spec_ref": "SWE-MISRA-CFG1",
+      "file": "src/drivers/uart.c:47",
+      "suggested_fix": "Use essentially unsigned type for '+' operand",
+      "priority": "high"
+    }
+  ]
+}
+```
+
+---
+
+#### 6.2.4 CI 报告未包含追溯信息
+
+**文件**: `src/yuleosh/ci/stages.py` — `run_misra_check()`
+
+当前 `save_report()` 调用仅传入 violations 和 rule_defs，未传入任何 spec 映射信息。
+
+**缺失**:
+- ❌ 报告元数据中无 spec_ref 汇总
+- ❌ 报告的 `generated_at` 无 commit 哈希关联
+- ❌ 无需求覆盖率统计（多少 SHALL 被覆盖/未覆盖）
+
+**修复建议**:
+
+在 `save_report()` 调用前加载 spec→rule 映射，传入报告生成器：
+
+```python
+spec_to_rules = load_spec_to_rule_mapping(rule_defs)
+json_report = generate_json_report(violations, groups, summary, spec_to_rules)
+```
+
+JSON 报告新增 `meta.commit` 字段（从环境变量获取 `GIT_COMMIT` 或执行 `git rev-parse HEAD`）。
+
+---
+
+### 6.3 Dir 4.2 去重复审查
+
+#### 原始问题（来自 Loop 1 审查）
+
+| 规则 ID | 当前描述 | 问题 |
+|:--------|:---------|:-----|
+| misra-c2023-dir-4.2 | "避免未定义行为" / "不得依赖任何未定义或未指定行为" | 🚨 **与 misra-c2023-1.2 完全重复** |
+| misra-c2023-1.2 | "不得依赖未定义或未指定的行为" | 同上 |
+
+#### 复审结果
+
+**提交 `b7fec371` 中 Dir 4.2 内容未变动。**
+
+Git diff 确认最新提交中 Dir 4.2 的内容仍是 `misra-c2023-dir-4.2` + `title: "避免未定义行为"` + `description: "不得依赖任何未定义或未指定行为"`，与 Rule 1.2 描述完全重复。
+
+| 检查项 | 结果 |
+|:-------|:-----|
+| Dir 4.2 内容已被修正？ | ❌ **否** — 仍与 Rule 1.2 重复 |
+| Rule 1.2 描述被调整？ | ❌ 否 — Rule 1.2 保持原样 |
+| 小克收到修正通知？ | ⚠️ 已确认（上一轮报告中已提出） |
+
+**正确内容建议**:
+
+MISRA C:2023 Dir 4.2 实际聚焦**动态内存使用的规则约束**（malloc/free 使用限制、内存泄漏预防等），而非重复 Rule 1.2 的未定义行为问题。建议修正为：
+
+```yaml
+misra-c2023-dir-4.2:
+  title: "动态内存约束"
+  severity: "required"
+  category: "资源 (Resources)"
+  description: "动态内存分配 (malloc/calloc/realloc/free) 应在受限且可预测的上下文中使用，不得在中断服务程序或时间关键路径中分配/释放"
+```
+
+> 注意：现有 `misra-c2023-21.3`（"不应使用内存分配函数"）和 `misra-c2023-22.1`（"不应使用动态堆内存"）也覆盖动态内存主题，但 Dir 4.2 的定位是**使用约束而非禁用**——它允许受限使用，重点在约束条件和上下文。
+
+---
+
+### 6.4 验收矩阵更新建议
+
+**文件**: `specs/misra-acceptance-matrix.md`
+
+当前矩阵涵盖 6 个验收域（CI 集成 / 规则配置 / 违规处理 / 配置集成 / 测试 / 全局），但**缺少追溯链相关验收项**。
+
+#### 新增：追溯链验收 (Section 7)
+
+建议在验收矩阵末尾追加 Section 7：
+
+| 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 |
+|:-------|:---------|:---------|:---------|:---------|
+| 追溯矩阵 JSON 输出 | SWE-MISRA-TR1 | 运行 `misra_report.py` 检查 JSON 输出 | pytest | JSON 含 `traceability` 节，覆盖全部 Spec ID 的规则覆盖率和违规计数 |
+| spec_ref 完整性 | SWE-MISRA-TR2 | 解析 misra-rules.yaml 逐条检查 | `pytest` YAML schema 校验 | 每条规则有非空 `spec_ref` 字段，值对应 `specs/misra-c2023-spec.md` 中的 SHALL ID |
+| check 字段完整性 | SWE-MISRA-TR2 | 解析 misra-rules.yaml | pytest | 每条规则有非空 `check` 字段，值 ∈ {cppcheck, clang-tidy, manual, ai} |
+| 修复任务自动生成 | SWE-MISRA-TR3 | 运行 CI 产生违规后检查 `.yuleosh/tasks/` | pytest | Required 违规自动生成修复任务 JSON，含规则 ID、文件路径、行号、建议修复 |
+| 修复任务优先级排序 | SWE-MISRA-TR3 | 检查生成的修复任务 JSON | pytest | 任务按 severity 排序，Required+error 标记为 high priority |
+| CI 报告含追溯信息 | SWE-MISRA-TR4 | 运行 CI 后检查 JSON 报告 | CI 日志 | JSON 报告包含 `traceability.specs` 节，列出各 Spec ID 的规则覆盖状态 |
+| CI 报告含 commit 哈希 | SWE-MISRA-TR4 | 运行 CI 后检查 JSON | pytest | JSON 报告 meta 中包含 commit hash，可回溯到代码版本 |
+| Spec→规则→检查→违规→修复 完整追溯 | SWE-MISRA-TR5 | 端到端验证：模拟违规触发完整链路 | 集成测试 | 从 Spec SHALL ID 出发，能找到对应规则、检查结果、违规报告和修复任务 |
+
+#### 验收级别
+
+| 验收项 | 级别 | 说明 |
+|:-------|:----:|:-----|
+| SWE-MISRA-TR1 | Required | 追溯矩阵输出是 ASPICE SWE.4 的基本要求 |
+| SWE-MISRA-TR2 | Required | spec_ref 和 check 字段完整性确保每条规则可追溯 |
+| SWE-MISRA-TR3 | Advisory | 修复任务自动生成是效率提升，不阻碍流水线 |
+| SWE-MISRA-TR4 | Required | CI 报告含追溯信息是审计的基本要求 |
+| SWE-MISRA-TR5 | Advisory | 端到端追溯是成熟度目标，初期可接受手工验证 |
+
+---
+
+### 6.5 总结：Loop 2 审查结论
+
+#### 追溯链完成度：15% ❌ 未达标
+
+| 环节 | 完成度 | 下一步 |
+|:-----|:------:|:-------|
+| Spec→规则映射 (spec_ref) | 0% | P0：misra-rules.yaml 全部规则加 spec_ref 和 check 字段 |
+| 规则→检查→违规 | 60% | 检查工具链已就绪，违规报告已 JSON 化 |
+| 违规→修复任务 | 0% | P1：misra_report.py 新增 fix_tasks 生成 |
+| CI 追溯输出 | 0% | P0：JSON 报告新增 traceability.specs 和 commit hash |
+| Dir 4.2 去重 | 0% | P0：修正 Dir 4.2 描述，避免与 Rule 1.2 重复 |
+
+#### 需要小克 👨‍💻 响应的 5 个问题
+
+1. **spec_ref schema**: 每条规则加 `spec_ref` 字段，值用什么格式？建议 `spec_ref: "SWE-MISRA-CFG1"` 引用 spec 中的 SHALL ID
+2. **check 字段**: 是否所有规则加 `check` 字段，还是只加非 cppcheck 默认的？建议全员加，default=`cppcheck`
+3. **Dir 4.2 修正**: 上次 Loop 1 已提重复问题，这次确认仍未修复。请将 Dir 4.2 改为聚焦动态内存使用约束
+4. **修复任务输出格式**: 建议用 YAML/JSON 两种格式，方便不同消费方（人类读 YAML，工具读 JSON）
+5. **验收矩阵更新**: 我已在 Section 6.4 给出建议，收到你确认后正式更新 `specs/misra-acceptance-matrix.md`
+
+#### Blocking 状态
+
+| 项目 | 是否 Blocked | 原因 |
+|:-----|:------------|:-----|
+| 追溯链 | 🔴 **Blocked** | misra-rules.yaml 无 spec_ref → 无法链接 Spec→规则→违规→修复 完整链 |
+| Dir 4.2 去重 | 🔴 **Blocked** | 虽已提出，但 commit 中未修复，内容仍重复 |
+| 验收矩阵更新 | 🟡 **Not blocked** | 建议已给出，待小克确认后正式更新 |
+| CI 追溯输出 | 🔴 **Blocked** | 依赖 spec_ref 就位后才能实现 |
