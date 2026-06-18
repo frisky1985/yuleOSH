@@ -719,6 +719,52 @@ def cmd_audit_evidence(output_dir: str | None = None, create_zip: bool = True):
     return evidence
 
 
+# ── KPI Commands (E08/E09) ────────────────────────────────────────────
+
+
+def cmd_kpi_status(args):
+    """Show current KPI dashboard (violations, coverage, trend)."""
+    from yuleosh.ci.kpi import kpi_status
+    result = kpi_status(
+        project_dir=OSH_HOME,
+        as_json=getattr(args, "json", False),
+    )
+    print(result)
+
+
+def cmd_kpi_baseline_save(args):
+    """Save current state as KPI baseline."""
+    from yuleosh.ci.kpi import kpi_baseline_save
+    saved = kpi_baseline_save(
+        project_dir=OSH_HOME,
+        label=getattr(args, "label", ""),
+    )
+    if getattr(args, "json", False):
+        print(json.dumps(saved, indent=2, ensure_ascii=False, default=str))
+    else:
+        label = saved.get("label", "")
+        bl_id = saved["baseline_id"]
+        ts = saved["saved_at"][:19]
+        print(f"\n  ✅ KPI 基线已保存")
+        print(f"     ID:    {bl_id}")
+        if label:
+            print(f"     Label: {label}")
+        print(f"     时间:  {ts}")
+        print(f"     MISRA 违规:  {saved['snapshot']['misra']['total_violations']}")
+        print(f"     C Line 覆盖率: {saved['snapshot']['coverage']['c_line_rate']}%")
+        print()
+
+
+def cmd_kpi_baseline_compare(args):
+    """Compare current state against baseline."""
+    from yuleosh.ci.kpi import kpi_baseline_compare
+    result = kpi_baseline_compare(
+        project_dir=OSH_HOME,
+        as_json=getattr(args, "json", False),
+    )
+    print(result)
+
+
 def cmd_stats(json_output: bool = False):
     from yuleosh.cli.stats import cmd_stats
     cmd_stats(to_json=json_output)
@@ -1398,6 +1444,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_misra_prof_set.add_argument("name", help="Profile name (safety|performance|testing)")
 
     # misra deviate
+    
+    p_kpi = sub.add_parser("kpi", help="KPI baseline management")
+    ksub = p_kpi.add_subparsers(dest="kpi_sub", required=True)
+    p_kpi_status = ksub.add_parser("status", help="Show current KPI dashboard")
+    p_kpi_baseline_save = ksub.add_parser("baseline-save", help="Save current state as KPI baseline")
+    p_kpi_baseline_compare = ksub.add_parser("baseline-compare", help="Compare current state against baseline")
+
     p_misra_deviate = msub.add_parser("deviate", help="Manage deviation records")
     mdev = p_misra_deviate.add_subparsers(dest="deviate_sub")
     # deviate list
@@ -1411,6 +1464,19 @@ def _build_parser() -> argparse.ArgumentParser:
     # deviate add
     mdev.add_parser("add", help="Interactive add a deviation")
 
+    # kpi
+    p_kpi = sub.add_parser("kpi", help="KPI 基线管理")
+    ksub = p_kpi.add_subparsers(dest="kpi_sub")
+    p_kpi_status = ksub.add_parser("status", help="Show current KPI dashboard")
+    p_kpi_status.add_argument("--json", action="store_true", help="Output as JSON")
+    p_kpi_baseline = ksub.add_parser("baseline", help="KPI baseline commands")
+    bsub = p_kpi_baseline.add_subparsers(dest="baseline_sub")
+    p_kpi_bl_save = bsub.add_parser("save", help="Save current state as KPI baseline")
+    p_kpi_bl_save.add_argument("--label", default="", help="Baseline label (e.g. sprint-12)")
+    p_kpi_bl_save.add_argument("--json", action="store_true", help="Output as JSON")
+    p_kpi_bl_compare = bsub.add_parser("compare", help="Compare current state against baseline")
+    p_kpi_bl_compare.add_argument("--json", action="store_true", help="Output as JSON")
+
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
 
@@ -1418,6 +1484,57 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 # ── Dispatch ────────────────────────────────────────────────────────────
+
+
+def cmd_kpi_status():
+    """Show current KPI dashboard."""
+    from yuleosh.ci.misra_trend import show_trend
+    from yuleosh.ci.coverage_trend import show_coverage_trend
+    print()
+    print("=== MISRA Violation Trend ===")
+    print(show_trend(lines=5))
+    print()
+    print("=== Coverage Trend ===")
+    print(show_coverage_trend(lines=5))
+
+
+def cmd_kpi_baseline_save():
+    """Save current state as KPI baseline."""
+    import json, os
+    from datetime import datetime
+    from pathlib import Path
+    
+    reports_dir = Path(os.environ.get("OSH_HOME", ".")) / ".yuleosh" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    
+    baseline = {
+        "timestamp": datetime.now().isoformat(),
+        "type": "kpi-baseline",
+        "version": "1.0",
+    }
+    
+    path = reports_dir / f"kpi-baseline-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    with open(path, "w") as f:
+        json.dump(baseline, f, indent=2)
+    print(f"✅ KPI baseline saved: {path}")
+
+
+def cmd_kpi_baseline_compare():
+    """Compare current state against baseline."""
+    import json
+    from pathlib import Path
+    
+    reports_dir = Path(".") / ".yuleosh" / "reports"
+    baselines = list(reports_dir.glob("kpi-baseline-*.json"))
+    if not baselines:
+        print("❌ No KPI baseline found. Run 'yuleosh kpi baseline-save' first.")
+        return
+    
+    latest = max(baselines, key=lambda p: p.stat().st_mtime)
+    with open(latest) as f:
+        baseline = json.load(f)
+    print(f"📊 KPI Baseline: {baseline.get('timestamp', 'unknown')}")
+
 
 def main():
     ensure_osh_home()
@@ -1531,8 +1648,32 @@ def main():
             parser.print_help()
             sys.exit(1)
 
+    elif args.command == "kpi":
+        if args.kpi_sub == "status":
+            cmd_kpi_status(args)
+        elif args.kpi_sub == "baseline":
+            if args.baseline_sub == "save":
+                cmd_kpi_baseline_save(args)
+            elif args.baseline_sub == "compare":
+                cmd_kpi_baseline_compare(args)
+            else:
+                parser.print_help()
+                sys.exit(1)
+        else:
+            parser.print_help()
+            sys.exit(1)
+
     elif args.command == "stats":
         cmd_stats(json_output=args.json)
+
+    
+    elif args.command == "kpi":
+        if args.kpi_sub == "status":
+            cmd_kpi_status()
+        elif args.kpi_sub == "baseline-save":
+            cmd_kpi_baseline_save()
+        elif args.kpi_sub == "baseline-compare":
+            cmd_kpi_baseline_compare()
 
     elif args.command == "misra":
         if args.misra_sub == "trend":
