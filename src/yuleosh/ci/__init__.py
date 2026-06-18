@@ -9,7 +9,7 @@ Exports: load_ci_config, CiConfig
 """
 
 from yuleosh.ci.run import run_layer1, run_layer2, run_layer_25, run_layer3, run_all, main
-from yuleosh.ci.config import load_ci_config, CiConfig, MisraConfig
+from yuleosh.ci.config import load_ci_config, CiConfig, MisraConfig, AlmConfig
 
 __all__ = [
     "run_layer1",
@@ -21,4 +21,5 @@ __all__ = [
     "load_ci_config",
     "CiConfig",
     "MisraConfig",
+    "AlmConfig",
 ]

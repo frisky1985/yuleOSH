@@ -68,3 +68,64 @@
 ---
 
 *本文档是 misra-c2023-spec.md 的验收执行视图，供测试团队和小克 👨‍💻 使用。*
+
+## 7. MISRA KPI/趋势 验收
+
+| 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 |
+|:-------|:---------|:---------|:---------|:---------|
+| misra_trend.py 文件存在 | SWE-MISRA-KPI1 | 检查文件是否存在 | `ls` | `src/yuleosh/ci/misra_trend.py` 存在 |
+| 趋势文件 JSONL 格式 | SWE-MISRA-KPI1 | 解析 `.yuleosh/reports/misra-trend.jsonl` | pytest | 每行是有效 JSON，含 timestamp, total_violations, required, advisory |
+| 趋势集成到 CI | SWE-MISRA-KPI2 | 运行 CI 后检查 trend 文件 | CI 日志 | `run_misra_check()` 输出中包含 `append_entry()` 调用痕迹 |
+| 趋势 Markdown 表格 | SWE-MISRA-KPI2 | 调用 show_trend() | pytest | 返回格式正确的 Markdown 表格 |
+| 密度计算正确 | SWE-MISRA-KPI3 | 输入已知 violation 和 KLOC | pytest | `get_violations_per_kloc(10, 5.0)` = 2.0; `(0, 5.0)` = 0.0; `(10, 0)` = 0.0 |
+
+## 8. 偏差 CLI 验收
+
+| 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 |
+|:-------|:---------|:---------|:---------|:---------|
+| `yuleosh misra deviate list` 命令 | SWE-MISRA-DEVCLI1 | 运行命令 | CLI 测试 | 输出偏差清单表格，含 rule_id, file_pattern, reason, approved_by, expires, status |
+| `yuleosh misra deviate add` 命令 | SWE-MISRA-DEVCLI2 | 运行 `add` 后检查 ci-config.yaml | pytest | ci-config.yaml 的 `misra.deviations` 新增对应条目，status=pending |
+| `yuleosh misra deviate approve` 命令 | SWE-MISRA-DEVCLI3 | 运行 `approve` 后检查 ci-config.yaml | pytest | 对应偏差条目 status → approved, approved_by 更新 |
+| `yuleosh misra deviate reject` 命令 | SWE-MISRA-DEVCLI3 | 运行 `reject` 后检查 ci-config.yaml | pytest | 对应偏差条目 status → rejected |
+| `yuleosh misra deviate export` 命令 | SWE-MISRA-DEVCLI4 | 运行 export | CLI 测试 | 输出 YAML/JSON 格式，内容与 ci-config.yaml 一致 |
+| 偏差 CI 过滤 | SWE-MISRA-DEVCLI5 | 配置偏差后运行 CI | CI 日志 | 匹配偏差的违规在报告中标记为 "acknowledged" 而非新增违规 |
+| docs/misra-deviations.md 存在 | SWE-MISRA-DEVCLI6 | 检查文件 | `ls` | 文件存在，至少包含表头和示例条目 |
+
+## 9. 验证计划文档验收
+
+| 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 |
+|:-------|:---------|:---------|:---------|:---------|
+| 文档存在 | SWE-MISRA-VP1 | 检查文件 | `ls` | `docs/misra-verification-plan.md` 存在 |
+| 角色定义 | SWE-MISRA-VP1 | 审查文档 | 人工审查 | 至少定义 3 个角色（质量架构师、开发者、项目负责人），职责描述清晰 |
+| 验证活动 | SWE-MISRA-VP1 | 审查文档 | 人工审查 | 至少列出 4 项验证活动，每项定义了执行者、频率、输入、输出 |
+| 门禁定义 | SWE-MISRA-VP2 | 审查文档 | 人工审查 | 至少定义 3 个门禁，每个门禁有通过条件和阻断行为 |
+| ASPICE SWE.4 映射 | SWE-MISRA-VP3 | 审查文档 | 人工审查 | 至少有 SWE.4 BP1/BP2 的映射说明 |
+| ASPICE SWE.5 映射 | SWE-MISRA-VP3 | 审查文档 | 人工审查 | 至少有 SWE.5 BP2/BP3 的映射说明 |
+| SWE.6 映射 | SWE-MISRA-VP3 | 审查文档 | 人工审查 | 至少有 SWE.6 BP2/BP3 的映射说明 |
+| 风险与缓解 | SWE-MISRA-VP4 | 审查文档 | 人工审查 | 至少列出 3 个风险项，每个含概率/影响/缓解措施 |
+
+## 10. 全局验收标准（更新版）
+
+| 标准 | 判定条件 |
+|:-----|:---------|
+| ✅ **全部通过** | 无 Required 级别项目未通过 |
+| ⚠️ **有条件通过** | 所有 Required 验收项通过；≤3 项 Advisory 未通过 |
+| ❌ **不通过** | 任意 Required 验收项未通过；或 ≥4 项 Advisory 未通过 |
+
+### 验收级别汇总
+
+| 域 | SHALL ID | 级别 | 说明 |
+|:---|:---------|:----:|:-----|
+| CI 集成 | SWE-MISRA-S1~S3 | Required | 核心基础设施 |
+| 规则配置 | SWE-MISRA-CFG1~CFG2 | Required | 规则驱动检查 |
+| 违规处理 | SWE-MISRA-DEV1~DEV2 | Required | 偏差管理 |
+| 配置集成 | SWE-MISRA-CONF1 | Required | CI 配置 |
+| 追溯链 | SWE-MISRA-TR1~TR5 | 混合 | Required 为主 |
+| KPI/趋势 | SWE-MISRA-KPI1~KPI3 | 混合 | KPI1/2 Required, KPI3 Advisory |
+| 偏差 CLI | SWE-MISRA-DEVCLI1~DEVCLI6 | 混合 | 除 export 外均为 Required |
+| 验证计划 | SWE-MISRA-VP1~VP4 | 混合 | VP1~VP3 Required, VP4 Advisory |
+
+---
+
+*本文档是 misra-c2023-spec.md 的验收执行视图，供测试团队和小克 👨‍💻 使用。*
+*更新: 2026-06-18 — 追加 §7 KPI/趋势, §8 偏差 CLI, §9 验证计划文档验收。*

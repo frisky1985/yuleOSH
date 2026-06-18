@@ -74,45 +74,77 @@ def append_entry(
     log.info("MISRA trend entry appended: %d violations", total_violations)
 
 
-def show_trend(project_dir: str, lines: int = 30) -> str:
-    """Return a Markdown table of the last N trend entries.
+def show_trend(
+    project_dir: str,
+    lines: int = 30,
+    days: int = 0,
+    as_json: bool = False,
+) -> str:
+    """Return a Markdown table (or JSON) of the last N trend entries.
 
     Parameters
     ----------
     project_dir : str
         Project root directory.
     lines : int
-        Number of most recent entries to display.
+        Number of most recent entries to display (max, after day filter).
+    days : int
+        If > 0, filter to entries within this many days.
+    as_json : bool
+        Return JSON string instead of markdown table.
 
     Returns
     -------
     str
-        Markdown-formatted trend table.
+        Markdown-formatted trend table or JSON string.
     """
     path = Path(project_dir) / TREND_FILE
     if not path.exists():
-        return f"*No trend data found at {path}*"
+        msg = f"*No trend data found at {path}*"
+        return json.dumps({"error": msg}) if as_json else msg
 
-    entries: list[dict] = []
+    entries_raw: list[dict] = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 try:
-                    entries.append(json.loads(line))
+                    entries_raw.append(json.loads(line))
                 except (json.JSONDecodeError, ValueError):
                     continue
 
-    if not entries:
-        return "*No valid trend entries*"
+    if not entries_raw:
+        msg = "*No valid trend entries*"
+        return json.dumps({"error": msg}) if as_json else msg
+
+    # Filter by day range if requested
+    if days > 0:
+        from datetime import timedelta
+        cutoff = datetime.now() - timedelta(days=days)
+        entries_raw = [
+            e for e in entries_raw
+            if _parse_timestamp(e.get("timestamp", "")) >= cutoff
+        ]
+
+    if not entries_raw:
+        msg = f"*No entries within the last {days} days*"
+        return json.dumps({"error": msg}) if as_json else msg
 
     # Take the last N
-    recent = entries[-lines:]
+    recent = entries_raw[-lines:]
+
+    if as_json:
+        result = {
+            "total_entries": len(entries_raw),
+            "returned_entries": len(recent),
+            "entries": recent,
+        }
+        return json.dumps(result, indent=2, ensure_ascii=False, default=str)
 
     rows = [
         "## MISRA 违规趋势",
         "",
-        f"*最近 {len(recent)} 次检查（共 {len(entries)} 次记录）*",
+        f"*最近 {len(recent)} 次检查（共 {len(entries_raw)} 次记录）*",
         "",
         "| # | 时间戳 | 总违规 | Required | Advisory | 文件数 | 增量 | Commit |",
         "|--:|:-------|-------:|---------:|---------:|-------:|:-----|:-------|",
@@ -124,7 +156,7 @@ def show_trend(project_dir: str, lines: int = 30) -> str:
         req = e.get("required", 0)
         adv = e.get("advisory", 0)
         files = e.get("files_checked", 0)
-        delta = "✓" if e.get("is_delta") else ""
+        delta = "\u2713" if e.get("is_delta") else ""
         commit = e.get("commit", "")[:8]
         rows.append(
             f"| {idx} | {ts} | {total} | {req} | {adv} | {files} | {delta} | {commit} |"
@@ -132,6 +164,14 @@ def show_trend(project_dir: str, lines: int = 30) -> str:
 
     rows.append("")
     return "\n".join(rows)
+
+
+def _parse_timestamp(ts_str: str) -> datetime:
+    """Parse an ISO timestamp string, returning epoch (1970-01-01) on failure."""
+    try:
+        return datetime.fromisoformat(ts_str)
+    except (ValueError, TypeError):
+        return datetime(1970, 1, 1)
 
 
 def get_violations_per_kloc(violations: int, kloc: float) -> float:
