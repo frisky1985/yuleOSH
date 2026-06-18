@@ -108,6 +108,7 @@ def run_layer1(project_dir: Optional[str] = None):
     ci = CIResult(1, commit)
     
     stages = [
+        ("yaml-validation", run_yaml_validation),
         ("plan-lint", run_plan_lint),
         ("clang-tidy", run_clang_tidy),
         ("misra-check", run_misra_check),
