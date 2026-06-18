@@ -827,6 +827,412 @@ Sprint B+（Dry Run 准备）
 
 ---
 
+---
+
+## 附录C: CL2 审计计划 — E03/E04/E06 完成状态
+
+> **来源**: `reports/cl2-audit-plan.md`（老陈编制）
+> **关联项**: E03（覆盖阈值门禁）· E04（覆盖趋势追踪与基线）· E06（文档状态门禁 MR 阻塞）
+> **负责人**: 小马 🐴（质量架构师）
+
+---
+
+### E03：覆盖阈值门禁 — 状态追踪
+
+| 维度 | 内容 |
+|:-----|:------|
+| **审计项编码** | E03 |
+| **名称** | 覆盖阈值门禁 (`fail_under`) |
+| **优先级** | 🔴 **P0 — 必须** |
+| **关联 SHALL** | SWE-PLN-CUT5 (G-45) |
+| **当前状态** | ❌ **未开始** |
+| **Sprint A 目标** | Sprint A 末完成集成 |
+| **依赖** | E01 (gcov 编译链) → E02 (lcov 报告) → E03 |
+| **关键路径** | E01→E02→E03→E10→E13，约 11 天开发 |
+
+**实现方案**:
+1. 在 `c-unit-tests` step handler 中集成 gcov 编译选项（`-fprofile-arcs -ftest-coverage`）
+2. `c-coverage-report` 步骤运行 `lcov --capture && genhtml` 产出覆盖率报告
+3. 在 CI 配置中增加 `coverage.fail_under_line` 配置项：
+   - `fail_under_line: 40` → 行覆盖率 <40% 时 Pipeline **阻断** (blocking)
+   - `fail_under_line: 60` → 行覆盖率 <60% 时 **警告** (warning，不阻断)
+4. 覆盖门禁只在 **embedded** 和 **automotive** profile 下启用；general profile 跳过
+
+**验收标准**:
+| # | 条件 | 预期结果 |
+|:-:|:-----|:---------|
+| E03-A1 | 正常覆盖率 (≥60%) | stage status = passed |
+| E03-A2 | 覆盖率 <60% 但 ≥40% | stage status = warning（非阻断） |
+| E03-A3 | 覆盖率 <40% | stage status = failed（阻断 Pipeline） |
+| E03-A4 | general profile 运行 | 覆盖门禁步骤自动跳过 |
+
+---
+
+### E04：覆盖趋势追踪与基线 — 状态追踪
+
+| 维度 | 内容 |
+|:-----|:------|
+| **审计项编码** | E04 |
+| **名称** | 覆盖趋势追踪与基线 |
+| **优先级** | 🔴 **P0 — 必须** |
+| **关联 SHALL** | SWE-PLN-CUT4 (G-45)；CL2-MP-2 |
+| **当前状态** | ❌ **未开始** |
+| **Sprint A 目标** | Sprint A 末启动覆盖率趋势采集，目标 ≥30 个数据点 |
+| **依赖** | E03 产出 coverage.info 后方可开始趋势记录 |
+
+**实现方案**:
+1. 每轮构建运行 lcov 后，提取行覆盖率百分比，追加写入 `coverage-trend.jsonl`
+2. 趋势记录字段：`timestamp, build_id, line_rate, branch_rate, function_rate, total_lines, covered_lines`
+3. 提供 CLI 查看：`yuleosh coverage trend --lines 10`（最近 N 次）、`yuleosh coverage trend --days 7`（近 7 天）
+4. 供 CLI 基线快照：`yuleosh coverage baseline save` → `coverage-baseline-v1.json`
+
+**趋势文件格式** (`coverage-trend.jsonl`):
+```jsonl
+{"timestamp":"2026-06-18T00:00:00Z","build_id":"b001","line_rate":62.5,"branch_rate":48.3,"function_rate":78.9,"total_lines":1200,"covered_lines":750}
+{"timestamp":"2026-06-19T00:00:00Z","build_id":"b002","line_rate":65.1,"branch_rate":51.0,"function_rate":80.2,"total_lines":1220,"covered_lines":794}
+```
+
+**验收标准**:
+| # | 条件 | 预期结果 |
+|:-:|:-----|:---------|
+| E04-A1 | 每轮构建后检查 | `.yuleosh/reports/coverage-trend.jsonl` 存在且追加新记录 |
+| E04-A2 | CLI 趋势查看 | `yuleosh coverage trend --lines 5` 输出 Markdown 表格含 5 条记录 |
+| E04-A3 | JSON 格式输出 | `yuleosh coverage trend --json` 输出 JSON 数组 |
+| E04-A4 | 趋势方向指示 | 最新记录与上一条对比有 ↑↓→ 方向箭头 |
+| E04-A5 | 基线快照 | `yuleosh coverage baseline save` 创建基线文件 |
+
+---
+
+### E06：文档状态门禁 — 状态追踪
+
+| 维度 | 内容 |
+|:-----|:------|
+| **审计项编码** | E06 |
+| **名称** | 文档状态门禁（MR 阻塞） |
+| **优先级** | 🔴 **P0 — 必须** |
+| **关联矩阵** | `specs/misra-acceptance-matrix.md §21.2`（E05~E07 新增验收项） |
+| **当前状态** | ❌ **未开始** |
+| **Sprint A 目标** | Sprint A 末完成关键模块文档同步门禁（§21.2.4~§21.2.6） |
+| **依赖** | E05 (文档 YAML Schema) 先行完成 |
+
+**实现方案**:
+1. **代码-文档映射表**：`scripts/docs_map.yaml`，定义关键模块路径→对应文档路径映射
+2. **变更检测**：在 L2 层新增 `docs-sync-check` step handler，解析 MR diff 检查：
+   - 关键模块（src/core/, src/hal/ 等）代码变更 → 对应 docs/ 未更新 → **MR 阻断**
+   - 非关键模块变更 → 对应文档未更新 → **WARNING** + MR 自动评论提醒
+3. **豁免机制**：通过偏差管理 CLI 创建文档同步豁免（`yuleosh misra deviate add` → 关联 rule_id `DOC-SYNC`）
+4. **指纹对比**：缓存已审查文档的代码模块 API 指纹，下次对比检出差异
+
+**验收标准**:
+| # | 条件 | 预期结果 |
+|:-:|:-----|:---------|
+| E06-A1 | 关键模块 src/ 变更 + docs/ 未更新 | CI FAILED（MR 阻断） |
+| E06-A2 | 非关键模块变更 + docs/ 未更新 | CI WARNING + MR 自动评论 |
+| E06-A3 | 有效偏差豁免 | 门禁不阻断；偏差记录审计链完整 |
+| E06-A4 | 文档变更+代码变更同步提交 | CI PASSED |
+
+---
+
+## 附录D: KPI 基线采集流程
+
+> **来源**: CL2 审计计划 E08/E09
+> **目的**: 建立可审计的过程性能基线，满足 ASPICE PA 2.2 对过程测量的要求
+> **负责人**: 小马 🐴（质量架构师）
+
+---
+
+### D.1 KPI 指标定义
+
+| 指标 | 字段 | 采集方式 | 目标值 | 门禁阈值 |
+|:-----|:-----|:---------|:------|:---------|
+| 构建成功率 | `build_success_rate` | 统计近期构建通过/总数 | ≥95% | <90% → 告警 |
+| 测试通过率 | `test_pass_rate` | pytest/gcov 结果汇总 | ≥90% | <80% → 阻断 |
+| C 行覆盖率 | `c_line_coverage` | lcov 提取 line_rate | ≥60% | <40% → 阻断 |
+| MISRA 违规密度 | `misra_violations_per_kloc` | cppcheck 报告 / KLOC | ≤5.0/KLOC | >10.0 → 告警 |
+| Required 违规数 | `misra_required_count` | cppcheck 报告解析 | 零 | >0 → 阻断 |
+| 构建时长 | `build_duration_sec` | CI pipeline 总耗时 | ≤600s | >900s → 告警 |
+| Agent 审查通过率 | `agent_review_pass_rate` | 审查项通过数/总数 | ≥85% | <70% → 告警 |
+
+### D.2 采集流程（Pipeline 集成）
+
+每次构建完成后自动采集 KPI 指标，追加写入结构化 JSONL 文件：
+
+```
+采集时序（Pipeline 内嵌）
+                        ┌──────────────────┐
+                        │  构建开始         │
+                        │  record_metrics() │
+                        │  build_status=    │
+                        │  "running"        │
+                        └────────┬─────────┘
+                                 │
+            ┌────────────────────┼────────────────────┐
+            ▼                    ▼                    ▼
+    ┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+    │ L1: C 单元测试 │   │ L2: MISRA 检查│   │ L2.5: Agent   │
+    │ → line_rate   │   │ → violations/ │   │ 审查 → pass_  │
+    │ → pass_rate   │   │   KLOC        │   │   rate        │
+    └───────────────┘   └───────────────┘   └───────────────┘
+            │                    │                    │
+            └────────────────────┼────────────────────┘
+                                 ▼
+                    ┌───────────────────────┐
+                    │ 构建结束              │
+                    │ metrics-aggregator.py │
+                    │ → merge 全部阶段指标  │
+                    │ → append 到 JSONL    │
+                    │ → 门禁对比触发告警    │
+                    └───────────────────────┘
+
+                        输出文件
+                    ┌───────────────────────┐
+                    │ .yuleosh/reports/     │
+                    │  kpi-trend.jsonl      │
+                    │  (每行一个结构化记录) │
+                    └───────────────────────┘
+```
+
+### D.3 基线与控制限
+
+首次基线采集 20 个有效数据点（4 周）后发布正式基线文档：
+
+**基线文档结构**:
+| 指标 | 基线均值 | P50 | P90 | UCL | LCL |
+|:-----|:--------:|:---:|:---:|:---:|:---:|
+| 构建成功率 | — | — | — | — | — |
+| C 行覆盖率 | — | — | — | — | — |
+| MISRA 违规密度 | — | — | — | — | — |
+| ... | — | — | — | — | — |
+
+**CRUD 操作**:
+| 命令 | 功能 |
+|:-----|:-----|
+| `yuleosh metrics baseline save` | 创建当前基线快照 |
+| `yuleosh metrics baseline list` | 查看基线版本历史 |
+| `yuleosh metrics baseline diff <v1> <v2>` | 对比两版基线差异 |
+| `yuleosh metrics trend --kpi <name>` | 查看单个 KPI 趋势 |
+
+### D.4 告警与门禁联动
+
+| 条件 | 动作 |
+|:-----|:------|
+| KPI 连续 3 次触及 UCL/LCL | CI 发出告警通知 + CCB 自动创建偏差工单 |
+| C 行覆盖率 <40% (已配置) | Pipeline 阻断 (blocking) |
+| 构建成功率 <90%（月数据） | 负责人收到月度 KPI 报告告警 |
+| Required MISRA >0 (已配置) | Pipeline 阻断 (blocking) |
+
+---
+
+## 附录E: 偏差审批链
+
+> **来源**: CL2 审计计划 E10 — 偏差管理 CLI + 审批链
+> **目的**: 定义偏差全生命周期的审批角色、流程和审计要求
+> **负责人**: 小马 🐴（质量架构师）
+
+---
+
+### E.1 偏差生命周期
+
+```
+发现违规
+    │
+    ▼
+[创建偏差] ─────> status=pending
+    │               │
+    │          ┌────┴────┐
+    │          ▼         ▼
+    │      [技术审查]  [自动拒绝]
+    │     status=      (缺少必填字段)
+    │     under_review
+    │          │
+    │    ┌─────┴──────┐
+    │    ▼             ▼
+    │ [approved]    [rejected]
+    │ status=       status=
+    │ approved      rejected
+    │ +expires
+    │
+    ▼
+[到期自动失效] ──> status=expired
+    │
+    ▼
+[续期或修复]  ──> 重新进入审批流程
+```
+
+### E.2 CLI 审批命令链
+
+| 命令 | 角色 | 效果 |
+|:-----|:-----|:------|
+| `yuleosh misra deviate add --rule X.Y --file src/foo.c:42 --reason "..."` | 开发者 | 创建 pending 偏差，写入 ci-config.yaml misra.deviations |
+| `yuleosh misra deviate list` | 任何人 | 查看全部偏差（含 status, expires, approved_by） |
+| `yuleosh misra deviate show <deviation_id>` | 任何人 | 查看单条偏差详情（含审批日志） |
+| `yuleosh misra deviate approve <deviation_id> --by "小陈"` | **CCB 批准人** | status → approved, approved_by 记录 |
+| `yuleosh misra deviate reject <deviation_id> --by "小陈" --reason "..."` | **CCB 批准人** | status → rejected, 记录拒绝理由 |
+| `yuleosh misra deviate expire <deviation_id>` | **CCB 管理员** | 手动到期（等同一键失效） |
+| `yuleosh misra deviate renew <deviation_id> --expires YYYY-MM-DD` | **CCB 批准人** | 延期偏差有效期 |
+| `yuleosh misra deviate export --format json` | 任何人 | 导出偏差全量数据（审计用途） |
+
+### E.3 CCB 角色定义
+
+> CCB = Change Control Board（变更控制委员会），负责偏差审批的决策机构。
+
+| 角色 | 别名 | 成员指派 | 职责 | 审批权 | 审计记录要求 |
+|:-----|:------|:---------|:------|:------|:------------|
+| **CCB Chair** | 变更控制委员会主席 | 小明 🧑‍💻（需求方/项目负责人） | 偏差策略方向；高影响偏差终审；争议裁决 | 可批准/拒绝/退回全部等级的偏差 | dev_id: approved_by + role=chair |
+| **CCB Approver** | 批准人 | 小马 🐴（质量架构师） | 技术偏差审查：评估风险、影响范围、修复代价 | 可批准/拒绝/退回 P1+ 偏差 | dev_id: approved_by + role=approver |
+| **CCB Reviewer** | 技术审查人 | 小克 👨‍💻（开发） | 偏差技术可行性审查；提供替代方案建议 | 无批准权；可建议 approve/reject | dev_id: reviewed_by + role=reviewer |
+| **CCB Admin** | 管理员 | 小马 🐴 或轮值 | 偏差记录管理；到期检查；审计追溯支持 | 可标记过期、关闭、重开 | 操作日志完整 |
+| **偏差提交者** | 发起人 | 任意开发者 | 发现违规后提交偏差申请；提供偏差理由和证据 | 无审批权 | dev_id: submitted_by + role=reporter |
+
+### E.4 审批等级与阈值
+
+| 偏差等级 | 定义 | 必须审批人 | 审批方式 | 有效期 |
+|:--------|:-----|:----------|:---------|:------|
+| **P0 — Critical** | 安全关键 Required 违规（MISRA Rule 1.x/2.x/22.x） | CCB Chair + CCB Approver（双重签） | 线下会议或书面审批 | ≤30 天 |
+| **P1 — Major** | 一般 Required 违规 | CCB Approver | CLI approve 或线下 | ≤90 天 |
+| **P2 — Minor** | Advisory 违规 | CCB Reviewer | CLI approve（CCB Approver 可事后确认） | ≤180 天 |
+| **P3 — Informational** | 文档/格式类偏差 | 无需审批（自动记录） | 系统自动 | 长期 |
+
+### E.5 偏差字段数据结构
+
+```yaml
+# ci-config.yaml 中偏差条目定义
+deviation:
+  rule_id: "Rule 8.2"
+  file_pattern: "src/legacy/uart.c"
+  reason: "Legacy module - refactoring planned for Q3 2026"
+  level: P1                        # P0/P1/P2/P3
+  submitted_by: "小克"
+  submitted_at: "2026-06-18T10:00:00Z"
+  reviewed_by: ["小马"]            # CCB Reviewer
+  approved_by: "小马"              # CCB Approver
+  approved_at: "2026-06-18T14:00:00Z"
+  expires: "2026-09-16"            # 默认 90 天
+  status: approved                 # pending/under_review/approved/rejected/expired
+  audit_log:
+    - action: created
+      by: "小克"
+      at: "2026-06-18T10:00:00Z"
+    - action: reviewed
+      by: "小马"
+      comment: "Legacy code, low risk. Approve with refactoring deadline."
+      at: "2026-06-18T12:00:00Z"
+    - action: approved
+      by: "小马"
+      at: "2026-06-18T14:00:00Z"
+```
+
+### E.6 审计追溯链
+
+审计师可以通过以下路径追溯偏差全生命周期：
+
+```
+违规报告 (rule_id + file:line)
+  → 查询偏差管理 CLI
+    → yuleosh misra deviate show <dev_id>
+      → 审批人签名 + 时间戳 + 审批理由
+        → 到期记录
+          → 续期 / 已修复证据
+```
+
+每条偏差的审计数据满足 CL2 PA 2.1 (TM) 要求：
+- ✅ 双向追溯：违规→偏差→审批→到期/修复
+- ✅ 审批签名：approved_by 字段不可为空
+- ✅ 时间戳：每步操作记录 ISO 时间戳
+- ✅ 理由链：偏差理由 + 审批意见 + 拒绝理由全部可查
+
+### E.7 到期自动失效机制
+
+| 触发条件 | 动作 |
+|:---------|:------|
+| expires 日期超期 | Pipeline 自动将偏差标记为 expired；YAML 中 status=expired |
+| 过期后偏差禁止过滤 | CI 运行时过期偏差不作为合法免除；违规照常阻断 |
+| 到期前 7 天预警 | CLI 运行时提示即将到期的偏差列表 |
+| 到期续期 | 重新创建偏差（新建 id）并重新走审批流程 |
+
+---
+
+## 附录F: CL2 评分路径更新（E01~E13 纳入）
+
+> 将 CL2 审计计划 E01~E13 的完成度纳入综合评分体系，确保评分反映真实的审计就绪度。
+
+### F.1 评分维度扩展
+
+| 维度 | 权重 | 旧方法 | 新方法 |
+|:-----|:----:|:-------|:-------|
+| V-Model 完整性 | 15% | 左右对称度 + 各层就绪度 | 同旧 + 加权 SWE.6 三段式完成度 |
+| 嵌入式特殊性 | 15% | review_linker/startup/rtos 深度 | 同旧（已全部 ✅） |
+| 追溯完整性 | **20%** | 仅含需求↔实现的非正式追溯 | **加权 E04/E06/E07/E13**：覆盖趋势(5%)+文档门禁(5%)+差异检测(5%)+证据包(5%) |
+| MISRA 集成 | 15% | cppcheck + 偏差 + 趋势 + 工具认证 | 同旧（已全部 ✅） |
+| CI 分层合理性 | 10% | Profile 切换 + 分层 step handler | 同旧 + Profile 完成度加权 |
+| **CL2 审计就绪度** | **25%（新增）** | 无 | **加权 E01~E13 完成度**：gcov(3%)+lcov(3%)+fail_under(3%)+趋势(3%)+文档Schema(3%)+门禁(3%)+差异检测(2%)+KPI基线(3%)+4周基线(2%) |
+| **总分** | **100%** |  |  |
+
+### F.2 Sprint A 评分路径（更新）
+
+| 阶段 | 评分 | 关键交付 |
+|:-----|:----:|:---------|
+| 三轮末 | 76/100 | G-34~G-40 深度补缺 ✅ |
+| Sprint A m1 | 79/100 | G-45 gcov/lcov ✅；G-46 追溯引擎 ✅ |
+| Sprint A m2 | 82/100 | G-31 SWE.6 三段式 ✅；G-33 Profile 基础 ✅ + **E01/E02** 覆盖基础 ✅ |
+| Sprint A m3 | 85/100 | G-45 C 覆盖率门禁 ✅；**E03** fail_under ✅ + **E04** 趋势 ✅ + **E06** 文档门禁基础 ✅ |
+| Sprint A m4 | **87/100** | G-31 完整 ✅ + G-46 L2 handler ✅ + G-33 Profile 完整 ✅；**E08** KPI 基线启动 ✅ |
+| Sprint B 末 | **89+/100** | P1 全部闭环；**E05/E06/E07** 完整 ✅；**E09** 4 周基线 ✅；**E13** 证据包 ✅ |
+| CL2 Dry Run | **≥90/100** | 全部 E01~E13 闭环；模拟审计通过 |
+
+### F.3 Sprint A 各阶段 E01~E13 完成进度
+
+```
+Sprint A:
+  Month1 | E01 ■■■□□□   E02 ■■■□□□   E03 ■■□□□□   E04 ■■□□□□
+         | E05 □□□□□□   E06 □□□□□□   E07 □□□□□□   E08 □□□□□□
+         | E09 □□□□□□                                 (E10 ✅ E11 ✅ E12 ✅)
+
+  Month2 | E01 ■■■■■■   E02 ■■■■■■   E03 ■■■■■■   E04 ■■■■■■
+         | E05 ■■□□□□   E06 ■■■□□□   E07 □□□□□□   E08 ■■■□□□
+         | E09 □□□□□□                                 (E10 ✅ E11 ✅ E12 ✅)
+
+Sprint B:
+         | E05 ■■■■■■   E06 ■■■■■■   E07 ■■■■■■
+         | E08 ■■■■■■   E09 ■■■■■■
+         | E13 ■■■□□□
+
+Sprint B+:
+         | E13 ■■■■■■
+```
+
+### F.4 Sprint A/E 维度评分变化明细
+
+| 维度 | 三轮 | Sprint A-m1 | Sprint A-m2 | Sprint A-m3 | Sprint A-m4 |
+|:-----|:----:|:----------:|:----------:|:----------:|:----------:|
+| V-Model 完整性 | 15/15 | 15/15 | 15/15 | 15/15 | 15/15 |
+| 嵌入式特殊性 | 15/15 | 15/15 | 15/15 | 15/15 | 15/15 |
+| 追溯完整性 | 5/20 | 5/20 | 8/20 | 12/20 | 14/20 |
+| MISRA 集成 | 15/15 | 15/15 | 15/15 | 15/15 | 15/15 |
+| CI 分层合理性 | 8/10 | 8/10 | 9/10 | 9/10 | 10/10 |
+| CL2 审计就绪度 | 0/25 | 5/25 | 10/25 | 16/25 | 18/25 |
+| **月份 | 76/100 | 79/100 | 82/100 | 85/100 | 87/100 |
+
+### F.5 CL2 交付物 E01~E13 就绪度对账
+
+| 审计项 | Sprint A-m1 | Sprint A-m2 | Sprint A-m3 | Sprint A-m4 | Sprint B 末 |
+|:------:|:-----------:|:-----------:|:-----------:|:-----------:|:-----------:|
+| E01 gcov | ■■□□□ 40% | ■■■■□ 80% | ■■■■■ 100% | ■■■■■ | ■■■■■ |
+| E02 lcov | ■■□□□ 40% | ■■■■□ 80% | ■■■■■ 100% | ■■■■■ | ■■■■■ |
+| E03 fail_under | □□□□□ 0% | ■■□□□ 40% | ■■■■■ 100% | ■■■■■ | ■■■■■ |
+| E04 趋势 | □□□□□ 0% | ■□□□□ 20% | ■■■■□ 80% | ■■■■■ 100% | ■■■■■ |
+| E05 Schema | □□□□□ 0% | □□□□□ 0% | ■□□□□ 20% | ■■□□□ 40% | ■■■■■ |
+| E06 门禁 | □□□□□ 0% | □□□□□ 0% | ■■■□□ 60% | ■■■□ 70% | ■■■■■ |
+| E07 差异检测 | □□□□□ 0% | □□□□□ 0% | □□□□□ 0% | □□□□□ 0% | ■■■■■ |
+| E08 KPI 基线 | □□□□□ 0% | □□□□□ 0% | ■□□□□ 20% | ■■■■□ 80% | ■■■■■ |
+| E09 4 周基线 | □□□□□ 0% | □□□□□ 0% | □□□□□ 0% | ■□□□□ 20% | ■■■■■ |
+| E10 偏差管理 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E11 ALM 集成 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E12 验证计划 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| E13 证据包 | □□□□□ 0% | □□□□□ 0% | □□□□□ 0% | □□□□□ 0% | ■■■□□ 60% |
+
+---
+
 *本文档基于老陈 Pipeline 审查报告（2026-06-18）产出，由小马 🐴（质量架构师）编制。*
-*版本历史: v1.0（一轮审查 58/100）→ v1.1（二轮审查 G-31~G-44）→ v1.2（三轮审查 76/100，G-45/G-46 新增，G-34~G-40 已修复）→ v1.3（CL2 过审路径追加，G-47~G-50 新增）*
-*最终版更新: 2026-06-18 (v1.3)*
+*版本历史: v1.0（一轮审查 58/100）→ v1.1（二轮审查 G-31~G-44）→ v1.2（三轮审查 76/100，G-45/G-46 新增，G-34~G-40 已修复）→ v1.3（CL2 过审路径追加，G-47~G-50 新增）→ v1.4（E03/E04/E06 状态追踪 + KPI 基线流程 + 偏差审批链 + 评分路径更新）*
+*最终版更新: 2026-06-18 (v1.4)*
