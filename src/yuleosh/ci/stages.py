@@ -527,6 +527,8 @@ def run_misra_check(project_dir: str, ci: CIResult,
             parse_cppcheck_output, group_by_rule, enrich_with_definitions,
             compute_summary_stats, save_report, load_rule_definitions,
             print_summary,
+            generate_traceability_matrix,
+            generate_fix_tasks,
         )
         sys.path.pop(0)
 
@@ -543,8 +545,22 @@ def run_misra_check(project_dir: str, ci: CIResult,
         output_dir = Path(project_dir) / ".yuleosh" / "reports"
         save_report(violations, groups, summary, rule_defs, output_dir)
 
+        # --- Generate traceability matrix and fix tasks (MISRA loop closure) ---
         if violations:
             print_summary(summary)
+            trace_matrix = generate_traceability_matrix(violations, rule_defs)
+            print(f"    📋 Traceability: {len(trace_matrix)} entries")
+
+            try:
+                fix_files = generate_fix_tasks(project_dir, violations, rule_defs)
+                print(f"    🔧 Fix tasks created: {len(fix_files)} file(s)")
+            except Exception as fix_e:
+                log.warning("Failed to generate MISRA fix tasks: %s", fix_e)
+
+            # Also check MISRA_FAIL_FAST (F-04 fix)
+            misra_ff = is_misra_fail_fast()
+            if misra_ff:
+                print(f"    🚨 MISRA_FAIL_FAST enabled — violations will be treated as blocking")
 
     except ImportError as e:
         log.warning("Could not import misra_report module: %s", e)
