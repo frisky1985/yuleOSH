@@ -36,7 +36,8 @@ except ImportError:
 log = logging.getLogger("ci.misra_report")
 
 # Default paths
-_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent / "misra-rules.yaml"
+# misra-rules.yaml lives at the workspace root (4 levels up: ci/ → yuleosh/ → src/ → workspace)
+_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
 _DEFAULT_OUTPUT_DIR = Path(".yuleosh") / "reports"
 
 # Regex patterns for cppcheck MISRA output
