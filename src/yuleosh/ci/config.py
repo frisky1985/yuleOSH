@@ -45,6 +45,36 @@ DEFAULT_MISRA_ADDON = "misra"  # misra-c-2023 | misra-c-2012
 
 
 @dataclass
+class MisraRuleOverride:
+    """Per-rule override for MISRA C:2023 analysis.
+
+    Allows selectively enabling/disabling individual rules,
+    overriding severity levels, and overriding auto-checkability.
+    """
+
+    rule_id: str = ""
+    enabled: bool = True
+    severity_override: str = ""  # Optional: advisory | required | warning
+    auto_checkable_override: bool | None = None
+
+
+@dataclass
+class MisraDeviation:
+    """Deviation record for a specific MISRA rule on a file pattern.
+
+    Documents a deliberate waiver, requiring approval and expiry.
+    When active, matching violations are marked "acknowledged"
+    in the traceability matrix.
+    """
+
+    rule_id: str = ""
+    file_pattern: str = ""  # glob pattern, e.g. "src/legacy/*.c"
+    reason: str = ""
+    approved_by: str = ""
+    expires: str = ""  # ISO date, e.g. "2026-09-30"
+
+
+@dataclass
 class MisraConfig:
     """MISRA C:2023 static analysis configuration (A-03)."""
 
@@ -57,6 +87,8 @@ class MisraConfig:
     cppcheck_std: str = "c11"
     suppress_rules: list = field(default_factory=list)
     rule_texts_path: str = ""
+    rule_overrides: list[MisraRuleOverride] = field(default_factory=list)
+    deviations: list[MisraDeviation] = field(default_factory=list)
 
 
 @dataclass
@@ -213,6 +245,39 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
         if isinstance(suppress, list):
             cfg.misra.suppress_rules = [str(s) for s in suppress]
         cfg.misra.rule_texts_path = str(misra_block.get("rule_texts_path", ""))
+
+        # Parse rule_overrides
+        rules_block = misra_block.get("rules", {})
+        if isinstance(rules_block, dict):
+            overrides: list[MisraRuleOverride] = []
+            for rule_id, rule_cfg in rules_block.items():
+                if isinstance(rule_cfg, dict):
+                    overrides.append(MisraRuleOverride(
+                        rule_id=str(rule_id),
+                        enabled=bool(rule_cfg.get("enabled", True)),
+                        severity_override=str(rule_cfg.get("severity", "")),
+                        auto_checkable_override=(
+                            bool(rule_cfg["auto_checkable"])
+                            if "auto_checkable" in rule_cfg
+                            else None
+                        ),
+                    ))
+            cfg.misra.rule_overrides = overrides
+
+        # Parse deviations
+        deviations_block = misra_block.get("deviations", [])
+        if isinstance(deviations_block, list):
+            dev_list: list[MisraDeviation] = []
+            for d in deviations_block:
+                if isinstance(d, dict):
+                    dev_list.append(MisraDeviation(
+                        rule_id=str(d.get("rule", "")),
+                        file_pattern=str(d.get("file", "")),
+                        reason=str(d.get("reason", "")),
+                        approved_by=str(d.get("approved_by", "")),
+                        expires=str(d.get("expires", "")),
+                    ))
+            cfg.misra.deviations = dev_list
 
     # Hardware test block
     hw_block = raw.get("hardware_test", {})
