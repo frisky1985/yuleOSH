@@ -47,7 +47,7 @@ const zh = {
       description: "个人开发者入门首选，适合 1-3 人独立探索嵌入式 AI 开发。",
       features: [
         "基础 Pipeline（Spec → Code → Test → CI）",
-        "3 个项目限制",
+        "1-3 人 · 3 个项目限制",
         "AI Code Review 基础规则",
         "ESP32 / STM32 模板 + QEMU SIL",
         "社区支持（GitHub Issues）",
@@ -110,7 +110,7 @@ const zh = {
       "ASPICE 现场检查（CL1-CL3）",
       "定制合规证据包（客户审计就绪）",
     ],
-    cta: "联系 Enterprise 团队",
+    cta: "联系销售",
   },
   faq: {
     title: "常见问题",
@@ -145,7 +145,7 @@ const zh = {
   },
   footer: {
     v: "v0.1.0 · MIT License",
-    freeTrial: "免费试用",
+    freeTrial: "免费开始试用",
     home: "首页",
     login: "登录",
     tagline: "为嵌入式开发者而生 · 开源社区驱动",
@@ -172,7 +172,7 @@ const en: typeof zh = {
       description: "For individual developers exploring embedded AI development with 1-3 people.",
       features: [
         "Basic Pipeline (Spec → Code → Test → CI)",
-        "3 project limit",
+        "1-3 people · 3 project limit",
         "AI Code Review (basic rules)",
         "ESP32 / STM32 templates + QEMU SIL",
         "Community support (GitHub Issues)",
