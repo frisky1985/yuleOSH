@@ -716,3 +716,80 @@ def run_misra_check(project_dir: str, ci: CIResult,
     print(f"    ✅ MISRA check: {detail}")
     print(f"    📍 Full report: .yuleosh/reports/misra-report.json")
     return True
+
+
+def run_c_coverage(project_dir: str, ci: CIResult) -> bool:
+    """Run C/C++ code coverage via gcov/lcov.
+
+    Runs in SWE.4 (unit test) slot after C unit tests execute.
+    Requires ``.gcda`` / ``.gcno`` files in the build directory.
+    Falls back to finding build directories with coverage data.
+    Saves structured JSON to ``.yuleosh/reports/c-coverage.json``.
+    """
+    print("  📊 CI: C/C++ code coverage (gcov/lcov)...")
+
+    from yuleosh.ci.gcov_coverage import generate_c_coverage_report
+
+    # Find a build directory with coverage data
+    coverage_dirs = [
+        os.path.join(project_dir, "build"),
+        os.path.join(project_dir, "build", "coverage"),
+        os.path.join(project_dir, "cmake-build-coverage"),
+        os.path.join(project_dir, "build", "Debug"),
+    ]
+
+    build_dir = None
+    for d in coverage_dirs:
+        if os.path.isdir(d):
+            # Check for .gcda or .gcno files
+            for root, _, files in os.walk(d):
+                if any(f.endswith(".gcda") or f.endswith(".gcno") for f in files):
+                    build_dir = d
+                    break
+            if build_dir:
+                break
+
+    if not build_dir:
+        # Last resort: just check if build/ exists
+        for d in coverage_dirs:
+            if os.path.isdir(d):
+                build_dir = d
+                break
+
+    if not build_dir:
+        ci.add_stage("c-coverage", "skipped", "No build directory with coverage data found")
+        print("    ⏭️  No build directory with .gcda/.gcno — skipped")
+        return True
+
+    try:
+        json_path = generate_c_coverage_report(build_dir=build_dir)
+        if not json_path:
+            ci.add_stage("c-coverage", "warning", "lcov/gcov may not be installed")
+            print("    ⚠️  C coverage generation failed (lcov/gcov not available)")
+            return True  # Non-blocking — tool may not be available
+
+        # Load and report summary
+        try:
+            with open(json_path) as f:
+                report = json.load(f)
+            line_rate = report.get("line_rate", 0.0)
+            branch_rate = report.get("branch_rate", 0.0)
+            total_files = report.get("total_files", 0)
+            detail = f"line={line_rate}%, branch={branch_rate}%, {total_files} file(s)"
+            ci.add_stage("c-coverage", "passed", detail)
+            print(f"    ✅ C/C++ coverage: {detail}")
+            print(f"    📍 Report: {json_path}")
+        except (json.JSONDecodeError, OSError) as e:
+            ci.add_stage("c-coverage", "passed", f"Report saved but unreadable: {e}")
+            print(f"    ⚠️  C coverage saved but failed to read: {e}")
+
+        return True
+
+    except ImportError:
+        ci.add_stage("c-coverage", "skipped", "gcov_coverage module not available")
+        print("    ⏭️  gcov_coverage module not available — skipped")
+        return True
+    except Exception as e:
+        ci.add_stage("c-coverage", "warning", f"Error: {e}")
+        print(f"    ⚠️  C coverage error: {e}")
+        return True

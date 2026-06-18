@@ -766,10 +766,17 @@ def step_review_memory(session: PipelineSession) -> str:
         elif finding_breakdown["major"] > 3:
             overall_status = "retry"
 
+        req_ids = [
+            "SWE-MISRA-S1",       # MISRA C:2023 integration
+            "SWE-MISRA-DEV2",     # Defensive programming / runtime checks
+        ]
+
         report = {
             "session": session.name,
             "reviewer": "小克",
             "step": "review-memory",
+            "spec_ref": "SWE.4",
+            "req_ids": req_ids,
             "timestamp": datetime.now().isoformat(),
             "status": overall_status,
             "static_findings": static_findings,

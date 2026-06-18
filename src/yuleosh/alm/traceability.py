@@ -57,16 +57,11 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
     shall_statements = []
     current_section = ""
 
-    # Pattern to match spec-defined IDs like **SWE-MISRA-S1**:
-    spec_id_pattern = re.compile(r'\*\*(\w[\w-]+)\*\*\s*:')
+    # Pattern to match spec-defined IDs like **SWE-MISRA-S1**: or [REQ-MISRA-S1.1]
+    spec_id_pattern = re.compile(r'(?:\*\*(\w[\w-]+)\*\*\s*:|\[([\w][\w.-]+)\])')
 
-    shall_pattern = re.compile(
-        r'(?:SHALL|shall|MUST|must)\s+(?:not\s+)?'
-        r'(?:be\s+|have\s+|use\s+|include\s+|provide\s+|support\s+|'
-        r'return\s+|accept\s+|validate\s+|check\s+|run\s+|generate\s+|'
-        r'produce\s+|contain\s+|ensure\s+|follow\s+|implement\s+)',
-        re.IGNORECASE,
-    )
+    # Broad SHALL keyword search — works for both English and Chinese text
+    shall_keyword_pattern = re.compile(r'\bSHALL\b|\bshall\b|\bMUST\b|\bmust\b')
 
     for idx, line in enumerate(lines, 1):
         stripped = line.strip()
@@ -76,17 +71,19 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
             current_section = stripped.lstrip("#").strip()
 
         # Look for SHALL / MUST keywords
-        if shall_pattern.search(stripped):
+        if shall_keyword_pattern.search(stripped):
             statement = stripped.strip()
             # Trim leading list markers
             statement = re.sub(r"^[\s]*[-*+]\s+", "", statement)
             statement = re.sub(r"^\d+[.)]\s+", "", statement)
 
-            # Parse spec-defined ID from **ID**: prefix
+            # Parse spec-defined ID from **ID**: prefix or [REQ-xxx] marker
+            # Use trimmed `statement` (after list marker removal) for matching
             req_id = None
-            spec_id_match = spec_id_pattern.match(stripped)
+            spec_id_match = spec_id_pattern.match(statement)
             if spec_id_match:
-                req_id = spec_id_match.group(1)
+                # group(1) = **ID**: pattern, group(2) = [REQ-xxx] pattern
+                req_id = spec_id_match.group(1) or spec_id_match.group(2)
 
             shall_statements.append({
                 "id": f"SHALL-{len(shall_statements) + 1}",
@@ -106,24 +103,28 @@ def extract_shall_from_text(text: str) -> list[dict]:
     shall_statements = []
     current_section = ""
 
-    shall_pattern = re.compile(
-        r'(?:SHALL|shall|MUST|must)\s+(?:not\s+)?'
-        r'(?:be\s+|have\s+|use\s+|include\s+|provide\s+|support\s+|'
-        r'return\s+|accept\s+|validate\s+|check\s+|run\s+|generate\s+|'
-        r'produce\s+|contain\s+|ensure\s+|follow\s+|implement\s+)',
-        re.IGNORECASE,
-    )
+    shall_keyword_pattern = re.compile(r'\bSHALL\b|\bshall\b|\bMUST\b|\bmust\b')
+
+    spec_id_pattern = re.compile(r'(?:\*\*(\w[\w-]+)\*\*\s*:|\[([\w][\w.-]+)\])')
 
     for idx, line in enumerate(lines, 1):
         stripped = line.strip()
         if stripped.startswith("#"):
             current_section = stripped.lstrip("#").strip()
-        if shall_pattern.search(stripped):
+        if shall_keyword_pattern.search(stripped):
             statement = stripped.strip()
             statement = re.sub(r"^[\s]*[-*+]\s+", "", statement)
             statement = re.sub(r"^\d+[.)]\s+", "", statement)
+
+            # Parse spec-defined ID
+            req_id = None
+            spec_id_match = spec_id_pattern.match(statement)
+            if spec_id_match:
+                req_id = spec_id_match.group(1) or spec_id_match.group(2)
+
             shall_statements.append({
                 "id": f"SHALL-{len(shall_statements) + 1}",
+                "req_id": req_id,
                 "statement": statement,
                 "line": idx,
                 "section": current_section,
@@ -323,7 +324,7 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         # Find reviews that reference this requirement
         matching_reviews = _find_reviews_for_requirement(reviews, req_id, shall["statement"])
 
-            requirements.append({
+        requirements.append({
             "id": req_id,
             "req_id": shall.get("req_id"),
             "statement": shall["statement"],

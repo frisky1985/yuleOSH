@@ -18,6 +18,7 @@ Usage:
     yuleosh review task <name> [kind]        — Review specific task
     yuleosh ci run <layer>                   — Run CI layer (1/2/3)
     yuleosh evidence pack                    — Generate ASPICE compliance pack
+    yuleosh audit evidence [-o <dir>]        — Generate CL2 audit evidence bundle
     yuleosh stats [--json]                   — Show project statistics
     yuleosh ui                              — Start dashboard server (:8080)
 """
@@ -370,6 +371,199 @@ def cmd_evidence_pack():
     generate_evidence()
 
 
+def cmd_audit_evidence(output_dir: str | None = None):
+    """Generate CL2 audit evidence bundle.
+
+    Collects all CI results, doc sync reports, C coverage reports,
+    and MISRA analysis artifacts into a single audit evidence package
+    suitable for CL2 functional safety assessment.
+
+    The bundle includes:
+    - All CI layer results (.osh/ci/layer*.json)
+    - C/C++ coverage report (.yuleosh/reports/c-coverage.json)
+    - Doc sync gate evidence
+    - MISRA compliance report
+    - Latest pipeline run status
+    - Overall audit summary
+    """
+    import json
+    import shutil
+    from datetime import datetime
+    from pathlib import Path
+
+    project_dir = Path(OSH_HOME).resolve()
+
+    if output_dir:
+        out_path = Path(output_dir).resolve()
+    else:
+        out_path = project_dir / ".yuleosh" / "audit"
+
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n📋 CL2 Audit Evidence Generation")
+    print(f"{'='*55}")
+    print(f"   Project: {project_dir}")
+    print(f"   Output:  {out_path}\n")
+
+    evidence = {
+        "generated_at": datetime.now().isoformat(),
+        "project": str(project_dir),
+        "artifacts": [],
+    }
+
+    # 1. Collect CI layer results
+    ci_dir = project_dir / ".osh" / "ci"
+    if ci_dir.exists():
+        layer_files = sorted(ci_dir.glob("layer*.json"))
+        for lf in layer_files:
+            try:
+                data = json.loads(lf.read_text())
+                evidence["artifacts"].append({
+                    "type": "ci-layer-result",
+                    "source": str(lf),
+                    "layer": data.get("layer"),
+                    "status": data.get("status"),
+                    "stages": data.get("stages", []),
+                })
+                # Copy to audit bundle
+                shutil.copy2(str(lf), str(out_path / lf.name))
+                print(f"   📄 CI Layer {data.get('layer')}: {data.get('status', 'unknown')}")
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"   ⚠️  Cannot read {lf.name}: {e}")
+    else:
+        print("   ⏭️  No CI layer results found")
+
+    # 2. Collect C/C++ coverage report
+    c_cov_path = project_dir / ".yuleosh" / "reports" / "c-coverage.json"
+    if c_cov_path.exists():
+        try:
+            data = json.loads(c_cov_path.read_text())
+            evidence["artifacts"].append({
+                "type": "c-coverage",
+                "source": str(c_cov_path),
+                "line_rate": data.get("line_rate"),
+                "branch_rate": data.get("branch_rate"),
+                "total_files": data.get("total_files"),
+            })
+            shutil.copy2(str(c_cov_path), str(out_path / "c-coverage.json"))
+            print(f"   📊 C Coverage: {data.get('line_rate', 'N/A')}% line, {data.get('branch_rate', 'N/A')}% branch")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"   ⚠️  Cannot read C coverage: {e}")
+    else:
+        print("   ⏭️  No C coverage report")
+
+    # 3. Collect doc sync gate evidence
+    docsync_path = project_dir / ".yuleosh" / "reports" / "docsync-evidence.json"
+    if docsync_path.exists():
+        try:
+            data = json.loads(docsync_path.read_text())
+            evidence["artifacts"].append({
+                "type": "docsync-gate",
+                "source": str(docsync_path),
+                "status": data.get("status", "unknown"),
+                "rule_results": data.get("rule_results", []),
+            })
+            shutil.copy2(str(docsync_path), str(out_path / "docsync-evidence.json"))
+            status = data.get("status", "unknown")
+            print(f"   📝 Doc Sync Gate: {status}")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"   ⚠️  Cannot read doc sync evidence: {e}")
+    else:
+        print("   ⏭️  No doc sync gate evidence (run 'yuleosh ci run 1' first)")
+
+    # 4. Collect MISRA report
+    misra_report_path = project_dir / ".yuleosh" / "reports" / "misra-report.json"
+    if misra_report_path.exists():
+        try:
+            data = json.loads(misra_report_path.read_text())
+            evidence["artifacts"].append({
+                "type": "misra-report",
+                "source": str(misra_report_path),
+                "total_violations": data.get("summary", {}).get("total_violations", 0),
+                "total_rules_violated": data.get("summary", {}).get("total_rules_violated", 0),
+            })
+            shutil.copy2(str(misra_report_path), str(out_path / "misra-report.json"))
+            viol = data.get("summary", {}).get("total_violations", 0)
+            print(f"   🔍 MISRA Report: {viol} violation(s)")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"   ⚠️  Cannot read MISRA report: {e}")
+    else:
+        print("   ⏭️  No MISRA report")
+
+    # 5. Check for MISRA trend data
+    misra_trend_path = project_dir / ".yuleosh" / "reports" / "misra-trend.json"
+    if misra_trend_path.exists():
+        try:
+            shutil.copy2(str(misra_trend_path), str(out_path / "misra-trend.json"))
+            evidence["artifacts"].append({
+                "type": "misra-trend",
+                "source": str(misra_trend_path),
+            })
+            print("   📈 MISRA Trend: collected")
+        except OSError:
+            pass
+
+    # 6. Check pipeline status
+    pipeline_status_path = project_dir / ".osh" / "pipeline-status.json"
+    if pipeline_status_path.exists():
+        try:
+            data = json.loads(pipeline_status_path.read_text())
+            evidence["artifacts"].append({
+                "type": "pipeline-status",
+                "source": str(pipeline_status_path),
+                "status": data.get("status"),
+            })
+            shutil.copy2(str(pipeline_status_path), str(out_path / "pipeline-status.json"))
+            print(f"   🔄 Pipeline Status: {data.get('status', 'unknown')}")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"   ⚠️  Cannot read pipeline status: {e}")
+    else:
+        print("   ⏭️  No pipeline status")
+
+    # 7. Collect evidence pack if exists
+    evidence_dir = project_dir / ".osh" / "evidence"
+    if evidence_dir.exists():
+        evidence_zips = list(evidence_dir.glob("*.zip"))
+        if evidence_zips:
+            latest_zip = max(evidence_zips, key=lambda p: p.stat().st_mtime)
+            try:
+                shutil.copy2(str(latest_zip), str(out_path / latest_zip.name))
+                evidence["artifacts"].append({
+                    "type": "evidence-zip",
+                    "source": str(latest_zip),
+                })
+                print(f"   📦 Evidence Pack: {latest_zip.name}")
+            except OSError as e:
+                print(f"   ⚠️  Cannot copy evidence pack: {e}")
+
+    # 8. Collect CI config for audit trail
+    ci_config_path = project_dir / ".yuleosh" / "ci-config.yaml"
+    if ci_config_path.exists():
+        try:
+            shutil.copy2(str(ci_config_path), str(out_path / "ci-config.yaml"))
+            evidence["artifacts"].append({
+                "type": "ci-config",
+                "source": str(ci_config_path),
+            })
+            print("   ⚙️  CI Config: collected")
+        except OSError as e:
+            print(f"   ⚠️  Cannot copy CI config: {e}")
+
+    # Write audit manifest
+    manifest_path = out_path / "audit-manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(evidence, f, indent=2)
+
+    print(f"\n{'='*55}")
+    print(f"✅ CL2 Audit Evidence Bundle Complete")
+    print(f"   Location: {out_path}/")
+    print(f"   Artifacts collected: {len(evidence['artifacts'])}")
+    print(f"   Manifest: {manifest_path}")
+    print()
+
+    return evidence
+
+
 def cmd_stats(json_output: bool = False):
     from yuleosh.cli.stats import cmd_stats
     cmd_stats(to_json=json_output)
@@ -412,15 +606,61 @@ def cmd_traceability_report(args):
 
 
 def cmd_traceability_matrix(args):
-    """Generate LRM / LRT matrix as JSON."""
+    """Generate LRM / LRT matrix as JSON and print formatted overview."""
     from yuleosh.alm.traceability import generate_lrm, generate_lrt
 
     project_dir = getattr(args, "project_dir", OSH_HOME)
     spec_path = getattr(args, "spec", None)
 
-    generate_lrm(project_dir, spec_path)
     lrt = generate_lrt(project_dir, spec_path)
+    lrm = lrt.get("lrm", {})
+    requirements = lrm.get("requirements", [])
+    summary = lrm.get("summary", {})
+    gaps = lrt.get("gap_analysis", {})
 
+    # Print formatted overview
+    print(f"\n  {'=' * 70}")
+    print(f"  📋 需求追溯矩阵 (LRM / LRT)")
+    print(f"  {'=' * 70}")
+    print(f"  生成时间: {lrm.get('generated_at', '')[:19]}")
+    print(f"  {'─' * 70}")
+
+    # Table header
+    header = f"  {'req_id':<20} {'SHALL':<8} {'Code':<6} {'Test':<6} {'Review':<6} {'StepHdlr':<8} Section"
+    print(header)
+    print(f"  {'─' * 70}")
+
+    for req in requirements:
+        req_id = req.get("req_id") or "—"
+        shall_id = req.get("id", "—")
+        code_icon = "✅" if req.get("has_code") else "❌"
+        test_icon = "✅" if req.get("has_test") else "❌"
+        review_icon = "✅" if req.get("has_review") else "❌"
+        steps = req.get("step_handlers", [])
+        step_str = f"{len(steps)}" if steps else "—"
+        section = (req.get("section", "") or "")[:30]
+        print(f"  {req_id:<20} {shall_id:<8} {code_icon:<6} {test_icon:<6} {review_icon:<6} {step_str:<8} {section}")
+
+    print(f"  {'─' * 70}")
+    total = summary.get("total", 0)
+    cov = summary.get("coverage_pct", 0.0)
+    print(f"  需求总数: {total}  |  测试覆盖率: {cov}%")
+    print(f"  Code: {summary.get('with_code', 0)}/{total}  Test: {summary.get('with_test', 0)}/{total}  Review: {summary.get('with_review', 0)}/{total}")
+
+    gap_list = gaps.get("gaps", [])
+    if gap_list:
+        print(f"\n  ⚠️  覆盖缺口: {len(gap_list)}")
+        for g in gap_list[:10]:
+            rid = g.get("req_id", "?")
+            stmt = g.get("statement", "")[:50]
+            print(f"    • [{g['type']}] {rid}: {stmt}...")
+        if len(gap_list) > 10:
+            print(f"    ... 还有 {len(gap_list) - 10} 个缺口")
+
+    print()
+
+    # Also output full JSON to stdout for pipe/redirect
+    print(">>> Full JSON:", file=sys.stderr)
     print(json.dumps(lrt, indent=2, ensure_ascii=False, default=str))
 
 
@@ -583,28 +823,55 @@ def cmd_misra_trend(args):
 
 
 def cmd_misra_profile_list():
-    """List available MISRA profiles."""
+    """List available MISRA profiles — both from ci-config.yaml and misra-rules.yaml."""
     from yuleosh.ci.config import load_ci_config
+    import yaml
 
     cfg = load_ci_config(OSH_HOME)
     profiles = cfg.misra.profiles
     active = cfg.misra.active_profile
 
-    if not profiles:
-        print("No MISRA profiles configured.")
-        return
+    # Count rules per profile from misra-rules.yaml
+    misra_rules_path = os.path.join(OSH_HOME, "misra-rules.yaml")
+    profile_counts: dict[str, int] = {"safety": 0, "performance": 0, "testing": 0}
+    if os.path.exists(misra_rules_path):
+        try:
+            with open(misra_rules_path, encoding="utf-8") as f:
+                rules_data = yaml.safe_load(f) or {}
+            for rule_id, rule in rules_data.items():
+                if rule_id == "meta":
+                    continue
+                p = rule.get("profile", "safety")
+                if p in profile_counts:
+                    profile_counts[p] += 1
+                else:
+                    profile_counts[p] = 1
+        except (yaml.YAMLError, OSError):
+            pass
 
-    print(f"\n  📋 MISRA Profiles (active: {active})")
-    print(f"  {'=' * 50}")
-    for prof_name, prof in sorted(profiles.items()):
-        marker = "👉" if prof_name == active else "  "
-        ovr_count = len(prof.rule_overrides)
-        dev_count = len(prof.deviations)
-        print(f"  {marker} {prof_name:15s}  {prof.name}")
-        if ovr_count > 0:
-            print(f"        Rule overrides: {ovr_count}")
-        if dev_count > 0:
-            print(f"        Deviations:     {dev_count}")
+    print(f"\n  📋 MISRA Profiles")
+    print(f"  {'=' * 60}")
+    
+    # Show profile counts from misra-rules.yaml
+    print(f"  Rules by profile (from misra-rules.yaml):")
+    for prof_name in ["safety", "performance", "testing"]:
+        count = profile_counts.get(prof_name, 0)
+        marker = " 👉 ACTIVE" if prof_name == active else ""
+        print(f"    {prof_name:15s}  {count:4d} rules{marker}")
+
+    # Show ci-config.yaml profile overrides if any
+    if profiles:
+        print()
+        print(f"  Profile overrides (from .yuleosh/ci-config.yaml):")
+        for prof_name, prof in sorted(profiles.items()):
+            marker = "👉" if prof_name == active else "  "
+            ovr_count = len(prof.rule_overrides)
+            dev_count = len(prof.deviations)
+            print(f"  {marker} {prof_name:15s}  {prof.name}")
+            if ovr_count > 0:
+                print(f"        Rule overrides: {ovr_count}")
+            if dev_count > 0:
+                print(f"        Deviations:     {dev_count}")
     print()
 
 
@@ -915,6 +1182,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_trace_matrix.add_argument("--spec", default=None, help="Path to spec file")
 
     # misra
+    # audit
+    p_audit = sub.add_parser("audit", help="CL2 audit evidence management")
+    asub = p_audit.add_subparsers(dest="audit_sub")
+    p_audit_evidence = asub.add_parser("evidence", help="Generate CL2 audit evidence bundle")
+    p_audit_evidence.add_argument("--output-dir", "-o", default=None,
+                                   help="Output directory for audit bundle (default: .yuleosh/audit/)")
+
+    # misra
     p_misra = sub.add_parser("misra", help="MISRA C:2023 compliance management")
     msub = p_misra.add_subparsers(dest="misra_sub")
 
@@ -1042,6 +1317,13 @@ def main():
 
     elif args.command == "evidence":
         cmd_evidence_pack()
+
+    elif args.command == "audit":
+        if args.audit_sub == "evidence":
+            cmd_audit_evidence(output_dir=args.output_dir)
+        else:
+            parser.print_help()
+            sys.exit(1)
 
     elif args.command == "traceability":
         if args.traceability_sub == "report":
