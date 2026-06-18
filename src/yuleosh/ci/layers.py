@@ -20,7 +20,8 @@ from typing import Optional
 from yuleosh.ci.config import _get_ci_config, is_strict, is_misra_fail_fast, layer_dependencies
 from yuleosh.ci.result import CIResult, timed_stage
 from yuleosh.ci.stages import (
-    run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check, run_sil_tests,
+    run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check,
+    run_c_coverage, run_sil_tests,
     run_misra_check,
 )
 from yuleosh.ci.stage_utils import (
@@ -112,6 +113,7 @@ def run_layer1(project_dir: Optional[str] = None):
         ("misra-check", run_misra_check),
         ("unit-tests", run_unit_tests),
         ("coverage", run_coverage_check),
+        ("c-coverage", run_c_coverage),
     ]
     
     all_passed = True

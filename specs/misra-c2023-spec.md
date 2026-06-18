@@ -46,21 +46,21 @@ MISRA C:2023 是汽车/工业嵌入式 C 代码的事实编码标准。本集成
   - traceability: "misra-rules.yaml → ci/stages.py:run_misra_check() → ci/misra_report.py:parse_cppcheck_output()"
 
 - 检查工具优先级：`cppcheck --misra=` > `cppcheck --enable=all --suppress=*` 降级回退 > `clang-tidy` 后备
-- SHALL 在 `src/` 下所有 `.c` / `.h` 文件上执行
-- SHALL 读取 `misra-rules.yaml` 确定启用规则集和严重度
+- [REQ-MISRA-S1.1] SHALL 在 `src/` 下所有 `.c` / `.h` 文件上执行
+- [REQ-MISRA-S1.2] SHALL 读取 `misra-rules.yaml` 确定启用规则集和严重度
 
 **SWE-MISRA-S2**: MISRA 违规报告 SHALL 以结构化 JSON 格式保存到 `.osh/ci/misra-report-{commit}.json`。
   - traceability: "ci/misra_report.py:generate_json_report() → .yuleosh/reports/misra-report.json → ASPICE SWE.4"
 
-- SHALL 包含规则编号、描述、文件路径、行号、严重度
-- SHALL 包含统计摘要（total / required / advisory / project-specific）
+- [REQ-MISRA-S2.1] SHALL 包含规则编号、描述、文件路径、行号、严重度
+- [REQ-MISRA-S2.2] SHALL 包含统计摘要（total / required / advisory / project-specific）
 - SHOULD 包含时间戳和工具版本
 
 **SWE-MISRA-S3**: MISRA_FAIL_FAST 环境变量 SHALL 控制违规是否阻断流水线。
   - traceability: "ci/stages.py:is_misra_fail_fast() → ci/config.py:MISRA_FAIL_FAST → run_misra_check() 阻断逻辑"
 
-- `MISRA_FAIL_FAST=1`：任何 Required 违规 SHALL 导致 stage 标记为 "failed"
-- `MISRA_FAIL_FAST=0`（默认）：违规 SHALL 被记录但 stage 标记为 "warning"
+- [REQ-MISRA-S3.1] `MISRA_FAIL_FAST=1`：任何 Required 违规 SHALL 导致 stage 标记为 "failed"
+- [REQ-MISRA-S3.2] `MISRA_FAIL_FAST=0`（默认）：违规 SHALL 被记录但 stage 标记为 "warning"
 
 ### 3.2 规则配置文件
 
@@ -87,8 +87,8 @@ rules:
 **SWE-MISRA-DEV1**: 偏差申请 SHALL 记录在 `docs/misra-deviations.md` 中。
   - traceability: "docs/misra-deviations.md → ci/stages.py:suppress_rules → misra_report.py 偏差排除"
 
-- SHALL 包含规则编号、被豁免的文件/行、理由、审批时间
-- SHALL 在 CI 报告中排除已豁免的违规
+- [REQ-MISRA-DEV1.1] SHALL 包含规则编号、被豁免的文件/行、理由、审批时间
+- [REQ-MISRA-DEV1.2] SHALL 在 CI 报告中排除已豁免的违规
 
 **SWE-MISRA-DEV2**: MISRA 违规报告 SHOULD 在每个 CI 运行后自动更新到 `.osh/evidence/`。
 
