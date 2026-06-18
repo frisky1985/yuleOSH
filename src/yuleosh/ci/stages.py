@@ -793,3 +793,60 @@ def run_c_coverage(project_dir: str, ci: CIResult) -> bool:
         ci.add_stage("c-coverage", "warning", f"Error: {e}")
         print(f"    ⚠️  C coverage error: {e}")
         return True
+
+
+def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
+    """C Coverage gate — block pipeline if line_rate < c_fail_under threshold.
+
+    Reads ``.yuleosh/reports/c-coverage.json`` (written by :func:`run_c_coverage`)
+    and compares the ``line_rate`` against the ``c_fail_under`` threshold from
+    ``.yuleosh/ci-config.yaml``.
+
+    Returns True if coverage meets or exceeds the threshold, False if blocked.
+    Reports 'skipped' when no C coverage report exists.
+    """
+    print("  🚧 CI: C coverage gate (c_fail_under)...")
+
+    from yuleosh.ci.config import _get_ci_config
+
+    try:
+        cfg = _get_ci_config(project_dir)
+        c_fail_under = cfg.coverage.c_fail_under if cfg else 70
+    except Exception as e:
+        log.info("c_fail_under config fallback: %s", e)
+        c_fail_under = 70
+
+    cov_path = Path(project_dir) / ".yuleosh" / "reports" / "c-coverage.json"
+    if not cov_path.exists():
+        ci.add_stage("c-coverage-gate", "skipped",
+                     "No C coverage report at .yuleosh/reports/c-coverage.json")
+        print("    ⏭️  No C coverage report — skipped")
+        return True
+
+    try:
+        with open(cov_path) as f:
+            report = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        ci.add_stage("c-coverage-gate", "failed",
+                     f"Cannot read coverage report: {e}")
+        print(f"    ❌ Cannot read coverage report: {e}")
+        return False
+
+    line_rate = report.get("line_rate", 0.0)
+    branch_rate = report.get("branch_rate", 0.0)
+
+    print(f"    C line coverage:   {line_rate:.1f}%")
+    print(f"    C branch coverage: {branch_rate:.1f}%")
+    print(f"    Threshold (c_fail_under): {c_fail_under}%")
+
+    if line_rate < c_fail_under:
+        detail = f"C line coverage {line_rate:.1f}% < c_fail_under {c_fail_under}%"
+        ci.add_stage("c-coverage-gate", "failed", detail)
+        print(f"    ❌ {detail}")
+        print(f"    🔧 Improve C unit tests to raise coverage above threshold")
+        return False
+
+    ci.add_stage("c-coverage-gate", "passed",
+                 f"line_rate={line_rate:.1f}% >= {c_fail_under}%")
+    print(f"    ✅ C coverage gate passed")
+    return True
