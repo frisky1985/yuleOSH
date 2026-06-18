@@ -74,31 +74,52 @@ def _resolve_handler(step_key: str, legacy_fn) -> callable:
     return legacy_fn
 
 
+# ═══════════════════════════════════════════════════════════════
+# yuleOSH Pipeline — ASPICE V-Model 对齐
+#
+# Left side (specification):      Steps 1-9    SWE.1→SWE.3
+# Bottom (implementation):        Steps 10-11
+# Right side (verification):      Steps 12-17  SWE.4→SWE.6
+#
+# Each left-side stage has a corresponding review step on the right
+# ═══════════════════════════════════════════════════════════════
 PIPELINE_STEPS = [
+    # ── Left side: SWE.1 Requirements ────────────────
     ("spec-check", "小明", "OpenSpec 合规检查", step_spec_check),
     ("super-analysis", "小明", "S.U.P.E.R 启动分析",
      _resolve_handler("super-analysis", step_super_analysis)),
     ("prd", "Hermes", "产品需求分析",
      _resolve_handler("prd", step_hermes_prd)),
-    ("internal-review", "小明", "内部评审", step_internal_review),
+    ("prd-review", "小马", "PRD 质量审查",
+     _resolve_handler("prd-review", step_review_prd)),
+
+    # ── Left side: SWE.2 Architecture Design ─────────
     ("architecture", "Claude", "架构设计",
      _resolve_handler("architecture", step_claude_arch)),
     ("arch-review", "小克", "架构审查", step_review_arch),
-    ("development", "Claude", "开发实现",
+
+    # ── Left side: SWE.3 Detailed Design & Code ─────
+    ("development", "Claude", "开发计划与代码实现",
      _resolve_handler("development", step_claude_dev)),
-    ("devplan-review", "小克", "Development Plan 审查", step_review_devplan),
-    ("internal-code-review", "小克", "代码实现审查", step_review_code),
+    ("devplan-review", "小克", "开发计划审查", step_review_devplan),
+
+    # ── Bottom: Code Pre-Review ─────────────────────
+    ("internal-code-review", "小克", "代码实现预审", step_review_code),
     ("test-planning", "Claude", "测试规划",
      _resolve_handler("test-planning", step_test_planning)),
+
+    # ── Right side: SWE.4 Unit Testing ──────────────
     ("self-test", "Claude", "自测验证", step_claude_test),
     ("self-test-review", "小克", "自测结果审查", step_review_selftest),
-    ("code-review", "Hermes", "代码审查",
+
+    # ── Right side: SWE.5 Integration Testing ───────
+    ("code-review", "Hermes", "集成代码审查",
      _resolve_handler("code-review", step_hermes_review)),
-    ("final-report", "小明", "最终报告", step_final_report),
-    ("prd-review", "小马", "PRD/Super Analysis 审查",
-     _resolve_handler("prd-review", step_review_prd)),
-    ("misra-review", "小马", "MISRA CI 结果审查",
+    ("misra-review", "小马", "MISRA 合规审查",
      _resolve_handler("misra-review", step_review_misra_ci)),
-    ("coverage-review", "小马", "测试覆盖结果审查",
+    ("coverage-review", "小马", "测试覆盖审查",
      _resolve_handler("coverage-review", step_review_test_coverage)),
+
+    # ── Right side: SWE.6 Qualification Testing ─────
+    ("final-report", "小明", "最终报告", step_final_report),
 ]
