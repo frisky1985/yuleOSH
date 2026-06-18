@@ -383,3 +383,149 @@ def run_sil_tests(project_dir: str, ci: CIResult) -> bool:
         ci.add_stage("sil-tests", "failed", reason)
         print(f"    \u274c {reason}")
         return False
+
+def run_misra_check(project_dir: str, ci: CIResult) -> bool:
+    """Run MISRA C:2023 static analysis via cppcheck --addon=misra.
+
+    Parses output through misra_report.py, saves structured report
+    to ``.yuleosh/reports/misra-report.json``, and blocks the pipeline
+    when violations exceed the configured threshold in strict mode.
+
+    Configuration is read from ``.yuleosh/ci-config.yaml`` (misra block).
+    Falls back to cppcheck --std=c11 --addon=misra when no config file.
+
+    Returns True if passed/acceptable violations, False if blocked.
+    """
+    print("  🔍 CI: MISRA C:2023 static analysis...")
+
+    # Load config
+    try:
+        cfg = _get_ci_config(project_dir)
+        misra_cfg = cfg.misra if cfg else None
+    except Exception:
+        misra_cfg = None
+
+    enabled = misra_cfg.enabled if misra_cfg else True
+    if not enabled:
+        ci.add_stage("misra-check", "skipped", "MISRA check disabled in config")
+        print("    ⏭️  MISRA check disabled — skipped")
+        return True
+
+    fail_on_violation = misra_cfg.fail_on_violation if misra_cfg else False
+    fail_threshold = misra_cfg.fail_threshold if misra_cfg else 10
+    addon = misra_cfg.addon if misra_cfg else "misra"
+    cppcheck_std = misra_cfg.cppcheck_std if misra_cfg else "c11"
+    suppress_rules = misra_cfg.suppress_rules if misra_cfg else []
+    strict = is_strict()
+
+    # Find C/C++ source files
+    c_files = []
+    src_dir = os.path.join(project_dir, "src")
+    if os.path.isdir(src_dir):
+        for root, dirs, files in os.walk(src_dir):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+            for f in files:
+                if f.endswith((".c", ".cpp")):
+                    c_files.append(os.path.join(root, f))
+
+    if not c_files:
+        ci.add_stage("misra-check", "skipped", "No C/C++ source files found")
+        print("    ⏭️  No C/C++ source files — skipped")
+        return True
+
+    # Build suppression arguments
+    suppress_args = []
+    for rule_id in suppress_rules:
+        suppress_args.append("--suppress=misra-c2023-" + rule_id)
+        suppress_args.append("--suppress=misra-c2012-" + rule_id)
+
+    # Construct cppcheck command
+    cmd = [
+        "cppcheck",
+        "--addon=" + addon,
+        "--language=c",
+        "--std=" + cppcheck_std,
+        "--enable=all",
+        "--suppress=missingIncludeSystem",
+        "-q",
+    ] + suppress_args + c_files
+
+    try:
+        start = time.perf_counter()
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120, cwd=project_dir
+        )
+        elapsed = time.perf_counter() - start
+    except FileNotFoundError:
+        return _handle_stage_error(ci, "misra-check", "cppcheck not installed", strict)
+    except subprocess.TimeoutExpired:
+        return _handle_stage_error(ci, "misra-check", "cppcheck timed out after 120s", strict)
+    except Exception as e:
+        return _handle_stage_error(ci, "misra-check", "cppcheck execution error: " + str(e), strict)
+
+    # Collect output (cppcheck writes MISRA warnings to stderr)
+    output = result.stderr or result.stdout or ""
+
+    # Process output through misra_report module
+    try:
+        # Try importing from the project-level ci/ directory
+        sys.path.insert(0, project_dir)
+        from yuleosh.ci.misra_report import (
+            parse_cppcheck_output, group_by_rule, enrich_with_definitions,
+            compute_summary_stats, save_report, load_rule_definitions,
+            print_summary,
+        )
+        sys.path.pop(0)
+
+        rule_defs_path = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
+        if misra_cfg and misra_cfg.rule_texts_path:
+            rule_defs_path = Path(misra_cfg.rule_texts_path)
+
+        rule_defs = load_rule_definitions(rule_defs_path)
+        violations = parse_cppcheck_output(output)
+        groups = group_by_rule(violations)
+        groups = enrich_with_definitions(groups, rule_defs)
+        summary = compute_summary_stats(violations, groups)
+
+        output_dir = Path(project_dir) / ".yuleosh" / "reports"
+        save_report(violations, groups, summary, rule_defs, output_dir)
+
+        if violations:
+            print_summary(summary)
+
+    except ImportError as e:
+        log.warning("Could not import misra_report module: %s", e)
+        raw_violations = sum(1 for line in output.splitlines() if "misra" in line.lower())
+        summary = {"total_violations": raw_violations, "total_rules_violated": 0,
+                    "severity_counts": {}, "unique_files": [], "per_file_counts": {}}
+    except Exception as e:
+        log.warning("MISRA report formatting failed: %s", e)
+        raw_violations = sum(1 for line in output.splitlines() if "misra" in line.lower())
+        summary = {"total_violations": raw_violations, "total_rules_violated": 0,
+                    "severity_counts": {}, "unique_files": [], "per_file_counts": {}}
+
+    total_violations = summary["total_violations"]
+
+    # Determine pass/fail
+    if total_violations == 0:
+        ci.add_stage("misra-check", "passed", "No MISRA violations")
+        print("    ✅ MISRA check passed — no violations")
+        return True
+
+    # Save raw output for debugging
+    misra_dir = Path(project_dir) / ".yuleosh" / "reports"
+    misra_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = misra_dir / "misra-raw-output.txt"
+    raw_path.write_text(output)
+
+    detail = str(total_violations) + " MISRA violation(s) found (see .yuleosh/reports/misra-report.json)"
+
+    if fail_on_violation or (strict and total_violations >= fail_threshold):
+        ci.add_stage("misra-check", "failed", detail)
+        print("    ❌ MISRA check FAILED: " + detail)
+        return False
+
+    ci.add_stage("misra-check", "warning", detail)
+    print("    ⚠️  MISRA check: " + detail + " (below threshold " + str(fail_threshold) + ", not blocking)")
+    print("    📍 Full report: .yuleosh/reports/misra-report.json")
+    return True

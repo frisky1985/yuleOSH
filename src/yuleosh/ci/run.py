@@ -48,6 +48,7 @@ run_clang_tidy = _stages.run_clang_tidy
 run_unit_tests = _stages.run_unit_tests
 run_coverage_check = _stages.run_coverage_check
 run_sil_tests = _stages.run_sil_tests
+run_misra_check = _stages.run_misra_check
 import yuleosh.ci.stage_utils as _sutils
 _detect_hil_target = _sutils._detect_hil_target
 _run_hil_mock_tests = _sutils._run_hil_mock_tests
@@ -80,6 +81,7 @@ is_strict = _cfg.is_strict
 is_misra_fail_fast = _cfg.is_misra_fail_fast
 load_ci_config = _cfg.load_ci_config
 CiConfig = _cfg.CiConfig
+MisraConfig = _cfg.MisraConfig
 
 # Result
 from yuleosh.ci.result import CIResult, timed_stage

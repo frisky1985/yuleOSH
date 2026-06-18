@@ -1,0 +1,83 @@
+# yuleOSH MISRA C:2023 Style Configuration
+# For future use with clang-tidy (currently not installed in CI).
+# Configured for Embedded C safety-critical development.
+
+Checks: >
+  -*,
+  clang-analyzer-*,
+  clang-diagnostic-*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -readability-identifier-length,
+  modernize-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+
+CheckOptions:
+  # MISRA C:2023 - Basic Rules (clang-tidy does not natively support MISRA C,
+  # but these diagnostics approximate the same intent)
+  
+  # Rule 1.1: All code shall conform to ISO C standard
+  clang-diagnostic-implicit-function-declaration: true
+  clang-diagnostic-implicit-int: true
+  
+  # Rule 8.4: Compatible declaration must be visible
+  clang-diagnostic-missing-prototypes: true
+  clang-diagnostic-missing-variable-declarations: true
+  
+  # Rule 10.1: Operands shall not be of inappropriate type
+  clang-diagnostic-conditional-type-mismatch: true
+  
+  # Rule 11.6: Casting pointer to integer type
+  clang-diagnostic-int-to-pointer-cast: true
+  clang-diagnostic-pointer-to-int-cast: true
+  
+  # Rule 14.4: Controlling expressions must be essentially Boolean
+  clang-diagnostic-logical-op-parentheses: true
+  
+  # Rule 15.6: Function should have a single exit point
+  readability-function-size: true
+  
+  # Rule 16.3: Switch body shall be compound statement
+  clang-diagnostic-switch: true
+  
+  # Rule 16.6: Default label shall be present in switch
+  clang-diagnostic-covered-switch-default: true
+  
+  # Rule 17.7: Function return value must be used
+  clang-diagnostic-unused-result: true
+  
+  # Rule 21.3: Memory allocation functions should not be used
+  clang-diagnostic-deprecated-declarations: true
+  
+  # Rule 21.12: <stdlib.h> should not be used
+  bugprone-suspicious-include: true
+
+  # Additional safety-oriented checks
+  bugprone-macro-parentheses: true
+  bugprone-swapped-arguments: true
+  bugprone-branch-clone: true
+  bugprone-dynamic-static-initializers: true
+  bugprone-narrowing-conversions: true
+  bugprone-signed-char-misuse: true
+  bugprone-sizeof-expression: true
+  bugprone-unhandled-self-assignment: true
+  
+  readability-braces-around-statements: true
+  readability-else-after-return: true
+  readability-isolate-declaration: true
+  
+  modernize-return-braced-init-list: true
+  modernize-use-nullptr: true
+  
+  # Performance checks for embedded systems
+  performance-for-range-copy: true
+  performance-unnecessary-value-param: true
+  performance-inefficient-string-concatenation: true
+
+HeaderFilterRegex: '.*\\.h$'
