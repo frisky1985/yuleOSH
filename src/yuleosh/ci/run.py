@@ -49,6 +49,7 @@ run_unit_tests = _stages.run_unit_tests
 run_coverage_check = _stages.run_coverage_check
 run_sil_tests = _stages.run_sil_tests
 run_misra_check = _stages.run_misra_check
+run_c_coverage = _stages.run_c_coverage
 import yuleosh.ci.stage_utils as _sutils
 _detect_hil_target = _sutils._detect_hil_target
 _run_hil_mock_tests = _sutils._run_hil_mock_tests

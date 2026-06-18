@@ -682,10 +682,18 @@ def step_review_linker(session: PipelineSession) -> str:
         elif finding_breakdown["major"] > 3:
             overall_status = "retry"
 
+        # Map this step handler to spec requirement IDs (req_id)
+        req_ids = [
+            "SWE-MISRA-S1",       # MISRA C:2023 integration
+            "SWE-MISRA-CFG1",     # misra-rules.yaml rule definitions
+        ]
+
         report = {
             "session": session.name,
             "reviewer": "小克",
             "step": "review-linker",
+            "spec_ref": "SWE.5",
+            "req_ids": req_ids,
             "timestamp": datetime.now().isoformat(),
             "status": overall_status,
             "static_findings": static_findings,
