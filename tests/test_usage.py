@@ -55,20 +55,20 @@ class TestGetOrgTier:
 
     def test_existing_org(self, mock_store):
         """Should return the org's configured tier."""
-        from usage.metering import get_org_tier
+        from yuleosh.usage.metering import get_org_tier
         tier = get_org_tier(mock_store, 1)
         assert tier == "community"
 
     def test_nonexistent_org(self, mock_store):
         """Should return 'community' for missing org."""
-        from usage.metering import get_org_tier
+        from yuleosh.usage.metering import get_org_tier
         mock_store.get_organization_by_id.return_value = None
         tier = get_org_tier(mock_store, 999)
         assert tier == "community"
 
     def test_pro_org(self, mock_store):
         """Should return 'pro' for pro-tier org."""
-        from usage.metering import get_org_tier
+        from yuleosh.usage.metering import get_org_tier
         mock_store.get_organization_by_id.return_value = {
             "id": 2, "tier": "pro", "created_at": datetime.now().isoformat(),
         }
@@ -81,7 +81,7 @@ class TestGetTrialStatus:
 
     def test_in_trial(self, mock_store):
         """New pro org without stripe sub should be in trial."""
-        from usage.metering import get_trial_status
+        from yuleosh.usage.metering import get_trial_status
         # Org created today
         mock_store.get_organization_by_id.return_value = {
             "id": 1, "tier": "pro",
@@ -98,7 +98,7 @@ class TestGetTrialStatus:
 
     def test_no_trial_for_community(self, mock_store):
         """Community tier should not be in trial."""
-        from usage.metering import get_trial_status
+        from yuleosh.usage.metering import get_trial_status
         mock_store.get_organization_by_id.return_value = {
             "id": 1, "tier": "community",
             "created_at": datetime.now().isoformat(),
@@ -109,7 +109,7 @@ class TestGetTrialStatus:
 
     def test_trial_expired(self, mock_store):
         """Org created more than 14 days ago should have expired trial."""
-        from usage.metering import get_trial_status
+        from yuleosh.usage.metering import get_trial_status
         old_date = (datetime.now() - timedelta(days=30)).isoformat()
         mock_store.get_organization_by_id.return_value = {
             "id": 1, "tier": "pro",
@@ -122,7 +122,7 @@ class TestGetTrialStatus:
 
     def test_nonexistent_org(self, mock_store):
         """Missing org should return no trial."""
-        from usage.metering import get_trial_status
+        from yuleosh.usage.metering import get_trial_status
         mock_store.get_organization_by_id.return_value = None
 
         status = get_trial_status(mock_store, 999)
@@ -134,7 +134,7 @@ class TestCheckTierLimit:
 
     def test_within_limit(self, mock_store):
         """Should return allowed=True when under the limit."""
-        from usage.metering import check_tier_limit
+        from yuleosh.usage.metering import check_tier_limit
         mock_store.get_monthly_usage.return_value = {
             "project_count": 0, "pipeline_runs": 5,
             "llm_tokens": 1000, "storage_mb": 10,
@@ -146,7 +146,7 @@ class TestCheckTierLimit:
 
     def test_exceeds_limit(self, mock_store):
         """Should return allowed=False when over the limit."""
-        from usage.metering import check_tier_limit
+        from yuleosh.usage.metering import check_tier_limit
         mock_store.get_monthly_usage.return_value = {
             "pipeline_runs": 99999,
         }
@@ -157,7 +157,7 @@ class TestCheckTierLimit:
 
     def test_unknown_resource(self, mock_store):
         """Unknown resource should always be allowed."""
-        from usage.metering import check_tier_limit
+        from yuleosh.usage.metering import check_tier_limit
         result = check_tier_limit(mock_store, 1, "unknown_resource")
         assert result["allowed"] is True
 
@@ -167,14 +167,14 @@ class TestRecordPipelineRun:
 
     def test_records_pipeline_run(self, mock_store):
         """Should record a pipeline run with llm_tokens."""
-        from usage.metering import record_pipeline_run
+        from yuleosh.usage.metering import record_pipeline_run
         record_pipeline_run(mock_store, 1, 1, llm_tokens=500)
         # record_usage should be called twice (run + tokens)
         assert mock_store.record_usage.call_count == 2
 
     def test_records_run_only(self, mock_store):
         """Should record only the pipeline run when no tokens."""
-        from usage.metering import record_pipeline_run
+        from yuleosh.usage.metering import record_pipeline_run
         record_pipeline_run(mock_store, 1, 1)
         assert mock_store.record_usage.call_count == 1
 
@@ -184,7 +184,7 @@ class TestGetUsageSummary:
 
     def test_returns_summary(self, mock_store):
         """Should return full usage summary dict."""
-        from usage.metering import get_usage_summary
+        from yuleosh.usage.metering import get_usage_summary
         result = get_usage_summary(mock_store, 1)
         assert "tier" in result
         assert "usage" in result
@@ -197,7 +197,7 @@ class TestGetUsageSummary:
 
     def test_llm_enabled_for_pro(self, mock_store):
         """LLM should be enabled for pro tier."""
-        from usage.metering import get_usage_summary
+        from yuleosh.usage.metering import get_usage_summary
         mock_store.get_organization_by_id.return_value = {
             "id": 1, "tier": "pro", "created_at": datetime.now().isoformat(),
         }
@@ -206,7 +206,7 @@ class TestGetUsageSummary:
 
     def test_llm_disabled_for_community(self, mock_store):
         """LLM should be disabled for community tier."""
-        from usage.metering import get_usage_summary
+        from yuleosh.usage.metering import get_usage_summary
         result = get_usage_summary(mock_store, 1)
         assert result["llm_enabled"] is False
 
@@ -220,15 +220,15 @@ class TestStripeConfigured:
 
     def test_not_configured(self):
         """Should return False when no stripe key."""
-        from usage.stripe_gateway import is_stripe_configured
+        from yuleosh.usage.stripe_gateway import is_stripe_configured
         with mock.patch.dict(os.environ, {}, clear=True):
-            with mock.patch("usage.stripe_gateway.STRIPE_SECRET_KEY", ""):
+            with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", ""):
                 assert is_stripe_configured() is False
 
     def test_configured(self):
         """Should return True when stripe key is set."""
-        from usage.stripe_gateway import is_stripe_configured
-        with mock.patch("usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
+        from yuleosh.usage.stripe_gateway import is_stripe_configured
+        with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
             assert is_stripe_configured() is True
 
 
@@ -237,8 +237,8 @@ class TestCreateCheckoutSession:
 
     def test_not_configured_returns_error(self):
         """Should return error when stripe not configured."""
-        from usage.stripe_gateway import create_checkout_session
-        with mock.patch("usage.stripe_gateway.is_stripe_configured", return_value=False):
+        from yuleosh.usage.stripe_gateway import create_checkout_session
+        with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=False):
             result = create_checkout_session(1, "pro", "user@test.com", "test-org")
         assert "error" in result
         assert "not configured" in result["error"]
@@ -247,8 +247,8 @@ class TestCreateCheckoutSession:
         """Should return error when tier has no price ID configured."""
         # Mock stripe as importable but not called because we fail early
         with mock.patch.dict("sys.modules", {"stripe": mock.MagicMock()}):
-            from usage.stripe_gateway import create_checkout_session
-            with mock.patch("usage.stripe_gateway.is_stripe_configured", return_value=True):
+            from yuleosh.usage.stripe_gateway import create_checkout_session
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True):
                 result = create_checkout_session(1, "pro", "user@test.com", "test-org")
             assert "error" in result
             assert "price ID" in result["error"]
@@ -262,12 +262,12 @@ class TestCreateCheckoutSession:
         )
         with mock.patch.dict("sys.modules", {"stripe": mock_stripe}):
             # Patch TIERS to include a price_id for pro
-            from usage import metering
+            from yuleosh.usage import metering
             original = metering.TIERS.copy()
             metering.TIERS["pro"]["stripe_price_id"] = "price_pro_123"
 
-            from usage.stripe_gateway import create_checkout_session
-            with mock.patch("usage.stripe_gateway.is_stripe_configured", return_value=True):
+            from yuleosh.usage.stripe_gateway import create_checkout_session
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True):
                 result = create_checkout_session(1, "pro", "user@test.com", "test-org")
 
             assert "url" in result
@@ -284,8 +284,8 @@ class TestHandleStripeWebhook:
 
     def test_not_configured(self):
         """Should return error when stripe not configured."""
-        from usage.stripe_gateway import handle_stripe_webhook
-        with mock.patch("usage.stripe_gateway.is_stripe_configured", return_value=False):
+        from yuleosh.usage.stripe_gateway import handle_stripe_webhook
+        with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=False):
             result = handle_stripe_webhook(b"{}", "sig")
         assert result["status"] == "error"
 
@@ -295,8 +295,8 @@ class TestHandleStripeWebhook:
         mock_stripe.Webhook.construct_event.side_effect = ValueError("Invalid signature")
 
         with mock.patch.dict("sys.modules", {"stripe": mock_stripe}):
-            from usage.stripe_gateway import handle_stripe_webhook
-            with mock.patch("usage.stripe_gateway.is_stripe_configured", return_value=True):
+            from yuleosh.usage.stripe_gateway import handle_stripe_webhook
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True):
                 result = handle_stripe_webhook(b"{}", "bad_sig")
 
         assert result["status"] == "error"
@@ -318,10 +318,10 @@ class TestHandleStripeWebhook:
         mock_stripe.Webhook.construct_event.return_value = event
 
         with mock.patch.dict("sys.modules", {"stripe": mock_stripe}):
-            from usage.stripe_gateway import handle_stripe_webhook
+            from yuleosh.usage.stripe_gateway import handle_stripe_webhook
             from yuleosh.store import Store  # noqa: used by import inside handler
 
-            with mock.patch("usage.stripe_gateway.is_stripe_configured", return_value=True), \
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True), \
                  mock.patch("yuleosh.store.Store") as MockStore:
                 mock_store_instance = mock.MagicMock()
                 MockStore.return_value = mock_store_instance
@@ -347,9 +347,9 @@ class TestHandleStripeWebhook:
         mock_store_instance.get_org_by_stripe_subscription.return_value = {"id": 1}
 
         with mock.patch.dict("sys.modules", {"stripe": mock_stripe}):
-            from usage.stripe_gateway import handle_stripe_webhook
+            from yuleosh.usage.stripe_gateway import handle_stripe_webhook
 
-            with mock.patch("usage.stripe_gateway.is_stripe_configured", return_value=True), \
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True), \
                  mock.patch("yuleosh.store.Store") as MockStore:
                 MockStore.return_value = mock_store_instance
                 result = handle_stripe_webhook(b"{}", "valid_sig")

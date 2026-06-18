@@ -35,6 +35,10 @@ Thumbs.db
 .venv/
 venv/
 
+# Secrets / certificates
+*.key
+*.pem
+
 # Runtime data (persistent DB, session state)
 .yuleosh/
 

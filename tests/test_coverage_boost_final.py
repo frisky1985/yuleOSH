@@ -68,7 +68,7 @@ class TestExecuteBodies:
         with patch("yuleosh.store.Store") as mock_store:
             store = MagicMock()
             mock_store.return_value = store
-            result = get_usage_summary(1)
+            result = get_usage_summary(store, 1)
             assert result is not None or result is None
 
     def test_usage_tier_check(self):
@@ -76,7 +76,7 @@ class TestExecuteBodies:
         with patch("yuleosh.store.Store") as mock_store:
             store = MagicMock()
             mock_store.return_value = store
-            result = check_tier_limit("free", 1)
+            result = check_tier_limit(store, 1, "free")
             assert isinstance(result, dict) or result is not None
 
     def test_spec_validate_diff(self):

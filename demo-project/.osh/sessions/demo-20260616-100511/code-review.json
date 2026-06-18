@@ -1,0 +1,23 @@
+{
+  "session": "demo-20260616-100511",
+  "reviewer": "Hermes",
+  "timestamp": "2026-06-16T10:05:11.572891",
+  "status": "retry",
+  "_raw_llm_output": "# Demo Analysis\n\n## Summary\nThe requirement has been analyzed. 1 functional component identified.\n\n## Architecture\n- **Component**: DemoController\n  - Handles user-requested functionality\n## Implementation\n- **Source files**: src/demo.c, include/demo.h\n## Test Plan\n- **Unit tests**: 2 test cases",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "reviewer-error",
+      "file": "",
+      "line": null,
+      "message": "LLM review output was not valid JSON. Raw output (first 500 chars): # Demo Analysis\n\n## Summary\nThe requirement has been analyzed. 1 functional component identified.\n\n## Architecture\n- **Component**: DemoController\n  - Handles user-requested functionality\n## Implementation\n- **Source files**: src/demo.c, include/demo.h\n## Test Plan\n- **Unit tests**: 2 test cases"
+    }
+  ],
+  "finding_breakdown": {
+    "critical": 0,
+    "major": 1,
+    "minor": 0,
+    "info": 0
+  },
+  "summary": "LLM review could not be parsed — check raw output."
+}

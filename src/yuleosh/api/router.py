@@ -30,6 +30,7 @@ from .audit import handle_audit
 from .auth import handle_auth
 from .demo import handle_demo
 from .preview import handle_preview
+from .subscription import handle_subscription
 
 
 # Resource routing map: resource_name -> handler function
@@ -49,6 +50,7 @@ ROUTES = {
     "audit": handle_audit,
     "auth": handle_auth,
     "demo": handle_demo,
+    "subscription": handle_subscription,
     "preview": handle_preview,
 }
 

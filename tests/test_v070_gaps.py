@@ -57,13 +57,13 @@ class TestRaceConditionGuard:
 
     def test_check_pipeline_not_running_no_sessions(self):
         """GIVEN no sessions directory WHEN check THEN returns True."""
-        from evidence.pack import _check_pipeline_not_running
+        from yuleosh.evidence.pack import _check_pipeline_not_running
         with tempfile.TemporaryDirectory() as td:
             assert _check_pipeline_not_running(td) is True
 
     def test_check_pipeline_not_running_clean_sessions(self):
         """GIVEN session JSON with 'completed' status WHEN check THEN returns True."""
-        from evidence.pack import _check_pipeline_not_running
+        from yuleosh.evidence.pack import _check_pipeline_not_running
         with tempfile.TemporaryDirectory() as td:
             sessions_dir = Path(td) / ".osh" / "sessions"
             sessions_dir.mkdir(parents=True)
@@ -76,7 +76,7 @@ class TestRaceConditionGuard:
 
     def test_check_pipeline_running_detected(self):
         """GIVEN session JSON with 'running' status WHEN check THEN returns False."""
-        from evidence.pack import _check_pipeline_not_running
+        from yuleosh.evidence.pack import _check_pipeline_not_running
         with tempfile.TemporaryDirectory() as td:
             sessions_dir = Path(td) / ".osh" / "sessions"
             sessions_dir.mkdir(parents=True)
@@ -89,7 +89,7 @@ class TestRaceConditionGuard:
 
     def test_check_pipeline_in_progress_detected(self):
         """GIVEN session JSON with 'in_progress' status WHEN check THEN returns False."""
-        from evidence.pack import _check_pipeline_not_running
+        from yuleosh.evidence.pack import _check_pipeline_not_running
         with tempfile.TemporaryDirectory() as td:
             sessions_dir = Path(td) / ".osh" / "sessions"
             sessions_dir.mkdir(parents=True)
@@ -102,7 +102,7 @@ class TestRaceConditionGuard:
 
     def test_check_pipeline_corrupt_json_skipped(self):
         """GIVEN corrupt session JSON WHEN check THEN skips and returns True."""
-        from evidence.pack import _check_pipeline_not_running
+        from yuleosh.evidence.pack import _check_pipeline_not_running
         with tempfile.TemporaryDirectory() as td:
             sessions_dir = Path(td) / ".osh" / "sessions"
             sessions_dir.mkdir(parents=True)

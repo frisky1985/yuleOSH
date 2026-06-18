@@ -1,0 +1,238 @@
+# ASPICE v3.1 Compliance Checkpoints
+# Defines SWE.1~SWE.6 check templates for yuleOSH compliance checker.
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "Software Engineering Process Group — SWE.1~SWE.6"
+
+swe.1:
+  id: "SWE.1"
+  title: "Software Requirements Analysis"
+  description: |
+    Transform system requirements into a structured set of software requirements.
+  base_practices:
+    - id: "SWE.1.BP1"
+      title: "Specify software requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/software-requirements.md"
+          description: "Software Requirements Specification (SRS)"
+        - type: "document"
+          path: "docs/requirements.md"
+          description: "Alternative requirements document"
+      check:
+        - "Each requirement has a unique identifier (REQ-xxx)"
+        - "Each requirement contains SHALL statements"
+        - "Requirements are traced to system requirements"
+    - id: "SWE.1.BP2"
+      title: "Structure software requirements"
+      output_evidence:
+        - type: "document"
+          path: "specs/"
+          description: "Structured specs directory"
+      check:
+        - "Requirements are organized by functional area"
+        - "Requirements have defined attributes (priority, status)"
+    - id: "SWE.1.BP3"
+      title: "Evaluate impact of requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/impact-analysis.md"
+          description: "Impact analysis document"
+      check:
+        - "Changes to requirements trigger impact analysis"
+        - "Impact analysis covers schedule, resources, and risks"
+
+swe.2:
+  id: "SWE.2"
+  title: "Software Architectural Design"
+  description: |
+    Establish a software architectural design that identifies components,
+    their interfaces, and data flow.
+  base_practices:
+    - id: "SWE.2.BP1"
+      title: "Develop software architecture"
+      output_evidence:
+        - type: "document"
+          path: "docs/architecture.md"
+          description: "Software architecture document"
+        - type: "document"
+          path: "ARCHITECTURE.md"
+          description: "Alternative architecture document"
+      check:
+        - "Architecture covers all software requirements"
+        - "Architecture defines component boundaries and interfaces"
+    - id: "SWE.2.BP2"
+      title: "Define interfaces"
+      output_evidence:
+        - type: "source"
+          path: "include/"
+          description: "Header files defining interfaces"
+      check:
+        - "All external interfaces are defined"
+        - "Interface specifications include data types and range"
+    - id: "SWE.2.BP3"
+      title: "Verify architecture"
+      output_evidence:
+        - type: "document"
+          path: "docs/architecture-review.md"
+          description: "Architecture review record"
+      check:
+        - "Architecture review is conducted and documented"
+        - "Review findings are tracked to closure"
+
+swe.3:
+  id: "SWE.3"
+  title: "Software Detailed Design and Unit Construction"
+  description: |
+    Develop a detailed design for each software component and construct units.
+  base_practices:
+    - id: "SWE.3.BP1"
+      title: "Develop detailed design"
+      output_evidence:
+        - type: "source"
+          path: "src/"
+          description: "Source code directory"
+      check:
+        - "Source code follows defined coding standards"
+        - "Each function has a clear, single responsibility"
+        - "Code complexity is managed (functions < 50 lines)"
+    - id: "SWE.3.BP2"
+      title: "Define unit test cases"
+      output_evidence:
+        - type: "test"
+          path: "tests/"
+          description: "Unit test directory"
+      check:
+        - "Unit tests exist for each software unit"
+        - "Test cases cover normal, boundary, and error conditions"
+        - "Test cases are traceable to requirements"
+    - id: "SWE.3.BP3"
+      title: "Verify detailed design"
+      output_evidence:
+        - type: "document"
+          path: "docs/design-review.md"
+          description: "Design review record"
+      check:
+        - "Design review is conducted per component"
+        - "Review covers correctness, consistency, and testability"
+
+swe.4:
+  id: "SWE.4"
+  title: "Software Unit Verification"
+  description: |
+    Verify software units against the detailed design and requirements.
+  base_practices:
+    - id: "SWE.4.BP1"
+      title: "Perform unit verification"
+      output_evidence:
+        - type: "test"
+          path: "tests/"
+          description: "Unit test results"
+        - type: "ci"
+          path: ".osh/ci/"
+          description: "CI test execution records"
+      check:
+        - "All unit tests pass (100% pass rate)"
+        - "Statement coverage ≥ 80%"
+        - "Branch/condition coverage ≥ 70%"
+    - id: "SWE.4.BP2"
+      title: "Establish bidirectional traceability"
+      output_evidence:
+        - type: "evidence"
+          path: ".osh/evidence/traceability-matrix.md"
+          description: "Traceability matrix"
+      check:
+        - "Each requirement is traced to unit tests"
+        - "Traceability matrix is maintained and current"
+    - id: "SWE.4.BP3"
+      title: "Evaluate unit verification results"
+      output_evidence:
+        - type: "evidence"
+          path: ".osh/evidence/"
+          description: "Evidence collection"
+      check:
+        - "Failed tests are analyzed and documented"
+        - "Regression test strategy is defined"
+
+swe.5:
+  id: "SWE.5"
+  title: "Software Integration and Integration Test"
+  description: |
+    Integrate software units and verify the integrated software against
+    the architecture and requirements.
+  base_practices:
+    - id: "SWE.5.BP1"
+      title: "Develop integration strategy"
+      output_evidence:
+        - type: "document"
+          path: "docs/integration-strategy.md"
+          description: "Integration strategy document"
+      check:
+        - "Integration sequence is defined and justified"
+        - "Stubs/drivers are identified"
+    - id: "SWE.5.BP2"
+      title: "Integrate software units"
+      output_evidence:
+        - type: "ci"
+          path: ".osh/ci/"
+          description: "CI integration records"
+      check:
+        - "Integration builds succeed"
+        - "Integration follows the defined strategy"
+    - id: "SWE.5.BP3"
+      title: "Perform integration tests"
+      output_evidence:
+        - type: "test"
+          path: "tests/integration/"
+          description: "Integration test directory"
+        - type: "ci"
+          path: ".osh/ci/"
+          description: "Integration test results"
+      check:
+        - "Integration tests cover component interfaces"
+        - "Integration tests verify data flow between components"
+        - "All integration tests pass"
+
+swe.6:
+  id: "SWE.6"
+  title: "Software Qualification Test"
+  description: |
+    Test the complete software against software requirements in the target
+    environment or a simulated environment.
+  base_practices:
+    - id: "SWE.6.BP1"
+      title: "Develop qualification test strategy"
+      output_evidence:
+        - type: "document"
+          path: "docs/qualification-strategy.md"
+          description: "Qualification test strategy"
+      check:
+        - "Qualification test scope covers all requirements"
+        - "Acceptance criteria are defined for each requirement"
+    - id: "SWE.6.BP2"
+      title: "Perform qualification tests"
+      output_evidence:
+        - type: "ci"
+          path: ".osh/ci/"
+          description: "Qualification test results"
+        - type: "sil"
+          path: ".osh/ci/"
+          description: "SIL/HIL test results"
+      check:
+        - "All qualification tests pass"
+        - "Tests are executed in target or equivalent environment"
+        - "Resulting evidence is archived"
+    - id: "SWE.6.BP3"
+      title: "Establish traceability"
+      output_evidence:
+        - type: "evidence"
+          path: ".osh/evidence/acceptance-matrix.md"
+          description: "Acceptance matrix"
+        - type: "evidence"
+          path: ".osh/evidence/requirement-coverage.md"
+          description: "Requirement coverage report"
+      check:
+        - "Qualification tests are traceable to requirements"
+        - "Coverage gaps are identified and documented"

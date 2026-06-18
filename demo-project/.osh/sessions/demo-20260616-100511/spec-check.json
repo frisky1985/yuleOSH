@@ -1,0 +1,18 @@
+{
+  "file": "/Users/stefan/.openclaw/workspace/tasks/yuleOSH/demo-project/docs/spec.md",
+  "requirements": 1,
+  "scenarios": 1,
+  "total_shall": 1,
+  "issues": [],
+  "issue_count": 0,
+  "error_count": 0,
+  "coverage": {
+    "score": 100.0,
+    "total_requirements": 1,
+    "with_shall": 1,
+    "with_reason": 1,
+    "scenarios_total": 1,
+    "scenarios_complete": 1,
+    "pass_threshold": true
+  }
+}

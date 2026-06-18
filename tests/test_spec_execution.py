@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 class TestSpecParseExecution:
     def test_spec_parse_basic(self):
         from yuleosh.spec.validate import parse_spec
-        content = "# Test\n## Requirements\n### REQ-001: Login\n*shall* work"
+        content = "# Test\n## Requirements\n### REQ-001: Login\n- The system SHALL work"
         with patch("pathlib.Path.exists", return_value=True):
             with patch("pathlib.Path.read_text", return_value=content):
                 doc = parse_spec("/tmp/test.md")
@@ -21,9 +21,9 @@ class TestSpecParseExecution:
             "# Full Spec\n"
             "## Functional Requirements\n"
             "### REQ-001: User Login\n"
-            "*shall* authenticate user with valid credentials\n"
-            "*should* lock after 5 attempts\n"
-            "*may* support biometric\n"
+            "- The system SHALL authenticate user with valid credentials\n"
+            "- The system SHOULD lock after 5 attempts\n"
+            "- The system MAY support biometric\n"
             "**reason** Security requirement\n"
             "## Scenarios\n"
             "### SCEN-001: Successful Login\n"
@@ -49,8 +49,8 @@ class TestSpecParseExecution:
         content = (
             "# Multi Req\n"
             "## Requirements\n"
-            "### REQ-001: First\n*shall* work\n"
-            "### REQ-002: Second\n*shall* also work\n"
+            "### REQ-001: First\n- The system SHALL work\n"
+            "### REQ-002: Second\n- The system SHALL also work\n"
         )
         with patch("pathlib.Path.exists", return_value=True):
             with patch("pathlib.Path.read_text", return_value=content):
@@ -59,7 +59,7 @@ class TestSpecParseExecution:
 
     def test_spec_parse_empty_line_handling(self):
         from yuleosh.spec.validate import parse_spec
-        content = "# Empty Handling\n\n## Requirements\n\n### REQ-001: Demo\n\n*shall* work\n\n"
+        content = "# Empty Handling\n\n## Requirements\n\n### REQ-001: Demo\n\n- The system SHALL work\n\n"
         with patch("pathlib.Path.exists", return_value=True):
             with patch("pathlib.Path.read_text", return_value=content):
                 doc = parse_spec("/tmp/test.md")

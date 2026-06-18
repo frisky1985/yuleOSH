@@ -33,7 +33,7 @@ def create_checkout_session(org_id: int, tier: str, email: str, org_slug: str) -
         import stripe
         stripe.api_key = STRIPE_SECRET_KEY
 
-        from usage.metering import TIERS
+        from yuleosh.usage.metering import TIERS
         tier_config = TIERS.get(tier, TIERS["pro"])
 
         if not tier_config.get("stripe_price_id"):

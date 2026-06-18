@@ -28,7 +28,7 @@ jobs:
 
     - name: Run tests with coverage gate
       run: |
-        python -m pytest tests/ -q --ignore=tests/test_e2e.py --cov=yuleosh --cov-fail-under=80
+        python -m pytest tests/ -q --ignore=tests/test_e2e.py --cov=src/yuleosh --cov-fail-under=80
 
     - name: Run CI Layer 1
       run: |
