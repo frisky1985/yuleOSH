@@ -26,6 +26,23 @@ log = logging.getLogger("ci.sync_check")
 
 DEFAULT_GATE_FILE = "docs/.sync-gate.yaml"
 
+# YAML文档Schema验证（CL2-E05：文档-代码同步 YAML Schema 验证）
+# 定义需要验证的文档类型及其预期的Schema字段
+DOC_YAML_SCHEMAS = {
+    "architecture": {
+        "required_fields": ["module_name", "version", "last_updated", "code_path"],
+        "patterns": ["docs/architecture/**/*.yaml", "docs/architecture/**/*.yml"],
+    },
+    "interface": {
+        "required_fields": ["interface_name", "parameters", "return_type", "changelog"],
+        "patterns": ["docs/interfaces/**/*.yaml", "docs/interfaces/**/*.yml"],
+    },
+    "requirement": {
+        "required_fields": ["requirement_id", "description", "status", "code_module"],
+        "patterns": ["docs/requirements/**/*.yaml", "docs/requirements/**/*.yml"],
+    },
+}
+
 
 def load_sync_gate_config(project_dir: str) -> list[dict]:
     """Load the sync-gate YAML config from ``docs/.sync-gate.yaml``.
@@ -228,9 +245,155 @@ def save_sync_evidence(project_dir: str, result: dict) -> str:
     return str(evidence_path)
 
 
+# ------------------------------------------------------------------
+# CL2-E05: YAML Schema validation for document files
+# ------------------------------------------------------------------
+
+
+def validate_doc_yaml_schema(project_dir: str) -> list[dict]:
+    """Validate YAML document files against expected schemas (CL2-E05).
+
+    Scans the project for YAML documents matching known patterns
+    (architecture, interface, requirement) and validates that each
+    contains the required fields defined in DOC_YAML_SCHEMAS.
+
+    Returns a list of findings (error/warning/info) per document.
+    """
+    findings: list[dict] = []
+    project_path = Path(project_dir)
+    import yaml
+
+    for doc_type, schema in DOC_YAML_SCHEMAS.items():
+        required = schema["required_fields"]
+        patterns = schema["patterns"]
+        matching_files: list[Path] = []
+        for pat in patterns:
+            matching_files.extend(project_path.glob(pat))
+
+        if not matching_files:
+            findings.append({
+                "rule": f"schema-{doc_type}",
+                "severity": "info",
+                "message": f"No {doc_type} YAML documents found matching {patterns}",
+            })
+            continue
+
+        for f in matching_files:
+            try:
+                with open(f, "r", encoding="utf-8") as fh:
+                    doc = yaml.safe_load(fh)
+            except (OSError, yaml.YAMLError) as e:
+                findings.append({
+                    "rule": f"schema-{doc_type}",
+                    "severity": "error",
+                    "file": str(f),
+                    "message": f"Cannot parse YAML file: {e}",
+                })
+                continue
+
+            if not isinstance(doc, dict):
+                findings.append({
+                    "rule": f"schema-{doc_type}",
+                    "severity": "error",
+                    "file": str(f),
+                    "message": f"Expected a YAML mapping (dict), got {type(doc).__name__}",
+                })
+                continue
+
+            missing = [rf for rf in required if rf not in doc]
+            if missing:
+                findings.append({
+                    "rule": f"schema-{doc_type}",
+                    "severity": "error",
+                    "file": str(f),
+                    "message": f"Missing required field(s): {', '.join(missing)}",
+                })
+            else:
+                findings.append({
+                    "rule": f"schema-{doc_type}",
+                    "severity": "info",
+                    "file": str(f),
+                    "message": f"All required fields present: {', '.join(required)}",
+                })
+
+    return findings
+
+
+# ------------------------------------------------------------------
+# CL2-E06: Document state gate with critical/warning differentiation
+# ------------------------------------------------------------------
+
+
+def run_sync_check_gate(
+    project_dir: str,
+    base_ref: str = "HEAD",
+) -> dict:
+    """Enhanced sync gate combining doc-tracking (E06) and schema validation (E05).
+
+    Returns a consolidated result dict with:
+        - status: "passed" | "failed" | "warning"
+        - tracking_results: results from run_sync_check()
+        - schema_results: results from validate_doc_yaml_schema()
+        - summary: text summary
+    """
+    result: dict = {
+        "status": "passed",
+        "tracking_results": {},
+        "schema_results": [],
+        "summary": "",
+        "generated_at": datetime.now().isoformat(),
+    }
+
+    # Part A: run_sync_check (E06)
+    tracking = run_sync_check(project_dir, base_ref=base_ref)
+    result["tracking_results"] = tracking
+
+    # Part B: validate_doc_yaml_schema (E05)
+    schema_findings = validate_doc_yaml_schema(project_dir)
+    result["schema_results"] = schema_findings
+
+    # Determine overall status
+    tracking_status = tracking.get("status", "passed")
+    schema_errors = [
+        sf for sf in schema_findings if sf.get("severity") == "error"
+    ]
+
+    if tracking_status == "failed" or schema_errors:
+        result["status"] = "failed"
+    elif tracking_status == "warning" or any(
+        sf.get("severity") in ("error", "warning") for sf in schema_findings
+    ):
+        result["status"] = "warning"
+    else:
+        result["status"] = "passed"
+
+    total_findings = len(schema_findings) + len(tracking.get("rule_results", []))
+    error_count = len(schema_errors) + sum(
+        1 for r in tracking.get("rule_results", []) if r.get("severity") == "error"
+    )
+    warning_count = sum(
+        1 for r in tracking.get("rule_results", []) if r.get("severity") == "warning"
+    )
+
+    result["summary"] = (
+        f"Sync gate: {result['status']} | {total_findings} total, "
+        f"{error_count} error(s), {warning_count} warning(s)"
+    )
+
+    return result
+
+
 def print_sync_result(result: dict) -> None:
-    """Print a human-readable summary of the sync check result."""
-    status = result.get("status", "unknown")
+    """Print a human-readable summary of the sync check result.
+
+    Supports both plain run_sync_check() output and the enhanced
+    run_sync_check_gate() output with schema validation results.
+    """
+    # Deeper access: if this is run_sync_check_gate output, extract sub-results
+    tracking = result.get("tracking_results", result)
+    schema_results = result.get("schema_results", [])
+
+    status = result.get("status", tracking.get("status", "unknown"))
     if status == "passed":
         status_icon = "✅"
     elif status == "warning":
@@ -241,39 +404,64 @@ def print_sync_result(result: dict) -> None:
     print(f"\n  📝 Doc Sync Gate Check")
     print(f"  {'=' * 50}")
     print(f"  Status: {status_icon} {status.upper()}")
-    print(f"  Generated: {result.get('generated_at', '')[:19]}")
+    print(f"  Generated: {result.get('generated_at', tracking.get('generated_at', ''))[:19]}")
     print()
 
-    changed = result.get("changed_files", [])
+    # Part 1: Code→Doc tracking (E06)
+    changed = tracking.get("changed_files", [])
+    print(f"  🎯 [E06] Code-Doc Tracking")
+    print(f"  {'─' * 50}")
     print(f"  Changed files ({len(changed)}):")
     for cf in changed:
         print(f"    • {cf}")
     print()
 
-    rules = result.get("rule_results", [])
-    if not rules:
-        print(f"  ✅ All sync gate rules satisfied — no documentation gaps")
-        return
+    rules = tracking.get("rule_results", [])
+    if rules:
+        errors = [r for r in rules if r.get("severity") == "error"]
+        warnings = [r for r in rules if r.get("severity") == "warning"]
 
-    errors = [r for r in rules if r.get("severity") == "error"]
-    warnings = [r for r in rules if r.get("severity") == "warning"]
+        for e in errors:
+            print(f"  ❌ [ERROR] {e['rule_id']}")
+            print(f"       Reason: {e.get('reason', 'N/A')}")
+            print(f"       Issue:  {e.get('message', 'N/A')}")
+            for mf in e.get("matched_files", []):
+                print(f"       ← {mf}")
+            print()
 
-    for e in errors:
-        print(f"  ❌ [ERROR] {e['rule_id']}")
-        print(f"       Reason: {e.get('reason', 'N/A')}")
-        print(f"       Issue:  {e.get('message', 'N/A')}")
-        for mf in e.get("matched_files", []):
-            print(f"       ← {mf}")
-        print()
+        for w in warnings:
+            print(f"  ⚠️  [WARNING] {w['rule_id']}")
+            print(f"       Reason: {w.get('reason', 'N/A')}")
+            print(f"       Issue:  {w.get('message', 'N/A')}")
+            print()
+    else:
+        print(f"  ✅ All code→doc tracking rules satisfied")
+    print()
 
-    for w in warnings:
-        print(f"  ⚠️  [WARNING] {w['rule_id']}")
-        print(f"       Reason: {w.get('reason', 'N/A')}")
-        print(f"       Issue:  {w.get('message', 'N/A')}")
-        print()
-
+    # Part 2: YAML Schema validation (E05)
+    print(f"  📐 [E05] YAML Schema Validation")
     print(f"  {'─' * 50}")
-    print(f"  {len(errors)} error(s), {len(warnings)} warning(s)")
+    if schema_results:
+        schema_errors = [s for s in schema_results if s.get("severity") == "error"]
+        schema_warnings = [s for s in schema_results if s.get("severity") == "warning"]
+        schema_infos = [s for s in schema_results if s.get("severity") == "info"]
+
+        for e in schema_errors:
+            print(f"  ❌ [ERROR] {e.get('rule', '?')}: {e.get('message', '')}")
+            if e.get("file"):
+                print(f"       File: {e['file']}")
+            print()
+
+        for w in schema_warnings:
+            print(f"  ⚠️  [WARNING] {w.get('rule', '?')}: {w.get('message', '')}")
+            if w.get("file"):
+                print(f"       File: {w['file']}")
+            print()
+
+        print(f"  {len(schema_errors)} schema error(s), {len(schema_warnings)} warning(s), "
+              f"{len(schema_infos)} info(s)")
+    else:
+        print(f"  ✅ No schema validation issues")
     print()
 
     evidence_path = result.get("_evidence_path", "")
@@ -287,7 +475,8 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Doc sync gate — verify docs are updated with code changes",
+        description="Doc sync gate — verify docs are updated with code changes "
+                    "(CL2-E05: YAML Schema validation + E06: doc tracking gate)",
     )
     parser.add_argument(
         "--project-dir", default=os.environ.get("OSH_HOME", os.getcwd()),
@@ -301,10 +490,18 @@ def main():
         "--save", action="store_true", default=True,
         help="Save evidence to .yuleosh/reports/docsync-evidence.json",
     )
+    parser.add_argument(
+        "--enhanced", action="store_true",
+        help="Run enhanced gate including YAML Schema validation (CL2-E05)",
+    )
     args = parser.parse_args()
 
     project_dir = args.project_dir
-    result = run_sync_check(project_dir, base_ref=args.base_ref)
+
+    if args.enhanced:
+        result = run_sync_check_gate(project_dir, base_ref=args.base_ref)
+    else:
+        result = run_sync_check(project_dir, base_ref=args.base_ref)
 
     if args.save:
         path = save_sync_evidence(project_dir, result)

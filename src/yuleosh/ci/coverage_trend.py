@@ -252,3 +252,184 @@ def _parse_timestamp(ts_str: str) -> datetime:
         return datetime.fromisoformat(ts_str)
     except (ValueError, TypeError):
         return datetime(1970, 1, 1)
+
+
+# ------------------------------------------------------------------
+# CL2-E04 step 4: Coverage regression alert
+# ------------------------------------------------------------------
+
+
+def check_coverage_regression(
+    project_dir: str,
+    line_drop_threshold: float = 5.0,
+    branch_drop_threshold: float = 5.0,
+    window: int = 3,
+) -> dict:
+    """Check for coverage regression against recent history.
+
+    Compares the **latest** entry against the **window**-entry rolling average.
+    Flags a regression if the drop exceeds *line_drop_threshold* or
+    *branch_drop_threshold* percentage points.
+
+    Returns a dict with:
+        - regression: bool (True if any metric regressed)
+        - alerts: list of alert dicts
+        - latest: latest coverage entry
+        - baseline_avg: rolling average over window entries
+        - status: "passed" | "warning"
+    """
+    result: dict = {
+        "regression": False,
+        "alerts": [],
+        "latest": {},
+        "baseline_avg": {},
+        "status": "passed",
+    }
+
+    path = Path(project_dir) / TREND_FILE
+    if not path.exists():
+        result["status"] = "warning"
+        result["alerts"].append({
+            "type": "no_data",
+            "message": f"No coverage trend data found at {path}",
+        })
+        return result
+
+    entries_raw: list[dict] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    entries_raw.append(json.loads(line))
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+    if len(entries_raw) < 2:
+        result["status"] = "warning"
+        result["alerts"].append({
+            "type": "insufficient_data",
+            "message": f"Need at least 2 trend entries, got {len(entries_raw)}",
+        })
+        return result
+
+    latest = entries_raw[-1]
+    result["latest"] = latest
+
+    # Compute rolling average over the last `window` entries (excluding latest)
+    baseline_entries = entries_raw[-(window + 1):-1] if len(entries_raw) > window + 1 else entries_raw[:-1]
+
+    def _avg(key: str, sub_key: str) -> Optional[float]:
+        vals = [e.get(key, {}).get(sub_key) for e in baseline_entries
+                if e.get(key, {}).get(sub_key) is not None]
+        return sum(vals) / len(vals) if vals else None
+
+    c_line_avg = _avg("c", "line_rate")
+    c_branch_avg = _avg("c", "branch_rate")
+    py_line_avg = _avg("python", "line_rate")
+    py_branch_avg = _avg("python", "branch_rate")
+
+    result["baseline_avg"] = {
+        "c_line_rate": f"{c_line_avg:.1f}" if c_line_avg is not None else None,
+        "c_branch_rate": f"{c_branch_avg:.1f}" if c_branch_avg is not None else None,
+        "py_line_rate": f"{py_line_avg:.1f}" if py_line_avg is not None else None,
+        "py_branch_rate": f"{py_branch_avg:.1f}" if py_branch_avg is not None else None,
+    }
+
+    # Check C line rate regression
+    latest_c_line = latest.get("c", {}).get("line_rate")
+    if latest_c_line is not None and c_line_avg is not None:
+        drop = c_line_avg - latest_c_line
+        if drop > line_drop_threshold:
+            result["regression"] = True
+            result["alerts"].append({
+                "type": "c_line_regression",
+                "severity": "warning",
+                "metric": "C line coverage",
+                "current": latest_c_line,
+                "baseline_avg": round(c_line_avg, 2),
+                "drop": round(drop, 2),
+                "threshold": line_drop_threshold,
+                "message": (
+                    f"C line coverage dropped by {drop:.1f}pp "
+                    f"({latest_c_line:.1f}% vs avg {c_line_avg:.1f}%, "
+                    f"threshold {line_drop_threshold}pp)"
+                ),
+            })
+
+    # Check C branch rate regression
+    latest_c_branch = latest.get("c", {}).get("branch_rate")
+    if latest_c_branch is not None and c_branch_avg is not None:
+        drop = c_branch_avg - latest_c_branch
+        if drop > branch_drop_threshold:
+            result["regression"] = True
+            result["alerts"].append({
+                "type": "c_branch_regression",
+                "severity": "warning",
+                "metric": "C branch coverage",
+                "current": latest_c_branch,
+                "baseline_avg": round(c_branch_avg, 2),
+                "drop": round(drop, 2),
+                "threshold": branch_drop_threshold,
+                "message": (
+                    f"C branch coverage dropped by {drop:.1f}pp "
+                    f"({latest_c_branch:.1f}% vs avg {c_branch_avg:.1f}%, "
+                    f"threshold {branch_drop_threshold}pp)"
+                ),
+            })
+
+    # Check Python line rate regression
+    latest_py_line = latest.get("python", {}).get("line_rate")
+    if latest_py_line is not None and py_line_avg is not None:
+        drop = py_line_avg - latest_py_line
+        if drop > line_drop_threshold:
+            result["regression"] = True
+            result["alerts"].append({
+                "type": "py_line_regression",
+                "severity": "warning",
+                "metric": "Python line coverage",
+                "current": latest_py_line,
+                "baseline_avg": round(py_line_avg, 2),
+                "drop": round(drop, 2),
+                "threshold": line_drop_threshold,
+                "message": (
+                    f"Python line coverage dropped by {drop:.1f}pp "
+                    f"({latest_py_line:.1f}% vs avg {py_line_avg:.1f}%, "
+                    f"threshold {line_drop_threshold}pp)"
+                ),
+            })
+
+    # Check Python branch rate regression
+    latest_py_branch = latest.get("python", {}).get("branch_rate")
+    if latest_py_branch is not None and py_branch_avg is not None:
+        drop = py_branch_avg - latest_py_branch
+        if drop > branch_drop_threshold:
+            result["regression"] = True
+            result["alerts"].append({
+                "type": "py_branch_regression",
+                "severity": "warning",
+                "metric": "Python branch coverage",
+                "current": latest_py_branch,
+                "baseline_avg": round(py_branch_avg, 2),
+                "drop": round(drop, 2),
+                "threshold": branch_drop_threshold,
+                "message": (
+                    f"Python branch coverage dropped by {drop:.1f}pp "
+                    f"({latest_py_branch:.1f}% vs avg {py_branch_avg:.1f}%, "
+                    f"threshold {branch_drop_threshold}pp)"
+                ),
+            })
+
+    if result["alerts"]:
+        result["status"] = "warning"
+    else:
+        c_line_trend = (
+            f"{latest_c_line:.1f}%" if latest_c_line is not None else "N/A"
+        )
+        log.info(
+            "Coverage regression check passed: latest C line=%s vs avg C line=%s",
+            c_line_trend,
+            f"{c_line_avg:.1f}%" if c_line_avg is not None else "N/A",
+        )
+
+    return result
