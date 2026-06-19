@@ -418,6 +418,50 @@ def cmd_audit_sync_check(project_dir: str, base_ref: str = "HEAD", save: bool = 
         sys.exit(1)
 
 
+def _cmd_coverage_gate(args):
+    """Run Python coverage gate (``yuleosh coverage gate --fail-under=60``)."""
+    fail_under = getattr(args, "fail_under", 60)
+    print(f"\n  🧪 Coverage Gate")
+    print(f"  {'=' * 50}")
+    print(f"  Fail-under threshold: {fail_under}%")
+    print()
+
+    import subprocess
+    import sys as _sys
+
+    result = subprocess.run(
+        [
+            _sys.executable, "-m", "coverage", "run",
+            "--source=src/yuleosh",
+            "-m", "pytest", "tests/",
+            "-q", "--ignore=tests/test_e2e.py",
+            "-x", "--tb=short",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    print(result.stdout)
+    if result.returncode != 0:
+        print(result.stderr)
+        print(f"  ❌ Tests failed, cannot measure coverage")
+        _sys.exit(1)
+
+    report_result = subprocess.run(
+        [_sys.executable, "-m", "coverage", "report", "--fail-under", str(fail_under)],
+        capture_output=True,
+        text=True,
+    )
+    print(report_result.stdout)
+    if report_result.stderr:
+        print(report_result.stderr)
+
+    if report_result.returncode != 0:
+        print(f"  ❌ Coverage gate FAILED: {fail_under}% threshold not met")
+        _sys.exit(1)
+
+    print(f"  ✅ Coverage gate PASSED ({fail_under}% threshold met)")
+
+
 def _cmd_coverage_trend(args):
     """Show coverage trend (``yuleosh coverage trend``)."""
     from yuleosh.ci.coverage_trend import show_coverage_trend
@@ -1764,6 +1808,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ev_check.add_argument("bundle_dir", help="Path to evidence bundle directory")
     p_ev_check.add_argument("--json", action="store_true")
 
+    # config — Profile 变更审计 (Sprint E)
+    p_config = sub.add_parser("config", help="Configuration management (Sprint E)")
+    csub = p_config.add_subparsers(dest="config_sub")
+    p_cfg_profile = csub.add_parser("profile", help="Pipeline profile management")
+    cp_sub = p_cfg_profile.add_subparsers(dest="profile_sub")
+    p_cp_audit = cp_sub.add_parser("audit", help="View profile change audit log")
+    p_cp_audit.add_argument("--limit", type=int, default=50, help="Max entries")
+    p_cp_audit.add_argument("--json", action="store_true", help="Output as JSON")
+
     # stats
     p_stats = sub.add_parser("stats", help="Show project statistics")
     p_stats.add_argument("--json", action="store_true", help="Output as JSON")
@@ -1803,6 +1856,10 @@ def _build_parser() -> argparse.ArgumentParser:
                                help="Build directory containing .gcda/.gcno files")
     p_coverage_c.add_argument("--src-dir", default="src",
                                help="Source directory for filtering")
+    p_coverage_gate = csub.add_parser("gate", help="Run coverage gate with fail-under threshold")
+    p_coverage_gate.add_argument("--fail-under", type=int, default=60,
+                                  help="Coverage percentage threshold (default 60)")
+
     p_coverage_trend = csub.add_parser("trend", help="Show coverage trend over time")
     p_coverage_trend.add_argument("--days", type=int, default=30,
                                    help="Filter entries within N days (default 30)")
@@ -1914,6 +1971,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kpi_ci_alert = ksub.add_parser("ci-alert", help="Check KPI thresholds and emit CI warnings (MP-16)")
     p_kpi_ci_alert.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # Sprint E: 缺陷逃逸率
+    p_kpi_defect_escape = ksub.add_parser("defect-escape", help="缺陷逃逸率采集 (Sprint E)")
+    de_sub = p_kpi_defect_escape.add_subparsers(dest="defect_escape_sub")
+    p_de_record = de_sub.add_parser("record", help="记录缺陷逃逸数据")
+    p_de_record.add_argument("--total", type=int, required=True, help="总缺陷数")
+    p_de_record.add_argument("--escaped", type=int, required=True, help="逃逸缺陷数")
+    p_de_record.add_argument("--stage", default="customer", help="逃逸阶段 (default: customer)")
+    p_de_record.add_argument("--desc", default="", help="描述")
+    p_de_status = de_sub.add_parser("status", help="查看缺陷逃逸率")
+    p_de_status.add_argument("--days", type=int, default=90, help="分析周期天数")
+    p_de_status.add_argument("--json", action="store_true", help="Output as JSON")
+
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
 
@@ -1989,6 +2058,8 @@ def main():
     elif args.command == "coverage":
         if args.coverage_sub == "c":
             _cmd_coverage_c(args.build_dir, args.src_dir)
+        elif args.coverage_sub == "gate":
+            _cmd_coverage_gate(args)
         elif args.coverage_sub == "trend":
             _cmd_coverage_trend(args)
         else:
@@ -2090,6 +2161,22 @@ def main():
             parser.print_help()
             sys.exit(1)
 
+    elif args.command == "config":
+        if args.config_sub == "profile":
+            if args.profile_sub == "audit":
+                from yuleosh.ci.profile import get_profile_audit_log, record_profile_change
+                print(get_profile_audit_log(
+                    OSH_HOME,
+                    limit=args.limit,
+                    as_json=args.json,
+                ))
+            else:
+                parser.print_help()
+                sys.exit(1)
+        else:
+            parser.print_help()
+            sys.exit(1)
+
     elif args.command == "stats":
         cmd_stats(json_output=args.json)
 
@@ -2125,6 +2212,28 @@ def main():
                 print("Usage: yuleosh kpi process status|baseline")
         elif args.kpi_sub == "ci-alert":
             cmd_kpi_ci_alert(args)
+        elif args.kpi_sub == "defect-escape":
+            from yuleosh.ci.kpi import record_defect_escape, get_defect_escape_summary
+            if args.defect_escape_sub == "record":
+                result = record_defect_escape(
+                    OSH_HOME,
+                    total_defects=args.total,
+                    escaped_defects=args.escaped,
+                    stage=args.stage,
+                    description=args.desc,
+                )
+                print(f"\n  ✅ 缺陷逃逸数据已记录")
+                print(f"     逃逸率: {result['escape_rate']:.1f}% ({result['escaped_defects']}/{result['total_defects']})")
+                print(f"     阶段:   {result['stage']}")
+                print()
+            elif args.defect_escape_sub == "status":
+                print(get_defect_escape_summary(
+                    OSH_HOME,
+                    days=args.days,
+                    as_json=args.json,
+                ))
+            else:
+                print("Usage: yuleosh kpi defect-escape record|status")
         else:
             parser.print_help()
             sys.exit(1)

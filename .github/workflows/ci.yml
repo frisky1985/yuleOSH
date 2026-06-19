@@ -36,6 +36,50 @@ jobs:
       env:
         CI_RUN: "1"
 
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]" 2>/dev/null || true
+        pip install ruff bandit mypy coverage
+
+    - name: Python Lint (ruff)
+      run: |
+        ruff check src/ --output-format=github || echo "ruff found issues (non-blocking)"
+      continue-on-error: true
+
+    - name: Security Scan (bandit)
+      run: |
+        bandit -r src/ -f sarif -o bandit-results.sarif || true
+        bandit -r src/ -q || echo "bandit found issues (non-blocking)"
+      continue-on-error: true
+
+    - name: Type Check (mypy)
+      run: |
+        mypy src/ --ignore-missing-imports --warn-unused-configs --show-error-codes || echo "mypy found issues (non-blocking)"
+      continue-on-error: true
+
+    - name: Coverage Gate (fail-under=60)
+      run: |
+        python -m yuleosh coverage gate --fail-under=60 || \
+          python -c "import subprocess,sys; subprocess.run([sys.executable,'-m','coverage','run','--source=src/yuleosh','-m','pytest','tests/','-q','--ignore=tests/test_e2e.py','-x','--tb=short']); r2=subprocess.run([sys.executable,'-m','coverage','report','--fail-under=60']); sys.exit(r2.returncode)"
+
+    - name: Upload bandit SARIF
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: bandit-results.sarif
+        category: bandit
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -54,7 +98,7 @@ jobs:
                 if 'task' in f.lower() and f.endswith('.md'):
                     content = open(os.path.join(root, f)).read()
                     if not any(k in content.lower() for k in ['feature','bugfix','refactor','docs']):
-                        print(f'⚠️  Missing kind: {os.path.join(root, f)}')
+                        print('⚠️  Missing kind: ' + os.path.join(root, f))
                         issues += 1
         if issues:
             exit(1)
