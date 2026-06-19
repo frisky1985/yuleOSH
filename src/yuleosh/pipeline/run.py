@@ -55,6 +55,8 @@ from yuleosh.pipeline.step_handlers import (
     step_review_bsp,
     step_review_build,
     step_review_power,
+    step_review_stack,
+    step_review_mmio,
     PIPELINE_STEPS,
     _check_llm_key,
     _resolve_handler,

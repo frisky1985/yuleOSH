@@ -160,6 +160,91 @@
 - **文件**: `src/yuleosh/ci/sync_check.py`
 - **提交**: 待
 
+### 🔧 DF-006: Pipeline Profile 切换机制 (DEF-004 / G-33)
+- **描述**: Pipeline Profile 切换机制实现。ci-config.yaml 配置、≥2 个 profile、启动校验、step 过滤。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `src/yuleosh/ci/profile.py` — profile 定义、验证、step 过滤
+  - 内置 4 个 profile（safety, ci, performance, testing），≥2 个
+  - 启动时校验 active_profile，无效时回退 safety
+  - `filter_steps_for_profile()` 根据 profile 排除/包含 step
+  - `run_pipeline()` 支持 `--profile <name>` CLI 参数
+  - 更新 `.yuleosh/ci-config.yaml` 添加 profiles 定义
+- **测试文件**: `tests/test_profile.py`（16 个测试用例）
+- **提交**: 待
+
+### 🔧 DF-007: MISRA Delta 模式 (DEF-006 / §14.20~§14.22)
+- **描述**: MISRA 双重 delta 模式实现：L1 增量 + L2 全量+零增量阻断。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - `stages.py:run_misra_check()` 新增 `mode` 参数（auto/delta/full）
+  - L1（`mode="delta"`）：仅扫描 `git diff HEAD~1` 修改文件
+  - L2（`mode="full"`）：全量扫描 + 基线对比 + 阻断新增 Required
+  - 新增 `_load_misra_baseline()` 加载最近全量扫描基线
+  - 新增 `_is_new_required_violation()` 检测新增 Required 违规
+  - L2 零增量阻断优先于所有其他阻断规则
+  - 更新 `layers.py` L1 调用传递 mode="delta"
+- **文件**: `src/yuleosh/ci/stages.py`, `src/yuleosh/ci/layers.py`
+- **提交**: 待
+
+### 🔧 DF-008: 堆栈使用分析 Step Handler (DEF-007 / §14.14~§14.15)
+- **描述**: 堆栈使用分析 step handler 实现，≥95% 使用率阻断。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `src/yuleosh/pipeline/step_handlers/review_stack.py`（516 行）
+  - 静态堆栈分析（linker script + 大数组检测）
+  - 函数调用深度分析（内联启发式）
+  - 中断嵌套堆栈预算检查
+  - RAM vs 堆栈利用率估算
+  - ≥95% 使用率触发 PipelineStepError 阻断
+  - 已注册至 PIPELINE_STEPS（review-stack step）
+- **测试文件**: `tests/test_stack_review.py`（10 个测试用例）
+- **提交**: 待
+
+### 🔧 DF-009: MMIO 配置审查 Step Handler (DEF-008 / §14.18~§14.19)
+- **描述**: MMIO 配置审查自动化：时钟/GPIO/NVIC/DMA 审查。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `src/yuleosh/pipeline/step_handlers/review_mmio.py`（741 行）
+  - 时钟系统审查（HSE/LSE/PLL/RCC 配置完整性）
+  - GPIO 配置审查（初始化、引脚分配、上下拉）
+  - NVIC 配置审查（优先级分组、IRQ 启用、优先级合理性）
+  - DMA 配置审查（通道/模式/优先级/中断）
+  - 跨系统一致性检查（外设→DMA、MSP Init）
+  - 已注册至 PIPELINE_STEPS（review-mmio step）
+- **测试文件**: `tests/test_mmio_review.py`（10 个测试用例）
+- **提交**: 待
+
+### 🔧 DF-010: 构建元数据持久化 (DEF-009 / G-48 §20.1~§20.6)
+- **描述**: 构建元数据 JSONL 持久化，字段完整性、变更审计、可关联性、工具版本锁定。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `src/yuleosh/ci/build_metadata.py`（CLI + API）
+  - JSONL 文件格式（`.yuleosh/reports/build-metadata.jsonl`）
+  - 9 个必填字段（build_id, timestamp, commit, status, layer, tool_versions, files_changed 等）
+  - 字段完整性校验（`_validate_fields()`）
+  - 变更审计：files_changed 计数
+  - 可关联性：`get_build_chain()` 按 commit 关联所有 build
+  - 工具版本锁定：`_get_tool_versions()` 捕获 6 个工具版本
+  - 完整性验证：`validate_metadata_integrity()` 检查重复/时间序/必填字段
+- **测试文件**: `tests/test_build_metadata.py`（9 个测试用例）
+- **提交**: 待
+
+### 🔧 DF-011: Agent 审查↔代码版本双向追溯 (DEF-010 / G-47 §19.1~§19.4)
+- **描述**: Agent 审查与代码版本双向追溯：commit SHA、file:line、build_id 关联。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `src/yuleosh/ci/agent_traceability.py`（CLI + API）
+  - JSONL 文件格式（`.yuleosh/reports/agent-traceability.jsonl`）
+  - `record_review()` — 记录审查会话含 commit SHA、file:line、build_id
+  - `get_reviews_for_commit()` — commit → 审查正向追溯
+  - `get_commits_for_review()` — review_id → commit 反向追溯
+  - `get_findings_for_file()` — file:line 定位查询
+  - `get_reviews_by_build()` — build_id → 审查关联
+  - 标准化 file:line 格式的 location 字段
+- **测试文件**: `tests/test_agent_traceability.py`（11 个测试用例）
+- **提交**: 待
+
 ## 汇总
 
 | 等级 | 数量 | 预计总修复时间 |
@@ -167,7 +252,8 @@
 | 🔴 阻塞 | 5 | 15h |
 | 🟡 严重 | 5 | 12h |
 | 🟢 低 | 4 | 6.5h |
-| 🔧 新增(已修复) | 5 | 3h |
-| **合计** | **19** | **36.5h** |
+| 🔧 新增(已修复) | 11 | 6h |
+| **合计** | **25** | **39.5h** |
 
 > 注：TD-001（.coveragerc 路径）已在 Phase 0 Bug 修复中处理完毕。TD-008（配置分裂）在统一 source 过程中部分解决。
+> Sprint B Wave 1 已修复 6 个 P0 缺陷（DEF-004~DEF-010），对应 11 个 DF 修复记录。
