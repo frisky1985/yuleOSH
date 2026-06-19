@@ -470,6 +470,222 @@ def _check_system_clock_frequency(content: str, path: Path) -> list[BspFinding]:
     return findings
 
 
+# ── Static checks: alloca / VLA / Dynamic allocation ────────────────────
+
+
+def _check_alloca_usage(content: str, path: Path) -> list[BspFinding]:
+    """Detect alloca() usage — stack-allocated memory at runtime.
+
+    alloca() is dangerous in embedded / safety-critical contexts because:
+    - It allocates on the stack, which is typically small (few KB)
+    - There is no error return on stack overflow — causes silent corruption
+    - It is banned by MISRA C:2023 Rule-21-5 (use of alloca)
+    - It is banned by AUTOSAR C++14 A18-5-2
+    """
+    findings = []
+
+    # Pattern 1: Direct alloca() call
+    alloca_direct = list(re.finditer(r'alloca\s*\(', content))
+    if alloca_direct:
+        findings.append({
+            "severity": "critical",
+            "category": "runtime_allocation",
+            "file": str(path),
+            "message": f"alloca() used {len(alloca_direct)} time(s) — stack allocation without overflow "
+                       f"protection. MISRA C:2023 Rule-21-5 violation. "
+                       f"Replace with fixed-size arrays or pool allocation.",
+        })
+
+    # Pattern 2: strdupa / strndupa (GNU extensions using alloca internally)
+    strdupa_usage = list(re.finditer(r'strdupa\s*\(|strndupa\s*\(', content))
+    if strdupa_usage:
+        findings.append({
+            "severity": "critical",
+            "category": "runtime_allocation",
+            "file": str(path),
+            "message": f"strdupa/strndupa used {len(strdupa_usage)} time(s) — these use alloca() "
+                       f"internally, same stack overflow risk. Replace with strdup + heap.",
+        })
+
+    return findings
+
+
+def _check_vla_usage(content: str, path: Path) -> list[BspFinding]:
+    """Detect Variable-Length Arrays (VLA) in C code.
+
+    VLAs are dangerous in embedded / BSP code because:
+    - Their size is determined at runtime, not compile-time
+    - Stack overflow cannot be statically verified
+    - VLAs are conditionally supported in C11 and optional in C23
+    - Banned by MISRA C:2012 Rule-18-7 / MISRA C:2023 Rule-18-7
+    - In BSP context: interrupt handlers and RTOS tasks have very limited stacks
+    """
+    findings = []
+
+    # Pattern: type array[size_expr]  where size_expr is NOT a constant
+    # Match patterns like: int arr[n]; int buf[len+1]; uint8_t data[size];
+    # These are hard to detect precisely with regex, but we can find suspicious patterns
+
+    # Look for array declarations with non-constant size in function bodies
+    # VLA pattern:  <type> <name>[<non-constant>]  inside a function body
+    vla_hits = []
+
+    # Pattern 1: type name[variable];  — variable as array dimension
+    vla_pat = re.finditer(
+        r'\b(?:int|long|short|char|uint8_t|uint16_t|uint32_t|uint64_t|int8_t|int16_t|int32_t|int64_t|'
+        r'float|double|size_t)\s+\w+\s*\[(?!\s*\d+\s*\])(?!\s*\w+\s*=\s*\d+\s*\])'
+        r'[^;\]]*\]',
+        content,
+    )
+    for m in vla_pat:
+        decl = m.group(0)
+        # Exclude known constant patterns
+        if re.search(r'\[\s*\d+\s*\]', decl):
+            continue  # definitely constant size
+        # Exclude sizeof() expressions
+        if 'sizeof' in decl:
+            continue
+        # Exclude macro constants (ALL_CAPS) as they are compile-time constants
+        expr = decl[decl.rfind('[')+1:decl.rfind(']')]
+        if expr.isupper():
+            continue
+        vla_hits.append(decl)
+        if len(vla_hits) >= 10:
+            break  # cap at 10 findings per file
+
+    if vla_hits:
+        findings.append({
+            "severity": "major",
+            "category": "runtime_allocation",
+            "file": str(path),
+            "message": f"Potential VLA usage detected ({len(vla_hits)} pattern(s)). "
+                       f"Examples: {'; '.join(vla_hits[:5])}. "
+                       f"VLAs are not MISRA-compliant and risk stack overflow in BSP code. "
+                       f"Replace with fixed-size arrays or dynamic pool allocation.",
+        })
+
+    return findings
+
+
+def _check_dynamic_allocation(content: str, path: Path) -> list[BspFinding]:
+    """Detect dynamic memory allocation (malloc/calloc/realloc/free) in BSP code.
+
+    Dynamic allocation is discouraged in safety-critical embedded BSP code because:
+    - Heap fragmentation over time
+    - Out-of-memory error handling required but frequently missing
+    - MISRA C:2023 Dir 4.12 prohibits dynamic memory allocation in safety-critical code
+    - BSP code often runs before heap initialization
+    - Interrupt handlers should never use dynamic allocation
+    """
+    findings = []
+
+    # Pattern 1: Direct malloc/calloc/realloc calls
+    malloc_calls = len(list(re.finditer(r'\bmalloc\s*\(', content)))
+    calloc_calls = len(list(re.finditer(r'\bcalloc\s*\(', content)))
+    realloc_calls = len(list(re.finditer(r'\brealloc\s*\(', content)))
+    free_calls = len(list(re.finditer(r'\bfree\s*\(', content)))
+
+    total_alloc = malloc_calls + calloc_calls + realloc_calls
+
+    if total_alloc > 0 or free_calls > 0:
+        severity = "major" if total_alloc > 3 else "minor"
+        details = []
+        if malloc_calls:
+            details.append(f"malloc({malloc_calls})")
+        if calloc_calls:
+            details.append(f"calloc({calloc_calls})")
+        if realloc_calls:
+            details.append(f"realloc({realloc_calls})")
+        if free_calls:
+            details.append(f"free({free_calls})")
+
+        findings.append({
+            "severity": severity,
+            "category": "runtime_allocation",
+            "file": str(path),
+            "message": f"Dynamic memory allocation detected: {', '.join(details)}. "
+                       f"MISRA C:2023 Dir 4.12 prohibits dynamic allocation in safety-critical "
+                       f"code. In BSP context this may be acceptable for non-critical init code "
+                       f"but should be reviewed for heap safety and out-of-memory handling.",
+        })
+
+        # Check for NULL-check after allocation
+        if total_alloc > 0 and not bool(re.search(r'(if\s*\(\s*\w+\s*\)\s*\{|if\s*\(\s*\w+\s*!=\s*NULL\s*\))', content[-2000:])):
+            findings.append({
+                "severity": "major",
+                "category": "runtime_allocation",
+                "file": str(path),
+                "message": f"Dynamic allocation ({total_alloc} call(s)) found without visible "
+                           f"NULL-return check in recent code. Missing OOM handling is a "
+                           f"safety risk — verify or add error handling.",
+            })
+
+    # Pattern 2: new/delete for C++ files
+    new_calls = len(list(re.finditer(r'\bnew\s+(?!constexpr)', content)))
+    delete_calls = len(list(re.finditer(r'\bdelete\[?\]?\s+', content)))
+
+    if new_calls > 0:
+        findings.append({
+            "severity": "major" if new_calls > 3 else "minor",
+            "category": "runtime_allocation",
+            "file": str(path),
+            "message": f"C++ 'new' operator used {new_calls} time(s) in BSP code — "
+                       f"prefer placement new with fixed pools for embedded targets.",
+        })
+
+    return findings
+
+
+def _check_runtime_allocation_integrity(files: dict[str, list[Path]]) -> list[BspFinding]:
+    """Run all runtime allocation checks across all BSP files."""
+    findings = []
+
+    all_categories = ["board_headers", "hal_config", "pin_mux", "clock_config",
+                      "peripheral_config", "dma_config"]
+
+    total_alloca = 0
+    total_vla = 0
+    total_dynamic = 0
+    files_with_issues = 0
+
+    for cat in all_categories:
+        for f in files.get(cat, []):
+            try:
+                content = f.read_text()
+            except OSError:
+                continue
+
+            before = len(findings)
+            findings.extend(_check_alloca_usage(content, f))
+            findings.extend(_check_vla_usage(content, f))
+            findings.extend(_check_dynamic_allocation(content, f))
+            if len(findings) > before:
+                files_with_issues += 1
+
+    # Add a cross-file summary finding
+    alloca_count = sum(1 for f in findings if "alloca()" in f.get("message", ""))
+    vla_count = sum(1 for f in findings if "VLA" in f.get("message", "") or "Variable-Length" in f.get("message", ""))
+    malloc_count = sum(1 for f in findings if "malloc" in f.get("message", "") or "calloc" in f.get("message", ""))
+
+    if alloca_count > 0 or vla_count > 0 or malloc_count > 0:
+        parts = []
+        if alloca_count:
+            parts.append(f"{alloca_count} alloca")
+        if vla_count:
+            parts.append(f"{vla_count} VLA")
+        if malloc_count:
+            parts.append(f"{malloc_count} dynamic-alloc")
+        summary_msg = f"Runtime allocation issues across {files_with_issues} file(s): {', '.join(parts)}"
+        findings.append({
+            "severity": "info",
+            "category": "runtime_allocation",
+            "file": "(multiple)",
+            "message": summary_msg,
+        })
+
+    return findings
+
+
 # ── Static checks: Peripheral initialization ──────────────────────────────
 
 
@@ -895,6 +1111,10 @@ def _static_bsp_review(project_dir: Path) -> list[BspFinding]:
     # ── DMA config ──
     log.info("  Checking DMA configuration...")
     all_findings.extend(_check_dma_config(files))
+
+    # ── Runtime allocation checks (alloca/VLA/dynamic) ──
+    log.info("  Checking runtime allocation (alloca/VLA/dynamic)...")
+    all_findings.extend(_check_runtime_allocation_integrity(files))
 
     return all_findings
 

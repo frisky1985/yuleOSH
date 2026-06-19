@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
@@ -147,8 +148,13 @@ def step_c_unit_test(session: PipelineSession) -> str:
                 else:
                     inc_flags = []
 
+                # Use a unique temp path per run (fix: $$ literal vs PID expansion)
+                tmp_runner = os.path.join(
+                    tempfile.gettempdir(),
+                    f"c_test_runner_{os.getpid()}_{id(session)}"
+                )
                 result = subprocess.run(
-                    ["gcc", "-o", "/tmp/c_test_runner_$$"]
+                    ["gcc", "-o", tmp_runner]
                     + src_files
                     + inc_flags
                     + ["-lunity", "-lm", "-Wall", "-Wextra"],
@@ -162,6 +168,12 @@ def step_c_unit_test(session: PipelineSession) -> str:
                 log.info(
                     "GCC compile check: returncode=%d", result.returncode,
                 )
+                # Clean up the temp binary
+                try:
+                    if os.path.exists(tmp_runner):
+                        os.unlink(tmp_runner)
+                except OSError:
+                    pass
             except FileNotFoundError:
                 log.info("gcc not found, cannot compile test")
             except subprocess.TimeoutExpired:

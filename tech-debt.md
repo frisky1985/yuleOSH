@@ -104,6 +104,62 @@
 
 ---
 
+## 2026-06-19 修复记录（v2.1 缺陷修复）
+
+### 🔧 DF-001: alloca/VLA 运行时检测缺失
+- **描述**: `review_bsp.py` 缺少 alloca()/VLA/dynamic-allocation 运行时检测。老陈 Pipeline 终审报告指出应在 BSP 审查中实现运行时检测增强。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `_check_alloca_usage()` — 检测 alloca() 及 strdupa/strndupa 使用
+  - 新增 `_check_vla_usage()` — 检测 VLA（变长数组）使用
+  - 新增 `_check_dynamic_allocation()` — 检测 malloc/calloc/realloc/free 及 NULL-check
+  - 新增 `_check_runtime_allocation_integrity()` — 跨文件运行所有运行时分配检查
+  - 集成到 `_static_bsp_review()` 主流程
+- **文件**: `src/yuleosh/pipeline/step_handlers/review_bsp.py`
+- **提交**: 待
+
+### 🔧 DF-002: test_c_unit.py `$$` PID 展开 bug
+- **描述**: `$$` 在 subprocess.run(list) 中不会被 shell 展开，导致输出文件始终名为 `/tmp/c_test_runner_$$`。重复运行会覆盖或文件锁定。
+- **状态**: ✅ **已修复**
+- **修复内容**: 替换为 `tempfile.gettempdir() + os.getpid() + session.id` 生成唯一临时路径
+- **文件**: `src/yuleosh/pipeline/step_handlers/test_c_unit.py`
+- **提交**: 待
+
+### 🔧 DF-003: gcov_coverage.py 缺少 fail_under 门禁 (CL2-E03)
+- **描述**: gcov_coverage.py 只采集覆盖率不检查阈值。虽然 stages.py 有门禁逻辑，但 gcov_coverage.py 自身没有 fail_under 支持，无法独立运行门禁。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - `generate_c_coverage_report()` 新增 `fail_under` 和 `fail_under_branch` 参数
+  - 新增 JSON 输出 `gate_passed` 和 `gate_details` 字段
+  - CLI 新增 `--fail-under` 和 `--fail-under-branch` 参数
+  - CLI 退出码反映门禁结果（失败时 exit 1）
+- **文件**: `src/yuleosh/ci/gcov_coverage.py`
+- **提交**: 待
+
+### 🔧 DF-004: coverage_trend.py 缺少回归告警 (CL2-E04)
+- **描述**: CL2-E04 step 4 要求单次下降 > 5% 触发 warning，coverage_trend.py 未实现。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `check_coverage_regression()` 函数
+  - 比较最新条目与滑动窗口平均值（默认窗口=3）
+  - 支持 C/Python 行覆盖率 + 分支覆盖率回归检测
+  - 默认阈值：行 5pp，分支 5pp
+  - 返回结构化告警结果
+- **文件**: `src/yuleosh/ci/coverage_trend.py`
+- **提交**: 待
+
+### 🔧 DF-005: sync_check.py 缺少 YAML Schema 验证 (CL2-E05) 和增强门禁 (CL2-E06)
+- **描述**: sync_check.py 有基础 tracking 功能，但缺少 CL2-E05 YAML Schema 验证和关键模块差异化门禁。
+- **状态**: ✅ **已修复**
+- **修复内容**:
+  - 新增 `DOC_YAML_SCHEMAS` 定义文档 Schema 规范
+  - 新增 `validate_doc_yaml_schema()` 验证文档必需字段
+  - 新增 `run_sync_check_gate()` 组合 E05+E06 的增强门禁
+  - 新增 `--enhanced` CLI 参数启用 Schema 验证
+  - 更新 `print_sync_result()` 同时显示 tracking 和 schema 结果
+- **文件**: `src/yuleosh/ci/sync_check.py`
+- **提交**: 待
+
 ## 汇总
 
 | 等级 | 数量 | 预计总修复时间 |
@@ -111,6 +167,7 @@
 | 🔴 阻塞 | 5 | 15h |
 | 🟡 严重 | 5 | 12h |
 | 🟢 低 | 4 | 6.5h |
-| **合计** | **14** | **33.5h** |
+| 🔧 新增(已修复) | 5 | 3h |
+| **合计** | **19** | **36.5h** |
 
 > 注：TD-001（.coveragerc 路径）已在 Phase 0 Bug 修复中处理完毕。TD-008（配置分裂）在统一 source 过程中部分解决。
