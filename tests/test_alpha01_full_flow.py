@@ -61,10 +61,13 @@ def test_server():
     os.environ["YULEOSH_DB"] = str(db_path)
     os.environ["YULEOSH_JWT_SECRET"] = "test-secret-for-e2e"
     os.environ["STRIPE_SECRET_KEY"] = "sk_test_dummy"
+    os.environ["YULEOSH_RATE_LIMIT"] = "999999"
 
     from yuleosh.ui import server as srv
 
-    # Clear Store singleton
+    # Reset rate limiter and Store singleton
+    from yuleosh.api import ratelimit
+    ratelimit.reset()
     from yuleosh.store import Store
     Store.reset()
 

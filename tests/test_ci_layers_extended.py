@@ -33,16 +33,46 @@ from yuleosh.ci.run import (
 )
 
 
+def _create_ci_files(td: str):
+    """Create minimum CI config files in a temp directory."""
+    td_path = Path(td)
+    # Create .yuleosh dir
+    yuleosh_dir = td_path / ".yuleosh"
+    yuleosh_dir.mkdir(parents=True, exist_ok=True)
+    ci_config = yuleosh_dir / "ci-config.yaml"
+    ci_config.write_text("""
+coverage:
+  threshold_line: 60
+  threshold_condition: 60
+  strict: false
+misra:
+  enabled: false
+  addon: misra
+  fail_on_required: false
+docsync:
+  enabled: false
+""")
+    # Create docs dir
+    docs_dir = td_path / "docs"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    (docs_dir / "spec.md").write_text("# Spec doc")
+    (docs_dir / "positioning-unified.md").write_text("# Positioning")
+    (td_path / "misra-rules.yaml").write_text("rules: {}")
+    (td_path / "specs").mkdir(exist_ok=True)
+    (td_path / "specs" / "misra-acceptance-matrix.md").write_text("# MISRA Matrix")
+
+
 class TestLayerFunctions:
     """GIVEN run_layer* functions WHEN called THEN exercise full pipeline."""
 
     def test_run_layer1(self):
         with tempfile.TemporaryDirectory() as td:
+            _create_ci_files(td)
             with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = ""
                 with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
-                    with mock.patch("yuleosh.ci.run._should_skip_coverage", return_value=True):
+                    with mock.patch("yuleosh.ci.stages._should_skip_coverage", return_value=True):
                         result = run_layer1(td)
                         assert result is True
 
@@ -67,11 +97,12 @@ class TestLayerFunctions:
 
     def test_run_all(self):
         with tempfile.TemporaryDirectory() as td:
+            _create_ci_files(td)
             with mock.patch("yuleosh.ci.run.subprocess.run") as m:
                 m.return_value.returncode = 0
                 m.return_value.stdout = "0 failed"
                 with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
-                    with mock.patch("yuleosh.ci.run._should_skip_coverage", return_value=True):
+                    with mock.patch("yuleosh.ci.stages._should_skip_coverage", return_value=True):
                         result = run_all(td)
                         assert result is True
 
@@ -130,8 +161,9 @@ class TestCoverageAndSIL:
 
     def test_coverage_check_skip(self):
         with tempfile.TemporaryDirectory() as td:
+            _create_ci_files(td)
             ci = CIResult(layer=1, commit_hash="x")
-            with mock.patch("yuleosh.ci.run._should_skip_coverage", return_value=True):
+            with mock.patch("yuleosh.ci.stages._should_skip_coverage", return_value=True):
                 result = run_coverage_check(td, ci)
                 assert result is True
 
