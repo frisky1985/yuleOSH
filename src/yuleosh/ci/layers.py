@@ -94,8 +94,21 @@ def check_layer_dependency(target_layer: int, project_dir: str) -> Optional[str]
 
 
 
+from yuleosh.ci.stages import (
+    run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check,
+    run_c_coverage, run_sil_tests,
+    run_misra_check, run_yaml_validation,
+    run_spec_validation, run_architecture_review,
+    run_requirements_trace, run_docsync_gate,
+)
+
+
 def run_layer1(project_dir: Optional[str] = None):
-    """Run Layer 1 CI pipeline."""
+    """Run Layer 1 CI pipeline.
+
+    V-Model left side (SWE.5): spec validation + architecture review + requirements trace
+    Added for ASPICE SWE.5 conformance — left side activities run before right side.
+    """
     if project_dir is None:
         project_dir = os.environ.get("OSH_HOME", os.getcwd())
     
@@ -107,9 +120,15 @@ def run_layer1(project_dir: Optional[str] = None):
     
     ci = CIResult(1, commit)
     
+    # V-Model Left Side (SWE.5): verification activities that run before construction
+    # These ensure requirements, architecture, and traceability are in place
     stages = [
         ("yaml-validation", run_yaml_validation),
+        ("spec-validation", run_spec_validation),           # SWE.5: 规约验证
+        ("architecture-review", run_architecture_review),   # SWE.5: 架构审查
+        ("requirements-trace", run_requirements_trace),     # SWE.5: 需求追溯校验
         ("plan-lint", run_plan_lint),
+        ("docsync-gate", run_docsync_gate),                 # H-07: 文档同步门禁
         ("clang-tidy", run_clang_tidy),
         ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="delta")),
         ("unit-tests", run_unit_tests),
