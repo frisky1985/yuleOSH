@@ -317,7 +317,7 @@ export default function SubscriptionPage() {
               <div className="rounded-xl border border-[#1e293b] p-5 hover:border-[#10b981]/40 transition-all">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold text-[#e2e8f0]">Pro</h3>
-                  <span className="text-lg font-black text-[#e2e8f0]">¥299<small className="text-xs text-[#64748b]">/月</small></span>
+                  <span className="text-lg font-black text-[#e2e8f0]">¥599<small className="text-xs text-[#64748b]">/月</small></span>
                 </div>
                 <p className="text-xs text-[#94a3b8] mb-4">无限项目 · 完整流水线 · ASPICE 合规包</p>
                 <Button
