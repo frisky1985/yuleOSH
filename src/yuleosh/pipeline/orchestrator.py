@@ -33,7 +33,8 @@ try:
 except ImportError:
     _notify = None
 
-def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None, mock: bool = False):
+def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
+                mock: bool = False, profile: Optional[str] = None):
     """Run the full OSH pipeline for a given spec.
     
     Args:
@@ -43,6 +44,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             When provided, all LLM-dependent steps use this callable
             instead of the global ``chat_completion``.
         mock: If True, skip LLM key check (for demo/testing).
+        profile: Optional profile name override (default: from ci-config.yaml or "safety").
     """
 
     # Deferred import from run shim so that test mocks on
@@ -55,17 +57,42 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         if not key:
             sys.exit(1)
     
+    # G-33: Profile validation
+    try:
+        from yuleosh.ci.profile import validate_active_profile, filter_steps_for_profile, get_current_profile
+        project_dir = os.environ.get("OSH_HOME", os.path.dirname(os.path.abspath(spec_path)))
+        active_profile = profile or get_current_profile(project_dir)
+        valid, msg = validate_active_profile(project_dir)
+        if not valid:
+            print(f"\n⚠️  Profile validation: {msg}")
+            print("   Falling back to 'safety' profile.")
+            active_profile = "safety"
+        else:
+            print(f"\n📋 Active profile: '{active_profile}' ({msg})")
+        _steps = filter_steps_for_profile(_steps, active_profile, project_dir)
+        if not _steps:
+            print("\n❌ No steps remaining after profile filtering!")
+            sys.exit(1)
+    except ImportError:
+        active_profile = "safety"
+        log.info("Profile module not available, using all steps")
+    except Exception as e:
+        log.warning("Profile validation skipped: %s", e)
+        active_profile = "safety"
+
     try:
         if name is None:
             name = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
         session = PipelineSession(name, spec_path, llm_client=llm_client)
+        session.profile = active_profile
         print(f"\n🚀 Pipeline started: {name}")
         print(f"   Spec: {spec_path}")
+        print(f"   Profile: {active_profile}")
         print(f"   Session: {session.session_dir}")
         print()
         
-        log.info(f"Pipeline starting: {name}, spec={spec_path}")
+        log.info(f"Pipeline starting: {name}, spec={spec_path}, profile={active_profile}")
         
         for step_key, agent, step_name, handler in _steps:
             step_idx = len(session.steps)
@@ -189,6 +216,7 @@ def main():
         print("Usage:", file=sys.stderr)
         print("  python3 run.py <spec.md>          — Run full pipeline", file=sys.stderr)
         print("  python3 run.py status [name]      — Show pipeline status", file=sys.stderr)
+        print("  python3 run.py --profile <name> <spec.md>  — Run with specific profile", file=sys.stderr)
         sys.exit(1)
     
     cmd = sys.argv[1]
@@ -196,9 +224,13 @@ def main():
     try:
         if cmd == "status":
             status_pipeline(sys.argv[2] if len(sys.argv) > 2 else None)
+        elif cmd == "--profile" and len(sys.argv) >= 4:
+            profile_name = sys.argv[2]
+            spec_path = sys.argv[3]
+            session = run_pipeline(spec_path, profile=profile_name)
+            sys.exit(0 if session.status == "completed" else 1)
         else:
             session = run_pipeline(cmd)
-
             sys.exit(0 if session.status == "completed" else 1)
     except KeyboardInterrupt:
         log.warning("Pipeline interrupted by user")
