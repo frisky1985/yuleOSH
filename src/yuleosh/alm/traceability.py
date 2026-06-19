@@ -56,9 +56,14 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
     lines = text.split("\n")
     shall_statements = []
     current_section = ""
+    current_req_id: str | None = None
+    in_given_when_then = False  # Skip GIVEN/WHEN/THEN scenario blocks
 
     # Pattern to match spec-defined IDs like **SWE-MISRA-S1**: or [REQ-MISRA-S1.1]
     spec_id_pattern = re.compile(r'(?:\*\*(\w[\w-]+)\*\*\s*:|\[([\w][\w.-]+)\])')
+
+    # Pattern to match requirement section headers like ### RS-001: or #### SWR-001.1:
+    section_req_id_pattern = re.compile(r'^#{1,6}\s+(RS-\d+(?:\.\d+)?|SWR-\d+(?:\.\d+)?|NFR-\d+(?:\.\d+)?)\b', re.IGNORECASE)
 
     # Broad SHALL keyword search — works for both English and Chinese text
     shall_keyword_pattern = re.compile(r'\bSHALL\b|\bshall\b|\bMUST\b|\bmust\b')
@@ -69,9 +74,37 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
         # Track section headings
         if stripped.startswith("#"):
             current_section = stripped.lstrip("#").strip()
+            # Check if this section header has a requirement ID
+            section_match = section_req_id_pattern.match(stripped)
+            if section_match:
+                current_req_id = section_match.group(1).upper()
+
+            # Track GIVEN/WHEN/THEN blocks (##### headings) — skip these
+            if stripped.startswith("#####"):
+                in_given_when_then = True
+            else:
+                in_given_when_then = False
+                # Skip Reason headings too — they contain explanatory text, not requirements
+                if "reason" in stripped.lower():
+                    continue
+
+            continue
+
+        # Reset GIVEN/WHEN/THEN state when we hit a non-heading line
+        # (remains in effect only for heading lines)
 
         # Look for SHALL / MUST keywords
         if shall_keyword_pattern.search(stripped):
+            # Skip lines in GIVEN/WHEN/THEN scenario blocks
+            if in_given_when_then:
+                continue
+
+            # Only capture bullet-point format SHALLs (`- ` or `* `)
+            # This avoids capturing inline/markdown SHALL references
+            if not (stripped.startswith("- ") or stripped.startswith("* ") or
+                    stripped.startswith("+ ")):
+                continue
+
             statement = stripped.strip()
             # Trim leading list markers
             statement = re.sub(r"^[\s]*[-*+]\s+", "", statement)
@@ -84,6 +117,10 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
             if spec_id_match:
                 # group(1) = **ID**: pattern, group(2) = [REQ-xxx] pattern
                 req_id = spec_id_match.group(1) or spec_id_match.group(2)
+
+            # If no inline req_id, use the section-level req_id
+            if not req_id:
+                req_id = current_req_id
 
             shall_statements.append({
                 "id": f"SHALL-{len(shall_statements) + 1}",
@@ -310,6 +347,7 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     requirements = []
     for shall in shalls:
         req_id = shall["id"]
+        spec_req_id = shall.get("req_id") or req_id  # Use spec-defined req_id when available
 
         # Find code that references this requirement
         matching_code = code_map.get(req_id, [])
@@ -317,12 +355,15 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
             # Fallback: search by keyword
             keywords = _extract_keywords(shall["statement"])
             matching_code = _find_code_by_keywords(src_dir, keywords)
+            # Also try spec_req_id for code matching
+            if spec_req_id != req_id and not matching_code:
+                matching_code = _find_code_by_keywords_for_id(src_dir, spec_req_id)
 
-        # Find tests that reference this requirement
-        matching_tests = _find_tests_for_requirement(test_reports, req_id, shall["statement"])
+        # Find tests that reference this requirement (use spec_req_id for better matches)
+        matching_tests = _find_tests_for_requirement(test_reports, spec_req_id, shall["statement"])
 
         # Find reviews that reference this requirement
-        matching_reviews = _find_reviews_for_requirement(reviews, req_id, shall["statement"])
+        matching_reviews = _find_reviews_for_requirement(reviews, spec_req_id, shall["statement"])
 
         requirements.append({
             "id": req_id,
@@ -643,26 +684,25 @@ def _find_code_by_keywords(src_dir: Path, keywords: list[str]) -> list[str]:
     return matching[:20]  # limit
 
 
-def _find_tests_for_requirement(test_reports: list[dict], req_id: str,
-                                 statement: str) -> list[dict]:
-    """Find test reports referencing a specific requirement."""
+def _find_code_by_keywords_for_id(src_dir: Path, req_id: str) -> list[str]:
+    """Find source files matching a req_id (RS-001, SWR-001.1, etc.)."""
+    if not src_dir.exists() or not req_id:
+        return []
+
     matching = []
-    keywords = _extract_keywords(statement)
-
-    for report in test_reports:
-        output_text = json.dumps(report).lower()
-
-        # Direct match on req_id
-        if req_id.lower() in output_text:
-            matching.append(report)
+    id_lower = req_id.lower()
+    for source_file in sorted(src_dir.rglob("*.py")):
+        if not source_file.is_file():
             continue
+        try:
+            text = source_file.read_text(encoding="utf-8", errors="replace").lower()
+        except OSError:
+            continue
+        if id_lower in text:
+            rel = str(source_file.relative_to(src_dir.parent))
+            matching.append(rel)
 
-        # Keyword match
-        kw_matches = sum(1 for kw in keywords if kw in output_text)
-        if len(keywords) > 0 and kw_matches >= max(2, len(keywords) // 3):
-            matching.append(report)
-
-    return matching
+    return matching[:20]
 
 
 def _find_reviews_for_requirement(reviews: list[dict], req_id: str,
@@ -698,6 +738,75 @@ def _find_orphaned_tests(test_reports: list[dict],
             orphaned.append(report.get("file", "unknown"))
 
     return orphaned
+
+
+def _scan_test_pytest_files(project_dir: str, req_id: str) -> list[dict]:
+    """Scan pytest files for test functions matching a requirement ID.
+
+    Looks for patterns like req_id, requirement IDs in test function names,
+    in docstrings, or in comments.
+    """
+    tests_dir = Path(project_dir) / "tests"
+    if not tests_dir.exists():
+        return []
+
+    matching = []
+    req_id_lower = req_id.lower()
+    # Exact match variants
+    variants = {req_id_lower, req_id.upper()}
+    # Also look for normalized version (underscores instead of dashes/dots)
+    id_normalized = req_id_lower.replace(".", "_").replace("-", "_")
+    normalized_variants = {id_normalized, id_normalized.upper()}
+    all_variants = variants | normalized_variants
+
+    for test_file in sorted(tests_dir.rglob("test_*.py")):
+        if not test_file.is_file():
+            continue
+        try:
+            text = test_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        found_match = any(variant in text for variant in all_variants)
+
+        if found_match:
+            test_funcs = re.findall(r'def\s+(test_\w+|check_\w+)\(', text)
+            matching.append({
+                "file": str(test_file),
+                "test_functions": test_funcs,
+                "test_count": len(test_funcs),
+            })
+
+    return matching
+
+
+# Override the _find_tests_for_requirement to also scan pytest files
+def _find_tests_for_requirement(test_reports: list[dict], req_id: str,
+                                 statement: str) -> list[dict]:
+    """Find test reports and pytest files referencing a specific requirement."""
+    matching = []
+
+    # First check test report artifacts
+    keywords = _extract_keywords(statement)
+    for report in test_reports:
+        output_text = json.dumps(report).lower()
+        if req_id.lower() in output_text:
+            matching.append(report)
+            continue
+        kw_matches = sum(1 for kw in keywords if kw in output_text)
+        if len(keywords) > 0 and kw_matches >= max(2, len(keywords) // 3):
+            matching.append(report)
+
+    # Also scan pytest files for direct req_id references
+    # (this is the authoritative source for the acceptance matrix)
+    # Scan for any spec-defined req_id (RS-XXX, SWR-XXX, NFR-XXX) or plain SHALL-N
+    if not matching and not req_id.startswith("SHALL-"):
+        project_dir = os.environ.get("OSH_HOME", os.getcwd())
+        pytest_matches = _scan_test_pytest_files(project_dir, req_id)
+        if pytest_matches:
+            matching.extend(pytest_matches)
+
+    return matching
 
 
 __all__ = [
