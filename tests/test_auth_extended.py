@@ -161,15 +161,21 @@ class TestAuthentication:
 
     def test_authenticated_with_expired_session_cookie(self):
         """GIVEN expired session cookie WHEN check THEN not authenticated."""
-        with mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
-             mock.patch("yuleosh.ui.auth.API_KEY", "expired-test-key"):
-            import yuleosh.ui.auth as auth_mod
-            auth_mod.API_KEY = "expired-test-key"
+        import importlib
+        import yuleosh.ui.auth as auth_mod
+        orig_auth = auth_mod.AUTH_ENABLED
+        orig_key = auth_mod.API_KEY
+        # Monkey-patch module-level constants directly to bypass mock.patch limitations
+        auth_mod.AUTH_ENABLED = True
+        auth_mod.API_KEY = "expired-test-key"
+        try:
             token, cookie_val = auth_mod.create_session()
             auth_mod._sessions[token] = time.time() - 99999
             headers = {"cookie": f"osh_session={cookie_val}"}
             assert auth_mod.is_authenticated(headers) is False
-            auth_mod.API_KEY = os.environ.get("YULEOSH_API_KEY", "")
+        finally:
+            auth_mod.AUTH_ENABLED = orig_auth
+            auth_mod.API_KEY = orig_key
 
     def test_authenticated_no_headers(self):
         """GIVEN auth enabled but no headers WHEN check THEN not authenticated."""
