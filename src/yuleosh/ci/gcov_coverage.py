@@ -246,11 +246,18 @@ def parse_lcov_output(lcov_file: str) -> dict:
     return result
 
 
-def generate_c_coverage_report(build_dir: str = ".") -> str:
+def generate_c_coverage_report(
+    build_dir: str = ".",
+    fail_under: Optional[float] = None,
+    fail_under_branch: Optional[float] = None,
+) -> str:
     """Generate C coverage report and return JSON path.
 
     Runs lcov capture + parse, saves structured JSON to
     ``.yuleosh/reports/c-coverage.json``, and returns the JSON file path.
+
+    When *fail_under* is set, the generated JSON report will include
+    ``gate_passed`` and ``gate_detail`` fields for downstream CI enforcement.
 
     Returns an empty string if coverage generation fails.
     """
@@ -274,14 +281,65 @@ def generate_c_coverage_report(build_dir: str = ".") -> str:
 
     parsed = parse_lcov_output(lcov_path)
 
+    line_rate = round(parsed["line_rate"] * 100, 2)
+    branch_rate = round(parsed["branch_rate"] * 100, 2)
+
+    # ── CL2-E03: fail_under gate check ──
+    if fail_under is not None:
+        if line_rate < fail_under:
+            log.warning(
+                "COVERAGE GATE FAILED: line_rate=%.1f%% < fail_under=%.1f%%",
+                line_rate, fail_under,
+            )
+        else:
+            log.info(
+                "COVERAGE GATE PASSED: line_rate=%.1f%% >= fail_under=%.1f%%",
+                line_rate, fail_under,
+            )
+
+    if fail_under_branch is not None:
+        if branch_rate < fail_under_branch:
+            log.warning(
+                "BRANCH COVERAGE GATE FAILED: branch_rate=%.1f%% < fail_under_branch=%.1f%%",
+                branch_rate, fail_under_branch,
+            )
+        else:
+            log.info(
+                "BRANCH COVERAGE GATE PASSED: branch_rate=%.1f%% >= fail_under_branch=%.1f%%",
+                branch_rate, fail_under_branch,
+            )
+
+    gate_passed = True
+    gate_details = []
+    if fail_under is not None:
+        line_ok = line_rate >= fail_under
+        gate_passed = gate_passed and line_ok
+        gate_details.append({
+            "metric": "line_rate",
+            "value": line_rate,
+            "threshold": fail_under,
+            "passed": line_ok,
+        })
+    if fail_under_branch is not None:
+        branch_ok = branch_rate >= fail_under_branch
+        gate_passed = gate_passed and branch_ok
+        gate_details.append({
+            "metric": "branch_rate",
+            "value": branch_rate,
+            "threshold": fail_under_branch,
+            "passed": branch_ok,
+        })
+
     output = {
         "success": True,
         "lcov_file": lcov_path,
         "html_dir": result.get("html_dir", ""),
         "totals": parsed["totals"],
-        "line_rate": round(parsed["line_rate"] * 100, 2),
-        "branch_rate": round(parsed["branch_rate"] * 100, 2),
+        "line_rate": line_rate,
+        "branch_rate": branch_rate,
         "total_files": len(parsed["files"]),
+        "gate_passed": gate_passed if gate_details else None,
+        "gate_details": gate_details if gate_details else None,
         "files": [
             {
                 "file": f["file"],
@@ -305,7 +363,7 @@ def generate_c_coverage_report(build_dir: str = ".") -> str:
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="C/C++ code coverage via gcov/lcov"
+        description="C/C++ code coverage via gcov/lcov. CL2-E03 fail_under supported.",
     )
     parser.add_argument(
         "--build-dir", default=".",
@@ -315,15 +373,51 @@ def main():
         "--src-dir", default="src",
         help="Source directory (for filtering)",
     )
+    parser.add_argument(
+        "--fail-under", type=float, default=None,
+        help="Minimum line coverage percentage (failure if below threshold). "
+             "Default: no gate. Example: --fail-under=60",
+    )
+    parser.add_argument(
+        "--fail-under-branch", type=float, default=None,
+        help="Minimum branch coverage percentage (failure if below threshold). "
+             "Default: no gate. Example: --fail-under-branch=50",
+    )
     args = parser.parse_args()
 
-    path = generate_c_coverage_report(build_dir=args.build_dir)
-    if path:
-        print(f"C coverage report: {path}")
-        sys.exit(0)
-    else:
+    path = generate_c_coverage_report(
+        build_dir=args.build_dir,
+        fail_under=args.fail_under,
+        fail_under_branch=args.fail_under_branch,
+    )
+    if not path:
         print("C coverage generation failed", file=sys.stderr)
         sys.exit(1)
+
+    print(f"C coverage report: {path}")
+
+    # Load the saved report to check gate status
+    try:
+        with open(path) as f:
+            report = json.load(f)
+        gate_passed = report.get("gate_passed")
+        gate_details = report.get("gate_details")
+
+        if gate_details:
+            for g in gate_details:
+                status = "✅ PASS" if g["passed"] else "❌ FAIL"
+                print(f"  {status}: {g['metric']}={g['value']:.1f}% >= {g['threshold']}%")
+
+        if gate_passed is not None:
+            if gate_passed:
+                print(f"  ✅ Coverage gate: ALL PASSED")
+            else:
+                print(f"  ❌ Coverage gate: FAILED — threshold(s) not met", file=sys.stderr)
+                sys.exit(1)
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Could not read back coverage report: %s", e)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
