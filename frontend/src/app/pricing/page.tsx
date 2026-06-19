@@ -74,9 +74,9 @@ const zh = {
     },
     {
       name: "Pro",
-      price: "¥999",
+      price: "¥599",
       period: "/月",
-      annual: "年付 ¥9,999（省 17%）",
+      annual: "年付 ¥5,999（省 16%）",
       description: "全功能版，面向需要完整 ASPICE 合规与自动化的嵌入式团队。",
       highlight: true,
       badge: "首月免费试用",
@@ -99,7 +99,7 @@ const zh = {
     badge: "Enterprise + ASPICE 咨询",
     title: "需要更强大的方案？",
     desc: "面向需要私有化部署、高级安全、专属支持及端到端 ASPICE 认证的企业团队。",
-    option: "可选 ¥298,000/年 ASPICE 咨询包（含现场检查 + 定制证据包）",
+    option: "独立部署 + 人民币合同模板 · 定制方案请咨询销售",
     features: [
       "私有化部署（On-Premise + K8s Helm）",
       "SAML / LDAP SSO + RBAC",
@@ -125,7 +125,7 @@ const zh = {
       },
       {
         q: "Team 版和 Pro 版有什么区别？",
-        a: "Team 版 ¥199/月（年付 ¥1,999），适合 3-10 人团队日常协作，包含全 Pipeline 和基础合规包。Pro 版 ¥999/月（年付 ¥9,999），增加硬件在环、多租户隔离、插件市场、高级证据包和 48h 技术支持。",
+        a: "Team 版 ¥199/月（年付 ¥1,999），适合 3-10 人团队日常协作，包含全 Pipeline 和基础合规包。Pro 版 ¥599/月（年付 ¥5,999），增加硬件在环、多租户隔离、插件市场、高级证据包和 48h 技术支持。",
       },
       {
         q: "可以随时取消订阅吗？",
@@ -199,9 +199,9 @@ const en: typeof zh = {
     },
     {
       name: "Pro",
-      price: "¥999",
+      price: "¥599",
       period: "/mo",
-      annual: "¥9,999/yr (save 17%)",
+      annual: "¥5,999/yr (save 16%)",
       description: "Full-featured plan for teams needing complete ASPICE compliance and automation.",
       highlight: true,
       badge: "Free trial available",
@@ -224,7 +224,7 @@ const en: typeof zh = {
     badge: "Enterprise + ASPICE Consulting",
     title: "Need something more powerful?",
     desc: "Custom pricing for organizations that need private deployment, advanced security, and end-to-end ASPICE certification.",
-    option: "Option: ¥298K/yr ASPICE Consulting Package — on-site inspection + custom evidence pack",
+    option: "On-premise deployment + RMB contract template · Custom pricing available",
     features: [
       "On-Premise deployment (K8s Helm)",
       "SAML / LDAP SSO + RBAC",
@@ -242,7 +242,7 @@ const en: typeof zh = {
     items: [
       { q: "Can I try Pro before buying?", a: "Yes! Start with a free month of Pro — no credit card required. Upgrade via the dashboard anytime. Not satisfied? Just cancel within the first month at no cost." },
       { q: "What hardware adapters does Pro support?", a: "OpenOCD (STM32), JLink (ARM Cortex-M), esptool (ESP32), Vector CANoe/dSPACE for automotive. More on the way." },
-      { q: "What's the difference between Team and Pro?", a: "Team is ¥199/mo for 3-10 person teams with the full pipeline and basic compliance. Pro is ¥999/mo for unlimited members, HIL, multi-tenant, plugin marketplace, advanced evidence packs, and 48h support." },
+      { q: "What's the difference between Team and Pro?", a: "Team is ¥199/mo for 3-10 person teams with the full pipeline and basic compliance. Pro is ¥599/mo for unlimited members, HIL, multi-tenant, plugin marketplace, advanced evidence packs, and 48h support." },
       { q: "Can I cancel anytime?", a: "Yes. No lock-in, no cancellation fees. Your data stays accessible on the Free tier after cancellation." },
       { q: "Do you offer educational/open-source discounts?", a: "Yes! Contact us at edu@yuleosh.com for academic pricing and open-source project sponsorships." },
     ],

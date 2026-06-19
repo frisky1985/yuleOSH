@@ -46,6 +46,7 @@ _CI_CONFIG_SCHEMA = {
         "keys": {
             "enabled": {"type": "bool"},
             "addon": {"type": "str"},
+            "fail_on_required": {"type": "bool"},
             "fail_on_violation": {"type": "bool"},
             "fail_on_advisory": {"type": "bool"},
             "fail_threshold": {"type": "int"},

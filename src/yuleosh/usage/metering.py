@@ -32,7 +32,7 @@ TIERS = {
         "max_llm_tokens": 500000,
         "max_storage_mb": 1000,
         "llm_enabled": True,
-        "price_monthly": 299,
+        "price_monthly": 599,
         "stripe_price_id": None,  # Set via Stripe Dashboard
     },
     "enterprise": {
@@ -42,7 +42,7 @@ TIERS = {
         "max_llm_tokens": 99999999,
         "max_storage_mb": 10240,
         "llm_enabled": True,
-        "price_monthly": 2999,
+        "price_monthly": 8167,
         "stripe_price_id": None,
     },
 }
