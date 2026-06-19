@@ -211,6 +211,18 @@ misra:
     approved_by: architect
     expires: '2027-01-01'
     status: approved
+  - rule: Rule-99.9
+    file: src/**/test/*.c
+    reason: Test fix
+    approved_by: architect
+    expires: '2027-01-01'
+    status: rejected
+  - rule: Rule-Test-DryRun
+    file: src/main.c
+    reason: Test deviation for dry run
+    approved_by: safety-manager
+    expires: '2026-12-31'
+    status: pending
   alm:
     enabled: false
     backend: jira

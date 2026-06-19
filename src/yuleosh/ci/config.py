@@ -123,7 +123,8 @@ class MisraConfig:
 
     enabled: bool = True
     addon: str = DEFAULT_MISRA_ADDON  # 'misra' or 'misra-c-2023' or 'misra-c-2012'
-    fail_on_violation: bool = True
+    fail_on_required: bool = True  # G-09: Required violations block pipeline by default
+    fail_on_violation: bool = False  # G-09: Deprecated — use fail_on_required for Required, fail_on_advisory for Advisory
     fail_on_advisory: bool = False
     fail_threshold: int = 10
     violations_per_kloc: float = 2.0
@@ -285,7 +286,8 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
     if isinstance(misra_block, dict):
         cfg.misra.enabled = bool(misra_block.get("enabled", True))
         cfg.misra.addon = str(misra_block.get("addon", DEFAULT_MISRA_ADDON))
-        cfg.misra.fail_on_violation = bool(misra_block.get("fail_on_violation", True))
+        cfg.misra.fail_on_required = bool(misra_block.get("fail_on_required", True))
+        cfg.misra.fail_on_violation = bool(misra_block.get("fail_on_violation", False))
         cfg.misra.fail_on_advisory = bool(misra_block.get("fail_on_advisory", False))
         cfg.misra.fail_threshold = int(misra_block.get("fail_threshold", 10))
         cfg.misra.violations_per_kloc = float(misra_block.get("violations_per_kloc", 2.0))
