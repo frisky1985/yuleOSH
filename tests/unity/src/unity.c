@@ -5,6 +5,7 @@
     ========================================================================= */
 
 #include "unity.h"
+#include "unity_internals.h"
 #include <string.h>
 #include <setjmp.h>
 #include <stdio.h>
@@ -18,9 +19,9 @@ static int     _test_ignored;
 static int     _current_test_failed;
 static const char *_current_test_name;
 
-/* Forward declarations */
-void setUp(void) { }
-void tearDown(void) { }
+/* Forward declarations — test files should provide their own setUp/tearDown */
+void setUp(void);
+void tearDown(void);
 
 /* ── Startup ────────────────────────────────────────────────────────── */
 
@@ -50,7 +51,7 @@ int UnityEnd(void) {
 
 /* ── Test fixture ───────────────────────────────────────────────────── */
 
-void UnityDefaultTestRun(UnityTestFunction func, const char *name, int UNITY_LINE_TYPE line) {
+void UnityDefaultTestRun(UnityTestFunction func, const char *name, UNITY_LINE_TYPE int line) {
     (void)line;
     _current_test_name = name;
     _current_test_failed = 0;
@@ -60,30 +61,30 @@ void UnityDefaultTestRun(UnityTestFunction func, const char *name, int UNITY_LIN
         func();
         tearDown();
     }
-    /* If we get here via longjmp, test already counted as failed */
     UnityConcludeTest();
 }
 
 /* ── Assert helpers ─────────────────────────────────────────────────── */
 
-void UnityFail(const char *msg, int UNITY_LINE_TYPE line) {
+void UnityFail(const char *msg, UNITY_LINE_TYPE int line) {
     _current_test_failed = 1;
-    printf("  FAIL: %s (%s:%d)\n", msg, __FILE__, line);
+    printf("  FAIL: %s [test=%s] (%s:%d)\n", msg, _current_test_name, __FILE__, line);
     longjmp(_abort_frame, 1);
 }
 
-void UnityIgnore(const char *msg, int UNITY_LINE_TYPE line) {
+void UnityIgnore(const char *msg, UNITY_LINE_TYPE int line) {
     ++_test_ignored;
     printf("  IGNORE: %s (%s:%d)\n", msg, __FILE__, line);
     longjmp(_abort_frame, 1);
 }
 
-void UnityAssertEqualNumber(const UNITY_INT expected, const UNITY_INT actual,
-                            const char *msg, int UNITY_LINE_TYPE line,
-                            const UNITY_DISPLAY_STYLE_T UNITY_DISPLAY_STYLE_UNUSED style) {
+void UnityAssertEqualNumber(UNITY_INT expected, UNITY_INT actual,
+                            const char *msg, UNITY_LINE_TYPE int line,
+                            UNITY_DISPLAY_STYLE_T style) {
+    (void)style;
     if (expected != actual) {
         _current_test_failed = 1;
-        printf("  FAIL: expected %d, got %d", (int)expected, (int)actual);
+        printf("  FAIL: expected %d, got %d [test=%s]", (int)expected, (int)actual, _current_test_name);
         if (msg && *msg) printf(" — %s", msg);
         printf(" (%s:%d)\n", __FILE__, line);
         longjmp(_abort_frame, 1);
@@ -91,7 +92,7 @@ void UnityAssertEqualNumber(const UNITY_INT expected, const UNITY_INT actual,
 }
 
 void UnityAssertEqualString(const char *expected, const char *actual,
-                            const char *msg, int UNITY_LINE_TYPE line) {
+                            const char *msg, UNITY_LINE_TYPE int line) {
     if (expected == NULL && actual == NULL) return;
     if (expected == NULL || actual == NULL || strcmp(expected, actual) != 0) {
         _current_test_failed = 1;
@@ -104,7 +105,7 @@ void UnityAssertEqualString(const char *expected, const char *actual,
     }
 }
 
-void UnityAssertTrue(int condition, const char *msg, int UNITY_LINE_TYPE line) {
+void UnityAssertTrue(int condition, const char *msg, UNITY_LINE_TYPE int line) {
     if (!condition) {
         _current_test_failed = 1;
         printf("  FAIL: expected TRUE");
@@ -114,10 +115,10 @@ void UnityAssertTrue(int condition, const char *msg, int UNITY_LINE_TYPE line) {
     }
 }
 
-void UnityAssertFalse(int condition, const char *msg, int UNITY_LINE_TYPE line) {
+void UnityAssertFalse(int condition, const char *msg, UNITY_LINE_TYPE int line) {
     if (condition) {
         _current_test_failed = 1;
-        printf("  FAIL: expected FALSE");
+        printf("  FAIL: expected FALSE [test=%s]", _current_test_name);
         if (msg && *msg) printf(" — %s", msg);
         printf(" (%s:%d)\n", __FILE__, line);
         longjmp(_abort_frame, 1);
@@ -125,9 +126,10 @@ void UnityAssertFalse(int condition, const char *msg, int UNITY_LINE_TYPE line) 
 }
 
 void UnityAssertIntArray(const UNITY_INT *expected, const UNITY_INT *actual,
-                         const unsigned int num_elements, const char *msg,
-                         int UNITY_LINE_TYPE line,
-                         const UNITY_DISPLAY_STYLE_T UNITY_DISPLAY_STYLE_UNUSED style) {
+                         unsigned int num_elements, const char *msg,
+                         UNITY_LINE_TYPE int line,
+                         UNITY_DISPLAY_STYLE_T style) {
+    (void)style;
     for (unsigned int i = 0; i < num_elements; ++i) {
         if (expected[i] != actual[i]) {
             _current_test_failed = 1;
@@ -141,8 +143,8 @@ void UnityAssertIntArray(const UNITY_INT *expected, const UNITY_INT *actual,
 }
 
 void UnityAssertEqualMemory(const void *expected, const void *actual,
-                            const unsigned int length, const char *msg,
-                            int UNITY_LINE_TYPE line) {
+                            unsigned int length, const char *msg,
+                            UNITY_LINE_TYPE int line) {
     if (memcmp(expected, actual, length) != 0) {
         _current_test_failed = 1;
         printf("  FAIL: memory mismatch (%u bytes)", length);
@@ -152,9 +154,9 @@ void UnityAssertEqualMemory(const void *expected, const void *actual,
     }
 }
 
-void UnityAssertBits(const UNITY_INT mask, const UNITY_INT expected,
-                     const UNITY_INT actual, const char *msg,
-                     int UNITY_LINE_TYPE line) {
+void UnityAssertBits(UNITY_INT mask, UNITY_INT expected,
+                     UNITY_INT actual, const char *msg,
+                     UNITY_LINE_TYPE int line) {
     if ((expected & mask) != (actual & mask)) {
         _current_test_failed = 1;
         printf("  FAIL: bitmask 0x%x: expected 0x%x, got 0x%x",
