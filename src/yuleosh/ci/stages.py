@@ -430,7 +430,8 @@ def run_sil_tests(project_dir: str, ci: CIResult) -> bool:
         return False
 
 def run_misra_check(project_dir: str, ci: CIResult,
-                    target_files: list[str] | None = None) -> bool:
+                    target_files: list[str] | None = None,
+                    mode: str = "auto") -> bool:
     """Run MISRA C:2023 static analysis via cppcheck --addon=misra.
 
     Parses output through misra_report.py, saves structured report
@@ -453,9 +454,49 @@ def run_misra_check(project_dir: str, ci: CIResult,
         CI result accumulator.
     target_files : list[str] | None
         Explicit list of files to check.  None = auto-detect.
+    mode : str
+        MISRA check mode: "auto" (default, auto-detect delta/full),
+        "delta" (L1 — only scan modified files),
+        "full" (L2 — full scan with zero-delta blocking for new Required).
 
     Returns True if passed/acceptable violations, False if blocked.
     """
+
+    def _load_misra_baseline(proj_dir: str) -> dict:
+        """Load the most recent MISRA trend entry as a baseline for delta comparison."""
+        from yuleosh.ci.misra_trend import TREND_FILE as _mf
+        trend_path = Path(proj_dir) / _mf
+        if not trend_path.exists():
+            return {}
+        entries: list[dict] = []
+        with open(trend_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        entries.append(json.loads(line))
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+        if not entries:
+            return {}
+        # Return most recent FULL scan entry (is_delta=False) as baseline
+        for e in reversed(entries):
+            if not e.get("is_delta", True):
+                return e
+        return entries[-1] if entries else {}
+
+    def _is_new_required_violation(v: dict, baseline_violations: list) -> bool:
+        """Check if a Required violation is new (not in baseline)."""
+        rule_id = v.get("rule_id", "")
+        v_file = v.get("file", "")
+        severity = v.get("severity_category", "").lower()
+        if severity != "required":
+            return False
+        for bv in baseline_violations:
+            if bv.get("rule_id") == rule_id and bv.get("file") == v_file:
+                if bv.get("line") == v.get("line"):  # Same line = same violation
+                    return False
+        return True
     print("  🔍 CI: MISRA C:2023 static analysis...")
 
     # Load config
@@ -483,38 +524,42 @@ def run_misra_check(project_dir: str, ci: CIResult,
     strict = is_strict()
 
     # --- Determine which files to check (delta / full) ---
-    # If target_files is given explicitly, use those (delta mode).
-    # Otherwise, try git diff to find changed files; fall back to full scan.
+    # DEF-006: Support explicit mode parameter (L1 delta, L2 full)
     is_delta = False
+    is_full_delta = False  # L2: full scan + delta blocking on new Required
     c_files: list[str] = []
 
-    if target_files is not None:
-        # Explicit list — use exactly what was passed
-        c_files = [f for f in target_files
-                   if f.endswith((".c", ".cpp")) and os.path.isfile(
-                       os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
+    if mode == "delta":
+        # L1: delta mode — only scan modified files
         is_delta = True
-    else:
-        # Try git diff for auto-delta
-        try:
-            git_result = subprocess.run(
-                ["git", "diff", "--name-only", "HEAD~1"],
-                capture_output=True, text=True, timeout=10,
-                cwd=project_dir,
-            )
-            if git_result.returncode == 0:
-                changed_files = [f.strip() for f in git_result.stdout.splitlines() if f.strip()]
-                c_files = [
-                    os.path.join(project_dir, f) if not os.path.isabs(f) else f
-                    for f in changed_files
-                    if f.endswith((".c", ".cpp"))
-                ]
-                if c_files:
-                    is_delta = True
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # Fall back to full scan
+        if target_files is not None:
+            c_files = [f for f in target_files
+                       if f.endswith((".c", ".cpp")) and os.path.isfile(
+                           os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
+        else:
+            try:
+                git_result = subprocess.run(
+                    ["git", "diff", "--name-only", "HEAD~1"],
+                    capture_output=True, text=True, timeout=10,
+                    cwd=project_dir,
+                )
+                if git_result.returncode == 0:
+                    changed_files = [f.strip() for f in git_result.stdout.splitlines() if f.strip()]
+                    c_files = [
+                        os.path.join(project_dir, f) if not os.path.isabs(f) else f
+                        for f in changed_files
+                        if f.endswith((".c", ".cpp"))
+                    ]
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+            # If no git diff, fall back to empty (skip delta check)
+    elif mode == "full":
+        # L2: full scan + delta blocking on new Required
+        is_full_delta = True
+        if target_files is not None:
+            c_files = [f for f in target_files
+                       if f.endswith((".c", ".cpp")) and os.path.isfile(
+                           os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
         if not c_files:
             src_dir = os.path.join(project_dir, "src")
             if os.path.isdir(src_dir):
@@ -523,6 +568,40 @@ def run_misra_check(project_dir: str, ci: CIResult,
                     for f in files:
                         if f.endswith((".c", ".cpp")):
                             c_files.append(os.path.join(root, f))
+    else:
+        # auto mode (default) — same as before
+        if target_files is not None:
+            c_files = [f for f in target_files
+                       if f.endswith((".c", ".cpp")) and os.path.isfile(
+                           os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
+            is_delta = True
+        else:
+            try:
+                git_result = subprocess.run(
+                    ["git", "diff", "--name-only", "HEAD~1"],
+                    capture_output=True, text=True, timeout=10,
+                    cwd=project_dir,
+                )
+                if git_result.returncode == 0:
+                    changed_files = [f.strip() for f in git_result.stdout.splitlines() if f.strip()]
+                    c_files = [
+                        os.path.join(project_dir, f) if not os.path.isabs(f) else f
+                        for f in changed_files
+                        if f.endswith((".c", ".cpp"))
+                    ]
+                    if c_files:
+                        is_delta = True
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+            if not c_files:
+                src_dir = os.path.join(project_dir, "src")
+                if os.path.isdir(src_dir):
+                    for root, dirs, files in os.walk(src_dir):
+                        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+                        for f in files:
+                            if f.endswith((".c", ".cpp")):
+                                c_files.append(os.path.join(root, f))
 
     if not c_files:
         ci.add_stage("misra-check", "skipped", "No C/C++ source files found")
@@ -530,7 +609,10 @@ def run_misra_check(project_dir: str, ci: CIResult,
         return True
 
     # Print mode header
-    mode_label = "增量检查" if is_delta else "全量检查"
+    if is_full_delta:
+        mode_label = "L2 全量+Delta阻断"
+    else:
+        mode_label = "L1 增量检查" if is_delta else "全量检查"
     print(f"    📋 Mode: {mode_label} ({len(c_files)} file(s))")
 
     # Build suppression arguments from config + rule_overrides
@@ -675,9 +757,40 @@ def run_misra_check(project_dir: str, ci: CIResult,
     raw_path = misra_dir / "misra-raw-output.txt"
     raw_path.write_text(output)
 
+    # ── L2 Delta blocking: only block NEW Required violations ────
+    new_required_count = 0
+    if is_full_delta and total_violations > 0:
+        try:
+            baseline = _load_misra_baseline(project_dir)
+            baseline_violations = baseline.get("violations", [])
+            if baseline_violations:
+                from yuleosh.ci.misra_report import parse_cppcheck_output
+                # Re-parse violations for comparison
+                current_violations = parse_cppcheck_output(output)
+                new_required = [v for v in current_violations
+                                if _is_new_required_violation(v, baseline_violations)]
+                new_required_count = len(new_required)
+                if new_required_count > 0:
+                    print(f"    🆕 New Required violations since last baseline: {new_required_count}")
+                    for nv in new_required[:5]:  # Show top 5
+                        print(f"        - {nv.get('rule_id', '?')} in {nv.get('file', '?')}:{nv.get('line', '?')}")
+                    if len(new_required) > 5:
+                        print(f"        ... and {len(new_required) - 5} more")
+        except Exception as delta_e:
+            log.debug("L2 delta blocking skipped: %s", delta_e)
+            new_required_count = 0
+
     # Blocking checks (in order of severity)
     should_block = False
     block_reasons = []
+
+    # 0. L2: New Required violations block unconditionally (zero-delta)
+    if is_full_delta and new_required_count > 0:
+        should_block = True
+        block_reasons.append(
+            f"L2-P0: {new_required_count} new Required violation(s) since baseline "
+            f"(zero-delta blocking)"
+        )
 
     # 1. Required violations with fail_on_violation
     if fail_on_violation and required_count > 0:
