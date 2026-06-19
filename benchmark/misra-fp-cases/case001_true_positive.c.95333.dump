@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<dumps language="c">
+  <platform name="native" char_bit="8" short_bit="16" int_bit="32" long_bit="64" long_long_bit="64" pointer_bit="64" wchar_t_bit="32" size_t_bit="64"/>
+  <rawtokens>
+    <file index="0" name="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c"/>
+    <tok fileIndex="0" linenr="1" column="1" str="/*x * MISRA Benchmark xxx Case 001: True Positivex * Rule: MISRA C:2023 Rule 10.1 xxx Operands shall not be of inappropriate typex *x * Expected: One violation (uint16_t assigned to uint8_t without cast)x * False positive risk: Lowx */"/>
+    <tok fileIndex="0" linenr="8" column="1" str="#"/>
+    <tok fileIndex="0" linenr="8" column="2" str="include"/>
+    <tok fileIndex="0" linenr="8" column="10" str="&lt;stdint.h&gt;"/>
+    <tok fileIndex="0" linenr="10" column="1" str="void"/>
+    <tok fileIndex="0" linenr="10" column="6" str="process_sensor"/>
+    <tok fileIndex="0" linenr="10" column="20" str="("/>
+    <tok fileIndex="0" linenr="10" column="21" str="void"/>
+    <tok fileIndex="0" linenr="10" column="25" str=")"/>
+    <tok fileIndex="0" linenr="10" column="27" str="{"/>
+    <tok fileIndex="0" linenr="11" column="5" str="uint8_t"/>
+    <tok fileIndex="0" linenr="11" column="13" str="sensor_val"/>
+    <tok fileIndex="0" linenr="11" column="23" str=";"/>
+    <tok fileIndex="0" linenr="12" column="5" str="uint16_t"/>
+    <tok fileIndex="0" linenr="12" column="14" str="raw"/>
+    <tok fileIndex="0" linenr="12" column="18" str="="/>
+    <tok fileIndex="0" linenr="12" column="20" str="0x1FF"/>
+    <tok fileIndex="0" linenr="12" column="25" str=";"/>
+    <tok fileIndex="0" linenr="14" column="5" str="sensor_val"/>
+    <tok fileIndex="0" linenr="14" column="16" str="="/>
+    <tok fileIndex="0" linenr="14" column="18" str="raw"/>
+    <tok fileIndex="0" linenr="14" column="21" str=";"/>
+    <tok fileIndex="0" linenr="14" column="24" str="/* MISRA 10.1: assignment between different essential types */"/>
+    <tok fileIndex="0" linenr="15" column="1" str="}"/>
+  </rawtokens>
+  <suppressions>
+    <suppression errorId="missingIncludeSystem" />
+    <suppression errorId="Dir-4-12" />
+    <suppression errorId="Rule-21-21" />
+  </suppressions>
+<dump cfg="">
+  <standards>
+    <c version="c11"/>
+    <cpp version="c++26"/>
+  </standards>
+  <directivelist>
+    <directive file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="8" str="#include &lt;stdint.h&gt;">
+      <token column="1" str="#"/>
+      <token column="2" str="include"/>
+      <token column="10" str="&lt;stdint.h&gt;"/>
+    </directive>
+  </directivelist>
+  <tokenlist>
+    <token id="c0f24b000" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="10" column="1" str="void" scope="1014764c0" type="name"/>
+    <token id="c0f24b0c0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="10" column="6" str="process_sensor" scope="1014764c0" type="name" function="101476640"/>
+    <token id="c0f24b120" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="10" column="20" str="(" scope="1014764c0" isRemovedVoidParameter="true" link="c0f24b1e0" valueType-type="void" valueType-reference="None"/>
+    <token id="c0f24b1e0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="10" column="25" str=")" scope="1014764c0" link="c0f24b120"/>
+    <token id="c0f24b240" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="10" column="27" str="{" scope="c0f040310" link="c0f24b720"/>
+    <token id="c0f24b2a0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="11" column="5" str="uint8_t" scope="c0f040310" type="name"/>
+    <token id="c0f24b300" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="11" column="13" str="sensor_val" scope="c0f040310" type="name" varId="1" exprId="1" variable="1014766e0" values="c0f1b0160" valueType-type="char" valueType-sign="unsigned" valueType-reference="None"/>
+    <token id="c0f24b360" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="11" column="23" str=";" scope="c0f040310"/>
+    <token id="c0f24b3c0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="12" column="5" str="uint16_t" scope="c0f040310" type="name"/>
+    <token id="c0f24b420" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="12" column="14" str="raw" scope="c0f040310" type="name" varId="2" exprId="2" variable="1014768e0" values="c0f1b0180" valueType-type="short" valueType-sign="unsigned" valueType-reference="None"/>
+    <token id="c0f24b480" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="12" column="18" str=";" scope="c0f040310" isSplittedVarDeclEq="true"/>
+    <token id="c0f24b840" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="12" column="14" str="raw" scope="c0f040310" type="name" varId="2" exprId="2" variable="1014768e0" values="c0f1b01a0" astParent="c0f24b8a0" valueType-type="short" valueType-sign="unsigned" valueType-reference="None"/>
+    <token id="c0f24b8a0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="12" column="18" str="=" scope="c0f040310" type="op" isAssignmentOp="true" values="c0f1b0120" astOperand1="c0f24b840" astOperand2="c0f24b4e0" valueType-type="short" valueType-sign="unsigned" valueType-reference="None"/>
+    <token id="c0f24b4e0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="12" column="20" str="0x1FF" scope="c0f040310" type="number" isInt="true" values="c0f1b0100" astParent="c0f24b8a0" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="c0f24b540" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="12" column="25" str=";" scope="c0f040310"/>
+    <token id="c0f24b5a0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="14" column="5" str="sensor_val" scope="c0f040310" type="name" varId="1" exprId="1" variable="1014766e0" values="c0f1b01c0" astParent="c0f24b600" valueType-type="char" valueType-sign="unsigned" valueType-reference="None"/>
+    <token id="c0f24b600" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="14" column="16" str="=" scope="c0f040310" type="op" isAssignmentOp="true" exprId="1073741827" values="c0f1b01e0" astOperand1="c0f24b5a0" astOperand2="c0f24b660" valueType-type="char" valueType-sign="unsigned" valueType-reference="None"/>
+    <token id="c0f24b660" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="14" column="18" str="raw" scope="c0f040310" type="name" varId="2" exprId="2" variable="1014768e0" values="c0f1b0200" astParent="c0f24b600" valueType-type="short" valueType-sign="unsigned" valueType-reference="None"/>
+    <token id="c0f24b6c0" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="14" column="21" str=";" scope="c0f040310"/>
+    <token id="c0f24b720" file="/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c" linenr="15" column="1" str="}" scope="c0f040310" link="c0f24b240"/>
+  </tokenlist>
+  <scopes>
+    <scope id="1014764c0" type="Global">
+      <functionList>
+        <function id="101476640" token="c0f24b0c0" tokenDef="c0f24b0c0" name="process_sensor" type="Function" access="Public"/>
+      </functionList>
+    </scope>
+    <scope id="c0f040310" type="Function" className="process_sensor" bodyStart="c0f24b240" bodyEnd="c0f24b720" nestedIn="1014764c0" function="101476640">
+      <varlist>
+        <var id="1014766e0"/>
+        <var id="1014768e0"/>
+      </varlist>
+    </scope>
+  </scopes>
+  <variables>
+    <var id="1014766e0" nameToken="c0f24b300" typeStartToken="c0f24b2a0" typeEndToken="c0f24b2a0" access="Local" scope="c0f040310" constness="0" volatileness="0" isArray="false" isClass="false" isConst="false" isExtern="false" isPointer="false" isReference="false" isStatic="false" isVolatile="false"/>
+    <var id="1014768e0" nameToken="c0f24b420" typeStartToken="c0f24b3c0" typeEndToken="c0f24b3c0" access="Local" scope="c0f040310" constness="0" volatileness="0" isArray="false" isClass="false" isConst="false" isExtern="false" isPointer="false" isReference="false" isStatic="false" isVolatile="false"/>
+  </variables>
+  <valueflow>
+    <values id="c0f1b0160">
+      <value intvalue="18446744073709551615" bound="Upper" impossible="true" path="0"/>
+    </values>
+    <values id="c0f1b0180">
+      <value intvalue="18446744073709551615" bound="Upper" impossible="true" path="0"/>
+    </values>
+    <values id="c0f1b01a0">
+      <value intvalue="18446744073709551615" bound="Upper" impossible="true" path="0"/>
+    </values>
+    <values id="c0f1b0120">
+      <value intvalue="511" bound="Point" known="true" path="0"/>
+    </values>
+    <values id="c0f1b0100">
+      <value intvalue="511" bound="Point" known="true" path="0"/>
+    </values>
+    <values id="c0f1b01c0">
+      <value intvalue="18446744073709551615" bound="Upper" impossible="true" path="0"/>
+    </values>
+    <values id="c0f1b01e0">
+      <value intvalue="511" bound="Point" known="true" path="0"/>
+    </values>
+    <values id="c0f1b0200">
+      <value intvalue="511" bound="Point" known="true" path="0"/>
+    </values>
+  </valueflow>
+</dump>
+</dumps>

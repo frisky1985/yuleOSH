@@ -28,6 +28,11 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
     if path_tail == "list" or (path_tail == "" and method == "GET"):
         return _list_pipelines()
 
+    if path_tail == "steps":
+        if method == "GET":
+            return _list_pipeline_steps()
+        return json_error("Use GET for steps", 405)
+
     return json_error(f"Unknown pipeline resource: {path_tail}", 404)
 
 
@@ -65,6 +70,25 @@ def _run_pipeline(body: dict) -> tuple[dict, int]:
         return json_error("Pipeline timed out after 300s", 504)
     except Exception as e:
         return json_error(f"Pipeline error: {e}", 500)
+
+
+def _list_pipeline_steps() -> tuple[dict, int]:
+    """GET /api/v1/pipeline/steps — list all pipeline step definitions."""
+    from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+
+    steps = []
+    for idx, (step_key, agent, name, _handler) in enumerate(PIPELINE_STEPS, start=1):
+        steps.append({
+            "index": idx,
+            "key": step_key,
+            "agent": agent,
+            "name": name,
+        })
+
+    return json_ok({
+        "steps": steps,
+        "count": len(steps),
+    })
 
 
 def _list_pipelines() -> tuple[dict, int]:

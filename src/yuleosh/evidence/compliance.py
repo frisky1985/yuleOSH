@@ -19,12 +19,37 @@ import zipfile
 log = logging.getLogger("evidence.collector")
 
 
+def _compute_sha256(file_path: str) -> str:
+    """Compute SHA256 hex digest of a file."""
+    import hashlib
+    sha = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            sha.update(chunk)
+    return sha.hexdigest()
+
+
+def _build_manifest_entry(file_path: Path, arcname: str) -> dict:
+    """Build a manifest entry with path, SHA256, size, and timestamp."""
+    stat = file_path.stat()
+    return {
+        "path": arcname,
+        "sha256": _compute_sha256(str(file_path)),
+        "size_bytes": stat.st_size,
+        "mtime": stat.st_mtime,
+        "mtime_iso": _time.strftime("%Y-%m-%dT%H:%M:%S", _time.localtime(stat.st_mtime)),
+    }
+
+
 def pack_compliance_zip(collector: "EvidenceCollector") -> str:
     """Create compliance pack ZIP for ASPICE audit.
 
     Includes all generated evidence files, the requirements spec,
     startup analysis, and any SIL test reports found in
     ``.osh/ci/``.
+
+    Also generates a manifest.json inside the ZIP with path, SHA256,
+    size, and timestamp for every file.
 
     Args:
         collector: An ``EvidenceCollector`` instance that has already
@@ -34,30 +59,46 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
         Path to the created ZIP file.
     """
     zip_path = collector.evidence_dir / "compliance-pack.zip"
+    manifest_entries: list[dict] = []
+
+    def _add_to_zip(file_path: Path, arcname: str):
+        if file_path.exists():
+            zf.write(file_path, arcname=arcname)
+            manifest_entries.append(_build_manifest_entry(file_path, arcname))
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # Add all generated evidence files
         for f in collector.evidence_dir.iterdir():
             if f.suffix in (".md", ".json") and f.name != "compliance-pack.zip":
-                zf.write(f, arcname=f.name)
+                _add_to_zip(f, f.name)
 
         # Add spec file
-        spec_path = os.path.join(collector.project_dir, "docs", "spec.md")
-        if os.path.exists(spec_path):
-            zf.write(spec_path, arcname="spec.md")
+        spec_path = Path(collector.project_dir) / "docs" / "spec.md"
+        _add_to_zip(spec_path, "spec.md")
 
         # Add startup analysis
-        sa_path = os.path.join(collector.project_dir, "docs", "startup-analysis.md")
-        if os.path.exists(sa_path):
-            zf.write(sa_path, arcname="startup-analysis.md")
+        sa_path = Path(collector.project_dir) / "docs" / "startup-analysis.md"
+        _add_to_zip(sa_path, "startup-analysis.md")
 
         # Include SIL test reports from .osh/ci/*sil*.json
         ci_dir = Path(collector.project_dir) / ".osh" / "ci"
         if ci_dir.exists():
             for sil_file in sorted(ci_dir.glob("*sil*.json")):
-                zf.write(sil_file, arcname=f"sil-reports/{sil_file.name}")
+                _add_to_zip(sil_file, f"sil-reports/{sil_file.name}")
+
+        # Generate manifest.json
+        manifest = {
+            "manifest_version": "1.0",
+            "pack_generated_at": _time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "project_dir": collector.project_dir,
+            "total_files": len(manifest_entries),
+            "files": manifest_entries,
+        }
+        manifest_json = json.dumps(manifest, indent=2, ensure_ascii=False)
+        zf.writestr("manifest.json", manifest_json)
 
     print(f"  📦 Compliance pack created: {zip_path}")
+    print(f"     Manifest: {len(manifest_entries)} files tracked")
     return str(zip_path)
 
 
@@ -146,6 +187,24 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     artifacts.append(collector.aggregate_review_logs())
     artifacts.append(pack_compliance_zip(collector))
 
+    # Generate standalone manifest.json for the evidence directory
+    manifest_path = collector.evidence_dir / "manifest.json"
+    ev_manifest_entries = []
+    for f in sorted(collector.evidence_dir.iterdir()):
+        if f.name == "compliance-pack.zip":
+            continue
+        if f.suffix in (".md", ".json", ".zip"):
+            ev_manifest_entries.append(_build_manifest_entry(f, f.name))
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "manifest_version": "1.0",
+            "generated_at": _time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "project_dir": collector.project_dir,
+            "total_files": len(ev_manifest_entries),
+            "files": ev_manifest_entries,
+        }, f, indent=2, ensure_ascii=False)
+    artifacts.append(str(manifest_path))
+
     print(f"\n{'='*50}")
     print(f"✅ Evidence generation complete")
     print(f"   Output: {collector.evidence_dir}")
@@ -155,6 +214,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     print(f"   - code-coverage-report.md")
     print(f"   - review-log-summary.md + review-log.json")
     print(f"   - acceptance-matrix.md")
+    print(f"   - manifest.json (目录清单 + SHA256)")
     print(f"   - sil-reports/ (in compliance-pack.zip) 🖥")
     print(f"   - compliance-pack.zip 🎯")
     print()
