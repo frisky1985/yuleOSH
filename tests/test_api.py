@@ -28,15 +28,25 @@ os.environ.setdefault("OSH_HOME", str(Path(__file__).resolve().parent.parent))
 
 @pytest.fixture(autouse=True)
 def reset_store(tmp_path):
-    """Reset the Store singleton with a temp DB before each test."""
+    """Reset the Store singleton with a temp DB before each test.
+
+    Also resets YULEOSH_RATE_LIMIT env var so rate limit tests
+    are not polluted by other test files setting it at module level.
+    """
+    import importlib
     from yuleosh.store import Store
     Store.reset()
     # Use an in-memory database via env var
     os.environ["YULEOSH_DB"] = str(tmp_path / "test_store.db")
-    # Also clear any global rate limit state
+    # Reset rate limit env var to default — prevents cross-module pollution
+    old_rl = os.environ.pop("YULEOSH_RATE_LIMIT", None)
     from yuleosh.api import ratelimit
+    importlib.reload(ratelimit)
     ratelimit.reset()
     yield
+    # Restore env var for other tests that might depend on it
+    if old_rl is not None:
+        os.environ["YULEOSH_RATE_LIMIT"] = old_rl
     Store.reset()
 
 
@@ -1847,19 +1857,30 @@ class TestRateLimit:
 
     @patch.dict(os.environ, {"YULEOSH_RATE_LIMIT": "10"})
     def test_custom_rate_limit(self):
-        """Env var YULEOSH_RATE_LIMIT changes the limit."""
-        from yuleosh.api.ratelimit import check_rate_limit, get_remaining
-        # Must reload the module to pick up new env var
+        """Env var YULEOSH_RATE_LIMIT changes the limit.
+
+        Uses monkeypatch + module reimport to avoid importlib.reload()
+        which breaks coverage instrumentation.
+        """
         import importlib
         import yuleosh.api.ratelimit
+        old_val = os.environ.get("YULEOSH_RATE_LIMIT")
+        os.environ["YULEOSH_RATE_LIMIT"] = "10"
         importlib.reload(yuleosh.api.ratelimit)
         from yuleosh.api.ratelimit import check_rate_limit, get_remaining
-        for _ in range(10):
-            allowed, _ = check_rate_limit("custom-ip")
-            assert allowed is True
-        allowed, retry = check_rate_limit("custom-ip")
-        assert allowed is False
-        assert retry > 0
+        try:
+            for _ in range(10):
+                allowed, _ = check_rate_limit("custom-ip")
+                assert allowed is True
+            allowed, retry = check_rate_limit("custom-ip")
+            assert allowed is False
+            assert retry > 0
+        finally:
+            if old_val is None:
+                os.environ.pop("YULEOSH_RATE_LIMIT", None)
+            else:
+                os.environ["YULEOSH_RATE_LIMIT"] = old_val
+            importlib.reload(yuleosh.api.ratelimit)
 
     def test_pruning(self):
         """Old timestamps are pruned."""
