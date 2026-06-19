@@ -33,7 +33,7 @@ from typing import Any, Optional
 
 log = logging.getLogger("ci.build_metadata")
 
-BUILD_META_FILE = Path(".yuleosh") / "reports" / "build-metadata.jsonl"
+BUILD_META_FILE = Path(".yuleosh") / "metrics" / "build-metadata.jsonl"
 
 # Required fields for CL2 compliance (G-48 §20.2)
 REQUIRED_FIELDS = [

@@ -247,9 +247,13 @@ def show_coverage_trend(
 
 
 def _parse_timestamp(ts_str: str) -> datetime:
-    """Parse ISO timestamp string, returning epoch on failure."""
+    """Parse ISO timestamp string, returning epoch on failure.
+
+    Strips timezone info so all comparisons are naive vs naive.
+    """
     try:
-        return datetime.fromisoformat(ts_str)
+        dt = datetime.fromisoformat(ts_str)
+        return dt.replace(tzinfo=None)
     except (ValueError, TypeError):
         return datetime(1970, 1, 1)
 
