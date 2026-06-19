@@ -1354,8 +1354,23 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ci_run = csub.add_parser("run", help="Run a CI layer")
     p_ci_run.add_argument("layer", help="CI layer (1/2/3)")
 
+    # evidence / ev — ASPICE compliance evidence
+    p_ev = sub.add_parser("ev", help="ASPICE compliance evidence & gap check")
+    evsub = p_ev.add_subparsers(dest="ev_sub")
+    p_ev_check = evsub.add_parser("check", help="Interactive ASPICE compliance gap check (C1)")
+    p_ev_check.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_ev_check.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output format")
+    p_ev_check.add_argument("--save", action="store_true", help="Save report to .osh/evidence/aspice-gap-report.md")
+
     # evidence
-    sub.add_parser("evidence", help="Generate ASPICE compliance evidence")
+    p_evidence = sub.add_parser("evidence", help="CL2 audit evidence pack & check (G-50)")
+    evisub = p_evidence.add_subparsers(dest="evidence_sub")
+    p_ev_pack = evisub.add_parser("pack", help="Generate evidence bundle")
+    p_ev_pack.add_argument("--project-dir", default=OSH_HOME)
+    p_ev_pack.add_argument("--output", "-o", default=None, help="Output directory")
+    p_ev_check = evisub.add_parser("check", help="Check evidence bundle integrity")
+    p_ev_check.add_argument("bundle_dir", help="Path to evidence bundle directory")
+    p_ev_check.add_argument("--json", action="store_true")
 
     # stats
     p_stats = sub.add_parser("stats", help="Show project statistics")
@@ -1364,6 +1379,10 @@ def _build_parser() -> argparse.ArgumentParser:
     # demo
     p_demo = sub.add_parser("demo", help="Create and run demo projects")
     dsub = p_demo.add_subparsers(dest="demo_sub")
+    p_demo_wow = dsub.add_parser("wow", help="🚀 \"Wow Moment\" — Brake Light / Wiper Control demo (D3)")
+    p_demo_wow.add_argument("--example", choices=["brake-light", "wiper-control"], default="brake-light",
+                              help="Demo example (default: brake-light)")
+    p_demo_wow.add_argument("--dir", default=".", help="Working directory")
     p_demo_quick = dsub.add_parser("quick", help="Quick pipeline from one-line requirement")
     p_demo_quick.add_argument("requirement", help="One-line user requirement (e.g. '写一个刹车灯控制')")
     p_demo_quick.add_argument("--dir", default=".", help="Working directory for the demo")
@@ -1464,6 +1483,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kpi_status = ksub.add_parser("status", help="Show current KPI dashboard")
     p_kpi_baseline_save = ksub.add_parser("baseline-save", help="Save current state as KPI baseline")
     p_kpi_baseline_compare = ksub.add_parser("baseline-compare", help="Compare current state against baseline")
+    # G-49: Process stability KPI
+    p_kpi_process = ksub.add_parser("process", help="Process stability KPIs (G-49)")
+    p_kpi_proc_sub = p_kpi_process.add_subparsers(dest="process_sub")
+    p_kpi_proc_status = p_kpi_proc_sub.add_parser("status", help="Show process stability status")
+    p_kpi_proc_status.add_argument("--days", type=int, default=14, help="Analysis window days")
+    p_kpi_proc_status.add_argument("--json", action="store_true")
+    p_kpi_proc_baseline = p_kpi_proc_sub.add_parser("baseline", help="Generate process stability baseline report")
+    p_kpi_proc_baseline.add_argument("--label", default="", help="Report label")
     p_kpi_status.add_argument("--json", action="store_true", help="Output as JSON")
     p_kpi_baseline = ksub.add_parser("baseline", help="KPI baseline commands")
     bsub = p_kpi_baseline.add_subparsers(dest="baseline_sub")
@@ -1553,7 +1580,10 @@ def main():
             sys.exit(1)
 
     elif args.command == "demo":
-        if args.demo_sub == "quick":
+        if args.demo_sub == "wow":
+            from yuleosh.api.demo_wow import main as demo_wow_main
+            demo_wow_main(example=args.example, work_dir=args.dir)
+        elif args.demo_sub == "quick":
             from yuleosh.api.demo_quick import main as demo_quick_main
             demo_quick_main(args.requirement, args.dir)
         elif args.demo_sub == "uart":
@@ -1569,8 +1599,58 @@ def main():
             parser.print_help()
             sys.exit(1)
 
+    elif args.command == "ev":
+        if args.ev_sub == "check":
+            from yuleosh.evidence.aspice_check import aspice_gap_check
+            report = aspice_gap_check(
+                project_dir=args.project_dir,
+                output_format=args.format,
+            )
+            print(report)
+            if args.save:
+                save_path = os.path.join(args.project_dir, ".osh", "evidence", "aspice-gap-report.md")
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write(report)
+                print(f"\n📄 Report saved: {save_path}")
+        else:
+            parser.print_help()
+            sys.exit(1)
+
     elif args.command == "evidence":
-        cmd_evidence_pack()
+        if args.evidence_sub == "pack":
+            from yuleosh.evidence.evidence_check import pack_evidence_bundle
+            manifest = pack_evidence_bundle(
+                project_dir=getattr(args, "project_dir", OSH_HOME),
+                output_dir=getattr(args, "output", None),
+            )
+            bundle_dir = args.output or os.path.join(OSH_HOME, ".yuleosh", "evidence-bundle")
+            print(f"\n  Manifest: {bundle_dir}/audit-manifest.json")
+        elif args.evidence_sub == "check":
+            from yuleosh.evidence.evidence_check import check_evidence_integrity
+            result = check_evidence_integrity(args.bundle_dir)
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            else:
+                print(f"\n  🔍 Evidence Bundle Integrity Check")
+                print(f"  {'=' * 55}")
+                print(f"  Bundle: {args.bundle_dir}")
+                print(f"  Status: {'✅ VALID' if result['valid'] else '❌ INVALID'}")
+                print()
+                for check in result.get("checks", []):
+                    icon = "✅" if check["status"] == "PASS" else "❌"
+                    print(f"  {icon} {check['check']}: {check['detail']}")
+                for warn in result.get("warnings", []):
+                    print(f"  ⚠️  {warn}")
+                for err in result.get("errors", []):
+                    print(f"  ❌ {err}")
+                print()
+            if not result.get("valid", True):
+                sys.exit(1)
+        else:
+            # Legacy — show brief status
+            print("📦 Generate ASPICE compliance evidence")
+            cmd_evidence_pack()
 
     elif args.command == "audit":
         if args.audit_sub == "evidence":
@@ -1601,15 +1681,32 @@ def main():
     elif args.command == "kpi":
         if args.kpi_sub == "status":
             cmd_kpi_status(args)
+        elif args.kpi_sub == "baseline-save":
+            cmd_kpi_baseline_save(args)
         elif args.kpi_sub == "baseline":
             if args.baseline_sub == "save":
-    elif args.kpi_sub == "baseline-save":
                 cmd_kpi_baseline_save(args)
             elif args.baseline_sub == "compare":
                 cmd_kpi_baseline_compare(args)
             else:
                 parser.print_help()
                 sys.exit(1)
+        elif args.kpi_sub == "process":
+            # G-49: Process stability KPIs
+            from yuleosh.ci.kpi import get_process_stability_summary, generate_process_baseline_report
+            if args.process_sub == "status":
+                print(get_process_stability_summary(
+                    OSH_HOME,
+                    days=args.days,
+                    as_json=args.json,
+                ))
+            elif args.process_sub == "baseline":
+                report_path = generate_process_baseline_report(OSH_HOME, label=args.label)
+                print(f"\n  ✅ Process stability baseline report generated")
+                print(f"     Location: {report_path}")
+                print()
+            else:
+                print("Usage: yuleosh kpi process status|baseline")
         else:
             parser.print_help()
             sys.exit(1)
