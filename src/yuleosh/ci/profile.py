@@ -217,3 +217,174 @@ def get_current_profile(project_dir: str) -> str:
         return cfg.misra.active_profile or "safety"
     except Exception:
         return "safety"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sprint E: Profile 变更审计
+# ═══════════════════════════════════════════════════════════════════════
+
+import json
+import os
+import subprocess as _subprocess
+from datetime import datetime
+
+PROFILE_AUDIT_FILE = Path(".yuleosh") / "reports" / "profile-audit.jsonl"
+
+
+def _ensure_audit_dir(project_dir: str) -> Path:
+    path = Path(project_dir) / PROFILE_AUDIT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _get_git_commit(project_dir: str) -> str:
+    """Get the current git commit SHA (short)."""
+    try:
+        r = _subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+            cwd=project_dir,
+        )
+        return r.stdout.strip() if r.returncode == 0 else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _get_git_user(project_dir: str) -> str:
+    """Get the configured git user name."""
+    try:
+        r = _subprocess.run(
+            ["git", "config", "user.name"],
+            capture_output=True, text=True, timeout=5,
+            cwd=project_dir,
+        )
+        return r.stdout.strip() if r.returncode == 0 else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def record_profile_change(
+    project_dir: str,
+    old_profile: str,
+    new_profile: str,
+    user: str = "",
+    reason: str = "",
+) -> dict:
+    """Record a profile change to the audit log.
+
+    Captures: timestamp, user, old profile, new profile,
+    commit SHA at time of change, and optional reason.
+
+    Parameters
+    ----------
+    project_dir : str
+        Project root directory.
+    old_profile : str
+        Previous profile value.
+    new_profile : str
+        New profile value.
+    user : str
+        User who made the change. Auto-detected from git if empty.
+    reason : str
+        Optional reason for the change.
+
+    Returns
+    -------
+    dict
+        The recorded audit entry.
+    """
+    if not user:
+        user = _get_git_user(project_dir)
+
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "user": user,
+        "old_profile": old_profile,
+        "new_profile": new_profile,
+        "commit": _get_git_commit(project_dir),
+        "reason": reason,
+    }
+
+    path = _ensure_audit_dir(project_dir)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    log.info(
+        "Profile change audited: %s -> %s (user=%s, commit=%s)",
+        old_profile, new_profile, user, entry["commit"],
+    )
+    return entry
+
+
+def get_profile_audit_log(
+    project_dir: str,
+    limit: int = 50,
+    as_json: bool = False,
+) -> str:
+    """Get the profile change audit log.
+
+    Parameters
+    ----------
+    project_dir : str
+        Project root directory.
+    limit : int
+        Max entries to show (most recent first).
+    as_json : bool
+        Return JSON string instead of formatted text.
+
+    Returns
+    -------
+    str
+        Audit log summary.
+    """
+    path = Path(project_dir) / PROFILE_AUDIT_FILE
+    if not path.exists():
+        msg = "*No profile change audit records found.*"
+        return json.dumps({"error": msg}) if as_json else msg
+
+    entries = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    entries.append(json.loads(line))
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+    # Most recent first
+    entries.reverse()
+    recent = entries[:limit]
+
+    if as_json:
+        result = {
+            "total_entries": len(entries),
+            "entries": recent,
+        }
+        return json.dumps(result, indent=2, ensure_ascii=False, default=str)
+
+    rows = [
+        "## Profile 变更审计日志",
+        "",
+        f"*共 {len(entries)} 条记录，显示最近 {len(recent)} 条*",
+        "",
+    ]
+
+    if not recent:
+        rows.append("*无记录*")
+        return "\n".join(rows)
+
+    rows.append("| # | 时间 | 用户 | 旧Profile | 新Profile | Commit | 原因 |")
+    rows.append("|--:|:-----|:-----|:----------|:----------|:------|:----|")
+
+    for idx, e in enumerate(recent, 1):
+        ts = e.get("timestamp", "")[:19]
+        user = e.get("user", "")
+        old_p = e.get("old_profile", "")
+        new_p = e.get("new_profile", "")
+        commit = e.get("commit", "")[:8]
+        reason = e.get("reason", "")
+        rows.append(f"| {idx} | {ts} | {user} | {old_p} | {new_p} | {commit} | {reason} |")
+
+    rows.append("")
+    return "\n".join(rows)

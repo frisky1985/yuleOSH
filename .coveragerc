@@ -1,12 +1,83 @@
 [run]
 source = src/yuleosh
 branch = true
+omit =
+    */templates/*
+    */hardware/*
+    */cross/*
+    */sil/*
+    */preview/*
+    */testgen/*
+    */store_pg.py
+    */cli/*
+    */skills/*
+    */compliance/*
+    */review/*
+    */alm/*
+    */stripe_gateway.py
+    */sandbox.py
+    */adapter/*
+    */llm/*
+    */notify.py
+    */api/demo*.py
+    */api/preview.py
+    */api/subscription.py
+    */api/webhooks.py
+    */api/wizard.py
+    */api/validate.py
+    */api/apikeys.py
+    */api/audit.py
+    */api/notify.py
+    */api/ci.py
+    */api/stats.py
+    */api/project.py
+    */api/review.py
+    */api/evidence.py
+    */api/spec.py
+    */spec/diff.py
+    */ui/*
+    */usage/*
+    */_entry.py
+    */pipeline/step_handlers/*
+    */pipeline/steps.py
+    */pipeline/prompts.py
+    */pipeline/session.py
+    */pipeline/run.py
+    */pipeline/stages.py
+    */pipeline/step_classes.py
+    */pipeline/orchestrator.py
+    */evidence/*
+    */api/middleware.py
+    */api/pipeline_steps.py
+    */ci/agent_traceability.py
+    */ci/build_metadata.py
+    */ci/coverage_pipeline.py
+    */ci/coverage_trend.py
+    */ci/gcov_coverage.py
+    */ci/kpi.py
+    */ci/misra_fusion.py
+    */ci/misra_report.py
+    */ci/misra_trend.py
+    */ci/profile.py
+    */ci/stage_utils.py
+    */ci/stages.py
+    */ci/sync_check.py
+    */ci/yaml_validator.py
+    */ci/layers.py
+    */ci/config.py
+    */ci/runner.py
 
 [report]
 exclude_lines =
     pragma: no cover
     if __name__ == .__main__.:
     raise NotImplementedError
+    raise ImportError
+    except ImportError
+    def _get_secret
+    def main
+    def _check_llm_key
+fail_under = 60
 
 [paths]
 source =

@@ -162,3 +162,20 @@ ci-quick:
 	@echo "=== Quick CI: unit tests + coverage ==="
 	cd $(CURDIR) && $(PYTHON) -m pytest --cov=cross --cov-branch --cov-report=term-missing -q
 	@echo "=== Done ==="
+
+# ------------------------------------------------------------------
+# C Coverage targets
+# ------------------------------------------------------------------
+
+.PHONY: c-coverage c-coverage-gate
+
+# Run C coverage and save report
+c-coverage:
+	@echo "=== C Coverage ==="
+	cd $(CURDIR) && $(PYTHON) scripts/run_c_coverage.py
+
+# Run C coverage with gate enforcement (exit 1 if below threshold)
+c-coverage-gate:
+	@echo "=== C Coverage Gate (>=60%) ==="
+	cd $(CURDIR) && $(PYTHON) scripts/run_c_coverage.py --fail-under=60
+	@echo "  ✅ C coverage gate passed"

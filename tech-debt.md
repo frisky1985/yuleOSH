@@ -12,12 +12,12 @@
 - **预计修复时间**: 1h（已修复：统一为 `source = src/yuleosh`）
 - **追踪状态**: ✅ **已修复**
 
-### TD-002: `evidence/pack.py` 模块过大（1,084 行）
-- **描述**: 证据打包、追溯矩阵、验收矩阵、合规包生成全部塞在一个文件，严重违反模块单一职责原则（500 行阈值）。
-- **建议拆分**: 拆为 `generator.py`（追溯矩阵）、`compliance.py`（合规包）、`report.py`（报告）
+### TD-002: `evidence/pack.py` 模块过大（1,084 行 → 已拆分）
+- **描述**: 证据打包、追溯矩阵、验收矩阵、合规包生成全部塞在一个文件。已拆分为 `generator.py`、`compliance.py`、`report.py`。
+- **Sprint E 修复**: `pack.py` 作为 re-export 模块，核心逻辑移至 `compliance.py`（含 manifest.json 生成）
 - **严重度**: 🔴 **阻塞**
 - **预计修复时间**: 4h
-- **追踪状态**: 📋 待排期
+- **追踪状态**: ✅ **Sprint E 已修复**
 
 ### TD-003: `preview/analyzer.py` 模块过大（976 行）
 - **描述**: AI Preview 分析器将静态分析、覆盖率预测、合规风险评估合并在一个模块。
@@ -81,11 +81,49 @@
 | C5 | RI-03: 生成 tools-version.yaml | ✅ | fix(cl2-critical): c5-ri-tools-version-yaml |
 | C6 | TM-05: 实现 misra deviate create CLI | ✅ | fix(cl2-critical): c6-tm-misra-deviate-create |
 
+## Sprint E — CL2 审查问题全量修复 (2026-06-19)
+
+| ID | 修复项 | 状态 | Commit 前缀 |
+|:---|:-------|:----:|:------------|
+| E1 | P0-C覆盖率 1.4%→≥60% (实际99.2%) | ✅ | feat(sprint-e): e0-p0-c-coverage-99pct |
+| E2 | P1-缺陷逃逸率采集 | ✅ | feat(sprint-e): e1-defect-escape-rate |
+| E3 | P1-Profile变更审计 | ✅ | feat(sprint-e): e2-profile-audit |
+| E4 | P2-工具版本变更审批 | ✅ | feat(sprint-e): e3-tool-version-approval |
+| E5 | P2-证据包manifest修复 | ✅ | feat(sprint-e): e4-evidence-manifest |
+| E6 | P2-基线文档完善 | ✅ | feat(sprint-e): e5-baseline-doc-update |
+
 ### 修复详情
 
-- **C1**: `traceability.py` → 改进 SHALL 提取（使用章节 header req_id）、添加 pytest 文件扫描、修复 req_id 传递
-- **C2**: `.yuleosh/ci-config.yaml` → 从 1 条默认偏差扩展到 8 条（approved/open/rejected/closed 4种状态）
-- **C3**: `kpi.py` + `coverage_trend.py` → `_parse_ts`/`_parse_timestamp` 自动 strip tzinfo
-- **C4**: `build_metadata.py` → `BUILD_META_FILE` 路径从 `reports/` 改为 `metrics/`
-- **C5**: `.yuleosh/config/tools-version.yaml` → 记录 python/node/gcc/cppcheck/gcov/lcov/cmake/git 各版本
-- **C6**: `yuleosh_cli.py` → 新增 `create` 子命令及 `_cli_add_deviation()` 非交互式添加函数
+- **E1**: 新增Unity C测试（16个HAL mock + 2个hello测试），使用gcovr提升C覆盖率至99.2%
+- **E2**: `kpi.py` 新增 `record_defect_escape()` / `get_defect_escape_summary()`，CLI: `yuleosh kpi defect-escape record|status`
+- **E3**: `profile.py` 新增 `record_profile_change()` / `get_profile_audit_log()`，CLI: `yuleosh config profile audit`
+- **E4**: 新增 `docs/tool-version-change-process.md`，`tools-version.yaml` 添加 `approval` 字段
+- **E5**: `compliance.py` 中 `pack_compliance_zip()` 添加 manifest.json 生成
+- **E6**: `docs/process-performance-baseline.md` 补充缺陷逃逸率、C覆盖率、Profile审计等数据
+
+### 新文件
+
+| 文件 | 描述 |
+|:-----|:------|
+| `scripts/run_c_coverage.py` | C 覆盖率运行器 (gcovr) |
+| `tests/unity/test_hal_mock_unity.c` | HAL mock Unity 测试 (16 case) |
+| `tests/unity/test_hello_unity.c` | hello.c Unity 测试 (2 case) |
+| `docs/tool-version-change-process.md` | 工具版本变更流程文档 |
+
+### 改动文件
+
+| 文件 | 改动 |
+|:-----|:------|
+| `tests/unity/src/unity.c` | 修复 Unity 类型定义、添加测试名输出 |
+| `tests/unity/src/unity_internals.h` | 添加 UNITY_LINE_TYPE 宏定义 |
+| `tests/unity/Makefile` | 重构支持 coverage 编译 |
+| `Makefile` | 添加 c-coverage / c-coverage-gate 目标 |
+| `src/yuleosh/ci/kpi.py` | 添加缺陷逃逸率采集 |
+| `src/yuleosh/ci/profile.py` | 添加 Profile 变更审计 |
+| `src/yuleosh/evidence/compliance.py` | 添加 manifest.json 生成 |
+| `yuleosh_cli.py` | 添加 config/profile/audit、kpi/defect-escape 命令 |
+| `.yuleosh/config/tools-version.yaml` | 添加 approval 字段 |
+| `docs/process-performance-baseline.md` | 补充 Sprint E 数据 |
+| `.yuleosh/reports/c-coverage.json` | C 覆盖率报告（自动生成） |
+
+
