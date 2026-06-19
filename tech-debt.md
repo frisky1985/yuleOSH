@@ -67,3 +67,25 @@
 | G-11 | 趋势存储（90天历史数据） | ✅ | `coverage_trend.py`（已有 JSONL 持久化）|
 | H-07 | 代码-文档同步自动化门禁增强 | ✅ | `stages.py` run_docsync_gate + `layers.py` L1 集成 |
 | G-12 | Dashboard 基础（CLI 趋势折线图） | ✅ | `coverage_trend.py`（已有趋势显示）|
+
+---
+
+## Sprint C — Critical CL2 缺陷修复 (2026-06-19)
+
+| ID | 修复项 | 状态 | Commit 前缀 |
+|:---|:-------|:----:|:------------|
+| C1 | TM-02: 追溯矩阵 missing_test_count 修复（244→148） | ✅ | fix(cl2-critical): c1-tm-02-traceability-shall-extraction |
+| C2 | TM-14: 偏差记录从1条扩展至8条（不同状态） | ✅ | fix(cl2-critical): c2-tm-14-deviation-records |
+| C3 | MP-03/MP-04: timezone bug 修复（naive-aware 比较） | ✅ | fix(cl2-critical): c3-mp-timezone-naive-aware-fix |
+| C4 | MP-04/MP-08: build-metadata.jsonl 路径修正 | ✅ | fix(cl2-critical): c4-mp-build-metadata-path |
+| C5 | RI-03: 生成 tools-version.yaml | ✅ | fix(cl2-critical): c5-ri-tools-version-yaml |
+| C6 | TM-05: 实现 misra deviate create CLI | ✅ | fix(cl2-critical): c6-tm-misra-deviate-create |
+
+### 修复详情
+
+- **C1**: `traceability.py` → 改进 SHALL 提取（使用章节 header req_id）、添加 pytest 文件扫描、修复 req_id 传递
+- **C2**: `.yuleosh/ci-config.yaml` → 从 1 条默认偏差扩展到 8 条（approved/open/rejected/closed 4种状态）
+- **C3**: `kpi.py` + `coverage_trend.py` → `_parse_ts`/`_parse_timestamp` 自动 strip tzinfo
+- **C4**: `build_metadata.py` → `BUILD_META_FILE` 路径从 `reports/` 改为 `metrics/`
+- **C5**: `.yuleosh/config/tools-version.yaml` → 记录 python/node/gcc/cppcheck/gcov/lcov/cmake/git 各版本
+- **C6**: `yuleosh_cli.py` → 新增 `create` 子命令及 `_cli_add_deviation()` 非交互式添加函数

@@ -931,6 +931,13 @@ def cmd_misra_deviate(args):
             print(f"Error: failed to update deviation '{dev_id}'", file=sys.stderr)
             sys.exit(1)
 
+    elif sub == "create":
+        _cli_add_deviation(project_dir, args.rule, args.file,
+                           reason=args.reason,
+                           approved_by=args.approved_by,
+                           expires=args.expires,
+                           status=args.status)
+
     elif sub == "add":
         _interactive_add_deviation(project_dir)
 
@@ -946,6 +953,47 @@ def _parse_dev_id(dev_id: str) -> tuple[str, str]:
         return parts[0].strip(), parts[1].strip()
     # Try matching by rule_id alone
     return dev_id.strip(), ""
+
+
+def _cli_add_deviation(project_dir: str, rule: str, file_pat: str,
+                        reason: str = "", approved_by: str = "",
+                        expires: str = "", status: str = "open") -> None:
+    """Non-interactive CLI to add a new deviation to ci-config.yaml."""
+    import yaml
+    from pathlib import Path
+
+    config_path = Path(project_dir) / ".yuleosh" / "ci-config.yaml"
+    if not config_path.exists():
+        print(f"Error: config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+
+    new_entry = {
+        "rule": rule,
+        "file": file_pat,
+        "reason": reason or "(not specified)",
+        "approved_by": approved_by or "(not specified)",
+        "expires": expires or "2099-12-31",
+        "status": status,
+    }
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        print(f"Error: failed to parse config: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    misra_block = raw.setdefault("misra", {})
+    deviations = misra_block.setdefault("deviations", [])
+    deviations.append(new_entry)
+
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(raw, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        print(f"✅ Deviation created: {rule}:{file_pat} (status: {status})")
+    except OSError as e:
+        print(f"Error: failed to write config: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _interactive_add_deviation(project_dir: str) -> None:
@@ -1474,6 +1522,15 @@ def _build_parser() -> argparse.ArgumentParser:
     # deviate reject <id>
     p_misra_dev_reject = mdev.add_parser("reject", help="Reject a deviation")
     p_misra_dev_reject.add_argument("dev_id", help="Deviation ID (rule_id:file_pattern)")
+    # deviate create <rule> <file> --reason ... --approved-by ... --expires ... --status ...
+    p_misra_dev_create = mdev.add_parser("create", help="Create a new deviation (non-interactive)")
+    p_misra_dev_create.add_argument("rule", help="Rule ID (e.g. Rule-17.7)")
+    p_misra_dev_create.add_argument("file", help="File pattern (e.g. src/legacy/*.c)")
+    p_misra_dev_create.add_argument("--reason", default="", help="Deviation reason")
+    p_misra_dev_create.add_argument("--approved-by", "--approved_by", dest="approved_by", default="", help="Approver name")
+    p_misra_dev_create.add_argument("--expires", default="", help="Expiry date (ISO format)")
+    p_misra_dev_create.add_argument("--status", default="open", choices=["open", "approved", "rejected", "pending"],
+                                     help="Initial deviation status")
     # deviate add
     mdev.add_parser("add", help="Interactive add a deviation")
 
