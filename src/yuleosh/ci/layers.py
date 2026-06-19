@@ -111,7 +111,7 @@ def run_layer1(project_dir: Optional[str] = None):
         ("yaml-validation", run_yaml_validation),
         ("plan-lint", run_plan_lint),
         ("clang-tidy", run_clang_tidy),
-        ("misra-check", run_misra_check),
+        ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="delta")),
         ("unit-tests", run_unit_tests),
         ("coverage", run_coverage_check),
         ("c-coverage", run_c_coverage),
