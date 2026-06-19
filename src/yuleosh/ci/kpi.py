@@ -186,9 +186,13 @@ def _get_coverage_trend_avg(project_dir: str, days: int = 28) -> dict[str, float
 
 
 def _parse_ts(ts_str: str) -> datetime:
-    """Parse ISO timestamp, returning epoch on failure."""
+    """Parse ISO timestamp, returning epoch on failure.
+
+    Strips timezone info so all comparisons are naive vs naive.
+    """
     try:
-        return datetime.fromisoformat(ts_str)
+        dt = datetime.fromisoformat(ts_str)
+        return dt.replace(tzinfo=None)
     except (ValueError, TypeError):
         return datetime(1970, 1, 1)
 
