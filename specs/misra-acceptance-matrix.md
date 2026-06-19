@@ -58,9 +58,9 @@
 | # | 验收项 | SHALL ID | 验证方法 | 验证工具 | 通过标准 | 状态 |
 |:-:|:-------|:---------|:---------|:---------|:---------|:----:|
 | 4.1 | ci-config.yaml MISRA 配置段 | SWE-MISRA-CONF1 | 解析 ci-config.yaml | pytest `test_ci_config.py` | `load_ci_config()` 返回的 CiConfig 对象有 `misra` 属性 | ✅ |
-| 4.2 | MISRA 配置默认值 | SWE-MISRA-CONF1 | 无 ci-config.yaml 时测试 | pytest | 默认 `enabled=True`, `fail_on_violation=True`, `fail_threshold=10` | ✅ |
+| 4.2 | MISRA 配置默认值 | SWE-MISRA-CONF1 | 无 ci-config.yaml 时测试 | pytest | 默认 `enabled=True`, `fail_on_required=True`, `fail_on_violation=False`, `fail_threshold=10` | ✅ |
 | 4.3 | MISRA 配置覆盖 | SWE-MISRA-CONF1 | 提供自定义 ci-config.yaml | pytest | 自定义值被正确解析 | ✅ |
-| 4.4 | MisraConfig data class 存在 | SWE-MISRA-CONF1 | 检查 config.py | pytest | `MisraConfig` 含 enabled, addon, fail_on_violation, fail_on_advisory, fail_threshold, violations_per_kloc, cppcheck_std, suppress_rules, deviations 等字段 | ✅ |
+| 4.4 | MisraConfig data class 存在 | SWE-MISRA-CONF1 | 检查 config.py | pytest | `MisraConfig` 含 enabled, addon, fail_on_required, fail_on_violation, fail_on_advisory, fail_threshold, violations_per_kloc, cppcheck_std, suppress_rules, deviations 等字段 | ✅ |
 | 4.5 | MisraDeviation data class 存在 | SWE-MISRA-CONF1 | 检查 config.py | pytest | `MisraDeviation` 含 rule_id, file_pattern, reason, approved_by, expires, status 字段 | ✅ |
 
 ## 5. 测试验收 ✅
