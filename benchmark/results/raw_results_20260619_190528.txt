@@ -1,0 +1,252 @@
+=== case001_true_positive ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c:8:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c:14:16: style: Variable 'sensor_val' is assigned a value that is never used. [unreadVariable]
+    sensor_val = raw;  /* MISRA 10.1: assignment between different essential types */
+               ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c:10:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void process_sensor(void) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c:14:16: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-10.3]
+    sensor_val = raw;  /* MISRA 10.1: assignment between different essential types */
+               ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case001_true_positive.c:10:0: style: The function 'process_sensor' is never used. [unusedFunction]
+void process_sensor(void) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 6 ---
+
+=== case002_false_positive ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case002_false_positive.c:11:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case002_false_positive.c:13:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void write_to_register(uint32_t reg_addr, uint32_t value) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case002_false_positive.c:15:30: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-11.4]
+    volatile uint32_t *reg = (volatile uint32_t *)(uintptr_t)reg_addr;
+                             ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case002_false_positive.c:13:0: style: The function 'write_to_register' is never used. [unusedFunction]
+void write_to_register(uint32_t reg_addr, uint32_t value) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 5 ---
+
+=== case003_false_positive ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case003_false_positive.c:11:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case003_false_positive.c:14:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void tx_application_define(void *first_unused_memory) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case003_false_positive.c:20:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void vTaskFunction(void *pvParameters) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case003_false_positive.c:14:0: style: The function 'tx_application_define' is never used. [unusedFunction]
+void tx_application_define(void *first_unused_memory) {
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case003_false_positive.c:20:0: style: The function 'vTaskFunction' is never used. [unusedFunction]
+void vTaskFunction(void *pvParameters) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 6 ---
+
+=== case004_false_positive ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case004_false_positive.c:11:0: information: Include file: <assert.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <assert.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case004_false_positive.c:20:20: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-7.2]
+    uint32_t crc = 0xDEADBEEF;
+                   ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case004_false_positive.c:19:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void compute_crc(void) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case004_false_positive.c:24:5: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-17.7]
+    DEBUG_LOG("CRC computed");
+    ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case004_false_positive.c:19:0: style: The function 'compute_crc' is never used. [unusedFunction]
+void compute_crc(void) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 6 ---
+
+=== case005_false_positive ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case005_false_positive.c:10:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case005_false_positive.c:17:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void uart_send_char(char c) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case005_false_positive.c:19:14: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-11.4]
+    while (!(USART1_SR & 0x80U)) {
+             ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case005_false_positive.c:22:5: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-11.4]
+    USART1_DR = (uint32_t)c;
+    ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case005_false_positive.c:17:0: style: The function 'uart_send_char' is never used. [unusedFunction]
+void uart_send_char(char c) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 6 ---
+
+=== case006_false_positive ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:10:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:23:13: style: Variable 'msg' can be declared as const array [constVariable]
+    uint8_t msg[] = "Hello";
+            ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:23:21: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-7.4]
+    uint8_t msg[] = "Hello";
+                    ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:17:10: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+uint32_t hal_uart_transmit(uint32_t usart, const uint8_t *data, uint16_t len) {
+         ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:22:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void send_message(void) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:22:0: style: The function 'send_message' is never used. [unusedFunction]
+void send_message(void) {
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:17:0: style: The function 'hal_uart_transmit' should have static linkage since it is not used outside of its translation unit. [staticFunction]
+uint32_t hal_uart_transmit(uint32_t usart, const uint8_t *data, uint16_t len) {
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:14:0: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-2.5]
+#define HAL_ERROR   0x01U
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case006_false_positive.c:15:0: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-2.5]
+#define HAL_BUSY    0x02U
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 10 ---
+
+=== case007_true_negative ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case007_true_negative.c:9:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case007_true_negative.c:10:0: information: Include file: <stdbool.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdbool.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case007_true_negative.c:34:9: style: Condition 'valid' is always true [knownConditionTrueFalse]
+    if (valid) {
+        ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case007_true_negative.c:32:21: note: Calling function 'is_valid' returns 1
+    valid = is_valid(result);
+                    ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case007_true_negative.c:32:21: note: Assignment 'valid=is_valid(result)', assigned value is 1
+    valid = is_valid(result);
+                    ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case007_true_negative.c:34:9: note: Condition 'valid' is always true
+    if (valid) {
+        ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case007_true_negative.c:35:25: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-11.4]
+        (void)safe_read((const volatile uint32_t *)0x40000000U);
+                        ^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 5 ---
+
+=== case008_false_negative ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case008_false_negative.c:11:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case008_false_negative.c:13:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void ambiguous_assign(uint32_t *arr) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case008_false_negative.c:18:10: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-13.3]
+    *p++ = ++i;  /* MISRA 13.3: side effects on p AND i */
+         ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case008_false_negative.c:13:0: style: The function 'ambiguous_assign' is never used. [unusedFunction]
+void ambiguous_assign(uint32_t *arr) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 5 ---
+
+=== case009_false_negative ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case009_false_negative.c:10:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case009_false_negative.c:12:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void buffer_overflow(void) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case009_false_negative.c:12:0: style: The function 'buffer_overflow' is never used. [unusedFunction]
+void buffer_overflow(void) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 4 ---
+
+=== case010_false_negative ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case010_false_negative.c:10:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case010_false_negative.c:13:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void caller(void) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case010_false_negative.c:13:0: style: The function 'caller' is never used. [unusedFunction]
+void caller(void) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 4 ---
+
+=== case011_mixed_type_math ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case011_mixed_type_math.c:10:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case011_mixed_type_math.c:12:9: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+int32_t mixed_calc(uint16_t a, int8_t b, uint32_t c) {
+        ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case011_mixed_type_math.c:14:24: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-10.4]
+    int32_t result = a + b;      /* 10.4: signed/unsigned essential type mix */
+                       ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case011_mixed_type_math.c:12:0: style: The function 'mixed_calc' is never used. [unusedFunction]
+int32_t mixed_calc(uint16_t a, int8_t b, uint32_t c) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 5 ---
+
+=== case012_complex_control ===
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case012_complex_control.c:10:0: information: Include file: <stdint.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdint.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case012_complex_control.c:11:0: information: Include file: <stdbool.h> not found. Please note: Cppcheck does not need standard library headers to get proper results. [missingIncludeSystem]
+#include <stdbool.h>
+^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case012_complex_control.c:20:6: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-8.4]
+void state_machine_controller(state_t current) {
+     ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case012_complex_control.c:33:17: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-14.2]
+                counter = 10U;  /* loop counter modification */
+                ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case012_complex_control.c:23:5: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-16.4]
+    switch (current) {
+    ^
+/Users/stefan/.openclaw/workspace/tasks/yuleOSH/benchmark/misra-fp-cases/case012_complex_control.c:20:0: style: The function 'state_machine_controller' is never used. [unusedFunction]
+void state_machine_controller(state_t current) {
+^
+nofile:0:0: information: Active checkers: 309/1056 (use --checkers-report=<filename> to see details) [checkersReport]
+
+
+--- Count: 7 ---
+
