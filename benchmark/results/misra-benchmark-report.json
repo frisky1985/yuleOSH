@@ -1,0 +1,137 @@
+{
+  "benchmark": "yuleOSH MISRA cppcheck False Positive Benchmark",
+  "generated_at": "2026-06-19T11:05:32Z",
+  "cppcheck_version": "Cppcheck 2.17.1 from cppcheck-wheel 1.5.1",
+  "summary": {
+    "total_cases": 12,
+    "true_positives": 4,
+    "false_positives": 6,
+    "true_negatives": 0,
+    "false_negatives": 0,
+    "false_positive_rate_pct": 100.0,
+    "false_negative_rate_pct": 0.0,
+    "precision_pct": 40.0,
+    "recall_pct": 100.0,
+    "accuracy_pct": 33.33
+  },
+  "cases": {
+    "case001_true_positive": {
+      "file": "case001_true_positive.c",
+      "class": "tp",
+      "expected_count": 1,
+      "actual_count": 6,
+      "validation": "correct",
+      "rules": [
+        "10.1"
+      ]
+    },
+    "case002_false_positive": {
+      "file": "case002_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 5,
+      "validation": "false_positive",
+      "rules": [
+        "11.3"
+      ]
+    },
+    "case003_false_positive": {
+      "file": "case003_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 6,
+      "validation": "false_positive",
+      "rules": [
+        "8.13"
+      ]
+    },
+    "case004_false_positive": {
+      "file": "case004_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 6,
+      "validation": "false_positive",
+      "rules": [
+        "17.7"
+      ]
+    },
+    "case005_false_positive": {
+      "file": "case005_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 6,
+      "validation": "false_positive",
+      "rules": [
+        "11.1"
+      ]
+    },
+    "case006_false_positive": {
+      "file": "case006_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 10,
+      "validation": "false_positive",
+      "rules": [
+        "10.7"
+      ]
+    },
+    "case007_true_negative": {
+      "file": "case007_true_negative.c",
+      "class": "tn",
+      "expected_count": 0,
+      "actual_count": 5,
+      "validation": "false_positive",
+      "rules": []
+    },
+    "case008_false_negative": {
+      "file": "case008_false_negative.c",
+      "class": "fn",
+      "expected_count": 1,
+      "actual_count": 5,
+      "validation": "correct",
+      "rules": [
+        "13.3"
+      ]
+    },
+    "case009_false_negative": {
+      "file": "case009_false_negative.c",
+      "class": "fn",
+      "expected_count": 1,
+      "actual_count": 4,
+      "validation": "correct",
+      "rules": [
+        "18.2"
+      ]
+    },
+    "case010_false_negative": {
+      "file": "case010_false_negative.c",
+      "class": "fn",
+      "expected_count": 1,
+      "actual_count": 4,
+      "validation": "correct",
+      "rules": [
+        "8.2"
+      ]
+    },
+    "case011_mixed_type_math": {
+      "file": "case011_mixed_type_math.c",
+      "class": "unknown",
+      "expected_count": 2,
+      "actual_count": 5,
+      "validation": "unknown",
+      "rules": [
+        "10.1"
+      ]
+    },
+    "case012_complex_control": {
+      "file": "case012_complex_control.c",
+      "class": "unknown",
+      "expected_count": 3,
+      "actual_count": 7,
+      "validation": "unknown",
+      "rules": [
+        "14.3"
+      ]
+    }
+  }
+}
