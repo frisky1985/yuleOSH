@@ -72,6 +72,7 @@ class MisraDeviation:
     reason: str = ""
     approved_by: str = ""
     expires: str = ""  # ISO date, e.g. "2026-09-30"
+    risk_level: str = "mid"  # low | mid | high
     status: str = "pending"  # pending | approved | rejected
 
 

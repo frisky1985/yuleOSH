@@ -101,7 +101,7 @@ def run_all(project_dir: Optional[str] = None):
 
     for layer in layers:
         # Check dependencies before running
-        from yuleosh.ci.run import check_layer_dependency  # lazy: avoid circular dep
+        from yuleosh.ci.layers import check_layer_dependency  # direct import, no circular dep
         blocker = check_layer_dependency(layer, project_dir)
         if blocker:
             print(f"\n  🔒 Layer {layer} SKIPPED — dependency not satisfied")
@@ -128,6 +128,17 @@ def run_all(project_dir: Optional[str] = None):
             if remaining:
                 print(f"     Blocked layers: {', '.join(f'L{l}' for l in remaining)}")
             break
+
+    # A4: Generate final comprehensive report after all layers
+    try:
+        from yuleosh.report.exporter import generate_final_report
+        report_dir = generate_final_report(project_dir)
+        if report_dir:
+            print(f"\n  📊 Final CI report: {report_dir}/ci-final-report.*")
+    except ImportError:
+        log.warning("report.exporter not available — final report not generated")
+    except Exception as fre:
+        log.warning(f"Final report generation failed: {fre}")
 
     print("\n" + "=" * 50)
     if all_passed:
