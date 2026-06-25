@@ -8,6 +8,7 @@ for ``EvidenceCollector``.
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -100,9 +101,18 @@ class ReportBuilderMixin:
         output_path.write_text(content)
         print(f"  ✅ Traceability matrix generated: {output_path}")
 
+        ci_env = {
+            "build_id": os.environ.get("BUILD_ID", ""),
+            "commit_sha": os.environ.get("GIT_COMMIT", ""),
+            "branch": os.environ.get("GIT_BRANCH", ""),
+        }
+
         json_data: dict = {
             "generated": self.generated_at,
             "version": self.version,
+            "build_id": ci_env["build_id"],
+            "commit_sha": ci_env["commit_sha"],
+            "branch": ci_env["branch"],
             "summary": {
                 "total_requirements": total,
                 "with_implementation": covered,

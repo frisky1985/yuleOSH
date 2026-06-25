@@ -105,8 +105,8 @@ class TestGenerateTraceabilityMatrix:
         result = generate_traceability_matrix(SAMPLE_VIOLATIONS, SAMPLE_RULE_DEFS)
         required_fields = {
             "rule_id", "file", "line", "col", "severity",
-            "message", "spec_ref", "check_method",
-            "auto_checkable", "fix_status",
+            "message", "spec_ref", "impl_id", "test_ref",
+            "check_method", "auto_checkable", "fix_status",
         }
         for entry in result:
             assert required_fields.issubset(entry.keys()), f"Missing fields in {entry}"

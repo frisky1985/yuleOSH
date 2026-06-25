@@ -1,0 +1,2311 @@
+meta:
+  standard: GSCR
+  language: C
+  version: '1.1'
+  ruleset_version: 1.1.0
+  rules_total: 186
+rules:
+  GSCR-C-2.1:
+    title: 所有源文件不能存在任何编译错误
+    severity: S1
+    category: 编译和构建
+    description_en: All source files shall compil without any compilation errors
+    description_cn: 所有源文件不能存在任何编译错误
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-2.1
+    - misra-c2023-Dir-2.1
+    profile: safety
+  GSCR-C-3.1:
+    title: 所有代码应可追溯至需求文档
+    severity: S1
+    category: 需求可追溯性
+    description_en: All code shall be traceable to documented requirements
+    description_cn: 所有代码应可追溯至需求文档
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-3.1
+    - misra-c2023-Dir-3.1
+    profile: safety
+  GSCR-C-4.1:
+    title: 应尽量减少运行时故障
+    severity: S1
+    category: 编码设计
+    description_en: Run-time failures shall be minimized
+    description_cn: 应尽量减少运行时故障
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-4.2:
+    title: 汇编语言应该封装和隔离
+    severity: S1
+    category: 编码设计
+    description_en: Assembly language shall be encapsulated and isolated
+    description_cn: 汇编语言应该封装和隔离
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.3
+    - misra-c2023-Dir-4.3
+    profile: safety
+  GSCR-C-4.3:
+    title: 如果函数返回错误信息，则应测试该错误信息
+    severity: S1
+    category: 编码设计
+    description_en: If a function returns error information, then that error information shall be tested
+    description_cn: 如果函数返回错误信息，则应测试该错误信息
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.7
+    - misra-c2023-Dir-4.7
+    profile: safety
+  GSCR-C-4.4:
+    title: 应采取预防措施，以防止头文件的内容被包含多次
+    severity: S1
+    category: 编码设计
+    description_en: Precautions shall be taken in order to prevent the contents of aheader flebeing included more than once
+    description_cn: 应采取预防措施，以防止头文件的内容被包含多次
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.10
+    - misra-c2023-Dir-4.10
+    profile: safety
+  GSCR-C-4.5:
+    title: 传递给库函数的值的有效性应进行检查
+    severity: S1
+    category: 编码设计
+    description_en: The validity of values passed to library functions shal1 be checked
+    description_cn: 传递给库函数的值的有效性应进行检查
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.11
+    - misra-c2023-Dir-4.11
+    profile: safety
+  GSCR-C-4.6:
+    title: 不应使用动态内存分配
+    severity: S1
+    category: 编码设计
+    description_en: Dynamic memory allocation shall not be used
+    description_cn: 不应使用动态内存分配
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.12
+    - misra-c2023-Dir-4.12
+    profile: safety
+  GSCR-C-4.7:
+    title: 汇编语言的所有用法都应该文档化
+    severity: S2
+    category: 编码设计
+    description_en: All usage language documented
+    description_cn: 汇编语言的所有用法都应该文档化
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.2
+    - misra-c2023-Dir-4.2
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-4.8:
+    title: 代码不应该注释掉
+    severity: S2
+    category: 编码设计
+    description_en: Sections of code should not be "commented out"
+    description_cn: 代码不应该注释掉
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.4
+    - misra-c2023-Dir-4.4
+    profile: safety
+    severity_rationale: MISRA Required规则，但注释掉的代码在开发阶段有合理的调试用途，降级为S2
+  GSCR-C-4.9:
+    title: 在同一命名空间的标识符命名应该是清晰无歧义的。
+    severity: S2
+    category: 编码设计
+    description_en: Identifiers in the same name space with overlapping visibility should be typographically unambiguous
+    description_cn: 在同一命名空间的标识符命名应该是清晰无歧义的。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.5
+    - misra-c2023-Dir-4.5
+    profile: safety
+    severity_rationale: MISRA Required规则，但命名清晰度属于编码规范而非安全关键，降级为S2
+  GSCR-C-4.10:
+    title: 应该使用指示了长度和有无符号的typedef来定义新的类型，而不要直接使用基本类型。
+    severity: S2
+    category: 编码设计
+    description_en: typedefs that indicate size and signedness should be used in place of the basic numerical types
+    description_cn: 应该使用指示了长度和有无符号的typedef来定义新的类型，而不要直接使用基本类型。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.6
+    - misra-c2023-Dir-4.6
+    profile: safety
+    severity_rationale: MISRA Required规则，但类型定义风格属于编码约定，降级为S2
+  GSCR-C-4.11:
+    title: 如果指向结构或联合的指针在翻译单元中从解引用，那么对象的实现应该隐藏起来
+    severity: S2
+    category: 编码设计
+    description_en: If a pointer to a structure or union is never dereferenced within a translation unit. then the implementation
+      of the object should be hidden
+    description_cn: 如果指向结构或联合的指针在翻译单元中从解引用，那么对象的实现应该隐藏起来
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.8
+    - misra-c2023-Dir-4.8
+    profile: safety
+    severity_rationale: MISRA Required规则，但在接口封装模式中存在指针未解引用的合理场景
+  GSCR-C-4.12:
+    title: 当函数和类似函数的宏是可互换的时候，应该优先使用函数
+    severity: S2
+    category: 编码设计
+    description_en: A function should be used in preference to a function-like macro where they are interchangeable
+    description_cn: 当函数和类似函数的宏是可互换的时候，应该优先使用函数
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.9
+    - misra-c2023-Dir-4.9
+    profile: safety
+    severity_rationale: MISRA Required规则，但宏在嵌入式硬件抽象层有广泛的合理用途
+  GSCR-C-4.13:
+    title: 提供资源操作的函数应按照适当的顺序被调用
+    severity: S2
+    category: 编码设计
+    description_en: Functions which are designed to provide operations on a resource should be called in an appropriate sequence
+    description_cn: 提供资源操作的函数应按照适当的顺序被调用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.13
+    - misra-c2023-Dir-4.13
+    profile: safety
+    severity_rationale: MISRA Required规则，但资源操作顺序依赖于具体API设计，降级为S2
+  GSCR-C-5.1:
+    title: 程序不应包含任何违反标准C语法和约束的内容，也不应超出实现的翻译限制
+    severity: S1
+    category: 标准C语言环境
+    description_en: The program shall contain no violations ofthe tandard C syntax and constraints, and shall not exceed the
+      implementation's translation limnits
+    description_cn: 程序不应包含任何违反标准C语法和约束的内容，也不应超出实现的翻译限制
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-1.1
+    - misra-c2023-1.1
+    profile: safety
+  GSCR-C-5.2:
+    title: 不得出现未定义或未指定的关键行为
+    severity: S1
+    category: 标准C语言环境
+    description_en: There shall be no occurrence of undefned or critical unspecified behaviour
+    description_cn: 不得出现未定义或未指定的关键行为
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-1.3
+    - misra-c2023-1.3
+    profile: safety
+  GSCR-C-5.3:
+    title: 不应该使用语言扩展
+    severity: S2
+    category: 标准C语言环境
+    description_en: Language extensions should not be used
+    description_cn: 不应该使用语言扩展
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-1.2
+    - misra-c2023-1.2
+    profile: safety
+    severity_rationale: MISRA Required规则，但语言扩展在特定编译器和嵌入式平台中难以完全避免
+  GSCR-C-6.1:
+    title: 项目不应包含不可到达的代码
+    severity: S1
+    category: 未使用的代码
+    description_en: A project shall not contain unreachable code
+    description_cn: 项目不应包含不可到达的代码
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-2.1
+    - misra-c2023-2.1
+    profile: safety
+  GSCR-C-6.2:
+    title: 不应该有死代码
+    severity: S1
+    category: 未使用的代码
+    description_en: There shall be no dead code
+    description_cn: 不应该有死代码
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-2.2
+    - misra-c2023-2.2
+    profile: safety
+  GSCR-C-6.3:
+    title: 项目不应包含未使用的类型声明
+    severity: S2
+    category: 未使用的代码
+    description_en: A project should not contain unused type declarations
+    description_cn: 项目不应包含未使用的类型声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-2.3
+    - misra-c2023-2.3
+    profile: safety
+    severity_rationale: MISRA Required规则，但在快速原型或自动生成代码中存在合理的未使用声明
+  GSCR-C-6.4:
+    title: 项目不应该包含未使用的tag声明
+    severity: S2
+    category: 未使用的代码
+    description_en: A project should not contain unused tag declarations
+    description_cn: 项目不应该包含未使用的tag声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-2.4
+    - misra-c2023-2.4
+    profile: safety
+    severity_rationale: MISRA Required规则，但在快速原型或自动生成代码中存在合理的未使用声明
+  GSCR-C-6.5:
+    title: 项目不应包含未使用的宏声明
+    severity: S2
+    category: 未使用的代码
+    description_en: A project should not contain unused macro declarations
+    description_cn: 项目不应包含未使用的宏声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-2.5
+    - misra-c2023-2.5
+    profile: safety
+    severity_rationale: MISRA Required规则，但宏在嵌入式硬件抽象层有广泛的合理用途
+  GSCR-C-6.6:
+    title: 函数不应该包含未使用的label 声明
+    severity: S2
+    category: 未使用的代码
+    description_en: A function should not contain unused label declarations
+    description_cn: 函数不应该包含未使用的label 声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-2.6
+    - misra-c2023-2.6
+    profile: safety
+    severity_rationale: MISRA Required规则，但在快速原型或自动生成代码中存在合理的未使用声明
+  GSCR-C-6.7:
+    title: 函数不应该包含未使用的参数
+    severity: S2
+    category: 未使用的代码
+    description_en: There should be no unused parameters in functions
+    description_cn: 函数不应该包含未使用的参数
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-2.7
+    - misra-c2023-2.7
+    profile: safety
+    severity_rationale: MISRA Required规则，但在快速原型或自动生成代码中存在合理的未使用声明
+  GSCR-C-7.1:
+    title: 字符序列/*和//不应在注释中使用
+    severity: S1
+    category: 注泽
+    description_en: The character sequences/ and /shall not be used within a comment
+    description_cn: 字符序列/*和//不应在注释中使用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-3.1
+    - misra-c2023-3.1
+    profile: safety
+  GSCR-C-7.2:
+    title: //注释中不能使用行拼接
+    severity: S1
+    category: 注泽
+    description_en: Line-splicing shall not be used in/comments
+    description_cn: //注释中不能使用行拼接
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-3.2
+    - misra-c2023-3.2
+    profile: safety
+  GSCR-C-8.1:
+    title: 应终止八进制和十六进制转义序列
+    severity: S1
+    category: 字符集和约定词汇
+    description_en: Octal and hexadecimal escape sequences shall be terminated
+    description_cn: 应终止八进制和十六进制转义序列
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-4.1
+    - misra-c2023-4.1
+    profile: safety
+  GSCR-C-8.2:
+    title: 不应该使用三字字符
+    severity: S2
+    category: 字符集和约定词汇
+    description_en: Trigraphs should not be used
+    description_cn: 不应该使用三字字符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-4.2
+    - misra-c2023-4.2
+    profile: safety
+    severity_rationale: MISRA Required规则，但三字字符在现代编译器中已基本淘汰
+  GSCR-C-9.1:
+    title: 在相同范围和名称空间中声明的标识符应是不同的
+    severity: S1
+    category: 标识符
+    description_en: Identifiers declared in the same scope and name space shall be distinct
+    description_cn: 在相同范围和名称空间中声明的标识符应是不同的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.2
+    - misra-c2023-5.2
+    profile: safety
+  GSCR-C-9.2:
+    title: 在内部范围内声明的标识符不得隐藏在外部范围内声明的标识符
+    severity: S1
+    category: 标识符
+    description_en: An identifier declared in an inner scope shall not hide an identifier declared in an outer scope
+    description_cn: 在内部范围内声明的标识符不得隐藏在外部范围内声明的标识符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.3
+    - misra-c2023-5.3
+    profile: safety
+  GSCR-C-9.3:
+    title: 宏标识符应该是独立的
+    severity: S1
+    category: 标识符
+    description_en: MMacro identifers shall be distinet
+    description_cn: 宏标识符应该是独立的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.4
+    - misra-c2023-5.4
+    profile: safety
+  GSCR-C-9.4:
+    title: 标识符应该与宏名不同
+    severity: S1
+    category: 标识符
+    description_en: Identifiers shall be distinct from macro names
+    description_cn: 标识符应该与宏名不同
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.5
+    - misra-c2023-5.5
+    profile: safety
+  GSCR-C-9.5:
+    title: typedef名称应该是唯一的标识符
+    severity: S1
+    category: 标识符
+    description_en: A typedef name shall be a unique identifier
+    description_cn: typedef名称应该是唯一的标识符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.6
+    - misra-c2023-5.6
+    profile: safety
+  GSCR-C-9.6:
+    title: 标签名称应当是唯一的标识符
+    severity: S1
+    category: 标识符
+    description_en: A tag name shall be a unique identifier
+    description_cn: 标签名称应当是唯一的标识符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.7
+    - misra-c2023-5.7
+    profile: safety
+  GSCR-C-9.7:
+    title: 定义具有外部链接的对象或函数的标识符应该是唯一的
+    severity: S1
+    category: 标识符
+    description_en: Identifiers that define objects or functions with external linkage shall be unique
+    description_cn: 定义具有外部链接的对象或函数的标识符应该是唯一的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.8
+    - misra-c2023-5.8
+    profile: safety
+  GSCR-C-9.8:
+    title: 外部标识符应该是独立的
+    severity: S2
+    category: 标识符
+    description_en: External identifiers shall be distinct
+    description_cn: 外部标识符应该是独立的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.1
+    - misra-c2023-5.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但在大型代码库中外部标识符唯一性难以100%保证
+  GSCR-C-9.9:
+    title: 定义具有内部链接的对象或函数的标识符应该是唯一的
+    severity: S2
+    category: 标识符
+    description_en: Identifiers that define objects or functions with interal linkage should be unique
+    description_cn: 定义具有内部链接的对象或函数的标识符应该是唯一的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.9
+    - misra-c2023-5.9
+    profile: safety
+    severity_rationale: MISRA Required规则，但在大型代码库中外部标识符唯一性难以100%保证
+  GSCR-C-10.1:
+    title: bit 字段只能用适当的类型声明
+    severity: S1
+    category: 类型
+    description_en: Bit-fields shall only be declared with an appropriate type
+    description_cn: bit 字段只能用适当的类型声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.1
+    - misra-c2023-6.1
+    profile: safety
+  GSCR-C-10.2:
+    title: 单bit命名的bit字段不应该是带符号的类型
+    severity: S1
+    category: 类型
+    description_en: Single-bit named bit fields shall not be of a signed type
+    description_cn: 单bit命名的bit字段不应该是带符号的类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.2
+    - misra-c2023-6.2
+    profile: safety
+  GSCR-C-12.1:
+    title: 类型应明确指定。
+    severity: S1
+    category: 声明和定义
+    description_en: Types shall be explicitly specified
+    description_cn: 类型应明确指定。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.1
+    - misra-c2023-8.1
+    profile: safety
+  GSCR-C-12.2:
+    title: 函数类型应该是带有命名参数的原型形式
+    severity: S1
+    category: 声明和定义
+    description_en: Function types shall be in prototype form with named parameters
+    description_cn: 函数类型应该是带有命名参数的原型形式
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2
+    - misra-c2023-8.2
+    profile: safety
+  GSCR-C-12.3:
+    title: 对象或函数的所有声明都应使用相同的名称和类型限定符
+    severity: S1
+    category: 声明和定义
+    description_en: All declarations of an object or function shall use the type same names and qualifiers
+    description_cn: 对象或函数的所有声明都应使用相同的名称和类型限定符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.3
+    - misra-c2023-8.3
+    profile: safety
+  GSCR-C-12.4:
+    title: 当定义具有外部链接的对象或函数时，兼容声明应是可见的
+    severity: S1
+    category: 声明和定义
+    description_en: A compatible declaration shall be visible when an obiect or function with external linkage is defined
+    description_cn: 当定义具有外部链接的对象或函数时，兼容声明应是可见的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.4
+    - misra-c2023-8.4
+    profile: safety
+  GSCR-C-12.5:
+    title: 外部对象或函数应在一个且仅有一个文件中声明一次
+    severity: S1
+    category: 声明和定义
+    description_en: An external object or function shall be declared once in one and only one file
+    description_cn: 外部对象或函数应在一个且仅有一个文件中声明一次
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.5
+    - misra-c2023-8.5
+    profile: safety
+  GSCR-C-12.6:
+    title: 具有外部链接的标识符应具有一个外部定义
+    severity: S1
+    category: 声明和定义
+    description_en: An identifier with exteral linkage shall have exactly one external Definition
+    description_cn: 具有外部链接的标识符应具有一个外部定义
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.6
+    - misra-c2023-8.6
+    profile: safety
+  GSCR-C-12.7:
+    title: Static存储类标识符应该用于具有内部链接的对象和函数的定义和声明
+    severity: S1
+    category: 声明和定义
+    description_en: The staticstorage class specifier shall be used in all declarations of objects and finctions that have
+      interal linkage
+    description_cn: Static存储类标识符应该用于具有内部链接的对象和函数的定义和声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.8
+    - misra-c2023-8.8
+    profile: safety
+  GSCR-C-12.8:
+    title: 内联函数应该使用静态存储类来声明
+    severity: S1
+    category: 声明和定义
+    description_en: An inline fction shall be declared with the static storage class
+    description_cn: 内联函数应该使用静态存储类来声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.10
+    - misra-c2023-8.10
+    profile: safety
+  GSCR-C-12.9:
+    title: 在枚举数列表中，隐含指定的枚举常数的值应是唯一的。
+    severity: S1
+    category: 声明和定义
+    description_en: Within an enumerator list.the value of an implicitly specified enumeration constant shall be unique
+    description_cn: 在枚举数列表中，隐含指定的枚举常数的值应是唯一的。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.12
+    - misra-c2023-8.12
+    profile: safety
+  GSCR-C-12.10:
+    title: 不应使用 restrict 限制符
+    severity: S1
+    category: 声明和定义
+    description_en: The restrict type qualifier shall not be used
+    description_cn: 不应使用 restrict 限制符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.14
+    - misra-c2023-8.14
+    profile: safety
+  GSCR-C-12.11:
+    title: 如果函数和对象仅在一个翻译单元中引用，则不应使用外部链接来定义它们
+    severity: S2
+    category: 声明和定义
+    description_en: Functions and obiects should not be defined with exteral linkage if they are referenced in only one translation
+      unit
+    description_cn: 如果函数和对象仅在一个翻译单元中引用，则不应使用外部链接来定义它们
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.7
+    - misra-c2023-8.7
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-12.12:
+    title: 如果一个对象的标识符只出现在一个函数中，那么它应该在块范围内定义
+    severity: S2
+    category: 声明和定义
+    description_en: An object should be defined at block scope if its identifier only appears in asingle funetion
+    description_cn: 如果一个对象的标识符只出现在一个函数中，那么它应该在块范围内定义
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.9
+    - misra-c2023-8.9
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-12.13:
+    title: 当声明一个带有外部链接的数组时，应该显式地指定它的大小。
+    severity: S2
+    category: 声明和定义
+    description_en: When an array with external linkage is declared,its size should be explicitly specified
+    description_cn: 当声明一个带有外部链接的数组时，应该显式地指定它的大小。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.11
+    - misra-c2023-8.11
+    profile: safety
+    severity_rationale: MISRA Required规则，但类型定义风格属于编码约定，降级为S2
+  GSCR-C-12.14:
+    title: 尽量使得指针指向 const限定的类型
+    severity: S2
+    category: 声明和定义
+    description_en: A pointer should point to a const-qualified type whenever possible
+    description_cn: 尽量使得指针指向 const限定的类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.13
+    - misra-c2023-8.13
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-13.1:
+    title: 不得在设置自动存储对象的值之前读取该对象的值
+    severity: S0
+    category: 初始化
+    description_en: The value of an object with automatic storageduration shall not be read before it has been set
+    description_cn: 不得在设置自动存储对象的值之前读取该对象的值
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.1
+    - misra-c2023-9.1
+    profile: safety
+  GSCR-C-13.2:
+    title: 结构和联合的初始化程序应该用括号括起来
+    severity: S1
+    category: 初始化
+    description_en: The initializer for an aggregate or union shall be enclosed in braces
+    description_cn: 结构和联合的初始化程序应该用括号括起来
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.2
+    - misra-c2023-9.2
+    profile: safety
+  GSCR-C-13.3:
+    title: 数组不能部分初始化
+    severity: S1
+    category: 初始化
+    description_en: Arrays shall not be partially initialized
+    description_cn: 数组不能部分初始化
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.3
+    - misra-c2023-9.3
+    profile: safety
+  GSCR-C-13.4:
+    title: 对象的元素不得多次初始化
+    severity: S1
+    category: 初始化
+    description_en: An element of an object shall not be initialized more than once
+    description_cn: 对象的元素不得多次初始化
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.4
+    - misra-c2023-9.4
+    profile: safety
+  GSCR-C-13.5:
+    title: 当使用指定的初始化方式对数组对象进行初始化时，应该显式地指定数组的大小
+    severity: S1
+    category: 初始化
+    description_en: Where designated initializers are used to initialize an array object the size of the array shall be specified
+      explicitly
+    description_cn: 当使用指定的初始化方式对数组对象进行初始化时，应该显式地指定数组的大小
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.5
+    - misra-c2023-9.5
+    profile: safety
+  GSCR-C-14.1:
+    title: 操作数不得有不适当的基本类型
+    severity: S1
+    category: 基本类型
+    description_en: Operands shall not be of an inappropriate essential type
+    description_cn: 操作数不得有不适当的基本类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.1
+    - misra-c2023-10.1
+    profile: safety
+  GSCR-C-14.2:
+    title: 基本字符类型的表达式禁止使用不恰当的加减法操作
+    severity: S1
+    category: 基本类型
+    description_en: Expressions ofessentially character type shall not be used inappropriately in addition and subtraction
+      operations
+    description_cn: 基本字符类型的表达式禁止使用不恰当的加减法操作
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.2
+    - misra-c2023-10.2
+    profile: safety
+  GSCR-C-14.3:
+    title: 表达式的值不应赋给具有较窄的基本类型或不同的基本类型类别的对象
+    severity: S1
+    category: 基本类型
+    description_en: The value of an expression shall not be assigned to an obiect with a narower essential type of a Or different
+      essential type category
+    description_cn: 表达式的值不应赋给具有较窄的基本类型或不同的基本类型类别的对象
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.3
+    - misra-c2023-10.3
+    profile: safety
+  GSCR-C-14.4:
+    title: 操作符的两个操作数进行常见的算术转换时应具有相同的基本类型类别
+    severity: S1
+    category: 基本类型
+    description_en: Both operands of an operatot in which the usual arithmetic conversions are perfomned shall have the same
+      essential type category
+    description_cn: 操作符的两个操作数进行常见的算术转换时应具有相同的基本类型类别
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.4
+    - misra-c2023-10.4
+    profile: safety
+  GSCR-C-14.5:
+    title: 禁止将复合表达式的值赋值给更宽基本类型的对象
+    severity: S1
+    category: 基本类型
+    description_en: The value of a composite expression shall not be assigned to an obiect with wider essential type
+    description_cn: 禁止将复合表达式的值赋值给更宽基本类型的对象
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.6
+    - misra-c2023-10.6
+    profile: safety
+  GSCR-C-14.6:
+    title: 如果将符合表达式作为一个操作数进行普通算术转换操作，那么另外一个操作数不可使用更宽的基本类型。
+    severity: S1
+    category: 基本类型
+    description_en: 'If a composite expression is used as one operand of an operator in which the usual arithmetic conversions
+      are performed then the other
+
+      operand shall not have wider essential type'
+    description_cn: 如果将符合表达式作为一个操作数进行普通算术转换操作，那么另外一个操作数不可使用更宽的基本类型。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.7
+    - misra-c2023-10.7
+    profile: safety
+  GSCR-C-14.7:
+    title: 复合表达式的值不应强制转换为不同的基本类型类别或更宽的基本类型
+    severity: S1
+    category: 基本类型
+    description_en: The value ofa composite expression shall not be cast to a different essential type category or a wider
+      essential type
+    description_cn: 复合表达式的值不应强制转换为不同的基本类型类别或更宽的基本类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.8
+    - misra-c2023-10.8
+    profile: safety
+  GSCR-C-14.8:
+    title: 表达式的值不应强制转换为不适当的基本类型
+    severity: S2
+    category: 基本类型
+    description_en: The value of an expression should not be cast to an inappropriate essential type
+    description_cn: 表达式的值不应强制转换为不适当的基本类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.5
+    - misra-c2023-10.5
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-15.1:
+    title: 对于指向有const 或volatile 限定符对象的指针进行强制指针类型转换，不能丢失const 或 volatile限定符
+    severity: S0
+    category: 指针类型转换
+    description_en: A cast shall not remove any volatiles const or qualification from the type pointed to by a pointer
+    description_cn: 对于指向有const 或volatile 限定符对象的指针进行强制指针类型转换，不能丢失const 或 volatile限定符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.8
+    - misra-c2023-11.8
+    profile: safety
+  GSCR-C-15.2:
+    title: 禁止函数指针和其他类型指针之间发生转换
+    severity: S1
+    category: 指针类型转换
+    description_en: Conversions shall not be perforned between a pointei to a function and any other type
+    description_cn: 禁止函数指针和其他类型指针之间发生转换
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.1
+    - misra-c2023-11.1
+    profile: safety
+  GSCR-C-15.3:
+    title: 禁止不完全类型指针转换成其他类型
+    severity: S1
+    category: 指针类型转换
+    description_en: Conversions shall not be performed between a pointer to an incomplete type and any other type
+    description_cn: 禁止不完全类型指针转换成其他类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.2
+    - misra-c2023-11.2
+    profile: safety
+  GSCR-C-15.4:
+    title: 禁止将对象类型指针强制转换为不同对象类型的指针
+    severity: S1
+    category: 指针类型转换
+    description_en: A cast shall not performed between a pointer to object type and a pointer to a different object type
+    description_cn: 禁止将对象类型指针强制转换为不同对象类型的指针
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.3
+    - misra-c2023-11.3
+    profile: safety
+  GSCR-C-15.5:
+    title: 不应在指向 void 的指针和算术类型之间执行强制类型转换
+    severity: S1
+    category: 指针类型转换
+    description_en: A  cast not performed between pointer to void and anarithmetic type
+    description_cn: 不应在指向 void 的指针和算术类型之间执行强制类型转换
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.6
+    - misra-c2023-11.6
+    profile: safety
+  GSCR-C-15.6:
+    title: 不应在指向对象的指针和非整数算术类型之间执行强制转换
+    severity: S1
+    category: 指针类型转换
+    description_en: A cast shall not be performed between pointer to object and a non-integer arithmetic type
+    description_cn: 不应在指向对象的指针和非整数算术类型之间执行强制转换
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.7
+    - misra-c2023-11.7
+    profile: safety
+  GSCR-C-15.7:
+    title: 宏 NULL 是整数空指针常量唯一允许形式
+    severity: S1
+    category: 指针类型转换
+    description_en: The macro NULL shall be the only permitted form of integer null pointer constant
+    description_cn: 宏 NULL 是整数空指针常量唯一允许形式
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.9
+    - misra-c2023-11.9
+    profile: safety
+  GSCR-C-15.8:
+    title: 不应在指向对象的指针和整数类型之间执行转换
+    severity: S2
+    category: 指针类型转换
+    description_en: A conversion should not be performed between a pointer to object and an integer type
+    description_cn: 不应在指向对象的指针和整数类型之间执行转换
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.4
+    - misra-c2023-11.4
+    profile: safety
+    severity_rationale: MISRA Required规则，但在嵌入式地址映射场景中指针-整数转换是必要的
+  GSCR-C-15.9:
+    title: 不应该执行从指针到 void 到指针到对象的转换
+    severity: S2
+    category: 指针类型转换
+    description_en: A conversion should not be performed from pointer to void into pointer to object
+    description_cn: 不应该执行从指针到 void 到指针到对象的转换
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.5
+    - misra-c2023-11.5
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-16.1:
+    title: 移位操作符的右操作数应位于左操作数的基本类型的位宽的范围内(从0到1)
+    severity: S1
+    category: 表达式
+    description_en: The right hand operand of a shift operator shall lie in the range zero to one less than the width in bits
+      of the essential type of the left hand operand
+    description_cn: 移位操作符的右操作数应位于左操作数的基本类型的位宽的范围内(从0到1)
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-12.2
+    - misra-c2023-12.2
+    profile: safety
+  GSCR-C-16.2:
+    title: 不应该使用逗号运算符
+    severity: S2
+    category: 表达式
+    description_en: The comma operator should not be used
+    description_cn: 不应该使用逗号运算符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-12.3
+    - misra-c2023-12.3
+    profile: safety
+    severity_rationale: MISRA Required规则，但逗号表达式在宏中有合理的使用场景，降级为S2
+  GSCR-C-16.3:
+    title: 对常数表达式的求值不应该导致无符号整数的循环回绕。
+    severity: S2
+    category: 表达式
+    description_en: Evaluation of constant expressions should not lead to unsigned integer wrap around
+    description_cn: 对常数表达式的求值不应该导致无符号整数的循环回绕。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-12.4
+    - misra-c2023-12.4
+    profile: safety
+    severity_rationale: MISRA Required规则，但无符号回绕在特定算法中是可预期的行为
+  GSCR-C-16.4:
+    title: 表达式中运算符的优先级应该是显式的
+    severity: S2
+    category: 表达式
+    description_en: The precedence ofoperators within expressions should be made explicit
+    description_cn: 表达式中运算符的优先级应该是显式的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-12.1
+    - misra-c2023-12.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但表达式优先级显式化属于风格偏好，降级为S2
+  GSCR-C-17.1:
+    title: sizeof操作符的操作数不应该包含任何有潜在副作用的表达式
+    severity: S0
+    category: 函数副作用
+    description_en: The operand of the sizeof operator shall not contain any expression which has potential side effects
+    description_cn: sizeof操作符的操作数不应该包含任何有潜在副作用的表达式
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.6
+    - misra-c2023-13.6
+    profile: safety
+  GSCR-C-17.2:
+    title: 初始化列表中不应包含有副作用
+    severity: S1
+    category: 函数副作用
+    description_en: Initializer lists shall not contain persistent side effects
+    description_cn: 初始化列表中不应包含有副作用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.1
+    - misra-c2023-13.1
+    profile: safety
+  GSCR-C-17.3:
+    title: 表达式的值在标准所允许的任何运算次序下都应该是相同的
+    severity: S1
+    category: 函数副作用
+    description_en: The value of an expression and its persistent side effects shall be the same under all peritted evaluation
+      orders
+    description_cn: 表达式的值在标准所允许的任何运算次序下都应该是相同的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.2
+    - misra-c2023-13.2
+    profile: safety
+  GSCR-C-17.4:
+    title: 逻辑&&或ll操作符的右手操作数不应包含持续的副作用
+    severity: S1
+    category: 函数副作用
+    description_en: The right hand operand of a logical &&oroperator shall not contain persistent side effects
+    description_cn: 逻辑&&或ll操作符的右手操作数不应包含持续的副作用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.5
+    - misra-c2023-13.5
+    profile: safety
+  GSCR-C-17.5:
+    title: 完整表达式自增(++)或自减(--)运算符不应引起除递增或递减运算之外的其他副作用。
+    severity: S2
+    category: 函数副作用
+    description_en: A full expression containing an increment (++)or decrement(--) operator should have no other potential
+      side effects other than that caused by the increment or decrement operator
+    description_cn: 完整表达式自增(++)或自减(--)运算符不应引起除递增或递减运算之外的其他副作用。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.3
+    - misra-c2023-13.3
+    profile: safety
+    severity_rationale: MISRA Required规则，但在简单递增/递减的操作中可安全使用
+  GSCR-C-17.6:
+    title: 不应使用赋值运算符的结果
+    severity: S2
+    category: 函数副作用
+    description_en: The result of an assignment operator should not be used
+    description_cn: 不应使用赋值运算符的结果
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.4
+    - misra-c2023-13.4
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-18.1:
+    title: 控制表达式不应该是恒定不变的
+    severity: S0
+    category: 控制语句表达式
+    description_en: Controlling expressions shall not be invariant
+    description_cn: 控制表达式不应该是恒定不变的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-14.3
+    - misra-c2023-14.3
+    profile: safety
+  GSCR-C-18.2:
+    title: 循环计数器中不得含有浮点类型
+    severity: S1
+    category: 控制语句表达式
+    description_en: A loop counter shall not have essentially floating type
+    description_cn: 循环计数器中不得含有浮点类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-14.1
+    - misra-c2023-14.1
+    profile: safety
+  GSCR-C-18.3:
+    title: for 循环应该是形式良好的
+    severity: S1
+    category: 控制语句表达式
+    description_en: A for loop shall be well formed
+    description_cn: for 循环应该是形式良好的
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-14.2
+    - misra-c2023-14.2
+    profile: safety
+  GSCR-C-18.4:
+    title: if语句的控制表达式和迭代语句的控制表达式本质上应该是布尔类型
+    severity: S1
+    category: 控制语句表达式
+    description_en: The controlling expression of an if statement and the controlling expression of an iteration-statement
+      shall have essentially Boolean type
+    description_cn: if语句的控制表达式和迭代语句的控制表达式本质上应该是布尔类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-14.4
+    - misra-c2023-14.4
+    profile: safety
+  GSCR-C-19.1:
+    title: goto 语句将跳转到后面在同一函数中声明的标签
+    severity: S1
+    category: 控制流
+    description_en: The goto statement shall jump to a label declared later in the same function
+    description_cn: goto 语句将跳转到后面在同一函数中声明的标签
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.2
+    - misra-c2023-15.2
+    profile: safety
+  GSCR-C-19.2:
+    title: goto语句引用的任何标签都应该在同一块中声明，或者在包围 goto 语句的任何块中声明
+    severity: S1
+    category: 控制流
+    description_en: Any label referenced by a goto statementshallbe declared in the same block or in any block enclosing the
+      goto statement
+    description_cn: goto语句引用的任何标签都应该在同一块中声明，或者在包围 goto 语句的任何块中声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.3
+    - misra-c2023-15.3
+    profile: safety
+  GSCR-C-19.3:
+    title: 迭代语句或选择语句的主体应为复合语句
+    severity: S1
+    category: 控制流
+    description_en: The body of an iteration statement or a selection statement shall be a compound statement
+    description_cn: 迭代语句或选择语句的主体应为复合语句
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.6
+    - misra-c2023-15.6
+    profile: safety
+  GSCR-C-19.4:
+    title: 所有if...elseif结构都应该用 else 语句终止
+    severity: S1
+    category: 控制流
+    description_en: All if ... else if constructs shall be terminated with an else statement
+    description_cn: 所有if...elseif结构都应该用 else 语句终止
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.7
+    - misra-c2023-15.7
+    profile: safety
+  GSCR-C-19.5:
+    title: 不应该使用 goto 语句
+    severity: S2
+    category: 控制流
+    description_en: The goto statement should not be used
+    description_cn: 不应该使用 goto 语句
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.1
+    - misra-c2023-15.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但goto在错误处理集中退出的模式中有合理用途
+  GSCR-C-19.6:
+    title: 用于终止任何迭代语句的break 或 goto 语句不应超过一个
+    severity: S2
+    category: 控制流
+    description_en: There should be no more than onebreakorgoto statement used to terminate any iteration statement
+    description_cn: 用于终止任何迭代语句的break 或 goto 语句不应超过一个
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.4
+    - misra-c2023-15.4
+    profile: safety
+    severity_rationale: MISRA Required规则，但goto在错误处理集中退出的模式中有合理用途
+  GSCR-C-19.7:
+    title: 一个函数在结束时应该有一个单独的出口点
+    severity: S2
+    category: 控制流
+    description_en: A function should have a single point of exit at the end
+    description_cn: 一个函数在结束时应该有一个单独的出口点
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.5
+    - misra-c2023-15.5
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-20.1:
+    title: 在每个swtich 子句的结束点都应该有无条件 break语句。
+    severity: S0
+    category: Switch语句
+    description_en: An unconditional break statement shall terminate every switch-clause
+    description_cn: 在每个swtich 子句的结束点都应该有无条件 break语句。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.3
+    - misra-c2023-16.3
+    profile: safety
+  GSCR-C-20.2:
+    title: 所有 switch 语句应形式良好
+    severity: S1
+    category: Switch语句
+    description_en: All switch statements shall be wellc-formed
+    description_cn: 所有 switch 语句应形式良好
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.1
+    - misra-c2023-16.1
+    profile: safety
+  GSCR-C-20.3:
+    title: switch 标签只能在最封闭的复合语句是 switch 语句的主体时使用
+    severity: S1
+    category: Switch语句
+    description_en: A switch label shall only be used when the most losely-enclosing compound statement is the body of a switch
+      statement
+    description_cn: switch 标签只能在最封闭的复合语句是 switch 语句的主体时使用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.2
+    - misra-c2023-16.2
+    profile: safety
+  GSCR-C-20.4:
+    title: 每个 switch 语句都应该有一个 default 标签
+    severity: S1
+    category: Switch语句
+    description_en: Every switch statement shall have a default label
+    description_cn: 每个 switch 语句都应该有一个 default 标签
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.4
+    - misra-c2023-16.4
+    profile: safety
+  GSCR-C-20.5:
+    title: default 标签应该作为switch 语句的第一个或最后一个 switch 标签出现
+    severity: S1
+    category: Switch语句
+    description_en: A default label shall appeat as either the first or the last switch label of aswitch statement
+    description_cn: default 标签应该作为switch 语句的第一个或最后一个 switch 标签出现
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.5
+    - misra-c2023-16.5
+    profile: safety
+  GSCR-C-20.6:
+    title: 每个switch 语句应该至少有两个 switch 子句
+    severity: S1
+    category: Switch语句
+    description_en: Every switch statement shall have at least two switch clauses
+    description_cn: 每个switch 语句应该至少有两个 switch 子句
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.6
+    - misra-c2023-16.6
+    profile: safety
+  GSCR-C-20.7:
+    title: switch 表达式不得含有布尔类型
+    severity: S1
+    category: Switch语句
+    description_en: Aswitch-expressionshall not have essentially Boolean type
+    description_cn: switch 表达式不得含有布尔类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.7
+    - misra-c2023-16.7
+    profile: safety
+  GSCR-C-21.1:
+    title: 不应该对函数隐式声明。
+    severity: S0
+    category: 函数
+    description_en: A function shall not be declared implicitly
+    description_cn: 不应该对函数隐式声明。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.3
+    - misra-c2023-17.3
+    profile: safety
+  GSCR-C-21.2:
+    title: 对于具有 non-void 返回类型的函数，所有退出路径都应该有一个带有表达式的显式的返回语句。
+    severity: S0
+    category: 函数
+    description_en: All exit paths from a function with non-void return type shall have an explicit return statement with
+      an expression
+    description_cn: 对于具有 non-void 返回类型的函数，所有退出路径都应该有一个带有表达式的显式的返回语句。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.4
+    - misra-c2023-17.4
+    profile: safety
+  GSCR-C-21.3:
+    title: 声明数组参数时 [ ] 中不能有static 关键字。
+    severity: S0
+    category: 函数
+    description_en: The declaration of an array parameter shall not contain the static keyword between the [ ]
+    description_cn: 声明数组参数时 [ ] 中不能有static 关键字。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.6
+    - misra-c2023-17.6
+    profile: safety
+  GSCR-C-21.4:
+    title: 不要使用<stdarg.h>里的特性
+    severity: S1
+    category: 函数
+    description_en: The features of <stdarg.h> shall not be used
+    description_cn: 不要使用<stdarg.h>里的特性
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.1
+    - misra-c2023-17.1
+    profile: safety
+  GSCR-C-21.5:
+    title: 函数不能直接或间接地调用自己
+    severity: S1
+    category: 函数
+    description_en: Functions shall not call themselves. either directly or indirectly
+    description_cn: 函数不能直接或间接地调用自己
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.2
+    - misra-c2023-17.2
+    profile: safety
+  GSCR-C-21.6:
+    title: 具有 non-void 返回类型应使用的函数返回的值
+    severity: S1
+    category: 函数
+    description_en: The value retumed by a function having non-void return type shall be used
+    description_cn: 具有 non-void 返回类型应使用的函数返回的值
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.7
+    - misra-c2023-17.7
+    profile: safety
+  GSCR-C-21.7:
+    title: 不应修改函数参数
+    severity: S2
+    category: 函数
+    description_en: A function parameter should not be modified
+    description_cn: 不应修改函数参数
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.8
+    - misra-c2023-17.8
+    profile: safety
+    severity_rationale: MISRA Required规则，但在输出参数通过指针传递的惯例中参数修改是设计意图
+  GSCR-C-21.8:
+    title: 声明为数组类型的参数所对应的函数参数应有适当数量的元素
+    severity: S2
+    category: 函数
+    description_en: The function argument corresponding to a parameter declared to have an array type shall have an appropriate
+      number of elements
+    description_cn: 声明为数组类型的参数所对应的函数参数应有适当数量的元素
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.5
+    - misra-c2023-17.5
+    profile: safety
+    severity_rationale: MISRA Required规则，但在输出参数通过指针传递的惯例中参数修改是设计意图
+  GSCR-C-22.1:
+    title: 对指针进行算数运算所产生的指针，应针对与该指针操作数相同的数组中的一个元素进行寻址。
+    severity: S1
+    category: 指针和数组
+    description_en: A pointer resulting from arithmetic on a pointer operand shall address an element of the same array as
+      that pointer operand
+    description_cn: 对指针进行算数运算所产生的指针，应针对与该指针操作数相同的数组中的一个元素进行寻址。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.1
+    - misra-c2023-18.1
+    profile: safety
+  GSCR-C-22.2:
+    title: 指针之间的减法只能应用于指向相同数组中的不同元素
+    severity: S1
+    category: 指针和数组
+    description_en: Subtraction between pointers shall only be applied to pointers that address elements of the same array
+    description_cn: 指针之间的减法只能应用于指向相同数组中的不同元素
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.2
+    - misra-c2023-18.2
+    profile: safety
+  GSCR-C-22.3:
+    title: 关系运算符>、>=、<和<=不应用于指针类型的对象，除非它们指向相同的对象
+    severity: S1
+    category: 指针和数组
+    description_en: The relational operators>、>=、< and <= shall not be applied to objects of pointer type except where they
+      point into the same obiect
+    description_cn: 关系运算符>、>=、<和<=不应用于指针类型的对象，除非它们指向相同的对象
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.3
+    - misra-c2023-18.3
+    profile: safety
+  GSCR-C-22.4:
+    title: 当一个对象不存在，不能把这个对象的地址去复制给仍然存在的另外的对象
+    severity: S1
+    category: 指针和数组
+    description_en: The address of an object with automatic storage shall not be copied to another object that persists after
+      the first object has ceased to exist
+    description_cn: 当一个对象不存在，不能把这个对象的地址去复制给仍然存在的另外的对象
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.6
+    - misra-c2023-18.6
+    profile: safety
+  GSCR-C-22.5:
+    title: 不允许声明一个动态数组
+    severity: S1
+    category: 指针和数组
+    description_en: Flexible array members shall not be declared
+    description_cn: 不允许声明一个动态数组
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.7
+    - misra-c2023-18.7
+    profile: safety
+  GSCR-C-22.6:
+    title: 不应使用可变长度数组类型
+    severity: S1
+    category: 指针和数组
+    description_en: Variable-length array types shall not be used
+    description_cn: 不应使用可变长度数组类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.8
+    - misra-c2023-18.8
+    profile: safety
+  GSCR-C-22.7:
+    title: 不应将+、-、+=和-=操作符应用于指针类型的表达式
+    severity: S2
+    category: 指针和数组
+    description_en: The +.-.+=and-= operators should not be applied to an expression ofpointer type
+    description_cn: 不应将+、-、+=和-=操作符应用于指针类型的表达式
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.4
+    - misra-c2023-18.4
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-22.8:
+    title: 声明应该包含不超过两层的指针嵌套
+    severity: S2
+    category: 指针和数组
+    description_en: Declarations should contain no more than two levels of pointer nesting
+    description_cn: 声明应该包含不超过两层的指针嵌套
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.5
+    - misra-c2023-18.5
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-C-23.1:
+    title: 不得将对象指派或复制给重叠对象。
+    severity: S0
+    category: 内存重叠
+    description_en: An object shall not be assigned orcopied to an overlapping object
+    description_cn: 不得将对象指派或复制给重叠对象。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.1
+    - misra-c2023-19.1
+    profile: safety
+  GSCR-C-23.2:
+    title: 不应该使用 union 关键字
+    severity: S2
+    category: 内存重叠
+    description_en: The union keyord should not be used
+    description_cn: 不应该使用 union 关键字
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.2
+    - misra-c2023-19.2
+    profile: safety
+    severity_rationale: MISRA Required规则，但union在硬件寄存器映射中难以完全避免
+  GSCR-C-24.1:
+    title: include 指令后面应该跟一个<filename>或"filename'序列。
+    severity: S0
+    category: 预处理指令
+    description_en: 'The #include directive shall be followed by either a <filename> or "filename" sequence'
+    description_cn: include 指令后面应该跟一个<filename>或"filename'序列。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.3
+    - misra-c2023-20.3
+    profile: security
+  GSCR-C-24.2:
+    title: 由宏参数展开得到的表达式用括号括起来
+    severity: S0
+    category: 预处理指令
+    description_en: Expressions resulting from the expansion ofmacro parameters shal be enclosed in parentheses
+    description_cn: 由宏参数展开得到的表达式用括号括起来
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.7
+    - misra-c2023-20.7
+    profile: security
+  GSCR-C-24.3:
+    title: “”或\字符和/*或//字符序列不应出现在头文件名称中
+    severity: S1
+    category: 预处理指令
+    description_en: The ’,’ or \ characters and the /* or // character Sequences shall not occur in a header file name
+    description_cn: “”或\字符和/*或//字符序列不应出现在头文件名称中
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.2
+    - misra-c2023-20.2
+    profile: safety
+  GSCR-C-24.4:
+    title: 宏的定义不能与关键字的名称相同
+    severity: S1
+    category: 预处理指令
+    description_en: A macro shall not be defined with the same name as a keyword
+    description_cn: 宏的定义不能与关键字的名称相同
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.4
+    - misra-c2023-20.4
+    profile: safety
+  GSCR-C-24.5:
+    title: 看起来像预处理指令的标记不能出现在宏参数中
+    severity: S1
+    category: 预处理指令
+    description_en: Tokens that look like a preprocessing directive shall not occur within a macro argument
+    description_cn: 看起来像预处理指令的标记不能出现在宏参数中
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.6
+    - misra-c2023-20.6
+    profile: safety
+  GSCR-C-24.6:
+    title: 一个#if或#elif预处理指令的控制表达式的值应为 0或1
+    severity: S1
+    category: 预处理指令
+    description_en: 'The controlling expression of a #ifor #elif preprocessing directive shall evaluate to 0 or 1'
+    description_cn: 一个#if或#elif预处理指令的控制表达式的值应为 0或1
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.8
+    - misra-c2023-20.8
+    profile: safety
+  GSCR-C-24.7:
+    title: 在#if或#elif预处理指令的控制表达式中使用的所有标识符都必须在求值前
+    severity: S1
+    category: 预处理指令
+    description_en: '#define All identifiers used in the controlling expression of #if or #elifreprocessing directives shall
+      be #define''d before evaluation'
+    description_cn: 在#if或#elif预处理指令的控制表达式中使用的所有标识符都必须在求值前
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.9
+    - misra-c2023-20.9
+    profile: safety
+  GSCR-C-24.8:
+    title: 紧接在#运算符之后的宏参数不能紧接在##运算符之后
+    severity: S1
+    category: 预处理指令
+    description_en: 'A macro parameter immediately following a # operator shall not immediately be followed by a ## operator'
+    description_cn: 紧接在#运算符之后的宏参数不能紧接在##运算符之后
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.11
+    - misra-c2023-20.11
+    profile: safety
+  GSCR-C-24.9:
+    title: 作为“#”或“##”运算符的操作数使用的宏参数，其本身还需要进行进一步宏替换处理，此类参数仅能用作这些运算符的操作数。
+    severity: S1
+    category: 预处理指令
+    description_en: 'A macro parameter used as an operand to the#or ## operators,which isitself subject tofurther macro replacement,shall
+      only be used as an operand to these operators'
+    description_cn: 作为“#”或“##”运算符的操作数使用的宏参数，其本身还需要进行进一步宏替换处理，此类参数仅能用作这些运算符的操作数。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.12
+    - misra-c2023-20.12
+    profile: safety
+  GSCR-C-24.10:
+    title: 以#为始的行为应为一条有效的预处理指令
+    severity: S1
+    category: 预处理指令
+    description_en: 'A line whose first token is # shall be  valid preprocessing directive'
+    description_cn: 以#为始的行为应为一条有效的预处理指令
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.13
+    - misra-c2023-20.13
+    profile: safety
+  GSCR-C-24.11:
+    title: 所有的#else、#elif和#endi预处理指令应该与它们相关的#if、#ifdef 或#ifndef指令驻留在同一个文件中
+    severity: S1
+    category: 预处理指令
+    description_en: 'All #else, #elif and #endif preprocessor directives shall reside in the same file as the #if #ifdef or
+      #ifdef directive to which they are related'
+    description_cn: 所有的#else、#elif和#endi预处理指令应该与它们相关的#if、#ifdef 或#ifndef指令驻留在同一个文件中
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.14
+    - misra-c2023-20.14
+    profile: safety
+  GSCR-C-24.12:
+    title: include 指令之前应该只有预处理指令或注释
+    severity: S2
+    category: 预处理指令
+    description_en: '#include directives should only be preceded by preprocessor directives or comments'
+    description_cn: include 指令之前应该只有预处理指令或注释
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.1
+    - misra-c2023-20.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但在条件编译场景中include位置可能受限
+  GSCR-C-24.13:
+    title: '#undef不应该被使用'
+    severity: S2
+    category: 预处理指令
+    description_en: '#undef should not be used'
+    description_cn: '#undef不应该被使用'
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.5
+    - misra-c2023-20.5
+    profile: safety
+    severity_rationale: MISRA Required规则，但在特定配置管理场景中#undef有合理用途
+  GSCR-C-24.14:
+    title: 不应该使用#和##预处理器操作符
+    severity: S2
+    category: 预处理指令
+    description_en: 'The # and ## preprocessor operators should not be used'
+    description_cn: 不应该使用#和##预处理器操作符
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-20.10
+    - misra-c2023-20.10
+    profile: safety
+    severity_rationale: MISRA Required规则，但#和##操作符在宏编程中有广泛用途
+  GSCR-C-25.1:
+    title: '#define和#ndef不能用于定义保留的标识符或保留的宏名。'
+    severity: S0
+    category: 标准库
+    description_en: '#define and #undef shall not be used onareserved identifier or reserved macro name'
+    description_cn: '#define和#ndef不能用于定义保留的标识符或保留的宏名。'
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.1
+    - misra-c2023-21.1
+    profile: safety
+  GSCR-C-25.2:
+    title: <ctype.h>标准库中的函数，其操作数需为unsigned char 或 EOF
+    severity: S0
+    category: 标准库
+    description_en: Any value passed to a function in<ctype.h>shall be representable as an unsigned char or be the value EOF
+    description_cn: <ctype.h>标准库中的函数，其操作数需为unsigned char 或 EOF
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.13
+    - misra-c2023-21.13
+    profile: safety
+  GSCR-C-25.3:
+    title: 使用<string.h>中的字符串处理函数不应超出其指针参数引用的对象范围的访间
+    severity: S0
+    category: 标准库
+    description_en: Use of the string handing function from<string.h>shall not result in accesses beyond  the bounds of the
+      objects referenced by their pointer parameters
+    description_cn: 使用<string.h>中的字符串处理函数不应超出其指针参数引用的对象范围的访间
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.17
+    - misra-c2023-21.17
+    profile: safety
+  GSCR-C-25.4:
+    title: 传递给<string.h>中任何函数的 sizet参数应具有适当的值
+    severity: S0
+    category: 标准库
+    description_en: The size_t argument passed to any function in  any <string.h>shall hava an appropriate value
+    description_cn: 传递给<string.h>中任何函数的 sizet参数应具有适当的值
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.18
+    - misra-c2023-21.18
+    profile: safety
+  GSCR-C-25.5:
+    title: 标准库函数localeconv，getenv, setlocale strerror返回的指针只能用作指向Const限定类型的指针
+    severity: S0
+    category: 标准库
+    description_en: The pointers returned by the Standard Library functions localeconv, getenv, setlocale or strerror shall
+      only be used as if they have pointer to const-qualified type
+    description_cn: 标准库函数localeconv，getenv, setlocale strerror返回的指针只能用作指向Const限定类型的指针
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.19
+    - misra-c2023-21.19
+    profile: safety
+  GSCR-C-25.6:
+    title: 在调用标准库函数asctime,ctime,gmtime.locatime,localeconv,getenv,setlocale 或 strerror时，不得
+    severity: S0
+    category: 标准库
+    description_en: The pointer retured by the Standard library fmction asctime,ctime,gmtime.locati me.localeconv,getenv,setloc
+      ale or strerror shall not be used following a subsequent call to the same function
+    description_cn: 在调用标准库函数asctime,ctime,gmtime.locatime,localeconv,getenv,setlocale 或 strerror时，不得使用上次调用同一函数的返回指针。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.20
+    - misra-c2023-21.20
+    profile: safety
+  GSCR-C-25.7:
+    title: 保留的标识符或宏名不得声明
+    severity: S1
+    category: 标准库
+    description_en: A reserved identifer or shall not be macro name declared
+    description_cn: 保留的标识符或宏名不得声明
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-MRule-21.2
+    - misra-c2023-MRule-21.2
+    profile: safety
+  GSCR-C-25.8:
+    title: 不允许使用<stdlib.h>中的内存分配和释放函数
+    severity: S1
+    category: 标准库
+    description_en: The memory allocation and  deallocation functions of <stdlib.h> shall not be used
+    description_cn: 不允许使用<stdlib.h>中的内存分配和释放函数
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.3
+    - misra-c2023-21.3
+    profile: safety
+  GSCR-C-25.9:
+    title: 不应使用标准头文件<setjmp.h>
+    severity: S1
+    category: 标准库
+    description_en: The standard header file <setjmp.h> shall not be used
+    description_cn: 不应使用标准头文件<setjmp.h>
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.4
+    - misra-c2023-21.4
+    profile: safety
+  GSCR-C-25.10:
+    title: 不能使用标准的头文件<signal.h>
+    severity: S1
+    category: 标准库
+    description_en: The standard header file <signal.h> shall not be used
+    description_cn: 不能使用标准的头文件<signal.h>
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.5
+    - misra-c2023-21.5
+    profile: safety
+  GSCR-C-25.11:
+    title: 不得使用标准库的输入/输出函数
+    severity: S1
+    category: 标准库
+    description_en: The Standard Library input/output functions shall not be used
+    description_cn: 不得使用标准库的输入/输出函数
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.6
+    - misra-c2023-21.6
+    profile: safety
+  GSCR-C-25.12:
+    title: <stdlib.h>的 atof、atoi、atol和 atoll 功能不得使用
+    severity: S1
+    category: 标准库
+    description_en: The atof. atoi.atol and atoll finctions of <stdlib.h> shal! not be used
+    description_cn: <stdlib.h>的 atof、atoi、atol和 atoll 功能不得使用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.7
+    - misra-c2023-21.7
+    profile: safety
+  GSCR-C-25.13:
+    title: 不允许使用 stdlibh的库函数abort，exit，getenv和system
+    severity: S1
+    category: 标准库
+    description_en: The library functions abort exit,getenv and system of <stdlib.h> shall not be used
+    description_cn: 不允许使用 stdlibh的库函数abort，exit，getenv和system
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.8
+    - misra-c2023-21.8
+    profile: safety
+  GSCR-C-25.14:
+    title: 不得使用<stdlib.h>的库函数 bsearch 和 qsort
+    severity: S1
+    category: 标准库
+    description_en: The library functions and bsearch qsort of <stdlib.h> shall not be used
+    description_cn: 不得使用<stdlib.h>的库函数 bsearch 和 qsort
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.9
+    - misra-c2023-21.9
+    profile: safety
+  GSCR-C-25.15:
+    title: 不得使用标准库的时间和日期函数
+    severity: S1
+    category: 标准库
+    description_en: The Standard Library time and date functions shall no be used
+    description_cn: 不得使用标准库的时间和日期函数
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.10
+    - misra-c2023-21.10
+    profile: safety
+  GSCR-C-25.16:
+    title: 不应使用标准头文件<tgmath.h>
+    severity: S1
+    category: 标准库
+    description_en: The standard header file <tgmath.h> shall not be used
+    description_cn: 不应使用标准头文件<tgmath.h>
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.11
+    - misra-c2023-21.11
+    profile: safety
+  GSCR-C-25.17:
+    title: 禁止使用标准库函数memcmp比较空终止字符串
+    severity: S1
+    category: 标准库
+    description_en: The Standard Library function memomp shall not be used to compare null terinated strings
+    description_cn: 禁止使用标准库函数memcmp比较空终止字符串
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.14
+    - misra-c2023-21.14
+    profile: safety
+  GSCR-C-25.18:
+    title: 标准库函数memcpy,memmove 和memcmp中的指针参数应该相互兼容的数据类型
+    severity: S1
+    category: 标准库
+    description_en: The pointer arguments to the Standard Library function memcpy,memmove and memcmp shall be pointers to
+      qualified or unqualified versions ofcompatible types
+    description_cn: 标准库函数memcpy,memmove 和memcmp中的指针参数应该相互兼容的数据类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.15
+    - misra-c2023-21.15
+    profile: safety
+  GSCR-C-25.19:
+    title: 标准库函数memcmp的指针参数应该指向指针类型、基本 signed 类型、基本unsigned 类型、基本布尔类型或者基本枚举类型
+    severity: S1
+    category: 标准库
+    description_en: The pointer arguments to the Standard Library function mememp shall point to either a pointer type,an
+      essentially signed type,an essentially unsigned type an essentially enum type
+    description_cn: 标准库函数memcmp的指针参数应该指向指针类型、基本 signed 类型、基本unsigned 类型、基本布尔类型或者基本枚举类型
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-MRule-21.16
+    - misra-c2023-MRule-21.16
+    profile: safety
+  GSCR-C-25.20:
+    title: 不应该使用<fenv.h>的异常处理特性
+    severity: S2
+    category: 标准库
+    description_en: The exception handling features of<fenv.h> should not be used
+    description_cn: 不应该使用<fenv.h>的异常处理特性
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.12
+    - misra-c2023-21.12
+    profile: safety
+    severity_rationale: MISRA Required规则，但fenv浮点异常特性在数值计算中有合理用途
+  GSCR-C-26.1:
+    title: 只能释放通过标准库函数分配的内存块。
+    severity: S0
+    category: 资源
+    description_en: A block of memory shall only be freed if it was allocated bymeansofa Standard Library function
+    description_cn: 只能释放通过标准库函数分配的内存块。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.2
+    - misra-c2023-22.2
+    profile: safety
+  GSCR-C-26.2:
+    title: 不应对作为只读打开的流进行写入操作。
+    severity: S0
+    category: 资源
+    description_en: There shall be no attempt to write to a stream which has been opened as read-only
+    description_cn: 不应对作为只读打开的流进行写入操作。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.4
+    - misra-c2023-22.4
+    profile: safety
+  GSCR-C-26.3:
+    title: 不应对文件对象指针进行解引用操作。
+    severity: S0
+    category: 资源
+    description_en: A pointer to a FIE object shall not be dereferenced
+    description_cn: 不应对文件对象指针进行解引用操作。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.5
+    - misra-c2023-22.5
+    profile: safety
+  GSCR-C-26.4:
+    title: 在文件流关闭后，不得再使用对应的 FILE 指针。
+    severity: S0
+    category: 资源
+    description_en: The value of a pointer to a  FILE shall not be used after the associated stream has been closed
+    description_cn: 在文件流关闭后，不得再使用对应的 FILE 指针。
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-MRule-22.6
+    - misra-c2023-MRule-22.6
+    profile: safety
+  GSCR-C-26.5:
+    title: 所有通过标准库函数动态获取的资源都应该被显式释放
+    severity: S1
+    category: 资源
+    description_en: All resources obtained dynamically by means of Standard Library functions shall be explicitly released
+    description_cn: 所有通过标准库函数动态获取的资源都应该被显式释放
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.1
+    - misra-c2023-22.1
+    profile: safety
+  GSCR-C-26.6:
+    title: 同一文件不能在不同的流上同时对读写访问打开
+    severity: S1
+    category: 资源
+    description_en: The same file shall not be open for readandwrite access at the same time on different streams
+    description_cn: 同一文件不能在不同的流上同时对读写访问打开
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.3
+    - misra-c2023-22.3
+    profile: safety
+  GSCR-C-26.7:
+    title: 宏EOF只能与能够返回EOF 的标准函数库的原始返回值进行比较
+    severity: S1
+    category: 资源
+    description_en: The macro EOF shall only be compared with the unmodified return value from any Standard Library function
+      capable of returning EOF
+    description_cn: 宏EOF只能与能够返回EOF 的标准函数库的原始返回值进行比较
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.7
+    - misra-c2023-22.7
+    profile: safety
+  GSCR-C-26.8:
+    title: 在调用 errno-setting函数之前，error的值应该设置为零
+    severity: S1
+    category: 资源
+    description_en: The value of error shall be set to zero prior to a call to an emno-setting-function
+    description_cn: 在调用 errno-setting函数之前，error的值应该设置为零
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.8
+    - misra-c2023-22.8
+    profile: safety
+  GSCR-C-26.9:
+    title: 在调用 errno 设置函数之后，应将 error 值与零值进行测试
+    severity: S1
+    category: 资源
+    description_en: The value of error shall be tested against zero after calling an errno-setting function
+    description_cn: 在调用 errno 设置函数之后，应将 error 值与零值进行测试
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.9
+    - misra-c2023-22.9
+    profile: safety
+  GSCR-C-26.10:
+    title: 只有当要调用的最后一个函数是 error 设置函数时，才会测试 error 的值
+    severity: S1
+    category: 资源
+    description_en: The value of error shall only be tesred when the last function to be called was an erno-setting-function
+    description_cn: 只有当要调用的最后一个函数是 error 设置函数时，才会测试 error 的值
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.10
+    - misra-c2023-22.10
+    profile: safety
+  GSCR-C-27.1:
+    title: 越界读取。
+    severity: S0
+    category: CWE
+    description_en: Out-of-bounds Read.
+    description_cn: 越界读取。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'CWE-125: Out-of-bounds Read'
+  GSCR-C-27.2:
+    title: 越界写入
+    severity: S0
+    category: CWE
+    description_en: Out-of-bounds Write.
+    description_cn: 越界写入
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'CWE-787: Out-of-bounds Write'
+  GSCR-C-27.3:
+    title: 对操作系统命令中所使用的特殊元素的不当中和(“操作系统命令注入”)
+    severity: S0
+    category: CWE
+    description_en: Improper Neutralization of Special Elements used in an OS Command ('Os Command Injection')
+    description_cn: 对操作系统命令中所使用的特殊元素的不当中和(“操作系统命令注入”)
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'CWE-78: OS Command Injection'
+  GSCR-C-27.4:
+    title: 释放后使用。
+    severity: S0
+    category: CWE
+    description_en: Use After Free.
+    description_cn: 释放后使用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'CWE-416: Use After Free'
+  GSCR-C-27.5:
+    title: 对内存缓冲区内的操作进行不当限制。
+    severity: S0
+    category: CWE
+    description_en: Improper Restriction of the Operations within of a Memory Bounds Buffer.
+    description_cn: 对内存缓冲区内的操作进行不当限制。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'CWE-119: Buffer Overflow'
+  GSCR-C-27.6:
+    title: 空指针解引用。
+    severity: S0
+    category: CWE
+    description_en: NULL Pointer Dereference.
+    description_cn: 空指针解引用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'CWE-476: NULL Pointer Dereference'
+  GSCR-C-27.7:
+    title: 整数溢出或循环溢出。
+    severity: S0
+    category: CWE
+    description_en: Integer Overflow or Wraparound.
+    description_cn: 整数溢出或循环溢出。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'CWE-190: Integer Overflow or Wraparound'
+  GSCR-C-27.8:
+    title: 不可达代码
+    severity: S1
+    category: 运行时错误
+    description_en: Unreachable code
+    description_cn: 不可达代码
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.9:
+    title: 除 0
+    severity: S1
+    category: 运行时错误
+    description_en: Division by zero
+    description_cn: 除 0
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.10:
+    title: 无效的浮点运算
+    severity: S1
+    category: 运行时错误
+    description_en: Invalid operation on floats
+    description_cn: 无效的浮点运算
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.11:
+    title: 无效的移位运算
+    severity: S1
+    category: 运行时错误
+    description_en: Invalid shift operations
+    description_cn: 无效的移位运算
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.12:
+    title: 溢出
+    severity: S1
+    category: 运行时错误
+    description_en: Overflow
+    description_cn: 溢出
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.13:
+    title: 次正规浮点数
+    severity: S1
+    category: 运行时错误
+    description_en: Subnommal float
+    description_cn: 次正规浮点数
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.14:
+    title: 绝对地址使用
+    severity: S1
+    category: 运行时错误
+    description_en: Absolute address usage
+    description_cn: 绝对地址使用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.15:
+    title: 指针非法解引用
+    severity: S1
+    category: 运行时错误
+    description_en: Illegally dereferenced pointer
+    description_cn: 指针非法解引用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.16:
+    title: 数组越界
+    severity: S1
+    category: 运行时错误
+    description_en: Out ofbounds array index
+    description_cn: 数组越界
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.17:
+    title: 无限调用
+    severity: S1
+    category: 运行时错误
+    description_en: Non-terminating call
+    description_cn: 无限调用
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.18:
+    title: 无限循环
+    severity: S1
+    category: 运行时错误
+    description_en: Non-terminating loop
+    description_cn: 无限循环
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.19:
+    title: 非正确的条件
+    severity: S1
+    category: 运行时错误
+    description_en: Correctness condition
+    description_cn: 非正确的条件
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
+  GSCR-C-27.20:
+    title: 无效使用标准库
+    severity: S1
+    category: 运行时错误
+    description_en: Invalid use of standard library routine
+    description_cn: 无效使用标准库
+    check_method: cppcheck
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-4.1
+    - misra-c2023-Dir-4.1
+    profile: safety
