@@ -1,0 +1,3162 @@
+meta:
+  standard: GSCR
+  language: C++
+  version: '1.1'
+  ruleset_version: 1.1.0
+  rules_total: 244
+rules:
+  GSCR-CPP-1.2:
+    title: 条件表达式不应为恒定值。
+    severity: S1
+    category: 一般原则
+    description_en: Controlling expressions should not be invariant.
+    description_cn: 条件表达式不应为恒定值。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-0.0.2
+    - misra-c2023-0.0.2
+    profile: safety
+  GSCR-CPP-1.3:
+    title: 变量被赋值后，新值应该被使用。
+    severity: S2
+    category: 语句
+    description_en: A value should not be unnecessarily written to a local object.
+    description_cn: 变量被赋值后，新值应该被使用。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-0.1.1
+    - misra-c2023-0.1.1
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-1.4:
+    title: 函数返回的值应当被使用。
+    severity: S1
+    category: 语句
+    description_en: The value returned by a function shall be used.
+    description_cn: 函数返回的值应当被使用。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-0.1.2
+    - misra-c2023-0.1.2
+    profile: safety
+  GSCR-CPP-1.5:
+    title: 可见性受限的变量至少应被使用一次。
+    severity: S2
+    category: 声明
+    description_en: Variables with limited visibility should be used at least once.
+    description_cn: 可见性受限的变量至少应被使用一次。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-0.2.1
+    - misra-c2023-0.2.1
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-1.6:
+    title: 命名的函数参数应至少使用一次。
+    severity: S2
+    category: 声明
+    description_en: A named function parameter shall be used at least once.
+    description_cn: 命名的函数参数应至少使用一次。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-0.2.2
+    - misra-c2023-0.2.2
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-1.7:
+    title: 浮点运算应适当使用。
+    severity: S2
+    category: 表达式
+    description_en: Floating-point arithmetic should be used appropriately.
+    description_cn: 浮点运算应适当使用。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-0.3.1
+    - misra-c2023-Dir-0.3.1
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-1.8:
+    title: 函数调用不应违反函数的前置条件。
+    severity: S1
+    category: 语句
+    description_en: A function call shall not violate the function's preconditions.
+    description_cn: 函数调用不应违反函数的前置条件。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-0.3.2
+    - misra-c2023-Dir-0.3.2
+    profile: safety
+  GSCR-CPP-1.9:
+    title: 使用数学函数时，应检查范围、定义域和极点错误。
+    severity: S1
+    category: 语句
+    description_en: Range, domain and pole errors shall be checked when using math functions.
+    description_cn: 使用数学函数时，应检查范围、定义域和极点错误。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'C++ Core Guidelines: C.x Containers'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-1.10:
+    title: 项目不得包含仅使用一次的非易失性POD变量。
+    severity: S2
+    category: 声明
+    description_en: A project shall not contain non-volatile POD variables having only one use.
+    description_cn: 项目不得包含仅使用一次的非易失性POD变量。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-1.11:
+    title: 所有返回类型为 void 的函数都必须有外部副作用。
+    severity: S1
+    category: 语句
+    description_en: All functions with void return type shall have external side effect(s).
+    description_cn: 所有返回类型为 void 的函数都必须有外部副作用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Expressions (Chapter 8)'
+    - 'C++ Core Guidelines: ES.x Expressions'
+  GSCR-CPP-1.12:
+    title: 不应存在死代码。
+    severity: S1
+    category: 一般原则
+    description_en: There shall be no dead code.
+    description_cn: 不应存在死代码。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-1.13:
+    title: 对象不得赋值给与之重叠的对象。
+    severity: S1
+    category: 表达式
+    description_en: An object shall not be assigned to an overlapping object.
+    description_cn: 对象不得赋值给与之重叠的对象。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-1.14:
+    title: 项目不得包含非易失性变量被赋予后续从未使用过的值的情况。
+    severity: S2
+    category: 声明
+    description_en: A project shall not contain instances of non-volatile variables being given values that are never subsequently
+      used.
+    description_cn: 项目不得包含非易失性变量被赋予后续从未使用过的值的情况。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-2.1:
+    title: 不应使用已弃用的特性。
+    severity: S1
+    category: 一般原则
+    description_en: Deprecated features should not be used.
+    description_cn: 不应使用已弃用的特性。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-4.1.2
+    - misra-c2023-4.1.2
+    profile: safety
+  GSCR-CPP-2.2:
+    title: 不应出现未定义行为或关键的未指定行为。
+    severity: S1
+    category: 一般原则
+    description_en: There shall be no occurrence of undefined or critical unspecified behaviour.
+    description_cn: 不应出现未定义行为或关键的未指定行为。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-4.1.3
+    - misra-c2023-4.1.3
+    profile: safety
+  GSCR-CPP-2.3:
+    title: 对内存位置的操作应恰当排序。
+    severity: S1
+    category: 一般原则
+    description_en: Operations on a memory location shall be sequenced appropriately.
+    description_cn: 对内存位置的操作应恰当排序。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-4.6.1
+    - misra-c2023-4.6.1
+    profile: safety
+  GSCR-CPP-3.1:
+    title: 在C风格注释中不应使用字符序列 /*。
+    severity: S1
+    category: 词法约定
+    description_en: The character sequence /* shall not be used within a C-style comment.
+    description_cn: 在C风格注释中不应使用字符序列 /*。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.7.1
+    - misra-c2023-5.7.1
+    profile: safety
+  GSCR-CPP-3.2:
+    title: 代码部分不应被“注释掉”。
+    severity: S2
+    category: 词法约定
+    description_en: Sections of code should not be "commented out".
+    description_cn: 代码部分不应被“注释掉”。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-5.7.2
+    - misra-c2023-Dir-5.7.2
+    profile: safety
+    severity_rationale: MISRA Required规则，但注释风格属于编码约定而非安全关键，降级为S2
+  GSCR-CPP-3.3:
+    title: 在 // 注释中不应使用行拼接。
+    severity: S2
+    category: 词法约定
+    description_en: Line-splicing shall not be used in // comments.
+    description_cn: 在 // 注释中不应使用行拼接。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.7.3
+    - misra-c2023-5.7.3
+    profile: safety
+    severity_rationale: MISRA Required规则，但注释风格属于编码约定而非安全关键，降级为S2
+  GSCR-CPP-3.4:
+    title: 用户定义的标识符应具有适当的格式。
+    severity: S2
+    category: 词法约定
+    description_en: User-defined identifiers shall have an appropriate form.
+    description_cn: 用户定义的标识符应具有适当的格式。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.10.1
+    - misra-c2023-5.10.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但该规则在特定控制流模式下误报率较高，降级为S2
+  GSCR-CPP-3.5:
+    title: 无符号整数字面量应适当添加后缀（U/u）。
+    severity: S2
+    category: 词法约定
+    description_en: Unsigned integer literals shall be appropriately suffixed.
+    description_cn: 无符号整数字面量应适当添加后缀（U/u）。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.13.4
+    - misra-c2023-5.13.4
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-3.6:
+    title: 字面量后缀的首字符不应使用 L 的小写形式。
+    severity: S2
+    category: 词法约定
+    description_en: The lowercase form of L shall not be used as the first character in a literal suffix.
+    description_cn: 字面量后缀的首字符不应使用 L 的小写形式。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.13.5
+    - misra-c2023-5.13.5
+    profile: safety
+    severity_rationale: MISRA Required规则，但字面量后缀风格属于编码风格约定，降级为S2
+  GSCR-CPP-3.7:
+    title: long long 类型的整数字面量，其后缀中不得仅使用单个 L 或 l。
+    severity: S2
+    category: 词法约定
+    description_en: An integer-literal of type long long shall not use a single L or l in any suffix.
+    description_cn: long long 类型的整数字面量，其后缀中不得仅使用单个 L 或 l。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-5.13.6
+    - misra-c2023-5.13.6
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-3.8:
+    title: 在内部作用域中声明的标识符不得隐藏在外部作用域中声明的标识符。
+    severity: S2
+    category: 词法约定
+    description_en: An identifier declared in an inner scope shall not hide an identifier declared in an outer scope.
+    description_cn: 在内部作用域中声明的标识符不得隐藏在外部作用域中声明的标识符。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-3.9:
+    title: 具有静态存储期的非成员对象或静态函数的标识符名称不得在命名空间内重用。
+    severity: S1
+    category: 词法约定
+    description_en: The identifier name of a non-member object with static storage duration or static function shall not be
+      reused within a namespace.
+    description_cn: 具有静态存储期的非成员对象或静态函数的标识符名称不得在命名空间内重用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-3.10:
+    title: 具有静态存储期的函数或具有外部或内部链接的非成员对象的标识符名称不应被重用。
+    severity: S1
+    category: 词法约定
+    description_en: An identifier name of a function with static storage duration or a non-member object with external or
+      internal linkage should not be reused.
+    description_cn: 具有静态存储期的函数或具有外部或内部链接的非成员对象的标识符名称不应被重用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-3.11:
+    title: 在同一作用域内，类或枚举名称不得被变量、函数或枚举器声明隐藏。
+    severity: S1
+    category: 词法约定
+    description_en: A class or enumeration name shall not be hidden by a variable, function or enumerator declaration in the
+      same scope.
+    description_cn: 在同一作用域内，类或枚举名称不得被变量、函数或枚举器声明隐藏。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-3.12:
+    title: 不得使用wchar_t类型。
+    severity: S2
+    category: 词法约定
+    description_en: Type wchar_t shall not be used.
+    description_cn: 不得使用wchar_t类型。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Lexical Conventions (Chapter 5)'
+    - 'C++ Core Guidelines: SL.x String'
+  GSCR-CPP-3.13:
+    title: 字符串字面量不得赋值给非常量指针。
+    severity: S1
+    category: 词法约定
+    description_en: String literals shall not be assigned to non-constant pointers.
+    description_cn: 字符串字面量不得赋值给非常量指针。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Lexical Conventions (Chapter 5)'
+    - 'C++ Core Guidelines: SL.x String'
+  GSCR-CPP-3.14:
+    title: 字面后缀必须大写。
+    severity: S2
+    category: 词法约定
+    description_en: Literal suffixes shall be upper case.
+    description_cn: 字面后缀必须大写。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Lexical Conventions (Chapter 5)'
+    - 'C++ Core Guidelines: SL.x String'
+  GSCR-CPP-3.15:
+    title: typedef名称（包括限定符，如果有的话）必须是唯一标识符。
+    severity: S1
+    category: 词法约定
+    description_en: A typedef name (including qualification, if any) shall be a unique identifier.
+    description_cn: typedef名称（包括限定符，如果有的话）必须是唯一标识符。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-3.16:
+    title: 类、联合或枚举名称（包括限定符，如果有的话）必须是唯一标识符。
+    severity: S1
+    category: 词法约定
+    description_en: A class, union or enum name (including qualification, if any) shall be a unique identifier.
+    description_cn: 类、联合或枚举名称（包括限定符，如果有的话）必须是唯一标识符。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-3.17:
+    title: 如果一个标识符引用了一个类型，那么在同一作用域内，它不得再引用一个对象或函数。
+    severity: S1
+    category: 词法约定
+    description_en: If an identifier refers to a type, it shall not also refer to an object or a function in the same scope.
+    description_cn: 如果一个标识符引用了一个类型，那么在同一作用域内，它不得再引用一个对象或函数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-4.1:
+    title: 标识符 main 不应用于除全局 main 函数之外的其他函数。
+    severity: S0
+    category: 基本概念
+    description_en: The identifier main shall not be used for a function other than the global function main.
+    description_cn: 标识符 main 不应用于除全局 main 函数之外的其他函数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.0.4
+    - misra-c2023-6.0.4
+    profile: safety
+  GSCR-CPP-4.2:
+    title: 不应违反定义唯一原则。
+    severity: S1
+    category: 基本概念
+    description_en: The one-definition rule shall not be violated.
+    description_cn: 不应违反定义唯一原则。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.2.1
+    - misra-c2023-6.2.1
+    profile: safety
+  GSCR-CPP-4.3:
+    title: 变量或函数的所有声明应具有相同的类型。
+    severity: S1
+    category: 基本概念
+    description_en: All declarations of a variable or function shall have the same type.
+    description_cn: 变量或函数的所有声明应具有相同的类型。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.2.2
+    - misra-c2023-6.2.2
+    profile: safety
+  GSCR-CPP-4.4:
+    title: 变量，类型，函数和模板只能在合适的位置定义一次。
+    severity: S1
+    category: 基本概念
+    description_en: The source code used to implement an entity shall appear only once.
+    description_cn: 变量，类型，函数和模板只能在合适的位置定义一次。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.2.3
+    - misra-c2023-6.2.3
+    profile: safety
+  GSCR-CPP-4.5:
+    title: 头文件不应包含非内联的、具有外部链接的函数或对象的定义。
+    severity: S1
+    category: 基本概念
+    description_en: A header file shall not contain definitions of functions or objects that are non-inline and have external
+      linkage.
+    description_cn: 头文件不应包含非内联的、具有外部链接的函数或对象的定义。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.2.4
+    - misra-c2023-6.2.4
+    profile: safety
+  GSCR-CPP-4.6:
+    title: 内部作用域中声明的变量不应隐藏外部作用域中声明的变量。
+    severity: S2
+    category: 基本概念
+    description_en: A variable declared in an inner scope shall not hide a variable declared in an outer scope.
+    description_cn: 内部作用域中声明的变量不应隐藏外部作用域中声明的变量。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.4.1
+    - misra-c2023-6.4.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但在特定设计模式（如适配器模式）中变量隐藏难以完全避免
+  GSCR-CPP-4.7:
+    title: 派生类不应隐藏继承自其基类中的函数。
+    severity: S1
+    category: 基本概念
+    description_en: Derived classes shall not conceal functions that are inherited from their bases.
+    description_cn: 派生类不应隐藏继承自其基类中的函数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.4.2
+    - misra-c2023-6.4.2
+    profile: safety
+  GSCR-CPP-4.8:
+    title: 具有外部链接的函数或对象应在头文件中声明。
+    severity: S1
+    category: 基本概念
+    description_en: A function or object with external linkage should be introduced in a header file.
+    description_cn: 具有外部链接的函数或对象应在头文件中声明。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.5.1
+    - misra-c2023-6.5.1
+    profile: safety
+  GSCR-CPP-4.9:
+    title: 不得访问超出生命周期的对象。
+    severity: S1
+    category: 基本概念
+    description_en: An object shall not be accessed outside of its lifetime.
+    description_cn: 不得访问超出生命周期的对象。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.8.1
+    - misra-c2023-6.8.1
+    profile: safety
+  GSCR-CPP-4.10:
+    title: 函数不得返回指向具有自动存储期的局部变量的引用或指针。
+    severity: S0
+    category: 基本概念
+    description_en: A function must not return a reference or a pointer to a local variable with automatic storage duration.
+    description_cn: 函数不得返回指向具有自动存储期的局部变量的引用或指针。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.8.2
+    - misra-c2023-6.8.2
+    profile: safety
+  GSCR-CPP-4.11:
+    title: 赋值运算符不得将自动存储期对象的地址赋给生命周期更长的对象。
+    severity: S0
+    category: 基本概念
+    description_en: An assignment operator shall not assign the address of an object with automatic storage duration to an
+      object with a greater lifetime.
+    description_cn: 赋值运算符不得将自动存储期对象的地址赋给生命周期更长的对象。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.8.3
+    - misra-c2023-6.8.3
+    profile: safety
+  GSCR-CPP-4.12:
+    title: 相同实体的所有声明中应使用相同的类型别名。
+    severity: S2
+    category: 基本概念
+    description_en: The same type aliases shall be used in all declarations of the same entity.
+    description_cn: 相同实体的所有声明中应使用相同的类型别名。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-6.9.1
+    - misra-c2023-6.9.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但在大型代码库中类型别名一致性检查工具覆盖有限
+  GSCR-CPP-4.13:
+    title: 函数定义仅当满足以下条件时才应置于类定义中：(1) 该函数旨在内联；(2) 它是成员函数模板；(3) 它是类模板的成员函数。
+    severity: S2
+    category: 基本概念
+    description_en: A function definition shall only be placed in a class definition if (1) the function is intended to be
+      inlined (2) it is a member function template (3) it is a member function of a class template.
+    description_cn: 函数定义仅当满足以下条件时才应置于类定义中：(1) 该函数旨在内联；(2) 它是成员函数模板；(3) 它是类模板的成员函数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Templates (Chapter 17)'
+    - 'C++ Core Guidelines: T.x Templates and Generic Programming'
+  GSCR-CPP-4.14:
+    title: 静态对象和线程局部对象应进行常量初始化。
+    severity: S2
+    category: 基本概念
+    description_en: Static and thread-local objects shall be constant-initialized.
+    description_cn: 静态对象和线程局部对象应进行常量初始化。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Declarations (Chapter 10)'
+    - 'C++ Core Guidelines: NL.x Naming and Layout'
+  GSCR-CPP-4.15:
+    title: 函数不得在块作用域中声明。
+    severity: S1
+    category: 基本概念
+    description_en: Functions shall not be declared at block scope.
+    description_cn: 函数不得在块作用域中声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-4.16:
+    title: 在多个翻译单元中使用的类型、对象或函数，必须在且仅在一个文件中声明。
+    severity: S2
+    category: 基本概念
+    description_en: A type, object or function that is used in multiple translation units shall be declared in one and only
+      one file.
+    description_cn: 在多个翻译单元中使用的类型、对象或函数，必须在且仅在一个文件中声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-5.1:
+    title: 不应将bool类型转换为其他类型。
+    severity: S1
+    category: 标准转换
+    description_en: There shall be no conversion from type bool.
+    description_cn: 不应将bool类型转换为其他类型。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-7.0.1
+    - misra-c2023-7.0.1
+    profile: safety
+  GSCR-CPP-5.2:
+    title: 不应将其他类型转换为 bool 类型。
+    severity: S1
+    category: 标准转换
+    description_en: There shall be no conversion to type bool.
+    description_cn: 不应将其他类型转换为 bool 类型。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-7.0.2
+    - misra-c2023-7.0.2
+    profile: safety
+  GSCR-CPP-5.3:
+    title: 位运算符和移位运算符应使用合适的操作数。
+    severity: S1
+    category: 标准转换
+    description_en: The operands of bitwise operators and shift operators shall be appropriate.
+    description_cn: 位运算符和移位运算符应使用合适的操作数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-7.0.4
+    - misra-c2023-7.0.4
+    profile: safety
+  GSCR-CPP-5.4:
+    title: 操作数的符号性和类型类别不应因整数提升或常规算术转换而改变。
+    severity: S1
+    category: 标准转换
+    description_en: Integral promotion and the usual arithmetic conversions shall not change the signedness or the type category
+      of an operand.
+    description_cn: 操作数的符号性和类型类别不应因整数提升或常规算术转换而改变。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-7.0.5
+    - misra-c2023-7.0.5
+    profile: safety
+  GSCR-CPP-5.5:
+    title: 数值类型之间的赋值应恰当，避免潜在错误。
+    severity: S1
+    category: 标准转换
+    description_en: Assignment between numeric types shall be appropriate.
+    description_cn: 数值类型之间的赋值应恰当，避免潜在错误。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-7.0.6
+    - misra-c2023-7.0.6
+    profile: safety
+  GSCR-CPP-5.6:
+    title: nullptr 应为唯一的空指针常量形式。
+    severity: S2
+    category: 标准转换
+    description_en: nullptr shall be the only form of the null-pointer-constant.
+    description_cn: nullptr 应为唯一的空指针常量形式。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-7.11.1
+    - misra-c2023-7.11.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但该规则在特定控制流模式下误报率较高，降级为S2
+  GSCR-CPP-5.7:
+    title: 整数表达式不得导致数据丢失。
+    severity: S1
+    category: 标准转换
+    description_en: An integer expression shall not lead to data loss.
+    description_cn: 整数表达式不得导致数据丢失。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-5.8:
+    title: 类型为布尔型的表达式不得用作除赋值操作符 =、逻辑操作符 &&、||、!、等号操作符 == 和!=、一元操作符 & 以及条件操作符之外的内置操作符的操作数。
+    severity: S1
+    category: 标准转换
+    description_en: Expressions with type bool shall not be used as operands to built-in operators other than the assignment
+      operator =, the logical operators &&, ||, !, the equality operators == and ! =, the unary & operator, and the conditional
+      operator.
+    description_cn: 类型为布尔型的表达式不得用作除赋值操作符 =、逻辑操作符 &&、||、!、等号操作符 == 和!=、一元操作符 & 以及条件操作符之外的内置操作符的操作数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Overloading (Chapter 16)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-6.1:
+    title: 应使用括号适当地明确表达式的含义。
+    severity: S2
+    category: 表达式
+    description_en: Parentheses should be used to make the meaning of an expression appropriately explicit.
+    description_cn: 应使用括号适当地明确表达式的含义。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.0.1
+    - misra-c2023-8.0.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但表达式优先级的显式化属于风格偏好，降级为S2
+  GSCR-CPP-6.2:
+    title: 不应使用 C 风格转换和函数式强制转换。
+    severity: S2
+    category: 表达式
+    description_en: C-style casts and functional notation casts shall not be used.
+    description_cn: 不应使用 C 风格转换和函数式强制转换。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2.2
+    - misra-c2023-8.2.2
+    profile: safety
+    severity_rationale: MISRA Required规则，但在与C语言API兼容时允许有限的C风格转换
+  GSCR-CPP-6.3:
+    title: 转换不应移除通过指针或引用访问的类型的任何 const 或 volatile 限定符。
+    severity: S1
+    category: 表达式
+    description_en: A cast shall not remove any const or volatile qualification from the type accessed via a pointer or by
+      reference.
+    description_cn: 转换不应移除通过指针或引用访问的类型的任何 const 或 volatile 限定符。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2.3
+    - misra-c2023-8.2.3
+    profile: safety
+  GSCR-CPP-6.4:
+    title: 不应在函数指针和任何其他类型之间进行转换。
+    severity: S1
+    category: 表达式
+    description_en: Casts shall not be performed between a pointer to function and any other type.
+    description_cn: 不应在函数指针和任何其他类型之间进行转换。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2.4
+    - misra-c2023-8.2.4
+    profile: safety
+  GSCR-CPP-6.5:
+    title: 整型、枚举型或 void 指针类型对象不应被转换为指针类型。
+    severity: S1
+    category: 表达式
+    description_en: An object with integral, enumerated, or pointer to void type shall not be cast to a pointer type.
+    description_cn: 整型、枚举型或 void 指针类型对象不应被转换为指针类型。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2.6
+    - misra-c2023-8.2.6
+    profile: safety
+  GSCR-CPP-6.6:
+    title: 不应将指针类型转换为整数类型。
+    severity: S1
+    category: 表达式
+    description_en: A cast should not convert a pointer type to an integral type.
+    description_cn: 不应将指针类型转换为整数类型。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2.7
+    - misra-c2023-8.2.7
+    profile: safety
+  GSCR-CPP-6.7:
+    title: 函数不应直接或间接地调用自身。
+    severity: S1
+    category: 表达式
+    description_en: Functions shall not call themselves, either directly or indirectly.
+    description_cn: 函数不应直接或间接地调用自身。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2.10
+    - misra-c2023-8.2.10
+    profile: safety
+  GSCR-CPP-6.8:
+    title: 通过省略号传递的参数应具有适当的类型。
+    severity: S2
+    category: 表达式
+    description_en: An argument passed via ellipsis shall have an appropriate type.
+    description_cn: 通过省略号传递的参数应具有适当的类型。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.2.11
+    - misra-c2023-8.2.11
+    profile: safety
+    severity_rationale: MISRA Required规则，但省略号参数在可变参数API中难以完全避免
+  GSCR-CPP-6.9:
+    title: 指针运算不应产生无效指针。
+    severity: S1
+    category: 表达式
+    description_en: Pointer arithmetic shall not form an invalid pointer.
+    description_cn: 指针运算不应产生无效指针。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.7.1
+    - misra-c2023-8.7.1
+    profile: safety
+  GSCR-CPP-6.10:
+    title: 指针之间的减法运算只应用于指向同一数组元素的指针。
+    severity: S1
+    category: 表达式
+    description_en: Subtraction between pointers shall only be applied to pointers that address elements of the same array.
+    description_cn: 指针之间的减法运算只应用于指向同一数组元素的指针。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.7.2
+    - misra-c2023-8.7.2
+    profile: safety
+  GSCR-CPP-6.11:
+    title: 内置的关系运算符 >、>=、< 和 <= 不应用于指针类型的对象，除非它们指向同一数组的元素。
+    severity: S0
+    category: 表达式
+    description_en: The built-in relational operators >, >=, < and <= shall not be applied to objects of pointer type, except
+      where they point to elements of the same array.
+    description_cn: 内置的关系运算符 >、>=、< 和 <= 不应用于指针类型的对象，除非它们指向同一数组的元素。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.9.1
+    - misra-c2023-8.9.1
+    profile: safety
+  GSCR-CPP-6.12:
+    title: 逻辑 && 或 || 运算符的右操作数不应包含持久的副作用。
+    severity: S1
+    category: 表达式
+    description_en: The right-hand operand of a logical && or || operator should not contain persistent side effects.
+    description_cn: 逻辑 && 或 || 运算符的右操作数不应包含持久的副作用。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.14.1
+    - misra-c2023-8.14.1
+    profile: safety
+  GSCR-CPP-6.13:
+    title: 不得将对象或子对象复制到重叠的对象上。
+    severity: S0
+    category: 表达式
+    description_en: An object or subobject must not be copied to an overlapping object.
+    description_cn: 不得将对象或子对象复制到重叠的对象上。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.18.1
+    - misra-c2023-8.18.1
+    profile: safety
+  GSCR-CPP-6.14:
+    title: 不应使用赋值运算符的返回结果。
+    severity: S1
+    category: 表达式
+    description_en: The result of an assignment operator should not be used.
+    description_cn: 不应使用赋值运算符的返回结果。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.18.2
+    - misra-c2023-8.18.2
+    profile: safety
+  GSCR-CPP-6.15:
+    title: 不应使用逗号运算符。
+    severity: S2
+    category: 表达式
+    description_en: The comma operator should not be used.
+    description_cn: 不应使用逗号运算符。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-8.19.1
+    - misra-c2023-8.19.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但逗号表达式在宏中有合理使用场景，降级为S2
+  GSCR-CPP-6.16:
+    title: 表达式的值在标准允许的任何求值顺序下都应相同。
+    severity: S1
+    category: 表达式
+    description_en: The value of an expression shall be the same under any order of evaluation that the standard permits.
+    description_cn: 表达式的值在标准允许的任何求值顺序下都应相同。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-6.17:
+    title: if语句的条件和迭代语句的条件必须为bool类型。
+    severity: S2
+    category: 表达式
+    description_en: The condition of an if-statement and the condition of an iteration statement shall have type bool.
+    description_cn: if语句的条件和迭代语句的条件必须为bool类型。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-6.18:
+    title: 指针算术运算不得用于指向非最终类的指针。
+    severity: S2
+    category: 表达式
+    description_en: Pointer arithmetic shall not be used with pointers to non-final classes.
+    description_cn: 指针算术运算不得用于指向非最终类的指针。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-6.19:
+    title: lambda表达式对象的生命周期不得超过其任何引用捕获对象的生命周期。
+    severity: S0
+    category: 表达式
+    description_en: A lambda expression object shall not outlive any of its reference-captured objects.
+    description_cn: lambda表达式对象的生命周期不得超过其任何引用捕获对象的生命周期。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-6.20:
+    title: 不得访问数组或容器超出其范围的元素。
+    severity: S0
+    category: 表达式
+    description_en: An array or container shall not be accessed beyond its range.
+    description_cn: 不得访问数组或容器超出其范围的元素。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'C++ Core Guidelines: C.x Containers'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-6.21:
+    title: 空指针不得被解引用。
+    severity: S0
+    category: 表达式
+    description_en: Null pointers shall not be dereferenced.
+    description_cn: 空指针不得被解引用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - SEI CERT C++ Coding Standard
+    - 'AUTOSAR C++14 Guideline: Expressions (Chapter 8)'
+  GSCR-CPP-6.22:
+    title: 指向不完整类类型的指针不得被销毁。
+    severity: S1
+    category: 表达式
+    description_en: Pointers to incomplete class types shall not be deleted.
+    description_cn: 指向不完整类类型的指针不得被销毁。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-6.23:
+    title: 成员指针不得访问不存在的类成员。
+    severity: S1
+    category: 表达式
+    description_en: A pointer to member shall not access non-existent class members.
+    description_cn: 成员指针不得访问不存在的类成员。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-6.24:
+    title: 整数除法或取余运算符的右操作数不得等于零。
+    severity: S0
+    category: 表达式
+    description_en: The right hand operand of the integer division or remainder operators shall not be equal to zero.
+    description_cn: 整数除法或取余运算符的右操作数不得等于零。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Overloading (Chapter 16)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-6.25:
+    title: 完整值表达式（cvalue）不得隐式转换为不同的底层类型。
+    severity: S1
+    category: 表达式
+    description_en: A cvalue expression shall not be implicitly converted to a different underlying type.
+    description_cn: 完整值表达式（cvalue）不得隐式转换为不同的底层类型。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-6.26:
+    title: 隐式整数转换不得改变底层类型的有符号性。
+    severity: S1
+    category: 表达式
+    description_en: An implicit integral conversion shall not change the signedness of the underlying type.
+    description_cn: 隐式整数转换不得改变底层类型的有符号性。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-6.27:
+    title: 不应存在隐式的浮点-整数转换。
+    severity: S1
+    category: 表达式
+    description_en: There shall be no implicit floating-integral conversions.
+    description_cn: 不应存在隐式的浮点-整数转换。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-6.28:
+    title: 隐式整数或浮点转换不得缩小基础类型的大小。
+    severity: S1
+    category: 表达式
+    description_en: An implicit integral or floating-point conversion shall not reduce the size of the underlying type.
+    description_cn: 隐式整数或浮点转换不得缩小基础类型的大小。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-6.29:
+    title: 对完整值表达式（cvalue）进行显式整型或浮点转换时，不得增大其底层类型的大小。
+    severity: S1
+    category: 表达式
+    description_en: An explicit integral or floating-point conversion shall not increase the size of the underlying type of
+      a cvalue expression.
+    description_cn: 对完整值表达式（cvalue）进行显式整型或浮点转换时，不得增大其底层类型的大小。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-6.30:
+    title: 如果按位运算符~和<<应用于底层类型为unsigned char或unsigned short的操作数，则结果应立即转换为该操作数的底层类型。
+    severity: S1
+    category: 表达式
+    description_en: If the bitwise operators ~and << are applied to an operand with an underlying type of unsigned char or
+      unsigned short, the result shall be immediately cast to the underlying type of the operand.
+    description_cn: 如果按位运算符~和<<应用于底层类型为unsigned char或unsigned short的操作数，则结果应立即转换为该操作数的底层类型。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Lexical Conventions (Chapter 5)'
+    - 'C++ Core Guidelines: SL.x String'
+  GSCR-CPP-6.31:
+    title: 数组索引应是指针算术运算的唯一形式。
+    severity: S2
+    category: 表达式
+    description_en: Array indexing shall be the only form of pointer arithmetic.
+    description_cn: 数组索引应是指针算术运算的唯一形式。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'C++ Core Guidelines: C.x Containers'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-6.32:
+    title: 指针操作数以及使用该操作数通过指针算术运算得到的任何指针，都必须指向同一个数组的元素。
+    severity: S1
+    category: 表达式
+    description_en: A pointer operand and any pointer resulting from pointer arithmetic using that operand shall both address
+      elements of the same array.
+    description_cn: 指针操作数以及使用该操作数通过指针算术运算得到的任何指针，都必须指向同一个数组的元素。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-6.33:
+    title: 二元按位运算符的非常量操作数必须具有相同的底层类型。
+    severity: S1
+    category: 表达式
+    description_en: Non-constant operands to a binary bitwise operator shall have the same underlying type.
+    description_cn: 二元按位运算符的非常量操作数必须具有相同的底层类型。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Declarations (Chapter 10)'
+    - 'C++ Core Guidelines: NL.x Naming and Layout'
+  GSCR-CPP-6.34:
+    title: 按位运算符只能应用于无符号底层类型的操作数。
+    severity: S1
+    category: 表达式
+    description_en: Bitwise operators shall only be applied to operands of unsigned underlying type.
+    description_cn: 按位运算符只能应用于无符号底层类型的操作数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Overloading (Chapter 16)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-6.35:
+    title: 递增 (++) 和递减 (--) 运算符不得在表达式中与其他运算符混用。
+    severity: S1
+    category: 表达式
+    description_en: The increment (++) and decrement (--) operators shall not be mixed with other operators in an expression.
+    description_cn: 递增 (++) 和递减 (--) 运算符不得在表达式中与其他运算符混用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Expressions (Chapter 8)'
+    - 'C++ Core Guidelines: ES.x Expressions'
+  GSCR-CPP-6.36:
+    title: 作为函数参数传递的数组类型标识符不得退化为指针。
+    severity: S2
+    category: 表达式
+    description_en: An identifier with array type passed as a function argument shall not decay to a pointer.
+    description_cn: 作为函数参数传递的数组类型标识符不得退化为指针。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-6.37:
+    title: '!运算符、逻辑&&运算符或逻辑||运算符的每个操作数都应具有布尔类型。'
+    severity: S1
+    category: 表达式
+    description_en: Each operand of the ! operator, the logical && or the logical || operators shall have type bool.
+    description_cn: '!运算符、逻辑&&运算符或逻辑||运算符的每个操作数都应具有布尔类型。'
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Overloading (Chapter 16)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-6.38:
+    title: 对sizeof运算符操作数的求值不得包含副作用。
+    severity: S0
+    category: 表达式
+    description_en: Evaluation of the operand to the sizeof operator shall not contain side effects.
+    description_cn: 对sizeof运算符操作数的求值不得包含副作用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Expressions (Chapter 8)'
+    - 'C++ Core Guidelines: ES.x Expressions'
+  GSCR-CPP-6.39:
+    title: 移位运算符的右操作数必须介于零和左操作数底层类型的位宽减一之间。
+    severity: S1
+    category: 表达式
+    description_en: The right hand operand of a shift operator shall lie between zero and one less than the width in bits
+      of the underlying type of the left hand operand.
+    description_cn: 移位运算符的右操作数必须介于零和左操作数底层类型的位宽减一之间。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-6.40:
+    title: 指针类型的对象不得直接或间接转换为不相关的指针类型。
+    severity: S1
+    category: 表达式
+    description_en: An object with pointer type shall not be converted to an unrelated pointer type, either directly or indirectly.
+    description_cn: 指针类型的对象不得直接或间接转换为不相关的指针类型。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-7.1:
+    title: 显式类型转换不应作为表达式语句。
+    severity: S1
+    category: 语句
+    description_en: An explicit type conversion shall not be an expression statement.
+    description_cn: 显式类型转换不应作为表达式语句。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.2.1
+    - misra-c2023-9.2.1
+    profile: safety
+  GSCR-CPP-7.2:
+    title: 声明为 [[noreturn]] 属性的函数不得有返回语句。
+    severity: S0
+    category: 语句
+    description_en: A function declared with the [[noreturn]] attribute shall not return.
+    description_cn: 声明为 [[noreturn]] 属性的函数不得有返回语句。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.6.4
+    - misra-c2023-9.6.4
+    profile: safety
+  GSCR-CPP-7.3:
+    title: 非 void 返回类型的函数应在所有路径上都有返回值。
+    severity: S0
+    category: 语句
+    description_en: A function with non-void return type shall return a value on all paths.
+    description_cn: 非 void 返回类型的函数应在所有路径上都有返回值。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-9.6.5
+    - misra-c2023-9.6.5
+    profile: safety
+  GSCR-CPP-7.4:
+    title: 移动和复制赋值操作符应分别移动或复制类的基类和数据成员，且无任何副作用。
+    severity: S1
+    category: 语句
+    description_en: Move and copy assignment operators shall either move or respectively copy base classes and data members
+      of a class, without any side effects.
+    description_cn: 移动和复制赋值操作符应分别移动或复制类的基类和数据成员，且无任何副作用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-7.5:
+    title: 表达式语句不得是仅对临时对象构造函数的显式调用。
+    severity: S1
+    category: 语句
+    description_en: Expression statements shall not be explicit calls to constructors of temporary objects only.
+    description_cn: 表达式语句不得是仅对临时对象构造函数的显式调用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-7.6:
+    title: 不应使用遍历容器所有元素且不使用其循环计数器的 for 循环。
+    severity: S2
+    category: 语句
+    description_en: A for-loop that loops through all elements of the container and does not use its loop-counter shall not
+      be used.
+    description_cn: 不应使用遍历容器所有元素且不使用其循环计数器的 for 循环。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'C++ Core Guidelines: C.x Containers'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-7.7:
+    title: 不得直接或间接对浮点表达式进行相等性或不相等性测试。
+    severity: S1
+    category: 语句
+    description_en: Floating-point expressions shall not be directly or indirectly tested for equality or inequality.
+    description_cn: 不得直接或间接对浮点表达式进行相等性或不相等性测试。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-7.8:
+    title: 无条件的throw或break语句必须终止每个非空的switch子句。
+    severity: S1
+    category: 语句
+    description_en: An unconditional throw or break statement shall terminate every non-empty switch-clause.
+    description_cn: 无条件的throw或break语句必须终止每个非空的switch子句。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-7.9:
+    title: switch语句的最后一个子句必须是default子句。
+    severity: S2
+    category: 语句
+    description_en: The final clause of a switch statement shall be the default-clause.
+    description_cn: switch语句的最后一个子句必须是default子句。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-8.1:
+    title: 指针或左值引用参数的目标类型应适当地被 const 限定。
+    severity: S2
+    category: 声明
+    description_en: The target type of a pointer or lvalue reference parameter should be const-qualified appropriately.
+    description_cn: 指针或左值引用参数的目标类型应适当地被 const 限定。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.1.1
+    - misra-c2023-10.1.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但在与遗留接口兼容时const限定可能受限
+  GSCR-CPP-8.2:
+    title: 不应声明无作用域枚举。
+    severity: S2
+    category: 声明
+    description_en: Unscoped enumerations should not be declared.
+    description_cn: 不应声明无作用域枚举。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.2.2
+    - misra-c2023-10.2.2
+    profile: safety
+    severity_rationale: MISRA Required规则，但C++11后enum class已普及，遗留无作用域枚举逐步迁移中
+  GSCR-CPP-8.3:
+    title: 不应使用没有固定基础类型的无作用域枚举的数值。
+    severity: S2
+    category: 声明
+    description_en: The numeric value of an unscoped enumeration with no fixed underlying type shall not be used.
+    description_cn: 不应使用没有固定基础类型的无作用域枚举的数值。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-10.2.3
+    - misra-c2023-10.2.3
+    profile: safety
+    severity_rationale: MISRA Required规则，但C++11后enum class已普及，遗留无作用域枚举逐步迁移中
+  GSCR-CPP-8.4:
+    title: constexpr 或 const 说明符应用于不可变数据的声明。
+    severity: S2
+    category: 声明
+    description_en: Constexpr or const specifiers shall be used for immutable data declaration.
+    description_cn: constexpr 或 const 说明符应用于不可变数据的声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-8.5:
+    title: constexpr 说明符应用于在编译时可以确定的值。
+    severity: S2
+    category: 声明
+    description_en: The constexpr specifier shall be used for values that can be determined at compile time.
+    description_cn: constexpr 说明符应用于在编译时可以确定的值。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-8.6:
+    title: CV 限定符（const/volatile）应置于 typedef 或 using 别名所指代类型的右侧。
+    severity: S2
+    category: 声明
+    description_en: CV-qualifiers shall be placed on the right hand side of the type that is a typedef or a using name.
+    description_cn: CV 限定符（const/volatile）应置于 typedef 或 using 别名所指代类型的右侧。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-8.7:
+    title: 除以下情况外，不得使用 auto 说明符：(1) 声明变量的类型与函数调用的返回类型相同；(2) 声明变量的类型与非基本类型的初始值设定项相同；(3) 声明泛型
+    severity: S2
+    category: 声明
+    description_en: 'The auto specifier shall not be used apart from following cases: (1) to declare that a variable has the
+      same type as return type of a function call, (2) to declare that a variable has the same type as initializer of non-fundamental
+      type, (3) to declare parameters of a generic lambda expression, (4) to declare a function template using trailing return
+      type syntax.'
+    description_cn: 除以下情况外，不得使用 auto 说明符：(1) 声明变量的类型与函数调用的返回类型相同；(2) 声明变量的类型与非基本类型的初始值设定项相同；(3) 声明泛型 lambda 表达式的参数；(4) 使用尾随返回类型语法声明函数模板。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Templates (Chapter 17)'
+    - 'C++ Core Guidelines: T.x Templates and Generic Programming'
+  GSCR-CPP-8.8:
+    title: 在声明中，非类型说明符应置于类型说明符之前。
+    severity: S2
+    category: 声明
+    description_en: A non-type specifier shall be placed before a type specifier in a declaration.
+    description_cn: 在声明中，非类型说明符应置于类型说明符之前。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-8.9:
+    title: 类、结构体或枚举不应在其类型的定义中声明。
+    severity: S2
+    category: 声明
+    description_en: A class, structure, or enumeration shall not be declared in the definition of its type.
+    description_cn: 类、结构体或枚举不应在其类型的定义中声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-8.10:
+    title: 在枚举中，要么（1）不初始化任何枚举器，要么（2）仅初始化第一个枚举器，要么（3）初始化所有枚举器。
+    severity: S2
+    category: 声明
+    description_en: In an enumeration, either (1) none, (2) the first or (3) all enumerators shall be initialized.
+    description_cn: 在枚举中，要么（1）不初始化任何枚举器，要么（2）仅初始化第一个枚举器，要么（3）初始化所有枚举器。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-8.11:
+    title: 一个函数不应返回对以常量引用形式传递的参数的引用或指针。
+    severity: S1
+    category: 声明
+    description_en: A function shall not return a reference or a pointer to a parameter that is passed by reference to const.
+    description_cn: 一个函数不应返回对以常量引用形式传递的参数的引用或指针。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-8.12:
+    title: 如果函数中对应的对象未被修改，则函数中的指针或引用参数应声明为指向常量的指针或对常量的引用。
+    severity: S2
+    category: 声明
+    description_en: A pointer or reference parameter in a function shall be declared as pointer to const or reference to const
+      if the corresponding object is not modified.
+    description_cn: 如果函数中对应的对象未被修改，则函数中的指针或引用参数应声明为指向常量的指针或对常量的引用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-8.13:
+    title: 头文件中不得使用using指令和using声明（不包括类作用域或函数作用域的using声明）。
+    severity: S2
+    category: 声明
+    description_en: Using-directives and using-declarations (excluding class scope or function scope using-declarations) shall
+      not be used in header files.
+    description_cn: 头文件中不得使用using指令和using声明（不包括类作用域或函数作用域的using声明）。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-8.14:
+    title: 函数不得返回指向自动变量（包括参数）的引用或指针，这些自动变量是在函数内部定义的。
+    severity: S0
+    category: 声明
+    description_en: A function shall not return a reference or a pointer to an automatic variable (including parameters),
+      defined within the function.
+    description_cn: 函数不得返回指向自动变量（包括参数）的引用或指针，这些自动变量是在函数内部定义的。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-8.15:
+    title: 自动存储期对象的地址，不得赋给生命周期可能长于该对象的另一个对象。
+    severity: S0
+    category: 声明
+    description_en: The address of an object with automatic storage shall not be assigned to another object that may persist
+      after the first object has ceased to exist.
+    description_cn: 自动存储期对象的地址，不得赋给生命周期可能长于该对象的另一个对象。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Declarations (Chapter 10)'
+    - 'C++ Core Guidelines: NL.x Naming and Layout'
+  GSCR-CPP-9.1:
+    title: 对象声明中不应使用二重以上的指针。
+    severity: S2
+    category: 声明符
+    description_en: The declaration of an object should contain no more than two levels of pointer indirection.
+    description_cn: 对象声明中不应使用二重以上的指针。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.3.2
+    - misra-c2023-11.3.2
+    profile: safety
+    severity_rationale: MISRA Required规则，但在底层硬件驱动代码中多层指针偶有需求，降级为S2
+  GSCR-CPP-9.2:
+    title: 不得读取未被赋值的对象。
+    severity: S1
+    category: 声明符
+    description_en: The value of an object must not be read before it has been set.
+    description_cn: 不得读取未被赋值的对象。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.6.2
+    - misra-c2023-11.6.2
+    profile: safety
+  GSCR-CPP-9.3:
+    title: 在枚举器列表中，隐式指定的枚举常量的值必须是唯一的。
+    severity: S1
+    category: 声明符
+    description_en: Within an enumerator list, the value of an implicitly-specified enumeration constant shall be unique.
+    description_cn: 在枚举器列表中，隐式指定的枚举常量的值必须是唯一的。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-11.6.3
+    - misra-c2023-11.6.3
+    profile: safety
+  GSCR-CPP-9.4:
+    title: 函数的多个产出值应以结构体或元组形式返回。
+    severity: S2
+    category: 声明符
+    description_en: Multiple output values from a function should be returned as a struct or tuple.
+    description_cn: 函数的多个产出值应以结构体或元组形式返回。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-9.5:
+    title: 对于“复制成本低”类型的输入参数，应按值传递。
+    severity: S2
+    category: 声明符
+    description_en: in parameters for "cheap to copy" types shall be passed by value.
+    description_cn: 对于“复制成本低”类型的输入参数，应按值传递。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-9.6:
+    title: 如果一个类有一个用户声明的构造函数，该构造函数接受一个 std::initializer_list 类型的参数，那么除了特殊成员函数构造函数之外，它应该是唯一的
+    severity: S2
+    category: 声明符
+    description_en: If a class has a user-declared constructor that takes a parameter of type std::initializer_list, then
+      it shall be the only constructor apart from special member function constructors.
+    description_cn: 如果一个类有一个用户声明的构造函数，该构造函数接受一个 std::initializer_list 类型的参数，那么除了特殊成员函数构造函数之外，它应该是唯一的构造函数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-9.7:
+    title: 函数重新声明中使用的标识符必须与声明中的标识符相同。
+    severity: S2
+    category: 声明符
+    description_en: The identifiers used for the parameters in a re-declaration of a function shall be identical to those
+      in the declaration.
+    description_cn: 函数重新声明中使用的标识符必须与声明中的标识符相同。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-9.8:
+    title: 函数标识符要么用于调用函数，要么前面必须加&。
+    severity: S2
+    category: 声明符
+    description_en: A function identifier shall either be used to call the function or it shall be preceded by &.
+    description_cn: 函数标识符要么用于调用函数，要么前面必须加&。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-10.1:
+    title: 用于与硬件接口或符合通信协议的数据类型必须是平凡的、标准布局的，并且仅包含具有定义大小的类型的成员。
+    severity: S1
+    category: 类
+    description_en: Data types used for interfacing with hardware or conforming to communication protocols shall be trivial,
+      standard-layout and only contain members of types with defined sizes.
+    description_cn: 用于与硬件接口或符合通信协议的数据类型必须是平凡的、标准布局的，并且仅包含具有定义大小的类型的成员。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-10.2:
+    title: 常量成员函数不得返回指向类数据的非常量指针或引用。
+    severity: S1
+    category: 类
+    description_en: Const member functions shall not return non-const pointers or references to class-data.
+    description_cn: 常量成员函数不得返回指向类数据的非常量指针或引用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-10.3:
+    title: 如果一个成员函数可以被声明为静态的，那么就应该将其声明为静态的；否则，如果它可以被声明为常量的，那么就应该将其声明为常量的。
+    severity: S2
+    category: 类
+    description_en: If a member function can be made static then it shall be made static, otherwise if it can be made const
+      then it shall be made const.
+    description_cn: 如果一个成员函数可以被声明为静态的，那么就应该将其声明为静态的；否则，如果它可以被声明为常量的，那么就应该将其声明为常量的。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-11.1:
+    title: 用户声明的成员函数应适当使用 virtual、override 和 final 说明符。
+    severity: S2
+    category: 派生类
+    description_en: User-declared member functions shall use the virtual, override and final specifiers appropriately.
+    description_cn: 用户声明的成员函数应适当使用 virtual、override 和 final 说明符。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.3.1
+    - misra-c2023-13.3.1
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-11.2:
+    title: 子类中重写的虚函数中的参数不得指定不同的默认参数。
+    severity: S2
+    category: 派生类
+    description_en: Parameters in an overriding virtual function shall not specify different default arguments.
+    description_cn: 子类中重写的虚函数中的参数不得指定不同的默认参数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.3.2
+    - misra-c2023-13.3.2
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-11.3:
+    title: 一个函数的所有重声明或覆盖函数中的参数应该要么不命名，要么名字一致。
+    severity: S2
+    category: 派生类
+    description_en: The parameters in all declarations or overrides of a function shall either be unnamed or have identical
+      names.
+    description_cn: 一个函数的所有重声明或覆盖函数中的参数应该要么不命名，要么名字一致。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-13.3.3
+    - misra-c2023-13.3.3
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-11.4:
+    title: 非虚公共或受保护成员函数不得在派生类中重新定义。
+    severity: S1
+    category: 派生类
+    description_en: Non-virtual public or protected member functions shall not be redefined in derived classes.
+    description_cn: 非虚公共或受保护成员函数不得在派生类中重新定义。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-11.5:
+    title: 每个重写的虚函数都应使用 override 或 final 说明符声明。
+    severity: S2
+    category: 派生类
+    description_en: Each overriding virtual function shall be declared with the override or final specifier.
+    description_cn: 每个重写的虚函数都应使用 override 或 final 说明符声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-11.6:
+    title: 最终类中不得引入虚函数。
+    severity: S1
+    category: 派生类
+    description_en: Virtual functions shall not be introduced in a final class.
+    description_cn: 最终类中不得引入虚函数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-11.7:
+    title: 多重继承层次结构中所有可访问的实体名称都应该是唯一的。
+    severity: S1
+    category: 派生类
+    description_en: All accessible entity names within a multiple inheritance hierarchy should be unique.
+    description_cn: 多重继承层次结构中所有可访问的实体名称都应该是唯一的。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-12.1:
+    title: 定义为结构体的类型应：(1)仅提供公共数据成员，(2)不提供任何特殊成员函数或方法，(3)不能作为另一个结构体或类的基类，(4)不能从另一个结构体或类继承。
+    severity: S1
+    category: 成员访问控制
+    description_en: 'A type defined as struct shall: (1) provide only public data members, (2) not provide any special member
+      functions or methods, (3) not be a base of another struct or class, (4) not inherit from another struct or class.'
+    description_cn: 定义为结构体的类型应：(1)仅提供公共数据成员，(2)不提供任何特殊成员函数或方法，(3)不能作为另一个结构体或类的基类，(4)不能从另一个结构体或类继承。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-13.1:
+    title: 特殊成员函数应适当提供。
+    severity: S1
+    category: 特殊成员函数
+    description_en: Special member functions shall be provided appropriately.
+    description_cn: 特殊成员函数应适当提供。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.0.1
+    - misra-c2023-15.0.1
+    profile: safety
+  GSCR-CPP-13.2:
+    title: 构造和析构函数中不要使用对象的动态类型。
+    severity: S1
+    category: 特殊成员函数
+    description_en: An object's dynamic type shall not be used from within its constructor or destructor.
+    description_cn: 构造和析构函数中不要使用对象的动态类型。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.1.1
+    - misra-c2023-15.1.1
+    profile: safety
+  GSCR-CPP-13.3:
+    title: 类的所有直接非静态数据成员应在类对象可访问之前初始化。
+    severity: S1
+    category: 特殊成员函数
+    description_en: All direct, non-static data members of a class should be initialized before the class object is accessible.
+    description_cn: 类的所有直接非静态数据成员应在类对象可访问之前初始化。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.1.4
+    - misra-c2023-15.1.4
+    profile: safety
+  GSCR-CPP-13.4:
+    title: 当类只有一个构造函数时，它应该是一个初始化列表构造函数。
+    severity: S2
+    category: 特殊成员函数
+    description_en: A class shall only define an initializer-list constructor when it is the only constructor.
+    description_cn: 当类只有一个构造函数时，它应该是一个初始化列表构造函数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-15.1.5
+    - misra-c2023-15.1.5
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-13.5:
+    title: 拷贝赋值和移动复制操作符应该处理自赋值。
+    severity: S1
+    category: 特殊成员函数
+    description_en: User-provided copy assignment operators and move assignment operators shall handle self-assignment.
+    description_cn: 拷贝赋值和移动复制操作符应该处理自赋值。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-Dir-15.8.1
+    - misra-c2023-Dir-15.8.1
+    profile: safety
+  GSCR-CPP-13.6:
+    title: 如果一个类通过“=default”、“=delete”或用户提供的声明来声明复制或移动操作，或析构函数，那么这五个特殊成员函数中的其他所有函数也都应被声明。
+    severity: S1
+    category: 特殊成员函数
+    description_en: If a class declares a copy or move operation, or a destructor, either via "=default", "=delete", or via
+      a user-provided declaration, then all others of these five special member functions shall be declared as well.
+    description_cn: 如果一个类通过“=default”、“=delete”或用户提供的声明来声明复制或移动操作，或析构函数，那么这五个特殊成员函数中的其他所有函数也都应被声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-13.7:
+    title: 不得对对象执行按位运算以及假定数据在内存中表示的运算。
+    severity: S1
+    category: 特殊成员函数
+    description_en: Bitwise operations and operations that assume data representation in memory shall not be performed on
+      objects.
+    description_cn: 不得对对象执行按位运算以及假定数据在内存中表示的运算。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-13.8:
+    title: 构造函数应显式初始化所有虚基类、所有直接非虚基类和所有非静态数据成员。
+    severity: S1
+    category: 特殊成员函数
+    description_en: Constructors shall explicitly initialize all virtual base classes, all direct non-virtual base classes
+      and all non-static data members.
+    description_cn: 构造函数应显式初始化所有虚基类、所有直接非虚基类和所有非静态数据成员。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-13.9:
+    title: 在同一类型中，不得同时使用 NSDMI 和构造函数中的非静态成员初始化器。
+    severity: S2
+    category: 特殊成员函数
+    description_en: Both NSDMI and a non-static member initializer in a constructor shall not be used in the same type.
+    description_cn: 在同一类型中，不得同时使用 NSDMI 和构造函数中的非静态成员初始化器。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-13.10:
+    title: 基类的析构函数应当是公有虚函数、公有重写函数或者受保护的非虚函数。
+    severity: S1
+    category: 特殊成员函数
+    description_en: Destructor of a base class shall be public virtual, public override or protected non-virtual.
+    description_cn: 基类的析构函数应当是公有虚函数、公有重写函数或者受保护的非虚函数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-13.11:
+    title: 如果类的公共析构函数是非虚函数，则该类应声明为 final。
+    severity: S2
+    category: 特殊成员函数
+    description_en: If a public destructor of a class is non-virtual, then the class should be declared final.
+    description_cn: 如果类的公共析构函数是非虚函数，则该类应声明为 final。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-13.12:
+    title: 如果用户定义的特殊成员函数的行为与隐式定义的特殊成员函数相同，则应将其定义为“=default”或保持未定义状态。
+    severity: S2
+    category: 特殊成员函数
+    description_en: If the behavior of a user-defined special member function is identical to implicitly defined special member
+      function, then it shall be defined "=default" or be left undefined.
+    description_cn: 如果用户定义的特殊成员函数的行为与隐式定义的特殊成员函数相同，则应将其定义为“=default”或保持未定义状态。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-13.13:
+    title: 移动和复制构造函数应分别移动和复制类的基类和数据成员，且无任何副作用。
+    severity: S1
+    category: 特殊成员函数
+    description_en: Move and copy constructors shall move and respectively copy base classes and data members of a class,
+      without any side effects.
+    description_cn: 移动和复制构造函数应分别移动和复制类的基类和数据成员，且无任何副作用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-13.14:
+    title: 在基类中，复制构造函数、移动构造函数、复制赋值操作符和移动赋值操作符应声明为受保护的，或定义为 "=delete"。
+    severity: S2
+    category: 特殊成员函数
+    description_en: Copy and move constructors and copy assignment and move assignment operators shall be declared protected
+      or defined "=delete" in base class.
+    description_cn: 在基类中，复制构造函数、移动构造函数、复制赋值操作符和移动赋值操作符应声明为受保护的，或定义为 "=delete"。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-13.15:
+    title: 赋值操作符应使用引用限定符 & 声明。
+    severity: S2
+    category: 特殊成员函数
+    description_en: Assignment operators should be declared with the ref-qualifier &.
+    description_cn: 赋值操作符应使用引用限定符 & 声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-14.1:
+    title: 逻辑 AND 和逻辑 OR 运算符不应被重载。
+    severity: S1
+    category: 重载
+    description_en: The logical AND and logical OR operators shall not be overloaded.
+    description_cn: 逻辑 AND 和逻辑 OR 运算符不应被重载。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.5.1
+    - misra-c2023-16.5.1
+    profile: safety
+  GSCR-CPP-14.2:
+    title: 地址运算符不应被重载。
+    severity: S1
+    category: 重载
+    description_en: The address-of operator shall not be overloaded.
+    description_cn: 地址运算符不应被重载。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-16.5.2
+    - misra-c2023-16.5.2
+    profile: safety
+  GSCR-CPP-14.3:
+    title: 逗号运算符、&&运算符和||运算符不得被重载。
+    severity: S1
+    category: 重载
+    description_en: The comma operator, && operator and the || operator shall not be overloaded.
+    description_cn: 逗号运算符、&&运算符和||运算符不得被重载。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Overloading (Chapter 16)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-14.4:
+    title: 赋值操作符应返回对 "this" 的引用。
+    severity: S1
+    category: 重载
+    description_en: An assignment operator shall return a reference to "this".
+    description_cn: 赋值操作符应返回对 "this" 的引用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Overloading (Chapter 16)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-14.5:
+    title: 包含“转发引用”作为其参数的函数不得重载。
+    severity: S1
+    category: 重载
+    description_en: A function that contains "forwarding reference" as its argument shall not be overloaded.
+    description_cn: 包含“转发引用”作为其参数的函数不得重载。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-15.1:
+    title: 不应显示实例化函数模板。
+    severity: S1
+    category: 模板
+    description_en: Function templates shall not be explicitly specialized.
+    description_cn: 不应显示实例化函数模板。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-17.8.1
+    - misra-c2023-17.8.1
+    profile: safety
+  GSCR-CPP-15.2:
+    title: 不依赖于模板类参数的类成员应在单独的基类中定义。
+    severity: S2
+    category: 模板
+    description_en: Class members that are not dependent on template class parameters should be defined in a separate base
+      class.
+    description_cn: 不依赖于模板类参数的类成员应在单独的基类中定义。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Templates (Chapter 17)'
+    - 'C++ Core Guidelines: T.x Templates and Generic Programming'
+  GSCR-CPP-15.3:
+    title: 非成员泛型运算符只能在不包含类（结构体）类型、枚举类型或联合类型声明的命名空间中声明。
+    severity: S2
+    category: 模板
+    description_en: A non-member generic operator shall only be declared in a namespace that does not contain class (struct)
+      type, enum type or union type declarations.
+    description_cn: 非成员泛型运算符只能在不包含类（结构体）类型、枚举类型或联合类型声明的命名空间中声明。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Templates (Chapter 17)'
+    - 'C++ Core Guidelines: T.x Templates and Generic Programming'
+  GSCR-CPP-15.4:
+    title: 当存在一个模板赋值操作符，其参数为泛型参数时，应声明一个复制赋值操作符。
+    severity: S2
+    category: 模板
+    description_en: A copy assignment operator shall be declared when there is a template assignment operator with a parameter
+      that is a generic parameter.
+    description_cn: 当存在一个模板赋值操作符，其参数为泛型参数时，应声明一个复制赋值操作符。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Templates (Chapter 17)'
+    - 'C++ Core Guidelines: T.x Templates and Generic Programming'
+  GSCR-CPP-15.5:
+    title: 在具有依赖基类的类模板中，任何可能在该依赖基类中找到的名称都应使用限定标识或 this-> 来引用。
+    severity: S1
+    category: 模板
+    description_en: In a class template with a dependent base, any name that may be found in that dependent base shall be
+      referred to using a qualified-id or this->.
+    description_cn: 在具有依赖基类的类模板中，任何可能在该依赖基类中找到的名称都应使用限定标识或 this-> 来引用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Templates (Chapter 17)'
+    - 'C++ Core Guidelines: T.x Templates and Generic Programming'
+  GSCR-CPP-15.6:
+    title: 当存在一个带有单个泛型参数的模板构造函数时，应当声明一个复制构造函数。
+    severity: S2
+    category: 模板
+    description_en: A copy constructor shall be declared when there is a template constructor with a single parameter that
+      is a generic parameter.
+    description_cn: 当存在一个带有单个泛型参数的模板构造函数时，应当声明一个复制构造函数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Templates (Chapter 17)'
+    - 'C++ Core Guidelines: T.x Templates and Generic Programming'
+  GSCR-CPP-16.1:
+    title: 不能抛出指针。
+    severity: S1
+    category: 异常处理
+    description_en: An exception object shall not have pointer type.
+    description_cn: 不能抛出指针。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.1.1
+    - misra-c2023-18.1.1
+    profile: safety
+  GSCR-CPP-16.2:
+    title: 空 throw 语句只应出现在 catch 下的复合语句之中。
+    severity: S1
+    category: 异常处理
+    description_en: An empty throw shall only occur within the compound-statement of a catch handler.
+    description_cn: 空 throw 语句只应出现在 catch 下的复合语句之中。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.1.2
+    - misra-c2023-18.1.2
+    profile: safety
+  GSCR-CPP-16.3:
+    title: 至少应有一个异常处理程序用于捕获所有未处理的异常。
+    severity: S1
+    category: 异常处理
+    description_en: There should be at least one exception handler to catch all otherwise unhandled exceptions.
+    description_cn: 至少应有一个异常处理程序用于捕获所有未处理的异常。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.3.1
+    - misra-c2023-18.3.1
+    profile: safety
+  GSCR-CPP-16.4:
+    title: 类类型的异常对象应该使用常量引用或引用来捕获。
+    severity: S2
+    category: 异常处理
+    description_en: An exception of class type shall be caught by const reference or reference.
+    description_cn: 类类型的异常对象应该使用常量引用或引用来捕获。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.3.2
+    - misra-c2023-18.3.2
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-16.5:
+    title: 不适合抛出异常的函数需要明确标记 noexcept 。
+    severity: S2
+    category: 异常处理
+    description_en: Exception-unfriendly functions shall be noexcept.
+    description_cn: 不适合抛出异常的函数需要明确标记 noexcept 。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.4.1
+    - misra-c2023-18.4.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但noexcept标记是C++11引入的，遗留代码逐步迁移中
+  GSCR-CPP-16.6:
+    title: noexcept 函数不应尝试将异常传播到调用函数。
+    severity: S2
+    category: 异常处理
+    description_en: A noexcept function should not attempt to propagate an exception to the calling function.
+    description_cn: noexcept 函数不应尝试将异常传播到调用函数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-18.5.1
+    - misra-c2023-18.5.1
+    profile: safety
+    severity_rationale: MISRA Required规则，但noexcept标记是C++11引入的，遗留代码逐步迁移中
+  GSCR-CPP-16.7:
+    title: 仅应抛出从 std::exception 派生的类型的实例。
+    severity: S2
+    category: 异常处理
+    description_en: Only instances of types derived from std::exception should be thrown.
+    description_cn: 仅应抛出从 std::exception 派生的类型的实例。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.8:
+    title: 如果一个函数因异常而退出，那么在抛出异常之前，该函数应将其构造的所有对象/资源置于有效状态，或者将其删除。
+    severity: S1
+    category: 异常处理
+    description_en: If a function exits with an exception, then before a throw, the function shall place all objects/resources
+      that the function constructed in valid states or it shall delete them.
+    description_cn: 如果一个函数因异常而退出，那么在抛出异常之前，该函数应将其构造的所有对象/资源置于有效状态，或者将其删除。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.9:
+    title: 在程序启动前，不得调用非 noexcept 的构造函数。
+    severity: S1
+    category: 异常处理
+    description_en: Constructors that are not noexcept shall not be invoked before program startup.
+    description_cn: 在程序启动前，不得调用非 noexcept 的构造函数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-16.10:
+    title: 如果构造函数不是 noexcept 且无法完成对象初始化，则它应释放对象的资源并抛出异常。
+    severity: S1
+    category: 异常处理
+    description_en: If a constructor is not noexcept and the constructor cannot finish object initialization, then it shall
+      deallocate the object's resources and it shall throw an exception.
+    description_cn: 如果构造函数不是 noexcept 且无法完成对象初始化，则它应释放对象的资源并抛出异常。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.11:
+    title: 主函数和任务主函数至少应捕获：所有使用的第三方库的基类异常、std::exception 以及所有其他未处理的异常。
+    severity: S2
+    category: 异常处理
+    description_en: 'Main function and a task main function shall catch at least: base class exceptions from all third-party
+      libraries used, std::exception and all otherwise unhandled exceptions.'
+    description_cn: 主函数和任务主函数至少应捕获：所有使用的第三方库的基类异常、std::exception 以及所有其他未处理的异常。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.12:
+    title: 如果一个函数被声明为 noexcept、noexcept(true) 或 noexcept(<true condition>)，那么它不应因异常而退出。
+    severity: S1
+    category: 异常处理
+    description_en: If a function is declared to be noexcept, noexcept(true) or noexcept(<true condition>), then it shall
+      not exit with an exception.
+    description_cn: 如果一个函数被声明为 noexcept、noexcept(true) 或 noexcept(<true condition>)，那么它不应因异常而退出。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.13:
+    title: 所有用户提供的类析构函数、内存释放函数、移动构造函数、移动赋值操作符和交换函数不得因异常而退出。应适当地为这些函数添加 noexcept 异常规范。
+    severity: S2
+    category: 异常处理
+    description_en: All user-provided class destructors, deallocation functions, move constructors, move assignment operators
+      and swap functions shall not exit with an exception. A noexcept exception specification shall be added to these functions
+      as appropriate.
+    description_cn: 所有用户提供的类析构函数、内存释放函数、移动构造函数、移动赋值操作符和交换函数不得因异常而退出。应适当地为这些函数添加 noexcept 异常规范。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.14:
+    title: 不得使用goto或switch语句将控制权转移到try或catch块中。
+    severity: S2
+    category: 异常处理
+    description_en: Control shall not be transferred into a try or catch block using a goto or a switch statement.
+    description_cn: 不得使用goto或switch语句将控制权转移到try或catch块中。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.15:
+    title: throw语句的赋值表达式本身不得引发异常。
+    severity: S1
+    category: 异常处理
+    description_en: The assignment-expression of a throw statement shall not itself cause an exception to be thrown.
+    description_cn: throw语句的赋值表达式本身不得引发异常。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.16:
+    title: 代码中显式抛出的每个异常，在所有可能导致该点的调用路径中，都应有一个兼容类型的处理程序。
+    severity: S1
+    category: 异常处理
+    description_en: Each exception explicitly thrown in the code shall have a handler of a compatible type in all call paths
+      that could lead to that point.
+    description_cn: 代码中显式抛出的每个异常，在所有可能导致该点的调用路径中，都应有一个兼容类型的处理程序。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.17:
+    title: 在派生类及其部分或全部基类的单个try-catch语句或try块中提供多个处理程序时，处理程序的顺序应从最派生类到基类。
+    severity: S2
+    category: 异常处理
+    description_en: Where multiple handlers are provided in a single try-catch statement or function-try-block for a derived
+      class and some or all of its bases, the handlers shall be ordered most-derived to base class.
+    description_cn: 在派生类及其部分或全部基类的单个try-catch语句或try块中提供多个处理程序时，处理程序的顺序应从最派生类到基类。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-16.18:
+    title: 在单个try-catch语句或函数try块中提供多个处理程序时，任何省略号（捕获所有异常）处理程序都应放在最后。
+    severity: S2
+    category: 异常处理
+    description_en: Where multiple handlers are provided in a single try-catch statement or function-try-block, any ellipsis
+      (catch-all) handler shall occur last.
+    description_cn: 在单个try-catch语句或函数try块中提供多个处理程序时，任何省略号（捕获所有异常）处理程序都应放在最后。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Exception Handling (Chapter 18)'
+    - 'C++ Core Guidelines: E.x Exception Handling'
+  GSCR-CPP-17.1:
+    title: 以#开头的行必须是一个有效的预处理指令。
+    severity: S0
+    category: 预处理指令
+    description_en: 'A line whose first token is # shall be a valid preprocessing directive.'
+    description_cn: 以#开头的行必须是一个有效的预处理指令。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.0.1
+    - misra-c2023-19.0.1
+    profile: security
+  GSCR-CPP-17.2:
+    title: include 指令之前只能有其它预处理指令或者注释。
+    severity: S2
+    category: 预处理指令
+    description_en: '#include directives should only be preceded by preprocessor directives or comments.'
+    description_cn: include 指令之前只能有其它预处理指令或者注释。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.0.3
+    - misra-c2023-19.0.3
+    profile: security
+    severity_rationale: MISRA Required规则，但注释风格属于编码约定而非安全关键，降级为S2
+  GSCR-CPP-17.3:
+    title: 应正确使用预处理指令 defined。
+    severity: S2
+    category: 预处理指令
+    description_en: The defined preprocessor operator shall be used appropriately.
+    description_cn: 应正确使用预处理指令 defined。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.1.1
+    - misra-c2023-19.1.1
+    profile: security
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-17.4:
+    title: '所有 #else、#elif 和 #endif 预处理指令必须与它们所关联的 #if 或 #ifdef 指令位于同一文件中。'
+    severity: S0
+    category: 预处理指令
+    description_en: 'All #else, #elif and #endif preprocessor directives shall reside in the same file as the #if, #ifdef
+      or #ifndef directive to which they are related.'
+    description_cn: '所有 #else、#elif 和 #endif 预处理指令必须与它们所关联的 #if 或 #ifdef 指令位于同一文件中。'
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.1.2
+    - misra-c2023-19.1.2
+    profile: security
+  GSCR-CPP-17.5:
+    title: '在 #if 或 #elif 预处理指令的控制表达式中使用的所有标识符都应在求值前定义。'
+    severity: S1
+    category: 预处理指令
+    description_en: 'All identifiers used in the controlling expression of #if or #elif preprocessing directives shall be
+      defined prior to evaluation.'
+    description_cn: '在 #if 或 #elif 预处理指令的控制表达式中使用的所有标识符都应在求值前定义。'
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.1.3
+    - misra-c2023-19.1.3
+    profile: security
+  GSCR-CPP-17.6:
+    title: 头文件必须包含头文件保护。
+    severity: S1
+    category: 预处理指令
+    description_en: Precautions shall be taken in order to prevent the contents of a header file being included more than
+      once.
+    description_cn: 头文件必须包含头文件保护。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.2.1
+    - misra-c2023-19.2.1
+    profile: security
+  GSCR-CPP-17.7:
+    title: '#include 指令应该跟有 <filename> 或 "filename" 序列。'
+    severity: S0
+    category: 预处理指令
+    description_en: 'The #include directive shall be followed by either a <filename> or "filename" sequence.'
+    description_cn: '#include 指令应该跟有 <filename> 或 "filename" 序列。'
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.2.2
+    - misra-c2023-19.2.2
+    profile: security
+  GSCR-CPP-17.8:
+    title: 禁止在头文件文件名中使用非法字符。
+    severity: S1
+    category: 预处理指令
+    description_en: The ' or " or \ characters and the /* or // character sequences shall not occur in a header file name.
+    description_cn: 禁止在头文件文件名中使用非法字符。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.2.3
+    - misra-c2023-19.2.3
+    profile: security
+  GSCR-CPP-17.9:
+    title: '#和##之间不能有宏参数。'
+    severity: S1
+    category: 预处理指令
+    description_en: 'A macro parameter immediately following a # operator shall not be immediately followed by a ## operator.'
+    description_cn: '#和##之间不能有宏参数。'
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.3.2
+    - misra-c2023-19.3.2
+    profile: security
+  GSCR-CPP-17.10:
+    title: 应使用括号确保宏的实际参数正确展开。
+    severity: S2
+    category: 预处理指令
+    description_en: Parentheses shall be used to ensure macro arguments are expanded appropriately.
+    description_cn: 应使用括号确保宏的实际参数正确展开。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.3.4
+    - misra-c2023-19.3.4
+    profile: security
+    severity_rationale: MISRA Required规则，但表达式优先级的显式化属于风格偏好，降级为S2
+  GSCR-CPP-17.11:
+    title: 宏的实际参数中不应该含有预处理指令。
+    severity: S0
+    category: 预处理指令
+    description_en: Tokens that look like a preprocessing directive shall not occur within a macro argument.
+    description_cn: 宏的实际参数中不应该含有预处理指令。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-19.3.5
+    - misra-c2023-19.3.5
+    profile: security
+  GSCR-CPP-17.12:
+    title: 对于文件中使用的每个符号，都应显式添加包含指令。
+    severity: S1
+    category: 预处理指令
+    description_en: An include directive shall be added explicitly for every symbol used in a file.
+    description_cn: 对于文件中使用的每个符号，都应显式添加包含指令。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'AUTOSAR C++14 Guideline: Standard Conversions (Chapter 7)'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-17.13:
+    title: 未定义的宏标识符不得在#if或#elif预处理器指令中使用，除非作为defined运算符的操作数。
+    severity: S1
+    category: 预处理指令
+    description_en: 'Undefined macro identifiers shall not be used in #if or #elif pre-processor directives, except as operands
+      to the defined operator.'
+    description_cn: 未定义的宏标识符不得在#if或#elif预处理器指令中使用，除非作为defined运算符的操作数。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-17.14:
+    title: 已定义的预处理器运算符只能在两种形式之一中使用。
+    severity: S2
+    category: 预处理指令
+    description_en: The defined pre-processor operator shall only be used in one of the two standard forms.
+    description_cn: 已定义的预处理器运算符只能在两种形式之一中使用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-18.1:
+    title: 标准库中保留的标识符、宏和函数不得被定义、重新定义或取消定义。
+    severity: S1
+    category: 库简介
+    description_en: Reserved identifiers, macros and functions in the C++ standard library shall not be defined, redefined
+      or undefined.
+    description_cn: 标准库中保留的标识符、宏和函数不得被定义、重新定义或取消定义。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-18.2:
+    title: 非标准实体不得添加到标准命名空间中。
+    severity: S2
+    category: 库简介
+    description_en: Non-standard entities shall not be added to standard namespaces.
+    description_cn: 非标准实体不得添加到标准命名空间中。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Declarations (Chapter 10)'
+    - 'C++ Core Guidelines: NL.x Naming and Layout'
+  GSCR-CPP-18.3:
+    title: 标准库宏和对象的名称不得重复使用。
+    severity: S1
+    category: 库简介
+    description_en: The names of standard library macros and objects shall not be reused.
+    description_cn: 标准库宏和对象的名称不得重复使用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-19.1:
+    title: 不应使用cstdlib中的atof,atoi,atol和atoll函数。
+    severity: S2
+    category: 语言支持库
+    description_en: The library functions atof, atoi, atol and atoll from <cstdlib> shall not be used.
+    description_cn: 不应使用cstdlib中的atof,atoi,atol和atoll函数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.2.1
+    - misra-c2023-21.2.1
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-19.2:
+    title: 不要使用<cstring>、<cstdlib>、<cwchar>和<cinttypes>中的字符串处理函数。
+    severity: S2
+    category: 语言支持库
+    description_en: The string handling functions from <cstring>, <cstdlib>, <cwchar> and <cinttypes> shall not be used.
+    description_cn: 不要使用<cstring>、<cstdlib>、<cwchar>和<cinttypes>中的字符串处理函数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.2.2
+    - misra-c2023-21.2.2
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-19.3:
+    title: 不要使用系统函数 system。
+    severity: S2
+    category: 语言支持库
+    description_en: The library function system from <cstdlib> shall not be used.
+    description_cn: 不要使用系统函数 system。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.2.3
+    - misra-c2023-21.2.3
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-19.4:
+    title: 应自动管理动态内存。
+    severity: S2
+    category: 语言支持库
+    description_en: Dynamic memory shall be managed automatically.
+    description_cn: 应自动管理动态内存。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.6.2
+    - misra-c2023-21.6.2
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-19.5:
+    title: 如果一个项目定义了全局的有长度或无长度的 delete 操作符，那么两种操作符都应该定义。
+    severity: S2
+    category: 语言支持库
+    description_en: If a project defines either a sized or unsized version of a global operator delete, then both shall be
+      defined.
+    description_cn: 如果一个项目定义了全局的有长度或无长度的 delete 操作符，那么两种操作符都应该定义。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.6.4
+    - misra-c2023-21.6.4
+    profile: safety
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-19.6:
+    title: 不要删除不完整类型对象的指针。
+    severity: S1
+    category: 语言支持库
+    description_en: A pointer to an incomplete class type shall not be deleted.
+    description_cn: 不要删除不完整类型对象的指针。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-21.6.5
+    - misra-c2023-21.6.5
+    profile: safety
+  GSCR-CPP-19.7:
+    title: C库工具只能通过c++库头访问。
+    severity: S2
+    category: 语言支持库
+    description_en: The C library facilities shall only be accessed through C++ library headers.
+    description_cn: C库工具只能通过c++库头访问。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-19.8:
+    title: 必须检查从字符串到数值的转换的错误状态。
+    severity: S2
+    category: 语言支持库
+    description_en: The error state of a conversion from string to a numeric value shall be checked.
+    description_cn: 必须检查从字符串到数值的转换的错误状态。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Lexical Conventions (Chapter 5)'
+    - 'C++ Core Guidelines: SL.x String'
+  GSCR-CPP-19.9:
+    title: 指向对象数组元素的指针不得传递给单对象类型的智能指针。
+    severity: S1
+    category: 语言支持库
+    description_en: A pointer pointing to an element of an array of objects shall not be passed to a smart pointer of single
+      object type.
+    description_cn: 指向对象数组元素的指针不得传递给单对象类型的智能指针。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-19.10:
+    title: delete 运算符的形式必须与分配内存时的 new 运算符形式匹配。
+    severity: S0
+    category: 语言支持库
+    description_en: The form of delete operator shall match the form of new operator used to allocate the memory.
+    description_cn: delete 运算符的形式必须与分配内存时的 new 运算符形式匹配。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-19.11:
+    title: 内存管理功能应确保以下几点：(a) 具有最坏情况执行时间的确定，(b) 避免内存碎片，(c) 避免内存溢出，(d) 避免不匹配的分配或释放，(e) 不依赖对内核
+    severity: S1
+    category: 语言支持库
+    description_en: 'Memory management functions shall ensure the following: (a) deterministic behavior resulting with the
+      existence of worst-case execution time, (b) avoiding memory fragmentation, (c) avoid running out of memory, (d) avoiding
+      mismatched allocations or deallocations, (e) no dependence on non-deterministic calls to kernel.'
+    description_cn: 内存管理功能应确保以下几点：(a) 具有最坏情况执行时间的确定，(b) 避免内存碎片，(c) 避免内存溢出，(d) 避免不匹配的分配或释放，(e) 不依赖对内核的非确定性调用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-19.12:
+    title: 不超过函数生命周期的对象应具有自动存储期。
+    severity: S2
+    category: 语言支持库
+    description_en: Objects that do not outlive a function shall have automatic storage duration.
+    description_cn: 不超过函数生命周期的对象应具有自动存储期。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Declarations (Chapter 10)'
+    - 'C++ Core Guidelines: NL.x Naming and Layout'
+  GSCR-CPP-19.13:
+    title: 动态存储分配和释放函数的自定义实现应符合 C++ 标准中相应 “所需行为” 条款规定的语义要求。
+    severity: S1
+    category: 语言支持库
+    description_en: Custom implementations of dynamic memory allocation and deallocation functions shall meet the semantic
+      requirements specified in the corresponding "Required behaviour" clause from the C++ Standard.
+    description_cn: 动态存储分配和释放函数的自定义实现应符合 C++ 标准中相应 “所需行为” 条款规定的语义要求。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-19.14:
+    title: “operator new”和“operator delete”必须一起定义。
+    severity: S1
+    category: 语言支持库
+    description_en: operator new and "operator delete" shall be defined together.
+    description_cn: “operator new”和“operator delete”必须一起定义。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Resource Management'
+    - 'C++ Core Guidelines: R.x Resource Management'
+  GSCR-CPP-20.1:
+    title: assert的参数不应该是常量表达式。
+    severity: S1
+    category: 诊断库
+    description_en: The assert macro shall not be used with a constant-expression
+    description_cn: assert的参数不应该是常量表达式。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-22.3.1
+    - misra-c2023-22.3.1
+    profile: security
+  GSCR-CPP-21.1:
+    title: 不要使用裸指针构造std::shared_ptr和std::unique_ptr。
+    severity: S1
+    category: 常规实用工具库
+    description_en: The raw pointer constructors of std::shared_ptr and std::unique_ptr should not be used.
+    description_cn: 不要使用裸指针构造std::shared_ptr和std::unique_ptr。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-23.11.1
+    - misra-c2023-23.11.1
+    profile: safety
+  GSCR-CPP-21.2:
+    title: 已拥有的指针值不得存储在不相关的智能指针中。
+    severity: S1
+    category: 常规实用工具库
+    description_en: An already-owned pointer value shall not be stored in an unrelated smart pointer.
+    description_cn: 已拥有的指针值不得存储在不相关的智能指针中。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Pointer and Array (Chapter 8)'
+    - 'SEI CERT C++ Coding Standard: MEMxx'
+  GSCR-CPP-21.3:
+    title: 应使用 std::unique_ptr 来表示独占所有权。
+    severity: S2
+    category: 常规实用工具库
+    description_en: A std::unique_ptr shall be used to represent exclusive ownership.
+    description_cn: 应使用 std::unique_ptr 来表示独占所有权。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-21.4:
+    title: 应使用 std::shared_ptr 来表示共享所有权。
+    severity: S2
+    category: 常规实用工具库
+    description_en: A std::shared_ptr shall be used to represent shared ownership.
+    description_cn: 应使用 std::shared_ptr 来表示共享所有权。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-21.5:
+    title: 如果不需要共享所有权，则应使用 std::unique_ptr 而非 std::shared_ptr。
+    severity: S2
+    category: 常规实用工具库
+    description_en: A std::unique_ptr shall be used over std::shared_ptr if ownership sharing is not required.
+    description_cn: 如果不需要共享所有权，则应使用 std::unique_ptr 而非 std::shared_ptr。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-21.6:
+    title: 应使用 std::make_unique 来构造由 std::unique_ptr 拥有的对象。
+    severity: S2
+    category: 常规实用工具库
+    description_en: std::make_unique shall be used to construct objects owned by std::unique_ptr.
+    description_cn: 应使用 std::make_unique 来构造由 std::unique_ptr 拥有的对象。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-21.7:
+    title: 应使用 std::make_shared 来构造由 std::shared_ptr 拥有的对象。
+    severity: S2
+    category: 常规实用工具库
+    description_en: std::make_shared shall be used to construct objects owned by std::shared_ptr.
+    description_cn: 应使用 std::make_shared 来构造由 std::shared_ptr 拥有的对象。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Classes (Chapter 10-15)'
+    - 'C++ Core Guidelines: C.x Classes'
+  GSCR-CPP-21.8:
+    title: std::weak_ptr 应用于表示临时的共享所有权。
+    severity: S2
+    category: 常规实用工具库
+    description_en: A std::weak_ptr shall be used to represent temporary shared ownership.
+    description_cn: std::weak_ptr 应用于表示临时的共享所有权。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-22.1:
+    title: 不要使用 ctype 和 cwctype 中的字符处理函数。
+    severity: S2
+    category: 字符串库
+    description_en: The character handling functions from <cctype> and <cwctype> shall not be used.
+    description_cn: 不要使用 ctype 和 cwctype 中的字符处理函数。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-24.5.1
+    - misra-c2023-24.5.1
+    profile: security
+    severity_rationale: MISRA Required规则，经评审该规则在特定上下文中不适用或工具误报率较高，降级为S2
+  GSCR-CPP-22.2:
+    title: 字符处理函数的参数必须能够表示为无符号字符。
+    severity: S2
+    category: 字符串库
+    description_en: Arguments to character-handling functions shall be representable as an unsigned char.
+    description_cn: 字符处理函数的参数必须能够表示为无符号字符。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'AUTOSAR C++14 Guideline: Lexical Conventions (Chapter 5)'
+    - 'C++ Core Guidelines: SL.x String'
+  GSCR-CPP-23.1:
+    title: localeconv等函数的返回值必须赋值给指向const的指针。
+    severity: S1
+    category: 本地化库
+    description_en: The pointers returned by the C++ Standard Library functions localeconv, getenv, setlocale or strerror
+      must only be used as if they have pointer to const-qualified type.
+    description_cn: localeconv等函数的返回值必须赋值给指向const的指针。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-25.5.2
+    - misra-c2023-25.5.2
+    profile: security
+  GSCR-CPP-23.2:
+    title: c++标准库函数asctime， ctime, gmtime, localtime, localeconv, getenv， setlocale或strerro
+    severity: S1
+    category: 本地化库
+    description_en: The pointer returned by the C++ Standard Library functions asctime, ctime, gmtime, localtime, localeconv,
+      getenv, setlocale or strerror must not be used following a subsequent call to the same function.
+    description_cn: c++标准库函数asctime， ctime, gmtime, localtime, localeconv, getenv， setlocale或strerror返回的指针不能在后续调用同一函数后使用。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-25.5.3
+    - misra-c2023-25.5.3
+    profile: security
+  GSCR-CPP-24.1:
+    title: 容器的元素只能通过有效的引用、迭代器和指针进行访问。
+    severity: S1
+    category: 容器库
+    description_en: Elements of a container shall only be accessed via valid references, iterators, and pointers.
+    description_cn: 容器的元素只能通过有效的引用、迭代器和指针进行访问。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'C++ Core Guidelines: C.x Containers'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-25.1:
+    title: 将值转发给其他函数应通过以下方式完成：(1) 如果该值是右值引用，则使用 std::move；(2) 如果该值是转发引用，则使用 std::forward。
+    severity: S1
+    category: 算法库
+    description_en: 'Forwarding values to other functions shall be done via: (1) std::move if the value is an rvalue reference,
+      (2) std::forward if the value is forwarding reference.'
+    description_cn: 将值转发给其他函数应通过以下方式完成：(1) 如果该值是右值引用，则使用 std::move；(2) 如果该值是转发引用，则使用 std::forward。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-25.2:
+    title: 不应使用已经被move的对象。
+    severity: S1
+    category: 算法库
+    description_en: An object shall not be used while in a potentially moved-from state.
+    description_cn: 不应使用已经被move的对象。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-28.6.3
+    - misra-c2023-28.6.3
+    profile: safety
+  GSCR-CPP-25.3:
+    title: 转发引用和 std::forward 应一起使用。
+    severity: S1
+    category: 算法库
+    description_en: Forwarding references and std::forward shall be used together.
+    description_cn: 转发引用和 std::forward 应一起使用。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-28.6.2
+    - misra-c2023-28.6.2
+    profile: safety
+  GSCR-CPP-25.4:
+    title: std::forward的参数不能随后使用。
+    severity: S1
+    category: 算法库
+    description_en: An argument to std::forward shall not be subsequently used.
+    description_cn: std::forward的参数不能随后使用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'AUTOSAR C++14 Guideline: Statements (Chapter 9)'
+    - 'C++ Core Guidelines: ES.x Statements'
+  GSCR-CPP-25.5:
+    title: 标准库函数std::remove, std::remove_if, std::unique 和 empty 的返回值必须被使用。
+    severity: S1
+    category: 算法库
+    description_en: The result of std::remove, std::remove_if, std::unique and empty shall be used.
+    description_cn: 标准库函数std::remove, std::remove_if, std::unique 和 empty 的返回值必须被使用。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-28.6.4
+    - misra-c2023-28.6.4
+    profile: safety
+  GSCR-CPP-25.6:
+    title: 与该对象标识相关的谓词函数对象的非静态数据成员或捕获值不得复制。
+    severity: S1
+    category: 算法库
+    description_en: Non-static data members or captured values of predicate function objects that are state related to this
+      object's identity shall not be copied.
+    description_cn: 与该对象标识相关的谓词函数对象的非静态数据成员或捕获值不得复制。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-25.7:
+    title: 与关联容器、STL排序及相关算法一起使用的排序谓词应遵循严格弱序关系。
+    severity: S2
+    category: 算法库
+    description_en: Ordering predicates used with associative containers and STL sorting and related algorithms shall adhere
+      to a strict weak ordering relation.
+    description_cn: 与关联容器、STL排序及相关算法一起使用的排序谓词应遵循严格弱序关系。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - 'C++ Core Guidelines: C.x Containers'
+    - 'C++ Core Guidelines: ES.x Expressions and Statements'
+  GSCR-CPP-26.1:
+    title: 随机数引擎不得进行默认初始化。
+    severity: S1
+    category: 随机数生成
+    description_en: Random number engines shall not be default-initialized.
+    description_cn: 随机数引擎不得进行默认初始化。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: safety
+    references:
+    - TBD - 需业务侧确认
+  GSCR-CPP-27.1:
+    title: 同一个文件的读写之间应有一个文件位置操作。
+    severity: S1
+    category: 输入/输出库
+    description_en: Reads and writes on the same file stream shall be separated by a positioning operation.
+    description_cn: 同一个文件的读写之间应有一个文件位置操作。
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-30.0.2
+    - misra-c2023-30.0.2
+    profile: security
+  GSCR-CPP-27.2:
+    title: 来自独立组件的输入应进行验证。
+    severity: S1
+    category: 输入/输出库
+    description_en: Inputs from independent components shall be validated.
+    description_cn: 来自独立组件的输入应进行验证。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - SEI CERT C++ Coding Standard
+    - 'AUTOSAR C++14 Guideline: Expressions (Chapter 8)'
+  GSCR-CPP-27.3:
+    title: C 风格字符串应保证为数据和空终止符留出足够的空间。
+    severity: S1
+    category: 输入/输出库
+    description_en: A C-style string shall guarantee sufficient space for data and the null terminator.
+    description_cn: C 风格字符串应保证为数据和空终止符留出足够的空间。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - 'AUTOSAR C++14 Guideline: Lexical Conventions (Chapter 5)'
+    - 'C++ Core Guidelines: SL.x String'
+  GSCR-CPP-27.4:
+    title: 在文件流上交替进行输入和输出操作时，若没有中间的刷新或定位调用，则不得使用。
+    severity: S1
+    category: 输入/输出库
+    description_en: Alternate input and output operations on a file stream shall not be used without an intervening flush
+      or positioning call.
+    description_cn: 在文件流上交替进行输入和输出操作时，若没有中间的刷新或定位调用，则不得使用。
+    check_method: manual_review
+    auto_checkable: false
+    mapped_misra_ids: []
+    profile: security
+    references:
+    - SEI CERT C++ Coding Standard
+    - 'AUTOSAR C++14 Guideline: Expressions (Chapter 8)'
+  GSCR-CPP-28.1:
+    title: 跨界内存写
+    severity: S0
+    category: CWE 高频缺陷
+    description_en: Out-of-bounds Write
+    description_cn: 跨界内存写
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-CWE-787
+    - misra-c2023-CWE-787
+    profile: security
+  GSCR-CPP-28.2:
+    title: 释放后使用
+    severity: S0
+    category: CWE 高频缺陷
+    description_en: Use After Free
+    description_cn: 释放后使用
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-CWE-416
+    - misra-c2023-CWE-416
+    profile: security
+  GSCR-CPP-28.3:
+    title: 空指针解引用
+    severity: S0
+    category: CWE 高频缺陷
+    description_en: NULL Pointer Dereference
+    description_cn: 空指针解引用
+    check_method: clang-tidy
+    auto_checkable: true
+    mapped_misra_ids:
+    - misra-c2012-CWE-476
+    - misra-c2023-CWE-476
+    profile: security

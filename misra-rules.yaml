@@ -1,6 +1,7 @@
 meta:
   standard: MISRA C
   version: '2023'
+  ruleset_version: '2023.1'
   description: MISRA C:2023 Guidelines for the use of the C language in critical systems
   source: MISRA Consortium
 misra-c2023-1.1:

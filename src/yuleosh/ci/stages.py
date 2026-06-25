@@ -752,6 +752,65 @@ def run_misra_check(project_dir: str, ci: CIResult,
     except Exception:
         estimated_kloc = 0
 
+    # ── GSCR: Translate MISRA violations to Corporate Standard Rules ──
+    try:
+        from yuleosh.ci.rulesets import RulesetRegistry
+        gscr_ruleset = RulesetRegistry.get_default()
+        if gscr_ruleset and gscr_ruleset.name != "misra-c2023":
+            # Translate all violations to GSCR
+            gscr_violations = gscr_ruleset.translate_violations(violations)
+
+            # Save GSCR-enhanced report
+            gscr_report_path = Path(project_dir) / ".yuleosh" / "reports" / "gscr-report.json"
+            gscr_report = {
+                "standard": gscr_ruleset.display_name,
+                "version": "1.1",
+                "generated_at": datetime.now().isoformat(),
+                "total_violations": len(gscr_violations),
+                "gscr_mapped": sum(1 for v in gscr_violations if v.get("gscr_rule_ids")),
+                "gscr_unmapped": sum(1 for v in gscr_violations if not v.get("gscr_rule_ids")),
+                "severity_counts": {
+                    "S0": sum(1 for v in gscr_violations if v.get("gscr_severity", "") == "S0"),
+                    "S1": sum(1 for v in gscr_violations if v.get("gscr_severity", "") == "S1"),
+                    "S2": sum(1 for v in gscr_violations if v.get("gscr_severity", "") == "S2"),
+                },
+                "gscr_rule_counts": {},
+                "violations": gscr_violations,
+            }
+
+            # Group by GSCR rule ID
+            from collections import Counter
+            gscr_rule_counter = Counter()
+            for v in gscr_violations:
+                for gid in v.get("gscr_rule_ids", []):
+                    gscr_rule_counter[gid] += 1
+            gscr_report["gscr_rule_counts"] = dict(gscr_rule_counter.most_common())
+
+            gscr_report_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(gscr_report_path, "w", encoding="utf-8") as f:
+                json.dump(gscr_report, f, ensure_ascii=False, indent=2)
+
+            print(f"    📋 GSCR report: {gscr_report['gscr_mapped']}/{gscr_report['total_violations']} "
+                  f"violations mapped to corporate standard rules")
+
+            # Show top 5 GSCR rules violated
+            if gscr_report["gscr_rule_counts"]:
+                print(f"    📋 Top GSCR rules violated:")
+                for gid, count in list(gscr_report["gscr_rule_counts"].items())[:5]:
+                    gscr_def = gscr_ruleset.rule_definitions().get("rules", {}).get(gid, {})
+                    title = gscr_def.get("description_cn", gid)[:60]
+                    print(f"        • {gid} ({gscr_def.get('severity', 'S2')}): {title} — {count} violation(s)")
+
+            # Severity summary
+            sc = gscr_report["severity_counts"]
+            print(f"    📋 GSCR severity: S0={sc['S0']}, S1={sc['S1']}, S2={sc['S2']}")
+
+        else:
+            log.debug("Default ruleset is MISRA — no GSCR translation needed")
+
+    except Exception as gscr_e:
+        log.warning("GSCR translation failed (non-blocking): %s", gscr_e)
+
     # Save raw output for debugging
     misra_dir = Path(project_dir) / ".yuleosh" / "reports"
     misra_dir.mkdir(parents=True, exist_ok=True)

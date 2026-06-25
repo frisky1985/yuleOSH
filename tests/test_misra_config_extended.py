@@ -345,6 +345,24 @@ class TestTraceabilityWithDeviations:
         assert matrix[0]["fix_status"] == "acknowledged"
         assert "deviation_ref" in matrix[0]
 
+    def test_deviation_risk_level_and_expires(self):
+        """WHEN deviation has risk_level and expires THEN reflected in traceability."""
+        deviations = [{
+            "rule_id": "misra-c2023-17.7",
+            "file_pattern": "src/legacy/*.c",
+            "reason": "Legacy code",
+            "approved_by": "arch",
+            "risk_level": "high",
+            "expires": "2029-12-31",
+            "status": "approved",
+        }]
+        matrix = generate_traceability_matrix(SAMPLE_VIOLATIONS, SAMPLE_RULE_DEFS, deviations=deviations)
+        entry = matrix[0]
+        assert entry["fix_status"] == "acknowledged"
+        assert entry["risk_level_info"] != ""
+        assert entry["expiration_status"]["is_expired"] is False
+        assert entry["expiration_status"]["expires"] == "2029-12-31"
+
     def test_unresolved_when_no_match(self):
         """WHEN violation does not match deviation THEN fix_status='unresolved'."""
         deviations = [("misra-c2023-17.7", "src/legacy/*.c")]
@@ -367,7 +385,7 @@ class TestTraceabilityWithDeviations:
             assert entry["fix_status"] == "unresolved"
 
     def test_entry_structure(self):
-        """WHEN deviation matched THEN deviation_ref is present."""
+        """WHEN deviation matched THEN deviation_ref has risk and expiration info."""
         deviations = [("misra-c2023-17.7", "src/legacy/*.c")]
         matrix = generate_traceability_matrix(SAMPLE_VIOLATIONS, SAMPLE_RULE_DEFS, deviations=deviations)
         entry = matrix[0]
