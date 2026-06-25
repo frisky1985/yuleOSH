@@ -255,8 +255,15 @@ def generate_c_coverage_report(build_dir: str = ".") -> str:
     Returns an empty string if coverage generation fails.
     """
     project_dir = Path(build_dir).resolve()
-    while not (project_dir / ".yuleosh").exists() and project_dir.parent != project_dir:
-        project_dir = project_dir.parent
+    # Guard: walk up only within workspace bounds, never reach filesystem root
+    root_candidate = project_dir
+    while not (root_candidate / ".yuleosh").exists() and root_candidate.parent != root_candidate:
+        root_candidate = root_candidate.parent
+    # If .yuleosh not found anywhere up to root, fallback to the original build_dir
+    if not (root_candidate / ".yuleosh").exists():
+        project_dir = Path(build_dir).resolve()
+    else:
+        project_dir = root_candidate
 
     report_dir = project_dir / ".yuleosh" / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)

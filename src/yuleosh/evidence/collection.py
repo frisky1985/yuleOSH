@@ -31,7 +31,10 @@ class DataCollectionMixin:
             return
 
         sys.path.insert(0, os.path.join(self.project_dir, "src", "spec"))
-        from validate import parse_spec
+        try:
+            from validate import parse_spec
+        except ImportError:
+            from yuleosh.spec.validate import parse_spec
 
         doc = parse_spec(spec_path)
         self.requirements = [r.to_dict() for r in doc.requirements]

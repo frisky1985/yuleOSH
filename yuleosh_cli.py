@@ -1603,7 +1603,6 @@ def main():
             cmd_kpi_status(args)
         elif args.kpi_sub == "baseline":
             if args.baseline_sub == "save":
-    elif args.kpi_sub == "baseline-save":
                 cmd_kpi_baseline_save(args)
             elif args.baseline_sub == "compare":
                 cmd_kpi_baseline_compare(args)
