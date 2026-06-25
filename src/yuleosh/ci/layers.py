@@ -32,6 +32,13 @@ from yuleosh.ci.stage_utils import (
 
 log = logging.getLogger("ci.layers")
 
+# Report generation — Phase 2 A4
+try:
+    from yuleosh.report.exporter import generate_layer_report as _generate_layer_report
+except ImportError:
+    _generate_layer_report = None
+    log.info("report.exporter not available — CI reports will not be auto-generated")
+
 def get_latest_layer_result(layer: int, project_dir: str) -> Optional[dict]:
     """Read the most recent CI result for the given layer from .osh/ci/.
 
@@ -170,6 +177,13 @@ def run_layer1(project_dir: Optional[str] = None):
         except Exception as ne:
             log.warning(f"Notification failed: {ne}")
 
+    # A4: Auto-generate layer report
+    if _generate_layer_report:
+        try:
+            _generate_layer_report(project_dir, 1)
+        except Exception as re:
+            log.warning(f"Layer 1 report generation failed: {re}")
+
     print(f"\n{'='*40}")
     if all_passed:
         print("✅ CI Layer 1: ALL STAGES PASSED")
@@ -256,6 +270,13 @@ def run_layer_25(project_dir: Optional[str] = None):
     ci.complete("passed" if all_passed else "failed")
     from yuleosh.ci.runner import _save_layer_result; result_path = _save_layer_result(project_dir, ci, all_passed, commit, 25)
 
+    # A4: Auto-generate layer report
+    if _generate_layer_report:
+        try:
+            _generate_layer_report(project_dir, 25)
+        except Exception as re:
+            log.warning(f"Layer 25 report generation failed: {re}")
+
     print(f"\n{'='*40}")
     if all_passed:
         print("✅ CI Layer 2.5: ALL HIL STAGES PASSED")
@@ -318,6 +339,13 @@ def run_layer2(project_dir: Optional[str] = None):
 
     ci.complete("passed" if all_passed else "failed")
     from yuleosh.ci.runner import _save_layer_result; _save_layer_result(project_dir, ci, all_passed, commit, 2)
+
+    # A4: Auto-generate layer report
+    if _generate_layer_report:
+        try:
+            _generate_layer_report(project_dir, 2)
+        except Exception as re:
+            log.warning(f"Layer 2 report generation failed: {re}")
 
     print(f"\n{'='*40}")
     if all_passed:
@@ -421,6 +449,13 @@ def run_layer3(project_dir: Optional[str] = None):
             )
         except Exception as ne:
             log.warning(f"Notification failed: {ne}")
+
+    # A4: Auto-generate layer report
+    if _generate_layer_report:
+        try:
+            _generate_layer_report(project_dir, 3)
+        except Exception as re:
+            log.warning(f"Layer 3 report generation failed: {re}")
 
     print(f"\n{'='*40}")
     if all_passed:
