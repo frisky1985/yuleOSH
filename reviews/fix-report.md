@@ -229,3 +229,88 @@ tests/engine/test_checkpoint_engine.py .............. 22 passed in 0.14s
 - `TestPersistence` (5 tests) — 磁盘持久化/加载/清除/空状态/序列化往返
 - `TestCICheckpoint` (3 tests) — L1/L2/无效 layer
 - `TestAgentCheckpoint` (2 tests) — 创建/列出注入点
+
+---
+
+## 质量检视修复（2026-06-26）
+
+> 基于 quality-review.md 评审结论修复，共 4 个 A 级 + 5 个 B 级问题。
+
+### 修复总览
+
+| # | 优先级 | 问题 | 状态 | 涉及文件 |
+|---|--------|------|------|---------|
+| A1 | 🔴 | 注入点不存在时 `run()` 返回 `True` | ✅ 已修复 | `checkpoint.py` |
+| A2 | 🔴 | CI Layer 2.5 通过 CLI 无法被调用 | ✅ 已修复 | `ci_checkpoint.py` |
+| A3 | 🔴 | 默认 `pipeline run` 不经过 Checkpoint 引擎 | ✅ 已修复 | `yuleosh.sh` |
+| A4 | 🔴 | 无 handler 步骤的 duration 计算错误 | ✅ 已修复 | `checkpoint.py` |
+| B1 | 🟠 | 缺失状态文件损坏的容错处理 | ✅ 已修复 | `checkpoint.py` |
+| B2 | 🟠 | 缺少 mid-pipeline status() 测试覆盖 | ✅ 已修复 | `test_checkpoint_engine.py` |
+| B3 | 🟠 | `agent_checkpoint.py` 中存在死代码 | ✅ 已修复 | `agent_checkpoint.py` |
+| B4 | 🟠 | 所有 stage 共享同一个 `CIResult` 实例 | ✅ 已修复 | `ci_checkpoint.py` |
+| B5 | 🟠 | 缺失空引擎 `run()` 的测试 | ✅ 已修复 | `test_checkpoint_engine.py` |
+
+### 详细修复说明
+
+#### A1: 注入点不存在时 `run()` 返回 `False`
+
+**文件**：`src/yuleosh/engine/checkpoint.py`
+**问题**：`_prepare_inject` 在注入点不存在时返回 `([], -1)`，`run()` 遇到空列表直接 `return True`。
+**修复**：在 `run()` 的空列表检查中增加状态判断，当 `self._state.status == "failed"`（由 `_prepare_inject` 在错误路径设置）时返回 `False`。
+
+#### A2: CI Layer 2.5 的 float→int 截断
+
+**文件**：`src/yuleosh/engine/ci_checkpoint.py`
+**问题**：`create_ci_pipeline` 参数类型声明为 `int`，CLI 中 `int(args.layer)` 将 `2.5` 截断为 `2`。
+**修复**：`create_ci_pipeline(layer: float)` 接受 float 类型；`main()` 中去除 `int()` 强转直接传递 `args.layer`。
+
+#### A3: 默认 `pipeline run` 使用 Checkpoint 引擎
+
+**文件**：`src/yuleosh/cli/yuleosh.sh`
+**问题**：无 `--inject-at` 或 `--resume` 标志时走旧路径 `yuleosh.pipeline.run`，完全不创建 checkpoint 状态。
+**修复**：默认分支改为 `python3 -m yuleosh.engine.agent_checkpoint run "$spec"`。
+
+#### A4: 无 handler 步骤的 duration 计算
+
+**文件**：`src/yuleosh/engine/checkpoint.py`
+**问题**：`t0` 仅在外层初始化一次，无 handler 步骤直接使用该值，而非步骤开始时间。
+**修复**：在每个循环迭代开始处重置 `t0 = datetime.now()`，确保 duration 基于当前步骤的开始时间。
+
+#### B1: 状态文件损坏容错
+
+**文件**：`src/yuleosh/engine/checkpoint.py`
+**问题**：`_load_state()` 未捕获 `json.load` 或 `from_dict()` 的异常。
+**修复**：增加 `try/except` 包裹读取逻辑，捕获 `json.JSONDecodeError`、`KeyError`、`TypeError`、`ValueError`，记录 warning 后返回 `None`。
+
+#### B2: mid-pipeline status 测试
+
+**文件**：`tests/engine/test_checkpoint_engine.py`
+**问题**：未测试 `run()` 执行过程中调用 `status()` 的行为。
+**修复**：新增 `test_mid_pipeline_status`，在 step handler 内部调用 `engine.status()` 验证中间状态正确（pending→running→passed 转换）。
+
+#### B3: 删除死代码
+
+**文件**：`src/yuleosh/engine/agent_checkpoint.py`
+**问题**：`_make_agent_handler` 定义了但从未被调用。
+**修复**：删除该函数。
+
+#### B4: 独立 CIResult 实例
+
+**文件**：`src/yuleosh/engine/ci_checkpoint.py`
+**问题**：所有 stage 共享同一个 `CIResult` 实例，为未来并行扩展埋下隐患。
+**修复**：`_wrap` 和 `_bool_wrap` 去掉 `ci` 参数，改为接收 `layer`；在每次闭包调用时创建新的 `CIResult(layer, ...)` 实例。
+
+#### B5: 空引擎 run 测试
+
+**文件**：`tests/engine/test_checkpoint_engine.py`
+**问题**：没有测试空引擎调用 `run()`。
+**修复**：新增 `test_empty_engine_run`，验证空引擎调用 `run()` 返回 `True` 且状态为 `completed`。
+
+### 验证结果
+
+```
+engine tests: 24 passed, 1 skipped ✓
+engine + ci tests: 211 passed, 1 skipped ✓
+```
+
+**影响范围**：仅 checkpoint 引擎及测试代码，CI stages 逻辑无变更。
