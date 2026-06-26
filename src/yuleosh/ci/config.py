@@ -139,6 +139,24 @@ class MisraConfig:
     active_profile: str = "safety"  # "safety" | "performance" | "testing"
     profiles: dict[str, MisraProfile] = field(default_factory=dict)
     exclude_paths: list[str] = field(default_factory=lambda: ["tests/**", "third_party/**", "build/**"])
+    code_categories: dict = field(default_factory=lambda: {
+        "template": {
+            "paths": ["src/yuleosh/templates/**", "test-dogfood/**"],
+            "action": "exclude",
+            "block_on": False,
+        },
+        "third_party": {
+            "paths": ["third_party/**", "Drivers/**", "Middlewares/**",
+                      "CMSIS/**", "vendor/**", "lib/**"],
+            "action": "alert",
+            "block_on": False,
+        },
+        "business": {
+            "paths": ["src/**"],
+            "action": "enforce",
+            "block_on": True,
+        },
+    })
 
 
 @dataclass
@@ -304,6 +322,16 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
         exclude = misra_block.get("exclude_paths", ["tests/**", "third_party/**", "build/**"])
         if isinstance(exclude, list):
             cfg.misra.exclude_paths = [str(p) for p in exclude]
+
+        # Parse code_categories (三级分类)
+        code_cat = misra_block.get("code_categories", None)
+        if isinstance(code_cat, dict) and code_cat:
+            # Merge user-supplied categories over defaults
+            merged = dict(cfg.misra.code_categories)
+            for cat_name, cat_cfg in code_cat.items():
+                if isinstance(cat_cfg, dict):
+                    merged[cat_name] = cat_cfg
+            cfg.misra.code_categories = merged
 
         # Parse profiles block
         profiles_block = misra_block.get("profiles", {})
