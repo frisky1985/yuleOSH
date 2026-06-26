@@ -475,6 +475,39 @@ class GscCRuleSet(BaseRuleSet):
     _name = "gscr-c"
     _display_name = "GSCR C (企标 C 语言规则 V1.1)"
 
+    # ── 运行时错误关键词 → GSCR 规则映射表 ──────────────────────
+    # MISRA C:2023 Dir-4.1 "Run-time failures shall be minimized" 未细分编号子规则。
+    # 本表通过关键词匹配 cppcheck 违规消息文本，实现运行时错误的细分路由。
+    # 参考: Polyspace Bug Finder 文档中 Dir-4.1 的 Rationale 分类
+    #   (arithmetic errors, pointer arithmetic, array bound errors,
+    #    function parameters, pointer dereferencing, dynamic memory)
+    _RUNTIME_ERROR_MAP: list[tuple[str, str, str]] = [
+        # (keyword, gscr_id, misra_2023_category)
+        # ── 注意事项: 关键词按特异性从高到低排列 ──
+        # "subnormal" 必须在 "float" 之前，否则 "subnormal float" 会误匹配 "float"
+        # "non-terminating call" 必须在 "non-terminating loop" 之前，否则误匹配
+        # "division by zero" 必须在 "divide by zero" 之前
+        # "out of bounds" 必须在 "array index" 之前（数组越界消息常用 "out of bounds"）
+        ("non-terminating call",  "GSCR-C-27.17", "function parameter: non-terminating call (Dir-4.1)"),
+        ("non-terminating loop",  "GSCR-C-27.18", "function parameter: non-terminating loop (Dir-4.1)"),
+        ("correctness condition", "GSCR-C-27.19", "function parameter: correctness condition (Dir-4.1)"),
+        ("subnormal",             "GSCR-C-27.13", "arithmetic error: subnormal float (Dir-4.1)"),
+        ("division by zero",      "GSCR-C-27.9",  "arithmetic error: division by zero (Dir-4.1)"),
+        ("divide by zero",        "GSCR-C-27.9",  "arithmetic error: division by zero (Dir-4.1)"),
+        ("absolute address",      "GSCR-C-27.14", "pointer arithmetic: absolute address (Dir-4.1)"),
+        ("out of bounds",         "GSCR-C-27.16", "array bound error: out-of-bounds index (Dir-4.1)"),
+        ("array index",           "GSCR-C-27.16", "array bound error: out-of-bounds index (Dir-4.1)"),
+        ("infinite loop",         "GSCR-C-27.18", "function parameter: non-terminating loop (Dir-4.1)"),
+        ("unreachable",           "GSCR-C-27.8",  "unreachable code (Dir-4.1 / also Rule 2.1)"),
+        ("null pointer",          "GSCR-C-27.15", "pointer dereferencing: null/invalid (Dir-4.1)"),
+        ("dereference",           "GSCR-C-27.15", "pointer dereferencing: null/invalid (Dir-4.1)"),
+        ("standard library",      "GSCR-C-27.20", "standard library: invalid use (Dir-4.1)"),
+        ("recursive",             "GSCR-C-27.17", "function parameter: non-terminating call (Dir-4.1)"),
+        ("overflow",              "GSCR-C-27.12", "arithmetic error: overflow (Dir-4.1)"),
+        ("float",                 "GSCR-C-27.10", "arithmetic error: floating-point operation (Dir-4.1)"),
+        ("shift",                 "GSCR-C-27.11", "arithmetic error: invalid shift (Dir-4.1)"),
+    ]
+
     def __init__(self, rules_path: Optional[Path] = None):
         self._rules_path = rules_path or _GSCR_C_RULES_PATH
         self._defs = self._load_rule_definitions()
@@ -534,9 +567,12 @@ class GscCRuleSet(BaseRuleSet):
         # 这种情况只能通过消息文本匹配，回退到空
         return []
 
-    @staticmethod
-    def _match_runtime_error_rule(message: str) -> str:
+    @classmethod
+    def _match_runtime_error_rule(cls, message: str) -> str:
         """根据 cppcheck message 文本匹配最具体的运行时错误 GSCR 规则。
+
+        使用 _RUNTIME_ERROR_MAP 类常量进行关键词匹配。
+        关键词列表按特异性从高到低排列（更长的关键词在前）。
 
         Parameters
         ----------
@@ -550,31 +586,37 @@ class GscCRuleSet(BaseRuleSet):
         """
         msg_lower = message.lower()
 
-        # 按特异性从高到低匹配
-        patterns = [
-            ("unreachable", "GSCR-C-27.8"),
-            ("division by zero", "GSCR-C-27.9"),
-            ("divide by zero", "GSCR-C-27.9"),
-            ("float", "GSCR-C-27.10"),
-            ("shift", "GSCR-C-27.11"),
-            ("overflow", "GSCR-C-27.12"),
-            ("subnormal", "GSCR-C-27.13"),
-            ("absolute address", "GSCR-C-27.14"),
-            ("null pointer", "GSCR-C-27.15"),
-            ("dereference", "GSCR-C-27.15"),
-            ("out of bounds", "GSCR-C-27.16"),
-            ("array index", "GSCR-C-27.16"),
-            ("non-terminating call", "GSCR-C-27.17"),
-            ("recursive", "GSCR-C-27.17"),
-            ("infinite loop", "GSCR-C-27.18"),
-            ("non-terminating loop", "GSCR-C-27.18"),
-            ("correctness condition", "GSCR-C-27.19"),
-            ("standard library", "GSCR-C-27.20"),
-        ]
-        for keyword, gscr_id in patterns:
+        # 关键词按特异性从高到低匹配（_RUNTIME_ERROR_MAP 按此顺序定义）
+        for keyword, gscr_id, _ in cls._RUNTIME_ERROR_MAP:
             if keyword in msg_lower:
                 return gscr_id
         return "GSCR-C-4.1"
+
+    @classmethod
+    def _match_runtime_error_category(cls, message: str) -> str:
+        """根据消息文本返回对应的 MISRA C:2023 Dir-4.1 错误类别。
+
+        Parameters
+        ----------
+        message : str
+            cppcheck 输出的消息文本。
+
+        Returns
+        -------
+        str
+            Dir-4.1 错误类别描述，如 "arithmetic error: division by zero (Dir-4.1)"。
+            若无法匹配则返回空字符串。
+        """
+        msg_lower = message.lower()
+        for keyword, _, category in cls._RUNTIME_ERROR_MAP:
+            if keyword in msg_lower:
+                return category
+        return ""
+
+    def _get_runtime_error_category(self, gscr_id: str) -> str:
+        """从 YAML 定义中获取运行时错误规则的 MISRA C:2023 Dir-4.1 类别。"""
+        rule_def = self._defs.get("rules", {}).get(gscr_id, {})
+        return rule_def.get("misra_2023_category", "")
 
     def translate_violations(self, violations: list[dict]) -> list[dict]:
         """将 MISRA 违规列表翻译为企标违规列表。
@@ -619,6 +661,8 @@ class GscCRuleSet(BaseRuleSet):
                 cn_desc = gscr_def.get("description_cn", "")
                 if cn_desc:
                     v["gscr_message_cn"] = cn_desc
+                # MISRA C:2023 运行时错误类别标注（从 YAML misra_2023_category 字段读取）
+                v["misra_2023_category"] = gscr_def.get("misra_2023_category", "")
             else:
                 v["gscr_severity"] = "S2"
                 v["gscr_category"] = "MISRA (未映射企标)"

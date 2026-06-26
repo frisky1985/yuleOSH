@@ -814,6 +814,16 @@ class TestCacheHelpers:
 class TestRunLayer1:
     def test_all_passed(self, tmp_proj):
         from yuleosh.ci.run import run_layer1
+        # Create YAML config files required by yaml-validation stage (added to L1)
+        yuleosh_dir = Path(tmp_proj) / ".yuleosh"
+        yuleosh_dir.mkdir(parents=True, exist_ok=True)
+        (yuleosh_dir / "ci-config.yaml").write_text(
+            "ci:\n  layers: [1]\n"
+            "coverage:\n  threshold_line: 85.0\n"
+            "misra:\n  enabled: true\n"
+        )
+        # Create a minimal misra-rules.yaml so validation doesn't block
+        (Path(tmp_proj) / "misra-rules.yaml").write_text("meta:\n  version: 1.0\n")
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 92.0, "percent_covered_condition": 88.0}
         }))
@@ -1263,7 +1273,7 @@ class TestRunAll:
         with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
-            with mock.patch("yuleosh.ci.run.check_layer_dependency",
+            with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                             return_value=None):
                 assert run_all(project_dir=tmp_proj) is True
 
@@ -1273,20 +1283,20 @@ class TestRunAll:
         cfg = CiConfig()
         cfg.layers = [99]
         with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.run.check_layer_dependency",
+            with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                             return_value=None):
                 assert run_all(project_dir=tmp_proj) is False
 
     def test_layer1_fails(self, tmp_proj, mock_ci_config):
         from yuleosh.ci.run import run_all
-        with mock.patch("yuleosh.ci.run.check_layer_dependency",
+        with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                         return_value="Layer 2 has no recorded result"):
             with mock.patch("yuleosh.ci.run.run_layer1", return_value=True):
                 assert run_all(project_dir=tmp_proj) is False
 
     def test_runs_with_dep_check(self, tmp_proj, mock_ci_config):
         from yuleosh.ci.run import run_all
-        with mock.patch("yuleosh.ci.run.check_layer_dependency",
+        with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                         side_effect=[None, None, None, None]):
             with mock.patch("yuleosh.ci.run.run_layer1", return_value=True):
                 with mock.patch("yuleosh.ci.run.run_layer2", return_value=True):
@@ -1701,14 +1711,14 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_all
         with mock.patch("yuleosh.ci.run._get_ci_config",
                         side_effect=ValueError("config broken")):
-            with mock.patch("yuleosh.ci.run.check_layer_dependency",
+            with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                             side_effect=[None, "Layer 2 blocked"]):
                 assert run_all(project_dir=tmp_proj) is False
 
     def test_run_all_layer_fail_chain_break(self, tmp_proj):
         """Cover run_all layer failure chain break."""
         from yuleosh.ci.run import run_all
-        with mock.patch("yuleosh.ci.run.check_layer_dependency",
+        with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                         return_value=None):
             with mock.patch("yuleosh.ci.run.run_layer1", return_value=False):
                 assert run_all(project_dir=tmp_proj) is False
@@ -1716,7 +1726,7 @@ class TestEdgeCasesBranch:
     def test_run_all_blocked_layers_message(self, tmp_proj):
         """Cover run_all blocked layers display with remaining layers."""
         from yuleosh.ci.run import run_all
-        with mock.patch("yuleosh.ci.run.check_layer_dependency",
+        with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                         return_value=None):
             with mock.patch("yuleosh.ci.run.run_layer1", return_value=True):
                 with mock.patch("yuleosh.ci.run.run_layer2", return_value=False):
@@ -1918,7 +1928,7 @@ class TestEdgeCasesBranch:
         """Cover run_all default from OSH_HOME env."""
         from yuleosh.ci.run import run_all
         with mock.patch.dict(os.environ, {"OSH_HOME": tmp_proj}):
-            with mock.patch("yuleosh.ci.run.check_layer_dependency",
+            with mock.patch("yuleosh.ci.layers.check_layer_dependency",
                             side_effect=["Layer 1 blocked"]):
                 assert run_all() is False
 
@@ -1929,7 +1939,7 @@ class TestEdgeCasesBranch:
         cfg = CiConfig()
         cfg.layers = [99]
         with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.run.check_layer_dependency", return_value=None):
+            with mock.patch("yuleosh.ci.layers.check_layer_dependency", return_value=None):
                 assert run_all(project_dir=tmp_proj) is False
 
 

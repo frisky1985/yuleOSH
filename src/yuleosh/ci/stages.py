@@ -1125,7 +1125,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
     # 3. Violations per KLOC (仅 business 文件的 KLOC)
     if violations_per_kloc > 0 and estimated_kloc > 0:
-        actual_vpkloc = max(business_total, 1) / max(estimated_kloc, 0.001)
+        actual_vpkloc = business_total / max(estimated_kloc, 0.001)
         if actual_vpkloc > violations_per_kloc:
             should_block = True
             block_reasons.append(
