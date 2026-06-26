@@ -9,6 +9,7 @@ Each function runs one CI check (lint, coverage, etc.).
 Called by layers.py to compose full CI layers.
 """
 
+import fnmatch
 import json
 import logging
 import os
@@ -32,6 +33,72 @@ from yuleosh.ci.stage_utils import (
 )
 
 log = logging.getLogger("ci.stages")
+
+
+def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: str) -> list[str]:
+    """Filter out files matching any of the exclude patterns (glob-style).
+
+    Patterns like "tests/**" are matched relative to project_dir.
+    """
+    if not exclude_patterns:
+        return files
+
+    filtered = []
+    for f in files:
+        # Get relative path
+        if os.path.isabs(f):
+            try:
+                rel = os.path.relpath(f, project_dir)
+            except ValueError:
+                rel = f
+        else:
+            rel = f
+
+        excluded = False
+        for pattern in exclude_patterns:
+            if fnmatch.fnmatch(rel, pattern):
+                excluded = True
+                break
+
+        if not excluded:
+            filtered.append(f)
+
+    excluded_count = len(files) - len(filtered)
+    if excluded_count > 0:
+        log.info("Excluded %d file(s) via exclude_paths patterns", excluded_count)
+
+    return filtered
+
+
+def _detect_include_paths(project_dir: str) -> list[str]:
+    """Auto-detect common include directories for cppcheck -I flags.
+
+    Scans project_dir for standard C/C++ include directories
+    that exist on disk.
+    """
+    candidates = [
+        ".",
+        "src",
+        "include",
+        "inc",
+        "tests",
+        "tests/unity/src",
+        "Drivers",
+        "Drivers/CMSIS",
+        "Drivers/CMSIS/Include",
+        "Drivers/STM32F4xx_HAL_Driver",
+        "Drivers/STM32F4xx_HAL_Driver/Inc",
+        "Middlewares",
+        "third_party",
+        "lib",
+        "common",
+    ]
+    found = []
+    for c in candidates:
+        full = os.path.join(project_dir, c)
+        if os.path.isdir(full):
+            found.append(full)
+    return found
 
 
 def _get_git_commit(project_dir: str) -> str:
@@ -161,6 +228,7 @@ def run_clang_tidy(project_dir: str, ci: CIResult) -> bool:
             return False  # A-01: always block on tool failure
     except FileNotFoundError:
         reason = "clang-tidy not installed"
+        print(f"    🔧 Fix: install clang-tidy (e.g. 'apt install clang-tidy' or 'brew install llvm')")
         if strict:
             ci.add_stage("clang-tidy", "failed", reason)
             print(f"    ❌ {reason} (strict mode)")
@@ -170,6 +238,7 @@ def run_clang_tidy(project_dir: str, ci: CIResult) -> bool:
         return False  # A-01: skip returns False, blocking pipeline
     except subprocess.TimeoutExpired:
         reason = "clang-tidy timed out"
+        print(f"    🔧 Fix: increase timeout or reduce analyzed file count (currently limited to 20)")
         if strict:
             ci.add_stage("clang-tidy", "failed", reason)
             print(f"    ❌ {reason} (strict mode)")
@@ -298,10 +367,13 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
         if line_pct < threshold_line:
             ci.add_stage("coverage", "failed", f"Line coverage {line_pct}% < {threshold_line}%")
             print(f"    ❌ Line coverage below threshold!")
+            print(f"    🔧 Fix: add more tests, or adjust threshold_line in ci-config.yaml coverage block")
+            print(f"    🔧 Tip: consider excluded_paths for startup/HAL code in ci-config.yaml")
             return False
         if cond_pct < threshold_cond:
             ci.add_stage("coverage", "failed", f"Condition coverage {cond_pct}% < {threshold_cond}%")
             print(f"    ❌ Condition coverage below threshold!")
+            print(f"    🔧 Fix: add branch coverage tests or adjust threshold_condition in ci-config.yaml")
             return False
 
         ci.add_stage("coverage", "passed", f"line={line_pct}%, cond={cond_pct}%")
@@ -309,8 +381,10 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
         return True
 
     except FileNotFoundError:
+        print(f"    🔧 Fix: install coverage tool ('pip install coverage', or 'apt install lcov' for C coverage)")
         return _handle_stage_error(ci, "coverage", "Coverage tool not installed", strict)
     except subprocess.TimeoutExpired:
+        print(f"    🔧 Fix: increase timeout or reduce test scope")
         return _handle_stage_error(ci, "coverage", "Coverage run timed out", strict)
     except json.JSONDecodeError as e:
         ci.add_stage("coverage", "skipped", f"Coverage JSON invalid: {e}")
@@ -609,6 +683,15 @@ def run_misra_check(project_dir: str, ci: CIResult,
         print("    ⏭️  No C/C++ source files — skipped")
         return True
 
+    # ── Apply exclude_paths filtering ──
+    exclude_patterns = misra_cfg.exclude_paths if misra_cfg else []
+    c_files = _exclude_paths(c_files, exclude_patterns, project_dir)
+
+    if not c_files:
+        ci.add_stage("misra-check", "skipped", "All C/C++ files excluded by exclude_paths")
+        print("    ⏭️  All C/C++ files excluded by exclude_paths — skipped")
+        return True
+
     # Print mode header
     if is_full_delta:
         mode_label = "L2 全量+Delta阻断"
@@ -625,6 +708,21 @@ def run_misra_check(project_dir: str, ci: CIResult,
         if not override.enabled and override.rule_id:
             suppress_args.append("--suppress=" + override.rule_id)
 
+    # ── Auto-detect include paths and add -I flags ──
+    include_paths = _detect_include_paths(project_dir)
+    include_args = []
+    for inc in include_paths:
+        include_args.extend(["-I", inc])
+    if include_args:
+        log.info("Adding include paths: %s", " ".join(
+            [inc for i, inc in enumerate(include_args) if i % 2 == 1]
+        ))
+
+    # Check for compile_commands.json and suggest it
+    compile_db = os.path.join(project_dir, "compile_commands.json")
+    if os.path.isfile(compile_db):
+        log.info("Found compile_commands.json — consider using --project=compile_commands.json")
+
     # Construct cppcheck command
     cmd = [
         "cppcheck",
@@ -634,7 +732,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
         "--enable=all",
         "--suppress=missingIncludeSystem",
         "-q",
-    ] + suppress_args + c_files
+    ] + include_args + suppress_args + c_files
 
     try:
         start = time.perf_counter()
@@ -643,9 +741,13 @@ def run_misra_check(project_dir: str, ci: CIResult,
         )
         elapsed = time.perf_counter() - start
     except FileNotFoundError:
-        return _handle_stage_error(ci, "misra-check", "cppcheck not installed", strict)
+        msg = "cppcheck not installed"
+        print(f"    🔧 Fix: install cppcheck (e.g. 'apt install cppcheck' or 'brew install cppcheck')")
+        return _handle_stage_error(ci, "misra-check", msg, strict)
     except subprocess.TimeoutExpired:
-        return _handle_stage_error(ci, "misra-check", "cppcheck timed out after 120s", strict)
+        msg = "cppcheck timed out after 120s"
+        print(f"    🔧 Fix: increase timeout or reduce file count. Try 'cppcheck --project=compile_commands.json' for faster analysis")
+        return _handle_stage_error(ci, "misra-check", msg, strict)
     except Exception as e:
         return _handle_stage_error(ci, "misra-check", "cppcheck execution error: " + str(e), strict)
 
@@ -939,13 +1041,25 @@ def run_c_coverage(project_dir: str, ci: CIResult) -> bool:
     from yuleosh.ci.gcov_coverage import generate_c_coverage_report
 
     # Find a build directory with coverage data
+    # Expanded search: common embedded/CMake build output directories
     coverage_dirs = [
         os.path.join(project_dir, "build"),
         os.path.join(project_dir, "build", "coverage"),
         os.path.join(project_dir, "cmake-build-coverage"),
         os.path.join(project_dir, "build", "Debug"),
+        os.path.join(project_dir, "build", "Release"),
+        os.path.join(project_dir, "build", "RelWithDebInfo"),
+        os.path.join(project_dir, "_build"),
+        os.path.join(project_dir, "out"),
+        os.path.join(project_dir, "build_arm"),
+        os.path.join(project_dir, "build_x86"),
+        os.path.join(project_dir, "cmake-build-debug"),
+        os.path.join(project_dir, "cmake-build-release"),
+        os.path.join(project_dir, "Debug"),
+        os.path.join(project_dir, "Release"),
     ]
 
+    # Also try recursive search for .gcda files across all directories
     build_dir = None
     for d in coverage_dirs:
         if os.path.isdir(d):
@@ -958,7 +1072,18 @@ def run_c_coverage(project_dir: str, ci: CIResult) -> bool:
                 break
 
     if not build_dir:
-        # Last resort: just check if build/ exists
+        # Last resort: recursive search for any .gcda file in project_dir
+        log.info("No build dir found in known paths — scanning project recursively for .gcda files...")
+        for root, dirs, files in os.walk(project_dir):
+            # Skip hidden directories
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            if any(f.endswith(".gcda") for f in files):
+                build_dir = root
+                log.info("Found .gcda files in: %s", root)
+                break
+
+    if not build_dir:
+        # Last resort: just check if any known dir exists
         for d in coverage_dirs:
             if os.path.isdir(d):
                 build_dir = d
@@ -966,7 +1091,9 @@ def run_c_coverage(project_dir: str, ci: CIResult) -> bool:
 
     if not build_dir:
         ci.add_stage("c-coverage", "skipped", "No build directory with coverage data found")
-        print("    ⏭️  No build directory with .gcda/.gcno — skipped")
+        print(f"    ⏭️  No build directory with .gcda/.gcno — skipped")
+        print(f"    🔧 Fix: compile with '--coverage' flag and run tests to generate .gcda files")
+        print(f"    🔧 Tip: export COVERAGE_BUILD_DIR=/path/to/build to specify a custom build dir")
         return True
 
     try:
@@ -1047,12 +1174,75 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
     print(f"    C branch coverage: {branch_rate:.1f}%")
     print(f"    Threshold (c_fail_under): {c_fail_under}%")
 
+    # ── Coordinate: fail_under gate ──
     if line_rate < c_fail_under:
         detail = f"C line coverage {line_rate:.1f}% < c_fail_under {c_fail_under}%"
         ci.add_stage("c-coverage-gate", "failed", detail)
         print(f"    ❌ {detail}")
         print(f"    🔧 Improve C unit tests to raise coverage above threshold")
+        # Show low-coverage files for debugging
+        files_list = report.get("files", [])
+        low_files = sorted(
+            [f for f in files_list if f.get("line_rate", 100) < c_fail_under],
+            key=lambda x: (1 - x.get("line_rate", 0) / 100) * x.get("lines", {}).get("found", 0),
+            reverse=True,
+        )[:5]
+        if low_files:
+            print(f"    📋 Low-coverage files (top 5 by uncovered lines):")
+            for lf in low_files:
+                lr = lf.get("line_rate", 0)
+                lines_found = lf.get("lines", {}).get("found", 0)
+                uncovered = int(lines_found * (1 - lr / 100))
+                print(f"        • {lf.get('file', '?')}: {lr:.1f}% ({uncovered} lines uncovered)")
+            print(f"    🔧 Consider adding module_thresholds in ci-config.yaml for low-coverage modules")
         return False
+
+    # ── Module-level threshold checks (SWR-003.2) ──
+    try:
+        module_thresholds = cfg.coverage.module_thresholds if cfg else {}
+    except Exception:
+        module_thresholds = {}
+
+    if module_thresholds and "files" in report:
+        files_list = report.get("files", [])
+        # Group files by module prefix (first path component after src/)
+        from collections import defaultdict as _dd
+        module_files: dict = _dd(list)
+        for f in files_list:
+            fpath = f.get("file", "")
+            rel = os.path.relpath(fpath, project_dir) if os.path.isabs(fpath) else fpath
+            parts = rel.replace("\\", "/").split("/")
+            # Module = first meaningful directory after src/
+            module_key = "root"
+            try:
+                src_idx = parts.index("src")
+                if src_idx + 1 < len(parts):
+                    module_key = parts[src_idx + 1]
+            except ValueError:
+                module_key = parts[0] if parts else "root"
+            module_files[module_key].append(f)
+
+        # Check each module against its threshold
+        module_failures = []
+        for mod_name, mod_files in module_files.items():
+            if mod_name in module_thresholds:
+                mod_threshold = module_thresholds[mod_name]
+                total_found = sum(f.get("lines", {}).get("found", 0) for f in mod_files)
+                total_hit = sum(f.get("lines", {}).get("hit", 0) for f in mod_files)
+                mod_rate = (total_hit / total_found * 100) if total_found > 0 else 100.0
+                if mod_rate < mod_threshold:
+                    module_failures.append((mod_name, mod_rate, mod_threshold))
+
+        if module_failures:
+            detail_parts = []
+            for mod_name, mod_rate, mod_threshold in module_failures:
+                detail_parts.append(f"{mod_name}: {mod_rate:.1f}% < {mod_threshold}%")
+            detail = "; ".join(detail_parts)
+            ci.add_stage("c-coverage-gate", "failed", f"Module thresholds: {detail}")
+            print(f"    ❌ Module coverage thresholds not met:")
+            for mod_name, mod_rate, mod_threshold in module_failures:
+                print(f"        • {mod_name}: {mod_rate:.1f}% < {mod_threshold}%")
+            return False
 
     # Record coverage trend (小马建议: auto-record on each C coverage gate run)
     try:

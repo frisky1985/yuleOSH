@@ -40,7 +40,18 @@ _CI_CONFIG_SCHEMA = {
             "module_thresholds": {"type": "dict"},
         },
     },
-    "docsync": {"type": "dict"},
+    "docsync": {
+        "type": "dict",
+        "keys": {
+            "enabled": {"type": "bool"},
+            "rules": {"type": "list"},
+            "mode": {"type": "str"},
+            "exempt_paths": {"type": "list"},
+            "critical_docs": {"type": "list"},
+            "staleness_days": {"type": "int"},
+            "audit": {"type": "dict"},
+        },
+    },
     "misra": {
         "type": "dict",
         "keys": {
@@ -59,6 +70,7 @@ _CI_CONFIG_SCHEMA = {
             "deviations": {"type": "list"},
             "alm": {"type": "dict"},
             "profiles": {"type": "dict"},
+            "exclude_paths": {"type": "list"},
         },
     },
     "hardware_test": {"type": "dict"},
