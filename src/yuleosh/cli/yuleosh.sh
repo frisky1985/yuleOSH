@@ -18,13 +18,40 @@ cmd_spec_diff() {
 }
 
 cmd_pipeline_run() {
-  local spec="$1"
-  echo "🚀 Running pipeline with spec: $spec"
-  python3 -m yuleosh.pipeline.run "$spec"
+  local spec=""
+  local inject_at=""
+  local resume=false
+  
+  # Parse options before spec
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --inject-at) inject_at="$2"; shift 2;;
+      --resume) resume=true; shift;;
+      *) spec="$1"; shift;;
+    esac
+  done
+  
+  if [ -n "$inject_at" ]; then
+    echo "🎯 Injecting at step: $inject_at"
+    python3 -m yuleosh.engine.agent_checkpoint run "$spec" --inject-at "$inject_at"
+  elif [ "$resume" = true ]; then
+    echo "🔄 Resuming pipeline from checkpoint"
+    python3 -m yuleosh.engine.agent_checkpoint run "$spec" --resume
+  else
+    echo "🚀 Running full pipeline with spec: $spec"
+    python3 -m yuleosh.pipeline.run "$spec"
+  fi
 }
 
 cmd_pipeline_status() {
-  python3 -m yuleosh.pipeline.run status "${1:-}"
+  case "${1:-}" in
+    --checkpoint)
+      python3 -m yuleosh.engine.agent_checkpoint status;;
+    --inject-points)
+      python3 -m yuleosh.engine.agent_checkpoint list-steps;;
+    *)
+      python3 -m yuleosh.pipeline.run status "${1:-}";;
+  esac
 }
 
 cmd_review_auto() {
@@ -39,9 +66,28 @@ cmd_review_task() {
 }
 
 cmd_ci_run() {
-  local layer="$1"
-  echo "🔬 Running CI Layer $layer"
-  python3 -m yuleosh.ci.run "$layer"
+  local layer=""
+  local inject_at=""
+  local resume=false
+  
+  # Parse options before layer
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --inject-at) inject_at="$2"; shift 2;;
+      --resume) resume=true; shift;;
+      *) layer="$1"; shift;;
+    esac
+  done
+  
+  if [ -n "$inject_at" ] || [ "$resume" = true ]; then
+    echo "🎯 CI Layer $layer with checkpoint..."
+    python3 -m yuleosh.engine.ci_checkpoint "$layer" \
+      ${inject_at:+--inject-at "$inject_at"} \
+      ${resume:+--resume}
+  else
+    echo "🔬 Running CI Layer $layer"
+    python3 -m yuleosh.ci.run "$layer"
+  fi
 }
 
 cmd_evidence_pack() {
@@ -166,9 +212,9 @@ case "${1:-help}" in
   pipeline)
     shift
     case "${1:-}" in
-      run) shift; cmd_pipeline_run "$1";;
+      run) shift; cmd_pipeline_run "$@";;
       status) shift; cmd_pipeline_status "$@";;
-      *) echo "Usage: osh-cli pipeline run|status"; exit 1;;
+      *) echo "Usage: osh-cli pipeline run|status [--inject-at|--resume|--checkpoint|--inject-points]"; exit 1;;
     esac
     ;;
   review)
@@ -182,7 +228,7 @@ case "${1:-help}" in
   ci)
     shift
     case "${1:-}" in
-      run) shift; cmd_ci_run "$1";;
+      run) shift; cmd_ci_run "$@";;
       *) echo "Usage: osh-cli ci run <layer>"; exit 1;;
     esac
     ;;
@@ -202,11 +248,11 @@ case "${1:-help}" in
       echo "  stats [--json]                — Show project statistics"
       echo "  spec validate <file>          — Validate OpenSpec (SHALL/SHOULD/MAY + GIVEN/WHEN/THEN)"
       echo "  spec diff <old> <new>         — Compare two OpenSpec files"
-      echo "  pipeline run <spec>           — Run full 9-step Agent pipeline"
-      echo "  pipeline status [name]        — Show pipeline session status"
+      echo "  pipeline run <spec> [--inject-at <step>|--resume]  — Run Agent pipeline (inject/resume)"
+      echo "  pipeline status [name|--checkpoint|--inject-points] — Show pipeline/checkpoint status"
       echo "  review auto                   — Auto-review all changed files"
       echo "  review task <name> [kind]     — Review specific task (feature|bugfix|refactor|docs|config)"
-      echo "  ci run <layer>                — Run CI layer (1=Dev|2=Integration|3=System)"
+      echo "  ci run <layer> [--inject-at <step>|--resume]  — Run CI layer (inject/resume)"
       echo "  evidence pack                 — Generate ASPICE compliance evidence pack"
       echo "  ui start                      — Launch Dashboard at http://localhost:8080"
       echo "  help [--examples]             — Show this help, or usage examples"
