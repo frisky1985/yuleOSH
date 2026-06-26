@@ -436,3 +436,241 @@ class TestCoverageConfig:
         assert cfg.coverage.module_thresholds["ci"] == 90.0
         assert cfg.coverage.module_thresholds["evidence"] == 80.0
         assert cfg.coverage.module_thresholds["api"] == 75.0
+
+
+# ===================================================================
+# 三级指针空违规分类策略 (template/third_party/business)
+# ===================================================================
+
+class TestCodeCategorization:
+    """验证三级分类逻辑: _categorize_file()"""
+
+    DEFAULT_CATEGORIES = {
+        "template": {
+            "paths": ["src/yuleosh/templates/**", "test-dogfood/**"],
+            "action": "exclude",
+            "block_on": False,
+        },
+        "third_party": {
+            "paths": ["third_party/**", "Drivers/**", "Middlewares/**",
+                      "CMSIS/**", "vendor/**", "lib/**"],
+            "action": "alert",
+            "block_on": False,
+        },
+        "business": {
+            "paths": ["src/**"],
+            "action": "enforce",
+            "block_on": True,
+        },
+    }
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        from yuleosh.ci.stages import _categorize_file
+        self._categorize_file = _categorize_file
+
+    def test_template_path_identified(self):
+        """template 路径正确识别。"""
+        cat, cfg = self._categorize_file(
+            "src/yuleosh/templates/arm-cmsis/src/main.c",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "template"
+        assert cfg["action"] == "exclude"
+
+    def test_third_party_path_identified(self):
+        """third_party 路径正确识别。"""
+        cat, cfg = self._categorize_file(
+            "third_party/freertos/src/tasks.c",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "third_party"
+        assert cfg["action"] == "alert"
+
+    def test_drivers_path_identified(self):
+        """Drivers 路径正确识别。"""
+        cat, cfg = self._categorize_file(
+            "Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "third_party"
+
+    def test_business_path_identified(self):
+        """business 路径正确识别。"""
+        cat, cfg = self._categorize_file(
+            "src/yuleosh/ci/stages.py",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "business"
+        assert cfg["block_on"] is True
+
+    def test_vendor_path_third_party(self):
+        """vendor 路径属于 third_party。"""
+        cat, _ = self._categorize_file(
+            "vendor/protobuf/src/descriptor.c",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "third_party"
+
+    def test_lib_path_third_party(self):
+        """lib 路径属于 third_party。"""
+        cat, _ = self._categorize_file(
+            "lib/curl/src/easy.c",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "third_party"
+
+    def test_template_priority_over_third_party(self):
+        """template > third_party 优先级。"""
+        cat, _ = self._categorize_file(
+            "src/yuleosh/templates/vendor/foo/src/main.c",  # 嵌套在 template 下的 vendor
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "template"
+
+    def test_template_priority_over_business(self):
+        """template > business 优先级。"""
+        cat, _ = self._categorize_file(
+            "src/yuleosh/templates/arm-cmsis/src/main.c",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "template"
+
+    def test_unknown_path_falls_to_business(self):
+        """无匹配路径回退到 business。"""
+        cat, _ = self._categorize_file(
+            "docs/architecture.md",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "business"
+
+    def test_cmsis_path_third_party(self):
+        """CMSIS 路径属于 third_party。"""
+        cat, _ = self._categorize_file(
+            "CMSIS/Core/Include/cmsis_gcc.h",
+            self.DEFAULT_CATEGORIES
+        )
+        assert cat == "third_party"
+
+
+class TestFixSuggestionFormat:
+    """验证修复建议包含多级指针判空示例。"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        from yuleosh.ci.stages import _format_null_pointer_fix
+        self._format_null_pointer_fix = _format_null_pointer_fix
+
+    def test_business_has_null_pointer_examples(self):
+        """business 代码应包含判空示例。"""
+        fix = self._format_null_pointer_fix("business", "src/main.c")
+        assert "修复建议" in fix
+        assert "逐层判空" in fix or "ptr != NULL" in fix
+        assert "assert" in fix
+
+    def test_third_party_has_deviation_suggestion(self):
+        """third_party 代码应包含 deviation 豁免建议。"""
+        fix = self._format_null_pointer_fix("third_party", "third_party/lib.c")
+        assert "deviation" in fix.lower()
+        assert "ci-config.yaml" in fix
+
+    def test_template_returns_empty(self):
+        """template 代码返回空字符串。"""
+        fix = self._format_null_pointer_fix("template", "src/templates/main.c")
+        assert fix == ""
+
+    def test_unknown_category_has_basic_fix(self):
+        """未知分类也有基本修复建议。"""
+        fix = self._format_null_pointer_fix("unknown", "src/main.c")
+        assert "修复建议" in fix
+
+
+class TestThirdPartyNonBlocking:
+    """验证第三方库违规不阻断流水线。"""
+
+    def test_third_party_default_block_on_false(self):
+        """third_party 默认 block_on=False。"""
+        from yuleosh.ci.config import MisraConfig
+        cfg = MisraConfig()
+        third_party_cfg = cfg.code_categories.get("third_party", {})
+        assert third_party_cfg.get("block_on") is False
+
+    def test_business_default_block_on_true(self):
+        """business 默认 block_on=True。"""
+        from yuleosh.ci.config import MisraConfig
+        cfg = MisraConfig()
+        business_cfg = cfg.code_categories.get("business", {})
+        assert business_cfg.get("block_on") is True
+
+    def test_code_categories_in_ci_config(self):
+        """ci-config.yaml 中存在 code_categories 配置。"""
+        import yaml
+        config_path = Path(__file__).resolve().parent.parent.parent / ".yuleosh" / "ci-config.yaml"
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        misra = cfg.get("misra", {})
+        assert "code_categories" in misra
+        cats = misra["code_categories"]
+        assert "template" in cats
+        assert "third_party" in cats
+        assert "business" in cats
+
+
+class TestBusinessCodeBlocks:
+    """验证业务代码违规阻断流水线逻辑。"""
+
+    def test_business_block_on_true_in_misra_config(self):
+        """MisraConfig 中 business.block_on=True。"""
+        from yuleosh.ci.config import MisraConfig
+        cfg = MisraConfig()
+        business_cfg = cfg.code_categories.get("business", {})
+        assert business_cfg.get("block_on") is True
+
+    def test_run_misra_check_references_categories(self):
+        """run_misra_check 中引用了 code_categories。"""
+        from yuleosh.ci.stages import run_misra_check
+        import inspect
+        source = inspect.getsource(run_misra_check)
+        assert "code_categories" in source
+        assert "_categorize_file" in source
+        assert "file_category_map" in source
+
+    def test_run_misra_check_references_fix_function(self):
+        """run_misra_check 中引用了 _format_null_pointer_fix。"""
+        from yuleosh.ci.stages import run_misra_check
+        import inspect
+        source = inspect.getsource(run_misra_check)
+        assert "_format_null_pointer_fix" in source
+
+    def test_parse_code_categories_from_config(self, tmp_path):
+        """从 YAML 正确解析 code_categories。"""
+        from yuleosh.ci.config import _parse_ci_config
+        cfg_yaml = {
+            "misra": {
+                "code_categories": {
+                    "template": {
+                        "paths": ["templates/**"],
+                        "block_on": False,
+                    },
+                    "business": {
+                        "paths": ["app/**"],
+                        "block_on": True,
+                    },
+                },
+            }
+        }
+        cfg = _parse_ci_config(cfg_yaml)
+        assert "template" in cfg.misra.code_categories
+        assert cfg.misra.code_categories["template"]["paths"] == ["templates/**"]
+
+    def test_code_categories_default_when_missing(self):
+        """YAML 中未提供 code_categories 时使用默认值。"""
+        from yuleosh.ci.config import _parse_ci_config
+        cfg_yaml = {"misra": {"enabled": True}}
+        cfg = _parse_ci_config(cfg_yaml)
+        cats = cfg.misra.code_categories
+        assert "template" in cats
+        assert "third_party" in cats
+        assert "business" in cats
+        assert cats["template"]["action"] == "exclude"
+        assert cats["business"]["block_on"] is True

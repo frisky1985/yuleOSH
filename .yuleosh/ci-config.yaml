@@ -134,6 +134,28 @@ misra:
     - tests/**
     - third_party/**
     - build/**
+  code_categories:
+    template:
+      paths:
+        - src/yuleosh/templates/**
+        - test-dogfood/**
+      action: exclude
+      block_on: false
+    third_party:
+      paths:
+        - third_party/**
+        - Drivers/**
+        - Middlewares/**
+        - CMSIS/**
+        - vendor/**
+        - lib/**
+      action: alert
+      block_on: false
+    business:
+      paths:
+        - src/**
+      action: enforce
+      block_on: true
   active_profile: safety
   rule_texts_path: misra-rules.yaml
   profiles:

@@ -35,6 +35,63 @@ from yuleosh.ci.stage_utils import (
 log = logging.getLogger("ci.stages")
 
 
+def _categorize_file(filepath: str, categories: dict) -> tuple[str, dict]:
+    """根据文件路径判断代码类别，返回 (category_name, category_config)。
+
+    匹配优先级: template > third_party > business。
+    无匹配时默认返回 ("business", business_config).
+    """
+    basename = os.path.basename(filepath)
+    # Priority order: template, third_party, business
+    priority_order = ["template", "third_party", "business"]
+    for cat_name in priority_order:
+        cat_cfg = categories.get(cat_name, {})
+        for pattern in cat_cfg.get("paths", []):
+            if fnmatch.fnmatch(filepath, pattern) or \
+               fnmatch.fnmatch(basename, pattern):
+                return cat_name, cat_cfg
+    # Fallback: business
+    return "business", categories.get("business", {})
+
+
+def _format_null_pointer_fix(category: str, file_path: str) -> str:
+    """根据代码类别生成针对性的多级指针空修复建议。"""
+    if category == "template":
+        return ""  # template 代码不显示
+
+    fix_text = """
+    🔧 修复建议（多级指针判空）:
+        // 方法一：逐层判空（推荐）
+        if (ptr != NULL) {
+            if (*ptr != NULL) {
+                **ptr = value;
+            }
+        }
+        // 方法二：封装安全访问函数
+        int safe_set(int **ptr, int row, int col, int value) {
+            if (ptr == NULL || ptr[row] == NULL) return -1;
+            ptr[row][col] = value;
+            return 0;
+        }
+        // 方法三：若确认不会为NULL，加断言（仅限于业务代码）
+        assert(ptr != NULL && *ptr != NULL);
+"""
+    if category == "third_party":
+        fix_text += """
+    ⚠️ 第三方库代码：
+        如果确认是误报（该指针在该场景中不可能为NULL），
+        请在 ci-config.yaml 中添加 deviation 豁免：
+            deviations:
+              - rule: Dir-4.1
+                file: "third_party/xxx/**/*.c"
+                reason: "第三方库，指针安全已由对方保证"
+                approved_by: "your-name"
+                expires: "2027-06-30"
+                status: approved
+"""
+    return fix_text
+
+
 def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: str) -> list[str]:
     """Filter out files matching any of the exclude patterns (glob-style).
 
@@ -692,6 +749,30 @@ def run_misra_check(project_dir: str, ci: CIResult,
         print("    ⏭️  All C/C++ files excluded by exclude_paths — skipped")
         return True
 
+    # ── 三级分类过滤 ──
+    code_categories = misra_cfg.code_categories if misra_cfg else {}
+    file_category_map: dict[str, str] = {}  # filepath -> category_name
+    categorized_c_files: list[str] = []
+    template_skipped = 0
+    for f in c_files:
+        cat_name, cat_cfg = _categorize_file(f, code_categories)
+        if cat_name == "template":
+            # template 代码完全跳过
+            template_skipped += 1
+            continue
+        file_category_map[f] = cat_name
+        categorized_c_files.append(f)
+    c_files = categorized_c_files
+    del categorized_c_files
+
+    if template_skipped > 0:
+        print(f"    📋 Template files excluded by code_categories: {template_skipped}")
+
+    if not c_files:
+        ci.add_stage("misra-check", "skipped", "All C/C++ files excluded by code_categories")
+        print("    ⏭️  All C/C++ files excluded by code_categories — skipped")
+        return True
+
     # Print mode header
     if is_full_delta:
         mode_label = "L2 全量+Delta阻断"
@@ -773,6 +854,18 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
         rule_defs = load_rule_definitions(rule_defs_path)
         violations = parse_cppcheck_output(output)
+
+        # ── 给每条违规标注代码类别 ──
+        for v in violations:
+            v_file = v.get("file", "")
+            # Resolve relative path for category matching
+            if not os.path.isabs(v_file):
+                v_file_abs = os.path.join(project_dir, v_file)
+            else:
+                v_file_abs = v_file
+            cat_name = file_category_map.get(v_file_abs, "business")
+            v["code_category"] = cat_name
+
         groups = group_by_rule(violations)
         groups = enrich_with_definitions(groups, rule_defs)
         summary = compute_summary_stats(violations, groups)
@@ -787,6 +880,11 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
         save_report(violations, groups, summary, rule_defs, output_dir,
                     deviations=deviations_used)
+
+        # ── 分类报告摘要 ──
+        business_violations = [v for v in violations if v.get("code_category", "") == "business"]
+        third_party_violations = [v for v in violations if v.get("code_category", "") == "third_party"]
+        print(f"    📋 Code category breakdown: business={len(business_violations)}, third_party={len(third_party_violations)}")
 
         # --- Generate traceability matrix and fix tasks (MISRA loop closure) ---
         if violations:
@@ -813,6 +911,15 @@ def run_misra_check(project_dir: str, ci: CIResult,
             misra_ff = is_misra_fail_fast()
             if misra_ff:
                 print(f"    🚨 MISRA_FAIL_FAST enabled — violations will be treated as blocking")
+
+            # ── 针对多级指针空违规 (GSCR-C-27.15) 输出修复建议 ──
+            null_ptr_violations = [v for v in violations if "27.15" in v.get("rule_id", "") or "Dir-4.1" in v.get("rule_id", "")]
+            for npv in null_ptr_violations:
+                cat = npv.get("code_category", "business")
+                np_file = npv.get("file", "")
+                fix_suggestion = _format_null_pointer_fix(cat, np_file)
+                if fix_suggestion:
+                    print(fix_suggestion)
 
     except ImportError as e:
         log.warning("Could not import misra_report module: %s", e)
@@ -942,6 +1049,34 @@ def run_misra_check(project_dir: str, ci: CIResult,
             log.debug("L2 delta blocking skipped: %s", delta_e)
             new_required_count = 0
 
+    # ── 三级分类阻断计算 ──
+    # 从 violations 中计算分类细目
+    try:
+        from yuleosh.ci.misra_report import parse_cppcheck_output as _pco
+        _current_violations = _pco(output)
+        for _v in _current_violations:
+            _vf = _v.get("file", "")
+            _vfa = os.path.join(project_dir, _vf) if not os.path.isabs(_vf) else _vf
+            _v["code_category"] = file_category_map.get(_vfa, "business")
+        business_violations_c = [v for v in _current_violations if v.get("code_category", "") == "business"]
+        third_party_violations_c = [v for v in _current_violations if v.get("code_category", "") == "third_party"]
+    except Exception:
+        _current_violations = []
+        business_violations_c = []
+        third_party_violations_c = []
+
+    # 确定 third_party 是否阻断
+    third_party_cfg = code_categories.get("third_party", {})
+    third_party_block_on = third_party_cfg.get("block_on", False)
+    business_cfg = code_categories.get("business", {})
+    business_block_on = business_cfg.get("block_on", True)
+
+    # 仅针对 business 代码计算阻断阈值
+    business_req = 0
+    business_adv = 0
+    business_total = len(business_violations_c)
+    third_party_total = len(third_party_violations_c)
+
     # Blocking checks (in order of severity)
     should_block = False
     block_reasons = []
@@ -954,34 +1089,53 @@ def run_misra_check(project_dir: str, ci: CIResult,
             f"(zero-delta blocking)"
         )
 
-    # 1. Required violations with fail_on_required (G-09)
-    if fail_on_required and required_count > 0:
-        should_block = True
-        block_reasons.append(f"{required_count} Required violation(s) (fail_on_required=True)")
+    # 0b. 业务代码 Required violations (三级分类阻断)
+    if business_block_on and business_total > 0:
+        # Count only business Required violations
+        for v in business_violations_c:
+            if v.get("severity", "").lower() in ("error", "warning"):
+                business_req += 1
+        if business_req > 0:
+            should_block = True
+            block_reasons.append(f"{business_req} business-code violation(s) (business.block_on=True)")
 
-    # 1b. Legacy: fail_on_violation master switch blocks ALL violations
-    if fail_on_violation and required_count > 0:
+    # 0c. 第三方库按 block_on 配置
+    if third_party_block_on and third_party_total > 0:
         should_block = True
-        block_reasons.append(f"{required_count} violation(s) (fail_on_violation=True — legacy)")
+        block_reasons.append(f"{third_party_total} third-party violation(s) (third_party.block_on=True)")
+    elif not third_party_block_on and third_party_total > 0:
+        print(f"    ℹ️  Third-party violations ({third_party_total}) do not block (third_party.block_on=False)")
 
-    # 2. Total violations >= fail_threshold
-    if fail_threshold > 0 and total_violations >= fail_threshold:
+    # 1. Required violations with fail_on_required (G-09) — 仅对 business 代码生效
+    if fail_on_required and required_count > 0 and business_block_on:
+        if business_req > 0:
+            should_block = True
+            block_reasons.append(f"{business_req} Required business-code violation(s) (fail_on_required=True)")
+
+    # 1b. Legacy: fail_on_violation master switch
+    if fail_on_violation and required_count > 0 and business_block_on:
+        if business_req > 0:
+            should_block = True
+            block_reasons.append(f"{business_req} business-code violation(s) (fail_on_violation=True)")
+
+    # 2. Total violations >= fail_threshold (仅 business 代码)
+    if fail_threshold > 0 and business_total >= fail_threshold:
         should_block = True
-        block_reasons.append(f"{total_violations} violation(s) >= threshold {fail_threshold}")
+        block_reasons.append(f"{business_total} business-code violation(s) >= threshold {fail_threshold}")
 
-    # 3. Violations per KLOC exceeded
+    # 3. Violations per KLOC (仅 business 文件的 KLOC)
     if violations_per_kloc > 0 and estimated_kloc > 0:
-        actual_vpkloc = total_violations / estimated_kloc
+        actual_vpkloc = max(business_total, 1) / max(estimated_kloc, 0.001)
         if actual_vpkloc > violations_per_kloc:
             should_block = True
             block_reasons.append(
-                f"{actual_vpkloc:.1f} violations/kloc > limit {violations_per_kloc}"
+                f"{actual_vpkloc:.1f} business-code violations/kloc > limit {violations_per_kloc}"
             )
 
-    # Advisory-blocking (separate flag)
-    if fail_on_advisory and advisory_count > 0:
+    # Advisory-blocking (separate flag) — 仅 business
+    if fail_on_advisory and advisory_count > 0 and business_block_on:
         should_block = True
-        block_reasons.append(f"{advisory_count} Advisory violation(s) (fail_on_advisory=True)")
+        block_reasons.append(f"{advisory_count} Advisory business-code violation(s) (fail_on_advisory=True)")
 
     detail = (
         f"{total_violations} MISRA violation(s) "
