@@ -57,7 +57,8 @@ rules:
     title: 如果函数返回错误信息，则应测试该错误信息
     severity: S1
     category: 编码设计
-    description_en: If a function returns error information, then that error information shall be tested
+    description_en: If a function returns error information, then that error information
+      shall be tested
     description_cn: 如果函数返回错误信息，则应测试该错误信息
     check_method: cppcheck
     auto_checkable: true
@@ -69,7 +70,8 @@ rules:
     title: 应采取预防措施，以防止头文件的内容被包含多次
     severity: S1
     category: 编码设计
-    description_en: Precautions shall be taken in order to prevent the contents of aheader flebeing included more than once
+    description_en: Precautions shall be taken in order to prevent the contents of
+      aheader flebeing included more than once
     description_cn: 应采取预防措施，以防止头文件的内容被包含多次
     check_method: cppcheck
     auto_checkable: true
@@ -131,7 +133,8 @@ rules:
     title: 在同一命名空间的标识符命名应该是清晰无歧义的。
     severity: S2
     category: 编码设计
-    description_en: Identifiers in the same name space with overlapping visibility should be typographically unambiguous
+    description_en: Identifiers in the same name space with overlapping visibility
+      should be typographically unambiguous
     description_cn: 在同一命名空间的标识符命名应该是清晰无歧义的。
     check_method: cppcheck
     auto_checkable: true
@@ -144,7 +147,8 @@ rules:
     title: 应该使用指示了长度和有无符号的typedef来定义新的类型，而不要直接使用基本类型。
     severity: S2
     category: 编码设计
-    description_en: typedefs that indicate size and signedness should be used in place of the basic numerical types
+    description_en: typedefs that indicate size and signedness should be used in place
+      of the basic numerical types
     description_cn: 应该使用指示了长度和有无符号的typedef来定义新的类型，而不要直接使用基本类型。
     check_method: cppcheck
     auto_checkable: true
@@ -157,8 +161,8 @@ rules:
     title: 如果指向结构或联合的指针在翻译单元中从解引用，那么对象的实现应该隐藏起来
     severity: S2
     category: 编码设计
-    description_en: If a pointer to a structure or union is never dereferenced within a translation unit. then the implementation
-      of the object should be hidden
+    description_en: If a pointer to a structure or union is never dereferenced within
+      a translation unit. then the implementation of the object should be hidden
     description_cn: 如果指向结构或联合的指针在翻译单元中从解引用，那么对象的实现应该隐藏起来
     check_method: cppcheck
     auto_checkable: true
@@ -171,7 +175,8 @@ rules:
     title: 当函数和类似函数的宏是可互换的时候，应该优先使用函数
     severity: S2
     category: 编码设计
-    description_en: A function should be used in preference to a function-like macro where they are interchangeable
+    description_en: A function should be used in preference to a function-like macro
+      where they are interchangeable
     description_cn: 当函数和类似函数的宏是可互换的时候，应该优先使用函数
     check_method: cppcheck
     auto_checkable: true
@@ -184,7 +189,8 @@ rules:
     title: 提供资源操作的函数应按照适当的顺序被调用
     severity: S2
     category: 编码设计
-    description_en: Functions which are designed to provide operations on a resource should be called in an appropriate sequence
+    description_en: Functions which are designed to provide operations on a resource
+      should be called in an appropriate sequence
     description_cn: 提供资源操作的函数应按照适当的顺序被调用
     check_method: cppcheck
     auto_checkable: true
@@ -197,8 +203,8 @@ rules:
     title: 程序不应包含任何违反标准C语法和约束的内容，也不应超出实现的翻译限制
     severity: S1
     category: 标准C语言环境
-    description_en: The program shall contain no violations ofthe tandard C syntax and constraints, and shall not exceed the
-      implementation's translation limnits
+    description_en: The program shall contain no violations ofthe tandard C syntax
+      and constraints, and shall not exceed the implementation's translation limnits
     description_cn: 程序不应包含任何违反标准C语法和约束的内容，也不应超出实现的翻译限制
     check_method: cppcheck
     auto_checkable: true
@@ -210,7 +216,8 @@ rules:
     title: 不得出现未定义或未指定的关键行为
     severity: S1
     category: 标准C语言环境
-    description_en: There shall be no occurrence of undefned or critical unspecified behaviour
+    description_en: There shall be no occurrence of undefned or critical unspecified
+      behaviour
     description_cn: 不得出现未定义或未指定的关键行为
     check_method: cppcheck
     auto_checkable: true
@@ -373,7 +380,8 @@ rules:
     title: 在相同范围和名称空间中声明的标识符应是不同的
     severity: S1
     category: 标识符
-    description_en: Identifiers declared in the same scope and name space shall be distinct
+    description_en: Identifiers declared in the same scope and name space shall be
+      distinct
     description_cn: 在相同范围和名称空间中声明的标识符应是不同的
     check_method: cppcheck
     auto_checkable: true
@@ -385,7 +393,8 @@ rules:
     title: 在内部范围内声明的标识符不得隐藏在外部范围内声明的标识符
     severity: S1
     category: 标识符
-    description_en: An identifier declared in an inner scope shall not hide an identifier declared in an outer scope
+    description_en: An identifier declared in an inner scope shall not hide an identifier
+      declared in an outer scope
     description_cn: 在内部范围内声明的标识符不得隐藏在外部范围内声明的标识符
     check_method: cppcheck
     auto_checkable: true
@@ -445,7 +454,8 @@ rules:
     title: 定义具有外部链接的对象或函数的标识符应该是唯一的
     severity: S1
     category: 标识符
-    description_en: Identifiers that define objects or functions with external linkage shall be unique
+    description_en: Identifiers that define objects or functions with external linkage
+      shall be unique
     description_cn: 定义具有外部链接的对象或函数的标识符应该是唯一的
     check_method: cppcheck
     auto_checkable: true
@@ -470,7 +480,8 @@ rules:
     title: 定义具有内部链接的对象或函数的标识符应该是唯一的
     severity: S2
     category: 标识符
-    description_en: Identifiers that define objects or functions with interal linkage should be unique
+    description_en: Identifiers that define objects or functions with interal linkage
+      should be unique
     description_cn: 定义具有内部链接的对象或函数的标识符应该是唯一的
     check_method: cppcheck
     auto_checkable: true
@@ -531,7 +542,8 @@ rules:
     title: 对象或函数的所有声明都应使用相同的名称和类型限定符
     severity: S1
     category: 声明和定义
-    description_en: All declarations of an object or function shall use the type same names and qualifiers
+    description_en: All declarations of an object or function shall use the type same
+      names and qualifiers
     description_cn: 对象或函数的所有声明都应使用相同的名称和类型限定符
     check_method: cppcheck
     auto_checkable: true
@@ -543,7 +555,8 @@ rules:
     title: 当定义具有外部链接的对象或函数时，兼容声明应是可见的
     severity: S1
     category: 声明和定义
-    description_en: A compatible declaration shall be visible when an obiect or function with external linkage is defined
+    description_en: A compatible declaration shall be visible when an obiect or function
+      with external linkage is defined
     description_cn: 当定义具有外部链接的对象或函数时，兼容声明应是可见的
     check_method: cppcheck
     auto_checkable: true
@@ -555,7 +568,8 @@ rules:
     title: 外部对象或函数应在一个且仅有一个文件中声明一次
     severity: S1
     category: 声明和定义
-    description_en: An external object or function shall be declared once in one and only one file
+    description_en: An external object or function shall be declared once in one and
+      only one file
     description_cn: 外部对象或函数应在一个且仅有一个文件中声明一次
     check_method: cppcheck
     auto_checkable: true
@@ -567,7 +581,8 @@ rules:
     title: 具有外部链接的标识符应具有一个外部定义
     severity: S1
     category: 声明和定义
-    description_en: An identifier with exteral linkage shall have exactly one external Definition
+    description_en: An identifier with exteral linkage shall have exactly one external
+      Definition
     description_cn: 具有外部链接的标识符应具有一个外部定义
     check_method: cppcheck
     auto_checkable: true
@@ -579,8 +594,8 @@ rules:
     title: Static存储类标识符应该用于具有内部链接的对象和函数的定义和声明
     severity: S1
     category: 声明和定义
-    description_en: The staticstorage class specifier shall be used in all declarations of objects and finctions that have
-      interal linkage
+    description_en: The staticstorage class specifier shall be used in all declarations
+      of objects and finctions that have interal linkage
     description_cn: Static存储类标识符应该用于具有内部链接的对象和函数的定义和声明
     check_method: cppcheck
     auto_checkable: true
@@ -604,7 +619,8 @@ rules:
     title: 在枚举数列表中，隐含指定的枚举常数的值应是唯一的。
     severity: S1
     category: 声明和定义
-    description_en: Within an enumerator list.the value of an implicitly specified enumeration constant shall be unique
+    description_en: Within an enumerator list.the value of an implicitly specified
+      enumeration constant shall be unique
     description_cn: 在枚举数列表中，隐含指定的枚举常数的值应是唯一的。
     check_method: cppcheck
     auto_checkable: true
@@ -628,8 +644,8 @@ rules:
     title: 如果函数和对象仅在一个翻译单元中引用，则不应使用外部链接来定义它们
     severity: S2
     category: 声明和定义
-    description_en: Functions and obiects should not be defined with exteral linkage if they are referenced in only one translation
-      unit
+    description_en: Functions and obiects should not be defined with exteral linkage
+      if they are referenced in only one translation unit
     description_cn: 如果函数和对象仅在一个翻译单元中引用，则不应使用外部链接来定义它们
     check_method: cppcheck
     auto_checkable: true
@@ -642,7 +658,8 @@ rules:
     title: 如果一个对象的标识符只出现在一个函数中，那么它应该在块范围内定义
     severity: S2
     category: 声明和定义
-    description_en: An object should be defined at block scope if its identifier only appears in asingle funetion
+    description_en: An object should be defined at block scope if its identifier only
+      appears in asingle funetion
     description_cn: 如果一个对象的标识符只出现在一个函数中，那么它应该在块范围内定义
     check_method: cppcheck
     auto_checkable: true
@@ -655,7 +672,8 @@ rules:
     title: 当声明一个带有外部链接的数组时，应该显式地指定它的大小。
     severity: S2
     category: 声明和定义
-    description_en: When an array with external linkage is declared,its size should be explicitly specified
+    description_en: When an array with external linkage is declared,its size should
+      be explicitly specified
     description_cn: 当声明一个带有外部链接的数组时，应该显式地指定它的大小。
     check_method: cppcheck
     auto_checkable: true
@@ -681,7 +699,8 @@ rules:
     title: 不得在设置自动存储对象的值之前读取该对象的值
     severity: S0
     category: 初始化
-    description_en: The value of an object with automatic storageduration shall not be read before it has been set
+    description_en: The value of an object with automatic storageduration shall not
+      be read before it has been set
     description_cn: 不得在设置自动存储对象的值之前读取该对象的值
     check_method: cppcheck
     auto_checkable: true
@@ -693,7 +712,8 @@ rules:
     title: 结构和联合的初始化程序应该用括号括起来
     severity: S1
     category: 初始化
-    description_en: The initializer for an aggregate or union shall be enclosed in braces
+    description_en: The initializer for an aggregate or union shall be enclosed in
+      braces
     description_cn: 结构和联合的初始化程序应该用括号括起来
     check_method: cppcheck
     auto_checkable: true
@@ -729,8 +749,8 @@ rules:
     title: 当使用指定的初始化方式对数组对象进行初始化时，应该显式地指定数组的大小
     severity: S1
     category: 初始化
-    description_en: Where designated initializers are used to initialize an array object the size of the array shall be specified
-      explicitly
+    description_en: Where designated initializers are used to initialize an array
+      object the size of the array shall be specified explicitly
     description_cn: 当使用指定的初始化方式对数组对象进行初始化时，应该显式地指定数组的大小
     check_method: cppcheck
     auto_checkable: true
@@ -754,8 +774,8 @@ rules:
     title: 基本字符类型的表达式禁止使用不恰当的加减法操作
     severity: S1
     category: 基本类型
-    description_en: Expressions ofessentially character type shall not be used inappropriately in addition and subtraction
-      operations
+    description_en: Expressions ofessentially character type shall not be used inappropriately
+      in addition and subtraction operations
     description_cn: 基本字符类型的表达式禁止使用不恰当的加减法操作
     check_method: cppcheck
     auto_checkable: true
@@ -767,8 +787,8 @@ rules:
     title: 表达式的值不应赋给具有较窄的基本类型或不同的基本类型类别的对象
     severity: S1
     category: 基本类型
-    description_en: The value of an expression shall not be assigned to an obiect with a narower essential type of a Or different
-      essential type category
+    description_en: The value of an expression shall not be assigned to an obiect
+      with a narower essential type of a Or different essential type category
     description_cn: 表达式的值不应赋给具有较窄的基本类型或不同的基本类型类别的对象
     check_method: cppcheck
     auto_checkable: true
@@ -780,8 +800,8 @@ rules:
     title: 操作符的两个操作数进行常见的算术转换时应具有相同的基本类型类别
     severity: S1
     category: 基本类型
-    description_en: Both operands of an operatot in which the usual arithmetic conversions are perfomned shall have the same
-      essential type category
+    description_en: Both operands of an operatot in which the usual arithmetic conversions
+      are perfomned shall have the same essential type category
     description_cn: 操作符的两个操作数进行常见的算术转换时应具有相同的基本类型类别
     check_method: cppcheck
     auto_checkable: true
@@ -793,7 +813,8 @@ rules:
     title: 禁止将复合表达式的值赋值给更宽基本类型的对象
     severity: S1
     category: 基本类型
-    description_en: The value of a composite expression shall not be assigned to an obiect with wider essential type
+    description_en: The value of a composite expression shall not be assigned to an
+      obiect with wider essential type
     description_cn: 禁止将复合表达式的值赋值给更宽基本类型的对象
     check_method: cppcheck
     auto_checkable: true
@@ -805,8 +826,8 @@ rules:
     title: 如果将符合表达式作为一个操作数进行普通算术转换操作，那么另外一个操作数不可使用更宽的基本类型。
     severity: S1
     category: 基本类型
-    description_en: 'If a composite expression is used as one operand of an operator in which the usual arithmetic conversions
-      are performed then the other
+    description_en: 'If a composite expression is used as one operand of an operator
+      in which the usual arithmetic conversions are performed then the other
 
       operand shall not have wider essential type'
     description_cn: 如果将符合表达式作为一个操作数进行普通算术转换操作，那么另外一个操作数不可使用更宽的基本类型。
@@ -820,8 +841,8 @@ rules:
     title: 复合表达式的值不应强制转换为不同的基本类型类别或更宽的基本类型
     severity: S1
     category: 基本类型
-    description_en: The value ofa composite expression shall not be cast to a different essential type category or a wider
-      essential type
+    description_en: The value ofa composite expression shall not be cast to a different
+      essential type category or a wider essential type
     description_cn: 复合表达式的值不应强制转换为不同的基本类型类别或更宽的基本类型
     check_method: cppcheck
     auto_checkable: true
@@ -833,7 +854,8 @@ rules:
     title: 表达式的值不应强制转换为不适当的基本类型
     severity: S2
     category: 基本类型
-    description_en: The value of an expression should not be cast to an inappropriate essential type
+    description_en: The value of an expression should not be cast to an inappropriate
+      essential type
     description_cn: 表达式的值不应强制转换为不适当的基本类型
     check_method: cppcheck
     auto_checkable: true
@@ -846,7 +868,8 @@ rules:
     title: 对于指向有const 或volatile 限定符对象的指针进行强制指针类型转换，不能丢失const 或 volatile限定符
     severity: S0
     category: 指针类型转换
-    description_en: A cast shall not remove any volatiles const or qualification from the type pointed to by a pointer
+    description_en: A cast shall not remove any volatiles const or qualification from
+      the type pointed to by a pointer
     description_cn: 对于指向有const 或volatile 限定符对象的指针进行强制指针类型转换，不能丢失const 或 volatile限定符
     check_method: cppcheck
     auto_checkable: true
@@ -858,7 +881,8 @@ rules:
     title: 禁止函数指针和其他类型指针之间发生转换
     severity: S1
     category: 指针类型转换
-    description_en: Conversions shall not be perforned between a pointei to a function and any other type
+    description_en: Conversions shall not be perforned between a pointei to a function
+      and any other type
     description_cn: 禁止函数指针和其他类型指针之间发生转换
     check_method: cppcheck
     auto_checkable: true
@@ -870,7 +894,8 @@ rules:
     title: 禁止不完全类型指针转换成其他类型
     severity: S1
     category: 指针类型转换
-    description_en: Conversions shall not be performed between a pointer to an incomplete type and any other type
+    description_en: Conversions shall not be performed between a pointer to an incomplete
+      type and any other type
     description_cn: 禁止不完全类型指针转换成其他类型
     check_method: cppcheck
     auto_checkable: true
@@ -882,7 +907,8 @@ rules:
     title: 禁止将对象类型指针强制转换为不同对象类型的指针
     severity: S1
     category: 指针类型转换
-    description_en: A cast shall not performed between a pointer to object type and a pointer to a different object type
+    description_en: A cast shall not performed between a pointer to object type and
+      a pointer to a different object type
     description_cn: 禁止将对象类型指针强制转换为不同对象类型的指针
     check_method: cppcheck
     auto_checkable: true
@@ -894,7 +920,8 @@ rules:
     title: 不应在指向 void 的指针和算术类型之间执行强制类型转换
     severity: S1
     category: 指针类型转换
-    description_en: A  cast not performed between pointer to void and anarithmetic type
+    description_en: A  cast not performed between pointer to void and anarithmetic
+      type
     description_cn: 不应在指向 void 的指针和算术类型之间执行强制类型转换
     check_method: cppcheck
     auto_checkable: true
@@ -906,7 +933,8 @@ rules:
     title: 不应在指向对象的指针和非整数算术类型之间执行强制转换
     severity: S1
     category: 指针类型转换
-    description_en: A cast shall not be performed between pointer to object and a non-integer arithmetic type
+    description_en: A cast shall not be performed between pointer to object and a
+      non-integer arithmetic type
     description_cn: 不应在指向对象的指针和非整数算术类型之间执行强制转换
     check_method: cppcheck
     auto_checkable: true
@@ -918,7 +946,8 @@ rules:
     title: 宏 NULL 是整数空指针常量唯一允许形式
     severity: S1
     category: 指针类型转换
-    description_en: The macro NULL shall be the only permitted form of integer null pointer constant
+    description_en: The macro NULL shall be the only permitted form of integer null
+      pointer constant
     description_cn: 宏 NULL 是整数空指针常量唯一允许形式
     check_method: cppcheck
     auto_checkable: true
@@ -930,7 +959,8 @@ rules:
     title: 不应在指向对象的指针和整数类型之间执行转换
     severity: S2
     category: 指针类型转换
-    description_en: A conversion should not be performed between a pointer to object and an integer type
+    description_en: A conversion should not be performed between a pointer to object
+      and an integer type
     description_cn: 不应在指向对象的指针和整数类型之间执行转换
     check_method: cppcheck
     auto_checkable: true
@@ -943,7 +973,8 @@ rules:
     title: 不应该执行从指针到 void 到指针到对象的转换
     severity: S2
     category: 指针类型转换
-    description_en: A conversion should not be performed from pointer to void into pointer to object
+    description_en: A conversion should not be performed from pointer to void into
+      pointer to object
     description_cn: 不应该执行从指针到 void 到指针到对象的转换
     check_method: cppcheck
     auto_checkable: true
@@ -956,8 +987,9 @@ rules:
     title: 移位操作符的右操作数应位于左操作数的基本类型的位宽的范围内(从0到1)
     severity: S1
     category: 表达式
-    description_en: The right hand operand of a shift operator shall lie in the range zero to one less than the width in bits
-      of the essential type of the left hand operand
+    description_en: The right hand operand of a shift operator shall lie in the range
+      zero to one less than the width in bits of the essential type of the left hand
+      operand
     description_cn: 移位操作符的右操作数应位于左操作数的基本类型的位宽的范围内(从0到1)
     check_method: cppcheck
     auto_checkable: true
@@ -982,7 +1014,8 @@ rules:
     title: 对常数表达式的求值不应该导致无符号整数的循环回绕。
     severity: S2
     category: 表达式
-    description_en: Evaluation of constant expressions should not lead to unsigned integer wrap around
+    description_en: Evaluation of constant expressions should not lead to unsigned
+      integer wrap around
     description_cn: 对常数表达式的求值不应该导致无符号整数的循环回绕。
     check_method: cppcheck
     auto_checkable: true
@@ -1008,7 +1041,8 @@ rules:
     title: sizeof操作符的操作数不应该包含任何有潜在副作用的表达式
     severity: S0
     category: 函数副作用
-    description_en: The operand of the sizeof operator shall not contain any expression which has potential side effects
+    description_en: The operand of the sizeof operator shall not contain any expression
+      which has potential side effects
     description_cn: sizeof操作符的操作数不应该包含任何有潜在副作用的表达式
     check_method: cppcheck
     auto_checkable: true
@@ -1032,8 +1066,8 @@ rules:
     title: 表达式的值在标准所允许的任何运算次序下都应该是相同的
     severity: S1
     category: 函数副作用
-    description_en: The value of an expression and its persistent side effects shall be the same under all peritted evaluation
-      orders
+    description_en: The value of an expression and its persistent side effects shall
+      be the same under all peritted evaluation orders
     description_cn: 表达式的值在标准所允许的任何运算次序下都应该是相同的
     check_method: cppcheck
     auto_checkable: true
@@ -1045,7 +1079,8 @@ rules:
     title: 逻辑&&或ll操作符的右手操作数不应包含持续的副作用
     severity: S1
     category: 函数副作用
-    description_en: The right hand operand of a logical &&oroperator shall not contain persistent side effects
+    description_en: The right hand operand of a logical &&oroperator shall not contain
+      persistent side effects
     description_cn: 逻辑&&或ll操作符的右手操作数不应包含持续的副作用
     check_method: cppcheck
     auto_checkable: true
@@ -1057,8 +1092,9 @@ rules:
     title: 完整表达式自增(++)或自减(--)运算符不应引起除递增或递减运算之外的其他副作用。
     severity: S2
     category: 函数副作用
-    description_en: A full expression containing an increment (++)or decrement(--) operator should have no other potential
-      side effects other than that caused by the increment or decrement operator
+    description_en: A full expression containing an increment (++)or decrement(--)
+      operator should have no other potential side effects other than that caused
+      by the increment or decrement operator
     description_cn: 完整表达式自增(++)或自减(--)运算符不应引起除递增或递减运算之外的其他副作用。
     check_method: cppcheck
     auto_checkable: true
@@ -1120,8 +1156,8 @@ rules:
     title: if语句的控制表达式和迭代语句的控制表达式本质上应该是布尔类型
     severity: S1
     category: 控制语句表达式
-    description_en: The controlling expression of an if statement and the controlling expression of an iteration-statement
-      shall have essentially Boolean type
+    description_en: The controlling expression of an if statement and the controlling
+      expression of an iteration-statement shall have essentially Boolean type
     description_cn: if语句的控制表达式和迭代语句的控制表达式本质上应该是布尔类型
     check_method: cppcheck
     auto_checkable: true
@@ -1133,7 +1169,8 @@ rules:
     title: goto 语句将跳转到后面在同一函数中声明的标签
     severity: S1
     category: 控制流
-    description_en: The goto statement shall jump to a label declared later in the same function
+    description_en: The goto statement shall jump to a label declared later in the
+      same function
     description_cn: goto 语句将跳转到后面在同一函数中声明的标签
     check_method: cppcheck
     auto_checkable: true
@@ -1145,8 +1182,8 @@ rules:
     title: goto语句引用的任何标签都应该在同一块中声明，或者在包围 goto 语句的任何块中声明
     severity: S1
     category: 控制流
-    description_en: Any label referenced by a goto statementshallbe declared in the same block or in any block enclosing the
-      goto statement
+    description_en: Any label referenced by a goto statementshallbe declared in the
+      same block or in any block enclosing the goto statement
     description_cn: goto语句引用的任何标签都应该在同一块中声明，或者在包围 goto 语句的任何块中声明
     check_method: cppcheck
     auto_checkable: true
@@ -1158,7 +1195,8 @@ rules:
     title: 迭代语句或选择语句的主体应为复合语句
     severity: S1
     category: 控制流
-    description_en: The body of an iteration statement or a selection statement shall be a compound statement
+    description_en: The body of an iteration statement or a selection statement shall
+      be a compound statement
     description_cn: 迭代语句或选择语句的主体应为复合语句
     check_method: cppcheck
     auto_checkable: true
@@ -1170,7 +1208,8 @@ rules:
     title: 所有if...elseif结构都应该用 else 语句终止
     severity: S1
     category: 控制流
-    description_en: All if ... else if constructs shall be terminated with an else statement
+    description_en: All if ... else if constructs shall be terminated with an else
+      statement
     description_cn: 所有if...elseif结构都应该用 else 语句终止
     check_method: cppcheck
     auto_checkable: true
@@ -1195,7 +1234,8 @@ rules:
     title: 用于终止任何迭代语句的break 或 goto 语句不应超过一个
     severity: S2
     category: 控制流
-    description_en: There should be no more than onebreakorgoto statement used to terminate any iteration statement
+    description_en: There should be no more than onebreakorgoto statement used to
+      terminate any iteration statement
     description_cn: 用于终止任何迭代语句的break 或 goto 语句不应超过一个
     check_method: cppcheck
     auto_checkable: true
@@ -1245,8 +1285,8 @@ rules:
     title: switch 标签只能在最封闭的复合语句是 switch 语句的主体时使用
     severity: S1
     category: Switch语句
-    description_en: A switch label shall only be used when the most losely-enclosing compound statement is the body of a switch
-      statement
+    description_en: A switch label shall only be used when the most losely-enclosing
+      compound statement is the body of a switch statement
     description_cn: switch 标签只能在最封闭的复合语句是 switch 语句的主体时使用
     check_method: cppcheck
     auto_checkable: true
@@ -1270,7 +1310,8 @@ rules:
     title: default 标签应该作为switch 语句的第一个或最后一个 switch 标签出现
     severity: S1
     category: Switch语句
-    description_en: A default label shall appeat as either the first or the last switch label of aswitch statement
+    description_en: A default label shall appeat as either the first or the last switch
+      label of aswitch statement
     description_cn: default 标签应该作为switch 语句的第一个或最后一个 switch 标签出现
     check_method: cppcheck
     auto_checkable: true
@@ -1318,8 +1359,8 @@ rules:
     title: 对于具有 non-void 返回类型的函数，所有退出路径都应该有一个带有表达式的显式的返回语句。
     severity: S0
     category: 函数
-    description_en: All exit paths from a function with non-void return type shall have an explicit return statement with
-      an expression
+    description_en: All exit paths from a function with non-void return type shall
+      have an explicit return statement with an expression
     description_cn: 对于具有 non-void 返回类型的函数，所有退出路径都应该有一个带有表达式的显式的返回语句。
     check_method: cppcheck
     auto_checkable: true
@@ -1331,7 +1372,8 @@ rules:
     title: 声明数组参数时 [ ] 中不能有static 关键字。
     severity: S0
     category: 函数
-    description_en: The declaration of an array parameter shall not contain the static keyword between the [ ]
+    description_en: The declaration of an array parameter shall not contain the static
+      keyword between the [ ]
     description_cn: 声明数组参数时 [ ] 中不能有static 关键字。
     check_method: cppcheck
     auto_checkable: true
@@ -1367,7 +1409,8 @@ rules:
     title: 具有 non-void 返回类型应使用的函数返回的值
     severity: S1
     category: 函数
-    description_en: The value retumed by a function having non-void return type shall be used
+    description_en: The value retumed by a function having non-void return type shall
+      be used
     description_cn: 具有 non-void 返回类型应使用的函数返回的值
     check_method: cppcheck
     auto_checkable: true
@@ -1392,8 +1435,8 @@ rules:
     title: 声明为数组类型的参数所对应的函数参数应有适当数量的元素
     severity: S2
     category: 函数
-    description_en: The function argument corresponding to a parameter declared to have an array type shall have an appropriate
-      number of elements
+    description_en: The function argument corresponding to a parameter declared to
+      have an array type shall have an appropriate number of elements
     description_cn: 声明为数组类型的参数所对应的函数参数应有适当数量的元素
     check_method: cppcheck
     auto_checkable: true
@@ -1406,8 +1449,8 @@ rules:
     title: 对指针进行算数运算所产生的指针，应针对与该指针操作数相同的数组中的一个元素进行寻址。
     severity: S1
     category: 指针和数组
-    description_en: A pointer resulting from arithmetic on a pointer operand shall address an element of the same array as
-      that pointer operand
+    description_en: A pointer resulting from arithmetic on a pointer operand shall
+      address an element of the same array as that pointer operand
     description_cn: 对指针进行算数运算所产生的指针，应针对与该指针操作数相同的数组中的一个元素进行寻址。
     check_method: cppcheck
     auto_checkable: true
@@ -1419,7 +1462,8 @@ rules:
     title: 指针之间的减法只能应用于指向相同数组中的不同元素
     severity: S1
     category: 指针和数组
-    description_en: Subtraction between pointers shall only be applied to pointers that address elements of the same array
+    description_en: Subtraction between pointers shall only be applied to pointers
+      that address elements of the same array
     description_cn: 指针之间的减法只能应用于指向相同数组中的不同元素
     check_method: cppcheck
     auto_checkable: true
@@ -1431,8 +1475,8 @@ rules:
     title: 关系运算符>、>=、<和<=不应用于指针类型的对象，除非它们指向相同的对象
     severity: S1
     category: 指针和数组
-    description_en: The relational operators>、>=、< and <= shall not be applied to objects of pointer type except where they
-      point into the same obiect
+    description_en: The relational operators>、>=、< and <= shall not be applied to
+      objects of pointer type except where they point into the same obiect
     description_cn: 关系运算符>、>=、<和<=不应用于指针类型的对象，除非它们指向相同的对象
     check_method: cppcheck
     auto_checkable: true
@@ -1444,8 +1488,8 @@ rules:
     title: 当一个对象不存在，不能把这个对象的地址去复制给仍然存在的另外的对象
     severity: S1
     category: 指针和数组
-    description_en: The address of an object with automatic storage shall not be copied to another object that persists after
-      the first object has ceased to exist
+    description_en: The address of an object with automatic storage shall not be copied
+      to another object that persists after the first object has ceased to exist
     description_cn: 当一个对象不存在，不能把这个对象的地址去复制给仍然存在的另外的对象
     check_method: cppcheck
     auto_checkable: true
@@ -1481,7 +1525,8 @@ rules:
     title: 不应将+、-、+=和-=操作符应用于指针类型的表达式
     severity: S2
     category: 指针和数组
-    description_en: The +.-.+=and-= operators should not be applied to an expression ofpointer type
+    description_en: The +.-.+=and-= operators should not be applied to an expression
+      ofpointer type
     description_cn: 不应将+、-、+=和-=操作符应用于指针类型的表达式
     check_method: cppcheck
     auto_checkable: true
@@ -1494,7 +1539,8 @@ rules:
     title: 声明应该包含不超过两层的指针嵌套
     severity: S2
     category: 指针和数组
-    description_en: Declarations should contain no more than two levels of pointer nesting
+    description_en: Declarations should contain no more than two levels of pointer
+      nesting
     description_cn: 声明应该包含不超过两层的指针嵌套
     check_method: cppcheck
     auto_checkable: true
@@ -1532,7 +1578,8 @@ rules:
     title: include 指令后面应该跟一个<filename>或"filename'序列。
     severity: S0
     category: 预处理指令
-    description_en: 'The #include directive shall be followed by either a <filename> or "filename" sequence'
+    description_en: 'The #include directive shall be followed by either a <filename>
+      or "filename" sequence'
     description_cn: include 指令后面应该跟一个<filename>或"filename'序列。
     check_method: cppcheck
     auto_checkable: true
@@ -1544,7 +1591,8 @@ rules:
     title: 由宏参数展开得到的表达式用括号括起来
     severity: S0
     category: 预处理指令
-    description_en: Expressions resulting from the expansion ofmacro parameters shal be enclosed in parentheses
+    description_en: Expressions resulting from the expansion ofmacro parameters shal
+      be enclosed in parentheses
     description_cn: 由宏参数展开得到的表达式用括号括起来
     check_method: cppcheck
     auto_checkable: true
@@ -1556,7 +1604,8 @@ rules:
     title: “”或\字符和/*或//字符序列不应出现在头文件名称中
     severity: S1
     category: 预处理指令
-    description_en: The ’,’ or \ characters and the /* or // character Sequences shall not occur in a header file name
+    description_en: The ’,’ or \ characters and the /* or // character Sequences shall
+      not occur in a header file name
     description_cn: “”或\字符和/*或//字符序列不应出现在头文件名称中
     check_method: cppcheck
     auto_checkable: true
@@ -1580,7 +1629,8 @@ rules:
     title: 看起来像预处理指令的标记不能出现在宏参数中
     severity: S1
     category: 预处理指令
-    description_en: Tokens that look like a preprocessing directive shall not occur within a macro argument
+    description_en: Tokens that look like a preprocessing directive shall not occur
+      within a macro argument
     description_cn: 看起来像预处理指令的标记不能出现在宏参数中
     check_method: cppcheck
     auto_checkable: true
@@ -1592,7 +1642,8 @@ rules:
     title: 一个#if或#elif预处理指令的控制表达式的值应为 0或1
     severity: S1
     category: 预处理指令
-    description_en: 'The controlling expression of a #ifor #elif preprocessing directive shall evaluate to 0 or 1'
+    description_en: 'The controlling expression of a #ifor #elif preprocessing directive
+      shall evaluate to 0 or 1'
     description_cn: 一个#if或#elif预处理指令的控制表达式的值应为 0或1
     check_method: cppcheck
     auto_checkable: true
@@ -1604,8 +1655,8 @@ rules:
     title: 在#if或#elif预处理指令的控制表达式中使用的所有标识符都必须在求值前
     severity: S1
     category: 预处理指令
-    description_en: '#define All identifiers used in the controlling expression of #if or #elifreprocessing directives shall
-      be #define''d before evaluation'
+    description_en: '#define All identifiers used in the controlling expression of
+      #if or #elifreprocessing directives shall be #define''d before evaluation'
     description_cn: 在#if或#elif预处理指令的控制表达式中使用的所有标识符都必须在求值前
     check_method: cppcheck
     auto_checkable: true
@@ -1617,7 +1668,8 @@ rules:
     title: 紧接在#运算符之后的宏参数不能紧接在##运算符之后
     severity: S1
     category: 预处理指令
-    description_en: 'A macro parameter immediately following a # operator shall not immediately be followed by a ## operator'
+    description_en: 'A macro parameter immediately following a # operator shall not
+      immediately be followed by a ## operator'
     description_cn: 紧接在#运算符之后的宏参数不能紧接在##运算符之后
     check_method: cppcheck
     auto_checkable: true
@@ -1629,8 +1681,9 @@ rules:
     title: 作为“#”或“##”运算符的操作数使用的宏参数，其本身还需要进行进一步宏替换处理，此类参数仅能用作这些运算符的操作数。
     severity: S1
     category: 预处理指令
-    description_en: 'A macro parameter used as an operand to the#or ## operators,which isitself subject tofurther macro replacement,shall
-      only be used as an operand to these operators'
+    description_en: 'A macro parameter used as an operand to the#or ## operators,which
+      isitself subject tofurther macro replacement,shall only be used as an operand
+      to these operators'
     description_cn: 作为“#”或“##”运算符的操作数使用的宏参数，其本身还需要进行进一步宏替换处理，此类参数仅能用作这些运算符的操作数。
     check_method: cppcheck
     auto_checkable: true
@@ -1654,8 +1707,8 @@ rules:
     title: 所有的#else、#elif和#endi预处理指令应该与它们相关的#if、#ifdef 或#ifndef指令驻留在同一个文件中
     severity: S1
     category: 预处理指令
-    description_en: 'All #else, #elif and #endif preprocessor directives shall reside in the same file as the #if #ifdef or
-      #ifdef directive to which they are related'
+    description_en: 'All #else, #elif and #endif preprocessor directives shall reside
+      in the same file as the #if #ifdef or #ifdef directive to which they are related'
     description_cn: 所有的#else、#elif和#endi预处理指令应该与它们相关的#if、#ifdef 或#ifndef指令驻留在同一个文件中
     check_method: cppcheck
     auto_checkable: true
@@ -1667,7 +1720,8 @@ rules:
     title: include 指令之前应该只有预处理指令或注释
     severity: S2
     category: 预处理指令
-    description_en: '#include directives should only be preceded by preprocessor directives or comments'
+    description_en: '#include directives should only be preceded by preprocessor directives
+      or comments'
     description_cn: include 指令之前应该只有预处理指令或注释
     check_method: cppcheck
     auto_checkable: true
@@ -1706,7 +1760,8 @@ rules:
     title: '#define和#ndef不能用于定义保留的标识符或保留的宏名。'
     severity: S0
     category: 标准库
-    description_en: '#define and #undef shall not be used onareserved identifier or reserved macro name'
+    description_en: '#define and #undef shall not be used onareserved identifier or
+      reserved macro name'
     description_cn: '#define和#ndef不能用于定义保留的标识符或保留的宏名。'
     check_method: cppcheck
     auto_checkable: true
@@ -1718,7 +1773,8 @@ rules:
     title: <ctype.h>标准库中的函数，其操作数需为unsigned char 或 EOF
     severity: S0
     category: 标准库
-    description_en: Any value passed to a function in<ctype.h>shall be representable as an unsigned char or be the value EOF
+    description_en: Any value passed to a function in<ctype.h>shall be representable
+      as an unsigned char or be the value EOF
     description_cn: <ctype.h>标准库中的函数，其操作数需为unsigned char 或 EOF
     check_method: cppcheck
     auto_checkable: true
@@ -1730,8 +1786,8 @@ rules:
     title: 使用<string.h>中的字符串处理函数不应超出其指针参数引用的对象范围的访间
     severity: S0
     category: 标准库
-    description_en: Use of the string handing function from<string.h>shall not result in accesses beyond  the bounds of the
-      objects referenced by their pointer parameters
+    description_en: Use of the string handing function from<string.h>shall not result
+      in accesses beyond  the bounds of the objects referenced by their pointer parameters
     description_cn: 使用<string.h>中的字符串处理函数不应超出其指针参数引用的对象范围的访间
     check_method: cppcheck
     auto_checkable: true
@@ -1743,7 +1799,8 @@ rules:
     title: 传递给<string.h>中任何函数的 sizet参数应具有适当的值
     severity: S0
     category: 标准库
-    description_en: The size_t argument passed to any function in  any <string.h>shall hava an appropriate value
+    description_en: The size_t argument passed to any function in  any <string.h>shall
+      hava an appropriate value
     description_cn: 传递给<string.h>中任何函数的 sizet参数应具有适当的值
     check_method: cppcheck
     auto_checkable: true
@@ -1755,8 +1812,9 @@ rules:
     title: 标准库函数localeconv，getenv, setlocale strerror返回的指针只能用作指向Const限定类型的指针
     severity: S0
     category: 标准库
-    description_en: The pointers returned by the Standard Library functions localeconv, getenv, setlocale or strerror shall
-      only be used as if they have pointer to const-qualified type
+    description_en: The pointers returned by the Standard Library functions localeconv,
+      getenv, setlocale or strerror shall only be used as if they have pointer to
+      const-qualified type
     description_cn: 标准库函数localeconv，getenv, setlocale strerror返回的指针只能用作指向Const限定类型的指针
     check_method: cppcheck
     auto_checkable: true
@@ -1768,9 +1826,11 @@ rules:
     title: 在调用标准库函数asctime,ctime,gmtime.locatime,localeconv,getenv,setlocale 或 strerror时，不得
     severity: S0
     category: 标准库
-    description_en: The pointer retured by the Standard library fmction asctime,ctime,gmtime.locati me.localeconv,getenv,setloc
-      ale or strerror shall not be used following a subsequent call to the same function
-    description_cn: 在调用标准库函数asctime,ctime,gmtime.locatime,localeconv,getenv,setlocale 或 strerror时，不得使用上次调用同一函数的返回指针。
+    description_en: The pointer retured by the Standard library fmction asctime,ctime,gmtime.locati
+      me.localeconv,getenv,setloc ale or strerror shall not be used following a subsequent
+      call to the same function
+    description_cn: 在调用标准库函数asctime,ctime,gmtime.locatime,localeconv,getenv,setlocale
+      或 strerror时，不得使用上次调用同一函数的返回指针。
     check_method: cppcheck
     auto_checkable: true
     mapped_misra_ids:
@@ -1793,7 +1853,8 @@ rules:
     title: 不允许使用<stdlib.h>中的内存分配和释放函数
     severity: S1
     category: 标准库
-    description_en: The memory allocation and  deallocation functions of <stdlib.h> shall not be used
+    description_en: The memory allocation and  deallocation functions of <stdlib.h>
+      shall not be used
     description_cn: 不允许使用<stdlib.h>中的内存分配和释放函数
     check_method: cppcheck
     auto_checkable: true
@@ -1841,7 +1902,8 @@ rules:
     title: <stdlib.h>的 atof、atoi、atol和 atoll 功能不得使用
     severity: S1
     category: 标准库
-    description_en: The atof. atoi.atol and atoll finctions of <stdlib.h> shal! not be used
+    description_en: The atof. atoi.atol and atoll finctions of <stdlib.h> shal! not
+      be used
     description_cn: <stdlib.h>的 atof、atoi、atol和 atoll 功能不得使用
     check_method: cppcheck
     auto_checkable: true
@@ -1853,7 +1915,8 @@ rules:
     title: 不允许使用 stdlibh的库函数abort，exit，getenv和system
     severity: S1
     category: 标准库
-    description_en: The library functions abort exit,getenv and system of <stdlib.h> shall not be used
+    description_en: The library functions abort exit,getenv and system of <stdlib.h>
+      shall not be used
     description_cn: 不允许使用 stdlibh的库函数abort，exit，getenv和system
     check_method: cppcheck
     auto_checkable: true
@@ -1865,7 +1928,8 @@ rules:
     title: 不得使用<stdlib.h>的库函数 bsearch 和 qsort
     severity: S1
     category: 标准库
-    description_en: The library functions and bsearch qsort of <stdlib.h> shall not be used
+    description_en: The library functions and bsearch qsort of <stdlib.h> shall not
+      be used
     description_cn: 不得使用<stdlib.h>的库函数 bsearch 和 qsort
     check_method: cppcheck
     auto_checkable: true
@@ -1901,7 +1965,8 @@ rules:
     title: 禁止使用标准库函数memcmp比较空终止字符串
     severity: S1
     category: 标准库
-    description_en: The Standard Library function memomp shall not be used to compare null terinated strings
+    description_en: The Standard Library function memomp shall not be used to compare
+      null terinated strings
     description_cn: 禁止使用标准库函数memcmp比较空终止字符串
     check_method: cppcheck
     auto_checkable: true
@@ -1913,8 +1978,9 @@ rules:
     title: 标准库函数memcpy,memmove 和memcmp中的指针参数应该相互兼容的数据类型
     severity: S1
     category: 标准库
-    description_en: The pointer arguments to the Standard Library function memcpy,memmove and memcmp shall be pointers to
-      qualified or unqualified versions ofcompatible types
+    description_en: The pointer arguments to the Standard Library function memcpy,memmove
+      and memcmp shall be pointers to qualified or unqualified versions ofcompatible
+      types
     description_cn: 标准库函数memcpy,memmove 和memcmp中的指针参数应该相互兼容的数据类型
     check_method: cppcheck
     auto_checkable: true
@@ -1926,8 +1992,9 @@ rules:
     title: 标准库函数memcmp的指针参数应该指向指针类型、基本 signed 类型、基本unsigned 类型、基本布尔类型或者基本枚举类型
     severity: S1
     category: 标准库
-    description_en: The pointer arguments to the Standard Library function mememp shall point to either a pointer type,an
-      essentially signed type,an essentially unsigned type an essentially enum type
+    description_en: The pointer arguments to the Standard Library function mememp
+      shall point to either a pointer type,an essentially signed type,an essentially
+      unsigned type an essentially enum type
     description_cn: 标准库函数memcmp的指针参数应该指向指针类型、基本 signed 类型、基本unsigned 类型、基本布尔类型或者基本枚举类型
     check_method: cppcheck
     auto_checkable: true
@@ -1952,7 +2019,8 @@ rules:
     title: 只能释放通过标准库函数分配的内存块。
     severity: S0
     category: 资源
-    description_en: A block of memory shall only be freed if it was allocated bymeansofa Standard Library function
+    description_en: A block of memory shall only be freed if it was allocated bymeansofa
+      Standard Library function
     description_cn: 只能释放通过标准库函数分配的内存块。
     check_method: cppcheck
     auto_checkable: true
@@ -1964,7 +2032,8 @@ rules:
     title: 不应对作为只读打开的流进行写入操作。
     severity: S0
     category: 资源
-    description_en: There shall be no attempt to write to a stream which has been opened as read-only
+    description_en: There shall be no attempt to write to a stream which has been
+      opened as read-only
     description_cn: 不应对作为只读打开的流进行写入操作。
     check_method: cppcheck
     auto_checkable: true
@@ -1988,7 +2057,8 @@ rules:
     title: 在文件流关闭后，不得再使用对应的 FILE 指针。
     severity: S0
     category: 资源
-    description_en: The value of a pointer to a  FILE shall not be used after the associated stream has been closed
+    description_en: The value of a pointer to a  FILE shall not be used after the
+      associated stream has been closed
     description_cn: 在文件流关闭后，不得再使用对应的 FILE 指针。
     check_method: cppcheck
     auto_checkable: true
@@ -2000,7 +2070,8 @@ rules:
     title: 所有通过标准库函数动态获取的资源都应该被显式释放
     severity: S1
     category: 资源
-    description_en: All resources obtained dynamically by means of Standard Library functions shall be explicitly released
+    description_en: All resources obtained dynamically by means of Standard Library
+      functions shall be explicitly released
     description_cn: 所有通过标准库函数动态获取的资源都应该被显式释放
     check_method: cppcheck
     auto_checkable: true
@@ -2012,7 +2083,8 @@ rules:
     title: 同一文件不能在不同的流上同时对读写访问打开
     severity: S1
     category: 资源
-    description_en: The same file shall not be open for readandwrite access at the same time on different streams
+    description_en: The same file shall not be open for readandwrite access at the
+      same time on different streams
     description_cn: 同一文件不能在不同的流上同时对读写访问打开
     check_method: cppcheck
     auto_checkable: true
@@ -2024,8 +2096,8 @@ rules:
     title: 宏EOF只能与能够返回EOF 的标准函数库的原始返回值进行比较
     severity: S1
     category: 资源
-    description_en: The macro EOF shall only be compared with the unmodified return value from any Standard Library function
-      capable of returning EOF
+    description_en: The macro EOF shall only be compared with the unmodified return
+      value from any Standard Library function capable of returning EOF
     description_cn: 宏EOF只能与能够返回EOF 的标准函数库的原始返回值进行比较
     check_method: cppcheck
     auto_checkable: true
@@ -2037,7 +2109,8 @@ rules:
     title: 在调用 errno-setting函数之前，error的值应该设置为零
     severity: S1
     category: 资源
-    description_en: The value of error shall be set to zero prior to a call to an emno-setting-function
+    description_en: The value of error shall be set to zero prior to a call to an
+      emno-setting-function
     description_cn: 在调用 errno-setting函数之前，error的值应该设置为零
     check_method: cppcheck
     auto_checkable: true
@@ -2049,7 +2122,8 @@ rules:
     title: 在调用 errno 设置函数之后，应将 error 值与零值进行测试
     severity: S1
     category: 资源
-    description_en: The value of error shall be tested against zero after calling an errno-setting function
+    description_en: The value of error shall be tested against zero after calling
+      an errno-setting function
     description_cn: 在调用 errno 设置函数之后，应将 error 值与零值进行测试
     check_method: cppcheck
     auto_checkable: true
@@ -2061,7 +2135,8 @@ rules:
     title: 只有当要调用的最后一个函数是 error 设置函数时，才会测试 error 的值
     severity: S1
     category: 资源
-    description_en: The value of error shall only be tesred when the last function to be called was an erno-setting-function
+    description_en: The value of error shall only be tesred when the last function
+      to be called was an erno-setting-function
     description_cn: 只有当要调用的最后一个函数是 error 设置函数时，才会测试 error 的值
     check_method: cppcheck
     auto_checkable: true
@@ -2097,7 +2172,8 @@ rules:
     title: 对操作系统命令中所使用的特殊元素的不当中和(“操作系统命令注入”)
     severity: S0
     category: CWE
-    description_en: Improper Neutralization of Special Elements used in an OS Command ('Os Command Injection')
+    description_en: Improper Neutralization of Special Elements used in an OS Command
+      ('Os Command Injection')
     description_cn: 对操作系统命令中所使用的特殊元素的不当中和(“操作系统命令注入”)
     check_method: manual_review
     auto_checkable: false
@@ -2121,7 +2197,8 @@ rules:
     title: 对内存缓冲区内的操作进行不当限制。
     severity: S0
     category: CWE
-    description_en: Improper Restriction of the Operations within of a Memory Bounds Buffer.
+    description_en: Improper Restriction of the Operations within of a Memory Bounds
+      Buffer.
     description_cn: 对内存缓冲区内的操作进行不当限制。
     check_method: manual_review
     auto_checkable: false
@@ -2153,6 +2230,25 @@ rules:
     profile: security
     references:
     - 'CWE-190: Integer Overflow or Wraparound'
+# ═════════════════════════════════════════════════════════════════════
+# GSCR-C-27.8 ~ 27.20: 运行时错误细化规则
+#
+# MISRA C:2023 Dir-4.1 映射说明:
+# MISRA C:2023 的 Dir-4.1 "Run-time failures shall be minimized" 未细分编号子规则。
+# 这些 GSCR 规则通过关键词匹配 cppcheck 输出中的违规描述文本进行细分。
+# misra_2023_category 字段标注了每条 GSCR 规则对应的 Dir-4.1 错误类别
+# (参考 Polyspace Bug Finder 文档中 Dir-4.1 的 Rationale 分类)。
+#
+# 映射类别:
+#   arithmetic errors       → 27.9(除0), 27.10(浮点), 27.11(移位), 27.12(溢出), 27.13(次正规)
+#   pointer arithmetic      → 27.14(绝对地址)
+#   array bound errors      → 27.16(数组越界)
+#   function parameters     → 27.17(无限调用), 27.18(无限循环), 27.19(条件)
+#   pointer dereferencing   → 27.15(指针解引用)
+#   unreachable code        → 27.8(不可达)
+#   standard library        → 27.20(标准库)
+# ═════════════════════════════════════════════════════════════════════
+
   GSCR-C-27.8:
     title: 不可达代码
     severity: S1
@@ -2165,6 +2261,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: unreachable code (Dir-4.1 / also Rule 2.1)
   GSCR-C-27.9:
     title: 除 0
     severity: S1
@@ -2177,6 +2274,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'arithmetic error: division by zero (Dir-4.1)'
   GSCR-C-27.10:
     title: 无效的浮点运算
     severity: S1
@@ -2189,6 +2287,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'arithmetic error: floating-point operation (Dir-4.1)'
   GSCR-C-27.11:
     title: 无效的移位运算
     severity: S1
@@ -2201,6 +2300,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'arithmetic error: invalid shift (Dir-4.1)'
   GSCR-C-27.12:
     title: 溢出
     severity: S1
@@ -2213,6 +2313,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'arithmetic error: overflow (Dir-4.1)'
   GSCR-C-27.13:
     title: 次正规浮点数
     severity: S1
@@ -2225,6 +2326,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'arithmetic error: subnormal float (Dir-4.1)'
   GSCR-C-27.14:
     title: 绝对地址使用
     severity: S1
@@ -2237,6 +2339,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'pointer arithmetic: absolute address (Dir-4.1)'
   GSCR-C-27.15:
     title: 指针非法解引用
     severity: S1
@@ -2249,6 +2352,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'pointer dereferencing: null/invalid (Dir-4.1)'
   GSCR-C-27.16:
     title: 数组越界
     severity: S1
@@ -2261,6 +2365,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'array bound error: out-of-bounds index (Dir-4.1)'
   GSCR-C-27.17:
     title: 无限调用
     severity: S1
@@ -2273,6 +2378,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'function parameter: non-terminating call (Dir-4.1)'
   GSCR-C-27.18:
     title: 无限循环
     severity: S1
@@ -2285,6 +2391,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'function parameter: non-terminating loop (Dir-4.1)'
   GSCR-C-27.19:
     title: 非正确的条件
     severity: S1
@@ -2297,6 +2404,7 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'function parameter: correctness condition (Dir-4.1)'
   GSCR-C-27.20:
     title: 无效使用标准库
     severity: S1
@@ -2309,3 +2417,4 @@ rules:
     - misra-c2012-Dir-4.1
     - misra-c2023-Dir-4.1
     profile: safety
+    misra_2023_category: 'standard library: invalid use (Dir-4.1)'
