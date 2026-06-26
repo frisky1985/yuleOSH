@@ -38,8 +38,8 @@ cmd_pipeline_run() {
     echo "🔄 Resuming pipeline from checkpoint"
     python3 -m yuleosh.engine.agent_checkpoint run "$spec" --resume
   else
-    echo "🚀 Running full pipeline with spec: $spec"
-    python3 -m yuleosh.pipeline.run "$spec"
+    echo "🚀 Running full pipeline with spec: $spec (checkpoint mode)"
+    python3 -m yuleosh.engine.agent_checkpoint run "$spec"
   fi
 }
 
