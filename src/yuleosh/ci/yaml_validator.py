@@ -71,6 +71,7 @@ _CI_CONFIG_SCHEMA = {
             "alm": {"type": "dict"},
             "profiles": {"type": "dict"},
             "exclude_paths": {"type": "list"},
+            "code_categories": {"type": "dict"},
         },
     },
     "hardware_test": {"type": "dict"},
