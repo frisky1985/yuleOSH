@@ -783,6 +783,8 @@ def generate_json_report(
             "directive_count": directive_group_count + summary.get("directive_count", 0),
             "rule_count": rule_group_count + summary.get("rule_count", 0),
         },
+        # 三级分类: code_category breakdown
+        "code_category_breakdown": _compute_category_breakdown(violations),
     }
 
     # R3-P0-4: Add prev_build_diff if non-empty
@@ -790,6 +792,18 @@ def generate_json_report(
         report["prev_build_diff"] = prev_build_diff
 
     return json.dumps(report, indent=2, ensure_ascii=False, default=str)
+
+
+def _compute_category_breakdown(violations: list[dict]) -> dict:
+    """Compute breakdown of violations by code_category (三级分类).
+
+    Categories: business, third_party, template, unknown.
+    """
+    counts: dict[str, int] = {}
+    for v in violations:
+        cat = v.get("code_category", "unknown")
+        counts[cat] = counts.get(cat, 0) + 1
+    return counts
 
 
 def _serialize_group(group: dict) -> dict:
@@ -902,6 +916,15 @@ def generate_markdown_report(
                     "portability": "🔗", "information": "ℹ️"}.get(sev, "•")
             lines.append(f"| {icon} {sev.capitalize()} | {count} |")
 
+    lines.append("")
+    lines.append("### Code Category Breakdown")
+    lines.append("")
+    category_counts = _compute_category_breakdown(violations)
+    for cat in ["business", "third_party", "template", "unknown"]:
+        count = category_counts.get(cat, 0)
+        if count > 0:
+            icon = {"business": "🔴", "third_party": "🟡", "template": "🟢", "unknown": "⚪"}.get(cat, "•")
+            lines.append(f"| {icon} {cat.capitalize()} | {count} |")
     lines.append("")
     lines.append("### Files with Violations")
     lines.append("")
