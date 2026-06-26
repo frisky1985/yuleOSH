@@ -204,6 +204,9 @@ class CheckpointEngine:
 
         # ---- 无步骤可执行（空引擎或全部已完成的情况） ----
         if not steps_to_run:
+            # 注入点不存在时 _prepare_inject 设置了 state.status=failed
+            if self._state and self._state.status == "failed":
+                return False
             return True
 
         # ---- 执行剩余的步骤 ----
@@ -358,7 +361,6 @@ class CheckpointEngine:
     def _execute_steps(self, steps_to_run: list[dict]) -> bool:
         """依次执行步骤列表，返回是否全部通过。"""
         all_passed = True
-        t0 = datetime.now()
 
         for i, step_def in enumerate(steps_to_run):
             abs_idx = self.find_step_index(step_def["step_id"])
@@ -371,6 +373,7 @@ class CheckpointEngine:
             agent_tag = f"{step_def.get('agent', '')}: " if step_def.get('agent') else ""
             print(f"\n  [{abs_idx + 1}/{len(self._step_defs)}] {agent_tag}{step_def['name']}")
 
+            t0 = datetime.now()
             handler = step_def.get("handler")
             if handler is None:
                 # 没有 handler — 以模拟通过测试场景时自动标记为 PASSED
@@ -445,5 +448,9 @@ class CheckpointEngine:
     def _load_state(self) -> Optional[CheckpointState]:
         if not self._state_path.exists():
             return None
-        with open(self._state_path) as f:
-            return CheckpointState.from_dict(json.load(f))
+        try:
+            with open(self._state_path) as f:
+                return CheckpointState.from_dict(json.load(f))
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+            log.warning("Corrupted checkpoint state file: %s (%s)", self._state_path, e)
+            return None

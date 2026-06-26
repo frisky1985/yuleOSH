@@ -19,19 +19,6 @@ from yuleosh.engine.checkpoint import CheckpointEngine
 from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
 
 
-def _make_agent_handler(step_key: str, handler_fn) -> Callable:
-    """将原始 handler 包装为无参 Callable。
-
-    测试中使用 mock 时，handler_fn 接受 (step_key, project_dir) 签名。
-    生产环境使用 step session 上下文。
-    """
-    def _inner():
-        return handler_fn()
-    _inner.__name__ = f"handler_{step_key}"
-    _inner.__qualname__ = f"handler_{step_key}"
-    return _inner
-
-
 def create_agent_pipeline(project_dir: str,
                           spec_path: Optional[str] = None) -> CheckpointEngine:
     """
