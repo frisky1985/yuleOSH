@@ -51,18 +51,20 @@ from yuleosh.ci.stage_utils import (
 )
 
 
-def _wrap(handler, project_dir: str, ci) -> Callable:
-    """将 (project_dir, ci) 签名的 handler 包装成无参 Callable。"""
+def _wrap(handler, project_dir: str, layer: float) -> Callable:
+    """将 (project_dir, ci) 签名的 handler 包装成无参 Callable，每个调用创建独立 CIResult。"""
     def _inner():
+        ci = CIResult(layer, f"checkpoint-{handler.__name__}")
         return handler(project_dir, ci)
     _inner.__name__ = handler.__name__
     _inner.__qualname__ = handler.__qualname__
     return _inner
 
 
-def _bool_wrap(handler, project_dir: str, ci) -> Callable:
-    """包装返回 bool 的 handler，True 表示通过，异常表示失败。"""
+def _bool_wrap(handler, project_dir: str, layer: float) -> Callable:
+    """包装返回 bool 的 handler，True 表示通过，异常表示失败。每个调用创建独立 CIResult。"""
     def _inner():
+        ci = CIResult(layer, f"checkpoint-{handler.__name__}")
         ok = handler(project_dir, ci)
         if not ok:
             raise RuntimeError(f"Stage failed: {handler.__name__}")
@@ -72,7 +74,7 @@ def _bool_wrap(handler, project_dir: str, ci) -> Callable:
     return _inner
 
 
-def create_ci_pipeline(layer: int, project_dir: str) -> CheckpointEngine:
+def create_ci_pipeline(layer: float, project_dir: str) -> CheckpointEngine:
     """
     创建 CI 某一层的 CheckpointPipeline。
 
@@ -81,107 +83,104 @@ def create_ci_pipeline(layer: int, project_dir: str) -> CheckpointEngine:
     """
     engine = CheckpointEngine(f"ci-layer-{layer}", project_dir)
 
-    # 为每个 layer 创建一个 CIResult 用于 stage 执行中传参
-    ci = CIResult(layer, "checkpoint-run")
-
     if layer == 1:
         engine.add_step(
             "yaml-validation", "YAML 配置验证",
-            _wrap(run_yaml_validation, project_dir, ci),
+            _wrap(run_yaml_validation, project_dir, layer),
         )
         engine.add_step(
             "spec-validation", "规约验证 (SWE.5)",
-            _wrap(run_spec_validation, project_dir, ci),
+            _wrap(run_spec_validation, project_dir, layer),
         )
         engine.add_step(
             "architecture-review", "架构审查 (SWE.5)",
-            _wrap(run_architecture_review, project_dir, ci),
+            _wrap(run_architecture_review, project_dir, layer),
         )
         engine.add_step(
             "requirements-trace", "需求追溯校验 (SWE.5)",
-            _wrap(run_requirements_trace, project_dir, ci),
+            _wrap(run_requirements_trace, project_dir, layer),
         )
         engine.add_step(
             "plan-lint", "计划检查",
-            _wrap(run_plan_lint, project_dir, ci),
+            _wrap(run_plan_lint, project_dir, layer),
         )
         engine.add_step(
             "docsync-gate", "文档同步门禁 (H-07)",
-            _wrap(run_docsync_gate, project_dir, ci),
+            _wrap(run_docsync_gate, project_dir, layer),
         )
         engine.add_step(
             "clang-tidy", "Clang-Tidy 检查",
-            _wrap(run_clang_tidy, project_dir, ci),
+            _wrap(run_clang_tidy, project_dir, layer),
         )
         engine.add_step(
             "misra-check", "MISRA 静态检查",
-            _wrap(lambda pd, ci: run_misra_check(pd, ci, mode="delta"), project_dir, ci),
+            _wrap(lambda pd, ci: run_misra_check(pd, ci, mode="delta"), project_dir, layer),
         )
         engine.add_step(
             "unit-tests", "Python 单元测试",
-            _wrap(run_unit_tests, project_dir, ci),
+            _wrap(run_unit_tests, project_dir, layer),
         )
         engine.add_step(
             "coverage", "Python 覆盖率",
-            _wrap(run_coverage_check, project_dir, ci),
+            _wrap(run_coverage_check, project_dir, layer),
         )
         engine.add_step(
             "c-coverage", "C 覆盖率生成",
-            _wrap(run_c_coverage, project_dir, ci),
+            _wrap(run_c_coverage, project_dir, layer),
         )
         engine.add_step(
             "c-coverage-gate", "C 覆盖率门禁",
-            _wrap(run_c_coverage_check, project_dir, ci),
+            _wrap(run_c_coverage_check, project_dir, layer),
         )
 
     elif layer == 2:
         engine.add_step(
             "cross-compile", "交叉编译",
-            _wrap(_cross_compile_stage, project_dir, ci),
+            _wrap(_cross_compile_stage, project_dir, layer),
         )
         engine.add_step(
             "static-analysis", "静态分析",
-            _wrap(_static_analysis_stage, project_dir, ci),
+            _wrap(_static_analysis_stage, project_dir, layer),
         )
         engine.add_step(
             "sil-tests", "SIL 测试",
-            _bool_wrap(run_sil_tests, project_dir, ci),
+            _bool_wrap(run_sil_tests, project_dir, layer),
         )
         engine.add_step(
             "integration-tests", "集成测试",
-            _wrap(_integration_test_stage, project_dir, ci),
+            _wrap(_integration_test_stage, project_dir, layer),
         )
         engine.add_step(
             "memory-safety", "内存安全检查",
-            _wrap(_dummy_memory_check, project_dir, ci),
+            _wrap(_dummy_memory_check, project_dir, layer),
         )
 
     elif layer == 2.5:
         engine.add_step(
             "hil-target-detect", "HIL 目标检测",
-            _wrap(_detect_hil_target_dummy, project_dir, ci),
+            _wrap(_detect_hil_target_dummy, project_dir, layer),
         )
         engine.add_step(
             "hil-tests", "HIL 测试",
-            _wrap(_hil_tests_wrapper, project_dir, ci),
+            _wrap(_hil_tests_wrapper, project_dir, layer),
         )
         engine.add_step(
             "hil-report", "HIL 报告",
-            _wrap(_save_hil_report_stub, project_dir, ci),
+            _wrap(_save_hil_report_stub, project_dir, layer),
         )
 
     elif layer == 3:
         engine.add_step(
             "e2e-tests", "端到端测试",
-            _wrap(_run_e2e_tests, project_dir, ci),
+            _wrap(_run_e2e_tests, project_dir, layer),
         )
         engine.add_step(
             "version-check", "版本检查",
-            _wrap(_run_version_check, project_dir, ci),
+            _wrap(_run_version_check, project_dir, layer),
         )
         engine.add_step(
             "evidence-pack", "证据包生成",
-            _wrap(_run_evidence_pack, project_dir, ci),
+            _wrap(_run_evidence_pack, project_dir, layer),
         )
 
     else:
@@ -311,13 +310,13 @@ def main():
     project_dir = os.path.abspath(args.project_dir)
 
     if args.list_steps:
-        engine = create_ci_pipeline(int(args.layer), project_dir)
-        print(f"\n📌 CI Layer {int(args.layer)} Injection Points ({len(engine._step_defs)} steps):")
+        engine = create_ci_pipeline(args.layer, project_dir)
+        print(f"\n📌 CI Layer {args.layer} Injection Points ({len(engine._step_defs)} steps):")
         for i, s in enumerate(engine._step_defs):
             print(f"  Step {i+1}: {s['step_id']:20s} — {s.get('agent', '')}{s['name']}")
         return
 
-    engine = create_ci_pipeline(int(args.layer), project_dir)
+    engine = create_ci_pipeline(args.layer, project_dir)
     result = engine.run(inject_at=args.inject_at, resume=args.resume)
     sys.exit(0 if result else 1)
 
