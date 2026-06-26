@@ -168,3 +168,64 @@ tests/ci/test_ci_fixes_p0_p1.py .............. 55 passed in 0.18s
 4. clang-tidy `--project=compile_commands.json` 支持
 5. `CI_STRICT`/`MISRA_FAIL_FAST` 文档化
 6. 覆盖率报告物发布增强（third_party 排除等）
+
+---
+
+## 新增功能：Checkpoint Pipeline Engine
+
+> 实现日期：2026-06-26
+
+### 概述
+
+Checkpoint Pipeline Engine 是一个通用流水线引擎，支持 **任意点注入** + **自动续跑**。同时对接 Agent Pipeline（30 步）和 CI Pipeline（L1/L2/L2.5/L3）。
+
+### 涉及文件
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `src/yuleosh/engine/__init__.py` | Engine 包入口 |
+| 2 | `src/yuleosh/engine/checkpoint.py` | 核心 CheckpointEngine（全量/注入/恢复三种模式） |
+| 3 | `src/yuleosh/engine/ci_checkpoint.py` | CI Pipeline 适配（L1: 12 stages, L2: 5 stages, L3: 3 stages） |
+| 4 | `src/yuleosh/engine/agent_checkpoint.py` | Agent Pipeline 适配（29 steps） |
+| 5 | `tests/engine/test_checkpoint_engine.py` | 22 tests（全量/注入/恢复/持久化/CI/Agent） |
+| 6 | `src/yuleosh/cli/yuleosh.sh` | CLI: `--inject-at`, `--resume`, `--checkpoint`, `--inject-points` |
+
+### 核心设计
+
+**三种运行模式**：
+- **全量模式**：从头到尾执行所有步骤
+- **注入模式**：从指定 step_id 开始，之前步骤标记为 SKIPPED
+- **恢复模式**：读取 `.yuleosh/checkpoint-state.json`，从上次中断/失败处继续
+
+**CLI 使用示例**：
+```bash
+# 注入模式
+osh-cli pipeline run docs/spec.md --inject-at self-test
+
+# 恢复模式
+osh-cli pipeline run docs/spec.md --resume
+
+# 列出所有注入点
+osh-cli pipeline status --inject-points
+
+# CI 注入
+osh-cli ci run 1 --inject-at misra-check
+
+# CI 恢复
+osh-cli ci run 2 --resume
+```
+
+### 测试结果
+
+```
+tests/engine/test_checkpoint_engine.py .............. 22 passed in 0.14s
+```
+
+测试覆盖：
+- `TestBasic` (3 tests) — 注册/查找/空引擎
+- `TestFullMode` (2 tests) — 全量执行/失败中断
+- `TestInjectMode` (4 tests) — 中间注入/首步注入/末步注入/不存在报错
+- `TestResumeMode` (3 tests) — 失败后恢复/全部完成/无 checkpoint
+- `TestPersistence` (5 tests) — 磁盘持久化/加载/清除/空状态/序列化往返
+- `TestCICheckpoint` (3 tests) — L1/L2/无效 layer
+- `TestAgentCheckpoint` (2 tests) — 创建/列出注入点
