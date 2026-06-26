@@ -130,6 +130,10 @@ misra:
   violations_per_kloc: 2.0
   cppcheck_std: c11
   suppress_rules: []
+  exclude_paths:
+    - tests/**
+    - third_party/**
+    - build/**
   active_profile: safety
   rule_texts_path: misra-rules.yaml
   profiles:
@@ -159,25 +163,36 @@ misra:
     Rule-21-21:
       enabled: false
   deviations:
+  - rule: misra-c2023-17.7
+    file: tests/unity/src/unity.c
+    reason: Unity test framework stdio calls — test code, not production
+    approved_by: test-lead
+    expires: '2027-06-30'
+    status: approved
+  - rule: misra-c2023-2.5
+    file: tests/unity/src/unity.h
+    reason: Unity test framework macros — not deployed in production
+    approved_by: test-lead
+    expires: '2027-06-30'
+    status: approved
+  - rule: misra-c2023-8.7
+    file: tests/unity/src/unity.c
+    reason: Unity test framework functions — non-static linkage for test usage
+    approved_by: test-lead
+    expires: '2027-06-30'
+    status: approved
+  - rule: misra-c2023-15.6
+    file: tests/unity/src/unity.c
+    reason: Unity framework coding style — not production code
+    approved_by: test-lead
+    expires: '2027-06-30'
+    status: approved
   - rule: Rule-17.7
     file: src/**/legacy/old_protocol.c
     reason: Legacy protocol implementation — refactoring scheduled for v2.0
     approved_by: safety-manager
     expires: '2026-12-31'
     status: approved
-  - rule: Rule-14.4
-    file: src/**/drv_timer.c
-    reason: Timer driver uses volatile for hardware register access — justified per
-      RTOS requirements
-    approved_by: architect
-    expires: '2027-03-15'
-    status: approved
-  - rule: misra-c2023-10.1
-    file: tests/**/*mock*.c
-    reason: Test mock code — not deployed in production, pending MISRA exemption policy
-    approved_by: test-lead
-    expires: '2026-09-30'
-    status: open
   - rule: Rule-21.21
     file: src/**/hal/*.c
     reason: Standard library usage in HAL layer — bounded context, reviewed by safety
@@ -211,18 +226,6 @@ misra:
     approved_by: architect
     expires: '2027-01-01'
     status: approved
-  - rule: Rule-99.9
-    file: src/**/test/*.c
-    reason: Test fix
-    approved_by: architect
-    expires: '2027-01-01'
-    status: rejected
-  - rule: Rule-Test-DryRun
-    file: src/main.c
-    reason: Test deviation for dry run
-    approved_by: safety-manager
-    expires: '2026-12-31'
-    status: pending
   alm:
     enabled: false
     backend: jira

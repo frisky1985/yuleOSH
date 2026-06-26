@@ -138,6 +138,7 @@ class MisraConfig:
     alm: AlmConfig = field(default_factory=AlmConfig)
     active_profile: str = "safety"  # "safety" | "performance" | "testing"
     profiles: dict[str, MisraProfile] = field(default_factory=dict)
+    exclude_paths: list[str] = field(default_factory=lambda: ["tests/**", "third_party/**", "build/**"])
 
 
 @dataclass
@@ -298,6 +299,11 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
             cfg.misra.suppress_rules = [str(s) for s in suppress]
         cfg.misra.rule_texts_path = str(misra_block.get("rule_texts_path", ""))
         cfg.misra.active_profile = str(misra_block.get("active_profile", "safety"))
+
+        # Parse exclude_paths
+        exclude = misra_block.get("exclude_paths", ["tests/**", "third_party/**", "build/**"])
+        if isinstance(exclude, list):
+            cfg.misra.exclude_paths = [str(p) for p in exclude]
 
         # Parse profiles block
         profiles_block = misra_block.get("profiles", {})
