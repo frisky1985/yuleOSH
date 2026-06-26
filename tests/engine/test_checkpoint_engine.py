@@ -115,6 +115,16 @@ class TestBasic:
         engine = CheckpointEngine("empty", project_dir)
         assert engine.get_step_ids() == []
 
+    def test_empty_engine_run(self, project_dir):
+        """空引擎调用 run() 应返回 True。"""
+        engine = CheckpointEngine("empty", project_dir)
+        result = engine.run()
+        assert result is True
+        # 无步骤时状态应为 completed
+        assert engine._state is not None
+        assert engine._state.status == "completed"
+        assert len(engine._state.steps) == 0
+
 
 # ---------------------------------------------------------------------------
 # Tests: Full mode
@@ -199,9 +209,9 @@ class TestInjectMode:
         assert engine._state.steps[2].status == StepStatus.PASSED
 
     def test_inject_at_nonexistent(self, passing_engine):
-        """注入不存在的步骤 — engine 打印错误后正常退出。"""
+        """注入不存在的步骤 — engine 返回 False。"""
         result = passing_engine.run(inject_at="step-99")
-        assert result is True  # engine exits cleanly (no steps to run)
+        assert result is False
         assert passing_engine._state is not None
         assert all(s.status == StepStatus.FAILED for s in passing_engine._state.steps)
         assert "not found" in (passing_engine._state.steps[0].error or "")
@@ -308,6 +318,45 @@ class TestPersistence:
     def test_status_no_checkpoint(self, project_dir):
         engine = CheckpointEngine("fresh", project_dir)
         assert engine.status() is None
+
+    def test_mid_pipeline_status(self, project_dir):
+        """run() 执行过程中调用 status() 应能读取中间状态。"""
+        engine = CheckpointEngine("mid-status", project_dir)
+        handler_calls = []
+
+        def handler_a():
+            # 执行中检查 status
+            status = engine.status()
+            assert status is not None
+            assert status["status"] == "running"
+            assert len(status["steps"]) == 3
+            assert status["steps"][0]["status"] == "running"
+            assert status["steps"][1]["status"] == "pending"
+            assert status["steps"][2]["status"] == "pending"
+            handler_calls.append("a")
+            return "/tmp/out.json"
+
+        def handler_b():
+            # 第二步时检查 status
+            status = engine.status()
+            assert status is not None
+            assert status["status"] == "running"
+            assert status["steps"][0]["status"] == "passed"
+            assert status["steps"][1]["status"] == "running"
+            handler_calls.append("b")
+            return "/tmp/out.json"
+
+        def handler_c():
+            handler_calls.append("c")
+            return "/tmp/out.json"
+
+        engine.add_step("step-a", "Step A", handler_a)
+        engine.add_step("step-b", "Step B", handler_b)
+        engine.add_step("step-c", "Step C", handler_c)
+
+        result = engine.run()
+        assert result is True
+        assert handler_calls == ["a", "b", "c"]
 
     def test_state_serialization_roundtrip(self):
         """StepRecord / CheckpointState 的 to_dict → from_dict 往返。"""
