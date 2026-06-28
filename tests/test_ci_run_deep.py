@@ -585,7 +585,7 @@ class TestRunClangTidy:
 class TestRunUnitTests:
     def test_no_tests_discovered(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
                 ci = CIResult(1, "abc")
@@ -593,7 +593,7 @@ class TestRunUnitTests:
 
     def test_fallback_collect_fails(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 1
                 mrun.return_value.stdout = "failed"
@@ -602,7 +602,7 @@ class TestRunUnitTests:
 
     def test_python_files_found_and_pass(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files",
+        with mock.patch("yuleosh.ci.stages.test.find_test_files",
                         return_value=["/tmp/tests/test_a.py"]):
             with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
@@ -611,7 +611,7 @@ class TestRunUnitTests:
 
     def test_python_file_fails(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files",
+        with mock.patch("yuleosh.ci.stages.test.find_test_files",
                         return_value=["/tmp/tests/test_bad.py"]):
             with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 1
@@ -620,7 +620,7 @@ class TestRunUnitTests:
 
     def test_pytest_not_found(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run",
                             side_effect=FileNotFoundError()):
                 ci = CIResult(1, "abc")
@@ -628,7 +628,7 @@ class TestRunUnitTests:
 
     def test_pytest_timeout(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run",
                             side_effect=TimeoutExpired("pytest", 30)):
                 ci = CIResult(1, "abc")
@@ -636,7 +636,7 @@ class TestRunUnitTests:
 
     def test_pytest_generic_error(self, tmp_proj):
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run",
                             side_effect=ValueError("strange")):
                 ci = CIResult(1, "abc")
@@ -663,7 +663,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 92.0, "percent_covered_condition": 88.0}
         }))
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
                 ci = CIResult(1, "abc")
@@ -677,7 +677,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 42.0, "percent_covered_condition": 40.0}
         }))
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
                 ci = CIResult(1, "abc")
@@ -691,7 +691,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 92.0, "percent_covered_condition": 30.0}
         }))
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
                 ci = CIResult(1, "abc")
@@ -699,7 +699,7 @@ class TestRunCoverage:
 
     def test_run_fails(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(False, "tool error")):
             ci = CIResult(1, "abc")
             assert run_coverage_check(tmp_proj, ci) is False
@@ -707,7 +707,7 @@ class TestRunCoverage:
     def test_json_decode_error(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
         Path(tmp_proj, "coverage.json").write_text("bad{json")
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(True, "")):
             ci = CIResult(1, "abc")
             assert run_coverage_check(tmp_proj, ci) is False
@@ -717,7 +717,7 @@ class TestRunCoverage:
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
             "totals": {"percent_covered": 90.0, "percent_covered_condition": 85.0}
         }))
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(True, "")):
             with mock.patch("yuleosh.ci.run._get_ci_config",
                             side_effect=ValueError("no config")):
@@ -1512,7 +1512,7 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_fail(self, tmp_proj):
         """Cover unit tests where fallback collect-only fails."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run") as mrun:
                 # First call for collect-only
                 mrun.return_value.returncode = 0
@@ -1523,7 +1523,7 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_collect_then_fail(self, tmp_proj):
         """Cover collect-only succeeds but real run fails."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("yuleosh.ci.run.subprocess") as msub:
                 mock_res = mock.MagicMock()
                 mock_res.returncode = 0
@@ -1540,7 +1540,7 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_coverage_check, CIResult
         # Write invalid JSON to make _load_coverage_json fail
         Path(tmp_proj, "coverage.json").write_text("not valid json at all")
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(True, "")):
             ci = CIResult(1, "abc")
             assert run_coverage_check(tmp_proj, ci) is False
@@ -1548,7 +1548,7 @@ class TestEdgeCasesBranch:
     def test_coverage_run_timeout(self, tmp_proj):
         """Cover coverage TimeoutExpired handler."""
         from yuleosh.ci.run import run_coverage_check, CIResult
-        with mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+        with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         side_effect=TimeoutExpired("coverage", 120)):
             ci = CIResult(1, "abc")
             with mock.patch.dict(os.environ, {}, clear=True):
@@ -1855,7 +1855,7 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_collect_only_success(self, tmp_proj):
         """Cover unit tests fallback path where collect-only succeeds."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run") as mrun:
                 # Two calls: collect-only (0) then real run (0)
                 mrun.return_value.returncode = 0
@@ -1865,7 +1865,7 @@ class TestEdgeCasesBranch:
     def test_unit_tests_fallback_collect_fail(self, tmp_proj):
         """Cover unit tests fallback: collect-only fails, no tests discovered."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run") as mrun:
                 # collect-only returns 0
                 mrun.return_value.returncode = 0
@@ -1958,7 +1958,7 @@ class TestRemainingBranches:
     def test_unit_tests_fallback_run_fail(self, tmp_proj):
         """Cover unit tests fallback: collect succeeds but run fails."""
         from yuleosh.ci.run import run_unit_tests, CIResult
-        with mock.patch("yuleosh.ci.stages.find_test_files", return_value=[]):
+        with mock.patch("yuleosh.ci.stages.test.find_test_files", return_value=[]):
             with mock.patch("subprocess.run") as mrun:
                 # collect-only succeeds, then real run fails
                 mrun.side_effect = [
@@ -2095,7 +2095,7 @@ class TestRemainingBranches:
         cross_path = str(Path(tmp_proj, "src", "cross", "hello.c"))
         Path(cross_path).parent.mkdir(parents=True, exist_ok=True)
         Path(cross_path).write_text("int main() {}")
-        with mock.patch("yuleosh.ci.stages._resolve_cross_compile",
+        with mock.patch("yuleosh.ci.stages.test._resolve_cross_compile",
                         return_value=False):
             ci = CIResult(2, "abc")
             r = _cross_compile_stage(tmp_proj, cross_path,

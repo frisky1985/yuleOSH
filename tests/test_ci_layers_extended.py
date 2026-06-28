@@ -72,7 +72,7 @@ class TestLayerFunctions:
                 m.return_value.returncode = 0
                 m.return_value.stdout = ""
                 with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
-                    with mock.patch("yuleosh.ci.stages._should_skip_coverage", return_value=True):
+                    with mock.patch("yuleosh.ci.stages.test._should_skip_coverage", return_value=True):
                         result = run_layer1(td)
                         assert result is True
 
@@ -102,7 +102,7 @@ class TestLayerFunctions:
                 m.return_value.returncode = 0
                 m.return_value.stdout = "0 failed"
                 with mock.patch("yuleosh.ci.run.git_commit_hash", return_value="abc1234"):
-                    with mock.patch("yuleosh.ci.stages._should_skip_coverage", return_value=True):
+                    with mock.patch("yuleosh.ci.stages.test._should_skip_coverage", return_value=True):
                         result = run_all(td)
                         assert result is True
 
@@ -163,7 +163,7 @@ class TestCoverageAndSIL:
         with tempfile.TemporaryDirectory() as td:
             _create_ci_files(td)
             ci = CIResult(layer=1, commit_hash="x")
-            with mock.patch("yuleosh.ci.stages._should_skip_coverage", return_value=True):
+            with mock.patch("yuleosh.ci.stages.test._should_skip_coverage", return_value=True):
                 result = run_coverage_check(td, ci)
                 assert result is True
 
