@@ -51,6 +51,7 @@ _SELFTEST_SCHEMA_VERSION = "selftest-review-v2"
 
 
 
+@dataclass
 class ToolResult:
     """Result from a single MISRA analysis tool.
 
