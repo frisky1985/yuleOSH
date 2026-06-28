@@ -474,7 +474,7 @@ class TestSaveReportWithDeviations:
             "per_file_counts": {"src/core/main.c": 2, "src/legacy/old_driver.c": 1},
         }
 
-        json_path, md_path, trace_path = save_report(
+        json_path, md_path, trace_path, *_ = save_report(
             SAMPLE_VIOLATIONS, groups, summary, SAMPLE_RULE_DEFS,
             tmp_dir, deviations=deviations,
         )
