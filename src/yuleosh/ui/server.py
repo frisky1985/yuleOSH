@@ -24,13 +24,31 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from yuleosh.store import Store
 
-# Caching, compression & security helpers extracted to routes/helpers
+# Route modules — extracted from the monolithic handler
 from yuleosh.ui.routes.helpers import (
     _compute_etag,
     _format_http_datetime,
     _parse_http_datetime,
     _send_gzipped_json,
     _send_security_headers,
+)
+from yuleosh.ui.routes.auth_routes import (
+    handle_auth_check,
+    handle_auth_login,
+    handle_api_action,
+)
+from yuleosh.ui.routes.page_routes import (
+    serve_page,
+    serve_file,
+)
+from yuleosh.ui.routes.api_routes import (
+    handle_status,
+    handle_health,
+    list_evidence,
+    list_reviews,
+    list_ci_results,
+    handle_pipeline_status,
+    handle_usage,
 )
 
 # Add parent dir to path for auth import
@@ -96,14 +114,6 @@ except ImportError:
     def _audit_log(method, path, status, ip, duration): pass
 
 
-def _send_security_headers(handler):
-    """Send security headers on the given handler."""
-    handler.send_header("Content-Security-Policy", "default-src 'self'")
-    handler.send_header("X-Content-Type-Options", "nosniff")
-    handler.send_header("X-Frame-Options", "DENY")
-    handler.send_header("Strict-Transport-Security", "max-age=31536000")
-    handler.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-
 OSH_HOME = os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UI_DIR = Path(__file__).parent
 PAGES_DIR = UI_DIR / "pages"
@@ -130,11 +140,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def _add_security_headers(self):
-        self.send_header("Content-Security-Policy", "default-src 'self'")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Strict-Transport-Security", "max-age=31536000")
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        _send_security_headers(self)
 
     # ------------------------------------------------------------------
     # Client IP helper
@@ -144,7 +150,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         return self.client_address[0]
 
     # ------------------------------------------------------------------
-    # Routing
+    # Routing — GET
     # ------------------------------------------------------------------
 
     def do_GET(self):
@@ -177,7 +183,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
 
         # Healthcheck — always accessible
         if path == "/api/health":
-            self._json_response(self._get_health())
+            self._json_response(handle_health(self))
             self._log_audit()
             return
 
@@ -264,15 +270,15 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         elif path == "/apikeys":
             self._serve_page("apikeys.html", {})
         elif path == "/api/status":
-            self._json_response(self._get_status())
+            self._json_response(handle_status(self))
         elif path == "/api/evidence":
-            self._json_response(self._list_evidence())
+            self._json_response(list_evidence(self))
         elif path == "/api/reviews":
-            self._json_response(self._get_reviews())
+            self._json_response(list_reviews(self))
         elif path == "/api/ci":
-            self._json_response(self._get_ci_results())
+            self._json_response(list_ci_results(self))
         elif path == "/api/health":
-            self._json_response(self._get_health())
+            self._json_response(handle_health(self))
         elif path == "/health":
             self._serve_page("health.html", {})
         elif path == "/welcome":
@@ -383,7 +389,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         )
 
     # ------------------------------------------------------------------
-    # API handler for tenant auth
+    # API handler for tenant auth (for backward compatibility)
     # ------------------------------------------------------------------
 
     def _handle_api(self, action: str):
@@ -393,48 +399,30 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             return
 
         body = self._read_body()
-
-        # Extract bearer token from Authorization header
         token = self._get_bearer_token()
 
         try:
             if action == "signin":
                 result, status = handle_signin(body)
-                # If signin returns a token (needs_org flow), pass it back
                 self._json_response(result, status)
-                return
-
             elif action == "session":
                 result, status = handle_session_info(token)
                 self._json_response(result, status)
-                return
-
             elif action == "org_create":
-                # The body might have email from a magic-token flow
                 result, status = handle_org_create(body, token)
                 self._json_response(result, status)
-                return
-
             elif action == "org_info":
                 result, status = handle_org_info(token)
                 self._json_response(result, status)
-                return
-
             elif action == "project_list":
                 result, status = handle_project_list(token)
                 self._json_response(result, status)
-                return
-
             elif action == "project_create":
                 result, status = handle_project_create(body, token)
                 self._json_response(result, status)
-                return
-
             elif action == "logout":
                 result, status = handle_logout(token)
                 self._json_response(result, status)
-                return
-
             else:
                 self._json_response({"error": "unknown action"}, 400)
         except Exception as e:
@@ -442,21 +430,13 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
 
     def _read_body(self) -> dict:
         """Read and parse JSON request body."""
-        content_length = int(self.headers.get("Content-Length", 0))
-        if content_length == 0:
-            return {}
-        try:
-            body = self.rfile.read(content_length).decode("utf-8")
-            return json.loads(body)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return {}
+        from yuleosh.ui.routes.auth_routes import _read_body as _rb
+        return _rb(self)
 
     def _get_bearer_token(self) -> Optional[str]:
         """Extract bearer token from Authorization header."""
-        auth = self.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            return auth[7:]
-        return None
+        from yuleosh.ui.routes.auth_routes import _get_bearer_token as _gbt
+        return _gbt(self)
 
     # ------------------------------------------------------------------
     # Legacy Auth
@@ -527,7 +507,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(legacy_login_page("Invalid API key").encode("utf-8"))
 
     # ------------------------------------------------------------------
-    # Endpoints
+    # Endpoints — page/file serving
     # ------------------------------------------------------------------
 
     def _serve_page(self, name: str, context: dict):
@@ -578,6 +558,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_file(self, filepath: Path, mime: str):
+        """Serve a static file with caching and security headers."""
         if filepath.exists():
             data = filepath.read_bytes()
             etag = _compute_etag(data)
@@ -650,22 +631,10 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def _get_status(self) -> dict:
-        return {
-            "status": "running",
-            "osh_home": OSH_HOME,
-            "version": "1.0.0",
-            "timestamp": __import__("datetime").datetime.now().isoformat(),
-        }
+        return handle_status(self)
 
     def _get_health(self) -> dict:
-        return {
-            "status": "ok",
-            "version": "1.0.0",
-            "uptime_seconds": None,
-            "auth_enabled": AUTH_ENABLED,
-            "tenant_auth": TENANT_AUTH,
-            "osh_home": OSH_HOME,
-        }
+        return handle_health(self)
 
     def _list_evidence(self) -> dict:
         ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
@@ -774,44 +743,6 @@ def main(port: int | None = None):
     except KeyboardInterrupt:
         print("\nShutting down...")
         server.shutdown()
-
-
-
-    # ── v0.9.0: Async pipeline + usage handlers ─────────────────────────────
-
-    def _handle_pipeline_status(self, path: str):
-        """GET /api/v1/pipeline/status/{job_id}"""
-        job_id = path.rsplit("/", 1)[-1]
-        try:
-            from pipeline.async_runner import get_job_status
-            status = get_job_status(job_id)
-            if status:
-                self._json_response(status)
-            else:
-                self._json_response({"error": "Job not found"}, 404)
-        except Exception:
-            self._json_response({"error": "Pipeline status unavailable"}, 500)
-
-    def _handle_usage(self):
-        """GET /api/v1/usage — current org usage summary"""
-        token = self._get_bearer_token()
-        if not token:
-            self._json_response({"error": "Unauthorized"}, 401)
-            return
-        try:
-            from yuleosh.ui.auth_extended import get_session_user
-            user = get_session_user(token)
-            if not user:
-                self._json_response({"error": "Invalid session"}, 401)
-                return
-            store = Store()
-            from yuleosh.usage.metering import get_usage_summary
-            summary = get_usage_summary(store, user["org_id"])
-            self._json_response(summary)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            self._json_response({"error": str(e)}, 500)
 
 
 if __name__ == "__main__":
