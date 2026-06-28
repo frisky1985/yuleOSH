@@ -60,6 +60,12 @@ _SELFTEST_SCHEMA_VERSION = "selftest-review-v2"
 # ------------------------------------------------------------------
 
 
+
+_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
+_DEFAULT_OUTPUT_DIR = Path(".yuleosh") / "reports"
+_DEFAULT_REPORT_DIR = _DEFAULT_OUTPUT_DIR
+_DEFAULT_CI_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent.parent / ".yuleosh" / "ci-config.yaml"
+
 def main():
     import argparse
 
