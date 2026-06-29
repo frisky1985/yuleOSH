@@ -30,7 +30,7 @@ log = logging.getLogger("ci.rulesets")
 from yuleosh.ci.rulesets.base import BaseRuleSet
 
 # 默认规则定义文件路径（project root / misra-rules.yaml）
-_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
+_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
 
 
 # ------------------------------------------------------------------
@@ -48,8 +48,8 @@ _DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "mi
 # ------------------------------------------------------------------
 
 # 企标规则文件路径（相对于项目根目录）
-_GSCR_C_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "gscr-c-rules.yaml"
-_GSCR_CPP_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "gscr-cpp-rules.yaml"
+_GSCR_C_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "gscr-c-rules.yaml"
+_GSCR_CPP_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "gscr-cpp-rules.yaml"
 
 
 class GscCRuleSet(BaseRuleSet):

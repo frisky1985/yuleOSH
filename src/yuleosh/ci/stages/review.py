@@ -470,7 +470,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
         )
         sys.path.pop(0)
 
-        rule_defs_path = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
+        rule_defs_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
         if misra_cfg and misra_cfg.rule_texts_path:
             rule_defs_path = Path(misra_cfg.rule_texts_path)
 

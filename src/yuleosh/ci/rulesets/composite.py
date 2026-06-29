@@ -33,7 +33,7 @@ from yuleosh.ci.rulesets.gscr_cpp import GscCppRuleSet
 from yuleosh.ci.rulesets.gscr_c import GscCRuleSet
 
 # 默认规则定义文件路径（project root / misra-rules.yaml）
-_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
+_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
 
 
 # ------------------------------------------------------------------

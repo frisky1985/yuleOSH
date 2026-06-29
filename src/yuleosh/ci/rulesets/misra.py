@@ -30,7 +30,7 @@ log = logging.getLogger("ci.rulesets")
 from yuleosh.ci.rulesets.base import BaseRuleSet
 
 # 默认规则定义文件路径（project root / misra-rules.yaml）
-_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
+_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
 
 
 # ------------------------------------------------------------------

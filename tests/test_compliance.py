@@ -285,16 +285,9 @@ def test_compliance_checker_in_pipeline(tmp_path, aspice_yaml_path):
 
 
 def _load_misra_report():
-    """Load ci.misra_report using importlib to avoid sys.path issues."""
-    import importlib.util as _iu
-    from pathlib import Path as _Path
-    _mod_path = str(_Path(__file__).resolve().parent.parent / "ci" / "misra_report.py")
-    _spec = _iu.spec_from_file_location("misra_report", _mod_path)
-    if _spec is None:
-        raise ImportError(f"Could not load misra_report from {_mod_path}")
-    _mod = _iu.module_from_spec(_spec)
-    _spec.loader.exec_module(_mod)
-    return _mod
+    """Load yuleosh.ci.misra_report via normal import."""
+    from yuleosh.ci import misra_report as _mr  # noqa: F811
+    return _mr
 
 
 def test_misra_report_parse_cppcheck_output():
@@ -427,7 +420,7 @@ def test_misra_report_save(tmp_path):
                "severity_counts": {}, "unique_files": [], "per_file_counts": {}}
     rule_defs = {}
 
-    json_path, md_path = _mr.save_report(violations, groups, summary, rule_defs, tmp_path / "reports")
+    json_path, md_path, trace_path, excel_path = _mr.save_report(violations, groups, summary, rule_defs, tmp_path / "reports")
     assert json_path.exists()
     assert md_path.exists()
     assert "misra-report" in json_path.name

@@ -57,12 +57,12 @@ _SELFTEST_SCHEMA_VERSION = "selftest-review-v2"
 
 # Default paths
 # misra-rules.yaml lives at the workspace root (4 levels up: ci/ → yuleosh/ → src/ → workspace)
-_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "misra-rules.yaml"
+_DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
 _DEFAULT_OUTPUT_DIR = Path(".yuleosh") / "reports"
 _DEFAULT_REPORT_DIR = _DEFAULT_OUTPUT_DIR
 
 # Path to ci-config.yaml (project root > .yuleosh/ci-config.yaml)
-_DEFAULT_CI_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent.parent / ".yuleosh" / "ci-config.yaml"
+_DEFAULT_CI_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / ".yuleosh" / "ci-config.yaml"
 
 # Regex patterns for cppcheck MISRA output
 # Typical cppcheck MISRA line (--addon=misra):
