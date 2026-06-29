@@ -51,7 +51,6 @@ omit = [
     "src/yuleosh/cross/*",
     "src/yuleosh/sil/*",
     "src/yuleosh/plugins/sandbox.py",
-    "src/yuleosh/store_pg.py",
     "src/yuleosh/llm/client.py",
     "src/yuleosh/_entry.py",
 ]
