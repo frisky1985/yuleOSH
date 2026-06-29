@@ -7,7 +7,6 @@ omit =
     */cross/*
     */sil/*
     */plugins/sandbox.py
-    */store_pg.py
     */llm/client.py
     */_entry.py
 
