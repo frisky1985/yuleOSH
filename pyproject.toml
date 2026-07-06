@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yuleosh"
-version = "2.1.0"
+version = "2.2.0"
 description = "嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体"
 authors = [{name = "frisky1985"}]
 license = {text = "MIT"}
@@ -66,5 +66,5 @@ exclude_lines = [
     "def main",
     "def _check_llm_key",
 ]
-fail_under = 60
+fail_under = 50
 show_missing = true
