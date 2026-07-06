@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="yuleosh",
-    version="2.1.0",
+    version="2.2.0",
     description="嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体",
     packages=find_packages(where=["src"]),
     package_dir={"": "src"},
