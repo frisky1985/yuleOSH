@@ -1,6 +1,6 @@
 # OSH-Fusion 嵌入式开发平台 · 规范文档
 
-> Version: 1.0.0 | 状态: 发布候选 | 格式: RS-XXX / SWR-XXX 层级
+> Version: 2.2.0 | 状态: 发布候选 | 格式: RS-XXX / SWR-XXX 层级
 
 ---
 

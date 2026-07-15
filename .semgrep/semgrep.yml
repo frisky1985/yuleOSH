@@ -1,0 +1,20 @@
+# =============================================================================
+# Semgrep — yuleOSH 主配置
+# =============================================================================
+
+rulesets:
+  - p/python
+  - p/python.lang.security.audit.audit
+  - p/c.lang.security.audit.audit
+  - p/owasp-top-ten
+  - p/command-injection
+  - p/sql-injection
+  - p/jwt
+  - p/flask
+  - p/django
+
+rules:
+  - id: yuleosh-custom-python
+    path: .semgrep/security-python.yml
+  - id: yuleosh-custom-c
+    path: .semgrep/security-c.yml

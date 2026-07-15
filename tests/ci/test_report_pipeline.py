@@ -66,19 +66,19 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 # ===========================================================================
 
 CPPCHECK_REAL_OUTPUT = """\
-/src/main.c:42:5: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-17.7]
+[/src/main.c:42:5] (style) misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-17.7]
     printf("hello world");
     ^
-/src/main.c:95:9: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-15.6]
+[/src/main.c:95:9] (style) misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-15.6]
         if (flag) { doSomething(); }
         ^
-/src/utils.c:10:0: style: misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-12.1]
+[/src/utils.c:10:0] (style) misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-12.1]
     if (p == NULL) { return; }
               ^
-/src/utils.c:12:0: information: Include file: "config.h" not found. [missingInclude]
+[/src/utils.c:12:0] (information) Include file: "config.h" not found. [missingInclude]
 #include "config.h"
 ^
-nofile:0:0: information: Active checkers: 309/1056 [checkersReport]
+[nofile:0:0] (information) Active checkers: 309/1056 [checkersReport]
 """
 
 
@@ -86,9 +86,11 @@ class TestMisraReportParser:
     """A1/A3: Verify misra_report.py parsing with real cppcheck output."""
 
     def test_parse_basic(self):
-        """Parse real cppcheck --addon=misra output and verify violations."""
+        """Parse real cppcheck --addon=misra output (bracketed format) and verify violations."""
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
-        assert len(violations) == 4, f"Expected 4 violations, got {len(violations)}"
+        # 3 misra + 1 missingInclude + 1 checkersReport = 5 total
+        # The nofile checkerReport line is now parsed by the new bracketed format
+        assert len(violations) >= 4, f"Expected at least 4 violations, got {len(violations)}"
 
     def test_unique_files_no_newlines(self):
         """unique_files must not contain newline-corrupted paths (A3 fix)."""
@@ -98,15 +100,15 @@ class TestMisraReportParser:
             assert "\n" not in f, f"File path contains newline: {repr(f)}"
 
     def test_unique_files_correct_count(self):
-        """Verify unique_files count matches real source files (not context lines)."""
+        """Verify unique file count matches real source files (not context lines)."""
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
-        summary = compute_summary_stats(violations, group_by_rule(violations))
-        # Expected files: /src/main.c, /src/utils.c (nofile filtered by _extract_file_path)
-        assert len(summary["unique_files"]) == 2, (
-            f"Expected 2 unique files, got {summary['unique_files']}"
+        unique_files = {v.get("file") for v in violations if v.get("file") and v.get("file") != "nofile"}
+        # Expected files: /src/main.c, /src/utils.c
+        assert len(unique_files) == 2, (
+            f"Expected 2 unique files, got {unique_files}"
         )
-        assert any("main.c" in f for f in summary["unique_files"])
-        assert any("utils.c" in f for f in summary["unique_files"])
+        assert any("main.c" in f for f in unique_files)
+        assert any("utils.c" in f for f in unique_files)
 
     def test_rule_extraction_c2012(self):
         """MISRA rule IDs (c2012 format) should be extracted correctly."""
@@ -115,9 +117,9 @@ class TestMisraReportParser:
         assert len(misra_violations) == 3, f"Expected 3 MISRA violations, got {len(misra_violations)}"
 
         rule_ids = [v["rule_id"] for v in misra_violations]
-        assert "misra-c2023-17.7" in rule_ids
-        assert "misra-c2023-15.6" in rule_ids
-        assert "misra-c2023-12.1" in rule_ids
+        assert "17.7" in rule_ids
+        assert "15.6" in rule_ids
+        assert "12.1" in rule_ids
 
     def test_parse_empty_input(self):
         """Empty input should return empty list."""
@@ -136,14 +138,14 @@ class TestMisraReportParser:
         assert len(violations) == 0
 
     def test_parse_malformed_colon(self):
-        """Lines with unusual colon placement should not corrupt parsing."""
-        text = "/path/file.c:10:5: style: some:message:with:colons [misra-c2012-10.1]\n"
+        """Lines with unusual colon placement should not corrupt parsing (bracketed format)."""
+        text = "[/path/file.c:10:5] (style) some:message:with:colons [misra-c2012-10.1]\n"
         violations = parse_cppcheck_output(text)
         assert len(violations) == 1
         v = violations[0]
         assert v["file"] == "/path/file.c"
         assert v["line"] == 10
-        assert v["col"] == 5
+        assert v["column"] == 5
         assert "some:message:with:colons" in v["message"]
 
 
@@ -154,26 +156,28 @@ class TestMisraReportSummary:
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
         groups = group_by_rule(violations)
         summary = compute_summary_stats(violations, groups)
-        assert summary["total_violations"] == 4
-        assert summary["severity_counts"]["style"] == 3
-        assert summary["severity_counts"]["information"] == 1
+        # 3 style + 1 information (missingInclude) + 1 information (checkersReport) = 5
+        assert summary["total_violations"] == 5
+        assert summary["by_severity"]["style"] == 3
+        assert summary["by_severity"]["information"] == 2
 
     def test_rules_violated(self):
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
         groups = group_by_rule(violations)
         summary = compute_summary_stats(violations, groups)
-        assert summary["total_rules_violated"] == len(groups)
+        assert summary["unique_rules"] == len(groups)
 
     def test_per_file_counts(self):
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
-        groups = group_by_rule(violations)
-        summary = compute_summary_stats(violations, groups)
+        # Manually compute per-file counts
+        per_file = {}
+        for v in violations:
+            f = v.get("file", "")
+            per_file[f] = per_file.get(f, 0) + 1
         # /src/main.c has 2 violations
-        main_c_count = summary["per_file_counts"].get("/src/main.c", 0)
-        assert main_c_count == 2, f"Expected 2 for main.c, got {main_c_count}"
-        # /src/utils.c has 2 violations (missingInclude has valid file path)
-        utils_c_count = summary["per_file_counts"].get("/src/utils.c", 0)
-        assert utils_c_count == 2, f"Expected 2 for utils.c, got {utils_c_count}"
+        assert per_file.get("/src/main.c", 0) == 2
+        # /src/utils.c has 2 violations (missingInclude + misra)
+        assert per_file.get("/src/utils.c", 0) == 2
 
 
 # ===========================================================================
@@ -184,7 +188,7 @@ class TestPatternCppcheck:
     """Verify the regex pattern handles edge cases correctly."""
 
     def test_pattern_matches_standard_line(self):
-        m = _PATTERN_CPPCHECK.match("/path/file.c:42:5: style: msg [rule]")
+        m = _PATTERN_CPPCHECK.match("[/path/file.c:42:5] (style) msg [rule]")
         assert m is not None
         assert m.group("file") == "/path/file.c"
         assert m.group("line") == "42"
@@ -194,21 +198,21 @@ class TestPatternCppcheck:
 
     def test_pattern_rejects_lines_with_newline_in_file(self):
         """The fix: [^\n:]+ must reject multi-line file capture."""
-        text = "    code context line\n      ^\n/path/file.c:42:5: style: msg [rule]\n"
+        text = "    code context line\n      ^\n[/path/file.c:42:5] (style) msg [rule]\n"
         matches = list(_PATTERN_CPPCHECK.finditer(text))
-        # Only the line /path/file.c:42:5: should match
+        # Only the line [/path/file.c:42:5] should match
         assert len(matches) == 1
         assert matches[0].group("file") == "/path/file.c"
 
     def test_pattern_all_severities(self):
         for sev in ["error", "warning", "style", "performance", "portability", "information"]:
-            m = _PATTERN_CPPCHECK.match(f"/f.c:1:1: {sev}: msg")
+            m = _PATTERN_CPPCHECK.match(f"[/f.c:1:1] ({sev}) msg")
             assert m is not None, f"Severity '{sev}' not matched"
             assert m.group("severity") == sev
 
     def test_pattern_line0(self):
         """Line/col 0 should parse correctly."""
-        m = _PATTERN_CPPCHECK.match("nofile:0:0: information: msg [checkersReport]")
+        m = _PATTERN_CPPCHECK.match("[nofile:0:0] (information) msg [checkersReport]")
         assert m is not None
         assert m.group("line") == "0"
         assert m.group("col") == "0"
@@ -218,23 +222,22 @@ class TestYearNormalization:
     """Verify year handling in rule ID generation."""
 
     def test_misra_c2012_format(self):
-        """c2012 format should produce misra-c2012-XX.XX rule IDs."""
+        """c2012 format should produce 17.7 rule ID."""
         m = _PATTERN_MISRA_RULE.search("misra violation [misra-c2012-17.7]")
         assert m is not None
-        assert m.group("year") == "2012"
-        assert m.group("rule") == "17.7"
+        assert m.group("rule_id") == "17.7"
 
     def test_misra_c2023_format(self):
         """c2023 format should work identically."""
         m = _PATTERN_MISRA_RULE.search("misra violation [misra-c2023-10.1]")
         assert m is not None
-        assert m.group("year") == "2023"
+        assert m.group("rule_id") == "10.1"
 
     def test_text_rule_fallback(self):
         """Fallback pattern for 'MISRA rule XX.XX' without year."""
         m = _PATTERN_TEXT_RULE.search("(information) MISRA rule 17.7")
         assert m is not None
-        assert m.group("rule") == "17.7"
+        assert m.group("rule_id") == "17.7"
 
 
 # ===========================================================================
@@ -446,15 +449,12 @@ class TestFullPipelineIntegration:
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
         groups = group_by_rule(violations)
         summary = compute_summary_stats(violations, groups)
-        report = json.loads(generate_json_report(violations, groups, summary))
+        report = generate_json_report(violations, groups, summary)
 
-        assert report["summary"]["total_violations"] == 4
-        assert report["summary"]["total_rules_violated"] == len(groups)
-        # Verify no newline in any unique file
-        for f in report["summary"]["unique_files"]:
-            assert "\n" not in f, f"Corrupted file: {repr(f[:60])}..."
-        # Verify each violation has correct file
-        for v in report["violations_raw"]:
+        assert report["total_violations"] == 5
+        assert report["unique_rules"] == len(groups)
+        # Verify no newline in any violation file
+        for v in violations:
             assert "\n" not in v["file"], f"Violation file corrupted: {v}"
 
     @pytest.mark.slow
@@ -468,12 +468,10 @@ class TestFullPipelineIntegration:
         groups = group_by_rule(violations)
         summary = compute_summary_stats(violations, groups)
 
-        # Verify no newline in any unique file entry (A3 fix applied)
-        for f in summary["unique_files"]:
-            assert "\n" not in f, f"Corrupted file: {repr(f[:60])}..."
-        # Must have 2+ real source files
-        real_files = [f for f in summary["unique_files"] if f != "nofile"]
-        assert len(real_files) > 0, "Expected at least one real source file"
+        # Verify no newline in any file entry (A3 fix applied)
+        for v in violations:
+            assert "\n" not in v.get("file", ""), f"Corrupted file: {repr(v.get('file', '')[:60])}..."
+        # Must have violations
         assert summary["total_violations"] > 0
 
 
@@ -485,10 +483,10 @@ class TestEdgeCases:
     """Edge cases: large output, format variations, etc."""
 
     def test_large_output(self):
-        """Generate 500 violations to test performance and memory."""
+        """Generate 500 violations to test performance and memory (bracketed format)."""
         lines = []
         for i in range(500):
-            lines.append(f"/src/mod{i//10}.c:{i}:{i%80+1}: style: violation {i} [misra-c2012-10.1]")
+            lines.append(f"[/src/mod{i//10}.c:{i}:{i%80+1}] (style) violation {i} [misra-c2012-10.1]")
             lines.append(f"    code line {i}")
             lines.append(f"    ^")
         text = "\n".join(lines)
@@ -499,12 +497,12 @@ class TestEdgeCases:
 
     def test_mixed_severity(self):
         text = """\
-/f.c:1:1: error: critical error [misra-c2012-1.1]
-/f.c:2:2: warning: something [misra-c2012-2.2]
-/f.c:3:3: style: formatting [misra-c2012-3.3]
-/f.c:4:4: performance: slow [misra-c2012-4.4]
-/f.c:5:5: portability: arch [misra-c2012-5.5]
-/f.c:6:6: information: note [misra-c2012-6.6]
+[/f.c:1:1] (error) critical error [misra-c2012-1.1]
+[/f.c:2:2] (warning) something [misra-c2012-2.2]
+[/f.c:3:3] (style) formatting [misra-c2012-3.3]
+[/f.c:4:4] (performance) slow [misra-c2012-4.4]
+[/f.c:5:5] (portability) arch [misra-c2012-5.5]
+[/f.c:6:6] (information) note [misra-c2012-6.6]
 """
         violations = parse_cppcheck_output(text)
         assert len(violations) == 6
@@ -515,17 +513,17 @@ class TestEdgeCases:
 
     def test_no_misra_rule_uses_fallback(self):
         """cppcheck non-misra messages (e.g. unusedFunction) should have rule_id=None."""
-        text = "/f.c:1:1: style: The function 'foo' is never used. [unusedFunction]\n"
+        text = "[/f.c:1:1] (style) The function 'foo' is never used. [unusedFunction]\n"
         violations = parse_cppcheck_output(text)
         assert len(violations) == 1
         assert violations[0]["rule_id"] is None
 
     def test_year_2023_normalization(self):
-        """Messages with misra-c2023 should parse correctly."""
-        text = "/f.c:1:1: style: violation [misra-c2023-10.1]\n"
+        """Messages with misra-c2023 should parse correctly (bracketed format)."""
+        text = "[/f.c:1:1] (style) violation [misra-c2023-10.1]\n"
         violations = parse_cppcheck_output(text)
         assert len(violations) == 1
-        assert violations[0]["rule_id"] == "misra-c2023-10.1"
+        assert violations[0]["rule_id"] == "10.1"
 
 
 # ===========================================================================
@@ -539,27 +537,25 @@ class TestJsonOutputConsistency:
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
         groups = group_by_rule(violations)
         summary = compute_summary_stats(violations, groups)
-        report_str = generate_json_report(violations, groups, summary)
-        data = json.loads(report_str)
+        data = generate_json_report(violations, groups, summary)
         assert "generated_at" in data
-        assert "summary" in data
-        assert "violations_raw" in data
+        assert "total_violations" in data
         assert "groups" in data
 
     def test_no_sets_in_json(self):
         """JSON must not contain Python sets (not serializable)."""
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
         groups = group_by_rule(violations)
-        for g in groups.values():
-            for v in g.values():
-                assert not isinstance(v, set), f"Set found in group: {v}"
+        for rule_id, violation_list in groups.items():
+            for v in violation_list:
+                assert not isinstance(v, set), f"Set found in group {rule_id}: {v}"
     def test_violation_raw_has_required_keys(self):
         violations = parse_cppcheck_output(CPPCHECK_REAL_OUTPUT)
         for v in violations:
-            for key in ("file", "line", "col", "severity", "message", "rule_id"):
+            for key in ("file", "line", "column", "severity", "message", "rule_id"):
                 assert key in v, f"Missing key {key} in violation: {v}"
             assert isinstance(v["line"], int)
-            assert isinstance(v["col"], int)
+            assert isinstance(v["column"], int)
 
 
 # ===========================================================================

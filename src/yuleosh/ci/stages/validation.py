@@ -85,7 +85,13 @@ def run_plan_lint(project_dir: str, ci: CIResult) -> bool:
         # Skip non-project hidden directories (.git, .pytest_cache)
         # but keep .osh/ and .yuleosh/ for plan/target lint checks
         skip_hidden = {".git", ".pytest_cache", "__pycache__", ".egg-info", ".mypy_cache"}
-        dirs[:] = [d for d in dirs if d not in skip_hidden and not (d.startswith(".") and d not in (".osh", ".yuleosh"))]
+        # Also skip large dependency directories that never contain task/plan files
+        _SKIP_LARGE_DIRS = {"node_modules", "venv", ".venv", "vendor",
+                            "third_party", ".cache", ".go", "target",
+                            ".build", "dist", ".tox"}
+        dirs[:] = [d for d in dirs
+                   if d not in skip_hidden | _SKIP_LARGE_DIRS
+                   and not (d.startswith(".") and d not in (".osh", ".yuleosh"))]
         # Only check files in tasks/ or plans/ directories (relative to project root)
         rel_parts = os.path.relpath(root, project_dir).split(os.sep)
         if "tasks" in rel_parts or "plans" in rel_parts:

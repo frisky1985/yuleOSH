@@ -30,9 +30,11 @@ VALID_STATUS_TRANSITIONS = {
 
 # ── ID patterns ───────────────────────────────────────────────────────────────
 
-ID_PATTERN = re.compile(r"^(RS|SWR|FEATURE)-(\d+)(?:\.(\d+))?$", re.IGNORECASE)
+ID_PATTERN = re.compile(r"^([A-Z][A-Z0-9]*(?:-REQ)?(?:-SHALL(?:\-NOT)?)?)-(\d+)(?:\.(\d+))?$", re.IGNORECASE)
+# Pattern for SHALL table-style IDs like KL-SHALL-01, PE-SHALL-NOT-01
+TABLE_ID_PATTERN = re.compile(r"^([A-Za-z]+)-SHALL(?:\-NOT)?-(\d+)$")
 HEADER_ID_PATTERN = re.compile(
-    r"^#{2,4}\s+((?:RS|SWR|FEATURE)-[\d.]+):?\s*(.+)$", re.IGNORECASE
+    r"^#{2,4}\s+((?:[A-Z][A-Z0-9]*(?:-REQ)?)-[\d.]+):?\s*(.+)$", re.IGNORECASE
 )
 # ── Data classes ──────────────────────────────────────────────────────────────
 
@@ -106,7 +108,7 @@ class SpecDocument:
             "scenarios": [s.to_dict() for s in self.scenarios],
             "requirement_count": len(self.requirements),
             "scenario_count": len(self.scenarios),
-            "total_shall": sum(r.shall_count for r in self.requirements),
+            "total_shall": sum(len(r.shall) for r in self.requirements),
         }
 
 
@@ -130,14 +132,20 @@ def _parse_id(req_id: str) -> tuple:
 def _id_to_level(req_id: str) -> str:
     """Derive level from ID prefix."""
     prefix, _, _ = _parse_id(req_id)
+    # Map known prefixes; project-specific (e.g. SCM-REQ, BCM-REQ) return ""
+    # and rely on project-context or user override.
     return {"RS": "SYS", "SWR": "SW", "FEATURE": "FEATURE"}.get(prefix, "")
 
 
 def _id_to_parent(req_id: str) -> str:
     """Derive parent ID. SWR-001.1 parent = RS-001."""
     prefix, major, minor = _parse_id(req_id)
+    # SWR child → RS parent; project-specific child → project parent
     if prefix == "SWR" and minor is not None:
         return f"RS-{major:03d}"
+    # Generic {PROJECT}-REQ-XXX.Y → {PROJECT}-REQ-XXX
+    if prefix.endswith("-REQ") and minor is not None:
+        return f"{prefix}-{major:03d}"
     return ""
 
 
@@ -177,15 +185,44 @@ def _detect_status_from_lines(lines: list[str], start_idx: int) -> str:
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
 
+
+# ── Table parsing helpers (extracted for CQ-P2-04) ───────────────────────────
+
+
+def _is_table_separator(line: str) -> bool:
+    """Check if a line is a markdown table separator."""
+    s = line.strip()
+    return s.startswith("|") and all(c in "|:- " for c in s) and ":---" in s
+
+
+def _is_shall_table_header(col_names: list[str]) -> bool:
+    """Detect table header for SHALL requirement tables."""
+    if len(col_names) < 2:
+        return False
+    id_found = col_names[0].upper() == "ID" or "ID" in col_names[0].upper()
+    desc_found = (
+        "描述" in col_names[1]
+        or "SHALL" in col_names[1].upper()
+        or "DESCRIPTION" in col_names[1].upper()
+        or "STATEMENT" in col_names[1].upper()
+    )
+    return id_found and desc_found
+
+
 def parse_spec(filepath: str) -> SpecDocument:
-    """Parse an OpenSpec markdown file into structured data."""
+    """Parse an OpenSpec markdown file into structured data.
+
+    NOTE (CQ-P2-04): This function is ~200 lines due to the multi-format parsing
+    (legacy list format + markdown table format). If it grows further, extract
+    per-format parsers into separate private functions.
+    """
     doc = SpecDocument(filepath)
     text = Path(filepath).read_text(encoding="utf-8")
     lines = text.split("\n")
 
-    current_req: Optional[SpecRequirement] = None
-    current_scenario: Optional[SpecScenario] = None
-    current_section: Optional[str] = None  # "req", "scenario", "intro"
+    current_req: SpecRequirement | None = None
+    current_scenario: SpecScenario | None = None
+    current_section: str | None = None  # "req", "scenario", "intro"
 
     req_pattern = re.compile(r"^#{2,4}\s+(?:Requirement|[A-Za-z]+-\d[\w.]*):?\s*(.+)$", re.IGNORECASE)
     scenario_pattern = re.compile(r"^#{2,4}\s+Scenario:\s*(.+)$", re.IGNORECASE)
@@ -204,12 +241,26 @@ def parse_spec(filepath: str) -> SpecDocument:
     # Track the last RS-ID for parent assignment
     last_rs_id = ""
 
+    # Table parsing state
+    in_shall_table = False
+    table_sep_seen = False
+    table_section_name = ""
+
     for idx, line in enumerate(lines):
         stripped = line.strip()
+
+        # Exit table mode on any non-table line
+        if in_shall_table and (not stripped.startswith("|") or stripped.startswith("#")):
+            in_shall_table = False
+            table_sep_seen = False
 
         # Detect section header
         req_match = req_pattern.match(stripped)
         if req_match:
+            # Exit table mode
+            in_shall_table = False
+            table_sep_seen = False
+
             if current_req:
                 doc.requirements.append(current_req)
             name = req_match.group(1).strip()
@@ -238,11 +289,21 @@ def parse_spec(filepath: str) -> SpecDocument:
 
         scenario_match = scenario_pattern.match(stripped)
         if scenario_match:
+            # Exit table mode
+            in_shall_table = False
+            table_sep_seen = False
+
             if current_scenario:
                 doc.scenarios.append(current_scenario)
             current_scenario = SpecScenario(scenario_match.group(1), [], [], [])
             current_section = "scenario"
             continue
+
+        # Track section heading names for table context
+        if stripped.startswith("#") and not stripped.startswith("######"):
+            in_shall_table = False
+            table_sep_seen = False
+            table_section_name = stripped.lstrip("#").strip()
 
         if reason_pattern.match(stripped):
             current_section = "reason"
@@ -252,7 +313,47 @@ def parse_spec(filepath: str) -> SpecDocument:
             current_section = "acceptance"
             continue
 
-        # Parse requirement items
+        # ── Detect markdown table with SHALL requirements ──
+        if stripped.startswith("|") and not in_shall_table and not current_req:
+            cols = [c.strip() for c in stripped.split("|")]
+            col_names = [c for c in cols if c]
+            if _is_shall_table_header(col_names):
+                in_shall_table = True
+                table_sep_seen = False
+                continue
+
+        # ── Parse table separator row ──
+        if in_shall_table and not table_sep_seen and _is_table_separator(stripped):
+            table_sep_seen = True
+            continue
+
+        # ── Parse table rows: each row becomes a SpecRequirement ──
+        if in_shall_table and table_sep_seen and stripped.startswith("|"):
+            cols = [c.strip() for c in stripped.split("|")]
+            if len(cols) >= 3:
+                row_id = cols[1].strip()
+                row_desc = cols[2].strip()
+
+                # Only create requirements for SHALL/SHALL-NOT rows
+                if "-SHALL" in row_id:
+                    # Extract prefix from ID (e.g., KL from KL-SHALL-01)
+                    prefix = row_id.split("-")[0] if "-" in row_id else ""
+
+                    new_req = SpecRequirement(
+                        name=row_id,
+                        shall=[row_desc],
+                        should=[],
+                        may=[],
+                        reason="",
+                        req_id=row_id,
+                        level="",
+                        parent="",
+                        status="PROPOSED",
+                    )
+                    doc.requirements.append(new_req)
+            continue
+
+        # Parse requirement items (legacy list format)
         if current_section == "req" and current_req:
             shall_m = shall_pattern.match(stripped)
             if shall_m:
@@ -346,7 +447,7 @@ def validate_spec(doc: SpecDocument) -> list[dict]:
                     "type": "invalid_req_id",
                     "item": req.name,
                     "req_id": req.req_id,
-                    "message": f"Requirement ID '{req.req_id}' does not match RS-XXX or SWR-XXX.Y format"
+                    "message": f"Requirement ID '{req.req_id}' does not match expected prefix-number format (e.g. RS-001, SWR-001.1, SCM-REQ-001)"
                 })
 
         # Validate status

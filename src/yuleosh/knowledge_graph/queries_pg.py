@@ -80,7 +80,21 @@ def trace_by_req_id(store: KGStorePG, req_id: str, include_tests: bool = True,
         nodes = [n for n in nodes if n.id in reachable_ids]
 
     result = TraceResultPG(source_node=req_node, nodes=nodes, edges=edges)
-    return result.to_dict()
+    result_dict = result.to_dict()
+    # Add confidence field to each edge and check for low-confidence chain
+    edge_dicts = []
+    has_low_confidence = False
+    for e in edges:
+        ed = e.to_dict()
+        confidence = e.properties.get("confidence", 1.0)
+        ed["confidence"] = confidence
+        if confidence < 0.8:
+            has_low_confidence = True
+        edge_dicts.append(ed)
+    result_dict["edges"] = edge_dicts
+    if has_low_confidence:
+        result_dict["low_confidence_warning"] = True
+    return result_dict
 
 
 def trace_by_file_path(store: KGStorePG, file_path: str) -> Optional[dict]:
@@ -96,7 +110,20 @@ def trace_by_file_path(store: KGStorePG, file_path: str) -> Optional[dict]:
     nodes, edges = store.trace_upstream(file_node.id, max_depth=3)
 
     result = TraceResultPG(source_node=file_node, nodes=nodes, edges=edges)
-    return result.to_dict()
+    result_dict = result.to_dict()
+    edge_dicts = []
+    has_low_confidence = False
+    for e in edges:
+        ed = e.to_dict()
+        confidence = e.properties.get("confidence", 1.0)
+        ed["confidence"] = confidence
+        if confidence < 0.8:
+            has_low_confidence = True
+        edge_dicts.append(ed)
+    result_dict["edges"] = edge_dicts
+    if has_low_confidence:
+        result_dict["low_confidence_warning"] = True
+    return result_dict
 
 
 def trace_by_test_function(store: KGStorePG, test_fqn: str) -> Optional[dict]:
@@ -120,7 +147,20 @@ def trace_by_test_function(store: KGStorePG, test_fqn: str) -> Optional[dict]:
     all_edges = down_edges + up_edges
 
     result = TraceResultPG(source_node=func_node, nodes=list(all_nodes.values()), edges=all_edges)
-    return result.to_dict()
+    result_dict = result.to_dict()
+    edge_dicts = []
+    has_low_confidence = False
+    for e in all_edges:
+        ed = e.to_dict()
+        confidence = e.properties.get("confidence", 1.0)
+        ed["confidence"] = confidence
+        if confidence < 0.8:
+            has_low_confidence = True
+        edge_dicts.append(ed)
+    result_dict["edges"] = edge_dicts
+    if has_low_confidence:
+        result_dict["low_confidence_warning"] = True
+    return result_dict
 
 
 def impact_analysis(store: KGStorePG, changed_files: list[str],
@@ -187,49 +227,61 @@ def get_graph_stats(store: KGStorePG) -> dict:
 def get_aspice_coverage(store: KGStorePG) -> dict:
     """Return an ASPICE coverage summary broken down by test layer.
 
-    Iterates all 'covers' edges and groups them by the ``layer``
-    property ("unit" / "integration" / "sil" / "hil" / "system").
-    For each layer, reports the count of edges and the distinct
+    Uses a single SQL JOIN query (instead of loading all edges into Python
+    memory + per-edge node lookups). For each test layer (unit/integration/
+    sil/hil/system), reports the count of covers edges and the distinct
     set of test files involved.
     """
     layer_names = ["unit", "integration", "sil", "hil", "system"]
     report: dict[str, dict] = {
         ln: {"total_covers": 0, "files": []} for ln in layer_names
     }
-    report["_unknown"] = {"total_covers": 0, "files": []}
-
     seen_files_by_layer: dict[str, set[str]] = {
         ln: set() for ln in layer_names
     }
-    seen_files_by_layer["_unknown"] = set()
 
-    covers_edges = store.list_edges(edge_type="covers")
-    for edge in covers_edges:
-        layer = edge.properties.get("layer") or "_unknown"
+    # Single SQL query: JOIN covers edges with target nodes
+    with store.conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                COALESCE(e.properties->>'layer', 'unknown') AS layer,
+                t.entity_type AS target_type,
+                t.entity_id   AS target_eid,
+                t.properties  AS target_props,
+                COUNT(*)      AS cnt
+            FROM kg_edges e
+            JOIN kg_nodes t ON t.id = e.target_id
+            WHERE e.edge_type = 'covers'
+            GROUP BY layer, t.entity_type, t.entity_id, t.properties
+            ORDER BY layer
+        """)
+        for row in cur.fetchall():
+            layer = row["layer"] if isinstance(row, dict) else row[0]
+            target_type = row["target_type"] if isinstance(row, dict) else row[1]
+            target_eid = row["target_eid"] if isinstance(row, dict) else row[2]
+            target_props = row["target_props"] if isinstance(row, dict) else (row[3] or {})
+            cnt = row["cnt"] if isinstance(row, dict) else row[4]
 
-        if layer not in report:
-            report[layer] = {"total_covers": 0, "files": []}
-            seen_files_by_layer[layer] = set()
+            if layer not in report:
+                report[layer] = {"total_covers": 0, "files": []}
+                seen_files_by_layer[layer] = set()
 
-        report[layer]["total_covers"] += 1
+            report[layer]["total_covers"] += cnt
 
-        # Resolve target to get file path
-        target_node = store.get_node_by_id(edge.target_id)
-        if target_node:
-            if target_node.entity_type == "test_file":
-                fpath = target_node.entity_id
-            elif target_node.entity_type == "test_function":
-                fpath = target_node.properties.get("file_path", "") \
-                        or target_node.entity_id.split("::")[0]
+            # Resolve file path from target node
+            if target_type == "test_file":
+                fpath = target_eid
+            elif target_type == "test_function":
+                fpath = target_props.get("file_path", "") or str(target_eid).split("::")[0]
             else:
-                fpath = str(target_node.entity_id)
+                fpath = str(target_eid)
             if fpath:
                 seen_files_by_layer[layer].add(fpath)
 
     for ln in layer_names:
         report[ln]["files"] = sorted(seen_files_by_layer[ln])
 
-    if report["_unknown"]["total_covers"] == 0:
+    if "_unknown" in report and report["_unknown"]["total_covers"] == 0:
         del report["_unknown"]
 
     return report
@@ -238,20 +290,68 @@ def get_aspice_coverage(store: KGStorePG) -> dict:
 def get_confirmation_trace(store):
     """返回所有 validates 边的完整确认追溯链路（P0-5 SWE.5 确认）。
 
-    PostgreSQL 后端版本。
+    Uses a single SQL JOIN query instead of iterating edges + per-edge
+    node lookups (optimized for 100K+ node graphs). PostgreSQL 后端版本。
     """
-    validates_edges = store.list_edges(edge_type="validates")
     result = []
-    for edge in validates_edges:
-        source_node = store.get_node_by_id(edge.source_id)
-        target_node = store.get_node_by_id(edge.target_id)
-        if source_node is None or target_node is None:
-            continue
-        result.append({
-            "edge_type": edge.edge_type,
-            "source": source_node.to_dict(),
-            "target": target_node.to_dict(),
-            "layer": edge.layer or edge.properties.get("layer"),
-            "properties": edge.properties,
-        })
+    with store.conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                e.source_id,
+                e.target_id,
+                e.edge_type,
+                e.properties,
+                e.build_id,
+                COALESCE(e.layer, e.properties->>'layer') AS layer,
+                e.created_at AS e_created,
+                e.updated_at AS e_updated,
+                -- Source node
+                s.entity_type AS s_type,
+                s.entity_id   AS s_eid,
+                s.label       AS s_label,
+                s.properties  AS s_props,
+                s.is_active   AS s_active,
+                s.created_at  AS s_created,
+                s.updated_at  AS s_updated,
+                -- Target node
+                t.entity_type AS t_type,
+                t.entity_id   AS t_eid,
+                t.label       AS t_label,
+                t.properties  AS t_props,
+                t.is_active   AS t_active,
+                t.created_at  AS t_created,
+                t.updated_at  AS t_updated
+            FROM kg_edges e
+            JOIN kg_nodes s ON s.id = e.source_id
+            JOIN kg_nodes t ON t.id = e.target_id
+            WHERE e.edge_type = 'validates'
+            ORDER BY e.id
+        """)
+        for row in cur.fetchall():
+            is_real_dict = isinstance(row, dict)
+            source_dict = {
+                "id": row["source_id"] if is_real_dict else str(row[0]),
+                "entity_type": row["s_type"] if is_real_dict else row[8],
+                "entity_id": row["s_eid"] if is_real_dict else row[9],
+                "label": row["s_label"] if is_real_dict else row[10],
+                "properties": row["s_props"] if is_real_dict else (row[11] or {}),
+                "is_active": row["s_active"] if is_real_dict else bool(row[12]),
+            }
+            target_dict = {
+                "id": row["target_id"] if is_real_dict else str(row[1]),
+                "entity_type": row["t_type"] if is_real_dict else row[15],
+                "entity_id": row["t_eid"] if is_real_dict else row[16],
+                "label": row["t_label"] if is_real_dict else row[17],
+                "properties": row["t_props"] if is_real_dict else (row[18] or {}),
+                "is_active": row["t_active"] if is_real_dict else bool(row[19]),
+            }
+            edge_props = row["properties"] if is_real_dict else (row[3] or {})
+            result.append({
+                "edge_type": row["edge_type"] if is_real_dict else row[2],
+                "source": source_dict,
+                "target": target_dict,
+                "layer": row["layer"] if is_real_dict else row[5],
+                "properties": edge_props,
+            })
+
     return result

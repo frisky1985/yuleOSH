@@ -133,10 +133,10 @@ class TestLayer1CoverageGate:
 
     def test_c_coverage_gate_in_stages(self):
         """确认 L1 stages 包含 c-coverage-gate。"""
-        from yuleosh.ci.layers import run_layer1
+        from yuleosh.ci.layers import _run_layer1_impl
         # Check that the function body references run_c_coverage_check
         import inspect
-        source = inspect.getsource(run_layer1)
+        source = inspect.getsource(_run_layer1_impl)
         assert "c-coverage-gate" in source
         assert "run_c_coverage_check" in source
 

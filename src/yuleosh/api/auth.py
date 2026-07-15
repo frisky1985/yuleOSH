@@ -31,8 +31,14 @@ logger = logging.getLogger("yuleosh.api.auth")
 EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 TOKEN_TTL_HOURS = 24
 
-# JWT secret from env var, with a random fallback for dev
-_JWT_SECRET = os.environ.get("YULEOSH_JWT_SECRET", secrets.token_urlsafe(32))
+# JWT secret from env var (required for production — no random fallback)
+_YULEOSH_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
+if not _YULEOSH_JWT_SECRET_ENV:
+    raise RuntimeError(
+        "YULEOSH_JWT_SECRET environment variable is required. "
+        "Generate one with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
+_JWT_SECRET = _YULEOSH_JWT_SECRET_ENV
 _JWT_ALGORITHM = "HS256"
 
 # In-memory rate limit tracking: email -> (attempts, window_start)

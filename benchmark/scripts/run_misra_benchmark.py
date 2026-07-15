@@ -2,6 +2,8 @@
 """
 yuleOSH MISRA cppcheck 误报率 Benchmark Runner (Python version)
 
+Supports easy/, medium/, and hard/ subdirectories under cases_dir.
+
 Usage:
     python3 benchmark/scripts/run_misra_benchmark.py [--output-dir <dir>]
 """
@@ -27,6 +29,31 @@ RED = "\033[0;31m"
 YELLOW = "\033[1;33m"
 NC = "\033[0m"
 
+# Difficulty levels to scan
+_DIFFICULTY_DIRS = ["easy", "medium", "hard"]
+
+
+def collect_case_files(cases_dir: Path) -> list[Path]:
+    """Collect all .c case files from easy/, medium/, hard/ subdirectories,
+    falling back to flat directory for backward compatibility."""
+    files = []
+    for diff_dir in _DIFFICULTY_DIRS:
+        diff_path = cases_dir / diff_dir
+        if diff_path.exists():
+            files.extend(sorted(diff_path.glob("*.c")))
+    # Fallback: flat directory (legacy)
+    if not files:
+        files = sorted(cases_dir.glob("*.c"))
+    return files
+
+
+def _detect_difficulty(filepath: Path) -> str:
+    """Detect difficulty level from parent directory name."""
+    parent = filepath.parent.name
+    if parent in _DIFFICULTY_DIRS:
+        return parent
+    return "easy"
+
 
 def classify_case(filepath: Path):
     """Read header of a case file and classify it."""
@@ -47,12 +74,13 @@ def classify_case(filepath: Path):
     m = re.search(r"Expected:\s*(\d+)", header, re.IGNORECASE)
     expected = int(m.group(1)) if m else (1 if cls in ("tp", "fn") else 0)
 
-    # Extract rules
+    # Extract rules — handle both single and comma-separated formats
     rules_matches = re.findall(r"Rule[s]?:?\s*([0-9]+\.[0-9]+)", header, re.IGNORECASE)
-    # If not found with that pattern, try "Rules: X, Y"
-    if not rules_matches:
-        rules_matches = re.findall(r"([0-9]+\.[0-9]+)", header)
-    rules = list(set(rules_matches))
+    # Also scan the full header for any "X.Y" patterns (handles "Rules: X, Y")
+    all_matches = re.findall(r"([0-9]+\.[0-9]+)", header)
+    rules = list(set(rules_matches + all_matches)) if not rules_matches else list(set(rules_matches))
+    if not rules:
+        rules = list(set(all_matches))
 
     return cls, expected, rules
 
@@ -87,15 +115,18 @@ def main():
     print(f"   Output:   {OUTPUT_DIR}")
     print()
 
-    # Collect test cases
-    case_files = sorted(CASES_DIR.glob("*.c"))
+    # Collect test cases from subdirectories
+    case_files = collect_case_files(CASES_DIR)
     print(f"--- Test Case Manifest ({len(case_files)} cases) ---")
 
     case_info = {}
     for f in case_files:
         cls, expected, rules = classify_case(f)
-        case_info[f.stem] = {"class": cls, "expected": expected, "rules": rules}
-        print(f"  {f.name}: Class={cls}, Expected={expected}, Rules={','.join(rules)}")
+        diff = _detect_difficulty(f)
+        case_info[f.stem] = {
+            "class": cls, "expected": expected, "rules": rules, "difficulty": diff,
+        }
+        print(f"  [{diff.upper():6s}] {f.name}: Class={cls}, Expected={expected}, Rules={','.join(rules)}")
 
     print()
 
@@ -126,6 +157,7 @@ def main():
 
             cls = info["class"]
             expected = info["expected"]
+            difficulty = info.get("difficulty", "easy")
 
             if violations == -1:
                 validation = "error"
@@ -178,6 +210,7 @@ def main():
                 "actual_count": violations,
                 "validation": validation,
                 "rules": info["rules"],
+                "difficulty": difficulty,
             }
 
     # Compute metrics
@@ -196,8 +229,14 @@ def main():
         "benchmark": "yuleOSH MISRA cppcheck False Positive Benchmark",
         "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "cppcheck_version": cppcheck_ver,
+        "difficulty_layout": {
+            "easy": "Basic MISRA violations (single-rule, single-file)",
+            "medium": "Intermediate patterns (multi-rule, RTOS, DMA, ISR)",
+            "hard": "Complex multi-module interactions (CAN, TCP, state machines)",
+        },
         "summary": {
             "total_cases": total,
+            "by_difficulty": {},
             "true_positives": tp,
             "false_positives": fp,
             "true_negatives": tn,
@@ -211,6 +250,18 @@ def main():
         "cases": results,
     }
 
+    # Compute per-difficulty breakdown
+    for diff in _DIFFICULTY_DIRS:
+        diff_cases = [v for v in results.values() if v.get("difficulty") == diff]
+        if diff_cases:
+            json_report["summary"]["by_difficulty"][diff] = {
+                "count": len(diff_cases),
+                "tp": sum(1 for c in diff_cases if c["validation"] == "correct" and c["class"] in ("tp", "fn")),
+                "fp": sum(1 for c in diff_cases if c["validation"] == "false_positive"),
+                "tn": sum(1 for c in diff_cases if c["validation"] == "correct" and c["class"] in ("fp", "tn")),
+                "fn": sum(1 for c in diff_cases if c["validation"] == "missed"),
+            }
+
     json_path = OUTPUT_DIR / "misra-benchmark-report.json"
     with open(json_path, "w") as f:
         json.dump(json_report, f, indent=2, ensure_ascii=False)
@@ -222,6 +273,16 @@ def main():
         f"> 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"> cppcheck 版本：{cppcheck_ver}",
         f"> 测试用例数：{total}",
+        "",
+        "## 难度分布",
+        "",
+    ]
+    for diff in _DIFFICULTY_DIRS:
+        count = sum(1 for v in results.values() if v.get("difficulty") == diff)
+        if count:
+            md_lines.append(f"- **{diff.upper()}**: {count} 个用例")
+
+    md_lines.extend([
         "",
         "## 汇总指标",
         "",
@@ -239,9 +300,9 @@ def main():
         "",
         "## 用例详情",
         "",
-        "| 用例 | 分类 | 预期违规 | 实际违规 | 判定 |",
-        "|:-----|:-----|:---------|:---------|:-----|",
-    ]
+        "| 用例 | 难度 | 分类 | 预期违规 | 实际违规 | 判定 |",
+        "|:-----|:-----|:-----|:---------|:---------|:-----|",
+    ])
 
     for name, info in sorted(results.items()):
         validation_emoji = {
@@ -250,8 +311,9 @@ def main():
             "missed": "❌",
             "error": "❌",
         }.get(info["validation"], "❓")
+        diff = info.get("difficulty", "easy").upper()
         md_lines.append(
-            f"| {validation_emoji} {name} | {info['class']} | {info['expected_count']} | {info['actual_count']} | {info['validation']} |"
+            f"| {validation_emoji} {name} | {diff} | {info['class']} | {info['expected_count']} | {info['actual_count']} | {info['validation']} |"
         )
 
     md_lines.extend([

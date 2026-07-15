@@ -1,142 +1,184 @@
-# 老陈 CL2 复测结果
+# 🧑‍🏫 CL2 复审报告 — 老陈 (二轮)
 
-> **审查人**: 老陈（CL2 审查专家）
-> **日期**: 2026-06-19
-> **审阅范围**: Sprint E 全量修复 + CL2 综合就绪度复测
-> **材料**: `reports/v2.1-sprint-e-fix.md`, `reports/v2.1-cl2-self-assessment.md`, `reports/expert-cl2-retest-invite.md` + 各 CLI 命令实际验证记录
+**审查人**: 老陈 👨‍🏫
+**审查日期**: 2026-07-04
+**审查类型**: 🔄 CL2 复审 — 修复验证
+**上一轮评分**: 58/100 ❌
+**本轮评分**: **65/100 ❌ 不通过**
 
----
-
-## 审查摘要
-
-上次审查（2026-06-17）我给出的 CL2 评分为 **70/100**，核心扣分点为 C 覆盖率严重不足（1.4%）和多项过程证据缺失。
-
-本次审查确认：Sprint E 修复覆盖了我指出的全部关键问题，修复质量良好。CL2 综合就绪度显著提升。
+> "紧赶慢赶修了6个坑，3个没修利索，还冒出新坑。态度很好，路还很长。"
 
 ---
 
-## Sprint E 逐项审核
+## 一、六大修复逐项验证结果
 
-### P0 — C 覆盖率门禁（1.4% → 99.2%）
+### 1️⃣ CI yaml-validation — description null→中文字符串 ✅ **通过**
+```
+$ grep -A 6 "misra-c2023-3.2" misra-rules.yaml
+→ description: '#line 指令必须指定有效的行号和文件名，且不得使用误导性的行号'
+```
+原来 `null` 现在填了有内容的中文描述，每个规则都有。**干净利落，没问题。**
 
-**审核结论**: ✅ **通过**
+### 2️⃣ CI unit-tests — E2E 忽略补全 + `--cov` 统一 ⚠️ **部分通过**
 
-- **修复质量**: 优。从 1.4% 到 99.2% 提升 70 倍，不仅达门禁（≥60%），还远超门禁水平
-- **基础设施**: `scripts/run_c_coverage.py` + Unity 测试框架 + Makefile 集成 + CI 门禁联合，形成了一个可重复、可持续的覆盖率管理闭环
-- **交叉验证**: `make c-coverage-gate` 验证通过，coverage-trend.jsonl 中趋势记录从临时上升至 99.2% 并持续稳定
-- **覆盖对象**: hal_mock 6 组件 (core/uart/gpio/timer/i2c/spi) + hello.c，实测 7 文件
-- **小幅注意**: Branch 覆盖率 71.0% 未做过高要求，但未来应扩展至实际生产代码而非仅为 mock 层
+✅ E2E 忽略清单从原来缺几项补全到 6 个 `--ignore=`
+✅ `--cov=yuleosh` 而不是 `--cov=src/yuleosh`（和 `.coveragerc` 一致）
 
-### P1 — 缺陷逃逸率采集
+**❌ 新问题：`test` job 的 `--cov-fail-under=80`**
+```yaml
+# .github/workflows/ci.yml
+python -m pytest tests/ ... --cov=yuleosh --cov-fail-under=80
+```
+当前 Python 覆盖率实际为 0%（数据采集断了，见下文），80% 是做梦。Coverage Gate job 设 60% 还靠谱点。两个 gate 阈值不一致，test job 跑一次崩一次。
 
-**审核结论**: ✅ **通过**
+### 3️⃣ 证据包 reviews/ 为空 — collection.py + report_builder.py 双重修复 ❌ **未通过**
 
-- **CLI 可用**: `kpi defect-escape record` + `kpi defect-escape status` 均可正常使用
-- **数据可用**: 当前逃逸率 6.0%（≤15% ✅），以 90 天窗口统计
-- **格式规范**: JSONL 存储，KPI Dashboard 全集成
-- **小幅注意**: 初始数据为 demo 数据（3 条记录完全相同），实际生产后需要积累真实数据
+```
+$ yuleosh evidence pack --output /tmp/test-evidence
+$ ls /tmp/test-evidence/reviews/
+→ .  ..
+```
+**空的！！**
 
-### P1 — Profile 变更审计
+查代码找到原因：
+```python
+# collection.py 第52行
+rev_dir = Path(self.project_dir) / ".osh" / "reviews"
+```
+但实际 review 文件在 **`.osh/evidence/reviews/`**，路径多了一级 `evidence/`。`collect_reviews()` 永远找不到任何文件。
 
-**审核结论**: ✅ **通过**
+同样的路径 bug 也发生在 traceability 模块：
+```python
+# alm/traceability.py 第194行
+review_file = session_dir / "code-review.json"
+# 扫描 .yuleosh/sessions/*/ 但该目录不存在！
+```
+实际 review 文件在 `.osh/evidence/reviews/` 和 `.osh/sessions/`。
 
-- **CLI 可用**: `config profile audit` 命令正常
-- **审计字段完整**: 时间 / 用户 / 旧Profile / 新Profile / Commit SHA / 原因 — 6 字段完备
-- **格式**: 支持 `--json`，可编程接入
-- **可追溯**: 审计日志 `.yuleosh/reports/profile-audit.jsonl` 持久化，Commit SHA 与 Git 可交叉引用
+**结论：双重修复全修到错误路径上去了。团队没有实际运行验证。**
 
-### P2 — 工具版本变更审批流程
+### 4️⃣ KPI 14天无数据 — 追加 16 天数据 ✅ **通过**
+```
+cat .yuleosh/reports/process-kpi.jsonl | tail -3
+2026-07-02 ✅
+2026-07-03 ✅
+2026-07-04 ✅
+```
+数据连续到审查当日，覆盖了 6/19→7/4 的完整窗口。**这部分没问题。**
 
-**审核结论**: ✅ **通过**
+### 5️⃣ MISRA 没扫到 C 源码 — 扫描路径扩展 ⚠️ **部分通过**
 
-- **文档完整**: `docs/tool-version-change-process.md` 定义 L1-L4 四级变更级别、影响分析检查表、审批流程、审计追溯
-- **YAML 集成**: `tools-version.yaml` 各工具含 `approval` 字段 (level/date/approver/pr)，8 工具均有
-- **可审计**: L1（补丁）/L2（次要）/L3（主要）/L4（替换）分级清晰，绑定 PR 和 Git commit
-- **小幅注意**: 当前所有工具标记为 L1 审批——这合理但未来有 L2+ 变更时应验证流程是否被遵循
+✅ `benchmark/misra-fp-cases/*.c` 已被 cppcheck 扫描到（6 files, 25 violations）
+✅ MISRA report 现在有 6 files affected
 
-### P2 — 证据包 manifest
+**❌ `ref/fault-inject/` 仍然没被 MISRA 扫描到**
+```
+# MISRA unique_files 完整清单：
+benchmark/misra-fp-cases/case002_false_positive.c
+benchmark/misra-fp-cases/case003_false_positive.c
+...（全是 benchmark/，0 个 ref/）
+```
+而 `ref/fault-inject/` 下明明有 10 多个 `.c`/`.h` 文件。扩展扫描路径时可能只加了 `benchmark/`，`ref/` 的 MISRA 扫描命令配置根本没改。
 
-**审核结论**: ✅ **通过**
+`gscr-report-benchmark.json` 里提到 `ref/` 文件，但那是另一个工具（GSCR），不是 MISRA cppcheck。
 
-- **生成验证**: `yuleosh evidence pack` 生成 6 子目录、18 artifacts
-- **manifest**: `audit-manifest.json` 完整（含 bundle/components/integrity/artifacts）
-- **SHA256 校验**: `evidence check --json` 所有 18 文件 SHA256 验证通过
-- **完整性检查**: 无 Required 级缺失项
-- **小幅注意**: 1 个非关键 warning（reviews/ 子目录为空——审查无新数据当属正常）
-
-### P2 — 基线文档完善
-
-**审核结论**: ✅ **通过**
-
-- **版本**: v1.0.1
-- **门禁扩展**: 从 5 项增至 9 项（新增缺陷逃逸率/C覆盖率/Profile审计/工具版本）
-- **内容**: 含 KPI 均值、采集范围、异常点说明、维护说明
-- **KPI Dashboard 集成**: `kpi status` 显示 8 KPI 全部 PASS
-
----
-
-## 自测结果验证
-
-小马自测报告显示 41/41 = **100% 通过**。我进行了抽样交叉验证：
-
-| 抽检项 | 验证方法 | 结果 |
-|:-------|:---------|:----:|
-| C 覆盖率数据 | `python3 scripts/run_c_coverage.py --fail-under=60` | ✅ PASS |
-| 缺陷逃逸率状态 | `yuleosh kpi defect-escape status` | ✅ 6.0% |
-| Profile 审计日志 | `yuleosh config profile audit` | ✅ 3 条记录 |
-| 证据包完整性 | `yuleosh evidence check /tmp/cl2-evidence-pack-r4 --json` | ✅ valid=true |
-| 追溯矩阵抽检 | `yuleosh traceability matrix` | ✅ 184 SHALL，REQ/Code/Test 三列 |
-| MISRA 趋势 | `yuleosh misra trend --lines 5` | ✅ 100 条，方向箭头 |
-| KPI Dashboard | `yuleosh kpi status` | ✅ 8/8 PASS |
-| SWE.6 合格性 | `yuleosh swe6 status + check` | ✅ 6/6 PASS |
-
-全部抽检项与自测结果一致。自我审计质量高、无重大遗漏。
-
----
-
-## 综合评分
-
-| 维度 | 权重 | 上次得分 | 本次得分 | 变化 |
-|:-----|:----:|:--------:|:--------:|:----:|
-| PA 2.1 TM — 追溯管理 | 30% | 22 | **30** | +8 |
-| PA 2.2 MP — 过程测量 | 30% | 20 | **28** | +8 |
-| PA 2.2 RI — 资源基础设施 | 20% | 12 | **20** | +8 |
-| Dry Run 可验证性 | 20% | 16 | **20** | +4 |
-| **综合** | **100%** | **70** | **98** | **+28 🚀** |
-
-### 扣分项说明
-
-| 扣分点 | 扣分 | 说明 |
-|:-------|:----:|:------|
-| Branch 覆盖率 71.0% | -1 | 主干覆盖率达标但分支覆盖仍有提升空间 |
-| 证据包 reviews/ 子目录空 | -1 | 不影响功能，建议增加定期审查生成 |
-
-**总分: 98/100** —— 接近满分。剩余 2 分为小幅优化项，**不阻断 CL2 通过**。
+### 6️⃣ 覆盖配置优化 — .coveragerc source 统一 ✅ **通过**
+```
+# .coveragerc
+[run]
+source = yuleosh
+```
+从 `src/yuleosh` 改成 `yuleosh`，和 CI 命令一致。**改对了。**
 
 ---
 
-## 判定
+## 二、新发现的严重问题
 
-| 条件 | 结果 |
-|:-----|:----:|
-| **CL2 综合评分 ≥80** | ✅ **98/100** |
-| 无 Critical 发现 | ✅ **0 项** |
-| Major 发现 ≤ 3 项 | ✅ **0 项** |
-| Sprint E 6 项修复全部验证通过 | ✅ **6/6** |
+### 🔴 CRITICAL：Python 覆盖率数据完全中断
 
-### 🏆 最终结论：**CL2 综合就绪审查通过！**
+```
+$ coverage report
+→ No data to report.
 
-> YuleOSH 已完全满足 ASPICE CL2 级别的过程追溯性、可测量性和可审计性要求。自上次审查（70分）以来提升近 30 分，C 覆盖率从 1.4% 到 99.2% 的提升尤其令人印象深刻。
+$ python3 -c "import coverage; cov = coverage.Coverage(); cov.load(); d = cov.get_data(); print(d.measured_files())"
+→ set()
+```
 
-### 后续建议
+`.coverage` 文件 53KB 但 SQLite 全空：0 个文件记录、0 行覆盖数据。`coverage-trend.jsonl` 中全部 Python `line_rate` 为 `null`：
 
-1. **积累生产数据**: Work items/tickets, 缺陷逃逸率等当前基于 demo 数据的指标需要自然积累
-2. **Branch 覆盖率扩展**: 从当前 71.0% 目标提升至 ≥80%
-3. **实际 C 代码测试扩展**: 从 mock 层扩展至实际业务逻辑代码
-4. **周期性自我审计**: CL2 就绪度需要持续维护，建议每 Sprint/every 2 weeks 运行一次全量 self-audit
+```
+2026-06-15  → python.line_rate: null
+2026-06-18  → python.line_rate: null
+2026-06-29  → python.line_rate: null
+2026-07-03  → python.line_rate: null
+```
+
+C 覆盖率倒是有 99.19%（只有 HAL mock 头文件），但 Python 覆盖率为 **零——不是 26%，是 0%**。上次修复 coverage 版本升级到 7.15.0 时可能破坏了数据采集流程。
+
+### 🟠 HIGH：审查追溯 0/184（新路径 bug）
+
+```
+# traceability-report.json
+Requirements: 184
+With reviews: 0
+```
+
+`scan_review_artifacts()` 扫描 `.yuleosh/sessions/*/code-review.json`，但该目录不存在。实际 review 文件在：
+- `.osh/evidence/reviews/`（4 files）
+- `.osh/sessions/*/`（多个）
+
+两种不同的 review 存储位置，代码都没扫到。0/184 = 0%，和上次一样没区别。
+
+### 🟡 MEDIUM：CI Coverage Gate shell 逃逸疑点
+
+```yaml
+python -c "... *'$E2E_IGNORES'.split() ..."
+```
+
+`$E2E_IGNORES` 在 Python `-c` 的双引号括号内，shell 会展开成包含空格的字符串。`'...'.split()` 默认按空白分割，但单引号也会留在第一个和最后一个元素里。这能跑通**纯属运气**，换个 shell 环境直接崩。
 
 ---
 
-**老陈**
-CL2 审查专家
-2026-06-19
+## 三、评分
+
+| 维度 | 权重 | 得分 | 说明 |
+|:-----|:----:|:----:|:-----|
+| **修复准确性** | 30% | 18 | 6 项修复中 3 项通过、2 项部分、1 项不通过 |
+| **代码质量** | 20% | 14 | 路径硬编码 bug 应属回归测试能拦截的基础错误 |
+| **测试覆盖** | 20% | 4 | Python 覆盖率为 0%，数据链断了 |
+| **CI 门禁** | 15% | 9 | YAML 验证通了，但覆盖率 gate 配置自相矛盾 |
+| **可追溯性** | 15% | 6 | 0/184 有审查记录，路径 bug 让 review 追踪完全失效 |
+
+### 加权总分：**65/100 ❌ 不通过**
+
+| 门禁 | 判定 | 原因 |
+|:----|:----|:-----|
+| Python 覆盖率 ≥60% | ❌ | 实际 0%（数据采集故障） |
+| CI 流水线全绿 | ❌ | --cov-fail-under=80 不可能通过 |
+| 审查追溯 ≥80% | ❌ | 0/184 |
+| 证据包 reviews/ 非空 | ❌ | 路径 bug 导致为空 |
+| MISRA 扫描无遗漏 | ❌ | ref/ 仍未被扫描到 |
+
+---
+
+## 四、给团队的话
+
+小马，各位兄弟，
+
+我上次说不怕分数低，怕的是修了和没修一样。这次真是有点心疼你们的加班时间——
+
+**3 个问题本质上是同一个 bug：路径错了。**
+- `collection.py` 读 `".osh/reviews"` 应该是 `".osh/evidence/reviews"`
+- `traceability.py` 读 `".yuleosh/sessions"` 应该也读 `".osh/evidence/reviews"`
+- 路径改对了，evidence pack reviews/ 和 traceability reviews 两个问题一起修掉
+
+**还有 3 件事你们得认真搞：**
+1. **Python 覆盖率数据链断了** — `.coverage` 文件空的但占 53KB，说明 coverage run 跑了但没写进数据。可能是 7.15.0 的新行为。跑一次 `coverage run && coverage report` 就发现了，**这不该漏**。
+2. **CI `--cov-fail-under=80`** — 设 80% 很有追求，但在 0%~26% 的现实面前就是开门就撞墙。先统一到 60%，等 pipeline/ 模块补了测试再提。
+3. **MISRA 还是没扫到 ref/** — benchmark/ 已经在了，把 ref/fault-inject/ 加入 cppcheck 扫描路径。
+
+**我给你们留个作业：本地跑一遍 `yuleosh evidence pack`，然后 `ls output/reviews/`。如果还是空的，别找我复审了。**
+
+下次来要是还这些路径问题——我可不客气了。😂
+
+— 老陈 👨‍🏫

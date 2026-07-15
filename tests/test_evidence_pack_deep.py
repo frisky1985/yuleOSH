@@ -460,7 +460,7 @@ class TestCollectReviews:
         assert collector.reviews == []
 
     def test_with_reviews(self, collector, tmp_proj):
-        reviews_dir = os.path.join(tmp_proj, ".osh", "reviews", "task1")
+        reviews_dir = os.path.join(tmp_proj, ".osh", "evidence", "reviews", "task1")
         os.makedirs(reviews_dir)
         with open(os.path.join(reviews_dir, "review-session.json"), "w") as f:
             json.dump({"task": "test", "decision": "pass"}, f)

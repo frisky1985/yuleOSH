@@ -3,95 +3,313 @@
 # SPDX-License-Identifier: MIT
 
 """
-yuleOSH LLM Client — OpenAI-compatible API client.
+llm/client.py — Unified LLMClient adapter.
 
-Reads configuration from environment variables:
-  LLM_API_KEY          (fallback: DEEPSEEK_API_KEY → OPENAI_API_KEY)
-  LLM_BASE_URL         (default: https://api.deepseek.com)
-  LLM_MODEL            (default: deepseek-chat)
+Replaces all direct ``_call_llm`` usage with a single, configurable
+entry point that handles routing, RAG, token budgeting, logging, and
+retry.
+
+Usage::
+
+    from yuleosh.llm import LLMClient, LLMConfig
+
+    response = await LLMClient.call(
+        prompt="Generate a UART driver...",
+        task_type="code_generation",
+    )
+    print(response.content)
+
+Backward-compatible shim ``_call_llm()`` is provided at module bottom.
 """
 
+from __future__ import annotations
+
+import asyncio
 import json
 import logging
 import os
 import time
-import urllib.request
-import urllib.error
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from yuleosh.llm.providers.base import (
+    AbstractProvider,
+    LLMConfig,
+    LLMResponse,
+    TASK_BUDGETS,
+)
+from yuleosh.llm.providers.mock import MockProvider
+from yuleosh.llm.token_budget import TokenBudgetChecker
+from yuleosh.llm.cost import CostLogger, LLMCallLog
+from yuleosh.llm.rag.engine import RAGEngine, get_default_engine
 
 log = logging.getLogger("llm.client")
 
 
-def _resolve_env() -> tuple[str, str, str]:
-    """Resolve API key, base URL, and model from environment."""
-    api_key = (
-        os.environ.get("LLM_API_KEY")
-        or os.environ.get("DEEPSEEK_API_KEY")
-        or os.environ.get("OPENAI_API_KEY")
-        or ""
-    )
-    base_url = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/")
-    model = os.environ.get("LLM_MODEL", "deepseek-chat")
-    return api_key, base_url, model
+# ═══════════════════════════════════════════════════════════════════════
+# Task → model routing table
+# ═══════════════════════════════════════════════════════════════════════
+
+TASK_ROUTES: Dict[str, str] = {
+    "architecture_design": "claude-4-sonnet",
+    "code_generation": "deepseek-v4",
+    "safety_code_generation": "claude-4-sonnet",
+    "test_generation": "deepseek-v4",
+    "misra_review": "claude-4-sonnet",
+    "misra_fix": "claude-4-sonnet",
+    "review_blocking": "claude-4-sonnet",
+    "review_selfcheck": "deepseek-v4",
+    "simple_summary": "deepseek-v4",
+}
+
+TASK_RAG_SOURCES: Dict[str, List[str]] = {
+    "code_generation": ["misra_c", "best_practices"],
+    "safety_code_generation": ["misra_c", "best_practices"],
+    "misra_review": ["misra_c"],
+    "misra_fix": ["misra_c"],
+    "test_generation": ["best_practices"],
+    "architecture_design": ["best_practices"],
+    "review_blocking": ["misra_c"],
+    "review_selfcheck": [],
+    "simple_summary": [],
+}
 
 
-def _build_payload(
-    system_prompt: str,
-    user_prompt: str,
-    model: str,
-    temperature: float = 0.3,
-    max_tokens: int = 4096,
-) -> bytes:
-    """Build the JSON request body for a chat completion."""
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stream": False,
-    }
-    return json.dumps(body).encode("utf-8")
+# ═══════════════════════════════════════════════════════════════════════
+# Provider registry (lazy-loaded)
+# ═══════════════════════════════════════════════════════════════════════
+
+_PROVIDER_REGISTRY: Dict[str, AbstractProvider] = {}
 
 
-def _build_request(url: str, api_key: str, payload: bytes) -> urllib.request.Request:
-    """Build a urllib Request with standard headers."""
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
-    return req
+def _get_provider(provider_name: str) -> AbstractProvider:
+    """Get or create a provider instance."""
+    if provider_name not in _PROVIDER_REGISTRY:
+        if provider_name == "mock":
+            _PROVIDER_REGISTRY[provider_name] = MockProvider()
+        elif provider_name == "anthropic":
+            from yuleosh.llm.providers.anthropic import ClaudeProvider
+            _PROVIDER_REGISTRY[provider_name] = ClaudeProvider()
+        elif provider_name == "deepseek":
+            from yuleosh.llm.providers.deepseek import DeepSeekProvider
+            _PROVIDER_REGISTRY[provider_name] = DeepSeekProvider()
+        elif provider_name == "openai":
+            from yuleosh.llm.providers.openai import OpenAIProvider
+            _PROVIDER_REGISTRY[provider_name] = OpenAIProvider()
+        else:
+            raise ValueError(f"Unknown provider: {provider_name}")
+    return _PROVIDER_REGISTRY[provider_name]
 
 
-def _do_request(req: urllib.request.Request, timeout: int = 60) -> dict:
-    """Execute the HTTP request and parse the JSON response.
+def resolve_config(
+    prompt: str,
+    system_prompt: Optional[str],
+    task_type: Optional[str],
+    config: Optional[LLMConfig],
+) -> LLMConfig:
+    """Resolve the effective LLMConfig for a call.
 
-    Returns the parsed response dict from the API.
-    Raises RuntimeError on HTTP errors or malformed responses.
+    Fills in defaults based on task type when config is None.
     """
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8")
-            return json.loads(raw)
-    except urllib.error.HTTPError as exc:
-        body = b""
+    if config is not None:
+        return config
+
+    task_type = task_type or "code_generation"
+    model = TASK_ROUTES.get(task_type, "deepseek-v4")
+    provider_map = {
+        "claude-4-sonnet": "anthropic",
+        "claude-4-haiku": "anthropic",
+        "deepseek-v4": "deepseek",
+        "gpt-4o": "openai",
+    }
+    provider = provider_map.get(model, "deepseek")
+    task_budget = TASK_BUDGETS.get(task_type, TASK_BUDGETS["code_generation"])
+
+    return LLMConfig(
+        model=model,
+        provider=provider,
+        max_tokens=min(4096, int(task_budget.get("max_tokens_out", 4096))),
+        temperature=0.3,
+        rag_enabled=task_type not in ("simple_summary",),
+        rag_sources=TASK_RAG_SOURCES.get(task_type, []),
+        max_cost_usd=task_budget.get("max_cost_usd", 0.50),
+        task_type=task_type,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# LLMClient — Unified entry point
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class LLMClient:
+    """Unified LLM call entry point.
+
+    Wraps: token budget check → RAG context assembly → provider call
+    → cost logging → retry.
+
+    All public methods are classmethods (singleton-like usage).
+    """
+
+    _rag_engine: Optional[RAGEngine] = None
+
+    @classmethod
+    def _get_rag_engine(cls) -> Optional[RAGEngine]:
+        """Lazy-init RAG engine."""
+        if cls._rag_engine is None:
+            try:
+                cls._rag_engine = get_default_engine()
+            except Exception as e:
+                log.warning("Failed to init RAG engine: %s", e)
+                cls._rag_engine = None
+        return cls._rag_engine
+
+    @classmethod
+    async def call(
+        cls,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        task_type: Optional[str] = None,
+        config: Optional[LLMConfig] = None,
+        messages: Optional[List[Dict[str, str]]] = None,
+    ) -> LLMResponse:
+        """Make a unified LLM call — the single entry point for all modules.
+
+        Args:
+            prompt: The user prompt / request text.
+            system_prompt: Optional system-level instructions.
+            task_type: Task category (for routing / budgeting).
+            config: Explicit LLMConfig (auto-resolve if None).
+            messages: Pre-built message list (overrides prompt+system).
+
+        Returns:
+            LLMResponse with content, model, usage, cost.
+        """
+        # 1. Resolve config
+        resolved_config = resolve_config(prompt, system_prompt, task_type, config)
+
+        # 2. Token budget pre-check
+        budget_check = TokenBudgetChecker.check(
+            prompt, resolved_config, system_prompt
+        )
+        if not budget_check.passed:
+            log.warning(
+                "Token budget check FAILED: %s", budget_check.reason
+            )
+            return LLMResponse(
+                content="",
+                model=resolved_config.model,
+                provider=resolved_config.provider,
+                token_usage={},
+                cost=0.0,
+                error=f"Budget check failed: {budget_check.reason}",
+            )
+
+        # 3. RAG context assembly (if enabled)
+        effective_system = system_prompt or ""
+        if resolved_config.rag_enabled and resolved_config.rag_sources:
+            engine = cls._get_rag_engine()
+            if engine:
+                try:
+                    rag_context = await engine.retrieve_as_context(
+                        prompt,
+                        sources=resolved_config.rag_sources,
+                    )
+                    if rag_context:
+                        effective_system = (
+                            f"{effective_system}\n\n{rag_context}"
+                            if effective_system
+                            else rag_context
+                        )
+                except Exception as e:
+                    log.warning("RAG retrieval failed (non-fatal): %s", e)
+
+        # 4. Build messages
+        if messages is None:
+            msgs: List[Dict[str, str]] = []
+            if effective_system:
+                msgs.append({"role": "system", "content": effective_system})
+            msgs.append({"role": "user", "content": prompt})
+        else:
+            msgs = messages
+
+        # 5. Get provider and call
+        provider = _get_provider(resolved_config.provider)
+        start_time = time.time()
+
         try:
-            body = exc.read()
-            detail = json.loads(body)
-            msg = detail.get("error", {}).get("message", str(exc))
-        except Exception:
-            msg = f"HTTP {exc.code}: {body.decode('utf-8', errors='replace')[:500] or str(exc)}"
-        raise RuntimeError(f"LLM API error: {msg}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"LLM API connection error: {e.reason}")
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"LLM API returned invalid JSON: {e}")
+            response = await provider.chat(msgs, resolved_config)
+            duration = time.time() - start_time
+            response.duration_s = duration
+
+            # 6. Log the call
+            try:
+                CostLogger.log_dict(
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                    task_type=resolved_config.task_type or "unknown",
+                    model=response.model,
+                    provider=resolved_config.provider,
+                    tokens_in=response.token_usage.get("prompt", 0),
+                    tokens_out=response.token_usage.get("completion", 0),
+                    cost=response.cost,
+                    duration_s=duration,
+                    status="success",
+                    task_id=resolved_config.task_id,
+                    user_id=resolved_config.user_id,
+                )
+            except Exception as e:
+                log.warning("Failed to log LLM call: %s", e)
+
+            return response
+
+        except Exception as exc:
+            duration = time.time() - start_time
+            log.error("LLM call failed after %.2fs: %s", duration, exc)
+
+            # Log failure
+            try:
+                CostLogger.log_dict(
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                    task_type=resolved_config.task_type or "unknown",
+                    model=resolved_config.model,
+                    provider=resolved_config.provider,
+                    tokens_in=0,
+                    tokens_out=0,
+                    cost=0.0,
+                    duration_s=duration,
+                    status=f"failed: {exc}",
+                    task_id=resolved_config.task_id,
+                    user_id=resolved_config.user_id,
+                )
+            except Exception as log_err:
+                log.warning("Failed to log LLM failure call: %s", log_err)
+
+            return LLMResponse(
+                content="",
+                model=resolved_config.model,
+                provider=resolved_config.provider,
+                token_usage={},
+                cost=0.0,
+                error=str(exc),
+            )
+
+    @classmethod
+    def configure_providers(cls, providers: Dict[str, AbstractProvider]):
+        """Inject custom provider instances (for testing)."""
+        _PROVIDER_REGISTRY.clear()
+        _PROVIDER_REGISTRY.update(providers)
+
+    @classmethod
+    def reset(cls):
+        """Reset client state (test isolation)."""
+        _PROVIDER_REGISTRY.clear()
+        cls._rag_engine = None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Backward-compatible shims
+# ═══════════════════════════════════════════════════════════════════════
 
 
 def chat_completion(
@@ -103,57 +321,72 @@ def chat_completion(
     timeout: int = 60,
     retries: int = 3,
 ) -> dict:
-    """Send a chat completion request to the LLM API.
+    """DEPRECATED — backward-compatible synchronous chat completion.
 
-    Args:
-        system_prompt: System-level instructions for the LLM.
-        user_prompt: The user message / query.
-        temperature: Sampling temperature (default: 0.3).
-        max_tokens: Maximum tokens in the response (default: 4096).
-        timeout: HTTP request timeout in seconds (default: 60).
-        retries: Number of retry attempts on failure (default: 3).
+    NOTE (AR-P2-02): This function duplicates the HTTPS/urllib logic that
+    should be handled by the individual provider modules (providers/anthropic.py,
+    providers/deepseek.py, etc.). It exists solely for backward compatibility
+    with legacy callers that import ``chat_completion`` directly.
 
-    Returns:
-        dict with keys:
-            "content" (str)  — the LLM's response text.
-            "model" (str)    — the model identifier used.
-            "usage" (dict)   — token usage info (prompt_tokens,
-                                completion_tokens, total_tokens).
+    Handles the actual OpenAI-compatible HTTP request directly so that
+    all existing importers (stages.py etc.) continue to work without changes.
 
-    Raises:
-        RuntimeError: If all retry attempts fail.
+    Reads environment variables LLM_API_KEY, LLM_BASE_URL, LLM_MODEL.
+
+    .. deprecated:: 2.0
+        Use ``LLMClient.call()`` instead.
     """
-    api_key, base_url, model = _resolve_env()
+    import json as _json
+    import os as _os
+    import time as _time
+    import urllib.request as _ur
+    import urllib.error as _ue
+
+    api_key = (
+        _os.environ.get("LLM_API_KEY")
+        or _os.environ.get("DEEPSEEK_API_KEY")
+        or _os.environ.get("OPENAI_API_KEY")
+        or ""
+    )
+    base_url = _os.environ.get("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/")
+    model = _os.environ.get("LLM_MODEL", "deepseek-chat")
 
     if not api_key:
-        raise RuntimeError(
-            "No LLM API key found. Set LLM_API_KEY, DEEPSEEK_API_KEY, "
-            "or OPENAI_API_KEY environment variable."
-        )
+        raise RuntimeError("No LLM API key found in environment")
 
     url = f"{base_url}/v1/chat/completions"
-    payload = _build_payload(system_prompt, user_prompt, model, temperature, max_tokens)
-    req = _build_request(url, api_key, payload)
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
 
     last_error = None
     for attempt in range(1, retries + 1):
         try:
-            log.info(
-                "LLM request: model=%s, system_len=%d, user_len=%d (attempt %d/%d)",
-                model, len(system_prompt), len(user_prompt), attempt, retries,
+            # Create a new Request for each attempt (CQ-P1-02: don't reuse consumed Request)
+            req = _ur.Request(
+                url,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                method="POST",
             )
-            data = _do_request(req, timeout=timeout)
-
-            if "choices" not in data or not data["choices"]:
-                raise RuntimeError(f"Unexpected API response structure: {json.dumps(data)[:300]}")
+            with _ur.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8")
+                data = _json.loads(raw)
 
             choice = data["choices"][0]
             content = choice.get("message", {}).get("content", "")
-
             if content is None:
-                # Some APIs return null content for refusal/finish_reason
-                finish_reason = choice.get("finish_reason", "unknown")
-                content = f"[LLM refused to respond, finish_reason={finish_reason}]"
+                content = f"[LLM refused, finish_reason={choice.get('finish_reason', 'unknown')}]"
 
             return {
                 "content": content,
@@ -161,18 +394,33 @@ def chat_completion(
                 "usage": data.get("usage", {}),
             }
 
-        except RuntimeError as e:
+        except (_ue.HTTPError, _ue.URLError, _json.JSONDecodeError, RuntimeError) as e:
             last_error = e
             if attempt < retries:
                 backoff = 1.0 * (2 ** (attempt - 1))
-                log.warning(
-                    "LLM attempt %d/%d failed: %s. Retrying in %.1fs…",
-                    attempt, retries, e, backoff,
-                )
-                time.sleep(backoff)
+                _time.sleep(backoff)
             else:
-                log.error("LLM all %d attempts failed: %s", retries, e)
-                raise
+                raise RuntimeError(f"LLM request failed after {retries} retries: {last_error}")
 
-    # Should not be reached, but safety net:
-    raise RuntimeError(f"LLM request failed after {retries} retries: {last_error}")
+    raise RuntimeError(f"LLM request failed after {retries} retries")
+
+
+
+async def _call_llm(
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    task_type: Optional[str] = None,
+) -> str:
+    """DEPRECATED — backward-compatible wrapper.
+
+    Calls LLMClient.call() and returns just the content string.
+
+    .. deprecated:: 2.0
+        Use ``LLMClient.call()`` directly instead.
+    """
+    response = await LLMClient.call(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        task_type=task_type,
+    )
+    return response.content

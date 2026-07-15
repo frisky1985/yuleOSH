@@ -87,7 +87,8 @@ def _load_misra_report():
     import importlib.util as _iu
     import sys as _sys
     from pathlib import Path as _Path
-    _mod_path = str(_Path(__file__).resolve().parent.parent / "ci" / "misra_report.py")
+    # misra_report is now a package at src/yuleosh/ci/misra_report/
+    _mod_path = str(_Path(__file__).resolve().parent.parent / "src" / "yuleosh" / "ci" / "misra_report" / "__init__.py")
     _spec = _iu.spec_from_file_location("misra_report", _mod_path)
     if _spec is None:
         raise ImportError(f"Could not load misra_report from {_mod_path}")

@@ -26,21 +26,50 @@ from typing import Optional
 log = logging.getLogger("yuleosh.alm.traceability")
 
 
-# ── SHALL statement extraction ─────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────────────────
+
+
+def _is_table_separator(line: str) -> bool:
+    """Check if a line is a markdown table separator (e.g., |:---|:-----|)."""
+    stripped = line.strip()
+    return stripped.startswith("|") and all(c in "|:- " for c in stripped) and (":---" in stripped or " --- " in stripped)
+
+
+def _is_shall_table_header(col_names: list[str]) -> bool:
+    """Detect if a list of column names indicates a SHALL requirement table.
+
+    A SHALL table has:
+      - Column 1 containing "ID"
+      - Column 2 containing "描述", "SHALL", "Description", or "Statement"
+    """
+    if len(col_names) < 2:
+        return False
+    id_found = col_names[0].upper() == "ID" or "ID" in col_names[0].upper()
+    desc_found = (
+        "描述" in col_names[1]
+        or "SHALL" in col_names[1].upper()
+        or "DESCRIPTION" in col_names[1].upper()
+        or "STATEMENT" in col_names[1].upper()
+    )
+    return id_found and desc_found
+
+
+# ── SHALL statement extraction ──────────────────────────────────────────
 
 
 def extract_shall_statements(spec_path: str) -> list[dict]:
     """Extract SHALL statements from a specification file (markdown).
 
+    Supports two formats:
+      1. List format: ``- The system SHALL ...`` under a requirement heading.
+      2. Table format: ``| ID | 描述 | ASIL | 端 |`` rows where ID contains "-SHALL".
+
     Returns list of dicts with keys:
-      - id:          Auto-generated SHALL-{n} identifier
-      - req_id:      Spec-defined ID (e.g. SWE-MISRA-S1) if available
+      - id:          Requirement ID (e.g. KL-SHALL-01) or auto-generated SHALL-{n}
+      - req_id:      Spec-defined ID if available
       - statement:   The full SHALL text
       - line:        Line number in the spec file
       - section:     Section heading (if available)
-
-    Spec-defined IDs are parsed from patterns like ``**SWE-MISRA-S1**: ...``
-    on the same line as the SHALL keyword.
     """
     spec_file = Path(spec_path)
     if not spec_file.exists():
@@ -62,47 +91,90 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
     # Pattern to match spec-defined IDs like **SWE-MISRA-S1**: or [REQ-MISRA-S1.1]
     spec_id_pattern = re.compile(r'(?:\*\*(\w[\w-]+)\*\*\s*:|\[([\w][\w.-]+)\])')
 
-    # Pattern to match requirement section headers like ### RS-001: or #### SWR-001.1:
-    section_req_id_pattern = re.compile(r'^#{1,6}\s+(RS-\d+(?:\.\d+)?|SWR-\d+(?:\.\d+)?|NFR-\d+(?:\.\d+)?)\b', re.IGNORECASE)
+    # Pattern to match requirement section headers
+    section_req_id_pattern = re.compile(
+        r'^#{1,6}\s+([A-Z][A-Z0-9]*(?:-REQ)?-\d+(?:\.\d+)?)\b', re.IGNORECASE
+    )
 
     # Broad SHALL keyword search — works for both English and Chinese text
     shall_keyword_pattern = re.compile(r'\bSHALL\b|\bshall\b|\bMUST\b|\bmust\b')
 
+    # ── Markdown table parsing state ──
+    in_shall_table = False     # currently parsing a SHALL requirement table
+    table_sep_seen = False     # separator row seen after table header
+
     for idx, line in enumerate(lines, 1):
         stripped = line.strip()
 
+        # ── Exit table mode on any non-pipe line (blank or heading) ──
+        if in_shall_table and not stripped.startswith("|"):
+            in_shall_table = False
+            table_sep_seen = False
+
         # Track section headings
         if stripped.startswith("#"):
+            # Exit table mode on headings
+            in_shall_table = False
+            table_sep_seen = False
+
             current_section = stripped.lstrip("#").strip()
             # Check if this section header has a requirement ID
             section_match = section_req_id_pattern.match(stripped)
             if section_match:
                 current_req_id = section_match.group(1).upper()
 
-            # Track GIVEN/WHEN/THEN blocks (##### headings) — skip these
-            if stripped.startswith("#####"):
-                in_given_when_then = True
-            else:
-                in_given_when_then = False
-                # Skip Reason headings too — they contain explanatory text, not requirements
-                if "reason" in stripped.lower():
-                    continue
+            # Track GIVEN/WHEN/THEN blocks — skip these
+            in_given_when_then = stripped.startswith("#####")
+            # Skip Reason headings — they contain explanatory text, not requirements
+            if "reason" in stripped.lower() and not in_given_when_then:
+                continue
 
             continue
 
-        # Reset GIVEN/WHEN/THEN state when we hit a non-heading line
-        # (remains in effect only for heading lines)
-
-        # Look for SHALL / MUST keywords
-        if shall_keyword_pattern.search(stripped):
-            # Skip lines in GIVEN/WHEN/THEN scenario blocks
-            if in_given_when_then:
+        # ── Detect markdown table with SHALL requirements ──
+        if stripped.startswith("|") and not in_shall_table:
+            cols = [c.strip() for c in stripped.split("|")]
+            col_names = [c for c in cols if c]  # Remove empty leading/trailing
+            if _is_shall_table_header(col_names):
+                in_shall_table = True
+                table_sep_seen = False
                 continue
 
-            # Only capture bullet-point format SHALLs (`- ` or `* `)
-            # This avoids capturing inline/markdown SHALL references
-            if not (stripped.startswith("- ") or stripped.startswith("* ") or
-                    stripped.startswith("+ ")):
+        # ── Parse table separator row ──
+        if in_shall_table and not table_sep_seen and _is_table_separator(stripped):
+            table_sep_seen = True
+            continue
+
+        # ── Parse table rows (SHALL requirements in table format) ──
+        if in_shall_table and table_sep_seen and stripped.startswith("|"):
+            cols = [c.strip() for c in stripped.split("|")]
+            # cols[0] is empty (before first |), cols[1] is ID, cols[2] is description
+            if len(cols) >= 3:
+                row_id = cols[1].strip()
+                row_desc = cols[2].strip()
+
+                # Only capture rows with SHALL IDs (e.g. KL-SHALL-01, PE-SHALL-NOT-01)
+                if "-SHALL" in row_id:
+                    shall_statement = row_desc.strip()
+                    shall_statements.append({
+                        "id": row_id,       # Use the actual spec ID (e.g. KL-SHALL-01)
+                        "req_id": row_id,
+                        "statement": shall_statement,
+                        "line": idx,
+                        "section": current_section,
+                    })
+            continue
+
+        # ── Legacy: bullet-point format SHALLs ──
+        if shall_keyword_pattern.search(stripped):
+            if in_given_when_then:
+                continue
+            if in_shall_table:
+                continue
+
+            # Only capture bullet-point format (`- `, `* `, `+ `)
+            if not (stripped.startswith("- ") or stripped.startswith("* ")
+                    or stripped.startswith("+ ")):
                 continue
 
             statement = stripped.strip()
@@ -111,11 +183,9 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
             statement = re.sub(r"^\d+[.)]\s+", "", statement)
 
             # Parse spec-defined ID from **ID**: prefix or [REQ-xxx] marker
-            # Use trimmed `statement` (after list marker removal) for matching
             req_id = None
             spec_id_match = spec_id_pattern.match(statement)
             if spec_id_match:
-                # group(1) = **ID**: pattern, group(2) = [REQ-xxx] pattern
                 req_id = spec_id_match.group(1) or spec_id_match.group(2)
 
             # If no inline req_id, use the section-level req_id
@@ -135,25 +205,74 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
 
 
 def extract_shall_from_text(text: str) -> list[dict]:
-    """Extract SHALL statements from raw text (no file I/O)."""
+    """Extract SHALL statements from raw text (no file I/O).
+
+    Supports both list format and table format.
+    """
     lines = text.split("\n")
     shall_statements = []
     current_section = ""
 
     shall_keyword_pattern = re.compile(r'\bSHALL\b|\bshall\b|\bMUST\b|\bmust\b')
-
     spec_id_pattern = re.compile(r'(?:\*\*(\w[\w-]+)\*\*\s*:|\[([\w][\w.-]+)\])')
+
+    # Table parsing state
+    in_shall_table = False
+    table_sep_seen = False
 
     for idx, line in enumerate(lines, 1):
         stripped = line.strip()
+
+        # Exit table mode
+        if in_shall_table and not stripped.startswith("|"):
+            in_shall_table = False
+            table_sep_seen = False
+
         if stripped.startswith("#"):
+            in_shall_table = False
+            table_sep_seen = False
             current_section = stripped.lstrip("#").strip()
+            continue
+
+        # Detect table
+        if stripped.startswith("|") and not in_shall_table:
+            cols = [c.strip() for c in stripped.split("|")]
+            col_names = [c for c in cols if c]
+            if _is_shall_table_header(col_names):
+                in_shall_table = True
+                table_sep_seen = False
+                continue
+
+        # Parse table separator
+        if in_shall_table and not table_sep_seen and _is_table_separator(stripped):
+            table_sep_seen = True
+            continue
+
+        # Parse table rows
+        if in_shall_table and table_sep_seen and stripped.startswith("|"):
+            cols = [c.strip() for c in stripped.split("|")]
+            if len(cols) >= 3:
+                row_id = cols[1].strip()
+                row_desc = cols[2].strip()
+                if "-SHALL" in row_id:
+                    shall_statement = row_desc.strip()
+                    shall_statements.append({
+                        "id": row_id,
+                        "req_id": row_id,
+                        "statement": shall_statement,
+                        "line": idx,
+                        "section": current_section,
+                    })
+            continue
+
+        # Legacy list format
         if shall_keyword_pattern.search(stripped):
+            if in_shall_table:
+                continue
             statement = stripped.strip()
             statement = re.sub(r"^[\s]*[-*+]\s+", "", statement)
             statement = re.sub(r"^\d+[.)]\s+", "", statement)
 
-            # Parse spec-defined ID
             req_id = None
             spec_id_match = spec_id_pattern.match(statement)
             if spec_id_match:
@@ -182,9 +301,12 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
       - reviewed_files: List of file paths reviewed
       - findings: List of finding descriptions
     """
-    sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    # Try .osh/sessions/ first (primary), fall back to .yuleosh/sessions/
+    sessions_dir = Path(project_dir) / ".osh" / "sessions"
     if not sessions_dir.exists():
-        log.info("No sessions directory found at %s", sessions_dir)
+        sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    if not sessions_dir.exists():
+        log.info("No sessions directory found (tried .osh/sessions/ and .yuleosh/sessions/)")
         return []
 
     reviews = []
@@ -193,6 +315,32 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
             continue
         review_file = session_dir / "code-review.json"
         if not review_file.exists():
+            # Also check for .osh/evidence/reviews/ files
+            evidence_reviews = (Path(project_dir) / ".osh" / "evidence" / "reviews").glob("*.json")
+            for evf in evidence_reviews:
+                try:
+                    data = json.loads(evf.read_text(encoding="utf-8"))
+                    reviewed_files = []
+                    findings = []
+                    if isinstance(data, dict):
+                        reviewed_files = data.get("reviewed_files", data.get("files", []))
+                        if isinstance(reviewed_files, dict):
+                            reviewed_files = list(reviewed_files.keys())
+                        findings_text = data.get("findings", data.get("issues", []))
+                        if isinstance(findings_text, list):
+                            for f in findings_text:
+                                if isinstance(f, dict):
+                                    findings.append(f.get("description", str(f)))
+                                elif isinstance(f, str):
+                                    findings.append(f)
+                    reviews.append({
+                        "session": evf.stem,
+                        "agent": data.get("agent", "unknown") if isinstance(data, dict) else "unknown",
+                        "reviewed_files": reviewed_files,
+                        "findings": findings,
+                    })
+                except (json.JSONDecodeError, OSError) as e:
+                    log.warning("Cannot parse %s: %s", evf, e)
             continue
 
         try:
@@ -240,9 +388,11 @@ def scan_test_reports(project_dir: str) -> list[dict]:
       - failed:   Number of failed tests
       - output:   Test output (truncated)
     """
-    sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    sessions_dir = Path(project_dir) / ".osh" / "sessions"
     if not sessions_dir.exists():
-        log.info("No sessions directory found at %s", sessions_dir)
+        sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    if not sessions_dir.exists():
+        log.info("No sessions directory found (tried .osh/sessions/ and .yuleosh/sessions/)")
         return []
 
     reports = []
@@ -554,7 +704,9 @@ def _find_step_handlers_for_requirement(project_dir: str, req_id: str,
     that contain a ``req_ids`` or ``spec_ref`` field matching the req_id
     or SHALL id.
     """
-    sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    sessions_dir = Path(project_dir) / ".osh" / "sessions"
+    if not sessions_dir.exists():
+        sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
     if not sessions_dir.exists():
         return []
 

@@ -15,6 +15,7 @@ is unchanged.
 """
 
 import copy
+import gc
 import json
 import logging
 import os
@@ -92,11 +93,15 @@ def import_from_req_test_json(store: KGStore, json_path: str) -> dict:
             tf_count += 1
 
             # Create covers edge
+            # Confidence = 1.0 (directly from RTM mapping)
             store.upsert_edge(Edge(
                 source_id=req_nid,
                 target_id=tf_nid,
                 edge_type="covers",
-                properties={"source": "req-test-mapping.json"},
+                properties={
+                    "source": "req-test-mapping.json",
+                    "confidence": 1.0,
+                },
             ))
             edge_count += 1
 
@@ -273,6 +278,7 @@ def import_from_rtm_md(store: KGStore, md_path: str) -> dict:
         tf_ids.add(tf_path_clean)
 
         # Create covers edge: Requirement → TestFile
+        # Confidence = 1.0 (directly from RTM mapping)
         store.upsert_edge(Edge(
             source_id=req_nid,
             target_id=tf_nid,
@@ -281,6 +287,7 @@ def import_from_rtm_md(store: KGStore, md_path: str) -> dict:
                 "source": "requirement-traceability-matrix.md",
                 "test_function": test_function,
                 "status": row["status"],
+                "confidence": 1.0,
             },
         ))
         edge_count += 1
@@ -310,6 +317,7 @@ def import_from_rtm_md(store: KGStore, md_path: str) -> dict:
             edge_count += 1
 
             # Create covers edge: Requirement → TestFunction
+            # Confidence = 1.0 (directly from RTM mapping)
             store.upsert_edge(Edge(
                 source_id=req_nid,
                 target_id=tfn_nid,
@@ -318,6 +326,7 @@ def import_from_rtm_md(store: KGStore, md_path: str) -> dict:
                     "source": "requirement-traceability-matrix.md",
                     "test_function": test_function,
                     "status": row["status"],
+                    "confidence": 1.0,
                 },
             ))
             edge_count += 1
@@ -460,54 +469,83 @@ def _annotate_covers_layer(store: KGStore) -> dict:
     """Annotate all 'covers' edges with layer information inferred from
     the target test file name.
 
-    Iterates every 'covers' edge (requirement → test_file / test_function),
-    resolves the target node, inspects its filename, and writes
-    ``layer`` into the edge properties.
+    Uses a SQL JOIN cursor-based approach (no full-load of edges into
+    Python memory) to iterate all 'covers' edges. Resolves target node
+    file path from the joined row and writes ``layer`` into properties.
 
     Returns summary dict with counts.
     """
-    covers_edges = store.list_edges(edge_type="covers")
+    import json
     annotated = 0
     skipped = 0
 
-    for edge in covers_edges:
+    # Streaming cursor: JOIN covers edges with target nodes — no full fetch
+    cur = store.conn.execute("""
+        SELECT
+            e.id,
+            e.source_id,
+            e.target_id,
+            e.edge_type,
+            e.properties        AS edge_props,
+            e.verified_at,
+            e.build_id,
+            t.entity_type       AS target_type,
+            t.entity_id         AS target_eid,
+            t.properties        AS target_props
+        FROM kg_edges e
+        JOIN kg_nodes t ON t.id = e.target_id
+        WHERE e.edge_type = 'covers'
+        ORDER BY e.id
+    """)
+
+    while True:
+        row = cur.fetchone()
+        if row is None:
+            break
+
+        edge_props = json.loads(row["edge_props"]) if isinstance(row["edge_props"], str) else (row["edge_props"] or {})
+
         # Skip if already annotated
-        if edge.properties.get("layer"):
+        if edge_props.get("layer"):
             skipped += 1
             continue
 
-        # Resolve the target node to get its file path
-        target_node = store.get_node_by_id(edge.target_id)
-        if target_node is None:
-            continue
+        # Determine the file path from target node
+        target_type = row["target_type"]
+        target_eid = row["target_eid"]
+        target_props = json.loads(row["target_props"]) if isinstance(row["target_props"], str) else (row["target_props"] or {})
 
-        # Determine the file path
-        if target_node.entity_type == "test_file":
-            file_path = target_node.entity_id
-        elif target_node.entity_type == "test_function":
-            file_path = target_node.properties.get("file_path", "") or target_node.entity_id.split("::")[0]
+        if target_type == "test_file":
+            file_path = target_eid
+        elif target_type == "test_function":
+            file_path = target_props.get("file_path", "") or target_eid.split("::")[0]
         else:
-            file_path = target_node.entity_id
+            file_path = target_eid
 
         if not file_path:
+            skipped += 1
             continue
 
         layer = _infer_layer_from_filename(file_path)
 
         # Update edge properties with layer
-        props = dict(edge.properties)
+        props = dict(edge_props)
         props["layer"] = layer
 
         store.upsert_edge(Edge(
-            source_id=edge.source_id,
-            target_id=edge.target_id,
-            edge_type=edge.edge_type,
+            source_id=row["source_id"],
+            target_id=row["target_id"],
+            edge_type=row["edge_type"],
             properties=props,
-            verified_at=edge.verified_at,
-            build_id=edge.build_id,
+            verified_at=row["verified_at"],
+            build_id=row["build_id"],
             layer=layer,
         ))
         annotated += 1
+
+        # Periodically yield to avoid building up too many Python objects
+        if annotated % 5000 == 0:
+            gc.collect()
 
     log.info("Layer annotation: %d covers edges annotated, %d already had layer",
              annotated, skipped)
@@ -539,18 +577,27 @@ def bootstrap(store: KGStore, project_dir: str, create_snapshot: bool = True) ->
     # Step 1: RTM
     rtm_result = import_from_rtm_md(store, str(rtm_path))
     result["rtm"] = rtm_result
+    # Memory release: RTM table rows parsed into memory
+    del rtm_result
+    gc.collect()
 
     # Step 2: JSON mapping (additional coverage)
     json_result = import_from_req_test_json(store, str(json_path))
     result["req_test_json"] = json_result
+    del json_result
+    gc.collect()
 
     # Step 3: AST-based code scan (P1-1, replaces old scan_code_directory)
     scan_result = scan_directory(store, str(project_path))
     result["code_scan"] = scan_result
+    del scan_result
+    gc.collect()
 
     # Step 4: Coverage import (P1-1)
     coverage_result = import_coverage_from_default(store, str(project_path))
     result["coverage"] = coverage_result
+    del coverage_result
+    gc.collect()
 
     # Step 5: Post-process — merge duplicate test_function nodes
     # Bridges the gap between RTM-imported test_function nodes (short entity_id like
@@ -564,24 +611,34 @@ def bootstrap(store: KGStore, project_dir: str, create_snapshot: bool = True) ->
     # Step 6: Annotate covers edges with test layer (ASPICE P0)
     layer_result = _annotate_covers_layer(store)
     result["layer_annotation"] = layer_result
+    del layer_result
+    gc.collect()
 
     # Step 7: implements edges (P0-1)
     # Derive code_function ──implements──→ requirement from:
     #   requirement ──covers──→ test_file ──contains──→ test_function ──verifies──→ code_function
     impl_result = _build_implements_edges(store)
     result["implements"] = impl_result
+    del impl_result
+    gc.collect()
 
     # Step 7a: validates edges (P0-5)
     valid_result = _build_validates_edges(store)
     result["validates"] = valid_result
+    del valid_result
+    gc.collect()
 
     # Step 7b: Orphan code file fallback matching (P0-4b)
     fallback_result = _fallback_code_file_matching(store, project_path)
     result["fallback_matching"] = fallback_result
+    del fallback_result
+    gc.collect()
 
     # Step 7c: Orphan test file auto-covers (P0-4e)
     orphan_tf_result = _fix_orphan_test_files(store)
     result["orphan_test_files"] = orphan_tf_result
+    del orphan_tf_result
+    gc.collect()
 
     # Step 8: Snapshot
     if create_snapshot:
@@ -595,26 +652,36 @@ def bootstrap(store: KGStore, project_dir: str, create_snapshot: bool = True) ->
             "edge_count": snapshot.edge_count,
         }
 
-    # Summary (include all sources)
+    # Summary (include all sources) — use result dict, not deleted local refs
+    rtm = result.get("rtm", {})
+    json_res = result.get("req_test_json", {})
+    scan_res = result.get("code_scan", {})
+    cov_res = result.get("coverage", {})
+    impl_res = result.get("implements", {})
+    valid_res_ = result.get("validates", {})
+    fallback_res = result.get("fallback_matching", {})
+    orphan_res = result.get("orphan_test_files", {})
+    merge_res = result.get("merge", {})
+
     node_components = [
-        rtm_result.get("requirements", 0),
-        rtm_result.get("test_files", 0),
-        rtm_result.get("test_functions", 0),
-        scan_result.get("code_files", 0),
-        scan_result.get("test_files", 0),
-        scan_result.get("functions", 0),
-        scan_result.get("classes", 0),
-        scan_result.get("methods", 0),
+        rtm.get("requirements", 0),
+        rtm.get("test_files", 0),
+        rtm.get("test_functions", 0),
+        scan_res.get("code_files", 0),
+        scan_res.get("test_files", 0),
+        scan_res.get("functions", 0),
+        scan_res.get("classes", 0),
+        scan_res.get("methods", 0),
     ]
     edge_components = [
-        rtm_result.get("edges", 0),
-        json_result.get("edges", 0),
-        scan_result.get("edges", 0),
-        coverage_result.get("verifies_edges", 0),
-        impl_result.get("edges", 0),
-        valid_result.get("edges", 0),
-        fallback_result.get("edges", 0),
-        orphan_tf_result.get("edges", 0),
+        rtm.get("edges", 0),
+        json_res.get("edges", 0),
+        scan_res.get("edges", 0),
+        cov_res.get("verifies_edges", 0),
+        impl_res.get("edges", 0),
+        valid_res_.get("edges", 0),
+        fallback_res.get("edges", 0),
+        orphan_res.get("edges", 0),
     ]
     total_nodes = sum(node_components)
     total_edges = sum(edge_components)
@@ -626,11 +693,11 @@ def bootstrap(store: KGStore, project_dir: str, create_snapshot: bool = True) ->
 
     log.info("Bootstrap complete: %s total nodes, %s total edges" +
              " (coverage: %s verifies, merge: %s merged, implements: %s, validates: %s, fallback: %s, orphan_tf: %s)",
-             total_nodes, total_edges, coverage_result.get("verifies_edges", 0),
-             merge_result.get("merged_nodes", 0), impl_result.get("edges", 0),
-             valid_result.get("edges", 0),
-             fallback_result.get("edges", 0),
-             orphan_tf_result.get("edges", 0))
+             total_nodes, total_edges, cov_res.get("verifies_edges", 0),
+             merge_res.get("merged_nodes", 0), impl_res.get("edges", 0),
+             valid_res_.get("edges", 0),
+             fallback_res.get("edges", 0),
+             orphan_res.get("edges", 0))
     return result
 
 
@@ -826,6 +893,7 @@ def _build_implements_edges(store: KGStore) -> dict:
                         continue
 
                     # Create implements edge: code_function → requirement
+                    # Path A confidence = 0.9 (deduced via test_file chain)
                     existing = store.get_edge(code_fn_node.id, req_nid, "implements")
                     if existing is None:
                         store.upsert_edge(Edge(
@@ -835,6 +903,7 @@ def _build_implements_edges(store: KGStore) -> dict:
                             properties={
                                 "source": "derived_from_covers_verifies",
                                 "via_test_function": tfn_node.entity_id,
+                                "confidence": 0.9,
                             },
                         ))
                         edge_count += 1
@@ -842,6 +911,7 @@ def _build_implements_edges(store: KGStore) -> dict:
                         code_fns_covered.add(code_fn_node.id)
 
         # ── Path B: requirement ──covers──→ test_function ──verifies──→ code_function
+        # Path B confidence = 0.8 (deduced via test_function direct)
         elif tgt_node.entity_type == "test_function":
             tfn_nid = tgt_node.id
             tfn_out_edges = store.get_outgoing_edges(tfn_nid)
@@ -860,6 +930,7 @@ def _build_implements_edges(store: KGStore) -> dict:
                         properties={
                             "source": "derived_from_covers_verifies",
                             "via_test_function": tgt_node.entity_id,
+                            "confidence": 0.8,
                         },
                     ))
                     edge_count += 1
@@ -868,6 +939,7 @@ def _build_implements_edges(store: KGStore) -> dict:
 
         # ── Path C: requirement ──covers──→ code_file ──contains──→ code_function
         # (direct covers of code_file with intent mapping — less common)
+        # Path C confidence = 0.7 (deduced via code_file direct)
         elif tgt_node.entity_type == "code_file":
             cf_nid = tgt_node.id
             cf_out_edges = store.get_outgoing_edges(cf_nid)
@@ -886,6 +958,7 @@ def _build_implements_edges(store: KGStore) -> dict:
                         properties={
                             "source": "derived_from_covers_contains",
                             "via_code_file": tgt_node.entity_id,
+                            "confidence": 0.7,
                         },
                     ))
                     edge_count += 1
@@ -936,11 +1009,14 @@ def _build_validates_edges(store: KGStore) -> dict:
             continue
 
         # 创建 validates 边（同方向）
+        # Confidence = 1.0 (directly from known test layer)
+        props = dict(edge.properties) if edge.properties else {}
+        props["confidence"] = 1.0
         store.upsert_edge(Edge(
             source_id=edge.source_id,
             target_id=edge.target_id,
             edge_type="validates",
-            properties=dict(edge.properties) if edge.properties else {},
+            properties=props,
             verified_at=edge.verified_at,
             build_id=edge.build_id,
             layer=layer,
@@ -1041,7 +1117,7 @@ def _fallback_code_file_matching(store: KGStore, project_base: Path) -> dict:
                     edge_type="covers",
                     properties={
                         "source": "fallback_matching_p0_4b",
-                        "confidence": "heuristic",
+                        "confidence": 0.6,
                     },
                 ))
                 edge_count += 1
@@ -1122,6 +1198,7 @@ def _fix_orphan_test_files(store: KGStore) -> dict:
                     properties={
                         "source": "orphan_test_file_fix_p0_4e",
                         "method": "derived_from_implements_chain",
+                        "confidence": 0.7,
                     },
                 ))
                 edge_count += 1

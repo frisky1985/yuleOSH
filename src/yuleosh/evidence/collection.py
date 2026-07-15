@@ -42,18 +42,42 @@ class DataCollectionMixin:
         print(f"  📋 Collected {len(self.requirements)} requirements, {len(self.scenarios)} scenarios")
 
     def collect_reviews(self):
-        """Collect review records from .osh/reviews/."""
-        rev_dir = Path(self.project_dir) / ".osh" / "reviews"
+        """Collect review records from .osh/reviews/.
+
+        Scans both subdirectory-based review-session.json files (e.g.
+        code-review/review-session.json) and flat JSON files in
+        latest/ directory (e.g. latest/code-review.json).
+        Deduplicates by (commit_sha, review_type) pair.
+        """
+        rev_dir = Path(self.project_dir) / ".osh" / "evidence" / "reviews"
         if not rev_dir.exists():
             print("  ⏭️  No review records found")
             return
 
+        seen_keys: set[tuple[str, str]] = set()
         for task_dir in rev_dir.iterdir():
+            json_files: list[Path] = []
             if task_dir.is_dir():
-                sess_file = task_dir / "review-session.json"
-                if sess_file.exists():
-                    with open(sess_file) as f:
-                        self.reviews.append(json.load(f))
+                # Collect all .json files in the subdirectory
+                for f in sorted(task_dir.glob("*.json")):
+                    json_files.append(f)
+            elif task_dir.suffix == ".json":
+                # Flat JSON files at the reviews/ root level
+                json_files.append(task_dir)
+
+            for f in json_files:
+                try:
+                    with open(f) as fh:
+                        data = json.load(fh)
+                    key = (data.get("commit_sha", ""), data.get("review_type", ""))
+                    if key == ("", ""):
+                        # No dedup key — always include
+                        self.reviews.append(data)
+                    elif key not in seen_keys:
+                        seen_keys.add(key)
+                        self.reviews.append(data)
+                except (json.JSONDecodeError, OSError) as e:
+                    print(f"    ⚠️  Could not read review file {f}: {e}")
 
         print(f"  📋 Collected {len(self.reviews)} review session(s)")
 

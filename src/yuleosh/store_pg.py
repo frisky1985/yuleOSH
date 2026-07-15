@@ -14,9 +14,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from yuleosh.store_interface import AbstractStore
 
-class PostgresStore:
-    """PostgreSQL-backed persistent store. Thread-safe via connection pool."""
+
+class PostgresStore(AbstractStore):
+    """PostgreSQL-backed persistent store. Thread-safe via per-thread connections."""
 
     _instances = {}
     _lock = threading.Lock()
@@ -26,15 +28,33 @@ class PostgresStore:
         with cls._lock:
             if key not in cls._instances:
                 instance = super().__new__(cls)
-                instance.dsn = dsn or os.environ.get(
-                    "YULEOSH_DB_URL",
-                    "postgresql://yuleosh:yuleosh@localhost:5432/yuleosh"
+                resolved_dsn = dsn or os.environ.get("YULEOSH_DB_URL")
+                if not resolved_dsn:
+                    raise ValueError(
+                        "PostgreSQL connection string is required. "
+                        "Set the YULEOSH_DB_URL environment variable, e.g.:\n"
+                        "  export YULEOSH_DB_URL=postgresql://user:password@host:5432/database\n"
+                        "Or pass the dsn parameter to PostgresStore(dsn=...)"
+                    )
+                instance.dsn = resolved_dsn
+                instance._local = threading.local()
+                # CQ-P1-01: _migrate in __new__ is kept for backward compat;
+                # call setup() explicitly to mitigate IO-during-creation risk.
+                import logging
+                logging.getLogger("yuleosh.store_pg").warning(
+                    "_migrate() called from __new__ (CQ-P1-01). Consider calling PostgresStore.setup() explicitly instead."
                 )
-                instance._pool = None
-                instance._conn = None  # per-thread fallback
                 instance._migrate()
                 cls._instances[key] = instance
             return cls._instances[key]
+
+    def setup(self):
+        """Explicit async-safe initialization: runs migrations if needed.
+
+        Call this after store creation to separate IO from object creation.
+        """
+        self._migrate()
+        return self
 
     @classmethod
     def reset(cls):
@@ -47,17 +67,19 @@ class PostgresStore:
 
     @property
     def conn(self):
-        """Get a database connection (creates if needed)."""
+        """Get a database connection (per-thread, created on demand)."""
         import psycopg2
-        if self._conn is None or self._conn.closed:
-            self._conn = psycopg2.connect(self.dsn)
-            self._conn.autocommit = True
-        return self._conn
+        # Each thread gets its own connection via threading.local()
+        if not hasattr(self._local, 'conn') or self._local.conn is None or self._local.conn.closed:
+            self._local.conn = psycopg2.connect(self.dsn)
+            self._local.conn.autocommit = True
+        return self._local.conn
 
     def close(self):
-        if self._conn and not self._conn.closed:
-            self._conn.close()
-            self._conn = None
+        """Close the current thread's connection."""
+        if hasattr(self._local, 'conn') and self._local.conn and not self._local.conn.closed:
+            self._local.conn.close()
+            self._local.conn = None
 
     # ------------------------------------------------------------------
     # Schema & Migration
@@ -572,12 +594,23 @@ class PostgresStore:
         now = datetime.now().isoformat()
         with self.conn.cursor() as cur:
             if existing:
-                for key in ("stripe_subscription_id", "stripe_customer_id", "tier", "status", "current_period_end"):
-                    if key in data and data[key]:
-                        cur.execute(
-                            f"UPDATE subscriptions SET {key}=%s WHERE org_id=%s",
-                            (data[key], org_id)
-                        )
+                # Use parameterized UPDATE with hardcoded column names (safe from injection)
+                cur.execute("""
+                    UPDATE subscriptions SET
+                        stripe_subscription_id = %s,
+                        stripe_customer_id = %s,
+                        tier = COALESCE(%s, tier),
+                        status = COALESCE(%s, status),
+                        current_period_end = COALESCE(%s, current_period_end)
+                    WHERE org_id = %s
+                """, (
+                    data.get("stripe_subscription_id", existing.get("stripe_subscription_id", "")),
+                    data.get("stripe_customer_id", existing.get("stripe_customer_id", "")),
+                    data.get("tier"),
+                    data.get("status"),
+                    data.get("current_period_end"),
+                    org_id,
+                ))
             else:
                 cur.execute("""
                     INSERT INTO subscriptions (org_id, stripe_subscription_id, stripe_customer_id, tier, status, current_period_end, created_at)

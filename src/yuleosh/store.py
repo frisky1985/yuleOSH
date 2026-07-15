@@ -13,8 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from yuleosh.store_interface import AbstractStore
 
-class Store:
+
+class Store(AbstractStore):
     """SQLite-backed persistent store. Thread-safe, testable.
 
     Falls back to PostgresStore when YULEOSH_DB_URL starts with postgresql://
@@ -572,6 +574,11 @@ class Store:
         row = cur.fetchone()
         return dict(row) if row else None
 
+    def setup(self):
+        """Explicit initialization — runs migrations."""
+        self._migrate()
+        return self
+
     def close(self):
         self.conn.close()
 
@@ -615,12 +622,19 @@ class Store:
         existing = self.get_subscription(org_id)
         now = datetime.now().isoformat()
         if existing:
-            for key in ("stripe_subscription_id", "stripe_customer_id", "tier", "status", "current_period_end"):
-                if key in data and data[key]:
-                    self.conn.execute(
-                        f"UPDATE subscriptions SET {key}=? WHERE org_id=?",
-                        (data[key], org_id)
-                    )
+            # Static parameterized UPDATE — all column names are hardcoded
+            self.conn.execute(
+                """UPDATE subscriptions SET
+                    stripe_subscription_id = COALESCE(?, stripe_subscription_id),
+                    stripe_customer_id = COALESCE(?, stripe_customer_id),
+                    tier = COALESCE(?, tier),
+                    status = COALESCE(?, status),
+                    current_period_end = COALESCE(?, current_period_end)
+                WHERE org_id = ?""",
+                (data.get("stripe_subscription_id"), data.get("stripe_customer_id"),
+                 data.get("tier"), data.get("status"),
+                 data.get("current_period_end"), org_id)
+            )
         else:
             self.conn.execute(
                 "INSERT INTO subscriptions (org_id, stripe_subscription_id, stripe_customer_id, tier, status, current_period_end, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",

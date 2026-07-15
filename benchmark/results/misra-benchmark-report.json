@@ -1,18 +1,46 @@
 {
   "benchmark": "yuleOSH MISRA cppcheck False Positive Benchmark",
-  "generated_at": "2026-06-19T11:05:32Z",
+  "generated_at": "2026-07-13T14:50:37Z",
   "cppcheck_version": "Cppcheck 2.17.1 from cppcheck-wheel 1.5.1",
+  "difficulty_layout": {
+    "easy": "Basic MISRA violations (single-rule, single-file)",
+    "medium": "Intermediate patterns (multi-rule, RTOS, DMA, ISR)",
+    "hard": "Complex multi-module interactions (CAN, TCP, state machines)"
+  },
   "summary": {
-    "total_cases": 12,
-    "true_positives": 4,
-    "false_positives": 6,
+    "total_cases": 27,
+    "by_difficulty": {
+      "easy": {
+        "count": 12,
+        "tp": 4,
+        "fp": 6,
+        "tn": 0,
+        "fn": 0
+      },
+      "medium": {
+        "count": 10,
+        "tp": 4,
+        "fp": 6,
+        "tn": 0,
+        "fn": 0
+      },
+      "hard": {
+        "count": 5,
+        "tp": 2,
+        "fp": 3,
+        "tn": 0,
+        "fn": 0
+      }
+    },
+    "true_positives": 10,
+    "false_positives": 15,
     "true_negatives": 0,
     "false_negatives": 0,
     "false_positive_rate_pct": 100.0,
     "false_negative_rate_pct": 0.0,
     "precision_pct": 40.0,
     "recall_pct": 100.0,
-    "accuracy_pct": 33.33
+    "accuracy_pct": 37.04
   },
   "cases": {
     "case001_true_positive": {
@@ -23,7 +51,8 @@
       "validation": "correct",
       "rules": [
         "10.1"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case002_false_positive": {
       "file": "case002_false_positive.c",
@@ -33,7 +62,8 @@
       "validation": "false_positive",
       "rules": [
         "11.3"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case003_false_positive": {
       "file": "case003_false_positive.c",
@@ -43,7 +73,8 @@
       "validation": "false_positive",
       "rules": [
         "8.13"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case004_false_positive": {
       "file": "case004_false_positive.c",
@@ -53,7 +84,8 @@
       "validation": "false_positive",
       "rules": [
         "17.7"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case005_false_positive": {
       "file": "case005_false_positive.c",
@@ -63,7 +95,8 @@
       "validation": "false_positive",
       "rules": [
         "11.1"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case006_false_positive": {
       "file": "case006_false_positive.c",
@@ -73,7 +106,8 @@
       "validation": "false_positive",
       "rules": [
         "10.7"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case007_true_negative": {
       "file": "case007_true_negative.c",
@@ -81,7 +115,8 @@
       "expected_count": 0,
       "actual_count": 5,
       "validation": "false_positive",
-      "rules": []
+      "rules": [],
+      "difficulty": "easy"
     },
     "case008_false_negative": {
       "file": "case008_false_negative.c",
@@ -91,7 +126,8 @@
       "validation": "correct",
       "rules": [
         "13.3"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case009_false_negative": {
       "file": "case009_false_negative.c",
@@ -101,7 +137,8 @@
       "validation": "correct",
       "rules": [
         "18.2"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case010_false_negative": {
       "file": "case010_false_negative.c",
@@ -111,7 +148,8 @@
       "validation": "correct",
       "rules": [
         "8.2"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case011_mixed_type_math": {
       "file": "case011_mixed_type_math.c",
@@ -121,7 +159,8 @@
       "validation": "unknown",
       "rules": [
         "10.1"
-      ]
+      ],
+      "difficulty": "easy"
     },
     "case012_complex_control": {
       "file": "case012_complex_control.c",
@@ -131,7 +170,176 @@
       "validation": "unknown",
       "rules": [
         "14.3"
-      ]
+      ],
+      "difficulty": "easy"
+    },
+    "medium001_true_positive": {
+      "file": "medium001_true_positive.c",
+      "class": "tp",
+      "expected_count": 1,
+      "actual_count": 5,
+      "validation": "correct",
+      "rules": [
+        "8.7"
+      ],
+      "difficulty": "medium"
+    },
+    "medium002_false_positive": {
+      "file": "medium002_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 7,
+      "validation": "false_positive",
+      "rules": [
+        "11.4"
+      ],
+      "difficulty": "medium"
+    },
+    "medium003_true_positive": {
+      "file": "medium003_true_positive.c",
+      "class": "tp",
+      "expected_count": 1,
+      "actual_count": 8,
+      "validation": "correct",
+      "rules": [
+        "10.3"
+      ],
+      "difficulty": "medium"
+    },
+    "medium004_false_positive": {
+      "file": "medium004_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 8,
+      "validation": "false_positive",
+      "rules": [
+        "15.6"
+      ],
+      "difficulty": "medium"
+    },
+    "medium005_true_negative": {
+      "file": "medium005_true_negative.c",
+      "class": "tn",
+      "expected_count": 0,
+      "actual_count": 4,
+      "validation": "false_positive",
+      "rules": [
+        "17.2"
+      ],
+      "difficulty": "medium"
+    },
+    "medium006_false_positive": {
+      "file": "medium006_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 3,
+      "validation": "false_positive",
+      "rules": [
+        "8.13"
+      ],
+      "difficulty": "medium"
+    },
+    "medium007_true_positive": {
+      "file": "medium007_true_positive.c",
+      "class": "tp",
+      "expected_count": 1,
+      "actual_count": 8,
+      "validation": "correct",
+      "rules": [
+        "21.5"
+      ],
+      "difficulty": "medium"
+    },
+    "medium008_false_negative": {
+      "file": "medium008_false_negative.c",
+      "class": "fn",
+      "expected_count": 1,
+      "actual_count": 5,
+      "validation": "correct",
+      "rules": [
+        "10.6"
+      ],
+      "difficulty": "medium"
+    },
+    "medium009_true_negative": {
+      "file": "medium009_true_negative.c",
+      "class": "tn",
+      "expected_count": 0,
+      "actual_count": 8,
+      "validation": "false_positive",
+      "rules": [
+        "13.2"
+      ],
+      "difficulty": "medium"
+    },
+    "medium010_false_positive": {
+      "file": "medium010_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 5,
+      "validation": "false_positive",
+      "rules": [
+        "18.1"
+      ],
+      "difficulty": "medium"
+    },
+    "hard001_true_positive": {
+      "file": "hard001_true_positive.c",
+      "class": "tp",
+      "expected_count": 1,
+      "actual_count": 12,
+      "validation": "correct",
+      "rules": [
+        "21.3",
+        "4.12"
+      ],
+      "difficulty": "hard"
+    },
+    "hard002_false_positive": {
+      "file": "hard002_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 13,
+      "validation": "false_positive",
+      "rules": [
+        "18.6"
+      ],
+      "difficulty": "hard"
+    },
+    "hard003_true_negative": {
+      "file": "hard003_true_negative.c",
+      "class": "tn",
+      "expected_count": 0,
+      "actual_count": 10,
+      "validation": "false_positive",
+      "rules": [
+        "22.1"
+      ],
+      "difficulty": "hard"
+    },
+    "hard004_false_positive": {
+      "file": "hard004_false_positive.c",
+      "class": "fp",
+      "expected_count": 0,
+      "actual_count": 11,
+      "validation": "false_positive",
+      "rules": [
+        "13.6"
+      ],
+      "difficulty": "hard"
+    },
+    "hard005_true_positive": {
+      "file": "hard005_true_positive.c",
+      "class": "tp",
+      "expected_count": 1,
+      "actual_count": 5,
+      "validation": "correct",
+      "rules": [
+        "10.1",
+        "12.1",
+        "1.1"
+      ],
+      "difficulty": "hard"
     }
   }
 }

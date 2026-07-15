@@ -1,0 +1,204 @@
+# =============================================================================
+# Semgrep — Python 数据流分析规则 (Data Flow Analysis / Taint Tracking)
+# =============================================================================
+
+rules:
+  # ---------- Taint: User Input → SQL Query ----------
+  - id: yuleosh-taint-sql-injection
+    mode: taint
+    message: "数据流分析检测：用户输入 → SQL 查询（SQL注入风险）"
+    severity: ERROR
+    languages: [python]
+    pattern-sources:
+      - pattern: request.$ANYTHING
+      - pattern: flask.request.$ANYTHING
+      - pattern: $REQ.args[...]
+      - pattern: $REQ.form[...]
+      - pattern: $REQ.json[...]
+      - pattern: $REQ.data
+      - pattern: $REQ.headers[...]
+      - pattern: $REQ.cookies[...]
+      - pattern: $BODY.get(...)
+      - pattern: input()
+      - pattern: sys.stdin.read(...)
+      - pattern: os.environ[...]
+      - pattern: json.loads($STR)
+    pattern-sinks:
+      - pattern: |
+          $DB.execute(...)
+      - pattern: |
+          $CURSOR.execute(...)
+      - pattern: |
+          $DB.run(...)
+      - pattern: |
+          sqlite3.connect($INPUT)
+      - pattern: |
+          $CONN.cursor().execute(...)
+    pattern-sanitizers:
+      - pattern: |
+          $X = sanitize_sql_input(...)
+      - pattern: |
+          $X = escape_string(...)
+      - pattern: |
+          $X = re.sub(...)
+    metadata:
+      category: security
+      cwe: "CWE-89"
+      owasp: "A1: Injection"
+      confidence: HIGH
+
+  # ---------- Taint: User Input → Shell Command ----------
+  - id: yuleosh-taint-command-injection
+    mode: taint
+    message: "数据流分析检测：用户输入 → shell 命令（命令注入风险）"
+    severity: ERROR
+    languages: [python]
+    pattern-sources:
+      - pattern: request.$ANYTHING
+      - pattern: flask.request.$ANYTHING
+      - pattern: $REQ.args[...]
+      - pattern: $REQ.form[...]
+      - pattern: $REQ.json[...]
+      - pattern: $REQ.data
+      - pattern: input()
+    pattern-sinks:
+      - pattern: os.system($CMD)
+      - pattern: subprocess.call($CMD, ...)
+      - pattern: subprocess.Popen($CMD, ...)
+      - pattern: subprocess.check_output($CMD, ...)
+      - pattern: subprocess.run($CMD, ...)
+      - pattern: os.popen($CMD)
+      - pattern: commands.getoutput(...)
+    pattern-sanitizers:
+      - pattern: shlex.quote(...)
+      - pattern: shlex.split(...)
+    metadata:
+      category: security
+      cwe: "CWE-78"
+      owasp: "A1: Injection"
+      confidence: HIGH
+
+  # ---------- Taint: User Input → File Operation (Path Traversal) ----------
+  - id: yuleosh-taint-path-traversal
+    mode: taint
+    message: "数据流分析检测：用户输入 → 文件路径（路径遍历风险）"
+    severity: WARNING
+    languages: [python]
+    pattern-sources:
+      - pattern: request.$ANYTHING
+      - pattern: flask.request.$ANYTHING
+      - pattern: $REQ.args[...]
+      - pattern: $REQ.form[...]
+      - pattern: $REQ.json[...]
+      - pattern: $REQ.data
+    pattern-sinks:
+      - pattern: open($PATH, ...)
+      - pattern: Path($PATH).read_text()
+      - pattern: Path($PATH).read_bytes()
+      - pattern: Path($PATH).write_text(...)
+      - pattern: os.remove($PATH)
+      - pattern: os.path.exists($PATH)
+      - pattern: shutil.copy($SRC, ...)
+    pattern-sanitizers:
+      - pattern: os.path.basename(...)
+      - pattern: os.path.normpath(...)
+      - pattern: os.path.abspath(...)
+      - pattern: os.path.realpath(...)
+    metadata:
+      category: security
+      cwe: "CWE-22"
+      owasp: "A1: Injection"
+
+  # ---------- Taint: Sensitive Data → Log / Response ----------
+  - id: yuleosh-taint-sensitive-in-log
+    mode: taint
+    message: "数据流分析检测：敏感数据 → 日志（敏感信息泄露）"
+    severity: WARNING
+    languages: [python]
+    pattern-sources:
+      - pattern: os.environ["$KEY"]
+      - pattern: os.environ.get("$KEY")
+      - pattern: config["$KEY"]
+      - pattern: $DB.execute("SELECT $PW ...")
+      - pattern: jwt.decode(...)
+    pattern-sinks:
+      - pattern: print($X)
+      - pattern: logging.info($X)
+      - pattern: logging.debug($X)
+      - pattern: logger.info($X)
+      - pattern: logger.debug($X)
+      - pattern: app.logger.info($X)
+    metadata:
+      category: security
+      cwe: "CWE-532"
+      owasp: "A3: Sensitive Data Exposure"
+
+  # ---------- Taint: Unsanitized Redirect ----------
+  - id: yuleosh-taint-open-redirect
+    mode: taint
+    message: "数据流分析检测：用户输入 → redirect（开放重定向风险）"
+    severity: WARNING
+    languages: [python]
+    pattern-sources:
+      - pattern: request.$ANYTHING
+      - pattern: flask.request.$ANYTHING
+      - pattern: $REQ.args[...]
+      - pattern: $REQ.form[...]
+    pattern-sinks:
+      - pattern: flask.redirect($URL)
+      - pattern: redirect($URL)
+      - pattern: HttpResponseRedirect($URL)
+      - pattern: redirect($URL, ...)
+    metadata:
+      category: security
+      cwe: "CWE-601"
+      owasp: "A1: Injection"
+
+  # ---------- Taint: User Input → eval/exec ----------
+  - id: yuleosh-taint-eval-injection
+    mode: taint
+    message: "数据流分析检测：用户输入 → eval/exec（代码注入风险）"
+    severity: ERROR
+    languages: [python]
+    pattern-sources:
+      - pattern: request.$ANYTHING
+      - pattern: $REQ.args[...]
+      - pattern: $REQ.form[...]
+      - pattern: input()
+      - pattern: json.loads(...)
+    pattern-sinks:
+      - pattern: eval($X)
+      - pattern: exec($X)
+      - pattern: compile($X, ...)
+      - pattern: __import__($X)
+    metadata:
+      category: security
+      cwe: "CWE-94"
+      owasp: "A1: Injection"
+      confidence: HIGH
+
+  # ---------- Taint: SSRF ----------
+  - id: yuleosh-taint-ssrf
+    mode: taint
+    message: "数据流分析检测：用户输入 → HTTP 请求（SSRF 风险）"
+    severity: WARNING
+    languages: [python]
+    pattern-sources:
+      - pattern: request.$ANYTHING
+      - pattern: flask.request.$ANYTHING
+      - pattern: $REQ.args[...]
+      - pattern: $REQ.form[...]
+      - pattern: $REQ.json[...]
+    pattern-sinks:
+      - pattern: requests.get($URL, ...)
+      - pattern: requests.post($URL, ...)
+      - pattern: requests.put($URL, ...)
+      - pattern: urlopen($URL, ...)
+      - pattern: httpx.get($URL, ...)
+      - pattern: httpx.post($URL, ...)
+      - pattern: aiohttp.ClientSession().get($URL, ...)
+      - pattern: aiohttp.ClientSession().post($URL, ...)
+    metadata:
+      category: security
+      cwe: "CWE-918"
+      owasp: "A1: Injection"

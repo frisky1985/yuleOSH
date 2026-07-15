@@ -17,6 +17,9 @@ dependencies = [
     "pyserial>=3.5",
     "pyyaml>=6.0",
     "stripe>=7.0",
+    # CVE-2026 transitive dep constraints
+    "msgpack>=1.2.1",  # GHSA-6v7p-g79w-8964
+    "starlette>=1.0.1",  # PYSEC-2026-161
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -41,6 +44,12 @@ yuleosh = "yuleosh._entry:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+yuleosh = ["ci/rulesets/misra-rules.yaml"]
+
+[tool.setuptools]
+include-package-data = true
 
 [tool.coverage.run]
 source = ["yuleosh"]

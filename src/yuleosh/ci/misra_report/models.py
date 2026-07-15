@@ -52,6 +52,60 @@ _SELFTEST_SCHEMA_VERSION = "selftest-review-v2"
 
 
 @dataclass
+class MisraViolation:
+    """A single MISRA rule violation."""
+    rule_id: str
+    category: str  # "Required" | "Advisory"
+    file: str
+    line: int
+    message: str
+    severity: str = "medium"  # "high" | "medium" | "low" | "info"
+    fix_proposed: str = ""
+    suppressed: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "rule_id": self.rule_id,
+            "category": self.category,
+            "file": self.file,
+            "line": self.line,
+            "message": self.message,
+            "severity": self.severity,
+            "fix_proposed": self.fix_proposed,
+            "suppressed": self.suppressed,
+        }
+
+
+@dataclass
+class MisraSummary:
+    """Aggregated MISRA analysis summary."""
+    violations: list = field(default_factory=list)
+    max_allowed_critical: int = 0
+    max_allowed_total: int = 10
+
+    @property
+    def total_violations(self) -> int:
+        return len(self.violations)
+
+    @property
+    def high_severity(self) -> int:
+        return sum(1 for v in self.violations if v.severity == "high")
+
+    @property
+    def medium_severity(self) -> int:
+        return sum(1 for v in self.violations if v.severity == "medium")
+
+    @property
+    def low_severity(self) -> int:
+        return sum(1 for v in self.violations if v.severity == "low")
+
+    @property
+    def passed(self) -> bool:
+        return (self.high_severity <= self.max_allowed_critical and
+                self.total_violations <= self.max_allowed_total)
+
+
+@dataclass
 class ToolResult:
     """Result from a single MISRA analysis tool.
 

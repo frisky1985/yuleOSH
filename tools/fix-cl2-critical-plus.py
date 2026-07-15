@@ -547,12 +547,10 @@ def _scan_all_test_files() -> dict[str, list[str]]:
 
     import re
 
-    # Pattern for requirement IDs: RS-001, SWR-001.1, NFR-001, TG-REQ-001, DEMO-REQ-002, etc.
+    # Pattern for requirement IDs: RS-001, SWR-001.1, SCM-REQ-001, BCM-REQ-001, etc.
+    # Accepts any uppercase-prefix-REQ-NUM or uppercase-prefix-NUM format.
     req_id_pattern = re.compile(
-        r'(?:RS-\d+(?:\.\d+)?|SWR-\d+(?:\.\d+)?|NFR-\d+(?:\.\d+)?'
-        r'|TG-REQ-\d+|DEMO-REQ-\d+|PREVIEW-REQ-\d+'
-        r'|S2-REQ-\d+(?:\.\d+)?'
-        r'|REQ-\d+)'
+        r'(?:[A-Z][A-Z0-9]*(?:-REQ)?-\d+(?:\.\d+)?)'
     )
 
     # Pattern for SHALL-N references in docstrings/code
