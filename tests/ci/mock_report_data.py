@@ -71,7 +71,9 @@ def make_misra_violation(
     rule_id: str = "misra-c2012-10.1",
     message: str = "Operands shall not be of inappropriate type",
 ) -> str:
-    """生成单行 cppcheck MISRA 违规输出。
+    """生成单行 cppcheck MISRA 违规输出 (bracketed format).
+
+    New parser expects: [file:line:col] (severity) message [rule_id]
 
     Parameters
     ----------
@@ -91,9 +93,9 @@ def make_misra_violation(
     Returns
     -------
     str
-        标准 cppcheck 格式的违规行。
+        Bracketed cppcheck 格式的违规行。
     """
-    return f"{file}:{line}:{col}: {severity}: {message} [{rule_id}]\n"
+    return f"[{file}:{line}:{col}] ({severity}) {message} [{rule_id}]\n"
 
 
 def _random_violation_line(file: str, code_line: str) -> tuple[str, str]:
@@ -172,7 +174,7 @@ def make_misra_output(
             lines.append(carets)
 
     # Add a trailing checkersReport line like real cppcheck output
-    lines.append("nofile:0:0: information: Active checkers: 309/1056 [checkersReport]")
+    lines.append("[nofile:0:0] (information) Active checkers: 309/1056 [checkersReport]")
 
     return "\n".join(lines) + "\n"
 
@@ -185,25 +187,25 @@ def make_misra_output_empty() -> str:
 def make_misra_output_only_header() -> str:
     """生成仅有 header 信息的 cppcheck 输出（无违规行）。"""
     return """\
-nofile:0:0: information: Active checkers: 309/1056 [checkersReport]
+[nofile:0:0] (information) Active checkers: 309/1056 [checkersReport]
 """
 
 
 def make_misra_output_malformed() -> str:
-    """生成包含格式异常行的 cppcheck 输出。
+    """生成包含格式异常行的 cppcheck 输出 (bracketed format).
 
     包含：
       - 不完整的违规行
-      - 缺少 file:line 前缀的上下文行
+      - 缺少 [file:line] 前缀的上下文行
       - 未知严重级别的行
     """
     return """\
-/src/main.c:42:5: style: Violation [misra-c2012-10.1]
+[/src/main.c:42:5] (style) Violation [misra-c2012-10.1]
     if (x) return;
     ^
 (style) standalone message without file/line prefix
-/src/utils.c:10:0: unknown_severity: weird format here
-/src/main.c:99:1: style:
+[/src/utils.c:10:0] (unknown_severity) weird format here
+[/src/main.c:99:1] (style)
 nofile:0:0: information: Active checkers: 309/1056 [checkersReport]
 """
 

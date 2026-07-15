@@ -7,14 +7,20 @@ Mounted at /api/v1/ in the main server.
 """
 
 import json
+import logging
 import os
 import sys
+import traceback
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler
 
-from . import json_ok, json_error, read_body
+from . import json_ok, json_error, read_body, BadRequest
+from .cors import get_cors_origin
+
+# Core modules (always loaded)
 from .health import handle_health
+from .kb import handle_kb
 from .spec import handle_spec
 from .pipeline import handle_pipeline
 from .ci import handle_ci
@@ -25,16 +31,26 @@ from .stats import handle_stats
 from .notify import handle_notify
 from .apikeys import handle_apikeys
 from .wizard import handle_wizard
-from .webhooks import handle_webhooks
 from .audit import handle_audit
 from .auth import handle_auth
-from .demo import handle_demo
-from .preview import handle_preview
-from .subscription import handle_subscription
+
+# Lazy-loaded modules (AR-P2-01): only imported when their route is hit
+# These are loaded lazily to avoid importing optional/seldom-used modules.
+_LAZY_HANDLERS = {
+    "webhooks": ("yuleosh.api.webhooks", "handle_webhooks"),
+    "demo": ("yuleosh.api.demo", "handle_demo"),
+    "preview": ("yuleosh.api.preview", "handle_preview"),
+    "subscription": ("yuleosh.api.subscription", "handle_subscription"),
+    "dashboard": ("yuleosh.api.dashboard", "handle_dashboard"),
+}
+
+logger = logging.getLogger("yuleosh.api.router")
 
 
 # Resource routing map: resource_name -> handler function
-ROUTES = {
+# Core modules are loaded eagerly; optional modules are lazy-loaded.
+# See AR-P2-01: prevents unnecessary imports for /api/v1/ routes not used.
+ROUTES: dict[str, object] = {
     "health": handle_health,
     "wizard": handle_wizard,
     "spec": handle_spec,
@@ -46,12 +62,9 @@ ROUTES = {
     "stats": handle_stats,
     "notify": handle_notify,
     "apikeys": handle_apikeys,
-    "webhooks": handle_webhooks,
     "audit": handle_audit,
     "auth": handle_auth,
-    "demo": handle_demo,
-    "subscription": handle_subscription,
-    "preview": handle_preview,
+    "kb": handle_kb,
 }
 
 
@@ -79,29 +92,81 @@ def dispatch(handler: BaseHTTPRequestHandler, path: str):
     body = read_body(handler)
     method = handler.command
 
-    # Find the handler
+    # Find the handler (AR-P2-01: resolve lazy-loaded modules on first request)
     handler_fn = ROUTES.get(resource)
     if handler_fn is None:
+        # Try lazy-loaded modules
+        lazy_entry = _LAZY_HANDLERS.get(resource)
+        if lazy_entry:
+            try:
+                module_name, func_name = lazy_entry
+                import importlib
+                mod = importlib.import_module(module_name)
+                handler_fn = getattr(mod, func_name)
+                ROUTES[resource] = handler_fn
+            except (ImportError, AttributeError):
+                pass
+    if handler_fn is None:
         return _respond(handler, *json_error(f"Unknown resource: {resource}", 404))
+
+    # ── Audit log helper ─────────────────────────────────────────────
+    def _do_audit_log(status_code: int):
+        import time
+        try:
+            from yuleosh.api.audit import log_request as _audit_log
+            duration_ms = (time.time() - handler._request_start_time) * 1000 \
+                if hasattr(handler, '_request_start_time') else 0.0
+            _audit_log(
+                method=method,
+                path=path,
+                status_code=status_code,
+                ip=handler.client_address[0],
+                duration_ms=round(duration_ms, 2),
+            )
+        except Exception:
+            pass
 
     try:
         result = handler_fn(method=method, path_tail=path_tail, body=body,
                             query=query, handler=handler)
         # If handler returned None, it already sent the response (e.g. binary download)
         if result is None:
+            _do_audit_log(200)
             return
+        response_status = result[1] if isinstance(result, tuple) else 200
         _respond(handler, *result)
+        _do_audit_log(response_status)
+    except BadRequest as e:
+        _respond(handler, *json_error(str(e), 400))
+        _do_audit_log(400)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        _respond(handler, *json_error(f"Internal error: {e}", 500))
+        # P0-03: Log full traceback with structured logging; return generic error
+        logger.error(
+            "Unhandled exception in API dispatch [module=%s] [method=%s] [path=%s]: %s: %s",
+            resource, method, path, type(e).__name__, e,
+            exc_info=True
+        )
+        _respond(handler, *json_error("Internal server error", 500))
+        _do_audit_log(500)
 
 
 def _respond(handler: BaseHTTPRequestHandler, data: dict, status: int = 200):
-    """Send a JSON response with security headers."""
+    """Send a JSON response with security headers and CORS.
+
+    CORS behavior (P0-01):
+    - Development mode (YULEOSH_ENV=development): Access-Control-Allow-Origin: *
+    - Production mode: validates Origin against allowed origins list.
+      localhost:18789 (desktop client) is always permitted.
+    """
+    # Determine CORS origin based on request Origin header
+    request_origin = handler.headers.get("Origin")
+    cors_origin = get_cors_origin(request_origin)
+
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.send_header("Access-Control-Allow-Origin", cors_origin)
+    if cors_origin != "*":
+        handler.send_header("Vary", "Origin")
     handler.send_header("Content-Security-Policy", "default-src 'self'")
     handler.send_header("X-Content-Type-Options", "nosniff")
     handler.send_header("X-Frame-Options", "DENY")

@@ -249,16 +249,16 @@ class CppcheckDriver(BaseToolDriver):
 
         # Group, enrich, summarize
         groups = group_by_rule(violations)
-        groups = enrich_with_definitions(groups, rule_defs)
-        summary = compute_summary_stats(violations, groups, rule_defs)
+        enriched = enrich_with_definitions(violations, rule_defs)
+        summary = compute_summary_stats(enriched, groups)
 
-        # Generate and parse back to dict
+        # Generate report dict
         report_dir = self._config.get("output_dir", self.get_report_dir())
-        report_json_str = generate_json_report(
-            violations, groups, summary, rule_defs,
+        report = generate_json_report(
+            violations, groups, rule_defs,
             output_dir=report_dir,
         )
-        return json.loads(report_json_str)
+        return report
 
     def get_rule_definitions(self) -> dict:
         """加载 MISRA 规则定义。

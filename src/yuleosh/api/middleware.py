@@ -20,8 +20,13 @@ logger = logging.getLogger("yuleosh.api.middleware")
 
 # JWT secret — must match the one used in auth.py
 import os
-import secrets
-_JWT_SECRET = os.environ.get("YULEOSH_JWT_SECRET", secrets.token_urlsafe(32))
+_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
+if not _JWT_SECRET_ENV:
+    raise RuntimeError(
+        "YULEOSH_JWT_SECRET environment variable is required. "
+        "Generate one with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
+_JWT_SECRET = _JWT_SECRET_ENV
 _JWT_ALGORITHM = "HS256"
 
 

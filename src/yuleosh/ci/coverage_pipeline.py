@@ -162,6 +162,14 @@ def generate_branch_coverage_report(
             "functions": f["functions"],
         })
 
+    # Step 4b: Record coverage trend entry (for dashboard coverage-trend.jsonl)
+    try:
+        from yuleosh.ci.coverage_trend import record_coverage
+        project_dir = build_dir or "."
+        record_coverage(project_dir)
+    except Exception as e:
+        log.warning("Failed to record coverage trend: %s", e)
+
     # Step 5: Publish artifacts
     artifacts = {}
     if publish_dir:

@@ -1,8 +1,8 @@
 <div align="center">
   <h1>yuleOSH</h1>
-  <p><strong>一站式 ASPICE 合规开发平台<br>
-  ASPICE-compliant embedded development platform<br>
-  合规辅助 · 证据包自动生成</strong></p>
+  <p><strong>嵌入式软件合规开发自动化平台<br>
+  Embedded Software Compliance Automation Platform<br>
+  AI 辅助 · SWE 全流程 · 证据包一键生成</strong></p>
 
   <!-- Badges -->
   <p>
@@ -14,7 +14,7 @@
     <img src="https://img.shields.io/badge/python-%E2%89%A53.10-ff69b4?style=flat-square" alt="Python">
     <img src="https://img.shields.io/badge/tests-3400%2B%20passing-brightgreen?style=flat-square" alt="Tests">
     <img src="https://img.shields.io/badge/coverage-11.45%25-red?style=flat-square" alt="Coverage">
-    <img src="https://img.shields.io/badge/ASPICE-compliant-8A2BE2?style=flat-square" alt="ASPICE">
+    <img src="https://img.shields.io/badge/ASPICE%20assistance-8A2BE2?style=flat-square" alt="ASPICE assistance">
   </p>
 
   <p>
@@ -34,7 +34,7 @@
 
 ---
 
-> **🇬🇧 English** · [🇨🇳 中文](#yuleosh-一站式-aspice-合规开发平台)
+> **🇬🇧 English** · [🇨🇳 中文](#yuleosh-嵌入式软件合规开发自动化平台)
 
 ---
 
@@ -57,9 +57,9 @@
 
 ## What is yuleOSH?
 
-**yuleOSH** is a one-stop ASPICE-compliant embedded development platform powered by AI. It converts natural language requirements into complete, CI/CD-ready firmware projects with full Automotive SPICE traceability — automatically.
+**yuleOSH** is an ASPICE assistance tool for embedded development powered by AI. It converts natural language requirements into complete, CI/CD-ready firmware projects with Automotive SPICE traceability assistance.
 
-**In one sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with full ASPICE-compliant traceability — all in under 2 minutes.
+**In one sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with ASPICE traceability assistance — all in under 2 minutes.
 
 ---
 
@@ -114,7 +114,7 @@ Built-in adapters for **OpenOCD** (STM32), **JLink** (ARM Cortex-M), and **espto
 Next.js web dashboard with PostgreSQL multi-tenant storage, JWT authentication, org/project isolation, and real-time pipeline monitoring.
 
 ### 📋 Compliance
-One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — ready for ASPICE / ISO 26262 audit.
+One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — assists in preparing ASPICE SWE.1~SWE.6 audit evidence.
 
 ### Full Automation Pipeline
 ```
@@ -343,7 +343,7 @@ MIT License — see [LICENSE](LICENSE) for details. Copyright (c) 2025 frisky198
 
 ---
 
-# yuleOSH — 一站式 ASPICE 合规开发平台
+# yuleOSH — 嵌入式软件合规开发自动化平台
 
 ## 📋 目录
 
@@ -364,9 +364,9 @@ MIT License — see [LICENSE](LICENSE) for details. Copyright (c) 2025 frisky198
 
 ## 项目简介
 
-**yuleOSH** 是一站式 ASPICE 合规开发平台，由 AI 驱动，将自然语言需求自动转化为完整、CI/CD就绪的固件工程，开箱即支持 Automotive SPICE 合规追溯。它用自动化代理流水线替代了需求工程、代码生成、审查、测试规划和合规证据收集中繁琐的人工环节。
+**yuleOSH** 是嵌入式软件合规开发自动化平台（ASPICE SWE 辅助工具），由 AI 驱动，将自然语言需求自动转化为完整、CI/CD就绪的固件工程，辅助 Automotive SPICE SWE.1~SWE.6 合规证据准备。它用 AI 辅助流水线替代了需求工程、代码生成、审查、测试规划和合规证据收集中繁琐的人工环节。
 
-**一句话：** yuleOSH 接收需求描述，输出经过审查、测试、CI集成的固件，并附带完整的 ASPICE 合规追溯——全自动完成。
+**一句话：** yuleOSH 接收需求描述，输出经过审查、测试、CI集成的固件，并附带 ASPICE 合规辅助证据——AI 辅助完成。
 
 ---
 
@@ -402,9 +402,9 @@ cd my-project && yuleosh pipeline run docs/spec.md
 Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目隔离 + 流水线实时监控。
 
 ### 📋 合规审计
-一键生成追溯矩阵、验收矩阵和合规证据 ZIP 包——ASPICE / ISO 26262 审计就绪。
+一键生成追溯矩阵、验收矩阵和合规证据 ZIP 包——辅助 ASPICE SWE.1~SWE.6 证据准备。
 
-### 全自动流水线
+### AI 辅助流水线
 ```
 用户需求 → OpenSpec → 系统设计 → 详细设计 → 代码生成 → 内审 →
 测试规划 → 代码审查 → CI运行 → 证据打包 → 部署

@@ -1,0 +1,207 @@
+name: yuleOSH Desktop Build
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'desktop/**'
+      - 'frontend/**'
+      - '.github/workflows/desktop-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'frontend/**'
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build for (mac, linux, all)'
+        required: true
+        default: 'all'
+
+jobs:
+  # ─── 前端构建 (复用) ────────────────────────────
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend (static export)
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-out
+          path: frontend/out/
+          retention-days: 1
+
+  # ─── macOS 构建 ─────────────────────────────────
+  build-mac:
+    needs: frontend-build
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'mac' || github.event.inputs.platform == 'all')
+        || github.event_name != 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-out
+          path: frontend/out/
+
+      - name: Verify frontend build
+        run: |
+          ls -la frontend/out/index.html
+
+      - name: Install desktop dependencies
+        run: |
+          cd desktop
+          npm ci
+
+      - name: Build macOS .dmg
+        run: |
+          cd desktop
+          npx electron-builder --mac --publish=never
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+
+      - name: Upload macOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: yuleOSH-mac-dmg
+          path: desktop/release/*.dmg
+          retention-days: 30
+
+  # ─── Linux 构建 ─────────────────────────────────
+  build-linux:
+    needs: frontend-build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'linux' || github.event.inputs.platform == 'all')
+        || github.event_name != 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-xcb1 libxcb-dri3-0 libxdamage1 libxfixes3 \
+            libxrandr2 libxss1 libxtst6 libnss3 libatk-bridge2.0-0 libgtk-3-0 \
+            libgbm1 libasound2
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-out
+          path: frontend/out/
+
+      - name: Verify frontend build
+        run: |
+          ls -la frontend/out/index.html
+
+      - name: Install desktop dependencies
+        run: |
+          cd desktop
+          npm ci
+
+      - name: Build Linux .AppImage
+        run: |
+          cd desktop
+          npx electron-builder --linux --publish=never
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: yuleOSH-linux-appimage
+          path: desktop/release/*.AppImage
+          retention-days: 30
+
+  # ─── Windows 构建 ───────────────────────────────
+  build-win:
+    needs: frontend-build
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'win' || github.event.inputs.platform == 'all')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-out
+          path: frontend/out/
+
+      - name: Verify frontend build
+        run: ls frontend/out/index.html
+
+      - name: Install desktop dependencies
+        run: cd desktop && npm ci
+
+      - name: Build Windows .exe
+        run: cd desktop && npx electron-builder --win --publish=never
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: yuleOSH-win-installer
+          path: desktop/release/*.exe
+          retention-days: 30
+
+  # ─── 构建产物报告 ───────────────────────────────
+  report:
+    needs: [build-mac, build-linux, build-win]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check build artifacts
+        run: |
+          echo "## yuleOSH Desktop Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Target | Arch | Notes |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS | .dmg | x64 + arm64 | ✅ (CI auto on PR/push) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linux | .AppImage + .deb | x64 + arm64 (AppImage) | ✅ (CI auto on PR/push) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows | NSIS .exe | x64 | ✅ (manual workflow_dispatch) |"}]}
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Details" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY

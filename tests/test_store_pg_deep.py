@@ -83,8 +83,10 @@ class TestSingleton:
 
     def test_singleton_default(self, mock_db):
         from yuleosh.store_pg import PostgresStore
-        s1 = PostgresStore()
-        s2 = PostgresStore()
+        PostgresStore.reset()
+        with mock.patch.dict(os.environ, {"YULEOSH_DB_URL": "pg://default:default@h/default"}):
+            s1 = PostgresStore()
+            s2 = PostgresStore()
         assert s1 is s2
 
     def test_singleton_different_dsn(self, mock_db):
@@ -103,7 +105,9 @@ class TestSingleton:
 
     def test_reset_clears_cache(self, mock_db):
         from yuleosh.store_pg import PostgresStore
-        _ = PostgresStore()
+        PostgresStore.reset()
+        with mock.patch.dict(os.environ, {"YULEOSH_DB_URL": "pg://default:default@h/default"}):
+            _ = PostgresStore()
         PostgresStore.reset()
         assert len(PostgresStore._instances) == 0
 
@@ -142,7 +146,9 @@ class TestConnection:
         PostgresStore.reset()
         conn, cursor, mock_psycopg2 = mock_db
         s = PostgresStore(dsn="pg://t:t@h/t")
-        s._conn = None
+        # Clear any cached connection from the per-thread store
+        if hasattr(s._local, 'conn'):
+            s._local.conn = None
         c = s.conn
         assert c is not None
 
@@ -155,15 +161,18 @@ class TestConnection:
     def test_close_sets_none(self, store, mock_db):
         conn, cursor, _ = mock_db
         store.close()
-        assert store._conn is None
+        assert not hasattr(store._local, 'conn') or store._local.conn is None
 
     def test_close_already_none(self, store, mock_db):
-        store._conn = None
+        if hasattr(store._local, 'conn'):
+            store._local.conn = None
         store.close()
 
     def test_conn_reconnects_if_closed(self, store, mock_db):
         conn, cursor, mock_psycopg2 = mock_db
-        store._conn.closed = True
+        # Simulate closed connection
+        store._local.conn = conn
+        conn.closed = True
         c = store.conn
         assert c is not None
 

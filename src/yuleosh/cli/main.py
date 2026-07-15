@@ -2255,6 +2255,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_de_status.add_argument("--days", type=int, default=90, help="分析周期天数")
     p_de_status.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # onboard
+    from yuleosh.cli.onboard import build_onboard_parser
+    build_onboard_parser(sub)
+
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
 
@@ -2561,6 +2565,10 @@ def main():
         else:
             parser.print_help()
             sys.exit(1)
+
+    elif args.command == "onboard":
+        from yuleosh.cli.onboard import handle_onboard_command
+        handle_onboard_command(args)
 
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main

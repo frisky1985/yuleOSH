@@ -1,0 +1,99 @@
+# yuleOSH Desktop — electron-builder 打包配置
+
+appId: com.yuleosh.desktop
+productName: yuleOSH
+copyright: Copyright © 2025 frisky1985 (MIT License)
+
+# ─── 目录 ────────────────────────────────────────────
+directories:
+  output: release
+  buildResources: assets
+
+# ─── 打包文件 ────────────────────────────────────────
+files:
+  - main.js
+  - preload.js
+  - server-manager.js
+  - tray.js
+  - package.json
+  - assets/**/*
+
+# ─── 额外资源 (打包到 app.asar 外) ──────────────────
+extraResources:
+  - from: ../frontend/out
+    to: frontend-out
+    filter:
+      - "**/*"
+
+# ─── asar 打包 ──────────────────────────────────────
+asar: true
+asarUnpack: []
+
+# ─── macOS ──────────────────────────────────────────
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: assets/icon.icns
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
+  electronLanguages:
+    - zh-Hans
+    - en
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+
+# ─── macOS DMG ─────────────────────────────────────
+dmg:
+  title: "yuleOSH ${version}"
+  icon: assets/icon.icns
+  background: assets/dmg-background.png
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ─── Linux ──────────────────────────────────────────
+linux:
+  category: Development
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+  icon: assets/icon.png
+  artifactName: "${productName}-${version}-linux-${arch}.${ext}"
+  vendor: frisky1985
+  maintainer: frisky1985
+
+# ─── 自动更新 ──────────────────────────────────────
+publish:
+  - provider: github
+    owner: frisky1985
+    repo: yuleOSH
+    releaseType: draft
+
+# ─── Windows ────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.png
+  artifactName: "${productName}-${version}-win-${arch}.${ext}"
+
+# ─── 压缩 ────────────────────────────────────────────
+compression: normal
+removePackageScripts: true
+
+# ─── 协议 ────────────────────────────────────────────
+license: LICENSE.txt

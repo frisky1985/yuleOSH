@@ -94,8 +94,8 @@ def test_collect_reviews_with_data():
     """Test collect_reviews reads review session files."""
     with tempfile.TemporaryDirectory() as tmp:
         c = EvidenceCollector(tmp)
-        # Create review session file
-        rev_dir = Path(tmp) / ".osh" / "reviews" / "task-1"
+        # Create review session file in .osh/evidence/reviews/ (where collector looks)
+        rev_dir = Path(tmp) / ".osh" / "evidence" / "reviews" / "task-1"
         rev_dir.mkdir(parents=True)
         with open(rev_dir / "review-session.json", "w") as f:
             json.dump({"task": "task-1", "decision": "passed"}, f)

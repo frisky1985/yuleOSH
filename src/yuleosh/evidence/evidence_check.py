@@ -333,6 +333,90 @@ def pack_evidence_bundle(
         except Exception as e:
             log.warning("Cannot copy ci-config: %s", e)
 
+    # ── SWE Status aggregation ─────────────────────────────────────────────
+    # Derive SWE.1~SWE.6 status from evidence components found in the bundle.
+    # This makes swe_status available to the dashboard without hardcoded mock data.
+    components_found = set(manifest.get("components", {}).keys())
+
+    swe_status = {}
+    swe_defs = {
+        "SWE.1": {
+            "name": "SWE.1 软件需求分析",
+            "short": "SWE.1",
+            "color": "#10b981",
+            "description": "Requirements traceability and analysis",
+        },
+        "SWE.2": {
+            "name": "SWE.2 软件架构设计",
+            "short": "SWE.2",
+            "color": "#10b981",
+            "description": "Architecture design documentation",
+        },
+        "SWE.3": {
+            "name": "SWE.3 软件详细设计",
+            "short": "SWE.3",
+            "color": "#faad14",
+            "description": "Detailed design and interface definitions",
+        },
+        "SWE.4": {
+            "name": "SWE.4 软件单元验证",
+            "short": "SWE.4",
+            "color": "#faad14",
+            "description": "Unit test coverage and static analysis",
+        },
+        "SWE.5": {
+            "name": "SWE.5 软件集成与测试",
+            "short": "SWE.5",
+            "color": "#ff4d4f",
+            "description": "Integration testing",
+        },
+        "SWE.6": {
+            "name": "SWE.6 软件合格性测试",
+            "short": "SWE.6",
+            "color": "#10b981",
+            "description": "Qualification testing",
+        },
+    }
+
+    for swe_id, defn in swe_defs.items():
+        # Determine status based on available components
+        status = "not_started"
+        if swe_id == "SWE.1":
+            status = "completed" if "traceability" in components_found else "not_started"
+        elif swe_id == "SWE.2":
+            status = "completed" if "ci-config" in manifest.get("components", {}) else "partial"
+        elif swe_id == "SWE.3":
+            status = "completed" if "reviews" in components_found else "partial"
+        elif swe_id == "SWE.4":
+            status = (
+                "completed"
+                if "coverage" in components_found and "misra-reports" in components_found
+                else "partial" if "coverage" in components_found or "misra-reports" in components_found
+                else "not_started"
+            )
+        elif swe_id == "SWE.5":
+            status = "completed" if "ci-results" in components_found else "not_started"
+        elif swe_id == "SWE.6":
+            status = (
+                "completed"
+                if "reviews" in components_found and "coverage" in components_found
+                else "partial" if "reviews" in components_found or "coverage" in components_found
+                else "not_started"
+            )
+
+        swe_status[swe_id] = {
+            **defn,
+            "status": status,
+            "label": {
+                "completed": "✅ 完成",
+                "partial": "⚠️ 部分完成",
+                "not_started": "❌ 未开始",
+            }.get(status, "❌ 未开始"),
+            "last_updated": now.strftime("%Y-%m-%d"),
+        }
+
+    manifest["swe_status"] = swe_status
+
     # §22.9: Write audit manifest
     manifest_path = bundle_dir / "audit-manifest.json"
     with open(manifest_path, "w") as f:

@@ -315,13 +315,15 @@ def run_misra_check(project_dir: str, ci: CIResult,
                        if f.endswith((".c", ".cpp")) and os.path.isfile(
                            os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
         if not c_files:
-            src_dir = os.path.join(project_dir, "src")
-            if os.path.isdir(src_dir):
-                for root, dirs, files in os.walk(src_dir):
-                    dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
-                    for f in files:
-                        if f.endswith((".c", ".cpp")):
-                            c_files.append(os.path.join(root, f))
+            # Scan src/ + benchmark/ + ref/ for C/C++ source files
+            for scan_subdir in ("src", "benchmark", "ref"):
+                subdir = os.path.join(project_dir, scan_subdir)
+                if os.path.isdir(subdir):
+                    for root, dirs, files in os.walk(subdir):
+                        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+                        for f in files:
+                            if f.endswith((".c", ".cpp")):
+                                c_files.append(os.path.join(root, f))
     else:
         # auto mode (default) — same as before
         if target_files is not None:
@@ -349,13 +351,15 @@ def run_misra_check(project_dir: str, ci: CIResult,
                 pass
 
             if not c_files:
-                src_dir = os.path.join(project_dir, "src")
-                if os.path.isdir(src_dir):
-                    for root, dirs, files in os.walk(src_dir):
-                        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
-                        for f in files:
-                            if f.endswith((".c", ".cpp")):
-                                c_files.append(os.path.join(root, f))
+                # Fallback: scan src/, benchmark/, ref/ for C/C++ source files
+                for scan_subdir in ("src", "benchmark", "ref"):
+                    subdir = os.path.join(project_dir, scan_subdir)
+                    if os.path.isdir(subdir):
+                        for root, dirs, files in os.walk(subdir):
+                            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+                            for f in files:
+                                if f.endswith((".c", ".cpp")):
+                                    c_files.append(os.path.join(root, f))
 
     if not c_files:
         ci.add_stage("misra-check", "skipped", "No C/C++ source files found")

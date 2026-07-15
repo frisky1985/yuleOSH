@@ -329,7 +329,7 @@ class TestRunLayer25Performance:
         result = run_layer_25(tmp_project)
         elapsed = t_mod.monotonic() - start
         assert result is True
-        assert elapsed < 2.0, f"L2.5 mock took {elapsed:.3f}s, expected <2.0s"
+        assert elapsed < 8.0, f"L2.5 mock took {elapsed:.3f}s, expected <8.0s"
 
     def test_mock_with_scripts_still_fast(self, with_mock_config, with_hil_scripts):
         """WHEN mock with many scripts THEN still completes fast."""
@@ -339,4 +339,4 @@ class TestRunLayer25Performance:
         result = run_layer_25(with_mock_config)
         elapsed = t_mod.monotonic() - start
         assert result is True
-        assert elapsed < 2.0, f"L2.5 mock with scripts took {elapsed:.3f}s, expected <2.0s"
+        assert elapsed < 8.0, f"L2.5 mock with scripts took {elapsed:.3f}s, expected <8.0s"

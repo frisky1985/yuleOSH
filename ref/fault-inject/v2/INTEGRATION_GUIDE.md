@@ -1,13 +1,29 @@
 /*******************************************************************************
- * A66-T Per-Task Fault Injection — Integration Guide
+ * A66-T Fault Injection — Integration Guide (v2.0)
  * ========================================================================
+ *
+ * ⚠️  IMPORTANT: Source moved to src/fault-inject/
+ *
+ * The fault-inject module has been promoted from a reference implementation
+ * (ref/fault-inject/) to a formal yuleOSH module at:
+ *
+ *    src/fault-inject/
+ *    ├── inc/          — Headers (FaultInject.h, TaskFaultInject.h, *_Cfg.h)
+ *    ├── src/          — Implementation (.c files)
+ *    ├── test/         — Self-test suite
+ *    ├── CMakeLists.txt — Build integration (fault-inject + fault-inject-test)
+ *    ├── README.md     — Module documentation
+ *    └── doc.go        — Go-style module doc with ASPICE annotations
+ *
+ * The reference implementations at ref/fault-inject/ are retained for
+ * traceability but all new development should use src/fault-inject/.
  *
  * This guide shows how to wire the TaskFaultInject module into the existing
  * A66-T SBM codebase. All changes are guarded by A66T_TASK_FAULT_INJECT_ENABLE
  * and compile to nothing when STD_OFF.
  *
  * Integration Checklist:
- *   [ ] Step 1: Add TaskFaultInject.c to the build (IAR project or CMake)
+ *   [ ] Step 1: Add TaskFaultInject.c to the build (CMake via add_subdirectory)
  *   [ ] Step 2: One-time init call in main.c
  *   [ ] Step 3: Register each task + add TASK_FAULT_CHECK() to its loop
  *   [ ] Step 4: Add TASK_FAULT_IS_ACTIVE() checks to error paths
@@ -18,15 +34,35 @@
  * Step 1: Build Integration
  *=========================================================================*/
 /*
- * IAR EWARM:
- *   1. Add inc/TaskFaultInject.h and inc/TaskFaultInject_Cfg.h to header includes
- *   2. Add src/TaskFaultInject.c to the project sources
- *   3. Ensure FreeRTOS include path is accessible
- *   4. Set A66T_TASK_FAULT_INJECT_ENABLE = STD_ON in TaskFaultInject_Cfg.h
+ * ╔═════════════════════════════════════════════════════════════════════╗
+ * ║  NEW: Use src/fault-inject/ via CMake add_subdirectory            ║
+ * ║  OLD: ref/fault-inject/v2/ is deprecated — use src/fault-inject/  ║
+ * ╚═════════════════════════════════════════════════════════════════════╝
  *
- * CMake:
+ * PREFERRED METHOD — CMake subdirectory (supports both production and test):
+ *
+ *   # In your CMakeLists.txt:
+ *   add_subdirectory(path/to/src/fault-inject)
+ *
+ *   # For production firmware (injection compiled out):
+ *   target_link_libraries(app PRIVATE fault-inject)
+ *
+ *   # For test firmware (injection enabled):
+ *   set(FAULT_INJECT_TESTS ON CACHE BOOL "")
+ *   target_link_libraries(test_app PRIVATE fault-inject-test)
+ *
+ * LEGACY METHOD — IAR EWARM:
+ *   1. Add src/fault-inject/inc/ to header includes
+ *   2. Add src/fault-inject/src/TaskFaultInject.c to the project sources
+ *   3. Add src/fault-inject/src/FaultInject.c to the project sources
+ *   4. Ensure FreeRTOS include path is accessible
+ *   5. Set A66T_TASK_FAULT_INJECT_ENABLE = STD_ON in TaskFaultInject_Cfg.h
+ *   6. Set A66T_FAULT_INJECTION_TEST_ENABLE = STD_ON in FaultInject_Cfg.h
+ *
+ * OLD PATH (deprecated) — ref/fault-inject/v2/:
  *   target_sources(app PRIVATE
- *       ${BSW_DIR}/FaultInject/src/TaskFaultInject.c
+ *       ${REF_DIR}/FaultInject/v2/src/TaskFaultInject.c
+ *       ${REF_DIR}/FaultInject/v2/src/FaultInject.c
  *   )
  */
 

@@ -15,6 +15,7 @@ from yuleosh.ui.routes.helpers import (
     _compute_etag,
     _format_http_datetime,
     _parse_http_datetime,
+    _add_cors_header,
     _send_security_headers,
 )
 
@@ -54,7 +55,7 @@ def serve_page(handler: BaseHTTPRequestHandler, name: str, context: dict):
         handler.send_header("ETag", etag)
         handler.send_header("Last-Modified", _format_http_datetime(last_mod))
         _send_security_headers(handler)
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(handler)
         handler.end_headers()
         return
 
@@ -63,7 +64,7 @@ def serve_page(handler: BaseHTTPRequestHandler, name: str, context: dict):
     handler.send_header("ETag", etag)
     handler.send_header("Last-Modified", _format_http_datetime(last_mod))
     _send_security_headers(handler)
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    _add_cors_header(handler)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -83,7 +84,7 @@ def serve_file(handler: BaseHTTPRequestHandler, filepath: Path, mime: str):
             handler.send_header("ETag", etag)
             handler.send_header("Last-Modified", _format_http_datetime(last_mod))
             _send_security_headers(handler)
-            handler.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(handler)
             handler.end_headers()
             return
         handler.send_response(200)
@@ -91,7 +92,7 @@ def serve_file(handler: BaseHTTPRequestHandler, filepath: Path, mime: str):
         handler.send_header("ETag", etag)
         handler.send_header("Last-Modified", _format_http_datetime(last_mod))
         _send_security_headers(handler)
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(handler)
         handler.end_headers()
         handler.wfile.write(data)
     else:
@@ -115,7 +116,7 @@ def _send_html_response(handler: BaseHTTPRequestHandler, content: str, status: i
     handler.send_response(status)
     handler.send_header("Content-Type", "text/html; charset=utf-8")
     _send_security_headers(handler)
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    _add_cors_header(handler)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -126,6 +127,6 @@ def _send_json_error(handler: BaseHTTPRequestHandler, message: str, status: int 
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
     _send_security_headers(handler)
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    _add_cors_header(handler)
     handler.end_headers()
     handler.wfile.write(body)

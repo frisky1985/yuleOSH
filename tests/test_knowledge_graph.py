@@ -2212,7 +2212,7 @@ class TestP04bFallbackMatching:
         edge = tmp_store.get_edge(req_nid, cf_nid, "covers")
         assert edge is not None,\
             "Expected covers edge for entity 'knowledge_graph' -> knowledge_graph/store.py"
-        assert edge.properties.get("confidence") == "heuristic"
+        assert edge.properties.get("confidence") == 0.6
 
     def test_fallback_matches_by_filename_stem(self, tmp_store):
         """GIVEN orphan code_file whose stem appears as keyword WHEN matching THEN covers edge."""
@@ -3170,3 +3170,258 @@ class TestIncrementalBuild:
         assert result["mode"] == "snapshot_only"
         assert "snapshot" not in result
         assert result["stats"]["total_nodes"] > 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Tests: KG Confidence Labels
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestConfidenceLabels:
+    """KG confidence labels on automatically generated edges.
+
+    Audit transparency: all automated edges must carry a confidence score
+    so end users can assess reliability.
+    """
+
+    def _build_path_a_graph(self, store):
+        """Build Path A: test_file chain (confidence = 0.9)."""
+        req = Node(entity_type="requirement", entity_id="RS-CONF-A", label="RS-CONF-A")
+        req_nid = store.upsert_node(req)
+
+        tf = Node(entity_type="test_file", entity_id="tests/test_conf_a.py", label="test_conf_a.py")
+        tf_nid = store.upsert_node(tf)
+        store.upsert_edge(Edge(source_id=req_nid, target_id=tf_nid, edge_type="covers",
+                                properties={"source": "rtm"}))
+
+        tfn = Node(entity_type="test_function",
+                   entity_id="tests/test_conf_a.py::test_bar",
+                   label="test_bar",
+                   properties={"file_path": "tests/test_conf_a.py"})
+        tfn_nid = store.upsert_node(tfn)
+        store.upsert_edge(Edge(source_id=tf_nid, target_id=tfn_nid, edge_type="contains"))
+
+        code_fn = Node(entity_type="code_function",
+                       entity_id="src/conf_a.py::bar",
+                       label="bar",
+                       properties={"file_path": "src/conf_a.py", "start_line": 1, "end_line": 10})
+        code_fn_nid = store.upsert_node(code_fn)
+        store.upsert_edge(Edge(source_id=tfn_nid, target_id=code_fn_nid, edge_type="verifies",
+                                properties={"confidence": 1.0}))
+        return store, req_nid, code_fn_nid
+
+    def _build_path_b_graph(self, store):
+        """Build Path B: test_function direct (confidence = 0.8)."""
+        req = Node(entity_type="requirement", entity_id="RS-CONF-B", label="RS-CONF-B")
+        req_nid = store.upsert_node(req)
+
+        tfn = Node(entity_type="test_function",
+                   entity_id="tests/test_conf_b.py::test_qux",
+                   label="test_qux",
+                   properties={"file_path": "tests/test_conf_b.py"})
+        tfn_nid = store.upsert_node(tfn)
+        store.upsert_edge(Edge(source_id=req_nid, target_id=tfn_nid, edge_type="covers",
+                                properties={"source": "rtm"}))
+
+        code_fn = Node(entity_type="code_function",
+                       entity_id="src/conf_b.py::qux",
+                       label="qux",
+                       properties={"file_path": "src/conf_b.py", "start_line": 1, "end_line": 5})
+        code_fn_nid = store.upsert_node(code_fn)
+        store.upsert_edge(Edge(source_id=tfn_nid, target_id=code_fn_nid, edge_type="verifies",
+                                properties={"confidence": 1.0}))
+        return store, req_nid, code_fn_nid
+
+    def _build_path_c_graph(self, store):
+        """Build Path C: code_file direct (confidence = 0.7)."""
+        req = Node(entity_type="requirement", entity_id="RS-CONF-C", label="RS-CONF-C")
+        req_nid = store.upsert_node(req)
+
+        cf = Node(entity_type="code_file", entity_id="src/conf_c.py", label="conf_c.py")
+        cf_nid = store.upsert_node(cf)
+        store.upsert_edge(Edge(source_id=req_nid, target_id=cf_nid, edge_type="covers",
+                                properties={"source": "rtm"}))
+
+        code_fn = Node(entity_type="code_function",
+                       entity_id="src/conf_c.py::do_stuff",
+                       label="do_stuff",
+                       properties={"file_path": "src/conf_c.py", "start_line": 10, "end_line": 20})
+        code_fn_nid = store.upsert_node(code_fn)
+        store.upsert_edge(Edge(source_id=cf_nid, target_id=code_fn_nid, edge_type="contains"))
+        return store, req_nid, code_fn_nid
+
+    # ── implements edge confidence tests ─────────────────────────────────
+
+    def test_implements_confidence_PathA(self, tmp_store):
+        """Path A implements edge has confidence=0.9."""
+        store, req_nid, code_fn_nid = self._build_path_a_graph(tmp_store)
+        from yuleosh.knowledge_graph.importer import _build_implements_edges
+        _build_implements_edges(store)
+        impl_edge = store.get_edge(code_fn_nid, req_nid, "implements")
+        assert impl_edge is not None
+        assert impl_edge.properties.get("confidence") == 0.9
+
+    def test_implements_confidence_PathB(self, tmp_store):
+        """Path B implements edge has confidence=0.8."""
+        store, req_nid, code_fn_nid = self._build_path_b_graph(tmp_store)
+        from yuleosh.knowledge_graph.importer import _build_implements_edges
+        _build_implements_edges(store)
+        impl_edge = store.get_edge(code_fn_nid, req_nid, "implements")
+        assert impl_edge is not None
+        assert impl_edge.properties.get("confidence") == 0.8
+
+    def test_implements_confidence_PathC(self, tmp_store):
+        """Path C implements edge has confidence=0.7."""
+        store, req_nid, code_fn_nid = self._build_path_c_graph(tmp_store)
+        from yuleosh.knowledge_graph.importer import _build_implements_edges
+        _build_implements_edges(store)
+        impl_edge = store.get_edge(code_fn_nid, req_nid, "implements")
+        assert impl_edge is not None
+        assert impl_edge.properties.get("confidence") == 0.7
+
+    # ── validates edge confidence ───────────────────────────────────────
+
+    def test_validates_confidence(self, tmp_store):
+        """Validates edge has confidence=1.0."""
+        req = Node(entity_type="requirement", entity_id="RS-VAL-CONF", label="RS-VAL-CONF")
+        req_nid = tmp_store.upsert_node(req)
+        tf = Node(entity_type="test_file", entity_id="tests/test_val_conf.py",
+                   label="test_val_conf.py")
+        tf_nid = tmp_store.upsert_node(tf)
+        tmp_store.upsert_edge(Edge(
+            source_id=req_nid, target_id=tf_nid, edge_type="covers",
+            properties={"layer": "integration", "source": "test"},
+        ))
+
+        from yuleosh.knowledge_graph.importer import _build_validates_edges
+        _build_validates_edges(tmp_store)
+
+        validates_edge = tmp_store.get_edge(req_nid, tf_nid, "validates")
+        assert validates_edge is not None
+        assert validates_edge.properties.get("confidence") == 1.0
+
+    # ── fallback covers edge confidence ─────────────────────────────────
+
+    def test_fallback_covers_confidence(self, tmp_store):
+        """Fallback heuristic covers edge has confidence=0.6."""
+        req = Node(entity_type="requirement", entity_id="knowledge_graph",
+                   label="Knowledge Graph Module")
+        req_nid = tmp_store.upsert_node(req)
+
+        cf = Node(entity_type="code_file",
+                  entity_id="src/yuleosh/knowledge_graph/store.py",
+                  label="store.py",
+                  properties={"language": "python",
+                             "path": "src/yuleosh/knowledge_graph/store.py"})
+        cf_nid = tmp_store.upsert_node(cf)
+
+        from yuleosh.knowledge_graph.importer import _fallback_code_file_matching
+        _fallback_code_file_matching(tmp_store, Path(tmp_store.db_path).parent)
+
+        edge = tmp_store.get_edge(req_nid, cf_nid, "covers")
+        assert edge is not None
+        assert edge.properties.get("confidence") == 0.6
+
+    # ── orphan test file fix (chain-derived) confidence ─────────────────
+
+    def test_orphan_tf_covers_confidence(self, tmp_store):
+        """Orphan test file fix creates covers with confidence=0.7."""
+        req = Node(entity_type="requirement", entity_id="RS-ORPH-CONF", label="RS-ORPH-CONF")
+        req_nid = tmp_store.upsert_node(req)
+
+        tf_node = Node(entity_type="test_file", entity_id="tests/test_orphan_conf.py",
+                       label="test_orphan_conf.py")
+        tf_nid = tmp_store.upsert_node(tf_node)
+
+        tfn_node = Node(entity_type="test_function",
+                        entity_id="tests/test_orphan_conf.py::test_something",
+                        label="test_something",
+                        properties={"file_path": "tests/test_orphan_conf.py"})
+        tfn_nid = tmp_store.upsert_node(tfn_node)
+        tmp_store.upsert_edge(Edge(source_id=tf_nid, target_id=tfn_nid, edge_type="contains"))
+
+        code_fn = Node(entity_type="code_function",
+                       entity_id="src/processor_c.py::do_something",
+                       label="do_something",
+                       properties={"file_path": "src/processor_c.py"})
+        code_fn_nid = tmp_store.upsert_node(code_fn)
+        tmp_store.upsert_edge(Edge(source_id=tfn_nid, target_id=code_fn_nid, edge_type="verifies",
+                                    properties={"confidence": 1.0}))
+
+        tmp_store.upsert_edge(Edge(source_id=code_fn_nid, target_id=req_nid, edge_type="implements",
+                                    properties={"confidence": 0.9}))
+
+        from yuleosh.knowledge_graph.importer import _fix_orphan_test_files
+        result = _fix_orphan_test_files(tmp_store)
+        assert result["edges"] >= 1
+
+        covers_edge = tmp_store.get_edge(req_nid, tf_nid, "covers")
+        assert covers_edge is not None
+        assert covers_edge.properties.get("confidence") == 0.7
+
+    # ── trace shows confidence in result ────────────────────────────────
+
+    def test_trace_shows_confidence(self, tmp_store):
+        """trace_by_req_id returns edges with confidence field."""
+        store, req_nid, code_fn_nid = self._build_path_a_graph(tmp_store)
+        from yuleosh.knowledge_graph.importer import _build_implements_edges
+        _build_implements_edges(store)
+
+        from yuleosh.knowledge_graph.queries import trace_by_req_id
+        result = trace_by_req_id(store, "RS-CONF-A")
+        assert result is not None
+        for edge in result["edges"]:
+            assert "confidence" in edge, f"Edge missing confidence: {edge}"
+
+    def test_trace_low_confidence_warning(self, tmp_store):
+        """trace_by_req_id sets low_confidence_warning when edge < 0.8."""
+        # Use Path C (confidence=0.7) to trigger warning
+        store, req_nid, code_fn_nid = self._build_path_c_graph(tmp_store)
+        from yuleosh.knowledge_graph.importer import _build_implements_edges
+        _build_implements_edges(store)
+
+        from yuleosh.knowledge_graph.queries import trace_by_req_id
+        result = trace_by_req_id(store, "RS-CONF-C")
+        assert result is not None
+        # Path C creates implements edge with confidence=0.7, and the trace
+        # traverses through edges including the covers edge
+        assert result.get("low_confidence_warning") is True, (
+            f"Expected low_confidence_warning, got: {result}"
+        )
+
+    def test_impact_analysis_confidence(self, tmp_store):
+        """impact_analysis returns affected_reqs with confidence_score."""
+        from yuleosh.knowledge_graph.queries import impact_analysis
+
+        req = Node(entity_type="requirement", entity_id="RS-IMP-CONF", label="RS-IMP-CONF")
+        req_nid = tmp_store.upsert_node(req)
+
+        tf = Node(entity_type="test_file", entity_id="tests/test_imp_conf.py",
+                   label="test_imp_conf.py")
+        tf_nid = tmp_store.upsert_node(tf)
+        tmp_store.upsert_edge(Edge(source_id=req_nid, target_id=tf_nid, edge_type="covers",
+                                    properties={"confidence": 1.0}))
+
+        result = impact_analysis(tmp_store, ["tests/test_imp_conf.py"])
+        assert len(result["affected_reqs"]) >= 1
+        for ar in result["affected_reqs"]:
+            assert "confidence_score" in ar, f"Missing confidence_score in {ar}"
+
+    # ── all edges have confidence (default=1.0 for legacy compat) ───────
+
+    def test_confidence_integrity(self, tmp_store):
+        """All edges have a confidence value (default=1.0 for missing)."""
+        # Create an edge without confidence (simulating old edge)
+        req = Node(entity_type="requirement", entity_id="RS-LEGACY", label="RS-LEGACY")
+        req_nid = tmp_store.upsert_node(req)
+        tf = Node(entity_type="test_file", entity_id="tests/test_legacy.py",
+                   label="test_legacy.py")
+        tf_nid = tmp_store.upsert_node(tf)
+        tmp_store.upsert_edge(Edge(source_id=req_nid, target_id=tf_nid, edge_type="covers",
+                                    properties={"source": "legacy"}))
+
+        # Query back and verify default confidence
+        edges = tmp_store.list_edges()
+        for edge in edges:
+            confidence = edge.properties.get("confidence", 1.0)
+            assert isinstance(confidence, (int, float)), f"confidence must be numeric: {confidence}"
+            assert 0.0 <= confidence <= 1.0, f"confidence out of range: {confidence}"

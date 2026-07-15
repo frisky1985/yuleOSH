@@ -11,7 +11,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler
 from typing import Optional
 
-from yuleosh.ui.routes.helpers import _send_security_headers
+from yuleosh.ui.routes.helpers import _send_security_headers, _add_cors_header
 
 
 def handle_auth_check(handler: BaseHTTPRequestHandler) -> bool:
@@ -36,7 +36,7 @@ def handle_auth_check(handler: BaseHTTPRequestHandler) -> bool:
         handler.send_response(401)
         handler.send_header("Content-Type", "application/json")
         _send_security_headers(handler)
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(handler)
         handler.end_headers()
         handler.wfile.write(json.dumps({
             "error": "unauthorized",
@@ -164,7 +164,7 @@ def _send_json_response(handler: BaseHTTPRequestHandler, data, status: int = 200
         handler.send_response(status)
         handler.send_header("Content-Type", "application/json")
         _send_security_headers(handler)
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(handler)
         handler.end_headers()
         handler.wfile.write(body)
 

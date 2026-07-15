@@ -1,4 +1,4 @@
-name: "CodeQL Advanced"
+name: "🔍 CodeQL + Semgrep — 深度安全分析"
 
 on:
   push:
@@ -8,9 +8,18 @@ on:
   schedule:
     - cron: '0 0 * * 0'  # Weekly on Sunday
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.13'
+
 jobs:
-  analyze:
-    name: Analyze (${{ matrix.language }})
+
+  # ---------- CodeQL Analysis ----------
+  codeql:
+    name: CodeQL — ${{ matrix.language }}
     runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
     timeout-minutes: ${{ (matrix.language == 'swift' && 120) || 360 }}
     permissions:
@@ -25,6 +34,8 @@ jobs:
         include:
           - language: python
             build-mode: none
+          # - language: cpp       # 当 C++ 代码加入后启用
+          #   build-mode: manual
 
     steps:
       - name: Checkout repository
@@ -35,8 +46,98 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql-queries/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
+
+  # ---------- Semgrep Analysis ----------
+  semgrep:
+    name: Semgrep — SAST + 数据流分析
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+
+      - name: Semgrep — Python Security Rules
+        run: |
+          semgrep --config=.semgrep/security-python.yml \
+                  --sarif=semgrep-python.sarif \
+                  --error --metrics=off \
+                  src/
+        continue-on-error: true
+
+      - name: Semgrep — C/C++ Security Rules
+        run: |
+          semgrep --config=.semgrep/security-c.yml \
+                  --sarif=semgrep-c.sarif \
+                  --error --metrics=off \
+                  src/ || true
+        continue-on-error: true
+
+      - name: Semgrep — 数据流分析 (Taint Tracking)
+        run: |
+          semgrep --config=.semgrep/dataflow-python.yml \
+                  --sarif=semgrep-dataflow.sarif \
+                  --error --metrics=off \
+                  src/
+        continue-on-error: true
+
+      - name: Semgrep — 远程规则 (OWASP Top 10)
+        run: |
+          semgrep --config=p/python \
+                  --config=p/owasp-top-ten \
+                  --config=p/command-injection \
+                  --config=p/sql-injection \
+                  --sarif=semgrep-remote.sarif \
+                  --error --metrics=off \
+                  src/
+        continue-on-error: true
+
+      - name: Upload Semgrep SARIF (Python)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-python.sarif
+          category: semgrep-python
+
+      - name: Upload Semgrep SARIF (C/C++)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-c.sarif
+          category: semgrep-c
+
+      - name: Upload Semgrep SARIF (Dataflow)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-dataflow.sarif
+          category: semgrep-dataflow
+
+      - name: Upload Semgrep SARIF (Remote Rules)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-remote.sarif
+          category: semgrep-remote

@@ -1,0 +1,31 @@
+# =============================================================================
+# yuleOSH — Docker Compose 一键本地体验
+# =============================================================================
+# 使用方式:
+#   docker compose up -d
+#   浏览器访问: http://localhost:8080
+#
+# CQ-P2-06 审查结果: 配置简洁合理。本地开发用 YULEOSH_AUTH_DISABLED=true
+# 是标准做法。生产部署时应替换为完整认证栈并添加反向代理(nginx/Caddy)。
+# =============================================================================
+
+services:
+
+  yuleosh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yuleosh
+    ports:
+      - "8080:8080"
+    environment:
+      - OSH_PORT=8080
+      - YULEOSH_AUTH_DISABLED=true    # 本地体验模式，无认证
+      - YULEOSH_STORE_DIR=/data
+      - YULEOSH_LOG_LEVEL=INFO
+    volumes:
+      - yuleosh-data:/data
+    restart: unless-stopped
+
+volumes:
+  yuleosh-data:

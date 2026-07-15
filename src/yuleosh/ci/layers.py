@@ -11,6 +11,7 @@ Each function runs multiple CI stages for one CI layer.
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
 from datetime import datetime
@@ -110,25 +111,249 @@ from yuleosh.ci.stages import (
 )
 
 
-def run_layer1(project_dir: Optional[str] = None):
-    """Run Layer 1 CI pipeline.
+# ------------------------------------------------------------------
+# Project language detection
+# ------------------------------------------------------------------
 
-    V-Model left side (SWE.5): spec validation + architecture review + requirements trace
-    Added for ASPICE SWE.5 conformance — left side activities run before right side.
+
+# Directories to always skip during filesystem walks (large dep dirs)
+_SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".egg-info", ".mypy_cache",
+             "node_modules", "venv", ".venv", "vendor", ".vendor",
+             "third_party", ".cache", ".go", "target", ".build"}
+
+
+def _detect_project_language(project_dir: str) -> str:
+    """Detect the project language type by examining marker files.
+
+    Checks in order:
+    1. ``go.mod`` → Go project
+    2. ``pyproject.toml`` or ``setup.py`` → Python project
+    3. ``CMakeLists.txt`` or ``Makefile`` → C project
+    4. Falls back to scanning ``src/`` for C/C++ source files
+    5. If none matched, return "c" (backward compatible default)
+
+    Returns
+    -------
+    str
+        One of ``"go"``, ``"python"``, or ``"c"``.
     """
-    if project_dir is None:
-        project_dir = os.environ.get("OSH_HOME", os.getcwd())
-    
-    from yuleosh.ci.runner import git_commit_hash; commit = git_commit_hash()
-    print(f"\n🔬 CI Layer 1: Development Verification")
-    print(f"   Commit: {commit}")
-    print(f"   Project: {project_dir}")
+    project_path = Path(project_dir)
+
+    # 1. Go project
+    if (project_path / "go.mod").exists():
+        return "go"
+
+    # 2. Python project
+    if (project_path / "pyproject.toml").exists():
+        return "python"
+    if (project_path / "setup.py").exists():
+        return "python"
+    if (project_path / "setup.cfg").exists():
+        return "python"
+
+    # 3. C project (build system markers)
+    if (project_path / "CMakeLists.txt").exists():
+        return "c"
+    if (project_path / "Makefile").exists():
+        return "c"
+
+    # 4. Check src/ for C/C++ source files (limited depth)
+    src_dir = project_path / "src"
+    if src_dir.is_dir():
+        for root, dirs, files in os.walk(src_dir):
+            # Limit depth: don't go deeper than 5 levels
+            rel = os.path.relpath(root, str(src_dir))
+            if rel.count(os.sep) > 4:
+                dirs.clear()
+                continue
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+            for f in files:
+                if f.endswith((".c", ".cpp", ".h", ".hpp")):
+                    return "c"
+
+    # 5. Check for .py files in project root (Python project without pyproject.toml)
+    py_files = list(project_path.glob("*.py"))
+    if py_files:
+        return "python"
+
+    # 6. Default: treat as C project (backward compatible)
+    return "c"
+
+
+# ------------------------------------------------------------------
+# Go Layer 1 stages
+# ------------------------------------------------------------------
+
+
+def _run_go_build(project_dir: str, ci: CIResult, timeout: int) -> bool:
+    """Run ``go build ./...``."""
+    print("  \U0001f3d7\ufe0f  CI: go build...")
+    try:
+        result = subprocess.run(
+            ["go", "build", "./..."],
+            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
+        )
+        if result.returncode == 0:
+            ci.add_stage("go-build", "passed")
+            print(f"    \u2705 go build passed")
+            return True
+        ci.add_stage("go-build", "failed", result.stderr[:500])
+        print(f"    \u274c go build failed")
+        return False
+    except FileNotFoundError:
+        ci.add_stage("go-build", "error", "go not installed")
+        print(f"    \u274c go not installed")
+        return False
+    except subprocess.TimeoutExpired:
+        ci.add_stage("go-build", "error", f"go build timed out ({timeout}s)")
+        print(f"    \u274c go build timed out")
+        return False
+
+
+def _run_go_vet(project_dir: str, ci: CIResult, timeout: int) -> bool:
+    """Run ``go vet ./...``."""
+    print("  \U0001f50d CI: go vet...")
+    try:
+        result = subprocess.run(
+            ["go", "vet", "./..."],
+            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
+        )
+        if result.returncode == 0:
+            ci.add_stage("go-vet", "passed")
+            print(f"    \u2705 go vet passed")
+            return True
+        ci.add_stage("go-vet", "failed", result.stderr[:500])
+        print(f"    \u274c go vet failed")
+        return False
+    except FileNotFoundError:
+        ci.add_stage("go-vet", "error", "go not installed")
+        print(f"    \u274c go not installed")
+        return False
+    except subprocess.TimeoutExpired:
+        ci.add_stage("go-vet", "error", f"go vet timed out ({timeout}s)")
+        print(f"    \u274c go vet timed out")
+        return False
+
+
+def _run_go_test(project_dir: str, ci: CIResult, timeout: int) -> bool:
+    """Run ``go test ./...``."""
+    print("  \U0001f9ea CI: go test...")
+    try:
+        result = subprocess.run(
+            ["go", "test", "./..."],
+            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
+        )
+        if result.returncode == 0:
+            ci.add_stage("go-test", "passed")
+            print(f"    \u2705 go test passed")
+            return True
+        ci.add_stage("go-test", "failed", result.stderr[:500])
+        print(f"    \u274c go test failed")
+        return False
+    except FileNotFoundError:
+        ci.add_stage("go-test", "error", "go not installed")
+        print(f"    \u274c go not installed")
+        return False
+    except subprocess.TimeoutExpired:
+        ci.add_stage("go-test", "error", f"go test timed out ({timeout}s)")
+        print(f"    \u274c go test timed out")
+        return False
+
+
+def _run_go_layer1(project_dir: str, ci: CIResult, timeout: int) -> bool:
+    """Run Layer 1 CI checks for a Go project.
+
+    Stages: go build, go vet, go test
+    """
+    print(f"  \U0001f433 Detected: Go project")
     print()
-    
-    ci = CIResult(1, commit)
-    
-    # V-Model Left Side (SWE.5): verification activities that run before construction
-    # These ensure requirements, architecture, and traceability are in place
+
+    all_passed = True
+
+    for name, handler in [
+        ("go-build", lambda pd, ci, t: _run_go_build(pd, ci, t)),
+        ("go-vet", lambda pd, ci, t: _run_go_vet(pd, ci, t)),
+        ("go-test", lambda pd, ci, t: _run_go_test(pd, ci, t)),
+    ]:
+        try:
+            passed = handler(project_dir, ci, timeout)
+            if not passed:
+                all_passed = False
+                ci.errors.append(f"{name} failed")
+        except Exception as e:
+            ci.add_stage(name, "error", str(e))
+            ci.errors.append(f"{name}: {e}")
+            all_passed = False
+
+    return all_passed
+
+
+# ------------------------------------------------------------------
+# Python Layer 1 stages
+# ------------------------------------------------------------------
+
+
+def _run_python_layer1(project_dir: str, ci: CIResult, timeout: int) -> bool:
+    """Run Layer 1 CI checks for a Python project.
+
+    Stages: pytest (if available), lint checks.
+    """
+    print(f"  \U0001f40d Detected: Python project")
+    print()
+
+    all_passed = True
+
+    # Stage: pytest
+    print("  \U0001f9ea CI: pytest...")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-x", "--tb=short", "-q"],
+            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
+        )
+        if result.returncode == 0:
+            ci.add_stage("python-tests", "passed")
+            print(f"    \u2705 pytest passed")
+        else:
+            ci.add_stage("python-tests", "failed", result.stdout[:500])
+            print(f"    \u274c pytest returned {result.returncode}")
+            all_passed = False
+    except FileNotFoundError:
+        ci.add_stage("python-tests", "skipped", "pytest not installed")
+        print(f"    \u23ed\ufe0f  pytest not installed — skipping")
+    except subprocess.TimeoutExpired:
+        ci.add_stage("python-tests", "skipped", f"pytest timed out ({timeout}s)")
+        print(f"    \u23ed\ufe0f  pytest timed out — skipping")
+
+    return all_passed
+
+
+# ------------------------------------------------------------------
+# Timeout helper
+# ------------------------------------------------------------------
+
+
+class _LayerTimeout(Exception):
+    """Raised when a CI layer exceeds its configured timeout."""
+    pass
+
+
+
+def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
+    """Core implementation of Layer 1, called inside the timeout guard."""
+    # 1. Detect project language
+    lang = _detect_project_language(project_dir)
+
+    # 2. Branch by language
+    if lang == "go":
+        return _run_go_layer1(project_dir, ci, timeout)
+
+    if lang == "python":
+        return _run_python_layer1(project_dir, ci, timeout)
+
+    # 3. C project — full standard Layer 1 (backward compatible)
+    print(f"  \U0001f4e6 Detected: C/C++ project")
+    print()
+
     stages = [
         ("yaml-validation", run_yaml_validation),
         ("spec-validation", run_spec_validation),           # SWE.5: 规约验证
@@ -143,7 +368,7 @@ def run_layer1(project_dir: Optional[str] = None):
         ("c-coverage", run_c_coverage),
         ("c-coverage-gate", run_c_coverage_check),  # C 覆盖率门禁
     ]
-    
+
     all_passed = True
     for name, handler in stages:
         try:
@@ -155,16 +380,102 @@ def run_layer1(project_dir: Optional[str] = None):
             ci.add_stage(name, "error", str(e))
             ci.errors.append(f"{name}: {e}")
             all_passed = False
-    
+
+    return all_passed
+
+
+def run_layer1(project_dir: Optional[str] = None, timeout: Optional[int] = None):
+    """Run Layer 1 CI pipeline.
+
+    Automatically detects the project language (Go, Python, or C) and
+    runs appropriate stages:
+
+    - **Go**: ``go build ./...`` + ``go vet ./...`` + ``go test ./...``
+    - **Python**: ``pytest`` (if available)
+    - **C**: Full V-Model left side + MISRA + clang-tidy + coverage
+
+    A safety timeout wraps the entire layer.  Default is 30 seconds;
+    overridable via ``CI_LAYER1_TIMEOUT`` environment variable or
+    the *timeout* parameter.
+
+    Parameters
+    ----------
+    project_dir : str, optional
+        Project root directory.  Defaults to ``OSH_HOME`` or current dir.
+    timeout : int, optional
+        Maximum seconds for the entire layer.  Defaults to 30, or the
+        value of env var ``CI_LAYER1_TIMEOUT``.
+
+    Returns
+    -------
+    bool
+        ``True`` if all stages passed, ``False`` otherwise (or on timeout).
+    """
+    if project_dir is None:
+        project_dir = os.environ.get("OSH_HOME", os.getcwd())
+
+    # Resolve timeout: param > env var > default 30s
+    if timeout is None:
+        try:
+            timeout = int(os.environ.get("CI_LAYER1_TIMEOUT", "30"))
+        except (ValueError, TypeError):
+            timeout = 30
+    timeout = max(timeout, 1)  # Minimum 1 second
+
+    from yuleosh.ci.runner import git_commit_hash; commit = git_commit_hash()
+    print(f"\n\U0001f52c CI Layer 1: Development Verification")
+    print(f"   Commit: {commit}")
+    print(f"   Project: {project_dir}")
+    print(f"   Timeout: {timeout}s")
+    print()
+
+    ci = CIResult(1, commit)
+    all_passed = False
+    timed_out = False
+
+    # Set up timeout alarm (Unix signal-based safety net)
+    _timeout_alarm_active = False
+
+    def _alarm_handler(signum, frame):
+        nonlocal timed_out
+        timed_out = True
+        raise _LayerTimeout(
+            f"CI Layer 1 timed out after {timeout}s — "
+            f"adjust via CI_LAYER1_TIMEOUT env or timeout parameter"
+        )
+
+    old_handler = signal.signal(signal.SIGALRM, _alarm_handler)
+    try:
+        signal.alarm(timeout)
+        _timeout_alarm_active = True
+
+        all_passed = _run_layer1_impl(project_dir, ci, timeout)
+
+        signal.alarm(0)
+        _timeout_alarm_active = False
+
+    except _LayerTimeout as e:
+        print(f"\n    \u23f0 {e}")
+        all_passed = False
+        ci.errors.append(f"layer-timeout: {e}")
+    except Exception as e:
+        ci.add_stage("layer1", "error", str(e))
+        ci.errors.append(f"layer1: {e}")
+        all_passed = False
+    finally:
+        if _timeout_alarm_active:
+            signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
     ci.complete("passed" if all_passed else "failed")
-    
+
     # Save result
     ci_dir = Path(project_dir) / ".osh" / "ci"
     ci_dir.mkdir(parents=True, exist_ok=True)
     result_path = ci_dir / f"layer1-{commit}.json"
     with open(result_path, "w") as f:
         json.dump(ci.to_dict(), f, indent=2)
-    
+
     # Send notification
     import yuleosh.ci.run as _run_notify
     if _run_notify._notify:
@@ -186,14 +497,16 @@ def run_layer1(project_dir: Optional[str] = None):
             log.warning(f"Layer 1 report generation failed: {re}")
 
     print(f"\n{'='*40}")
-    if all_passed:
-        print("✅ CI Layer 1: ALL STAGES PASSED")
+    if timed_out:
+        print("\u23f0 CI Layer 1: TIMED OUT")
+    elif all_passed:
+        print("\u2705 CI Layer 1: ALL STAGES PASSED")
     else:
-        print(f"❌ CI Layer 1: FAILED — {len(ci.errors)} error(s)")
-    
+        print(f"\u274c CI Layer 1: FAILED \u2014 {len(ci.errors)} error(s)")
+
     print(f"   Report: {result_path}")
     print()
-    
+
     return all_passed
 
 

@@ -33,6 +33,51 @@ from typing import Optional
 
 from . import json_ok, json_error, read_body
 
+# ── Thread-safe dict wrapper ──────────────────────────────────────────────
+
+class _ThreadSafeDict:
+    """A dict wrapper that serializes all access with a lock."""
+    def __init__(self):
+        self._dict: dict = {}
+        self._lock = threading.Lock()
+
+    def get(self, key, default=None):
+        with self._lock:
+            return self._dict.get(key, default)
+
+    def __getitem__(self, key):
+        with self._lock:
+            return self._dict[key]
+
+    def __setitem__(self, key, value):
+        with self._lock:
+            self._dict[key] = value
+
+    def __delitem__(self, key):
+        with self._lock:
+            del self._dict[key]
+
+    def __contains__(self, key):
+        with self._lock:
+            return key in self._dict
+
+    def items(self):
+        with self._lock:
+            return list(self._dict.items())
+
+    def keys(self):
+        with self._lock:
+            return list(self._dict.keys())
+
+    def get_and_update(self, key, updater):
+        """Atomically get an entry and apply an update function."""
+        with self._lock:
+            if key in self._dict:
+                updater(self._dict[key])
+                return self._dict[key]
+            return None
+
+
 # ── Configuration ───────────────────────────────────────────────────────
 
 MAX_ZIP_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -43,9 +88,10 @@ RESULT_TTL = 24 * 3600  # 24 hours
 
 SUPPORTED_GIT_HOSTS = {"github.com", "gitlab.com", "bitbucket.org"}
 
-# ── In-memory state ─────────────────────────────────────────────────────
+# ── In-memory state — thread-safe ────────────────────────────────────────
 
-_assessment_store: dict[str, dict] = {}
+_assessment_store = _ThreadSafeDict()
+_repo_cache = _ThreadSafeDict()
 _cleanup_timer: Optional[threading.Timer] = None
 
 
@@ -339,6 +385,7 @@ def _get_dir_size(path: Path) -> int:
 
 # ── Rate limiter ────────────────────────────────────────────────────────
 
+_store_lock = threading.Lock()
 _preview_request_log: dict[str, list[float]] = {}
 _PREVIEW_AUTH_LIMIT = 3  # unauth: 3 per 24h
 _PREVIEW_AUTHED_LIMIT = 20  # authed: 20 per 24h
@@ -367,9 +414,6 @@ def _check_preview_rate_limit(ip: str, is_authenticated: bool = False) -> tuple[
 
 
 # ── Cache by repo URL ──────────────────────────────────────────────────
-
-_repo_cache: dict[str, str] = {}  # repo_url_hash -> preview_id
-
 
 def _get_cached_preview(repo_url: str) -> Optional[dict]:
     """Check if a cached assessment result exists (PREVIEW-REQ-007)."""

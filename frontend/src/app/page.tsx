@@ -43,17 +43,13 @@ export default function LandingPage() {
               <Link href="/pricing" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">定价</Link>
               <Link href="/login" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">登录</Link>
               <Link href="/register"
-                className="text-sm inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg font-semibold min-h-[48px]
-                  bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/20
-                  hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
+                className="text-sm inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg font-semibold min-h-[48px] bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/20 hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
               >
                 <Sparkles className="w-4 h-4" />
                 免费试用
               </Link>
               <Link href="/demo"
-                className="text-sm inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold
-                  border border-[#1e293b] text-[#94a3b8]
-                  hover:border-[#10b981]/40 hover:text-white transition-all"
+                className="text-sm inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold border border-[#1e293b] text-[#94a3b8] hover:border-[#10b981]/40 hover:text-white transition-all"
               >
                 🎮 Try Demo
               </Link>
@@ -121,9 +117,7 @@ export default function LandingPage() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link href="/register"
-                className="group relative inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm min-h-[48px]
-                  bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/30
-                  hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
+                className="group relative inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm min-h-[48px] bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/30 hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all"
               >
                 <Sparkles className="w-4 h-4" />
                 <span>开始免费试用</span>
@@ -131,16 +125,13 @@ export default function LandingPage() {
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </Link>
               <Link href="/login"
-                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
-                  bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
-                  hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
               >
                 <Zap className="w-4 h-4" />
                 已有账号？立即登录
               </Link>
               <a href="#how-it-works"
-                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
-                  border border-[#1e293b] text-[#94a3b8] hover:border-[#1677ff]/40 hover:text-white transition-all"
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm border border-[#1e293b] text-[#94a3b8] hover:border-[#1677ff]/40 hover:text-white transition-all"
               >
                 <Play className="w-4 h-4" />
                 看它如何工作
@@ -380,11 +371,7 @@ export default function LandingPage() {
           <div className="mt-8 text-center">
             <Link
               href="/demo"
-              className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl font-semibold text-sm
-                bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
-                hover:from-[#722ed1]/90 hover:to-[#1677ff]/90
-                shadow-lg shadow-[#722ed1]/20
-                transition-all group"
+              className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all group"
             >
               <Play className="w-4 h-4" />
               查看 Pipeline 演示
@@ -542,9 +529,7 @@ export default function LandingPage() {
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link href="/login"
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
-                bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
-                hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
             >
               已有账号？登录
               <ChevronRight className="w-3.5 h-3.5" />

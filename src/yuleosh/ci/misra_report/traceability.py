@@ -69,8 +69,11 @@ def _enrich_traceability_with_tests(
     """
     result: dict[str, dict] = {}
 
+    # Handle both flat {rule_id: info} and nested {meta, rules: {rule_id: info}} formats
+    if "rules" in rule_defs:
+        rule_defs = rule_defs["rules"]
     for rid, defn in rule_defs.items():
-        if rid == "meta":
+        if not isinstance(defn, dict):
             continue
         spec_id = defn.get("spec_ref", "")
         impl_id = defn.get("impl_ref", defn.get("check_method", ""))

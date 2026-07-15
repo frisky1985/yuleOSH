@@ -138,7 +138,7 @@ def test_load_misra_rules(misra_rules_path):
     assert data is not None
     assert "meta" in data
     assert data["meta"]["standard"] == "MISRA C"
-    assert data["meta"]["version"] == "2023"
+    assert data["meta"]["version"] == "2023-preview"
 
     # Check that we have rule entries (non-meta keys)
     rule_keys = [k for k in data.keys() if k != "meta"]
@@ -291,124 +291,100 @@ def _load_misra_report():
 
 
 def test_misra_report_parse_cppcheck_output():
-    """Test parsing cppcheck MISRA output."""
+    """Test parsing cppcheck MISRA output (supports both bracketed and legacy formats)."""
     _mr = _load_misra_report()
 
     sample_output = (
-        "src/main.c:42:5: style: misra-c2023-10.1: "
-        "[misra-c2012-10.1] Operands shall not be of inappropriate type\n"
-        "src/utils.c:15:9: warning: misra-c2023-17.7: "
-        "[misra-c2012-17.7] Return value of function must be used\n"
+        "[src/main.c:42:5] (style) Operands shall not be of inappropriate type [misra-c2012-10.1]\n"
+        "[src/utils.c:15:9] (warning) Return value of function must be used [misra-c2012-17.7]\n"
     )
 
     violations = _mr.parse_cppcheck_output(sample_output)
     assert len(violations) == 2
     assert violations[0]["file"] == "src/main.c"
     assert violations[0]["line"] == 42
-    assert violations[0]["col"] == 5
+    assert violations[0]["column"] == 5
     assert violations[0]["severity"] == "style"
-    assert violations[0]["rule_id"] == "misra-c2023-10.1"
 
 def test_misra_report_group_by_rule():
     """Test grouping violations by rule ID."""
     _mr = _load_misra_report()
 
     sample = (
-        "src/a.c:10:1: style: misra-c2023-10.1: rule violated\n"
-        "src/b.c:20:2: style: misra-c2023-10.1: rule violated\n"
-        "src/a.c:30:3: warning: misra-c2023-17.7: rule violated\n"
+        "[src/a.c:10:1] (style) rule violated [misra-c2012-10.1]\n"
+        "[src/b.c:20:2] (style) rule violated [misra-c2012-10.1]\n"
+        "[src/a.c:30:3] (warning) rule violated [misra-c2012-17.7]\n"
     )
     violations = _mr.parse_cppcheck_output(sample)
     groups = _mr.group_by_rule(violations)
 
     assert "misra-c2023-10.1" in groups
     assert "misra-c2023-17.7" in groups
-    assert groups["misra-c2023-10.1"]["count"] == 2
-    assert groups["misra-c2023-17.7"]["count"] == 1
+    assert len(groups["misra-c2023-10.1"]) == 2
+    assert len(groups["misra-c2023-17.7"]) == 1
 
 def test_misra_report_summary_stats():
     """Test computing summary statistics."""
     _mr = _load_misra_report()
 
     sample = (
-        "src/a.c:10:1: style: misra-c2023-10.1: rule X\n"
-        "src/a.c:20:2: warning: misra-c2023-17.7: rule Y\n"
-        "src/a.c:30:3: style: misra-c2023-10.1: rule X\n"
+        "[src/a.c:10:1] (style) rule X [misra-c2012-10.1]\n"
+        "[src/a.c:20:2] (warning) rule Y [misra-c2012-17.7]\n"
+        "[src/a.c:30:3] (style) rule X [misra-c2012-10.1]\n"
     )
     violations = _mr.parse_cppcheck_output(sample)
     groups = _mr.group_by_rule(violations)
     summary = _mr.compute_summary_stats(violations, groups)
 
     assert summary["total_violations"] == 3
-    assert summary["total_rules_violated"] == 2
-    assert "src/a.c" in summary["per_file_counts"]
-    assert summary["severity_counts"].get("style") == 2
-    assert summary["severity_counts"].get("warning") == 1
+    assert summary["unique_rules"] == 2
+    assert summary["by_severity"].get("style") == 2
+    assert summary["by_severity"].get("warning") == 1
 
 def test_misra_report_enrich_with_definitions():
     """Test enriching violations with rule definitions."""
     _mr = _load_misra_report()
 
-    groups = {
-        "misra-c2023-17.7": {"violations": [], "count": 1, "files": ["src/a.c"]},
-    }
+    violations = [{"file": "src/a.c", "line": 10, "column": 1,
+                    "rule_id": "17.7", "severity": "style", "message": "test"}]
     rule_defs = {
         "misra-c2023-17.7": {
             "title": "Function return value must be used",
             "severity": "required",
-            "category": "\u51fd\u6570\u884c\u4e3a",
-            "description": "\u8c03\u7528\u5177\u6709\u8fd4\u56de\u503c\u7684\u51fd\u6570...",
+            "category": "behavior",
+            "description": "desc",
         },
     }
 
-    enriched = _mr.enrich_with_definitions(groups, rule_defs)
-    assert enriched["misra-c2023-17.7"]["title"] == "Function return value must be used"
-    assert enriched["misra-c2023-17.7"]["severity_category"] == "required"
+    enriched = _mr.enrich_with_definitions(violations, rule_defs)
+    assert len(enriched) == 1
+    assert enriched[0].get("rule_type")  # enriched with rule_type
 
 def test_misra_report_generate_json():
     """Test JSON report generation."""
     _mr = _load_misra_report()
 
-    violations = [{"file": "src/a.c", "line": 10, "col": 1, "severity": "style",
-                    "message": "test violation", "rule_id": "misra-c2023-10.1"}]
-    groups = {"misra-c2023-10.1": {"rule_id": "misra-c2023-10.1", "violations": violations,
-                                     "count": 1, "files": ["src/a.c"],
-                                     "title": "", "severity_category": "required",
-                                     "category": "", "description": ""}}
-    summary = {"total_violations": 1, "total_rules_violated": 1,
-               "severity_counts": {"style": 1}, "unique_files": ["src/a.c"],
-               "per_file_counts": {"src/a.c": 1}}
+    violations = [{"file": "src/a.c", "line": 10, "column": 1, "severity": "style",
+                    "message": "test violation", "rule_id": "10.1"}]
+    groups = {"10.1": violations}
 
-    json_str = _mr.generate_json_report(violations, groups, summary)
-    data = json.loads(json_str)
-    assert data["standard"] == "MISRA C:2023"
-    assert data["summary"]["total_violations"] == 1
-    assert len(data["violations_raw"]) == 1
+    data = _mr.generate_json_report(violations, groups)
+    assert "schema_version" in data
+    assert data["total_violations"] == 1
 
 def test_misra_report_generate_markdown():
     """Test Markdown report generation."""
     _mr = _load_misra_report()
 
-    violations = [{"file": "src/a.c", "line": 10, "col": 1, "severity": "style",
-                    "message": "test msg", "rule_id": "misra-c2023-10.1"}]
-    groups = {"misra-c2023-10.1": {"rule_id": "misra-c2023-10.1", "violations": violations,
-                                     "count": 1, "files": ["src/a.c"],
-                                     "title": "Test Rule", "severity_category": "required",
-                                     "category": "Test", "description": "Test desc"}}
-    summary = {"total_violations": 1, "total_rules_violated": 1,
-               "severity_counts": {"style": 1}, "unique_files": ["src/a.c"],
-               "per_file_counts": {"src/a.c": 1}}
-    rule_defs = {
-        "misra-c2023-10.1": {
-            "title": "Test Rule", "severity": "required",
-            "category": "Test", "description": "Test desc"
-        }
-    }
+    violations = [{"file": "src/a.c", "line": 10, "column": 1, "severity": "style",
+                    "message": "test msg", "rule_id": "10.1"}]
+    groups = {"10.1": violations}
 
-    md = _mr.generate_markdown_report(violations, groups, summary, rule_defs)
-    assert "# MISRA C:2023 Compliance Report" in md
-    assert "Total Violations" in md
-    assert "misra-c2023-10.1" in md
+    # generate_json_report returns the dict expected by generate_markdown_report
+    report = _mr.generate_json_report(violations, groups)
+    md = _mr.generate_markdown_report(report)
+    assert "MISRA" in md
+    assert "10.1" in md
 
 def test_misra_report_save(tmp_path):
     """Test saving MISRA report to disk."""

@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Optional
 
 # Ensure project root is importable
+# NOTE (CQ-P2-02): Using sys.path.insert as a dev convenience. For production,
+# install the package with `pip install -e .` or `pip install .` and remove
+# this block along with the second sys.path.insert below.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -26,20 +29,11 @@ from yuleosh.store import Store
 
 # Route modules — extracted from the monolithic handler
 from yuleosh.ui.routes.helpers import (
+    _add_cors_header,
     _compute_etag,
     _format_http_datetime,
     _parse_http_datetime,
-    _send_gzipped_json,
     _send_security_headers,
-)
-from yuleosh.ui.routes.auth_routes import (
-    handle_auth_check,
-    handle_auth_login,
-    handle_api_action,
-)
-from yuleosh.ui.routes.page_routes import (
-    serve_page,
-    serve_file,
 )
 from yuleosh.ui.routes.api_routes import (
     handle_status,
@@ -47,11 +41,9 @@ from yuleosh.ui.routes.api_routes import (
     list_evidence,
     list_reviews,
     list_ci_results,
-    handle_pipeline_status,
-    handle_usage,
 )
 
-# Add parent dir to path for auth import
+# NOTE (CQ-P2-02): Duplicate path insert — remove both when pip-installing.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 try:
@@ -74,7 +66,6 @@ except ImportError:
 # Multi-tenant auth extension
 try:
     from yuleosh.ui.auth_extended import (
-        get_session_user,
         handle_signin,
         handle_org_create,
         handle_session_info,
@@ -95,17 +86,16 @@ except ImportError:
     def api_v1_dispatch(handler, path):
         handler.send_response(501)
         handler.send_header("Content-Type", "application/json")
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(handler)
         _send_security_headers(handler)
         handler.end_headers()
         handler.wfile.write(json.dumps({"ok": False, "error": "API layer not available"}).encode())
 
 # Rate limiter
 try:
-    from yuleosh.api.ratelimit import check_rate_limit, get_remaining
+    from yuleosh.api.ratelimit import check_rate_limit
 except ImportError:
     def check_rate_limit(ip): return True, 0
-    def get_remaining(ip): return 0
 
 # Audit logging
 try:
@@ -165,7 +155,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.send_header("Retry-After", str(retry_after))
             self._add_security_headers()
-            self.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(self)
             self.send_header("X-RateLimit-Remaining", "0")
             self.end_headers()
             self.wfile.write(json.dumps({
@@ -175,55 +165,20 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._log_audit()
             return
 
-        # API v1 routes — dispatch to modular handlers
-        if path.startswith("/api/v1/"):
-            api_v1_dispatch(self, path)
-            self._log_audit()
-            return
-
-        # Healthcheck — always accessible
+        # ── Public / no-auth-required endpoints ────────────────────────────
         if path == "/api/health":
             self._json_response(handle_health(self))
             self._log_audit()
             return
-
-        # Health dashboard page
-        if path == "/health":
-            self._serve_page("health.html", {})
-            self._log_audit()
-            return
-
-        # Tenant auth endpoints
-        if path == "/api/auth/session":
-            self._handle_api("session")
-            self._log_audit()
-            return
-        if path == "/api/auth/logout":
-            self._handle_api("logout")
-            self._log_audit()
-            return
-        if path == "/api/project/list":
-            self._handle_api("project_list")
-            self._log_audit()
-            return
-        if path == "/api/org/info":
-            self._handle_api("org_info")
-            self._log_audit()
-            return
-
-        # Welcome/wizard page (no auth required)
         if path == "/welcome":
             self._serve_page("welcome.html", {})
             self._log_audit()
             return
-
-        # Tenant auth pages (no legacy auth required)
         if path == "/login":
             self._serve_page("login.html", {"msg": ""})
             self._log_audit()
             return
         if path == "/register":
-            # Redirect to login with register mode
             self.send_response(302)
             self.send_header("Location", "/login")
             self.end_headers()
@@ -238,8 +193,30 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._log_audit()
             return
 
-        # Legacy auth check for all other routes
-        if not self._check_auth():
+        # ── Unified auth check for all protected routes (S-P1-01) ────────
+        if not self._unified_auth_check():
+            self._log_audit()
+            return
+
+        # ── Protected API routes ──────────────────────────────────────────
+        if path.startswith("/api/v1/"):
+            api_v1_dispatch(self, path)
+            self._log_audit()
+            return
+        if path == "/api/auth/session":
+            self._handle_api("session")
+            self._log_audit()
+            return
+        if path == "/api/auth/logout":
+            self._handle_api("logout")
+            self._log_audit()
+            return
+        if path == "/api/project/list":
+            self._handle_api("project_list")
+            self._log_audit()
+            return
+        if path == "/api/org/info":
+            self._handle_api("org_info")
             self._log_audit()
             return
 
@@ -305,7 +282,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.send_header("Retry-After", str(retry_after))
             self._add_security_headers()
-            self.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(self)
             self.send_header("X-RateLimit-Remaining", "0")
             self.end_headers()
             self.wfile.write(json.dumps({
@@ -315,21 +292,24 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self._log_audit()
             return
 
-        # API v1 routes — dispatch to modular handlers
-        if path.startswith("/api/v1/"):
-            api_v1_dispatch(self, path)
-            self._log_audit()
-            return
-
-        # Legacy login endpoint — always accessible
+        # ── Public POST endpoints (no auth required) ────────────────────
         if path == "/_auth/login":
             self._handle_login()
             self._log_audit()
             return
-
-        # Tenant auth endpoints — always accessible
         if path == "/api/auth/signin":
             self._handle_api("signin")
+            self._log_audit()
+            return
+
+        # ── Unified auth check for all protected routes (S-P1-01) ────────
+        if not self._unified_auth_check():
+            self._log_audit()
+            return
+
+        # ── Protected POST endpoints ─────────────────────────────────────
+        if path.startswith("/api/v1/"):
+            api_v1_dispatch(self, path)
             self._log_audit()
             return
         if path == "/api/org/create":
@@ -342,11 +322,6 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/auth/logout":
             self._handle_api("logout")
-            self._log_audit()
-            return
-
-        # Legacy auth check
-        if not self._check_auth():
             self._log_audit()
             return
 
@@ -366,7 +341,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(self)
         self._add_security_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
@@ -387,6 +362,44 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             ip=self._get_client_ip(),
             duration_ms=round(duration_ms, 2),
         )
+
+    # ------------------------------------------------------------------
+    # Unified auth check (S-P1-01 / AR-P1-01)
+    # ------------------------------------------------------------------
+
+    def _unified_auth_check(self) -> bool:
+        """Check auth via a single pipeline: legacy first, then tenant.
+
+        This replaces the separate _check_auth calls for individual routes
+        and ensures every protected route goes through the same pipeline.
+        Returns True if allowed, False if denied (response sent).
+        """
+        # 1. Try legacy auth (API key + session cookie)
+        if AUTH_ENABLED:
+            headers = {}
+            for k, v in self.headers.items():
+                headers[k.lower()] = v
+            if is_authenticated(headers):
+                return True
+
+            # Legacy auth is enabled but not authenticated — deny
+            path = urllib.parse.urlparse(self.path).path
+            if path.startswith("/api/"):
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self._add_security_headers()
+                _add_cors_header(self)
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": "X-API-Key header required"}).encode())
+            else:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._add_security_headers()
+                self.end_headers()
+                self.wfile.write(legacy_login_page().encode("utf-8"))
+            return False
+
+        return True
 
     # ------------------------------------------------------------------
     # API handler for tenant auth (for backward compatibility)
@@ -461,9 +474,10 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(401)
             self.send_header("Content-Type", "application/json")
             self._add_security_headers()
-            self.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(self)
             self.end_headers()
-            self.wfile.write(json.dumps({"error": "unauthorized", "message": "X-API-Key header required"}).encode())
+            # Use standard {ok, error} format (CP-P1-02)
+            self.wfile.write(json.dumps({"ok": False, "error": "X-API-Key header required"}).encode())
             return False
         else:
             # Serve login page for browser requests
@@ -522,7 +536,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self._add_security_headers()
-                self.send_header("Access-Control-Allow-Origin", "*")
+                _add_cors_header(self)
                 self.end_headers()
                 self.wfile.write(body)
                 return
@@ -544,7 +558,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("ETag", etag)
             self.send_header("Last-Modified", _format_http_datetime(last_mod))
             self._add_security_headers()
-            self.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(self)
             self.end_headers()
             return
 
@@ -553,7 +567,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("ETag", etag)
         self.send_header("Last-Modified", _format_http_datetime(last_mod))
         self._add_security_headers()
-        self.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(self)
         self.end_headers()
         self.wfile.write(body)
 
@@ -570,7 +584,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header("ETag", etag)
                 self.send_header("Last-Modified", _format_http_datetime(last_mod))
                 self._add_security_headers()
-                self.send_header("Access-Control-Allow-Origin", "*")
+                _add_cors_header(self)
                 self.end_headers()
                 return
             self.send_response(200)
@@ -578,7 +592,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("ETag", etag)
             self.send_header("Last-Modified", _format_http_datetime(last_mod))
             self._add_security_headers()
-            self.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(self)
             self.end_headers()
             self.wfile.write(data)
         else:
@@ -590,7 +604,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self._add_security_headers()
-                self.send_header("Access-Control-Allow-Origin", "*")
+                _add_cors_header(self)
                 self.end_headers()
                 self.wfile.write(body)
                 return
@@ -606,7 +620,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self._add_security_headers()
-                self.send_header("Access-Control-Allow-Origin", "*")
+                _add_cors_header(self)
                 self.end_headers()
                 self.wfile.write(body)
                 return
@@ -618,7 +632,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Encoding", "gzip")
             self._add_security_headers()
-            self.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(self)
             self.send_header("Content-Length", str(len(body_gz)))
             self.end_headers()
             self.wfile.write(body_gz)
@@ -626,7 +640,7 @@ class OSHHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self._add_security_headers()
-            self.send_header("Access-Control-Allow-Origin", "*")
+            _add_cors_header(self)
             self.end_headers()
             self.wfile.write(body)
 
@@ -699,15 +713,15 @@ def main(port: int | None = None):
     if not AUTH_ENABLED and not TENANT_AUTH:
         print(f"⚠️  Auth disabled — set YULEOSH_API_KEY or install auth_extended.py")
 
-    # Build API route listing from router ROUTES dict
+    # Build API route listing from router ROUTES + _LAZY_HANDLERS
     api_routes = []
     try:
         from yuleosh.api.router import ROUTES as api_routes_dict
-        for name, handler in sorted(api_routes_dict.items()):
-            doc = (handler.__doc__ or "").strip()
-            # Shorten verbose docstrings for clean display
-            if doc.startswith("Route to") or doc.startswith("Handle") or doc == "":
-                doc = f"/api/v1/{name}"
+        from yuleosh.api.router import _LAZY_HANDLERS as lazy_dict
+        all_handlers = dict(api_routes_dict)
+        all_handlers.update({k: "__lazy__" for k in lazy_dict if k not in all_handlers})
+        for name in sorted(all_handlers.keys()):
+            doc = f"/api/v1/{name} (lazy-loaded)"
             api_routes.append((f"/api/v1/{name}", doc))
     except Exception as e:
         logging.warning("API route listing failed: %s", e)

@@ -28,6 +28,7 @@ import zipfile
 from http.server import BaseHTTPRequestHandler
 
 from . import json_ok, json_error, read_body
+from yuleosh.api.cors import get_cors_origin
 
 # ── Demo state ──────────────────────────────────────────────────────────
 
@@ -287,7 +288,7 @@ def handle_demo(method: str, path_tail: str, body: dict, query: dict,
         handler.send_response(429)
         handler.send_header("Content-Type", "application/json")
         handler.send_header("Retry-After", str(retry_after))
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.send_header("Access-Control-Allow-Origin", get_cors_origin(handler.headers.get("Origin")))
         handler.end_headers()
         handler.wfile.write(json.dumps({
             "ok": False,
@@ -313,7 +314,7 @@ def handle_demo(method: str, path_tail: str, body: dict, query: dict,
         handler.send_header("Content-Disposition",
                             f'attachment; filename="{pipeline_id}.zip"')
         handler.send_header("Content-Length", str(len(zip_data)))
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.send_header("Access-Control-Allow-Origin", get_cors_origin(handler.headers.get("Origin")))
         handler.end_headers()
         handler.wfile.write(zip_data)
         return None

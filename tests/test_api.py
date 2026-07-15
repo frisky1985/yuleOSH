@@ -137,14 +137,22 @@ class TestApiHelpers:
         """read_body with no Content-Length returns {}."""
         from yuleosh.api import read_body
         mock_handler = MagicMock()
-        mock_handler.headers.get.return_value = "0"
+        def _header_side_effect(key, default=None):
+            if key == "Content-Type":
+                return "application/json"
+            return "0"
+        mock_handler.headers.get.side_effect = _header_side_effect
         result = read_body(mock_handler)
         assert result == {}
 
     def test_read_body_json(self):
         from yuleosh.api import read_body
         mock_handler = MagicMock()
-        mock_handler.headers.get.return_value = len('{"foo":"bar"}')
+        def _header_side_effect(key, default=None):
+            if key == "Content-Type":
+                return "application/json"
+            return str(len('{"foo":"bar"}'))
+        mock_handler.headers.get.side_effect = _header_side_effect
         mock_handler.rfile.read.return_value = b'{"foo":"bar"}'
         result = read_body(mock_handler)
         assert result == {"foo": "bar"}
@@ -153,7 +161,11 @@ class TestApiHelpers:
         from yuleosh.api import read_body
         mock_handler = MagicMock()
         body = "foo=bar&baz=qux"
-        mock_handler.headers.get.return_value = str(len(body))
+        def _header_side_effect(key, default=None):
+            if key == "Content-Type":
+                return "application/x-www-form-urlencoded"
+            return str(len(body))
+        mock_handler.headers.get.side_effect = _header_side_effect
         mock_handler.rfile.read.return_value = body.encode()
         result = read_body(mock_handler)
         assert result == {"foo": "bar", "baz": "qux"}
@@ -162,7 +174,11 @@ class TestApiHelpers:
         from yuleosh.api import read_body
         mock_handler = MagicMock()
         body = "a=1&a=2"
-        mock_handler.headers.get.return_value = str(len(body))
+        def _header_side_effect(key, default=None):
+            if key == "Content-Type":
+                return "application/x-www-form-urlencoded"
+            return str(len(body))
+        mock_handler.headers.get.side_effect = _header_side_effect
         mock_handler.rfile.read.return_value = body.encode()
         result = read_body(mock_handler)
         assert result == {"a": ["1", "2"]}
@@ -1516,13 +1532,15 @@ class TestRouter:
     """dispatch and _respond."""
 
     def test_respond(self):
-        """_respond sends proper JSON."""
+        """_respond sends proper JSON with CORS header."""
         from yuleosh.api.router import _respond
         handler = MagicMock()
+        # Set Origin to the allowed desktop client origin
+        handler.headers.get.return_value = "http://localhost:18789"
         _respond(handler, {"ok": True, "data": "hello"}, 200)
         handler.send_response.assert_called_once_with(200)
         handler.send_header.assert_any_call("Content-Type", "application/json")
-        handler.send_header.assert_any_call("Access-Control-Allow-Origin", "*")
+        handler.send_header.assert_any_call("Access-Control-Allow-Origin", "http://localhost:18789")
         handler.send_header.assert_any_call("X-Content-Type-Options", "nosniff")
         data_written = b"".join(
             args[0] for args, _ in handler.wfile.write.call_args_list

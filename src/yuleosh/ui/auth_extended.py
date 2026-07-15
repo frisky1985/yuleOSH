@@ -37,17 +37,49 @@ SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 SESSION_TTL_HOURS = 72
 
 # ── JWT ──────────────────────────────────────────────────────────────────────
-JWT_SECRET = os.environ.get("YULEOSH_JWT_SECRET", secrets.token_urlsafe(32))
+_YULEOSH_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
+if not _YULEOSH_JWT_SECRET_ENV:
+    raise RuntimeError(
+        "YULEOSH_JWT_SECRET environment variable is required for multi-tenant auth. "
+        "Generate one with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
+JWT_SECRET = _YULEOSH_JWT_SECRET_ENV
 JWT_ALGORITHM = "HS256"
 
+# ── Password strength validation ────────────────────────────────────────────
+
+_MIN_PASSWORD_LENGTH = 8
+
+
+def _validate_password_strength(password: str) -> list[str]:
+    """Validate password strength. Returns list of error messages (empty = valid)."""
+    errors: list[str] = []
+    if len(password) < _MIN_PASSWORD_LENGTH:
+        errors.append(f"Password must be at least {_MIN_PASSWORD_LENGTH} characters")
+    if not re.search(r"[A-Z]", password):
+        errors.append("Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", password):
+        errors.append("Password must contain at least one lowercase letter")
+    if not re.search(r"[0-9]", password):
+        errors.append("Password must contain at least one digit")
+    return errors
+
+
 # ── Rate limiting ────────────────────────────────────────────────────────────
+# NOTE (S-P2-02): The in-memory rate limiter does NOT work across multiple
+# processes or workers. For production deployments with >1 worker, replace
+# with a shared store (Redis/Memcached) or database-backed rate limiter.
 _SIGNIN_RATE_LIMIT: dict[str, tuple[int, int]] = {}  # email -> (attempts, window_start)
 _MAX_SIGNIN_ATTEMPTS = 10
 _RATE_WINDOW_SECONDS = 300  # 5 minutes
 
 
 def _check_rate_limit(email: str) -> bool:
-    """Check signin rate limit. Returns True if blocked."""
+    """Check signin rate limit. Returns True if blocked.
+
+    Process-local only (S-P2-02): does not span workers.
+    Stale entries are cleaned up opportunistically.
+    """
     now = int(time.time())
     entry = _SIGNIN_RATE_LIMIT.get(email)
     if entry:
@@ -60,7 +92,18 @@ def _check_rate_limit(email: str) -> bool:
         _SIGNIN_RATE_LIMIT[email] = (attempts + 1, window_start)
     else:
         _SIGNIN_RATE_LIMIT[email] = (1, now)
+        # Opportunistic stale entry cleanup (every ~11th new entry)
+        if len(_SIGNIN_RATE_LIMIT) > 1000 and hash(email) % 11 == 0:
+            _cleanup_stale_rate_entries()
     return False
+
+
+def _cleanup_stale_rate_entries():
+    """Remove rate-limit entries older than the window."""
+    cutoff = int(time.time()) - _RATE_WINDOW_SECONDS
+    stale = [k for k, (_, ws) in _SIGNIN_RATE_LIMIT.items() if ws < cutoff]
+    for k in stale:
+        del _SIGNIN_RATE_LIMIT[k]
 
 
 # ── Password hashing ─────────────────────────────────────────────────────────
@@ -95,7 +138,7 @@ def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "") -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def _decode_token(token: str) -> Optional[dict]:
+def _decode_token(token: str) -> dict | None:
     """Decode and validate JWT. Returns payload dict or None if invalid/expired."""
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -112,7 +155,7 @@ def _slugify(text: str) -> str:
 # Session helpers
 # ---------------------------------------------------------------------------
 
-def get_session_user(token: str) -> Optional[dict]:
+def get_session_user(token: str) -> dict | None:
     """Resolve a bearer token to a user dict with org info."""
     if not token:
         return None
@@ -183,8 +226,9 @@ def handle_signin(body: dict) -> dict:
             return _create_login_response(store, existing_user)
         else:
             # New member — require password for signup into existing org
-            if not password or len(password) < 8:
-                return {"error": "Password must be at least 8 characters"}, 400
+            pwd_errors = _validate_password_strength(password) if password else ["Password is required"]
+            if pwd_errors:
+                return {"error": pwd_errors[0]}, 400
             password_hash = _hash_password(password)
             user = store.create_user(target_org["id"], email, "member", password_hash)
             return _create_login_response(store, user)
@@ -239,7 +283,11 @@ def handle_org_create(body: dict, session_token: str) -> dict:
     org = store.create_organization(org_name, org_slug)
 
     # Create user as admin — with optional password
-    password_hash = _hash_password(password) if (password and len(password) >= 8) else None
+    if password:
+        pwd_errors = _validate_password_strength(password)
+        if pwd_errors:
+            return {"error": pwd_errors[0]}, 400
+    password_hash = _hash_password(password) if password else None
     user = store.create_user(org["id"], email, "admin", password_hash)
 
     # Create first project
