@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample AUTOSAR CP ARXML file — SWC descriptors.
+  Schema: AUTOSAR 4.2 (R20-11)
+  
+  Contains two SWC components:
+    1. CanIf (CAN Interface) — Receiver/Sender ports + timing runnable
+    2. CanSm (CAN State Manager) — Mode management runnables
+  
+  This file is a minimal example for testing yuleOSH's ARXML parser.
+-->
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0"
+         xsi:schemaLocation="http://autosar.org/schema/r4.0 autosar_422.xsd"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <AR-PACKAGE>
+    <SHORT-NAME>CanStack</SHORT-NAME>
+    <AR-PACKAGE>
+      <SHORT-NAME>SwcComponents</SHORT-NAME>
+      <ELEMENTS>
+
+        <!-- =============================================================
+             ApplicationSwComponentType: CanIf (CAN Interface)
+             ============================================================= -->
+        <APPLICATION-SW-COMPONENT-TYPE UUID="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+          <SHORT-NAME>CanIf</SHORT-NAME>
+          <PORT-PROTOTYPE>
+            <SHORT-NAME>CanRxData</SHORT-NAME>
+            <PROVIDED-INTERFACE>
+              <PORT-INTERFACE-REF>
+                /CanStack/Interfaces/CanRxInterface
+              </PORT-INTERFACE-REF>
+            </PROVIDED-INTERFACE>
+          </PORT-PROTOTYPE>
+          <PORT-PROTOTYPE>
+            <SHORT-NAME>CanTxData</SHORT-NAME>
+            <REQUIRED-INTERFACE>
+              <PORT-INTERFACE-REF>
+                /CanStack/Interfaces/CanTxInterface
+              </PORT-INTERFACE-REF>
+            </REQUIRED-INTERFACE>
+          </PORT-PROTOTYPE>
+          <PORT-PROTOTYPE>
+            <SHORT-NAME>CanIfConfig</SHORT-NAME>
+            <PROVIDED-INTERFACE>
+              <PORT-INTERFACE-REF>
+                /CanStack/Interfaces/CanIfConfigInterface
+              </PORT-INTERFACE-REF>
+            </PROVIDED-INTERFACE>
+          </PORT-PROTOTYPE>
+          <PORT-PROTOTYPE>
+            <SHORT-NAME>CanIfStatus</SHORT-NAME>
+            <PROVIDED-INTERFACE>
+              <PORT-INTERFACE-REF>
+                /CanStack/Interfaces/CanIfStatusInterface
+              </PORT-INTERFACE-REF>
+            </PROVIDED-INTERFACE>
+          </PORT-PROTOTYPE>
+
+          <SWC-INTERNAL-BEHAVIOR>
+            <SHORT-NAME>CanIfBehavior</SHORT-NAME>
+            <EXCLUSIVE-AREA>
+              <SHORT-NAME>CanIfExclusive</SHORT-NAME>
+            </EXCLUSIVE-AREA>
+            <RUNNABLE-ENTITY>
+              <SHORT-NAME>CanIf_RxIndication</SHORT-NAME>
+              <SYMBOL>CanIf_RxIndication</SYMBOL>
+              <CAN-BE-INVOKED-CONCURRENTLY>false</CAN-BE-INVOKED-CONCURRENTLY>
+              <DATA-READ-ACCESS>
+                <TARGET>/CanStack/SwcComponents/CanIf/CanRxData</TARGET>
+              </DATA-READ-ACCESS>
+              <DATA-WRITE-ACCESS>
+                <TARGET>/CanStack/SwcComponents/CanIf/CanTxData</TARGET>
+              </DATA-WRITE-ACCESS>
+              <EVENT>
+                <DATA-RECEIVED-EVENT>
+                  <TARGET>/CanStack/SwcComponents/CanIf/CanRxData</TARGET>
+                </DATA-RECEIVED-EVENT>
+              </EVENT>
+            </RUNNABLE-ENTITY>
+            <RUNNABLE-ENTITY>
+              <SHORT-NAME>CanIf_TxConfirmation</SHORT-NAME>
+              <SYMBOL>CanIf_TxConfirmation</SYMBOL>
+              <CAN-BE-INVOKED-CONCURRENTLY>false</CAN-BE-INVOKED-CONCURRENTLY>
+              <MINIMUM-START-INTERVAL>1.0</MINIMUM-START-INTERVAL>
+              <EVENT>
+                <TIMING-EVENT>
+                  <PERIOD>0.01</PERIOD>
+                </TIMING-EVENT>
+              </EVENT>
+            </RUNNABLE-ENTITY>
+            <RUNNABLE-ENTITY>
+              <SHORT-NAME>CanIf_MainFunction</SHORT-NAME>
+              <SYMBOL>CanIf_MainFunction</SYMBOL>
+              <MINIMUM-START-INTERVAL>1.0</MINIMUM-START-INTERVAL>
+              <EVENT>
+                <TIMING-EVENT>
+                  <PERIOD>0.01</PERIOD>
+                </TIMING-EVENT>
+              </EVENT>
+            </RUNNABLE-ENTITY>
+          </SWC-INTERNAL-BEHAVIOR>
+        </APPLICATION-SW-COMPONENT-TYPE>
+
+        <!-- =============================================================
+             ComplexDeviceDriverSwComponentType: CanSm (CAN State Manager)
+             ============================================================= -->
+        <COMPLEX-DEVICE-DRIVER-SW-COMPONENT-TYPE UUID="b2c3d4e5-f6a7-8901-bcde-f12345678901">
+          <SHORT-NAME>CanSm</SHORT-NAME>
+          <PORT-PROTOTYPE>
+            <SHORT-NAME>CanSmState</SHORT-NAME>
+            <REQUIRED-INTERFACE>
+              <PORT-INTERFACE-REF>
+                /CanStack/Interfaces/CanSmStateInterface
+              </PORT-INTERFACE-REF>
+            </REQUIRED-INTERFACE>
+          </PORT-PROTOTYPE>
+          <PORT-PROTOTYPE>
+            <SHORT-NAME>CanSmControl</SHORT-NAME>
+            <PROVIDED-INTERFACE>
+              <PORT-INTERFACE-REF>
+                /CanStack/Interfaces/CanSmControlInterface
+              </PORT-INTERFACE-REF>
+            </PROVIDED-INTERFACE>
+          </PORT-PROTOTYPE>
+          <SWC-INTERNAL-BEHAVIOR>
+            <SHORT-NAME>CanSmBehavior</SHORT-NAME>
+            <RUNNABLE-ENTITY>
+              <SHORT-NAME>CanSm_MainFunction</SHORT-NAME>
+              <SYMBOL>CanSm_MainFunction</SYMBOL>
+              <MINIMUM-START-INTERVAL>5.0</MINIMUM-START-INTERVAL>
+              <EVENT>
+                <TIMING-EVENT>
+                  <PERIOD>0.005</PERIOD>
+                </TIMING-EVENT>
+              </EVENT>
+            </RUNNABLE-ENTITY>
+            <RUNNABLE-ENTITY>
+              <SHORT-NAME>CanSm_StateChange</SHORT-NAME>
+              <SYMBOL>CanSm_StateChange</SYMBOL>
+              <CAN-BE-INVOKED-CONCURRENTLY>false</CAN-BE-INVOKED-CONCURRENTLY>
+              <DATA-READ-ACCESS>
+                <TARGET>/CanStack/SwcComponents/CanSm/CanSmState</TARGET>
+              </DATA-READ-ACCESS>
+              <DATA-WRITE-ACCESS>
+                <TARGET>/CanStack/SwcComponents/CanSm/CanSmControl</TARGET>
+              </DATA-WRITE-ACCESS>
+            </RUNNABLE-ENTITY>
+          </SWC-INTERNAL-BEHAVIOR>
+        </COMPLEX-DEVICE-DRIVER-SW-COMPONENT-TYPE>
+
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGE>
+</AUTOSAR>
