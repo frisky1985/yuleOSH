@@ -84,7 +84,7 @@ jobs:
           python -c "import subprocess,sys; subprocess.run([sys.executable,'-m','coverage','run','--source=yuleosh','-m','pytest','tests/','-q',*'$E2E_IGNORES'.split(),'-x','--tb=short']); r2=subprocess.run([sys.executable,'-m','coverage','report','--fail-under=50']); sys.exit(r2.returncode)"
 
     - name: Upload bandit SARIF
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always()
       with:
         sarif_file: bandit-results.sarif
