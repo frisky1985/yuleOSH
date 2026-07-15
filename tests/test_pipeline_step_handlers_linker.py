@@ -470,8 +470,8 @@ class TestCheckHeapStackOverlap:
            WHEN _check_heap_stack_overlap runs
            THEN it warns about overlap risk."""
         content = """
-        .heap : { *(.heap*) } > RAM
-        .stack : { *(.stack*) } > RAM
+        .heap : { *(.heap*) } >RAM
+        .stack : { *(.stack*) } >RAM
         """
         f = _create_file(tmp_path, "linker.ld", content)
         findings = _check_heap_stack_overlap(content, f)
@@ -482,8 +482,8 @@ class TestCheckHeapStackOverlap:
            WHEN _check_heap_stack_overlap runs
            THEN it reports no overlap risk."""
         content = """
-        .heap : { *(.heap*) } > RAM
-        .stack : { *(.stack*) } > ITCM
+        .heap : { *(.heap*) } >RAM
+        .stack : { *(.stack*) } >ITCM
         """
         f = _create_file(tmp_path, "linker.ld", content)
         findings = _check_heap_stack_overlap(content, f)

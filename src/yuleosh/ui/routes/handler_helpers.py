@@ -21,6 +21,7 @@ import urllib.parse
 from pathlib import Path
 
 from yuleosh.ui.routes.helpers import (
+    _add_cors_header,
     _compute_etag,
     _format_http_datetime,
     _parse_http_datetime,
@@ -44,7 +45,7 @@ def rate_limit_check(handler) -> bool:
         handler.send_header("Content-Type", "application/json")
         handler.send_header("Retry-After", str(retry_after))
         _send_security_headers(handler)
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(handler)
         handler.send_header("X-RateLimit-Remaining", "0")
         handler.end_headers()
         handler.wfile.write(json.dumps({
@@ -195,7 +196,7 @@ def handle_delete(handler) -> None:
 def handle_options(handler) -> None:
     """Serve OPTIONS preflight response."""
     handler.send_response(204)
-    handler.send_header("Access-Control-Allow-Origin", "*")
+    _add_cors_header(handler)
     _send_security_headers(handler)
     handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")

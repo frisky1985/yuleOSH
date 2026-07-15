@@ -1,0 +1,173 @@
+# =============================================================================
+# Semgrep — C/C++ Security Rules (嵌入式/汽车安全)
+# Tags: yuleosh, embedded, automotive, c, cpp
+# =============================================================================
+
+rules:
+  # ---------- Buffer Overflow ----------
+  - id: yuleosh-gets-use
+    pattern: gets($BUF)
+    message: "Buffer overflow: gets() has no bounds checking. Use fgets() or getline()."
+    severity: ERROR
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-242"
+      misra: "MISRA C:2012 21.6"
+
+  - id: yuleosh-strcpy
+    pattern-either:
+      - pattern: strcpy($DST, $SRC)
+      - pattern: strcat($DST, $SRC)
+    message: "Buffer overflow risk: strcpy/strcat with no bounds checking. Use strncpy/strncat or snprintf."
+    severity: ERROR
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-121"
+      misra: "MISRA C:2012 21.7"
+
+  - id: yuleosh-sprintf
+    pattern-either:
+      - pattern: sprintf($BUF, $FMT, $ARGS)
+      - pattern: vsprintf($BUF, $FMT, $ARGS)
+    message: "Buffer overflow risk: sprintf/vsprintf with no bounds check. Use snprintf/vsnprintf."
+    severity: ERROR
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-120"
+
+  - id: yuleosh-scanf-bounds
+    patterns:
+      - pattern: scanf($FMT, $BUF)
+      - metavariable-regex:
+          metavariable: $FMT
+          regex: '^%"'
+    message: "Buffer overflow risk: scanf with no width limit. Use scanf(\"%Ns\", buf) with explicit width."
+    severity: ERROR
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-120"
+
+  - id: yuleosh-memcpy-unsafe
+    patterns:
+      - pattern: memcpy($DST, $SRC, $SIZE)
+      - metavariable-regex:
+          metavariable: $SIZE
+          regex: '^[0-9]+$'
+    message: "Verify memcpy($DST, $SRC, $SIZE): destination must be >= $SIZE bytes."
+    severity: WARNING
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-805"
+
+  # ---------- Integer Issues ----------
+  - id: yuleosh-integer-overflow
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = $A + $B
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: '.*(len|size|count|index|offset).*'
+      - metavariable-regex:
+          metavariable: $B
+          regex: '.*(input|arg|param|user|recv|read).*'
+    message: "Potential integer overflow: arithmetic with user-controlled size variable."
+    severity: WARNING
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-190"
+      misra: "MISRA C:2012 10.3"
+
+  # ---------- Memory Management ----------
+  - id: yuleosh-double-free
+    pattern: free($X)
+    message: "Found free() call. CodeQL will handle cross-function double-free analysis."
+    severity: WARNING
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-415"
+
+  - id: yuleosh-null-deref
+    pattern-either:
+      - pattern: malloc($SIZE)
+    message: "Found malloc(). Verify NULL check before dereferencing (MISRA C:2012 22.1)."
+    severity: WARNING
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-476"
+      misra: "MISRA C:2012 22.1"
+
+  # ---------- Format String ----------
+  - id: yuleosh-format-string
+    patterns:
+      - pattern: printf($FMT)
+      - metavariable-regex:
+          metavariable: $FMT
+          regex: '^[A-Za-z_][A-Za-z0-9_]*$'
+    message: "Format string vulnerability: user string as format argument. Use printf(\"%s\", str)."
+    severity: ERROR
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-134"
+
+  # ---------- Automotive / Embedded Specific ----------
+  - id: yuleosh-embedded-hal-return
+    pattern-regex: 'return\s+\(\s*(void|uint8_t|uint16_t)\s*\*\s*\)'
+    message: "Verify return value type matches function signature (embedded hardware layer)."
+    severity: WARNING
+    languages: [c, cpp]
+    metadata:
+      category: embedded
+
+  - id: yuleosh-return-stack-addr
+    pattern: return &$VAR
+    message: "Returning address of stack-local variable. Undefined behavior."
+    severity: ERROR
+    languages: [c, cpp]
+    metadata:
+      category: security
+      cwe: "CWE-562"
+
+  # ---------- MISRA C:2012 Style ----------
+  - id: yuleosh-misra-assign-in-condition
+    pattern: if ($X = $V)
+    message: "Assignment in condition (MISRA C:2012 13.4). Did you mean == ?"
+    severity: WARNING
+    languages: [c, cpp]
+    metadata:
+      category: misra
+      misra: "MISRA C:2012 13.4"
+
+  - id: yuleosh-misra-magic-number
+    pattern-either:
+      - patterns:
+          - pattern: if ($X == $NUM)
+          - metavariable-regex:
+              metavariable: $NUM
+              regex: '^[0-9]+$'
+          - metavariable-regex:
+              metavariable: $NUM
+              regex: '^(?![01]$).*'
+    message: "Magic number in comparison. Use named constant (MISRA C:2012 5.1)."
+    severity: INFO
+    languages: [c, cpp]
+    metadata:
+      category: misra
+      misra: "MISRA C:2012 5.1"
+
+  - id: yuleosh-misra-goto
+    pattern-regex: '\bgoto\b'
+    message: "Use of goto (MISRA C:2012 15.1). Use structured control flow instead."
+    severity: WARNING
+    languages: [c, cpp]
+    metadata:
+      category: misra
+      misra: "MISRA C:2012 15.1"

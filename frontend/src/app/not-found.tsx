@@ -13,9 +13,7 @@ export default function NotFound() {
         </p>
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm
-            bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white
-            hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 shadow-lg shadow-[#722ed1]/20 transition-all"
         >
           返回 Dashboard
         </Link>

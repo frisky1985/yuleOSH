@@ -193,20 +193,51 @@ class ReportBuilderMixin:
         return str(output_path)
 
     def aggregate_review_logs(self) -> str:
-        """Aggregate review logs into a markdown summary + JSON export."""
+        """Aggregate review logs into a markdown summary + JSON export.
+
+        Handles both the legacy review-session.json format (with
+        task/decision/reviews) and the newer flat format (with
+        review_type/status/findings/summary/agent).  Raw review JSON
+        files are also copied to a reviews/ subdirectory in the
+        evidence output for audit traceability.
+        """
         status_icon = {"passed": "✅", "failed": "❌", "retry": "🔄", "running": "⏳"}
         lines = []
+
         for r in self.reviews:
-            lines.append(f"## Task: {r.get('task', 'N/A')}")
-            lines.append(f"- Decision: {r.get('decision', 'N/A')}")
-            lines.append(f"- Created: {r.get('created_at', 'N/A')}")
-            lines.append(f"- Reviews ({len(r.get('reviews', []))} agents):")
-            for rev in r.get("reviews", []):
-                icon = status_icon.get(rev.get("status", ""), "❓")
-                findings = rev.get("finding_breakdown", {})
-                lines.append(f"  {icon} {rev.get('reviewer', 'N/A')}: {rev.get('status', 'N/A')} "
-                           f"(C:{findings.get('critical',0)} M:{findings.get('major',0)} m:{findings.get('minor',0)})")
-                lines.append(f"    Summary: {rev.get('summary', 'N/A')}")
+            if "task" in r:
+                # Legacy format: task/decision/reviews
+                lines.append(f"## Task: {r.get('task', 'N/A')}")
+                lines.append(f"- Decision: {r.get('decision', 'N/A')}")
+                lines.append(f"- Created: {r.get('created_at', 'N/A')}")
+                lines.append(f"- Reviews ({len(r.get('reviews', []))} agents):")
+                for rev in r.get("reviews", []):
+                    icon = status_icon.get(rev.get("status", ""), "❓")
+                    findings = rev.get("finding_breakdown", {})
+                    lines.append(f"  {icon} {rev.get('reviewer', 'N/A')}: {rev.get('status', 'N/A')} "
+                               f"(C:{findings.get('critical',0)} M:{findings.get('major',0)} "
+                               f"m:{findings.get('minor',0)})")
+                    lines.append(f"    Summary: {rev.get('summary', 'N/A')}")
+            else:
+                # New flat format: review_type/status/findings/summary/agent
+                review_type = r.get("review_type", "unknown")
+                status = r.get("status", "unknown")
+                agent = r.get("agent", "N/A")
+                icon = status_icon.get(status, "❓")
+                lines.append(f"## {icon} Review: {review_type.upper()}")
+                lines.append(f"- Status: {status}")
+                lines.append(f"- Agent: {agent}")
+                lines.append(f"- Generated: {r.get('generated_at', 'N/A')}")
+                lines.append(f"- Build: {r.get('build_id', 'N/A')}")
+                lines.append(f"- Summary: {r.get('summary', 'N/A')}")
+                findings = r.get("findings", [])
+                if findings:
+                    lines.append(f"- Findings ({len(findings)}):")
+                    for f_item in findings:
+                        sev = f_item.get("severity", "info")
+                        sev_icon = {"critical": "🔴", "major": "🟡", "minor": "🔵", "info": "ℹ️"}.get(sev, "❓")
+                        lines.append(f"  {sev_icon} [{sev}] {f_item.get('file', '?')}:{f_item.get('line', '?')} "
+                                   f"- {f_item.get('message', '')}")
             lines.append("")
 
         content = "\n".join(lines)
@@ -216,6 +247,23 @@ class ReportBuilderMixin:
         json_path = self.evidence_dir / "review-log.json"
         with open(json_path, "w") as f:
             json.dump(self.reviews, f, indent=2, ensure_ascii=False)
+
+        # ── Copy raw review JSON files to evidence/reviews/ subdir ──
+        raw_reviews_dir = self.evidence_dir / "reviews"
+        raw_reviews_dir.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        rev_dir = Path(self.project_dir) / ".osh" / "evidence" / "reviews"
+        if rev_dir.exists():
+            for f in sorted(rev_dir.rglob("*.json")):
+                dest = raw_reviews_dir / f.name
+                # Avoid overwriting collisions by prepending subdir name
+                if dest.exists():
+                    dest = raw_reviews_dir / f"{f.parent.name}-{f.name}"
+                import shutil
+                shutil.copy2(str(f), str(dest))
+                copied += 1
+        if copied:
+            print(f"  📁 Copied {copied} raw review file(s) to {raw_reviews_dir}")
 
         print(f"  ✅ Review logs aggregated: {output_path}")
         return str(output_path)

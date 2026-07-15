@@ -92,8 +92,12 @@ def run_c_coverage(project_dir: str, ci: CIResult) -> bool:
         # Last resort: recursive search for any .gcda file in project_dir
         log.info("No build dir found in known paths — scanning project recursively for .gcda files...")
         for root, dirs, files in os.walk(project_dir):
-            # Skip hidden directories
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            # Skip hidden directories and large non-C dep dirs
+            _SKIP_COVERAGE = {"node_modules", "venv", ".venv", "vendor",
+                              "third_party", "__pycache__", ".git", ".cache",
+                              ".go", "target", ".build", "dist", ".tox"}
+            dirs[:] = [d for d in dirs
+                       if not d.startswith(".") and d not in _SKIP_COVERAGE]
             if any(f.endswith(".gcda") for f in files):
                 build_dir = root
                 log.info("Found .gcda files in: %s", root)

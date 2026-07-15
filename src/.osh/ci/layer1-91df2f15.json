@@ -1,0 +1,87 @@
+{
+  "layer": 1,
+  "commit": "91df2f15",
+  "status": "failed",
+  "started_at": "2026-07-10T13:11:55.691213",
+  "completed_at": "2026-07-10T13:12:06.887936",
+  "stages": [
+    {
+      "name": "yaml-validation",
+      "status": "failed",
+      "detail": "[ci-config] File not found: /Users/stefan/.openclaw/workspace/tasks/yuleOSH/src/.yuleosh/ci-config.yaml; [misra-rules] File not found: /Users/stefan/.openclaw/workspace/tasks/yuleOSH/src/misra-rules.yaml",
+      "timestamp": "2026-07-10T13:11:55.693002"
+    },
+    {
+      "name": "spec-validation",
+      "status": "warning",
+      "detail": "Project spec (docs/spec.md); MISRA acceptance matrix (specs/misra-acceptance-matrix.md)",
+      "timestamp": "2026-07-10T13:11:55.693116"
+    },
+    {
+      "name": "architecture-review",
+      "status": "warning",
+      "detail": "Missing docs: docs/positioning-unified.md, docs/spec.md",
+      "timestamp": "2026-07-10T13:11:55.693179"
+    },
+    {
+      "name": "requirements-trace",
+      "status": "passed",
+      "detail": "0 reqs, 0 modules, 0 tests (ratio 0.0%)",
+      "timestamp": "2026-07-10T13:11:55.693374"
+    },
+    {
+      "name": "plan-lint",
+      "status": "skipped",
+      "detail": "No task/plan files found",
+      "timestamp": "2026-07-10T13:11:55.697930"
+    },
+    {
+      "name": "docsync-gate",
+      "status": "warning",
+      "detail": "Sync gate: warning | 3 total, 0 error(s), 0 warning(s)",
+      "timestamp": "2026-07-10T13:11:55.711078"
+    },
+    {
+      "name": "clang-tidy",
+      "status": "skipped",
+      "detail": "No C/C++ files found",
+      "timestamp": "2026-07-10T13:11:55.711119"
+    },
+    {
+      "name": "misra-check",
+      "status": "skipped",
+      "detail": "No C/C++ source files found",
+      "timestamp": "2026-07-10T13:11:55.763278"
+    },
+    {
+      "name": "unit-tests",
+      "status": "failed",
+      "detail": "yuleosh/pipeline/step_handlers/test_c_unit.py: \nERROR: Coverage failure: total of 4 is less than fail-under=24\n\n================================ tests coverage ================================\n______________ coverage: platform darwin, python 3.13.",
+      "timestamp": "2026-07-10T13:12:06.360053"
+    },
+    {
+      "name": "coverage",
+      "status": "failed",
+      "detail": "coverage run returned non-zero (1): ERROR: file or directory not found: tests/\n\nTraceback (most recent call last):\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/coverage/cmdline.py\", line 1056, ",
+      "timestamp": "2026-07-10T13:12:06.882788"
+    },
+    {
+      "name": "c-coverage",
+      "status": "skipped",
+      "detail": "No build directory with coverage data found",
+      "timestamp": "2026-07-10T13:12:06.887759"
+    },
+    {
+      "name": "c-coverage-gate",
+      "status": "skipped",
+      "detail": "No C coverage report at .yuleosh/reports/c-coverage.json",
+      "timestamp": "2026-07-10T13:12:06.887878"
+    }
+  ],
+  "coverage": null,
+  "errors": [
+    "yaml-validation failed",
+    "unit-tests failed",
+    "coverage failed"
+  ]
+}

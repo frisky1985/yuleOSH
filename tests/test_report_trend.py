@@ -51,6 +51,22 @@ def test_load_jsonl_partial_invalid(tmp_path):
     assert len(result) == 2
 
 
+def test_load_jsonl_with_blank_lines(tmp_path):
+    """GIVEN JSONL with blank lines WHEN loading THEN skips blanks."""
+    p = tmp_path / "blanks.jsonl"
+    p.write_text('{"a": 1}\n\n{"a": 2}\n   \n')
+    result = _load_jsonl(p)
+    assert len(result) == 2
+
+
+def test_load_jsonl_oserror(tmp_path):
+    """GIVEN path that raises OSError WHEN loading THEN returns empty list."""
+    p = tmp_path / "subdir"
+    p.mkdir()
+    result = _load_jsonl(p)
+    assert result == []
+
+
 # ------------------------------------------------------------------
 # _safe_float / _safe_int
 # ------------------------------------------------------------------
@@ -96,6 +112,15 @@ def test_normalize_timestamp_unix():
     assert isinstance(result, str)
 
 
+def test_normalize_timestamp_datetime():
+    """GIVEN datetime object WHEN normalizing THEN returns ISO string."""
+    from datetime import datetime
+    dt = datetime(2026, 7, 10, 12, 0, 0)
+    result = _normalize_timestamp(dt)
+    assert isinstance(result, str)
+    assert "2026" in result
+
+
 def test_normalize_timestamp_empty():
     """GIVEN empty string WHEN normalizing THEN returns empty."""
     result = _normalize_timestamp("")
@@ -125,3 +150,21 @@ def test_export_trend_for_project_empty(tmp_path):
     """GIVEN empty project WHEN exporting trend THEN returns dict."""
     result = export_trend_for_project(str(tmp_path), "misra")
     assert isinstance(result, dict)
+
+
+def test_export_trend_for_project_unsupported(tmp_path):
+    """GIVEN unsupported type WHEN exporting trend THEN returns None."""
+    result = export_trend_for_project(str(tmp_path), "invalid")
+    assert result is None
+
+
+def test_export_ut_trend_with_files_measured(tmp_path):
+    """GIVEN old format with files_measured WHEN exporting THEN uses fallback."""
+    reports_dir = tmp_path / ".yuleosh" / "reports"
+    reports_dir.mkdir(parents=True)
+    (reports_dir / "coverage-trend.jsonl").write_text(
+        '{"timestamp":"2026-01-01","c":{},"line_coverage":80.0,"branch_coverage":70.0,"files_measured":15}\n'
+    )
+    result = export_ut_trend(str(tmp_path))
+    assert result["total_entries"] == 1
+    assert result["history"][0]["total_files"] == 15

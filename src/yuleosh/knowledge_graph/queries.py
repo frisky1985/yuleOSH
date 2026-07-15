@@ -72,11 +72,26 @@ def trace_by_req_id(store: KGStore, req_id: str, include_tests: bool = True,
     result_nodes = [n for n in nodes if n.id != req_node.id]
     result_edges = [e for e in edges]
 
-    return {
+    # Add confidence field to each edge and check for low-confidence chain
+    edge_dicts = []
+    has_low_confidence = False
+    for e in result_edges:
+        ed = e.to_dict()
+        confidence = e.properties.get("confidence", 1.0)
+        ed["confidence"] = confidence
+        if confidence < 0.8:
+            has_low_confidence = True
+        edge_dicts.append(ed)
+
+    result = {
         "source_node": req_node.to_dict(),
         "nodes": [n.to_dict() for n in result_nodes],
-        "edges": [e.to_dict() for e in result_edges],
+        "edges": edge_dicts,
     }
+    if has_low_confidence:
+        result["low_confidence_warning"] = True
+
+    return result
 
 
 def trace_by_file_path(store: KGStore, file_path: str) -> Optional[dict]:
@@ -89,11 +104,26 @@ def trace_by_file_path(store: KGStore, file_path: str) -> Optional[dict]:
 
     nodes, edges = store.trace_upstream(file_node.id, max_depth=4)
 
-    return {
+    # Add confidence field to each edge and check for low-confidence chain
+    edge_dicts = []
+    has_low_confidence = False
+    for e in edges:
+        ed = e.to_dict()
+        confidence = e.properties.get("confidence", 1.0)
+        ed["confidence"] = confidence
+        if confidence < 0.8:
+            has_low_confidence = True
+        edge_dicts.append(ed)
+
+    result = {
         "source_node": file_node.to_dict(),
         "nodes": [n.to_dict() for n in nodes if n.id != file_node.id],
-        "edges": [e.to_dict() for e in edges],
+        "edges": edge_dicts,
     }
+    if has_low_confidence:
+        result["low_confidence_warning"] = True
+
+    return result
 
 
 def trace_by_test_function(store: KGStore, test_fqn: str) -> Optional[dict]:
@@ -109,11 +139,26 @@ def trace_by_test_function(store: KGStore, test_fqn: str) -> Optional[dict]:
 
     nodes, edges = store.trace_upstream(tf_node.id, max_depth=4)
 
-    return {
+    # Add confidence field to each edge and check for low-confidence chain
+    edge_dicts = []
+    has_low_confidence = False
+    for e in edges:
+        ed = e.to_dict()
+        confidence = e.properties.get("confidence", 1.0)
+        ed["confidence"] = confidence
+        if confidence < 0.8:
+            has_low_confidence = True
+        edge_dicts.append(ed)
+
+    result = {
         "source_node": tf_node.to_dict(),
         "nodes": [n.to_dict() for n in nodes if n.id != tf_node.id],
-        "edges": [e.to_dict() for e in edges],
+        "edges": edge_dicts,
     }
+    if has_low_confidence:
+        result["low_confidence_warning"] = True
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -171,6 +216,7 @@ def impact_analysis(store: KGStore, changed_files: list[str],
                         "req_id": target.entity_id,
                         "label": target.label,
                         "confidence": "implements",
+                        "confidence_score": edge.properties.get("confidence", 1.0),
                     }
 
         # For each test function, find its parent test file and requirements
@@ -198,6 +244,7 @@ def impact_analysis(store: KGStore, changed_files: list[str],
                                 "req_id": src2.entity_id,
                                 "label": src2.label,
                                 "confidence": "via_coverage",
+                                "confidence_score": e2.properties.get("confidence", 1.0),
                             }
 
         # ── Path B: Direct test_file coverage (from RTM data)
@@ -216,6 +263,7 @@ def impact_analysis(store: KGStore, changed_files: list[str],
                         "req_id": source.entity_id,
                         "label": source.label,
                         "confidence": "direct",
+                        "confidence_score": edge.properties.get("confidence", 1.0),
                     }
 
         # ── Path C: Direct covers from code_file to requirement
@@ -230,11 +278,18 @@ def impact_analysis(store: KGStore, changed_files: list[str],
                         "req_id": target.entity_id,
                         "label": target.label,
                         "confidence": "direct",
+                        "confidence_score": edge.properties.get("confidence", 1.0),
                     }
 
     total_affected_tests = sum(len(funcs) for funcs in affected_tests.values())
 
-    return {
+    # Check for low confidence in affected reqs
+    has_low_confidence = any(
+        r.get("confidence_score", 1.0) < 0.8
+        for r in affected_reqs.values()
+    )
+
+    result = {
         "affected_reqs": list(affected_reqs.values()),
         "affected_tests": [
             {"file": tf, "functions": funcs}
@@ -247,6 +302,10 @@ def impact_analysis(store: KGStore, changed_files: list[str],
             f"{len(affected_functions)} code functions affected"
         ),
     }
+    if has_low_confidence:
+        result["low_confidence_warning"] = True
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -282,9 +341,9 @@ def get_graph_stats(store: KGStore) -> dict:
 def get_aspice_coverage(store: KGStore) -> dict:
     """Return an ASPICE coverage summary broken down by test layer.
 
-    Iterates all 'covers' edges and groups them by the ``layer``
-    property ("unit" / "integration" / "sil" / "hil" / "system").
-    For each layer, reports the count of edges and the distinct
+    Uses a single SQL JOIN query (instead of loading all edges into Python
+    memory + per-edge node lookups). For each test layer (unit/integration/
+    sil/hil/system), reports the count of covers edges and the distinct
     set of test files involved.
 
     Returns:
@@ -296,48 +355,61 @@ def get_aspice_coverage(store: KGStore) -> dict:
             "system": {"total_covers": N, "files": [...]},
         }
     """
-    import collections
+    import json
 
-    # Predefined layers — order matters for the report
     layer_names = ["unit", "integration", "sil", "hil", "system"]
     report: dict[str, dict] = {
         ln: {"total_covers": 0, "files": []} for ln in layer_names
     }
-    report["_unknown"] = {"total_covers": 0, "files": []}
-
     seen_files_by_layer: dict[str, set[str]] = {
         ln: set() for ln in layer_names
     }
-    seen_files_by_layer["_unknown"] = set()
 
-    covers_edges = store.list_edges(edge_type="covers")
-    for edge in covers_edges:
-        layer = edge.properties.get("layer") or "_unknown"
+    # Single SQL query: JOIN covers edges with target nodes
+    # Extract file path from target node based on entity_type
+    # and extract layer from edge.properties JSON
+    cur = store.conn.execute("""
+        SELECT
+            json_extract(e.properties, '$.layer') AS layer,
+            t.entity_type AS target_type,
+            t.entity_id   AS target_eid,
+            t.properties  AS target_props,
+            COUNT(*)      AS cnt
+        FROM kg_edges e
+        JOIN kg_nodes t ON t.id = e.target_id
+        WHERE e.edge_type = 'covers'
+        GROUP BY layer, t.entity_type, t.entity_id, t.properties
+        ORDER BY layer
+    """)
+
+    for row in cur:
+        layer = row["layer"] or "_unknown"
+        target_type = row["target_type"]
+        target_eid = row["target_eid"]
+        target_props = json.loads(row["target_props"]) if isinstance(row["target_props"], str) else (row["target_props"] or {})
+        cnt = row["cnt"]
 
         if layer not in report:
             report[layer] = {"total_covers": 0, "files": []}
             seen_files_by_layer[layer] = set()
 
-        report[layer]["total_covers"] += 1
+        report[layer]["total_covers"] += cnt
 
-        # Resolve target to get file path
-        target_node = store.get_node_by_id(edge.target_id)
-        if target_node:
-            if target_node.entity_type == "test_file":
-                fpath = target_node.entity_id
-            elif target_node.entity_type == "test_function":
-                fpath = target_node.properties.get("file_path", "") \
-                        or target_node.entity_id.split("::")[0]
-            else:
-                fpath = str(target_node.entity_id)
-            if fpath:
-                seen_files_by_layer[layer].add(fpath)
+        # Resolve file path from target node
+        if target_type == "test_file":
+            fpath = target_eid
+        elif target_type == "test_function":
+            fpath = target_props.get("file_path", "") or target_eid.split("::")[0]
+        else:
+            fpath = str(target_eid)
+        if fpath:
+            seen_files_by_layer[layer].add(fpath)
 
     for ln in layer_names:
         report[ln]["files"] = sorted(seen_files_by_layer[ln])
 
     # Clean up _unknown if empty
-    if report["_unknown"]["total_covers"] == 0:
+    if "_unknown" in report and report["_unknown"]["total_covers"] == 0:
         del report["_unknown"]
 
     return report
@@ -346,7 +418,8 @@ def get_aspice_coverage(store: KGStore) -> dict:
 def get_confirmation_trace(store: KGStore) -> list[dict]:
     """返回所有 validates 边的完整确认追溯链路（P0-5 SWE.5 确认）。
 
-    遍历每条 validates 边，解析出 source 和 target 节点的完整信息。
+    Uses a single SQL JOIN query instead of iterating edges + per-edge
+    node lookups (optimized for 100K+ node graphs).
 
     Returns:
         list of dicts, each with:
@@ -355,18 +428,69 @@ def get_confirmation_trace(store: KGStore) -> list[dict]:
           - target: target node info (entity_type, entity_id, label)
           - layer: test layer (integration/sil/hil/system)
     """
-    validates_edges = store.list_edges(edge_type="validates")
+    cur = store.conn.execute("""
+        SELECT
+            e.source_id,
+            e.target_id,
+            e.edge_type,
+            e.properties,
+            e.build_id,
+            json_extract(e.properties, '$.layer') AS layer,
+            e.created_at,
+            e.updated_at,
+            -- Source node
+            s.entity_type AS s_type,
+            s.entity_id   AS s_eid,
+            s.label       AS s_label,
+            s.properties  AS s_props,
+            s.is_active   AS s_active,
+            s.created_at  AS s_created,
+            s.updated_at  AS s_updated,
+            -- Target node
+            t.entity_type AS t_type,
+            t.entity_id   AS t_eid,
+            t.label       AS t_label,
+            t.properties  AS t_props,
+            t.is_active   AS t_active,
+            t.created_at  AS t_created,
+            t.updated_at  AS t_updated
+        FROM kg_edges e
+        JOIN kg_nodes s ON s.id = e.source_id
+        JOIN kg_nodes t ON t.id = e.target_id
+        WHERE e.edge_type = 'validates'
+        ORDER BY e.id
+    """)
+
+    import json
     result = []
-    for edge in validates_edges:
-        source_node = store.get_node_by_id(edge.source_id)
-        target_node = store.get_node_by_id(edge.target_id)
-        if source_node is None or target_node is None:
-            continue
+    for row in cur:
+        source_dict = {
+            "id": row["source_id"],
+            "entity_type": row["s_type"],
+            "entity_id": row["s_eid"],
+            "label": row["s_label"],
+            "properties": json.loads(row["s_props"]) if isinstance(row["s_props"], str) else (row["s_props"] or {}),
+            "is_active": bool(row["s_active"]),
+            "created_at": row["s_created"],
+            "updated_at": row["s_updated"],
+        }
+        target_dict = {
+            "id": row["target_id"],
+            "entity_type": row["t_type"],
+            "entity_id": row["t_eid"],
+            "label": row["t_label"],
+            "properties": json.loads(row["t_props"]) if isinstance(row["t_props"], str) else (row["t_props"] or {}),
+            "is_active": bool(row["t_active"]),
+            "created_at": row["t_created"],
+            "updated_at": row["t_updated"],
+        }
+        edge_props = json.loads(row["properties"]) if isinstance(row["properties"], str) else (row["properties"] or {})
         result.append({
-            "edge_type": edge.edge_type,
-            "source": source_node.to_dict(),
-            "target": target_node.to_dict(),
-            "layer": edge.layer or edge.properties.get("layer"),
-            "properties": edge.properties,
+            "edge_type": row["edge_type"],
+            "source": source_dict,
+            "target": target_dict,
+            "layer": row["layer"],
+            "properties": edge_props,
         })
+
     return result

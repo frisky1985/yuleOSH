@@ -272,14 +272,13 @@ class TestMisraParsing:
         from yuleosh.ci.misra_report.core import parse_cppcheck_output
 
         cppcheck_out = (
-            "src/main.c:42:5: style: misra-c2023-10.1: "
-            "[misra-c2012-10.1] Operands shall not be of inappropriate type\n"
+            "[src/main.c:42:5] (style) Operands shall not be of inappropriate type [misra-c2012-10.1]\n"
         )
         violations = parse_cppcheck_output(cppcheck_out)
         assert len(violations) >= 1
         v = violations[0]
         assert v["file"] == "src/main.c"
-        assert v["rule_id"] == "misra-c2023-10.1"
+        assert v["rule_id"] == "10.1"
 
     def test_parse_cppcheck_output_no_violations(self):
         """GIVEN empty cppcheck output WHEN parsed THEN returns empty list."""
@@ -300,25 +299,25 @@ class TestMisraParsing:
         from yuleosh.ci.misra_report.core import group_by_rule
 
         violations = [{
-            "rule_id": "misra-c2023-10.1",
+            "rule_id": "10.1",
             "file": "test.c",
             "line": 42,
             "severity": "warning",
         }]
         groups = group_by_rule(violations)
-        assert "misra-c2023-10.1" in groups
-        assert groups["misra-c2023-10.1"]["count"] == 1
+        assert "10.1" in groups
+        assert len(groups["10.1"]) == 1
 
     def test_compute_summary_stats_basic(self):
         """GIVEN violations+groups WHEN compute_summary_stats THEN returns stats."""
         from yuleosh.ci.misra_report.core import compute_summary_stats
 
-        violations = [{"rule_id": "misra-c2023-10.1", "file": "test.c"}]
-        groups = {"misra-c2023-10.1": {"count": 1, "severity_category": "required", "rule_id": "10.1"}}
+        violations = [{"rule_id": "10.1", "file": "test.c"}]
+        groups = {"10.1": [{"rule_id": "10.1", "file": "test.c"}]}
 
         stats = compute_summary_stats(violations, groups)
         assert stats["total_violations"] == 1
-        assert stats["total_rules_violated"] == 1
+        assert stats["unique_rules"] == 1
 
     def test_load_rule_definitions(self, tmp_path):
         """GIVEN a misra-rules.yaml WHEN load_rule_definitions THEN returns dict."""
@@ -338,29 +337,23 @@ class TestMisraParsing:
         """GIVEN minimal data WHEN save_report THEN writes JSON/MD files."""
         from yuleosh.ci.misra_report.core import save_report
 
-        violations = [{"rule_id": "misra-c2023-10.1", "file": "test.c", "line": 42, "col": 5, "severity": "warning", "message": "Test MISRA violation", "code_category": "business"}]
-        groups = {"10.1": {"count": 1, "severity_category": "required", "rule_id": "10.1", "files": ["test.c"], "violations": [{"rule_id": "misra-c2023-10.1", "file": "test.c", "line": 42, "col": 5, "severity": "warning", "message": "Test", "code_category": "business"}]}}
-        summary = {"total_violations": 1, "total_rules_violated": 1,
-                    "severity_counts": {"required": 1, "advisory": 0},
-                    "unique_files": ["test.c"], "per_file_counts": {"test.c": 1,
-                    "violations": violations, "groups": groups}}
-        rule_defs = {"version": "1.0", "year": "2023", "rules": {"10.1": {"severity": "Required", "text": "Test", "spec_ref": "SWR-001"}}}
+        violations = [{"rule_id": "10.1", "file": "test.c", "line": 42, "severity": "warning", "message": "Test MISRA violation"}]
+        groups = {"10.1": violations}
+        summary = {"total_violations": 1, "unique_rules": 1,
+                    "by_severity": {"warning": 1}, "by_rule_type": {"required": 1},
+                    "affected_files": 1, "total_source_lines": 0,
+                    "density_per_kloc": 0.0}
+        rule_defs = {"version": "1.0", "year": "2023", "rules": {"10.1": {"severity": "Required", "text": "Test"}}}
 
-        with patch("yuleosh.ci.misra_report.core.generate_traceability_matrix") as mock_tm:
-            mock_tm.return_value = []
-            with patch("yuleosh.evidence.excel_writer.ExcelReportWriter") as mock_excel:
-                mock_excel_instance = MagicMock()
-                mock_excel.return_value = mock_excel_instance
+        json_path, md_path, trace_path, excel_path = save_report(
+            violations, groups, summary, rule_defs,
+            tmp_path,
+        )
+        assert json_path.exists()
+        assert md_path.exists()
 
-                json_path, md_path, trace_path, excel_path = save_report(
-                    violations, groups, summary, rule_defs,
-                    output_dir=tmp_path,
-                )
-                assert json_path.exists()
-                assert md_path.exists()
-
-                report = json.loads(json_path.read_text())
-                assert report["summary"]["total_violations"] == 1
+        report = json.loads(json_path.read_text())
+        assert report["total_violations"] == 1
 
 
 # ═════════════════════════════════════════════════════════════════════════════

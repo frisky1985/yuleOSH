@@ -50,6 +50,11 @@ from yuleosh.pipeline.step_handlers.review_build import step_review_build
 from yuleosh.pipeline.step_handlers.review_power import step_review_power
 from yuleosh.pipeline.step_handlers.review_stack import step_review_stack
 from yuleosh.pipeline.step_handlers.review_mmio import step_review_mmio
+from yuleosh.pipeline.step_handlers.review_critical_safety import step_review_critical_safety
+
+# Fault Injection testing (SWE.5 / SWE.6)
+from yuleosh.pipeline.step_handlers.fault_inject import step_fault_injection
+
 from yuleosh.pipeline.stages import _check_llm_key
 
 
@@ -87,6 +92,8 @@ __all__ = [
     "step_review_memory",
     "step_review_stack",
     "step_review_mmio",
+    "step_review_critical_safety",
+    "step_fault_injection",
     "step_test_qualification",
     "step_c_unit_test",
     "PIPELINE_STEPS",
@@ -161,6 +168,12 @@ PIPELINE_STEPS = [
     ("review-stack", "小克", "堆栈使用分析 (P0/DEF-007)", step_review_stack),
     ("review-mmio", "小克", "MMIO 配置审查 (P0/DEF-008)", step_review_mmio),
 
+    # ── ⛔ P0 CRITICAL GATE: 关键安全异常阻塞检查 ──────
+    ("review-critical-safety", "小明", "关键安全异常阻塞检查 (P0 GATE)", step_review_critical_safety),
+
+
+    # ── SWE.5 / SWE.6: Fault Injection Testing ────
+    ("fault-injection", "小克", "故障注入测试 (SWE.5/SWE.6)", step_fault_injection),
 
     # ── Right side: SWE.6 Qualification Testing ─────
     ("test-qualification", "小明", "合格性测试", step_test_qualification),

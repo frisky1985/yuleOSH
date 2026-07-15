@@ -76,8 +76,9 @@ class TestMisraC2023RuleSet:
         """
         rs = MisraC2023RuleSet.__new__(MisraC2023RuleSet)
         rs._rules_path = Path("/fake/path")
+        rs._backward_compat = {}
         rs._defs = {
-            "meta": {"standard": "MISRA C", "version": "2023", "ruleset_version": "2023.1"},
+            "meta": {"standard": "MISRA C", "version": "2023-preview", "ruleset_version": "2023.1-preview1"},
             "misra-c2023-1.1": {
                 "title": "ISO C standard compliance",
                 "severity": "required",

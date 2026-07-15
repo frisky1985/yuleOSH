@@ -1,0 +1,35 @@
+# Build artifacts
+build/
+*.o
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.s19
+*.mot
+
+# IDE projects
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Coverage
+*.gcda
+*.gcno
+*.gcov
+coverage.info
+coverage/
+
+# yuleOSH artifacts
+.yuleosh/
+.osh/
+__pycache__/
+*.pyc
+.pytest_cache/
