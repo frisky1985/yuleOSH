@@ -9,12 +9,12 @@
     <a href="https://github.com/frisky1985/yuleOSH/actions">
       <img src="https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square" alt="CI">
     </a>
-    <img src="https://img.shields.io/badge/version-1.0.0-blue?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/version-2.2.0-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-%E2%89%A53.10-ff69b4?style=flat-square" alt="Python">
-    <img src="https://img.shields.io/badge/tests-3400%2B%20passing-brightgreen?style=flat-square" alt="Tests">
-    <img src="https://img.shields.io/badge/coverage-11.45%25-red?style=flat-square" alt="Coverage">
-    <img src="https://img.shields.io/badge/ASPICE%20assistance-8A2BE2?style=flat-square" alt="ASPICE assistance">
+    <img src="https://img.shields.io/badge/tests-3600%2B%20passing-brightgreen?style=flat-square" alt="Tests">
+    <img src="https://img.shields.io/badge/KG-11K%20nodes%2F16K%20edges-blueviolet?style=flat-square" alt="KG">
+    <img src="https://img.shields.io/badge/ASPICE%20Review%20R3-85%2F100%20%E2%9C%85-success?style=flat-square" alt="ASPICE R3">
   </p>
 
   <p>
