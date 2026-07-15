@@ -1,0 +1,222 @@
+# =============================================================================
+# Semgrep — Python Security Rules (深度安全分析)
+# Tags: yuleosh, python, security
+#
+# 规则结构说明:
+#   - 顶层用 `patterns:` 包 `pattern-either:` 当需要组合多个条件
+#   - 单一模式直接 `pattern:` 或 `pattern-either:`
+# =============================================================================
+
+rules:
+  # ---------- Injection ----------
+  - id: yuleosh-injection-sql
+    patterns:
+      - pattern-either:
+          - pattern: f"$QUERY $SQL"
+          - pattern: f'$QUERY $SQL'
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: (?i).*(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE).*
+      - pattern-not: f"..."
+    message: "SQL injection risk: string interpolation in SQL query. Use parameterized queries."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-89"
+      owasp: "A1: Injection"
+
+  - id: yuleosh-command-injection
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.call($CMD, ...)
+          - pattern: subprocess.Popen($CMD, ...)
+          - pattern: os.system($CMD)
+          - pattern: os.popen($CMD)
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: '.*f["\''].*\{.*\}.*["\''].*'
+    message: "Command injection risk: user-controlled variables in shell command."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-78"
+      owasp: "A1: Injection"
+
+  - id: yuleosh-eval-exec
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: exec($X)
+      - pattern: compile($X, ...)
+    message: "Arbitrary code execution risk: eval/exec/compile with dynamic input."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-94"
+      owasp: "A1: Injection"
+
+  - id: yuleosh-unsafe-yaml
+    pattern: yaml.load($X)
+    message: "Unsafe YAML deserialization: use yaml.safe_load() instead of yaml.load()."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-502"
+
+  - id: yuleosh-unsafe-pickle
+    pattern: pickle.loads($X)
+    message: "Unsafe deserialization: pickle.loads() can execute arbitrary code."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-502"
+
+  # ---------- Authentication & Secrets ----------
+  - id: yuleosh-hardcoded-secret
+    pattern-regex: '(password|secret|api_key|token|apikey)\s*[:=]\s*["''][^"'']+["'']'
+    message: "Possible hardcoded secret detected. Move to environment variable or secret store."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-798"
+
+  - id: yuleosh-token-print
+    patterns:
+      - pattern-either:
+          - pattern: print($TOKEN)
+          - pattern: logging.info($TOKEN)
+          - pattern: logger.info($TOKEN)
+      - metavariable-regex:
+          metavariable: $TOKEN
+          regex: '(?i).*(token|secret|password|api_key|credential).*'
+    message: "Secret leakage risk: printing/logging sensitive data."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-532"
+
+  # ---------- Path Traversal ----------
+  - id: yuleosh-path-traversal
+    patterns:
+      - pattern-either:
+          - pattern: open($PATH, ...)
+          - pattern: Path($PATH).read_text()
+          - pattern: Path($PATH).read_bytes()
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: '.*f["\''].*\{.*\}.*["\''].*'
+    message: "Path traversal risk: user-controlled path construction. Validate/sanitize input."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-22"
+
+  # ---------- Data Flow: Taint Analysis ----------
+  - id: yuleosh-redirect-to-file
+    patterns:
+      - pattern: redirect($URL)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '.*\{.*\}.*'
+    message: "Open redirect risk: user-controlled redirect destination."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-601"
+
+  - id: yuleosh-unsafe-request-get
+    patterns:
+      - pattern: requests.get($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: '.*\{.*\}.*'
+    message: "SSRF risk: user-controlled URL in request. Validate URL scheme and host."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-918"
+
+  # ---------- Sensitive Data Exposure ----------
+  - id: yuleosh-exception-with-data
+    patterns:
+      - pattern: raise $EXC(...)
+      - metavariable-regex:
+          metavariable: $EXC
+          regex: '.*Exception.*'
+    message: "Check that exceptions don't leak sensitive data (PII, tokens, internal paths)."
+    severity: INFO
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-209"
+
+  # ---------- Insecure Crypto ----------
+  - id: yuleosh-weak-crypto
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.sha1(...)
+      - pattern: Crypto.Cipher.DES.new(...)
+      - pattern: cryptography.hazmat.primitives.ciphers.algorithms.ARC4(...)
+    message: "Weak cryptographic algorithm. Use SHA-256/SHA-512 or AES-256-GCM."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-327"
+
+  - id: yuleosh-ecb-mode
+    pattern: $CIPHER.new(..., AES.MODE_ECB, ...)
+    message: "ECB mode is insecure. Use AES-GCM or AES-CBC with random IV."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-327"
+
+  # ---------- Django/Flask/Web Specific ----------
+  - id: yuleosh-debug-enabled
+    pattern-either:
+      - pattern: app.run(debug=True, ...)
+      - pattern: app.run(..., debug=True)
+    message: "Debug mode enabled in production. Disable debug=True."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+
+  # ---------- Log Forging ----------
+  - id: yuleosh-log-injection
+    patterns:
+      - pattern: logger.info(f"...{$INPUT}...")
+      - metavariable-regex:
+          metavariable: $INPUT
+          regex: '.*(request|input|data|body|param|user).*'
+    message: "Log injection risk: avoid formatting user input directly into log messages."
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-117"
+
+  # ---------- Insecure Default ----------
+  - id: yuleosh-insecure-ssl
+    pattern-either:
+      - pattern: verify=False
+      - pattern: verify_cert=False
+      - pattern: verify_ssl=False
+      - pattern: ssl._create_unverified_context(...)
+    message: "SSL/TLS verification disabled. Enable certificate verification."
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-295"

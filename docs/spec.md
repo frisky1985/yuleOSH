@@ -1,6 +1,6 @@
-# yuleOSH · 一站式 ASPICE 合规开发平台 · 规范文档
+# yuleOSH · 嵌入式软件合规开发自动化平台 · 规范文档
 
-> Version: 1.0.0 | 状态: 发布候选 | 格式: RS-XXX / SWR-XXX 层级
+> Version: 2.2.0 | 状态: 发布候选 | 格式: RS-XXX / SWR-XXX 层级
 >
 > yuleOSH 是由 AI 驱动的 Automotive SPICE 合规开发平台，从需求定义到审计证据包，一站式覆盖嵌入式开发全生命周期。
 

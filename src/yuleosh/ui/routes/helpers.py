@@ -47,12 +47,25 @@ def _send_gzipped_json(handler, data: dict, status: int = 200):
         handler.send_response(status)
         handler.send_header("Content-Type", "application/json")
         handler.send_header("Content-Encoding", "gzip")
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        _add_cors_header(handler)
         handler.send_header("Content-Length", str(len(body_gz)))
         handler.end_headers()
         handler.wfile.write(body_gz)
     else:
         handler._json_response(data, status)
+
+
+def _add_cors_header(handler):
+    """Set Access-Control-Allow-Origin based on request Origin and env.
+
+    Uses yuleosh.api.cors to determine the correct CORS origin.
+    """
+    from yuleosh.api.cors import get_cors_origin
+    request_origin = handler.headers.get("Origin")
+    cors_origin = get_cors_origin(request_origin)
+    handler.send_header("Access-Control-Allow-Origin", cors_origin)
+    if cors_origin != "*":
+        handler.send_header("Vary", "Origin")
 
 
 def _send_security_headers(handler):

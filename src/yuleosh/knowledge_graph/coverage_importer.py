@@ -293,6 +293,7 @@ def import_coverage(store: KGStore, coverage_path: str,
                             l for l in covered_lines
                             if cfn.properties.get("start_line", 0) <= l <= cfn.properties.get("end_line", 0)
                         ),
+                        "confidence": 1.0,
                     },
                 ))
                 verifies_edge_count += 1

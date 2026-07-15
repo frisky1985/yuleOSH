@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 from . import json_ok, json_error
+from yuleosh.api.cors import get_cors_origin
 
 
 def handle_evidence(method: str, path_tail: str, body: dict, query: dict, handler=None):
@@ -82,7 +83,7 @@ def _download_pack(handler) -> tuple[dict, int]:
             'attachment; filename="compliance-pack.zip"',
         )
         handler.send_header("Content-Length", str(len(data)))
-        handler.send_header("Access-Control-Allow-Origin", "*")
+        handler.send_header("Access-Control-Allow-Origin", get_cors_origin(handler.headers.get("Origin")))
         handler.end_headers()
         handler.wfile.write(data)
         # Signal that the response was already sent

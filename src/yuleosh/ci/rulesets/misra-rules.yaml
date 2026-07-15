@@ -1,0 +1,2977 @@
+meta:
+  standard: MISRA C
+  version: '2023-preview'
+  ruleset_version: '2023.1'
+  description: MISRA C:2023 Guidelines for the use of the C language in critical systems
+  source: MISRA Consortium
+  backward_compat:
+    description: MISRA C:2012 → C:2023 rule ID mapping for backward compatibility
+    mapping:
+      Rule 1.1:
+        c2023_id: misra-c2023-1.1
+        change: modified
+      Rule 1.2:
+        c2023_id: misra-c2023-1.2
+        change: unchanged
+      Rule 1.3:
+        c2023_id: misra-c2023-1.3
+        change: unchanged
+      Rule 2.1:
+        c2023_id: misra-c2023-2.1
+        change: unchanged
+      Rule 2.2:
+        c2023_id: misra-c2023-2.2
+        change: modified
+      Rule 2.3:
+        c2023_id: misra-c2023-2.3
+        change: unchanged
+      Rule 2.4:
+        c2023_id: misra-c2023-2.4
+        change: unchanged
+      Rule 2.5:
+        c2023_id: misra-c2023-2.5
+        change: unchanged
+      Rule 2.6:
+        c2023_id: misra-c2023-2.6
+        change: unchanged
+      Rule 2.7:
+        c2023_id: misra-c2023-2.7
+        change: unchanged
+      Rule 3.1:
+        c2023_id: misra-c2023-3.1
+        change: unchanged
+      Rule 4.1:
+        c2023_id: misra-c2023-4.1
+        change: unchanged
+      Rule 5.1:
+        c2023_id: misra-c2023-5.1
+        change: unchanged
+      Rule 5.2:
+        c2023_id: misra-c2023-5.2
+        change: unchanged
+      Rule 5.3:
+        c2023_id: misra-c2023-5.3
+        change: unchanged
+      Rule 5.4:
+        c2023_id: misra-c2023-5.4
+        change: unchanged
+      Rule 5.5:
+        c2023_id: misra-c2023-5.5
+        change: unchanged
+      Rule 5.6:
+        c2023_id: misra-c2023-5.6
+        change: removed
+      Rule 5.7:
+        c2023_id: misra-c2023-5.7
+        change: unchanged
+      Rule 5.8:
+        c2023_id: misra-c2023-5.8
+        change: unchanged
+      Rule 5.9:
+        c2023_id: misra-c2023-5.9
+        change: unchanged
+      Rule 6.1:
+        c2023_id: misra-c2023-6.1
+        change: unchanged
+      Rule 6.2:
+        c2023_id: misra-c2023-6.2
+        change: unchanged
+      Rule 7.1:
+        c2023_id: misra-c2023-7.1
+        change: unchanged
+      Rule 7.2:
+        c2023_id: misra-c2023-7.2
+        change: unchanged
+      Rule 8.1:
+        c2023_id: misra-c2023-8.1
+        change: unchanged
+      Rule 8.2:
+        c2023_id: misra-c2023-8.2
+        change: unchanged
+      Rule 8.3:
+        c2023_id: misra-c2023-8.3
+        change: unchanged
+      Rule 8.4:
+        c2023_id: misra-c2023-8.4
+        change: unchanged
+      Rule 8.5:
+        c2023_id: misra-c2023-8.5
+        change: unchanged
+      Rule 8.6:
+        c2023_id: misra-c2023-8.6
+        change: unchanged
+      Rule 8.7:
+        c2023_id: misra-c2023-8.7
+        change: unchanged
+      Rule 8.8:
+        c2023_id: misra-c2023-8.8
+        change: unchanged
+      Rule 8.9:
+        c2023_id: misra-c2023-8.9
+        change: unchanged
+      Rule 8.10:
+        c2023_id: misra-c2023-8.10
+        change: unchanged
+      Rule 8.11:
+        c2023_id: misra-c2023-8.11
+        change: unchanged
+      Rule 8.12:
+        c2023_id: misra-c2023-8.12
+        change: unchanged
+      Rule 9.1:
+        c2023_id: misra-c2023-9.1
+        change: unchanged
+      Rule 9.2:
+        c2023_id: misra-c2023-9.2
+        change: unchanged
+      Rule 9.3:
+        c2023_id: misra-c2023-9.3
+        change: unchanged
+      Rule 10.1:
+        c2023_id: misra-c2023-10.1
+        change: modified
+      Rule 10.2:
+        c2023_id: misra-c2023-10.2
+        change: unchanged
+      Rule 10.3:
+        c2023_id: misra-c2023-10.3
+        change: modified
+      Rule 10.4:
+        c2023_id: misra-c2023-10.4
+        change: modified
+      Rule 10.5:
+        c2023_id: misra-c2023-10.5
+        change: unchanged
+      Rule 10.6:
+        c2023_id: misra-c2023-10.6
+        change: unchanged
+      Rule 10.7:
+        c2023_id: misra-c2023-10.7
+        change: unchanged
+      Rule 10.8:
+        c2023_id: misra-c2023-10.8
+        change: unchanged
+      Rule 11.1:
+        c2023_id: misra-c2023-11.1
+        change: unchanged
+      Rule 11.2:
+        c2023_id: misra-c2023-11.2
+        change: unchanged
+      Rule 11.3:
+        c2023_id: misra-c2023-11.3
+        change: modified
+      Rule 11.4:
+        c2023_id: misra-c2023-11.4
+        change: unchanged
+      Rule 11.5:
+        c2023_id: misra-c2023-11.5
+        change: unchanged
+      Rule 11.6:
+        c2023_id: misra-c2023-11.6
+        change: unchanged
+      Rule 11.7:
+        c2023_id: misra-c2023-11.7
+        change: unchanged
+      Rule 11.8:
+        c2023_id: misra-c2023-11.8
+        change: unchanged
+      Rule 12.1:
+        c2023_id: misra-c2023-12.1
+        change: unchanged
+      Rule 12.2:
+        c2023_id: misra-c2023-12.2
+        change: unchanged
+      Rule 13.1:
+        c2023_id: misra-c2023-13.1
+        change: unchanged
+      Rule 13.2:
+        c2023_id: misra-c2023-13.2
+        change: unchanged
+      Rule 13.3:
+        c2023_id: misra-c2023-13.3
+        change: unchanged
+      Rule 14.1:
+        c2023_id: misra-c2023-14.1
+        change: unchanged
+      Rule 14.2:
+        c2023_id: misra-c2023-14.2
+        change: unchanged
+      Rule 14.3:
+        c2023_id: misra-c2023-14.3
+        change: unchanged
+      Rule 14.4:
+        c2023_id: misra-c2023-14.4
+        change: unchanged
+      Rule 15.1:
+        c2023_id: misra-c2023-15.1
+        change: unchanged
+      Rule 15.2:
+        c2023_id: misra-c2023-15.2
+        change: unchanged
+      Rule 15.3:
+        c2023_id: misra-c2023-15.3
+        change: unchanged
+      Rule 15.4:
+        c2023_id: misra-c2023-15.4
+        change: unchanged
+      Rule 15.5:
+        c2023_id: misra-c2023-15.5
+        change: unchanged
+      Rule 15.6:
+        c2023_id: misra-c2023-15.6
+        change: unchanged
+      Rule 15.7:
+        c2023_id: misra-c2023-15.7
+        change: unchanged
+      Rule 16.1:
+        c2023_id: misra-c2023-16.1
+        change: unchanged
+      Rule 16.2:
+        c2023_id: misra-c2023-16.2
+        change: unchanged
+      Rule 16.3:
+        c2023_id: misra-c2023-16.3
+        change: unchanged
+      Rule 16.4:
+        c2023_id: misra-c2023-16.4
+        change: unchanged
+      Rule 16.5:
+        c2023_id: misra-c2023-16.5
+        change: unchanged
+      Rule 16.6:
+        c2023_id: misra-c2023-16.6
+        change: modified
+      Rule 17.1:
+        c2023_id: misra-c2023-17.1
+        change: unchanged
+      Rule 17.2:
+        c2023_id: misra-c2023-17.2
+        change: modified
+      Rule 17.3:
+        c2023_id: misra-c2023-17.3
+        change: unchanged
+      Rule 17.4:
+        c2023_id: misra-c2023-17.4
+        change: unchanged
+      Rule 17.5:
+        c2023_id: misra-c2023-17.5
+        change: unchanged
+      Rule 17.6:
+        c2023_id: misra-c2023-17.6
+        change: unchanged
+      Rule 17.7:
+        c2023_id: misra-c2023-17.7
+        change: unchanged
+      Rule 17.8:
+        c2023_id: misra-c2023-17.8
+        change: unchanged
+      Rule 18.1:
+        c2023_id: misra-c2023-18.1
+        change: unchanged
+      Rule 18.2:
+        c2023_id: misra-c2023-18.2
+        change: unchanged
+      Rule 18.3:
+        c2023_id: misra-c2023-18.3
+        change: unchanged
+      Rule 18.4:
+        c2023_id: misra-c2023-18.4
+        change: modified
+      Rule 18.5:
+        c2023_id: misra-c2023-18.5
+        change: modified
+      Rule 18.6:
+        c2023_id: misra-c2023-18.6
+        change: unchanged
+      Rule 18.7:
+        c2023_id: misra-c2023-18.7
+        change: unchanged
+      Rule 18.8:
+        c2023_id: misra-c2023-18.8
+        change: unchanged
+      Rule 19.1:
+        c2023_id: misra-c2023-19.1
+        change: unchanged
+      Rule 19.2:
+        c2023_id: misra-c2023-19.2
+        change: unchanged
+      Rule 20.1:
+        c2023_id: misra-c2023-20.1
+        change: unchanged
+      Rule 20.2:
+        c2023_id: misra-c2023-20.2
+        change: unchanged
+      Rule 20.3:
+        c2023_id: misra-c2023-20.3
+        change: unchanged
+      Rule 20.4:
+        c2023_id: misra-c2023-20.4
+        change: unchanged
+      Rule 20.5:
+        c2023_id: misra-c2023-20.5
+        change: unchanged
+      Rule 20.6:
+        c2023_id: misra-c2023-20.6
+        change: unchanged
+      Rule 20.7:
+        c2023_id: misra-c2023-20.7
+        change: unchanged
+      Rule 20.8:
+        c2023_id: misra-c2023-20.8
+        change: unchanged
+      Rule 20.9:
+        c2023_id: misra-c2023-20.9
+        change: unchanged
+      Rule 20.10:
+        c2023_id: misra-c2023-20.10
+        change: unchanged
+      Rule 20.11:
+        c2023_id: misra-c2023-20.11
+        change: unchanged
+      Rule 20.12:
+        c2023_id: misra-c2023-20.12
+        change: unchanged
+      Rule 20.13:
+        c2023_id: misra-c2023-20.13
+        change: unchanged
+      Rule 20.14:
+        c2023_id: misra-c2023-20.14
+        change: unchanged
+      Rule 21.1:
+        c2023_id: misra-c2023-21.1
+        change: unchanged
+      Rule 21.2:
+        c2023_id: misra-c2023-21.2
+        change: unchanged
+      Rule 21.3:
+        c2023_id: misra-c2023-21.3
+        change: unchanged
+      Rule 21.4:
+        c2023_id: misra-c2023-21.4
+        change: unchanged
+      Rule 21.5:
+        c2023_id: misra-c2023-21.5
+        change: unchanged
+      Rule 21.6:
+        c2023_id: misra-c2023-21.6
+        change: unchanged
+      Rule 21.7:
+        c2023_id: misra-c2023-21.7
+        change: unchanged
+      Rule 21.8:
+        c2023_id: misra-c2023-21.8
+        change: unchanged
+      Rule 21.9:
+        c2023_id: misra-c2023-21.9
+        change: unchanged
+      Rule 21.10:
+        c2023_id: misra-c2023-21.10
+        change: unchanged
+      Rule 21.11:
+        c2023_id: misra-c2023-21.11
+        change: unchanged
+      Rule 21.12:
+        c2023_id: misra-c2023-21.12
+        change: modified
+      Rule 21.13:
+        c2023_id: misra-c2023-21.13
+        change: unchanged
+      Rule 21.14:
+        c2023_id: misra-c2023-21.14
+        change: unchanged
+      Rule 21.15:
+        c2023_id: misra-c2023-21.15
+        change: unchanged
+      Rule 21.16:
+        c2023_id: misra-c2023-21.16
+        change: unchanged
+      Rule 21.17:
+        c2023_id: misra-c2023-21.17
+        change: unchanged
+      Rule 21.18:
+        c2023_id: misra-c2023-21.18
+        change: unchanged
+      Rule 22.1:
+        c2023_id: misra-c2023-22.1
+        change: modified
+      Rule 22.2:
+        c2023_id: misra-c2023-22.2
+        change: unchanged
+      Dir 4.1:
+        c2023_id: misra-c2023-dir-4.1
+        change: unchanged
+      Dir 4.2:
+        c2023_id: misra-c2023-dir-4.2
+        change: unchanged
+      Dir 4.3:
+        c2023_id: misra-c2023-dir-4.3
+        change: unchanged
+      Dir 4.4:
+        c2023_id: misra-c2023-dir-4.4
+        change: unchanged
+      Dir 4.5:
+        c2023_id: misra-c2023-dir-4.5
+        change: unchanged
+      Dir 4.6:
+        c2023_id: misra-c2023-dir-4.6
+        change: unchanged
+      Dir 4.7:
+        c2023_id: misra-c2023-dir-4.7
+        change: unchanged
+      Dir 4.8:
+        c2023_id: misra-c2023-dir-4.8
+        change: unchanged
+      Dir 4.9:
+        c2023_id: misra-c2023-dir-4.9
+        change: unchanged
+      Dir 4.10:
+        c2023_id: misra-c2023-dir-4.10
+        change: unchanged
+      Dir 4.11:
+        c2023_id: misra-c2023-dir-4.11
+        change: unchanged
+      Dir 4.12:
+        c2023_id: misra-c2023-dir-4.12
+        change: unchanged
+      Rule 8.13:
+        c2023_id: misra-c2023-8.13
+        change: modified
+    total_c2012_rules: 143
+misra-c2023-1.1:
+  title: ISO C standard compliance
+  severity: required
+  category: 环境 (Environment)
+  description: 所有代码应符合 ISO C 标准，不得使用编译器扩展
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 1.1
+  c2023_change: modified
+  c2023_note: 放松对 __attribute__ 等常见编译器扩展的限制，新增偏差审批流程
+misra-c2023-1.2:
+  title: No reliance on undefined or unspecified behavior
+  severity: required
+  category: 环境 (Environment)
+  description: 不得依赖未定义或未指定的行为
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 1.2
+  c2023_change: unchanged
+misra-c2023-1.3:
+  title: No violation of syntax or constraints
+  severity: required
+  category: 环境 (Environment)
+  description: 不得违反 C 标准的语法或约束规则
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 1.3
+  c2023_change: unchanged
+misra-c2023-2.1:
+  title: Source files shall only contain legal C constructs
+  severity: required
+  category: 未分类 (Uncategorized)
+  description: 源文件应仅包含合法的 C 语言结构
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 2.1
+  c2023_change: unchanged
+misra-c2023-2.2:
+  title: Source code shall not contain dead code
+  severity: required
+  category: 未分类 (Uncategorized)
+  description: 源代码不得包含死代码（无法到达的代码）
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 2.2
+  c2023_change: modified
+  c2023_note: 放宽死代码判定，允许调试宏展开的死代码
+misra-c2023-2.3:
+  title: Source code shall not contain unused type declarations
+  severity: advisory
+  category: 未分类 (Uncategorized)
+  description: 源代码不得包含未使用的类型声明
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 2.3
+  c2023_change: unchanged
+misra-c2023-2.4:
+  title: Source code shall not contain unused tag declarations
+  severity: advisory
+  category: 未分类 (Uncategorized)
+  description: 源代码不得包含未使用的标记声明
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 2.4
+  c2023_change: unchanged
+misra-c2023-2.5:
+  title: Source code shall not contain unused macro declarations
+  severity: advisory
+  category: 未分类 (Uncategorized)
+  description: 源代码不得包含未使用的宏定义
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 2.5
+  c2023_change: unchanged
+misra-c2023-2.6:
+  title: Source code shall not contain labels not referenced
+  severity: required
+  category: 未分类 (Uncategorized)
+  description: 源代码不得包含未引用的标签
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 2.6
+  c2023_change: unchanged
+misra-c2023-2.7:
+  title: Source code shall not contain functions not called
+  severity: required
+  category: 未分类 (Uncategorized)
+  description: 源代码不得包含未被调用的函数
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 2.7
+  c2023_change: unchanged
+misra-c2023-3.1:
+  title: Character sequences in comments shall not begin with /*
+  severity: required
+  category: 注释 (Comments)
+  description: 注释内的字符序列不能以 /* 开头，以防止嵌套注释
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 3.1
+  c2023_change: unchanged
+misra-c2023-4.1:
+  title: Octal and hex escape sequences shall be terminated
+  severity: required
+  category: 字符集 (Character Sets)
+  description: 八进制和十六进制转义序列必须正确终止
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 4.1
+  c2023_change: unchanged
+misra-c2023-5.1:
+  title: Identifiers shall be distinct from keywords
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 标识符必须与关键字区分
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.1
+  c2023_change: unchanged
+misra-c2023-5.2:
+  title: Identifiers in same scope shall be distinct
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 同一作用域内的标识符应唯一
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.2
+  c2023_change: unchanged
+misra-c2023-5.3:
+  title: Typedef names shall not be reused
+  severity: required
+  category: 标识符 (Identifiers)
+  description: typedef 名称不得重复使用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.3
+  c2023_change: unchanged
+misra-c2023-5.4:
+  title: Macro identifiers shall be distinct
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 宏标识符应唯一
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.4
+  c2023_change: unchanged
+misra-c2023-5.5:
+  title: Identifiers shall be distinct from macro names
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 标识符应与宏名称区分
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.5
+  c2023_change: unchanged
+misra-c2023-5.6:
+  title: Typedef names shall be unique identifiers
+  severity: required
+  category: 标识符 (Identifiers)
+  description: typedef 名称应是唯一标识符
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.6
+  c2023_change: removed
+  c2023_note: 与 Rule 5.8 语义重复，已在 C:2023 中合并移除
+misra-c2023-5.7:
+  title: Identifiers shall not rely on significance of characters
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 标识符不应依赖于区分大小写以外的字符区分
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.7
+  c2023_change: unchanged
+misra-c2023-5.8:
+  title: Identifiers in external scope shall be distinct
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 外部作用域的标识符应唯一
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.8
+  c2023_change: unchanged
+misra-c2023-5.9:
+  title: Identifiers of internal linkage shall be unique
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 内部链接的标识符应唯一
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.9
+  c2023_change: unchanged
+misra-c2023-6.1:
+  title: Bit fields shall only be of appropriate types
+  severity: required
+  category: 类型 (Types)
+  description: 位域仅应使用适当的类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 6.1
+  c2023_change: unchanged
+misra-c2023-6.2:
+  title: Single-bit named bit fields shall be of unsigned type
+  severity: required
+  category: 类型 (Types)
+  description: 单比特位域必须是无符号类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 6.2
+  c2023_change: unchanged
+misra-c2023-7.1:
+  title: Octal constants shall not be used
+  severity: required
+  category: 字面量 (Literals)
+  description: 不得使用八进制常量
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 7.1
+  c2023_change: unchanged
+misra-c2023-7.2:
+  title: U or u suffix on unsigned integer constants
+  severity: required
+  category: 字面量 (Literals)
+  description: 无符号整数常量应使用 U 或 u 后缀
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 7.2
+  c2023_change: unchanged
+misra-c2023-8.1:
+  title: Types shall be explicitly specified
+  severity: required
+  category: 声明 (Declarations)
+  description: 类型应被显式指定
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.1
+  c2023_change: unchanged
+misra-c2023-8.2:
+  title: Function types shall be in prototype form
+  severity: required
+  category: 声明 (Declarations)
+  description: 函数类型应使用原型形式声明
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.2
+  c2023_change: unchanged
+misra-c2023-8.3:
+  title: Objects declared at file scope shall have external linkage
+  severity: required
+  category: 声明 (Declarations)
+  description: 文件作用域对象应具有外部链接或使用 static
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.3
+  c2023_change: unchanged
+misra-c2023-8.4:
+  title: Compatible declaration shall be visible
+  severity: required
+  category: 声明 (Declarations)
+  description: 兼容声明应对所有 translation units 可见
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.4
+  c2023_change: unchanged
+misra-c2023-8.5:
+  title: External definitions shall be declared in header files
+  severity: required
+  category: 声明 (Declarations)
+  description: 外部定义应在头文件中声明
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.5
+  c2023_change: unchanged
+misra-c2023-8.6:
+  title: Identifier shall be defined
+  severity: required
+  category: 声明 (Declarations)
+  description: 标识符必须被定义
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.6
+  c2023_change: unchanged
+misra-c2023-8.7:
+  title: Functions and objects should not be defined with external linkage
+  severity: advisory
+  category: 声明 (Declarations)
+  description: 除非必要，函数和对象不应使用外部链接定义（优先用 static）
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.7
+  c2023_change: unchanged
+misra-c2023-8.8:
+  title: Static storage class specifier in declarations
+  severity: required
+  category: 声明 (Declarations)
+  description: 内部链接的函数和对象应使用 static 声明
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.8
+  c2023_change: unchanged
+misra-c2023-8.9:
+  title: Internal linkage objects shall have static storage
+  severity: required
+  category: 声明 (Declarations)
+  description: 内部链接的对象应具有静态存储期
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.9
+  c2023_change: unchanged
+misra-c2023-8.10:
+  title: Static objects shall not exceed reasonable size
+  severity: required
+  category: 声明 (Declarations)
+  description: 静态对象不应超过合理大小
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.10
+  c2023_change: unchanged
+misra-c2023-8.11:
+  title: External arrays shall have explicit size or initializer
+  severity: required
+  category: 声明 (Declarations)
+  description: 外部数组应具有显式大小或初始化器
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.11
+  c2023_change: unchanged
+misra-c2023-8.12:
+  title: Array dimensions should be explicit
+  severity: advisory
+  category: 声明 (Declarations)
+  description: 数组维度应是显式的
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.12
+  c2023_change: unchanged
+misra-c2023-9.1:
+  title: All automatic objects shall be initialized before use
+  severity: required
+  category: 初始化 (Initialization)
+  description: 所有自动存储期对象在使用前应被赋值
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 9.1
+  c2023_change: unchanged
+misra-c2023-9.2:
+  title: Braces in initializer lists
+  severity: required
+  category: 初始化 (Initialization)
+  description: 初始化列表中的括号应正确匹配
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 9.2
+  c2023_change: unchanged
+misra-c2023-9.3:
+  title: Designated initializers shall not be mixed
+  severity: required
+  category: 初始化 (Initialization)
+  description: 不得混用指定初始化和位置初始化
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 9.3
+  c2023_change: unchanged
+misra-c2023-9.4:
+  title: Elements referenced in an initializer shall be available
+  severity: required
+  category: 初始化 (Initialization)
+  description: 初始化器中引用的元素应可用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 9.4
+  c2023_change: unchanged
+misra-c2023-9.5:
+  title: Where designated initializers used, array size shall be specified explicitly
+  severity: required
+  category: 初始化 (Initialization)
+  description: 使用指定初始化器初始化数组对象时，应显式指定数组大小，避免隐式大小导致不可预期的行为
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+misra-c2023-10.1:
+  title: Operands shall not be of inappropriate type
+  severity: required
+  category: 基本类型 (Essential Types)
+  description: 操作数不得具有不适当的本质类型
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.1
+  c2023_change: modified
+  c2023_note: 整型转换规则细化，新增异常路径和显式转换例外
+misra-c2023-10.2:
+  title: MISRA expressions of composite essential type
+  severity: required
+  category: 基本类型 (Essential Types)
+  description: 复合本质类型的 MISRA 表达式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.2
+  c2023_change: unchanged
+misra-c2023-10.3:
+  title: Complex integer types shall not be used
+  severity: required
+  category: 基本类型 (Essential Types)
+  description: 复整数类型不得使用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.3
+  c2023_change: modified
+  c2023_note: 赋值窄化转换判定逻辑调整，新增安全路径
+misra-c2023-10.4:
+  title: Complex floating types shall not be used
+  severity: required
+  category: 基本类型 (Essential Types)
+  description: 复浮点类型不得使用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.4
+  c2023_change: modified
+  c2023_note: 表达式类型不匹配判定条件调整
+misra-c2023-10.5:
+  title: Expression evaluation not affected by operator precedence
+  severity: advisory
+  category: 基本类型 (Essential Types)
+  description: 表达式求值不应受优先级和求值顺序影响
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.5
+  c2023_change: unchanged
+misra-c2023-10.6:
+  title: Composite expression used as operand of further operators
+  severity: required
+  category: 基本类型 (Essential Types)
+  description: 复合表达式用作运算符的操作数应加括号
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.6
+  c2023_change: unchanged
+misra-c2023-10.7:
+  title: Essential type model - expressions
+  severity: required
+  category: 基本类型 (Essential Types)
+  description: 如果复合表达式用作更大的表达式操作数，应加括号明确
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.7
+  c2023_change: unchanged
+misra-c2023-10.8:
+  title: Casting should not remove const/volatile
+  severity: required
+  category: 基本类型 (Essential Types)
+  description: 强制类型转换不应移除 const 或 volatile 限定
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 10.8
+  c2023_change: unchanged
+misra-c2023-11.1:
+  title: Conversions shall not be performed between pointers
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: 函数指针和对象指针之间不得进行转换
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.1
+  c2023_change: unchanged
+misra-c2023-11.2:
+  title: Pointer conversions to/from integer types
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: 指针和整数类型之间的转换应受限
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.2
+  c2023_change: unchanged
+misra-c2023-11.3:
+  title: Cast of pointer to integer type
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: 将指针转换为整数类型应谨慎
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.3
+  c2023_change: modified
+  c2023_note: 指针转换规则更严格，新增 MMIO 硬件访问例外路径
+misra-c2023-11.4:
+  title: Cast of integer to pointer type
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: 将整数转换为指针类型应谨慎
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.4
+  c2023_change: unchanged
+misra-c2023-11.5:
+  title: Pointer to void shall not be converted to pointer to object
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: void 指针不应转换为对象指针（除赋值）
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.5
+  c2023_change: unchanged
+misra-c2023-11.6:
+  title: Cast between pointer to object and pointer to function
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: 对象指针和函数指针之间不得进行转换
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.6
+  c2023_change: unchanged
+misra-c2023-11.7:
+  title: Cast between pointer to object and non-integer arithmetic type
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: 对象指针和非整数算术类型之间不得进行转换
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.7
+  c2023_change: unchanged
+misra-c2023-11.8:
+  title: Pointer arithmetic limited to array elements
+  severity: required
+  category: 指针类型转换 (Pointer Type Conversions)
+  description: 指针算术仅限于数组元素
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.8
+  c2023_change: unchanged
+misra-c2023-12.1:
+  title: Expression precedence with parentheses
+  severity: required
+  category: 表达式 (Expressions)
+  description: 应使用括号明确表达式的运算符优先级
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 12.1
+  c2023_change: unchanged
+misra-c2023-12.2:
+  title: Value of expression shall be of appropriate essential type
+  severity: required
+  category: 表达式 (Expressions)
+  description: 表达式的值应具有适当的本质类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 12.2
+  c2023_change: unchanged
+misra-c2023-13.1:
+  title: Side effects in initializer lists
+  severity: required
+  category: 副作用 (Side Effects)
+  description: 初始化列表中不应有副作用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 13.1
+  c2023_change: unchanged
+misra-c2023-13.2:
+  title: Side effects of called functions shall not depend on evaluation order
+  severity: required
+  category: 副作用 (Side Effects)
+  description: 被调用函数的副作用不应依赖于求值顺序
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 13.2
+  c2023_change: unchanged
+misra-c2023-13.3:
+  title: Full expression with side effects shall not be discarded
+  severity: required
+  category: 副作用 (Side Effects)
+  description: 具有副作用的完整表达式不应被丢弃
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 13.3
+  c2023_change: unchanged
+misra-c2023-14.1:
+  title: Loop counter shall be of appropriate type
+  severity: required
+  category: 控制流 (Control Flow)
+  description: 循环计数器应具有适当类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 14.1
+  c2023_change: unchanged
+misra-c2023-14.2:
+  title: For loop shall contain well-formed expressions
+  severity: required
+  category: 控制流 (Control Flow)
+  description: for 循环应包含完整的三个表达式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 14.2
+  c2023_change: unchanged
+misra-c2023-14.3:
+  title: Loop counter shall not be modified in body
+  severity: required
+  category: 控制流 (Control Flow)
+  description: 循环计数器不应在循环体中修改
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 14.3
+  c2023_change: unchanged
+misra-c2023-14.4:
+  title: Controlling expressions shall be essentially Boolean
+  severity: required
+  category: 控制流 (Control Flow)
+  description: 控制表达式应为本质布尔类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 14.4
+  c2023_change: unchanged
+misra-c2023-15.1:
+  title: Goto statement shall not be used
+  severity: required
+  category: 控制流 (Control Flow)
+  description: 不应使用 goto 语句
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.1
+  c2023_change: unchanged
+misra-c2023-15.2:
+  title: Goto statement should not be used
+  severity: advisory
+  category: 控制流 (Control Flow)
+  description: 建议不要使用 goto 语句
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.2
+  c2023_change: unchanged
+misra-c2023-15.3:
+  title: Labels not part of switch case shall be avoided
+  severity: required
+  category: 控制流 (Control Flow)
+  description: 不在 switch 中的标签不应使用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.3
+  c2023_change: unchanged
+misra-c2023-15.4:
+  title: Single point of exit
+  severity: advisory
+  category: 控制流 (Control Flow)
+  description: 函数应有单一退出点
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.4
+  c2023_change: unchanged
+misra-c2023-15.5:
+  title: Function shall not have multiple return statements
+  severity: advisory
+  category: 控制流 (Control Flow)
+  description: 函数不应有多个 return 语句
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.5
+  c2023_change: unchanged
+misra-c2023-15.6:
+  title: If-else-if chain shall terminate with else
+  severity: required
+  category: 控制流 (Control Flow)
+  description: if-else-if 链应以 else 子句终止
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.6
+  c2023_change: unchanged
+misra-c2023-15.7:
+  title: All if-else constructs shall be terminated
+  severity: required
+  category: 控制流 (Control Flow)
+  description: 所有 if-else 结构应有 complete 形式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.7
+  c2023_change: unchanged
+misra-c2023-16.1:
+  title: Switch shall be well-formed
+  severity: required
+  category: 控制流 (Control Flow)
+  description: switch 语句应格式正确
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 16.1
+  c2023_change: unchanged
+misra-c2023-16.2:
+  title: Switch expression shall be essentially Boolean or essentially enum
+  severity: required
+  category: 控制流 (Control Flow)
+  description: switch 表达式应为本质布尔或枚举类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 16.2
+  c2023_change: unchanged
+misra-c2023-16.3:
+  title: Body of switch shall be a compound statement
+  severity: required
+  category: 控制流 (Control Flow)
+  description: switch 主体应为复合语句（花括号）
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 16.3
+  c2023_change: unchanged
+misra-c2023-16.4:
+  title: Every switch clause shall terminate with break
+  severity: required
+  category: 控制流 (Control Flow)
+  description: 每个 switch case 应以 break 终止
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 16.4
+  c2023_change: unchanged
+misra-c2023-16.5:
+  title: No more than one default clause
+  severity: required
+  category: 控制流 (Control Flow)
+  description: switch 中应最多有一个 default 标签
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 16.5
+  c2023_change: unchanged
+misra-c2023-16.6:
+  title: Default label shall be present
+  severity: required
+  category: 控制流 (Control Flow)
+  description: switch 语句应包含 default 标签
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 16.6
+  c2023_change: modified
+  c2023_note: switch fall-through 要求放宽，允许注释标注的贯穿
+misra-c2023-17.1:
+  title: Function parameters shall not exceed a maximum
+  severity: required
+  category: 函数 (Functions)
+  description: 函数参数数量不应超过限制（通常 6 个）
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.1
+  c2023_change: unchanged
+misra-c2023-17.2:
+  title: Functions shall not call themselves directly
+  severity: required
+  category: 函数 (Functions)
+  description: 函数不应直接递归调用自身
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.2
+  c2023_change: modified
+  c2023_note: 递归禁止规则增加 tail-recursion 编译器优化例外
+misra-c2023-17.3:
+  title: Functions shall not call themselves indirectly
+  severity: required
+  category: 函数 (Functions)
+  description: 函数不应间接递归调用自身
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.3
+  c2023_change: unchanged
+misra-c2023-17.4:
+  title: Functions shall not exceed maximum length
+  severity: advisory
+  category: 函数 (Functions)
+  description: 函数不应超过最大长度
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.4
+  c2023_change: unchanged
+misra-c2023-17.5:
+  title: Function parameter type shall be declared
+  severity: required
+  category: 函数 (Functions)
+  description: 函数参数类型必须声明
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.5
+  c2023_change: unchanged
+misra-c2023-17.6:
+  title: Declaration of an array parameter
+  severity: required
+  category: 函数 (Functions)
+  description: 数组参数的声明
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.6
+  c2023_change: unchanged
+misra-c2023-17.7:
+  title: 返回值必须被使用
+  severity: required
+  category: 函数行为
+  description: 调用具有返回值的函数，其返回值应被检查或使用
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.7
+  c2023_change: unchanged
+misra-c2023-17.8:
+  title: Boolean arguments for bool parameter
+  severity: required
+  category: 函数 (Functions)
+  description: 布尔型参数应使用 bool 类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 17.8
+  c2023_change: unchanged
+misra-c2023-18.1:
+  title: Pointer arithmetic on array without subscript
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: 避免直接对数组执行指针算术
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.1
+  c2023_change: unchanged
+misra-c2023-18.2:
+  title: Subtraction between pointers only for same array
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: 指针相减仅限于同一数组的元素之间
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.2
+  c2023_change: unchanged
+misra-c2023-18.3:
+  title: Relational operators on pointers
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: 关系运算符应用于指针时应指向同一数组
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.3
+  c2023_change: unchanged
+misra-c2023-18.4:
+  title: + - += -= shall not be applied to pointer to void
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: + - += -= 不应用于 void 指针
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.4
+  c2023_change: modified
+  c2023_note: 指针算术规则新增安全操作模式
+misra-c2023-18.5:
+  title: Address of array shall not be assigned
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: 数组地址不应被赋值
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.5
+  c2023_change: modified
+  c2023_note: 变长数组(VLA)规则在 C:2023 中新增例外路径
+misra-c2023-18.6:
+  title: Array indexing shall be within bounds
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: 数组索引应在边界内
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.6
+  c2023_change: unchanged
+misra-c2023-18.7:
+  title: Flexible array members should not be used
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: 不应使用灵活数组成员
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.7
+  c2023_change: unchanged
+misra-c2023-18.8:
+  title: Variable-length arrays should not be used
+  severity: required
+  category: 指针与数组 (Pointers & Arrays)
+  description: 不应使用变长数组 (VLA)
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.8
+  c2023_change: unchanged
+misra-c2023-19.1:
+  title: Object shall not be assigned or copied overlapping
+  severity: required
+  category: 覆盖存储 (Overlapping Storage)
+  description: 对象不应被重叠地赋值或复制
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 19.1
+  c2023_change: unchanged
+misra-c2023-19.2:
+  title: Union shall not overlap in confusing way
+  severity: required
+  category: 覆盖存储 (Overlapping Storage)
+  description: union 不应以混淆的方式重叠
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 19.2
+  c2023_change: unchanged
+misra-c2023-20.1:
+  title: '#include directives in source files'
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: '#include 指令的格式应符合规范'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.1
+  c2023_change: unchanged
+misra-c2023-20.2:
+  title: '#include directives for standard headers'
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: 标准头文件的包含
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.2
+  c2023_change: unchanged
+misra-c2023-20.3:
+  title: '#include shall not be within comments'
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: '#include 不应出现在注释内'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.3
+  c2023_change: unchanged
+misra-c2023-20.4:
+  title: Recursive macro definitions
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: 不应有递归宏定义
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.4
+  c2023_change: unchanged
+misra-c2023-20.5:
+  title: '#undef should not be used'
+  severity: advisory
+  category: 预处理器 (Preprocessing)
+  description: '不应使用 #undef'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 20.5
+  c2023_change: unchanged
+misra-c2023-20.6:
+  title: Macros should expand to complete syntactic units
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: 宏应展开为完整的语法单元
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.6
+  c2023_change: unchanged
+misra-c2023-20.7:
+  title: Function-like macro shall not be used
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: 不应使用类函数宏
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.7
+  c2023_change: unchanged
+misra-c2023-20.8:
+  title: 'Control expression in #if shall be constant'
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: '#if 中的控制表达式应为常量'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.8
+  c2023_change: unchanged
+misra-c2023-20.9:
+  title: Preprocessor operators shall not be misused
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: 预处理器运算符不应误用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.9
+  c2023_change: unchanged
+misra-c2023-20.10:
+  title: '# and ## operators should not be used'
+  severity: advisory
+  category: 预处理器 (Preprocessing)
+  description: '不应使用 # 和 ## 运算符'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 20.10
+  c2023_change: unchanged
+misra-c2023-20.11:
+  title: 'Layout of #if chain should follow rules'
+  severity: advisory
+  category: 预处理器 (Preprocessing)
+  description: '#if 链的布局应遵循规范'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 20.11
+  c2023_change: unchanged
+misra-c2023-20.12:
+  title: '#line should not be used'
+  severity: advisory
+  category: 预处理器 (Preprocessing)
+  description: '不应使用 #line 指令'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 20.12
+  c2023_change: unchanged
+misra-c2023-20.13:
+  title: '#error directive shall be used'
+  severity: required
+  category: 预处理器 (Preprocessing)
+  description: '#error 指令的使用'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 20.13
+  c2023_change: unchanged
+misra-c2023-20.14:
+  title: '#pragma should not be used'
+  severity: advisory
+  category: 预处理器 (Preprocessing)
+  description: '不应使用 #pragma 指令'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 20.14
+  c2023_change: unchanged
+misra-c2023-21.1:
+  title: '#define and #undef for reserved identifiers'
+  severity: required
+  category: 标准库 (Standard Library)
+  description: '#define 和 #undef 不应作用于保留标识符'
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV2
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.1
+  c2023_change: unchanged
+misra-c2023-21.2:
+  title: Reserved identifiers shall not be declared
+  severity: required
+  category: 标准库 (Standard Library)
+  description: 不应声明保留标识符
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.2
+  c2023_change: unchanged
+misra-c2023-21.3:
+  title: Memory allocation functions should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应使用内存分配函数 (malloc/free)
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.3
+  c2023_change: unchanged
+misra-c2023-21.4:
+  title: Standard library output functions should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应使用标准库输出函数 (printf/puts)
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.4
+  c2023_change: unchanged
+misra-c2023-21.5:
+  title: Standard library input functions should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应使用标准库输入函数 (scanf/gets)
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.5
+  c2023_change: unchanged
+misra-c2023-21.6:
+  title: <stdlib.h> functions should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: <stdlib.h> 的函数不应使用（atoi/atof/exit等）
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.6
+  c2023_change: unchanged
+misra-c2023-21.7:
+  title: Signal handling functions should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 信号处理函数不应使用
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.7
+  c2023_change: unchanged
+misra-c2023-21.8:
+  title: Setjmp and longjmp should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应使用 setjmp/longjmp
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.8
+  c2023_change: unchanged
+misra-c2023-21.9:
+  title: Time and date functions should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 时间日期函数不应使用
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.9
+  c2023_change: unchanged
+misra-c2023-21.10:
+  title: Standard library abort functions should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 标准库中止函数不应使用
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.10
+  c2023_change: unchanged
+misra-c2023-21.11:
+  title: Standard library <stdarg.h> should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应使用可变参数宏
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.11
+  c2023_change: unchanged
+misra-c2023-21.12:
+  title: Exception handling <fenv.h> should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应使用 <fenv.h>
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.12
+  c2023_change: modified
+  c2023_note: 放宽对 abort/exit 的限制，允许看门狗复位场景使用
+misra-c2023-21.13:
+  title: <math.h> functions should not be used without care
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应未经考虑使用 <math.h> 函数
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.13
+  c2023_change: unchanged
+misra-c2023-21.14:
+  title: errno should not be used in expressions
+  severity: required
+  category: 标准库 (Standard Library)
+  description: errno 在表达式中不应被使用
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.14
+  c2023_change: unchanged
+misra-c2023-21.15:
+  title: Locale should not be set
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应设置区域设置
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.15
+  c2023_change: unchanged
+misra-c2023-21.16:
+  title: Use of atexit should be avoided
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 应避免使用 atexit
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.16
+  c2023_change: unchanged
+misra-c2023-21.17:
+  title: Offsetof macro should not be used
+  severity: advisory
+  category: 标准库 (Standard Library)
+  description: 不应使用 offsetof 宏
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.17
+  c2023_change: unchanged
+misra-c2023-21.18:
+  title: Bounds of standard library functions
+  severity: required
+  category: 标准库 (Standard Library)
+  description: 标准库函数的边界条件
+  spec_ref: SWE-MISRA-S1
+  check_method: clang-tidy
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.18
+  c2023_change: unchanged
+misra-c2023-22.1:
+  title: Dynamic heap memory should not be used
+  severity: required
+  category: 资源 (Resources)
+  description: 不应使用动态堆内存
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-DEV1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.1
+  c2023_change: modified
+  c2023_note: 放宽对 setjmp/longjmp 的限制，仅特定场景受限
+misra-c2023-22.2:
+  title: C libraries not in safe subset
+  severity: required
+  category: 资源 (Resources)
+  description: 不应使用安全子集外的 C 标准库
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.2
+  c2023_change: unchanged
+misra-c2023-dir-4.1:
+  title: 运行时边界检查
+  severity: required
+  category: runtime behavior
+  description: 程序应确保所有数组引用、指针运算和内存访问都在有效边界内
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.1
+  c2023_change: unchanged
+misra-c2023-dir-4.2:
+  title: 调用标准库的运行时边界约束
+  severity: required
+  category: runtime safety
+  description: 调用标准库函数时需进行运行时边界约束检查，确保数组引用、指针运算和内存访问都在有效边界内
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.2
+  c2023_change: unchanged
+misra-c2023-dir-4.3:
+  title: 汇编代码约束
+  severity: advisory
+  category: assembly
+  description: 汇编代码应封装在内联函数或汇编模块中，不得散布在 C 代码中
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.3
+  c2023_change: unchanged
+misra-c2023-dir-4.4:
+  title: Unicode/字符编码约束
+  severity: advisory
+  category: portability
+  description: 源文件字符集和字符串字面量的编码应一致声明
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.4
+  c2023_change: unchanged
+misra-c2023-dir-4.5:
+  title: char 类型使用约束
+  severity: required
+  category: type safety
+  description: char 类型仅用于字符数据；不得用于数值计算或布尔判断
+  spec_ref: SWE-MISRA-DEV2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Dir 4.5
+  c2023_change: unchanged
+misra-c2023-dir-4.6:
+  title: size_t / ptrdiff_t 使用
+  severity: advisory
+  category: portability
+  description: 数组下标和指针差值应使用 size_t / ptrdiff_t 类型
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.6
+  c2023_change: unchanged
+misra-c2023-dir-4.7:
+  title: setjmp / longjmp 约束
+  severity: required
+  category: control flow
+  description: setjmp 和 longjmp 不得用于错误处理或异常流，应使用结构化错误处理替代
+  spec_ref: SWE-MISRA-DEV2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Dir 4.7
+  c2023_change: unchanged
+misra-c2023-dir-4.8:
+  title: 宏定义约束
+  severity: advisory
+  category: preprocessing
+  description: 宏替换应尽量避免副作用和多次求值
+  spec_ref: SWE-MISRA-DEV2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Dir 4.8
+  c2023_change: unchanged
+misra-c2023-dir-4.9:
+  title: 条件编译完整性
+  severity: required
+  category: preprocessing
+  description: '条件编译指令（#if / #ifdef / #ifndef）应确保所有分支都有明确定义且编译通过'
+  spec_ref: SWE-MISRA-DEV2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Dir 4.9
+  c2023_change: unchanged
+misra-c2023-dir-4.10:
+  title: 诊断信息保留
+  severity: advisory
+  category: build
+  description: 预处理、编译和链接阶段的所有诊断信息（warning/error）应保留在构建日志中
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.10
+  c2023_change: unchanged
+misra-c2023-dir-4.11:
+  title: 存储器映射寄存器指针有效性
+  severity: required
+  category: runtime behavior
+  description: 指向存储器映射寄存器的指针应确保其引用的地址有效且与硬件文档一致
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.11
+  c2023_change: unchanged
+misra-c2023-dir-4.12:
+  title: 动态内存分配限制
+  severity: required
+  category: runtime safety
+  description: 动态内存分配（malloc/calloc/realloc/free）仅允许在初始化阶段使用，运行时不得分配
+  spec_ref: SWE-MISRA-DEV2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Dir 4.12
+  c2023_change: unchanged
+misra-c2023-dir-4.13:
+  title: 静态分析置信度要求
+  severity: advisory
+  category: analysis
+  description: 应对关键安全代码执行静态分析，确保分析结果达到足够的置信度等级
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: Dir 4.13
+  c2023_change: unchanged
+misra-c2023-dir-4.14:
+  title: The validity of values received from external sources shall be checked
+  severity: required
+  category: design
+  description: 来自外部来源（函数参数、I/O数据、传感器值）的值应进行有效性验证，实现防御性编程
+  spec_ref: SWE-MISRA-DEV2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: N/A
+  c2023_change: new
+misra-c2023-1.4:
+  title: Emergent language features shall not be used
+  severity: required
+  category: 环境 (Environment)
+  description: 新的C语言特性（如泛型选择_Generic、_Alignas、_Alignof等C11新增特性）不得使用，除非经过安全评估和偏差审批
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: manual
+  auto_checkable: false
+  mcu: all
+  profile: testing
+  c2012_ref: N/A
+  c2023_change: new
+misra-c2023-3.2:
+  title: 行号指令正确性
+  severity: required
+  category: 预处理 (Preprocessing)
+  description: '#line 指令必须指定有效的行号和文件名，且不得使用误导性的行号'
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 3.2
+  c2023_change: unchanged
+misra-c2023-4.2:
+  title: 禁止三字符组
+  severity: required
+  category: 字符集
+  description: 源代码中不得使用三字符组（trigraph sequences），应根据C标准在编译器层面禁用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 4.2
+  c2023_change: unchanged
+misra-c2023-5.10:
+  title: 标识符作用域辨析
+  severity: required
+  category: 标识符 (Identifiers)
+  description: 不同作用域的标识符不得隐藏外层作用域的同名标识符
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 5.10
+  c2023_change: unchanged
+misra-c2023-6.3:
+  title: typedef 类型使用
+  severity: advisory
+  category: 类型 (Types)
+  description: typedef 定义的类型应优先于底层基本类型使用，禁止混用本质类型和 typedef 别名
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 6.3
+  c2023_change: unchanged
+misra-c2023-7.3:
+  title: 常数字面量后缀约束
+  severity: required
+  category: 字面量 (Literals)
+  description: 所有非常整数字面量和浮点字面量应带有明确的后缀以指定其类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 7.3
+  c2023_change: unchanged
+misra-c2023-7.4:
+  title: 不应使用字符串字面量作为条件表达式
+  severity: required
+  category: 字面量 (Literals)
+  description: 字符串字面量不得用作条件表达式或布尔上下文中的操作数
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 7.4
+  c2023_change: unchanged
+misra-c2023-8.13:
+  title: const 限定指针参数
+  severity: advisory
+  category: 声明 (Declarations)
+  description: 指向仅读取而不修改的数据的指针参数应声明为指向 const 的指针
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 8.13
+  c2023_change: modified
+  c2023_note: 允许嵌入式回调函数省略 const 限定
+misra-c2023-8.14:
+  title: The restrict type qualifier shall not be used
+  severity: required
+  category: 声明 (Declarations)
+  description: restrict类型限定符不得使用，防止因指针别名假设错误导致未定义行为
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+misra-c2023-9.6:
+  title: Chained designators initializer shall not contain initializers without designators
+  severity: advisory
+  category: 初始化 (Initialization)
+  description: 使用链式指定初始化器时，不得包含无指定符的初始化器，防止初始化顺序混乱
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+misra-c2023-11.9:
+  title: void* 指针算术禁止
+  severity: required
+  category: 指针 (Pointer)
+  description: 不得对 void* 类型的指针执行算术运算，void* 的大小未定义
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 11.9
+  c2023_change: unchanged
+misra-c2023-12.3:
+  title: sizeof 操作数约束
+  severity: advisory
+  category: 表达式 (Expressions)
+  description: sizeof 操作符不应应用于具有副作用的表达式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 12.3
+  c2023_change: unchanged
+misra-c2023-12.4:
+  title: 表达式求值顺序不依赖
+  severity: required
+  category: 表达式 (Expressions)
+  description: 不得依赖于 C 标准未定义的表达式求值顺序
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 12.4
+  c2023_change: unchanged
+misra-c2023-12.5:
+  title: 逗号表达式约束
+  severity: required
+  category: 表达式 (Expressions)
+  description: 逗号运算符不得用于除 for 循环控制表达式之外的场景
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 12.5
+  c2023_change: unchanged
+misra-c2023-13.4:
+  title: 赋值操作符评估顺序
+  severity: required
+  category: 副作用 (Side Effects)
+  description: 复合赋值操作符（+=, -= 等）及其操作数的求值顺序不得依赖于未定义行为
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 13.4
+  c2023_change: unchanged
+misra-c2023-13.5:
+  title: 逻辑与/或的短路求值
+  severity: required
+  category: 副作用 (Side Effects)
+  description: 逻辑与（&&）和逻辑或（||）的短路求值行为不应被依赖来保护其他操作数中的副作用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 13.5
+  c2023_change: unchanged
+misra-c2023-13.6:
+  title: sizeof 不得包含副作用
+  severity: required
+  category: 副作用 (Side Effects)
+  description: sizeof 操作符的操作数中不应包含会产生副作用的表达式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 13.6
+  c2023_change: unchanged
+misra-c2023-15.8:
+  title: switch 条件类型约束
+  severity: required
+  category: 控制流 (Control Flow)
+  description: switch 语句的条件表达式应仅使用本质类型（essential type），且每个 case 标签应为同一类型的常量
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 15.8
+  c2023_change: unchanged
+misra-c2023-16.7:
+  title: 无参函数指针类型
+  severity: required
+  category: 函数 (Functions)
+  description: 声明无参函数指针时，应显式使用 void 参数列表，而非空括号
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 16.7
+  c2023_change: unchanged
+misra-c2023-18.9:
+  title: 指针算术与数组边界
+  severity: required
+  category: 指针/数组 (Pointer/Array)
+  description: 指针算术运算的结果必须确保指向同一数组对象或其后一位
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG2
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 18.9
+  c2023_change: unchanged
+misra-c2023-19.3:
+  title: 头文件包含守卫
+  severity: required
+  category: 预处理 (Preprocessing)
+  description: 所有头文件应使用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 19.3
+  c2023_change: unchanged
+misra-c2023-21.19:
+  title: locale.h 函数约束
+  severity: advisory
+  category: 标准库 (Standard Libraries)
+  description: locale.h 中的 setlocale 和 localeconv 等函数不应在运行时动态修改区域设置
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.19
+  c2023_change: unchanged
+misra-c2023-21.20:
+  title: signal.h 函数约束
+  severity: required
+  category: 标准库 (Standard Libraries)
+  description: signal 处理函数应遵循严格的限制：仅能调用 signal 本身或写入 volatile sig_atomic_t 变量
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.20
+  c2023_change: unchanged
+misra-c2023-21.21:
+  title: stdlib.h system 约束
+  severity: required
+  category: 标准库 (Standard Libraries)
+  description: system() 函数不得在生产代码中使用，其行为依赖于外部环境且不可控
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.21
+  c2023_change: unchanged
+misra-c2023-21.22:
+  title: at_quick_exit 约束
+  severity: advisory
+  category: 标准库 (Standard Libraries)
+  description: at_quick_exit 注册的函数应满足与 atexit 相同的限制条件
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: testing
+  c2012_ref: Rule 21.22
+  c2023_change: unchanged
+misra-c2023-22.3:
+  title: 文件打开模式验证
+  severity: required
+  category: 资源 (Resources)
+  description: fopen/freopen 的文件打开模式字符串应为有效且预期的模式，不得使用二进制模式以外的模式
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.3
+  c2023_change: unchanged
+misra-c2023-22.4:
+  title: 文件关闭确认
+  severity: required
+  category: 资源 (Resources)
+  description: 所有打开的文件应在关闭前检查 fclose 的返回值以确认成功关闭
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.4
+  c2023_change: unchanged
+misra-c2023-22.5:
+  title: 文件访问方式检查
+  severity: required
+  category: 资源 (Resources)
+  description: 文件操作（fread/fwrite/fprintf/fscanf）前应验证文件是以正确的访问模式打开的
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.5
+  c2023_change: unchanged
+misra-c2023-22.6:
+  title: EOF 比较约束
+  severity: required
+  category: 资源 (Resources)
+  description: 从 fgetc/getc 等函数获取的字符值在与 EOF 比较时应使用 int 类型而非 char
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.6
+  c2023_change: unchanged
+misra-c2023-22.7:
+  title: fgetpos/fsetpos 返回值检查
+  severity: required
+  category: 资源 (Resources)
+  description: fgetpos 和 fsetpos 的返回值应始终检查以确保文件定位操作成功
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.7
+  c2023_change: unchanged
+misra-c2023-22.8:
+  title: setvbuf 参数约束
+  severity: required
+  category: 资源 (Resources)
+  description: setvbuf 应在流上执行任何其他操作之前调用，且其缓冲区和大小参数应有效
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.8
+  c2023_change: unchanged
+misra-c2023-22.9:
+  title: fprintf/fscanf 格式字符串约束
+  severity: required
+  category: 资源 (Resources)
+  description: fprintf/fscanf 的格式字符串应与对应的参数类型严格匹配，不得使用不可控的格式字符串
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.9
+  c2023_change: unchanged
+misra-c2023-22.10:
+  title: 临时文件使用约束
+  severity: required
+  category: 资源 (Resources)
+  description: tmpfile/tmpnam 使用前需确认其安全性，tmpnam 的缓冲区不能为 NULL
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.10
+  c2023_change: unchanged
+misra-c2023-22.11:
+  title: remove/rename 返回值检查
+  severity: required
+  category: 资源 (Resources)
+  description: remove 和 rename 的返回值应始终检查，确保文件操作成功
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: Rule 22.11
+  c2023_change: unchanged
+
+misra-c2023-1.5:
+  title: Obsolescent language features shall not be used
+  severity: required
+  category: 环境 (Environment)
+  description: 废弃的语言特性（如旧式函数定义、隐式int等C90已废弃特性）不得使用
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-CFG1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-11.10:
+  title: The _Atomic qualifier shall not be applied to incomplete type void
+  severity: required
+  category: 指针 (Pointer)
+  description: _Atomic限定符不得应用于不完整类型void，void类型不具备原子操作意义
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-THREAD1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-12.6:
+  title: Structure and union members of atomic objects shall not be directly accessed
+  severity: required
+  category: 表达式 (Expressions)
+  description: 原子对象的结构体和联合体成员不得直接访问，应通过原子操作函数访问
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-THREAD1
+  check_method: cppcheck
+  auto_checkable: false
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-17.10:
+  title: A _Noreturn function shall have void return type
+  severity: required
+  category: 函数 (Functions)
+  description: 声明为_Noreturn的函数应具有void返回类型
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-17.11:
+  title: A function that never returns should be declared with _Noreturn
+  severity: advisory
+  category: 函数 (Functions)
+  description: 永远不会返回的函数应使用_Noreturn函数说明符声明
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: false
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-17.12:
+  title: Function identifier only with & or parenthesised parameter list
+  severity: advisory
+  category: 函数 (Functions)
+  description: 函数标识符应仅与&操作符或带括号的参数列表一起使用
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-17.13:
+  title: A function type shall not be type qualified
+  severity: required
+  category: 函数 (Functions)
+  description: 函数类型不得具有类型限定符（const、volatile、restrict等）
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-17.9:
+  title: A _Noreturn function shall not return to its caller
+  severity: required
+  category: 函数 (Functions)
+  description: 声明为_Noreturn的函数不得返回其调用者
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: false
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-2.8:
+  title: A project should not contain unused object definitions
+  severity: advisory
+  category: 未使用代码 (Unused Code)
+  description: 项目中不应包含未使用的对象定义，防止误用和代码膨胀
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-7.5:
+  title: The argument of an integer-constant macro shall have an appropriate form
+  severity: required
+  category: 字面量 (Literals)
+  description: 整数常量宏（如INT8_C、UINT16_C等<inttypes.h>宏）的参数应具有适当的形式，确保类型正确
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-7.6:
+  title: Small integer variants of min-width integer constant macros shall not be used
+  severity: required
+  category: 字面量 (Literals)
+  description: 最小宽度整数常量宏的小整数变体（如INT8_C、UINT8_C）不应使用，使用完整宽度宏替代
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-8.15:
+  title: All alignment specifications for same object shall specify the same alignment
+  severity: required
+  category: 声明 (Declarations)
+  description: 同一对象的所有声明中的对齐指定（_Alignas）应完全相同，防止对齐不一致
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-8.16:
+  title: Alignment specification of zero should not appear
+  severity: advisory
+  category: 声明 (Declarations)
+  description: 对齐说明符中的零对齐值不应出现在对象声明中
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-8.17:
+  title: At most one explicit alignment specifier should appear
+  severity: advisory
+  category: 声明 (Declarations)
+  description: 对象声明中至多应出现一个显式对齐说明符
+  spec_ref: SWE-MISRA-S1
+  check_method: cppcheck
+  auto_checkable: true
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-9.7:
+  title: Atomic objects shall be appropriately initialized before being accessed
+  severity: required
+  category: 初始化 (Initialization)
+  description: 原子类型对象在访问前应进行正确初始化，确保线程安全
+  spec_ref: SWE-MISRA-S1; SWE-MISRA-THREAD1
+  check_method: cppcheck
+  auto_checkable: false
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+
+misra-c2023-dir-4.15:
+  title: Floating-point evaluation shall not lead to undetected infinities/NaNs
+  severity: required
+  category: design
+  description: 浮点表达式的求值不应导致未检测到的无穷大或NaN的产生
+  spec_ref: SWE-MISRA-DEV2; SWE-MISRA-NUM1
+  check_method: cppcheck
+  auto_checkable: false
+  mcu: all
+  profile: safety
+  c2012_ref: N/A
+  c2023_change: new
+mcu-arm-1:
+  title: 中断优先级分组
+  severity: required
+  category: mcu-specific
+  description: ARM Cortex-M NVIC 中断优先级分组必须使用确定的优先级分组，不得使用不确定的优先级分组配置
+  mcu: arm
+  spec_ref: SWE-MISRA-MCU1
+  check_method: manual
+  auto_checkable: false
+  profile: performance
+  c2023_change: new
+  c2012_ref: N/A
+mcu-arm-2:
+  title: 中断嵌套保护
+  severity: required
+  category: mcu-specific
+  description: ARM Cortex-M 中断服务程序必须进行嵌套保护，确保不会出现优先级反转问题
+  mcu: arm
+  spec_ref: SWE-MISRA-MCU2
+  check_method: manual
+  auto_checkable: false
+  profile: performance
+  c2023_change: new
+  c2012_ref: N/A
+mcu-esp32-1:
+  title: ISR 函数属性
+  severity: required
+  category: mcu-specific
+  description: ESP32 ISR 必须使用 IRAM_ATTR 属性，确保中断服务程序运行在 IRAM 中以防止闪存缓存缺失
+  mcu: esp32
+  spec_ref: SWE-MISRA-MCU3
+  check_method: manual
+  auto_checkable: false
+  profile: performance
+  c2023_change: new
+  c2012_ref: N/A
+mcu-esp32-2:
+  title: FreeRTOS 任务栈大小检查
+  severity: advisory
+  category: mcu-specific
+  description: ESP32 FreeRTOS 任务应设置合理的栈大小，并在运行时使用 uxTaskGetStackHighWaterMark 进行栈溢出检查
+  mcu: esp32
+  spec_ref: SWE-MISRA-MCU4
+  check_method: cppcheck
+  auto_checkable: false
+  profile: performance
+  c2023_change: new
+  c2012_ref: N/A
+mcu-riscv-1:
+  title: RISC-V 内存屏障
+  severity: required
+  category: mcu-specific
+  description: RISC-V 多核系统中访问共享内存时需要使用 fence 指令确保内存序正确性
+  mcu: riscv
+  spec_ref: SWE-MISRA-MCU5
+  check_method: manual
+  auto_checkable: false
+  profile: performance
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-division-by-zero:
+  title: 除零检测
+  severity: required
+  category: P0-CRITICAL
+  description: 检测整数或浮点除零/取模零操作。常量除零直接报错；变量作为除数前必须检查非零。
+  spec_ref: CRIT-DIV-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: zerodiv,zerodivcond
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-buffer-overflow:
+  title: 缓冲区越界
+  severity: required
+  category: P0-CRITICAL
+  description: 检测数组下标超限、memcpy/sprintf/strcpy 无长度限界。禁用 sprintf/strcpy/gets。
+  spec_ref: CRIT-BUF-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: arrayIndexOutOfBounds,bufferAccessOutOfBounds,uninitstring
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-null-deref:
+  title: 空指针解引用
+  severity: required
+  category: P0-CRITICAL
+  description: 检测 malloc/calloc/pvPortMalloc 后未检查 NULL 直接解引用。函数返回指针必须校验。
+  spec_ref: CRIT-NULL-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: nullPointer,nullPointerRedundantCheck,returnDanglingLifetime
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-recursion:
+  title: 无限递归
+  severity: required
+  category: P0-CRITICAL
+  description: 禁止递归函数。必须用时加深度限制守卫（depth++ > MAX_DEPTH），最大深度 ≤ 4。
+  spec_ref: CRIT-REC-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: selfAssignment,recurseCount
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-infinite-loop:
+  title: 死循环
+  severity: required
+  category: P0-CRITICAL
+  description: while(1)/for(;;) 必须有退出条件：break、return、goto exit。
+  spec_ref: CRIT-LOOP-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: knownConditionTrueFalse,variableScope
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-integer-overflow:
+  title: 整型溢出
+  severity: required
+  category: P0-CRITICAL
+  description: 检测整型溢出/回绕。禁止隐式窄化转换。所有有符号运算用 int32_t 及以上。
+  spec_ref: CRIT-INT-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: integerOverflow,uninitvar,shiftTooManyBits
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-stack-overflow:
+  title: 栈溢出风险
+  severity: required
+  category: P0-CRITICAL
+  description: 局部数组 >1KB 报错。禁用 alloca。
+  spec_ref: CRIT-STK-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: allocaCalled,autoVariables
+  c2023_change: new
+  c2012_ref: N/A
+crit-safe-memory-leak:
+  title: 内存泄漏/双重释放
+  severity: required
+  category: P0-CRITICAL
+  description: 检测 malloc 未对应 free。检测二次 free。
+  spec_ref: CRIT-MEM-001
+  check_method: cppcheck
+  auto_checkable: true
+  profile: safety
+  cppcheck_check: memleak,leakReturnValNotUsed,doubleFree
+  c2023_change: new
+  c2012_ref: N/A

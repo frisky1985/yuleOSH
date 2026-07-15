@@ -24,6 +24,15 @@ RISCV_CC   = riscv64-unknown-elf-gcc
 ARM_CFLAGS = -mcpu=cortex-m4 -mthumb -Wall -Wextra -O2 -specs=nano.specs
 RISCV_CFLAGS = -march=rv64imac -mabi=lp64 -Wall -Wextra -O2
 
+# 静态代码检查编译模式 (P0 GATE — 全部静态分析)
+# make MODE=safe 时启用 — 所有告警转错误
+ifeq ($(MODE),safe)
+ARM_CFLAGS += -Werror -Wconversion -Wuninitialized \
+	-Wmaybe-uninitialized -Wnull-dereference \
+	-Wdouble-promotion -Wformat=2 -Wfloat-equal \
+	-Wdiv-by-zero -fstack-protector-strong -fstack-clash-protection
+endif
+
 # Detect available tools
 HAS_ARM   := $(shell command -v $(ARM_CC) 2>/dev/null && echo yes || echo no)
 HAS_RISCV := $(shell command -v $(RISCV_CC) 2>/dev/null && echo yes || echo no)
@@ -162,6 +171,88 @@ ci-quick:
 	@echo "=== Quick CI: unit tests + coverage ==="
 	cd $(CURDIR) && $(PYTHON) -m pytest --cov=cross --cov-branch --cov-report=term-missing -q
 	@echo "=== Done ==="
+
+# ------------------------------------------------------------------
+# Semgrep targets
+# ------------------------------------------------------------------
+
+.PHONY: semgrep semgrep-python semgrep-c semgrep-dataflow
+
+# Run all Semgrep rules
+semgrep:
+	@echo "=== Semgrep: SAST + 数据流分析 ==="
+	cd $(CURDIR) && bash scripts/run-semgrep.sh
+
+# Run Python security rules only
+semgrep-python:
+	@echo "=== Semgrep: Python Security ==="
+	semgrep --config=.semgrep/security-python.yml --error --metrics=off src/
+
+# Run C/C++ security rules only
+semgrep-c:
+	@echo "=== Semgrep: C/C++ Security ==="
+	semgrep --config=.semgrep/security-c.yml --error --metrics=off src/ || true
+
+# Run data flow analysis (taint tracking)
+semgrep-dataflow:
+	@echo "=== Semgrep: Data Flow Analysis ==="
+	semgrep --config=.semgrep/dataflow-python.yml --error --metrics=off src/
+
+# ------------------------------------------------------------------
+# CodeQL targets
+# ------------------------------------------------------------------
+
+.PHONY: codeql codeql-python codeql-clean
+
+# Run full CodeQL analysis (requires codeql CLI installed)
+codeql:
+	@echo "=== CodeQL: 深度安全 + 数据流分析 ==="
+	cd $(CURDIR) && bash scripts/run-codeql.sh
+
+codeql-python:
+	@echo "=== CodeQL: Python 深度分析 ==="
+	@if ! command -v codeql &>/dev/null; then \
+		echo "❌ codeql not installed. See scripts/run-codeql.sh for install instructions."; \
+		exit 1; \
+	fi
+	$(eval DB_DIR := .codeql-db)
+	rm -rf $(DB_DIR)
+	codeql database create $(DB_DIR) --language=python --source-root=. --overwrite
+	codeql database analyze $(DB_DIR) --format=sarif-latest --output=codeql-python.sarif codeql/python-queries:codeql-suites/python-security-extended.qls
+	rm -rf $(DB_DIR)
+	@echo "  ✅ CodeQL complete — report: codeql-python.sarif"
+
+# Full CI pipeline with SAST
+ci-sast:
+	@echo "=== yuleOSH SAST Pipeline ==="
+	$(MAKE) semgrep-python
+	$(MAKE) semgrep-c
+	$(MAKE) semgrep-dataflow
+	@echo "  ✅ SAST Pipeline: All passes"
+
+# ------------------------------------------------------------------
+# CVE Security Scan
+# ------------------------------------------------------------------
+
+.PHONY: cve-scan cve-scan-python cve-scan-npm
+
+# Run full CVE scan (Python + npm)
+cve-scan:
+	@echo "=== CVE Security Scan ==="
+	cd $(CURDIR) && bash scripts/cve-scan.sh --all
+	@echo "  ✅ CVE scan complete"
+
+# Python dependencies only
+cve-scan-python:
+	@echo "=== CVE Security Scan: Python ==="
+	cd $(CURDIR) && bash scripts/cve-scan.sh --python
+	@echo "  ✅ Python CVE scan complete"
+
+# npm dependencies only
+cve-scan-npm:
+	@echo "=== CVE Security Scan: npm ==="
+	cd $(CURDIR) && bash scripts/cve-scan.sh --npm
+	@echo "  ✅ npm CVE scan complete"
 
 # ------------------------------------------------------------------
 # C Coverage targets

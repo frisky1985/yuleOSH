@@ -36,11 +36,13 @@ def _infer_test_type(tc_name: str, xml_path: Path) -> str:
       4. Default: "unit"
     """
     # Check function name prefixes
-    if re.search(r"\btest_unit_\b", tc_name, re.IGNORECASE):
+    # Note: \b before _ works; after _ doesn't because _ is a \w char.
+    # Use (?:\w|$) to match either a following word char or end-of-string.
+    if re.search(r"\btest_unit_(?:\w|$)", tc_name, re.IGNORECASE):
         return "unit"
-    if re.search(r"\btest_integration_\b", tc_name, re.IGNORECASE):
+    if re.search(r"\btest_integration_(?:\w|$)", tc_name, re.IGNORECASE):
         return "integration"
-    if re.search(r"\btest_system_\b", tc_name, re.IGNORECASE):
+    if re.search(r"\btest_system_(?:\w|$)", tc_name, re.IGNORECASE):
         return "system"
 
     # Check file path segments
@@ -122,6 +124,7 @@ def _extract_testcase(tc: ET.Element, suite: ET.Element | None = None) -> dict:
 
     result = {
         "name": full_name,
+        "classname": class_name,
         "status": status,
         "duration": round(duration, 3),
         "message": message.strip()[:500],  # Truncate long messages
@@ -187,7 +190,7 @@ def parse_junit_xml(xml_path: Path) -> list[dict]:
 #   test_SWE_4_BP1_shall_10_1
 #   test_SWE4865_shall_10_1
 _SHALL_ID_PATTERN = re.compile(
-    r"(?:SHALL|shall|requirement|req)[_.-]?(?P<id>\d+[_.]\d+)",
+    r"(?:SHALL|shall|requirement|req)[_.-]?(?P<id>\d+(?:[_.]\d+)?)",
     re.IGNORECASE,
 )
 
@@ -224,7 +227,8 @@ def _extract_assertion_lines(source_files: list[Path], test_name: str) -> list[i
 
     # Assertion patterns to search for inside function bodies
     assert_patterns = [
-        r"assert\s*[(]",           # pytest assert
+        r"\bassert\b",             # pytest assert (generic, e.g. assert x == 1)
+        r"assert\s*[(]",           # pytest assert with parens
         r"self\.assert",           # unittest.TestCase.assert*
         r"TEST_ASSERT",            # Unity TEST_ASSERT*
         r"TEST_CHECK",             # Unity TEST_CHECK
@@ -277,7 +281,8 @@ def _extract_assertion_lines(source_files: list[Path], test_name: str) -> list[i
 
             if inside_function:
                 # Track Python indentation-based function body
-                if stripped and not stripped.startswith((" ", "\t")):
+                # Use the original line (not stripped) to test indentation
+                if stripped and not line.startswith((" ", "\t")):
                     # Back to module-level scope
                     inside_function = False
                     continue
@@ -334,7 +339,7 @@ def auto_map_shall_coverage(
     for i, shall in enumerate(shall_statements):
         stmt = shall.get("statement", "")
         # Try to extract SHALL ID from statement (e.g., "SHALL-10.1" or "10.1")
-        id_match = re.search(r"(?:SHALL|shall|Requirement|requirement|REQ|req)[-_.\s]*(\d+[_.]\d+)", stmt)
+        id_match = re.search(r"(?:SHALL|shall|Requirement|requirement|REQ|req)[-_.\s]*(\d+(?:[_.]\d+)?)", stmt)
         if id_match:
             sid = id_match.group(1).replace("_", ".")
         else:

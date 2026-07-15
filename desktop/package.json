@@ -1,0 +1,24 @@
+{
+  "name": "yuleosh-desktop",
+  "version": "0.1.0",
+  "description": "yuleOSH Desktop — 嵌入式AI开发全流程平台",
+  "author": "frisky1985",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "ELECTRON_DEV=true electron .",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --mac --linux --win",
+    "build:win": "electron-builder --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  }
+}

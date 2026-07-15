@@ -140,6 +140,8 @@ class TestFileDiscovery:
 
     def test_find_test_files_no_tests_dir(self):
         """GIVEN dir without tests/ WHEN find_test_files THEN empty list."""
+        from yuleosh.ci.run import _test_file_cache
+        _test_file_cache.clear()
         with tempfile.TemporaryDirectory() as td:
             files = find_test_files(td)
             assert files == []
