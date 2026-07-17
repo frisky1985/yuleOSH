@@ -405,9 +405,15 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             elif "coverage" in check_item.lower():
-                if self._evidence_dir_exists():
+                # Check for actual coverage reports, not just evidence dir
+                cov_report = self.project_dir / ".osh" / "ci" / "coverage.json"
+                gcov_report = self.project_dir / ".yuleosh" / "reports" / "c-coverage.json"
+                if cov_report.exists() or gcov_report.exists():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} (coverage report found)")
+                elif self._evidence_dir_exists():
+                    passed += 1
+                    details.append(f"  ⚠️ Check: {check_item} (evidence exists but no coverage report)")
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
@@ -451,13 +457,10 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             else:
-                # Fallback: if evidence directory exists, assume check is passed
-                if has_evidence:
-                    passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
-                else:
-                    failed += 1
-                    details.append(f"  ❌ Check: {check_item}")
+                # SECURITY: No fallback pass — unknown/unmatched checks are marked failed
+                # to prevent false positives from inflated compliance scores.
+                failed += 1
+                details.append(f"  ❌ Check: {check_item} (unknown check type — not recognized)")
 
         total = passed + failed
         if total == 0:

@@ -9,8 +9,10 @@ import sys
 from pathlib import Path
 
 from . import json_ok, json_error
+from .middleware import require_auth
 
 
+@require_auth
 def handle_spec(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to spec sub-resources."""
     if path_tail == "validate":
@@ -29,10 +31,15 @@ def _validate(method: str, body: dict) -> tuple[dict, int]:
     if not spec_path:
         return json_error("'path' is required")
 
-    resolved = Path(spec_path)
-    if not resolved.is_absolute():
-        from . import OSH_HOME
-        resolved = Path(OSH_HOME) / resolved
+    from . import OSH_HOME
+    project_root = Path(OSH_HOME).resolve()
+    resolved = (project_root / spec_path.lstrip("/")).resolve()
+
+    # SECURITY: path traversal guard
+    try:
+        resolved.relative_to(project_root)
+    except ValueError:
+        return json_error("Spec path must be within project directory", 403)
 
     if not resolved.exists():
         return json_error(f"Spec file not found: {resolved}")

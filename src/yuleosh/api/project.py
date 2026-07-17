@@ -6,8 +6,10 @@
 from datetime import datetime
 
 from . import json_ok, json_error
+from .middleware import require_auth
 
 
+@require_auth
 def handle_project(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to project sub-resources."""
     from yuleosh.store import Store  # pylint: disable=import-error

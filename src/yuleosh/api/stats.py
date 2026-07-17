@@ -11,9 +11,11 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 from . import json_ok, json_error
+from .middleware import require_auth
 from yuleosh.store import Store
 
 
+@require_auth
 def handle_stats(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to stats sub-resources."""
     if method != "GET":

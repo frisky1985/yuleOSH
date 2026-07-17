@@ -10,8 +10,10 @@ import subprocess
 from pathlib import Path
 
 from . import json_ok, json_error
+from .middleware import require_auth
 
 
+@require_auth
 def handle_ci(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to CI sub-resources."""
     if path_tail == "runs" and method == "GET":

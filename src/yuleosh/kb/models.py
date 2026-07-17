@@ -3,6 +3,8 @@
 
 """Knowledge Base data models — dataclasses for kb_articles, lessons, fmea_entries."""
 
+import re
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -156,16 +158,40 @@ class FmeaEntry:
         )
 
 
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags and dangerous patterns from text."""
+    if not isinstance(text, str):
+        return str(text) if text is not None else ""
+    text = re.sub(r'<script[^>]*?>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<iframe[^>]*?>.*?</iframe>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<object[^>]*?>.*?</object>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<embed[^>]*?>.*?</embed>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'\s+on\w+\s*=\s*"[^"]*"', '', text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+on\w+\s*=\s*'[^']*'", '', text, flags=re.IGNORECASE)
+    text = re.sub(r'javascript\s*:', '', text, flags=re.IGNORECASE)
+    return text
+
 def sanitize_kb_article_fields(body: dict) -> dict:
     """Extract and validate only the allowed fields for a KbArticle."""
     allowed = {"title", "content", "source", "source_ref", "tags"}
-    return {k: v for k, v in body.items() if k in allowed and isinstance(v, str)}
+    cleaned = {}
+    for k, v in body.items():
+        if k in allowed and isinstance(v, str):
+            cleaned[k] = _strip_html(v)
+    return cleaned
 
 
 def sanitize_lesson_fields(body: dict) -> dict:
     """Extract and validate only the allowed fields for a Lesson."""
     allowed = {"title", "problem", "solution", "root_cause", "project_id", "severity"}
-    cleaned = {k: v for k, v in body.items() if k in allowed}
+    cleaned = {}
+    for k, v in body.items():
+        if k in allowed:
+            if isinstance(v, str):
+                cleaned[k] = _strip_html(v)
+            else:
+                cleaned[k] = v
     sev = cleaned.get("severity", "medium")
     if sev not in Lesson.VALID_SEVERITIES:
         cleaned["severity"] = "medium"
@@ -179,7 +205,10 @@ def sanitize_fmea_fields(body: dict) -> dict:
     cleaned = {}
     for k in allowed:
         if k in body:
-            cleaned[k] = body[k]
+            if isinstance(body[k], str):
+                cleaned[k] = _strip_html(body[k])
+            else:
+                cleaned[k] = body[k]
     # Clamp numeric ratings to 1-10
     for num_field in ("severity", "occurence", "detection"):
         val = cleaned.get(num_field, 1)

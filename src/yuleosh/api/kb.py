@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from . import json_ok, json_error, get_store
+from .middleware import require_auth
 from yuleosh.kb.store import KbStore
 from yuleosh.kb.models import (
     sanitize_kb_article_fields,
@@ -24,6 +25,7 @@ def _get_kb_store():
     return KbStore()
 
 
+@require_auth
 def handle_kb(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route KB requests to sub-resource handlers."""
     if not path_tail:
