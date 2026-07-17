@@ -10,8 +10,10 @@ import subprocess
 from pathlib import Path
 
 from . import json_ok, json_error
+from .middleware import require_auth
 
 
+@require_auth
 def handle_review(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to review sub-resources."""
     if path_tail == "auto" and method == "POST":
