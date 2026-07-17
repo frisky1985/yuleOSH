@@ -72,7 +72,10 @@ class TestLoopE2E:
           3. 通过 EventBus 发布 CI_FAILURE 事件
           4. 验证 handler 被调用
         """
-        bus = SystemEventBus()
+        bus = SystemEventBus(
+            source_validation_enabled=False,
+            rate_limit_enabled=False,
+        )
         engine = LoopEngine(event_bus=bus)
 
         # 注册 Loop 1 handler (require_kg=False 以使用降级模式)
@@ -276,7 +279,10 @@ class TestLoopE2E:
           3. 发布 CI_FAILURE 事件
           4. 验证: 事件送达 → KG 查询 → spec-delta 生成 → 审计追踪
         """
-        bus = SystemEventBus()
+        bus = SystemEventBus(
+            source_validation_enabled=False,
+            rate_limit_enabled=False,
+        )
         engine = LoopEngine(event_bus=bus)
 
         from yuleosh.loop_engine.feedback_handlers.loop1_defect_to_req import (
@@ -338,7 +344,10 @@ class TestLoopE2E:
           - 现场缺陷 → Loop 2 (stub)
           - KG置信度 → Loop 4 (stub)
         """
-        bus = SystemEventBus()
+        bus = SystemEventBus(
+            source_validation_enabled=False,
+            rate_limit_enabled=False,
+        )
         received = []
 
         def collector(event):

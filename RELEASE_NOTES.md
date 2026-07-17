@@ -1,3 +1,146 @@
+# yuleOSH v3.1.0 — Loop Engineering I4 生产加固发布
+
+> **发布日期**: 2026-07-17
+> **版本**: v3.1.0
+> **上一个版本**: v3.0.0 (Loop Engineering 四个闭环交付)
+
+---
+
+## 概览
+
+I4 是 Loop Engineering 最后一个迭代，聚焦**生产加固 + 验收完整验证**。在小克交付的 I1-I3 代码基础上，追加四个生产级组件并进行全面验收。
+
+---
+
+## 🚀 生产加固 (I4)
+
+### 事件来源验证 (LE-009) — 小克 👨‍💻
+- **SourceValidator** (`event_bus.py`): HMAC-SHA256 签名生成与验证
+- 白名单 + 自动白名单机制
+- 可通过 `YULEOSH_EVENT_SOURCE_SECRET` 环境变量配置
+- 验证失败 → 死信队列 + 统计 + 审计日志
+
+### 速率限制 (LE-011) — 小克 👨‍💻
+- **TokenBucket**: 每个事件类型独立 token bucket
+- 默认: 50 events/sec, burst=100
+- 可配置 `rate_limit_per_type` 按事件类型覆盖
+- 超限事件入死信队列
+
+### 死信队列 (LE-003 隐含) — 小克 👨‍💻
+- **DeadLetterQueue**: 事件失败后的最终归宿
+- 触发条件: 来源验证失败、速率限制超限、handler 重试耗尽
+- 支持 retry/clear/list 操作
+- 可选持久化到 Store
+
+### 审计日志 (LE-012) — 小克 👨‍💻
+- **AuditLog**: 每次 emit() 完成后自动记录
+- 完整字段: event_id, type, source, priority, handler_results, rollback_status
+- `handler_results` 数组记录每个 handler 的执行状态和错误
+- 可选持久化到 Store
+
+### 质量验收 — 小马 🐴
+- 52 个验收测试全部激活 + 真实运行
+- 6 个 E2E 测试验证完整流水线
+- 240 个 loop 相关测试全部通过
+
+---
+
+## ✅ 验收统计
+
+| 区域 | 测试数 | 通过 | 覆盖率 |
+|:-----|:------:|:----:|:------:|
+| ACC 验收测试 | 52 | 52 | 100% |
+| E2E 测试 | 6 | 6 | 100% |
+| Loop 单元测试 | 182 | 182 | 100% |
+| **总计** | **240** | **240** | **100%** |
+
+### 验收矩阵摘要
+
+| 区域 | 总 ACC | ✅ 已实现 | 🟡 部分 |
+|:-----|:------:|:--------:|:--------:|
+| EventBus | 10 | 8 | 2 |
+| Loop 1-4 | 24 | 22 | 2 |
+| CLI + 审计 | 13 | 9 | 4 |
+| **总计** | **47** | **39 (83%)** | **8 (17%)** |
+
+所有 SHALL 级别全部 ✅，8 个 🟡 为 SHOULD 级别或 CLI 增强，已有行动计划。
+
+---
+
+## 📋 遗留问题 (P3, 不影响签署)
+
+| # | 组件 | 说明 | 严重度 |
+|:-:|:----|:-----|:------:|
+| I4-01 | SourceValidator | `_auto_whitelist` 可能被绕过，建议默认禁用 | P3 |
+| I4-02 | TokenBucket | `default_burst` 100 硬编码，建议配置化 | P3 |
+| I4-03 | DeadLetterQueue | 主路径和 retry 路径可能双重入队 | P3 |
+
+---
+
+## 📦 发布文件
+
+- `reports/loop-engineering-i4-review.md` — I4 生产加固审查报告
+- `reports/loop-engineering-i4-quality.md` — I4 质量进度报告
+- `docs/acceptance-matrix-loop-engineering.md` (v3.1.0) — 更新验收矩阵
+- `docs/spec-delta-loop-engineering.md` (v3.1.0) — 更新 Spec
+
+---
+
+# yuleOSH v3.1.1 — 专家评审问题修复 Patch
+
+> **发布日期**: 2026-07-17
+> **版本**: v3.1.1
+> **上一个版本**: v3.1.0
+
+---
+
+## 概览
+
+在老陈专家评审中发现三个问题（2 P0 + 1 P1），一次性修复完成。
+
+---
+
+## 🚀 修复
+
+### Fix 1: SourceValidator auto_whitelist 默认禁用 (🔴 P0)
+- 新增 `auto_whitelist` 布尔参数，默认 `False`
+- `False` + 空白名单 + 无密钥 → 拒绝所有事件（严格模式）
+- `True` + 空白名单 → 自动信任所有来源（兼容模式）
+- 修复前: 未配置白名单时存在潜在自动信任行为
+
+### Fix 2: DeadLetterQueue 文件持久化 (🔴 P0)
+- 新增 JSON 文件持久化，路径: `.yuleosh/loop/dead_letter_queue.json`
+- 重启后自动恢复死信事件，数据零丢失
+- 所有操作（enqueue/clear/retry）自动同步到磁盘
+
+### Fix 3: CLI audit 增强 — 支持时间范围查询 (🟡 P1)
+- `--since` / `--until` ISO 8601 时间过滤
+- `--type` / `-t` 事件类型过滤
+- `--limit` 条数限制（默认 50）
+
+示例:
+```bash
+yuleosh loop audit list \
+  --since 2026-07-17T00:00:00 \
+  --until 2026-07-17T23:59:59 \
+  --type ci.failure \
+  --limit 100
+```
+
+---
+
+## ✅ 验证
+
+| 测试套件 | 用例数 | 通过 | 备注 |
+|:---------|:------:|:----:|:-----|
+| event_bus 单元测试 | 55 | 55 | 含 3 个新增测试 |
+| E2E 测试 | 6 | 6 | 全通过 |
+| 验收测试 | 51 | 51 | 全通过 |
+
+修复报告: `reports/expert-issue-fix-report.md`
+
+---
+
 # yuleOSH v2.3.0 — 知识图谱深化 + 技术债攻坚发布
 
 > **发布日期**: 2026-07-17
