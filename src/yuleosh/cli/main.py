@@ -2339,6 +2339,10 @@ def _build_parser() -> argparse.ArgumentParser:
     from yuleosh.cli.onboard import build_onboard_parser
     build_onboard_parser(sub)
 
+    # loop
+    from yuleosh.loop_engine.cli import build_loop_subparser
+    build_loop_subparser(sub)
+
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
 
@@ -2684,6 +2688,10 @@ def main():
     elif args.command == "onboard":
         from yuleosh.cli.onboard import handle_onboard_command
         handle_onboard_command(args)
+
+    elif args.command == "loop":
+        from yuleosh.loop_engine.cli import handle_loop_command
+        sys.exit(handle_loop_command(args))
 
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main
