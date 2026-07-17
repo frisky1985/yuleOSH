@@ -172,6 +172,67 @@ class TestKeySerialization:
             assert mode == 0o600
 
 
+class TestSignManifestFile:
+    @requires_crypto
+    def test_sign_manifest_file_roundtrip(self):
+        priv, pub = generate_keypair()
+        with tempfile.TemporaryDirectory() as tmp:
+            priv_path = os.path.join(tmp, "private.pem")
+            pub_path = os.path.join(tmp, "public.pem")
+            save_keys(priv, pub, private_path=priv_path, public_path=pub_path)
+
+            manifest_path = os.path.join(tmp, "audit-manifest.json")
+            manifest_obj = {
+                "build_id": "build-001",
+                "version": "2.0.0",
+                "files": ["file1.bin", "file2.bin"],
+                "timestamp": "2026-07-17T00:00:00",
+            }
+            with open(manifest_path, "w") as f:
+                json.dump(manifest_obj, f)
+
+            from yuleosh.evidence.signer import sign_manifest_file
+            sig = sign_manifest_file(manifest_path, priv_path)
+
+            # Verify the signature was written to the file
+            with open(manifest_path) as f:
+                updated = json.load(f)
+            assert "signature" in updated
+            assert updated["signature"] == sig
+
+            from yuleosh.evidence.signer import verify_manifest, load_public_key
+            loaded_pub = load_public_key(pub_path)
+            # sign_manifest_file signs the raw file content (unindented json.dump)
+            # Verify against the same format that was originally in the file
+            original_content = json.dumps(manifest_obj)
+            assert verify_manifest(original_content, sig, loaded_pub) is True
+
+    @requires_crypto
+    def test_sign_manifest_file_tampered_detection(self):
+        priv, pub = generate_keypair()
+        with tempfile.TemporaryDirectory() as tmp:
+            priv_path = os.path.join(tmp, "private.pem")
+            pub_path = os.path.join(tmp, "public.pem")
+            save_keys(priv, pub, private_path=priv_path, public_path=pub_path)
+
+            manifest_path = os.path.join(tmp, "audit-manifest.json")
+            with open(manifest_path, "w") as f:
+                f.write('{"build_id": "build-001", "files": []}')
+
+            from yuleosh.evidence.signer import sign_manifest_file, verify_manifest, load_public_key
+            sig = sign_manifest_file(manifest_path, priv_path)
+
+            # The function signs exact bytes read from file, so original_content
+            # is what was read before signature was added
+            original_content = '{"build_id": "build-001", "files": []}'
+            loaded_pub = load_public_key(pub_path)
+            assert verify_manifest(original_content, sig, loaded_pub) is True
+
+            # Tampered content should fail
+            tampered = '{"build_id": "tampered", "files": []}'
+            assert verify_manifest(tampered, sig, loaded_pub) is False
+
+
 @pytest.mark.skipif(_HAS_CRYPTO, reason="cryptography IS installed, testing no-crypto path requires skipping")
 class TestNoCrypto:
     def test_generate_fails_without_crypto(self):
