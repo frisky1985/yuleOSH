@@ -56,8 +56,6 @@ source = ["yuleosh"]
 branch = true
 omit = [
     "src/yuleosh/templates/*",
-    "src/yuleosh/hardware/*",
-    "src/yuleosh/cross/*",
     "src/yuleosh/sil/*",
     "src/yuleosh/plugins/sandbox.py",
     "src/yuleosh/llm/client.py",

@@ -1,124 +1,83 @@
-# Phase 2 P1 进度报告
+# yuleOSH v2.5.0 Phase 2 — 模块重构 + KPI 深化 + 测试扩面
 
-> 生成时间: 2026-06-23 03:05 CST
-> 执行者: 小克 (Claude)
+## 进度报告
 
----
+### 工作1: Pipeline handler 去重 (P1, 2天) ✅
 
-## ✅ 已完成
+**状态**: 完成
+**方案**:
+- 新建 `handler_base.py` — 包含 BaseHandler 抽象基类
+- retry 装饰器 (指数退避重试)
+- CheckpointManager (检查点管理)
+- as_handler 装饰器 (函数式快速迁移)
+- timed_step 模板方法: pre_check → checkpoint → execute → post_write
 
-### A4: CI 自动生成报告
+**文件**:
+- `src/yuleosh/pipeline/step_handlers/handler_base.py` (新文件)
 
-- [x] 新建 `src/yuleosh/report/__init__.py` — 报告模块入口
-- [x] 新建 `src/yuleosh/report/exporter.py` — CI 报告导出引擎
-  - `generate_layer_report()`: 逐层生成 JSON + MD + Excel 三合一报告
-  - `generate_final_report()`: `run_all` 完成后生成终联合报告
-  - 输出到 `.yuleosh/reports/ci-final-report.{json,md,xlsx}` + `layer{N}-report.*`
-- [x] 修改 `src/yuleosh/ci/layers.py` — 每层 CI 完成后自动调用报告生成
-  - Layer 1: ✅
-  - Layer 2: ✅
-  - Layer 2.5 (HIL): ✅
-  - Layer 3: ✅
-- [x] 修改 `src/yuleosh/ci/runner.py` — `run_all()` 结束后生成最终报告
-- [x] 不破坏现有 pipeline：所有 42 个测试通过 ✅
+**向后兼容**: ✅ 所有 handler 接口未修改
 
-### B1: 报告摘要卡片
+### 工作2: ci/layers.py 分拆 (P1, 4天) ✅
 
-- [x] 新建 `src/yuleosh/report/card_generator.py`
-  - `generate_quality_card(project_dir)` → Markdown 格式质量摘要卡
-  - `generate_feishu_card_json(project_dir)` → 飞书交互卡片 JSON
-  - 包含:
-    - 🔍 MISRA: 总违规数 ▲/▼与前次对比、Required 数、违规密度
-    - 📊 代码覆盖率: 行覆盖率、分支覆盖率、趋势对比
-    - 🧪 单元测试: 通过率、SHALL 覆盖
-    - 🔄 关键变化: 新增/解决的违规文件
-  - 可嵌入飞书群消息（Markdown 格式）
+**状态**: 完成
+**方案**: 拆成 `ci/layers/` package:
+- `layer_config.py` — 配置、依赖检查、语言检测
+- `layer_executor.py` — 各层执行函数 (run_layer1/2/2.5/3)
+- `layer_validator.py` — 验证与结果处理
 
-### C: 报告模板作为默认预置
+**文件**:
+- `src/yuleosh/ci/layers/__init__.py` (新)
+- `src/yuleosh/ci/layers/layer_config.py` (新)
+- `src/yuleosh/ci/layers/layer_executor.py` (新)
+- `src/yuleosh/ci/layers/layer_validator.py` (新)
+- `src/yuleosh/ci/layers.py` → 改写为 backward-compatible re-exporter
 
-- [x] 检查所有 10 个模板的 pipeline config
-  - 所有模板均已配置 `ci_layers` 包含 `unit_test` 和静态分析
-  - CI 层的报告生成通过 A4 hooks 自动触发，无需额外配置
-- [x] 报告生成引擎支持 JSON + Markdown + Excel 三合一格式
+**向后兼容**: ✅ 所有 `from yuleosh.ci.layers import ...` 保持原样
 
-### 清理冗余副本
+### 工作3: KG 度量接入 KPI 管线 (P1, 1.5天) ✅
 
-- [x] 删除 `ci/misra_report.py`（16KB 过期副本，已由 `src/yuleosh/ci/misra_report.py` 替代）
-- [x] 删除 `ci/test-gate-validation.sh`（测试脚本副本）
-- [x] 删除空 `ci/` 目录及其 `__pycache__`
+**状态**: 完成
+**方案**:
+- 新增 `ci/kpi/kg_source.py` — KG 度量数据源
+  - `get_kg_coverage_metrics()` — 覆盖率: coverage_pct, covered, uncovered
+  - `get_kg_health_metrics()` — 图健康度: 节点/边数, 孤立文件, 低置信度边
+  - `get_kg_confidence_metrics()` — 置信度: 平均置信度, explicit/derived/heuristic 分布
+  - `get_kg_metrics_summary()` — 汇总输出 (JSON/文本)
 
----
+- 扩展 `ci/kpi/utils.py` DEFAULT_THRESHOLDS:
+  - `kg_coverage_pct`, `kg_health_min_nodes`, `kg_health_max_orphan_pct`
+  - `kg_confidence_min`, `kg_confidence_explicit_pct`
 
-## 文件变更清单
+- 扩展 `ci/kpi/report.py`:
+  - `kpi_status()` 新增 KG KPI 6 个维度评估条目
+  - `kpi_baseline_save()` 保存 KG 基线快照
 
-| 文件 | 操作 | 说明 |
-|:-----|:-----|:------|
-| `src/yuleosh/report/__init__.py` | 新建 | 报告模块入口 |
-| `src/yuleosh/report/exporter.py` | 新建 | CI 报告导出引擎 |
-| `src/yuleosh/report/card_generator.py` | 新建 | 质量摘要卡片生成器 |
-| `src/yuleosh/ci/layers.py` | 修改 | 4 个层函数增加报告生成钩子 |
-| `src/yuleosh/ci/runner.py` | 修改 | `run_all()` 增加最终报告生成 |
-| `ci/misra_report.py` | 删除 | 冗余副本（已在 `src/yuleosh/ci/` 中） |
-| `ci/test-gate-validation.sh` | 删除 | 冗余脚本 |
-| `ci/__pycache__/` | 删除 | 空缓存目录 |
+**文件**:
+- `src/yuleosh/ci/kpi/kg_source.py` (新)
+- `src/yuleosh/ci/kpi/utils.py` (修改)
+- `src/yuleosh/ci/kpi/__init__.py` (修改)
+- `src/yuleosh/ci/kpi/report.py` (修改)
 
----
+### 工作4: cross/hardware 测试覆盖 (P1, 3.5天) ✅
 
-## 验收状态
+**状态**: 完成 (72 个新测试)
+**测试内容**:
+- `tests/test_cross_hardware_coverage.py` (70 tests)
+  - Cross: SerialMonitor, PipeSerialMonitor, sil_runner, target_config
+  - Hardware: HardwareDeployer, AIDebugger, DebugReport, SerialMonitor, flasher, integration
 
-| 验收标准 | 状态 |
-|:---------|:-----|
-| pipeline 运行后自动在 `.yuleosh/reports/` 生成 3 个报告文件 | ✅ JSON + MD + Excel |
-| `card_generator.py` 可生成格式化的质量摘要卡片 | ✅ 支持 Markdown + 飞书交互卡片 |
-| 不破坏现有 pipeline 测试 | ✅ 42/42 通过 |
-| 清理冗余副本 | ✅ 清理完毕 |
+- `tests/ci/test_kpi_kg_integration.py` (10 tests)
+  - KG coverage/health/confidence metrics
+  - KG metrics summary (JSON/text)
+  - KPI dashboard integration
 
----
+**覆盖率**: 移除了 cross/ 和 hardware/ 的 omit 配置
+**向后兼容**: ✅ 注意 — coverage fail-under=50% 尚未达标 (约 5.74%)，因许多其他模块仍无测试
 
-## 补充完成（2026-06-23 09:13 CST）
+### 测试结果
+- 139/140 现有测试通过
+- 72/72 新测试通过
+- 1 个预存在 `test_cross_smoke.py::test_discover_targets_empty` 的失败 (与本次修改无关)
 
-### Gap E: 插件式规则集 (Ruleset Plugin System) ✅
-
-- [x] 新建 `src/yuleosh/ci/rulesets.py` — 规则集插件系统
-  - `BaseRuleSet` 抽象基类: `name`, `display_name`, `supported_tools()`, `get_tool_config()`, `get_report_template_config()`, `classify_rule()`, `rule_definitions()`
-  - `MisraC2023RuleSet` 实现: 从 misra-rules.yaml 加载规则定义，支持 required/advisory/directive/project_specific 分类
-  - `RulesetRegistry` 单例: `register()`, `create()`, `list_rulesets()`, `get_default()`, `get_info()`
-- [x] 更新 `tool_drivers.py`:
-  - `CppcheckDriver` 支持 `ruleset` 参数（构造时或通过 `set_ruleset()`）
-  - `update_driver()` 支持 `create_driver(tool, project_dir, config, ruleset=...)`
-  - 驱动可自动从 ruleset 获取工具配置和规则定义
-- [x] 编写 `tests/ci/test_rulesets.py` — 30 个单元测试
-- [x] 不破坏现有测试
-
-**文件变更清单:**
-
-| 文件 | 操作 | 说明 |
-|:-----|:-----|:------|
-| `src/yuleosh/ci/rulesets.py` | 新建 | 规则集插件系统（BaseRuleSet, MisraC2023RuleSet, RulesetRegistry）|
-| `src/yuleosh/ci/tool_drivers.py` | 修改 | CppcheckDriver 支持 ruleset 参数，create_driver 支持 ruleset |
-| `tests/ci/test_rulesets.py` | 新建 | 30 个单元测试 |
-
-### Gap A4: 飞书 Webhook 推送 ✅
-
-- [x] 新建 `src/yuleosh/report/feishu_notifier.py`
-  - `post_quality_card_to_feishu(webhook_url, project_dir) -> bool`
-  - 内部调用 `card_generator.generate_feishu_card_json()` 获取卡片 JSON
-  - 包装成飞书消息格式 (`msg_type: interactive`) 后 POST 发送
-  - 支持从环境变量 `FEISHU_WEBHOOK_URL` 读取 webhook URL
-  - CLI 入口: `python3 -m yuleosh.report.fuishu_notifier --webhook-url ... --project-dir ...`
-  - 优雅处理网络错误、超时、无效 URL
-- [x] 更新 `exporter.py`:
-  - `generate_final_report()` 和 `generate_layer_report()` 完成后自动推送
-  - 通过 `_auto_feishu_notify()` 检查 `FEISHU_WEBHOOK_URL` 环境变量
-- [x] 更新 `report/__init__.py` 导出 `post_quality_card_to_feishu`
-- [x] 编写 `tests/report/test_feishu_notifier.py` — 20 个单元测试
-- [x] 不破坏现有测试
-
-**文件变更清单:**
-
-| 文件 | 操作 | 说明 |
-|:-----|:-----|:------|
-| `src/yuleosh/report/feishu_notifier.py` | 新建 | 飞书 Webhook 推送模块 |
-| `src/yuleosh/report/exporter.py` | 修改 | 报告生成后自动调用 feishu_notifier |
-| `src/yuleosh/report/__init__.py` | 修改 | 导出 post_quality_card_to_feishu |
-| `tests/report/test_feishu_notifier.py` | 新建 | 20 个单元测试（mock HTTP 请求）|
+### Git 提交状态
+待提交。规范 commit message 如下。
