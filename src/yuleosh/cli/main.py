@@ -2114,6 +2114,69 @@ def _build_parser() -> argparse.ArgumentParser:
     from yuleosh.kb.cli import build_kb_subparser
     build_kb_subparser(sub)
 
+    # kg (knowledge graph)
+    p_kg = sub.add_parser("kg", help="Knowledge Graph management")
+    kgsub = p_kg.add_subparsers(dest="kg_sub")
+    p_kg_build = kgsub.add_parser("build", help="Incremental knowledge graph build")
+    p_kg_build.add_argument("files", nargs="*", default=None, help="Changed file paths")
+    p_kg_build.add_argument("--build-id", "-b", default=None, help="Build identifier")
+    p_kg_build.add_argument("--auto", action="store_true", help="Auto-detect changes from git diff")
+    p_kg_build.add_argument("--ci", action="store_true", help="CI mode (auto-detect + snapshot)")
+    p_kg_build.add_argument("--files", type=str, default=None, help="Comma-separated file paths")
+    p_kg_build.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_bootstrap = kgsub.add_parser("bootstrap", help="Full bootstrap from traceability data")
+    p_kg_bootstrap.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_snapshot = kgsub.add_parser("snapshot", help="Snapshot management")
+    ssub = p_kg_snapshot.add_subparsers(dest="snapshot_sub")
+    p_kg_snap_list = ssub.add_parser("list", help="List graph snapshots")
+    p_kg_snap_list.add_argument("--limit", type=int, default=20, help="Maximum snapshots to show")
+    p_kg_snap_list.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_snap_diff = ssub.add_parser("diff", help="Diff two snapshots")
+    p_kg_snap_diff.add_argument("build_a", help="First build ID")
+    p_kg_snap_diff.add_argument("build_b", help="Second build ID")
+    p_kg_snap_diff.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_query = kgsub.add_parser("query", help="Knowledge Graph queries")
+    qsub = p_kg_query.add_subparsers(dest="query_sub")
+    p_kg_query_impact = qsub.add_parser("impact", help="Impact analysis for changed files")
+    p_kg_query_impact.add_argument("file_path", help="File path(s) to analyze (comma-separated)")
+    p_kg_query_impact.add_argument("--layer", default=None, help="Test layer filter (unit/integration/sil/hil)")
+    p_kg_query_impact.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_stats = kgsub.add_parser("stats", help="Show graph statistics")
+    p_kg_stats.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_stats.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # P2: kg report — RTM + Metrics
+    p_kg_report = kgsub.add_parser("report", help="Generate reports from KG (P2)")
+    rsub = p_kg_report.add_subparsers(dest="report_sub")
+    p_kg_report_rtm = rsub.add_parser("rtm", help="Generate traceability matrix")
+    p_kg_report_rtm.add_argument("--format", choices=["markdown", "html", "csv"],
+                                   default="markdown", help="Output format (default: markdown)")
+    p_kg_report_rtm.add_argument("--layer", choices=["unit", "integration", "sil", "hil", "system"],
+                                  default=None, help="Test layer filter")
+    p_kg_report_rtm.add_argument("--output", "-o", default=None, help="Output file path")
+    p_kg_report_rtm.add_argument("--title", default=None, help="Report title")
+    p_kg_report_rtm.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_report_metrics = rsub.add_parser("metrics", help="Generate metrics report")
+    p_kg_report_metrics.add_argument("--format", choices=["text", "json"],
+                                      default="text", help="Output format (default: text)")
+    p_kg_report_metrics.add_argument("--trend", type=int, default=5,
+                                      help="Number of snapshots for trend analysis")
+    p_kg_report_metrics.add_argument("--output", "-o", default=None, help="Output file path")
+    p_kg_report_metrics.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+
+    # P2: kg events — Event bus
+    p_kg_events = kgsub.add_parser("events", help="Event bus operations (P2)")
+    evsub = p_kg_events.add_subparsers(dest="events_sub")
+    p_kg_events_listen = evsub.add_parser("listen", help="Listen for KG events")
+    p_kg_events_listen.add_argument("--filter", default=None, help="Event type filter")
+    p_kg_events_listen.add_argument("--duration", type=int, default=None,
+                                     help="Listen duration in seconds")
+    p_kg_events_listen.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_events_history = evsub.add_parser("history", help="Show event history")
+    p_kg_events_history.add_argument("--filter", default=None, help="Event type filter")
+    p_kg_events_history.add_argument("--limit", type=int, default=50, help="Max events to show")
+    p_kg_events_history.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+
     # coverage
     p_coverage = sub.add_parser("coverage", help="Code coverage management")
     csub = p_coverage.add_subparsers(dest="coverage_sub")
@@ -2562,6 +2625,39 @@ def main():
             else:
                 parser.print_help()
                 sys.exit(1)
+        else:
+            parser.print_help()
+            sys.exit(1)
+
+    elif args.command == "kg":
+        from yuleosh.knowledge_graph.kg_cli import (
+            cmd_build, cmd_bootstrap, cmd_snapshot_list, cmd_snapshot_diff,
+            cmd_query_impact, cmd_stats, cmd_report, cmd_events,
+        )
+        if args.kg_sub == "build":
+            cmd_build(args)
+        elif args.kg_sub == "bootstrap":
+            cmd_bootstrap(args)
+        elif args.kg_sub == "snapshot":
+            if args.snapshot_sub == "list":
+                cmd_snapshot_list(args)
+            elif args.snapshot_sub == "diff":
+                cmd_snapshot_diff(args)
+            else:
+                parser.print_help()
+                sys.exit(1)
+        elif args.kg_sub == "query":
+            if args.query_sub == "impact":
+                cmd_query_impact(args)
+            else:
+                parser.print_help()
+                sys.exit(1)
+        elif args.kg_sub == "stats":
+            cmd_stats(args)
+        elif args.kg_sub == "report":
+            cmd_report(args)
+        elif args.kg_sub == "events":
+            cmd_events(args)
         else:
             parser.print_help()
             sys.exit(1)

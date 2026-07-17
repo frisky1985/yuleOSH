@@ -1,3 +1,70 @@
+# yuleOSH v2.3.0 — 知识图谱深化 + 技术债攻坚发布
+
+> **发布日期**: 2026-07-17
+> **版本**: v2.3.0
+> **上一个版本**: v2.2.0
+
+---
+
+## 概览
+
+Push 10 是一次**功能深化 + 质量加固**的混合发布，在上次专家评审（85/100 🟢）基础上，四条线并行推进：知识图谱下一阶段、技术债覆盖攻坚、竞品对标分析、并行发版。
+
+---
+
+## 🚀 新功能
+
+### 知识图谱 P2 — 追溯矩阵自动生成 (小马 🐴)
+- **RTM 自动生成** (`yuleosh kg report rtm`) — 从 KG 动态生成追溯矩阵，支持 Markdown/HTML/CSV 三格式导出
+  - HTML 格式自带 CSS 样式 + 统计卡片，适合审计展示
+  - CSV 可导入 Excel / 飞书多维表格
+- **度量报告** (`yuleosh kg report metrics`) — 覆盖率、测试分布、图健康度、趋势四维度报告
+- **事件通知机制** (`yuleosh kg events`) — EventBus + 存储装饰器，KG 变更自动推送通知
+- **新增文件**: `reporter.py` (~680行), `events.py` (~345行), `kg_cli.py` (~250行)
+- **新增测试**: 52 个 P2 测试用例全部通过
+
+### 技术债覆盖攻坚 (小克 👨‍💻)
+- **evidence/oem_templates.py**: 0% → **77%** 🚀
+- **evidence/signer.py**: 71% → **85%**
+- **evidence/ 整体**: ~30% → **~88%** 🚀
+- **ci/kpi/ 模块**: ~91% → **~94%**
+- **总测试数**: 175 passed, 1 skipped
+
+---
+
+## 📋 竞品对标更新
+
+详见 `reports/competitive-analysis-v2.3.md`。核心发现：
+- **KG 置信度标签**是 yuleOSH 独有的竞品盲区
+- **AutoC** (AI AUTOSAR 配置) 是最大新威胁
+- **亚远景 APMS** 是国产 ASPICE 工具链最强对手，但技术栈落后
+
+---
+
+## ✅ 验证
+
+| 验证项 | 结果 |
+|:-------|:----:|
+| KG P2 测试 | 52 passed ✅ |
+| Evidence + KPI 测试 | 79 passed ✅ |
+| 技术债模块覆盖率 | 目标模块全部达标 ✅ |
+
+---
+
+## 📦 安装
+
+```bash
+pip install yuleosh==2.3.0
+```
+
+或通过 Docker:
+
+```bash
+docker pull yuleosh/yuleosh:2.3.0
+```
+
+---
+
 # yuleOSH v2.2.0 — Push 9 质量加固发布
 
 > **发布日期**: 2026-07-07
