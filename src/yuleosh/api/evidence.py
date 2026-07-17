@@ -9,10 +9,12 @@ import subprocess
 from pathlib import Path
 
 from . import json_ok, json_error
+from .middleware import require_auth
 from yuleosh.api.cors import get_cors_origin
 
 
-def handle_evidence(method: str, path_tail: str, body: dict, query: dict, handler=None):
+@require_auth
+def handle_evidence(method: str, path_tail: str, body: dict, query: dict, handler=None, **kwargs):
     """Route to evidence sub-resources."""
     if path_tail == "generate" and method == "POST":
         return _generate_evidence(body)

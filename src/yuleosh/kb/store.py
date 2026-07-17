@@ -304,6 +304,7 @@ class KbStore:
     def list_fmea(self, sort_by: str = "rpn", sort_desc: bool = True,
                   limit: int = 100, offset: int = 0) -> list[FmeaEntry]:
         conn = self._get_conn()
+        # SECURITY: whitelist sort column to prevent SQL injection
         allowed_sort = {"rpn", "severity", "occurence", "detection", "created_at"}
         if sort_by not in allowed_sort:
             sort_by = "rpn"
