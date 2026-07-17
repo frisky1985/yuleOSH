@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to yuleOSH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 1rem;
+    }
+    .wizard {
+      max-width: 680px;
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    }
+    .steps-indicator {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+    }
+    .step-dot {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      background: #334155;
+      color: #64748b;
+      border: 2px solid transparent;
+      transition: all 0.3s ease;
+    }
+    .step-dot.active {
+      background: #38bdf8;
+      color: #0f172a;
+      border-color: #7dd3fc;
+    }
+    .step-dot.done {
+      background: #064e3b;
+      color: #6ee7b7;
+      border-color: #6ee7b7;
+    }
+    .step-line {
+      width: 32px;
+      height: 2px;
+      align-self: center;
+      background: #334155;
+    }
+    .step-line.done { background: #6ee7b7; }
+
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+
+    h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p { color: #94a3b8; margin-bottom: 1.25rem; line-height: 1.6; }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      margin-bottom: 0.35rem;
+      font-weight: 600;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus { border-color: #38bdf8; }
+    textarea { min-height: 120px; resize: vertical; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+    .btn {
+      padding: 0.6rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    .btn-primary:hover { background: #7dd3fc; }
+    .btn-secondary {
+      background: #334155;
+      color: #cbd5e1;
+    }
+    .btn-secondary:hover { background: #475569; }
+    .btn-success {
+      background: #10b981;
+      color: #0f172a;
+    }
+    .btn-success:hover { background: #34d399; }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 1rem;
+      color: #38bdf8;
+    }
+    .loading.active { display: block; }
+    .feature-list {
+      list-style: none;
+      margin: 1rem 0;
+    }
+    .feature-list li {
+      padding: 0.5rem 0;
+      padding-left: 1.5rem;
+      position: relative;
+      color: #94a3b8;
+    }
+    .feature-list li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: #38bdf8;
+    }
+    .success-message {
+      text-align: center;
+      padding: 2rem;
+    }
+    .success-message .icon { font-size: 3rem; margin-bottom: 1rem; }
+    .spec-preview {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: #a5b4fc;
+      white-space: pre-wrap;
+      margin-bottom: 1rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .info-box {
+      background: #0ea5e9/10;
+      border: 1px solid #0ea5e9/30;
+      background: rgba(14,165,233,0.1);
+      border: 1px solid rgba(14,165,233,0.3);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      color: #7dd3fc;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wizard" id="wizard">
+    <!-- Steps indicator -->
+    <div class="steps-indicator">
+      <div class="step-dot active" id="step-dot-1">1</div>
+      <div class="step-line" id="step-line-1"></div>
+      <div class="step-dot" id="step-dot-2">2</div>
+      <div class="step-line" id="step-line-2"></div>
+      <div class="step-dot" id="step-dot-3">3</div>
+      <div class="step-line" id="step-line-3"></div>
+      <div class="step-dot" id="step-dot-4">4</div>
+      <div class="step-line" id="step-line-4"></div>
+      <div class="step-dot" id="step-dot-5">5</div>
+    </div>
+
+    <!-- Step 1: Welcome -->
+    <div class="step-panel active" id="step-1">
+      <h2>🎉 Welcome to yuleOSH!</h2>
+      <p>
+        yuleOSH is your open-source specification-driven development platform.
+        It's designed to bridge the gap between requirements and implementation,
+        ensuring every line of code is traceable back to a spec.
+      </p>
+      <ul class="feature-list">
+        <li><strong>Spec-First Development</strong> — Write specs, not tickets</li>
+        <li><strong>Automated Pipeline</strong> — From spec to CI, all in one flow</li>
+        <li><strong>Traceability</strong> — Every requirement mapped to evidence</li>
+        <li><strong>Multi-tenant</strong> — Organizations, projects, and teams</li>
+        <li><strong>Open Source</strong> — MIT licensed, built for everyone</li>
+      </ul>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="goStep(2)">Get Started →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Create Project -->
+    <div class="step-panel" id="step-2">
+      <h2>📁 Create Your First Project</h2>
+      <p>Give your project a name and a short description to get started.</p>
+      <div class="loading" id="loading-step2">Creating project...</div>
+      <div id="error-step2" style="color:#f87171;margin-bottom:0.75rem;display:none;"></div>
+      <div id="form-step2">
+        <label for="project-name">Project Name</label>
+        <input type="text" id="project-name" placeholder="e.g. my-first-project" value="My First Project">
+
+        <label for="project-desc">Description</label>
+        <textarea id="project-desc" placeholder="A short description of your project...">My first yuleOSH project</textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+        <button class="btn btn-primary" onclick="createProject()">Create Project →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Write Spec -->
+    <div class="step-panel" id="step-3">
+      <h2>📝 Write Your First Spec</h2>
+      <p>yuleOSH uses markdown-based specs. Here's a template to get you started.</p>
+      <div class="info-box">💡 You can edit the template below or use it as-is.</div>
+      <textarea id="spec-content">## Requirement: Hello World
+- The system SHALL respond with a friendly greeting
+
+#### Reason
+This is the foundational user interaction
+
+## Scenario: Greeting
+- GIVEN a user visits the platform
+- WHEN they land on the dashboard
+- THEN they see a welcome message</textarea>
+      <div class="loading" id="loading-step3">Saving spec...</div>
+      <div id="error-step3" style="color:#f87171;margin-bottom:0.75rem;display:none;"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+        <button class="btn btn-primary" onclick="saveSpec()">Save Spec →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Run Pipeline -->
+    <div class="step-panel" id="step-4">
+      <h2>🚀 Run Your Pipeline</h2>
+      <p>Your spec is ready. Click below to run the pipeline — it will validate, process, and generate results.</p>
+      <div class="loading" id="loading-step4">Running pipeline...</div>
+      <div id="error-step4" style="color:#f87171;margin-bottom:0.75rem;display:none;"></div>
+      <div id="pipeline-result" style="display:none;" class="info-box"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
+        <button class="btn btn-primary" id="btn-run-pipeline" onclick="runPipeline()">⚡ Run Pipeline</button>
+      </div>
+    </div>
+
+    <!-- Step 5: See Results -->
+    <div class="step-panel" id="step-5">
+      <div class="success-message">
+        <div class="icon">🎊</div>
+        <h2>You're All Set!</h2>
+        <p style="font-size:1.05rem;">
+          Your first yuleOSH project is up and running. You've created a project,
+          written a spec, and run a pipeline. Now go build something amazing!
+        </p>
+        <div style="margin-top:2rem;">
+          <a href="/dashboard" class="btn btn-success" style="text-decoration:none;display:inline-block;">
+            Go to Dashboard →
+          </a>
+        </div>
+        <p style="margin-top:1.5rem;font-size:0.85rem;">
+          Or <a href="/health" style="color:#38bdf8;">check system health</a> —
+          explore more features at your own pace.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentStep = 1;
+    let projectName = '';
+
+    function goStep(n) {
+      document.querySelector('.step-panel.active')?.classList.remove('active');
+      document.getElementById('step-' + n).classList.add('active');
+      document.querySelector('.step-dot.active')?.classList.remove('active');
+      document.getElementById('step-dot-' + n).classList.add('active');
+
+      // Mark passed steps as done
+      for (let i = 1; i < n; i++) {
+        const dot = document.getElementById('step-dot-' + i);
+        dot.classList.remove('active');
+        dot.classList.add('done');
+        const line = document.getElementById('step-line-' + i);
+        if (line) line.classList.add('done');
+      }
+      // Reset future steps
+      for (let i = n; i <= 5; i++) {
+        const dot = document.getElementById('step-dot-' + i);
+        dot.classList.remove('done');
+        const line = document.getElementById('step-line-' + i);
+        if (line) line.classList.remove('done');
+      }
+
+      currentStep = n;
+
+      // Mark wizard completed when reaching step 5
+      if (n === 5) {
+        markWizardComplete();
+      }
+    }
+
+    async function createProject() {
+      const name = document.getElementById('project-name').value.trim();
+      const desc = document.getElementById('project-desc').value.trim();
+      const loading = document.getElementById('loading-step2');
+      const error = document.getElementById('error-step2');
+
+      if (!name) {
+        error.textContent = 'Please enter a project name.';
+        error.style.display = 'block';
+        return;
+      }
+      error.style.display = 'none';
+      document.getElementById('form-step2').style.display = 'none';
+      loading.classList.add('active');
+
+      try {
+        const resp = await fetch('/api/v1/project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, description: desc }),
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          projectName = name;
+          loading.textContent = '✅ Project "' + name + '" created!';
+          setTimeout(() => { goStep(3); }, 800);
+        } else {
+          error.textContent = json.error || 'Failed to create project.';
+          error.style.display = 'block';
+          loading.classList.remove('active');
+          document.getElementById('form-step2').style.display = 'block';
+        }
+      } catch (err) {
+        error.textContent = 'Error: ' + err.message;
+        error.style.display = 'block';
+        loading.classList.remove('active');
+        document.getElementById('form-step2').style.display = 'block';
+      }
+    }
+
+    async function saveSpec() {
+      const content = document.getElementById('spec-content').value.trim();
+      const loading = document.getElementById('loading-step3');
+      const error = document.getElementById('error-step3');
+      error.style.display = 'none';
+      loading.classList.add('active');
+
+      try {
+        // Save spec via the spec API endpoint
+        const resp = await fetch('/api/v1/spec', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: projectName || 'default',
+            content: content,
+          }),
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          loading.textContent = '✅ Spec saved successfully!';
+          setTimeout(() => { goStep(4); }, 800);
+        } else {
+          error.textContent = json.error || 'Failed to save spec.';
+          error.style.display = 'block';
+          loading.classList.remove('active');
+        }
+      } catch (err) {
+        error.textContent = 'Error: ' + err.message;
+        error.style.display = 'block';
+        loading.classList.remove('active');
+      }
+    }
+
+    async function runPipeline() {
+      const loading = document.getElementById('loading-step4');
+      const error = document.getElementById('error-step4');
+      const resultDiv = document.getElementById('pipeline-result');
+      const btn = document.getElementById('btn-run-pipeline');
+      error.style.display = 'none';
+      resultDiv.style.display = 'none';
+      loading.classList.add('active');
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/v1/pipeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: projectName || 'default',
+            action: 'run',
+          }),
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          loading.textContent = '✅ Pipeline completed successfully!';
+          resultDiv.innerHTML = 'Pipeline ran successfully for project "' + (projectName || 'default') + '". You can view details on the dashboard.';
+          resultDiv.style.display = 'block';
+          setTimeout(() => { goStep(5); }, 1000);
+        } else {
+          error.textContent = json.error || 'Pipeline failed.';
+          error.style.display = 'block';
+          loading.classList.remove('active');
+          btn.disabled = false;
+        }
+      } catch (err) {
+        error.textContent = 'Error: ' + err.message;
+        error.style.display = 'block';
+        loading.classList.remove('active');
+        btn.disabled = false;
+      }
+    }
+
+    async function markWizardComplete() {
+      try {
+        await fetch('/api/v1/wizard/complete', { method: 'POST' });
+      } catch (e) {
+        // Non-critical — wizard is still shown
+      }
+    }
+  </script>
+</body>
+</html>

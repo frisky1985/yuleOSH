@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — yuleOSH</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --purple:#722ed1; --purple-bg:rgba(114,46,209,.08);
+  --blue:#1677ff; --blue-bg:rgba(22,119,255,.08);
+  --green:#52c41a; --green-bg:rgba(82,196,26,.08);
+  --orange:#d4a017; --orange-bg:rgba(250,173,20,.08);
+  --red:#ff4d4f;
+  --bg:#0a0e17; --surface:#111827; --surface2:#1a2332;
+  --border:#1e293b; --border-active:#334155;
+  --text:#e2e8f0; --text2:#94a3b8; --text3:#64748b;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(114,46,209,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(114,46,209,.015) 1px,transparent 1px);
+  background-size:60px 60px;
+}
+
+.app{display:flex;min-height:100vh;position:relative;z-index:1}
+
+/* Sidebar */
+.sidebar{width:240px;background:rgba(17,24,39,.85);backdrop-filter:blur(12px);border-right:1px solid var(--border);padding:24px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.sidebar-logo{font-size:18px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--purple),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:32px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;color:var(--text2);text-decoration:none;font-size:13px;font-weight:500;transition:all .15s;margin-bottom:2px}
+.nav-item:hover{background:var(--purple-bg);color:var(--text)}
+.nav-item.active{background:var(--purple-bg);color:var(--purple)}
+.nav-icon{font-size:15px;width:20px;text-align:center}
+.sidebar-footer{margin-top:auto;padding-top:16px;border-top:1px solid var(--border)}
+
+/* Main */
+.main{flex:1;padding:32px 40px;max-width:1320px}
+
+/* Header */
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
+.header-title{font-size:28px;font-weight:800;letter-spacing:-1px}
+.gradient-text{background:linear-gradient(135deg,var(--purple),var(--blue),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.header-meta{display:flex;align-items:center;gap:12px}
+.tier-badge{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700}
+.tier-pro{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(114,46,209,.2)}
+.dot-live{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:6px;animation:pulse 2s infinite;box-shadow:0 0 8px rgba(82,196,26,.4)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Phase header */
+.phase-label{font-size:13px;font-weight:700;padding:6px 14px;border-radius:6px;margin-bottom:14px;display:inline-flex;align-items:center;gap:6px}
+.phase-1 .phase-label{background:rgba(114,46,209,.12);color:var(--purple);border:1px solid rgba(114,46,209,.15)}
+.phase-2 .phase-label{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(22,119,255,.15)}
+.phase-3 .phase-label{background:var(--green-bg);color:var(--green);border:1px solid rgba(82,196,26,.15)}
+.phase-group{margin-bottom:28px}
+.phase-name{font-size:12px;color:var(--text3);margin-left:8px;font-weight:400}
+
+/* Stage grid */
+.stage-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:8px}
+
+/* Stage card */
+.stage-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:16px;transition:all .2s;cursor:pointer;position:relative
+}
+.stage-card:hover{transform:translateY(-2px);box-shadow:0 2px 16px rgba(0,0,0,.3)}
+.phase-1 .stage-card{border-left:3px solid var(--purple)}
+.phase-2 .stage-card{border-left:3px solid var(--blue)}
+.phase-3 .stage-card{border-left:3px solid var(--green)}
+.stage-card.gated{border-color:rgba(250,173,20,.2);background:linear-gradient(135deg,rgba(250,173,20,.03),var(--surface))}
+.stage-card.gated:hover{border-color:rgba(250,173,20,.4);box-shadow:0 2px 16px rgba(250,173,20,.08)}
+.stage-num{font-size:22px;font-weight:800;color:var(--border-active);min-width:28px;margin-bottom:8px}
+.phase-1 .stage-num{color:var(--purple)}
+.phase-2 .stage-num{color:var(--blue)}
+.phase-3 .stage-num{color:var(--green)}
+.stage-card.gated .stage-num{color:var(--orange)}
+.stage-icon{font-size:20px;margin-bottom:8px}
+.stage-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.3}
+.stage-meta{font-size:11px;color:var(--text3);margin-top:4px}
+.stage-gate{position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:none;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700}
+.stage-card.gated .stage-gate{display:flex}
+
+/* Project cards */
+.projects-section{margin-bottom:28px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:16px;font-weight:700}
+.section-action{font-size:13px;color:var(--text2);text-decoration:none;transition:color .15s}
+.section-action:hover{color:var(--purple)}
+.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.project-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;text-decoration:none;color:var(--text);transition:all .2s;cursor:pointer}
+.project-card:hover{border-color:var(--purple);transform:translateY(-2px);box-shadow:0 2px 16px rgba(114,46,209,.1)}
+.project-name{font-size:14px;font-weight:600;margin-bottom:3px}
+.project-slug{font-size:11px;color:var(--text3);font-family:'SF Mono',monospace}
+.project-meta{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:11px;color:var(--text2)}
+
+/* Cmd+K */
+.search-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:none;align-items:flex-start;justify-content:center;padding-top:140px;z-index:100}
+.search-overlay.show{display:flex}
+.search-box{background:var(--surface);border:1px solid rgba(114,46,209,.2);border-radius:14px;width:480px;padding:14px 18px;box-shadow:0 0 60px rgba(114,46,209,.15)}
+.search-input{background:none;border:none;color:var(--text);font-size:16px;font-family:inherit;width:100%;outline:none}
+.search-input::placeholder{color:var(--text2)}
+.search-hint{font-size:11px;color:var(--text2);margin-top:10px;display:flex;gap:8px}
+.search-hint kbd{background:rgba(255,255,255,.06);border:1px solid var(--border);padding:1px 6px;border-radius:4px;font-family:inherit}
+
+/* Buttons */
+.quick-actions{display:flex;gap:10px;margin-bottom:32px}
+.btn{padding:10px 20px;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;gap:8px}
+.btn-purple{background:linear-gradient(135deg,var(--purple),#531dab);color:#fff}
+.btn-purple:hover{box-shadow:0 0 20px rgba(114,46,209,.3)}
+.btn-blue{background:linear-gradient(135deg,var(--blue),#0958d9);color:#fff}
+.btn-blue:hover{box-shadow:0 0 20px rgba(22,119,255,.3)}
+.btn-green{background:linear-gradient(135deg,var(--green),#389e0d);color:#fff}
+.btn-green:hover{box-shadow:0 0 20px rgba(82,196,26,.3)}
+.btn-ghost{background:var(--surface2);border:1px solid var(--border);color:var(--text2)}
+
+@media(max-width:768px){.sidebar{display:none}.main{padding:20px}.stage-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="app">
+<nav class="sidebar">
+  <div class="sidebar-logo">▲ yuleOSH</div>
+  <a href="/dashboard" class="nav-item active"><span class="nav-icon">⌂</span> Dashboard</a>
+  <a href="/pipeline" class="nav-item"><span class="nav-icon">⇢</span> Pipeline</a>
+  <a href="/evidence" class="nav-item"><span class="nav-icon">⊡</span> Evidence</a>
+  <a href="/projects" class="nav-item"><span class="nav-icon">⊞</span> Projects</a>
+  <div class="sidebar-footer">
+    <a href="/pricing" class="nav-item" style="color:var(--orange)"><span class="nav-icon">⬆</span> Upgrade</a>
+    <a href="/settings" class="nav-item"><span class="nav-icon">⚙</span> Settings</a>
+  </div>
+</nav>
+
+<main class="main">
+  <div class="header">
+    <div>
+      <h1 class="header-title"><span class="gradient-text" id="orgName">yuleOSH</span></h1>
+      <div style="margin-top:6px;font-size:13px">
+        <span class="tier-badge tier-pro"><span class="dot-live"></span>PRO</span>
+        <span style="margin-left:8px;color:var(--text2)" id="trialText"></span>
+      </div>
+    </div>
+    <div class="header-meta">
+      <button onclick="openSearch()" class="btn btn-ghost"><span>⌘K</span>Search...</button>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="quick-actions">
+    <button onclick="runPipeline()" class="btn btn-purple">▶ Run Full Pipeline</button>
+    <button onclick="runCI()" class="btn btn-blue">🔍 Run CI Layer 1</button>
+    <button onclick="newProject()" class="btn btn-green">＋ New Project</button>
+  </div>
+
+  <!-- Pipeline Stages --><?xml version="1.0" ?>
+  <div class="phase-group phase-1">
+    <div><span class="phase-label">▎ 质量预检<span class="phase-name">Pre-flight Coverage & Parsing</span></span></div>
+    <div class="stage-grid">
+      <div class="stage-card gated">
+        <div class="stage-gate">⚡</div><div class="stage-num">0</div>
+        <div class="stage-icon">📊</div><div class="stage-title">Spec Validation</div>
+        <div class="stage-meta">需求覆盖率 100%</div>
+      </div>
+      <div class="stage-card">
+        <div class="stage-num">1</div><div class="stage-icon">📋</div>
+        <div class="stage-title">Plan Lint</div><div class="stage-meta">Sprint 计划合规</div>
+      </div>
+      <div class="stage-card">
+        <div class="stage-num">2</div><div class="stage-icon">🔎</div>
+        <div class="stage-title">Clang-Tidy</div><div class="stage-meta">C 代码静态检查</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-group phase-2">
+    <div><span class="phase-label">▎ 代码与测试<span class="phase-name">Unit Tests & Coverage</span></span></div>
+    <div class="stage-grid">
+      <div class="stage-card gated">
+        <div class="stage-gate">⚡</div><div class="stage-num">3</div>
+        <div class="stage-icon">🧪</div><div class="stage-title">Unit Tests</div><div class="stage-meta">1020+ tests</div>
+      </div>
+      <div class="stage-card gated">
+        <div class="stage-gate">⚡</div><div class="stage-num">4</div>
+        <div class="stage-icon">📊</div>
+        <div class="stage-title">Coverage Check</div><div class="stage-meta">≥ 85% 门禁</div>
+      </div>
+      <div class="stage-card">
+        <div class="stage-num">5</div><div class="stage-icon">🖥️</div>
+        <div class="stage-title">SIL Tests</div><div class="stage-meta">QEMU 仿真验证</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-group phase-3">
+    <div><span class="phase-label">▎ 构建与交付<span class="phase-name">Build, HIL & Evidence</span></span></div>
+    <div class="stage-grid">
+      <div class="stage-card">
+        <div class="stage-num">6</div><div class="stage-icon">🔨</div>
+        <div class="stage-title">Cross-Compile</div><div class="stage-meta">ARM / RISC-V</div>
+      </div>
+      <div class="stage-card">
+        <div class="stage-num">7</div><div class="stage-icon">⚡</div>
+        <div class="stage-title">HIL Tests</div><div class="stage-meta">OpenOCD / JLink</div>
+      </div>
+      <div class="stage-card gated">
+        <div class="stage-gate">⚡</div><div class="stage-num">8</div>
+        <div class="stage-icon">📦</div>
+        <div class="stage-title">Evidence Pack</div><div class="stage-meta">追溯矩阵 + 验收报告</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Projects -->
+  <div class="projects-section">
+    <div class="section-header">
+      <h2 class="section-title">📁 Projects</h2>
+      <a href="/onboarding" class="section-action">+ New →</a>
+    </div>
+    <div class="project-grid" id="projectList"></div>
+  </div>
+</main>
+</div>
+
+<div class="search-overlay" id="searchOverlay" onclick="closeSearch(event)">
+  <div class="search-box" onclick="event.stopPropagation()">
+    <input class="search-input" placeholder="Search stages, projects..." id="q" onkeydown="if(event.key==='Escape')closeSearch()" autofocus>
+    <div class="search-hint"><kbd>esc</kbd> close <kbd>enter</kbd> open</div>
+  </div>
+</div>
+
+<script>
+const T=localStorage.getItem('yuleosh_token');
+async function api(p,o={}){const h={'Content-Type':'application/json'};if(T)h['Authorization']='Bearer '+T;const r=await fetch(p,{headers:h,...o});return r.json()}
+async function load(){
+  try{const s=await api('/api/auth/session');if(s.error){window.location='/';return}
+  document.getElementById('orgName').textContent=s.org_name||'yuleOSH';
+  const u=await api('/api/v1/usage');
+  if(u.trial&&u.trial.in_trial)document.getElementById('trialText').textContent=u.trial.days_left+'d trial left';
+  const p=await api('/api/project/list');renderProjects(p.projects||[])
+  }catch(e){console.error(e)}
+}
+function renderProjects(ps){const e=document.getElementById('projectList');
+  if(!ps.length){e.innerHTML='<a href="/onboarding" class="project-card" style="border-style:dashed;text-align:center;padding:32px"><span style="font-size:28px">＋</span><div style="font-weight:600;margin-top:8px">Create first project</div></a>';return}
+  e.innerHTML=ps.map(p=>`<a href="/project/${p.slug}" class="project-card"><div class="project-name">${p.name}</div><div class="project-slug">${p.slug}</div><div class="project-meta"><span class="dot-live"></span>Active · ${(p.created_at||'').slice(0,10)}</div></a>`).join('')
+}
+function newProject(){window.location='/onboarding'}
+function runPipeline(){document.querySelectorAll('.stage-card').forEach(c=>c.style.opacity='.5');setTimeout(load,2000)}
+function runCI(){window.location='/api/v1/ci/run'}
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openSearch()}})
+function openSearch(){document.getElementById('searchOverlay').classList.add('show');document.getElementById('q').focus()}
+function closeSearch(e){if(!e||e.target===document.getElementById('searchOverlay'))document.getElementById('searchOverlay').classList.remove('show')}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yuleOSH — Embedded AI Development Platform</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        osh: { bg: '#0a0e17', surface: '#111827', surface2: '#1a2332', border: '#1e293b', text: '#e2e8f0', text2: '#94a3b8' }
+      },
+      fontFamily: { sans: ['Inter', '-apple-system', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] }
+    }
+  }
+}
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+* { scroll-behavior: smooth; }
+body { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+
+/* Glow effects */
+.glow-green { box-shadow: 0 0 40px rgba(16,185,129,.15), 0 0 80px rgba(16,185,129,.05); }
+.glow-blue { box-shadow: 0 0 40px rgba(59,130,246,.15), 0 0 80px rgba(59,130,246,.05); }
+.glow-amber { box-shadow: 0 0 40px rgba(245,158,11,.15), 0 0 80px rgba(245,158,11,.05); }
+.text-glow { text-shadow: 0 0 40px rgba(16,185,129,.3); }
+.text-glow-blue { text-shadow: 0 0 40px rgba(59,130,246,.3); }
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-green-blue {
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Grid background */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(16,185,129,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16,185,129,.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Animated gradient border */
+.gradient-border {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, #10b981, #3b82f6, #f59e0b, #10b981);
+  background-size: 300% 300%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-shimmer 4s ease infinite;
+}
+@keyframes border-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Floating animation */
+.float { animation: float 6s ease-in-out infinite; }
+.float-delayed { animation: float 6s ease-in-out 2s infinite; }
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+/* Feature card hover */
+.feature-card {
+  transition: all .3s cubic-bezier(.4,0,.2,1);
+}
+.feature-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(16,185,129,.4);
+}
+
+/* Step connector */
+.step-connector::after {
+  content: '';
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  width: 2px;
+  height: calc(100% - 40px);
+  background: linear-gradient(to bottom, rgba(16,185,129,.4), rgba(59,130,246,.1));
+}
+@media (min-width: 768px) {
+  .step-connector::after {
+    top: 50%;
+    left: 100%;
+    width: 40px;
+    height: 2px;
+  }
+}
+
+/* Nav blur */
+.nav-blur { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+
+/* Particle dot */
+.particle { position: absolute; border-radius: 50%; pointer-events: none; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0e17; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #334155; }
+</style>
+</head>
+<body class="bg-[#0a0e17] text-[#e2e8f0] antialiased overflow-x-hidden">
+
+<!-- ==================== NAV ==================== -->
+<nav class="fixed top-0 left-0 right-0 z-50 border-b border-[#1e293b]/60 nav-blur" style="background:rgba(10,14,23,.85)">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16">
+      <a href="/en" class="flex items-center gap-2.5 group">
+        <span class="text-2xl font-black tracking-tight">
+          <span class="text-[#10b981]">yule</span><span class="text-[#3b82f6]">OSH</span>
+        </span>
+      </a>
+      <div class="hidden md:flex items-center gap-8">
+        <a href="#features" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">Features</a>
+        <a href="#how-it-works" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">How It Works</a>
+        <a href="/en/pricing" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">Pricing</a>
+        <a href="#faq" class="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">FAQ</a>
+        <a href="/demo"
+           class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg font-semibold text-sm min-h-[48px]
+                  bg-gradient-to-r from-[#10b981] to-[#059669] text-white shadow-lg shadow-[#10b981]/20
+                  hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+          Try Demo
+        </a>
+        <a href="https://github.com/stefanji/yuleOSH" target="_blank"
+           class="text-sm flex items-center gap-1.5 px-4 py-2 rounded-lg border border-[#1e293b] text-[#94a3b8]
+                  hover:border-[#10b981]/40 hover:text-[#e2e8f0] transition-all">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+      <div class="md:hidden">
+        <button id="mobileMenuBtn" class="p-2 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white transition-all">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- Mobile menu -->
+  <div id="mobileMenu" class="hidden md:hidden border-t border-[#1e293b] bg-[#0a0e17]/95 nav-blur">
+    <div class="px-4 py-4 space-y-3">
+      <a href="/demo" class="block text-sm font-semibold text-[#10b981] hover:text-white transition-colors">🚀 Try Demo</a>
+      <a href="#features" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">Features</a>
+      <a href="#how-it-works" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">How It Works</a>
+      <a href="/en/pricing" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">Pricing</a>
+      <a href="#faq" class="block text-sm text-[#94a3b8] hover:text-white transition-colors">FAQ</a>
+      <a href="https://github.com/stefanji/yuleOSH" target="_blank"
+         class="block text-sm text-[#94a3b8] hover:text-white transition-colors">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ==================== HERO ==================== -->
+<section class="relative min-h-screen flex items-center bg-grid pt-16 overflow-hidden">
+  <!-- Background orbs -->
+  <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-[#10b981]/5 rounded-full blur-[120px]"></div>
+  <div class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-[#3b82f6]/5 rounded-full blur-[120px]"></div>
+  <div class="absolute top-1/3 right-1/3 w-64 h-64 bg-[#f59e0b]/5 rounded-full blur-[100px]"></div>
+
+  <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32">
+    <div class="text-center max-w-4xl mx-auto">
+      <!-- Badge -->
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#10b981]/30 bg-[#10b981]/5 text-[#10b981] text-xs font-medium mb-8">
+        <span class="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
+        v0.1.0 &middot; Open Source &middot; Docker Self-Hosted
+      </div>
+
+      <h1 class="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight leading-[1.1] mb-6">
+        <span class="gradient-text">Embedded AI</span><br>
+        <span class="text-[#e2e8f0]">Development Platform</span>
+      </h1>
+
+      <p class="text-lg sm:text-xl text-[#94a3b8] max-w-2xl mx-auto mb-10 leading-relaxed">
+        End-to-end workflow automation powered by AI Agent orchestration.<br class="hidden sm:block">
+        <span class="text-[#10b981]/80 font-medium">OpenSpec &rarr; SDD &rarr; DDD &rarr; TDD &rarr; Continuous Delivery</span>
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="/demo"
+           class="group relative inline-flex items-center gap-2 px-8 py-3.5 min-h-[48px] rounded-xl font-semibold text-sm
+                  bg-gradient-to-r from-[#f59e0b] to-[#d97706] text-white
+                  hover:from-[#f59e0b]/90 hover:to-[#d97706]/90
+                  shadow-lg shadow-[#f59e0b]/20 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+          <span>Try Demo</span>
+          <svg class="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </a>
+        <a href="/dashboard"
+           class="group relative inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
+                  bg-gradient-to-r from-[#10b981] to-[#059669] text-white
+                  hover:from-[#10b981]/90 hover:to-[#059669]/90
+                  shadow-lg shadow-[#10b981]/20 transition-all">
+          <span>Try Dashboard Now</span>
+          <svg class="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </a>
+        <a href="#how-it-works"
+           class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-sm
+                  border border-[#1e293b] text-[#94a3b8] hover:border-[#3b82f6]/40 hover:text-white transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          See How It Works
+        </a>
+      </div>
+
+      <!-- Quick stats -->
+      <div class="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
+        <div class="text-center">
+          <div class="text-2xl font-black text-[#10b981]">3</div>
+          <div class="text-xs text-[#64748b] mt-1">AI Agents Orchestrated</div>
+        </div>
+        <div class="text-center">
+          <div class="text-2xl font-black text-[#3b82f6]">3</div>
+          <div class="text-xs text-[#64748b] mt-1">CI/CD Pipeline Layers</div>
+        </div>
+        <div class="text-center">
+          <div class="text-2xl font-black text-[#f59e0b]">1</div>
+          <div class="text-xs text-[#64748b] mt-1">Click Compliance Pack</div>
+        </div>
+        <div class="text-center">
+          <div class="text-2xl font-black text-[#10b981]">100%</div>
+          <div class="text-xs text-[#64748b] mt-1">Docker Self-Hosted</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FEATURES ==================== -->
+<section id="features" class="py-24 bg-[#0d111f]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <span class="text-xs font-semibold tracking-widest uppercase text-[#10b981]">Core Features</span>
+      <h2 class="text-3xl sm:text-4xl font-black mt-3 text-[#e2e8f0]">
+        Embedded Development, One Platform
+      </h2>
+      <p class="text-[#94a3b8] mt-4 max-w-xl mx-auto">
+        From requirements definition to compliance auditing, yuleOSH covers the entire embedded development lifecycle
+      </p>
+    </div>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <!-- Feature 1: OpenSpec Engine -->
+      <div class="feature-card rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+        <div class="w-11 h-11 rounded-lg bg-[#10b981]/10 flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 text-[#10b981]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+          </svg>
+        </div>
+        <h3 class="text-base font-bold text-[#e2e8f0] mb-2">OpenSpec Engine</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          Structured requirements definition using SHALL/SHOULD/MAY syntax. Automatic traceability matrix with bidirectional coverage from requirements to code and tests. Supports incremental change (Delta) management.
+        </p>
+      </div>
+
+      <!-- Feature 2: AI Pipeline -->
+      <div class="feature-card rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+        <div class="w-11 h-11 rounded-lg bg-[#3b82f6]/10 flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 text-[#3b82f6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+          </svg>
+        </div>
+        <h3 class="text-base font-bold text-[#e2e8f0] mb-2">AI Pipeline</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          Three AI Agents — Ming, Hermes, Claude — automatically orchestrate: review requirements, generate design, write code, self-test, code review, and generate reports. Fully autonomous intelligent collaboration.
+        </p>
+      </div>
+
+      <!-- Feature 3: SDD/D/DD/TDD -->
+      <div class="feature-card rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+        <div class="w-11 h-11 rounded-lg bg-[#f59e0b]/10 flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 text-[#f59e0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </div>
+        <h3 class="text-base font-bold text-[#e2e8f0] mb-2">3-Layer CI/CD Pipeline</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          From software design documents to detailed design documents to test-driven development — automated layer by layer. Design is code, tests are documentation, ensuring full process traceability.
+        </p>
+      </div>
+
+      <!-- Feature 4: ASPICE -->
+      <div class="feature-card rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+        <div class="w-11 h-11 rounded-lg bg-[#10b981]/10 flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 text-[#10b981]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+        </div>
+        <h3 class="text-base font-bold text-[#e2e8f0] mb-2">ASPICE Compliance</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          Layer 1 Dev Verification &rarr; Layer 2 Integration Verification &rarr; Layer 3 System Verification. Progresses layer by layer, aligned with ASPICE standards (SWE.4 / SWE.5 / SWE.6).
+        </p>
+      </div>
+
+      <!-- Feature 5: Self-hosted -->
+      <div class="feature-card rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+        <div class="w-11 h-11 rounded-lg bg-[#3b82f6]/10 flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 text-[#3b82f6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+        </div>
+        <h3 class="text-base font-bold text-[#e2e8f0] mb-2">Self-Hosted &amp; Secure</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          Auto-generate compliance audit evidence packs: traceability matrix, coverage reports, review logs. One-click packaging and download, ready for ASPICE assessments or customer audits.
+        </p>
+      </div>
+
+      <!-- Feature 6: Web Dashboard -->
+      <div class="feature-card rounded-xl border border-[#1e293b] bg-[#111827] p-6">
+        <div class="w-11 h-11 rounded-lg bg-[#f59e0b]/10 flex items-center justify-center mb-4">
+          <svg class="w-5 h-5 text-[#f59e0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+          </svg>
+        </div>
+        <h3 class="text-base font-bold text-[#e2e8f0] mb-2">Web Dashboard &amp; SaaS</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          One-command Docker deployment with full data control on your infrastructure. Also available as a SaaS cloud version — zero deployment cost, quick onboarding experience.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== HOW IT WORKS ==================== -->
+<section id="how-it-works" class="py-24 bg-[#0a0e17]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <span class="text-xs font-semibold tracking-widest uppercase text-[#3b82f6]">How It Works</span>
+      <h2 class="text-3xl sm:text-4xl font-black mt-3 text-[#e2e8f0]">
+        From Requirements to Delivery, <span class="gradient-green-blue">Fully Automated</span>
+      </h2>
+      <p class="text-[#94a3b8] mt-4 max-w-xl mx-auto">
+        Configure your project and let the AI Agent pipeline handle the rest
+      </p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-8 relative">
+      <!-- Step 1 -->
+      <div class="relative text-center p-6">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#10b981]/20 to-[#10b981]/5 border border-[#10b981]/30 flex items-center justify-center mx-auto mb-5">
+          <svg class="w-7 h-7 text-[#10b981]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+        </div>
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-3 w-8 h-8 rounded-full bg-[#10b981] text-white text-xs font-black flex items-center justify-center">1</div>
+        <h3 class="text-lg font-bold text-[#e2e8f0] mb-2">Define Requirements</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          Write requirements in OpenSpec format. SHALL/SHOULD/MAY syntax clearly defines functionality and acceptance criteria. AI automatically reviews requirement quality.
+        </p>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="relative text-center p-6">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#3b82f6]/20 to-[#3b82f6]/5 border border-[#3b82f6]/30 flex items-center justify-center mx-auto mb-5">
+          <svg class="w-7 h-7 text-[#3b82f6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-3 w-8 h-8 rounded-full bg-[#3b82f6] text-white text-xs font-black flex items-center justify-center">2</div>
+        <h3 class="text-lg font-bold text-[#e2e8f0] mb-2">AI Auto Development</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          The Agent orchestration pipeline executes automatically: SDD design &rarr; DDD refinement &rarr; TDD test-first &rarr; code implementation &rarr; self-testing &rarr; code review. No manual intervention required.
+        </p>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="relative text-center p-6">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#f59e0b]/20 to-[#f59e0b]/5 border border-[#f59e0b]/30 flex items-center justify-center mx-auto mb-5">
+          <svg class="w-7 h-7 text-[#f59e0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-3 w-8 h-8 rounded-full bg-[#f59e0b] text-white text-xs font-black flex items-center justify-center">3</div>
+        <h3 class="text-lg font-bold text-[#e2e8f0] mb-2">Deliver &amp; Comply</h3>
+        <p class="text-sm text-[#94a3b8] leading-relaxed">
+          Three-layer CI/CD pipeline verification. Traceability matrix auto-generated, ASPICE compliance audit pack exported with one click. Ship fast, pass customer audits with ease.
+        </p>
+      </div>
+    </div>
+
+    <!-- Pipeline visualization -->
+    <div class="mt-16 gradient-border">
+      <div class="bg-[#111827] rounded-2xl p-6 sm:p-8">
+        <h3 class="text-sm font-semibold text-[#94a3b8] mb-6 text-center tracking-wider uppercase">Agent Pipeline End-to-End Flow</h3>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <span class="px-3 py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981] text-xs font-medium">OpenSpec</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6] text-xs font-medium">S.U.P.E.R</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] text-xs font-medium">PRD</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981] text-xs font-medium">Review</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6] text-xs font-medium">Arch</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] text-xs font-medium">Develop</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981] text-xs font-medium">Self-Test</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6] text-xs font-medium">Code Review</span>
+          <svg class="w-4 h-4 text-[#1e293b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <span class="px-3 py-1.5 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#f59e0b] text-xs font-medium">Report</span>
+        </div>
+        <div class="mt-6 grid grid-cols-3 gap-3 text-center text-xs text-[#64748b]">
+          <div>
+            <div class="font-medium text-[#10b981] mb-1">Layer 1</div>
+            <div>Development Verification (SWE.4)</div>
+          </div>
+          <div>
+            <div class="font-medium text-[#3b82f6] mb-1">Layer 2</div>
+            <div>Integration Verification (SWE.5)</div>
+          </div>
+          <div>
+            <div class="font-medium text-[#f59e0b] mb-1">Layer 3</div>
+            <div>System Verification (SWE.6)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PRICING PREVIEW ==================== -->
+<section class="py-24 bg-[#0d111f]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-12">
+      <span class="text-xs font-semibold tracking-widest uppercase text-[#f59e0b]">Pricing</span>
+      <h2 class="text-3xl sm:text-4xl font-black mt-3 text-[#e2e8f0]">
+        Choose the Plan That Fits You
+      </h2>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+      <!-- Free -->
+      <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-8 hover:border-[#10b981]/30 transition-all">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-2xl">🎯</span>
+          <h3 class="text-lg font-bold">Free</h3>
+        </div>
+        <div class="mb-6">
+          <span class="text-3xl font-black text-[#e2e8f0]">$0</span>
+          <span class="text-[#64748b] text-sm ml-1">/month</span>
+        </div>
+        <ul class="space-y-3 text-sm text-[#94a3b8] mb-8">
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>1 project</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>OpenSpec requirements management</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>AI Agent basic pipeline</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Community support</li>
+        </ul>
+        <a href="/dashboard" class="block w-full text-center py-2.5 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:border-[#10b981]/40 hover:text-white text-sm font-medium transition-all">
+          Get Started Free
+        </a>
+      </div>
+
+      <!-- Pro -->
+      <div class="rounded-xl border-2 border-[#10b981]/40 bg-[#111827] p-8 relative glow-green">
+        <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-[#10b981] to-[#059669] text-white text-xs font-bold">
+          Most Popular
+        </div>
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-2xl">🚀</span>
+          <h3 class="text-lg font-bold">Pro</h3>
+        </div>
+        <div class="mb-6">
+          <span class="text-3xl font-black text-[#e2e8f0]">$199</span>
+          <span class="text-[#64748b] text-sm ml-1">/month</span>
+        </div>
+        <ul class="space-y-3 text-sm text-[#94a3b8] mb-8">
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited projects</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>SDD &rarr; DDD &rarr; TDD full pipeline</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>3-layer CI/CD full pipeline</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>One-click ASPICE compliance pack</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Docker self-hosted deployment</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Email support</li>
+        </ul>
+        <a href="/dashboard" class="block w-full text-center py-2.5 rounded-lg bg-gradient-to-r from-[#10b981] to-[#059669] text-white text-sm font-semibold hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all shadow-lg shadow-[#10b981]/20">
+          Choose Pro
+        </a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="rounded-xl border border-[#1e293b] bg-[#111827] p-8 hover:border-[#3b82f6]/30 transition-all">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-2xl">🏢</span>
+          <h3 class="text-lg font-bold">Enterprise</h3>
+        </div>
+        <div class="mb-6">
+          <span class="text-3xl font-black text-[#e2e8f0]">Custom</span>
+          <span class="text-[#64748b] text-sm ml-1">/year</span>
+        </div>
+        <ul class="space-y-3 text-sm text-[#94a3b8] mb-8">
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Multi-tenant + organization management</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Custom Agent configuration</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Private deployment + Helm Chart</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>SSO / OAuth integration</li>
+          <li class="flex items-start gap-2"><svg class="w-4 h-4 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Dedicated customer success manager</li>
+        </ul>
+        <a href="mailto:stefanji@example.com" class="block w-full text-center py-2.5 rounded-lg border border-[#3b82f6]/30 bg-[#3b82f6]/5 text-[#3b82f6] hover:bg-[#3b82f6]/10 text-sm font-medium transition-all">
+          Contact Us
+        </a>
+      </div>
+    </div>
+
+    <div class="text-center mt-10">
+      <a href="/en/pricing" class="inline-flex items-center gap-1.5 text-sm text-[#3b82f6] hover:text-[#60a5fa] transition-colors">
+        View full pricing details
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FAQ ==================== -->
+<section id="faq" class="py-24 bg-[#0a0e17]">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-12">
+      <span class="text-xs font-semibold tracking-widest uppercase text-[#94a3b8]">FAQ</span>
+      <h2 class="text-3xl sm:text-4xl font-black mt-3 text-[#e2e8f0]">Frequently Asked Questions</h2>
+    </div>
+
+    <div class="space-y-3">
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          What embedded development scenarios does yuleOSH support?
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          yuleOSH is designed for all types of embedded systems development teams: automotive electronics (ASPICE compliance), IoT devices, industrial control, consumer electronics, and more. Any team with strict requirements management, automated testing, and compliance auditing needs will benefit significantly from yuleOSH.
+        </div>
+      </details>
+
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          How is it different from CI/CD tools like Jenkins or GitLab CI?
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          yuleOSH is more than CI/CD — it's a platform covering the entire development lifecycle. From requirements definition (OpenSpec), AI-powered design and development, a three-layer CI/CD pipeline, to one-click ASPICE audit evidence generation. Traditional CI/CD only solves "continuous integration"; yuleOSH solves "end-to-end automation from requirements to delivery."
+        </div>
+      </details>
+
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          How is data security ensured?
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          The Pro plan supports Docker self-hosted deployment — all data stays on your own servers. Enterprise provides private deployment with Helm Chart support. SaaS data is encrypted at rest with regular backups. All transmission is secured with TLS encryption.
+        </div>
+      </details>
+
+      <details class="group rounded-xl border border-[#1e293b] bg-[#111827] open:border-[#10b981]/20 transition-all">
+        <summary class="flex items-center justify-between p-5 cursor-pointer text-sm font-medium text-[#e2e8f0] hover:text-[#10b981] transition-colors">
+          How do I get started?
+          <svg class="w-4 h-4 text-[#64748b] group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </svg>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-[#94a3b8] leading-relaxed">
+          The Free plan requires no registration — just visit the Dashboard to get started. For self-hosted, run <code class="px-1.5 py-0.5 rounded bg-[#1e293b] text-[#10b981] text-xs font-mono">docker run -p 8080:8080 yuleosh/server</code> to launch. Full documentation is available on our <a href="https://github.com/stefanji/yuleOSH" class="text-[#3b82f6] hover:underline">GitHub repository</a>.
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== CTA ==================== -->
+<section class="py-20 bg-[#0d111f] border-t border-[#1e293b]">
+  <div class="max-w-3xl mx-auto px-4 text-center">
+    <h2 class="text-3xl sm:text-4xl font-black text-[#e2e8f0] mb-4">
+      Ready to Get Started?
+    </h2>
+    <p class="text-[#94a3b8] mb-8">
+      No registration required. Experience full-stack embedded AI development automation now.
+    </p>
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <a href="/dashboard" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#10b981] to-[#059669] text-white font-semibold text-sm shadow-lg shadow-[#10b981]/20 hover:from-[#10b981]/90 hover:to-[#059669]/90 transition-all">
+        Try Now
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+      </a>
+      <a href="https://github.com/stefanji/yuleOSH" target="_blank" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl border border-[#1e293b] text-[#94a3b8] hover:border-white/20 hover:text-white text-sm font-medium transition-all">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer class="py-12 border-t border-[#1e293b] bg-[#0a0e17]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <a href="/en" class="text-lg font-black tracking-tight">
+          <span class="text-[#10b981]">yule</span><span class="text-[#3b82f6]">OSH</span>
+        </a>
+        <span class="text-xs text-[#64748b]">v0.1.0 &middot; MIT License</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="#features" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">Features</a>
+        <a href="/en/pricing" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">Pricing</a>
+        <a href="https://github.com/stefanji/yuleOSH" target="_blank" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">GitHub</a>
+        <a href="https://github.com/stefanji/yuleOSH/issues" target="_blank" class="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors">Feedback</a>
+      </div>
+    </div>
+    <div class="mt-6 text-center text-xs text-[#393e4a]">
+      Built for embedded developers. Open source and community driven.
+    </div>
+  </div>
+</footer>
+
+<!-- Mobile menu toggle -->
+<script>
+document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+  const menu = document.getElementById('mobileMenu');
+  menu.classList.toggle('hidden');
+});
+
+// Close mobile menu on link click
+document.querySelectorAll('#mobileMenu a').forEach(link => {
+  link.addEventListener('click', () => {
+    document.getElementById('mobileMenu').classList.add('hidden');
+  });
+});
+</script>
+</body>
+</html>

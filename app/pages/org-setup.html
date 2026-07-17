@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔱 OSH-Fusion — Set Up Organization</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --red: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px;
+  width: 480px;
+  max-width: 90vw;
+}
+.card h1 { font-size: 24px; font-weight: 800; margin-bottom: 4px; text-align: center; }
+.card h1 .green { color: var(--green); }
+.card h1 .blue { color: var(--blue); }
+.card .subtitle { text-align: center; color: var(--text2); font-size: 14px; margin: 8px 0 24px; }
+.card .msg { color: var(--red); font-size: 13px; margin-bottom: 12px; min-height: 20px; text-align: center; }
+.card label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text2); }
+.card input {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s;
+  margin-bottom: 16px;
+}
+.card input:focus { border-color: var(--green); }
+.card input::placeholder { color: var(--text2); }
+.card button {
+  width: 100%;
+  padding: 12px;
+  background: var(--green);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.card button:hover { opacity: .85; }
+.card .hint { font-size: 11px; color: var(--text2); text-align: center; margin-top: 16px; }
+.card .step { font-size: 12px; color: var(--text2); text-align: center; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1><span class="green">🔱 OSH</span><span class="blue">-Fusion</span></h1>
+  <p class="subtitle">Create your organization</p>
+  <div class="step">Step 1 of 2</div>
+  <div class="msg" id="msg"></div>
+  <form id="orgForm" onsubmit="return handleOrgCreate(event)">
+    <label for="org_name">Organization Name</label>
+    <input type="text" id="org_name" name="org_name" placeholder="Acme Corp" autofocus required>
+
+    <label for="org_slug">Slug (used as invite code)</label>
+    <input type="text" id="org_slug" name="org_slug" placeholder="acme-corp" required>
+
+    <label for="project_name">First Project Name</label>
+    <input type="text" id="project_name" name="project_name" placeholder="My First Project" required>
+
+    <label for="project_slug">Project Slug</label>
+    <input type="text" id="project_slug" name="project_slug" placeholder="my-first-project" required>
+
+    <button type="submit" id="submitBtn">→ Create Organization</button>
+  </form>
+  <div class="hint">You'll be the admin of this organization</div>
+</div>
+
+<script>
+// Auto-slug generation
+document.getElementById('org_name').addEventListener('input', function() {
+  const slug = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  document.getElementById('org_slug').value = slug;
+});
+document.getElementById('project_name').addEventListener('input', function() {
+  const slug = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  document.getElementById('project_slug').value = slug;
+});
+
+async function handleOrgCreate(e) {
+  e.preventDefault();
+  const msgEl = document.getElementById('msg');
+  const btn = document.getElementById('submitBtn');
+  const token = localStorage.getItem('osh_token');
+
+  if (!token) {
+    window.location.href = '/login';
+    return false;
+  }
+
+  const data = {
+    org_name: document.getElementById('org_name').value.trim(),
+    org_slug: document.getElementById('org_slug').value.trim(),
+    project_name: document.getElementById('project_name').value.trim(),
+    project_slug: document.getElementById('project_slug').value.trim(),
+  };
+
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+
+  try {
+    const resp = await fetch('/api/org/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(data),
+    });
+    const result = await resp.json();
+
+    if (resp.ok) {
+      window.location.href = result.redirect || '/project/select';
+    } else {
+      msgEl.textContent = result.error || 'Failed to create organization';
+      btn.disabled = false;
+      btn.textContent = '→ Create Organization';
+    }
+  } catch (err) {
+    msgEl.textContent = 'Network error';
+    btn.disabled = false;
+    btn.textContent = '→ Create Organization';
+  }
+  return false;
+}
+</script>
+</body>
+</html>

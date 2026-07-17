@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yuleOSH · Mock Pipeline Demo</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --purple: #8b5cf6;
+  --red: #ef4444;
+  --cyan: #06b6d4;
+  --orange: #f97316;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+/* Header */
+.header {
+  width: 100%;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+.header h1 { font-size: 18px; font-weight: 800; }
+.header h1 span.green { color: var(--green); }
+.header h1 span.blue { color: var(--blue); }
+.header .nav-links { display: flex; align-items: center; gap: 16px; }
+.header .nav-links a {
+  font-size: 13px; color: var(--text2); text-decoration: none; transition: color 0.2s;
+}
+.header .nav-links a:hover { color: var(--text); }
+.header .btn-try-now {
+  font-size: 13px; padding: 7px 18px; border-radius: 8px; font-weight: 600;
+  background: linear-gradient(135deg, var(--green), #059669); color: #fff; text-decoration: none;
+  transition: all 0.2s; box-shadow: 0 0 16px rgba(16,185,129,.2);
+}
+.header .btn-try-now:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgba(16,185,129,.3); }
+
+/* Container */
+.container {
+  width: 100%;
+  max-width: 900px;
+  padding: 32px 20px;
+  flex: 1;
+}
+
+/* Start Screen */
+.start-screen {
+  text-align: center;
+  padding: 60px 20px;
+}
+.start-screen .logo-icon { font-size: 56px; margin-bottom: 16px; }
+.start-screen h2 { font-size: 28px; font-weight: 800; margin-bottom: 10px; }
+.start-screen h2 .gradient {
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.start-screen p { color: var(--text2); font-size: 15px; line-height: 1.7; margin-bottom: 28px; max-width: 560px; margin-left: auto; margin-right: auto; }
+.start-screen .features { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 32px; }
+.start-screen .features span { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 5px; }
+.start-screen .features span .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+.btn-start {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 36px; border: none; border-radius: 12px; font-weight: 700; font-size: 16px;
+  background: linear-gradient(135deg, var(--green), #059669); color: #fff; cursor: pointer;
+  transition: all 0.3s; box-shadow: 0 0 30px rgba(16,185,129,.25);
+}
+.btn-start:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(16,185,129,.35); }
+.btn-start:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Pipeline Screen (hidden initially) */
+.pipeline-screen { display: none; }
+
+/* Progress Overview */
+.progress-overview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.progress-header .title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.progress-header .title .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); animation: pulse 1.5s ease infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.progress-header .status-badge {
+  font-size: 11px; padding: 4px 12px; border-radius: 12px; font-weight: 600;
+}
+.status-badge.running { background: rgba(245,158,11,.15); color: var(--yellow); border: 1px solid rgba(245,158,11,.3); }
+.status-badge.completed { background: rgba(16,185,129,.15); color: var(--green); border: 1px solid rgba(16,185,129,.3); }
+
+.progress-bar-bg {
+  width: 100%; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+}
+.progress-bar-fill {
+  height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--green), var(--blue));
+  transition: width 0.6s ease; width: 0%;
+}
+.progress-label { font-size: 12px; color: var(--text2); text-align: right; }
+
+/* Step List */
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: all 0.4s ease;
+}
+.step-item.pending { opacity: 0.5; }
+.step-item.running {
+  border-color: var(--yellow);
+  background: rgba(245,158,11,.06);
+  box-shadow: 0 0 20px rgba(245,158,11,.08);
+}
+.step-item.done {
+  border-color: rgba(16,185,129,.3);
+  background: rgba(16,185,129,.05);
+}
+.step-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; flex-shrink: 0;
+  transition: all 0.4s ease;
+}
+.step-item.pending .step-icon { background: var(--surface2); color: var(--text2); border: 2px solid var(--border); }
+.step-item.running .step-icon {
+  background: rgba(245,158,11,.15); color: var(--yellow); border: 2px solid var(--yellow);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.step-item.done .step-icon {
+  background: rgba(16,185,129,.15); color: var(--green); border: 2px solid var(--green);
+}
+.step-info { flex: 1; min-width: 0; }
+.step-name { font-size: 14px; font-weight: 600; }
+.step-item.running .step-name { color: var(--yellow); }
+.step-item.done .step-name { color: var(--green); }
+.step-desc { font-size: 11px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Report Section */
+.report-section {
+  display: none;
+  margin-top: 20px;
+}
+.report-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  animation: fadeUp 0.5s ease;
+}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.report-title {
+  font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 20px;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.report-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.metric-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  transition: all 0.3s;
+}
+.metric-card:hover { border-color: var(--green); transform: translateY(-2px); }
+.metric-icon { font-size: 24px; margin-bottom: 6px; }
+.metric-value { font-size: 22px; font-weight: 800; color: var(--green); }
+.metric-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+.report-compliance {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.report-compliance h3 { font-size: 13px; font-weight: 700; margin-bottom: 10px; color: var(--text); }
+.compliance-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; font-size: 13px;
+}
+.compliance-item .label { color: var(--text2); }
+.compliance-item .value.pass { color: var(--green); font-weight: 600; }
+.compliance-item .value.warn { color: var(--yellow); font-weight: 600; }
+
+.report-summary {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.8;
+  padding: 16px;
+  background: var(--surface2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+  white-space: pre-wrap;
+}
+
+/* CTA Register */
+.cta-register {
+  text-align: center;
+  padding: 28px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-top: 20px;
+  animation: fadeUp 0.6s ease 0.3s both;
+}
+.cta-register h3 {
+  font-size: 20px; font-weight: 800; margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--yellow), var(--orange));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.cta-register p { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+.cta-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 12px 28px; border: none; border-radius: 10px; font-weight: 600; font-size: 14px;
+  background: linear-gradient(135deg, var(--green), #059669); color: #fff; cursor: pointer;
+  text-decoration: none; transition: all 0.2s; box-shadow: 0 0 20px rgba(16,185,129,.2);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 28px rgba(16,185,129,.3); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 12px 28px; border: 1px solid var(--border); border-radius: 10px; font-weight: 600; font-size: 14px;
+  background: var(--surface2); color: var(--text2); cursor: pointer;
+  text-decoration: none; transition: all 0.2s;
+}
+.btn-secondary:hover { border-color: var(--blue); color: var(--text); }
+
+/* Error state */
+.error-state {
+  text-align: center; padding: 40px;
+}
+.error-state .error-icon { font-size: 48px; margin-bottom: 12px; }
+.error-state h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: var(--red); }
+.error-state p { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+
+/* Footer */
+.footer {
+  width: 100%;
+  text-align: center;
+  padding: 20px;
+  font-size: 12px;
+  color: var(--text2);
+  border-top: 1px solid var(--border);
+}
+
+/* Step artifacts toggle */
+.artifacts { font-size: 11px; color: var(--text2); margin-top: 4px; display: none; }
+.step-item.done .artifacts { display: block; }
+.artifacts span { display: inline-block; margin-right: 8px; }
+.artifacts span::before { content: '📎 '; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span class="green">yule</span><span class="blue">OSH</span> <span style="font-weight:400;font-size:13px;color:var(--text2)">· Demo Pipeline</span></h1>
+  <div class="nav-links">
+    <a href="/">首页</a>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/pricing">定价</a>
+    <a href="/demo" class="btn-try-now">Try Demo</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Start Screen -->
+  <div class="start-screen" id="startScreen">
+    <div class="logo-icon">🚀</div>
+    <h2><span class="gradient">yuleOSH</span> Mock Pipeline Demo</h2>
+    <p>
+      零配置体验嵌入式 AI 开发全流程。<br>
+      点击下方按钮，触发包含 10 个步骤的模拟 Pipeline。
+    </p>
+    <div class="features">
+      <span><span class="dot" style="background:var(--green)"></span> 10 步骤全流程</span>
+      <span><span class="dot" style="background:var(--blue)"></span> 三层 CI 验证</span>
+      <span><span class="dot" style="background:var(--yellow)"></span> 实时进度展示</span>
+      <span><span class="dot" style="background:var(--purple)"></span> 最终报告 + 证据包</span>
+    </div>
+    <button class="btn-start" id="btnStart" onclick="startDemo()">
+      ▶ 启动 Mock Pipeline
+    </button>
+  </div>
+
+  <!-- Pipeline Screen -->
+  <div class="pipeline-screen" id="pipelineScreen">
+
+    <!-- Progress -->
+    <div class="progress-overview">
+      <div class="progress-header">
+        <div class="title">
+          <span>⚙️ Pipeline</span>
+          <span class="pulse" id="pulseDot"></span>
+        </div>
+        <span class="status-badge running" id="statusBadge">⏳ 运行中</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-label" id="progressLabel">0 / 10 步完成</div>
+    </div>
+
+    <!-- Steps -->
+    <div class="step-list" id="stepList"></div>
+
+    <!-- Report -->
+    <div class="report-section" id="reportSection">
+      <div class="report-card" id="reportCard">
+        <div class="report-title">✅ Pipeline 完成</div>
+        <div class="report-metrics" id="reportMetrics"></div>
+        <div class="report-compliance" id="reportCompliance"></div>
+        <div class="report-summary" id="reportSummary"></div>
+      </div>
+
+      <!-- Registration CTA -->
+      <div class="cta-register">
+        <h3>🎯 立即注册，开启真实验证</h3>
+        <p>
+          Mock Pipeline 跑通了！<br>
+          注册 yuleOSH 即可体验真实 AI Agent 编排、三层 CI/CD 和 ASPICE 合规包生成。
+        </p>
+        <div class="cta-buttons">
+          <a href="/dashboard" class="btn-primary">🚀 立即注册 →</a>
+          <a href="/" class="btn-secondary">← 回到首页了解更多</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-state" id="errorState" style="display:none">
+      <div class="error-icon">⚠️</div>
+      <h3>Pipeline 启动失败</h3>
+      <p id="errorMsg">无法连接到 API。请检查服务是否正常运行。</p>
+      <button class="btn-primary" onclick="location.reload()">重试</button>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="footer">
+  yuleOSH v0.1.0 · Mock Pipeline Demo · <a href="/" style="color:var(--blue);text-decoration:none;">回到首页</a>
+</div>
+
+<script>
+const API_BASE = '/api/v1/demo/pipeline';
+
+// Pipeline step emoji mapping
+const STEP_ICONS = {
+  'spec-parse': '📋',
+  'requirements-analysis': '🔍',
+  'sdd': '📐',
+  'code-gen': '💻',
+  'internal-review': '🔎',
+  'test-plan': '🧪',
+  'code-review': '👀',
+  'ci-layer1': '🟢',
+  'ci-layer2': '🟡',
+  'ci-layer3': '🔵',
+};
+const DEFAULT_ICON = '⚡';
+
+let pipelineData = null;
+let currentStep = -1;
+let animationTimer = null;
+
+async function startDemo() {
+  const btn = document.getElementById('btnStart');
+  btn.disabled = true;
+  btn.textContent = '⏳ 启动中...';
+
+  try {
+    const resp = await fetch(API_BASE);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    if (!data.ok) throw new Error(data.error || 'API 返回错误');
+
+    // Show pipeline screen
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('pipelineScreen').style.display = 'block';
+
+    pipelineData = data.data;
+    renderAllSteps(pipelineData);
+    animatePipeline(pipelineData);
+
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = '▶ 重试';
+    document.getElementById('errorMsg').textContent = err.message || '无法连接到 API。请检查服务是否正常运行。';
+    document.getElementById('pipelineScreen').style.display = 'block';
+    document.getElementById('errorState').style.display = 'block';
+  }
+}
+
+function renderAllSteps(data) {
+  const list = document.getElementById('stepList');
+  list.innerHTML = '';
+
+  data.steps.forEach((step, idx) => {
+    const icon = STEP_ICONS[step.id] || DEFAULT_ICON;
+    const div = document.createElement('div');
+    div.className = 'step-item pending';
+    div.id = `step-${idx}`;
+    div.innerHTML = `
+      <div class="step-icon">${icon}</div>
+      <div class="step-info">
+        <div class="step-name">${idx + 1}. ${step.name}</div>
+        <div class="step-desc" id="stepDesc-${idx}">等待执行...</div>
+        <div class="artifacts" id="stepArtifacts-${idx}"></div>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function animatePipeline(data) {
+  const steps = data.steps;
+  let idx = 0;
+
+  function advance() {
+    if (idx >= steps.length) {
+      // All done
+      showCompleted();
+      return;
+    }
+
+    const step = steps[idx];
+
+    // Mark current as running
+    const el = document.getElementById(`step-${idx}`);
+    if (el) {
+      el.className = 'step-item running';
+      document.getElementById(`stepDesc-${idx}`).textContent = step.output_summary || '运行中...';
+    }
+
+    // Update progress
+    updateProgress(idx, steps.length);
+
+    // Animate for this step's duration, then mark done
+    const duration = step.duration_ms || 1500;
+
+    // Clear any existing timer and wait
+    if (animationTimer) clearTimeout(animationTimer);
+
+    animationTimer = setTimeout(() => {
+      // Mark as done
+      if (el) {
+        el.className = 'step-item done';
+      }
+
+      // Show artifacts
+      if (step.artifacts) {
+        const artEl = document.getElementById(`stepArtifacts-${idx}`);
+        if (artEl) {
+          artEl.textContent = Object.entries(step.artifacts)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' · ');
+        }
+      }
+
+      idx++;
+      advance();
+    }, Math.min(duration, 2000)); // cap at 2s per step for demo pacing
+  }
+
+  advance();
+}
+
+function updateProgress(current, total) {
+  const pct = Math.round((current / total) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `${current} / ${total} 步完成`;
+}
+
+function showCompleted() {
+  const pct = 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `${pipelineData.total_steps} / ${pipelineData.total_steps} 步完成 ✅`;
+
+  // Update status
+  document.getElementById('statusBadge').className = 'status-badge completed';
+  document.getElementById('statusBadge').textContent = '✅ 已完成';
+  document.getElementById('pulseDot').style.display = 'none';
+
+  // Show report
+  if (pipelineData.final_report) {
+    showReport(pipelineData.final_report);
+  }
+}
+
+function showReport(report) {
+  document.getElementById('reportSection').style.display = 'block';
+
+  // Metrics
+  const metrics = [
+    { icon: '📊', value: report.coverage_prediction || 'N/A', label: '覆盖率预测' },
+    { icon: '⭐', value: report.review_score || 'N/A', label: '审查评分' },
+    { icon: '📐', value: pipelineData.total_steps || '10', label: '流水线步骤' },
+    { icon: '📦', value: '6', label: '证据文件' },
+  ];
+
+  const metricsEl = document.getElementById('reportMetrics');
+  metricsEl.innerHTML = metrics.map(m => `
+    <div class="metric-card">
+      <div class="metric-icon">${m.icon}</div>
+      <div class="metric-value">${m.value}</div>
+      <div class="metric-label">${m.label}</div>
+    </div>
+  `).join('');
+
+  // Compliance gates
+  if (report.compliance_gates) {
+    const compEl = document.getElementById('reportCompliance');
+    const gates = report.compliance_gates;
+    compEl.innerHTML = `
+      <h3>🔐 合规检查</h3>
+      ${Object.entries(gates).map(([key, val]) => {
+        const pass = typeof val === 'string' && val.toLowerCase().includes('pass');
+        return `
+          <div class="compliance-item">
+            <span class="label">${key}</span>
+            <span class="value ${pass ? 'pass' : 'warn'}">${val}</span>
+          </div>
+        `;
+      }).join('')}
+    `;
+  }
+
+  // Summary
+  if (report.summary) {
+    document.getElementById('reportSummary').textContent = report.summary
+      .replace(/\\n/g, '\n')
+      .replace(/\*\*/g, '')
+      .trim();
+  }
+}
+</script>
+</body>
+</html>
