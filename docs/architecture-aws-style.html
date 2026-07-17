@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yuleOSH 系统架构 — AWS 风格</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f0f2f5;
+    font-family: -apple-system, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+    padding: 30px 20px;
+    color: #232f3e;
+  }
+  .diagram-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 30px 20px 20px;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #ff9900;
+  }
+  .header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #232f3e;
+    margin-bottom: 4px;
+  }
+  .header h1 span { color: #ff9900; }
+  .header p {
+    font-size: 13px;
+    color: #666;
+  }
+  .header .badge {
+    display: inline-block;
+    background: #ff9900;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 10px;
+    margin-left: 8px;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    font-size: 12px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-swatch {
+    width: 16px; height: 16px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+  }
+  .legend .arrow-icon {
+    color: #888;
+    font-size: 16px;
+    margin: 0 4px;
+  }
+  .layer {
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: 1.5px solid #ddd;
+    overflow: hidden;
+    position: relative;
+  }
+  .layer-header {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .layer-header .count {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.7;
+    margin-left: auto;
+  }
+  .layer-body {
+    padding: 12px 14px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .layer-body.compact { gap: 6px; }
+  .service {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    flex: 0 0 auto;
+    min-width: 120px;
+    max-width: 240px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    position: relative;
+  }
+  .service-badge { color: var(--svc-color, #666); }
+  .service .icon {
+    font-size: 18px;
+    margin-right: 6px;
+  }
+  .service .name {
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .service .desc {
+    font-size: 10px;
+    color: #888;
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+  .service .tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-top: 4px;
+    background: #f0f0f0;
+    color: #666;
+  }
+  .service .tag.p0 { background: #fee2e2; color: #dc2626; }
+  .service .tag.p1 { background: #fef3c7; color: #d97706; }
+  .service .tag.done { background: #dcfce7; color: #16a34a; }
+  .service .tag.new { background: #dbeafe; color: #2563eb; }
+
+  /* Layer colors - AWS style palettes */
+  .layer-ui     { border-color: #ec7211; }
+  .layer-ui .layer-header     { background: #ec7211; color: #fff; }
+  .layer-ui .layer-body       { background: #fef5ef; }
+
+  .layer-orch   { border-color: #a468c8; }
+  .layer-orch .layer-header   { background: #a468c8; color: #fff; }
+  .layer-orch .layer-body     { background: #f5eff8; }
+
+  .layer-engine { border-color: #3b7bdb; }
+  .layer-engine .layer-header { background: #3b7bdb; color: #fff; }
+  .layer-engine .layer-body   { background: #eef3fc; }
+
+  .layer-store  { border-color: #15a36b; }
+  .layer-store .layer-header  { background: #15a36b; color: #fff; }
+  .layer-store .layer-body    { background: #eef8f3; }
+
+  .layer-out    { border-color: #e8a317; }
+  .layer-out .layer-header    { background: #e8a317; color: #fff; }
+  .layer-out .layer-body      { background: #fef7ec; }
+
+  .layer-infra  { border-color: #8f8f8f; }
+  .layer-infra .layer-header  { background: #8f8f8f; color: #fff; }
+  .layer-infra .layer-body    { background: #f5f5f5; }
+
+  /* Arrow between layers */
+  .arrow-down {
+    text-align: center;
+    font-size: 20px;
+    color: #999;
+    line-height: 1;
+    padding: 2px 0;
+  }
+  
+  .footer {
+    text-align: center;
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1px solid #e9ecef;
+    font-size: 11px;
+    color: #999;
+  }
+  .footer strong { color: #666; }
+</style>
+</head>
+<body>
+<div class="diagram-container">
+
+  <div class="header">
+    <h1>yuleOSH <span>⚡</span> 系统架构</h1>
+    <p>嵌入式 AI 开发全流程平台 &nbsp;·&nbsp; v2.5.0 &nbsp;·&nbsp; 2026-07-17
+      <span class="badge">老陈 85/100 🟢</span>
+    </p>
+  </div>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-swatch" style="background:#ec7211"></span> 用户界面层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#a468c8"></span> 编排层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#3b7bdb"></span> 核心引擎层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#15a36b"></span> 数据与存储层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#e8a317"></span> 输出与集成层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#8f8f8f"></span> 基础设施层</span>
+    <span style="flex:1"></span>
+    <span class="legend-item"><span class="tag done">✅</span> Phase 1-2完成</span>
+    <span class="legend-item"><span class="tag new">🆕</span> 新增</span>
+    <span class="legend-item"><span class="tag p0">P0</span> 待开发</span>
+  </div>
+
+  <!-- ============================== Layer 1: 用户界面 ============================== -->
+  <div class="layer layer-ui">
+    <div class="layer-header">
+      <span>🌐</span> 用户界面层 <span class="count">3 模块</span>
+    </div>
+    <div class="layer-body">
+      <div class="service">
+        <span class="icon">🖥️</span>
+        <span class="name">CLI 命令行</span>
+        <div class="desc">argparse · 22+ 子命令<br/>yuleosh init/pipeline/ci/review/kg</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🌐</span>
+        <span class="name">REST API</span>
+        <div class="desc">api/router.py<br/>FastAPI 风格路由 · JWT 鉴权</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">📊</span>
+        <span class="name">Web Dashboard</span>
+        <div class="desc">内置 HTTP 服务器<br/>SWE/KPI/覆盖率/KG 可视化</div>
+        <span class="tag p1">P1 增强</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">⬇</div>
+
+  <!-- ============================== Layer 2: 编排层 ============================== -->
+  <div class="layer layer-orch">
+    <div class="layer-header">
+      <span>⚙️</span> 编排层 <span class="count">3 模块</span>
+    </div>
+    <div class="layer-body">
+      <div class="service">
+        <span class="icon">🔄</span>
+        <span class="name">Checkpoint Engine</span>
+        <div class="desc">engine/checkpoint.py<br/>全量 · 注入 · 断点续跑</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🧩</span>
+        <span class="name">Step Handlers (20+)</span>
+        <div class="desc">pipeline/step_handlers/<br/>模板方法 + retry + CheckpointManager</div>
+        <span class="tag done">✅ Phase 2</span>
+      </div>
+      <div class="service">
+        <span class="icon">🏗️</span>
+        <span class="name">Loop Engineering 🆕</span>
+        <div class="desc">缺陷→需求 · 现场→FMEA<br/>KPI→改进 · KG 自进化</div>
+        <span class="tag p0">P0 待设计</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">⬇</div>
+
+  <!-- ============================== Layer 3: 核心引擎层 ============================== -->
+  <div class="layer layer-engine">
+    <div class="layer-header">
+      <span>🔧</span> 核心引擎层 <span class="count">5 模块</span>
+    </div>
+    <div class="layer-body">
+      <div class="service">
+        <span class="icon">🧪</span>
+        <span class="name">CI 持续集成</span>
+        <div class="desc">L1 静态/L2 测试/L3 综合<br/>MISRA C:2023 · 覆盖率 · KPI</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🤖</span>
+        <span class="name">AI 代码审查</span>
+        <div class="desc">Track A/B · ResourcePredictor<br/>15 种审查轨道 · ReviewFinding</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🔗</span>
+        <span class="name">知识图谱 KG</span>
+        <div class="desc">importer/reporter/events/merge_gate<br/>置信度标签 · 100K Stress Test</div>
+        <span class="tag done">✅ Phase 2</span>
+      </div>
+      <div class="service">
+        <span class="icon">✅</span>
+        <span class="name">Compliance 合规</span>
+        <div class="desc">ASPICE v3.1 · ACC 验证<br/>ISO 26262 · 网络安全基线</div>
+        <span class="tag done">✅ Phase 1</span>
+      </div>
+      <div class="service">
+        <span class="icon">🚗</span>
+        <span class="name">AUTOSAR 支持</span>
+        <div class="desc">--template autosar · ARM 交叉编译<br/>ARXML 合规 · yuleASR 集成</div>
+        <span class="tag done">✅ Phase 3</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">⬇</div>
+
+  <!-- ============================== Layer 4: 数据与存储层 ============================== -->
+  <div class="layer layer-store">
+    <div class="layer-header">
+      <span>💾</span> 数据与存储层 <span class="count">5 模块</span>
+    </div>
+    <div class="layer-body">
+      <div class="service">
+        <span class="icon">🗄️</span>
+        <span class="name">Store 持久化</span>
+        <div class="desc">SQLite (默认) / PostgreSQL<br/>AbstractStore 统一接口</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">📚</span>
+        <span class="name">知识库 KB</span>
+        <div class="desc">KbStore · 文章/教训/FMEA<br/>MISRA 规则 · 最佳实践</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🧠</span>
+        <span class="name">RAG 引擎</span>
+        <div class="desc">ChromaDB / FAISS<br/>向量检索 · 多源融合</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🤖</span>
+        <span class="name">LLM 客户端</span>
+        <div class="desc">统一接口 · CostTracker<br/>TokenBudget · 多提供商</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🔗</span>
+        <span class="name">ALM 集成</span>
+        <div class="desc">Jira / Polarion 双向同步<br/>AlmTicket · 证据回忆</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">⬇</div>
+
+  <!-- ============================== Layer 5: 输出与集成层 ============================== -->
+  <div class="layer layer-out">
+    <div class="layer-header">
+      <span>📋</span> 输出与集成层 <span class="count">4 模块</span>
+    </div>
+    <div class="layer-body">
+      <div class="service">
+        <span class="icon">📦</span>
+        <span class="name">Evidence Pack</span>
+        <div class="desc">自动收集 · RSA 签名<br/>Compliance ZIP · OEM 5 模板</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">📋</span>
+        <span class="name">Ultra-Plan</span>
+        <div class="desc">AI 开发计划生成器<br/>Agent 分配 · 拓扑排序 · 工时估算</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">📝</span>
+        <span class="name">OpenSpec</span>
+        <div class="desc">SHALL/SHOULD/MAY<br/>spec-delta · 追溯矩阵 · 版本管理</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🧩</span>
+        <span class="name">测试生成器</span>
+        <div class="desc">testgen/ · 自动生成<br/>单元测试骨架 · 参数化</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">⬇</div>
+
+  <!-- ============================== Layer 6: 基础设施层 ============================== -->
+  <div class="layer layer-infra">
+    <div class="layer-header">
+      <span>🏗️</span> 基础设施层 <span class="count">5 模块</span>
+    </div>
+    <div class="layer-body">
+      <div class="service">
+        <span class="icon">🖥️</span>
+        <span class="name">Cross 编译</span>
+        <div class="desc">交叉编译 · JLink/OpenOCD<br/>SIL 仿真 · 串口监视</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🎛️</span>
+        <span class="name">Hardware 抽象</span>
+        <div class="desc">调试器 · 烧录器 · 目标板<br/>HardwareDeployer · AIDebugger</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">📊</span>
+        <span class="name">Usage / Metering</span>
+        <div class="desc">用量统计 · Stripe 计费<br/>API Key 管理</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">🪝</span>
+        <span class="name">Hooks / Plugins</span>
+        <div class="desc">Git pre-commit/post-merge<br/>技能插件 · 沙箱注册</div>
+        <span class="tag done">✅ v1.0</span>
+      </div>
+      <div class="service">
+        <span class="icon">📐</span>
+        <span class="name">模板系统</span>
+        <div class="desc">generic / autosar / OEM<br/>VW/BMW/Mercedes 5 模板</div>
+        <span class="tag done">✅ Phase 3</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Data Flow ============================== -->
+  <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+    <div style="font-size:13px; font-weight:600; margin-bottom:10px;">📊 核心数据流</div>
+    <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap; font-size:11px; color:#555;">
+      <span style="background:#ec7211; color:#fff; padding:3px 8px; border-radius:4px;">CLI / API</span>
+      <span style="padding:0 4px; color:#999;">→</span>
+      <span style="background:#a468c8; color:#fff; padding:3px 8px; border-radius:4px;">Pipeline</span>
+      <span style="padding:0 4px; color:#999;">→</span>
+      <span style="background:#3b7bdb; color:#fff; padding:3px 8px; border-radius:4px;">CI / Review / KG</span>
+      <span style="padding:0 4px; color:#999;">→</span>
+      <span style="background:#15a36b; color:#fff; padding:3px 8px; border-radius:4px;">Store / KB</span>
+      <span style="padding:0 4px; color:#999;">→</span>
+      <span style="background:#e8a317; color:#fff; padding:3px 8px; border-radius:4px;">Evidence / Reports</span>
+      <span style="padding:0 4px; color:#999;">⬆</span>
+      <span style="background:#8f8f8f; color:#fff; padding:3px 8px; border-radius:4px;">HW / Metering</span>
+    </div>
+  </div>
+
+  <!-- ============================== Loop Engineering ============================== -->
+  <div style="margin-top: 16px; padding: 16px; background: #fef2f2; border: 1.5px dashed #ef4444; border-radius: 8px;">
+    <div style="font-size:13px; font-weight:600; margin-bottom:8px; color:#dc2626;">🔄 Loop Engineering — 待实现 (P0)</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:180px; background:#fff; padding:8px 10px; border-radius:6px; border:1px solid #fecaca;">
+        <div style="font-size:11px; font-weight:600; color:#dc2626;">🔵 Loop 1</div>
+        <div style="font-size:10px; color:#666;">缺陷回溯闭环<br/>Test Fail → KG追溯 → Spec更新</div>
+      </div>
+      <div style="flex:1; min-width:180px; background:#fff; padding:8px 10px; border-radius:6px; border:1px solid #fecaca;">
+        <div style="font-size:11px; font-weight:600; color:#dc2626;">🟢 Loop 2</div>
+        <div style="font-size:10px; color:#666;">现场数据闭环<br/>Field Fail → FMEA → Design</div>
+      </div>
+      <div style="flex:1; min-width:180px; background:#fff; padding:8px 10px; border-radius:6px; border:1px solid #fecaca;">
+        <div style="font-size:11px; font-weight:600; color:#dc2626;">🟡 Loop 3</div>
+        <div style="font-size:10px; color:#666;">KPI 改进闭环<br/>Measure → 告警 → RCA → Improve</div>
+      </div>
+      <div style="flex:1; min-width:180px; background:#fff; padding:8px 10px; border-radius:6px; border:1px solid #fecaca;">
+        <div style="font-size:11px; font-weight:600; color:#dc2626;">🟣 Loop 4</div>
+        <div style="font-size:10px; color:#666;">KG 自进化闭环<br/>验证 → 置信度更新 → 越用越准</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <strong>yuleOSH</strong> · 35+ 模块 · 34,000+ 行 Python · 260+ 测试通过 · 基于 OpenSpec + Superpowers + Harness Engineering 三位一体
+  </div>
+
+</div>
+</body>
+</html>
