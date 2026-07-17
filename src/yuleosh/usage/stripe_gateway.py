@@ -61,6 +61,12 @@ def handle_stripe_webhook(payload: bytes, signature: str) -> dict:
     if not is_stripe_configured():
         return {"status": "error", "message": "Payment not configured"}
 
+    if not STRIPE_WEBHOOK_SECRET:
+        return {"status": "error", "message": "STRIPE_WEBHOOK_SECRET not configured"}
+
+    if not signature:
+        return {"status": "error", "message": "Missing Stripe signature header"}
+
     try:
         import stripe
         stripe.api_key = STRIPE_SECRET_KEY

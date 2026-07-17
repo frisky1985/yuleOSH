@@ -91,6 +91,7 @@ def _get_handler_instance():
     h.client_address = ("127.0.0.1", 54321)
     h.close_connection = True
     h.request_version = "HTTP/1.1"
+    h.requestline = "GET / HTTP/1.1"
     return h
 
 

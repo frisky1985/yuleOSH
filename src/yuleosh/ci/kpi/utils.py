@@ -43,6 +43,12 @@ DEFAULT_THRESHOLDS = {
     "required_fix_hours": 48.0,             # §21.4: Required 违规 48h 内修复/提偏差
     "advisory_fix_days": 15.0,              # §21.4: Advisory 违规 15d 内修复
     "defect_escape_rate_pct": 15.0,         # Sprint E: 缺陷逃逸率 ≤15%
+    # KG 知识图谱 KPI 阈值
+    "kg_coverage_pct": 80.0,               # KG 需求覆盖率 ≥80%
+    "kg_health_min_nodes": 10,              # KG 最小节点数
+    "kg_health_max_orphan_pct": 20.0,       # 孤立文件比例 ≤20%
+    "kg_confidence_min": 0.8,              # 最低平均置信度 ≥0.8
+    "kg_confidence_explicit_pct": 50.0,    # 显式追溯占边数比例 ≥50%
 }
 
 

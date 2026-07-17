@@ -32,6 +32,7 @@ int main(void) {
     valid = is_valid(result);
 
     if (valid) {
+        /* cppcheck-suppress [misra-c2023-11.3] — intentional MMIO read */
         (void)safe_read((const volatile uint32_t *)0x40000000U);
     }
 

@@ -1,0 +1,21 @@
+name: autosar
+version: 1.1.0
+description: yuleASR AUTOSAR BSW project — S32K312 with full MCAL+ECUAL+Services stack
+platforms: [arm, s32k312, nxp]
+tags: [autosar, bsw, mcal, ecual, services, s32k312, automotive, safety]
+spec_sections:
+  - System Requirements
+  - MCAL Configuration
+  - ECUAL Abstraction
+  - Services Layer
+  - RTE & SW-C
+  - Diagnostic & Memory
+  - Safety & Security
+  - Test Plan
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]
+yuleasr:
+  modules_mcal: [Mcu, Dio, Port, Gpt, Can, Lin, Spi, Icu, Ocu, Pwm, Adc, Fls, Eep, Wdg, Eth, I2C, Uart, Crypto, Fee, Flash, RamTst]
+  modules_ecual: [CanIf, CanNm, CanSm, CanTp, CanTrcv, LinIf, LinNm, LinSM, LinTp, LinTrcv, DoIP, EthIf, EthSm, EthTrcv, FrIf, FrTp, FiM, Srp, Ea, IpHwAb, IpduM, Fee, MemIf, WdgIf, SomeIpIf, SomeIpSd, Xcp, Dlt, J1939Tp]
+  modules_services: [Com, ComM, Dcm, Dem, Det, EcuM, EcuC, BswM, SchM, NvM, PduR, CanM, CanSm, LinM, LinSm, LinTp, EthSm, FiM, IpduM, E2E, Crc, CryIf, Csm, KeyM, SecOC, SoAd, SomeIp, SomeIpTp, SomeIpXf, StbM, WdgM, Xcp, Dlt, J1939Nm, J1939Tp, UdpNm, MemIf, Mem, Nm, SwC, LnTm, Mqtt, RAMSafety, DoCan]

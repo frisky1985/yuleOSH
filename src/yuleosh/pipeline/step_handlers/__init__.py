@@ -55,6 +55,9 @@ from yuleosh.pipeline.step_handlers.review_critical_safety import step_review_cr
 # Fault Injection testing (SWE.5 / SWE.6)
 from yuleosh.pipeline.step_handlers.fault_inject import step_fault_injection
 
+# KG Merge Gate (KG-42)
+from yuleosh.knowledge_graph.merge_gate import step_merge_gate
+
 from yuleosh.pipeline.stages import _check_llm_key
 
 
@@ -94,6 +97,7 @@ __all__ = [
     "step_review_mmio",
     "step_review_critical_safety",
     "step_fault_injection",
+    "step_merge_gate",
     "step_test_qualification",
     "step_c_unit_test",
     "PIPELINE_STEPS",
@@ -174,6 +178,9 @@ PIPELINE_STEPS = [
 
     # ── SWE.5 / SWE.6: Fault Injection Testing ────
     ("fault-injection", "小克", "故障注入测试 (SWE.5/SWE.6)", step_fault_injection),
+
+    # ── Merge Gate (KG-42): Pre-merge KG validation ──
+    ("merge-gate", "小马", "KG Merge Gate — 图一致性/置信度检查", step_merge_gate),
 
     # ── Right side: SWE.6 Qualification Testing ─────
     ("test-qualification", "小明", "合格性测试", step_test_qualification),

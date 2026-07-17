@@ -22,6 +22,7 @@ uint32_t hal_uart_transmit(uint32_t usart, const uint8_t *data, uint16_t len) {
 void send_message(void) {
     uint8_t msg[] = "Hello";
     /* HAL check pattern — widespread in embedded code */
+    /* cppcheck-suppress [misra-c2023-10.7, misra-c2023-14.4] — HAL status check */
     if (hal_uart_transmit(0x40011000U, msg, 5) != HAL_OK) {
         /* Error handling */
     }

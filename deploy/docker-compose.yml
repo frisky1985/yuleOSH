@@ -6,8 +6,14 @@ version: "3.8"
 # Usage:
 #   docker compose -f deploy/docker-compose.yml up -d
 #
-# Environment variables are loaded from deploy/.env.production (create from
+# Environment variables are loaded from deploy/.env (create from
 # deploy/.env.production.example) and process environment variables.
+#
+#   cp deploy/.env.production.example deploy/.env
+#   docker compose -f deploy/docker-compose.yml up -d
+#
+# For a full production setup including the Next.js frontend, see:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d
 # =============================================================================
 
 x-logging: &default-logging
@@ -47,6 +53,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       YULEOSH_DB_URL: "postgresql://${YULEOSH_DB_USER:-yuleosh}:${YULEOSH_DB_PASSWORD:-changeme123}@db:5432/${YULEOSH_DB_NAME:-yuleosh}"
       YULEOSH_JWT_SECRET: ${YULEOSH_JWT_SECRET}
@@ -95,6 +103,12 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/html; sleep 12h & wait $${!}; done'"
     depends_on:
       - nginx
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'certbot renew' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 30s
     networks:
       - yuleosh-net
 

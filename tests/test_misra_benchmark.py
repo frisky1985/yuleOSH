@@ -29,10 +29,11 @@ import pytest
 import yaml
 
 # ── 路径 ──────────────────────────────────────────────────────────────
-BENCH_DIR = Path(__file__).resolve().parent / "benchmarks" / "misra-false-positive"
-KNOWN_POSITIVES_DIR = BENCH_DIR / "known-positives"
-CLEAN_CODE_DIR = BENCH_DIR / "clean-code"
-EXPECTED_RESULTS_PATH = BENCH_DIR / "expected-results.yaml"
+BENCH_DIR = Path(__file__).resolve().parent.parent / "benchmark" / "misra-fp-cases"
+KNOWN_POSITIVES_DIR = Path(__file__).resolve().parent.parent / "benchmark" / "misra-fp-cases"
+# All cases live in a flat directory; classification is by filename prefix/suffix
+CLEAN_CODE_DIR = Path(__file__).resolve().parent.parent / "benchmark" / "misra-fp-cases"
+EXPECTED_RESULTS_PATH = Path(__file__).resolve().parent.parent / "benchmark" / "results" / "misra-benchmark-report.json"
 
 # cppcheck MISRA 规则匹配 — 输出格式 example:
 #   src/main.c:42:5: style: misra violation (use --rule-texts=...) [misra-c2012-17.7]
