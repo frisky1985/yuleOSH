@@ -266,12 +266,12 @@ def impact_analysis(store: KGStore, changed_files: list[str],
                         "confidence_score": edge.properties.get("confidence", 1.0),
                     }
 
-        # ── Path C: Direct covers from code_file to requirement
+        # ── Path C: Direct covers/implements from code_file to requirement
         if file_node.entity_type == "code_file":
             # Record the code file itself
             affected_functions.append(f"code_file[{file_node.entity_id}]")
             for edge, target in out_edges:
-                if edge.edge_type == "covers" and target.entity_type == "requirement":
+                if edge.edge_type in ("covers", "implements") and target.entity_type == "requirement":
                     if layer is not None and edge.properties.get("layer") != layer:
                         continue
                     affected_reqs[target.entity_id] = {
