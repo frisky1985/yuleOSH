@@ -13,9 +13,11 @@ import os
 import secrets
 
 from . import json_ok, json_error
+from .middleware import require_auth
 from yuleosh.store import Store
 
 
+@require_auth
 def handle_apikeys(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to api key sub-resources."""
     if method == "POST" and path_tail == "":

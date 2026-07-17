@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import json_ok, json_error
+from .middleware import require_auth
 
 log = logging.getLogger("api.dashboard")
 
@@ -269,6 +270,8 @@ def _mock_note() -> str:
     return "⚠️ 演示数据 — 需连接实际项目"
 
 
+
+@require_auth
 def handle_dashboard(method: str, path_tail: str, body: dict,
                      query: dict, handler: Any) -> Optional[tuple[dict, int]]:
     """Handle /api/v1/dashboard/... requests.

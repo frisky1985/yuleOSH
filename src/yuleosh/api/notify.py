@@ -4,8 +4,10 @@
 """Notification config endpoints — GET/PUT notification settings."""
 
 from . import json_ok, json_error
+from .middleware import require_auth
 
 
+@require_auth
 def handle_notify(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to notification sub-resources."""
     if path_tail in ("", "config"):

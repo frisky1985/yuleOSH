@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 
 from . import json_ok, json_error, get_store
+from .middleware import require_auth
 
 
 def log_request(method: str, path: str, status_code: int, ip: str, duration_ms: float):
@@ -44,6 +45,7 @@ def _ensure_table():
     store.conn.commit()
 
 
+@require_auth
 def handle_audit(method: str, path_tail: str, body: dict, query: dict, **kwargs) -> tuple[dict, int]:
     """GET /api/v1/audit — list recent audit entries (admin only).
 

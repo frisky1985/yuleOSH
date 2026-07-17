@@ -11,8 +11,10 @@ from pathlib import Path
 from datetime import datetime
 
 from . import json_ok, json_error
+from .middleware import require_auth
 
 
+@require_auth
 def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to pipeline sub-resources."""
     if path_tail in ("", "run"):
@@ -37,20 +39,31 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
 
 
 def _run_pipeline(body: dict) -> tuple[dict, int]:
-    """POST /api/v1/pipeline/run — run pipeline for a spec."""
+    """POST /api/v1/pipeline/run — run pipeline for a spec.
+
+    SECURITY: resolves path safely and validates it's within project root.
+    """
     spec_path = body.get("spec", "")
     name = body.get("name")
 
     if not spec_path:
         return json_error("'spec' is required")
 
-    resolved = Path(spec_path)
-    if not resolved.is_absolute():
-        from . import OSH_HOME
-        resolved = Path(OSH_HOME) / resolved
+    from . import OSH_HOME
+    project_root = Path(OSH_HOME).resolve()
+    resolved = (project_root / spec_path.lstrip("/")).resolve()
+
+    # SECURITY: path traversal guard — resolved path MUST be inside project root
+    try:
+        resolved.relative_to(project_root)
+    except ValueError:
+        return json_error("Spec path must be within project directory", 403)
 
     if not resolved.exists():
         return json_error(f"Spec file not found: {resolved}")
+
+    if not resolved.is_file():
+        return json_error(f"Spec path is not a file", 400)
 
     try:
         result = subprocess.run(
