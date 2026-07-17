@@ -56,6 +56,26 @@ log = logging.getLogger("yuleosh.loop_engine.event_bus")
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# 前向声明 (避免循环依赖)
+# ═══════════════════════════════════════════════════════════════════════
+
+# ChainConfig / ChainContext 在 chain.py 中定义。
+# 在 SystemEventBus 中使用时延迟导入。
+_ChainConfig = None
+_ChainContext = None
+
+
+def _get_chain_classes():
+    """延迟加载 ChainConfig 和 ChainContext (避免循环导入)。"""
+    global _ChainConfig, _ChainContext
+    if _ChainConfig is None:
+        from yuleosh.loop_engine.chain import ChainConfig, ChainContext
+        _ChainConfig = ChainConfig
+        _ChainContext = ChainContext
+    return _ChainConfig, _ChainContext
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Event Types
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -84,6 +104,19 @@ class LoopEventType(str, enum.Enum):
 
     SPEC_CHANGE = "spec.change"
     """需求规格变更事件 — 用于影响分析链传播。"""
+
+    # ── Chain / Done 事件 (Loop Chaining, I5) ──
+    LOOP1_DONE = "loop1.done"
+    """Loop 1 (Defect→Requirement) 完成事件。"""
+
+    LOOP2_DONE = "loop2.done"
+    """Loop 2 (Field→FMEA) 完成事件。"""
+
+    LOOP3_DONE = "loop3.done"
+    """Loop 3 (KPI→Improvement) 完成事件。"""
+
+    LOOP4_CONFIDENCE_UP = "loop4.confidence_up"
+    """Loop 4 置信度上升事件。"""
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -475,12 +508,13 @@ class DeadLetterQueue:
     """
 
     def __init__(self, max_retries: int = 3, backoff_factor: float = 2.0,
-                 store=None, persist_path: Optional[str] = None):
+                 store=None, persist_path: Optional[str] = None,
+                 max_queue: int = 5000):
         self._max_retries = max_retries
         self._backoff_factor = backoff_factor
         self._store = store
         self._queue: list[dict] = []  # in-memory dead letter store
-        self._max_queue = 5000
+        self._max_queue = max_queue
         self._lock = threading.RLock()
 
         # ── 持久化路径 ──
@@ -503,6 +537,10 @@ class DeadLetterQueue:
     @property
     def backoff_factor(self) -> float:
         return self._backoff_factor
+
+    @property
+    def max_queue(self) -> int:
+        return self._max_queue
 
     def enqueue(self, event: LoopEvent, reason: str):
         """将事件加入死信队列。
@@ -806,9 +844,12 @@ class SystemEventBus:
                  source_auto_whitelist: bool = False,
                  rate_limit_enabled: bool = True,
                  rate_limit_default: float = 50.0,
+                 rate_limit_default_burst: int = 100,
                  rate_limit_per_type: Optional[dict[str, float]] = None,
                  dead_letter_max_retries: int = 3,
-                 dead_letter_backoff: float = 2.0):
+                 dead_letter_backoff: float = 2.0,
+                 dead_letter_max_queue: int = 5000,
+                 audit_log_max_entries: int = 5000):
         self._lock = threading.RLock()
         self._lock_emit = threading.Lock()
         self._subscriptions: dict[LoopEventType, list[Subscription]] = defaultdict(list)
@@ -845,6 +886,7 @@ class SystemEventBus:
         # ── I4: 速率限制 ──
         self._rate_limiter = TokenBucket(
             default_rate=rate_limit_default,
+            default_burst=rate_limit_default_burst,
             per_type_rates=rate_limit_per_type,
         )
         self._rate_limiter.set_enabled(rate_limit_enabled)
@@ -853,6 +895,7 @@ class SystemEventBus:
         self._dead_letter = DeadLetterQueue(
             max_retries=dead_letter_max_retries,
             backoff_factor=dead_letter_backoff,
+            max_queue=dead_letter_max_queue,
             store=store,
             persist_path=os.path.join(
                 os.environ.get("OSH_HOME", "."),
@@ -860,8 +903,12 @@ class SystemEventBus:
             ),
         )
 
+        # ── I5: Loop Chaining ──
+        self._chain_config = None
+        self._chain_context: Optional["_ChainContext"] = None
+
         # ── I4: 审计日志 ──
-        self._audit_log = AuditLog(store=store)
+        self._audit_log = AuditLog(store=store, max_entries=audit_log_max_entries)
 
     # ── I4 组件访问 (只读) ──────────────────────────────────────────
 
@@ -880,6 +927,36 @@ class SystemEventBus:
     @property
     def audit_log(self) -> AuditLog:
         return self._audit_log
+
+    # ── I5: Chain Config ───────────────────────────────────────────────
+
+    @property
+    def chain_config(self):
+        """获取链式触发配置。
+
+        默认使用 chain.default_chain_config。
+        """
+        if self._chain_config is None:
+            from yuleosh.loop_engine.chain import default_chain_config
+            self._chain_config = default_chain_config
+        return self._chain_config
+
+    @chain_config.setter
+    def chain_config(self, config):
+        """设置链式触发配置。
+
+        Args:
+            config: ChainConfig 实例或 None (重置为默认)。
+        """
+        self._chain_config = config
+
+    @property
+    def chain_enabled(self) -> bool:
+        """链式触发是否已启用 (有规则配置)。"""
+        cc = self._chain_config
+        if cc is None:
+            return False
+        return len(cc.list_rules()) > 0
 
     # ── Subscription ──────────────────────────────────────────────────
 
@@ -1031,6 +1108,15 @@ class SystemEventBus:
             matching += list(self._subscriptions.get(
                 LoopEventType.TEST_RESULT, []))  # wildcard-like
 
+        # 去重: 当 event == TEST_RESULT 时, 订阅者同时出现在两个列表中
+        seen_ids = set()
+        deduped = []
+        for s in matching:
+            if s.id not in seen_ids:
+                seen_ids.add(s.id)
+                deduped.append(s)
+        matching = deduped
+
         # 只匹配满足 priority_filter 的订阅
         matching = [s for s in matching
                     if s.priority_filter is None
@@ -1092,6 +1178,10 @@ class SystemEventBus:
         self._record_audit(event, handler_results, event.rollback_status)
 
         self._append_history(event)
+
+        # ── I5: Loop Chaining — 链式触发 ──
+        self._trigger_chained_events(event, handler_results)
+
         return event
 
     def emit_signed(self, event_type: LoopEventType,
@@ -1175,6 +1265,126 @@ class SystemEventBus:
                 log.exception("EventBus: worker error")
         self._running = False
 
+    # ── I5: Loop Chaining — 链式触发 ─────────────────────────────────
+
+    def _trigger_chained_events(self, event: LoopEvent,
+                                 handler_results: list[dict]):
+        """处理完成后的链式触发检查。
+
+        在 handler 执行完成后调用。检查 chain_config 是否有匹配的
+        链式规则。如果有，发出相应的目标事件。
+
+        防循环:
+          - max_chain_depth: 超过深度自动终止
+          - 同一事件链中不重复执行相同 handler
+          - 同一事件链中不重复发出相同事件类型
+
+        Args:
+            event: 刚处理完毕的事件。
+            handler_results: handler 执行结果列表。
+        """
+        ChainConfig, ChainContext = _get_chain_classes()
+
+        # 只在 handler 全部成功时链式触发 (部分失败时也触发, 但记录)
+        all_failed = all(
+            r.get("status") in ("failed", "exhausted")
+            for r in handler_results
+        )
+        if all_failed and handler_results:
+            log.debug("EventBus: all handlers failed for '%s', skipping chain",
+                      event.event_type.value)
+            return
+
+        cc = self._chain_config
+        if cc is None:
+            return
+
+        # 获取链式规则的目标
+        event_type_str = event.event_type.value
+        targets = cc.get_targets(event_type_str)
+        if not targets:
+            return
+
+        log.debug("EventBus: chain triggered for '%s' -> %d target(s)",
+                  event_type_str, len(targets))
+
+        # 获取或初始化 ChainContext
+        chain_ctx = self._chain_context
+        if chain_ctx is None:
+            # 初始链式触发: 标记当前事件的 event_type 和 handlers 为已访问
+            chain_ctx = ChainContext(
+                root_event_id=event.event_id,
+                max_depth=cc.max_depth,
+            )
+            chain_ctx.visited_events.add(event_type_str)
+            for hr in handler_results:
+                hname = hr.get("handler", "")
+                if hname:
+                    chain_ctx.visited_handlers.add(hname)
+
+        # 检查深度和重复
+        for target_handler in targets:
+            target_event = cc.get_event_for_handler(target_handler)
+            if target_event is None:
+                log.warning("EventBus: no event mapping for handler '%s', skipping",
+                            target_handler)
+                continue
+
+            target_event_str = target_event.value
+
+            # 防循环检查
+            if not chain_ctx.can_chain(target_handler, target_event_str):
+                continue
+
+            # 标记已访问
+            child_ctx = chain_ctx.child_context(target_handler, target_event_str)
+            self._chain_context = child_ctx
+
+            # 构造链式触发事件数据
+            chain_data = {
+                **event.data,
+                "_chain_root_event_id": chain_ctx.root_event_id,
+                "_chain_depth": child_ctx.depth,
+                "_chain_trigger": event_type_str,
+                "_chain_target": target_handler,
+            }
+
+            log.info("EventBus: chain triggering '%s' -> '%s' (depth=%d/%d)",
+                     event_type_str, target_event_str,
+                     child_ctx.depth, cc.max_depth)
+
+            # 发出目标事件 (跳过来源验证和速率限制以加速链式触发)
+            try:
+                chain_event = LoopEvent(
+                    event_type=target_event,
+                    source="loop_engine.chain",
+                    data=chain_data,
+                    priority=event.priority,
+                )
+                self._emit_event(chain_event)
+            except Exception as e:
+                log.error("EventBus: chain trigger error '%s' -> '%s': %s",
+                          event_type_str, target_event_str, e)
+
+        # 清理当前链上下文 (防止泄漏到新的事件链)
+        self._chain_context = None
+
+    def set_chain_max_depth(self, max_depth: int):
+        """设置链式触发的最大深度。
+
+        Args:
+            max_depth: 最大深度 (≥ 1)。
+        """
+        ChainConfig, _ = _get_chain_classes()
+        self.chain_config.max_depth = max_depth
+
+    def clear_chain_context(self):
+        """清除链式触发上下文 (重置 visit 记录)。
+
+        用于测试或手动重置。
+        """
+        self._chain_context = None
+
     # ── 来源验证 (I4) ──────────────────────────────────────────────
 
     def set_source_secret(self, secret: str):
@@ -1235,9 +1445,12 @@ class SystemEventBus:
         self._dead_letter = DeadLetterQueue(
             max_retries=self._dead_letter.max_retries,
             backoff_factor=self._dead_letter.backoff_factor,
+            max_queue=self._dead_letter.max_queue,
             store=store,
+            persist_path=self._dead_letter.persist_path,
         )
-        self._audit_log = AuditLog(store=store)
+        self._audit_log = AuditLog(store=store,
+                                   max_entries=self._audit_log.stats()["max_entries"])
 
     def _persist_event(self, event: LoopEvent):
         """增强持久化 — 完整审计字段 (I4)。"""
@@ -1336,7 +1549,7 @@ class SystemEventBus:
     # ── 状态查询 ──────────────────────────────────────────────────────
 
     def stats(self) -> dict:
-        """返回事件总线统计信息 (含 I4 增强字段)。"""
+        """返回事件总线统计信息 (含 I4/I5 增强字段)。"""
         with self._lock:
             base = dict(self._stats)
             base["rate_limiter"] = self._rate_limiter.stats()
@@ -1348,6 +1561,20 @@ class SystemEventBus:
                 "whitelist": self._source_validator.whitelist(),
                 "auto_whitelist": self._source_validator.auto_whitelist_enabled,
             }
+            # I5: Loop Chaining
+            cc = self._chain_config
+            if cc is not None:
+                from yuleosh.loop_engine.chain import ChainConfig
+                if isinstance(cc, ChainConfig):
+                    base["chain"] = {
+                        "max_depth": cc.max_depth,
+                        "active_rules": len(cc.list_rules()),
+                        "rules": cc.list_rules(),
+                    }
+                else:
+                    base["chain"] = {"enabled": True}
+            else:
+                base["chain"] = {"enabled": False}
             return base
 
     def active_subscriptions(self) -> dict[str, int]:
