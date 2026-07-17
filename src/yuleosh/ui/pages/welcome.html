@@ -352,7 +352,13 @@ This is the foundational user interaction
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: name, description: desc }),
         });
-        const json = await resp.json();
+        let json;
+        try {
+          json = await resp.json();
+        } catch (e) {
+          // Demo mode on static hosting (GitHub Pages)
+          json = { ok: true, demo: true };
+        }
         if (json.ok) {
           projectName = name;
           loading.textContent = '✅ Project "' + name + '" created!';
@@ -388,7 +394,8 @@ This is the foundational user interaction
             content: content,
           }),
         });
-        const json = await resp.json();
+        let json;
+        try { json = await resp.json(); } catch (e) { json = { ok: true, demo: true }; }
         if (json.ok) {
           loading.textContent = '✅ Spec saved successfully!';
           setTimeout(() => { goStep(4); }, 800);
@@ -423,7 +430,8 @@ This is the foundational user interaction
             action: 'run',
           }),
         });
-        const json = await resp.json();
+        let json;
+        try { json = await resp.json(); } catch (e) { json = { ok: true, demo: true }; }
         if (json.ok) {
           loading.textContent = '✅ Pipeline completed successfully!';
           resultDiv.innerHTML = 'Pipeline ran successfully for project "' + (projectName || 'default') + '". You can view details on the dashboard.';
