@@ -3,12 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 """
-yuleOSH Loop Engineering CLI — `yuleosh loop {status|run|config}` (LE-007)。
+yuleOSH Loop Engineering CLI — `yuleosh loop {status|run|config|dead-letter|audit}` (LE-007)。
 
 提供统一的命令行接口来管理反馈回路：
   - `yuleosh loop status`       — 查看当前活跃的 loop 事件和状态
   - `yuleosh loop run <name>`   — 手动触发指定 loop
   - `yuleosh loop config`       — 查看/修改 loop 参数
+  - `yuleosh loop dead-letter {list|retry|clear}` — 死信队列管理 (I4)
+  - `yuleosh loop audit {list|query}`              — 审计日志查询 (I4)
 
 Usage:
     yuleosh loop status
@@ -16,6 +18,11 @@ Usage:
     yuleosh loop run loop1_defect_to_req --test test_foo --req RS-001
     yuleosh loop config
     yuleosh loop config --set dedup_window 600
+    yuleosh loop dead-letter list
+    yuleosh loop dead-letter retry
+    yuleosh loop dead-letter clear
+    yuleosh loop audit list
+    yuleosh loop audit query <event_id>
 """
 
 import argparse
@@ -26,13 +33,6 @@ import sys
 
 from yuleosh.loop_engine import LoopEngine
 from yuleosh.loop_engine.event_bus import loop_bus, LoopEventType
-from yuleosh.loop_engine.feedback_handlers import (
-    get_registered_handlers,
-    Loop1DefectToReqHandler,
-    Loop2FieldToFMEAHandler,
-    Loop3KPIToImproveHandler,
-    Loop4KGSelfEvolveHandler,
-)
 
 log = logging.getLogger("yuleosh.loop_engine.cli")
 
@@ -49,6 +49,7 @@ def _build_engine() -> LoopEngine:
     # Loop 1 — 缺陷→需求回溯
     try:
         kg_store = _get_kg_store()
+        from yuleosh.loop_engine.feedback_handlers import Loop1DefectToReqHandler
         loop1 = Loop1DefectToReqHandler(kg_store=kg_store)
         engine.register_handler(loop1)
     except Exception as e:
@@ -56,7 +57,7 @@ def _build_engine() -> LoopEngine:
 
     # Loop 2 — 现场缺陷→FMEA
     try:
-        from yuleosh.loop_engine.rca_engine import RCAEngine
+        from yuleosh.loop_engine.feedback_handlers import Loop2FieldToFMEAHandler
         from yuleosh.knowledge_management.store import KBStore
         kg_store_km = KBStore()
         loop2 = Loop2FieldToFMEAHandler(kg_store=kg_store_km)
@@ -66,6 +67,8 @@ def _build_engine() -> LoopEngine:
 
     # Loop 3 — KPI→RCA→改进
     try:
+        from yuleosh.loop_engine.rca_engine import RCAEngine
+        from yuleosh.loop_engine.feedback_handlers import Loop3KPIToImproveHandler
         rca_engine = RCAEngine(kg_store=kg_store_km if 'kg_store_km' in dir() else None)
         loop3 = Loop3KPIToImproveHandler(rca_engine=rca_engine)
         engine.register_handler(loop3)
@@ -74,6 +77,7 @@ def _build_engine() -> LoopEngine:
 
     # Loop 4 — KG 置信度自进化
     try:
+        from yuleosh.loop_engine.feedback_handlers import Loop4KGSelfEvolveHandler
         loop4 = Loop4KGSelfEvolveHandler(
             knowledge_store=kg_store_km if 'kg_store_km' in dir() else None
         )
@@ -99,7 +103,14 @@ def _get_kg_store():
 # ═══════════════════════════════════════════════════════════════════════
 
 def cmd_status(args):
-    """`yuleosh loop status` — 查看当前活跃的 loop 事件和状态。"""
+    """`yuleosh loop status` — 查看当前活跃的 loop 事件和状态。
+
+    I4 增强:
+        - 显示来源验证状态
+        - 显示速率限制统计
+        - 显示死信队列统计
+        - 显示审计统计
+    """
     engine = _build_engine()
     status = engine.status
 
@@ -123,6 +134,41 @@ def cmd_status(args):
           f"{eb_stats.get('total_retried', 0)} retried")
     print()
 
+    # I4: 来源验证状态
+    sv = eb_stats.get("source_validator", {})
+    if sv:
+        print(f"  🛡️  Source Validation: {'✅ ON' if sv.get('enabled') else '⏸️ OFF'} "
+              f"| Secret: {'configured' if sv.get('has_secret') else 'none'} "
+              f"| Whitelist: {len(sv.get('whitelist', []))} sources")
+    print()
+
+    # I4: 速率限制 & 死信队列 & 审计
+    rl = eb_stats.get("rate_limiter", {})
+    dl = eb_stats.get("dead_letter", {})
+    al = eb_stats.get("audit", {})
+
+    print(f"  ⚡ Rate Limiting: {'✅ ON' if rl.get('enabled') else '⏸️ OFF'} "
+          f"| Default: {rl.get('default_rate', 'N/A')} e/s")
+    print(f"  💀 Dead Letter Queue: {dl.get('count', 0)} events "
+          f"| Max retries: {dl.get('max_retries', 'N/A')}")
+    print(f"  📋 Audit Log: {al.get('total_records', 0)} records "
+          f"| Max: {al.get('max_entries', 'N/A')}")
+    print()
+
+    # 速率限制桶详情
+    buckets = rl.get("buckets", {})
+    if buckets:
+        print(f"  🪣  Token Buckets ({len(buckets)}):")
+        print(f"  {'─' * 50}")
+        for btype, binfo in sorted(buckets.items()):
+            tokens = binfo.get("tokens", 0)
+            rate = binfo.get("rate", 0)
+            dropped = binfo.get("dropped", 0)
+            status_icon = "🟢" if tokens > 1 else "🟡" if tokens > 0 else "🔴"
+            print(f"  {status_icon} {btype:<25s} {tokens:>7.1f} tokens  "
+                  f"rate={rate:.1f}/s  dropped={dropped}")
+        print()
+
     # Handlers
     handlers = status.get("handlers", {})
     if handlers:
@@ -144,9 +190,11 @@ def cmd_status(args):
         print(f"  📋 Recent Events (last {len(recent)}):")
         print(f"  {'─' * 50}")
         for ev in recent:
+            sig = "🔏" if ev.get("signature") else "  "
             print(f"     {ev['event_type']:30s} "
                   f"prio={ev['priority']} "
-                  f"id={ev['event_id'][:8]}")
+                  f"id={ev['event_id'][:8]} "
+                  f"{sig}")
         print()
 
 
@@ -261,7 +309,7 @@ def cmd_config(args):
     print(f"  Config file: {config_path}")
     print()
 
-    # 默认参数
+    # 默认参数 (含 I4 新增)
     defaults = {
         "dedup_window_seconds": 300,
         "max_retries": 3,
@@ -271,6 +319,13 @@ def cmd_config(args):
         "loop3_enabled": False,
         "loop4_enabled": False,
         "log_level": "INFO",
+        # I4 生产加固参数
+        "source_validation_enabled": True,
+        "rate_limit_enabled": True,
+        "rate_limit_default": 50.0,
+        "dead_letter_max_retries": 3,
+        "dead_letter_backoff": 2.0,
+        "audit_max_entries": 5000,
     }
 
     merged = {**defaults, **config}
@@ -283,6 +338,152 @@ def cmd_config(args):
         print(f"  {key:<30s} {str(current):<20s} {source:<10s}")
 
     print()
+
+
+def cmd_dead_letter(args):
+    """`yuleosh loop dead-letter` — 死信队列管理 (I4)。"""
+    sub = args.dl_sub
+
+    if sub == "list":
+        limit = getattr(args, "limit", 50)
+        entries = loop_bus.dead_letter.list(limit=limit)
+
+        if args.json:
+            print(json.dumps(entries, indent=2, ensure_ascii=False, default=str))
+            return
+
+        if not entries:
+            print("\n  ✅ Dead letter queue is empty.\n")
+            return
+
+        print(f"\n  💀 Dead Letter Queue ({len(entries)} entries):")
+        print(f"  {'=' * 65}")
+        print(f"  {'Event ID':<12s} {'Type':<22s} {'Source':<15s} {'Retry':<6s} {'Reason'}")
+        print(f"  {'─' * 65}")
+        for entry in entries:
+            eid = entry.get("event_id", "?")[:10]
+            etype = entry.get("event_type", "?")
+            src = entry.get("source", "?")
+            retry = f"{entry.get('retry_count', 0)}/{entry.get('max_retries', 3)}"
+            reason = entry.get("failure_reason", "")[:30]
+            print(f"  {eid:<12s} {etype:<22s} {src:<15s} {retry:<6s} {reason}")
+        print()
+
+    elif sub == "retry":
+        count = loop_bus.dead_letter.count()
+        if count == 0:
+            print("\n  ✅ Dead letter queue is empty, nothing to retry.\n")
+            return
+
+        print(f"\n  🔄 Retrying {count} dead letter events...")
+
+        def retry_callback(entry):
+            """重试回调 — 重新发布事件到总线。"""
+            event_type = LoopEventType(entry["event_type"])
+            loop_bus.emit(
+                event_type,
+                source=entry.get("source", "dlq_retry"),
+                data=entry.get("data", {}),
+                priority=entry.get("priority", 5),
+            )
+
+        success, failed = loop_bus.dead_letter.retry_all(retry_callback)
+        remaining = loop_bus.dead_letter.count()
+
+        print(f"  ✅ Retry complete: {success} succeeded, "
+              f"{failed} failed, {remaining} remaining\n")
+
+    elif sub == "clear":
+        count = loop_bus.dead_letter.count()
+        cleared = loop_bus.dead_letter.clear()
+        print(f"\n  🗑️  Cleared {cleared} entries from dead letter queue.\n")
+
+
+def cmd_audit(args):
+    """`yuleosh loop audit` — 审计日志查询 (I4)。"""
+    sub = args.audit_sub
+
+    if sub == "list":
+        limit = getattr(args, "limit", 50)
+        event_type = getattr(args, "event_type", None)
+        since = getattr(args, "since", None)
+        until = getattr(args, "until", None)
+
+        entries = loop_bus.audit_log.list(
+            limit=limit,
+            event_type=event_type,
+            since=since,
+            until=until,
+        )
+
+        if args.json:
+            print(json.dumps(entries, indent=2, ensure_ascii=False, default=str))
+            return
+
+        # 显示过滤条件摘要
+        filters = []
+        if event_type:
+            filters.append(f"type={event_type}")
+        if since:
+            filters.append(f"since={since}")
+        if until:
+            filters.append(f"until={until}")
+
+        if not entries:
+            filter_str = " (" + ", ".join(filters) + ")" if filters else ""
+            print(f"\n  📋 No audit records{filter_str}.\n")
+            return
+
+        header_info = f" (filter: {', '.join(filters)})" if filters else ""
+        print(f"\n  📋 Audit Log (last {len(entries)} entries{header_info}):")
+        print(f"  {'=' * 80}")
+        print(f"  {'Event ID':<12s} {'Type':<22s} {'Source':<14s} {'Prio':<5s} "
+              f"{'Retry':<6s} {'Rollback':<18s}")
+        print(f"  {'─' * 80}")
+        for entry in entries:
+            eid = entry.get("event_id", "?")[:10]
+            etype = entry.get("event_type", "?")
+            src = entry.get("source", "?")
+            prio = str(entry.get("priority", "?"))
+            retry = str(entry.get("retry_count", 0))
+            rb = entry.get("rollback_status", "")[:16]
+            print(f"  {eid:<12s} {etype:<22s} {src:<14s} {prio:<5s} "
+                  f"{retry:<6s} {rb:<18s}")
+        print()
+
+    elif sub == "query":
+        event_id = args.event_id
+        entry = loop_bus.audit_log.query(event_id)
+
+        if args.json:
+            print(json.dumps(entry, indent=2, ensure_ascii=False, default=str)
+                  if entry else "{}")
+            return
+
+        if not entry:
+            print(f"\n  ❌ Audit entry not found: {event_id}\n")
+            return
+
+        print(f"\n  📋 Audit Entry: {event_id}")
+        print(f"  {'=' * 50}")
+        print(f"  Event Type:      {entry.get('event_type', '?')}")
+        print(f"  Source:          {entry.get('source', '?')}")
+        print(f"  Priority:        {entry.get('priority', '?')}")
+        print(f"  Timestamp:       {entry.get('timestamp', '?')}")
+        print(f"  Retry Count:     {entry.get('retry_count', 0)}")
+        print(f"  Rollback Status: {entry.get('rollback_status', '?')}")
+        print(f"  Fingerprint:     {entry.get('source_fingerprint', '?')}")
+        print(f"  Signature:       {entry.get('signature', '?')[:20]}...")
+
+        hr = entry.get("handler_results", [])
+        if hr:
+            print(f"  Handler Results:")
+            for r in hr:
+                status = r.get("status", "?")
+                icon = "✅" if status == "success" else "❌"
+                hname = r.get("handler", "?")
+                print(f"    {icon} {hname}: {status}")
+        print()
 
 
 def _load_config(config_path: str) -> dict:
@@ -332,6 +533,38 @@ def build_loop_subparser(subparsers):
     p_config.add_argument("--set", "-s", default=None,
                           help="设置参数 (key=value, e.g. dedup_window=600)")
 
+    # ── I4: loop dead-letter ──
+    p_dl = lsub.add_parser("dead-letter", help="死信队列管理 (I4)")
+    dlsub = p_dl.add_subparsers(dest="dl_sub", help="Dead letter subcommand")
+
+    p_dl_list = dlsub.add_parser("list", help="查看死信队列")
+    p_dl_list.add_argument("--limit", "-l", type=int, default=50,
+                           help="Max entries to show")
+    p_dl_list.add_argument("--json", action="store_true", help="Output as JSON")
+
+    dlsub.add_parser("retry", help="重试死信事件")
+    dlsub.add_parser("clear", help="清空死信队列")
+
+    # ── I4: loop audit ──
+    p_audit = lsub.add_parser("audit", help="审计日志查询 (I4)")
+    asub = p_audit.add_subparsers(dest="audit_sub", help="Audit subcommand")
+
+    p_audit_list = asub.add_parser("list", help="审计日志列表")
+    p_audit_list.add_argument("--limit", "-l", type=int, default=50,
+                              help="Max entries to show")
+    p_audit_list.add_argument("--type", "-t", default=None,
+                              dest="event_type",
+                              help="Filter by event type (e.g. ci.failure)")
+    p_audit_list.add_argument("--since", default=None,
+                              help="ISO 8601 start time (e.g. 2026-07-17T00:00:00)")
+    p_audit_list.add_argument("--until", default=None,
+                              help="ISO 8601 end time (e.g. 2026-07-17T23:59:59)")
+    p_audit_list.add_argument("--json", action="store_true", help="Output as JSON")
+
+    p_audit_query = asub.add_parser("query", help="查询单条审计日志")
+    p_audit_query.add_argument("event_id", help="Event ID to query")
+    p_audit_query.add_argument("--json", action="store_true", help="Output as JSON")
+
 
 def handle_loop_command(args):
     """Dispatch loop subcommands."""
@@ -341,6 +574,10 @@ def handle_loop_command(args):
         cmd_run(args)
     elif args.loop_sub == "config":
         cmd_config(args)
+    elif args.loop_sub == "dead-letter":
+        cmd_dead_letter(args)
+    elif args.loop_sub == "audit":
+        cmd_audit(args)
     else:
-        print("Usage: yuleosh loop {status|run|config}")
+        print("Usage: yuleosh loop {status|run|config|dead-letter|audit}")
         sys.exit(1)
