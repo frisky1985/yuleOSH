@@ -52,3 +52,6 @@ self/
 .osh/sessions/
 .osh/reviews/
 .osh/store.db
+desktop/node_modules/
+node_modules/
+*.pyc
