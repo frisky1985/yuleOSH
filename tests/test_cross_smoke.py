@@ -74,8 +74,9 @@ class TestTargetConfig:
 
     def test_discover_targets_empty(self):
         from yuleosh.cross.target_config import discover_targets
-        with patch("yuleosh.cross.target_config.Path.exists", return_value=False):
-            result = discover_targets()
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = discover_targets(base_dir=tmpdir)
             assert result == {}
 
     @patch("yuleosh.cross.target_config.yaml", return_value=None)
