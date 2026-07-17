@@ -43,6 +43,14 @@ venv/
 .yuleosh/
 !.yuleosh/ci-config.yaml
 
+# Loop engineering auto-generated artifacts
+fmea_entries/
+improvement_tickets/
+kpi_trends/
+kg_confidence_trend/
+reports/safety-impact-*.md
+rereview_tickets/
+
 # Dogfooding — local-only self-referential projects
 self/
 

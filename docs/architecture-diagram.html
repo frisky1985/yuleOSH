@@ -1,0 +1,379 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>yuleOSH 系统架构图</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --fg: #172033;
+    --muted: #5b6475;
+    --line: #64748b;
+    --neutral: #e2e8f0;
+    --input: #bfdbfe;
+    --process: #c7d2fe;
+    --storage: #99f6e4;
+    --external: #fde68a;
+    --risk: #fecaca;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a;
+      --fg: #e5e7eb;
+      --muted: #a3adbd;
+      --line: #94a3b8;
+      --neutral: #334155;
+      --input: #1d4ed8;
+      --process: #4338ca;
+      --storage: #0f766e;
+      --external: #92400e;
+      --risk: #991b1b;
+    }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  svg { display: block; width: 100%; height: auto; background: var(--bg); border-radius: 8px; border: 1px solid var(--neutral); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0 0; font-size: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); }
+  .note { color: var(--muted); font-size: 12px; margin-top: 20px; border-top: 1px solid var(--neutral); padding-top: 12px; }
+</style>
+<main>
+  <h1>yuleOSH — 系统架构图</h1>
+  <p class="subtitle">嵌入式 AI 开发全流程平台 · v2.5.0 · 2026-07-17</p>
+  <svg viewBox="0 0 1020 1420" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--line)"/></marker>
+      <marker id="arrow-dashed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#94a3b8"/></marker>
+    </defs>
+
+    <!-- Layer backgrounds -->
+    <rect x="10" y="30" width="1000" height="190" rx="6" fill="var(--input)" opacity="0.08" />
+    <rect x="10" y="230" width="1000" height="150" rx="6" fill="var(--process)" opacity="0.08" />
+    <rect x="10" y="390" width="1000" height="310" rx="6" fill="var(--neutral)" opacity="0.08" />
+    <rect x="10" y="710" width="1000" height="230" rx="6" fill="var(--storage)" opacity="0.08" />
+    <rect x="10" y="950" width="1000" height="240" rx="6" fill="var(--external)" opacity="0.08" />
+    <rect x="10" y="1200" width="1000" height="90" rx="6" fill="var(--risk)" opacity="0.08" />
+
+    <!-- Layer labels -->
+    <text x="20" y="20" fill="var(--muted)" font-size="10" font-weight="600" text-transform="uppercase" letter-spacing="1">用户界面层</text>
+    <text x="20" y="220" fill="var(--muted)" font-size="10" font-weight="600" text-transform="uppercase" letter-spacing="1">编排层</text>
+    <text x="20" y="380" fill="var(--muted)" font-size="10" font-weight="600" text-transform="uppercase" letter-spacing="1">核心引擎层</text>
+    <text x="20" y="700" fill="var(--muted)" font-size="10" font-weight="600" text-transform="uppercase" letter-spacing="1">数据与存储层</text>
+    <text x="20" y="940" fill="var(--muted)" font-size="10" font-weight="600" text-transform="uppercase" letter-spacing="1">输出与集成层</text>
+    <text x="20" y="1190" fill="var(--muted)" font-size="10" font-weight="600" text-transform="uppercase" letter-spacing="1">基础设施层</text>
+
+    <!-- ===== ===== ===== Layer 1: User Interface ===== ===== ===== -->
+
+    <!-- CLI -->
+    <rect x="80" y="50" width="280" height="150" rx="6" fill="var(--input)" stroke="var(--line)" stroke-width="1" />
+    <text x="220" y="72" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">🖥️ CLI — yuleosh 命令</text>
+    <text x="220" y="90" fill="var(--muted)" font-size="11" text-anchor="middle">argparse · 22+ 子命令</text>
+    <line x1="120" y1="100" x2="320" y2="100" stroke="var(--line)" stroke-width="0.5" />
+    <text x="120" y="116" fill="var(--fg)" font-size="11">yuleosh init          — 初始化项目</text>
+    <text x="120" y="132" fill="var(--fg)" font-size="11">yuleosh project       — 模板项目</text>
+    <text x="120" y="148" fill="var(--fg)" font-size="11">yuleosh pipeline      — 流水线编排</text>
+    <text x="120" y="164" fill="var(--fg)" font-size="11">yuleosh ci run        — CI 执行</text>
+    <text x="120" y="180" fill="var(--fg)" font-size="11">yuleosh review        — AI 审查</text>
+    <text x="120" y="196" fill="var(--fg)" font-size="11">yuleosh kg report     — KG 报告</text>
+
+    <!-- REST API -->
+    <rect x="400" y="50" width="280" height="150" rx="6" fill="var(--input)" stroke="var(--line)" stroke-width="1" />
+    <text x="540" y="72" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">🌐 REST API</text>
+    <text x="540" y="90" fill="var(--muted)" font-size="11" text-anchor="middle">api/ · FastAPI 风格路由</text>
+    <line x1="420" y1="100" x2="660" y2="100" stroke="var(--line)" stroke-width="0.5" />
+    <text x="420" y="116" fill="var(--fg)" font-size="11">POST /api/pipeline/run</text>
+    <text x="420" y="132" fill="var(--fg)" font-size="11">POST /api/review/auto</text>
+    <text x="420" y="148" fill="var(--fg)" font-size="11">POST /api/evidence/pack</text>
+    <text x="420" y="164" fill="var(--fg)" font-size="11">GET  /api/dashboard/status</text>
+    <text x="420" y="180" fill="var(--fg)" font-size="11">POST /api/kg/query</text>
+    <text x="420" y="196" fill="var(--fg)" font-size="11">GET  /api/health</text>
+
+    <!-- Web Dashboard -->
+    <rect x="720" y="50" width="270" height="150" rx="6" fill="var(--input)" stroke="var(--line)" stroke-width="1" />
+    <text x="855" y="72" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">📊 Web Dashboard</text>
+    <text x="855" y="90" fill="var(--muted)" font-size="11" text-anchor="middle">ui/server.py · HTTP 内置</text>
+    <line x1="735" y1="100" x2="975" y2="100" stroke="var(--line)" stroke-width="0.5" />
+    <text x="735" y="116" fill="var(--fg)" font-size="11">SWE 状态面板</text>
+    <text x="735" y="132" fill="var(--fg)" font-size="11">覆盖率趋势图</text>
+    <text x="735" y="148" fill="var(--fg)" font-size="11">KPI 仪表盘</text>
+    <text x="735" y="164" fill="var(--fg)" font-size="11">MISRA 违规趋势</text>
+    <text x="735" y="180" fill="var(--fg)" font-size="11">KG 知识图谱可视化</text>
+    <text x="735" y="196" fill="var(--fg)" font-size="11">多租户认证</text>
+
+
+    <!-- ===== ===== ===== Layer 2: Orchestration ===== ===== ===== -->
+
+    <!-- Pipeline Engine -->
+    <rect x="80" y="250" width="430" height="110" rx="6" fill="var(--process)" stroke="var(--line)" stroke-width="1" />
+    <text x="295" y="272" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">⚙️ Pipeline 编排引擎</text>
+    <text x="295" y="290" fill="var(--muted)" font-size="11" text-anchor="middle">CheckpointEngine · Orchestrator · PipelineSession</text>
+    <line x1="100" y1="300" x2="490" y2="300" stroke="var(--line)" stroke-width="0.5" />
+    <text x="100" y="316" fill="var(--fg)" font-size="11">全量模式 · 注入模式 · 恢复模式（断点续跑）</text>
+    <text x="100" y="332" fill="var(--fg)" font-size="11">CICheckpoint · AgentCheckpoint — 每一步支持检查点</text>
+    <text x="100" y="348" fill="var(--fg)" font-size="11">Session Management — 多会话隔离</text>
+
+    <!-- Step Handlers -->
+    <rect x="550" y="250" width="460" height="110" rx="6" fill="var(--process)" stroke="var(--line)" stroke-width="1" opacity="0.9" />
+    <text x="780" y="272" fill="var(--fg)" font-size="13" font-weight="700" text-anchor="middle">📋 Step Handlers (20+)</text>
+    <text x="780" y="290" fill="var(--muted)" font-size="11" text-anchor="middle">pipeline/step_handlers/</text>
+    <line x1="565" y1="300" x2="995" y2="300" stroke="var(--line)" stroke-width="0.5" />
+    <text x="565" y="316" fill="var(--fg)" font-size="11">analysis  /  execution  /  review  /  spec</text>
+    <text x="565" y="332" fill="var(--fg)" font-size="11">test_c_unit  /  test_integration  /  test_qualification</text>
+    <text x="565" y="348" fill="var(--fg)" font-size="11">review_arch/code/misra_ci/security/startup/stack/…</text>
+
+
+    <!-- ===== ===== ===== Layer 3: Core Engine ===== ===== ===== -->
+
+    <!-- CI System -->
+    <rect x="80" y="410" width="440" height="270" rx="6" fill="var(--neutral)" stroke="var(--line)" stroke-width="1" />
+    <text x="300" y="432" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">🧪 CI 持续集成系统</text>
+    <text x="300" y="450" fill="var(--muted)" font-size="11" text-anchor="middle">ci/ · 三层管线 + MISRA + 覆盖率 + KPI</text>
+    <line x1="100" y1="460" x2="500" y2="460" stroke="var(--line)" stroke-width="0.5" />
+
+    <rect x="95" y="472" width="130" height="60" rx="4" fill="var(--neutral)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="160" y="492" fill="var(--fg)" font-size="11" font-weight="600" text-anchor="middle">L1 — 静态分析</text>
+    <text x="160" y="508" fill="var(--muted)" font-size="10" text-anchor="middle">MISRA C:2023</text>
+    <text x="160" y="522" fill="var(--muted)" font-size="10" text-anchor="middle">YAML 验证</text>
+
+    <rect x="235" y="472" width="130" height="60" rx="4" fill="var(--neutral)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="300" y="492" fill="var(--fg)" font-size="11" font-weight="600" text-anchor="middle">L2 — 测试</text>
+    <text x="300" y="508" fill="var(--muted)" font-size="10" text-anchor="middle">单元测试</text>
+    <text x="300" y="522" fill="var(--muted)" font-size="10" text-anchor="middle">覆盖率门禁</text>
+
+    <rect x="375" y="472" width="130" height="60" rx="4" fill="var(--neutral)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="440" y="492" fill="var(--fg)" font-size="11" font-weight="600" text-anchor="middle">L3 — 综合</text>
+    <text x="440" y="508" fill="var(--muted)" font-size="10" text-anchor="middle">可追溯性检查</text>
+    <text x="440" y="522" fill="var(--muted)" font-size="10" text-anchor="middle">合规验证</text>
+
+    <text x="100" y="550" fill="var(--fg)" font-size="11">• misra_report/ — C:2012 → C:2023 融合分析</text>
+    <text x="100" y="566" fill="var(--fg)" font-size="11">• coverage_pipeline / gcov_coverage — 覆盖率追踪</text>
+    <text x="100" y="582" fill="var(--fg)" font-size="11">• kpi/ — 缺陷 / 稳定性 / 趋势 / 指标收集</text>
+    <text x="100" y="598" fill="var(--fg)" font-size="11">• stages/ — build / review / test / trace / validation</text>
+    <text x="100" y="614" fill="var(--fg)" font-size="11">• rulesets/ — MISRA C:2023 · GSCR C/C++</text>
+    <text x="100" y="630" fill="var(--fg)" font-size="11">• dashboard_writer — SWE Status / 覆盖率 / KPI</text>
+    <text x="100" y="646" fill="var(--fg)" font-size="11">• tool_drivers — CppcheckDriver / ClangTidyDriver</text>
+    <text x="100" y="662" fill="var(--fg)" font-size="11">• agent_traceability — 智能体追溯日志</text>
+
+    <!-- AI Review -->
+    <rect x="540" y="410" width="220" height="160" rx="6" fill="var(--neutral)" stroke="var(--line)" stroke-width="1" />
+    <text x="650" y="432" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">🤖 AI 代码审查</text>
+    <text x="650" y="450" fill="var(--muted)" font-size="11" text-anchor="middle">review/ · 多轨道并行</text>
+    <line x1="555" y1="460" x2="745" y2="460" stroke="var(--line)" stroke-width="0.5" />
+    <text x="555" y="478" fill="var(--fg)" font-size="11">Track A — AI 自检（非阻塞）</text>
+    <text x="555" y="496" fill="var(--fg)" font-size="11">Track B — 自动审查（阻塞）</text>
+    <text x="555" y="514" fill="var(--fg)" font-size="11">ResourcePredictor — 资源预测</text>
+    <text x="555" y="532" fill="var(--fg)" font-size="11">ReviewFinding — 发现项模型</text>
+    <text x="555" y="550" fill="var(--fg)" font-size="11">审查范畴: 架构/领域/风格/安全/</text>
+    <text x="555" y="566" fill="var(--fg)" font-size="11">覆盖率/BSP/内存/链接脚本/Power/…</text>
+
+    <!-- Knowledge Graph -->
+    <rect x="540" y="580" width="220" height="100" rx="6" fill="var(--neutral)" stroke="var(--line)" stroke-width="1" />
+    <text x="650" y="602" fill="var(--fg)" font-size="13" font-weight="700" text-anchor="middle">🔗 知识图谱 KG</text>
+    <text x="650" y="618" fill="var(--muted)" font-size="10" text-anchor="middle">knowledge_graph/</text>
+    <line x1="555" y1="628" x2="745" y2="628" stroke="var(--line)" stroke-width="0.5" />
+    <text x="555" y="644" fill="var(--fg)" font-size="11">bootstrap / incremental / edge_builder</text>
+    <text x="555" y="660" fill="var(--fg)" font-size="11">reporter (RTM/Metrics) / events / merge_gate</text>
+    <text x="555" y="676" fill="var(--fg)" font-size="11">置信度标签 · 100K Stress Test · 增量12ms</text>
+
+    <!-- Compliance + AUTOSAR -->
+    <rect x="780" y="410" width="220" height="130" rx="6" fill="var(--neutral)" stroke="var(--line)" stroke-width="1" />
+    <text x="890" y="432" fill="var(--fg)" font-size="13" font-weight="700" text-anchor="middle">✅ Compliance 合规</text>
+    <text x="890" y="448" fill="var(--muted)" font-size="10" text-anchor="middle">compliance/</text>
+    <line x1="795" y1="458" x2="985" y2="458" stroke="var(--line)" stroke-width="0.5" />
+    <text x="795" y="476" fill="var(--fg)" font-size="11">ASPICE v3.1 合规检查器</text>
+    <text x="795" y="494" fill="var(--fg)" font-size="11">SWE.1~SWE.6 过程域检查</text>
+    <text x="795" y="512" fill="var(--fg)" font-size="11">验收矩阵 ACC 自动验证</text>
+    <text x="795" y="530" fill="var(--fg)" font-size="11">ISO 26262 功能安全骨架</text>
+
+    <rect x="780" y="550" width="220" height="130" rx="6" fill="var(--neutral)" stroke="var(--line)" stroke-width="1" />
+    <text x="890" y="572" fill="var(--fg)" font-size="13" font-weight="700" text-anchor="middle">🚗 AUTOSAR</text>
+    <text x="890" y="588" fill="var(--muted)" font-size="10" text-anchor="middle">autosar/ · 模板/流水线</text>
+    <line x1="795" y1="598" x2="985" y2="598" stroke="var(--line)" stroke-width="0.5" />
+    <text x="795" y="616" fill="var(--fg)" font-size="11">--template autosar 项目初始化</text>
+    <text x="795" y="634" fill="var(--fg)" font-size="11">Pipeline AUTOSAR CI 支持</text>
+    <text x="795" y="652" fill="var(--fg)" font-size="11">交叉编译 ARM Cortex-M/R</text>
+    <text x="795" y="670" fill="var(--fg)" font-size="11">ARXML 合规验证</text>
+
+
+    <!-- ===== ===== ===== Layer 4: Data & Storage ===== ===== ===== -->
+
+    <!-- Store -->
+    <rect x="80" y="730" width="300" height="190" rx="6" fill="var(--storage)" stroke="var(--line)" stroke-width="1" />
+    <text x="230" y="752" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">💾 Store — 持久化存储</text>
+    <text x="230" y="770" fill="var(--muted)" font-size="11" text-anchor="middle">AbstractStore 统一接口</text>
+    <line x1="100" y1="780" x2="360" y2="780" stroke="var(--line)" stroke-width="0.5" />
+
+    <rect x="95" y="792" width="130" height="55" rx="4" fill="var(--storage)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="160" y="812" fill="var(--fg)" font-size="12" font-weight="600" text-anchor="middle">SQLite</text>
+    <text x="160" y="828" fill="var(--muted)" font-size="10" text-anchor="middle">默认 · ~/.yuleosh/</text>
+    <text x="160" y="842" fill="var(--muted)" font-size="10" text-anchor="middle">KG: BFS 遍历</text>
+
+    <rect x="235" y="792" width="130" height="55" rx="4" fill="var(--storage)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="300" y="812" fill="var(--fg)" font-size="12" font-weight="600" text-anchor="middle">PostgreSQL</text>
+    <text x="300" y="828" fill="var(--muted)" font-size="10" text-anchor="middle">YULEOSH_DB_URL</text>
+    <text x="300" y="842" fill="var(--muted)" font-size="10" text-anchor="middle">KG: RECURSIVE CTE</text>
+
+    <text x="100" y="868" fill="var(--fg)" font-size="11">• 组织/用户/项目管理</text>
+    <text x="100" y="884" fill="var(--fg)" font-size="11">• Pipeline Run 记录</text>
+    <text x="100" y="900" fill="var(--fg)" font-size="11">• KPI / 覆盖率历史</text>
+    <text x="100" y="916" fill="var(--fg)" font-size="11">• 审查发现项 / 可追溯数据</text>
+
+    <!-- KB -->
+    <rect x="400" y="730" width="280" height="190" rx="6" fill="var(--storage)" stroke="var(--line)" stroke-width="1" />
+    <text x="540" y="752" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">📚 知识库 KB</text>
+    <text x="540" y="770" fill="var(--muted)" font-size="11" text-anchor="middle">kb/ · SQLite 持久化</text>
+    <line x1="415" y1="780" x2="665" y2="780" stroke="var(--line)" stroke-width="0.5" />
+    <text x="415" y="798" fill="var(--fg)" font-size="11">KbStore — 文章 / 经验教训 / FMEA</text>
+    <text x="415" y="816" fill="var(--fg)" font-size="11">LLM RAG 引擎 — 多源向量检索</text>
+    <text x="415" y="834" fill="var(--fg)" font-size="11">ChromaDB / FAISS · 余弦相似度</text>
+    <text x="415" y="852" fill="var(--fg)" font-size="11">MISRA 规则 · 最佳实践 · 评审历史</text>
+
+    <!-- LLM -->
+    <rect x="400" y="840" width="280" height="60" rx="4" fill="var(--storage)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="540" y="860" fill="var(--fg)" font-size="12" font-weight="600" text-anchor="middle">🤖 LLM 客户端</text>
+    <text x="540" y="878" fill="var(--muted)" font-size="10" text-anchor="middle">统一接口 · CostTracker · TokenBudget</text>
+    <text x="540" y="894" fill="var(--muted)" font-size="10" text-anchor="middle">提供商: 基类 + Mock</text>
+
+    <!-- ALM -->
+    <rect x="700" y="730" width="290" height="190" rx="6" fill="var(--storage)" stroke="var(--line)" stroke-width="1" />
+    <text x="845" y="752" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">🔗 ALM 集成</text>
+    <text x="845" y="770" fill="var(--muted)" font-size="11" text-anchor="middle">alm/ · 应用生命周期管理</text>
+    <line x1="715" y1="780" x2="975" y2="780" stroke="var(--line)" stroke-width="0.5" />
+
+    <rect x="715" y="792" width="130" height="55" rx="4" fill="var(--storage)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="780" y="812" fill="var(--fg)" font-size="12" font-weight="600" text-anchor="middle">Jira</text>
+    <text x="780" y="828" fill="var(--muted)" font-size="10" text-anchor="middle">工单 · 证据同步</text>
+    <text x="780" y="842" fill="var(--muted)" font-size="10" text-anchor="middle">状态追踪</text>
+
+    <rect x="855" y="792" width="120" height="55" rx="4" fill="var(--storage)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="915" y="812" fill="var(--fg)" font-size="12" font-weight="600" text-anchor="middle">Polarion</text>
+    <text x="915" y="828" fill="var(--muted)" font-size="10" text-anchor="middle">LRM / LRT</text>
+    <text x="915" y="842" fill="var(--muted)" font-size="10" text-anchor="middle">可追溯矩阵</text>
+
+    <text x="715" y="868" fill="var(--fg)" font-size="11">AlmBackend 抽象 + AlmTicket 模型</text>
+    <text x="715" y="884" fill="var(--fg)" font-size="11">双向同步: yuleOSH ↔ ALM</text>
+    <text x="715" y="900" fill="var(--fg)" font-size="11">证据回忆 / 状态同步</text>
+
+
+    <!-- ===== ===== ===== Layer 5: Output & Integration ===== ===== ===== -->
+
+    <!-- Evidence Pack -->
+    <rect x="80" y="970" width="420" height="200" rx="6" fill="var(--external)" stroke="var(--line)" stroke-width="1" />
+    <text x="290" y="992" fill="var(--fg)" font-size="14" font-weight="700" text-anchor="middle">📦 证据包 (Evidence Pack)</text>
+    <text x="290" y="1010" fill="var(--muted)" font-size="11" text-anchor="middle">ASPICE CL1/CL2 合规证据全自动生成</text>
+    <line x1="100" y1="1020" x2="480" y2="1020" stroke="var(--line)" stroke-width="0.5" />
+
+    <rect x="95" y="1032" width="120" height="40" rx="4" fill="var(--external)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="155" y="1056" fill="var(--fg)" font-size="11" font-weight="600" text-anchor="middle">EvidenceCollector</text>
+
+    <rect x="225" y="1032" width="120" height="40" rx="4" fill="var(--external)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="285" y="1056" fill="var(--fg)" font-size="11" font-weight="600" text-anchor="middle">数字签名</text>
+
+    <rect x="355" y="1032" width="130" height="40" rx="4" fill="var(--external)" stroke="var(--line)" stroke-width="0.5" />
+    <text x="420" y="1056" fill="var(--fg)" font-size="11" font-weight="600" text-anchor="middle">Compliance ZIP</text>
+
+    <text x="100" y="1090" fill="var(--fg)" font-size="11">• generator / pack / check — 生成/打包/检查</text>
+    <text x="100" y="1106" fill="var(--fg)" font-size="11">• manifest / signer — 清单管理 + RSA-SHA256 签名</text>
+    <text x="100" y="1122" fill="var(--fg)" font-size="11">• aspice_check / compliance — ASPICE SWE 聚合</text>
+    <text x="100" y="1138" fill="var(--fg)" font-size="11">• excel_writer / report_builder — 报告导出</text>
+    <text x="100" y="1154" fill="var(--fg)" font-size="11">• oem_templates — 5 OEM 模板兼容 (VW/BMW/Mercedes/…)</text>
+
+    <!-- Plan & Reports -->
+    <rect x="520" y="970" width="230" height="200" rx="6" fill="var(--external)" stroke="var(--line)" stroke-width="1" />
+    <text x="635" y="992" fill="var(--fg)" font-size="13" font-weight="700" text-anchor="middle">📋 规划 & 报告</text>
+    <line x1="535" y1="1002" x2="735" y2="1002" stroke="var(--line)" stroke-width="0.5" />
+    <text x="535" y="1020" fill="var(--fg)" font-size="11">Ultra-Plan Agent (plan/)</text>
+    <text x="535" y="1038" fill="var(--muted)" font-size="10">AI 驱动开发计划生成</text>
+    <text x="535" y="1056" fill="var(--muted)" font-size="10">Agent 分配 / 步骤编排 / 工时估算</text>
+    <text x="535" y="1076" fill="var(--fg)" font-size="11">Report (report/)</text>
+    <text x="535" y="1094" fill="var(--muted)" font-size="10">合规报告 · 检查报告 · 飞书通知</text>
+    <text x="535" y="1114" fill="var(--fg)" font-size="11">Preview (preview/)</text>
+    <text x="535" y="1132" fill="var(--muted)" font-size="10">合规预览分析器</text>
+
+    <!-- Spec & Templates -->
+    <rect x="770" y="970" width="220" height="200" rx="6" fill="var(--external)" stroke="var(--line)" stroke-width="1" />
+    <text x="880" y="992" fill="var(--fg)" font-size="13" font-weight="700" text-anchor="middle">📝 Spec & 模板</text>
+    <line x1="785" y1="1002" x2="975" y2="1002" stroke="var(--line)" stroke-width="0.5" />
+    <text x="785" y="1020" fill="var(--fg)" font-size="11">OpenSpec 规范管理</text>
+    <text x="785" y="1038" fill="var(--muted)" font-size="10">SHALL/SHOULD/MAY · GIVEN/WHEN/THEN</text>
+    <text x="785" y="1056" fill="var(--muted)" font-size="10">spec-delta · 版本差异比较</text>
+    <text x="785" y="1076" fill="var(--fg)" font-size="11">项目模板 (templates/)</text>
+    <text x="785" y="1094" fill="var(--muted)" font-size="10">generic / autosar / VW / BMW / Mercedes</text>
+    <text x="785" y="1114" fill="var(--fg)" font-size="11">测试生成 (testgen/)</text>
+    <text x="785" y="1132" fill="var(--muted)" font-size="10">自动生成单元测试骨架</text>
+
+
+    <!-- ===== ===== ===== Layer 6: Infrastructure ===== ===== ===== -->
+
+    <rect x="80" y="1220" width="420" height="50" rx="6" fill="var(--risk)" stroke="var(--line)" stroke-width="1" />
+    <text x="290" y="1242" fill="var(--fg)" font-size="12" font-weight="700" text-anchor="middle">🖥️ HW / Cross-Compile</text>
+    <text x="290" y="1258" fill="var(--muted)" font-size="10" text-anchor="middle">cross/ · hardware/ · JLink/OpenOCD/pyOCD · SIL 仿真</text>
+
+    <rect x="520" y="1220" width="230" height="50" rx="6" fill="var(--risk)" stroke="var(--line)" stroke-width="1" />
+    <text x="635" y="1242" fill="var(--fg)" font-size="12" font-weight="700" text-anchor="middle">📊 Usage / Metering</text>
+    <text x="635" y="1258" fill="var(--muted)" font-size="10" text-anchor="middle">usage/ · Stripe 计费 · API Key</text>
+
+    <rect x="770" y="1220" width="220" height="50" rx="6" fill="var(--risk)" stroke="var(--line)" stroke-width="1" />
+    <text x="880" y="1242" fill="var(--fg)" font-size="12" font-weight="700" text-anchor="middle">🔌 Hooks / Plugins</text>
+    <text x="880" y="1258" fill="var(--muted)" font-size="10" text-anchor="middle">hooks/ · plugins/ · 技能注册</text>
+
+
+    <!-- ===== ===== ===== Connections (Arrows) ===== ===== ===== -->
+
+    <!-- CLI → Pipeline -->
+    <path d="M220,200 L220,250" fill="none" stroke="var(--line)" stroke-width="1" marker-end="url(#arrow)"/>
+    <!-- CLI → CI -->
+    <path d="M220,200 L220,350 L160,350 L160,410" fill="none" stroke="var(--line)" stroke-width="1" marker-end="url(#arrow)"/>
+    <!-- CLI → Review -->
+    <path d="M220,200 L220,350 L650,350 L650,410" fill="none" stroke="var(--line)" stroke-width="1" marker-end="url(#arrow)"/>
+
+    <!-- API → Pipeline -->
+    <path d="M540,200 L540,250" fill="none" stroke="var(--line)" stroke-width="1" marker-end="url(#arrow)"/>
+
+    <!-- Dashboard → Store -->
+    <path d="M855,200 L855,730" fill="none" stroke="var(--line)" stroke-width="1" marker-end="url(#arrow)" stroke-dasharray="4,3"/>
+
+    <!-- Pipeline → Step Handlers -->
+    <path d="M510,305 L550,305" fill="none" stroke="var(--line)" stroke-width="1" marker-end="url(#arrow)"/>
+
+    <!-- Pipeline → Evidence -->
+    <path d="M180,360 L180,970" fill="none" stroke="var(--line)" stroke-width="0.8" marker-end="url(#arrow)" stroke-dasharray="3,2"/>
+
+    <!-- CI → Store -->
+    <path d="M230,680 L230,730" fill="none" stroke="var(--line)" stroke-width="0.8" marker-end="url(#arrow)"/>
+    <!-- CI → Evidence -->
+    <path d="M280,680 L280,970" fill="none" stroke="var(--line)" stroke-width="0.8" marker-end="url(#arrow)" stroke-dasharray="3,2"/>
+
+    <!-- Review → Store -->
+    <path d="M650,570 L650,730" fill="none" stroke="var(--line)" stroke-width="0.8" marker-end="url(#arrow)"/>
+
+    <!-- KG → Report -->
+    <path d="M670,680 L670,970" fill="none" stroke="var(--line)" stroke-width="0.8" marker-end="url(#arrow)" stroke-dasharray="3,2"/>
+
+    <!-- Store → Evidence -->
+    <path d="M230,920 L230,970" fill="none" stroke="var(--line)" stroke-width="0.8" marker-end="url(#arrow)"/>
+
+    <!-- KB → LLM RAG → CI -->
+    <path d="M540,790 L540,720 L360,720 L360,680" fill="none" stroke="#94a3b8" stroke-width="0.8" marker-end="url(#arrow-dashed)" stroke-dasharray="3,2"/>
+
+    <!-- ALM → Store -->
+    <path d="M845,920 L845,950 L100,950 L100,920" fill="none" stroke="var(--line)" stroke-width="0.8" marker-end="url(#arrow)" stroke-dasharray="3,2"/>
+
+  </svg>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--input)"></span> 用户界面层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--process)"></span> 编排层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--neutral)"></span> 核心引擎层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--storage)"></span> 数据与存储层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--external)"></span> 输出与集成层</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--risk)"></span> 基础设施层</span>
+  </div>
+
+  <p class="note">
+    yuleOSH v2.5.0 · 模块数: 35+ · 源码: 32,000+ 行 Python · 测试: 260+ passed · 老陈评审: 85/100 🟢<br>
+    基于 OpenSpec + Superpowers + Harness Engineering 三位一体的方法论底座。
+  </p>
+</main>
