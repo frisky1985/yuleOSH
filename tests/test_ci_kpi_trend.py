@@ -91,3 +91,84 @@ class TestGetCoverageTrendAvg:
             }) + "\n")
             result = _get_coverage_trend_avg(td, days=28)
             assert result["avg_c_line_rate"] == 75.0
+
+
+class TestGetMisraTrendAvgEdgeCases:
+    def test_entries_all_older_than_cutoff(self):
+        """Test when all entries have timestamps older than the cutoff."""
+        with tempfile.TemporaryDirectory() as td:
+            _write_trend_file(td, "misra-trend.jsonl", [
+                {"total_violations": 10, "required": 3, "advisory": 5,
+                 "timestamp": "2020-01-01T00:00:00"},
+                {"total_violations": 20, "required": 6, "advisory": 10,
+                 "timestamp": "2020-06-01T00:00:00"},
+            ])
+            # days=28 means cutoff is ~28 days from now, all entries are in 2020
+            result = _get_misra_trend_avg(td, days=28)
+            # Should fall back to entries[-28:] which includes both
+            assert result["entry_count"] == 2
+            assert result["avg_total_violations"] == 15.0
+
+    def test_entries_all_older_but_less_than_28(self):
+        """Test when entries are old and fewer than 28."""
+        with tempfile.TemporaryDirectory() as td:
+            _write_trend_file(td, "misra-trend.jsonl", [
+                {"total_violations": 5, "required": 1, "advisory": 2,
+                 "timestamp": "2020-01-01T00:00:00"},
+            ])
+            result = _get_misra_trend_avg(td, days=28)
+            # entries[-28:] with 1 entry returns that 1 entry
+            assert result["entry_count"] == 1
+
+    def test_with_le_28_entries(self):
+        """Test with exactly 28 entries all older than cutoff."""
+        with tempfile.TemporaryDirectory() as td:
+            entries = []
+            for i in range(28):
+                entries.append({
+                    "total_violations": i * 2,
+                    "required": i,
+                    "advisory": i,
+                    "timestamp": "2020-01-01T00:00:00",
+                })
+            _write_trend_file(td, "misra-trend.jsonl", entries)
+            result = _get_misra_trend_avg(td, days=28)
+            assert result["entry_count"] == 28
+
+
+class TestGetCoverageTrendAvgEdgeCases:
+    def test_entries_all_older_than_cutoff(self):
+        with tempfile.TemporaryDirectory() as td:
+            _write_trend_file(td, "coverage-trend.jsonl", [
+                {"c": {"line_rate": 60.0, "branch_rate": 50.0},
+                 "python": {"line_rate": 80.0, "branch_rate": 70.0},
+                 "timestamp": "2020-01-01T00:00:00"},
+            ])
+            result = _get_coverage_trend_avg(td, days=28)
+            # Falls back to entries[-28:]
+            assert result["entry_count"] == 1
+            assert result["avg_c_line_rate"] == 60.0
+
+    def test_missing_all_coverage_keys(self):
+        """Coverage entries with empty c/python dicts."""
+        with tempfile.TemporaryDirectory() as td:
+            _write_trend_file(td, "coverage-trend.jsonl", [
+                {"c": {}, "python": {}, "timestamp": "2026-07-01T00:00:00"},
+            ])
+            result = _get_coverage_trend_avg(td, days=28)
+            assert result["avg_c_line_rate"] == 0.0
+            assert result["avg_c_branch_rate"] == 0.0
+            assert result["avg_py_line_rate"] == 0.0
+            assert result["avg_py_branch_rate"] == 0.0
+
+    def test_entry_without_timestamp_not_filtered_out(self):
+        """Entries with no timestamp key still get counted."""
+        with tempfile.TemporaryDirectory() as td:
+            _write_trend_file(td, "coverage-trend.jsonl", [
+                {"c": {"line_rate": 70.0, "branch_rate": 60.0},
+                 "python": {"line_rate": 85.0, "branch_rate": 75.0}},
+            ])
+            result = _get_coverage_trend_avg(td, days=28)
+            # _parse_ts returns epoch for missing value, which is < cutoff, so falls back
+            assert result["entry_count"] == 1
+            assert result["avg_c_line_rate"] == 70.0
