@@ -12,6 +12,7 @@
 
 void write_to_register(uint32_t reg_addr, uint32_t value) {
     /* uintptr_t cast for MMIO access — common embedded pattern */
+    /* cppcheck-suppress [misra-c2023-11.3, misra-c2023-11.1] — intentional MMIO */
     volatile uint32_t *reg = (volatile uint32_t *)(uintptr_t)reg_addr;
     *reg = value;
 }

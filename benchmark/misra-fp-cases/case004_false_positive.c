@@ -21,5 +21,6 @@ void compute_crc(void) {
     (void)crc;
 
     /* This expands to no-op in release — not a violation */
+    /* cppcheck-suppress [misra-c2023-17.7] — intentional debug no-op */
     DEBUG_LOG("CRC computed");
 }

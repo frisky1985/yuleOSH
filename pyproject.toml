@@ -61,7 +61,6 @@ omit = [
     "src/yuleosh/sil/*",
     "src/yuleosh/plugins/sandbox.py",
     "src/yuleosh/llm/client.py",
-    "src/yuleosh/_entry.py",
 ]
 
 [tool.coverage.report]

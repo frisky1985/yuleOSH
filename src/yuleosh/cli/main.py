@@ -2141,6 +2141,23 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kg_query_impact.add_argument("file_path", help="File path(s) to analyze (comma-separated)")
     p_kg_query_impact.add_argument("--layer", default=None, help="Test layer filter (unit/integration/sil/hil)")
     p_kg_query_impact.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    # KG Merge Gate (P2: KG-42)
+    p_kg_check_merge = kgsub.add_parser("check-merge", help="KG merge gate — validate PR before merge")
+    p_kg_check_merge.add_argument("--base-ref", default="HEAD~1", help="Git base ref for change detection")
+    p_kg_check_merge.add_argument("--min-confidence", type=float, default=None,
+                                    help="Minimum traceability confidence threshold")
+    p_kg_check_merge.add_argument("--min-coverage", type=float, default=None,
+                                    help="Minimum requirement coverage threshold")
+    p_kg_check_merge.add_argument("--no-build", action="store_true",
+                                    help="Skip incremental KG build")
+    p_kg_check_merge.add_argument("--fail-on-warning", action="store_true",
+                                    help="Fail on warnings, not just errors")
+    p_kg_check_merge.add_argument("--output", "-o", default=None,
+                                    help="Output report file path")
+    p_kg_check_merge.add_argument("--json", action="store_true",
+                                    help="Output as JSON")
+    p_kg_check_merge.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+
     p_kg_stats = kgsub.add_parser("stats", help="Show graph statistics")
     p_kg_stats.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_kg_stats.add_argument("--json", action="store_true", help="Output as JSON")
@@ -2632,7 +2649,7 @@ def main():
     elif args.command == "kg":
         from yuleosh.knowledge_graph.kg_cli import (
             cmd_build, cmd_bootstrap, cmd_snapshot_list, cmd_snapshot_diff,
-            cmd_query_impact, cmd_stats, cmd_report, cmd_events,
+            cmd_query_impact, cmd_stats, cmd_report, cmd_events, cmd_check_merge,
         )
         if args.kg_sub == "build":
             cmd_build(args)
@@ -2658,6 +2675,8 @@ def main():
             cmd_report(args)
         elif args.kg_sub == "events":
             cmd_events(args)
+        elif args.kg_sub == "check-merge":
+            cmd_check_merge(args)
         else:
             parser.print_help()
             sys.exit(1)

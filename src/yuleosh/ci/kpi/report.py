@@ -28,6 +28,7 @@ from yuleosh.ci.kpi.utils import _load_latest_misra_entry, _load_latest_coverage
 from yuleosh.ci.kpi.trend import _get_misra_trend_avg, _get_coverage_trend_avg
 from yuleosh.ci.kpi.stability import get_process_stability_summary
 from yuleosh.ci.kpi.defects import get_defect_escape_summary
+from yuleosh.ci.kpi.kg_source import get_kg_coverage_metrics, get_kg_health_metrics, get_kg_confidence_metrics
 
 
 BASELINE_FILE = Path(".yuleosh") / "kpi-baseline.json"
@@ -209,6 +210,65 @@ def kpi_status(
             "unit": "%",
         })
 
+    # KG KPI 维度
+    kg_cov = get_kg_coverage_metrics(project_dir)
+    kg_health = get_kg_health_metrics(project_dir)
+    kg_conf = get_kg_confidence_metrics(project_dir)
+
+    if kg_cov.get("coverage_pct") is not None:
+        status_entries.append({
+            "metric": "kg_coverage_pct",
+            "label": "KG 需求覆盖率",
+            "value": kg_cov["coverage_pct"],
+            "threshold": thr.get("kg_coverage_pct", 80.0),
+            "status": "PASS" if kg_cov["coverage_pct"] >= thr.get("kg_coverage_pct", 80.0) else "FAIL",
+            "unit": "%",
+        })
+
+    if kg_health.get("edge_density") is not None:
+        status_entries.append({
+            "metric": "kg_edge_density",
+            "label": "KG 边密度",
+            "value": kg_health["edge_density"],
+            "threshold": 1.0,
+            "status": "PASS" if kg_health["edge_density"] >= 1.0 else "INFO",
+            "unit": "ratio",
+        })
+        status_entries.append({
+            "metric": "kg_orphan_files",
+            "label": "KG 孤立文件数",
+            "value": kg_health.get("orphan_code_files", 0) + kg_health.get("orphan_test_files", 0),
+            "threshold": 5,
+            "status": "PASS" if (kg_health.get("orphan_code_files", 0) + kg_health.get("orphan_test_files", 0)) <= 5 else "FAIL",
+            "unit": "count",
+        })
+        status_entries.append({
+            "metric": "kg_low_confidence_edges",
+            "label": "KG 低置信度边数",
+            "value": kg_health.get("low_confidence_edges", 0),
+            "threshold": 5,
+            "status": "PASS" if kg_health.get("low_confidence_edges", 0) <= 5 else "FAIL",
+            "unit": "count",
+        })
+
+    if kg_conf.get("avg_confidence") is not None:
+        status_entries.append({
+            "metric": "kg_avg_confidence",
+            "label": "KG 平均置信度",
+            "value": kg_conf["avg_confidence"],
+            "threshold": thr.get("kg_confidence_min", 0.8),
+            "status": "PASS" if kg_conf["avg_confidence"] >= thr.get("kg_confidence_min", 0.8) else "FAIL",
+            "unit": "score",
+        })
+        status_entries.append({
+            "metric": "kg_explicit_pct",
+            "label": "KG 显式追溯占比",
+            "value": kg_conf.get("explicit_pct", 0),
+            "threshold": thr.get("kg_confidence_explicit_pct", 50.0),
+            "status": "PASS" if kg_conf.get("explicit_pct", 0) >= thr.get("kg_confidence_explicit_pct", 50.0) else "FAIL",
+            "unit": "%",
+        })
+
     if as_json:
         result = {
             "timestamp": datetime.now().isoformat(),
@@ -220,6 +280,11 @@ def kpi_status(
                 "coverage": cov_avg,
             },
             "process_stability": process_data,
+            "kg_metrics": {
+                "coverage": kg_cov,
+                "health": kg_health,
+                "confidence": kg_conf,
+            },
         }
         return json.dumps(result, indent=2, ensure_ascii=False, default=str, allow_nan=False)
 
@@ -325,6 +390,10 @@ def kpi_baseline_save(
     except (json.JSONDecodeError, TypeError):
         pass
 
+    kg_cov = get_kg_coverage_metrics(project_dir)
+    kg_health = get_kg_health_metrics(project_dir)
+    kg_conf = get_kg_confidence_metrics(project_dir)
+
     baseline = {
         "baseline_id": datetime.now().strftime("%Y%m%d-%H%M%S"),
         "label": label,
@@ -346,6 +415,14 @@ def kpi_baseline_save(
                 "python_branch_rate": cov_latest.get("python", {}).get("branch_rate"),
                 "commit": cov_latest.get("commit", ""),
                 "timestamp": cov_latest.get("timestamp", ""),
+            },
+            "kg": {
+                "coverage_pct": kg_cov.get("coverage_pct", 0.0),
+                "total_nodes": kg_health.get("total_nodes", 0),
+                "total_edges": kg_health.get("total_edges", 0),
+                "orphan_files": kg_health.get("orphan_code_files", 0) + kg_health.get("orphan_test_files", 0),
+                "avg_confidence": kg_conf.get("avg_confidence", 0.0),
+                "explicit_pct": kg_conf.get("explicit_pct", 0.0),
             },
         },
         "trend_28d": {

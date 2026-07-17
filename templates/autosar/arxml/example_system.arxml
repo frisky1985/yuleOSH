@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  yuleASR Example AUTOSAR System ARXML
+  Target: NXP S32K312 | Classic Platform R20-11
+  
+  Demonstrates:
+    - SW-C definition with ports
+    - Runnable entities with timing events
+    - Sender/receiver and client/server interfaces
+    - Composition assembly
+-->
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0">
+  <AR-PACKAGE>
+    <SHORT-NAME>YuleTech</SHORT-NAME>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- Port Interfaces                                   -->
+    <!-- ══════════════════════════════════════════════════ -->
+
+    <AR-PACKAGE>
+      <SHORT-NAME>PortInterfaces</SHORT-NAME>
+      <ELEMENTS>
+
+        <!-- Sender-Receiver Interface: Vehicle Speed -->
+        <SENDER-RECEIVER-INTERFACE>
+          <SHORT-NAME>VehicleSpeed_I</SHORT-NAME>
+          <IS-SERVICE>false</IS-SERVICE>
+          <DATA-ELEMENTS>
+            <VARIABLE-DATA-PROTOTYPE>
+              <SHORT-NAME>Speed</SHORT-NAME>
+              <TYPE-TREF DEST="SW-BASE-TYPE">/AUTOSAR/AUTOSAR_PlatformBaseTypes/uint16</TYPE-TREF>
+              <SW-CALIBRATION-ACCESS>READ-WRITE</SW-CALIBRATION-ACCESS>
+            </VARIABLE-DATA-PROTOTYPE>
+          </DATA-ELEMENTS>
+        </SENDER-RECEIVER-INTERFACE>
+
+        <!-- Sender-Receiver Interface: Seat Position -->
+        <SENDER-RECEIVER-INTERFACE>
+          <SHORT-NAME>SeatPosition_I</SHORT-NAME>
+          <IS-SERVICE>false</IS-SERVICE>
+          <DATA-ELEMENTS>
+            <VARIABLE-DATA-PROTOTYPE>
+              <SHORT-NAME>Position</SHORT-NAME>
+              <TYPE-TREF DEST="SW-BASE-TYPE">/AUTOSAR/AUTOSAR_PlatformBaseTypes/sint16</TYPE-TREF>
+              <SW-CALIBRATION-ACCESS>READ-WRITE</SW-CALIBRATION-ACCESS>
+            </VARIABLE-DATA-PROTOTYPE>
+            <VARIABLE-DATA-PROTOTYPE>
+              <SHORT-NAME>ReclineAngle</SHORT-NAME>
+              <TYPE-TREF DEST="SW-BASE-TYPE">/AUTOSAR/AUTOSAR_PlatformBaseTypes/uint8</TYPE-TREF>
+              <SW-CALIBRATION-ACCESS>READ-WRITE</SW-CALIBRATION-ACCESS>
+            </VARIABLE-DATA-PROTOTYPE>
+          </DATA-ELEMENTS>
+        </SENDER-RECEIVER-INTERFACE>
+
+        <!-- Client-Server Interface: Seat Control -->
+        <CLIENT-SERVER-INTERFACE>
+          <SHORT-NAME>SeatControl_I</SHORT-NAME>
+          <IS-SERVICE>false</IS-SERVICE>
+          <OPERATIONS>
+            <CLIENT-SERVER-OPERATION>
+              <SHORT-NAME>AdjustPosition</SHORT-NAME>
+              <ARGUMENTS>
+                <ARGUMENT-PROTOTYPE>
+                  <SHORT-NAME>TargetPosition</SHORT-NAME>
+                  <TYPE-TREF DEST="SW-BASE-TYPE">/AUTOSAR/AUTOSAR_PlatformBaseTypes/sint16</TYPE-TREF>
+                  <DIRECTION>IN</DIRECTION>
+                </ARGUMENT-PROTOTYPE>
+                <ARGUMENT-PROTOTYPE>
+                  <SHORT-NAME>Result</SHORT-NAME>
+                  <TYPE-TREF DEST="SW-BASE-TYPE">/AUTOSAR/AUTOSAR_PlatformBaseTypes/boolean</TYPE-TREF>
+                  <DIRECTION>OUT</DIRECTION>
+                </ARGUMENT-PROTOTYPE>
+              </ARGUMENTS>
+            </CLIENT-SERVER-OPERATION>
+            <CLIENT-SERVER-OPERATION>
+              <SHORT-NAME>StoreMemoryPosition</SHORT-NAME>
+              <ARGUMENTS>
+                <ARGUMENT-PROTOTYPE>
+                  <SHORT-NAME>SlotNumber</SHORT-NAME>
+                  <TYPE-TREF DEST="SW-BASE-TYPE">/AUTOSAR/AUTOSAR_PlatformBaseTypes/uint8</TYPE-TREF>
+                  <DIRECTION>IN</DIRECTION>
+                </ARGUMENT-PROTOTYPE>
+                <ARGUMENT-PROTOTYPE>
+                  <SHORT-NAME>Result</SHORT-NAME>
+                  <TYPE-TREF DEST="SW-BASE-TYPE">/AUTOSAR/AUTOSAR_PlatformBaseTypes/boolean</TYPE-TREF>
+                  <DIRECTION>OUT</DIRECTION>
+                </ARGUMENT-PROTOTYPE>
+              </ARGUMENTS>
+            </CLIENT-SERVER-OPERATION>
+          </OPERATIONS>
+        </CLIENT-SERVER-INTERFACE>
+
+      </ELEMENTS>
+    </AR-PACKAGE>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- Software Components (SW-C)                        -->
+    <!-- ══════════════════════════════════════════════════ -->
+
+    <AR-PACKAGE>
+      <SHORT-NAME>SwComponents</SHORT-NAME>
+      <ELEMENTS>
+
+        <!-- Application SW-C: SeatControl -->
+        <APPLICATION-SW-COMPONENT-TYPE UUID="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+          <SHORT-NAME>SeatControl</SHORT-NAME>
+          <PORTS>
+
+            <!-- P-PORT: Publish seat position -->
+            <P-PORT-PROTOTYPE>
+              <SHORT-NAME>SeatPositionOut</SHORT-NAME>
+              <PROVIDED-INTERFACE-TREF DEST="SENDER-RECEIVER-INTERFACE">
+                /YuleTech/PortInterfaces/SeatPosition_I
+              </PROVIDED-INTERFACE-TREF>
+            </P-PORT-PROTOTYPE>
+
+            <!-- R-PORT: Receive speed data -->
+            <R-PORT-PROTOTYPE>
+              <SHORT-NAME>VehicleSpeedIn</SHORT-NAME>
+              <REQUIRED-INTERFACE-TREF DEST="SENDER-RECEIVER-INTERFACE">
+                /YuleTech/PortInterfaces/VehicleSpeed_I
+              </REQUIRED-INTERFACE-TREF>
+            </R-PORT-PROTOTYPE>
+
+            <!-- R-PORT: Client for seat control service -->
+            <R-PORT-PROTOTYPE>
+              <SHORT-NAME>SeatControlService</SHORT-NAME>
+              <REQUIRED-INTERFACE-TREF DEST="CLIENT-SERVER-INTERFACE">
+                /YuleTech/PortInterfaces/SeatControl_I
+              </REQUIRED-INTERFACE-TREF>
+            </R-PORT-PROTOTYPE>
+
+          </PORTS>
+
+          <INTERNAL-BEHAVIORS>
+            <SWC-INTERNAL-BEHAVIOR>
+              <SHORT-NAME>SeatControl_Behavior</SHORT-NAME>
+
+              <!-- Runnable: Periodic position update (10ms) -->
+              <RUNNABLE-ENTITY>
+                <SHORT-NAME>UpdatePosition</SHORT-NAME>
+                <MINIMUM-START-INTERVAL>0.01</MINIMUM-START-INTERVAL>
+                <CAN-BE-INVOKED-CONCURRENTLY>false</CAN-BE-INVOKED-CONCURRENTLY>
+                <SYMBOL>SeatControl_UpdatePosition</SYMBOL>
+                <DATA-READ-ACCESS>
+                  <VARIABLE-ACCESS>
+                    <SHORT-NAME>SpeedIn</SHORT-NAME>
+                    <ACCESSED-VARIABLE>
+                      <AUTOSAR-VARIABLE-IREF>
+                        <PORT-PROTOTYPE-REF DEST="R-PORT-PROTOTYPE">
+                          /YuleTech/SwComponents/SeatControl/VehicleSpeedIn
+                        </PORT-PROTOTYPE-REF>
+                        <TARGET-DATA-PROTOTYPE-REF DEST="VARIABLE-DATA-PROTOTYPE">
+                          /YuleTech/PortInterfaces/VehicleSpeed_I/Speed
+                        </TARGET-DATA-PROTOTYPE-REF>
+                      </AUTOSAR-VARIABLE-IREF>
+                    </ACCESSED-VARIABLE>
+                  </VARIABLE-ACCESS>
+                </DATA-READ-ACCESS>
+                <DATA-WRITE-ACCESS>
+                  <VARIABLE-ACCESS>
+                    <SHORT-NAME>PositionOut</SHORT-NAME>
+                    <ACCESSED-VARIABLE>
+                      <AUTOSAR-VARIABLE-IREF>
+                        <PORT-PROTOTYPE-REF DEST="P-PORT-PROTOTYPE">
+                          /YuleTech/SwComponents/SeatControl/SeatPositionOut
+                        </PORT-PROTOTYPE-REF>
+                        <TARGET-DATA-PROTOTYPE-REF DEST="VARIABLE-DATA-PROTOTYPE">
+                          /YuleTech/PortInterfaces/SeatPosition_I/Position
+                        </TARGET-DATA-PROTOTYPE-REF>
+                      </AUTOSAR-VARIABLE-IREF>
+                    </ACCESSED-VARIABLE>
+                  </VARIABLE-ACCESS>
+                </DATA-WRITE-ACCESS>
+                <EVENT-TIMING-EVENT>
+                  <SHORT-NAME>TimingEvent_10ms</SHORT-NAME>
+                  <TIMING-OFFSET>0.0</TIMING-OFFSET>
+                  <TIMING-PERIOD>0.01</TIMING-PERIOD>
+                </EVENT-TIMING-EVENT>
+              </RUNNABLE-ENTITY>
+
+              <!-- Runnable: Client call adjust position -->
+              <RUNNABLE-ENTITY>
+                <SHORT-NAME>AdjustSeatPosition</SHORT-NAME>
+                <CAN-BE-INVOKED-CONCURRENTLY>false</CAN-BE-INVOKED-CONCURRENTLY>
+                <SYMBOL>SeatControl_AdjustPosition</SYMBOL>
+                <SERVER-CALL-POINTS>
+                  <SYNCHRONOUS-SERVER-CALL-POINT>
+                    <SHORT-NAME>AdjustPositionCall</SHORT-NAME>
+                    <OPERATION-IREF>
+                      <CONTEXT-PORT-REF DEST="R-PORT-PROTOTYPE">
+                        /YuleTech/SwComponents/SeatControl/SeatControlService
+                      </CONTEXT-PORT-REF>
+                      <TARGET-OPERATION-REF DEST="CLIENT-SERVER-OPERATION">
+                        /YuleTech/PortInterfaces/SeatControl_I/AdjustPosition
+                      </TARGET-OPERATION-REF>
+                    </OPERATION-IREF>
+                  </SYNCHRONOUS-SERVER-CALL-POINT>
+                </SERVER-CALL-POINTS>
+                <EVENT-TIMING-EVENT>
+                  <SHORT-NAME>TimingEvent_100ms</SHORT-NAME>
+                  <TIMING-OFFSET>0.0</TIMING-OFFSET>
+                  <TIMING-PERIOD>0.1</TIMING-PERIOD>
+                </EVENT-TIMING-EVENT>
+              </RUNNABLE-ENTITY>
+
+            </SWC-INTERNAL-BEHAVIOR>
+          </INTERNAL-BEHAVIORS>
+        </APPLICATION-SW-COMPONENT-TYPE>
+
+        <!-- Composition: SeatSystem -->
+        <COMPOSITION-SW-COMPONENT-TYPE>
+          <SHORT-NAME>SeatSystem</SHORT-NAME>
+          <PORTS>
+            <P-PORT-PROTOTYPE>
+              <SHORT-NAME>ExternalSpeedIn</SHORT-NAME>
+              <PROVIDED-INTERFACE-TREF DEST="SENDER-RECEIVER-INTERFACE">
+                /YuleTech/PortInterfaces/VehicleSpeed_I
+              </PROVIDED-INTERFACE-TREF>
+            </P-PORT-PROTOTYPE>
+          </PORTS>
+          <COMPONENTS>
+            <COMPONENT-REF DEST="APPLICATION-SW-COMPONENT-TYPE">
+              /YuleTech/SwComponents/SeatControl
+            </COMPONENT-REF>
+          </COMPONENTS>
+          <CONNECTORS>
+            <ASSEMBLY-SW-CONNECTOR>
+              <SHORT-NAME>SpeedToSeatControl</SHORT-NAME>
+              <PROVIDER-IREF>
+                <COMPONENT-REF DEST="COMPOSITION-SW-COMPONENT-TYPE">
+                  /YuleTech/SwComponents/SeatSystem
+                </COMPONENT-REF>
+                <PORT-PROTOTYPE-REF DEST="P-PORT-PROTOTYPE">
+                  /YuleTech/SwComponents/SeatSystem/ExternalSpeedIn
+                </PORT-PROTOTYPE-REF>
+              </PROVIDER-IREF>
+              <REQUESTER-IREF>
+                <COMPONENT-REF DEST="APPLICATION-SW-COMPONENT-TYPE">
+                  /YuleTech/SwComponents/SeatControl
+                </COMPONENT-REF>
+                <PORT-PROTOTYPE-REF DEST="R-PORT-PROTOTYPE">
+                  /YuleTech/SwComponents/SeatControl/VehicleSpeedIn
+                </PORT-PROTOTYPE-REF>
+              </REQUESTER-IREF>
+            </ASSEMBLY-SW-CONNECTOR>
+          </CONNECTORS>
+        </COMPOSITION-SW-COMPONENT-TYPE>
+
+      </ELEMENTS>
+    </AR-PACKAGE>
+
+  </AR-PACKAGE>
+</AUTOSAR>

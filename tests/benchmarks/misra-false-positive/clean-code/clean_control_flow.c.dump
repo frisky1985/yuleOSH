@@ -1,0 +1,171 @@
+<?xml version="1.0"?>
+<dumps language="c">
+  <platform name="native" char_bit="8" short_bit="16" int_bit="32" long_bit="64" long_long_bit="64" pointer_bit="64" wchar_t_bit="32" size_t_bit="64"/>
+  <rawtokens>
+    <file index="0" name="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c"/>
+    <tok fileIndex="0" linenr="1" column="1" str="/* Clean code xxx xxx MISRA xxxxxx */"/>
+    <tok fileIndex="0" linenr="2" column="1" str="#"/>
+    <tok fileIndex="0" linenr="2" column="2" str="include"/>
+    <tok fileIndex="0" linenr="2" column="10" str="&lt;stdint.h&gt;"/>
+    <tok fileIndex="0" linenr="4" column="1" str="static"/>
+    <tok fileIndex="0" linenr="4" column="8" str="void"/>
+    <tok fileIndex="0" linenr="4" column="13" str="clean_switch"/>
+    <tok fileIndex="0" linenr="4" column="25" str="("/>
+    <tok fileIndex="0" linenr="4" column="26" str="int32_t"/>
+    <tok fileIndex="0" linenr="4" column="34" str="cmd"/>
+    <tok fileIndex="0" linenr="4" column="37" str=")"/>
+    <tok fileIndex="0" linenr="5" column="1" str="{"/>
+    <tok fileIndex="0" linenr="6" column="5" str="switch"/>
+    <tok fileIndex="0" linenr="6" column="12" str="("/>
+    <tok fileIndex="0" linenr="6" column="13" str="cmd"/>
+    <tok fileIndex="0" linenr="6" column="16" str=")"/>
+    <tok fileIndex="0" linenr="6" column="18" str="{"/>
+    <tok fileIndex="0" linenr="7" column="9" str="case"/>
+    <tok fileIndex="0" linenr="7" column="14" str="1"/>
+    <tok fileIndex="0" linenr="7" column="15" str=":"/>
+    <tok fileIndex="0" linenr="8" column="13" str="break"/>
+    <tok fileIndex="0" linenr="8" column="18" str=";"/>
+    <tok fileIndex="0" linenr="9" column="9" str="case"/>
+    <tok fileIndex="0" linenr="9" column="14" str="2"/>
+    <tok fileIndex="0" linenr="9" column="15" str=":"/>
+    <tok fileIndex="0" linenr="10" column="13" str="break"/>
+    <tok fileIndex="0" linenr="10" column="18" str=";"/>
+    <tok fileIndex="0" linenr="11" column="9" str="default"/>
+    <tok fileIndex="0" linenr="11" column="16" str=":"/>
+    <tok fileIndex="0" linenr="12" column="13" str="break"/>
+    <tok fileIndex="0" linenr="12" column="18" str=";"/>
+    <tok fileIndex="0" linenr="13" column="5" str="}"/>
+    <tok fileIndex="0" linenr="14" column="1" str="}"/>
+    <tok fileIndex="0" linenr="16" column="1" str="static"/>
+    <tok fileIndex="0" linenr="16" column="8" str="void"/>
+    <tok fileIndex="0" linenr="16" column="13" str="clean_if"/>
+    <tok fileIndex="0" linenr="16" column="21" str="("/>
+    <tok fileIndex="0" linenr="16" column="22" str="int32_t"/>
+    <tok fileIndex="0" linenr="16" column="30" str="val"/>
+    <tok fileIndex="0" linenr="16" column="33" str=")"/>
+    <tok fileIndex="0" linenr="17" column="1" str="{"/>
+    <tok fileIndex="0" linenr="18" column="5" str="if"/>
+    <tok fileIndex="0" linenr="18" column="8" str="("/>
+    <tok fileIndex="0" linenr="18" column="9" str="val"/>
+    <tok fileIndex="0" linenr="18" column="13" str="!="/>
+    <tok fileIndex="0" linenr="18" column="16" str="0"/>
+    <tok fileIndex="0" linenr="18" column="17" str=")"/>
+    <tok fileIndex="0" linenr="18" column="19" str="{"/>
+    <tok fileIndex="0" linenr="19" column="9" str="clean_switch"/>
+    <tok fileIndex="0" linenr="19" column="21" str="("/>
+    <tok fileIndex="0" linenr="19" column="22" str="val"/>
+    <tok fileIndex="0" linenr="19" column="25" str=")"/>
+    <tok fileIndex="0" linenr="19" column="26" str=";"/>
+    <tok fileIndex="0" linenr="20" column="5" str="}"/>
+    <tok fileIndex="0" linenr="21" column="1" str="}"/>
+  </rawtokens>
+  <suppressions>
+  </suppressions>
+<dump cfg="">
+  <standards>
+    <c version="c23"/>
+    <cpp version="c++26"/>
+  </standards>
+  <directivelist>
+    <directive file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="2" str="#include &lt;stdint.h&gt;">
+      <token column="1" str="#"/>
+      <token column="2" str="include"/>
+      <token column="10" str="&lt;stdint.h&gt;"/>
+    </directive>
+  </directivelist>
+  <tokenlist>
+    <token id="7d11fedc0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="4" column="1" str="static" scope="1056053d0" type="name"/>
+    <token id="7d11fee80" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="4" column="8" str="void" scope="1056053d0" type="name"/>
+    <token id="7d11feee0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="4" column="13" str="clean_switch" scope="1056053d0" type="name" function="105605550"/>
+    <token id="7d11fef40" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="4" column="25" str="(" scope="1056053d0" link="7d11ff060" valueType-type="void" valueType-reference="None"/>
+    <token id="7d11fefa0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="4" column="26" str="int32_t" scope="1056053d0" type="name"/>
+    <token id="7d11ff000" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="4" column="34" str="cmd" scope="1056053d0" type="name" varId="1" exprId="1" variable="1056009f0" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d11ff060" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="4" column="37" str=")" scope="1056053d0" link="7d11fef40"/>
+    <token id="7d11ff0c0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="5" column="1" str="{" scope="1056055f0" link="7d11ff8a0"/>
+    <token id="7d11ff120" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="6" column="5" str="switch" scope="1056055f0" type="name" astParent="7d11ff180"/>
+    <token id="7d11ff180" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="6" column="12" str="(" scope="1056055f0" link="7d11ff240" astOperand1="7d11ff120" astOperand2="7d11ff1e0"/>
+    <token id="7d11ff1e0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="6" column="13" str="cmd" scope="1056055f0" type="name" varId="1" exprId="1" variable="1056009f0" astParent="7d11ff180" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d11ff240" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="6" column="16" str=")" scope="1056055f0" link="7d11ff180"/>
+    <token id="7d11ff2a0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="6" column="18" str="{" scope="1056006f0" link="7d11ff840"/>
+    <token id="7d11ff300" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="7" column="9" str="case" scope="1056006f0" type="name" astOperand1="7d11ff360"/>
+    <token id="7d11ff360" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="7" column="14" str="1" scope="1056006f0" type="number" isInt="true" values="7d10018c0" astParent="7d11ff300" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d11ff3c0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="7" column="15" str=":" scope="1056006f0"/>
+    <token id="7d1208240" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="7" column="0" str=";" scope="1056006f0"/>
+    <token id="7d11ff420" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="8" column="13" str="break" scope="1056006f0" type="name"/>
+    <token id="7d11ff480" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="8" column="18" str=";" scope="1056006f0"/>
+    <token id="7d11ff4e0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="9" column="9" str="case" scope="1056006f0" type="name" astOperand1="7d11ff540"/>
+    <token id="7d11ff540" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="9" column="14" str="2" scope="1056006f0" type="number" isInt="true" values="7d10018e0" astParent="7d11ff4e0" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d11ff5a0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="9" column="15" str=":" scope="1056006f0"/>
+    <token id="7d12082a0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="9" column="0" str=";" scope="1056006f0"/>
+    <token id="7d11ff600" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="10" column="13" str="break" scope="1056006f0" type="name"/>
+    <token id="7d11ff660" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="10" column="18" str=";" scope="1056006f0"/>
+    <token id="7d11ff6c0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="11" column="9" str="default" scope="1056006f0" type="name"/>
+    <token id="7d11ff720" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="11" column="16" str=":" scope="1056006f0"/>
+    <token id="7d1208300" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="11" column="0" str=";" scope="1056006f0"/>
+    <token id="7d11ff780" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="12" column="13" str="break" scope="1056006f0" type="name"/>
+    <token id="7d11ff7e0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="12" column="18" str=";" scope="1056006f0"/>
+    <token id="7d11ff840" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="13" column="5" str="}" scope="1056006f0" link="7d11ff2a0"/>
+    <token id="7d11ff8a0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="14" column="1" str="}" scope="1056055f0" link="7d11ff0c0"/>
+    <token id="7d11ff900" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="16" column="1" str="static" scope="1056053d0" type="name"/>
+    <token id="7d11ff960" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="16" column="8" str="void" scope="1056053d0" type="name"/>
+    <token id="7d11ff9c0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="16" column="13" str="clean_if" scope="1056053d0" type="name" function="105605770"/>
+    <token id="7d11ffa20" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="16" column="21" str="(" scope="1056053d0" link="7d11ffb40" valueType-type="void" valueType-reference="None"/>
+    <token id="7d11ffa80" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="16" column="22" str="int32_t" scope="1056053d0" type="name"/>
+    <token id="7d11ffae0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="16" column="30" str="val" scope="1056053d0" type="name" varId="2" exprId="2" variable="105600ae0" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d11ffb40" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="16" column="33" str=")" scope="1056053d0" link="7d11ffa20"/>
+    <token id="7d11ffba0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="17" column="1" str="{" scope="105600870" link="7d1208120"/>
+    <token id="7d11ffc00" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="18" column="5" str="if" scope="105600870" type="name" astParent="7d11ffc60"/>
+    <token id="7d11ffc60" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="18" column="8" str="(" scope="105600870" link="7d11ffde0" astOperand1="7d11ffc00" astOperand2="7d11ffd20"/>
+    <token id="7d11ffcc0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="18" column="9" str="val" scope="105600870" type="name" varId="2" exprId="2" variable="105600ae0" astParent="7d11ffd20" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d11ffd20" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="18" column="13" str="!=" scope="105600870" type="op" isComparisonOp="true" exprId="1073741830" values="7d1001980" astParent="7d11ffc60" astOperand1="7d11ffcc0" astOperand2="7d11ffd80" valueType-type="bool" valueType-reference="None"/>
+    <token id="7d11ffd80" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="18" column="16" str="0" scope="105600870" type="number" isInt="true" values="7d1001900" astParent="7d11ffd20" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d11ffde0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="18" column="17" str=")" scope="105600870" link="7d11ffc60"/>
+    <token id="7d11ffe40" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="18" column="19" str="{" scope="1055ffab0" link="7d12080c0"/>
+    <token id="7d11ffea0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="19" column="9" str="clean_switch" scope="1055ffab0" type="name" function="105605550" astParent="7d11fff00"/>
+    <token id="7d11fff00" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="19" column="21" str="(" scope="1055ffab0" link="7d1208000" exprId="1073741832" astOperand1="7d11ffea0" astOperand2="7d11fff60" valueType-type="void" valueType-reference="None"/>
+    <token id="7d11fff60" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="19" column="22" str="val" scope="1055ffab0" type="name" varId="2" exprId="2" variable="105600ae0" values="7d10019c0" astParent="7d11fff00" valueType-type="int" valueType-sign="signed" valueType-reference="None"/>
+    <token id="7d1208000" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="19" column="25" str=")" scope="1055ffab0" link="7d11fff00"/>
+    <token id="7d1208060" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="19" column="26" str=";" scope="1055ffab0"/>
+    <token id="7d12080c0" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="20" column="5" str="}" scope="1055ffab0" link="7d11ffe40"/>
+    <token id="7d1208120" file="tests/benchmarks/misra-false-positive/clean-code/clean_control_flow.c" linenr="21" column="1" str="}" scope="105600870" link="7d11ffba0"/>
+  </tokenlist>
+  <scopes>
+    <scope id="1056053d0" type="Global">
+      <functionList>
+        <function id="105605550" token="7d11feee0" tokenDef="7d11feee0" name="clean_switch" type="Function" access="Public" isStatic="true">
+          <arg nr="1" variable="1056009f0"/>
+        </function>
+        <function id="105605770" token="7d11ff9c0" tokenDef="7d11ff9c0" name="clean_if" type="Function" access="Public" isStatic="true">
+          <arg nr="1" variable="105600ae0"/>
+        </function>
+      </functionList>
+    </scope>
+    <scope id="1056055f0" type="Function" className="clean_switch" bodyStart="7d11ff0c0" bodyEnd="7d11ff8a0" nestedIn="1056053d0" function="105605550"/>
+    <scope id="1056006f0" type="Switch" bodyStart="7d11ff2a0" bodyEnd="7d11ff840" nestedIn="1056055f0"/>
+    <scope id="105600870" type="Function" className="clean_if" bodyStart="7d11ffba0" bodyEnd="7d1208120" nestedIn="1056053d0" function="105605770"/>
+    <scope id="1055ffab0" type="If" bodyStart="7d11ffe40" bodyEnd="7d12080c0" nestedIn="105600870"/>
+  </scopes>
+  <variables>
+    <var id="1056009f0" nameToken="7d11ff000" typeStartToken="7d11fefa0" typeEndToken="7d11fefa0" access="Argument" scope="1056055f0" constness="0" volatileness="0" isArray="false" isClass="false" isConst="false" isExtern="false" isPointer="false" isReference="false" isStatic="false" isVolatile="false"/>
+    <var id="105600ae0" nameToken="7d11ffae0" typeStartToken="7d11ffa80" typeEndToken="7d11ffa80" access="Argument" scope="105600870" constness="0" volatileness="0" isArray="false" isClass="false" isConst="false" isExtern="false" isPointer="false" isReference="false" isStatic="false" isVolatile="false"/>
+  </variables>
+  <valueflow>
+    <values id="7d10018c0">
+      <value intvalue="1" bound="Point" known="true" path="0"/>
+    </values>
+    <values id="7d10018e0">
+      <value intvalue="2" bound="Point" known="true" path="0"/>
+    </values>
+    <values id="7d1001980">
+      <value intvalue="-1" bound="Upper" impossible="true" path="0"/>
+      <value intvalue="2" bound="Lower" impossible="true" path="0"/>
+    </values>
+    <values id="7d1001900">
+      <value intvalue="0" bound="Point" known="true" path="0"/>
+    </values>
+    <values id="7d10019c0">
+      <value intvalue="0" bound="Point" condition-line="18" impossible="true" path="0"/>
+    </values>
+  </valueflow>
+</dump>
+</dumps>

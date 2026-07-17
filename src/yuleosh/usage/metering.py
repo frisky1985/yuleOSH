@@ -13,6 +13,23 @@ from typing import Optional
 
 
 # ── Tier configuration ────────────────────────────────────────────────────────
+#
+# stripe_price_id: Set via Stripe Dashboard after creating products/prices.
+#   Steps:
+#     1. Go to https://dashboard.stripe.com/products → Add Product
+#     2. Create product named "yuleOSH Pro" with recurring monthly price
+#     3. Copy the Price ID (starts with price_) and set it here
+#     4. Repeat for Enterprise tier
+#     5. Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in .env.production
+#     6. Create a Webhook Endpoint pointing to: {BASE_URL}/api/v1/subscription/webhook
+#        Subscribe to: checkout.session.completed, customer.subscription.updated,
+#        customer.subscription.deleted
+#
+#   Example:
+#     "pro": {
+#         ...,
+#         "stripe_price_id": "price_1Qwerty123456789",
+#     }
 
 TIERS = {
     "community": {
