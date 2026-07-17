@@ -109,6 +109,31 @@ from yuleosh.knowledge_graph.coverage_importer import (
 # Incremental build
 from yuleosh.knowledge_graph.importer import incremental_bootstrap
 
+# P2: Event bus & reporter
+from yuleosh.knowledge_graph.events import kg_events, instrument_store, EventBus, KGDataclass
+from yuleosh.knowledge_graph.reporter import (
+    generate_rtm, generate_rtm_markdown, generate_rtm_html, generate_rtm_csv,
+    generate_metrics, format_metrics_text,
+)
+
+# P1: Spec diff & verify delta
+from yuleosh.knowledge_graph.spec_diff import (
+    analyze_spec_changes,
+    analyze_spec_file_changes,
+    extract_shall_statements,
+    extract_shall_ids,
+    detect_spec_files_in_changes,
+    apply_spec_changes_to_store,
+)
+from yuleosh.knowledge_graph.verify_delta import (
+    apply_test_results,
+    apply_single_test_result,
+    load_test_results,
+    normalize_test_result,
+    parse_pytest_json_report,
+    parse_yuleosh_ci_results,
+)
+
 __all__ = [
     # Factory
     "get_store", "import_data",
@@ -128,6 +153,26 @@ __all__ = [
     "import_coverage_from_default",
     # Incremental build
     "incremental_bootstrap",
+    # P1: Spec diff
+    "analyze_spec_changes",
+    "analyze_spec_file_changes",
+    "extract_shall_statements",
+    "extract_shall_ids",
+    "detect_spec_files_in_changes",
+    "apply_spec_changes_to_store",
+    # P1: Verify delta
+    "apply_test_results",
+    "apply_single_test_result",
+    "load_test_results",
+    "normalize_test_result",
+    "parse_pytest_json_report",
+    "parse_yuleosh_ci_results",
+    # P2: Event bus
+    "kg_events", "instrument_store", "EventBus", "KGDataclass",
+    # P2: Reporter (RTM + Metrics)
+    "generate_rtm", "generate_rtm_markdown", "generate_rtm_html", "generate_rtm_csv",
+    "generate_metrics", "format_metrics_text",
     # Backend status
     "_USE_POSTGRES",
 ]
+
