@@ -27,6 +27,13 @@ from yuleosh.loop_engine.event_bus import (
     LoopEvent,
     loop_bus,
 )
+from yuleosh.loop_engine.chain import (
+    ChainConfig,
+    ChainContext,
+    HANDLER_EVENT_MAP,
+    DEFAULT_CHAIN_RULES,
+    default_chain_config,
+)
 from yuleosh.loop_engine.feedback_handlers.base import (
     FeedbackHandler,
     ActionResult,
@@ -123,6 +130,8 @@ class LoopEngine:
 __all__ = [
     "LoopEngine",
     "SystemEventBus", "loop_bus", "LoopEventType", "LoopEvent",
+    "ChainConfig", "ChainContext", "default_chain_config",
+    "HANDLER_EVENT_MAP", "DEFAULT_CHAIN_RULES",
     "FeedbackHandler", "ActionResult", "register_handler", "get_registered_handlers",
     "SpecDeltaGenerator", "SpecDelta",
 ]
