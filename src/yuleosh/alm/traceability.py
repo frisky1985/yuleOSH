@@ -30,9 +30,20 @@ log = logging.getLogger("yuleosh.alm.traceability")
 
 
 def _is_table_separator(line: str) -> bool:
-    """Check if a line is a markdown table separator (e.g., |:---|:-----|)."""
+    """Check if a line is a markdown table separator.
+
+    Accepts both ``|:---|---:|`` (with colons) and ``|---|---|`` (plain dashes) formats.
+    """
     stripped = line.strip()
-    return stripped.startswith("|") and all(c in "|:- " for c in stripped) and (":---" in stripped or " --- " in stripped)
+    if not stripped.startswith("|"):
+        return False
+    # Allowable chars: |, -, :, and optional spaces
+    for c in stripped:
+        if c not in "|:- ":
+            return False
+    # Must have at least 2 dashes somewhere
+    stripped_dashes = stripped.replace("|", "").replace(":", "").replace(" ", "")
+    return len(stripped_dashes) >= 2 and all(c == "-" for c in stripped_dashes)
 
 
 def _is_shall_table_header(col_names: list[str]) -> bool:
@@ -47,6 +58,8 @@ def _is_shall_table_header(col_names: list[str]) -> bool:
     id_found = col_names[0].upper() == "ID" or "ID" in col_names[0].upper()
     desc_found = (
         "描述" in col_names[1]
+        or "需求" in col_names[1]
+        or "REQUIREMENT" in col_names[1].upper()
         or "SHALL" in col_names[1].upper()
         or "DESCRIPTION" in col_names[1].upper()
         or "STATEMENT" in col_names[1].upper()
@@ -153,8 +166,13 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
                 row_id = cols[1].strip()
                 row_desc = cols[2].strip()
 
-                # Only capture rows with SHALL IDs (e.g. KL-SHALL-01, PE-SHALL-NOT-01)
-                if "-SHALL" in row_id:
+                # Capture rows with SHALL IDs (e.g. KL-SHALL-01, PE-SHALL-NOT-01)
+                # or REQ-style IDs where description starts with SHALL
+                is_shall_row = "-SHALL" in row_id
+                if not is_shall_row and row_desc.upper().startswith("SHALL"):
+                    is_shall_row = True
+
+                if is_shall_row:
                     shall_statement = row_desc.strip()
                     shall_statements.append({
                         "id": row_id,       # Use the actual spec ID (e.g. KL-SHALL-01)
@@ -254,7 +272,11 @@ def extract_shall_from_text(text: str) -> list[dict]:
             if len(cols) >= 3:
                 row_id = cols[1].strip()
                 row_desc = cols[2].strip()
-                if "-SHALL" in row_id:
+                # Capture rows with SHALL IDs or REQ-style IDs with SHALL in description
+                is_shall_row = "-SHALL" in row_id
+                if not is_shall_row and row_desc.upper().startswith("SHALL"):
+                    is_shall_row = True
+                if is_shall_row:
                     shall_statement = row_desc.strip()
                     shall_statements.append({
                         "id": row_id,
@@ -468,25 +490,40 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
       - Tests verifying it (Test)
       - Reviews covering it (Review)
 
+    Scans ALL spec files under specs/ and docs/ for SHALL statements.
+
     Returns dict with 'requirements' list and summary stats.
     """
-    # Resolve spec path
-    if spec_path is None or not Path(spec_path).exists():
-        candidates = [
-            Path(project_dir) / "docs" / "spec.md",
-            Path(project_dir) / "specs" / "spec.md",
-        ]
-        for c in candidates:
-            if c.exists():
-                spec_path = str(c)
-                break
+    # Collect all spec files: primary spec + all specs/*.md
+    spec_files = []
 
-    if spec_path is None or not Path(spec_path).exists():
-        log.warning("No spec file found for LRM generation")
+    # Primary spec file (docs/spec.md or explicit path)
+    if spec_path and Path(spec_path).exists():
+        spec_files.append(str(spec_path))
+
+    # Auto-discover docs/spec.md
+    docs_spec = Path(project_dir) / "docs" / "spec.md"
+    if str(docs_spec) not in spec_files and docs_spec.exists():
+        spec_files.append(str(docs_spec))
+
+    # Auto-discover ALL specs/*.md files
+    specs_dir = Path(project_dir) / "specs"
+    if specs_dir.exists():
+        for sf in sorted(specs_dir.glob("*.md")):
+            s = str(sf)
+            if s not in spec_files:
+                spec_files.append(s)
+
+    if not spec_files:
+        log.warning("No spec files found for LRM generation")
         return {"requirements": [], "summary": {"total": 0, "no_code": 0, "no_test": 0}}
 
-    # Extract requirements
-    shalls = extract_shall_statements(spec_path)
+    # Extract requirements from ALL spec files
+    shalls = []
+    for sf in spec_files:
+        sf_shalls = extract_shall_statements(sf)
+        log.info("Extracted %d SHALLs from %s", len(sf_shalls), sf)
+        shalls.extend(sf_shalls)
     reviews = scan_review_artifacts(project_dir)
     test_reports = scan_test_reports(project_dir)
 

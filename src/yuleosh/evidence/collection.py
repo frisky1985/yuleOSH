@@ -20,15 +20,34 @@ class DataCollectionMixin:
     """Mixin adding data-collection methods to EvidenceCollector."""
 
     def collect_requirements(self, spec_path: str = None):
-        """Collect requirements from a spec file."""
+        """Collect requirements from ALL spec files.
+
+        Scans docs/spec.md, the specified spec_path, and ALL specs/*.md files,
+        merging requirements and scenarios from each.
+        """
         if spec_path is None:
             spec_path = self._find_latest_pipeline_spec()
         if spec_path is None:
             spec_path = os.path.join(self.project_dir, "docs", "spec.md")
 
-        if not os.path.exists(spec_path):
-            print(f"  ⏭️  Spec not found: {spec_path}")
-            return
+        # Build list of spec files to parse
+        spec_files = []
+        if os.path.exists(spec_path):
+            spec_files.append(spec_path)
+
+        # Always include docs/spec.md if different
+        docs_path = os.path.join(self.project_dir, "docs", "spec.md")
+        if docs_path not in spec_files and os.path.exists(docs_path):
+            spec_files.append(docs_path)
+
+        # Include ALL specs/*.md files
+        specs_dir = os.path.join(self.project_dir, "specs")
+        if os.path.isdir(specs_dir):
+            for f in sorted(os.listdir(specs_dir)):
+                if f.endswith(".md"):
+                    fp = os.path.join(specs_dir, f)
+                    if fp not in spec_files:
+                        spec_files.append(fp)
 
         sys.path.insert(0, os.path.join(self.project_dir, "src", "spec"))
         try:
@@ -36,10 +55,27 @@ class DataCollectionMixin:
         except ImportError:
             from yuleosh.spec.validate import parse_spec
 
-        doc = parse_spec(spec_path)
-        self.requirements = [r.to_dict() for r in doc.requirements]
-        self.scenarios = [s.to_dict() for s in doc.scenarios]
-        print(f"  📋 Collected {len(self.requirements)} requirements, {len(self.scenarios)} scenarios")
+        all_reqs = []
+        all_scenarios = []
+        seen_names = set()
+
+        for sf in spec_files:
+            try:
+                doc = parse_spec(sf)
+                new_reqs = 0
+                for r in doc.requirements:
+                    if r.name not in seen_names:
+                        all_reqs.append(r.to_dict())
+                        seen_names.add(r.name)
+                        new_reqs += 1
+                all_scenarios.extend(s.to_dict() for s in doc.scenarios)
+                print(f"  📋 Parsed {sf}: {new_reqs} new requirements, {len(doc.scenarios)} scenarios")
+            except Exception as e:
+                print(f"  ⚠️  Skipped {sf}: {e}")
+
+        self.requirements = all_reqs
+        self.scenarios = all_scenarios
+        print(f"  📋 Total: {len(self.requirements)} requirements, {len(self.scenarios)} scenarios")
 
     def collect_reviews(self):
         """Collect review records from .osh/reviews/.
