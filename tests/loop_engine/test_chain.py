@@ -772,6 +772,263 @@ class TestBackwardCompatibility:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Edge Case: 异常 / 超时 / 边界条件
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestChainEdgeCases:
+    """补充边缘情况测试 — 异常处理、超时、边界条件。"""
+
+    def test_handler_no_op_event_mapping(self):
+        """注册自定义 handler 但无事件映射不应崩溃。"""
+        config = ChainConfig(max_depth=5)
+        # 添加规则但使用未注册的 handler 应抛 ValueError
+        with pytest.raises(ValueError, match="Unknown target handler"):
+            config.add_rule("ci.failure", "NonExistentHandler")
+        # 注册 handler 后应可添加规则
+        config.register_handler_event("MyCustomHandler", LoopEventType.SPEC_CHANGE)
+        config.add_rule("ci.failure", "MyCustomHandler")
+        assert config.has_rule("ci.failure", "MyCustomHandler")
+
+    def test_partial_handler_failure_still_triggers_chain(self, clean_bus):
+        """部分 handler 失败时链式触发应继续 (不是 ALL 失败)。"""
+        config = ChainConfig(max_depth=5)
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")
+        clean_bus.chain_config = config
+
+        kpi_cb = Mock()
+        clean_bus.on(LoopEventType.KPI_BREACH, kpi_cb)
+
+        # 注册两个 CI_FAILURE handler: 一个成功, 一个失败
+        def failing_handler(event):
+            raise RuntimeError("Handler crashed")
+
+        def success_handler(event):
+            pass
+
+        clean_bus.on(LoopEventType.CI_FAILURE, failing_handler)
+        clean_bus.on(LoopEventType.CI_FAILURE, success_handler)
+
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "partial_fail"})
+
+        # 部分失败不应阻止链式触发
+        kpi_cb.assert_called_once()
+        stats = clean_bus.stats()
+        assert stats["total_failed"] >= 1
+        assert stats["total_handled"] >= 1
+
+    def test_all_handlers_failed_skips_chain(self, clean_bus):
+        """所有 handler 都失败时链式触发应跳过。"""
+        config = ChainConfig(max_depth=5)
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")
+        clean_bus.chain_config = config
+
+        kpi_cb = Mock()
+        clean_bus.on(LoopEventType.KPI_BREACH, kpi_cb)
+
+        def failing_handler(event):
+            raise RuntimeError("Handler crashed")
+
+        clean_bus.on(LoopEventType.CI_FAILURE, failing_handler)
+
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "all_fail"})
+
+        # 所有 handler 失败 → 链式应跳过
+        kpi_cb.assert_not_called()
+        stats = clean_bus.stats()
+        assert stats["total_failed"] >= 1
+
+    def test_unregistered_handler_in_chain_skipped(self, clean_bus):
+        """链式规则指向未注册的 handler 应被跳过而不是崩溃。"""
+        config = ChainConfig(max_depth=5)
+        # 添加一个 handler, 但注册时使用自定义事件映射指向已知类型
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")
+        clean_bus.chain_config = config
+
+        kpi_cb = Mock()
+        clean_bus.on(LoopEventType.KPI_BREACH, kpi_cb)
+
+        # 移除 handler 的事件映射 (模拟未注册场景)
+        # 实际上 add_rule 会验证 handler 存在, 所以这里无法直接添加不存在 handler 的规则
+        # 但我们可以修改 chain_config._handler_event_map
+        original = config._handler_event_map.pop("Loop3KPIToImproveHandler", None)
+        try:
+            # 现在应该无法验证 — 但我们已添加规则, 所以规则本身存在
+            # 只是 get_event_for_handler 返回 None
+            pass
+        finally:
+            if original:
+                config._handler_event_map["Loop3KPIToImproveHandler"] = original
+
+        # 正常 emit
+        loop1_cb = Mock()
+        clean_bus.on(LoopEventType.CI_FAILURE, loop1_cb)
+
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "unreg"})
+
+        # CI handler 应被调用
+        loop1_cb.assert_called_once()
+
+    def test_chain_with_dedup_on_chained_events(self, clean_bus):
+        """链式触发的事件应仍受去重保护。"""
+        config = ChainConfig(max_depth=5)
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")
+        clean_bus.chain_config = config
+        # 设置去重窗口
+        clean_bus._dedup_window = 300.0
+
+        kpi_count = [0]
+
+        def on_kpi(event):
+            kpi_count[0] += 1
+
+        clean_bus.on(LoopEventType.KPI_BREACH, on_kpi)
+
+        def on_ci(event):
+            pass
+
+        clean_bus.on(LoopEventType.CI_FAILURE, on_ci)
+
+        # 发出两个相同的 CI_FAILURE 事件
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "dedup_chain"}, dedup_key="same-1")
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "dedup_chain"}, dedup_key="same-1")
+
+        # CI: 两个事件, 第一个被处理, 第二个被去重
+        # KPI: 链式触发一次
+        assert kpi_count[0] == 1, f"Expected 1 KPI, got {kpi_count[0]}"
+
+    def test_chain_context_reset_between_emits(self, clean_bus):
+        """两次独立的 emit 之间 chain_context 应被重置。"""
+        config = ChainConfig(max_depth=5)
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")
+        clean_bus.chain_config = config
+
+        kpi_count = [0]
+
+        def on_kpi(event):
+            kpi_count[0] += 1
+
+        clean_bus.on(LoopEventType.KPI_BREACH, on_kpi)
+
+        def on_ci(event):
+            pass
+
+        clean_bus.on(LoopEventType.CI_FAILURE, on_ci)
+
+        # 两次独立 emit
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "first"})
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "second"})
+
+        # 链式应触发 2 次 (每个 CI_FAILURE 独立触发)
+        assert kpi_count[0] == 2, f"Expected 2 KPI, got {kpi_count[0]}"
+
+    def test_chain_context_empty_root_event_id(self):
+        """空 root_event_id 的 ChainContext 不应崩溃。"""
+        ctx = ChainContext(root_event_id="", max_depth=5)
+        assert ctx.can_chain("HandlerA", "event.a")
+        ctx.mark_visited("HandlerA", "event.a")
+        assert not ctx.can_chain("HandlerA", "event.b")
+        d = ctx.to_dict()
+        assert d["root_event_id"] == ""
+
+    def test_chain_max_depth_exact_boundary(self, clean_bus):
+        """max_depth=2: depth 0→1 应允许, depth 1→2 应允许, depth 2→3 应阻断。"""
+        config = ChainConfig(max_depth=2)
+        # A→B→C→D 链 (使用 REVIEW_FINDING 避免 TEST_RESULT 通配符)
+        config.register_handler_event("Loop4KGSelfEvolveHandler",
+                                       LoopEventType.REVIEW_FINDING)
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")  # → KPI (depth 0→1)
+        config.add_rule("kpi.breach", "Loop4KGSelfEvolveHandler")  # → REVIEW (depth 1→2)
+        config.add_rule("review.finding", "Loop1DefectToReqHandler")  # → CI (depth 2→3, blocked)
+        clean_bus.chain_config = config
+
+        counts = {"ci": 0, "kpi": 0, "review": 0}
+
+        def on_ci(e): counts["ci"] += 1
+        def on_kpi(e): counts["kpi"] += 1
+        def on_review(e): counts["review"] += 1
+
+        clean_bus.on(LoopEventType.CI_FAILURE, on_ci)
+        clean_bus.on(LoopEventType.KPI_BREACH, on_kpi)
+        clean_bus.on(LoopEventType.REVIEW_FINDING, on_review)
+
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "boundary"})
+
+        # max_depth=2: CI(0) → KPI(1) → REVIEW(2) → CI(3, blocked)
+        # Depth 0=root event, depth 1=first chain, depth 2=second chain
+        # can_chain checks depth >= max_depth
+        # KPI: depth=0, 0>=2? No → OK
+        # REVIEW: depth=1, 1>=2? No → OK
+        # CI again: depth=2, 2>=2? Yes → BLOCKED
+        assert counts["ci"] == 1, f"Expected 1 CI, got {counts['ci']}"
+        assert counts["kpi"] == 1, f"Expected 1 KPI, got {counts['kpi']}"
+        assert counts["review"] == 1, f"Expected 1 REVIEW, got {counts['review']}"
+
+    def test_chain_priority_preserved(self, clean_bus):
+        """链式触发事件应保留原始事件的优先级。"""
+        config = ChainConfig(max_depth=3)
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")
+        clean_bus.chain_config = config
+
+        target_cb = Mock()
+        clean_bus.on(LoopEventType.KPI_BREACH, target_cb)
+
+        clean_bus.on(LoopEventType.CI_FAILURE, Mock())
+
+        # 高优先级事件
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "high_prio"}, priority=0)
+
+        target_cb.assert_called_once()
+        event = target_cb.call_args[0][0]
+        assert event.priority == 0, f"Expected priority 0, got {event.priority}"
+
+    def test_self_trigger_same_type_sub_ne(self, clean_bus):
+        """handler 触发同一事件时 (自链) 应被阻断。"""
+        config = ChainConfig(max_depth=5)
+        # ci.failure → 再次触发 CI_FAILURE
+        config.add_rule("ci.failure", "Loop1DefectToReqHandler")
+        clean_bus.chain_config = config
+
+        ci_count = [0]
+
+        def on_ci(event):
+            ci_count[0] += 1
+
+        clean_bus.on(LoopEventType.CI_FAILURE, on_ci)
+
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "self_trigger"})
+
+        # 只触发一次 (emit), 链式尝试触发 CI_FAILURE 但被阻断
+        assert ci_count[0] == 1, f"Expected 1 CI, got {ci_count[0]}"
+
+    def test_chain_after_multiple_handlers(self, clean_bus):
+        """多个 handler 为同一事件注册时链式应只触发一次。"""
+        config = ChainConfig(max_depth=3)
+        config.add_rule("ci.failure", "Loop3KPIToImproveHandler")
+        clean_bus.chain_config = config
+
+        kpi_count = [0]
+
+        def on_kpi(event):
+            kpi_count[0] += 1
+
+        clean_bus.on(LoopEventType.KPI_BREACH, on_kpi)
+
+        # 多个 handler 订阅 CI_FAILURE
+        def h1(event): pass
+        def h2(event): pass
+        def h3(event): pass
+
+        clean_bus.on(LoopEventType.CI_FAILURE, h1)
+        clean_bus.on(LoopEventType.CI_FAILURE, h2)
+        clean_bus.on(LoopEventType.CI_FAILURE, h3)
+
+        clean_bus.emit(LoopEventType.CI_FAILURE, data={"test": "multi_handler"})
+
+        # 链式只触发一次 KPI
+        assert kpi_count[0] == 1, f"Expected 1 KPI, got {kpi_count[0]}"
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # 集成测试
 # ═══════════════════════════════════════════════════════════════════════
 

@@ -65,7 +65,7 @@ def generate_json_report(
         "ci_environ": get_ci_environ(),
         **stats,
         "category_breakdown": category_bd,
-        "groups": {rid: _serialize_group(g) for rid, g in groups.items()},
+        "groups": {rid: _serialize_group(g) for rid, g in groups.items()} if isinstance(groups, dict) else {},
         "deviations": [_deviation_to_dict(d) for d in (deviation_list or [])],
         "excluded_rules": excluded_rules,
         "excluded_files": excluded_files,

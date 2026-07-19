@@ -32,7 +32,10 @@ def group_by_rule(violations: list[dict]) -> dict:
     """Group violations by rule ID."""
     groups: dict[str, list[dict]] = defaultdict(list)
     for v in violations:
-        groups[v.get("rule_id", "unknown")].append(v)
+        rid = v.get("rule_id")
+        if rid is None:
+            rid = "unknown"
+        groups[rid].append(v)
     return dict(groups)
 
 
@@ -73,14 +76,25 @@ def _extract_rules(rule_defs: dict) -> dict:
 
 
 def enrich_with_definitions(
-    violations: list[dict],
+    violations: list[dict] | dict,
     rule_defs: dict | None = None,
 ) -> list[dict]:
-    """Enrich violations with rule definition info."""
+    """Enrich violations with rule definition info.
+
+    Accepts either a list of violation dicts (standard) or a dict
+    of rule_id → violation entries (from group_by_rule).
+    In the dict case, iterates over the values (lists of dicts).
+    """
     if not rule_defs:
         rule_defs = load_rule_definitions()
     enriched = []
     rules = _extract_rules(rule_defs)
+    # Support both list[dict] and dict[str, list[dict]] inputs
+    if isinstance(violations, dict):
+        items = []
+        for vlist in violations.values():
+            items.extend(vlist if isinstance(vlist, list) else [vlist])
+        violations = items
     for v in violations:
         rid = v.get("rule_id", "")
         defn = rules.get(rid, {})
