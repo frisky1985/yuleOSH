@@ -410,8 +410,9 @@ class TestToolDrivers:
         violations = driver.parse(raw)
         assert len(violations) == 2
         for v in violations:
-            assert v["rule_id"] in ("17.7", "10.1"), (
-                f"Expected rule ID 17.7 or 10.1, got {v['rule_id']}"
+            # Parser normalizes to canonical C:2023 format
+            assert v["rule_id"] in ("misra-c2023-17.7", "misra-c2023-10.1"), (
+                f"Expected canonical misra-c2023-17.7 or misra-c2023-10.1, got {v['rule_id']}"
             )
 
     def test_clang_tidy_driver_stub(self, tmp_path):

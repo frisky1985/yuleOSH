@@ -1,3 +1,115 @@
 misra:
-  profiles: {}
+  enabled: true
+  addon: misra-c-2023
+  fail_on_required: true
+  fail_on_advisory: false
+  fail_threshold: 10
+  violations_per_kloc: 2.0
+  cppcheck_std: c11
   active_profile: safety
+
+  # 三级代码分类: template → exclude, third_party → alert, business → enforce
+  code_categories:
+    template:
+      paths:
+        - "src/yuleosh/templates/**"
+        - "test-dogfood/**"
+      action: exclude
+      block_on: false
+    third_party:
+      paths:
+        - "third_party/**"
+        - "Drivers/**"
+        - "Middlewares/**"
+        - "CMSIS/**"
+        - "vendor/**"
+        - "lib/**"
+      action: alert
+      block_on: false
+    business:
+      paths:
+        - "src/**"
+      action: enforce
+      block_on: true
+
+  # 排除路径 — unit test 目录和第三方代码
+  exclude_paths:
+    - "tests/**"
+    - "third_party/**"
+    - "build/**"
+
+  # 有效 deviation 记录 — tests/unity/ 使用 Unity 框架，误报可豁免
+  deviations:
+    - rule: "Rule-1.1"
+      file: "tests/unity/*.c"
+      reason: "Unity 测试框架 — 测试代码豁免 strict MISRA"
+      approved_by: "system"
+      expires: "2027-12-31"
+      status: "approved"
+    - rule: "Rule-8.7"
+      file: "tests/unity/*.c"
+      reason: "Unity 测试函数 — 非生产代码，允许外部链接"
+      approved_by: "system"
+      expires: "2027-12-31"
+      status: "approved"
+    - rule: "Rule-10.1"
+      file: "tests/unity/*.c"
+      reason: "Unity 测试使用隐式类型转换 — 测试代码豁免"
+      approved_by: "system"
+      expires: "2027-12-31"
+      status: "approved"
+    - rule: "Rule-14.4"
+      file: "tests/unity/*.c"
+      reason: "Unity 测试断言宏涉及非布尔表达式测试 — 测试豁免"
+      approved_by: "system"
+      expires: "2027-12-31"
+      status: "approved"
+    - rule: "Rule-17.4"
+      file: "tests/unity/*.c"
+      reason: "Unity 测试框架递归检查辅助函数 — 非生产代码"
+      approved_by: "system"
+      expires: "2027-12-31"
+      status: "approved"
+
+  profiles:
+    safety:
+      name: Safety Profile
+      rule_overrides: []
+      deviations: []
+      severity_map:
+        required: fail
+        advisory: warning
+    performance:
+      name: Performance Profile
+      rule_overrides: []
+      deviations: []
+      severity_map:
+        required: warning
+        advisory: warning
+    testing:
+      name: Testing Profile
+      rule_overrides: []
+      deviations: []
+      severity_map:
+        required: warning
+        advisory: none
+
+coverage:
+  threshold_line: 85.0
+  threshold_condition: 80.0
+  strict: false
+  c_fail_under: 70
+  module_thresholds:
+    yuleosh: 90.0
+
+hardware_test:
+  enabled: true
+  firmware: build/firmware.elf
+  boot_pattern: "Boot Complete"
+  flash_tool: auto
+  serial_port: ""
+  baud: 115200
+  test_timeout: 30
+  boot_delay: 2.0
+  test_scripts_dir: tests/hil
+  mock: false
