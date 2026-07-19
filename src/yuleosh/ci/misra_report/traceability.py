@@ -200,7 +200,7 @@ def generate_fix_tasks(
     # Group violations by rule_id, skipping acknowledged ones
     rule_groups: dict[str, list[dict]] = {}
     for v in violations:
-        rid = v.get("rule_id", "unknown")
+        rid = v.get("rule_id", "unknown") or "unknown"
         file_path = v.get("file", "")
         # Skip deviations-acknowledged violations
         matched, _ = _match_deviation(rid, file_path, deviations)

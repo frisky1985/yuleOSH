@@ -569,8 +569,9 @@ def run_misra_check(project_dir: str, ci: CIResult,
     # Count required vs advisory violations from enriched groups
     required_count = 0
     advisory_count = 0
-    for g in groups.values():
-        sev = g.get("severity_category", "").lower()
+    groups_iter = groups.values() if isinstance(groups, dict) else groups
+    for g in groups_iter:
+        sev = g.get("severity_category", "").lower() if isinstance(g, dict) else ""
         if sev == "required":
             required_count += g["count"]
         elif sev == "advisory":
