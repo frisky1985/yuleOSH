@@ -236,7 +236,7 @@ def run_sil_tests(project_dir: str, ci: CIResult) -> bool:
                 arch="arm" if "arm" in elf_path.name else "arm",
                 qemu_machine="lm3s6965evb",
                 qemu_cpu="cortex-m3",
-                qemu_serial="-serial stdio",
+                qemu_serial="-serial mon:stdio",
                 elf=str(elf_path),
                 default_timeout=30,
             )

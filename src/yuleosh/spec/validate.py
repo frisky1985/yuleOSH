@@ -190,9 +190,20 @@ def _detect_status_from_lines(lines: list[str], start_idx: int) -> str:
 
 
 def _is_table_separator(line: str) -> bool:
-    """Check if a line is a markdown table separator."""
+    """Check if a line is a markdown table separator.
+
+    Accepts both ``|:---|---:|`` (with colons) and ``|---|---|`` (plain dashes) formats.
+    """
     s = line.strip()
-    return s.startswith("|") and all(c in "|:- " for c in s) and ":---" in s
+    if not s.startswith("|"):
+        return False
+    # Allowable chars: |, -, :, and optional spaces
+    for c in s:
+        if c not in "|:- " and c != "|":
+            return False
+    # Must have at least 2 dashes somewhere (table separator has >2 dashes between pipes)
+    stripped_dashes = s.replace("|", "").replace(":", "").replace(" ", "")
+    return len(stripped_dashes) >= 2 and all(c == "-" for c in stripped_dashes)
 
 
 def _is_shall_table_header(col_names: list[str]) -> bool:
@@ -202,6 +213,8 @@ def _is_shall_table_header(col_names: list[str]) -> bool:
     id_found = col_names[0].upper() == "ID" or "ID" in col_names[0].upper()
     desc_found = (
         "描述" in col_names[1]
+        or "需求" in col_names[1]
+        or "REQUIREMENT" in col_names[1].upper()
         or "SHALL" in col_names[1].upper()
         or "DESCRIPTION" in col_names[1].upper()
         or "STATEMENT" in col_names[1].upper()
@@ -334,18 +347,26 @@ def parse_spec(filepath: str) -> SpecDocument:
                 row_id = cols[1].strip()
                 row_desc = cols[2].strip()
 
-                # Only create requirements for SHALL/SHALL-NOT rows
-                if "-SHALL" in row_id:
-                    # Extract prefix from ID (e.g., KL from KL-SHALL-01)
-                    prefix = row_id.split("-")[0] if "-" in row_id else ""
+                # Create requirements for SHALL/SHALL-NOT rows (ID-based)
+                # or for REQ rows whose description starts with SHALL
+                is_shall_row = "-SHALL" in row_id
+                if not is_shall_row and row_desc.upper().startswith("SHALL"):
+                    # REQ-xxx rows like DCM-REQ-01 with "SHALL support ..."
+                    is_shall_row = True
+
+                if is_shall_row:
+                    # Determine the proper ID to use
+                    use_id = row_id
+                    if "-SHALL" not in row_id and "-REQ-" in row_id:
+                        use_id = row_id.replace("-REQ-", "-SHALL-")
 
                     new_req = SpecRequirement(
-                        name=row_id,
+                        name=use_id,
                         shall=[row_desc],
                         should=[],
                         may=[],
                         reason="",
-                        req_id=row_id,
+                        req_id=use_id,
                         level="",
                         parent="",
                         status="PROPOSED",
@@ -373,6 +394,29 @@ def parse_spec(filepath: str) -> SpecDocument:
             if status_m:
                 current_req.status = status_m.group(1).upper()
                 continue
+
+        # Fallback: capture standalone bullet-point SHALLs outside a requirement section
+        # (e.g. bullet-point specs like bsw-services-spec.md, mcal-drivers-spec.md)
+        if not current_req and not in_shall_table:
+            if stripped.startswith("- ") or stripped.startswith("* ") or stripped.startswith("+ "):
+                if re.search(r'\bSHALL\b', stripped, re.IGNORECASE):
+                    statement = stripped.strip()
+                    statement = re.sub(r"^[\s]*[-*+]\s+(The\s+system\s+)?", "", statement, flags=re.IGNORECASE)
+                    # Generate fallback requirement name from section
+                    sec_name = re.sub(r'[^A-Z0-9]', '', (table_section_name or 'SPEC').upper())[:8]
+                    if not sec_name or len(sec_name) < 2:
+                        sec_name = "SPEC"
+                    fallback_id = f"{sec_name}-SHALL-{len(doc.requirements) + 1}"
+                    new_req = SpecRequirement(
+                        name=fallback_id,
+                        shall=[statement],
+                        should=[], may=[], reason="",
+                        req_id=fallback_id,
+                        level="", parent="",
+                        status="PROPOSED",
+                    )
+                    doc.requirements.append(new_req)
+                    continue
 
         # Parse reason
         if current_section == "reason" and current_req and stripped:
