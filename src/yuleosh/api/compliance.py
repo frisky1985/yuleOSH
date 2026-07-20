@@ -27,7 +27,8 @@ OSH_HOME = PROJECT_ROOT
 
 @require_auth
 def handle_compliance(method: str, path_tail: str, body: dict,
-                      query: dict, handler: Any) -> tuple[dict, int]:
+                      query: dict, handler: Any = None,
+                      **kwargs) -> tuple[dict, int]:
     """Handle /api/v1/compliance/... requests.
 
     Supported routes:
