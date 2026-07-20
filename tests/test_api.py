@@ -557,8 +557,9 @@ class TestPipeline:
         # Empty path_tail + POST routes to _run_pipeline -> needs spec
         result, status = handle_pipeline("POST", "", {"spec": "/nonexistent"}, {})
         assert result["ok"] is False
-        # It hits run pipeline path, which checks spec exists
-        assert "not found" in result["error"].lower()
+        # Absolute path outside project triggers security guard
+        assert "within project" in result["error"].lower()
+        assert status == 403
 
     def test_empty_path_get(self, tmp_path):
         """path_tail='' with GET returns 405 (first condition catches it)."""
