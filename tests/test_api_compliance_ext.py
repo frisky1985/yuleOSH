@@ -8,13 +8,13 @@ from yuleosh.api.compliance import handle_compliance
 
 def test_method_not_allowed():
     """POST returns 405."""
-    result, code = handle_compliance("POST", "overview", {}, {}, None)
+    result, code = handle_compliance("POST", "overview", {}, {}, handler=None)
     assert code == 405
 
 
 def test_unknown_subpath():
     """GET with unknown subpath returns 404."""
-    result, code = handle_compliance("GET", "foobar", {}, {}, None)
+    result, code = handle_compliance("GET", "foobar", {}, {}, handler=None)
     assert code == 404
 
 
@@ -24,7 +24,7 @@ def test_no_reports(tmp_path):
         mock_path = MagicMock()
         mock_path.exists.return_value = False
         mock_path_cls.return_value = mock_path
-        result, code = handle_compliance("GET", "overview", {}, {}, None)
+        result, code = handle_compliance("GET", "overview", {}, {}, handler=None)
         assert code == 200
         assert result["data"]["misra_total"] == 0
 
@@ -35,7 +35,7 @@ def test_empty_path_tail(tmp_path):
         mock_path = MagicMock()
         mock_path.exists.return_value = False
         mock_path_cls.return_value = mock_path
-        result, code = handle_compliance("GET", "", {}, {}, None)
+        result, code = handle_compliance("GET", "", {}, {}, handler=None)
         assert code == 200
 
 
@@ -63,7 +63,7 @@ def test_with_extended_report(tmp_path):
         return p
 
     with patch("yuleosh.api.compliance.Path", side_effect=path_side_effect):
-        result, code = handle_compliance("GET", "overview", {}, {}, None)
+        result, code = handle_compliance("GET", "overview", {}, {}, handler=None)
         assert code == 200
         assert result["data"]["misra_total"] == 42
 
@@ -94,6 +94,6 @@ def test_fallback_misra_report(tmp_path):
         return p
 
     with patch("yuleosh.api.compliance.Path", side_effect=path_side_effect):
-        result, code = handle_compliance("GET", "overview", {}, {}, None)
+        result, code = handle_compliance("GET", "overview", {}, {}, handler=None)
         assert code == 200
         assert result["data"]["misra_total"] == 10
