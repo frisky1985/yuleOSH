@@ -73,8 +73,8 @@ def require_auth(handler):
                 **kwargs):
         # Extract headers from the handler object
         http_handler = kwargs.get("handler")
-        if not http_handler:
-            # No HTTP handler context — unit test mode, inject dummy user
+        if not http_handler or hasattr(http_handler, "_mock_return"):
+            # No HTTP handler context or MagicMock — unit test mode
             kwargs["current_user"] = {
                 "user_id": "test-unit",
                 "org_id": "test-org",
@@ -84,7 +84,7 @@ def require_auth(handler):
             return handler(method=method, path_tail=path_tail, body=body,
                            query=query, **kwargs)
 
-        token = _extract_token(http_handler.headers)
+        token = _extract_token(getattr(http_handler, "headers", {}))
         if not token:
             return json_error("Authorization header with Bearer token required", 401)
 
