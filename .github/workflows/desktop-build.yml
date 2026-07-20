@@ -68,7 +68,7 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
 
       - name: Download frontend build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-out
           path: frontend/out/
@@ -122,7 +122,7 @@ jobs:
             libgbm1 libasound2
 
       - name: Download frontend build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-out
           path: frontend/out/
@@ -165,7 +165,7 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
 
       - name: Download frontend build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-out
           path: frontend/out/
