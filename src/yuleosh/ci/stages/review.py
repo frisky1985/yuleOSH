@@ -140,31 +140,108 @@ def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: s
 def _detect_include_paths(project_dir: str) -> list[str]:
     """Auto-detect common include directories for cppcheck -I flags.
 
-    Scans project_dir for standard C/C++ include directories
-    that exist on disk.
+    Dynamically discovers all **/include/ directories under the project
+    tree (excluding build/artifacts) plus standard project-level paths.
+    This is the single source of truth — the hardcoded path lists have been
+    replaced by filesystem scanning so that new modules are picked up
+    automatically without manual updates.
+
+    Only returns paths that exist on disk.
     """
+    # Standard project-level directories (always relevant)
     candidates = [
         ".",
         "src",
         "include",
         "inc",
+        "config",
+        "config/common",
         "tests",
         "tests/unity/src",
+        "third_party",
+        "lib",
+        "common",
         "Drivers",
         "Drivers/CMSIS",
         "Drivers/CMSIS/Include",
         "Drivers/STM32F4xx_HAL_Driver",
         "Drivers/STM32F4xx_HAL_Driver/Inc",
         "Middlewares",
-        "third_party",
-        "lib",
-        "common",
     ]
+
+    # Dynamically discover every **/include/ directory
+    auto_scanned = _scan_include_dirs(project_dir)
+
+    all_candidates = candidates + auto_scanned
+
     found = []
-    for c in candidates:
+    seen = set()
+    for c in all_candidates:
         full = os.path.join(project_dir, c)
-        if os.path.isdir(full):
-            found.append(full)
+        norm = os.path.normpath(full)
+        if norm not in seen and os.path.isdir(norm):
+            seen.add(norm)
+            found.append(norm)
+
+    return found
+
+
+def _scan_include_dirs(project_dir: str) -> list[str]:
+    """Walk project source dirs and collect every **/include/ directory
+    plus module-level **/src directories that contain .h files.
+    """
+    skip_prefixes = (
+        ".git", "build", "website", "node_modules", "__pycache__",
+        ".docusaurus", "backups", ".yuleosh", ".osh", ".claude",
+        ".build", "CMakeFiles", "coverage-report", "examples",
+    )
+
+    scan_roots = ["src", "include", "tests", "third_party"]
+
+    found: list[str] = []
+    seen: set[str] = set()
+
+    for root in scan_roots:
+        abs_root = os.path.join(project_dir, root)
+        if not os.path.isdir(abs_root):
+            continue
+
+        rel_root = os.path.relpath(abs_root, project_dir)
+        if rel_root not in seen and os.path.isdir(abs_root):
+            seen.add(rel_root)
+            found.append(rel_root)
+
+        for dirpath, dirnames, _ in os.walk(abs_root):
+            dirnames[:] = [
+                d for d in dirnames
+                if not d.startswith(".") and d != "__pycache__"
+                and not any(d.startswith(p) for p in skip_prefixes)
+            ]
+
+            rel = os.path.relpath(dirpath, project_dir)
+            dirname = os.path.basename(dirpath)
+            parts = rel.split(os.sep)
+
+            skip = False
+            for p in parts:
+                if any(p.startswith(s) for s in skip_prefixes):
+                    skip = True
+                    break
+            if skip:
+                continue
+
+            if dirname == "include" and rel not in seen:
+                seen.add(rel)
+                found.append(rel)
+
+            if dirname == "src" and len(parts) >= 3 and rel not in seen:
+                has_headers = any(
+                    f.endswith((".h", ".hpp")) for f in os.listdir(dirpath)
+                )
+                if has_headers:
+                    seen.add(rel)
+                    found.append(rel)
+
     return found
 
 
