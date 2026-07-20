@@ -46,26 +46,19 @@ class TestEvidence:
         result, code = handle_evidence("POST", "generate", {}, {})
         assert code == 500
 
-    @patch("yuleosh.api.evidence.Path")
-    def test_list_evidence_files_empty(self, mock_path_cls):
-        """GET /evidence/files handles non-existent dir."""
-        mock_path = MagicMock()
-        mock_path.exists.return_value = False
-        mock_path_cls.return_value = mock_path
+    def test_list_evidence_files_empty(self, tmp_path):
+        """GET /evidence/files handles missing evidence dir."""
+        # The real project may have .osh/evidence/ so patch OSH_HOME to tmp_path
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+            result, code = handle_evidence("GET", "files", {}, {})
+            assert code == 200
+            assert result["data"]["count"] == 0
 
-        result, code = handle_evidence("GET", "files", {}, {})
-        assert code == 200
-        assert result["data"]["count"] == 0
-
-    @patch("yuleosh.api.evidence.Path")
-    def test_download_pack_not_found(self, mock_path_cls):
+    def test_download_pack_not_found(self, tmp_path):
         """GET /evidence/pack when pack doesn't exist."""
-        mock_path = MagicMock()
-        mock_path.exists.return_value = False
-        mock_path_cls.return_value = mock_path
-
-        result, code = handle_evidence("GET", "pack", {}, {}, handler=None)
-        assert code == 404
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+            result, code = handle_evidence("GET", "pack", {}, {}, handler=None)
+            assert code == 404
 
     @patch("yuleosh.api.evidence.subprocess.run")
     def test_generate_direct(self, mock_subproc):
