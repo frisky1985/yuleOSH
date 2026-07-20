@@ -63,15 +63,17 @@ class TestMiddleware:
         assert result is None
 
     def test_require_auth_no_handler(self):
-        """require_auth without handler returns 500."""
+        """require_auth without handler injects dummy user."""
 
         @require_auth
         def my_handler(**kwargs):
-            return {"ok": True}, 200
+            assert "current_user" in kwargs
+            return {"ok": True, "user": kwargs["current_user"]}, 200
 
         result, code = my_handler(method="GET", path_tail="", body={}, query={})
-        assert code == 500
-        assert result["ok"] is False
+        assert code == 200
+        assert result["ok"] is True
+        assert result["user"]["user_id"] == "test-unit"
 
     def test_require_auth_no_token(self):
         """require_auth without token returns 401."""
