@@ -14,19 +14,12 @@ from typing import Optional
 import jwt
 
 from . import json_error
+from .auth import _JWT_SECRET
 
 logger = logging.getLogger("yuleosh.api.middleware")
 
 
-# JWT secret — must match the one used in auth.py
-import os
-_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
-if not _JWT_SECRET_ENV:
-    raise RuntimeError(
-        "YULEOSH_JWT_SECRET environment variable is required. "
-        "Generate one with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'"
-    )
-_JWT_SECRET = _JWT_SECRET_ENV
+# JWT secret — imported from .auth to ensure a single source of truth
 _JWT_ALGORITHM = "HS256"
 
 
