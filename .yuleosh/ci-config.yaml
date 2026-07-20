@@ -94,6 +94,27 @@ misra:
         required: warning
         advisory: none
 
+# 文件大小门限配置: 按代码类型分级检查
+# AUTOSAR BSW 模块因规范复杂度天然较大 (2000-5000行)
+# Application 代码一般 2000 行以内
+code_style:
+  file_size_limits:
+    autosar_bsw:
+      max_lines: 5000
+      description: "AUTOSAR BSW模块 (MCAL/ECUAL/Services)"
+    application:
+      max_lines: 2000
+      description: "Application/SWC 代码"
+    default:
+      max_lines: 1000
+      description: "其他/一般代码"
+  enabled: true
+  exclude_paths:
+    - "third_party/**"
+    - "Drivers/**"
+    - "vendor/**"
+    - "*.generated.c"
+
 coverage:
   threshold_line: 85.0
   threshold_condition: 80.0
