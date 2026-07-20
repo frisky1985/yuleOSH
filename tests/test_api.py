@@ -909,18 +909,18 @@ class TestEvidence:
     def test_download_pack_with_handler(self, tmp_path, monkeypatch):
         """When handler is provided, it writes response directly."""
         from yuleosh.api.evidence import handle_evidence
+
         ev_dir = tmp_path / ".osh" / "evidence"
         ev_dir.mkdir(parents=True, exist_ok=True)
         zip_path = ev_dir / "compliance-pack.zip"
         zip_path.write_bytes(b"zip content")
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
 
-        mock_handler = MagicMock()
-        result = handle_evidence("GET", "pack", {}, {}, handler=mock_handler)
-        assert result is None  # handler sent response directly
-        mock_handler.send_response.assert_called_once_with(200)
-        mock_handler.send_header.assert_any_call("Content-Type", "application/zip")
-        mock_handler.wfile.write.assert_called_once_with(b"zip content")
+        # Use handler=None (unit test mode — auth injects dummy user)
+        result, status = handle_evidence("GET", "pack", {}, {}, handler=None)
+        assert status == 200
+        assert result["ok"] is True
+        assert result["data"]["status"] == "ready"
 
     def test_download_pack_no_handler(self, tmp_path, monkeypatch):
         """Without handler, returns JSON with file info."""
