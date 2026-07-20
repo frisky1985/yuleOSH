@@ -1531,6 +1531,37 @@ class TestAudit:
 # router.py
 # =============================================================================
 
+
+def _seed_auth_for_dispatch(handler):
+    """Seed store with test user + session, and set auth header on handler."""
+    from datetime import datetime
+    from yuleosh.store import Store
+    store = Store()
+    test_secret = os.environ.get("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for-production")
+    import jwt as _jwt
+    valid_token = _jwt.encode(
+        {"user_id": 1, "org_id": 1, "email": "t@t.com",
+         "iat": 0, "exp": 9999999999},
+        test_secret, algorithm="HS256"
+    )
+    now = datetime.now().isoformat()
+    store.conn.execute(
+        "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
+        (1, 1, "t@t.com", "member", now)
+    )
+    store.conn.execute(
+        "INSERT OR IGNORE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
+        (1, valid_token, now, "2099-12-31")
+    )
+    store.conn.commit()
+    original_get = handler.headers.get
+    def _get_with_auth(k, d=""):
+        if k == "Authorization":
+            return f"Bearer {valid_token}"
+        return original_get(k, d)
+    handler.headers.get = _get_with_auth
+
+
 class TestRouter:
     """dispatch and _respond."""
 
@@ -1596,14 +1627,13 @@ class TestRouter:
     def test_dispatch_with_request_body(self):
         """dispatch reads body and passes it to handler."""
         from yuleosh.api.router import dispatch
-        import jwt as _jwt
         handler = MagicMock()
         handler.command = "POST"
         body = json.dumps({"path": "docs/spec.md"}).encode()
         handler.headers.get.return_value = str(len(body))
         handler.rfile.read.return_value = body
 
-        # Seed test user + session in store so @require_auth passes
+        # Seed auth and save the valid token for the headers
         from datetime import datetime
         from yuleosh.store import Store
         store = Store()
@@ -1616,18 +1646,18 @@ class TestRouter:
         )
         now = datetime.now().isoformat()
         store.conn.execute(
-            "INSERT INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
             (1, 1, "t@t.com", "member", now)
         )
         store.conn.execute(
-            "INSERT INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
             (1, valid_token, now, "2099-12-31")
         )
         store.conn.commit()
-
         handler.headers.get.side_effect = lambda k, d="": {
             "Authorization": f"Bearer {valid_token}",
             "Content-Length": str(len(body)),
+            "Content-Type": "application/json",
         }.get(k, d)
         dispatch(handler, "/api/v1/spec/validate")
         handler.send_response.assert_called_once_with(200)
@@ -1680,6 +1710,9 @@ class TestRouter:
         handler.command = "GET"
         handler.headers.get.return_value = "0"
         handler.rfile.read.return_value = b""
+
+        # Seed auth
+        _seed_auth_for_dispatch(handler)
 
         # Patch OSH_HOME in the parent package so evidence's inline import sees it
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
