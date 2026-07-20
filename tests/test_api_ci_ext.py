@@ -52,7 +52,7 @@ class TestApiCI:
         mock_path.exists.return_value = False
         mock_path_cls.return_value = mock_path
 
-        with patch("yuleosh.api.ci.OSH_HOME", "/tmp"):
+        with patch("yuleosh.api.OSH_HOME", "/tmp"):
             result, code = handle_ci("GET", "runs", {}, {})
             assert code == 200
             assert result["data"]["count"] == 0
