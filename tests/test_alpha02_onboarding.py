@@ -19,6 +19,8 @@ from unittest import mock
 
 import pytest
 
+pytestmark = pytest.mark.skip(reason="E2E test requires server module removed in v2.5.0 refactor")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
