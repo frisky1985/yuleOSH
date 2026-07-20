@@ -1626,6 +1626,8 @@ class TestRouter:
 
     def test_dispatch_with_request_body(self):
         """dispatch reads body and passes it to handler."""
+        from yuleosh.store import Store
+        Store.reset()
         from yuleosh.api.router import dispatch
         handler = MagicMock()
         handler.command = "POST"
@@ -1635,15 +1637,25 @@ class TestRouter:
 
         # Seed auth and save the valid token for the headers
         from datetime import datetime
-        from yuleosh.store import Store
-        store = Store()
-        test_secret = os.environ.get("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for-production")
+        from yuleosh.api import auth as _auth_mod
+        test_secret = _auth_mod._JWT_SECRET
         import jwt as _jwt
         valid_token = _jwt.encode(
             {"user_id": 1, "org_id": 1, "email": "t@t.com",
              "iat": 0, "exp": 9999999999},
             test_secret, algorithm="HS256"
         )
+        store = Store()
+        now = datetime.now().isoformat()
+        store.conn.execute(
+            "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
+            (1, 1, "t@t.com", "member", now)
+        )
+        store.conn.execute(
+            "INSERT OR IGNORE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (1, valid_token, now, "2099-12-31")
+        )
+        store.conn.commit()
         now = datetime.now().isoformat()
         store.conn.execute(
             "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -1660,7 +1672,15 @@ class TestRouter:
             "Content-Type": "application/json",
         }.get(k, d)
         dispatch(handler, "/api/v1/spec/validate")
-        handler.send_response.assert_called_once_with(200)
+        try:
+            handler.send_response.assert_called_once_with(200)
+        except AssertionError:
+            # Debug: show what was written
+            data_written = b"".join(
+                args[0] for args, _ in handler.wfile.write.call_args_list
+            )
+            print(f"DEBUG response body: {data_written}")
+            raise
         data_written = b"".join(
             args[0] for args, _ in handler.wfile.write.call_args_list
         )
