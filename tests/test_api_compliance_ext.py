@@ -19,11 +19,8 @@ def test_unknown_subpath():
 
 
 def test_no_reports(tmp_path):
-    """No compliance reports exist - uses Path() for OSH_HOME."""
-    with patch("yuleosh.api.compliance.Path") as mock_path_cls:
-        mock_path = MagicMock()
-        mock_path.exists.return_value = False
-        mock_path_cls.return_value = mock_path
+    """No compliance reports exist."""
+    with patch("yuleosh.api.compliance.OSH_HOME", tmp_path):
         result, code = handle_compliance("GET", "overview", {}, {}, handler=None)
         assert code == 200
         assert result["data"]["misra_total"] == 0
@@ -31,38 +28,28 @@ def test_no_reports(tmp_path):
 
 def test_empty_path_tail(tmp_path):
     """Empty path_tail returns overview."""
-    with patch("yuleosh.api.compliance.Path") as mock_path_cls:
-        mock_path = MagicMock()
-        mock_path.exists.return_value = False
-        mock_path_cls.return_value = mock_path
+    with patch("yuleosh.api.compliance.OSH_HOME", tmp_path):
         result, code = handle_compliance("GET", "", {}, {}, handler=None)
         assert code == 200
 
 
 def test_with_extended_report(tmp_path):
     """Extended compliance report exists."""
-    def path_side_effect(*args):
-        p = MagicMock()
-        arg0 = str(args[0]) if args else ""
-        if "gscr-extended-compliance" in arg0:
-            p.exists.return_value = True
-            p.read_text.return_value = json.dumps({
-                "summary": {
-                    "misra_total": 42, "gscr_mapped": 30, "gscr_mapping_rate": 71.4,
-                    "s0_count": 10, "s1_count": 20, "s2_count": 12,
-                    "files_checked": 5, "lines_checked": 1000,
-                    "violation_density": 0.5, "last_check": None,
-                },
-                "generated_at": "2025-01-01T00:00:00",
-                "top5": [{"rule_id": "R1", "count": 5}],
-            })
-        elif "misra-report" in arg0:
-            p.exists.return_value = False
-        else:
-            p.exists.return_value = False
-        return p
+    report_dir = tmp_path / ".yuleosh" / "reports"
+    report_dir.mkdir(parents=True)
+    report_data = {
+        "summary": {
+            "misra_total": 42, "gscr_mapped": 30, "gscr_mapping_rate": 71.4,
+            "s0_count": 10, "s1_count": 20, "s2_count": 12,
+            "files_checked": 5, "lines_checked": 1000,
+            "violation_density": 0.5, "last_check": None,
+        },
+        "generated_at": "2025-01-01T00:00:00",
+        "top5": [{"rule_id": "R1", "count": 5}],
+    }
+    (report_dir / "gscr-extended-compliance.json").write_text(json.dumps(report_data))
 
-    with patch("yuleosh.api.compliance.Path", side_effect=path_side_effect):
+    with patch("yuleosh.api.compliance.OSH_HOME", tmp_path):
         result, code = handle_compliance("GET", "overview", {}, {}, handler=None)
         assert code == 200
         assert result["data"]["misra_total"] == 42
@@ -70,30 +57,21 @@ def test_with_extended_report(tmp_path):
 
 def test_fallback_misra_report(tmp_path):
     """Fallback to misra-report.json."""
-    call_count = 0
+    report_dir = tmp_path / ".yuleosh" / "reports"
+    report_dir.mkdir(parents=True)
+    misra_data = {
+        "summary": {
+            "total_violations": 10,
+            "severity_counts": {"S0": 5, "S1": 3},
+            "unique_files": ["a.c"],
+            "misra_classification": {"required": 8, "advisory": 2},
+        },
+        "generated_at": "2025-02-01",
+        "groups": [{"rule_id": "R1", "count": 5, "trend": "\u2191"}],
+    }
+    (report_dir / "misra-report.json").write_text(json.dumps(misra_data))
 
-    def path_side_effect(*args):
-        p = MagicMock()
-        arg0 = str(args[0]) if args else ""
-        if "gscr-extended-compliance" in arg0:
-            p.exists.return_value = False
-        elif "misra-report" in arg0:
-            p.exists.return_value = True
-            p.read_text.return_value = json.dumps({
-                "summary": {
-                    "total_violations": 10,
-                    "severity_counts": {"S0": 5, "S1": 3},
-                    "unique_files": ["a.c"],
-                    "misra_classification": {"required": 8, "advisory": 2},
-                },
-                "generated_at": "2025-02-01",
-                "groups": [{"rule_id": "R1", "count": 5, "trend": "↑"}],
-            })
-        else:
-            p.exists.return_value = False
-        return p
-
-    with patch("yuleosh.api.compliance.Path", side_effect=path_side_effect):
+    with patch("yuleosh.api.compliance.OSH_HOME", tmp_path):
         result, code = handle_compliance("GET", "overview", {}, {}, handler=None)
         assert code == 200
         assert result["data"]["misra_total"] == 10
