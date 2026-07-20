@@ -469,7 +469,8 @@ class TestPipeline:
         result, status = handle_pipeline("POST", "run",
                                          {"spec": "/nonexistent.md"}, {})
         assert result["ok"] is False
-        assert "not found" in result["error"].lower()
+        assert "within project" in result["error"].lower()
+        assert status == 403
 
     @patch("subprocess.run")
     def test_run_pipeline_success(self, mock_run, temp_spec_file):
