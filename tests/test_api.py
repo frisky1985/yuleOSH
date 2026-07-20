@@ -361,11 +361,12 @@ class TestSpec:
         assert result["ok"] is False
         assert "'path' is required" in result["error"]
 
-    def test_validate_bad_path(self):
+    def test_validate_outside_project(self):
         from yuleosh.api.spec import handle_spec
         result, status = handle_spec("POST", "validate", {"path": "/nonexistent/file.md"}, {})
         assert result["ok"] is False
-        assert "not found" in result["error"].lower()
+        assert "within project" in result["error"].lower()
+        assert status == 403
 
     def test_validate_success(self, temp_spec_file):
         """Validate a real spec file."""
