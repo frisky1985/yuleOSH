@@ -73,7 +73,7 @@ def require_auth(handler):
                 **kwargs):
         # Extract headers from the handler object
         http_handler = kwargs.get("handler")
-        if not http_handler or hasattr(http_handler, "_mock_return"):
+        if not http_handler:
             # No HTTP handler context or MagicMock — unit test mode
             kwargs["current_user"] = {
                 "user_id": "test-unit",
