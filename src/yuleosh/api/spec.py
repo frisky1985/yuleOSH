@@ -33,7 +33,10 @@ def _validate(method: str, body: dict) -> tuple[dict, int]:
 
     from . import OSH_HOME
     project_root = Path(OSH_HOME).resolve()
-    resolved = (project_root / spec_path.lstrip("/")).resolve()
+    if Path(spec_path).is_absolute():
+        resolved = Path(spec_path).resolve()
+    else:
+        resolved = (project_root / spec_path.lstrip("/")).resolve()
 
     # SECURITY: path traversal guard
     try:
