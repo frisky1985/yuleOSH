@@ -624,7 +624,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
             if dev.rule_id and dev.file_pattern:
                 deviations_used.append((dev.rule_id, dev.file_pattern))
 
-        save_report(violations, {}, summary, rule_defs, output_dir,
+        save_report(enriched_violations, {}, summary, rule_defs, output_dir,
                     deviations=deviations_used)
 
         # ── 分类报告摘要 ──
@@ -659,7 +659,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
                 print(f"    🚨 MISRA_FAIL_FAST enabled — violations will be treated as blocking")
 
             # ── 针对多级指针空违规 (GSCR-C-27.15) 输出修复建议 ──
-            null_ptr_violations = [v for v in violations if "27.15" in v.get("rule_id", "") or "Dir-4.1" in v.get("rule_id", "")]
+            null_ptr_violations = [v for v in violations if "27.15" in (v.get("rule_id") or "") or "Dir-4.1" in (v.get("rule_id") or "")]
             for npv in null_ptr_violations:
                 cat = npv.get("code_category", "business")
                 np_file = npv.get("file", "")
