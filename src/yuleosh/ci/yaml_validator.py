@@ -75,6 +75,14 @@ _CI_CONFIG_SCHEMA = {
         },
     },
     "hardware_test": {"type": "dict"},
+    "code_style": {
+        "type": "dict",
+        "keys": {
+            "enabled": {"type": "bool"},
+            "file_size_limits": {"type": "dict"},
+            "exclude_paths": {"type": "list"},
+        },
+    },
 }
 
 _MISRA_RULE_SCHEMA = {

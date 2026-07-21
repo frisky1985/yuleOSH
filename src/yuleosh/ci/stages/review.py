@@ -508,6 +508,21 @@ def run_misra_check(project_dir: str, ci: CIResult,
         log.info("Found compile_commands.json — consider using --project=compile_commands.json")
 
     # Construct cppcheck command
+    cppcheck_suppressions = os.path.join(project_dir, ".cppcheck_suppressions")
+    suppressions_list_args = []
+    if os.path.isfile(cppcheck_suppressions):
+        suppressions_list_args = ["--suppressions-list=" + cppcheck_suppressions]
+
+    # AUTOSAR macro defines — suppress false positives from common
+    # AUTOSAR platform constants that are not defined in source headers.
+    define_args = [
+        "-DSTD_ON", "-DSTD_OFF", "-DSTD_HIGH", "-DSTD_LOW",
+        "-DSTD_ACTIVE", "-DSTD_IDLE",
+        "-DNULL_PTR", "-DTRUE", "-DFALSE",
+        "-DE_OK", "-DE_NOT_OK",
+        "-DNULL",
+    ]
+
     cmd = [
         "cppcheck",
         "--addon=" + addon,
@@ -516,12 +531,22 @@ def run_misra_check(project_dir: str, ci: CIResult,
         "--enable=all",
         "--suppress=missingIncludeSystem",
         "-q",
-    ] + include_args + suppress_args + c_files
+    ] + suppressions_list_args + define_args + include_args + suppress_args
+
+    # Add --rule-texts if configured
+    if misra_cfg and misra_cfg.rule_texts_path:
+        rt_path = misra_cfg.rule_texts_path
+        if os.path.isfile(rt_path):
+            cmd.append("--rule-texts=" + rt_path)
+        else:
+            log.warning("rule_texts_path configured but file not found: %s", rt_path)
+
+    cmd += c_files
 
     try:
         start = time.perf_counter()
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=120, cwd=project_dir
+            cmd, capture_output=True, text=True, timeout=180, cwd=project_dir
         )
         elapsed = time.perf_counter() - start
     except FileNotFoundError:
@@ -529,7 +554,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
         print(f"    🔧 Fix: install cppcheck (e.g. 'apt install cppcheck' or 'brew install cppcheck')")
         return _handle_stage_error(ci, "misra-check", msg, strict)
     except subprocess.TimeoutExpired:
-        msg = "cppcheck timed out after 120s"
+        msg = "cppcheck timed out after 180s"
         print(f"    🔧 Fix: increase timeout or reduce file count. Try 'cppcheck --project=compile_commands.json' for faster analysis")
         return _handle_stage_error(ci, "misra-check", msg, strict)
     except Exception as e:
@@ -644,15 +669,12 @@ def run_misra_check(project_dir: str, ci: CIResult,
         return True
 
     # Count required vs advisory violations from enriched groups
-    required_count = 0
-    advisory_count = 0
-    groups_iter = groups.values() if isinstance(groups, dict) else groups
-    for g in groups_iter:
-        sev = g.get("severity_category", "").lower() if isinstance(g, dict) else ""
-        if sev == "required":
-            required_count += g["count"]
-        elif sev == "advisory":
-            advisory_count += g["count"]
+    # Fix P1.5-F: use summary's by_rule_type for accurate required/advisory counts.
+    # enrich_with_definitions() returns a flat list (not a dict of groups),
+    # so the old severity_category iteration over groups always returned 0.
+    by_rule_type = summary.get("by_rule_type", {})
+    required_count = by_rule_type.get("required", 0)
+    advisory_count = by_rule_type.get("advisory", 0)
 
     # Estimate KLOC from checked files
     estimated_kloc = 0
