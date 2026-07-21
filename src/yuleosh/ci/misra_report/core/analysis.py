@@ -84,6 +84,9 @@ def enrich_with_definitions(
     Accepts either a list of violation dicts (standard) or a dict
     of rule_id → violation entries (from group_by_rule).
     In the dict case, iterates over the values (lists of dicts).
+
+    Sets severity_category from the rule definition's 'severity' field
+    (required/advisory) rather than the heuristic _classify_rule_type().
     """
     if not rule_defs:
         rule_defs = load_rule_definitions()
@@ -100,7 +103,9 @@ def enrich_with_definitions(
         defn = rules.get(rid, {})
         v["category"] = defn.get("category", _classify_rule_type(rid))
         v["description"] = defn.get("description", "")
-        v["rule_type"] = _classify_rule_type(rid)
+        # Use actual rule definition severity (required/advisory) instead of heuristic
+        v["severity_category"] = defn.get("severity", _classify_rule_type(rid))
+        v["rule_type"] = defn.get("severity", _classify_rule_type(rid))
         enriched.append(v)
     return enriched
 
@@ -117,7 +122,9 @@ def compute_summary_stats(
 
     for v in violations:
         by_severity[v.get("severity", "unknown")] += 1
-        rule_type = v.get("rule_type", _classify_rule_type(v.get("rule_id")))
+        # Use severity_category from enrichment (set from rule defs) when available,
+        # fall back to heuristic for backward compat
+        rule_type = v.get("severity_category", v.get("rule_type", _classify_rule_type(v.get("rule_id"))))
         by_rule_type[rule_type] += 1
 
     total_file_count = len({v.get("file") for v in violations if v.get("file")})

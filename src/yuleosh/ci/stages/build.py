@@ -111,11 +111,45 @@ def run_c_coverage(project_dir: str, ci: CIResult) -> bool:
                 break
 
     if not build_dir:
-        ci.add_stage("c-coverage", "skipped", "No build directory with coverage data found")
-        print(f"    ⏭️  No build directory with .gcda/.gcno — skipped")
-        print(f"    🔧 Fix: compile with '--coverage' flag and run tests to generate .gcda files")
-        print(f"    🔧 Tip: export COVERAGE_BUILD_DIR=/path/to/build to specify a custom build dir")
-        return True
+        # Fallback: try batch10_coverage.sh if no .gcda files found
+        batch_script = os.path.join(project_dir, "batch10_coverage.sh")
+        if os.path.isfile(batch_script):
+            print(f"    📦 No .gcda files — running batch10_coverage.sh as fallback...")
+            try:
+                result = subprocess.run(
+                    ["bash", batch_script],
+                    capture_output=True, text=True, timeout=600,
+                    cwd=project_dir,
+                )
+                print(result.stdout[-2000:] if result.stdout else "")
+                if result.returncode == 0:
+                    print(f"    ✅ batch10_coverage.sh completed")
+                    # Check for generated coverage files
+                    gen_cov = os.path.join(project_dir, "coverage_filtered.info") or \
+                              os.path.join(project_dir, "coverage_src.info")
+                    for cov_file in ["coverage_src.info", "coverage_filtered.info"]:
+                        cf = os.path.join(project_dir, cov_file)
+                        if os.path.isfile(cf):
+                            build_dir = project_dir
+                            log.info("Found coverage file from batch10: %s", cf)
+                            break
+                    if not build_dir:
+                        # Try build-coverage-b10 dir
+                        b10_build = os.path.join(project_dir, "build-coverage-b10", "bin")
+                        if os.path.isdir(b10_build):
+                            build_dir = b10_build
+                else:
+                    log.warning("batch10_coverage.sh failed (rc=%d): %s",
+                                result.returncode, result.stderr[-500:])
+            except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+                log.warning("batch10_coverage.sh error: %s", e)
+        
+        if not build_dir:
+            ci.add_stage("c-coverage", "skipped", "No build directory with coverage data found")
+            print(f"    ⏭️  No build directory with .gcda/.gcno — skipped")
+            print(f"    🔧 Fix: compile with '--coverage' flag and run tests to generate .gcda files")
+            print(f"    🔧 Tip: export COVERAGE_BUILD_DIR=/path/to/build to specify a custom build dir")
+            return True
 
     try:
         json_path = generate_c_coverage_report(build_dir=build_dir)

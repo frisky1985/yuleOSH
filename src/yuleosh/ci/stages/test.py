@@ -339,7 +339,13 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
         print(f"    ❌ Cannot read coverage report: {e}")
         return False
 
-    line_rate = report.get("line_rate", 0.0)
+    # Support both CI format (line_rate at root) and batch format (summary.lines.rate)
+    line_rate = report.get("line_rate")
+    if line_rate is None:
+        # Batch format: nested under summary.lines.rate (as fraction 0.0-1.0)
+        summary_block = report.get("summary", {})
+        lines_block = summary_block.get("lines", {}) if isinstance(summary_block, dict) else {}
+        line_rate = lines_block.get("rate", 0.0) * 100 if isinstance(lines_block, dict) else 0.0
     branch_rate = report.get("branch_rate", 0.0)
 
     print(f"    C line coverage:   {line_rate:.1f}%")
@@ -353,9 +359,13 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
         print(f"    ❌ {detail}")
         print(f"    🔧 Improve C unit tests to raise coverage above threshold")
         # Show low-coverage files for debugging
-        files_list = report.get("files", [])
+        raw_files = report.get("files", [])
+        # Handle both list and dict formats for files
+        if isinstance(raw_files, dict):
+            raw_files = list(raw_files.values()) if raw_files else []
+        files_list = raw_files
         low_files = sorted(
-            [f for f in files_list if f.get("line_rate", 100) < c_fail_under],
+            [f for f in files_list if isinstance(f, dict) and f.get("line_rate", 100) < c_fail_under],
             key=lambda x: (1 - x.get("line_rate", 0) / 100) * x.get("lines", {}).get("found", 0),
             reverse=True,
         )[:5]
@@ -376,7 +386,10 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
         module_thresholds = {}
 
     if module_thresholds and "files" in report:
-        files_list = report.get("files", [])
+        raw_files_for_mod = report.get("files", [])
+        if isinstance(raw_files_for_mod, dict):
+            raw_files_for_mod = list(raw_files_for_mod.values()) if raw_files_for_mod else []
+        files_list = raw_files_for_mod
         # Group files by module prefix (first path component after src/)
         from collections import defaultdict as _dd
         module_files: dict = _dd(list)
