@@ -612,7 +612,9 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
         groups = group_by_rule(violations)
         groups = enrich_with_definitions(groups, rule_defs)
-        summary = compute_summary_stats(violations, groups)
+        # Use enriched violations for summary so severity_category is available
+        enriched_violations = groups  # enrich_with_definitions returns enriched list
+        summary = compute_summary_stats(enriched_violations, violations)
 
         output_dir = Path(project_dir) / ".yuleosh" / "reports"
 
@@ -622,12 +624,12 @@ def run_misra_check(project_dir: str, ci: CIResult,
             if dev.rule_id and dev.file_pattern:
                 deviations_used.append((dev.rule_id, dev.file_pattern))
 
-        save_report(violations, groups, summary, rule_defs, output_dir,
+        save_report(violations, {}, summary, rule_defs, output_dir,
                     deviations=deviations_used)
 
         # ── 分类报告摘要 ──
-        business_violations = [v for v in violations if v.get("code_category", "") == "business"]
-        third_party_violations = [v for v in violations if v.get("code_category", "") == "third_party"]
+        business_violations = [v for v in enriched_violations if v.get("code_category", "") == "business"]
+        third_party_violations = [v for v in enriched_violations if v.get("code_category", "") == "third_party"]
         print(f"    📋 Code category breakdown: business={len(business_violations)}, third_party={len(third_party_violations)}")
 
         # --- Generate traceability matrix and fix tasks (MISRA loop closure) ---
