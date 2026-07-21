@@ -523,25 +523,40 @@ def run_misra_check(project_dir: str, ci: CIResult,
         "-DNULL",
     ]
 
+    # Determine addon arg: use JSON config when rule_texts_path is set
+    if misra_cfg and misra_cfg.rule_texts_path:
+        rt_path = misra_cfg.rule_texts_path
+        rt_resolved = os.path.join(project_dir, rt_path) if not os.path.isabs(rt_path) else rt_path
+        if os.path.isfile(rt_resolved):
+            # Use JSON addon config to pass --rule-texts to misra.py
+            addon_json = os.path.join(project_dir, ".yuleosh", "misra-addon-config.json")
+            if not os.path.isfile(addon_json):
+                # Create dynamically
+                import json as _json
+                addon_cfg = {
+                    "script": addon,
+                    "python": "python3",
+                    "args": ["--rule-texts=" + rt_resolved],
+                }
+                with open(addon_json, "w") as _f:
+                    _json.dump(addon_cfg, _f, indent=2)
+                log.info("Created addon JSON config: %s", addon_json)
+            addon_arg = addon_json
+        else:
+            log.warning("rule_texts_path configured but file not found: %s", rt_resolved)
+            addon_arg = addon
+    else:
+        addon_arg = addon
+
     cmd = [
         "cppcheck",
-        "--addon=" + addon,
+        "--addon=" + addon_arg,
         "--language=c",
         "--std=" + cppcheck_std,
         "--enable=all",
         "--suppress=missingIncludeSystem",
         "-q",
-    ] + suppressions_list_args + define_args + include_args + suppress_args
-
-    # Add --rule-texts if configured
-    if misra_cfg and misra_cfg.rule_texts_path:
-        rt_path = misra_cfg.rule_texts_path
-        if os.path.isfile(rt_path):
-            cmd.append("--rule-texts=" + rt_path)
-        else:
-            log.warning("rule_texts_path configured but file not found: %s", rt_path)
-
-    cmd += c_files
+    ] + suppressions_list_args + define_args + include_args + suppress_args + c_files
 
     try:
         start = time.perf_counter()
@@ -576,9 +591,10 @@ def run_misra_check(project_dir: str, ci: CIResult,
         )
         sys.path.pop(0)
 
-        rule_defs_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
-        if misra_cfg and misra_cfg.rule_texts_path:
-            rule_defs_path = Path(misra_cfg.rule_texts_path)
+        # Rule definitions file: misra-rules.yaml in project root (NOT rule_texts_path)
+        rule_defs_path = Path(project_dir) / "misra-rules.yaml"
+        if not rule_defs_path.exists():
+            rule_defs_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
 
         rule_defs = load_rule_definitions(rule_defs_path)
         violations = parse_cppcheck_output(output)
