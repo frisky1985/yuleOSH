@@ -24,7 +24,7 @@ jobs:
   frontend-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -58,7 +58,7 @@ jobs:
         || github.event_name != 'workflow_dispatch'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -105,7 +105,7 @@ jobs:
         || github.event_name != 'workflow_dispatch'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -155,7 +155,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'win' || github.event.inputs.platform == 'all')
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
