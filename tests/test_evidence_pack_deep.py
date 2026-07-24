@@ -562,11 +562,18 @@ class TestGenerateRequirementCoverage:
         assert os.path.exists(path)
 
     def test_with_reqs(self, collector_with_reqs, tmp_proj):
-        path = collector_with_reqs.generate_requirement_coverage()
+        c = collector_with_reqs
+        # Set up test_coverage so req_to_tests mapping finds matches
+        c.test_coverage = {"test_pipe.py": ["pipeline"]}
+        c._build_requirement_to_test_map()
+        name_to_tests = c.req_to_tests.get("Pipeline Processing", [])
+        assert len(name_to_tests) > 0  # verify mapping works
+        path = c.generate_requirement_coverage()
         content = open(path).read()
         assert "Pipeline Processing" in content
         assert "✅" in content
-        assert "100%" in content  # all reqs have shall_count > 0
+        assert "100%" in content  # all reqs have test mappings
+        assert "Tests" in content  # new column header
 
 
 # ==================================================================
