@@ -158,3 +158,98 @@ class DataCollectionMixin:
         total_tests = sum(len(r.get("results", [])) for r in self.sil_reports)
         print(f"  🖥️  Collected {len(self.sil_reports)} SIL report(s)"
               f" ({total_tests} test case(s))")
+
+    def collect_session_data(self):
+        """Collect pipeline session data from .osh/sessions/.
+
+        Scans all session subdirectories for session.json, spec-check.json,
+        and per-step review files (arch-review.json, code-review.json, etc.),
+        capturing the full pipeline lifecycle as evidence.
+
+        This extends evidence coverage to ALL pipeline stages (not just
+        review/L3), enabling traceability across spec-check, architecture
+        review, devplan review, code review, MISRA review, linker review,
+        memory review, startup review, selftest review, unit tests,
+        integration tests, and coverage review.
+        """
+        sessions_dir = Path(self.project_dir) / ".osh" / "sessions"
+        if not sessions_dir.exists():
+            print("  ⏭️  No pipeline session data found")
+            return
+
+        session_count = 0
+        step_files_found = 0
+        step_coverage = {}  # step_name -> count of sessions with data
+
+        for session_folder in sorted(sessions_dir.iterdir()):
+            if not session_folder.is_dir():
+                continue
+
+            # Read session.json for metadata
+            session_json = session_folder / "session.json"
+            if not session_json.exists():
+                continue
+
+            try:
+                with open(session_json) as f:
+                    session_data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            session_count += 1
+            self.session_data.append(session_data)
+
+            # Collect per-step review files
+            # These match the pattern: {step_name}-review.json or spec-check.json
+            for step_file in sorted(session_folder.glob("*.json")):
+                if step_file.name == "session.json":
+                    continue
+                step_name = step_file.stem  # e.g. "arch-review", "spec-check"
+                try:
+                    with open(step_file) as f:
+                        step_data = json.load(f)
+                    step_data["_session_name"] = session_data.get("name", session_folder.name)
+                    step_data["_step_name"] = step_name
+                    step_data["_session_status"] = session_data.get("status", "unknown")
+                    self.pipeline_steps.append(step_data)
+                    step_files_found += 1
+                    step_coverage[step_name] = step_coverage.get(step_name, 0) + 1
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+        if session_count > 0:
+            print(f"  📋 Collected {session_count} session(s) with {step_files_found} step data file(s)")
+            # Print coverage summary showing which pipeline stages are covered
+            covered_stages = sorted(step_coverage.keys())
+            stages_summary = ", ".join(covered_stages[:10])
+            if len(covered_stages) > 10:
+                stages_summary += f" ... and {len(covered_stages) - 10} more"
+            print(f"     Pipeline stages covered: {stages_summary}")
+        else:
+            print("  ⏭️  No session data found in .osh/sessions/")
+
+    def _find_latest_pipeline_spec(self) -> Optional[str]:
+        """Find the spec file path from the most recent pipeline session."""
+        sessions_dir = Path(self.project_dir) / ".osh" / "sessions"
+        if not sessions_dir.exists():
+            return None
+
+        latest_session = None
+        latest_mtime = 0
+        for sf in sessions_dir.iterdir():
+            sj = sf / "session.json"
+            if sj.exists():
+                mtime = sj.stat().st_mtime
+                if mtime > latest_mtime:
+                    latest_mtime = mtime
+                    latest_session = sj
+
+        if latest_session:
+            try:
+                data = json.loads(latest_session.read_text())
+                spec = data.get("spec_path", "")
+                if spec and os.path.exists(spec):
+                    return spec
+            except (json.JSONDecodeError, OSError):
+                pass
+        return None
