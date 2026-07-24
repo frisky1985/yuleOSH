@@ -220,7 +220,7 @@ def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
         ("plan-lint", run_plan_lint),
         ("docsync-gate", run_docsync_gate),
         ("clang-tidy", run_clang_tidy),
-        ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="delta")),
+        ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="full")),
         ("unit-tests", run_unit_tests),
         ("coverage", run_coverage_check),
         ("c-coverage", run_c_coverage),
@@ -248,7 +248,7 @@ def run_layer1(project_dir: Optional[str] = None, timeout: Optional[int] = None)
     Automatically detects the project language (Go, Python, or C) and
     runs appropriate stages.
 
-    A safety timeout wraps the entire layer. Default is 30 seconds;
+    A safety timeout wraps the entire layer. Default is 180 seconds;
     overridable via ``CI_LAYER1_TIMEOUT`` environment variable or
     the *timeout* parameter.
 
@@ -270,7 +270,7 @@ def run_layer1(project_dir: Optional[str] = None, timeout: Optional[int] = None)
 
     if timeout is None:
         try:
-            timeout = int(os.environ.get("CI_LAYER1_TIMEOUT", "30"))
+            timeout = int(os.environ.get("CI_LAYER1_TIMEOUT", "180"))
         except (ValueError, TypeError):
             timeout = 30
     timeout = max(timeout, 1)

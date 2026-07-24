@@ -173,7 +173,17 @@ def generate_markdown_report(
 
 
 def _deviation_to_dict(d) -> dict:
-    """Serialize a deviation object to dict."""
+    """Serialize a deviation object to dict.
+
+    Supports both deviation objects (dataclass with .rule_id/.reason/.expires)
+    and plain dicts (from run_misra_check which now stores full dicts).
+    """
+    if isinstance(d, dict):
+        return {
+            "rule_id": d.get("rule_id", str(d)),
+            "reason": d.get("reason", ""),
+            "expires": d.get("expires", None),
+        }
     return {
         "rule_id": getattr(d, "rule_id", str(d)),
         "reason": getattr(d, "reason", ""),

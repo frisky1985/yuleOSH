@@ -143,6 +143,9 @@ def _match_deviation(
         dev_pattern = dev_dict["file_pattern"]
 
         # Match rule
+        if rule_id is None:
+            # Violations without a rule_id (non-MISRA warnings) cannot match deviations
+            continue
         rule_match = (dev_rule == rule_id)
         if not rule_match and dev_rule:
             # Try suffix matching (e.g. rule_id="misra-c2023-17.7", dev="17.7")
