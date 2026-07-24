@@ -55,6 +55,8 @@ class EvidenceCollector(DataCollectionMixin, ReportBuilderMixin):
         self.ci_results: list[dict] = []
         self.coverage_data: Optional[dict] = None
         self.sil_reports: list[dict] = []
+        self.session_data: list[dict] = []
+        self.pipeline_steps: list[dict] = []
 
         # Traceability data
         self.test_coverage: dict[str, list[str]] = {}
