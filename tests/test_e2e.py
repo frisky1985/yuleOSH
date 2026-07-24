@@ -125,7 +125,7 @@ def test_e2e_spec_validate():
     """E2E: spec validation on the real spec file."""
     spec_path = os.path.join(PROJECT_DIR, "docs", "spec.md")
     result = subprocess.run(
-        [sys.executable, "src/spec/validate.py", spec_path, "--json"],
+        [sys.executable, "src/yuleosh/spec/validate.py", spec_path, "--json"],
         capture_output=True, text=True, cwd=PROJECT_DIR,
     )
     assert result.returncode == 0, f"Validation failed: {result.stderr}"
@@ -138,7 +138,7 @@ def test_e2e_spec_diff():
     """E2E: spec diff on the same file produces no changes."""
     spec_path = os.path.join(PROJECT_DIR, "docs", "spec.md")
     result = subprocess.run(
-        [sys.executable, "src/spec/diff.py", spec_path, spec_path, "--json"],
+        [sys.executable, "src/yuleosh/spec/diff.py", spec_path, spec_path, "--json"],
         capture_output=True, text=True, cwd=PROJECT_DIR,
     )
     assert result.returncode == 0, f"Diff failed: {result.stderr}"
@@ -180,7 +180,7 @@ def test_e2e_pipeline_run():
 def test_e2e_pipeline_status():
     """E2E: pipeline status returns results."""
     result = subprocess.run(
-        [sys.executable, "src/pipeline/run.py", "status"],
+        [sys.executable, "src/yuleosh/pipeline/run.py", "status"],
         capture_output=True, text=True, cwd=PROJECT_DIR,
     )
     assert result.returncode == 0, f"Status failed: {result.stderr}"
