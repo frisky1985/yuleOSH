@@ -107,6 +107,15 @@ SANITIZER_FLAGS = {
         "-fstack-protector-strong",
         "-fstack-clash-protection",
     ],
+    "ubsan": [
+        "-fsanitize=undefined",
+        "-fsanitize-undefined-trap-on-error",
+    ],
+    "asan": [
+        "-fsanitize=address",
+        "-fno-omit-frame-pointer",
+        "-fsanitize-recover=address",
+    ],
 }
 
 
@@ -464,7 +473,9 @@ class CriticalSafetyScanner:
 # ============================================================
 
 def get_build_flags(enable_warnings: bool = True,
-                       enable_stack_protect: bool = True) -> list[str]:
+                       enable_stack_protect: bool = True,
+                       enable_ubsan: bool = True,
+                       target: str = "arm") -> list[str]:
     """生成编译器加固 flags。
 
     核心 P0 检查由 cppcheck 静态分析完成。
@@ -473,6 +484,7 @@ def get_build_flags(enable_warnings: bool = True,
     Args:
         enable_warnings: 启用安全相关编译警告
         enable_stack_protect: 启用栈保护
+        target: 目标架构标识（arm/riscv/xtensa等）。
 
     Returns:
         CMake/CFLAGS 兼容的 flag 列表
@@ -484,6 +496,9 @@ def get_build_flags(enable_warnings: bool = True,
 
     if enable_stack_protect:
         flags.extend(SANITIZER_FLAGS["stack_protect"])
+
+    if enable_ubsan:
+        flags.extend(SANITIZER_FLAGS["ubsan"])
 
     return flags
 
