@@ -67,3 +67,4 @@ self/
 desktop/node_modules/
 node_modules/
 *.pyc
+reports/*.md
