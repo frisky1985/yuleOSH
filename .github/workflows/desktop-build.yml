@@ -44,7 +44,7 @@ jobs:
           npm run build
 
       - name: Upload frontend build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-out
           path: frontend/out/
@@ -91,7 +91,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
 
       - name: Upload macOS build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: yuleOSH-mac-dmg
           path: desktop/release/*.dmg
@@ -142,7 +142,7 @@ jobs:
           npx electron-builder --linux --publish=never
 
       - name: Upload Linux build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: yuleOSH-linux-appimage
           path: desktop/release/*.AppImage
@@ -180,7 +180,7 @@ jobs:
         run: cd desktop && npx electron-builder --win --publish=never
 
       - name: Upload Windows build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: yuleOSH-win-installer
           path: desktop/release/*.exe
