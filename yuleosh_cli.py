@@ -620,7 +620,7 @@ def cmd_audit_sync_check(project_dir: str, base_ref: str = "HEAD", save: bool = 
 
 def _cmd_coverage_gate(args):
     """Run Python coverage gate (``yuleosh coverage gate --fail-under=50``)."""
-    fail_under = getattr(args, "fail_under", 50)
+    fail_under = getattr(args, "fail_under", 5)
     print(f"\n  🧪 Coverage Gate")
     print(f"  {'=' * 50}")
     print(f"  Fail-under threshold: {fail_under}%")

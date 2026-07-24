@@ -52,6 +52,7 @@ from yuleosh.ci.stages.test import (
     run_coverage_check,
     run_sil_tests,
     run_c_coverage_check,
+    run_coverage_regression,
 )
 
 from yuleosh.ci.stages.build import (

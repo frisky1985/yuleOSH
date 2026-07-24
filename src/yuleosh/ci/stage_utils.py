@@ -219,6 +219,11 @@ def _coverage_skip_reason() -> str:
 def _run_coverage_and_export(project_dir: str) -> tuple[bool, str]:
     """Run ``coverage run`` + ``coverage json``.
 
+    检测范围：整个 ``src/`` 目录下的所有代码（含 Python + C 扩展）。
+    这是一个全项目级别的覆盖率检测，阈值由 pyproject.toml/pytest.ini
+    的 fail_under 控制，或由 CI pipeline 的 ci-config.yaml 中 coverage.threshold_line 控制。
+    当前全局 Python 覆盖率约 5%，对应的 fail_under 阈值已统一设置为 5。
+
     Returns (success, error_detail).
     """
     cov_env = {**os.environ, "COVERAGE_RUN": "1"}

@@ -25,6 +25,7 @@ from yuleosh.ci.config import _get_ci_config, is_strict, is_misra_fail_fast
 from yuleosh.ci.result import CIResult
 from yuleosh.ci.stages import (
     run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check,
+    run_coverage_regression,
     run_c_coverage, run_c_coverage_check, run_sil_tests,
     run_misra_check, run_yaml_validation,
     run_spec_validation, run_architecture_review,
@@ -223,6 +224,7 @@ def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
         ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="full")),
         ("unit-tests", run_unit_tests),
         ("coverage", run_coverage_check),
+        ("coverage-regression", run_coverage_regression),
         ("c-coverage", run_c_coverage),
         ("c-coverage-gate", run_c_coverage_check),
     ]

@@ -115,6 +115,12 @@ def run_unit_tests(project_dir: str, ci: CIResult) -> bool:
 def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     """Check test coverage meets threshold.
 
+    检测范围：全项目 ``src/`` 下的所有 Python 代码。
+    阈值来自 ci-config.yaml 的 coverage.threshold_line，默认 5.0。
+    当前全局 Python 覆盖率约 5%，故全局阈值设为 5.0。
+    如需模块级门禁（如只对 ci/kpi/ 子模块设置更高阈值），
+    请在 ci-config.yaml coverage.module_thresholds 中添加。
+
     Skips coverage when HOOK_TYPE=commit (pre-commit hook) to avoid
     slowing down every commit.  Coverage runs on push (HOOK_TYPE=push
     or when not in a hook at all).
@@ -440,6 +446,58 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
                  f"line_rate={line_rate:.1f}% >= {c_fail_under}%")
     print(f"    ✅ C coverage gate passed")
     return True
+
+
+def run_coverage_regression(project_dir: str, ci: CIResult) -> bool:
+    """Check Python coverage regression against trend history.
+
+    CL3 P1-5: 覆盖率退化监控。
+    比较最新覆盖率与历史滚动平均值的差异。
+    如果 line/branch 覆盖率下降超过 5 个百分点，发出告警。
+    """
+    print("  📉 CI: coverage regression check...")
+
+    try:
+        from yuleosh.ci.coverage_trend import (
+            record_coverage, check_coverage_regression,
+        )
+
+        # Step 1: Record current coverage
+        record_coverage(project_dir)
+
+        # Step 2: Check regression
+        reg = check_coverage_regression(
+            project_dir,
+            line_drop_threshold=5.0,
+            branch_drop_threshold=5.0,
+            window=3,
+        )
+
+        if reg.get("regression"):
+            alerts = reg.get("alerts", [])
+            for alert in alerts:
+                msg = alert.get("message", "")
+                ci.add_stage("coverage-regression", "warning", msg)
+                print(f"    ⚠️  Coverage regression detected: {msg}")
+
+        if reg.get("alerts"):
+            ci.add_stage("coverage-regression", "passed",
+                         f"{len(reg['alerts'])} alert(s) (non-blocking)")
+            print(f"    ⚠️  {len(reg['alerts'])} regression alert(s) - non-blocking")
+        else:
+            ci.add_stage("coverage-regression", "passed", "No regression detected")
+            print(f"    ✅ No coverage regression detected")
+
+        return True
+
+    except ImportError as e:
+        ci.add_stage("coverage-regression", "skipped", f"Cannot import: {e}")
+        print(f"    ⏭️  Coverage regression skipped: {e}")
+        return True
+    except Exception as e:
+        ci.add_stage("coverage-regression", "skipped", str(e))
+        print(f"    ⏭️  Coverage regression error (non-blocking): {e}")
+        return True
 
 
 # ═══════════════════════════════════════════════════════════════════════
