@@ -266,11 +266,11 @@ def test_e2e_evidence_generate():
     """E2E: evidence pack generates."""
     # Run review auto first to ensure fresh review data
     subprocess.run(
-        [sys.executable, "src/review/run.py", "auto"],
+        [sys.executable, "src/yuleosh/review/run.py", "auto"],
         capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
     )
     result = subprocess.run(
-        [sys.executable, "src/evidence/pack.py"],
+        [sys.executable, "src/yuleosh/evidence/pack.py"],
         capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
     )
     print(result.stdout[-300:])
@@ -281,7 +281,7 @@ def test_e2e_evidence_generate():
 def test_e2e_review_auto():
     """E2E: auto-review runs (may have no changes but shouldn't crash)."""
     result = subprocess.run(
-        [sys.executable, "src/review/run.py", "auto"],
+        [sys.executable, "src/yuleosh/review/run.py", "auto"],
         capture_output=True, text=True, cwd=PROJECT_DIR,
     )
     assert result.returncode == 0, f"Review crashed: {result.stderr}"
@@ -291,7 +291,7 @@ def test_e2e_review_auto():
 def test_e2e_cli_help():
     """E2E: CLI help works."""
     result = subprocess.run(
-        ["bash", "src/cli/yuleosh.sh", "help"],
+        ["bash", "src/yuleosh/cli/yuleosh.sh", "help"],
         capture_output=True, text=True, cwd=PROJECT_DIR,
     )
     assert result.returncode == 0
