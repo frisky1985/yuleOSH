@@ -145,23 +145,36 @@ class ReportBuilderMixin:
         return str(output_path)
 
     def generate_requirement_coverage(self) -> str:
-        """Generate a markdown requirements coverage report."""
+        """Generate a markdown requirements coverage report.
+
+        Uses actual test coverage (req_to_tests) to determine status,
+        not shall_count. A requirement is only "Covered" when at least
+        one test file maps to it.
+        """
+        if not hasattr(self, 'req_to_tests') or not self.req_to_tests:
+            self._build_requirement_to_test_map()
+
         lines = [
             f"# Requirements Coverage Report\n",
             f"> Generated: {self.generated_at}\n",
-            f"| Requirement | SHALLs | Status |",
-            f"|:-----------|:------:|:------:|",
+            f"| Requirement | SHALLs | Tests | Status |",
+            f"|:-----------|:------:|:-----:|:------:|",
         ]
         for req in self.requirements:
             name = req.get("name", "Unknown")
             sc = req.get("shall_count", 0)
-            lines.append(f"| {name} | {sc} | {'✅' if sc > 0 else '❌'} |")
+            matching_tests = self.req_to_tests.get(name, [])
+            test_count = len(matching_tests)
+            status_icon = '✅' if matching_tests else '❌'
+            lines.append(f"| {name} | {sc} | {test_count} | {status_icon} |")
 
         total = len(self.requirements)
-        covered = sum(1 for r in self.requirements if r.get("shall_count", 0) > 0)
+        covered = sum(1 for r in self.requirements
+                      if self.req_to_tests.get(r.get("name", ""), []))
         pct = (covered / total * 100) if total > 0 else 0
         lines.extend([
             "", f"**Requirement Coverage**: {covered}/{total} ({pct:.0f}%)",
+            f"  (Status based on actual test-file mapping, not SHALL presence)",
             f"**Scenarios**: {len(self.scenarios)}",
             f"**Threshold**: 100%",
             f"**Pass**: {'✅' if pct >= 100 else '❌'}",
