@@ -523,6 +523,16 @@ def run_misra_check(project_dir: str, ci: CIResult,
         "-DNULL",
     ]
 
+    # ── cppcheck-config.h for AUTOSAR platform defines ──
+    # Provides configuration constants for MISRA addon completeness.
+    # Simplifies config analysis and suppresses [misra-config] false positives.
+    cppcheck_config_h = os.path.join(project_dir, "cppcheck-config.h")
+    if os.path.isfile(cppcheck_config_h):
+        define_args.append("--include=" + cppcheck_config_h)
+        define_args.append("--max-configs=1")
+        if misra_cfg and misra_cfg.enabled:
+            suppress_args.append("--suppress=misra-config")
+
     # Determine addon arg: use JSON config when rule_texts_path is set
     if misra_cfg and misra_cfg.rule_texts_path:
         rt_path = misra_cfg.rule_texts_path
@@ -579,6 +589,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
     output = result.stderr or result.stdout or ""
 
     # Process output through misra_report module
+    summary = None
     try:
         # Try importing from the project-level ci/ directory
         sys.path.insert(0, project_dir)
@@ -611,20 +622,25 @@ def run_misra_check(project_dir: str, ci: CIResult,
             v["code_category"] = cat_name
 
         groups = group_by_rule(violations)
-        groups = enrich_with_definitions(groups, rule_defs)
-        # Use enriched violations for summary so severity_category is available
-        enriched_violations = groups  # enrich_with_definitions returns enriched list
-        summary = compute_summary_stats(enriched_violations, violations)
+        enriched_violations = enrich_with_definitions(violations, rule_defs)
+        summary = compute_summary_stats(enriched_violations, groups, rule_defs)
 
         output_dir = Path(project_dir) / ".yuleosh" / "reports"
 
         # Apply deviations: mark matching violations as "acknowledged"
-        deviations_used: list[tuple[str, str]] = []
+        # Store full deviation objects so reason/expiry are serialized correctly
+        deviations_used: list[dict] = []
         for dev in deviations:
             if dev.rule_id and dev.file_pattern:
-                deviations_used.append((dev.rule_id, dev.file_pattern))
+                deviations_used.append({
+                    "rule_id": dev.rule_id,
+                    "file_pattern": dev.file_pattern,
+                    "reason": dev.reason or "",
+                    "expires": dev.expires or None,
+                    "approved_by": dev.approved_by or "",
+                })
 
-        save_report(enriched_violations, {}, summary, rule_defs, output_dir,
+        save_report(enriched_violations, groups, summary, rule_defs, output_dir,
                     deviations=deviations_used)
 
         # ── 分类报告摘要 ──
@@ -669,14 +685,37 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
     except ImportError as e:
         log.warning("Could not import misra_report module: %s", e)
-        raw_violations = sum(1 for line in output.splitlines() if "misra" in line.lower())
-        summary = {"total_violations": raw_violations, "total_rules_violated": 0,
-                    "severity_counts": {}, "unique_files": [], "per_file_counts": {}}
     except Exception as e:
         log.warning("MISRA report formatting failed: %s", e)
-        raw_violations = sum(1 for line in output.splitlines() if "misra" in line.lower())
-        summary = {"total_violations": raw_violations, "total_rules_violated": 0,
-                    "severity_counts": {}, "unique_files": [], "per_file_counts": {}}
+        import traceback
+        traceback.print_exc()
+
+    # If report was saved but summary creation failed, reload from disk
+    if summary is None:
+        report_json = Path(project_dir) / ".yuleosh" / "reports" / "misra-report.json"
+        if report_json.exists():
+            try:
+                with open(report_json) as _f:
+                    _report_data = json.load(_f)
+                summary = {
+                    "total_violations": _report_data.get("total_violations", 0),
+                    "unique_rules": _report_data.get("unique_rules", 0),
+                    "affected_files": _report_data.get("affected_files", 0),
+                    "total_source_lines": _report_data.get("total_source_lines", 0),
+                    "by_severity": _report_data.get("by_severity", {}),
+                    "by_rule_type": _report_data.get("by_rule_type", {}),
+                    "density_per_kloc": _report_data.get("density_per_kloc", 0),
+                }
+                print(f"    📋 Summary reloaded from saved report (by_rule_type: {summary['by_rule_type']})")
+            except Exception as _fe:
+                log.warning("Failed to reload report for summary: %s", _fe)
+                raw_violations = sum(1 for line in output.splitlines() if "misra" in line.lower())
+                summary = {"total_violations": raw_violations, "total_rules_violated": 0,
+                          "severity_counts": {}, "unique_files": [], "per_file_counts": {}}
+        else:
+            raw_violations = sum(1 for line in output.splitlines() if "misra" in line.lower())
+            summary = {"total_violations": raw_violations, "total_rules_violated": 0,
+                      "severity_counts": {}, "unique_files": [], "per_file_counts": {}}
 
     total_violations = summary["total_violations"]
 
