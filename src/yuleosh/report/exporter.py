@@ -146,14 +146,15 @@ def generate_json_report(
         "layers": layers_data,
     }
     if misra:
-        misra_summary = misra.get("summary", {})
+        # misra-report.json uses top-level keys, not a nested "summary" dict
+        by_rule_type = misra.get("by_rule_type", {})
         report["misra"] = {
-            "total_violations": misra_summary.get("total_violations", 0),
-            "required": misra_summary.get("misra_classification", {}).get("required", 0),
-            "advisory": misra_summary.get("misra_classification", {}).get("advisory", 0),
-            "violations_per_kloc": misra_summary.get("violations_per_kloc", 0),
-            "rules_violated": misra_summary.get("total_rules_violated", 0),
-            "files_affected": len(misra_summary.get("unique_files", [])),
+            "total_violations": misra.get("total_violations", 0),
+            "required": by_rule_type.get("required", 0),
+            "advisory": by_rule_type.get("advisory", 0),
+            "violations_per_kloc": misra.get("density_per_kloc", 0),
+            "rules_violated": misra.get("unique_rules", 0),
+            "files_affected": misra.get("affected_files", 0),
         }
     if coverage:
         report["c_coverage"] = {
@@ -246,18 +247,17 @@ def generate_markdown_report(
 
     # MISRA
     if misra:
-        ms = misra.get("summary", {})
-        totals = ms.get("misra_classification", {})
+        by_rule_type = misra.get("by_rule_type", {})
         lines.append("## MISRA C:2023")
         lines.append("")
         lines.append("| Metric | Value |")
         lines.append("|:-------|------:|")
-        lines.append(f"| Total Violations | {ms.get('total_violations', 0)} |")
-        lines.append(f"| Required | {totals.get('required', 0)} |")
-        lines.append(f"| Advisory | {totals.get('advisory', 0)} |")
-        lines.append(f"| Violations / KLOC | {ms.get('violations_per_kloc', 0)} |")
-        lines.append(f"| Rules Violated | {ms.get('total_rules_violated', 0)} |")
-        lines.append(f"| Files Affected | {len(ms.get('unique_files', []))} |")
+        lines.append(f"| Total Violations | {misra.get('total_violations', 0)} |")
+        lines.append(f"| Required | {by_rule_type.get('required', 0)} |")
+        lines.append(f"| Advisory | {by_rule_type.get('advisory', 0)} |")
+        lines.append(f"| Violations / KLOC | {misra.get('density_per_kloc', 0)} |")
+        lines.append(f"| Rules Violated | {misra.get('unique_rules', 0)} |")
+        lines.append(f"| Files Affected | {misra.get('affected_files', 0)} |")
         lines.append("")
 
     # C coverage

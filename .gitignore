@@ -39,6 +39,10 @@ venv/
 *.key
 *.pem
 
+# Unity coverage artifacts
+tests/unity/coverage-*
+tests/unity/*.info
+
 # Runtime data (persistent DB, session state)
 .yuleosh/
 !.yuleosh/ci-config.yaml
