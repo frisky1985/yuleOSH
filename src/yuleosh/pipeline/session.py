@@ -69,6 +69,7 @@ class PipelineSession:
     ):
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
+        self.project_dir = str(Path(os.environ.get("OSH_HOME", ".")).resolve())
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
         self.status = "created"  # created -> running -> completed | failed
@@ -77,6 +78,7 @@ class PipelineSession:
         self.artifacts: dict = {}
         self.errors: list[str] = []
         self.session_dir = self._ensure_session_dir()
+        self.artifacts_dir = str(self.session_dir)
         self.llm_client = llm_client
         # Token usage tracking across all steps
         self.token_usage_total: int = 0

@@ -443,6 +443,28 @@ class KGStore:
         """)
         return [self._row_to_node(r) for r in cur.fetchall()]
 
+    def get_all_edges(self) -> list[Edge]:
+        """Return all edges in the knowledge graph.
+
+        Returns:
+            List of all Edge objects.
+        """
+        cur = self.conn.execute(
+            "SELECT * FROM kg_edges"
+        )
+        return [self._row_to_edge(r) for r in cur.fetchall()]
+
+    def get_all_nodes(self) -> list[Node]:
+        """Return all active nodes in the knowledge graph.
+
+        Returns:
+            List of all active Node objects.
+        """
+        cur = self.conn.execute(
+            "SELECT * FROM kg_nodes WHERE is_active=1"
+        )
+        return [self._row_to_node(r) for r in cur.fetchall()]
+
     def get_top_fan_out(self, limit: int = 10) -> list[tuple[Node, int]]:
         """Return nodes with the most outgoing edges."""
         cur = self.conn.execute("""
