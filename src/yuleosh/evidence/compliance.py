@@ -86,6 +86,16 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
             for sil_file in sorted(ci_dir.glob("*sil*.json")):
                 _add_to_zip(sil_file, f"sil-reports/{sil_file.name}")
 
+        # Include pipeline session step data (all stages)
+        sessions_dir = Path(collector.project_dir) / ".osh" / "sessions"
+        if sessions_dir.exists():
+            for session_folder in sorted(sessions_dir.iterdir()):
+                if not session_folder.is_dir():
+                    continue
+                for step_file in sorted(session_folder.glob("*.json")):
+                    arcname = f"session-steps/{session_folder.name}/{step_file.name}"
+                    _add_to_zip(step_file, arcname)
+
         # Generate manifest.json
         manifest = {
             "manifest_version": "1.0",
@@ -99,6 +109,7 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
 
     print(f"  📦 Compliance pack created: {zip_path}")
     print(f"     Manifest: {len(manifest_entries)} files tracked")
+    print(f"     Pipeline sessions included: ✓")
     return str(zip_path)
 
 
@@ -176,6 +187,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     collector.collect_reviews()
     collector.collect_ci_results()
     collector.collect_sil_reports()
+    collector.collect_session_data()
 
     print(f"\n{'='*50}")
 
