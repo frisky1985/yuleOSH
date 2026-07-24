@@ -38,5 +38,10 @@
     "ts-jest": "^29.4.11",
     "typescript": "^5",
     "whatwg-fetch": "^3.6.20"
+  },
+  "overrides": {
+    "sharp": "^0.35.0",
+    "@hono/node-server": "^2.0.5",
+    "postcss": "^8.5.15"
   }
 }

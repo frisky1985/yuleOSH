@@ -15,15 +15,17 @@ setup(
     package_dir={"": "src"},
     python_requires=">=3.10",
     install_requires=[
-        "bcrypt>=4.1",
-        "pyjwt>=2.8",
+        "bcrypt>=5.0",
+        "pyjwt>=2.13",
         "psycopg2-binary>=2.9",
         "pyserial>=3.5",
         "pyyaml>=6.0",
-        "stripe>=7.0",
-        # CVE-2026 transitive dep constraints
+        "stripe>=15.0",
         "msgpack>=1.2.1",  # GHSA-6v7p-g79w-8964
-        "starlette>=1.0.1",  # PYSEC-2026-161
+        "starlette>=1.3.0",  # PYSEC-2026-161
+        "click>=8.3.3",  # PYSEC-2026-2132
+        "pillow>=12.3.0",  # Multiple CVEs
+        "setuptools>=83.0.0",  # PYSEC-2026-3447
     ],
     extras_require={
         "dev": ["pytest", "pytest-cov", "pytest-mock"],

@@ -1,7 +1,7 @@
 {
   "name": "yuleosh-desktop",
   "version": "0.1.0",
-  "description": "yuleOSH Desktop — 嵌入式AI开发全流程平台",
+  "description": "yuleOSH Desktop \u2014 \u5d4c\u5165\u5f0fAI\u5f00\u53d1\u5168\u6d41\u7a0b\u5e73\u53f0",
   "author": "frisky1985",
   "license": "MIT",
   "main": "main.js",
@@ -15,10 +15,13 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
-    "electron": "^33.2.1",
-    "electron-builder": "^25.1.8"
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "overrides": {
+    "tar": "^7.4.3"
   }
 }
