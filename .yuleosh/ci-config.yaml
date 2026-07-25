@@ -1,10 +1,3 @@
-# ── yuleOSH CI Configuration ──────────────────────────────────────────────
-#
-# Coverage gate thresholds:
-#   threshold_line / threshold_condition: 全局 Python 覆盖率门禁（对齐 pytest fail_under=5）
-#   检测范围: src/yuleosh/ 下所有 Python 代码（通过 coverage run --source=src）
-#   如需模块级精细化门禁（如仅对 ci/kpi/ 等子模块生效），请在 module_thresholds 中添加条目
-
 misra:
   profiles: {}
   active_profile: safety
