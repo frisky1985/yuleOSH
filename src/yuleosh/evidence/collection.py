@@ -13,7 +13,42 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# JSON Schema for session.json validation
+SESSION_JSON_SCHEMA = {
+    "type": "object",
+    "required": ["name", "status"],
+    "properties": {
+        "name": {"type": "string"},
+        "status": {"type": "string"},
+        "spec_path": {"type": "string"},
+        "commit_sha": {"type": "string"},
+        "branch": {"type": "string"},
+        "created_at": {"type": "string"},
+    },
+    "additionalProperties": True,
+}
+
 log = logging.getLogger("evidence.collection")
+
+
+def _validate_session_json(data: dict, source: str) -> bool:
+    """Validate session JSON data against the minimal schema.
+
+    Returns True if valid, False if invalid (warnings logged).
+    Non-blocking: schema violations emit warnings but do not raise.
+    """
+    if not isinstance(data, dict):
+        log.warning(f"Session data in {source} is not a dict (type={type(data).__name__})")
+        return False
+    if "name" not in data:
+        log.warning(f"Session data in {source} missing required field 'name'")
+    if "status" not in data:
+        log.warning(f"Session data in {source} missing required field 'status'")
+    if not isinstance(data.get("name", ""), str):
+        log.warning(f"Session 'name' in {source} is not a string")
+    if not isinstance(data.get("status", ""), str):
+        log.warning(f"Session 'status' in {source} is not a string")
+    return True
 
 
 class DataCollectionMixin:
@@ -195,6 +230,9 @@ class DataCollectionMixin:
                     session_data = json.load(f)
             except (json.JSONDecodeError, OSError):
                 continue
+
+            # JSON schema validation (non-blocking)
+            _validate_session_json(session_data, str(session_json))
 
             session_count += 1
             self.session_data.append(session_data)
