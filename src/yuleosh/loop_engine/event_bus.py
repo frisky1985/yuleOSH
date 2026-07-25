@@ -723,9 +723,13 @@ class AuditLog:
             handler_results: handler 执行结果列表。
             rollback_status: 回滚状态描述。
         """
+        now = datetime.now(timezone.utc)
+        recorded_at = now.isoformat()
+        duration_ms = self._compute_duration_ms(event.timestamp, recorded_at)
         entry = {
             "event_id": event.event_id,
             "event_type": event.event_type.value,
+            "action": "completed",
             "source": event.source,
             "source_fingerprint": event.source_fingerprint or "",
             "signature": event.signature,
@@ -735,7 +739,8 @@ class AuditLog:
             "handler_results": handler_results or event.handler_results,
             "rollback_status": rollback_status or event.rollback_status,
             "data_summary": json.dumps(event.data, sort_keys=True)[:500],
-            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": duration_ms,
+            "recorded_at": recorded_at,
         }
 
         with self._lock:
@@ -753,7 +758,8 @@ class AuditLog:
     def list(self, limit: int = 50,
              event_type: Optional[str] = None,
              since: Optional[str] = None,
-             until: Optional[str] = None) -> list[dict]:
+             until: Optional[str] = None,
+             handler: Optional[str] = None) -> list[dict]:
         """列出审计日志。
 
         Args:
@@ -777,6 +783,21 @@ class AuditLog:
             result = [e for e in result if e.get("timestamp", "") >= since]
         if until:
             result = [e for e in result if e.get("timestamp", "") <= until]
+
+        # 过滤 handler 名称
+        if handler:
+            filtered = []
+            for e in result:
+                hr = e.get("handler_results", [])
+                top_handler = e.get("handler_id", "")
+                if top_handler == handler:
+                    filtered.append(e)
+                    continue
+                for r in hr:
+                    if r.get("handler", "") == handler:
+                        filtered.append(e)
+                        break
+            result = filtered
 
         return result[-limit:] if limit >= 0 else result
 
@@ -802,6 +823,69 @@ class AuditLog:
                 "store_configured": self._store is not None,
             }
 
+    def record_action(self, action: str, actor: str = "system",
+                       handler_id: str = "",
+                       result: str = "success",
+                       details: Optional[dict] = None,
+                       duration_ms: float = 0.0,
+                       journal_id: str = "",
+                       restored_entities: Optional[list] = None):
+        """记录非事件触发的审计条目（如配置变更、回滚）。
+
+        Args:
+            action: 操作名称 (如 "config_changed", "rollback").
+            actor: 操作执行者.
+            handler_id: handler 标识.
+            result: 操作结果 ("success" / "failure").
+            details: 操作详情.
+            duration_ms: 操作耗时 (毫秒).
+            journal_id: 关联的 journal ID (回滚时使用).
+            restored_entities: 恢复的实体列表.
+        """
+        import uuid as _uuid
+        now = datetime.now(timezone.utc).isoformat()
+        entry = {
+            "event_id": str(_uuid.uuid4()),
+            "event_type": "manual",
+            "action": action,
+            "source": actor,
+            "handler_id": handler_id or actor,
+            "timestamp": now,
+            "recorded_at": now,
+            "duration_ms": duration_ms,
+            "result": result,
+            "handler_results": [{
+                "handler": handler_id or actor,
+                "status": result,
+            }],
+            "rollback_status": "",
+            "data_summary": json.dumps(details or {}, sort_keys=True)[:500],
+        }
+        if journal_id:
+            entry["journal_id"] = journal_id
+        if restored_entities:
+            entry["restored_entities"] = restored_entities
+
+        with self._lock:
+            self._entries.append(entry)
+            if len(self._entries) > self._max_entries:
+                self._entries = self._entries[-self._max_entries:]
+
+        if self._store is not None:
+            try:
+                self._store.insert("audit_log", entry)
+            except Exception as e:
+                log.warning("AuditLog: persist error: %s", e)
+
+    def _compute_duration_ms(self, start_timestamp: str, end_timestamp: str) -> float:
+        """计算两个 ISO 时间戳之间的毫秒差。"""
+        try:
+            start = datetime.fromisoformat(start_timestamp)
+            end = datetime.fromisoformat(end_timestamp)
+            return max(0.0, (end - start).total_seconds() * 1000.0)
+        except Exception:
+            return 0.0
+
     def by_type(self) -> dict[str, int]:
         """按事件类型统计。"""
         with self._lock:
@@ -812,6 +896,354 @@ class AuditLog:
             return counts
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# EventQueuePersistence — 事件持久化 (ACC-005, ACC-008)
+# ═══════════════════════════════════════════════════════════════════════
+# EventQueuePersistence — 持久化 + 崩溃后自动恢复 (ACC-005, ACC-008)
+# ═══════════════════════════════════════════════════════════════════════
+
+class EventQueuePersistence:
+    """事件队列持久化 — 崩溃后自动恢复未消费的事件。
+
+    功能:
+        - 将事件持久化到磁盘 JSON 文件
+        - 启动时自动加载未消费事件
+        - 幂等性: 避免重复投递已处理的事件
+        - 并发安全的文件操作
+
+    存储路径:
+        {base_path}/pending_events.json — 未消费事件队列
+        {base_path}/processed_events.json — 已处理事件 ID 追踪
+
+    Usage:
+        persist = EventQueuePersistence()
+        persist.save_event(event)
+        persist.mark_processed(event_id)
+        recovered = persist.recover_unconsumed()
+    """
+
+    def __init__(self, base_path: Optional[str] = None):
+        if base_path is None:
+            _home = os.environ.get("OSH_HOME", "/tmp")
+            base_path = os.path.join(_home, ".yuleosh", "loop")
+        self._base_path = base_path
+        self._pending_path = os.path.join(base_path, "pending_events.json")
+        self._processed_path = os.path.join(base_path, "processed_events.json")
+        self._lock = threading.RLock()
+
+        os.makedirs(base_path, exist_ok=True)
+
+        self._processed_ids: set[str] = set()
+        self._load_processed_ids()
+
+    @property
+    def base_path(self) -> str:
+        return self._base_path
+
+    def save_event(self, event: LoopEvent):
+        """持久化保存一个事件到 pending 队列。"""
+        with self._lock:
+            if event.event_id in self._processed_ids:
+                log.debug("EventQueuePersistence: event %s already processed, skipping",
+                          event.event_id[:8])
+                return
+            pending = self._load_pending()
+            existing_ids = {e["event_id"] for e in pending}
+            if event.event_id in existing_ids:
+                return
+            pending.append(event.to_dict())
+            self._save_pending(pending)
+
+    def mark_processed(self, event_id: str):
+        """标记事件为已处理。"""
+        with self._lock:
+            self._processed_ids.add(event_id)
+            self._save_processed_ids()
+            pending = self._load_pending()
+            pending = [e for e in pending if e["event_id"] != event_id]
+            self._save_pending(pending)
+
+    def mark_batch_processed(self, event_ids: list[str]):
+        """批量标记事件为已处理。"""
+        with self._lock:
+            for eid in event_ids:
+                self._processed_ids.add(eid)
+            self._save_processed_ids()
+            pending = self._load_pending()
+            ids_set = set(event_ids)
+            pending = [e for e in pending if e["event_id"] not in ids_set]
+            self._save_pending(pending)
+
+    def recover_unconsumed(self) -> list[LoopEvent]:
+        """恢复未消费的事件。
+
+        从 pending 队列中读取未被标记为已处理的事件。
+
+        Returns:
+            未消费的 LoopEvent 列表 (按时间戳排序)。
+        """
+        with self._lock:
+            pending = self._load_pending()
+            unconsumed: list[LoopEvent] = []
+            remaining: list[dict] = []
+
+            for entry in pending:
+                eid = entry.get("event_id", "")
+                if eid and eid in self._processed_ids:
+                    continue
+                try:
+                    event = LoopEvent.from_dict(entry)
+                    event.retry_count = 0
+                    unconsumed.append(event)
+                    remaining.append(entry)
+                except Exception as exc:
+                    log.warning("EventQueuePersistence: skip invalid event %s: %s",
+                                eid[:8] if eid else "?", exc)
+
+            unconsumed.sort(key=lambda e: e.timestamp)
+            self._save_pending(remaining)
+
+            if unconsumed:
+                log.info("EventQueuePersistence: recovered %d unconsumed event(s)",
+                         len(unconsumed))
+            return unconsumed
+
+    def has_pending(self) -> bool:
+        """检查是否有未消费事件。"""
+        pending = self._load_pending()
+        for entry in pending:
+            if entry.get("event_id", "") not in self._processed_ids:
+                return True
+        return False
+
+    def pending_count(self) -> int:
+        """返回未消费事件计数。"""
+        pending = self._load_pending()
+        return sum(1 for e in pending
+                   if e.get("event_id", "") not in self._processed_ids)
+
+    def clear(self):
+        """清空所有持久化数据。"""
+        with self._lock:
+            self._processed_ids.clear()
+            self._save_pending([])
+            self._save_processed_ids()
+
+    def stats(self) -> dict:
+        """返回持久化统计。"""
+        pending = self._load_pending()
+        return {
+            "base_path": self._base_path,
+            "pending_count": len(pending),
+            "unconsumed_count": self.pending_count(),
+            "processed_ids_count": len(self._processed_ids),
+        }
+
+    def _load_pending(self) -> list[dict]:
+        try:
+            if os.path.exists(self._pending_path):
+                with open(self._pending_path, "r") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    return data
+        except (json.JSONDecodeError, OSError) as e:
+            log.warning("EventQueuePersistence: load pending error: %s", e)
+        return []
+
+    def _save_pending(self, events: list[dict]):
+        try:
+            with open(self._pending_path, "w") as f:
+                json.dump(events, f, indent=2, default=str)
+        except OSError as e:
+            log.warning("EventQueuePersistence: save pending error: %s", e)
+
+    def _load_processed_ids(self):
+        try:
+            if os.path.exists(self._processed_path):
+                with open(self._processed_path, "r") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    self._processed_ids = set(data)
+        except (json.JSONDecodeError, OSError) as e:
+            log.warning("EventQueuePersistence: load processed ids error: %s", e)
+
+    def _save_processed_ids(self):
+        try:
+            with open(self._processed_path, "w") as f:
+                json.dump(sorted(self._processed_ids), f, indent=2)
+        except OSError as e:
+            log.warning("EventQueuePersistence: save processed ids error: %s", e)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CoalescingGroup — 聚合窗口分组 (ACC-106, ACC-406)
+# ═══════════════════════════════════════════════════════════════════════
+
+@dataclass
+class CoalescingGroup:
+    """聚合窗口内的事件分组。
+
+    Attributes:
+        group_key: 分组键 (通常是目标实体 ID)。
+        event_type: 事件类型。
+        events: 窗口内的原始事件列表。
+        window_start: 窗口开启时间戳。
+        pending: 是否仍在等待窗口关闭。
+    """
+    group_key: str = ""
+    event_type: Optional[LoopEventType] = None
+    events: list[LoopEvent] = field(default_factory=list)
+    window_start: float = 0.0
+    pending: bool = True
+
+    def add_event(self, event: LoopEvent):
+        """向分组添加事件。"""
+        self.events.append(event)
+
+    def to_dict(self) -> dict:
+        return {
+            "group_key": self.group_key,
+            "event_type": self.event_type.value if self.event_type else "",
+            "event_count": len(self.events),
+            "window_start": self.window_start,
+            "pending": self.pending,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CoalescingManager — 时间窗口聚合管理器 (ACC-106, ACC-406)
+# ═══════════════════════════════════════════════════════════════════════
+
+class CoalescingManager:
+    """时间窗口聚合管理器。
+
+    允许多个事件在可配置的时间窗口内聚合为单个动作。
+    用于:
+        - Loop 1: 30s 窗口内多个测试失败映射到同一需求时合并 spec-delta
+        - Loop 4: 60s 窗口内多条预测验证到达时聚合置信度调整
+
+    Usage:
+        mgr = CoalescingManager()
+        mgr.set_window(LoopEventType.CI_FAILURE, 30.0)
+        grouped, is_ready = mgr.add_event(event, group_key="RS-001")
+        if is_ready:
+            aggregated_event = mgr.flush(group_key)
+    """
+
+    def __init__(self):
+        self._windows: dict[LoopEventType, float] = {}
+        self._groups: dict[str, CoalescingGroup] = {}
+        self._lock = threading.RLock()
+
+    def set_window(self, event_type: LoopEventType, window_seconds: float):
+        """设置某事件类型的聚合窗口时间。"""
+        with self._lock:
+            self._windows[event_type] = window_seconds
+
+    def get_window(self, event_type: LoopEventType) -> float:
+        """获取某事件类型的聚合窗口时间。"""
+        with self._lock:
+            return self._windows.get(event_type, 0.0)
+
+    def remove_window(self, event_type: LoopEventType):
+        """移除某事件类型的聚合窗口。"""
+        with self._lock:
+            self._windows.pop(event_type, None)
+
+    def get_group_key(self, event: LoopEvent) -> Optional[str]:
+        """获取事件的聚合分组键。"""
+        data = event.data or {}
+        if event.event_type == LoopEventType.CI_FAILURE:
+            return data.get("req_id") or data.get("requirement_id")
+        if event.event_type in (LoopEventType.TEST_RESULT, LoopEventType.KG_LOW_CONFIDENCE):
+            return data.get("entity_id") or data.get("edge_id")
+        if event.event_type == LoopEventType.FIELD_DEFECT:
+            return data.get("swc")
+        return None
+
+    def add_event(self, event: LoopEvent,
+                  group_key: Optional[str] = None) -> tuple[Optional[str], bool]:
+        """向聚合窗口添加事件。
+
+        Returns:
+            (group_key, is_ready): 窗口是否已关闭可以提交聚合结果。
+        """
+        if group_key is None:
+            group_key = self.get_group_key(event)
+        if group_key is None:
+            return None, True
+
+        with self._lock:
+            window = self._windows.get(event.event_type, 0.0)
+            if window <= 0:
+                return group_key, True
+
+            if group_key not in self._groups:
+                self._groups[group_key] = CoalescingGroup(
+                    group_key=group_key,
+                    event_type=event.event_type,
+                    window_start=time.time(),
+                )
+
+            group = self._groups[group_key]
+            group.add_event(event)
+
+            elapsed = time.time() - group.window_start
+            if elapsed >= window:
+                return group_key, True
+
+            return group_key, False
+
+    def flush(self, group_key: str) -> Optional[CoalescingGroup]:
+        """刷新 (提取并移除) 一个聚合分组。"""
+        with self._lock:
+            return self._groups.pop(group_key, None)
+
+    def flush_by_event_type(self, event_type: LoopEventType) -> list[CoalescingGroup]:
+        """刷新某事件类型的所有已就绪分组。"""
+        window = self.get_window(event_type)
+        ready: list[CoalescingGroup] = []
+        with self._lock:
+            keys_to_remove: list[str] = []
+            for gk, group in self._groups.items():
+                if group.event_type != event_type:
+                    continue
+                elapsed = time.time() - group.window_start
+                if elapsed >= window:
+                    ready.append(group)
+                    keys_to_remove.append(gk)
+
+            for gk in keys_to_remove:
+                del self._groups[gk]
+
+        return ready
+
+    def cancel_group(self, group_key: str):
+        """取消一个聚合分组。"""
+        with self._lock:
+            self._groups.pop(group_key, None)
+
+    def clear(self):
+        """清除所有聚合分组。"""
+        with self._lock:
+            self._groups.clear()
+
+    def active_groups(self) -> dict[str, dict]:
+        """返回当前活跃的聚合分组信息。"""
+        with self._lock:
+            return {k: v.to_dict() for k, v in self._groups.items()}
+
+    def stats(self) -> dict:
+        """返回聚合管理器统计。"""
+        with self._lock:
+            return {
+                "active_groups": len(self._groups),
+                "windows": {k.value: v for k, v in self._windows.items()},
+                "groups": self.active_groups(),
+            }
+
+
+@dataclass
 # ═══════════════════════════════════════════════════════════════════════
 # System EventBus
 # ═══════════════════════════════════════════════════════════════════════
@@ -849,7 +1281,13 @@ class SystemEventBus:
                  dead_letter_max_retries: int = 3,
                  dead_letter_backoff: float = 2.0,
                  dead_letter_max_queue: int = 5000,
-                 audit_log_max_entries: int = 5000):
+                 audit_log_max_entries: int = 5000,
+                 # EventQueuePersistence — 持久化路径 (ACC-005, ACC-008)
+                 persistence_base_path: Optional[str] = None,
+                 persistence_enabled: bool = False,
+                 # Coalescing windows — 时间窗口聚合 (ACC-106, ACC-406, 默认禁用)
+                 loop1_coalescing_window: float = 0.0,
+                 loop4_coalescing_window: float = 0.0):
         self._lock = threading.RLock()
         self._lock_emit = threading.Lock()
         self._subscriptions: dict[LoopEventType, list[Subscription]] = defaultdict(list)
@@ -867,6 +1305,8 @@ class SystemEventBus:
             "total_rate_limited": 0,
             "total_source_rejected": 0,
             "total_dead_letter": 0,
+            "total_recovered": 0,
+            "total_coalesced": 0,
             "by_type": defaultdict(int),
         }
         self._store = store  # 可选的持久化后端
@@ -910,6 +1350,54 @@ class SystemEventBus:
         # ── I4: 审计日志 ──
         self._audit_log = AuditLog(store=store, max_entries=audit_log_max_entries)
 
+        # ── ACC-005, ACC-008: EventQueuePersistence — 事件持久化 + 崩溃自动恢复 ──
+        self._persistence_enabled = persistence_enabled
+        if persistence_enabled:
+            self._persistence = EventQueuePersistence(
+                base_path=persistence_base_path
+            )
+            log.info("EventBus: EventQueuePersistence initialized at %s",
+                     self._persistence.base_path)
+
+            # 崩溃后自动恢复未消费的事件
+            recovered = self._persistence.recover_unconsumed()
+            if recovered:
+                log.info("EventBus: recovering %d unconsumed event(s) from crash",
+                         len(recovered))
+                for idx, recovered_event in enumerate(recovered):
+                    self._work_queue.put((recovered_event.priority, idx, recovered_event))
+                    with self._lock:
+                        self._stats["total_recovered"] += 1
+
+                # 启动 worker 线程处理恢复的事件
+                if not self._running:
+                    self._running = True
+                    self._worker_thread = threading.Thread(
+                        target=self._worker_loop, daemon=True
+                    )
+        else:
+            self._persistence = EventQueuePersistence(
+                base_path=persistence_base_path or "/tmp/yuleosh-loop"
+            )
+
+        # ── ACC-106, ACC-406: CoalescingManager — 时间窗口聚合 ──
+        self._coalescing = CoalescingManager()
+        if loop1_coalescing_window > 0:
+            self._coalescing.set_window(
+                LoopEventType.CI_FAILURE, loop1_coalescing_window
+            )
+            log.info("EventBus: Loop 1 coalescing window = %ss",
+                     loop1_coalescing_window)
+        if loop4_coalescing_window > 0:
+            self._coalescing.set_window(
+                LoopEventType.TEST_RESULT, loop4_coalescing_window
+            )
+            self._coalescing.set_window(
+                LoopEventType.KG_LOW_CONFIDENCE, loop4_coalescing_window
+            )
+            log.info("EventBus: Loop 4 coalescing window = %ss",
+                     loop4_coalescing_window)
+
     # ── I4 组件访问 (只读) ──────────────────────────────────────────
 
     @property
@@ -927,6 +1415,20 @@ class SystemEventBus:
     @property
     def audit_log(self) -> AuditLog:
         return self._audit_log
+
+    @property
+    def persistence(self) -> EventQueuePersistence:
+        """事件持久化队列 (ACC-005, ACC-008)."""
+        return self._persistence
+
+    @property
+    def coalescing(self) -> CoalescingManager:
+        """时间窗口聚合管理器 (ACC-106, ACC-406)."""
+        return self._coalescing
+
+    @property
+    def persistence_enabled(self) -> bool:
+        return self._persistence_enabled
 
     # ── I5: Chain Config ───────────────────────────────────────────────
 
@@ -1098,7 +1600,23 @@ class SystemEventBus:
             log.debug("EventBus: deduped %s", event.dedup_key)
             return event
 
-        # ── 持久化 ──
+        # ── ACC-106, ACC-406: 聚合窗口检查 ──
+        group_key, is_ready = self._coalescing.add_event(event)
+        if group_key is not None and not is_ready:
+            # 事件被聚合窗口捕获，不立即处理
+            # 持久化事件以便崩溃恢复
+            if self._persistence_enabled:
+                self._persistence.save_event(event)
+            log.debug("EventBus: coalesced '%s' into group '%s' (waiting for window close)",
+                      event.event_type.value, group_key)
+            self._append_history(event)
+            return event
+
+        # ── 持久化 (事件队列) ──
+        if self._persistence_enabled:
+            self._persistence.save_event(event)
+
+        # ── Store 持久化 ──
         if self._store is not None:
             self._persist_event(event)
 
@@ -1172,6 +1690,14 @@ class SystemEventBus:
             if sub.one_shot:
                 self.off(sub.id)
 
+        # ── ACC-005, ACC-008: 已处理 → 标记持久化完成 ──
+        all_success = all(
+            r.get("status") == "success"
+            for r in handler_results
+        )
+        if self._persistence_enabled and all_success:
+            self._persistence.mark_processed(event.event_id)
+
         # ── 审计日志 (I4) ──
         event.handler_results = handler_results
         event.rollback_status = self._compute_rollback_status(handler_results)
@@ -1241,7 +1767,7 @@ class SystemEventBus:
             priority=priority,
             dedup_key=dedup_key,
         )
-        self._work_queue.put((event.priority, event))
+        self._work_queue.put((event.priority, 0, event))
 
         # 启动 worker 线程（如果需要）
         if not self._running:
@@ -1255,7 +1781,7 @@ class SystemEventBus:
         """后台 worker 循环 — 处理异步事件队列。"""
         while self._running:
             try:
-                _, event = self._work_queue.get(timeout=1.0)
+                _, _, event = self._work_queue.get(timeout=1.0)
                 self.emit(event.event_type, source=event.source,
                           data=event.data, priority=event.priority,
                           dedup_key=event.dedup_key)
@@ -1384,6 +1910,116 @@ class SystemEventBus:
         用于测试或手动重置。
         """
         self._chain_context = None
+
+    # ── ACC-005, ACC-008: EventQueuePersistence 管理 ─────────────────
+
+    def set_persistence_base_path(self, base_path: str):
+        """设置持久化基路径。
+
+        Args:
+            base_path: 持久化目录路径。
+        """
+        self._persistence = EventQueuePersistence(base_path=base_path)
+
+    def set_persistence_enabled(self, enabled: bool):
+        """启用/禁用事件持久化。"""
+        self._persistence_enabled = enabled
+
+    def recover_from_crash(self) -> int:
+        """手动触发出崩溃恢复 — 重新入队未消费事件。
+
+        Returns:
+            恢复的事件数量。
+        """
+        if not self._persistence_enabled:
+            log.warning("EventBus: persistence disabled, skipping recovery")
+            return 0
+
+        recovered = self._persistence.recover_unconsumed()
+        count = 0
+        for idx, event in enumerate(recovered):
+            self._work_queue.put((event.priority, idx, event))
+            with self._lock:
+                self._stats["total_recovered"] += 1
+                self._stats["total_emitted"] += 1
+                self._stats["by_type"][event.event_type.value] += 1
+            count += 1
+
+        # 启动 worker 线程 (如需要)
+        if count > 0 and not self._running:
+            self._running = True
+            self._worker_thread = threading.Thread(
+                target=self._worker_loop, daemon=True
+            )
+            self._worker_thread.start()
+
+        return count
+
+    # ── ACC-106, ACC-406: Coalescing 管理 ─────────────────────────
+
+    def set_loop1_coalescing_window(self, window_seconds: float):
+        """设置 Loop 1 聚合窗口 (CI_FAILURE 事件的 spec-delta 合并)。
+
+        Args:
+            window_seconds: 窗口秒数 (<=0 禁用)。
+        """
+        if window_seconds > 0:
+            self._coalescing.set_window(
+                LoopEventType.CI_FAILURE, window_seconds
+            )
+        else:
+            self._coalescing.remove_window(LoopEventType.CI_FAILURE)
+
+    def set_loop4_coalescing_window(self, window_seconds: float):
+        """设置 Loop 4 聚合窗口 (置信度调整的合并)。
+
+        Args:
+            window_seconds: 窗口秒数 (<=0 禁用)。
+        """
+        if window_seconds > 0:
+            self._coalescing.set_window(
+                LoopEventType.TEST_RESULT, window_seconds
+            )
+            self._coalescing.set_window(
+                LoopEventType.KG_LOW_CONFIDENCE, window_seconds
+            )
+        else:
+            self._coalescing.remove_window(LoopEventType.TEST_RESULT)
+            self._coalescing.remove_window(LoopEventType.KG_LOW_CONFIDENCE)
+
+    def flush_loop1_coalesced(self) -> list[CoalescingGroup]:
+        """刷新 Loop 1 已就绪的聚合分组。
+
+        返回已就绪的分组列表，调用方应针对每个分组生成
+        单一的聚合 spec-delta。
+
+        Returns:
+            已就绪的 CoalescingGroup 列表。
+        """
+        with self._lock:
+            self._stats["total_coalesced"] += 1
+        return self._coalescing.flush_by_event_type(LoopEventType.CI_FAILURE)
+
+    def flush_loop4_coalesced(self) -> list[CoalescingGroup]:
+        """刷新 Loop 4 已就绪的聚合分组。
+
+        返回已就绪的分组列表，调用方应针对每个分组应用
+        单一的聚合置信度调整。
+
+        Returns:
+            已就绪的 CoalescingGroup 列表。
+        """
+        with self._lock:
+            self._stats["total_coalesced"] += 1
+        return self._coalescing.flush_by_event_type(LoopEventType.TEST_RESULT)
+
+    def clear_coalescing(self):
+        """清除所有活跃的聚合分组。"""
+        self._coalescing.clear()
+
+    def active_coalescing_groups(self) -> dict[str, dict]:
+        """返回当前活跃的聚合分组。"""
+        return self._coalescing.active_groups()
 
     # ── 来源验证 (I4) ──────────────────────────────────────────────
 
@@ -1575,6 +2211,10 @@ class SystemEventBus:
                     base["chain"] = {"enabled": True}
             else:
                 base["chain"] = {"enabled": False}
+            # ACC-005, ACC-008: 持久化统计
+            base["persistence"] = self._persistence.stats()
+            # ACC-106, ACC-406: 聚合窗口统计
+            base["coalescing"] = self._coalescing.stats()
             return base
 
     def active_subscriptions(self) -> dict[str, int]:
@@ -1585,5 +2225,24 @@ class SystemEventBus:
 
 # ── 全局单例 ──────────────────────────────────────────────────────────
 
-loop_bus = SystemEventBus()
-"""全局 Loop 系统事件总线实例。"""
+loop_bus = SystemEventBus(persistence_enabled=False)
+"""全局 Loop 系统事件总线实例 (持久化禁用, 按需配置)。"""
+
+# ═══════════════════════════════════════════════════════════════════════
+# __all__
+# ═══════════════════════════════════════════════════════════════════════
+
+__all__ = [
+    "LoopEventType",
+    "LoopEvent",
+    "Subscription",
+    "SourceValidator",
+    "TokenBucket",
+    "DeadLetterQueue",
+    "AuditLog",
+    "EventQueuePersistence",
+    "CoalescingGroup",
+    "CoalescingManager",
+    "SystemEventBus",
+    "loop_bus",
+]

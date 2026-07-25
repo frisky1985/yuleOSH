@@ -82,7 +82,7 @@
 | `test_e2e_review_auto` | `test_e2e.py` | `src/review/run.py` | `src/yuleosh/review/run.py` |
 | `test_e2e_cli_help` | `test_e2e.py` | `src/cli/yuleosh.sh` | `src/yuleosh/cli/yuleosh.sh` |
 
-**根因**: 所有模块文件在 `src/yuleosh/` 下，但测试引用了 `src/` 下的路径（7 处）。
+**根因**: 所有模块文件在 `src/yuleosh/` 下，但测试引用了 `src/` 下的路径（本次整改批次实际修复 4 处，剩余 3 处已通过后续补修 `50d1a55d` 完成全部闭环）。
 
 ---
 
