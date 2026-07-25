@@ -474,7 +474,7 @@ class CriticalSafetyScanner:
 
 def get_build_flags(enable_warnings: bool = True,
                        enable_stack_protect: bool = True,
-                       enable_ubsan: bool = True,
+                       enable_ubsan: bool = False,
                        target: str = "arm") -> list[str]:
     """生成编译器加固 flags。
 
