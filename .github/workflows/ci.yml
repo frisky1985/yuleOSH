@@ -188,7 +188,7 @@ else:
         python -m yuleosh.evidence.pack || echo "Evidence pack requires API key, skipped"
 
     - name: Upload compliance pack
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: compliance-evidence
         path: .osh/evidence/
