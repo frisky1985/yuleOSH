@@ -258,8 +258,13 @@ class ReportBuilderMixin:
         output_path.write_text(content)
 
         json_path = self.evidence_dir / "review-log.json"
-        with open(json_path, "w") as f:
-            json.dump(self.reviews, f, indent=2, ensure_ascii=False)
+        try:
+            with open(json_path, "w") as f:
+                json.dump(self.reviews, f, indent=2, ensure_ascii=False)
+        except (OSError, IOError) as e:
+            import logging as _lg
+            _lg.getLogger("evidence.report_builder").error(
+                "Failed to write review-log.json to %s — %s", json_path, e)
 
         # ── Copy raw review JSON files to evidence/reviews/ subdir ──
         raw_reviews_dir = self.evidence_dir / "reviews"

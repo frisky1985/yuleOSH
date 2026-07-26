@@ -475,7 +475,7 @@ class CriticalSafetyScanner:
 def get_build_flags(enable_warnings: bool = True,
                        enable_stack_protect: bool = True,
                        enable_ubsan: bool = False,
-                       target: str = "arm") -> list[str]:
+                       target: str = "native") -> list[str]:
     """生成编译器加固 flags。
 
     核心 P0 检查由 cppcheck 静态分析完成。
@@ -484,7 +484,9 @@ def get_build_flags(enable_warnings: bool = True,
     Args:
         enable_warnings: 启用安全相关编译警告
         enable_stack_protect: 启用栈保护
-        target: 目标架构标识（arm/riscv/xtensa等）。
+        enable_ubsan: 启用 UndefinedBehaviorSanitizer（默认关闭）
+        target: 目标架构标识（arm/riscv/xtensa/native）。
+                arm 目标额外添加 -mthumb -mcpu=cortex-m7 等嵌入编译标志。
 
     Returns:
         CMake/CFLAGS 兼容的 flag 列表
@@ -499,6 +501,16 @@ def get_build_flags(enable_warnings: bool = True,
 
     if enable_ubsan:
         flags.extend(SANITIZER_FLAGS["ubsan"])
+
+    # Architecture-specific flags
+    if target == "arm":
+        flags.extend(["-mthumb", "-mcpu=cortex-m7", "-mfloat-abi=hard",
+                      "-mfpu=fpv5-d16", "-specs=nano.specs"])
+    elif target == "riscv":
+        flags.extend(["-march=rv32imafc", "-mabi=ilp32f"])
+    elif target == "xtensa":
+        flags.extend(["-mlongcalls"])
+    # target == "native": no arch-specific flags
 
     return flags
 
@@ -534,7 +546,7 @@ def step_review_critical_safety(session: PipelineSession) -> list[dict]:
         },
         "compiler_flags": {
             "ubsan": get_build_flags(target="arm"),
-            "asan": get_build_flags(target="arm", enable_ubsan=False),
+            "asan": get_build_flags(target="arm"),
         },
     }
 

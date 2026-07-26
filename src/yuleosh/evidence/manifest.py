@@ -116,9 +116,13 @@ _REQUIRED_FILES = {
 def _sha256_file(filepath: str) -> str:
     """Compute SHA-256 hex digest for a file."""
     h = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
+    try:
+        with open(filepath, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+    except (OSError, IOError) as e:
+        log.error("Failed to read file for SHA-256: %s — %s", filepath, e)
+        return ""
     return h.hexdigest()
 
 
@@ -313,8 +317,12 @@ def save_manifest(manifest: AuditManifest, output_path: str) -> str:
     d = manifest_to_dict(manifest)
     content = json.dumps(d, indent=2, ensure_ascii=False, default=str)
 
-    with open(output_path, "w") as f:
-        f.write(content)
+    try:
+        with open(output_path, "w") as f:
+            f.write(content)
+    except (OSError, IOError) as e:
+        log.error("Failed to write manifest to %s — %s", output_path, e)
+        return ""
 
     file_hash = _sha256_file(output_path)
     log.info("Manifest written to %s (sha256: %s)", output_path, file_hash[:16])
@@ -330,8 +338,12 @@ def load_manifest(manifest_path: str) -> AuditManifest:
     Returns:
         AuditManifest populated from the JSON.
     """
-    with open(manifest_path) as f:
-        d = json.load(f)
+    try:
+        with open(manifest_path) as f:
+            d = json.load(f)
+    except (OSError, IOError, json.JSONDecodeError) as e:
+        log.error("Failed to load manifest from %s — %s", manifest_path, e)
+        return None
 
     files = [
         ManifestFileEntry(

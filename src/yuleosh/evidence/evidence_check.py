@@ -47,9 +47,13 @@ MANDATORY_COMPONENTS = [
 def _sha256_file(filepath: str) -> str:
     """Compute SHA-256 hash of a file."""
     h = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
+    try:
+        with open(filepath, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+    except (OSError, IOError) as e:
+        log.error("Failed to read file for SHA-256: %s — %s", filepath, e)
+        return ""
     return h.hexdigest()
 
 
@@ -419,8 +423,11 @@ def pack_evidence_bundle(
 
     # §22.9: Write audit manifest
     manifest_path = bundle_dir / "audit-manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2, ensure_ascii=False, default=str)
+    try:
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False, default=str)
+    except (OSError, IOError) as e:
+        log.error("Failed to write audit manifest to %s — %s", manifest_path, e)
     manifest["_manifest_sha256"] = _sha256_file(str(manifest_path))
 
     # Compute bundle integrity
