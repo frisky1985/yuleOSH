@@ -14,15 +14,40 @@ from pathlib import Path
 from typing import Optional
 
 # JSON Schema for session.json validation
+# Covers both pipeline session.json and review-session.json formats.
 SESSION_JSON_SCHEMA = {
     "type": "object",
     "required": ["name", "status"],
     "properties": {
         "name": {"type": "string"},
-        "status": {"type": "string"},
+        "status": {"type": "string", "enum": ["running", "passed", "failed", "skipped", "blocked", "in_progress", "completed", "cancelled", "pending"]},
         "spec_path": {"type": "string"},
         "commit_sha": {"type": "string"},
         "branch": {"type": "string"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"},
+        "current_step": {"type": "string"},
+        "steps": {"type": "array"},
+        "artifacts": {"type": "object"},
+        "errors": {"type": "array"},
+        "task": {"type": "string"},
+        "decision": {"type": "string"},
+        "reviews": {"type": "array"},
+        "project_dir": {"type": "string"},
+        "pipeline": {"type": "string"},
+    },
+    "additionalProperties": True,
+}
+
+# Schema for review-session.json (per-step review files)
+REVIEW_SESSION_JSON_SCHEMA = {
+    "type": "object",
+    "required": ["task", "status"],
+    "properties": {
+        "task": {"type": "string"},
+        "status": {"type": "string"},
+        "decision": {"type": "string"},
+        "reviews": {"type": "array"},
         "created_at": {"type": "string"},
     },
     "additionalProperties": True,
@@ -32,22 +57,55 @@ log = logging.getLogger("evidence.collection")
 
 
 def _validate_session_json(data: dict, source: str) -> bool:
-    """Validate session JSON data against the minimal schema.
+    """Validate session JSON data against the SESSION_JSON_SCHEMA.
 
     Returns True if valid, False if invalid (warnings logged).
     Non-blocking: schema violations emit warnings but do not raise.
     """
+    return _validate_json_schema(data, source, SESSION_JSON_SCHEMA, "Session")
+
+
+def _validate_review_session_json(data: dict, source: str) -> bool:
+    """Validate review-session.json data against REVIEW_SESSION_JSON_SCHEMA."""
+    return _validate_json_schema(data, source, REVIEW_SESSION_JSON_SCHEMA, "ReviewSession")
+
+
+def _validate_json_schema(data: dict, source: str, schema: dict, label: str) -> bool:
+    """Generic JSON schema validator (no external jsonschema lib dependency).
+
+    Checks:
+    - data is a dict
+    - all required fields are present
+    - enum constraints on string fields
+    - type constraints on properties
+
+    Non-blocking: violations emit warnings but do not raise.
+    """
     if not isinstance(data, dict):
-        log.warning(f"Session data in {source} is not a dict (type={type(data).__name__})")
+        log.warning(f"{label} data in {source} is not a dict (type={type(data).__name__})")
         return False
-    if "name" not in data:
-        log.warning(f"Session data in {source} missing required field 'name'")
-    if "status" not in data:
-        log.warning(f"Session data in {source} missing required field 'status'")
-    if not isinstance(data.get("name", ""), str):
-        log.warning(f"Session 'name' in {source} is not a string")
-    if not isinstance(data.get("status", ""), str):
-        log.warning(f"Session 'status' in {source} is not a string")
+
+    # Check required fields
+    for req in schema.get("required", []):
+        if req not in data:
+            log.warning(f"{label} data in {source} missing required field '{req}'")
+
+    # Check property constraints
+    props = schema.get("properties", {})
+    for key, value in data.items():
+        prop = props.get(key)
+        if prop is None:
+            continue  # additionalProperties allowed
+        # Type check
+        expected_type = prop.get("type")
+        if expected_type and expected_type != "object" and expected_type != "array":
+            if not isinstance(value, eval(expected_type.capitalize())):
+                log.warning(f"{label} field '{key}' in {source}: expected {expected_type}, got {type(value).__name__}")
+        # Enum check
+        enum_vals = prop.get("enum")
+        if enum_vals and isinstance(value, str) and value not in enum_vals:
+            log.warning(f"{label} field '{key}' in {source}: value '{value}' not in allowed values {enum_vals}")
+
     return True
 
 

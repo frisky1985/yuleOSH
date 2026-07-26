@@ -77,8 +77,16 @@ def list_reviews(handler: BaseHTTPRequestHandler) -> dict:
             if d.is_dir():
                 sess_file = d / "review-session.json"
                 if sess_file.exists():
-                    data = json.loads(sess_file.read_text())
-                    sessions.append(data)
+                    try:
+                        data = json.loads(sess_file.read_text())
+                        # Validate review session JSON schema (non-blocking)
+                        from yuleosh.evidence.collection import _validate_review_session_json
+                        _validate_review_session_json(data, str(sess_file))
+                        sessions.append(data)
+                    except (json.JSONDecodeError, OSError) as e:
+                        import logging
+                        logging.getLogger("api.routes").warning(
+                            f"Could not read review session {sess_file}: {e}")
     return {"sessions": sessions, "count": len(sessions)}
 
 

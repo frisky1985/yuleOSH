@@ -6,6 +6,49 @@
 
 Serves the yuleOSH web dashboard with API routes, auth, static files,
 and project management.  Routes are extracted to yuleosh/ui/routes/*.
+
+## Configuration
+
+Environment variables:
+  YULEOSH_AUTH_DISABLED=true|1|yes  — Disable authentication (default: enabled)
+  OSH_HOME=<path>                   — Override project home directory
+
+## API Endpoints
+
+### Static files
+  GET /, /index.html, /* — Serve frontend/out/ static files
+
+### Pages
+  GET /dashboard     — Dashboard landing page (dashboard-v5.html)
+  GET /health        — Health check endpoint
+  GET /status        — System status endpoint
+  GET /login         — Login page
+
+### API v0 (legacy)
+  GET  /api/reviews        — List review sessions
+  GET  /api/ci-results     — List CI layer results
+  GET  /api/evidence       — List evidence artifacts
+  POST /api/action         — Execute API action
+
+### Auth
+  POST /_auth/login  — Validate API key, set session cookie
+
+## Rate Limiting
+  - 60 requests per 60s window per client IP
+  - Returns 429 with Retry-After header when exceeded
+
+## Security Headers
+  All responses include:
+  - X-Content-Type-Options: nosniff
+  - X-Frame-Options: DENY
+  - X-XSS-Protection: 1; mode=block
+  - Referrer-Policy: strict-origin-when-cross-origin
+
+## Routes
+  HTTP method handlers (do_GET, do_POST, do_DELETE) delegate to:
+    yuleosh.ui.routes.handler_helpers.handle_get
+    yuleosh.ui.routes.handler_helpers.handle_post
+    yuleosh.ui.routes.handler_helpers.handle_delete
 """
 
 import json
