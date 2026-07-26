@@ -8,7 +8,7 @@ from yuleosh.pipeline.step_handlers.review_misra_ci import (
     _read_misra_report, _read_misra_trend, _compute_trend,
     _classify_violations, _generate_fix_recommendations,
     _check_for_regression_violations, step_review_misra_ci,
-    _PRIORITY_MAP,
+    _PRIORITY_MAP, _DEFAULT_REPORT_DIR,
 )
 
 
@@ -148,6 +148,55 @@ class TestClassifyViolations:
         classified = _classify_violations(report)
         assert classified[0]["rule_id"] == "R1"
 
+    def test_mandatory_severity(self):
+        """Mandatory severity should be treated as priority 1, needs deviation."""
+        report = {"groups": {
+            "M1.1": {
+                "severity_category": "Mandatory",
+                "count": 2,
+                "title": "Mandatory rule",
+                "files": ["main.c"],
+            }
+        }}
+        classified = _classify_violations(report)
+        assert len(classified) == 1
+        assert classified[0]["severity"] == "mandatory"
+        assert classified[0]["needs_deviation"] is True
+
+    def test_unknown_severity_category(self):
+        """Unknown severity category should be treated as priority 3."""
+        report = {"groups": {
+            "X1": {
+                "severity_category": "unknown",
+                "count": 1,
+                "title": "Unknown",
+                "files": [],
+            }
+        }}
+        classified = _classify_violations(report)
+        assert len(classified) == 1
+        assert classified[0]["priority"] == 3
+
+    def test_no_violations_raw_key_in_compute_trend(self):
+        """_compute_trend should handle missing violations_raw key gracefully."""
+        trend = _compute_trend(
+            {"summary": {"total_violations": 5}},
+            {"summary": {"total_violations": 3}},
+        )
+        assert trend["direction"] == "up"
+        assert trend["delta"] == 2
+        assert trend["required_delta"] == 0
+
+    def test_compute_trend_same_with_empty_violations(self):
+        """_compute_trend with empty violations_raw on both sides."""
+        trend = _compute_trend(
+            {"summary": {"total_violations": 5}, "violations_raw": []},
+            {"summary": {"total_violations": 5}, "violations_raw": []},
+        )
+        assert trend["direction"] == "same"
+        assert trend["delta"] == 0
+        assert trend["required_delta"] == 0
+
 
 class TestGenerateFixRecommendations:
     def test_no_p1_p2(self):
@@ -228,3 +277,60 @@ class TestStepReviewMisraCi:
         with patch.dict("os.environ", {}, clear=True):
             result = step_review_misra_ci(session)
             assert result is not None
+
+
+class TestStepReviewMisraCiWithReport:
+    """Integration test: step_review_misra_ci with a real report file."""
+
+    def test_with_valid_report(self):
+        with tempfile.TemporaryDirectory() as td:
+            # Setup minimal project structure
+            report_dir = Path(td) / _DEFAULT_REPORT_DIR
+            report_dir.mkdir(parents=True, exist_ok=True)
+
+            # Write a valid MISRA report
+            report_data = {
+                "summary": {
+                    "total_violations": 42,
+                    "total_rules_violated": 10,
+                    "unique_files": ["main.c", "foo.c"],
+                    "severity_counts": {"Required": 12, "Advisory": 30},
+                },
+                "groups": {
+                    "R1.1": {
+                        "severity_category": "Required",
+                        "count": 8,
+                        "title": "Test rule",
+                        "files": ["main.c"],
+                    },
+                    "A1.1": {
+                        "severity_category": "Advisory",
+                        "count": 30,
+                        "title": "Advisory rule",
+                        "files": ["foo.c"],
+                    },
+                },
+                "violations_raw": [
+                    {"severity": "error", "rule": "R1.1"},
+                    {"severity": "warning", "rule": "A1.1"},
+                ],
+            }
+            (report_dir / "misra-report.json").write_text(json.dumps(report_data))
+
+            session = MagicMock()
+            session.name = "test-session"
+            session_dir = Path(td) / ".yuleosh" / "sessions" / "test-session"
+            session_dir.mkdir(parents=True, exist_ok=True)
+            session.session_dir = session_dir
+
+            with patch.dict("os.environ", {"OSH_HOME": td}, clear=True):
+                result = step_review_misra_ci(session)
+                assert result is not None
+                # Verify the output file was written
+                out_path = session_dir / "misra-review.json"
+                assert out_path.exists()
+                review = json.loads(out_path.read_text())
+                assert review["status"] == "failed"  # Has required violations
+                assert review["summary"]["total_violations"] == 42
+                assert len(review["violations_by_priority"]["p1_required"]) == 1
+                assert len(review["violations_by_priority"]["p2_advisory"]) == 1
