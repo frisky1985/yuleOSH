@@ -1,7 +1,7 @@
 {
   "name": "yuleosh-desktop",
   "version": "0.1.0",
-  "description": "yuleOSH Desktop \u2014 \u5d4c\u5165\u5f0fAI\u5f00\u53d1\u5168\u6d41\u7a0b\u5e73\u53f0",
+  "description": "yuleOSH Desktop — 嵌入式AI开发全流程平台",
   "author": "frisky1985",
   "license": "MIT",
   "main": "main.js",
@@ -22,6 +22,16 @@
     "electron-builder": "^26.15.3"
   },
   "overrides": {
-    "tar": "^7.4.3"
+    "tar": "^7.5.19",
+    "app-builder-lib": ">=26.15.0",
+    "builder-util-runtime": "^9.7.0",
+    "brace-expansion": ">=2.1.2",
+    "js-yaml": ">=4.3.0",
+    "minimatch": ">=9.0.7",
+    "fast-uri": ">=3.1.4",
+    "form-data": ">=4.0.6",
+    "body-parser": ">=2.3.0",
+    "linkify-it": ">=5.0.2",
+    "undici": ">=7.28.0"
   }
 }
