@@ -8,6 +8,39 @@
 misra:
   profiles: {}
   active_profile: safety
+  deviations:
+    - rule: "Dir 4.1"
+      file: "tests/unity/**"
+      reason: "Unity test framework uses non-compliant patterns intentionally"
+    - rule: "R 10.1"
+      file: "src/hal/**"
+      reason: "Hardware abstraction layer — value range verified by runtime checks"
+  exclude_paths:
+    - "tests/**"
+    - "third_party/**"
+    - "build/**"
+  code_categories:
+    template:
+      paths:
+        - "src/yuleosh/templates/**"
+        - "test-dogfood/**"
+      action: "exclude"
+      block_on: false
+    third_party:
+      paths:
+        - "third_party/**"
+        - "Drivers/**"
+        - "Middlewares/**"
+        - "CMSIS/**"
+        - "vendor/**"
+        - "lib/**"
+      action: "alert"
+      block_on: false
+    business:
+      paths:
+        - "src/**"
+      action: "enforce"
+      block_on: true
 
 coverage:
   # 全局覆盖率阈值 —— 实际全局 Python 覆盖率约 5%
