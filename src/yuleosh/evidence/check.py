@@ -64,9 +64,13 @@ class EvidenceCheckResult:
 def _sha256_file(filepath: str) -> str:
     """Compute SHA-256 of a file."""
     h = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
+    try:
+        with open(filepath, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+    except (OSError, IOError) as e:
+        log.error("Failed to read file for SHA-256: %s — %s", filepath, e)
+        return ""
     return h.hexdigest()
 
 

@@ -207,14 +207,17 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
             continue
         if f.suffix in (".md", ".json", ".zip"):
             ev_manifest_entries.append(_build_manifest_entry(f, f.name))
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "manifest_version": "1.0",
-            "generated_at": _time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "project_dir": collector.project_dir,
-            "total_files": len(ev_manifest_entries),
-            "files": ev_manifest_entries,
-        }, f, indent=2, ensure_ascii=False)
+    try:
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "manifest_version": "1.0",
+                "generated_at": _time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "project_dir": collector.project_dir,
+                "total_files": len(ev_manifest_entries),
+                "files": ev_manifest_entries,
+            }, f, indent=2, ensure_ascii=False)
+    except (OSError, IOError) as e:
+        log.error("Failed to write compliance manifest to %s — %s", manifest_path, e)
     artifacts.append(str(manifest_path))
 
     print(f"\n{'='*50}")
