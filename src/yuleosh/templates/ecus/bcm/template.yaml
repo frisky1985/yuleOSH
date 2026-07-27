@@ -1,0 +1,37 @@
+name: bcm
+version: 1.0.0
+description: Body Control Module — 门控/灯光/雨刮/电源控制
+mcu: S32K312
+asil: ASIL_B
+platforms: [arm, s32k312, nxp]
+tags: [autosar, bsw, body, automotive, safety, bcm]
+spec_sections:
+  - System Overview
+  - Door Control
+  - Light Control
+  - Wiper Control
+  - Power Management
+  - Diagnostic
+  - Safety
+  - Test Plan
+bsw_modules:
+  - Mcu
+  - Dio
+  - Port
+  - Gpt
+  - Can
+  - Lin
+  - Spi
+  - Icu
+  - Pwm
+  - Adc
+  - Fls
+  - Wdg
+swcs:
+  - Door_SWC
+  - Light_SWC
+  - Wiper_SWC
+  - Power_SWC
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]

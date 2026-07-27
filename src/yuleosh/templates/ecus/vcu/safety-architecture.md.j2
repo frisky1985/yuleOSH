@@ -1,0 +1,35 @@
+# {{ project_name }} — Safety Architecture (VCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+## Architecture
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                    Application Layer (ASIL D decomposition)     │
+│  ┌────────────────────┐      ┌─────────────────────────────┐  │
+│  │ TorqueManager_SWC   │      │  TorqueMonitor (Core 1)    │  │
+│  │  Core 0 (ASIL B(D))│      │  Independent calc (ASIL B) │  │
+│  └────────┬───────────┘      └────────────┬────────────────┘  │
+│           └───────────────┬───────────────┘                   │
+│                      Cross-Compare                            │
+├───────────────────────────────────────────────────────────────┤
+│                    MotorControl_SWC / GearManager_SWC          │
+├───────────────────────────────────────────────────────────────┤
+│  Com / Dcm / Dem / EcuM / BswM / NvM / WdgM / E2E            │
+├───────────────────────────────────────────────────────────────┤
+│  CanIf / CanTp / MemIf / Fee / WdgIf                          │
+├───────────────────────────────────────────────────────────────┤
+│  Mcu / Dio / Port / Gpt / Can / Spi / Icu / Pwm / Adc / Wdg  │
+└───────────────────────────────────────────────────────────────┘
+```
+
+## Safety Mechanisms
+
+| ID | Mechanism | ASIL | Description |
+|:---|:----------|:----:|:------------|
+| SM-01 | Dual-Core Lockstep | D | Core 0 & 1 execute diverse torque calc |
+| SM-02 | Pedal Plausibility | D | Dual pedal, deviation check |
+| SM-03 | Slew Rate Limiter | C | Max 500 Nm/s torque rate |
+| SM-04 | E2E Profile 1 | D | Torque CAN signals CRC+Counter |
+| SM-05 | Brake-Over-Accelerator | D | BOA logic in dedicated SWC |

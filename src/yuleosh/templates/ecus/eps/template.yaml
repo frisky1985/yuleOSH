@@ -1,0 +1,36 @@
+name: eps
+version: 1.0.0
+description: Electric Power Steering — 电动助力转向控制
+mcu: S32K312
+asil: ASIL_D
+platforms: [arm, s32k312, nxp]
+tags: [autosar, bsw, steering, eps, automotive, safety]
+spec_sections:
+  - System Overview
+  - Torque Assist
+  - Position Control
+  - Return-to-Center
+  - Damping Control
+  - Sensor Management
+  - Safety (ASIL D)
+  - Test Plan
+bsw_modules:
+  - Mcu
+  - Dio
+  - Port
+  - Gpt
+  - Can
+  - Spi
+  - Icu
+  - Pwm
+  - Adc
+  - Fls
+  - Wdg
+swcs:
+  - AssistTorque_SWC
+  - PositionControl_SWC
+  - SensorFusion_SWC
+  - SafetyMonitor_SWC
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]

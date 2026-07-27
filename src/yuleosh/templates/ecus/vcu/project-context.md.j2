@@ -1,0 +1,20 @@
+# {{ project_name }} — Vehicle Control Unit (VCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+## Overview
+
+{{ project_name }} is a Vehicle Control Unit for powertrain domain control.
+Built on dual-core NXP {{ mcu }} with ASIL {{ asil_label }} decomposition (ASIL B(D) + ASIL B(D)).
+
+## Key Features
+- **Torque Management**: Driver demand, arbitration, slew rate limiting
+- **Pedal Monitoring**: Dual redundant pedal sensors with plausibility check
+- **Motor Control**: Inverter interface with regen coordination
+- **Brake-Over-Accelerator**: Mandatory safety logic
+- **Safety**: ASIL D decomposition, dual-core lockstep, E2E profile 1
+
+## BSW Modules ({{ num_bsw_modules }})
+{% for mod in bsw_modules %}
+- {{ mod }}
+{% endfor %}

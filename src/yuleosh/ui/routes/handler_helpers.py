@@ -156,6 +156,108 @@ def handle_get(handler) -> None:
         handler._serve_file(UI_DIR / "pages" / "pipeline-flow.html", "text/html; charset=utf-8")
     elif path == "/demo":
         handler._serve_page("demo.html", {})
+    elif path.startswith("/api/v1/pipeline/status/"):
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_status
+        result = handle_pipeline_status(handler, path)
+        if isinstance(result, tuple):
+            data, status = result
+            handler._json_response(data, status)
+        else:
+            handler._json_response(result)
+    elif path == "/api/v1/pipeline/runs":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_runs
+        handler._json_response(handle_pipeline_runs(handler))
+    elif path == "/api/v1/pipeline/stats":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_stats
+        handler._json_response(handle_pipeline_stats(handler))
+    elif path == "/api/v1/pipeline/validate":
+        from yuleosh.pipeline.config_validator import validate_pipeline_config
+        result = validate_pipeline_config(project_dir=os.environ.get("OSH_HOME", ""))
+        handler._json_response({"ok": True, **result})
+    # ── Loop Engineering API routes ──
+    elif path == "/api/loops/summary":
+        from yuleosh.api.loops import get_all_loops_data
+        handler._json_response(get_all_loops_data())
+    # ── Tenant API routes (SAAS-1) ──
+    elif path.startswith("/api/v1/tenant/"):
+        from yuleosh.ui.routes.tenant_routes import (
+            handle_tenant_info, handle_tenant_update, handle_tenant_projects, handle_usage_check,
+        )
+        parts = path.split("/")
+        # /api/v1/tenant/{slug}
+        if len(parts) == 5:
+            slug = parts[4]
+            handle_tenant_info(handler, slug)
+        # /api/v1/tenant/{slug}/projects
+        elif len(parts) == 6 and parts[5] == "projects":
+            slug = parts[4]
+            handle_tenant_projects(handler, slug)
+        # /api/v1/tenant/{slug}/usage
+        elif len(parts) == 6 and parts[5] == "usage":
+            slug = parts[4]
+            handle_usage_check(handler, slug)
+        else:
+            handler._serve_page("404.html", {})
+        return
+    elif path == "/api/v1/tenants":
+        from yuleosh.ui.routes.tenant_routes import handle_tenant_list
+        handle_tenant_list(handler)
+        return
+    # ── Kanban / Project routes (SAAS-3) ──
+    elif path == "/kanban":
+        # Serve the kanban page from ui/pages/
+        ui_dir = Path(__file__).resolve().parent.parent
+        kanban_path = ui_dir / "pages" / "kanban.html"
+        if kanban_path.exists():
+            handler._serve_file(kanban_path, "text/html; charset=utf-8")
+        else:
+            handler._serve_static("/404.html")
+        return
+    elif path.startswith("/api/v1/projects/"):
+        from yuleosh.ui.routes.project_routes import handle_get_project
+        handle_get_project(handler, path)
+        return
+    # ── Audit routes (SAAS-4) ──
+    elif path == "/audit-dashboard":
+        ui_dir = Path(__file__).resolve().parent.parent
+        audit_path = ui_dir / "pages" / "audit-dashboard.html"
+        if audit_path.exists():
+            handler._serve_file(audit_path, "text/html; charset=utf-8")
+        else:
+            handler._serve_static("/404.html")
+        return
+    elif path == "/api/v1/audit":
+        from yuleosh.ui.routes.audit_routes import handle_get_audit_logs
+        handle_get_audit_logs(handler)
+        return
+    # ── Billing routes (SAAS-5) ──
+    elif path == "/billing":
+        ui_dir = Path(__file__).resolve().parent.parent
+        billing_path = ui_dir / "pages" / "billing.html"
+        if billing_path.exists():
+            handler._serve_file(billing_path, "text/html; charset=utf-8")
+        else:
+            handler._serve_static("/404.html")
+        return
+    elif path == "/api/v1/billing/usage":
+        from yuleosh.ui.routes.billing_routes import handle_get_usage
+        handle_get_usage(handler)
+        return
+    elif path == "/api/v1/billing/plan":
+        from yuleosh.ui.routes.billing_routes import handle_get_plan
+        handle_get_plan(handler)
+        return
+    elif path.startswith("/api/loops/"):
+        from yuleosh.api.loops import get_loop_data
+        parts = path.split("/")
+        if len(parts) >= 4 and parts[-1] == "data":
+            try:
+                loop_id = int(parts[3])
+            except (ValueError, IndexError):
+                loop_id = None
+            handler._json_response(get_loop_data(loop_id))
+        else:
+            handler._serve_page("404.html", {})
     else:
         handler._serve_page("404.html", {})
 
@@ -182,6 +284,46 @@ def handle_post(handler) -> None:
         handler._handle_api("logout")
         return
 
+    # ── Tenant project create (SAAS-1) ──
+    if path.startswith("/api/v1/tenant/") and path.endswith("/projects"):
+        from yuleosh.ui.routes.tenant_routes import handle_tenant_project_create
+        parts = path.split("/")
+        if len(parts) == 6:
+            slug = parts[4]
+            handle_tenant_project_create(handler, slug)
+            return
+
+    # ── Project kanban operations (SAAS-3) ──
+    if path == "/api/v1/projects":
+        from yuleosh.ui.routes.project_routes import handle_create_project
+        handle_create_project(handler)
+        return
+    if path.startswith("/api/v1/projects/"):
+        from yuleosh.ui.routes.project_routes import handle_update_project
+        handle_update_project(handler, path)
+        return
+
+    # ── Audit log event creation (SAAS-4) ──
+    if path == "/api/v1/audit":
+        from yuleosh.ui.routes.audit_routes import handle_post_audit_event
+        handle_post_audit_event(handler)
+        return
+
+    # ── Billing (SAAS-5) ──
+    if path == "/api/v1/billing/upgrade":
+        from yuleosh.ui.routes.billing_routes import handle_upgrade_plan
+        handle_upgrade_plan(handler)
+        return
+
+    # Pipeline trigger endpoint
+    if path == "/api/v1/pipeline/trigger":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_trigger
+        content_length = int(handler.headers.get("Content-Length", 0))
+        body = handler.rfile.read(content_length) if content_length else b"{}"
+        result = handle_pipeline_trigger(handler, body)
+        handler._json_response(result)
+        return
+
     if not handler._check_auth():
         return
 
@@ -200,6 +342,7 @@ def handle_options(handler) -> None:
     _send_security_headers(handler)
     handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
+    handler.send_header("Access-Control-Allow-Origin", "*")
     handler.end_headers()
 
 

@@ -1,0 +1,40 @@
+# {{ project_name }} — Safety Concept (EPS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. HARA Summary
+
+### HAZ-01: 非预期转向助力 (ASIL D)
+| Hazard | 非预期转向助力导致车辆偏离车道 |
+| Malfunction | 扭矩传感器信号错误 / 电机失控 |
+| S | S3 | E | E4 | C | C3 |
+| **ASIL** | **D** |
+| Safety Goal | SG-01: 防止非预期转向助力 |
+
+### HAZ-02: 助力丢失 (ASIL B)
+| Hazard | 高速时助力突然丢失导致驾驶员难以控制 |
+| Safety Goal | SG-02: 检测助力故障并平滑降级 |
+
+### HAZ-03: 方向盘打到底不回正 (ASIL A)
+| Safety Goal | SG-03: 确保回正功能在合理时间完成 |
+
+## 2. Safety Goals
+
+| ID | Description | ASIL |
+|:---|:------------|:----:|
+| SG-01 | 防止非预期转向助力 | D |
+| SG-02 | 检测助力故障并平滑降级 | B |
+| SG-03 | 确保回正功能 | A |
+| SG-04 | 双路径扭矩监控 (TAS x2 + torque monitor) | D |
+
+## 3. ASIL D 架构
+
+### 双路径监控
+```
+TAS-Sensor Ch1 ──→ Path 1: AssistTorque_SWC (Core0) ──→ Motor Current
+TAS-Sensor Ch2 ──→ Path 2: SafetyMonitor_SWC (Core0) ──→ Monitor
+                         ↓                          ↓
+                    Cross-Compare ──→ Disable on mismatch
+```

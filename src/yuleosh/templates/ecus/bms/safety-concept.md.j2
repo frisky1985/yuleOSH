@@ -1,0 +1,37 @@
+# {{ project_name }} — Safety Concept (BMS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. HARA Summary
+
+### HAZ-01: 电池过充 (ASIL D)
+| Hazard | 电池过充导致热失控/起火 |
+| Malfunction | 电压测量错误 / 接触器无法断开 |
+| S | S3 | E | E3 | C | C3 |
+| **ASIL** | **D** |
+| Safety Goal | SG-01: 防止电池过充 |
+
+### HAZ-02: 电池过放 (ASIL C)
+| Safety Goal | SG-02: 防止电池过放导致永久损坏 |
+
+### HAZ-03: 电池过热 (ASIL D)
+| Hazard | 温度失控导致热蔓延 |
+| Malfunction | 温度传感器失效 / 冷却请求未发出 |
+| S | S3 | E | E3 | C | C2 |
+| **ASIL** | **D** |
+| Safety Goal | SG-03: 防止电池热失控 |
+
+### HAZ-04: 绝缘故障 (ASIL D)
+| Safety Goal | SG-04: 检测 HV 绝缘故障并断开高压 |
+
+## 2. Safety Goals
+
+| ID | Description | ASIL |
+|:---|:------------|:----:|
+| SG-01 | 防止电池过充 (OVP) | D |
+| SG-02 | 防止电池过放 (UVP) | C |
+| SG-03 | 防止电池热失控 (OTP) | D |
+| SG-04 | 检测 HV 绝缘故障 | D |
+| SG-05 | 确保接触器可靠断开 | D |

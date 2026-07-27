@@ -1,0 +1,20 @@
+# {{ project_name }} — Electric Power Steering (EPS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+## Overview
+
+{{ project_name }} is an Electric Power Steering system providing torque assist,
+position control, and return-to-center. Built on NXP {{ mcu }} with ASIL {{ asil_label }}.
+
+## Key Features
+- **Torque Assist**: Speed-dependent boost curve, FOC motor control
+- **Dual TAS Sensors**: Two redundant torque-angle sensors
+- **Return-to-Center**: Speed-adaptive, 2 second return at low speed
+- **Active Damping**: Steering oscillation suppression at high speed
+- **Safety**: ASIL D dual-path torque monitoring, windowed watchdog
+
+## BSW Modules ({{ num_bsw_modules }})
+{% for mod in bsw_modules %}
+- {{ mod }}
+{% endfor %}

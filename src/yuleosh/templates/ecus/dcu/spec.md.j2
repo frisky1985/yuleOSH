@@ -1,0 +1,115 @@
+# {{ project_name }} — Specification (DCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} ({{ mcu_family }}, {{ mcu_arch }}) | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. System Overview
+
+{{ project_name }} is a Domain Control Unit (DCU) serving as a zone gateway and body domain
+controller. Built on NXP {{ mcu }} with {{ asil_label }} safety level, it routes CAN, LIN,
+and Ethernet (SOME/IP) traffic between vehicle domains.
+
+### Communication Matrix
+
+| Interface | Type | Speed | Purpose |
+|:----------|:-----|:-----:|:--------|
+| CAN0 | CAN FD | 2 Mbps | Body CAN (doors, lights, wipers) |
+| CAN1 | CAN FD | 2 Mbps | Chassis CAN (brake, steering) |
+| CAN2 | CAN 2.0 | 500 kbps | Diagnostic CAN |
+| Eth0 | 100BASE-T1 | 100 Mbps | SOME/IP to central gateway |
+| LIN0 | LIN 2.1 | 19.2 kbps | Local zone sensors/actuators |
+
+---
+
+## 2. Gateway Routing
+
+### DCU-GW-001: CAN-to-CAN Routing
+- The system SHALL route CAN messages between CAN0, CAN1, and CAN2 based on routing table
+- The system SHALL support up to 256 route entries with configurable filter masks
+- The system SHALL forward messages within 1 ms of reception
+- The system SHALL support routing enable/disable per entry during runtime
+
+### DCU-GW-002: Signal Gateway
+- The system SHALL extract individual signals from CAN frames and repack into different frames
+- The system SHALL support signal conversion (endianness, scaling, offset)
+- The system SHALL validate signal range before forwarding
+
+### DCU-GW-003: CAN-to-Ethernet Gateway
+- The system SHALL encapsulate CAN messages into SOME/IP-SD events
+- The system SHALL support up to 50 SOME/IP service instances
+- The system SHALL serialize CAN signal groups into PDUs at 10 ms intervals
+
+---
+
+## 3. Ethernet Communication (SOME/IP)
+
+### DCU-ETH-001: SOME/IP Service Discovery
+- The system SHALL implement SOME/IP-SD per AUTOSAR PRS protocol
+- The system SHALL support Offer/Subscribe/StopOffer entry types
+- The system SHALL send FindService entries on network activation
+
+### DCU-ETH-002: SOME/IP Event Communication
+- The system SHALL publish vehicle state events via SOME/IP notifications
+- The system SHALL support Event Groups for selective subscription
+- The system SHALL respect initial delay and repetition phase per AR 4.x
+
+### DCU-ETH-003: DoIP (Diagnostic over IP)
+- The system SHALL support DoIP for UDS diagnostic routing via Ethernet
+- The system SHALL handle logical address assignment and routing activation
+- The system SHALL support up to 16 concurrent diagnostic sessions
+
+---
+
+## 4. Diagnostic Functions
+
+### DCU-DIAG-001: Diagnostic Gateway
+- The system SHALL support UDS routing between diagnostic requestor and target ECUs
+- The system SHALL maintain a diagnostic routing table with up to 64 targets
+- The system SHALL forward UDS responses back to the diagnostic source
+
+### DCU-DIAG-002: Event Memory
+- The system SHALL store Diagnostic Trouble Codes (DTCs) per ISO 14229-1
+- The system SHALL support up to 256 DTC entries with freeze frame data
+- The system SHALL support DTC status mask operations
+
+---
+
+## 5. Safety Requirements
+
+### DCU-SAF-001: Gateway Safety (ASIL B)
+- The system SHALL monitor critical path routing with a watchdog (100 ms timeout)
+- The system SHALL verify CAN routing data consistency via CRC on routing table
+- The system SHALL detect routing table corruption and enter safe state
+
+### DCU-SAF-002: Communication Isolation
+- The system SHALL isolate safety-critical CAN channels from non-critical channels
+- The system SHALL prevent bus-off on one channel from affecting other channels
+- The system SHALL protect routing table RAM using E2E profile 1
+
+### DCU-SAF-003: Secure Boot
+- The system SHALL verify firmware integrity via HSM crypto block before execution
+- The system SHALL authenticate diagnostic session requests via secure access (0x27)
+- The system SHALL support secure on-board communication (SecOC)
+
+---
+
+## 6. Acceptance Scenarios
+
+### Scenario: CAN Routing
+- GIVEN the gateway is running with 50 route entries
+- WHEN a CAN message arrives on CAN0 with matching ID
+- THEN the message SHALL be forwarded to CAN1 within 1 ms
+- AND the forwarding counter SHALL increment
+
+### Scenario: SOME/IP Event
+- GIVEN a SOME/IP service is offered
+- WHEN a client subscribes to an event group
+- THEN the gateway SHALL start publishing events at the configured interval
+- AND correct SOME/IP header SHALL be present
+
+### Scenario: Diagnostic Routing
+- GIVEN the diagnostic gateway is active
+- WHEN a UDS request arrives on CAN2 for target ECU
+- THEN the request SHALL be forwarded to the target via CAN1
+- AND the response SHALL be routed back to CAN2

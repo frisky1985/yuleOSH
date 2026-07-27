@@ -23,16 +23,60 @@
         "title": "yuleOSH: Run Pipeline"
       },
       {
+        "command": "yuleosh.checkMisra",
+        "title": "yuleOSH: Check MISRA"
+      },
+      {
+        "command": "yuleosh.runCi",
+        "title": "yuleOSH: Run CI"
+      },
+      {
+        "command": "yuleosh.showDashboard",
+        "title": "yuleOSH: Show Dashboard"
+      },
+      {
         "command": "yuleosh.viewStatus",
         "title": "yuleOSH: View Status"
       },
       {
         "command": "yuleosh.openDashboard",
-        "title": "yuleOSH: Open Dashboard"
+        "title": "yuleOSH: Open Dashboard (External)"
       },
       {
         "command": "yuleosh.flashDevice",
         "title": "yuleOSH: Flash Device"
+      },
+      {
+        "command": "yuleosh.viewEvidence",
+        "title": "yuleOSH: View Evidence Report"
+      },
+      {
+        "command": "yuleosh.loadMisraDiagnostics",
+        "title": "yuleOSH: Load MISRA Diagnostics"
+      },
+      {
+        "command": "yuleosh.reloadMisraReport",
+        "title": "yuleOSH: Reload MISRA Report"
+      },
+      {
+        "command": "yuleosh.showMisraProblems",
+        "title": "yuleOSH: Show MISRA Problems"
+      },
+      {
+        "command": "yuleosh.showMisraRuleDetail",
+        "title": "yuleOSH: Show MISRA Rule Detail"
+      },
+      {
+        "command": "yuleosh.openMisraDoc",
+        "title": "yuleOSH: Open MISRA Documentation"
+      },
+      {
+        "command": "yuleosh.quickCommand",
+        "title": "yuleOSH: Quick Command Menu"
+      },
+      {
+        "command": "yuleosh.viewPipelineLog",
+        "title": "yuleOSH: View Pipeline Stage Log"
       }
     ],
     "viewsContainers": {

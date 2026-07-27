@@ -1,0 +1,51 @@
+# {{ project_name }} — Safety Concept (VCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. HARA Summary
+
+### HAZ-01: 非预期加速 (ASIL D)
+| Hazard | 车辆非预期加速导致碰撞 |
+| Malfunction | 扭矩计算错误 / 踏板信号错误 |
+| S | S3 | E | E4 | C | C3 |
+| **ASIL** | **D** |
+| Safety Goal | SG-01: 防止非预期加速 |
+
+### HAZ-02: 制动踏板与加速踏板冲突 (ASIL D)
+| Hazard | 同时踩下刹车和油门时制动优先失效 |
+| Malfunction | BOA 逻辑失效 |
+| S | S3 | E | E3 | C | C3 |
+| **ASIL** | **D** |
+| Safety Goal | SG-02: 确保制动踏板优先于加速踏板 |
+
+### HAZ-03: 扭矩超限 (ASIL C)
+| Safety Goal | SG-03: 限制最大电机扭矩 |
+
+## 2. ASIL D 分解
+
+```
+ASIL D Requirement
+      ↓
+┌─────────────────┐  ┌─────────────────┐
+│ Path 1 (ASIL B) │  │ Path 2 (ASIL B) │
+│ TorqueManager   │  │ TorqueMonitor   │
+│  Core 0         │  │  Core 1         │
+└────────┬────────┘  └────────┬────────┘
+         └──────────┬─────────┘
+                    ↓
+              Cross-Compare
+              ┌─────────┐
+              │  ASIL D │
+              └─────────┘
+```
+
+## 3. Safety Goals
+
+| ID | Description | ASIL |
+|:---|:------------|:----:|
+| SG-01 | 防止非预期加速 | D |
+| SG-02 | 确保制动优先 | D |
+| SG-03 | 限制最大电机扭矩 | C |
+| SG-04 | 扭矩监控双路径交叉校验 | D |

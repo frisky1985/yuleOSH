@@ -1,0 +1,110 @@
+# {{ project_name }} — Specification (EPS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} ({{ mcu_family }}, {{ mcu_arch }}) | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. System Overview
+
+{{ project_name }} is an Electric Power Steering (EPS) system providing
+steering torque assist, position control, and return-to-center functionality.
+Built on NXP {{ mcu }} with ASIL {{ asil_label }} safety integrity.
+
+---
+
+## 2. Torque Assist
+
+### EPS-TRQ-001: Steering Torque Sensor
+- The system SHALL read steering torque from two redundant TAS (Torque Angle Sensor) channels
+- The system SHALL validate torque sensor signals by cross-checking both channels
+- The system SHALL detect torque sensor failure when channel deviation > 10%
+- The system SHALL use the lower torque value for assist calculation
+
+### EPS-TRQ-002: Assist Torque Calculation
+- The system SHALL calculate assist torque based on steering torque, vehicle speed, and steering angle
+- The system SHALL apply a speed-dependent boost curve (more assist at low speed, less at high speed)
+- The system SHALL update the assist torque setpoint every 1 ms
+- The system SHALL rate-limit assist torque changes to 50 Nm/s
+
+### EPS-TRQ-003: Motor Current Control
+- The system SHALL control the EPS motor current via FOC (Field-Oriented Control)
+- The system SHALL regulate motor current with ±1% accuracy
+- The system SHALL detect motor overcurrent (> 100 A) within 100 µs
+
+---
+
+## 3. Position Control
+
+### EPS-POS-001: Steering Angle Measurement
+- The system SHALL measure steering wheel angle with ±1° accuracy
+- The system SHALL determine steering direction and absolute position
+- The system SHALL support angle range of ±720° (4 turns)
+
+### EPS-POS-002: Return-to-Center
+- The system SHALL provide return-to-center torque when driver releases the wheel
+- The system SHALL adapt return speed based on vehicle velocity
+- The system SHALL complete return-to-center within 2 seconds at low speed
+
+---
+
+## 4. Damping Control
+
+### EPS-DMP-001: Active Damping
+- The system SHALL apply active damping to suppress steering wheel oscillations
+- The system SHALL adjust damping factor based on steering rate and vehicle speed
+- The system SHALL prevent steering wheel wobble at high speeds
+
+---
+
+## 5. Safety Requirements (ASIL D)
+
+### EPS-SAF-001: ASIL D Torque Monitoring
+- The system SHALL implement two independent torque monitoring paths
+- Path 1: Calculate max allowed assist based on lookup table
+- Path 2: Monitor actual motor current and verify against allowed range
+- The system SHALL disable assist on torque monitoring path mismatch
+
+### EPS-SAF-002: Redundant Sensors
+- The system SHALL use redundant steering torque sensors
+- The system SHALL use redundant motor position sensors
+- The system SHALL detect sensor faults within 1 ms
+
+### EPS-SAF-003: Safe State
+- The system SHALL disable motor assist on any safety violation
+- The system SHALL maintain mechanical steering capability in safe state
+- The system SHALL set DTC and notify driver via CAN
+
+### EPS-SAF-004: Watchdog Supervision
+- The system SHALL trigger watchdog at 10 ms interval
+- The system SHALL monitor main control loop execution deadline
+- The system SHALL enter safe state on watchdog timeout
+
+---
+
+## 6. Acceptance Scenarios
+
+### Scenario: Normal Steering Assist
+- GIVEN vehicle speed is 30 km/h
+- WHEN driver applies 3 Nm steering torque
+- THEN the system SHALL calculate assist torque within 1 ms
+- AND the motor SHALL deliver the calculated assist within 2 ms
+- AND measured assist torque SHALL be within 10% of demand
+
+### Scenario: Torque Sensor Failure
+- GIVEN TAS channel 1 reads 5 Nm and channel 2 reads 0 Nm
+- WHEN deviation > 10% is detected
+- THEN the system SHALL use the lower value (0 Nm) within 1 ms
+- AND SHALL set a DTC for torque sensor plausibility
+- AND SHALL disable assist within 10 ms
+
+### Scenario: High-Speed Damping
+- GIVEN vehicle speed > 100 km/h
+- WHEN steering rate exceeds 100°/s
+- THEN the system SHALL increase damping factor
+- AND SHALL prevent steering oscillation
+
+### Scenario: Safe State Activation
+- GIVEN a safety monitoring mismatch
+- WHEN the safety monitor detects torque path disagreement
+- THEN the system SHALL disable motor assist within 2 ms
+- AND SHALL notify the driver via CAN message
