@@ -1,0 +1,122 @@
+# {{ project_name }} — Specification (BMS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} ({{ mcu_family }}, {{ mcu_arch }}) | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. System Overview
+
+{{ project_name }} is a Battery Management System for HV battery pack monitoring,
+cell balancing, and safety protection. Built on NXP {{ mcu }} with ASIL {{ asil_label }}.
+
+---
+
+## 2. Voltage Monitoring
+
+### BMS-VLT-001: Cell Voltage Measurement
+- The system SHALL measure each cell voltage with ±2 mV accuracy at 10 ms intervals
+- The system SHALL support up to 96 series cells via analog front-end IC
+- The system SHALL detect cell overvoltage (> 4.2 V) within 20 ms
+
+### BMS-VLT-002: Voltage Validation
+- The system SHALL validate cell voltage using two independent AFE measurements
+- The system SHALL detect AFE communication errors via CRC check
+- The system SHALL report voltage sensor plausibility faults as DTC
+
+---
+
+## 3. Temperature Monitoring
+
+### BMS-TMP-001: Temperature Measurement
+- The system SHALL measure up to 16 NTC temperature sensors across the battery pack
+- The system SHALL sample all temperature channels every 100 ms
+- The system SHALL detect overtemperature (> 60°C cell) within 100 ms
+
+### BMS-TMP-002: Thermal Runaway Detection
+- The system SHALL detect rapid temperature rise (> 5°C/s) as potential thermal runaway
+- The system SHALL trigger contactor open on thermal runaway detection
+- The system SHALL report thermal event via CAN within 50 ms
+
+---
+
+## 4. Current Monitoring
+
+### BMS-CUR-001: Current Sensor Interface
+- The system SHALL measure battery pack current via shunt-based sensor
+- The system SHALL support bidirectional current measurement (±500 A range)
+- The system SHALL sample current every 1 ms for coulomb counting
+
+### BMS-CUR-002: Overcurrent Protection
+- The system SHALL detect discharge overcurrent (> 300 A) within 1 ms
+- The system SHALL detect charge overcurrent (> 200 A) within 1 ms
+- The system SHALL open contactors on overcurrent events
+
+---
+
+## 5. Cell Balancing
+
+### BMS-BAL-001: Passive Balancing
+- The system SHALL perform passive balancing via bleed resistors (100 mA per cell)
+- The system SHALL activate balancing when cell voltage delta exceeds 20 mV
+- The system SHALL limit balancing time to prevent overheating
+
+### BMS-BAL-002: Balancing Strategy
+- The system SHALL balance during charge phase (CC/CV)
+- The system SHALL prioritize cells with highest voltage deviation
+- The system SHALL report balancing status per cell on CAN
+
+---
+
+## 6. SOC/SOH Estimation
+
+### BMS-SOC-001: State of Charge
+- The system SHALL compute SOC using coulomb counting + voltage correction
+- The system SHALL update SOC every 100 ms with ±3% accuracy
+- The system SHALL recalibrate SOC at full charge (100%) and deep discharge (0%)
+
+### BMS-SOH-001: State of Health
+- The system SHALL track capacity fade as primary SOH indicator
+- The system SHALL update SOH after each full charge-discharge cycle
+- The system SHALL report SOH < 80% as end-of-life warning
+
+---
+
+## 7. Safety Requirements (ASIL D)
+
+### BMS-SAF-001: Contactors Control (ASIL D)
+- The system SHALL control at least three contactors: Positive, Negative, and Precharge
+- The system SHALL verify contactor state via auxiliary feedback contacts
+- The system SHALL open all contactors within 10 ms of any safety violation
+- The system SHALL detect contactor welding via voltage sense after open command
+
+### BMS-SAF-002: Insulation Monitoring
+- The system SHALL monitor HV-to-chassis insulation resistance
+- The system SHALL detect insulation fault when resistance < 500 Ω/V
+- The system SHALL open contactors on insulation fault
+
+### BMS-SAF-003: Redundant Voltage Monitoring
+- The system SHALL implement two independent voltage monitoring paths
+- The system SHALL enter safe state if voltage paths disagree > 5%
+- The system SHALL use E2E protection for all safety-critical CAN signals
+
+---
+
+## 8. Acceptance Scenarios
+
+### Scenario: Overvoltage Detection
+- GIVEN cell voltage > 4.2 V threshold
+- WHEN the measurement is validated
+- THEN the system SHALL open all contactors within 20 ms
+- AND SHALL set DTC for cell overvoltage
+
+### Scenario: Thermal Event
+- GIVEN cell temperature rises at 6°C/s
+- WHEN thermal runaway is detected
+- THEN contactors SHALL open within 10 ms
+- AND a thermal event warning SHALL be broadcast on CAN
+
+### Scenario: Contactor Welding Detection
+- GIVEN contactor positive is commanded open
+- WHEN pack voltage > 50 V is still measured at inverter side
+- THEN the system SHALL detect contactor welding
+- AND SHALL set DTC_CONTACTOR_WELDED

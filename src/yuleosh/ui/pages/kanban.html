@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目管理看板 - yuleOSH</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --purple: #8b5cf6;
+  --orange: #f97316;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 { font-size: 18px; font-weight: 700; }
+.header h1 .green { color: var(--green); }
+.header .subtitle { color: var(--text2); font-size: 13px; margin-top: 2px; }
+.header-right { display: flex; gap: 12px; align-items: center; }
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn:hover { border-color: var(--green); }
+.btn-primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-primary:hover { opacity: .85; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px 24px; }
+.project-bar {
+  display: flex; gap: 12px; align-items: center;
+  margin-bottom: 20px; padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.project-bar label { color: var(--text2); font-size: 13px; }
+.project-bar select {
+  padding: 6px 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 13px;
+}
+.project-bar .stats { margin-left: auto; display: flex; gap: 16px; }
+.project-bar .stat { text-align: center; }
+.project-bar .stat-num { font-size: 18px; font-weight: 700; color: var(--green); }
+.project-bar .stat-label { font-size: 11px; color: var(--text2); }
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.kanban-column {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+.kanban-column-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.kanban-column-header .count {
+  background: var(--surface2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text2);
+}
+.kanban-column-body {
+  padding: 8px;
+  flex: 1;
+  min-height: 100px;
+}
+.kanban-column.col-requirement { border-top: 3px solid var(--blue); }
+.kanban-column.col-development { border-top: 3px solid var(--yellow); }
+.kanban-column.col-review { border-top: 3px solid var(--purple); }
+.kanban-column.col-testing { border-top: 3px solid var(--orange); }
+.kanban-column.col-release { border-top: 3px solid var(--green); }
+.kanban-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: grab;
+  transition: all .15s;
+}
+.kanban-item:hover {
+  border-color: var(--green);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+.kanban-item:active { cursor: grabbing; }
+.kanban-item.dragging {
+  opacity: .5;
+  transform: rotate(2deg);
+}
+.kanban-item .item-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.kanban-item .item-desc {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+.kanban-item .item-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.kanban-item .tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.tag-p0 { background: rgba(239,68,68,.15); color: var(--red); }
+.tag-p1 { background: rgba(245,158,11,.15); color: var(--yellow); }
+.tag-p2 { background: rgba(59,130,246,.15); color: var(--blue); }
+.tag-feature { background: rgba(16,185,129,.15); color: var(--green); }
+.tag-bug { background: rgba(239,68,68,.15); color: var(--red); }
+.tag-task { background: rgba(139,92,246,.15); color: var(--purple); }
+.kanban-column-body.drag-over {
+  background: rgba(16,185,129,.05);
+  border: 2px dashed var(--green);
+  border-radius: 8px;
+}
+.dropdown-menu {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 0;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  z-index: 100;
+  min-width: 160px;
+  display: none;
+}
+.dropdown-menu.show { display: block; }
+.dropdown-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .1s;
+}
+.dropdown-item:hover { background: var(--surface2); }
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+}
+.modal h2 { font-size: 18px; margin-bottom: 16px; }
+.modal label { font-size: 13px; color: var(--text2); display: block; margin-bottom: 4px; }
+.modal input, .modal select, .modal textarea {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.modal textarea { min-height: 80px; resize: vertical; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text2);
+  font-size: 12px;
+}
+.empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+@media (max-width: 1000px) {
+  .kanban { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1><span class="green">📋 项目</span> 看板</h1>
+    <div class="subtitle">yuleOSH 项目管理和需求追踪</div>
+  </div>
+  <div class="header-right">
+    <button class="btn" onclick="showCreateProject()">+ 新项目</button>
+    <button class="btn" onclick="showAddTask()">+ 新建任务</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="project-bar">
+    <label>项目选择:</label>
+    <select id="projectSelect" onchange="switchProject(this.value)">
+      <option value="">— 选择项目 —</option>
+    </select>
+    <div class="stats">
+      <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-label">任务总数</div></div>
+      <div class="stat"><div class="stat-num" id="statDone" style="color:var(--green)">0</div><div class="stat-label">已完成</div></div>
+      <div class="stat"><div class="stat-num" id="statProgress" style="color:var(--yellow)">0</div><div class="stat-label">进行中</div></div>
+    </div>
+  </div>
+
+  <div class="kanban" id="kanbanBoard">
+    <div class="kanban-column col-requirement" data-status="需求">
+      <div class="kanban-column-header">📝 需求 <span class="count" id="count-0">0</span></div>
+      <div class="kanban-column-body" id="column-0" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+    <div class="kanban-column col-development" data-status="开发">
+      <div class="kanban-column-header">🔧 开发 <span class="count" id="count-1">0</span></div>
+      <div class="kanban-column-body" id="column-1" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+    <div class="kanban-column col-review" data-status="审查">
+      <div class="kanban-column-header">👁 审查 <span class="count" id="count-2">0</span></div>
+      <div class="kanban-column-body" id="column-2" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+    <div class="kanban-column col-testing" data-status="测试">
+      <div class="kanban-column-header">🧪 测试 <span class="count" id="count-3">0</span></div>
+      <div class="kanban-column-body" id="column-3" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+    <div class="kanban-column col-release" data-status="发布">
+      <div class="kanban-column-header">🚀 发布 <span class="count" id="count-4">0</span></div>
+      <div class="kanban-column-body" id="column-4" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: New Project -->
+<div class="modal-overlay" id="modalProject" style="display:none">
+  <div class="modal">
+    <h2>创建新项目</h2>
+    <label>项目名称</label><input id="newProjectName" placeholder="例如: BCM 刹车灯控制">
+    <label>描述</label><textarea id="newProjectDesc" placeholder="项目描述…"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalProject')">取消</button>
+      <button class="btn btn-primary" onclick="createProject()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: New Task -->
+<div class="modal-overlay" id="modalTask" style="display:none">
+  <div class="modal">
+    <h2>新建任务</h2>
+    <label>任务标题</label><input id="newTaskTitle" placeholder="任务标题">
+    <label>描述</label><textarea id="newTaskDesc" placeholder="详细描述…"></textarea>
+    <label>优先级</label>
+    <select id="newTaskPriority"><option value="P1">P1 - 高</option><option value="P2">P2 - 中</option><option value="P3">P3 - 低</option></select>
+    <label>类型</label>
+    <select id="newTaskType"><option value="feature">功能</option><option value="bug">缺陷</option><option value="task">任务</option></select>
+    <label>目标列</label>
+    <select id="newTaskColumn">
+      <option value="需求">需求</option>
+      <option value="开发" selected>开发</option>
+      <option value="审查">审查</option>
+      <option value="测试">测试</option>
+      <option value="发布">发布</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalTask')">取消</button>
+      <button class="btn btn-primary" onclick="createTask()">创建</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATUSES = ['需求', '开发', '审查', '测试', '发布'];
+let projects = {};
+let currentProjectSlug = '';
+
+function getToken() {
+  return localStorage.getItem('yuleosh_token') || '';
+}
+
+function showCreateProject() {
+  document.getElementById('modalProject').style.display = 'flex';
+}
+function showAddTask() {
+  if (!currentProjectSlug) { alert('请先选择一个项目'); return; }
+  document.getElementById('modalTask').style.display = 'flex';
+}
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+async function api(method, path, body) {
+  const token = getToken();
+  const opts = {
+    method,
+    headers: {'Content-Type': 'application/json'},
+  };
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body) opts.body = JSON.stringify(body);
+  const resp = await fetch(path, opts);
+  return resp.json();
+}
+
+// ── Projects ──
+
+async function createProject() {
+  const name = document.getElementById('newProjectName').value.trim();
+  const desc = document.getElementById('newProjectDesc').value.trim();
+  if (!name) { alert('项目名称不能为空'); return; }
+  const data = await api('POST', '/api/v1/projects', {name, description: desc});
+  if (data.project) {
+    closeModal('modalProject');
+    document.getElementById('newProjectName').value = '';
+    document.getElementById('newProjectDesc').value = '';
+    await loadProjects();
+    switchProject(data.project.slug);
+  } else {
+    alert(data.error || '创建失败');
+  }
+}
+
+async function loadProjects() {
+  const select = document.getElementById('projectSelect');
+  select.innerHTML = '<option value="">— 选择项目 —</option>';
+  const data = await api('GET', '/api/v1/tenants');
+  // Use tenant info to list projects
+  // Try listing from tenant
+  const tokenData = await api('GET', '/api/auth/session');
+  if (tokenData && tokenData.org_slug) {
+    const projData = await api('GET', `/api/v1/tenant/${tokenData.org_slug}/projects`);
+    if (projData && projData.projects) {
+      projects = {};
+      projData.projects.forEach(p => {
+        if (p.slug) {
+          projects[p.slug] = p;
+          const opt = document.createElement('option');
+          opt.value = p.slug;
+          opt.textContent = p.name || p.slug;
+          select.appendChild(opt);
+        }
+      });
+    }
+  }
+}
+
+async function switchProject(slug) {
+  currentProjectSlug = slug;
+  if (!slug) {
+    document.querySelectorAll('.kanban-column-body').forEach(el => el.innerHTML = '');
+    document.getElementById('statTotal').textContent = '0';
+    document.getElementById('statDone').textContent = '0';
+    document.getElementById('statProgress').textContent = '0';
+    return;
+  }
+  const data = await api('GET', `/api/v1/projects/${slug}`);
+  if (data && data.project) {
+    renderKanban(data.project);
+  }
+}
+
+// ── Kanban rendering ──
+
+function renderKanban(project) {
+  const items = project.items || STATUSES.map(s => ({status: s, tasks: []}));
+  let total = 0, done = 0, progress = 0;
+
+  STATUSES.forEach((status, idx) => {
+    const col = document.getElementById(`column-${idx}`);
+    const colData = items.find(i => i.status === status) || {tasks: []};
+    col.innerHTML = '';
+
+    colData.tasks.forEach(task => {
+      total++;
+      if (status === '发布') done++;
+
+      const el = document.createElement('div');
+      el.className = 'kanban-item';
+      el.draggable = true;
+      el.dataset.id = task.id || '';
+      el.dataset.status = status;
+      el.ondragstart = drag;
+      el.innerHTML = `
+        <div class="item-title">${escHtml(task.title || '未命名')}</div>
+        <div class="item-desc">${escHtml(task.description || '')}</div>
+        <div class="item-tags">
+          ${task.priority ? `<span class="tag ${task.priority === 'P0' || task.priority === 'P1' ? 'tag-p0' : 'tag-p2'}">${escHtml(task.priority)}</span>` : ''}
+          ${task.type ? `<span class="tag tag-${escHtml(task.type)}">${escHtml(task.type)}</span>` : ''}
+        </div>`;
+      col.appendChild(el);
+    });
+    document.getElementById(`count-${idx}`).textContent = colData.tasks.length;
+  });
+
+  if (STATUSES.indexOf('开发') >= 0) {
+    const devCol = document.getElementById(`column-1`);
+    progress = devCol ? devCol.children.length : 0;
+  }
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statProgress').textContent = progress;
+}
+
+// ── Drag & Drop ──
+
+function allowDrop(ev) {
+  ev.preventDefault();
+  ev.currentTarget.classList.add('drag-over');
+}
+function drag(ev) {
+  ev.dataTransfer.setData('text/plain', ev.target.dataset.id);
+  ev.target.classList.add('dragging');
+}
+async function drop(ev) {
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('drag-over');
+
+  const taskId = ev.dataTransfer.getData('text/plain');
+  const targetStatus = ev.currentTarget.closest('.kanban-column').dataset.status;
+  if (!taskId || !currentProjectSlug || !targetStatus) return;
+
+  const data = await api('GET', `/api/v1/projects/${currentProjectSlug}`);
+  if (!data || !data.project) return;
+  const project = data.project;
+  const items = project.items || [];
+
+  // Find the task in current items and move it
+  let movedTask = null;
+  items.forEach(col => {
+    const idx = col.tasks.findIndex(t => t.id === taskId);
+    if (idx >= 0) {
+      movedTask = col.tasks.splice(idx, 1)[0];
+    }
+  });
+
+  if (movedTask) {
+    movedTask.status = targetStatus;
+    const targetCol = items.find(i => i.status === targetStatus);
+    if (targetCol) {
+      targetCol.tasks.push(movedTask);
+    }
+    await api('POST', `/api/v1/projects/${currentProjectSlug}`, {items});
+  }
+  // Refresh
+  const refreshed = await api('GET', `/api/v1/projects/${currentProjectSlug}`);
+  if (refreshed && refreshed.project) renderKanban(refreshed.project);
+}
+
+// ── Task creation ──
+
+async function createTask() {
+  const title = document.getElementById('newTaskTitle').value.trim();
+  const desc = document.getElementById('newTaskDesc').value.trim();
+  const priority = document.getElementById('newTaskPriority').value;
+  const type = document.getElementById('newTaskType').value;
+  const column = document.getElementById('newTaskColumn').value;
+
+  if (!title) { alert('任务标题不能为空'); return; }
+
+  const data = await api('GET', `/api/v1/projects/${currentProjectSlug}`);
+  if (!data || !data.project) { alert('项目数据加载失败'); return; }
+  const project = data.project;
+  const items = project.items || STATUSES.map(s => ({status: s, tasks: []}));
+
+  const taskId = 'task-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
+  const colData = items.find(i => i.status === column);
+  if (colData) {
+    colData.tasks.push({
+      id: taskId,
+      title,
+      description: desc,
+      priority,
+      type,
+      status: column,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  await api('POST', `/api/v1/projects/${currentProjectSlug}`, {items});
+
+  closeModal('modalTask');
+  document.getElementById('newTaskTitle').value = '';
+  document.getElementById('newTaskDesc').value = '';
+
+  const refreshed = await api('GET', `/api/v1/projects/${currentProjectSlug}`);
+  if (refreshed && refreshed.project) renderKanban(refreshed.project);
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Init ──
+loadProjects();
+</script>
+</body>
+</html>

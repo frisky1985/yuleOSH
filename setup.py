@@ -26,6 +26,7 @@ setup(
         "click>=8.3.3",  # PYSEC-2026-2132
         "pillow>=12.3.0",  # Multiple CVEs
         "setuptools>=83.0.0",  # PYSEC-2026-3447
+        "jinja2>=3.1.0",
     ],
     extras_require={
         "dev": ["pytest", "pytest-cov", "pytest-mock"],

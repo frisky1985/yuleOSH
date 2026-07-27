@@ -1,0 +1,108 @@
+# {{ project_name }} — Safety Architecture (BCM)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. Architecture Overview
+
+```
+┌───────────────────────────────────────────────────────────┐
+│                     Application Layer                       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│  │ Door_SWC │ │Light_SWC │ │Wiper_SWC │ │Power_SWC │     │
+│  │ ASIL B   │ │ ASIL A   │ │ ASIL A   │ │ ASIL B   │     │
+│  └─────┬────┘ └─────┬────┘ └─────┬────┘ └─────┬────┘     │
+├────────┴──────────────┴──────────────┴────────────┴───────┤
+│                     RTE (with E2E Wrapper)                 │
+├───────────────────────────────────────────────────────────┤
+│  ┌────────────┐  ┌────────────┐  ┌───────────────────┐   │
+│  │ Com Module │  │ Dcm Module │  │ Safety Services   │   │
+│  │ (Signal)   │  │ (UDS Diag) │  │ WdgM / E2E / DET │   │
+│  └────────────┘  └────────────┘  └───────────────────┘   │
+│  ┌────────────┐  ┌────────────┐  ┌───────────────────┐   │
+│  │ EcuM/BswM  │  │ NvM        │  │ SchM (Scheduler)  │   │
+│  └────────────┘  └────────────┘  └───────────────────┘   │
+├───────────────────────────────────────────────────────────┤
+│                    ECUAL Abstraction                       │
+│  CanIf / LinIf / Fee / MemIf / WdgIf                      │
+├───────────────────────────────────────────────────────────┤
+│                    MCAL Drivers                            │
+│  Mcu / Dio / Port / Gpt / Can / Lin / Spi / Icu / Pwm     │
+│  Adc / Fls / Wdg                                          │
+├───────────────────────────────────────────────────────────┤
+│                    Hardware ({{ mcu }})                     │
+│  ┌────────┐ ┌────────┐ ┌───────┐ ┌───────┐ ┌───────┐   │
+│  │ MPU    │ │ WDG    │ │ CAN   │ │ PWM   │ │ ADC   │   │
+│  │ Unit   │ │ Timer  │ │ Trxcv │ │ Unit  │ │ Unit  │   │
+│  └────────┘ └────────┘ └───────┘ └───────┘ └───────┘   │
+└───────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. DFA — Dependent Failure Analysis
+
+### 2.1 共因失效 (CCF)
+
+| 失效模式 | 防范措施 | 覆盖 |
+|:---------|:---------|:----:|
+| 时钟故障 | 独立时钟源 + 时钟监控 | 高 |
+| 电源扰动 | 独立电压监控 + BOD | 高 |
+| 温度漂移 | 温度传感器 + 降额策略 | 中 |
+| EMI 干扰 | 硬件滤波 + 软件多样性 | 中 |
+| 共用地/电源 | 分区供电 + 独立地回路 | 高 |
+
+### 2.2 级联失效 (Cascading)
+
+| 源分区 | 目标分区 | 隔离措施 |
+|:-------|:---------|:---------|
+| QM (非安全) | ASIL B (安全) | MPU 分区 + 时间隔离 |
+| Door_SWC | Power_SWC | 独立堆栈 + 内存隔离 |
+
+---
+
+## 3. MPU Partitioning
+
+| 分区 | SWCs | 权限 | 区域 | ASIL |
+|:-----|:-----|:-----|:-----|:----:|
+| Partition 0 | Door_SWC, Power_SWC | 完全 | 0x0000_0000 - 0x0003_FFFF | B |
+| Partition 1 | Light_SWC, Wiper_SWC | 完全 | 0x0004_0000 - 0x0007_FFFF | A |
+| Partition 2 | BSW Services | 只读 (代码) | 0x0008_0000 - 0x000F_FFFF | B |
+| Partition 3 | MCAL / ECUAL | 受保护 | 0x0010_0000 - 0x0013_FFFF | B |
+
+---
+
+## 4. FMEDA 骨架
+
+### 4.1 失效模式
+
+| 组件 | 失效模式 | 检测机制 | 覆盖率 | FMEDA |
+|:-----|:---------|:---------|:------:|:-----:|
+| MCU Core | 锁步错误 | Lockstep Comparator | 99% | 需评估 |
+| Flash | SEU/SET | ECC (SECDED) | 98% | 需评估 |
+| SRAM | SEU | ECC / Parity | 95% | 需评估 |
+| CAN Trxcv | 总线离线 | Bus-Off Recovery | 90% | 需评估 |
+| PWM Out | Stuck-at | Read-back Check | 99% | 需评估 |
+| ADC | 偏移 | 自测通道 (Vref) | 95% | 需评估 |
+| WDG Timer | 超时 | 第二监控定时器 | 99% | 需评估 |
+| Clock | 频率偏移 | PLL Lock Detect | 95% | 需评估 |
+
+### 4.2 PMHF 目标
+- ASIL B: < 100 FIT (10^-7 / hour)
+- 当前估算: TBD (需完成定量 FMEDA 后更新)
+
+---
+
+## 5. Safety Mechanisms Summary
+
+| ID | Mechanism | ASIL | SWC/BSW | Detection | Reaction |
+|:---|:----------|:----:|:--------|:----------|:---------|
+| SM-01 | MPU Violation Detect | B | BSW | DEM Event | Safe State |
+| SM-02 | WDG Alive Supervision | B | WdgM | DEM Event | ECU Reset |
+| SM-03 | E2E CRC + Counter | B | E2E Lib | COM Error | Default Value |
+| SM-04 | ADC Self-Test | B | MCAL | DTC | Degraded Mode |
+| SM-05 | Output Read-back | B | MCAL | DTC | Safe Value |
+| SM-06 | Memory ECC | B | HW | ECC IRQ | Correction / Reset |
+| SM-07 | PWM Monitor | A | MCAL | DTC | Disable Output |
+| SM-08 | Voltage Monitor | B | ADC | DEM Event | Controlled Shutdown |
