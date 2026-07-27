@@ -1,0 +1,366 @@
+[
+  {
+    "id": "REQ-BCM-001",
+    "title": "Door lock shall respond within 10ms",
+    "description": "SHALL_DOOR_LOCK_RESPONSE: The door lock actuator SHALL achieve its target position within 10 ms of the HSM-authenticated unlock command, measured at the actuator feedback pin.",
+    "priority": "P0",
+    "status": "approved",
+    "version": "1.2",
+    "asil": "ASIL_B",
+    "source": "customer",
+    "tags": ["door", "lock", "timing", "actuator"],
+    "category": "functional",
+    "created_at": "2026-07-01T08:00:00Z",
+    "updated_at": "2026-07-20T14:30:00Z",
+    "approved_by": "ou_requester_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "draft",
+        "timestamp": "2026-07-01T08:00:00Z",
+        "author": "ou_requester_mock",
+        "change": "Initial creation"
+      },
+      {
+        "version": "1.1",
+        "status": "review",
+        "timestamp": "2026-07-10T10:00:00Z",
+        "author": "ou_reviewer_mock",
+        "change": "Clarified measurement point — added 'at actuator feedback pin'"
+      },
+      {
+        "version": "1.2",
+        "status": "approved",
+        "timestamp": "2026-07-20T14:30:00Z",
+        "author": "ou_manager_mock",
+        "change": "Approved for ASIL_B implementation"
+      }
+    ],
+    "linked_req_ids": ["REQ-BCM-002", "REQ-SAF-001"],
+    "linked_test_ids": ["TC-BCM-001", "TC-BCM-002"],
+    "linked_risk_ids": ["HAZ-DOOR-001"]
+  },
+  {
+    "id": "REQ-BCM-002",
+    "title": "Door lock SHALL NOT unlock during vehicle motion",
+    "description": "SHALL_DOOR_LOCK_MOTION: The door lock controller SHALL NOT apply an unlock command to any door when the vehicle speed exceeds 5 km/h, regardless of command source.",
+    "priority": "P0",
+    "status": "implemented",
+    "version": "1.1",
+    "asil": "ASIL_B",
+    "source": "safety",
+    "tags": ["door", "lock", "safety", "motion"],
+    "category": "functional",
+    "created_at": "2026-07-01T08:30:00Z",
+    "updated_at": "2026-07-22T09:00:00Z",
+    "approved_by": "ou_safety_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "approved",
+        "timestamp": "2026-07-01T08:30:00Z",
+        "author": "ou_safety_mock",
+        "change": "Initial from HARA output"
+      },
+      {
+        "version": "1.1",
+        "status": "implemented",
+        "timestamp": "2026-07-22T09:00:00Z",
+        "author": "ou_swe_mock",
+        "change": "Implementation complete — speed check in Dcm_LockCtrl()"
+      }
+    ],
+    "linked_req_ids": ["REQ-BCM-001", "REQ-SAF-002"],
+    "linked_test_ids": ["TC-BCM-003", "TC-BCM-004", "TC-SAF-001"],
+    "linked_risk_ids": ["HAZ-DOOR-002"]
+  },
+  {
+    "id": "REQ-BCM-003",
+    "title": "Lighting output PWM frequency SHALL be 100 Hz ± 1%",
+    "description": "SHALL_LIGHT_PWM_FREQ: The BCM SHALL generate all exterior lighting PWM outputs at a nominal frequency of 100 Hz with tolerance not exceeding ±1% over the full operating temperature range (-40 °C to +105 °C).",
+    "priority": "P1",
+    "status": "approved",
+    "version": "1.0",
+    "asil": "QM",
+    "source": "internal",
+    "tags": ["lighting", "pwm", "timing"],
+    "category": "functional",
+    "created_at": "2026-07-03T11:00:00Z",
+    "updated_at": "2026-07-18T16:00:00Z",
+    "approved_by": "ou_arch_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "approved",
+        "timestamp": "2026-07-18T16:00:00Z",
+        "author": "ou_arch_mock",
+        "change": "Approved after arch review"
+      }
+    ],
+    "linked_req_ids": [],
+    "linked_test_ids": ["TC-BCM-005"],
+    "linked_risk_ids": []
+  },
+  {
+    "id": "REQ-BCM-004",
+    "title": "Diagnostics SHALL report each actuator fault within 100 ms",
+    "description": "SHALL_DIAG_FAULT_REPORT: The DEM SHALL detect and report any actuator open-load, short-circuit, or over-current fault within 100 ms of occurrence, with fault type and actuator ID encoded in the DTC.",
+    "priority": "P1",
+    "status": "review",
+    "version": "1.1",
+    "asil": "ASIL_B",
+    "source": "customer",
+    "tags": ["diagnostics", "dem", "actuator", "fault"],
+    "category": "functional",
+    "created_at": "2026-07-05T09:00:00Z",
+    "updated_at": "2026-07-24T11:00:00Z",
+    "approved_by": "ou_requester_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "draft",
+        "timestamp": "2026-07-05T09:00:00Z",
+        "author": "ou_requester_mock",
+        "change": "Initial draft from customer spec §7.3"
+      },
+      {
+        "version": "1.1",
+        "status": "review",
+        "timestamp": "2026-07-24T11:00:00Z",
+        "author": "ou_reviewer_mock",
+        "change": "Updated fault type encoding per AUTOSAR DEM spec"
+      }
+    ],
+    "linked_req_ids": ["REQ-DEM-001"],
+    "linked_test_ids": ["TC-BCM-006", "TC-DEM-001"],
+    "linked_risk_ids": ["HAZ-DIAG-001"]
+  },
+  {
+    "id": "REQ-BCM-005",
+    "title": "Wiper control SHALL support intermittent mode with adjustable interval",
+    "description": "SHALL_WIPER_INTERMITTENT: The wiper control subsystem SHALL support an intermittent wipe mode where the interval between consecutive wipe cycles is adjustable in 0.5 s steps from 1 s to 30 s, via LIN command from the steering column module.",
+    "priority": "P2",
+    "status": "draft",
+    "version": "1.0",
+    "asil": "QM",
+    "source": "internal",
+    "tags": ["wiper", "lin", "comfort"],
+    "category": "functional",
+    "created_at": "2026-07-10T14:00:00Z",
+    "updated_at": "2026-07-10T14:00:00Z",
+    "approved_by": "",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "draft",
+        "timestamp": "2026-07-10T14:00:00Z",
+        "author": "ou_swe_mock",
+        "change": "Initial draft"
+      }
+    ],
+    "linked_req_ids": [],
+    "linked_test_ids": ["TC-BCM-007"],
+    "linked_risk_ids": []
+  },
+  {
+    "id": "REQ-BCM-006",
+    "title": "BCM SHALL support OTA firmware update via UDS 0x34/0x36/0x37",
+    "description": "SHALL_BCM_OTA_UDS: The BCM SHALL support reprogramming via UDS service 0x34 (RequestDownload), 0x36 (TransferData), and 0x37 (RequestTransferExit) over CAN, with flash write verified by CRC-32 after each block.",
+    "priority": "P1",
+    "status": "verified",
+    "version": "1.0",
+    "asil": "ASIL_B",
+    "source": "customer",
+    "tags": ["ota", "uds", "flash", "can"],
+    "category": "functional",
+    "created_at": "2026-07-02T10:00:00Z",
+    "updated_at": "2026-07-25T17:00:00Z",
+    "approved_by": "ou_manager_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "draft",
+        "timestamp": "2026-07-02T10:00:00Z",
+        "author": "ou_requester_mock",
+        "change": "Initial draft from customer OTA spec"
+      },
+      {
+        "version": "1.0",
+        "status": "approved",
+        "timestamp": "2026-07-08T14:00:00Z",
+        "author": "ou_manager_mock",
+        "change": "Approved"
+      },
+      {
+        "version": "1.0",
+        "status": "implemented",
+        "timestamp": "2026-07-20T12:00:00Z",
+        "author": "ou_swe_mock",
+        "change": "Implementation done — FlashLoader integrated"
+      },
+      {
+        "version": "1.0",
+        "status": "verified",
+        "timestamp": "2026-07-25T17:00:00Z",
+        "author": "ou_tester_mock",
+        "change": "Passed verification — all UDS download sequences tested"
+      }
+    ],
+    "linked_req_ids": ["REQ-FLS-001"],
+    "linked_test_ids": ["TC-BCM-008", "TC-BCM-009", "TC-FLS-001"],
+    "linked_risk_ids": ["HAZ-OTA-001", "HAZ-OTA-002"]
+  },
+  {
+    "id": "REQ-BCM-007",
+    "title": "CAN communication SHALL use 500 kbps with CAN-FD arbitration",
+    "description": "SHALL_CAN_BITRATE: The BCM CAN interface SHALL operate at a nominal bit rate of 500 kbps, with CAN-FD arbitration phase at 500 kbps and data phase at 2 Mbps, compliant with ISO 11898-1:2015 and AUTOSAR CanIf specification.",
+    "priority": "P2",
+    "status": "implemented",
+    "version": "1.0",
+    "asil": "QM",
+    "source": "internal",
+    "tags": ["can", "communication", "bitrate"],
+    "category": "technical",
+    "created_at": "2026-07-04T08:00:00Z",
+    "updated_at": "2026-07-21T15:00:00Z",
+    "approved_by": "ou_arch_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "approved",
+        "timestamp": "2026-07-06T10:00:00Z",
+        "author": "ou_arch_mock",
+        "change": "Approved"
+      },
+      {
+        "version": "1.0",
+        "status": "implemented",
+        "timestamp": "2026-07-21T15:00:00Z",
+        "author": "ou_swe_mock",
+        "change": "CanIf configured and tested with CAN-FD"
+      }
+    ],
+    "linked_req_ids": [],
+    "linked_test_ids": ["TC-BCM-010"],
+    "linked_risk_ids": []
+  },
+  {
+    "id": "REQ-BCM-008",
+    "title": "Fault-tolerant power management SHALL maintain critical functions during brownout",
+    "description": "SHALL_POWER_BROWNOUT: When supply voltage drops below 6.0 V but remains above 4.5 V for less than 50 ms, the BCM SHALL maintain door locking, external lighting, and DEM logging without interruption. Below 4.5 V or >50 ms, SHALL enter controlled shutdown preserving NVM data.",
+    "priority": "P0",
+    "status": "review",
+    "version": "1.2",
+    "asil": "ASIL_B",
+    "source": "safety",
+    "tags": ["power", "brownout", "safety", "nvm"],
+    "category": "functional",
+    "created_at": "2026-07-01T09:00:00Z",
+    "updated_at": "2026-07-23T13:00:00Z",
+    "approved_by": "ou_safety_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "draft",
+        "timestamp": "2026-07-01T09:00:00Z",
+        "author": "ou_safety_mock",
+        "change": "Initial from HARA — HAZ-BCM-PWR-001"
+      },
+      {
+        "version": "1.1",
+        "status": "review",
+        "timestamp": "2026-07-15T11:00:00Z",
+        "author": "ou_reviewer_mock",
+        "change": "Added voltage thresholds and timing"
+      },
+      {
+        "version": "1.2",
+        "status": "review",
+        "timestamp": "2026-07-23T13:00:00Z",
+        "author": "ou_reviewer_mock",
+        "change": "Clarified NVM preservation requirement per ISO 26262-6 §7.4"
+      }
+    ],
+    "linked_req_ids": ["REQ-PMU-001", "REQ-NVM-001"],
+    "linked_test_ids": ["TC-BCM-011", "TC-BCM-012", "TC-PMU-001"],
+    "linked_risk_ids": ["HAZ-BCM-PWR-001"]
+  },
+  {
+    "id": "REQ-SAF-001",
+    "title": "ASIL B decomposition SHALL be applied to door lock function",
+    "description": "SHALL_ASIL_B_DECOMP: The door lock control function SHALL be decomposed into a QM(D) part (lock actuation logic) and an ASIL B(D) part (lock status monitoring and fault reaction), per ISO 26262-9 §5 with independence confirmed by freedom-from-interference analysis.",
+    "priority": "P0",
+    "status": "approved",
+    "version": "1.1",
+    "asil": "ASIL_B",
+    "source": "safety",
+    "tags": ["safety", "decomposition", "asil"],
+    "category": "safety",
+    "created_at": "2026-07-01T07:00:00Z",
+    "updated_at": "2026-07-19T10:00:00Z",
+    "approved_by": "ou_safety_mock",
+    "owner": "ou_safety_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "draft",
+        "timestamp": "2026-07-01T07:00:00Z",
+        "author": "ou_safety_mock",
+        "change": "Initial decomposition proposal"
+      },
+      {
+        "version": "1.1",
+        "status": "approved",
+        "timestamp": "2026-07-19T10:00:00Z",
+        "author": "ou_safety_mock",
+        "change": "FFI analysis completed — approved"
+      }
+    ],
+    "linked_req_ids": ["REQ-BCM-001", "REQ-BCM-002"],
+    "linked_test_ids": ["TC-SAF-002", "TC-SAF-003"],
+    "linked_risk_ids": ["HAZ-DOOR-001"]
+  },
+  {
+    "id": "REQ-SAF-002",
+    "title": "Memory protection SHALL prevent QM software from corrupting ASIL B data",
+    "description": "SHALL_MPU_PROTECT: The MPU SHALL be configured so that QM-part software partitions cannot write to memory regions assigned to ASIL_B-part software or safety-critical NVM areas. Any access violation SHALL trigger a Safety Hook with DEM event DTC 0xC000101.",
+    "priority": "P0",
+    "status": "implemented",
+    "version": "1.0",
+    "asil": "ASIL_B",
+    "source": "safety",
+    "tags": ["mpu", "safety", "memory", "protection"],
+    "category": "safety",
+    "created_at": "2026-07-02T07:30:00Z",
+    "updated_at": "2026-07-22T10:00:00Z",
+    "approved_by": "ou_safety_mock",
+    "owner": "ou_swe_mock",
+    "history": [
+      {
+        "version": "1.0",
+        "status": "approved",
+        "timestamp": "2026-07-05T13:00:00Z",
+        "author": "ou_safety_mock",
+        "change": "Approved per FFI analysis"
+      },
+      {
+        "version": "1.0",
+        "status": "implemented",
+        "timestamp": "2026-07-22T10:00:00Z",
+        "author": "ou_swe_mock",
+        "change": "MPU regions configured and tested"
+      }
+    ],
+    "linked_req_ids": ["REQ-SAF-001"],
+    "linked_test_ids": ["TC-SAF-004"],
+    "linked_risk_ids": ["HAZ-MPU-001"]
+  }
+]

@@ -1,0 +1,41 @@
+name: bms
+version: 1.0.0
+description: Battery Management System — 电池监控/均衡/保护
+mcu: S32K314
+asil: ASIL_D
+platforms: [arm, s32k314, nxp]
+tags: [autosar, bsw, battery, bms, automotive, safety]
+spec_sections:
+  - System Overview
+  - Voltage Monitoring
+  - Temperature Monitoring
+  - Current Monitoring
+  - Cell Balancing
+  - SOC/SOH Estimation
+  - Contactors Control
+  - Safety (ASIL D)
+  - Test Plan
+bsw_modules:
+  - Mcu
+  - Dio
+  - Port
+  - Gpt
+  - Can
+  - Spi
+  - Icu
+  - Pwm
+  - Adc
+  - Fls
+  - Eep
+  - Wdg
+  - RamTst
+  - Crypto
+swcs:
+  - CellMonitor_SWC
+  - Balancing_SWC
+  - SocEstimator_SWC
+  - Contactor_SWC
+  - ThermalMonitor_SWC
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]

@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import { PipelineManager, PipelineStatus } from './pipeline';
+import * as path from 'path';
+import { PipelineManager, PipelineStatus, StageStatus } from './pipeline';
 
 // ---------------------------------------------------------------------------
-// Pipeline Tree View
+// Pipeline Tree View — VSC-3: Stage status, auto-refresh, click-to-view-log
 // ---------------------------------------------------------------------------
 
 export class PipelineTreeDataProvider
@@ -16,6 +17,9 @@ export class PipelineTreeDataProvider
 
   constructor(private pipelineManager: PipelineManager) {
     pipelineManager.onDidChangeStatus(() => this.refresh());
+    pipelineManager.onDidChangeStages(() => this.refresh());
+    // Start 30s auto-refresh
+    pipelineManager.startAutoRefresh(30000);
   }
 
   refresh(): void {
@@ -26,22 +30,55 @@ export class PipelineTreeDataProvider
     return element;
   }
 
-  getChildren(_element?: PipelineTreeItem): Thenable<PipelineTreeItem[]> {
+  getChildren(element?: PipelineTreeItem): Thenable<PipelineTreeItem[]> {
+    if (element) {
+      // If element has children (stages), return them
+      if (element.children) {
+        const stages: StageStatus[] = element.children as StageStatus[];
+        return Promise.resolve(stages.map(s => {
+          const statusIcon = s.status === 'running' ? '$(sync~spin)' :
+            s.status === 'pass' ? '$(pass-filled)' :
+            s.status === 'fail' ? '$(error)' :
+            s.status === 'skipped' ? '$(circle-slash)' : '$(circle-outline)';
+
+          // Format timing
+          let timeInfo = '';
+          if (s.startTime) timeInfo += ` started: ${s.startTime.toLocaleTimeString()}`;
+          if (s.endTime) timeInfo += ` ended: ${s.endTime.toLocaleTimeString()}`;
+
+          const item = new PipelineTreeItem(
+            `${statusIcon} ${s.name}`,
+            vscode.TreeItemCollapsibleState.None,
+            {
+              command: 'yuleosh.viewPipelineLog',
+              title: 'View Stage Log',
+              arguments: [s.name],
+            }
+          );
+          item.description = s.status.toUpperCase() + timeInfo;
+          item.tooltip = `Stage: ${s.name}\nStatus: ${s.status}\n${timeInfo}\nClick to view log`;
+          item.contextValue = 'pipelineStage';
+          return item;
+        }));
+      }
+      return Promise.resolve([]);
+    }
+
+    // Root level
     const status = this.pipelineManager.getStatus();
     const items: PipelineTreeItem[] = [];
 
-    // Status indicator
+    // Overall pipeline status
     const statusIcon = status.running
       ? '$(sync~spin)'
       : status.success
       ? '$(pass-filled)'
       : '$(error)';
+
     items.push(
       new PipelineTreeItem(
-        `${statusIcon} ${status.running ? 'Running' : status.success ? 'Passed' : 'Failed'}`,
-        status.running
-          ? vscode.TreeItemCollapsibleState.None
-          : vscode.TreeItemCollapsibleState.None,
+        `${statusIcon} Pipeline: ${status.running ? 'Running...' : status.success ? 'Passed' : 'Failed'}`,
+        vscode.TreeItemCollapsibleState.None,
         {
           command: 'yuleosh.viewStatus',
           title: 'View Status',
@@ -66,11 +103,55 @@ export class PipelineTreeDataProvider
       )
     );
 
+    // Stages section header
+    if (status.stages.length > 0) {
+      const stageItems = status.stages.map(s => {
+        const stageIcon = s.status === 'running' ? '$(sync~spin)' :
+          s.status === 'pass' ? '$(pass-filled)' :
+          s.status === 'fail' ? '$(error)' :
+          s.status === 'skipped' ? '$(circle-slash)' : '$(circle-outline)';
+        return {
+          name: s.name,
+          status: s.status,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          label: `${stageIcon} ${s.name}`,
+        };
+      });
+
+      const stagesHeader = new PipelineTreeItem(
+        '$(list-tree) Stages',
+        vscode.TreeItemCollapsibleState.Expanded
+      );
+      stagesHeader.description = `${status.stages.filter(s => s.status === 'pass').length}/${status.stages.length} passed`;
+      stagesHeader.children = stageItems.map(s => {
+        const item = new PipelineTreeItem(
+          s.label,
+          vscode.TreeItemCollapsibleState.None,
+          {
+            command: 'yuleosh.viewPipelineLog',
+            title: 'View Stage Log',
+            arguments: [s.name],
+          }
+        );
+        item.description = s.status.toUpperCase();
+        item.tooltip = `Stage: ${s.name}\nStatus: ${s.status}\nClick to view log`;
+        item.contextValue = 'pipelineStage';
+        return item;
+      });
+      items.push(stagesHeader);
+
+      // Also add individual stage items for quick access
+      // (The collapsible stages header already contains them)
+    }
+
     return Promise.resolve(items);
   }
 }
 
 class PipelineTreeItem extends vscode.TreeItem {
+  children?: vscode.TreeItem[] | StageStatus[];
+
   constructor(
     label: string,
     collapsibleState: vscode.TreeItemCollapsibleState,
@@ -168,11 +249,35 @@ export class ActionsTreeDataProvider
         }
       ),
       new ActionTreeItem(
-        '$(dashboard) Open Dashboard',
+        '$(check) Check MISRA',
         vscode.TreeItemCollapsibleState.None,
         {
-          command: 'yuleosh.openDashboard',
-          title: 'Open Dashboard',
+          command: 'yuleosh.checkMisra',
+          title: 'Check MISRA',
+        }
+      ),
+      new ActionTreeItem(
+        '$(tools) Run CI',
+        vscode.TreeItemCollapsibleState.None,
+        {
+          command: 'yuleosh.runCi',
+          title: 'Run CI',
+        }
+      ),
+      new ActionTreeItem(
+        '$(dashboard) Show Dashboard',
+        vscode.TreeItemCollapsibleState.None,
+        {
+          command: 'yuleosh.showDashboard',
+          title: 'Show Dashboard',
+        }
+      ),
+      new ActionTreeItem(
+        '$(file) View Evidence',
+        vscode.TreeItemCollapsibleState.None,
+        {
+          command: 'yuleosh.viewEvidence',
+          title: 'View Evidence Report',
         }
       ),
       new ActionTreeItem(

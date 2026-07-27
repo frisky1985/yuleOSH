@@ -1,0 +1,20 @@
+# {{ project_name }} — Domain Control Unit (DCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+## Overview
+
+{{ project_name }} is a Domain Control Unit serving as a zone gateway and body domain controller.
+Built on the yuleOSH platform with {{ mcu }} MCU, target ASIL {{ asil_label }}.
+
+## Key Features
+- **CAN Routing**: Message forwarding between 3 CAN buses (body, chassis, diagnostic)
+- **SOME/IP Gateway**: CAN-to-Ethernet signal gateway with 50 service instances
+- **Signal Gateway**: Signal extraction, repacking, range validation
+- **Diagnostic Gateway**: UDS routing to target ECUs
+- **Safety**: ASIL B routing table CRC protection, E2E profiles
+
+## BSW Modules ({{ num_bsw_modules }})
+{% for mod in bsw_modules %}
+- {{ mod }}
+{% endfor %}

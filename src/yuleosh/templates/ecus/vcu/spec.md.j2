@@ -1,0 +1,109 @@
+# {{ project_name }} — Specification (VCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} ({{ mcu_family }}, {{ mcu_arch }}) | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. System Overview
+
+{{ project_name }} is a Vehicle Control Unit (VCU) for powertrain domain control
+including torque management, motor control, and thermal management.
+Built on NXP {{ mcu }} (dual-core) with ASIL {{ asil_label }} decomposition.
+
+---
+
+## 2. Torque Management
+
+### VCU-TRQ-001: Driver Demand Processing
+- The system SHALL read accelerator pedal position from two redundant sensors
+- The system SHALL validate pedal position by cross-checking both sensor channels
+- The system SHALL map validated pedal position to driver torque demand
+- The system SHALL detect pedal plausibility faults within 10 ms
+
+### VCU-TRQ-002: Torque Arbitration
+- The system SHALL arbitrate torque requests from: driver, cruise control, stability control (ESP)
+- The system SHALL apply minimum-request-wins strategy for safety
+- The system SHALL limit torque slew rate to 500 Nm/s maximum
+- The system SHALL execute torque interventions from ESP within 5 ms
+
+### VCU-TRQ-003: Torque Monitoring
+- The system SHALL monitor actual torque vs demanded torque deviation
+- The system SHALL detect torque exceedance > 10% of demand for more than 50 ms
+- The system SHALL trigger torque reduction path on monitoring failure
+
+---
+
+## 3. Motor Control
+
+### VCU-MOT-001: Inverter Interface
+- The system SHALL send torque setpoint to inverter via CAN every 10 ms
+- The system SHALL read inverter status (actual torque, speed, temp) every 10 ms
+- The system SHALL detect inverter communication timeout > 50 ms
+
+### VCU-MOT-002: Regenerative Braking
+- The system SHALL coordinate regen torque with friction brake via ESP
+- The system SHALL limit regen torque to battery SOC and temperature limits
+- The system SHALL disable regenerative braking during ABS intervention
+
+---
+
+## 4. Pedal Monitoring (ASIL D)
+
+### VCU-PED-001: Redundant Pedal Sensors
+- The system SHALL read two independent accelerator pedal position sensors (APP1, APP2)
+- The system SHALL use the lower value when sensor deviation > 5%
+- The system SHALL detect sensor plausibility fault when deviation > 10%
+- The system SHALL enter degraded mode (limp-home) on pedal sensor fault
+
+### VCU-PED-002: Brake Pedal Monitoring
+- The system SHALL detect brake pedal application via two independent switches
+- The system SHALL request torque reduction when brake is applied with accelerator
+- The system SHALL prioritize brake-over-accelerator (BOA) logic
+
+---
+
+## 5. Safety Requirements (ASIL D)
+
+### VCU-SAF-001: ASIL D Decomposition
+- The system SHALL decompose ASIL D requirements into ASIL B(D) + ASIL B(D) independent channels
+- The system SHALL implement diverse software on the two cores (Lockstep mode)
+- The system SHALL perform cross-core comparison of torque command at frame rate
+
+### VCU-SAF-002: Safe Torque Path
+- The system SHALL implement two independent torque monitoring paths
+- Path 1 (TorqueManager): calculate demanded torque
+- Path 2 (TorqueMonitor): independently verify torque demand via lookup table
+- The system SHALL activate torque reduction if Path 1 and Path 2 disagree
+
+### VCU-SAF-003: Watchdog with Windowed Supervision
+- The system SHALL configure windowed watchdog (100 ms window)
+- The system SHALL check alive supervision of torque calculation runnable
+- The system SHALL execute independent deadline supervision for motor control
+
+### VCU-SAF-004: End-to-End Protection
+- The system SHALL protect torque-related CAN signals with E2E profile 1
+- The system SHALL check E2E header CRC and sequence counter on every frame
+- The system SHALL apply safe torque (zero torque) on 3 consecutive E2E failures
+
+---
+
+## 6. Acceptance Scenarios
+
+### Scenario: Normal Acceleration
+- GIVEN the vehicle is in Drive mode
+- WHEN driver applies 50% accelerator pedal
+- THEN the torque demand SHALL be calculated within 10 ms
+- AND the torque setpoint SHALL be sent to inverter within 10 ms
+- AND the actual torque SHALL track demand within 5%
+
+### Scenario: Brake-Over-Accelerator
+- GIVEN the vehicle is accelerating with 30% pedal
+- WHEN the driver applies brake pedal
+- THEN the system SHALL reduce torque demand to 0 within 20 ms
+- AND the torque monitoring path SHALL confirm reduction within 50 ms
+
+### Scenario: Pedal Sensor Fault
+- GIVEN APP1 reads 50% and APP2 reads 60%
+- WHEN deviation exceeds 5% threshold
+- THEN the system SHALL use the lower value (50%)
+- AND SHALL set a DTC for pedal plausibility warning

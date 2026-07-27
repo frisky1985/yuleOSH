@@ -1,0 +1,43 @@
+# CI Configuration for {{ project_name }} (VCU)
+# MCU: {{ mcu }} | ASIL: {{ asil_label }}
+
+misra:
+  active_profile: safety
+  deviations:
+    - rule: "Dir 4.1"
+      file: "tests/**"
+      reason: "Test frameworks"
+  exclude_paths:
+    - "tests/**"
+    - "build/**"
+
+coverage:
+  threshold_line: 75.0
+  threshold_condition: 65.0
+  strict: true
+  c_fail_under: 75
+  module_thresholds:
+    TorqueManager_SWC:
+      line: 85
+    PedalMonitor_SWC:
+      line: 90
+
+gate:
+  require_pass:
+    - spec_validate
+    - misra_check
+    - unit_test
+    - coverage_check
+  block_on:
+    - misra_check
+    - unit_test
+  pre_commit_checklist:
+    - spec_validate
+    - misra_check
+    - unit_test
+  pre_release_checklist:
+    - spec_validate
+    - misra_check
+    - unit_test
+    - coverage_check
+    - safety_review

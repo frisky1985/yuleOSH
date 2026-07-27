@@ -1,0 +1,21 @@
+# {{ project_name }} — Battery Management System (BMS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+## Overview
+
+{{ project_name }} is a Battery Management System for HV battery pack monitoring.
+Built on NXP {{ mcu }} with ASIL {{ asil_label }} safety integrity.
+
+## Key Features
+- **Cell Monitoring**: 96-cell voltage ±2 mV, 16 NTC temperature sensors
+- **Current Monitoring**: ±500 A shunt-based, coulomb counting
+- **Cell Balancing**: Passive balancing with bleed resistors
+- **SOC/SOH Estimation**: Coulomb counting + voltage correction
+- **Contactor Control**: Positive, Negative, Precharge with state feedback
+- **Safety**: ASIL D overvoltage/overtemperature protection, dual AFE redundancy
+
+## BSW Modules ({{ num_bsw_modules }})
+{% for mod in bsw_modules %}
+- {{ mod }}
+{% endfor %}

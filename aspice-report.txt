@@ -1,0 +1,102 @@
+========================================================================
+  ASPICE AUDIT REPORT — BCM Project v1.5.0
+========================================================================
+  Report ID: ASPICE-AUDIT-20260726-171427
+  Generated: 2026-07-26T17:14:27.612139+00:00
+  Overall Score: NI
+  Overall Coverage: 10.5%
+  Total Evidence: 26
+  Total Gaps: 12
+
+------------------------------------------------------------------------
+  MAN.3: Project Management
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process MAN.3 (Project Management)
+
+------------------------------------------------------------------------
+  SUP.1: Quality Assurance
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SUP.1 (Quality Assurance)
+
+------------------------------------------------------------------------
+  SUP.10: Change Management
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SUP.10 (Change Management)
+
+------------------------------------------------------------------------
+  SUP.9: Problem Resolution Management
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SUP.9 (Problem Resolution Management)
+
+------------------------------------------------------------------------
+  SWE.1: Software Requirements Analysis
+    Score: AL1  |  Coverage: 30.0%  |  Evidence: 10  |  Gaps: 0
+    ✅  No findings
+
+------------------------------------------------------------------------
+  SWE.2: Software Architectural Design
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SWE.2 (Software Architectural Design)
+
+------------------------------------------------------------------------
+  SWE.3: Software Detailed Design and Unit Construction
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SWE.3 (Software Detailed Design and Unit Construction)
+
+------------------------------------------------------------------------
+  SWE.4: Software Unit Verification
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SWE.4 (Software Unit Verification)
+
+------------------------------------------------------------------------
+  SWE.5: Software Integration and Integration Test
+    Score: AL2  |  Coverage: 71.4%  |  Evidence: 7  |  Gaps: 0
+    ✅  No findings
+
+------------------------------------------------------------------------
+  SWE.6: Software Qualification Test
+    Score: AL1  |  Coverage: 55.6%  |  Evidence: 9  |  Gaps: 0
+    ✅  No findings
+
+------------------------------------------------------------------------
+  SYS.1: System Requirements Elicitation
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SYS.1 (System Requirements Elicitation)
+
+------------------------------------------------------------------------
+  SYS.2: System Requirements Analysis
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SYS.2 (System Requirements Analysis)
+
+------------------------------------------------------------------------
+  SYS.3: System Architectural Design
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SYS.3 (System Architectural Design)
+
+------------------------------------------------------------------------
+  SYS.4: System Integration and Integration Test
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SYS.4 (System Integration and Integration Test)
+
+------------------------------------------------------------------------
+  SYS.5: System Qualification Test
+    Score: NI  |  Coverage: 0.0%  |  Evidence: 0  |  Gaps: 1
+    ⚠️  No evidence found for process SYS.5 (System Qualification Test)
+
+========================================================================
+  RECOMMENDATIONS
+========================================================================
+    • [MAN.3] ❌ 无可用证据 — 请提供符合过程 MAN.3 (Project Management) 的工作产品
+    • [SUP.1] ❌ 无可用证据 — 请提供符合过程 SUP.1 (Quality Assurance) 的工作产品
+    • [SUP.10] ❌ 无可用证据 — 请提供符合过程 SUP.10 (Change Management) 的工作产品
+    • [SUP.9] ❌ 无可用证据 — 请提供符合过程 SUP.9 (Problem Resolution Management) 的工作产品
+    • [SWE.2] ❌ 无可用证据 — 请提供符合过程 SWE.2 (Software Architectural Design) 的工作产品
+    • [SWE.3] ❌ 无可用证据 — 请提供符合过程 SWE.3 (Software Detailed Design and Unit Construction) 的工作产品
+    • [SWE.4] ❌ 无可用证据 — 请提供符合过程 SWE.4 (Software Unit Verification) 的工作产品
+    • [SWE.5] ✅ AL2 已满足 — 可通过增加过程绩效指标证据提升至 AL3
+    • [SYS.1] ❌ 无可用证据 — 请提供符合过程 SYS.1 (System Requirements Elicitation) 的工作产品
+    • [SYS.2] ❌ 无可用证据 — 请提供符合过程 SYS.2 (System Requirements Analysis) 的工作产品
+    • [SYS.3] ❌ 无可用证据 — 请提供符合过程 SYS.3 (System Architectural Design) 的工作产品
+    • [SYS.4] ❌ 无可用证据 — 请提供符合过程 SYS.4 (System Integration and Integration Test) 的工作产品
+    • [SYS.5] ❌ 无可用证据 — 请提供符合过程 SYS.5 (System Qualification Test) 的工作产品
+    • ⚠️ 3 个 SWE 维度无证据: SWE.2, SWE.3, SWE.4 — 建议优先补充以达成 CL1

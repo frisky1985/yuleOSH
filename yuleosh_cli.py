@@ -2203,6 +2203,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_de_status.add_argument("--days", type=int, default=90, help="分析周期天数")
     p_de_status.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # validate-config
+    p_valcfg = sub.add_parser("validate-config", help="Validate ARXML/JSON config for pipeline readiness")
+    p_valcfg.add_argument("--arxml", type=str, help="Path to ARXML config file")
+    p_valcfg.add_argument("--json", type=str, help="Path to JSON config file")
+    p_valcfg.add_argument("--project-dir", type=str, default=".", help="Project directory")
+
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
 
@@ -2503,6 +2509,10 @@ def main():
         else:
             parser.print_help()
             sys.exit(1)
+
+    elif args.command == "validate-config":
+        from yuleosh.pipeline.config_validator import cli_validate
+        sys.exit(cli_validate(sys.argv[2:]))
 
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main

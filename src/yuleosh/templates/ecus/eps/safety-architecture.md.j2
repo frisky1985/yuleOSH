@@ -1,0 +1,33 @@
+# {{ project_name }} — Safety Architecture (EPS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                 Application Layer (ASIL D)                     │
+│  ┌────────────────┐ ┌────────────────┐ ┌─────────────────┐  │
+│  │AssistTorque_SWC │ │PositionControl │ │SafetyMonitor_SWC│  │
+│  │  torque calc    │ │   angle/return │ │  dual path chk  │  │
+│  └───────┬────────┘ └───────┬────────┘ └────────┬────────┘  │
+│          └──────────────────┴───────────────────┘            │
+├──────────────────────────────────────────────────────────────┤
+│  Com / Dcm / Dem / EcuM / BswM / NvM / WdgM / E2E           │
+├──────────────────────────────────────────────────────────────┤
+│  CanIf / CanTp / MemIf / Fee / WdgIf                         │
+├──────────────────────────────────────────────────────────────┤
+│  Mcu / Dio / Port / Gpt / Can / Spi / Icu / Pwm / Adc / Wdg│
+│              FOC Motor Driver                                 │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## Safety Mechanisms
+
+| ID | Mechanism | ASIL | Description |
+|:---|:----------|:----:|:------------|
+| SM-01 | Dual TAS Sensor | D | Two redundant steering torque sensors |
+| SM-02 | Torque Path Monitor | D | Path 1: assist calc → Path 2: verify |
+| SM-03 | Motor Current Monitor | D | FOC current monitoring + overcurrent trip |
+| SM-04 | Windowed Watchdog | D | 10 ms window, main loop deadline check |
+| SM-05 | Position Sensor Plausibility | C | Redundant motor position sensor check |

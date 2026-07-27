@@ -1,0 +1,525 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "yuleOSH Test Case Library — BCM project",
+    "generated_at": "2026-07-27T01:00:00Z",
+    "total_cases": 16,
+    "schema_url": "https://yuleosh.dev/schemas/test-case/v1"
+  },
+  "test_cases": [
+    {
+      "id": "TC-BCM-001",
+      "title": "Door lock response time — nominal condition",
+      "description": "Verify that the door lock actuator reaches target position within 10 ms under nominal voltage (13.5 V) and temperature (25 °C).",
+      "requirement_ids": ["REQ-BCM-001"],
+      "preconditions": [
+        "BCM powered at 13.5 V ± 0.1 V",
+        "Ambient temperature 25 °C ± 2 °C",
+        "Door lock actuator connected to BCM channel 1",
+        "HSM session active with valid auth token"
+      ],
+      "steps": [
+        "Send authenticated unlock command via CAN (UDS 0x2F, DID 0xF190)",
+        "Start timer on CAN Tx confirmation",
+        "Monitor actuator feedback pin via ADC",
+        "Stop timer when feedback pin transitions above 2.5 V",
+        "Record measured response time"
+      ],
+      "expected_results": "Response time ≤ 10 ms from CAN Tx to feedback pin transition",
+      "verification_method": "test",
+      "tags": ["door", "lock", "timing", "actuator"],
+      "category": "functional",
+      "test_level": "SWE.5",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-24T14:00:00Z",
+        "pipeline_id": "ci-run-bcm-20260724-001",
+        "status": "passed",
+        "measured_value": "7.2 ms",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260724-001", "status": "passed", "timestamp": "2026-07-24T14:00:00Z", "measured": "7.2 ms"},
+        {"run_id": "ci-run-bcm-20260723-002", "status": "passed", "timestamp": "2026-07-23T16:30:00Z", "measured": "8.1 ms"},
+        {"run_id": "ci-run-bcm-20260722-001", "status": "failed", "timestamp": "2026-07-22T10:00:00Z", "measured": "11.4 ms", "error": "Exceeded 10 ms threshold — actuator driver optimization needed"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-BCM-002",
+      "title": "Door lock response time — temperature extremes",
+      "description": "Verify door lock response time ≤ 10 ms at -40 °C and +105 °C.",
+      "requirement_ids": ["REQ-BCM-001"],
+      "preconditions": [
+        "BCM temperature-soaked at test temperature for 30 min",
+        "Door lock actuator at same temperature",
+        "Same channel and auth as TC-BCM-001"
+      ],
+      "steps": [
+        "Repeat TC-BCM-001 steps at -40 °C chamber temp",
+        "Repeat TC-BCM-001 steps at +105 °C chamber temp"
+      ],
+      "expected_results": "Response time ≤ 10 ms at both temperature extremes",
+      "verification_method": "test",
+      "tags": ["door", "lock", "timing", "temperature", "robustness"],
+      "category": "robustness",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "semi-automated",
+      "last_run": null,
+      "history": [],
+      "regression_priority": "on_demand"
+    },
+    {
+      "id": "TC-BCM-003",
+      "title": "Door lock SHALL NOT unlock above 5 km/h",
+      "description": "Verify that unlock command is rejected when vehicle speed exceeds 5 km/h.",
+      "requirement_ids": ["REQ-BCM-002"],
+      "preconditions": [
+        "BCM powered at 13.5 V",
+        "Vehicle speed signal simulated at >5 km/h (e.g. 10 km/h)",
+        "Door lock currently in locked state"
+      ],
+      "steps": [
+        "Set vehicle speed simulation to 10 km/h",
+        "Send authenticated unlock command via CAN",
+        "Monitor door lock actuator state and DEM DTC"
+      ],
+      "expected_results": "Door lock remains locked. DEM event DTC 0xC000201 recorded with FMI indicating 'conditions not correct'",
+      "verification_method": "test",
+      "tags": ["door", "lock", "safety", "motion"],
+      "category": "functional",
+      "test_level": "SWE.5",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-24T14:30:00Z",
+        "pipeline_id": "ci-run-bcm-20260724-001",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260724-001", "status": "passed", "timestamp": "2026-07-24T14:30:00Z"},
+        {"run_id": "ci-run-bcm-20260723-003", "status": "passed", "timestamp": "2026-07-23T17:00:00Z"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-BCM-004",
+      "title": "Door lock unlock — speed signal loss behavior",
+      "description": "Verify that unlock is rejected when speed signal is lost (open circuit / invalid).",
+      "requirement_ids": ["REQ-BCM-002"],
+      "preconditions": [
+        "BCM powered",
+        "Vehicle speed signal disconnected or set to invalid value (0xFFFF)",
+        "Door lock in locked state"
+      ],
+      "steps": [
+        "Send authenticated unlock command via CAN",
+        "Monitor actuator state and DTC"
+      ],
+      "expected_results": "Door lock remains locked (fail-safe — treat invalid speed as ≥5 km/h). DEM DTC logged.",
+      "verification_method": "test",
+      "tags": ["door", "safety", "fail-safe", "signal-loss"],
+      "category": "robustness",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-23T17:30:00Z",
+        "pipeline_id": "ci-run-bcm-20260723-003",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260723-003", "status": "passed", "timestamp": "2026-07-23T17:30:00Z"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-BCM-005",
+      "title": "Exterior lighting PWM frequency accuracy",
+      "description": "Verify all exterior lighting PWM outputs are 100 Hz ± 1%.",
+      "requirement_ids": ["REQ-BCM-003"],
+      "preconditions": [
+        "BCM powered at 13.5 V",
+        "Test load connected to each lighting channel (low-beam, high-beam, turn, brake)"
+      ],
+      "steps": [
+        "Activate each lighting output via CAN command",
+        "Measure PWM frequency on each channel with oscilloscope",
+        "Repeat at -40 °C and +105 °C"
+      ],
+      "expected_results": "Each channel: 99 Hz ≤ f ≤ 101 Hz across full temperature range",
+      "verification_method": "test",
+      "tags": ["lighting", "pwm", "timing"],
+      "category": "functional",
+      "test_level": "SWE.5",
+      "asil": "QM",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-22T11:00:00Z",
+        "pipeline_id": "ci-run-bcm-20260722-001",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260722-001", "status": "passed", "timestamp": "2026-07-22T11:00:00Z"}
+      ],
+      "regression_priority": "on_change"
+    },
+    {
+      "id": "TC-BCM-006",
+      "title": "DEM fault detection — actuator open-load",
+      "description": "Verify BCM detects and reports actuator open-load within 100 ms.",
+      "requirement_ids": ["REQ-BCM-004"],
+      "preconditions": [
+        "BCM powered at 13.5 V",
+        "Door lock actuator connected (to be disconnected mid-test)",
+        "DEM monitoring active"
+      ],
+      "steps": [
+        "Energize door lock actuator output",
+        "Disconnect actuator harness (simulate open-load)",
+        "Start timer",
+        "Monitor DEM DTC event",
+        "Stop timer when DTC 0xC000301 (open-load) is reported"
+      ],
+      "expected_results": "DTC 0xC000301 reported within 100 ms of disconnection. Fault type and actuator ID correctly encoded.",
+      "verification_method": "test",
+      "tags": ["diagnostics", "dem", "open-load"],
+      "category": "functional",
+      "test_level": "SWE.5",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": null,
+      "history": [],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-BCM-007",
+      "title": "Wiper intermittent mode interval adjustment via LIN",
+      "description": "Verify all adjustable intervals (1–30 s, 0.5 s steps) are respected.",
+      "requirement_ids": ["REQ-BCM-005"],
+      "preconditions": [
+        "BCM powered at 13.5 V",
+        "LIN communication with steering column module active",
+        "Wiper motor simulation load connected"
+      ],
+      "steps": [
+        "Send LIN command for intermittent mode with interval = 1.0 s",
+        "Measure time between consecutive wiper cycles",
+        "Repeat for interval = 5.0 s, 10.0 s, 15.0 s, 30.0 s",
+        "Repeat for interval = 1.5 s, etc. (spot check half-step)"
+      ],
+      "expected_results": "Measured interval within ±10% of commanded value for each step",
+      "verification_method": "test",
+      "tags": ["wiper", "lin", "intermittent"],
+      "category": "functional",
+      "test_level": "SWE.5",
+      "asil": "QM",
+      "automation": "automated",
+      "last_run": null,
+      "history": [],
+      "regression_priority": "on_change"
+    },
+    {
+      "id": "TC-BCM-008",
+      "title": "UDS RequestDownload (0x34) — positive response",
+      "description": "Verify that a valid UDS 0x34 request is accepted and correct addressing/memory info returned.",
+      "requirement_ids": ["REQ-BCM-006"],
+      "preconditions": [
+        "BCM powered, UDS session active",
+        "Security access level 0x03 granted",
+        "Valid app image on CAN bus"
+      ],
+      "steps": [
+        "Send UDS 0x34 with DFI = 0xFF00 (application), AFI = 0x00",
+        "Capture response",
+        "Verify positive response SID 0x74",
+        "Verify memory address and size in response data"
+      ],
+      "expected_results": "Response = 0x74 0x20 <addr_4bytes> <size_4bytes> — max block length ≥ 256 bytes",
+      "verification_method": "test",
+      "tags": ["ota", "uds", "download"],
+      "category": "functional",
+      "test_level": "SWE.5",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-25T17:00:00Z",
+        "pipeline_id": "ci-run-bcm-20260725-ota",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260725-ota", "status": "passed", "timestamp": "2026-07-25T17:00:00Z"},
+        {"run_id": "ci-run-bcm-20260724-002", "status": "passed", "timestamp": "2026-07-24T15:00:00Z"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-BCM-009",
+      "title": "UDS TransferData (0x36) block CRC verification",
+      "description": "Verify that each flash data block is CRC-32 verified before acknowledgment.",
+      "requirement_ids": ["REQ-BCM-006"],
+      "preconditions": [
+        "UDS 0x34 completed and memory address known",
+        "Security access level 0x03 granted"
+      ],
+      "steps": [
+        "Send UDS 0x36 with block of 256 bytes and correct CRC-32",
+        "Verify positive response 0x76",
+        "Send 0x36 with intentionally corrupted CRC-32",
+        "Verify negative response 0x76 with NRC 0x72 (generalReject)"
+      ],
+      "expected_results": "Correct CRC → positive response. Corrupted CRC → NRC 0x72. Flash not written for corrupted block.",
+      "verification_method": "test",
+      "tags": ["ota", "uds", "crc", "flash"],
+      "category": "robustness",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-25T17:15:00Z",
+        "pipeline_id": "ci-run-bcm-20260725-ota",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260725-ota", "status": "passed", "timestamp": "2026-07-25T17:15:00Z"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-BCM-010",
+      "title": "CAN-FD data phase bit rate at 2 Mbps",
+      "description": "Verify CAN-FD data phase operates at 2 Mbps with correct timing.",
+      "requirement_ids": ["REQ-BCM-007"],
+      "preconditions": [
+        "CAN-FD capable transceiver connected",
+        "CAN bus termination 120 Ω",
+        "Second CAN-FD node transmitting"
+      ],
+      "steps": [
+        "Configure BCM CAN-FD for 500 kbps arbitration / 2 Mbps data phase",
+        "Transmit CAN-FD frame with DLC > 8 bytes",
+        "Capture bus signal with CAN analyzer",
+        "Measure data phase bit time"
+      ],
+      "expected_results": "Data phase bit time = 500 ns ± 1% (2 Mbps). Arbitration phase bit time = 2 μs ± 1% (500 kbps).",
+      "verification_method": "test",
+      "tags": ["can", "can-fd", "bitrate"],
+      "category": "functional",
+      "test_level": "SWE.5",
+      "asil": "QM",
+      "automation": "semi-automated",
+      "last_run": {
+        "timestamp": "2026-07-21T15:00:00Z",
+        "pipeline_id": "ci-run-bcm-20260721-can",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260721-can", "status": "passed", "timestamp": "2026-07-21T15:00:00Z"}
+      ],
+      "regression_priority": "on_change"
+    },
+    {
+      "id": "TC-BCM-011",
+      "title": "Brownout — voltage dip to 5.5 V for 30 ms",
+      "description": "Verify critical functions maintained during a short brownout within spec.",
+      "requirement_ids": ["REQ-BCM-008"],
+      "preconditions": [
+        "BCM powered at 13.5 V nominal",
+        "Door lock engaged, low-beam on, DEM monitoring",
+        "Programmable power supply connected"
+      ],
+      "steps": [
+        "Ramp supply voltage to 5.5 V in 1 ms",
+        "Hold at 5.5 V for 30 ms",
+        "Ramp back to 13.5 V in 1 ms",
+        "Monitor door lock state, lighting state, DEM events throughout"
+      ],
+      "expected_results": "Door lock remains locked. Lighting remains on. No DEM fault events logged (no interruption).",
+      "verification_method": "test",
+      "tags": ["power", "brownout", "robustness"],
+      "category": "robustness",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "semi-automated",
+      "last_run": null,
+      "history": [],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-BCM-012",
+      "title": "Brownout — voltage dip to 4.0 V for 60 ms — controlled shutdown",
+      "description": "Verify controlled shutdown with NVM preservation during deep brownout.",
+      "requirement_ids": ["REQ-BCM-008"],
+      "preconditions": [
+        "BCM powered at 13.5 V nominal",
+        "Door lock engaged, low-beam on, some NVM variables dirty (pending write)",
+        "Programmable power supply connected"
+      ],
+      "steps": [
+        "Ramp supply voltage to 4.0 V in 1 ms",
+        "Hold at 4.0 V for 60 ms",
+        "Monitor actuator states, NVM write, and DEM events",
+        "Restore power to 13.5 V after 60 ms"
+      ],
+      "expected_results": "Controlled shutdown initiated within 50 ms. Door lock remains (mechanical latch). NVM data preserved (verify on power-up). DEM DTC 0xC000401 (brownout shutdown) recorded.",
+      "verification_method": "test",
+      "tags": ["power", "brownout", "nvm", "shutdown"],
+      "category": "robustness",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "semi-automated",
+      "last_run": null,
+      "history": [],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-SAF-001",
+      "title": "ASIL B decomposition — QM part does not affect B part lock monitoring",
+      "description": "Verify independence of decomposed door lock functions per FFI analysis.",
+      "requirement_ids": ["REQ-SAF-001", "REQ-BCM-002"],
+      "preconditions": [
+        "MPU configured with ASIL B / QM partition boundaries",
+        "Lock actuator in locked state"
+      ],
+      "steps": [
+        "From QM partition, attempt to write to ASIL_B-part lock-status memory",
+        "From QM partition, attempt to disable lock monitoring ISR",
+        "Verify lock monitoring continues to report correct state"
+      ],
+      "expected_results": "MPU violation triggered on write attempt (DTC 0xC000101). Lock monitoring ISR remains active.",
+      "verification_method": "test",
+      "tags": ["safety", "asil", "decomposition", "ffi"],
+      "category": "safety",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-25T10:00:00Z",
+        "pipeline_id": "ci-run-bcm-20260725-safety",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260725-safety", "status": "passed", "timestamp": "2026-07-25T10:00:00Z"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-SAF-002",
+      "title": "MPU region isolation — QM write to ASIL_B data",
+      "description": "Verify MPU prevents QM software from writing to ASIL_B memory regions.",
+      "requirement_ids": ["REQ-SAF-002"],
+      "preconditions": [
+        "MPU regions configured per safety concept",
+        "QM and ASIL_B software partitions active",
+        "DEM monitoring active for DTC 0xC000101"
+      ],
+      "steps": [
+        "Execute memory write instruction from QM partition targeting ASIL_B region",
+        "Monitor MPU exception handler and DEM event"
+      ],
+      "expected_results": "MPU exception fires. DEM DTC 0xC000101 recorded. ASIL_B region data unchanged.",
+      "verification_method": "test",
+      "tags": ["mpu", "memory", "isolation"],
+      "category": "safety",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-22T10:00:00Z",
+        "pipeline_id": "ci-run-bcm-20260722-safety",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260722-safety", "status": "passed", "timestamp": "2026-07-22T10:00:00Z"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-SAF-003",
+      "title": "ASIL B decomposition — independence coverage",
+      "description": "Verify decomposition independence per ISO 26262-9 §5 via fault-injection campaign.",
+      "requirement_ids": ["REQ-SAF-001"],
+      "preconditions": [
+        "Fault injection framework active on BCM test bench",
+        "All decomposition-relevant interfaces identified in FFI analysis"
+      ],
+      "steps": [
+        "For each identified interface between QM(D) and ASIL_B(D) partitions:",
+        "  - Inject stuck-at, bit-flip, and delay faults on the interface",
+        "  - Verify ASIL_B(D) part detects and reacts per safety mechanism",
+        "  - Verify no common-cause failure propagates to safety goal violation"
+      ],
+      "expected_results": "All injected faults detected or contained. No single fault leads to SG1 (door_unlock_during_motion) violation.",
+      "verification_method": "analysis",
+      "tags": ["safety", "decomposition", "fault-injection"],
+      "category": "safety",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": {
+        "timestamp": "2026-07-25T11:00:00Z",
+        "pipeline_id": "ci-run-bcm-20260725-fault",
+        "status": "passed",
+        "runner": "yuleosh.testgen.runner"
+      },
+      "history": [
+        {"run_id": "ci-run-bcm-20260725-fault", "status": "passed", "timestamp": "2026-07-25T11:00:00Z"}
+      ],
+      "regression_priority": "always"
+    },
+    {
+      "id": "TC-SAF-004",
+      "title": "Safety Mechanism — lock status monitoring watchdog",
+      "description": "Verify that the ASIL_B(D) lock status monitoring watchdog detects QM(D) lock drive failure.",
+      "requirement_ids": ["REQ-SAF-001", "REQ-BCM-002"],
+      "preconditions": [
+        "BCM locked state with lock status monitoring active",
+        "Timeout configured at 20 ms"
+      ],
+      "steps": [
+        "Disable QM(D) lock drive output (simulate failure)",
+        "Wait for lock status monitoring timeout",
+        "Check DEM event and fail-safe action"
+      ],
+      "expected_results": "Within 20 ms + tolerance: Safety mechanism activates. DEM DTC logged. Lock remains mechanically locked. DCM requests safe state (keep unlock disabled).",
+      "verification_method": "test",
+      "tags": ["safety", "watchdog", "lock-monitoring"],
+      "category": "safety",
+      "test_level": "SWE.6",
+      "asil": "ASIL_B",
+      "automation": "automated",
+      "last_run": null,
+      "history": [],
+      "regression_priority": "always"
+    }
+  ],
+  "test_categories": {
+    "functional": {"description": "Functional requirements verification (SWE.5)", "count": 7},
+    "robustness": {"description": "Robustness and boundary testing (SWE.6)", "count": 5},
+    "safety": {"description": "Safety mechanism and decomposition verification", "count": 4}
+  },
+  "regression_sets": {
+    "always": {
+      "description": "Run every CI pipeline — safety critical and core functional",
+      "case_ids": ["TC-BCM-001", "TC-BCM-003", "TC-BCM-004", "TC-BCM-006", "TC-BCM-008", "TC-BCM-009", "TC-BCM-011", "TC-BCM-012", "TC-SAF-001", "TC-SAF-002", "TC-SAF-003", "TC-SAF-004"]
+    },
+    "on_change": {
+      "description": "Run when related module changes",
+      "case_ids": ["TC-BCM-005", "TC-BCM-007", "TC-BCM-010"]
+    },
+    "on_demand": {
+      "description": "Manual trigger — resource-intensive or environment-specific",
+      "case_ids": ["TC-BCM-002"]
+    }
+  }
+}
