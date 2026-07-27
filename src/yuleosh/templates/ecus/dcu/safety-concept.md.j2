@@ -1,0 +1,58 @@
+# {{ project_name }} — Safety Concept (DCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. HARA Summary
+
+### HAZ-01: 网关路由错误 — 信号错误转发
+| 属性 | 值 |
+|:-----|:----|
+| Hazard | 关键信号(CAN1 底盘)路由到错误目标 |
+| S | S3 (生命危险) |
+| E | E4 (高频) |
+| C | C2 (一般可控) |
+| **ASIL** | **B** |
+| Safety Goal | SG-01: 确保安全相关信号按路由表精确转发 |
+
+### HAZ-02: 以太网通信超时 — 控制信号延迟
+| Hazard | 域间控制信号延迟超过 100 ms |
+| S | S2 | E | E3 | C | C2 |
+| **ASIL** | **A** |
+| Safety Goal | SG-02: 保证关键 SOME/IP 事件端到端延迟 < 50 ms |
+
+### HAZ-03: 诊断通信中断 — 无法执行安全诊断
+| Hazard | 诊断请求不回响应 |
+| S | S2 | E | E3 | C | C1 |
+| **ASIL** | **A** |
+| Safety Goal | SG-03: 诊断网关响应时间 < 100 ms |
+
+---
+
+## 2. Safety Goals
+
+| ID | Description | ASIL |
+|:---|:------------|:----:|
+| SG-01 | 确保安全相关信号按路由表精确转发 | B |
+| SG-02 | 保证关键 SOME/IP 事件端到端延迟 < 50 ms | A |
+| SG-03 | 诊断网关响应时间 < 100 ms | A |
+| SG-04 | 防止路由表内存损坏导致错误转发 | B |
+
+---
+
+## 3. Technical Safety Requirements
+
+### TSR-01: 路由表保护 (ASIL B)
+- 路由表 SHALL 使用 CRC 校验，每 10 ms 检查完整性
+- 路由表 SHALL 存储在受 MPU 保护的只读区域
+- 检测到路由表损坏 SHALL 切换到默认安全路由
+
+### TSR-02: 通信监控 (ASIL B)
+- CAN 控制器 SHALL 监控总线-off 状态并自动恢复
+- 以太网链路 SHALL 定期发送心跳帧监控连接状态
+- 关键 CAN ID 的接收间隔 SHALL 受 Deadline Monitoring 约束
+
+### TSR-03: 安全诊断 (ASIL A)
+- 诊断会话 SHALL 在 5 秒无活动后自动关闭
+- 安全访问 (0x27) SHALL 使用种子-密钥机制

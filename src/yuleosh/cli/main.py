@@ -79,6 +79,26 @@ def cmd_template_list():
     print(f"\n{len(templates)} template(s) available.\n")
 
 
+def cmd_ecu_template_list():
+    """List all available ECU templates in a formatted table."""
+    from yuleosh.templates.ecus import list_ecu_templates
+
+    templates = list_ecu_templates()
+    if not templates:
+        print("No ECU templates found.")
+        return
+
+    print(f"\n{'Name':<8} {'MCU':<10} {'ASIL':<10} {'Description':<50}")
+    print(f"{'---':<8} {'---':<10} {'---':<10} {'---':<50}")
+    for t in templates:
+        desc = t.get("description", "")
+        if len(desc) > 50:
+            desc = desc[:47] + "..."
+        print(f"{t['name']:<8} {t.get('mcu', '-'):<10} {t.get('asil', '-'):<10} {desc:<50}")
+    print(f"\n{len(templates)} ECU template(s) available.")
+    print("Use: yuleosh init --template <name> --name <project>\n")
+
+
 def cmd_template_init(project_name: str, parent_dir: str = ".", template_name: str | None = None):
     """Create a new project from a built-in or user template (TG-REQ-003)."""
     from yuleosh.templates import resolve_template, get_template_dir
@@ -1975,6 +1995,16 @@ def _build_parser() -> argparse.ArgumentParser:
     # init
     p_init = sub.add_parser("init", help="Initialize a yuleOSH project directory")
     p_init.add_argument("dir", nargs="?", default=".", help="Project directory")
+    p_init.add_argument("--template", "-t", default=None,
+                        help="ECU template: bcm, dcu, vcu, bms, eps")
+    p_init.add_argument("--name", default=None,
+                        help="Project name (defaults to dir basename when --template is set)")
+    p_init.add_argument("--mcu", default=None,
+                        help="Target MCU: S32K312, S32K344, S32K324, S32K314")
+    p_init.add_argument("--asil", default=None,
+                        help="ASIL safety level: QM, ASIL_B, ASIL_C, ASIL_D")
+    p_init.add_argument("--output", "-o", default=None,
+                        help="Output parent directory (default: current dir)")
 
     # init-autosar
     p_init_asr = sub.add_parser("init-autosar", help="Initialize a complete yuleASR AUTOSAR BSW project")
@@ -1993,6 +2023,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_template = sub.add_parser("template", help="Project template management")
     tsub = p_template.add_subparsers(dest="template_sub")
     tsub.add_parser("list", help="List all available templates")
+    tsub.add_parser("list-ecus", help="List all available ECU templates")
     p_template_init = tsub.add_parser("init", help="Create project from template")
     p_template_init.add_argument("--from", dest="from_template", default=None, help="Template name or path")
     p_template_init.add_argument("project_name", help="Project name")
@@ -2349,6 +2380,15 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _resolve_ecu_template(name: str) -> dict | None:
+    """Resolve an ECU template by name, returning its metadata or None."""
+    try:
+        from yuleosh.templates.ecus import get_template
+        return get_template(name)
+    except ImportError:
+        return None
+
+
 # ── Dispatch ────────────────────────────────────────────────────────────
 
 
@@ -2364,7 +2404,26 @@ def main():
 
     # Dispatch
     if args.command == "init":
-        cmd_init(args.dir)
+        if args.template:
+            # ECU template-based init (Jinja2 rendering)
+            from yuleosh.templates.ecus import init_project, list_ecu_templates
+
+            template_name = args.template
+            project_name = args.name or os.path.basename(os.path.abspath(args.dir))
+            if not project_name or project_name == ".":
+                project_name = template_name + "-project"
+            output_dir = args.output or os.path.dirname(os.path.abspath(args.dir))
+            if output_dir == ".":
+                output_dir = os.getcwd()
+
+            # Determine MCU from template defaults if not provided
+            tpl_meta = _resolve_ecu_template(template_name)
+            mcu = args.mcu or (tpl_meta.get("mcu", "S32K312") if tpl_meta else "S32K312")
+            asil = args.asil or (tpl_meta.get("asil", "ASIL_B") if tpl_meta else "ASIL_B")
+
+            init_project(template_name, project_name, mcu, asil, output_dir=output_dir)
+        else:
+            cmd_init(args.dir)
 
     elif args.command == "init-autosar":
         cmd_init_autosar(args.project_name, parent_dir=args.dir, yuleasr_home=args.yuleasr_home)
@@ -2382,6 +2441,8 @@ def main():
     elif args.command == "template":
         if args.template_sub == "list":
             cmd_template_list()
+        elif args.template_sub == "list-ecus":
+            cmd_ecu_template_list()
         elif args.template_sub == "init":
             template_name = getattr(args, "from_template", None)
             cmd_template_init(args.project_name, parent_dir=".", template_name=template_name)

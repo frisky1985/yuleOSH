@@ -1,0 +1,45 @@
+# {{ project_name }} — Safety Architecture (DCU)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. Architecture Overview
+
+```
+         ┌──────────────────────────────────────────────────┐
+         │                  Application Layer                │
+┌────────┴────────┐  ┌───────────────┐  ┌─────────────────┐│
+│  Gateway_SWC    │  │ CanRouter_SWC │  │  EthManager_SWC ││
+│  (CAN routing)  │  │ (signal gw)   │  │  (SOME/IP)      ││
+└────────┬────────┘  └───────┬───────┘  └────────┬────────┘│
+         └──────────────────┬────────────────────┘         │
+┌───────────────────────────┴──────────────────────────────┘
+│                    RTE + E2E Wrapper
+├───────────────────────────────────────────────────────────
+│  Com / Dcm / Dem / EcuM / BswM / NvM / PduR / CanM
+├───────────────────────────────────────────────────────────
+│  CanIf / CanTp / LinIf / EthIf / SomeIpIf / SoAd / DoIP
+├───────────────────────────────────────────────────────────
+│  Can / Lin / Eth / Mcu / Dio / Port / Gpt / Wdg / Adc
+└───────────────────────────────────────────────────────────
+```
+
+## 2. MPU Partitioning
+
+| Partition | SWCs | ASIL | Memory Region |
+|:----------|:-----|:----:|:--------------|
+| Partition 0 | Gateway_SWC | B | 0x0000_0000 - 0x0005_FFFF |
+| Partition 1 | CanRouter_SWC | B | 0x0006_0000 - 0x0009_FFFF |
+| Partition 2 | EthManager, DiagGateway | A | 0x000A_0000 - 0x000F_FFFF |
+| Partition 3 | BSW Services | B | 0x0010_0000 - 0x001F_FFFF |
+
+## 3. Safety Mechanisms
+
+| ID | Mechanism | ASIL | Reaction |
+|:---|:----------|:----:|:---------|
+| SM-01 | Routing Table CRC | B | Safe Route |
+| SM-02 | CAN Bus-Off Recovery | B | DTC + Retry |
+| SM-03 | Eth Link Heartbeat | A | DTC + Fallback |
+| SM-04 | Deadline Monitor | B | DEM Event |
+| SM-05 | Secure Boot | B | Halt on Fail |

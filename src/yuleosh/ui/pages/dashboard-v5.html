@@ -117,7 +117,94 @@ body::before{
 .btn-green:hover{box-shadow:0 0 20px rgba(82,196,26,.3)}
 .btn-ghost{background:var(--surface2);border:1px solid var(--border);color:var(--text2)}
 
-@media(max-width:768px){.sidebar{display:none}.main{padding:20px}.stage-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.sidebar{display:none}.main{padding:20px}.stage-grid{grid-template-columns:repeat(2,1fr)}.loop-grid{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}}
+
+/* ── Loop Engineering Widgets ── */
+.loop-section{margin-bottom:28px}
+.loop-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.loop-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;transition:all .2s;cursor:pointer;position:relative;overflow:hidden}
+.loop-card:hover{transform:translateY(-2px);box-shadow:0 4px 24px rgba(0,0,0,.3)}
+.loop-card.expanded{border-color:var(--border-active)}
+.loop-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.loop-card-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.loop-card-badge{font-size:11px;padding:2px 10px;border-radius:10px;font-weight:600}
+.loop-kpi{display:flex;gap:16px;margin-bottom:14px}
+.loop-kpi-item{flex:1}
+.loop-kpi-value{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.loop-kpi-label{font-size:11px;color:var(--text3);margin-top:2px}
+.loop-kpi-trend{font-size:11px;margin-left:4px}
+.trend-up{color:var(--green)}
+.trend-down{color:var(--red)}
+/* Loop 1 color */
+.loop-1 .loop-card-title{color:#3b82f6}
+.loop-1 .loop-kpi-value{color:#60a5fa}
+.loop-1.loop-card{border-left:3px solid #3b82f6}
+/* Loop 2 color */
+.loop-2 .loop-card-title{color:#22c55e}
+.loop-2 .loop-kpi-value{color:#4ade80}
+.loop-2.loop-card{border-left:3px solid #22c55e}
+/* Loop 3 color */
+.loop-3 .loop-card-title{color:#eab308}
+.loop-3 .loop-kpi-value{color:#facc15}
+.loop-3.loop-card{border-left:3px solid #eab308}
+/* Loop 4 color */
+.loop-4 .loop-card-title{color:#a855f7}
+.loop-4 .loop-kpi-value{color:#c084fc}
+.loop-4.loop-card{border-left:3px solid #a855f7}
+
+/* Timeline */
+.timeline{position:relative;padding-left:20px;margin-top:10px}
+.timeline::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:2px;background:var(--border)}
+.timeline-item{position:relative;padding:8px 0 8px 16px;font-size:12px;line-height:1.4}
+.timeline-item::before{content:'';position:absolute;left:-3px;top:12px;width:8px;height:8px;border-radius:50%}
+.timeline-item.type-ci::before{background:#3b82f6}
+.timeline-item.type-kg::before{background:#8b5cf6}
+.timeline-item.type-spec::before{background:#f59e0b}
+.timeline-item .tl-time{color:var(--text3);font-size:10px;display:block}
+.timeline-item .tl-summary{color:var(--text2)}
+
+/* Tree */
+.tree-node{padding:4px 0}
+.tree-children{padding-left:20px;border-left:1px solid var(--border);margin:2px 0 4px 12px}
+.tree-label{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:500}
+.tree-label.critical{background:rgba(255,77,79,.1);color:#ff4d4f;border:1px solid rgba(255,77,79,.2)}
+.tree-label.high{background:rgba(250,173,20,.1);color:#f59e0b;border:1px solid rgba(250,173,20,.2)}
+.tree-label.medium{background:rgba(250,204,21,.08);color:#eab308;border:1px solid rgba(250,204,21,.15)}
+.tree-label.low{background:rgba(82,196,26,.08);color:#52c41a;border:1px solid rgba(82,196,26,.15)}
+.tree-meta{font-size:10px;color:var(--text3);margin-left:6px}
+
+/* Chart canvas */
+.loop-chart{margin:10px 0;position:relative}
+.loop-chart canvas{width:100%!important;height:120px!important;border-radius:6px}
+
+/* Detail panel */
+.loop-detail{display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);max-height:360px;overflow-y:auto}
+.loop-card.expanded .loop-detail{display:block}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.detail-list{list-style:none;font-size:12px}
+.detail-list li{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);display:flex;justify-content:space-between}
+.detail-list .dl-label{color:var(--text3)}
+.detail-list .dl-value{color:var(--text);font-weight:500}
+
+/* Confidence histogram */
+.histogram{margin:8px 0}
+.hist-bar{display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:11px}
+.hist-bar-fill{height:16px;border-radius:3px;transition:width .5s}
+.hist-bar-label{width:60px;color:var(--text3);flex-shrink:0}
+.hist-bar-count{width:30px;text-align:right;color:var(--text2)}
+
+/* Badge colors */
+.badge-blue{background:rgba(59,130,246,.12);color:#60a5fa}
+.badge-green{background:rgba(34,197,94,.12);color:#4ade80}
+.badge-yellow{background:rgba(234,179,8,.12);color:#facc15}
+.badge-purple{background:rgba(168,85,247,.12);color:#c084fc}
+
+/* Loading shimmer */
+.loop-loading{text-align:center;padding:20px;color:var(--text3);font-size:13px}
+
+/* Auto-refresh indicator */
+.refresh-dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:4px}
+.refresh-dot.active{background:var(--green);animation:pulse 2s infinite}
 </style>
 </head>
 <body>
@@ -221,6 +308,20 @@ body::before{
     </div>
     <div class="project-grid" id="projectList"></div>
   </div>
+
+  <!-- ═══ Loop Engineering Section ═══ -->
+  <div class="loop-section">
+    <div class="section-header">
+      <h2 class="section-title">⟳ Loop Engineering</h2>
+      <span style="font-size:11px;color:var(--text3)">
+        <span class="refresh-dot active" id="loopRefreshDot"></span>
+        <span id="loopRefreshLabel">Auto-refresh 30s</span>
+      </span>
+    </div>
+    <div class="loop-grid" id="loopGrid">
+      <!-- 4 widgets rendered by JS -->
+    </div>
+  </div>
 </main>
 </div>
 
@@ -234,6 +335,8 @@ body::before{
 <script>
 const T=localStorage.getItem('yuleosh_token');
 async function api(p,o={}){const h={'Content-Type':'application/json'};if(T)h['Authorization']='Bearer '+T;const r=await fetch(p,{headers:h,...o});return r.json()}
+
+// ── Dashboard init ──
 async function load(){
   try{const s=await api('/api/auth/session');if(s.error){window.location='/';return}
   document.getElementById('orgName').textContent=s.org_name||'yuleOSH';
@@ -241,6 +344,7 @@ async function load(){
   if(u.trial&&u.trial.in_trial)document.getElementById('trialText').textContent=u.trial.days_left+'d trial left';
   const p=await api('/api/project/list');renderProjects(p.projects||[])
   }catch(e){console.error(e)}
+  loadAllLoops();
 }
 function renderProjects(ps){const e=document.getElementById('projectList');
   if(!ps.length){e.innerHTML='<a href="/onboarding" class="project-card" style="border-style:dashed;text-align:center;padding:32px"><span style="font-size:28px">＋</span><div style="font-weight:600;margin-top:8px">Create first project</div></a>';return}
@@ -252,7 +356,411 @@ function runCI(){window.location='/api/v1/ci/run'}
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openSearch()}})
 function openSearch(){document.getElementById('searchOverlay').classList.add('show');document.getElementById('q').focus()}
 function closeSearch(e){if(!e||e.target===document.getElementById('searchOverlay'))document.getElementById('searchOverlay').classList.remove('show')}
+
+// ═══════════════════════════════════════════
+// Loop Engineering Widgets
+// ═══════════════════════════════════════════
+
+const LOOP_NAMES = {
+  1: {label:'缺陷→需求回溯', emoji:'🔵', cls:'loop-1'},
+  2: {label:'现场→FMEA', emoji:'🟢', cls:'loop-2'},
+  3: {label:'KPI→RCA→改进', emoji:'🟡', cls:'loop-3'},
+  4: {label:'KG 自进化', emoji:'🟣', cls:'loop-4'}
+};
+
+let loopRefreshTimer = null;
+
+async function loadAllLoops() {
+  const grid = document.getElementById('loopGrid');
+  grid.innerHTML = '';
+  for (let i = 1; i <= 4; i++) {
+    grid.innerHTML += renderLoopLoading(i);
+  }
+  // Fetch all 4 loops in parallel
+  const results = await Promise.allSettled([
+    api('/api/loops/1/data'),
+    api('/api/loops/2/data'),
+    api('/api/loops/3/data'),
+    api('/api/loops/4/data')
+  ]);
+  for (let i = 0; i < 4; i++) {
+    const loopId = i + 1;
+    if (results[i].status === 'fulfilled' && results[i].value.ok) {
+      renderLoopWidget(loopId, results[i].value);
+    } else {
+      renderLoopError(loopId);
+    }
+  }
+  document.getElementById('loopRefreshLabel').textContent = 'Auto-refresh 30s';
+}
+
+function renderLoopLoading(id) {
+  const meta = LOOP_NAMES[id];
+  return `<div class="loop-card ${meta.cls}" id="loop-${id}">
+    <div class="loop-loading">${meta.emoji} ${meta.label} — 加载中...</div>
+  </div>`;
+}
+
+function renderLoopError(id) {
+  const el = document.getElementById('loop-'+id);
+  if (!el) return;
+  el.innerHTML = `<div class="loop-loading" style="color:var(--red)">⚠ ${LOOP_NAMES[id].emoji} ${LOOP_NAMES[id].label} — 数据加载失败</div>`;
+}
+
+function renderLoopWidget(id, data) {
+  const el = document.getElementById('loop-'+id);
+  if (!el) return;
+  el.innerHTML = '';
+  el.classList.add('loop-card', LOOP_NAMES[id].cls);
+  el.onclick = () => toggleLoopExpand(id);
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'loop-card-header';
+  hdr.innerHTML = `<span class="loop-card-title">${data.emoji} ${data.label}</span>` +
+    `<span class="loop-card-badge badge-${['blue','green','yellow','purple'][id-1]}">` +
+    `Loop ${id}</span>`;
+  el.appendChild(hdr);
+
+  // KPI row
+  const kpi = buildKPI(id, data);
+  el.appendChild(kpi);
+
+  // Chart
+  const chartDiv = document.createElement('div');
+  chartDiv.className = 'loop-chart';
+  chartDiv.id = 'chart-'+id;
+  el.appendChild(chartDiv);
+
+  // Detail panel
+  const detail = document.createElement('div');
+  detail.className = 'loop-detail';
+  detail.id = 'detail-'+id;
+  el.appendChild(detail);
+
+  // Render chart after DOM insertion
+  setTimeout(() => renderChart(id, data), 50);
+}
+
+function buildKPI(id, data) {
+  const div = document.createElement('div');
+  div.className = 'loop-kpi';
+  const m = data.metrics || {};
+  let items = [];
+  switch(id) {
+    case 1:
+      items = [
+        {v: m.total_ci_failures_24h||0, l:'24h CI失败', u:''},
+        {v: m.spec_deltas_generated||0, l:'SpecDelta', u:''},
+        {v: (m.traceability_rate_7d||0)+'%', l:'追溯率', u: ''}
+      ];
+      break;
+    case 2:
+      items = [
+        {v: m.total_field_defects_30d||0, l:'30d现场缺陷', u:''},
+        {v: m.active_fmea_entries||0, l:'活跃FMEA', u:''},
+        {v: m.safety_alerts_active||0, l:'安全告警', u:''}
+      ];
+      break;
+    case 3:
+      items = [
+        {v: (m.closure_rate_30d||0)+'%', l:'闭环率', u: ' '},
+        {v: m.active_rca_count||0, l:'活跃RCA', u:''},
+        {v: m.open_tickets||0, l:'待处理工单', u:''}
+      ];
+      break;
+    case 4:
+      items = [
+        {v: m.total_kg_entries||0, l:'KG条目', u:''},
+        {v: (m.avg_confidence||0).toFixed(2), l:'平均置信度', u:''},
+        {v: m.needs_review_count||0, l:'需审查', u:''}
+      ];
+      break;
+  }
+  items.forEach(it => {
+    const item = document.createElement('div');
+    item.className = 'loop-kpi-item';
+    item.innerHTML = `<div class="loop-kpi-value">${it.v}</div>` +
+      `<div class="loop-kpi-label">${it.l}</div>`;
+    div.appendChild(item);
+  });
+  return div;
+}
+
+function toggleLoopExpand(id) {
+  const el = document.getElementById('loop-'+id);
+  if (!el) return;
+  const expanded = el.classList.toggle('expanded');
+  if (expanded) {
+    loadDetail(id);
+  }
+}
+
+function loadDetail(id) {
+  const detail = document.getElementById('detail-'+id);
+  if (!detail || detail.children.length > 0) return;
+  api('/api/loops/' + id + '/data').then(data => {
+    if (!data.ok) { detail.innerHTML = '<div style="color:var(--red);font-size:12px">数据加载失败</div>'; return; }
+    renderDetail(id, data, detail);
+  }).catch(e => {
+    detail.innerHTML = '<div style="color:var(--red);font-size:12px">'+e.message+'</div>';
+  });
+}
+
+function renderDetail(id, data, el) {
+  switch(id) {
+    case 1: renderLoop1Detail(data, el); break;
+    case 2: renderLoop2Detail(data, el); break;
+    case 3: renderLoop3Detail(data, el); break;
+    case 4: renderLoop4Detail(data, el); break;
+  }
+}
+
+// ── Loop 1: Timeline Detail ──
+function renderLoop1Detail(data, el) {
+  let html = '<div class="timeline">';
+  (data.events||[]).forEach(evt => {
+    const type = evt.event_type === 'CI_FAILURE' ? 'ci' :
+                 evt.event_type === 'KG_TRACE' ? 'kg' : 'spec';
+    html += `<div class="timeline-item type-${type}">` +
+      `<span class="tl-time">${evt.timestamp.slice(5,16).replace('T',' ')}</span>` +
+      `<span class="tl-summary">${evt.summary||''}</span></div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── Loop 2: Tree Detail ──
+function renderLoop2Detail(data, el) {
+  const chain = data.impact_chain;
+  if (!chain) { el.innerHTML = '<div style="font-size:12px;color:var(--text2)">无影响链数据</div>'; return; }
+  el.innerHTML = renderTree(chain);
+}
+
+function renderTree(node) {
+  if (!node.children || !node.children.length) {
+    const sev = node.severity || 0;
+    const cls = sev >= 8 ? 'critical' : sev >= 5 ? 'high' : sev >= 3 ? 'medium' : 'low';
+    let label = node.name || '';
+    if (node.count) label += ' <span class="tree-meta">×'+node.count+'</span>';
+    if (node.rpn) label += ' <span class="tree-meta">RPN:'+node.rpn+'</span>';
+    if (node.impact) label += ' <span class="tree-meta">'+node.impact+'</span>';
+    if (node.status) label += ' <span class="tree-meta">['+node.status+']</span>';
+    return `<div class="tree-node"><span class="tree-label ${cls}">${label}</span></div>`;
+  }
+  let html = '<div class="tree-node">';
+  const sev = node.severity || 0;
+  const cls = sev >= 8 ? 'critical' : sev >= 5 ? 'high' : sev >= 3 ? 'medium' : 'low';
+  html += `<span class="tree-label ${cls}">${node.name}`;
+  if (node.count) html += ' <span class="tree-meta">×'+node.count+'</span>';
+  if (node.severity) html += ' <span class="tree-meta">S:'+node.severity+'</span>';
+  html += '</span>';
+  html += '<div class="tree-children">';
+  node.children.forEach(c => { html += renderTree(c); });
+  html += '</div></div>';
+  return html;
+}
+
+// ── Loop 3: KPI Trend + RCA List Detail ──
+function renderLoop3Detail(data, el) {
+  let html = '<div class="detail-grid">';
+  html += '<div><div style="font-size:12px;font-weight:600;margin-bottom:6px">RCA 记录</div><ul class="detail-list">';
+  (data.rca_records||[]).forEach(r => {
+    const statusCls = r.status === 'resolved' ? 'color:var(--green)' :
+                      r.status === 'in_progress' ? 'color:var(--orange)' : '';
+    html += `<li><span class="dl-label">${r.metric}</span><span class="dl-value" style="${statusCls}">${r.status}</span></li>`;
+  });
+  html += '</ul></div>';
+  html += '<div><div style="font-size:12px;font-weight:600;margin-bottom:6px">改进工单</div><ul class="detail-list">';
+  (data.improvement_tickets||[]).forEach(t => {
+    const stCls = t.status === 'closed' ? 'color:var(--green)' :
+                  t.status === 'in_progress' ? 'color:var(--orange)' : '';
+    html += `<li><span class="dl-label">${t.id}</span><span class="dl-value" style="${stCls}">${t.status}</span></li>`;
+  });
+  html += '</ul></div></div>';
+  el.innerHTML = html;
+}
+
+// ── Loop 4: Histogram + Low Conf Detail ──
+function renderLoop4Detail(data, el) {
+  let html = '<div class="detail-grid">';
+  // Histogram
+  html += '<div><div style="font-size:12px;font-weight:600;margin-bottom:6px">置信度分布</div><div class="histogram">';
+  (data.confidence_buckets||[]).forEach(b => {
+    const pct = b.pct || 0;
+    const color = pct < 10 ? '#ef4444' : pct < 25 ? '#f59e0b' : pct < 35 ? '#22c55e' : '#3b82f6';
+    html += `<div class="hist-bar"><span class="hist-bar-label">${b.range}</span>` +
+      `<div class="hist-bar-fill" style="width:${Math.max(pct*1.8,4)}%;background:${color}"></div>` +
+      `<span class="hist-bar-count">${b.count}</span></div>`;
+  });
+  html += '</div></div>';
+  // Low confidence items
+  html += '<div><div style="font-size:12px;font-weight:600;margin-bottom:6px">低分条目</div><ul class="detail-list">';
+  (data.low_confidence_items||[]).slice(0,5).forEach(item => {
+    html += `<li><span class="dl-label">${item.entity.slice(0,24)}…</span>` +
+      `<span class="dl-value" style="color:var(--red)">${(item.confidence*100).toFixed(0)}%</span></li>`;
+  });
+  html += '</ul></div></div>';
+  el.innerHTML = html;
+}
+
+// ── Canvas Charts ──
+function renderChart(id, data) {
+  const canvas = document.createElement('canvas');
+  const container = document.getElementById('chart-'+id);
+  if (!container) return;
+  container.innerHTML = '';
+  canvas.width = container.clientWidth || 300;
+  canvas.height = 120;
+  container.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  switch(id) {
+    case 1: drawBarChart(ctx, canvas, data.charts?.traceability_7d); break;
+    case 2: drawMonthlyBarChart(ctx, canvas, data.charts?.monthly_trend); break;
+    case 3: drawKPITrendChart(ctx, canvas, data.charts?.kpi_trend); break;
+    case 4: drawConfidenceTrend(ctx, canvas, data.charts?.confidence_trend); break;
+  }
+}
+
+function drawBarChart(ctx, c, data) {
+  if (!data || !data.length) return;
+  const W = c.width, H = c.height, pad = {t:16,b:18,l:28,r:8};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  const bw = iw / data.length / 3.5;
+  const max = Math.max(...data.map(d=>Math.max(d.ci_failures||0,d.kg_traces||0,d.spec_deltas||0)),1);
+  ctx.clearRect(0,0,W,H);
+  data.forEach((d,i) => {
+    const x = pad.l + i * (iw / data.length);
+    const h1 = (d.ci_failures/max) * ih;
+    const h2 = (d.kg_traces/max) * ih;
+    const h3 = (d.spec_deltas/max) * ih;
+    ctx.fillStyle = '#3b82f6'; ctx.fillRect(x, pad.t+ih-h1, bw, h1);
+    ctx.fillStyle = '#8b5cf6'; ctx.fillRect(x+bw+1, pad.t+ih-h2, bw, h2);
+    ctx.fillStyle = '#f59e0b'; ctx.fillRect(x+2*bw+2, pad.t+ih-h3, bw, h3);
+    // Date label
+    ctx.fillStyle = '#64748b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(d.date, x+bw*1.5, H-2);
+  });
+  // Legend
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#3b82f6'; ctx.fillRect(W-58,4,6,6); ctx.fillStyle='#94a3b8'; ctx.fillText('CI',W-50,10);
+  ctx.fillStyle = '#8b5cf6'; ctx.fillRect(W-34,4,6,6); ctx.fillStyle='#94a3b8'; ctx.fillText('KG',W-26,10);
+  ctx.fillStyle = '#f59e0b'; ctx.fillRect(W-16,4,6,6); ctx.fillStyle='#94a3b8'; ctx.fillText('S',W-8,10);
+}
+
+function drawMonthlyBarChart(ctx, c, data) {
+  if (!data || !data.length) return;
+  const W = c.width, H = c.height, pad = {t:16,b:18,l:28,r:8};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  const bw = iw / data.length / 3;
+  const max = Math.max(...data.map(d=>Math.max(d.defects||0,d.fmea_updates||0,d.safety_alerts||0)),1);
+  ctx.clearRect(0,0,W,H);
+  data.forEach((d,i) => {
+    const x = pad.l + i * (iw / data.length);
+    const h1 = (d.defects/max) * ih;
+    const h2 = (d.fmea_updates/max) * ih;
+    const h3 = (d.safety_alerts/max) * ih;
+    ctx.fillStyle = '#ef4444'; ctx.fillRect(x, pad.t+ih-h1, bw, h1);
+    ctx.fillStyle = '#22c55e'; ctx.fillRect(x+bw+1, pad.t+ih-h2, bw, h2);
+    ctx.fillStyle = '#f59e0b'; ctx.fillRect(x+2*bw+2, pad.t+ih-h3, bw, h3);
+    ctx.fillStyle = '#64748b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(d.month.slice(5), x+bw*1.5, H-2);
+  });
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#ef4444'; ctx.fillRect(W-64,4,6,6); ctx.fillStyle='#94a3b8'; ctx.fillText('缺陷',W-56,10);
+  ctx.fillStyle = '#22c55e'; ctx.fillRect(W-34,4,6,6); ctx.fillStyle='#94a3b8'; ctx.fillText('FMEA',W-26,10);
+  ctx.fillStyle = '#f59e0b'; ctx.fillRect(W-16,4,6,6); ctx.fillStyle='#94a3b8'; ctx.fillText('安全',W-8,10);
+}
+
+function drawKPITrendChart(ctx, c, data) {
+  if (!data || !data.length) return;
+  const W = c.width, H = c.height, pad = {t:16,b:18,l:28,r:8};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  const max = 100;
+  ctx.clearRect(0,0,W,H);
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,.04)'; ctx.lineWidth = 1;
+  for (let y = 0; y < 4; y++) {
+    const yy = pad.t + (y/3)*ih;
+    ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W-pad.r, yy); ctx.stroke();
+  }
+  // Draw line
+  function drawLine(key, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    data.forEach((d,i) => {
+      const x = pad.l + (i/(data.length-1))*iw;
+      const y = pad.t + ih - ((d[key]||0)/max)*ih;
+      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+  drawLine('coverage', '#22c55e');
+  drawLine('defect_escape', '#ef4444');
+  drawLine('build_stability', '#3b82f6');
+  // Month labels (first, mid, last)
+  ctx.fillStyle = '#64748b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(data[0]?.date||'', pad.l, H-2);
+  ctx.fillText(data[Math.floor(data.length/2)]?.date||'', pad.l+iw/2, H-2);
+  ctx.fillText(data[data.length-1]?.date||'', pad.l+iw, H-2);
+}
+
+function drawConfidenceTrend(ctx, c, data) {
+  if (!data || !data.length) return;
+  const W = c.width, H = c.height, pad = {t:16,b:18,l:28,r:8};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  const max = 1.0;
+  ctx.clearRect(0,0,W,H);
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,.04)'; ctx.lineWidth = 1;
+  for (let y = 0; y < 5; y++) {
+    const yy = pad.t + (y/4)*ih;
+    ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W-pad.r, yy); ctx.stroke();
+  }
+  // Area fill
+  ctx.beginPath();
+  data.forEach((d,i) => {
+    const x = pad.l + (i/(data.length-1))*iw;
+    const y = pad.t + ih - ((d.avg_confidence||0)/max)*ih;
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.lineTo(pad.l+iw, pad.t+ih); ctx.lineTo(pad.l, pad.t+ih); ctx.closePath();
+  ctx.fillStyle = 'rgba(168,85,247,.12)'; ctx.fill();
+  // Line
+  ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  data.forEach((d,i) => {
+    const x = pad.l + (i/(data.length-1))*iw;
+    const y = pad.t + ih - ((d.avg_confidence||0)/max)*ih;
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // Labels
+  ctx.fillStyle = '#64748b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(data[0]?.date||'', pad.l, H-2);
+  ctx.fillText(data[data.length-1]?.date||'', pad.l+iw, H-2);
+  // Current value
+  const last = data[data.length-1];
+  if (last) {
+    const lx = pad.l + iw;
+    const ly = pad.t + ih - ((last.avg_confidence||0)/max)*ih;
+    ctx.fillStyle = '#c084fc'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText((last.avg_confidence||0).toFixed(2), lx+4, ly-2);
+  }
+}
+
+// ── Auto-refresh ──
+function startLoopRefresh() {
+  if (loopRefreshTimer) clearInterval(loopRefreshTimer);
+  loopRefreshTimer = setInterval(() => {
+    loadAllLoops();
+  }, 30000);
+}
+
+// ── Init ──
 load();
+startLoopRefresh();
 </script>
 </body>
 </html>

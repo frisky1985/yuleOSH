@@ -1,0 +1,31 @@
+# {{ project_name }} — Safety Architecture (BMS)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│              Application Layer (ASIL D)                    │
+│  ┌────────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐ │
+│  │CellMonitor │ │Balancing │ │SocEstim  │ │Contactor  │ │
+│  └──────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘ │
+├─────────┴─────────────┴──────────────┴────────────┴──────┤
+│  Com / Dcm / Dem / EcuM / BswM / NvM / WdgM / E2E       │
+├──────────────────────────────────────────────────────────┤
+│  CanIf / CanTp / MemIf / Fee / WdgIf                     │
+├──────────────────────────────────────────────────────────┤
+│  Mcu / Dio / Port / Gpt / Can / Spi / Icu / Adc / Wdg   │
+│                   AFE Driver                              │
+└──────────────────────────────────────────────────────────┘
+```
+
+## Safety Mechanisms
+
+| ID | Mechanism | ASIL | Description |
+|:---|:----------|:----:|:------------|
+| SM-01 | Dual AFE Redundancy | D | Two independent voltage measurements |
+| SM-02 | OVP Detection | D | Overvoltage protection within 20 ms |
+| SM-03 | OTP Detection | D | Overtemperature protection |
+| SM-04 | Contactor State Feedback | D | Verify contactor open/close state |
+| SM-05 | Insulation Monitor | D | HV isolation resistance check |

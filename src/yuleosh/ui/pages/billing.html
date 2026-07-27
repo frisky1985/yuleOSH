@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计费管理 - yuleOSH</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --purple: #8b5cf6;
+  --orange: #f97316;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 { font-size: 18px; font-weight: 700; }
+.header h1 .green { color: var(--green); }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+.current-plan {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 24px; margin-bottom: 24px;
+}
+.current-plan h2 { font-size: 16px; margin-bottom: 12px; }
+.plan-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-free { background: rgba(148,163,184,.15); color: var(--text2); }
+.badge-pro { background: rgba(16,185,129,.15); color: var(--green); }
+.badge-enterprise { background: rgba(139,92,246,.15); color: var(--purple); }
+.status-row {
+  display: flex; gap: 24px; align-items: center;
+  margin-top: 12px; flex-wrap: wrap;
+}
+.status-item { font-size: 13px; }
+.status-item .label { color: var(--text2); }
+.status-item .value { font-weight: 600; color: var(--green); }
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin-bottom: 24px;
+}
+.usage-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px;
+}
+.usage-card .num { font-size: 24px; font-weight: 800; }
+.usage-card .label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+.usage-card .bar {
+  margin-top: 8px; height: 4px; background: var(--surface2);
+  border-radius: 2px; overflow: hidden;
+}
+.usage-card .bar-fill {
+  height: 100%; border-radius: 2px; transition: width .3s;
+}
+.usage-card .limit { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px; margin-bottom: 24px;
+}
+.plan-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 24px;
+  text-align: center; transition: all .15s;
+}
+.plan-card:hover { border-color: var(--green); transform: translateY(-2px); }
+.plan-card.featured {
+  border-color: var(--green);
+  box-shadow: 0 0 20px rgba(16,185,129,.1);
+}
+.plan-card .plan-name { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.plan-card .plan-price { font-size: 32px; font-weight: 800; }
+.plan-card .plan-price .sub { font-size: 14px; font-weight: 400; color: var(--text2); }
+.plan-card .plan-desc { font-size: 13px; color: var(--text2); margin: 8px 0 16px; }
+.plan-card .plan-features { text-align: left; padding: 0; list-style: none; }
+.plan-card .plan-features li {
+  padding: 6px 0; font-size: 13px;
+  display: flex; align-items: center; gap: 8px;
+}
+.plan-card .plan-features .check { color: var(--green); }
+.plan-card .plan-features .cross { color: var(--red); }
+.btn {
+  display: inline-block;
+  padding: 8px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .15s;
+  text-decoration: none;
+}
+.btn-primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+.btn:hover { opacity: .85; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+  margin-top: 12px;
+}
+.invoice-table th, .invoice-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.invoice-table th { font-size: 11px; color: var(--text2); background: var(--surface2); }
+.status-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+}
+.status-paid { background: rgba(16,185,129,.15); color: var(--green); }
+.status-pending { background: rgba(245,158,11,.15); color: var(--yellow); }
+.status-cancelled { background: rgba(239,68,68,.15); color: var(--red); }
+.mock-badge {
+  display: inline-block; font-size: 10px; padding: 2px 6px;
+  background: rgba(245,158,11,.15); color: var(--yellow);
+  border-radius: 4px; margin-left: 8px;
+}
+@media (max-width: 800px) {
+  .plans-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1><span class="green">💰 计费</span> 管理</h1>
+    <div style="color:var(--text2);font-size:12px;margin-top:2px;">用量计量 & Stripe 计费</div>
+  </div>
+  <button class="btn btn-primary" onclick="refresh()">🔄 刷新</button>
+</div>
+
+<div class="container">
+  <!-- Current Plan -->
+  <div class="current-plan" id="currentPlan">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h2>当前套餐</h2>
+      <span class="plan-badge" id="planBadge">-</span>
+      <span class="mock-badge" id="mockBadge" style="display:none">MOCK</span>
+    </div>
+    <div class="status-row">
+      <div class="status-item"><span class="label">状态: </span><span class="value" id="planStatus">-</span></div>
+      <div class="status-item"><span class="label">周期结束: </span><span class="value" id="periodEnd">-</span></div>
+    </div>
+  </div>
+
+  <!-- Usage -->
+  <h3 style="font-size:14px;margin-bottom:12px;color:var(--text2)">本月用量</h3>
+  <div class="usage-grid" id="usageGrid">
+    <div class="usage-card">
+      <div class="num" id="usageCiRuns">-</div>
+      <div class="label">CI 运行次数</div>
+      <div class="bar"><div class="bar-fill" id="barCi" style="width:0%;background:var(--blue)"></div></div>
+      <div class="limit" id="limitCi">上限: -</div>
+    </div>
+    <div class="usage-card">
+      <div class="num" id="usageProjects">-</div>
+      <div class="label">项目数</div>
+      <div class="bar"><div class="bar-fill" id="barProjects" style="width:0%;background:var(--green)"></div></div>
+      <div class="limit" id="limitProjects">上限: -</div>
+    </div>
+    <div class="usage-card">
+      <div class="num" id="usageUsers">-</div>
+      <div class="label">用户数</div>
+      <div class="bar"><div class="bar-fill" id="barUsers" style="width:0%;background:var(--purple)"></div></div>
+      <div class="limit" id="limitUsers">上限: -</div>
+    </div>
+  </div>
+
+  <!-- Plan options -->
+  <h3 style="font-size:14px;margin-bottom:12px;color:var(--text2)">选择套餐</h3>
+  <div class="plans-grid" id="plansGrid">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<script>
+function getToken() {
+  return localStorage.getItem('yuleosh_token') || '';
+}
+
+async function api(method, path, body) {
+  const token = getToken();
+  const opts = {method, headers: {'Content-Type': 'application/json'}};
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body) opts.body = JSON.stringify(body);
+  const resp = await fetch(path, opts);
+  return resp.json();
+}
+
+async function refresh() {
+  await loadPlan();
+  await loadUsage();
+}
+
+async function loadPlan() {
+  const data = await api('GET', '/api/v1/billing/plan');
+  if (!data) return;
+
+  const plan = data.current_plan || 'free';
+
+  // Badge
+  const badge = document.getElementById('planBadge');
+  badge.textContent = plan.toUpperCase();
+  badge.className = 'plan-badge badge-' + plan;
+
+  // Mock badge
+  document.getElementById('mockBadge').style.display = data.mock_mode ? 'inline-block' : 'none';
+
+  // Status
+  document.getElementById('planStatus').textContent = data.status || 'active';
+  document.getElementById('periodEnd').textContent = data.current_period_end || '-';
+
+  // Plan cards
+  const grid = document.getElementById('plansGrid');
+  grid.innerHTML = '';
+
+  (data.available_plans || []).forEach(p => {
+    const isCurrent = p.id === plan;
+    const isPro = p.id === 'pro';
+    const card = document.createElement('div');
+    card.className = 'plan-card' + (isPro ? ' featured' : '');
+    card.innerHTML = `
+      <div class="plan-name">${escHtml(p.label)}</div>
+      <div class="plan-price">
+        ${p.price_monthly_cents > 0 ? '$' + (p.price_monthly_cents / 100).toFixed(2) : '免费'}
+        <span class="sub">${p.price_monthly_cents > 0 ? '/月' : ''}</span>
+      </div>
+      <ul class="plan-features">
+        <li><span class="check">✓</span> 项目上限: ${p.limits.max_projects === 9999 ? '∞' : p.limits.max_projects}</li>
+        <li><span class="check">✓</span> 用户上限: ${p.limits.max_users === 9999 ? '∞' : p.limits.max_users}</li>
+        <li><span class="check">✓</span> CI 运行/月: ${p.limits.max_ci_runs === 50000 ? '∞' : p.limits.max_ci_runs}</li>
+      </ul>
+      ${isCurrent
+        ? '<button class="btn" disabled>当前套餐</button>'
+        : p.price_monthly_cents === 0
+          ? '<button class="btn">当前套餐</button>'
+          : `<button class="btn btn-primary" onclick="upgrade('${p.id}')">
+              ${plan === 'free' ? '升级至' : '切换至'} ${p.label}
+             </button>`
+      }
+    `;
+    grid.appendChild(card);
+  });
+}
+
+async function loadUsage() {
+  const data = await api('GET', '/api/v1/billing/usage');
+  if (!data || !data.usage) return;
+
+  const usage = data.usage;
+  const limits = data.limits || {};
+
+  // CI runs
+  document.getElementById('usageCiRuns').textContent = usage.ci_runs || 0;
+  document.getElementById('limitCi').textContent = `上限: ${limits.ci_runs || '?'}`;
+  const ciPct = limits.ci_runs > 0 ? Math.min(100, (usage.ci_runs / limits.ci_runs) * 100) : 0;
+  document.getElementById('barCi').style.width = ciPct + '%';
+
+  // Projects
+  document.getElementById('usageProjects').textContent = '-';
+  document.getElementById('limitProjects').textContent = `上限: ${limits.projects || '?'}`;
+
+  // Users
+  document.getElementById('usageUsers').textContent = '-';
+  document.getElementById('limitUsers').textContent = `上限: ${limits.users || '?'}`;
+}
+
+async function upgrade(plan) {
+  if (!confirm(`确定升级到 ${plan.toUpperCase()} 套餐？`)) return;
+  const data = await api('POST', '/api/v1/billing/upgrade', {plan});
+  if (data.ok) {
+    if (data.url && !data.mock) {
+      window.location.href = data.url;
+    } else {
+      alert(`✅ 升级成功！已切换至 ${plan.toUpperCase()} 套餐`);
+      await refresh();
+    }
+  } else {
+    alert('❌ ' + (data.error || '升级失败'));
+  }
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Init ──
+refresh();
+</script>
+</body>
+</html>

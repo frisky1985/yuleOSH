@@ -1,0 +1,134 @@
+# {{ project_name }} — Safety Concept (BCM)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. Item Definition
+
+### 1.1 系统定义
+{{ project_name }} 是一个车身控制模块 (Body Control Module)，负责门控制、灯光控制、
+雨刮控制和电源管理功能。目标 ASIL 等级为 {{ asil_label }}。
+
+### 1.2 运行场景
+- 车辆正常行驶 (IGN ON, 引擎运行)
+- 车辆驻车 (IGN ON, 引擎关闭)
+- 车辆休眠 (IGN OFF)
+- 故障模式 (部分功能降级)
+
+### 1.3 运行模式
+- SLEEP: 低功耗模式，仅保留唤醒逻辑 (< 100 µA)
+- RUN: 正常运行模式，所有功能可用
+- STOP: 待机模式，保留软件上下文
+- SAFE: 安全状态，输出预定义安全值
+
+---
+
+## 2. Hazard Analysis and Risk Assessment (HARA)
+
+### HAZ-01: 门锁非预期解锁
+| 属性 | 值 |
+|:-----|:----|
+| Hazard | 行驶过程中车门非预期打开 |
+| Malfunction | 门锁输出信号错误 (Stuck-at-1 / Bit-flip) |
+| S (Severity) | S3 (生命危险) |
+| E (Exposure) | E4 (高频 ≥10% 运行时间) |
+| C (Controllability) | C2 (一般可控) |
+| **ASIL** | **B** |
+| Safety Goal | SG-01: 行驶中门锁不得非预期解锁 |
+| Safe State | 门锁保持锁定状态, 点亮警告灯 |
+| FTDI | < 10 ms |
+
+### HAZ-02: 远光灯非预期点亮
+| 属性 | 值 |
+|:-----|:----|
+| Hazard | 会车时远光灯导致对向驾驶员眩目 |
+| Malfunction | 远光灯 PWM 输出错误 |
+| S | S2 (严重伤害) |
+| E | E3 (中等 ≤10% 运行时间) |
+| C | C2 (一般可控) |
+| **ASIL** | **A** |
+| Safety Goal | SG-02: 避免会车时远光灯非预期点亮 |
+| Safe State | 远光灯切换至近光灯 |
+
+### HAZ-03: 雨刮非预期高速运行
+| 属性 | 值 |
+|:-----|:----|
+| Hazard | 干燥挡风玻璃上雨刮高速刮擦导致视线受阻 |
+| Malfunction | 雨刮速度控制信号错误 |
+| S | S2 (严重伤害) |
+| E | E3 (中等 ≤10% 运行时间) |
+| C | C2 (一般可控) |
+| **ASIL** | **A** |
+| Safety Goal | SG-03: 干燥状态下雨刮不得非预期高速运行 |
+| Safe State | 雨刮停止或低速运行 |
+
+### HAZ-04: 电源非预期断电
+| 属性 | 值 |
+|:-----|:----|
+| Hazard | 行驶中关键系统(灯光/门控)突然断电 |
+| Malfunction | 电源管理控制逻辑错误 |
+| S | S3 (生命危险) |
+| E | E4 (高频) |
+| C | C1 (易于控制) |
+| **ASIL** | **B** |
+| Safety Goal | SG-04: 确保关键负载供电不中断 |
+| Safe State | 维持KL30供电, 使能故障指示灯 |
+
+---
+
+## 3. Safety Goals
+
+| ID | Description | ASIL | HARA Source |
+|:---|:------------|:----:|:------------|
+| SG-01 | 行驶中门锁不得非预期解锁 | B | HAZ-01 |
+| SG-02 | 避免会车时远光灯非预期点亮 | A | HAZ-02 |
+| SG-03 | 干燥状态下雨刮不得非预期高速运行 | A | HAZ-03 |
+| SG-04 | 确保关键负载供电不中断 | B | HAZ-04 |
+
+---
+
+## 4. Functional Safety Requirements (FSR)
+
+### FSR-01: 门锁安全监控 (ASIL B)
+- FSR-01-01: 门锁驱动 SHALL 使用回读诊断 (Read-back check) 每 10 ms 验证输出状态
+- FSR-01-02: 门锁状态 SHALL 通过两个独立通道进行表决 (1oo2)
+- FSR-01-03: 行驶中 (车速 > 5 km/h) 门锁解锁命令 SHALL 经验证后才执行
+- FSR-01-04: 检测到门锁故障时 SHALL 在 10 ms 内进入安全状态
+
+### FSR-02: 灯光安全监控 (ASIL A)
+- FSR-02-01: 远光灯控制 SHALL 使用 PWM 占空比监控
+- FSR-02-02: 灯光输出 SHALL 每 50 ms 进行一次负载电流检测
+- FSR-02-03: 检测到短路/开路故障时 SHALL 报告 DTC
+
+### FSR-03: 雨刮安全监控 (ASIL A)
+- FSR-03-01: 雨刮速度指令 SHALL 通过 E2E 保护 (CRC + Counter)
+- FSR-03-02: 干燥检测逻辑 SHALL 在无雨信号时禁止高速模式
+
+### FSR-04: 电源管理安全 (ASIL B)
+- FSR-04-01: KL15 状态 SHALL 通过两个独立 ADC 通道采样
+- FSR-04-02: 电压监控 SHALL 每 10 ms 检查一次
+- FSR-04-03: 欠压 (< 8V) 时 SHALL 触发受控关断
+- FSR-04-04: 电源模式转换 SHALL 使用状态机并防止非法转换
+
+---
+
+## 5. Technical Safety Requirements (TSR)
+
+### TSR-01: MPU 配置 (ASIL B)
+- TSR-01-01: SWC 数据区 SHALL 使用 MPU 隔离
+- TSR-01-02: BSW 关键数据区 SHALL 配置为只读
+- TSR-01-03: MPU 异常 SHALL 触发 DEM 事件
+
+### TSR-02: 看门狗 (ASIL B)
+- TSR-02-01: 硬件看门狗超时 SHALL 设置为 100 ms
+- TSR-02-02: Door_SWC 的 Alive Supervision SHALL 每 10 ms 触发
+- TSR-02-03: Power_SWC 的 Deadline Supervision SHALL 在 5 ms 内完成
+
+### TSR-03: E2E 保护 (ASIL B)
+- TSR-03-01: SG-01 和 SG-04 相关 CAN 信号 SHALL 使用 E2E Profile 1
+- TSR-03-02: E2E 状态 SHALL 每帧检查, 连续 3 帧失败触发安全措施
+
+### TSR-04: 软件分区
+- TSR-04-01: ASIL B 软件分区和 QM 软件分区 SHALL 物理隔离
+- TSR-04-02: QM 分区的故障 SHALL 不影响 ASIL B 分区

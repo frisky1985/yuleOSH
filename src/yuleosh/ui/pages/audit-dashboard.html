@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审计日志 - yuleOSH</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --purple: #8b5cf6;
+  --orange: #f97316;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 { font-size: 18px; font-weight: 700; }
+.header h1 .green { color: var(--green); }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+.filters {
+  display: flex; gap: 12px; align-items: flex-end;
+  margin-bottom: 20px; padding: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; flex-wrap: wrap;
+}
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-group label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+.filter-group input, .filter-group select {
+  padding: 6px 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 13px;
+}
+.btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+.btn:hover { opacity: .85; }
+.summary-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px;
+}
+.card .num { font-size: 28px; font-weight: 800; }
+.card .label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+}
+.events-table th {
+  padding: 10px 12px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text2); text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.events-table td {
+  padding: 10px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.events-table tr:last-child td { border-bottom: none; }
+.events-table tr:hover td { background: var(--surface2); }
+.action-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+  font-weight: 600;
+}
+.badge-create { background: rgba(16,185,129,.15); color: var(--green); }
+.badge-update { background: rgba(59,130,246,.15); color: var(--blue); }
+.badge-delete { background: rgba(239,68,68,.15); color: var(--red); }
+.badge-move { background: rgba(245,158,11,.15); color: var(--yellow); }
+.badge-run { background: rgba(139,92,246,.15); color: var(--purple); }
+.badge-approve { background: rgba(16,185,129,.15); color: var(--green); }
+.badge-reject { background: rgba(239,68,68,.15); color: var(--red); }
+.badge-login { background: rgba(59,130,246,.15); color: var(--blue); }
+.badge-upgrade { background: rgba(245,158,11,.15); color: var(--yellow); }
+.loading {
+  text-align: center; padding: 48px;
+  color: var(--text2); font-size: 14px;
+}
+.empty {
+  text-align: center; padding: 48px;
+  color: var(--text2); font-size: 14px;
+}
+.result-count {
+  font-size: 13px; color: var(--text2);
+  margin-bottom: 12px;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1><span class="green">📋 审计日志</span></h1>
+    <div class="subtitle" style="color:var(--text2);font-size:12px;margin-top:2px;">yuleOSH 不可变事件溯源审计追踪</div>
+  </div>
+  <button class="btn btn-primary" onclick="refresh()">🔄 刷新</button>
+</div>
+
+<div class="container">
+  <!-- Filters -->
+  <div class="filters">
+    <div class="filter-group">
+      <label>开始日期</label>
+      <input type="date" id="filterFrom">
+    </div>
+    <div class="filter-group">
+      <label>结束日期</label>
+      <input type="date" id="filterTo">
+    </div>
+    <div class="filter-group">
+      <label>操作类型</label>
+      <select id="filterAction">
+        <option value="">全部</option>
+        <option value="project.create">project.create</option>
+        <option value="project.update">project.update</option>
+        <option value="project.delete">project.delete</option>
+        <option value="project.move">project.move (看板)</option>
+        <option value="pipeline.run">pipeline.run</option>
+        <option value="pipeline.complete">pipeline.complete</option>
+        <option value="review.create">review.create</option>
+        <option value="review.approve">review.approve</option>
+        <option value="review.reject">review.reject</option>
+        <option value="auth.login">auth.login</option>
+        <option value="billing.upgrade">billing.upgrade</option>
+        <option value="user.invite">user.invite</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>执行者</label>
+      <input type="text" id="filterActor" placeholder="user:email@..." style="width:200px">
+    </div>
+    <button class="btn btn-primary" onclick="queryAudit()">🔍 查询</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-cards" id="summaryCards">
+    <div class="card"><div class="num" id="totalEvents">-</div><div class="label">事件总数</div></div>
+    <div class="card"><div class="num" id="uniqueActions" style="color:var(--blue)">-</div><div class="label">操作类型数</div></div>
+    <div class="card"><div class="num" id="dateRange" style="color:var(--text2);font-size:14px">-</div><div class="label">查询范围</div></div>
+  </div>
+
+  <!-- Results -->
+  <div class="result-count" id="resultCount"></div>
+  <div id="eventsContainer">
+    <div class="loading">加载审计事件…</div>
+  </div>
+</div>
+
+<script>
+function getToken() {
+  return localStorage.getItem('yuleosh_token') || '';
+}
+
+async function api(method, path) {
+  const token = getToken();
+  const opts = {method, headers: {}};
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  const resp = await fetch(path, opts);
+  return resp.json();
+}
+
+function getActionBadge(action) {
+  const map = {
+    'project.create': 'badge-create',
+    'project.move': 'badge-move',
+    'project.delete': 'badge-delete',
+    'project.update': 'badge-update',
+    'pipeline.run': 'badge-run',
+    'pipeline.complete': 'badge-run',
+    'review.create': 'badge-create',
+    'review.approve': 'badge-approve',
+    'review.reject': 'badge-reject',
+    'auth.login': 'badge-login',
+    'billing.upgrade': 'badge-upgrade',
+  };
+  const cls = map[action] || 'badge-update';
+  let label = action;
+  if (action === 'project.move') label = '看板移动';
+  else if (action.startsWith('project.')) label = '项目·' + action.split('.')[1];
+  else if (action.startsWith('pipeline.')) label = '流水线·' + action.split('.')[1];
+  else if (action.startsWith('review.')) label = '审查·' + action.split('.')[1];
+  else if (action.startsWith('auth.')) label = '认证·' + action.split('.')[1];
+  else if (action.startsWith('billing.')) label = '计费·' + action.split('.')[1];
+  return `<span class="action-badge ${cls}">${escHtml(label)}</span>`;
+}
+
+async function queryAudit() {
+  const container = document.getElementById('eventsContainer');
+  container.innerHTML = '<div class="loading">正在查询审计事件…</div>';
+
+  const from = document.getElementById('filterFrom').value;
+  const to = document.getElementById('filterTo').value;
+  const action = document.getElementById('filterAction').value;
+  const actor = document.getElementById('filterActor').value.trim();
+
+  let url = '/api/v1/audit?limit=200';
+  if (from) url += '&from=' + from;
+  if (to) url += '&to=' + to;
+  if (action) url += '&action=' + encodeURIComponent(action);
+  if (actor) url += '&actor=' + encodeURIComponent(actor);
+
+  const data = await api('GET', url);
+
+  if (!data || !data.ok) {
+    container.innerHTML = `<div class="empty">❌ ${data ? escHtml(data.error) : '请求失败'}</div>`;
+    return;
+  }
+
+  const events = data.events || [];
+  const summary = data.summary || {};
+
+  // Update summary cards
+  document.getElementById('totalEvents').textContent = summary.total_events || events.length;
+  const uniqueActions = summary.by_action ? Object.keys(summary.by_action).length : '-';
+  document.getElementById('uniqueActions').textContent = uniqueActions;
+  document.getElementById('dateRange').textContent = `${summary.from_date || from || '?'} ~ ${summary.to_date || to || '?'}`;
+
+  document.getElementById('resultCount').textContent = `共 ${events.length} 条审计事件`;
+
+  if (events.length === 0) {
+    container.innerHTML = '<div class="empty">📭 该日期范围内没有审计事件</div>';
+    return;
+  }
+
+  let html = '<table class="events-table">';
+  html += '<thead><tr><th>时间</th><th>操作</th><th>执行者</th><th>目标</th><th>租户</th><th>详情</th></tr></thead><tbody>';
+
+  events.forEach(e => {
+    const ts = e.timestamp || '';
+    const timeStr = ts.length > 16 ? ts.substring(0, 19).replace('T', ' ') : ts;
+    html += `<tr>
+      <td style="font-size:12px;color:var(--text2);white-space:nowrap">${escHtml(timeStr)}</td>
+      <td>${getActionBadge(e.action)}</td>
+      <td style="font-size:12px">${escHtml(e.actor || '')}</td>
+      <td style="font-size:12px;color:var(--text2)">${escHtml(e.target || '-')}</td>
+      <td style="font-size:12px;color:var(--text2)">${escHtml(e.tenant || '-')}</td>
+      <td style="font-size:11px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        ${e.detail ? escHtml(JSON.stringify(e.detail).substring(0, 80)) : '-'}
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function refresh() {
+  queryAudit();
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Init ──
+// Set default date range: last 7 days
+const today = new Date();
+const weekAgo = new Date(today);
+weekAgo.setDate(weekAgo.getDate() - 7);
+document.getElementById('filterFrom').value = weekAgo.toISOString().substring(0, 10);
+document.getElementById('filterTo').value = today.toISOString().substring(0, 10);
+queryAudit();
+</script>
+</body>
+</html>

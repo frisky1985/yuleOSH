@@ -1,0 +1,175 @@
+# {{ project_name }} — Specification (BCM)
+
+> **Template**: {{ template_name }} | **MCU**: {{ mcu }} | **ASIL**: {{ asil_label }}
+
+---
+
+## 1. System Requirements
+
+### BCM-REQ-001: System Initialization
+- The system SHALL initialize all configured BSW modules within 100 ms after power-up
+- The system SHALL enter the configured default operating mode (SLEEP -> RUN) within 200 ms
+- The system SHALL perform a startup diagnostic check on all critical peripherals
+
+#### Reason
+系统初始化是安全启动的基础，确保 ECU 在上电后按预期进入运行状态。
+
+### BCM-REQ-002: Diagnostic Communication
+- The system SHALL support UDS diagnostic services via ISO 14229-1 over CAN
+- The system SHALL support DiagnosticSessionControl (0x10), EcuReset (0x11), ReadDTCInformation (0x19)
+- The system SHALL support ReadDataByIdentifier (0x22) and WriteDataByIdentifier (0x2E)
+- The system SHALL respond to diagnostic requests within 50 ms
+
+#### Reason
+诊断通信是量产 ECU 的强制要求，用于产线标定和售后诊断。
+
+---
+
+## 2. Door Control (门控)
+
+### BCM-DOOR-001: Door Lock Control
+- The system SHALL lock all doors within 150 ms of receiving a lock request via CAN
+- The system SHALL unlock individual doors based on the CAN message payload
+- The system SHALL provide feedback via CAN indicating the lock status
+- The system SHALL activate child lock within 200 ms of request
+
+### BCM-DOOR-002: Window Lift Control
+- The system SHALL control each window lift motor independently
+- The system SHALL support one-touch auto-up and auto-down with pinch protection
+- The system SHALL stop window movement immediately when pinch detection exceeds threshold
+- The system SHALL store pinch calibration values in NVM
+
+### BCM-DOOR-003: Mirror Control
+- The system SHALL adjust mirror position (horizontal/vertical) based on LIN commands
+- The system SHALL store mirror position presets in NVM
+- The system SHALL fold mirrors automatically when vehicle is locked
+
+### BCM-DOOR-004: Door Status Monitoring
+- The system SHALL detect door open/close state for each door via Hall sensors
+- The system SHALL publish door status on CAN every 100 ms
+- The system SHALL detect ajar state and trigger warning after 30 seconds
+
+---
+
+## 3. Light Control (灯光)
+
+### BCM-LIGHT-001: Headlight Control
+- The system SHALL control low beam and high beam actuators via PWM
+- The system SHALL support automatic headlight leveling
+- The system SHALL switch between low/high beam within 50 ms of command
+- The system SHALL activate daytime running lights (DRL) when engine is running
+
+### BCM-LIGHT-002: Turn Signal Control
+- The system SHALL control left/right turn signals with 50% duty cycle at 1.5 Hz
+- The system SHALL support hazard warning (both turn signals simultaneously)
+- The system SHALL detect bulb failure via current monitoring and report via CAN
+
+### BCM-LIGHT-003: Interior Lighting
+- The system SHALL control interior ambient light dimming with PWM
+- The system SHALL support scenario-based lighting (door open → interior lights on)
+- The system SHALL fade interior lights in/out over 500 ms
+
+### BCM-LIGHT-004: Brake Light
+- The system SHALL activate brake lights within 50 ms of brake pedal detection
+- The system SHALL support emergency brake flash (rapid flashing at >0.6g deceleration)
+
+---
+
+## 4. Wiper Control (雨刮)
+
+### BCM-WIPER-001: Wiper Speed Control
+- The system SHALL control wiper motor at low speed, high speed, and intermittent modes
+- The system SHALL support intermittent delay adjustment (2s, 4s, 6s, 8s, 10s)
+- The system SHALL auto-park wipers at the rest position when turned off
+
+### BCM-WIPER-002: Rain Sensor Integration
+- The system SHALL read rain sensor data via LIN interface
+- The system SHALL automatically activate wipers when rain is detected above threshold
+- The system SHALL adjust wiper speed proportionally to rainfall intensity
+
+### BCM-WIPER-003: Wash-Wipe Function
+- The system SHALL activate washer pump for 1.5 seconds on command
+- The system SHALL perform 3 wipe cycles after washer activation
+- The system SHALL support rear window wiper and washer
+
+---
+
+## 5. Power Management (电源管理)
+
+### BCM-PWR-001: Power Mode Management
+- The system SHALL support SLEEP, RUN, and STOP power modes per AUTOSAR ECU State Manager
+- The system SHALL transition to SLEEP mode within 500 ms of sleep request
+- The system SHALL wake from SLEEP on CAN activity, LIN activity, or digital input
+
+### BCM-PWR-002: KL15 and KL30 Monitoring
+- The system SHALL monitor KL15 (ignition) and KL30 (battery) voltage levels
+- The system SHALL report undervoltage (< 8V) and overvoltage (> 16V) via DTC
+- The system SHALL perform graceful shutdown when KL15 is OFF for > 3 seconds
+
+### BCM-PWR-003: Low Power Consumption
+- The system SHALL consume less than 100 µA in SLEEP mode
+- The system SHALL complete wake-up to operational state within 50 ms
+- The system SHALL support timed wake-up (RTC alarm)
+
+---
+
+## 6. Safety Requirements
+
+### BCM-SAF-001: MPU Protection (ASIL B)
+{% if asil == 'ASIL_B' or asil == 'ASIL_C' or asil == 'ASIL_D' %}
+- The system SHALL configure MPU to protect safety-critical memory regions
+- The system SHALL detect and report MPU violations via DEM
+- The system SHALL isolate SWC memory regions using MPU partitions
+{% else %}
+- The system SHOULD configure MPU to protect memory regions
+- The system MAY detect and report memory access violations
+{% endif %}
+
+### BCM-SAF-002: Watchdog Supervision
+- The system SHALL configure the hardware watchdog with a timeout of 100 ms
+- The system SHALL trigger Alive Supervision for all runnable entities
+- The system SHALL trigger Deadline Supervision for time-critical SWCs
+- The system SHALL perform an ECU reset if watchdog triggers
+
+### BCM-SAF-003: End-to-End Protection
+- The system SHALL implement E2E profile 1 for safety-critical CAN signals
+- The system SHALL detect data corruption, repetition, loss, and delay
+- The system SHALL report E2E errors to DEM with DTC
+
+### BCM-SAF-004: Safe State
+- The system SHALL enter safe state (all outputs to pre-defined safe values) on safety violation
+- The system SHALL log the safety violation event in DEM before entering safe state
+- The system SHALL remain in safe state until external reset
+
+---
+
+## 7. Acceptance Scenarios
+
+### Scenario: Door Lock/Unlock Cycle
+- GIVEN the system is in RUN mode
+- WHEN a CAN lock command is received for all doors
+- THEN all door actuators SHALL engage lock within 150 ms
+- AND a CAN status message SHALL be sent confirming locked state
+- WHEN an unlock command is received for driver door
+- THEN only the driver door actuator SHALL disengage lock
+
+### Scenario: Light Switch Cycle
+- GIVEN the system is in RUN mode
+- WHEN low beam command is received
+- THEN headlight PWM output SHALL activate within 50 ms
+- AND the response CAN message SHALL indicate low beam ON
+- WHEN turn signal left command is received
+- THEN left turn signal SHALL flash at 1.5 Hz with 50% duty cycle
+
+### Scenario: Wiper Rain Detection
+- GIVEN the wiper mode is AUTO
+- WHEN rain sensor detects precipitation above threshold
+- THEN wipers SHALL activate at calculated speed within 200 ms
+- AND the wiper status SHALL be reported on CAN
+
+### Scenario: Sleep/Wake Cycle
+- GIVEN KL15 is OFF and no CAN activity for 5 seconds
+- WHEN the system receives a sleep request
+- THEN the system SHALL transition to SLEEP mode within 500 ms
+- WHEN a CAN message is received
+- THEN the system SHALL wake and return to RUN mode within 50 ms

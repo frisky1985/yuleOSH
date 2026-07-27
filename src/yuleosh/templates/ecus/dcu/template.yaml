@@ -1,0 +1,44 @@
+name: dcu
+version: 1.0.0
+description: Domain Control Unit — 区域网关/车身域控制器
+mcu: S32K344
+asil: ASIL_B
+platforms: [arm, s32k344, nxp]
+tags: [autosar, bsw, domain-controller, gateway, automotive, safety]
+spec_sections:
+  - System Overview
+  - Gateway Routing
+  - Ethernet Communication
+  - CAN Routing
+  - Signal Gateway
+  - Diagnostic Gateway
+  - Safety
+  - Test Plan
+bsw_modules:
+  - Mcu
+  - Dio
+  - Port
+  - Gpt
+  - Can
+  - Lin
+  - Eth
+  - Spi
+  - Icu
+  - Pwm
+  - Adc
+  - Fls
+  - Eep
+  - Wdg
+  - Crypto
+  - I2C
+  - Uart
+  - RamTst
+swcs:
+  - Gateway_SWC
+  - CanRouter_SWC
+  - EthManager_SWC
+  - DiagGateway_SWC
+  - SignalProxy_SWC
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, sdd, code-gen, internal-review, test-plan, code-review, unit-test, cross-compile, static-analysis, system-verification]
+  ci_layers: [L1, L2, L3]
