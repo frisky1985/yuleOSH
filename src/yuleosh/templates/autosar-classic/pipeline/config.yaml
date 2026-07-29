@@ -25,8 +25,14 @@ steps:
     name: CI Layer 1
     handler: ci_layer1
   - id: cross-compile
-    name: CI Layer 2
+    name: CI Layer 2 — Cross Compile
     handler: ci_layer2
+  - id: qemu-run
+    name: QEMU 仿真测试 (L2)
+    handler: qemu_run
+  - id: c-coverage-gate
+    name: C 覆盖率门禁 (L2)
+    handler: coverage_gate
   - id: static-analysis
     name: AUTOSAR Compliance Static Analysis
     handler: static_analysis
@@ -35,7 +41,7 @@ steps:
     handler: ci_layer3
 ci_layers:
   L1: {unit_test: true, linter: true}
-  L2: {cross_compile: true, autosar_check: true, static_analysis: true}
+  L2: {cross_compile: true, qemu_run: true, c_coverage_gate: true, autosar_check: true, static_analysis: true}
   L3: {hardware_test: true, evidence_pack: true}
 review_gates:
   - {type: internal, before: code-gen}
