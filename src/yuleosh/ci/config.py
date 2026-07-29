@@ -33,9 +33,9 @@ DEFAULT_LAYER_DEPENDENCIES: dict[int, list[int]] = {
     3: [1, 2, 25],
 }
 
-DEFAULT_COVERAGE_THRESHOLD_LINE = 5.0
-DEFAULT_COVERAGE_THRESHOLD_COND = 5.0
-DEFAULT_STRICT = False
+DEFAULT_COVERAGE_THRESHOLD_LINE = 50.0
+DEFAULT_COVERAGE_THRESHOLD_COND = 50.0
+DEFAULT_STRICT = True
 DEFAULT_MISRA_ADDON = "misra"  # misra-c-2023 | misra-c-2012
 
 
@@ -537,6 +537,68 @@ def _get_ci_config(project_dir: str = "") -> "CiConfig":
 def _clear_ci_config_cache() -> None:
     """Clear the CI config cache (used in tests)."""
     _ci_config_cache.clear()
+
+
+# ------------------------------------------------------------------
+# CI Profile merge (QG-007)
+# ------------------------------------------------------------------
+
+
+def load_ci_profile_into_config(
+    cfg: "CiConfig",
+    profile_name: str = "",
+) -> "CiConfig":
+    """Merge a named CI environment profile over the loaded config.
+
+    Applies profile-specific coverage thresholds, strict mode, and
+    MISRA profile from the built-in CI profiles (development / ci /
+    production) onto the given :class:`CiConfig`.
+
+    Parameters
+    ----------
+    cfg : CiConfig
+        The base configuration loaded from ci-config.yaml.
+    profile_name : str
+        One of ``development``, ``ci``, or ``production``.
+        If empty or unknown, defaults to ``ci``.
+
+    Returns
+    -------
+    CiConfig
+        The same config object with updated fields (mutated in place).
+    """
+    if not profile_name:
+        profile_name = "ci"
+
+    from yuleosh.ci.profiles import resolve_ci_profile
+
+    merged = resolve_ci_profile(
+        profile_name=profile_name,
+        ci_config_coverage_threshold_line=cfg.coverage.threshold_line,
+        ci_config_coverage_threshold_condition=cfg.coverage.threshold_condition,
+        ci_config_strict=cfg.coverage.strict,
+        ci_config_misra_profile=cfg.misra.active_profile,
+        ci_config_module_thresholds=cfg.coverage.module_thresholds,
+    )
+
+    # Apply merged values to config
+    cfg.coverage.threshold_line = merged["threshold_line"]
+    cfg.coverage.threshold_condition = merged["threshold_condition"]
+    cfg.coverage.strict = merged["strict"]
+    cfg.misra.active_profile = merged["misra_profile"]
+    cfg.coverage.module_thresholds = merged["module_thresholds"]
+    cfg.ci_profile = merged["profile_name"]
+
+    logging.getLogger("ci.config").info(
+        "CI profile '%s' applied: line=%.1f%%, strict=%s, misra=%s, modules=%d",
+        merged["profile_name"],
+        merged["threshold_line"],
+        merged["strict"],
+        merged["misra_profile"],
+        len(merged["module_thresholds"]),
+    )
+
+    return cfg
 
 
 # ------------------------------------------------------------------
