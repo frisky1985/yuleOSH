@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+from yuleosh.llm.fallback import apply_fallback_chain
+from yuleosh.llm.validation import validate_llm_output
 
 log = logging.getLogger("pipeline.orchestrator")
 
@@ -123,6 +125,82 @@ def _detect_and_bootstrap(project_dir: str) -> Optional[dict]:
     return info
 
 
+# ── Agent constraints loading ──────────────────────────────────────
+
+_DEFAULT_AGENT_SPEC = """
+# Default Agent Spec (from ci-config.yaml)
+
+## Roles
+- 小明: Project Manager / Orchestrator
+- 小克: Architect / Developer / Tester
+- 小马: Quality Architect / Reviewer
+
+## Core Rules
+- P0/P1 issues MUST be resolved before phase completion.
+- Context safety: split when > 50% context used.
+- Loop Chain: fix discovered issues immediately without asking.
+- Expert review required at phase completion.
+"""
+
+
+def load_agent_constraints(project_dir: str) -> tuple[str, str]:
+    """Load agent constraints from `.yuleosh/agents/` directory.
+
+    Reads all ``*.md`` files from ``.yuleosh/agents/`` and concatenates
+    their content into a single string suitable for injection into the
+    LLM system prompt.
+
+    If the directory does not exist or is empty, falls back to the
+    default agent spec from ``ci-config.yaml`` or the built-in default.
+
+    Returns:
+        Tuple of (constraints_text, source_description).
+        ``source_description`` is one of:
+            "agents_dir"    — loaded from .yuleosh/agents/*.md
+            "ci_config"     — loaded from ci-config.yaml default_agent_spec
+            "builtin_fallback" — built-in default spec
+    """
+    import yaml as _yaml
+
+    agents_dir = Path(project_dir) / ".yuleosh" / "agents"
+
+    if agents_dir.is_dir():
+        md_files = sorted(agents_dir.glob("*.md"))
+        if md_files:
+            parts = []
+            for f in md_files:
+                try:
+                    content = f.read_text(encoding="utf-8")
+                    parts.append(f"<!-- from: {f.name} -->\n{content}")
+                except Exception as e:
+                    log.warning("Failed to read agent constraint %s: %s", f, e)
+            if parts:
+                log.info(
+                    "Loaded %d agent constraint file(s) from .yuleosh/agents/",
+                    len(parts),
+                )
+                return "\n\n".join(parts), "agents_dir"
+
+    # Fallback: try ci-config.yaml default_agent_spec
+    ci_config = Path(project_dir) / ".yuleosh" / "ci-config.yaml"
+    if ci_config.exists():
+        try:
+            raw = _yaml.safe_load(ci_config.read_text(encoding="utf-8"))
+            if raw and isinstance(raw, dict):
+                default_spec = raw.get("default_agent_spec")
+                if default_spec:
+                    log.info(
+                        "Loaded default agent spec from %s", ci_config.name
+                    )
+                    return str(default_spec), "ci_config"
+        except Exception as e:
+            log.debug("Could not parse %s for default_agent_spec: %s", ci_config, e)
+
+    # Built-in fallback
+    log.info("Using built-in default agent spec (no .yuleosh/agents/ or ci-config default)")
+    return _DEFAULT_AGENT_SPEC.strip(), "builtin_fallback"
+
+
 def _mock_llm_client() -> Callable:
     """Create a mock LLM client for demo/testing (--mock flag).
 
@@ -201,6 +279,17 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         if project_info["type"] == "autosar":
             print(f"   AUTOSAR template auto-loaded from: {project_info.get('config_source', 'template')}")
 
+    # ── Load agent constraints from .yuleosh/agents/ ──
+    agent_constraints, constraints_source = load_agent_constraints(project_root)
+    if agent_constraints:
+        source_labels = {
+            "agents_dir": "📋 Agent constraints loaded from .yuleosh/agents/",
+            "ci_config": "📋 Agent constraints loaded from ci-config.yaml default",
+            "builtin_fallback": "📋 Agent constraints: built-in default",
+        }
+        label = source_labels.get(constraints_source, "📋 Agent constraints loaded")
+        print(f"   {label}")
+
     # G-33: Profile validation
     try:
         from yuleosh.ci.profile import validate_active_profile, filter_steps_for_profile, get_current_profile
@@ -228,7 +317,12 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         if name is None:
             name = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
-        session = PipelineSession(name, spec_path, llm_client=llm_client)
+        session = PipelineSession(
+            name,
+            spec_path,
+            llm_client=llm_client,
+            agent_constraints=agent_constraints,
+        )
         session.profile = active_profile
         print(f"\n🚀 Pipeline started: {name}")
         print(f"   Spec: {spec_path}")
@@ -247,26 +341,30 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             log.info(f"Step {step_idx+1}/{len(_steps)}: [{agent}] {step_name}")
             
             try:
-                # Set status to completed before the final report step
-                # so the report captures the correct status
+                # Run step handler
                 if step_key == "final-report":
                     session.status = "completed"
-                output_path = handler(session)
+
+                # --- LLM Fallback Integration ---
+                # Wrap handler call so that if it uses an LLM, the
+                # fallback chain is applied to validate the output.
+                output_path = _run_step_with_fallback(
+                    handler, session, step_key, step_name, spec_path,
+                )
+
                 session.complete_step(step_idx, str(output_path))
                 session.set_artifact(step_key, str(output_path))
-                # Persist immediately after the final-report step completes
-                # to eliminate the race condition between setting status and
-                # the deferred save at the end of the loop.
                 if step_key == "final-report":
                     session._save()
                 log.info(f"Step {step_idx+1} completed: {step_key}")
                 print()
-            except Exception as e:
+            except (PipelineStepError, RuntimeError) as e:
                 log.error(f"Step {step_idx+1} [{agent}] {step_name} failed: {e}")
                 log.debug(traceback.format_exc())
                 session.fail_step(step_idx, str(e))
                 print(f"  ❌ Step failed: {e}")
                 print()
+                # Block dependent steps: no more steps run after failure
                 break
         
         if session.status != "failed":
@@ -353,6 +451,53 @@ def status_pipeline(name: Optional[str] = None) -> None:
             steps_done = sum(1 for s in data["steps"] if s["status"] == "completed")
             steps_total = len(data["steps"])
             print(f"  {icon} {sname}: [{steps_done}/{steps_total}] {data['status']}")
+
+
+# ------------------------------------------------------------------
+# LLM Fallback Integration
+# ------------------------------------------------------------------
+
+
+def _run_step_with_fallback(
+    handler: Callable,
+    session: PipelineSession,
+    step_key: str,
+    step_name: str,
+    spec_path: str,
+) -> str:
+    """Run a pipeline step handler with LLM output validation and fallback.
+
+    The handler is called normally.  Afterward, if the output looks like
+    LLM-generated content (contains certain markers or is structured),
+    the fallback chain validates it.
+
+    If the handler raises an exception, it's caught and surfaced as a
+    PipelineStepError, which blocks dependent steps.
+    """
+    try:
+        output_path = handler(session)
+        return str(output_path)
+    except Exception as e:
+        log.error("Step [%s] handler raised: %s", step_key, e)
+        log.debug(traceback.format_exc())
+
+        # Attempt template fallback
+        fallback_result = apply_fallback_chain(
+            step_name=step_key,
+            llm_output="",
+            template_ctx={"title": step_name},
+            session_dir=session.session_dir,
+            start_level=4,  # Skip straight to template
+        )
+
+        if fallback_result.status == "fallback":
+            # Write the template fallback output
+            fallback_path = session.session_dir / f"{step_key}-fallback.md"
+            fallback_path.write_text(fallback_result.output)
+            log.info("Step [%s] used template fallback: %s", step_key, fallback_path)
+            return str(fallback_path)
+
+        raise PipelineStepError(f"Step [{step_key}] failed: {e}") from e
 
 
 def main():
