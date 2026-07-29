@@ -205,6 +205,18 @@ body::before{
 /* Auto-refresh indicator */
 .refresh-dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:4px}
 .refresh-dot.active{background:var(--green);animation:pulse 2s infinite}
+
+/* ── yuleASR BSW Status Widget ── */
+.yuleasr-section{margin-bottom:28px}
+.yuleasr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.yuleasr-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;transition:all .2s}
+.yuleasr-card:hover{transform:translateY(-2px);box-shadow:0 2px 16px rgba(0,0,0,.3);border-color:var(--blue)}
+.yuleasr-card-wide{grid-column:1/-1;text-align:left;padding:12px 16px}
+.yuleasr-card-icon{font-size:20px;margin-bottom:6px}
+.yuleasr-card-value{font-size:20px;font-weight:800;letter-spacing:-.5px}
+.yuleasr-card-label{font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase}
+.yuleasr-detail-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+@media(max-width:768px){.yuleasr-grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -309,6 +321,49 @@ body::before{
     <div class="project-grid" id="projectList"></div>
   </div>
 
+  <!-- ═══ yuleASR BSW Status Widget ═══ -->
+  <div class="yuleasr-section">
+    <div class="section-header">
+      <h2 class="section-title">🔩 yuleASR BSW Status</h2>
+      <span style="font-size:11px;color:var(--text3)">
+        <span id="yuleasrStatusDot" class="refresh-dot" style="background:var(--text3)"></span>
+        <span id="yuleasrLastRun">—</span>
+      </span>
+    </div>
+    <div class="yuleasr-grid">
+      <div class="yuleasr-card" id="yuleasrCompile">
+        <div class="yuleasr-card-icon">🔨</div>
+        <div class="yuleasr-card-value" id="yuleasrCompileVal">—</div>
+        <div class="yuleasr-card-label">Compile</div>
+      </div>
+      <div class="yuleasr-card" id="yuleasrMisra">
+        <div class="yuleasr-card-icon">📐</div>
+        <div class="yuleasr-card-value" id="yuleasrMisraVal">—</div>
+        <div class="yuleasr-card-label">MISRA Violations</div>
+      </div>
+      <div class="yuleasr-card" id="yuleasrCoverage">
+        <div class="yuleasr-card-icon">📊</div>
+        <div class="yuleasr-card-value" id="yuleasrCovVal">—</div>
+        <div class="yuleasr-card-label">Line Coverage</div>
+      </div>
+      <div class="yuleasr-card" id="yuleasrQemu">
+        <div class="yuleasr-card-icon">🖥️</div>
+        <div class="yuleasr-card-value" id="yuleasrQemuVal">—</div>
+        <div class="yuleasr-card-label">QEMU / SIL</div>
+      </div>
+      <div class="yuleasr-card yuleasr-card-wide" id="yuleasrDetail">
+        <div class="yuleasr-detail-row">
+          <span style="color:var(--text3);font-size:11px">Branch Cov:</span>
+          <span id="yuleasrBranchCov" style="font-weight:600">—</span>
+          <span style="color:var(--text3);font-size:11px;margin-left:16px">Function Cov:</span>
+          <span id="yuleasrFuncCov" style="font-weight:600">—</span>
+          <span style="color:var(--text3);font-size:11px;margin-left:16px">Recent Runs:</span>
+          <span id="yuleasrRecentRuns" style="font-weight:600">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Loop Engineering Section ═══ -->
   <div class="loop-section">
     <div class="section-header">
@@ -336,6 +391,71 @@ body::before{
 const T=localStorage.getItem('yuleosh_token');
 async function api(p,o={}){const h={'Content-Type':'application/json'};if(T)h['Authorization']='Bearer '+T;const r=await fetch(p,{headers:h,...o});return r.json()}
 
+// ── yuleASR widget ──
+async function loadYuleASR() {
+  try {
+    const r = await api('/api/v1/pipeline/yuleasr-status');
+    if (!r || !r.ok) {
+      document.getElementById('yuleasrStatusDot').style.background = 'var(--red)';
+      return;
+    }
+    // Compile
+    const compileEl = document.getElementById('yuleasrCompileVal');
+    const compileStatus = r.compile_status || 'unknown';
+    const isPassed = compileStatus === 'passed' || compileStatus === 'completed';
+    compileEl.textContent = isPassed ? '✅ Pass' : compileStatus === 'running' ? '🔄 Run' : '❌ Fail';
+    compileEl.style.color = isPassed ? 'var(--green)' : 'var(--red)';
+
+    // MISRA
+    const misraEl = document.getElementById('yuleasrMisraVal');
+    if (r.misra_violations !== null && r.misra_violations !== undefined) {
+      const v = r.misra_violations;
+      misraEl.textContent = v.toLocaleString();
+      misraEl.style.color = v < 1000 ? 'var(--green)' : v < 5000 ? 'var(--yellow)' : 'var(--red)';
+    } else {
+      misraEl.textContent = '—';
+      misraEl.style.color = 'var(--text2)';
+    }
+
+    // Coverage
+    const covEl = document.getElementById('yuleasrCovVal');
+    if (r.coverage) {
+      const pct = (r.coverage.line_rate * 100).toFixed(1);
+      covEl.textContent = pct + '%';
+      covEl.style.color = r.coverage.line_rate >= 0.8 ? 'var(--green)' : r.coverage.line_rate >= 0.5 ? 'var(--yellow)' : 'var(--red)';
+      document.getElementById('yuleasrBranchCov').textContent = r.coverage.branch_rate ? (r.coverage.branch_rate*100).toFixed(1)+'%' : '—';
+      document.getElementById('yuleasrFuncCov').textContent = r.coverage.function_rate ? (r.coverage.function_rate*100).toFixed(1)+'%' : '—';
+    } else {
+      covEl.textContent = '—';
+      covEl.style.color = 'var(--text2)';
+    }
+
+    // QEMU
+    const qemuEl = document.getElementById('yuleasrQemuVal');
+    if (r.qemu_status) {
+      qemuEl.textContent = r.qemu_status === 'passed' ? '✅ Pass' : '❌ Fail';
+      qemuEl.style.color = r.qemu_status === 'passed' ? 'var(--green)' : 'var(--red)';
+    } else {
+      qemuEl.textContent = '—';
+      qemuEl.style.color = 'var(--text2)';
+    }
+
+    // Last run
+    if (r.last_run_at) {
+      const d = new Date(r.last_run_at);
+      document.getElementById('yuleasrLastRun').textContent = 'Last run: ' + d.toLocaleString();
+      document.getElementById('yuleasrStatusDot').style.background = 'var(--green)';
+    }
+
+    // Recent runs
+    const runs = r.recent_autosar_runs || [];
+    document.getElementById('yuleasrRecentRuns').textContent = runs.length + ' in history';
+  } catch(e) {
+    console.error('yuleASR load failed', e);
+    document.getElementById('yuleasrStatusDot').style.background = 'var(--red)';
+  }
+}
+
 // ── Dashboard init ──
 async function load(){
   try{const s=await api('/api/auth/session');if(s.error){window.location='/';return}
@@ -344,6 +464,7 @@ async function load(){
   if(u.trial&&u.trial.in_trial)document.getElementById('trialText').textContent=u.trial.days_left+'d trial left';
   const p=await api('/api/project/list');renderProjects(p.projects||[])
   }catch(e){console.error(e)}
+  loadYuleASR();
   loadAllLoops();
 }
 function renderProjects(ps){const e=document.getElementById('projectList');
