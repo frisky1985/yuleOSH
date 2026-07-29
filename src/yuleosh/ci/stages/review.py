@@ -354,6 +354,28 @@ def run_misra_check(project_dir: str, ci: CIResult,
     deviations = misra_cfg.deviations if misra_cfg else []
     strict = is_strict()
 
+    # ── Resolve active MISRA profile (QG-002) ──
+    active_profile_name = misra_cfg.active_profile if misra_cfg else "safety"
+    active_profile = misra_cfg.profiles.get(active_profile_name) if misra_cfg and misra_cfg.profiles else None
+    profile_block_on: list[str] = []
+    profile_rules: list[str] = []
+    if active_profile:
+        profile_block_on = active_profile.block_on or []
+        profile_rules = active_profile.rules or []
+        log.info("Active MISRA profile: %s — block_on=%s, rules=%s",
+                 active_profile_name, profile_block_on, profile_rules)
+        print(f"    📋 MISRA profile: {active_profile_name} — block_on={profile_block_on}, rules={profile_rules}")
+    elif misra_cfg and misra_cfg.profiles:
+        log.warning("Active profile '%s' not found in profiles — defaulting to safety blocking",
+                    active_profile_name)
+        print(f"    ⚠️  Active profile '{active_profile_name}' not found — using safety defaults")
+        profile_block_on = ["mandatory", "required"]
+        profile_rules = ["mandatory", "required", "advisory"]
+    else:
+        # No profiles configured — backwards compatible: all severities may block
+        profile_block_on = ["mandatory", "required", "advisory"]
+        profile_rules = ["mandatory", "required", "advisory"]
+
     # --- Determine which files to check (delta / full) ---
     # DEF-006: Support explicit mode parameter (L1 delta, L2 full)
     is_delta = False
@@ -889,11 +911,57 @@ def run_misra_check(project_dir: str, ci: CIResult,
     elif not third_party_block_on and third_party_total > 0:
         print(f"    ℹ️  Third-party violations ({third_party_total}) do not block (third_party.block_on=False)")
 
+    # ── Profile-based blocking filter (QG-002) ──
+    # Only block on violation tiers that are in the active profile's block_on list
+    # Mapping: profile tier → severity_category value in cppcheck output
+    profile_tier_to_severity = {
+        "mandatory": ["error", "warning"],
+        "required": ["required"],
+        "advisory": ["advisory", "style"],
+    }
+    # Build a set of severity values that should block based on active profile
+    blocking_severities: set[str] = set()
+    for tier in profile_block_on:
+        blocking_severities.update(profile_tier_to_severity.get(tier, []))
+
+    # Count business violations that match the profile's block_on severity tiers
+    business_blocking = 0
+    if business_violations_c:
+        for v in business_violations_c:
+            sev = v.get("severity_category", v.get("severity", "")).lower()
+            if sev in blocking_severities:
+                business_blocking += 1
+
+    has_blocking_violations = business_blocking > 0
+
+    # If profile filtering says no blocking violations exist, clear should_block reasons
+    # that were added by generic checks above (code-category checks are unaffected)
+    if profile_block_on and not has_blocking_violations:
+        # Only clear reasons that are not code-category related
+        generic_block_reasons = [r for r in block_reasons if "business-code" in r or "fail_on_" in r]
+        for r in generic_block_reasons:
+            if r in block_reasons:
+                block_reasons.remove(r)
+                if r in block_reasons:
+                    block_reasons.remove(r)  # handle duplicates
+        if block_reasons:
+            # Still other reasons (e.g., code-category, threshold) remain
+            pass
+        elif should_block and not has_blocking_violations:
+            # No other reasons — profile says this shouldn't block
+            should_block = False
+
+    if profile_block_on:
+        profile_block_str = ", ".join(profile_block_on)
+        print(f"    📋 Profile block_on={profile_block_str}: {business_blocking} business-code blocking violations")
+
     # 1. Required violations with fail_on_required (G-09) — 仅对 business 代码生效
-    if fail_on_required and required_count > 0 and business_block_on:
-        if business_req > 0:
-            should_block = True
-            block_reasons.append(f"{business_req} Required business-code violation(s) (fail_on_required=True)")
+    # Profile-aware: only counts if "required" is in profile_block_on
+    if not profile_block_on or "required" in profile_block_on:
+        if fail_on_required and required_count > 0 and business_block_on:
+            if business_req > 0:
+                should_block = True
+                block_reasons.append(f"{business_req} Required business-code violation(s) (fail_on_required=True)")
 
     # 1b. Legacy: fail_on_violation master switch
     if fail_on_violation and required_count > 0 and business_block_on:
@@ -901,24 +969,37 @@ def run_misra_check(project_dir: str, ci: CIResult,
             should_block = True
             block_reasons.append(f"{business_req} business-code violation(s) (fail_on_violation=True)")
 
-    # 2. Total violations >= fail_threshold (仅 business 代码)
-    if fail_threshold > 0 and business_total >= fail_threshold:
-        should_block = True
-        block_reasons.append(f"{business_total} business-code violation(s) >= threshold {fail_threshold}")
+    # 2. Total violations >= fail_threshold (仅 business 代码) — profile-aware
+    # Only count violations whose severity matches the profile's rules
+    if profile_block_on and profile_rules:
+        profile_severities_for_check: set[str] = set()
+        for tier in profile_rules:
+            profile_severities_for_check.update(profile_tier_to_severity.get(tier, []))
+        business_profile_total = sum(
+            1 for v in business_violations_c
+            if v.get("severity_category", v.get("severity", "")).lower() in profile_severities_for_check
+        )
+    else:
+        business_profile_total = business_total
 
-    # 3. Violations per KLOC (仅 business 文件的 KLOC)
+    if fail_threshold > 0 and business_profile_total >= fail_threshold:
+        should_block = True
+        block_reasons.append(f"{business_profile_total} business-code violation(s) (profile-matching) >= threshold {fail_threshold}")
+
+    # 3. Violations per KLOC (仅 business 文件的 KLOC) — profile-aware
     if violations_per_kloc > 0 and estimated_kloc > 0:
-        actual_vpkloc = business_total / max(estimated_kloc, 0.001)
+        actual_vpkloc = business_profile_total / max(estimated_kloc, 0.001)
         if actual_vpkloc > violations_per_kloc:
             should_block = True
             block_reasons.append(
-                f"{actual_vpkloc:.1f} business-code violations/kloc > limit {violations_per_kloc}"
+                f"{actual_vpkloc:.1f} business-code (profile-matching) violations/kloc > limit {violations_per_kloc}"
             )
 
-    # Advisory-blocking (separate flag) — 仅 business
-    if fail_on_advisory and advisory_count > 0 and business_block_on:
-        should_block = True
-        block_reasons.append(f"{advisory_count} Advisory business-code violation(s) (fail_on_advisory=True)")
+    # Advisory-blocking (separate flag) — 仅 business, profile-aware
+    if not profile_block_on or "advisory" in profile_block_on:
+        if fail_on_advisory and advisory_count > 0 and business_block_on:
+            should_block = True
+            block_reasons.append(f"{advisory_count} Advisory business-code violation(s) (fail_on_advisory=True)")
 
     detail = (
         f"{total_violations} MISRA violation(s) "

@@ -17,7 +17,7 @@ See ``ci/layers/`` package for implementation details:
 import logging
 log = logging.getLogger("ci.layers")
 
-from yuleosh.ci.config import layer_dependencies
+from yuleosh.ci.config import layer_dependencies, validate_misra_profiles
 
 from yuleosh.ci.layers import (
     # config

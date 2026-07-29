@@ -78,14 +78,24 @@ class MisraDeviation:
 
 @dataclass
 class MisraProfile:
-    """A named MISRA profile with rule overrides and deviations.
+    """A named MISRA profile with rule overrides, deviations, and filter rules.
 
     Profiles allow quick switching between different compliance modes:
     - "safety": Strictest, all rules enabled (default)
-    - "performance": Relaxed rules for performance-critical code
-    - "testing": Relaxed rules for test / non-production code
+    - "motor": Moderate, mandatory + required checks
+    - "benchmark": Lightweight, only mandatory rules block
+
+    Each profile defines:
+    - rules: which rule tiers to check (mandatory, required, advisory)
+    - block_on: which tiers cause pipeline failure
+    - exclude_paths: file patterns to skip for this profile
+    - description: human-readable explanation
     """
     name: str = ""
+    rules: list[str] = field(default_factory=lambda: ["mandatory", "required", "advisory"])
+    block_on: list[str] = field(default_factory=lambda: ["mandatory", "required"])
+    exclude_paths: list[str] = field(default_factory=list)
+    description: str = ""
     rule_overrides: list[MisraRuleOverride] = field(default_factory=list)
     deviations: list[MisraDeviation] = field(default_factory=list)
     severity_map: dict = field(default_factory=dict)
@@ -210,6 +220,55 @@ class CiConfig:
 # ------------------------------------------------------------------
 # Loader
 # ------------------------------------------------------------------
+
+
+def validate_misra_profiles(cfg: CiConfig) -> list[str]:
+    """Validate MISRA profile configuration.
+
+    Checks:
+    - profiles is not empty
+    - active_profile references a defined profile
+
+    Returns a list of error messages (empty = valid).
+    """
+    errors: list[str] = []
+
+    misra = cfg.misra
+    profiles = misra.profiles
+    active = misra.active_profile
+
+    if not profiles:
+        errors.append(
+            "❌ active_profile '%s' has no rules defined in profiles — profiles is empty" % active
+        )
+        return errors
+
+    if not active:
+        errors.append(
+            "❌ active_profile is empty or undefined — must reference a defined profile"
+        )
+        return errors
+
+    if active not in profiles:
+        avail = ", ".join(sorted(profiles.keys()))
+        errors.append(
+            "❌ active_profile '%s' not found. Available profiles: %s" % (active, avail)
+        )
+        return errors
+
+    # Validate the active profile has reasonable configuration
+    active_prof = profiles[active]
+    if not active_prof.rules:
+        errors.append(
+            "❌ active_profile '%s' has no rules configured" % active
+        )
+    if not active_prof.block_on:
+        errors.append(
+            "⚠️  active_profile '%s' has no block_on rules — no rules will block pipeline" % active
+        )
+
+    return errors
+
 
 
 def load_ci_config(
@@ -359,8 +418,23 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
                             expires=str(d.get("expires", "")),
                             status=str(d.get("status", "pending")),
                         ))
+                # Parse profile-level rules/block_on/exclude_paths
+                rules: list[str] = prof_cfg.get("rules", ["mandatory", "required", "advisory"])
+                if not isinstance(rules, list):
+                    rules = ["mandatory", "required", "advisory"]
+                block_on: list[str] = prof_cfg.get("block_on", ["mandatory", "required"])
+                if not isinstance(block_on, list):
+                    block_on = ["mandatory", "required"]
+                exclude_paths: list[str] = prof_cfg.get("exclude_paths", [])
+                if not isinstance(exclude_paths, list):
+                    exclude_paths = []
+                description: str = str(prof_cfg.get("description", ""))
                 parsed_profiles[prof_name] = MisraProfile(
                     name=str(prof_cfg.get("name", "")),
+                    rules=rules,
+                    block_on=block_on,
+                    exclude_paths=exclude_paths,
+                    description=description,
                     rule_overrides=ovr_list,
                     deviations=dev_list,
                     severity_map=prof_cfg.get("severity_map", {}),
