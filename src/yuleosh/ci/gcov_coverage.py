@@ -250,6 +250,7 @@ def generate_c_coverage_report(
     build_dir: str = ".",
     fail_under: Optional[float] = None,
     fail_under_branch: Optional[float] = None,
+    module_thresholds: Optional[dict[str, float]] = None,
 ) -> str:
     """Generate C coverage report and return JSON path.
 
@@ -258,6 +259,10 @@ def generate_c_coverage_report(
 
     When *fail_under* is set, the generated JSON report will include
     ``gate_passed`` and ``gate_detail`` fields for downstream CI enforcement.
+
+    When *module_thresholds* is set, per-module coverage thresholds are
+    checked in addition to global thresholds, with results in
+    ``module_gate_details``.
 
     Returns an empty string if coverage generation fails.
     """
@@ -357,7 +362,32 @@ def generate_c_coverage_report(
             }
             for f in parsed["files"]
         ],
+        "module_gate_details": [],
     }
+
+    # Module-level threshold checks
+    if module_thresholds:
+        module_gates = []
+        for module_name, module_fail_under in module_thresholds.items():
+            module_cov = _compute_module_c_coverage(parsed["files"], module_name)
+            if module_cov is not None:
+                module_ok = module_cov >= module_fail_under
+                gate_passed = gate_passed and module_ok
+                module_gates.append({
+                    "metric": f"module_line_rate:{module_name}",
+                    "value": module_cov,
+                    "threshold": module_fail_under,
+                    "passed": module_ok,
+                })
+                log.info(
+                    "  Module '%s' C coverage: %s (%.1f%% >= %.1f%%)",
+                    module_name,
+                    "PASS" if module_ok else "FAIL",
+                    module_cov, module_fail_under,
+                )
+            else:
+                log.info("  Module '%s': no files matched", module_name)
+        output["module_gate_details"] = module_gates
 
     json_path = report_dir / "c-coverage.json"
     with open(json_path, "w") as f:
@@ -365,6 +395,18 @@ def generate_c_coverage_report(
 
     log.info("C coverage report saved to %s", json_path)
     return str(json_path)
+
+
+def _compute_module_c_coverage(files: list[dict], module_prefix: str) -> Optional[float]:
+    """Compute line coverage for C files matching a module prefix."""
+    matched = [f for f in files if f["file"].startswith(module_prefix)]
+    if not matched:
+        return None
+    total_found = sum(f["lines"]["found"] for f in matched)
+    total_hit = sum(f["lines"]["hit"] for f in matched)
+    if total_found == 0:
+        return None
+    return (total_hit / total_found) * 100
 
 
 def main():

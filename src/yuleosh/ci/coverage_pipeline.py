@@ -39,6 +39,7 @@ from yuleosh.ci.gcov_coverage import (
     run_gcov_coverage,
     parse_lcov_output,
 )
+from yuleosh.ci.config import _get_ci_config
 
 log = logging.getLogger("yuleosh.ci.coverage_pipeline")
 
@@ -126,6 +127,27 @@ def generate_branch_coverage_report(
         log.info("  Branch gate: %s (%.1f%% >= %.1f%%)",
                  "PASS" if branch_ok else "FAIL", branch_rate, fail_under_branch)
 
+    # Step 3b: Module-level threshold checks
+    module_gates = []
+    if module_thresholds:
+        for module_name, module_fail_under in module_thresholds.items():
+            module_cov = _compute_module_line_coverage(parsed["files"], module_name)
+            if module_cov is not None:
+                module_ok = module_cov >= module_fail_under
+                all_gates_passed = all_gates_passed and module_ok
+                module_gates.append({
+                    "metric": f"module_line_rate:{module_name}",
+                    "value": module_cov,
+                    "threshold": module_fail_under,
+                    "passed": module_ok,
+                })
+                log.info("  Module '%s' line gate: %s (%.1f%% >= %.1f%%)",
+                         module_name,
+                         "PASS" if module_ok else "FAIL",
+                         module_cov, module_fail_under)
+            else:
+                log.info("  Module '%s': no files matched, skipping check", module_name)
+
     # Step 4: Build report
     report = {
         "generated_at": datetime.now().isoformat(),
@@ -149,6 +171,7 @@ def generate_branch_coverage_report(
             "covered_functions": parsed["totals"]["functions"]["hit"],
         },
         "gates": gates,
+        "module_gates": module_gates,
         "all_gates_passed": all_gates_passed,
         "files": [],
     }
@@ -178,6 +201,18 @@ def generate_branch_coverage_report(
 
     report["success"] = True
     return report
+
+
+def _compute_module_line_coverage(files: list[dict], module_prefix: str) -> Optional[float]:
+    """Compute line coverage for all files matching a module prefix."""
+    matched = [f for f in files if f["file"].startswith(module_prefix)]
+    if not matched:
+        return None
+    total_found = sum(f["lines"]["found"] for f in matched)
+    total_hit = sum(f["lines"]["hit"] for f in matched)
+    if total_found == 0:
+        return None
+    return (total_hit / total_found) * 100
 
 
 def _get_tool_version(name: str) -> str:
