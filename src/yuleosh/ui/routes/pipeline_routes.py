@@ -135,3 +135,168 @@ def handle_pipeline_stats(handler: BaseHTTPRequestHandler) -> dict:
     from yuleosh.pipeline.async_runner import get_pipeline_stats
     stats = get_pipeline_stats()
     return {"ok": True, **stats}
+
+
+def handle_yuleasr_status(handler: BaseHTTPRequestHandler) -> dict:
+    """GET /api/v1/pipeline/yuleasr-status — yuleASR BSW project live status.
+
+    Aggregates the latest pipeline run results for the yuleASR project.
+    Reads from evidence-bundle artifacts and pipeline job history.
+    """
+    import json as _json
+    from pathlib import Path
+    from datetime import datetime
+
+    yuleasr_home = os.environ.get("YULEASR_HOME", "")
+    if not yuleasr_home:
+        # Try default path alongside yuleOSH
+        osh_home = os.environ.get("OSH_HOME", "")
+        candidate = str(Path(osh_home).parent / "yuleASR") if osh_home else ""
+        if candidate and Path(candidate).exists():
+            yuleasr_home = candidate
+
+    result = {
+        "ok": True,
+        "project": "yuleASR",
+        "type": "autosar",
+        "compile_status": None,
+        "misra_violations": None,
+        "coverage": None,
+        "qemu_status": None,
+        "last_run_at": None,
+        "errors": [],
+        "available": False,
+    }
+
+    if not yuleasr_home or not Path(yuleasr_home).exists():
+        result["errors"].append(f"yuleASR home not found: {yuleasr_home}")
+        return result
+
+    result["available"] = True
+    result["yuleasr_home"] = yuleasr_home
+
+    evidence_dir = Path(yuleasr_home) / ".yuleosh" / "evidence-bundle"
+
+    # ── 1. CI results (compile + QEMU status) ──
+    ci_results_file = evidence_dir / "ci-results" / "ci-results.json"
+    if ci_results_file.exists():
+        try:
+            ci_data = _json.loads(ci_results_file.read_text())
+            pipeline_info = ci_data.get("pipeline", {})
+            result["compile_status"] = pipeline_info.get("status", "unknown")
+            result["last_run_at"] = pipeline_info.get("completed_at", ci_data.get("generated_at"))
+            # QEMU / SIL test results
+            sil_file = evidence_dir / "ci-results" / "sil-test-results.json"
+            if sil_file.exists():
+                sil_data = _json.loads(sil_file.read_text())
+                result["qemu_status"] = "passed" if sil_data.get("all_passed") else "failed"
+            else:
+                # Fallback to sil-results.json
+                sil_results = evidence_dir / "ci-results" / "sil-results.json"
+                if sil_results.exists():
+                    sr = _json.loads(sil_results.read_text())
+                    sil_reports = sr.get("sil_reports", [])
+                    if sil_reports:
+                        all_passed = all(
+                            r.get("status") == "completed" and r.get("failed", 0) == 0
+                            for r in sil_reports
+                        )
+                        result["qemu_status"] = "passed" if all_passed else "failed"
+                        if not result["last_run_at"]:
+                            result["last_run_at"] = sr.get("generated_at")
+        except Exception as e:
+            result["errors"].append(f"ci-results parse: {e}")
+
+    # ── 2. MISRA violations ──
+    misra_file = evidence_dir / "misra-reports" / "misra-report.json"
+    if misra_file.exists():
+        try:
+            misra_data = _json.loads(misra_file.read_text())
+            result["misra_violations"] = misra_data.get("total_violations", 0)
+        except Exception as e:
+            result["errors"].append(f"misra parse: {e}")
+
+    # ── 3. Coverage ──
+    coverage_file = evidence_dir / "coverage" / "c-coverage.json"
+    if coverage_file.exists():
+        try:
+            cov_data = _json.loads(coverage_file.read_text())
+            summary = cov_data.get("summary", {})
+            lines = summary.get("lines", {})
+            result["coverage"] = {
+                "line_rate": lines.get("rate", 0),
+                "line_covered": lines.get("covered", 0),
+                "line_total": lines.get("total", 0),
+                "branch_rate": summary.get("branches", {}).get("rate", 0),
+                "function_rate": summary.get("functions", {}).get("rate", 0),
+            }
+        except Exception as e:
+            result["errors"].append(f"coverage parse: {e}")
+
+    # ── 4. Also check pipeline job history for autosar type runs ──
+    from yuleosh.pipeline.async_runner import list_jobs
+    recent = list_jobs(limit=10)
+    autosar_runs = [j for j in recent if j.get("type") in ("full_pipeline", "autosar")]
+    result["recent_autosar_runs"] = autosar_runs[:5]
+
+    return result
+
+
+def handle_yuleasr_notify(handler: BaseHTTPRequestHandler, body: bytes) -> dict:
+    """POST /api/v1/pipeline/yuleasr-notify — Send yuleASR pipeline result notification.
+
+    Writes a notification file that the cron deliver mechanism can pick up.
+    """
+    import json as _json
+    from datetime import datetime as _dt
+    from pathlib import Path as _Path
+
+    try:
+        data = _json.loads(body) if body else {}
+    except _json.JSONDecodeError as e:
+        return {"ok": False, "error": f"Invalid JSON body: {e}"}
+
+    project = data.get("project", "yuleASR")
+    status = data.get("status", "unknown")
+    misra_count = data.get("misra_violations", "?")
+    coverage = data.get("coverage", "?")
+    qemu = data.get("qemu_status", "?")
+
+    # Write notification file for cron deliver pickup
+    osh_home = os.environ.get("OSH_HOME", "")
+    notify_dir = _Path(osh_home) / "reports" / "pipeline-notify" if osh_home else _Path("reports/pipeline-notify")
+    notify_dir.mkdir(parents=True, exist_ok=True)
+
+    notify_file = notify_dir / f"yuleasr-{_dt.now().strftime('%Y%m%d-%H%M%S')}.json"
+    notify_payload = {
+        "project": project,
+        "status": status,
+        "misra_violations": misra_count,
+        "coverage": coverage,
+        "qemu_status": qemu,
+        "timestamp": _dt.now().isoformat(),
+        "channel": "feishu",
+    }
+    notify_file.write_text(_json.dumps(notify_payload, indent=2, ensure_ascii=False))
+
+    log.info("yuleASR notify file written: %s", notify_file)
+
+    # Also attempt feishu notification directly
+    try:
+        from yuleosh.notify import notify_pipeline
+        errors = data.get("errors", [])
+        notify_pipeline(
+            name=project,
+            status=status,
+            total_steps=6,
+            completed_steps=6 if status in ("passed", "completed") else 0,
+            errors=errors if errors else None,
+        )
+    except Exception as e:
+        log.warning("Feishu notify attempt: %s", e)
+
+    return {
+        "ok": True,
+        "notify_file": str(notify_file),
+        "message": f"Notification queued for {project}",
+    }

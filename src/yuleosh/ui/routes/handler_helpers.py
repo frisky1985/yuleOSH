@@ -170,6 +170,9 @@ def handle_get(handler) -> None:
     elif path == "/api/v1/pipeline/stats":
         from yuleosh.ui.routes.pipeline_routes import handle_pipeline_stats
         handler._json_response(handle_pipeline_stats(handler))
+    elif path == "/api/v1/pipeline/yuleasr-status":
+        from yuleosh.ui.routes.pipeline_routes import handle_yuleasr_status
+        handler._json_response(handle_yuleasr_status(handler))
     elif path == "/api/v1/pipeline/validate":
         from yuleosh.pipeline.config_validator import validate_pipeline_config
         result = validate_pipeline_config(project_dir=os.environ.get("OSH_HOME", ""))
@@ -321,6 +324,15 @@ def handle_post(handler) -> None:
         content_length = int(handler.headers.get("Content-Length", 0))
         body = handler.rfile.read(content_length) if content_length else b"{}"
         result = handle_pipeline_trigger(handler, body)
+        handler._json_response(result)
+        return
+
+    # yuleASR pipeline notification endpoint
+    if path == "/api/v1/pipeline/yuleasr-notify":
+        from yuleosh.ui.routes.pipeline_routes import handle_yuleasr_notify
+        content_length = int(handler.headers.get("Content-Length", 0))
+        body = handler.rfile.read(content_length) if content_length else b"{}"
+        result = handle_yuleasr_notify(handler, body)
         handler._json_response(result)
         return
 
