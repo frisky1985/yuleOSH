@@ -344,6 +344,9 @@ def _run_full_pipeline(
     job["completed_at"] = datetime.now().isoformat()
     job["updated_at"] = datetime.now().isoformat()
 
+    # ── Notification on completion (for all autosar / full_pipeline types) ──
+    _notify_pipeline_completion(job_id)
+
 
 # ── Status queries ────────────────────────────────────────────────────────
 
@@ -370,3 +373,57 @@ def get_pipeline_stats() -> dict:
         "total": total, "running": running, "queued": queued,
         "passed": passed, "failed": failed,
     }
+
+
+def _notify_pipeline_completion(job_id: str):
+    """Send notification for a completed pipeline job.
+
+    Writes a notification file to reports/pipeline-notify/ and
+    attempts to send via Feishu if configured.
+    """
+    job = _PIPELINE_JOBS.get(job_id)
+    if not job or job["status"] not in ("passed", "failed"):
+        return
+
+    status = job["status"]
+    project_name = "yuleASR" if job.get("type") == "full_pipeline" else job.get("type", "pipeline")
+
+    # Write notification file
+    osh_home = os.environ.get("OSH_HOME", "")
+    if osh_home:
+        notify_dir = Path(osh_home) / "reports" / "pipeline-notify"
+        notify_dir.mkdir(parents=True, exist_ok=True)
+        notify_payload = {
+            "project": project_name,
+            "status": status,
+            "job_id": job_id,
+            "timestamp": datetime.now().isoformat(),
+            "channel": "feishu",
+        }
+        notify_file = notify_dir / f"{project_name}-{job_id}.json"
+        try:
+            notify_file.write_text(json.dumps(notify_payload, indent=2))
+            _append_log(job_id, f"Notification file written: {notify_file}")
+        except Exception as e:
+            _append_log(job_id, f"Notification file write failed: {e}")
+
+    # Attempt feishu notification
+    try:
+        # Try importing the notify module using the project-relative path
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "yuleosh_notify",
+            os.path.join(os.path.dirname(__file__), "..", "notify.py")
+        )
+        if spec and spec.loader:
+            notify_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(notify_mod)
+            notify_mod.notify_pipeline(
+                name=project_name,
+                status=status,
+                total_steps=6,
+                completed_steps=6 if status == "passed" else 0,
+            )
+            _append_log(job_id, "Feishu notification sent")
+    except Exception as e:
+        log.debug("Feishu notify not available: %s", e)

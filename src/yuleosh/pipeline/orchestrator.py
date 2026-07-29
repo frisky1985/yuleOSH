@@ -33,6 +33,96 @@ try:
 except ImportError:
     _notify = None
 
+# ── Auto-detect project type from .yuleosh.yaml ──────────────────────
+
+def _detect_project_type(project_dir: str) -> Optional[dict]:
+    """Read .yuleosh.yaml and detect the project type (e.g. autosar).
+
+    Returns a dict with 'type', 'name', and 'template_name' if found.
+    Returns None if no config or no type field.
+    """
+    import yaml as _yaml
+    proj_path = Path(project_dir)
+    candidates = [
+        proj_path / ".yuleosh.yaml",
+        proj_path / "yuleosh.yaml",
+        proj_path / ".yuleosh" / "config.yml",
+    ]
+    for cfg_file in candidates:
+        if cfg_file.exists():
+            try:
+                raw = _yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
+                if raw and isinstance(raw, dict):
+                    ptype = raw.get("type") or raw.get("project", {}).get("type")
+                    if ptype:
+                        return {
+                            "type": ptype,
+                            "name": raw.get("name") or raw.get("project", {}).get("name", ptype),
+                            "template_name": raw.get("template") or raw.get("project", {}).get("template", ptype),
+                            "config_source": str(cfg_file),
+                        }
+            except Exception as e:
+                log.debug("Could not parse %s: %s", cfg_file, e)
+    return None
+
+
+def _ensure_autosar_pipeline_config(project_dir: str, template_dir: Optional[Path] = None) -> bool:
+    """If project type is autosar and no `.yuleosh/ci-config.yaml` exists,
+    copy the template pipeline config.
+
+    Returns True if a config was generated.
+    """
+    ci_config = Path(project_dir) / ".yuleosh" / "ci-config.yaml"
+    if ci_config.exists():
+        return False  # Already configured
+
+    if template_dir is None:
+        # Try built-in template path
+        template_dir = Path(os.path.dirname(__file__)).parent.parent.parent / "templates" / "autosar"
+        if not template_dir.exists():
+            template_dir = Path(os.path.dirname(__file__)).parent.parent / "templates" / "autosar"
+
+    pipeline_cfg = template_dir / "pipeline" / "config.yaml" if template_dir else None
+    if pipeline_cfg and pipeline_cfg.exists():
+        # Ensure .yuleosh dir exists
+        (Path(project_dir) / ".yuleosh").mkdir(parents=True, exist_ok=True)
+        ci_config.write_text(pipeline_cfg.read_text(encoding="utf-8"))
+        log.info("Generated autosar pipeline config: %s", ci_config)
+        return True
+
+    return False
+
+
+def _detect_and_bootstrap(project_dir: str) -> Optional[dict]:
+    """Auto-detect project type and bootstrap missing config.
+
+    Returns the detected project info dict, or None if not detected.
+    """
+    info = _detect_project_type(project_dir)
+    if not info:
+        return None
+
+    ptype = info["type"]
+    log.info("Detected project type: %s (name=%s)", ptype, info["name"])
+
+    if ptype == "autosar":
+        # Find template directory
+        templates_base = Path(os.path.dirname(__file__)).parent.parent / "templates"
+        if not templates_base.exists():
+            templates_base = Path(os.path.dirname(__file__)).parent.parent.parent / "templates"
+        tdir = templates_base / "autosar" if templates_base.exists() else None
+        if tdir and tdir.exists():
+            # Register: ensure template.yaml is used
+            template_yaml = tdir / "template.yaml"
+            if template_yaml.exists():
+                log.info("AUTOSAR template found: %s", template_yaml)
+            _ensure_autosar_pipeline_config(project_dir, tdir)
+        else:
+            log.info("AUTOSAR template dir not found, skipping bootstrap")
+
+    return info
+
+
 def _mock_llm_client() -> Callable:
     """Create a mock LLM client for demo/testing (--mock flag).
 
@@ -103,6 +193,14 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         if not key:
             sys.exit(1)
     
+    # ── Auto-detect project type and bootstrap ──
+    project_root = os.path.dirname(os.path.abspath(spec_path))
+    project_info = _detect_and_bootstrap(project_root)
+    if project_info:
+        print(f"\n📋 Detected project: {project_info['name']} (type: {project_info['type']})")
+        if project_info["type"] == "autosar":
+            print(f"   AUTOSAR template auto-loaded from: {project_info.get('config_source', 'template')}")
+
     # G-33: Profile validation
     try:
         from yuleosh.ci.profile import validate_active_profile, filter_steps_for_profile, get_current_profile
