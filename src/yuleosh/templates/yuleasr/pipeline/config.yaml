@@ -27,6 +27,12 @@ steps:
   - id: cross-compile
     name: CI Layer 2 — yuleASR Cross Compile
     handler: ci_layer2
+  - id: qemu-run
+    name: QEMU 仿真测试 (L2)
+    handler: qemu_run
+  - id: c-coverage-gate
+    name: C 覆盖率门禁 (L2)
+    handler: c_coverage_gate
   - id: static-analysis
     name: MISRA C:2023 Static Analysis
     handler: static_analysis
@@ -40,6 +46,8 @@ ci_layers:
     autosar_check: true
   L2:
     cross_compile: true
+    qemu_run: true
+    c_coverage_gate: true
     misra_check: true
     bsw_config_check: true
   L3:

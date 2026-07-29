@@ -1,24 +1,62 @@
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: MIT
 
-"""GitHub Webhook handler — receives push events and triggers CI.
+"""GitHub Webhook handler — receives push events and triggers pipeline.
+
+Enhancements:
+  - Uses pipeline trigger API (POST /api/v1/pipeline/trigger) instead of direct CI
+  - Maps repo name to project type (yuleASR → autosar template)
+  - Pushes pipeline result to dashboard
 
 Endpoint: POST /api/v1/webhooks/github
 """
 
+import json
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
 from . import json_ok, json_error, OSH_HOME
 
 log = logging.getLogger("webhooks")
+
+# Repo → project type mapping
+REPO_PROJECT_MAP = {
+    "yuleasr": "autosar",
+    "yuleASR": "autosar",
+    "yuleosh": "generic-embedded-c",
+    "yuleOSH": "generic-embedded-c",
+}
+
+# Repo → project root path mapping
+REPO_PATH_MAP: dict[str, str] = {}
+
+
+def _build_repo_path_map():
+    """Build a mapping of known repo names to their on-disk paths."""
+    global REPO_PATH_MAP
+    candidates = {
+        "yuleasr": os.path.expanduser("~/.openclaw/workspace/yuleASR"),
+        "yuleASR": os.path.expanduser("~/.openclaw/workspace/yuleASR"),
+        "yuleosh": os.path.expanduser("~/.openclaw/workspace/tasks/yuleOSH"),
+        "yuleOSH": os.path.expanduser("~/.openclaw/workspace/tasks/yuleOSH"),
+    }
+    for name, path in candidates.items():
+        if os.path.isdir(path):
+            REPO_PATH_MAP[name] = path
+
+
+# Build once on import
+_build_repo_path_map()
 
 
 def handle_webhooks(method: str, path_tail: str = "", body: dict = None,
                      query: dict = None, handler=None, **kwargs):
     """Handle webhook-related API calls.
 
-    POST /api/v1/webhooks/github — Receive GitHub push webhook and trigger CI.
+    POST /api/v1/webhooks/github — Receive GitHub push webhook and trigger pipeline.
     """
     if method != "POST":
         return json_error("Method not allowed. Use POST.", 405)
@@ -26,7 +64,6 @@ def handle_webhooks(method: str, path_tail: str = "", body: dict = None,
     if body is None:
         body = {}
 
-    # Parse the provider from the path tail: "github" or similar
     provider = path_tail.strip("/") if path_tail else ""
 
     if provider != "github":
@@ -36,11 +73,12 @@ def handle_webhooks(method: str, path_tail: str = "", body: dict = None,
 
 
 def _handle_github_push(payload: dict, handler=None) -> tuple:
-    """Process a GitHub push event payload and trigger CI Layer 1."""
+    """Process a GitHub push event payload and trigger pipeline via API."""
     try:
         # Extract repository info
         repo = payload.get("repository", {})
         repo_name = repo.get("full_name", repo.get("name", "unknown"))
+        repo_url = repo.get("clone_url", repo.get("html_url", ""))
 
         # Extract branch info from ref (refs/heads/main)
         ref = payload.get("ref", "")
@@ -58,8 +96,38 @@ def _handle_github_push(payload: dict, handler=None) -> tuple:
             f"commit={commit_hash}, pusher={pusher_name}"
         )
 
-        # Trigger CI Layer 1
-        ci_result = _trigger_ci(repo_name, branch, commit_hash, commit_message)
+        # Determine project type and project dir from repo name
+        short_name = repo_name.split("/")[-1] if "/" in repo_name else repo_name
+        project_type = REPO_PROJECT_MAP.get(short_name, "generic-embedded-c")
+        project_dir = REPO_PATH_MAP.get(short_name, OSH_HOME)
+
+        # Map yuleASR → autosar template
+        pipeline_type = "full"
+        if project_type == "autosar":
+            pipeline_type = "full"
+        elif project_type == "generic-embedded-c":
+            pipeline_type = "ci"
+            project_dir = OSH_HOME
+
+        # Trigger pipeline using the async runner directly
+        pipeline_result = _trigger_pipeline(
+            project_dir=project_dir,
+            repo_name=repo_name,
+            project_type=project_type,
+            branch=branch,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+
+        # Push result to dashboard
+        if pipeline_result and pipeline_result.get("job_id"):
+            _push_to_dashboard(
+                job_id=pipeline_result["job_id"],
+                repo_name=repo_name,
+                branch=branch,
+                commit_hash=commit_hash,
+                project_type=project_type,
+            )
 
         return json_ok({
             "status": "received",
@@ -67,67 +135,117 @@ def _handle_github_push(payload: dict, handler=None) -> tuple:
             "branch": branch,
             "commit": commit_hash,
             "pusher": pusher_name,
-            "ci_triggered": ci_result is not None,
-            "ci_status": ci_result.get("status", "unknown") if ci_result else "skipped",
+            "project_type": project_type,
+            "pipeline_triggered": pipeline_result is not None,
+            "job_id": pipeline_result.get("job_id") if pipeline_result else None,
             "timestamp": datetime.now().isoformat(),
         })
 
     except Exception as e:
-        log.error(f"Error processing GitHub webhook: {e}")
-        # Return 200 anyway per GitHub best practices (don't retry on server errors)
+        log.error(f"Error processing GitHub webhook: {e}", exc_info=True)
+        # Return 200 per GitHub best practices (don't retry on server errors)
         return json_ok({
             "status": "received",
             "error": str(e),
-            "ci_triggered": False,
+            "pipeline_triggered": False,
         })
 
 
-def _trigger_ci(repo_name: str, branch: str, commit_hash: str,
-                commit_message: str) -> dict:
-    """Trigger CI Layer 1 pipeline for the given commit.
+def _trigger_pipeline(project_dir: str, repo_name: str, project_type: str,
+                      branch: str, commit_hash: str, commit_message: str) -> Optional[dict]:
+    """Trigger yuleOSH pipeline for the given commit.
 
-    Returns the CI result dict or None if CI could not be triggered.
+    Uses the async pipeline runner directly (same as POST /api/v1/pipeline/trigger).
+    Returns job info dict or None on failure.
     """
     try:
-        # Import CI runner
-        from yuleosh.ci.run import run_layer1
+        from yuleosh.pipeline.async_runner import submit_pipeline, submit_full_pipeline
 
-        # Prepare CI context
-        project_dir = OSH_HOME
+        # Determine pipeline type based on project type
+        if project_type == "autosar":
+            # Full pipeline for AUTOSAR projects: ARXML → RTE → CI → MISRA
+            job_id = submit_full_pipeline(
+                project_dir=project_dir,
+                config_json=json.dumps({
+                    "trigger": "webhook",
+                    "repo": repo_name,
+                    "branch": branch,
+                    "commit": commit_hash,
+                    "message": commit_message,
+                    "project_type": project_type,
+                }),
+            )
+            pipeline_type = "full"
+        else:
+            # CI layer pipeline for embedded projects
+            job_id = submit_pipeline(
+                project_dir=project_dir,
+                layer=1,  # Start with Layer 1
+            )
+            pipeline_type = "ci"
 
-        # Run CI Layer 1
-        success = run_layer1(project_dir)
+        if not job_id:
+            return None
 
-        # Save CI result to store
-        from yuleosh.store import Store
-        store = Store()
-        store.save_ci({
-            "layer": 1,
-            "commit": commit_hash or "webhook",
-            "status": "passed" if success else "failed",
-            "started_at": datetime.now().isoformat(),
-            "completed_at": datetime.now().isoformat(),
-            "stages": [],
-            "coverage": None,
-            "errors": [] if success else ["CI Layer 1 failed"],
-        })
+        # Save webhook trigger to store
+        try:
+            from yuleosh.store import Store
+            store = Store()
+            store.save_ci({
+                "layer": 0,
+                "commit": commit_hash or "webhook",
+                "status": "queued",
+                "job_id": job_id,
+                "repo": repo_name,
+                "branch": branch,
+                "project_type": project_type,
+                "started_at": datetime.now().isoformat(),
+            })
+        except Exception as store_err:
+            log.debug("Failed to save webhook trigger to store: %s", store_err)
 
         return {
-            "status": "passed" if success else "failed",
-            "success": success,
-            "timestamp": datetime.now().isoformat(),
+            "job_id": job_id,
+            "type": pipeline_type,
+            "status": "queued",
         }
+
     except ImportError as e:
-        log.warning(f"CI module not available: {e}")
-        return {
-            "status": "skipped",
-            "error": f"CI module not available: {e}",
-            "timestamp": datetime.now().isoformat(),
-        }
+        log.warning(f"Pipeline runner not available: {e}")
+        return None
     except Exception as e:
-        log.error(f"Failed to trigger CI: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
+        log.error(f"Failed to trigger pipeline: {e}")
+        return None
+
+
+def _push_to_dashboard(job_id: str, repo_name: str, branch: str,
+                       commit_hash: str, project_type: str) -> None:
+    """Push pipeline trigger event to dashboard store.
+
+    Creates a dashboard activity entry so the dashboard can display
+    real-time webhook-triggered pipeline runs.
+    """
+    try:
+        dashboard_entry = {
+            "event": "webhook_push",
+            "job_id": job_id,
+            "repository": repo_name,
+            "branch": branch,
+            "commit": commit_hash,
+            "project_type": project_type,
             "timestamp": datetime.now().isoformat(),
+            "status": "queued",
         }
+
+        # Store in .yuleosh/reports/
+        reports_dir = Path(OSH_HOME) / ".yuleosh" / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+
+        webhook_log_path = reports_dir / "webhook-triggers.jsonl"
+        with open(webhook_log_path, "a") as f:
+            f.write(json.dumps(dashboard_entry) + "\n")
+
+        log.info("Dashboard webhook event pushed: job=%s repo=%s", job_id, repo_name)
+
+    except Exception as e:
+        log.debug("Failed to push to dashboard: %s", e)

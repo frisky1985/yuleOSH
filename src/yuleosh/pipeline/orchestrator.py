@@ -105,12 +105,12 @@ def _detect_and_bootstrap(project_dir: str) -> Optional[dict]:
     ptype = info["type"]
     log.info("Detected project type: %s (name=%s)", ptype, info["name"])
 
+    templates_base = Path(os.path.dirname(__file__)).parent.parent / "templates"
+    if not templates_base.exists():
+        templates_base = Path(os.path.dirname(__file__)).parent.parent.parent / "templates"
+
     if ptype == "autosar":
-        # Find template directory
-        templates_base = Path(os.path.dirname(__file__)).parent.parent / "templates"
-        if not templates_base.exists():
-            templates_base = Path(os.path.dirname(__file__)).parent.parent.parent / "templates"
-        tdir = templates_base / "autosar" if templates_base.exists() else None
+        tdir = templates_base / "autosar-classic" if templates_base.exists() else None
         if tdir and tdir.exists():
             # Register: ensure template.yaml is used
             template_yaml = tdir / "template.yaml"

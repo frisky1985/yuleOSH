@@ -52,6 +52,12 @@ from yuleosh.pipeline.step_handlers.review_stack import step_review_stack
 from yuleosh.pipeline.step_handlers.review_mmio import step_review_mmio
 from yuleosh.pipeline.step_handlers.review_critical_safety import step_review_critical_safety
 
+# QEMU firmware emulation test (L2)
+from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
+
+# C coverage gate check (L2)
+from yuleosh.pipeline.step_handlers.c_coverage_gate import coverage_gate_step
+
 # Fault Injection testing (SWE.5 / SWE.6)
 from yuleosh.pipeline.step_handlers.fault_inject import step_fault_injection
 
@@ -60,10 +66,6 @@ from yuleosh.knowledge_graph.merge_gate import step_merge_gate
 
 from yuleosh.pipeline.stages import _check_llm_key
 
-
-# Lazy import for step class registry
-# Sprint 3 eliminated the dual-path; always use legacy step functions
-_have_step_classes = False
 
 # Lazy import for step class registry
 # Sprint 3 eliminated the dual-path; always use legacy step functions
@@ -100,6 +102,9 @@ __all__ = [
     "step_merge_gate",
     "step_test_qualification",
     "step_c_unit_test",
+    "QemuTestHandler",
+    "qemu_run",
+    "coverage_gate_step",
     "PIPELINE_STEPS",
     "_check_llm_key",
     "_resolve_handler",
@@ -109,6 +114,10 @@ __all__ = [
 def _resolve_handler(step_key: str, legacy_fn) -> callable:
     """Return the legacy step function (Sprint 3 eliminated the dual-path)."""
     return legacy_fn
+
+
+# Create handler instances for pipeline step registration
+qemu_run = QemuTestHandler()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -159,6 +168,10 @@ PIPELINE_STEPS = [
     ("coverage-review", "小马", "测试覆盖审查",
      _resolve_handler("coverage-review", step_review_test_coverage)),
 
+    # ── CI Layer steps (L1/L2/L3) ────────────────────
+    ("qemu-run", "QEMU", "QEMU 仿真测试 (L2)", qemu_run),
+    ("c-coverage-gate", "小克", "C 覆盖率门禁检查 (L2)", coverage_gate_step),
+
     # ── Embedded review steps (SWE.5) ────────────────
     ("review-linker", "小克", "链接脚本审查", step_review_linker),
     ("review-startup", "小克", "启动代码审查", step_review_startup),
@@ -174,7 +187,6 @@ PIPELINE_STEPS = [
 
     # ── ⛔ P0 CRITICAL GATE: 关键安全异常阻塞检查 ──────
     ("review-critical-safety", "小明", "关键安全异常阻塞检查 (P0 GATE)", step_review_critical_safety),
-
 
     # ── SWE.5 / SWE.6: Fault Injection Testing ────
     ("fault-injection", "小克", "故障注入测试 (SWE.5/SWE.6)", step_fault_injection),
