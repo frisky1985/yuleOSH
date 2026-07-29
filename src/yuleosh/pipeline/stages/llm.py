@@ -21,6 +21,35 @@ from yuleosh.llm.client import chat_completion
 log = logging.getLogger("pipeline.stages.llm")
 
 
+def _build_effective_system_prompt(
+    session: PipelineSession,
+    system_prompt: str,
+) -> str:
+    """Prepend agent constraints from .yuleosh/agents/ to the system prompt.
+
+    The constraints (loaded into ``session.agent_constraints`` by the
+    orchestrator) are added before the step-specific system prompt so that
+    they act as foundational behavior rules.
+
+    If the step's system prompt already contains agent constraint markers,
+    the constraints are not duplicated.
+    """
+    if not session.agent_constraints:
+        return system_prompt
+
+    # Avoid duplicate injection: check if constraints are already present
+    if "# AGENTS.md" in system_prompt or "# RULES.md" in system_prompt:
+        return system_prompt
+
+    effective = (
+        "[Agent Constraints — loaded from .yuleosh/agents/]\n\n"
+        f"{session.agent_constraints}\n\n"
+        "[End Agent Constraints]\n\n"
+        f"{system_prompt}"
+    )
+    return effective
+
+
 def _call_llm(
     session: PipelineSession,
     system_prompt: str,
@@ -32,14 +61,22 @@ def _call_llm(
     This is the single point of dependency injection for LLM calls in pipeline steps.
     Tests can inject a mock via ``PipelineSession(llm_client=mock_fn)``.
 
+    Before calling the LLM, ``session.agent_constraints`` (loaded from
+    ``.yuleosh/agents/`` by the orchestrator) are prepended to the
+    ``system_prompt`` so that all pipeline steps receive agent behavior
+    rules as system context.
+
     For backward-compatible test mock paths, the global fallback is looked up
     through the ``run`` shim module at call time (deferred import avoids cycles).
     """
+    # Inject agent constraints into the system prompt
+    effective_system = _build_effective_system_prompt(session, system_prompt)
+
     # Deferred import from the run shim so that test mocks on
     # yuleosh.pipeline.run.chat_completion take effect.
     from yuleosh.pipeline.run import chat_completion as _fallback
     client = session.llm_client if session.llm_client is not None else _fallback
-    return client(system_prompt, user_prompt, **kwargs)
+    return client(effective_system, user_prompt, **kwargs)
 
 
 def _check_llm_key() -> Optional[str]:

@@ -66,6 +66,7 @@ class PipelineSession:
         name: str,
         spec_path: str,
         llm_client: Optional[Callable] = None,
+        agent_constraints: Optional[str] = None,
     ):
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
@@ -80,6 +81,8 @@ class PipelineSession:
         self.session_dir = self._ensure_session_dir()
         self.artifacts_dir = str(self.session_dir)
         self.llm_client = llm_client
+        # Agent constraints loaded from .yuleosh/agents/ or default spec
+        self.agent_constraints = agent_constraints or ""
         # Token usage tracking across all steps
         self.token_usage_total: int = 0
         self.token_usage_steps: list[dict] = []

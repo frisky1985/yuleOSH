@@ -46,6 +46,8 @@ tests/unity/*.info
 # Runtime data (persistent DB, session state)
 .yuleosh/
 !.yuleosh/ci-config.yaml
+!.yuleosh/agents/
+!.yuleosh/agents/*.md
 
 # Loop engineering auto-generated artifacts
 fmea_entries/
