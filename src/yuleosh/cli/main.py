@@ -510,6 +510,14 @@ def cmd_init(dir_path: str = "."):
     print()
 
 
+def cmd_spec_merge(delta_file: str, project_dir: str | None = None, dry_run: bool = False):
+    """Merge a spec-delta file into the main spec (QG-003)."""
+    from yuleosh.spec.merge import cmd_spec_merge as _merge_cmd
+    success = _merge_cmd(delta_file, project_dir=project_dir, dry_run=dry_run)
+    if not success:
+        sys.exit(1)
+
+
 def cmd_spec_validate(filepath: str):
     from yuleosh.spec.validate import parse_spec, validate_spec
 
@@ -2036,6 +2044,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_spec_diff = ssub.add_parser("diff", help="Diff two OpenSpec files")
     p_spec_diff.add_argument("old", help="Old spec file")
     p_spec_diff.add_argument("new", help="New spec file")
+    p_spec_merge = ssub.add_parser("merge", help="Merge a spec-delta file into the main spec")
+    p_spec_merge.add_argument("delta_file", help="Spec-delta markdown file path")
+    p_spec_merge.add_argument("--dry-run", action="store_true", help="Validate without writing")
+    p_spec_merge.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
 
     # pipeline
     p_pipe = sub.add_parser("pipeline", help="Agent pipeline management")
@@ -2455,6 +2467,12 @@ def main():
             cmd_spec_validate(args.file)
         elif args.spec_sub == "diff":
             cmd_spec_diff(args.old, args.new)
+        elif args.spec_sub == "merge":
+            cmd_spec_merge(
+                args.delta_file,
+                project_dir=getattr(args, "project_dir", None),
+                dry_run=getattr(args, "dry_run", False),
+            )
         else:
             parser.print_help()
             sys.exit(1)

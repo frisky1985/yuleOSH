@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from yuleosh.ci.config import _get_ci_config, is_strict, is_misra_fail_fast
+from yuleosh.ci.config import _get_ci_config, is_strict, is_misra_fail_fast, validate_misra_profiles
 from yuleosh.ci.result import CIResult
 from yuleosh.ci.stages import (
     run_plan_lint, run_clang_tidy, run_unit_tests, run_coverage_check,
@@ -212,6 +212,24 @@ def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
 
     print(f"  \U0001f4e6 Detected: C/C++ project")
     print()
+
+    # ── MISRA profile validation (QG-002) ──
+    try:
+        cfg = _get_ci_config(project_dir)
+        profile_errors = validate_misra_profiles(cfg)
+        for err in profile_errors:
+            print(f"    {err}")
+            ci.add_stage("misra-profile-check", "failed" if "❌" in err else "warning", err)
+            ci.errors.append(err)
+        if any("❌" in err for err in profile_errors):
+            print(f"    \u274c MISRA profile validation FAILED — aborting L1")
+            return False
+        if profile_errors:
+            print(f"    \u26a0\ufe0f  MISRA profile warnings exist — proceeding")
+        else:
+            print(f"    \u2705 MISRA profile: {cfg.misra.active_profile}")
+    except Exception as e:
+        print(f"    \u26a0\ufe0f  Could not validate MISRA profiles: {e}")
 
     stages = [
         ("yaml-validation", run_yaml_validation),
