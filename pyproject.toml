@@ -80,5 +80,5 @@ exclude_lines = [
     "def main",
     "def _check_llm_key",
 ]
-fail_under = 5
+fail_under = 30
 show_missing = true
