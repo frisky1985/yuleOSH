@@ -295,6 +295,8 @@ def _normalize_shall_text(text: str) -> str:
     text = re.sub(r'^[\s*\-]+', '', text)
     # Collapse whitespace
     text = re.sub(r'\s+', ' ', text).strip().lower()
+    # Strip trailing punctuation for consistent comparison
+    text = text.rstrip('.,;:!?')
     return text
 
 
