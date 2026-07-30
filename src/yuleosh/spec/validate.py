@@ -237,7 +237,7 @@ def parse_spec(filepath: str) -> SpecDocument:
     current_scenario: SpecScenario | None = None
     current_section: str | None = None  # "req", "scenario", "intro"
 
-    req_pattern = re.compile(r"^#{2,4}\s+(?:Requirement|[A-Za-z]+-\d[\w.]*):?\s*(.+)$", re.IGNORECASE)
+    req_pattern = re.compile(r"^#{2,4}\s+(?:Requirement(?!s)\b|[A-Za-z]+-\d[\w.]*):?\s*(.+)$", re.IGNORECASE)
     scenario_pattern = re.compile(r"^#{2,4}\s+Scenario:\s*(.+)$", re.IGNORECASE)
     reason_pattern = re.compile(r"^#{2,5}\s+Reason\s*$", re.IGNORECASE)
     acceptance_pattern = re.compile(r"^#{2,5}\s+(?:Acceptance|验收)", re.IGNORECASE)
