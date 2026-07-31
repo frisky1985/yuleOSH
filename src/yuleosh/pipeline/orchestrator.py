@@ -323,6 +323,11 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             llm_client=llm_client,
             agent_constraints=agent_constraints,
         )
+        # D3: allow enabling generate-code mode via env (no code changes).
+        env_dev_mode = os.environ.get("OSH_DEVELOPMENT_MODE", "").strip()
+        if env_dev_mode:
+            session.development_mode = env_dev_mode
+            print(f"   📝 development_mode from env: {env_dev_mode}")
         session.profile = active_profile
         print(f"\n🚀 Pipeline started: {name}")
         print(f"   Spec: {spec_path}")

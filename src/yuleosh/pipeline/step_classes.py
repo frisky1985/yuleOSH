@@ -1,8 +1,11 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
 from yuleosh.pipeline.steps import PipelineStep
+
+log = logging.getLogger("pipeline.step_classes")
 
 class SuperAnalysisStep(PipelineStep):
     """
@@ -151,7 +154,17 @@ Step 4: Claude — AI-powered architecture design."""
 
 class DevelopmentStep(PipelineStep):
     """
-Step 5: Claude — AI-powered development planning."""
+Step 5: Claude — AI-powered development.
+
+Two modes (``mode`` constructor arg or ``session.development_mode``):
+
+* ``planning`` (default) — writes ``development-plan.md`` (unchanged
+  legacy behavior).
+* ``generate-code`` (D3) — directly generates code files from
+  spec/architecture/PRD, runs compile verification, and auto-fixes up to
+  ``max_retries`` times.  Output lands in
+  ``artifacts/generated-code/<session>/`` with a ``codegen-report.md``.
+"""
 
 
     step_key = "development"
@@ -159,6 +172,17 @@ Step 5: Claude — AI-powered development planning."""
     description = "开发实现"
     output_filename = "development-plan.md"
     max_tokens = 4096
+
+    def __init__(self, mode: str = "planning", max_retries: int = 3):
+        self.mode = mode
+        self.max_retries = max_retries
+
+    def _effective_mode(self, session) -> str:
+        """Resolve the mode: session config wins, then constructor arg."""
+        session_mode = getattr(session, "development_mode", None)
+        if session_mode:
+            return session_mode
+        return self.mode or "planning"
 
     def _artifact_keys(self):
         return ["architecture", "prd", "super-analysis"]
@@ -227,6 +251,72 @@ Step 5: Claude — AI-powered development planning."""
             git_commits=git_commits,
             git_log=git_log,
         )
+
+    def __call__(self, session) -> str:
+        """Branch on mode: codegen when enabled, planning otherwise."""
+        if self._effective_mode(session) == "generate-code":
+            return self._run_codegen(session)
+        return super().__call__(session)
+
+    def _run_codegen(self, session) -> str:
+        """D3 loop: prompt → LLM → write files → verify → auto-fix → report."""
+        from yuleosh.codegen.engine import CodegenEngine, build_codegen_report
+        from yuleosh.codegen.prompts import build_codegen_prompt
+
+        print("  💻 [Claude] Running generate-code mode (D3)...")
+        spec_path = Path(session.spec_path)
+        spec_content = (
+            spec_path.read_text() if spec_path.exists() else "(spec file not found)"
+        )
+        artifacts = self._read_artifacts(session, self._artifact_keys())
+
+        cfg = session.config.get("codegen", {}) if getattr(session, "config", None) else {}
+        skills = cfg.get("skills") or ["autosar-coding"]
+        target_language = cfg.get("target_language")
+        build_cmd = cfg.get("build_cmd")
+        language_hint = cfg.get("language")
+
+        system_prompt, user_prompt = build_codegen_prompt(
+            spec_content=spec_content,
+            spec_name=Path(session.spec_path).name,
+            architecture_content=artifacts.get("architecture", ""),
+            prd_content=artifacts.get("prd", ""),
+            super_analysis_content=artifacts.get("super-analysis", ""),
+            skills=skills,
+            target_language=target_language,
+        )
+
+        engine = CodegenEngine(
+            output_dir=cfg.get("output_dir"),
+            max_retries=int(cfg.get("max_retries", self.max_retries)),
+            llm_client=getattr(session, "llm_client", None),
+            max_tokens=self.max_tokens,
+        )
+        result = engine.generate(
+            session, system_prompt, user_prompt,
+            language_hint=language_hint, build_cmd=build_cmd,
+        )
+
+        # Also record a pointer note as the step output file so downstream
+        # steps (devplan-review etc.) still have content to read.
+        note = (
+            f"# Development (generate-code mode): {session.name}\n\n"
+            f"> Status: {result.status}\n"
+            f"> Generated files: {len(result.files)}\n"
+            f"> Output dir: {result.output_dir}\n"
+            f"> Report: {result.report_path}\n"
+            f"> Rounds: {result.rounds} (max retries {result.max_retries})\n\n"
+            + build_codegen_report(result, session)
+        )
+        out_path = session.session_dir / self.output_filename
+        out_path.write_text(note, encoding="utf-8")
+        print(f"  ✅ [Claude] generate-code: {len(result.files)} files, "
+              f"status={result.status}, report={result.report_path}")
+        log.info(
+            "Codegen complete: status=%s files=%d rounds=%d",
+            result.status, len(result.files), result.rounds,
+        )
+        return result.report_path
 
     def _icon(self):
         return "💻"
