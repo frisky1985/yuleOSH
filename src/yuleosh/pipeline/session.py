@@ -67,6 +67,8 @@ class PipelineSession:
         spec_path: str,
         llm_client: Optional[Callable] = None,
         agent_constraints: Optional[str] = None,
+        development_mode: Optional[str] = None,
+        config: Optional[dict] = None,
     ):
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
@@ -86,6 +88,11 @@ class PipelineSession:
         # Token usage tracking across all steps
         self.token_usage_total: int = 0
         self.token_usage_steps: list[dict] = []
+        # D3 codegen: "planning" (default) or "generate-code".
+        # Accepts None (default planning), "generate-code", or "planning".
+        self.development_mode: Optional[str] = development_mode
+        # Arbitrary session config (e.g. {"codegen": {...}}).
+        self.config: dict = config or {}
 
     def _ensure_session_dir(self) -> Path:
         """Ensure the session directory exists and return its path."""

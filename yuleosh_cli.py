@@ -2114,6 +2114,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_swe6_check = s6sub.add_parser("check", help="Run SWE.6 qualification test check")
     p_swe6_check.add_argument("--report", action="store_true", help="Generate full SWE.6 report")
 
+    # skills (v3.4.0)
+    p_skills = sub.add_parser("skills", help="Skills 技能库管理 (v3.4.0)")
+    sksub = p_skills.add_subparsers(dest="skills_sub")
+    p_skills_list = sksub.add_parser("list", help="List all registered skills")
+    p_skills_list.add_argument("--json", action="store_true", help="Output as JSON")
+    p_skills_show = sksub.add_parser("show", help="Show full skill content")
+    p_skills_show.add_argument("name", help="Skill name (e.g. autosar-coding)")
+
     # misra
     p_misra = sub.add_parser("misra", help="MISRA C:2023 compliance management")
     msub = p_misra.add_subparsers(dest="misra_sub")
@@ -2490,6 +2498,10 @@ def main():
         else:
             parser.print_help()
             sys.exit(1)
+
+    elif args.command == "skills":
+        from yuleosh.skills.cli import handle_skills_command
+        sys.exit(handle_skills_command(args))
 
     elif args.command == "misra":
         if args.misra_sub == "trend":
