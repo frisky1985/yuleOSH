@@ -143,12 +143,91 @@ def step_claude_arch(session: PipelineSession) -> str:
 
 @timed_step
 def step_claude_dev(session: PipelineSession) -> str:
-    """Step 5: Claude — AI-powered development planning.
+    """Step 5: Claude — AI-powered development.
 
-    Reads spec content + architecture analysis from artifacts,
-    sends to LLM, and generates a real development plan with
-    task breakdown and tech debt identification.
+    Default mode: reads spec content + architecture analysis from artifacts,
+    sends to LLM, and generates a real development plan with task breakdown
+    and tech debt identification.
+
+    When ``session.development_mode == "generate-code"`` (D3), directly
+    generates code files from spec/architecture/PRD, runs compile
+    verification, and auto-fixes up to 3 rounds.  Files land under
+    ``artifacts/generated-code/<session>/``.
     """
+    if getattr(session, "development_mode", None) == "generate-code":
+        return _step_claude_dev_codegen(session)
+    return _step_claude_dev_planning(session)
+
+
+def _step_claude_dev_codegen(session: PipelineSession) -> str:
+    """D3 codegen branch: spec/arch/PRD → code → verify → auto-fix."""
+    from yuleosh.codegen.engine import CodegenEngine, build_codegen_report
+    from yuleosh.codegen.prompts import build_codegen_prompt
+
+    print("  💻 [Claude] Running generate-code mode (D3)...")
+    log.info("Running generate-code mode (D3)")
+    try:
+        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
+        architecture_content = artifacts_read(session.artifacts, "architecture") or ""
+        prd_content = artifacts_read(session.artifacts, "prd") or ""
+        super_content = artifacts_read(session.artifacts, "super-analysis") or ""
+
+        cfg = session.config.get("codegen", {}) if getattr(session, "config", None) else {}
+        skills = cfg.get("skills") or ["autosar-coding"]
+        target_language = cfg.get("target_language")
+        build_cmd = cfg.get("build_cmd")
+        language_hint = cfg.get("language")
+
+        system_prompt, user_prompt = build_codegen_prompt(
+            spec_content=spec_content,
+            spec_name=Path(session.spec_path).name,
+            architecture_content=architecture_content,
+            prd_content=prd_content,
+            super_analysis_content=super_content,
+            skills=skills,
+            target_language=target_language,
+        )
+
+        engine = CodegenEngine(
+            output_dir=cfg.get("output_dir"),
+            max_retries=int(cfg.get("max_retries", 3)),
+            llm_client=getattr(session, "llm_client", None),
+            max_tokens=4096,
+        )
+        result = engine.generate(
+            session, system_prompt, user_prompt,
+            language_hint=language_hint, build_cmd=build_cmd,
+        )
+
+        note = (
+            f"# Development (generate-code mode): {session.name}\n\n"
+            f"> Status: {result.status}\n"
+            f"> Generated files: {len(result.files)}\n"
+            f"> Output dir: {result.output_dir}\n"
+            f"> Report: {result.report_path}\n"
+            f"> Rounds: {result.rounds} (max retries {result.max_retries})\n\n"
+            + build_codegen_report(result, session)
+        )
+        out_path = session.session_dir / "development-plan.md"
+        out_path.write_text(note, encoding="utf-8")
+        print(f"  ✅ [Claude] generate-code: {len(result.files)} files, "
+              f"status={result.status}, report={result.report_path}")
+        log.info(
+            "Codegen complete: status=%s files=%d rounds=%d",
+            result.status, len(result.files), result.rounds,
+        )
+        return result.report_path
+    except PipelineStepError:
+        raise
+    except Exception as e:
+        log.error(f"Codegen step failed: {e}")
+        raise PipelineStepError(f"Codegen step failed: {e}")
+
+
+def _step_claude_dev_planning(session: PipelineSession) -> str:
+    """Legacy planning behavior (unchanged)."""
     try:
         print("  💻 [Claude] Running AI-powered development planning...")
         log.info("Running AI-powered development planning")
