@@ -27,24 +27,24 @@ class TestUiServer:
         assert callable(main)
 
     def test_security_headers(self):
-        from yuleosh.ui.server import _send_security_headers
+        from yuleosh.ui.routes.helpers import _send_security_headers
         handler = MagicMock()
         _send_security_headers(handler)
         assert handler.send_header.call_count >= 5
 
     def test_compute_etag(self):
-        from yuleosh.ui.server import _compute_etag
+        from yuleosh.ui.routes.helpers import _compute_etag
         etag = _compute_etag(b"hello world")
         assert isinstance(etag, str)
         assert len(etag) > 0
 
     def test_format_http_datetime(self):
-        from yuleosh.ui.server import _format_http_datetime
+        from yuleosh.ui.routes.helpers import _format_http_datetime
         result = _format_http_datetime(1000000.0)
         assert "GMT" in result
 
     def test_parse_http_datetime(self):
-        from yuleosh.ui.server import _parse_http_datetime
+        from yuleosh.ui.routes.helpers import _parse_http_datetime
         # Invalid date should return 0
         result = _parse_http_datetime("invalid")
         assert result == 0.0
