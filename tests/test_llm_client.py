@@ -32,17 +32,17 @@ class TestResolveConfig:
     """Tests for resolve_config() — LLM config resolution."""
 
     def test_returns_default_config(self):
-        config = resolve_config()
+        config = resolve_config("hi", None, None, None)
         assert isinstance(config, LLMConfig)
         assert config.provider == "deepseek"
 
     def test_task_specific_routing(self):
-        for task_type, expected_model in TASK_ROUTES.items():
-            config = resolve_config(task_type=task_type)
+        for task_type in TASK_ROUTES:
+            config = resolve_config("hi", None, task_type, None)
             assert config is not None
 
     def test_custom_model_override(self):
-        config = resolve_config(model="custom-model")
+        config = resolve_config("hi", None, None, LLMConfig(model="custom-model", provider="deepseek"))
         assert config.model == "custom-model"
 
 
@@ -51,17 +51,37 @@ class TestResolveConfig:
 # ---------------------------------------------------------------------------
 
 class TestChatCompletion:
-    """Tests for chat_completion() — backward-compatible wrapper."""
+    """Tests for chat_completion() — backward-compatible wrapper (v3.4.0)."""
 
     def test_requires_prompt(self):
+        """chat_completion requires positional system/user prompts."""
         with pytest.raises(TypeError):
             chat_completion()
 
-    def test_returns_string(self):
-        """chat_completion should return a string."""
-        result = chat_completion(prompt="Hello", system_prompt="Be helpful")
-        assert isinstance(result, str)
-        assert len(result) > 0
+    def test_no_key_raises(self):
+        """Without an API key, chat_completion raises RuntimeError."""
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(RuntimeError):
+                chat_completion("Be helpful", "Hello")
+
+    def test_returns_dict_with_mocked_http(self):
+        """chat_completion returns a dict with content/model/usage."""
+        import json as _json
+        fake_resp = mock.MagicMock()
+        fake_resp.read.return_value = _json.dumps({
+            "choices": [{"message": {"content": "Hello!"}, "finish_reason": "stop"}],
+            "model": "deepseek-chat",
+            "usage": {"total_tokens": 3},
+        }).encode()
+        fake_ctx = mock.MagicMock()
+        fake_ctx.__enter__.return_value = fake_resp
+        fake_ctx.__exit__.return_value = False
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "sk-test"}, clear=False):
+            with mock.patch("urllib.request.urlopen", return_value=fake_ctx):
+                result = chat_completion("Be helpful", "Hello", retries=1)
+        assert isinstance(result, dict)
+        assert result["content"] == "Hello!"
+        assert result["model"] == "deepseek-chat"
 
 
 # ---------------------------------------------------------------------------
