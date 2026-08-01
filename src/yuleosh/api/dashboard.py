@@ -273,8 +273,11 @@ def _mock_note() -> str:
 
 @require_auth
 def handle_dashboard(method: str, path_tail: str, body: dict,
-                     query: dict, handler: Any) -> Optional[tuple[dict, int]]:
+                     query: dict, handler: Any = None, **kwargs) -> Optional[tuple[dict, int]]:
     """Handle /api/v1/dashboard/... requests.
+
+    Note: `**kwargs` absorbs the `current_user` injected by require_auth so
+    the decorated signature stays compatible (P0-A token contract fix).
 
     Supported routes:
         GET  /api/v1/dashboard/projects             — 项目列表
