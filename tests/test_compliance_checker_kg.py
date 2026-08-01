@@ -131,68 +131,45 @@ def test_kg_check_with_store(mock_get_store, tmp_path, aspice_yaml_path):
     """Mock KG store available -> KG check path should succeed."""
     from yuleosh.compliance.compliance_checker import ComplianceChecker
 
-    # Build a mock store that returns proper data for real queries
     fake_store = mock.MagicMock()
-
-    # get_graph_stats
-    fake_store.get_stats = mock.MagicMock(return_value={
-        "total_nodes": 42,
-        "total_edges": 10,
-        "nodes_by_type": {"requirement": 10, "code_file": 15, "test_file": 8, "test_function": 20},
-        "edges_by_type": {"implements": 5, "covers": 8, "validates": 3, "verifies": 1},
-    })
-
-    # list_edges for get_aspice_coverage and get_confirmation_trace
-    # list_edges — use side_effect to return different data per edge_type
-    covers_edges = [_MockEdge(layer="unit"), _MockEdge(layer="unit"), _MockEdge(layer="unit")]
-    validates_edges = [_MockEdge(layer="integration", edge_type="validates"),
-                       _MockEdge(layer="system", edge_type="validates")]
-    all_edges = covers_edges + validates_edges + [_MockEdge(layer="integration")]
-
-    def _list_edges(edge_type=None):
-        if edge_type == "covers":
-            return covers_edges
-        if edge_type == "validates":
-            return validates_edges
-        return all_edges
-
-    fake_store.list_edges = mock.MagicMock(side_effect=_list_edges)
-    fake_store.get_node_by_id = mock.MagicMock(return_value=_MockNode())
-
-    fake_store.list_snapshots = mock.MagicMock(return_value=[_MockSnapshot(b) for b in ["build-a", "build-b", "build-c"]])
-    fake_store.get_node_by_id = mock.MagicMock(return_value=None)
-    fake_store.get_node = mock.MagicMock(return_value=None)
-
     mock_get_store.return_value = fake_store
 
-    checker = ComplianceChecker(str(tmp_path), template_path=aspice_yaml_path)
-    store = checker._get_kg_store()
-    assert store is not None
-    mock_get_store.assert_called_once()
+    # v3.4.0: queries run SQL against store.conn — patch the query
+    # functions at the checker boundary instead (unit under test is the
+    # checker's KG mapping logic).
+    qpatch = mock.patch.multiple(
+        "yuleosh.knowledge_graph.queries",
+        get_graph_stats=mock.MagicMock(return_value={
+            "total_nodes": 42, "total_edges": 10,
+            "edges_by_type": {"implements": 5, "covers": 8,
+                               "validates": 3, "verifies": 1},
+        }),
+        get_aspice_coverage=mock.MagicMock(return_value={
+            "unit": {"total_covers": 3, "files": []},
+            "integration": {"total_covers": 0, "files": []},
+        }),
+        get_confirmation_trace=mock.MagicMock(return_value=[{"id": 1}, {"id": 2}]),
+        list_snapshots=mock.MagicMock(return_value=[_MockSnapshot("build-1")]),
+    )
 
-    # _check_with_kg — trace check (uses _get_kg_stats -> get_graph_stats -> implements_edges)
-    result = checker._check_with_kg("bidirectional trace", store)
-    assert result is True, "Should find implements_edges > 0"
+    with qpatch:
+        checker = ComplianceChecker(str(tmp_path), template_path=aspice_yaml_path)
+        store = checker._get_kg_store()
+        assert store is not None
+        mock_get_store.assert_called_once()
 
-    # _check_with_kg — trace check (same KG stats path, uses implements_edges)
-    result = checker._check_with_kg("traceability check", store)
-    assert result is True, "Should find implements_edges > 0"
+        # trace check (uses _get_kg_stats -> get_graph_stats -> implements_edges)
+        assert checker._check_with_kg("bidirectional trace", store) is True
+        assert checker._check_with_kg("traceability check", store) is True
 
-    # Check with some unit covers in coverage data
-    # We need list_edges to return edges with layer="unit" for covers
-    fake_store.list_edges.return_value = [_MockEdge(layer="unit"), _MockEdge(layer="unit"), _MockEdge(layer="unit")]
-    result = checker._check_with_kg("unit test verification", store)
-    assert result is True, "Should find unit covers > 0"
+        # unit test verification via get_aspice_coverage
+        assert checker._check_with_kg("unit test verification", store) is True
 
-    # Confirmation/validation check: needs validates edges
-    fake_store.list_edges.return_value = [_MockEdge(layer="integration", edge_type="validates"),
-                                          _MockEdge(layer="system", edge_type="validates")]
-    result = checker._check_with_kg("confirmation trace", store)
-    assert result is True, "Should find validates edges"
+        # confirmation/validation check via get_confirmation_trace
+        assert checker._check_with_kg("confirmation trace", store) is True
 
-    # Snapshot check
-    result = checker._check_with_kg("CI result check", store)
-    assert result is True, "Should find snapshots > 0"
+        # snapshot check
+        assert checker._check_with_kg("CI result check", store) is True
 
 
 # ===================================================================
@@ -337,46 +314,34 @@ def test_kg_stats_in_report(mock_get_store, sample_project, aspice_yaml_path):
     from yuleosh.compliance.compliance_checker import ComplianceChecker
 
     fake_store = mock.MagicMock()
-    fake_store.get_stats = mock.MagicMock(return_value={
-        "total_nodes": 42,
-        "total_edges": 16,
-        "nodes_by_type": {"requirement": 10, "test_file": 8, "code_file": 15, "test_function": 20},
-        "edges_by_type": {"implements": 5, "covers": 8, "validates": 3, "verifies": 1},
-    })
-    # For get_aspice_coverage: covers edges with layers
-    # Use side_effect to return proper data per edge_type
-    covers_edges = [
-        _MockEdge(layer="unit"), _MockEdge(layer="unit"),
-        _MockEdge(layer="unit"), _MockEdge(layer="unit"),
-        _MockEdge(layer="integration"), _MockEdge(layer="integration"),
-    ]
-    validates_edges = [
-        _MockEdge(layer="integration", edge_type="validates"),
-        _MockEdge(layer="system", edge_type="validates"),
-    ]
-    def _list_edges(edge_type=None):
-        if edge_type == "covers":
-            return covers_edges
-        if edge_type == "validates":
-            return validates_edges
-        return covers_edges + validates_edges
-
-    fake_store.list_edges = mock.MagicMock(side_effect=_list_edges)
-
-    # Mock the get_node_by_id for get_confirmation_trace to return proper nodes
-    _nodes = {
-        1: _MockNode(entity_id="test_file_a.py", entity_type="test_file"),
-        2: _MockNode(entity_id="RS-001", entity_type="requirement"),
-        3: _MockNode(entity_id="test_file_b.py", entity_type="test_file"),
-    }
-    fake_store.get_node_by_id = mock.MagicMock(side_effect=lambda nid: _nodes.get(nid))
-    fake_store.list_snapshots = mock.MagicMock(return_value=[
-        _MockSnapshot(f"build-{i}") for i in range(6)
-    ])
     mock_get_store.return_value = fake_store
 
-    checker = ComplianceChecker(str(sample_project), template_path=aspice_yaml_path)
-    report = checker.run()
+    qpatch = mock.patch.multiple(
+        "yuleosh.knowledge_graph.queries",
+        get_graph_stats=mock.MagicMock(return_value={
+            "total_nodes": 42, "total_edges": 16,
+            "nodes_by_type": {"requirement": 10, "test_file": 8,
+                               "code_file": 15, "test_function": 20},
+            "edges_by_type": {"implements": 5, "covers": 8,
+                               "validates": 3, "verifies": 1},
+        }),
+        get_aspice_coverage=mock.MagicMock(return_value={
+            "unit": {"total_covers": 4, "files": []},
+            "integration": {"total_covers": 2, "files": []},
+            "sil": {"total_covers": 0, "files": []},
+            "hil": {"total_covers": 0, "files": []},
+            "system": {"total_covers": 0, "files": []},
+        }),
+        get_confirmation_trace=mock.MagicMock(return_value=[
+            {"requirement_id": "RS-001", "test_file": "t.py", "method": "x"},
+            {"requirement_id": "RS-002", "test_file": "t2.py", "method": "y"},
+        ]),
+        list_snapshots=mock.MagicMock(return_value=[_MockSnapshot(f"build-{i}") for i in range(6)]),
+    )
+
+    with qpatch:
+        checker = ComplianceChecker(str(sample_project), template_path=aspice_yaml_path)
+        report = checker.run()
 
     # Check kg_data in report dict
     assert "kg_data" in report
@@ -589,39 +554,59 @@ def test_kg_new_mappings_with_data(mock_get_store, mock_impact, tmp_path, aspice
 
     mock_get_store.return_value = fake_store
 
-    checker = ComplianceChecker(str(tmp_path), template_path=aspice_yaml_path)
-    store = checker._get_kg_store()
+    qpatch = mock.patch.multiple(
+        "yuleosh.knowledge_graph.queries",
+        get_graph_stats=mock.MagicMock(return_value={
+            "total_nodes": 50, "total_edges": 20,
+            "nodes_by_type": {"requirement": 15, "code_file": 10,
+                               "test_file": 8, "test_function": 25},
+            "edges_by_type": {"implements": 5, "covers": 12, "validates": 3},
+        }),
+        get_aspice_coverage=mock.MagicMock(return_value={
+            "unit": {"total_covers": 4, "files": []},
+            "integration": {"total_covers": 2, "files": []},
+            "sil": {"total_covers": 1, "files": []},
+            "hil": {"total_covers": 0, "files": []},
+            "system": {"total_covers": 0, "files": []},
+        }),
+        get_confirmation_trace=mock.MagicMock(return_value=[{"id": 1}, {"id": 2}]),
+        list_snapshots=mock.MagicMock(return_value=[s.to_dict() for s in snapshots]),
+    )
 
-    # 1. coverage check
-    result = checker._check_with_kg("Statement coverage ≥ 80%", store)
-    assert result is True, "coverage: should find total covers > 0"
+    with qpatch:
+        checker = ComplianceChecker(str(tmp_path), template_path=aspice_yaml_path)
+        store = checker._get_kg_store()
 
-    # 2. architecture check
-    result = checker._check_with_kg("Architecture defines component boundaries", store)
-    assert result is True, "architecture: code_file count > 5"
+        # 1. coverage check
+        result = checker._check_with_kg("Statement coverage ≥ 80%", store)
+        assert result is True, "coverage: should find total covers > 0"
 
-    # 3. review check
-    result = checker._check_with_kg("Architecture review is conducted and documented", store)
-    assert result is True, "review: should find review evidence in snapshot meta"
+        # 2. architecture check
+        result = checker._check_with_kg("Architecture defines component boundaries", store)
+        assert result is True, "architecture: code_file count > 5"
 
-    # 4. standard / coding standard check
-    result = checker._check_with_kg("Source code follows defined coding standards", store)
-    assert result is True, "standard: should find misra config in snapshot meta"
+        # 3. review check
+        result = checker._check_with_kg("Architecture review is conducted and documented", store)
+        assert result is True, "review: should find review evidence in snapshot meta"
 
-    # 5. interface check
-    result = checker._check_with_kg("All external interfaces are defined", store)
-    assert result is True, "interface: should find .h header files in KG"
+        # 4. standard / coding standard check
+        result = checker._check_with_kg("Source code follows defined coding standards", store)
+        assert result is True, "standard: should find misra config in snapshot meta"
 
-    # 6. qualification check
-    result = checker._check_with_kg("Qualification test scope covers all requirements", store)
-    assert result is True, "qualification: should find integration/sil covers"
+        # 5. interface check
+        result = checker._check_with_kg("All external interfaces are defined", store)
+        assert result is True, "interface: should find .h header files in KG"
 
-    # 7. acceptance check (same logic as qualification)
-    result = checker._check_with_kg("Acceptance criteria are defined", store)
-    assert result is True, "acceptance: should find integration/sil covers"
+        # 6. qualification check
+        result = checker._check_with_kg("Qualification test scope covers all requirements", store)
+        assert result is True, "qualification: should find integration/sil covers"
 
-    # 8. regression check
-    result = checker._check_with_kg("Regression test strategy is defined", store)
+        # 7. acceptance check (same logic as qualification)
+        result = checker._check_with_kg("Acceptance criteria are defined", store)
+        assert result is True, "acceptance: should find integration/sil covers"
+
+        # 8. regression check
+        result = checker._check_with_kg("Regression test strategy is defined", store)
     assert result is True, "regression: snapshot count > 3"
 
     # 9. impact check
@@ -742,31 +727,42 @@ def test_kg_new_mappings_graceful_degradation(mock_get_store, tmp_path, aspice_y
     broken_store.list_nodes.side_effect = RuntimeError("list_nodes broken")
     mock_get_store.return_value = broken_store
 
-    checker = ComplianceChecker(str(tmp_path), template_path=aspice_yaml_path)
-    store = checker._get_kg_store()
-    assert store is not None
+    # v3.4.0: query functions run SQL against store.conn — make them raise
+    # so the checker's exception handlers take the None-fallback path.
+    qpatch = mock.patch.multiple(
+        "yuleosh.knowledge_graph.queries",
+        get_graph_stats=mock.MagicMock(side_effect=RuntimeError("stats broken")),
+        get_aspice_coverage=mock.MagicMock(side_effect=RuntimeError("cov broken")),
+        get_confirmation_trace=mock.MagicMock(side_effect=RuntimeError("confirm broken")),
+        list_snapshots=mock.MagicMock(side_effect=RuntimeError("snap broken")),
+    )
 
-    # Most new check paths should return None on exception.
-    # Exception: architecture uses _get_kg_stats() which swallows errors
-    # internally and returns empty dict → code_file=0 → False.
-    # (Review comes before architecture in the if-chain, so "Architecture
-    #  review is conducted" goes through the review path, not architecture.)
-    expect_none = [
-        "Statement coverage ≥ 80%",
-        "Architecture review is conducted",
-        "Source code follows coding standards",
-        "All external interfaces are defined",
-        "Qualification test scope covers all requirements",
-        "Regression test strategy is defined",
-        "Changes to requirements trigger impact analysis",
-    ]
-    for check_item in expect_none:
-        result = checker._check_with_kg(check_item, store)
-        assert result is None, f"'{check_item}' should fallback on exception (got {result})"
+    with qpatch:
+        checker = ComplianceChecker(str(tmp_path), template_path=aspice_yaml_path)
+        store = checker._get_kg_store()
+        assert store is not None
 
-    # Architecture check: _get_kg_stats() handles errors → returns False not None
-    result = checker._check_with_kg("Architecture defines component boundaries", store)
-    assert result is False, "architecture: _get_kg_stats swallows error → no code files"
+        # Most new check paths should return None on exception.
+        # Exception: architecture uses _get_kg_stats() which swallows errors
+        # internally and returns empty dict → code_file=0 → False.
+        # (Review comes before architecture in the if-chain, so "Architecture
+        #  review is conducted" goes through the review path, not architecture.)
+        expect_none = [
+            "Statement coverage ≥ 80%",
+            "Architecture review is conducted",
+            "Source code follows coding standards",
+            "All external interfaces are defined",
+            "Qualification test scope covers all requirements",
+            "Regression test strategy is defined",
+            "Changes to requirements trigger impact analysis",
+        ]
+        for check_item in expect_none:
+            result = checker._check_with_kg(check_item, store)
+            assert result is None, f"'{check_item}' should fallback on exception (got {result})"
+
+        # Architecture check: _get_kg_stats() handles errors → returns False not None
+        result = checker._check_with_kg("Architecture defines component boundaries", store)
+        assert result is False, "architecture: _get_kg_stats swallows error → no code files"
 
     # Existing checks: _get_kg_stats returns empty dict, trace sees graph={}
     # and returns None (fallback), not False

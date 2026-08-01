@@ -54,15 +54,18 @@ def _build_rule_lookup():
             if m:
                 short = m.group(1).lower()
                 _CANONICAL_RULE_LOOKUP[short] = key
-                # Also store just the numeric part for "X.Y" matches
+                # Also store just the numeric part for "X.Y" matches.
+                # NOTE: plain "X.Y" is ambiguous between a rule and a
+                # directive (e.g. 1.1 vs dir-1.1). Rules win the plain key;
+                # directives keep the "dir X.Y"/"dir-X.Y" forms.
                 num_m = re.match(r'^(\d+\.\d+)$', short)
                 if num_m:
-                    _CANONICAL_RULE_LOOKUP[num_m.group(1)] = key
+                    _CANONICAL_RULE_LOOKUP.setdefault(num_m.group(1), key)
                 # Handle directive forms
                 dir_m = re.match(r'^dir[- ]?(\d+\.\d+)$', short, re.IGNORECASE)
                 if dir_m:
-                    _CANONICAL_RULE_LOOKUP[dir_m.group(1)] = key
                     _CANONICAL_RULE_LOOKUP[f"dir {dir_m.group(1)}".lower()] = key
+                    _CANONICAL_RULE_LOOKUP[f"dir-{dir_m.group(1)}".lower()] = key
 
         # Phase 2: Load backward_compat mapping from meta section
         # Maps C:2012 rule IDs like "Rule 1.1" → C:2023 key "misra-c2023-1.1"
