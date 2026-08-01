@@ -697,8 +697,8 @@ class TestBuildBspReviewPrompt:
 class TestStepReviewBsp:
     """Tests for step_review_bsp — the main pipeline step handler."""
 
-    @patch("yuleosh.pipeline.step_handlers.review_bsp._call_llm")
-    @patch("yuleosh.pipeline.step_handlers.review_bsp.os.environ")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core._call_llm")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core.os.environ")
     def test_empty_project(self, mock_environ, mock_llm, mock_session, tmp_path):
         """GIVEN an empty project directory
            WHEN step_review_bsp runs
@@ -713,8 +713,8 @@ class TestStepReviewBsp:
         assert report["bsp_file_counts"]["board_headers"] == 0
         assert any("No BSP files" in fi.get("message", "") for fi in report["static_findings"])
 
-    @patch("yuleosh.pipeline.step_handlers.review_bsp._call_llm")
-    @patch("yuleosh.pipeline.step_handlers.review_bsp.os.environ")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core._call_llm")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core.os.environ")
     def test_with_bsp_files(self, mock_environ, mock_llm, mock_session, tmp_path):
         """GIVEN BSP board header files exist
            WHEN step_review_bsp runs
@@ -732,8 +732,8 @@ class TestStepReviewBsp:
         assert "NO GPIO" in report["llm_review"] or report["llm_review"]
         assert report["finding_count"] > 0
 
-    @patch("yuleosh.pipeline.step_handlers.review_bsp._call_llm")
-    @patch("yuleosh.pipeline.step_handlers.review_bsp.os.environ")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core._call_llm")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core.os.environ")
     def test_critical_finding_triggers_failed(self, mock_environ, mock_llm, mock_session, tmp_path):
         """GIVEN BSP code with alloca (critical finding)
            WHEN step_review_bsp runs
@@ -750,8 +750,8 @@ class TestStepReviewBsp:
         assert report["status"] == "failed"
         assert report["finding_breakdown"]["critical"] > 0
 
-    @patch("yuleosh.pipeline.step_handlers.review_bsp._call_llm")
-    @patch("yuleosh.pipeline.step_handlers.review_bsp.os.environ")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core._call_llm")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core.os.environ")
     def test_llm_failure_non_fatal(self, mock_environ, mock_llm, mock_session, tmp_path):
         """GIVEN LLM call raises an exception
            WHEN step_review_bsp runs
@@ -768,8 +768,8 @@ class TestStepReviewBsp:
         # Should have "(LLM-powered review unavailable)" as fallback
         assert "unavailable" in report["llm_review"] or "(LLM-powered" in report["llm_review"]
 
-    @patch("yuleosh.pipeline.step_handlers.review_bsp._call_llm")
-    @patch("yuleosh.pipeline.step_handlers.review_bsp.os.environ")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core._call_llm")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core.os.environ")
     def test_pipeline_step_error_propagates(self, mock_environ, mock_llm, mock_session, tmp_path):
         """GIVEN the output file cannot be written
            WHEN step_review_bsp runs
@@ -784,8 +784,8 @@ class TestStepReviewBsp:
         with pytest.raises(PipelineStepError, match="Cannot write BSP review"):
             step_review_bsp(mock_session)
 
-    @patch("yuleosh.pipeline.step_handlers.review_bsp._call_llm")
-    @patch("yuleosh.pipeline.step_handlers.review_bsp.os.environ")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core._call_llm")
+    @patch("yuleosh.pipeline.step_handlers.review_bsp.core.os.environ")
     def test_with_many_findings(self, mock_environ, mock_llm, mock_session, tmp_path):
         """GIVEN many BSP findings across multiple categories
            WHEN step_review_bsp runs
