@@ -424,7 +424,7 @@ class TestCiConfigPerf:
             f"Default CI config load took {elapsed:.3f}s, "
             f"expected <{THRESHOLD_CI_DEFAULT}s"
         )
-        assert cfg.coverage.threshold_line == 85.0
+        assert cfg.coverage.threshold_line == 50.0  # v3.4.0 default
 
     @pytest.mark.perf
     def test_ci_config_load_from_yaml(self):

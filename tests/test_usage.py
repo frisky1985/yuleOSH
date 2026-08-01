@@ -248,7 +248,8 @@ class TestCreateCheckoutSession:
         # Mock stripe as importable but not called because we fail early
         with mock.patch.dict("sys.modules", {"stripe": mock.MagicMock()}):
             from yuleosh.usage.stripe_gateway import create_checkout_session
-            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True):
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True), \
+             mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_test"):
                 result = create_checkout_session(1, "pro", "user@test.com", "test-org")
             assert "error" in result
             assert "price ID" in result["error"]
@@ -267,7 +268,8 @@ class TestCreateCheckoutSession:
             metering.TIERS["pro"]["stripe_price_id"] = "price_pro_123"
 
             from yuleosh.usage.stripe_gateway import create_checkout_session
-            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True):
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True), \
+             mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_test"):
                 result = create_checkout_session(1, "pro", "user@test.com", "test-org")
 
             assert "url" in result
@@ -296,7 +298,8 @@ class TestHandleStripeWebhook:
 
         with mock.patch.dict("sys.modules", {"stripe": mock_stripe}):
             from yuleosh.usage.stripe_gateway import handle_stripe_webhook
-            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True):
+            with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True), \
+             mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_test"):
                 result = handle_stripe_webhook(b"{}", "bad_sig")
 
         assert result["status"] == "error"
@@ -322,6 +325,7 @@ class TestHandleStripeWebhook:
             from yuleosh.store import Store  # noqa: used by import inside handler
 
             with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True), \
+                 mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_test"), \
                  mock.patch("yuleosh.store.Store") as MockStore:
                 mock_store_instance = mock.MagicMock()
                 MockStore.return_value = mock_store_instance
@@ -350,6 +354,7 @@ class TestHandleStripeWebhook:
             from yuleosh.usage.stripe_gateway import handle_stripe_webhook
 
             with mock.patch("yuleosh.usage.stripe_gateway.is_stripe_configured", return_value=True), \
+                 mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_test"), \
                  mock.patch("yuleosh.store.Store") as MockStore:
                 MockStore.return_value = mock_store_instance
                 result = handle_stripe_webhook(b"{}", "valid_sig")
