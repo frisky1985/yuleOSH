@@ -17,10 +17,29 @@ Covers the newly extracted sub-modules:
 import json
 import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
 
 import pytest
+
+
+# ── Inject mock cross.* modules (same strategy as test_ci_run_deep.py) ──
+# ci/stages/test.py imports ``from cross.sil_runner import ...`` at call time;
+# without a real ``cross`` top-level package those imports raise ImportError.
+_mock_cross = types.ModuleType("cross")
+_mock_cross.__path__ = []
+_mock_cross.__package__ = "cross"
+sys.modules["cross"] = _mock_cross
+
+for _sub in ("sil_runner", "target_config", "flash", "hil_runner"):
+    _m = types.ModuleType(f"cross.{_sub}")
+    setattr(_m, "sil_test", None)
+    setattr(_m, "SilResult", None)
+    setattr(_m, "TargetConfig", lambda **kw: None)
+    setattr(_m, "hil_test", None)
+    setattr(_m, "flash_firmware", None)
+    sys.modules[f"cross.{_sub}"] = _m
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -162,7 +181,7 @@ class TestStagesTest:
             mock_result.log = "Hello from yuleOSH cross-compilation test!"
             mock_sil.return_value = mock_result
 
-            with patch("yuleosh.cross.target_config.TargetConfig") as mock_tc:
+            with patch("cross.target_config.TargetConfig") as mock_tc:
                 mock_tc.return_value = MagicMock()
                 result = run_sil_tests(str(tmp_path), ci)
                 assert result is True
@@ -278,7 +297,7 @@ class TestMisraParsing:
         assert len(violations) >= 1
         v = violations[0]
         assert v["file"] == "src/main.c"
-        assert v["rule_id"] == "10.1"
+        assert v["rule_id"] == "misra-c2023-10.1"
 
     def test_parse_cppcheck_output_no_violations(self):
         """GIVEN empty cppcheck output WHEN parsed THEN returns empty list."""

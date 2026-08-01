@@ -112,7 +112,7 @@ class TestHilTestRunnerInit:
         """WHEN string target name THEN resolved via flash.load_target_config_safe."""
         with mock.patch.object(FlashRunner, "__init__", return_value=None):
             with mock.patch(
-                "cross.flash.load_target_config_safe",
+                "yuleosh.cross.flash.load_target_config_safe",
                 return_value=arm_target_config,
             ) as mock_load:
                 runner = HilTestRunner(target="stm32f4")
@@ -151,7 +151,7 @@ class TestHilTestRunnerRun:
         )
 
         # Mock the serial monitor to return "Test PASSED"
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["expect", "captured_log", "__enter__", "__exit__"])
             mock_serial.__enter__.return_value = mock_serial
             mock_serial.captured_log = "Boot OK\nTest PASSED\nDone\n"
@@ -181,7 +181,7 @@ class TestHilTestRunnerRun:
         )
 
         # Mock serial to always timeout
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["__enter__", "__exit__"])
             mock_serial.__enter__.side_effect = SerialMonitorTimeout(
                 "Pattern 'FAIL' not found"
@@ -262,7 +262,7 @@ class TestHilTestRunnerRun:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["expect", "expect_all", "captured_log", "__enter__", "__exit__"])
             mock_serial.__enter__.return_value = mock_serial
             mock_serial.captured_log = "Boot\nReady\nDone\n"
@@ -352,7 +352,7 @@ class TestHilTestScript:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["expect", "expect_all", "captured_log", "__enter__", "__exit__"])
             mock_serial.__enter__.return_value = mock_serial
             mock_serial.captured_log = "Step1\nStep2\nDone\n"
@@ -376,7 +376,7 @@ class TestHilTestScript:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=[
                 "expect", "expect_all", "assert_text_present",
                 "assert_text_absent", "read_until", "captured_log",
@@ -405,7 +405,7 @@ class TestHilTestScript:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=[
                 "expect", "expect_all", "assert_text_present",
                 "assert_text_absent", "read_until", "captured_log",
@@ -434,7 +434,7 @@ class TestHilTestScript:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["expect", "captured_log", "__enter__", "__exit__"])
             mock_serial.__enter__.return_value = mock_serial
             mock_serial.captured_log = "Done\n"
@@ -461,7 +461,7 @@ class TestHilTestScript:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["expect", "read_until", "captured_log", "__enter__", "__exit__"])
             mock_serial.__enter__.return_value = mock_serial
             mock_serial.captured_log = "Header\nBody\nEnd\n"
@@ -486,7 +486,7 @@ class TestHilTestScript:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["expect", "captured_log", "__enter__", "__exit__"])
             mock_serial.__enter__.return_value = mock_serial
             mock_serial.captured_log = "ERROR: code 42\n"
@@ -510,7 +510,7 @@ class TestHilTestScript:
         )
         runner = HilTestRunner(target=cfg, serial_port="/dev/null", flash_delay=0)
 
-        with mock.patch("cross.hil_runner.SerialMonitor") as mock_serial_cls:
+        with mock.patch("yuleosh.cross.hil_runner.SerialMonitor") as mock_serial_cls:
             mock_serial = mock.MagicMock(spec=["expect", "captured_log", "__enter__", "__exit__"])
             mock_serial.__enter__.return_value = mock_serial
             mock_serial.captured_log = "OK\n"
@@ -542,7 +542,7 @@ class TestHilTestConvenience:
             qemu_serial="-serial stdio",
         )
 
-        with mock.patch("cross.hil_runner.HilTestRunner") as mock_runner_cls:
+        with mock.patch("yuleosh.cross.hil_runner.HilTestRunner") as mock_runner_cls:
             mock_runner = mock.MagicMock(spec=HilTestRunner)
             mock_runner.run.return_value = HilTestResult(passed=True)
             mock_runner_cls.return_value = mock_runner

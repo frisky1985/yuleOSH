@@ -15,7 +15,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 class TestAsyncRunner:
-    """GIVEN async pipeline runner WHEN submitted THEN status tracked."""
+    """GIVEN async pipeline runner WHEN submitted THEN status tracked.
+
+    The real ``_run_ci_job`` executes a full CI layer (up to 180s) in a
+    background thread. Tests only exercise the job registry, so the heavy
+    worker is mocked — prevents suite hangs.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _mock_ci_worker(self):
+        import yuleosh.pipeline.async_runner as ar
+        with mock.patch.object(ar, "_run_ci_job",
+                               side_effect=lambda jid, pd, layer: None):
+            with mock.patch.object(ar, "_run_full_pipeline",
+                                   side_effect=lambda jid, pd, *a, **k: None):
+                yield
 
     def test_submit_returns_job_id(self):
         from yuleosh.pipeline.async_runner import submit_pipeline, get_job_status

@@ -821,6 +821,11 @@ class TestRunLayer1:
             "ci:\n  layers: [1]\n"
             "coverage:\n  threshold_line: 85.0\n"
             "misra:\n  enabled: true\n"
+            "  active_profile: safety\n"
+            "  profiles:\n"
+            "    safety:\n"
+            "      rules: [mandatory, required]\n"
+            "      block_on: [mandatory]\n"
         )
         # Create a minimal misra-rules.yaml so validation doesn't block
         (Path(tmp_proj) / "misra-rules.yaml").write_text("meta:\n  version: 1.0\n")
@@ -840,7 +845,9 @@ class TestRunLayer1:
 
     def test_stage_raises_exception(self, tmp_proj):
         from yuleosh.ci.run import run_layer1
-        with mock.patch("yuleosh.ci.layers.run_plan_lint",
+        # v3.4.0: stage handlers live in ci.stages and are bound into
+        # layer_executor at import — patch the binding used by L1 dispatch.
+        with mock.patch("yuleosh.ci.layers.layer_executor.run_plan_lint",
                         side_effect=ValueError("crash")):
             with mock.patch("subprocess.run") as mrun:
                 mrun.return_value.returncode = 0
@@ -1435,42 +1442,40 @@ class TestEdgeCasesBranch:
     def test_run_layer1_from_env(self, tmp_proj):
         """Cover run_layer1 default from OSH_HOME env."""
         from yuleosh.ci.run import run_layer1
-        # Need coverage.json to pass coverage check
-        Path(tmp_proj, "coverage.json").write_text(json.dumps({
-            "totals": {"percent_covered": 95.0, "percent_covered_condition": 90.0}
-        }))
-        with mock.patch.dict(os.environ, {"OSH_HOME": tmp_proj}):
-            with mock.patch("subprocess.run") as mrun:
-                mrun.return_value.returncode = 0
-                mrun.return_value.stdout = "abc1234"
-                assert run_layer1() is True
+        # Mock the heavy implementation — we only test the wrapper:
+        # env resolution, result writing, notify.  (C2: mock all internal
+        # sub-calls so no real CI work runs in unit tests.)
+        with mock.patch("yuleosh.ci.layers.layer_executor._run_layer1_impl",
+                        return_value=True) as m_impl:
+            with mock.patch.dict(os.environ, {"OSH_HOME": tmp_proj}):
+                with mock.patch("yuleosh.ci.runner.git_commit_hash",
+                                return_value="abc1234"):
+                    assert run_layer1() is True
+                    m_impl.assert_called_once()
 
     def test_run_layer1_notify(self, tmp_proj):
         """Cover notification in run_layer1."""
         from yuleosh.ci.run import run_layer1
-        Path(tmp_proj, "coverage.json").write_text(json.dumps({
-            "totals": {"percent_covered": 95.0, "percent_covered_condition": 90.0}
-        }))
         fake_notify = mock.MagicMock()
-        with mock.patch("yuleosh.ci.run._notify", fake_notify):
-            with mock.patch("subprocess.run") as mrun:
-                mrun.return_value.returncode = 0
-                mrun.return_value.stdout = "abc1234"
-                assert run_layer1(project_dir=tmp_proj) is True
+        with mock.patch("yuleosh.ci.layers.layer_executor._run_layer1_impl",
+                        return_value=True):
+            with mock.patch("yuleosh.ci.runner.git_commit_hash",
+                            return_value="abc1234"):
+                with mock.patch("yuleosh.ci.run._notify", fake_notify):
+                    assert run_layer1(project_dir=tmp_proj) is True
+                    fake_notify.assert_called_once()
 
     def test_run_layer1_notify_error(self, tmp_proj):
         """Cover notification error handler in run_layer1."""
         from yuleosh.ci.run import run_layer1
-        Path(tmp_proj, "coverage.json").write_text(json.dumps({
-            "totals": {"percent_covered": 95.0, "percent_covered_condition": 90.0}
-        }))
         fake_notify = mock.MagicMock(side_effect=RuntimeError("notify fail"))
-        with mock.patch("yuleosh.ci.run._notify", fake_notify):
-            with mock.patch("subprocess.run") as mrun:
-                mrun.return_value.returncode = 0
-                mrun.return_value.stdout = "abc1234"
-                # coverage check passes, overall passes, notify error is logged
-                assert run_layer1(project_dir=tmp_proj) is True
+        with mock.patch("yuleosh.ci.layers.layer_executor._run_layer1_impl",
+                        return_value=True):
+            with mock.patch("yuleosh.ci.runner.git_commit_hash",
+                            return_value="abc1234"):
+                with mock.patch("yuleosh.ci.run._notify", fake_notify):
+                    # coverage check passes, overall passes, notify error is logged
+                    assert run_layer1(project_dir=tmp_proj) is True
 
     def test_clang_tidy_misra_fail_fast(self, tmp_proj):
         """Cover clang-tidy with MISRA_FAIL_FAST env."""
@@ -1635,7 +1640,7 @@ class TestEdgeCasesBranch:
         with mock.patch("subprocess.run") as mrun:
             mrun.return_value.returncode = 0
             mrun.return_value.stdout = "abc1234"
-            with mock.patch("yuleosh.ci.layers.run_sil_tests",
+            with mock.patch("yuleosh.ci.layers.layer_executor.run_sil_tests",
                             side_effect=ValueError("sil crash")):
                 assert run_layer2(project_dir=tmp_proj) is False
 

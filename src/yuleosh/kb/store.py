@@ -3,6 +3,7 @@
 
 """SQLite storage for Knowledge Base — CRUD operations for kb_articles, lessons, fmea_entries."""
 
+import os
 import sqlite3
 import threading
 from datetime import datetime
@@ -20,8 +21,14 @@ class KbStore:
 
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
-            osh_home = Path(__file__).resolve().parent.parent.parent.parent
-            db_path = str(osh_home / ".yuleosh" / "kb.db")
+            # Allow isolation via YULEOSH_KB_DB (used by tests and multi-tenant
+            # deployments); fall back to the repo-local default.
+            env_db = os.environ.get("YULEOSH_KB_DB")
+            if env_db:
+                db_path = env_db
+            else:
+                osh_home = Path(__file__).resolve().parent.parent.parent.parent
+                db_path = str(osh_home / ".yuleosh" / "kb.db")
         self._db_path = db_path
         self._local = threading.local()
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
