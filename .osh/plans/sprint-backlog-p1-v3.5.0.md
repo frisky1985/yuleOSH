@@ -91,3 +91,8 @@
 - **✅ 放行 v3.5.0**（tag 已打并推送）
 - 依据：小克全量 P1 修复（11 项全过）+ P2 4 项 + dependabot 清零；小马独立复验 9.0/10（源码+测试双证据，全量 9611/0 failed，覆盖率 82.83% 反升）；小明抽查 git/_check_auth/session 哈希/async_runner 实锤
 - 遗留 P2（3 项，不阻断）：server.py:147 异常回显、CORS 拒绝态 ACAO:null、signin 邮箱可区分 → v3.6 带出
+
+## 终审结论（小明 🔥 2026-08-02 00:01）
+- **✅ 放行 v3.5.0**（tag 已打）
+- 小马复验 9.0/10：P1 11/11 真实修复（防枚举/哈希存储/fail-closed 实锤）、全量 9611/0 failed、覆盖率 82.83%（+0.86pp）、dependabot 三份审计 0 漏洞
+- 3 项 P2 不阻断（server.py 异常回显残留 / CORS null / signin 枚举权衡），随 v3.6 处理
