@@ -18,10 +18,9 @@ class TestEntry:
 
     def test_main_calls_cli(self):
         from yuleosh._entry import main
-        # yuleosh_cli is imported inside main(), so we patch at the module level
-        with patch("yuleosh_cli.main") as mock_cli_main:
-            try:
+        # v3.4.0: entry delegates via the module-level ``cli_main`` binding
+        with patch("yuleosh._entry.cli_main") as mock_cli_main:
+            with patch("sys.exit") as mock_exit:
                 main()
-            except SystemExit:
-                pass
-            mock_cli_main.assert_called_once()
+                mock_cli_main.assert_called_once()
+                mock_exit.assert_called_once_with(mock_cli_main.return_value)

@@ -192,7 +192,9 @@ class TestTemplateGallery:
             )
             assert has_main, f"{t['name']} src/ missing main entry point"
             has_cmake = list(src_dir.rglob("CMakeLists.txt"))
-            if t["name"] != "generic-python":
+            # yuleasr is an AUTOSAR template — sources build via RTE/MCAL
+            # toolchain, not CMake (see src/mcal + src/ecual layout).
+            if t["name"] not in ("generic-python", "yuleasr"):
                 assert has_cmake, f"{t['name']} src/ missing CMakeLists.txt"
 
     def test_tg_req_006_no_overwrite_without_force(self):
