@@ -149,7 +149,8 @@ class TestClassifyViolations:
         assert classified[0]["rule_id"] == "R1"
 
     def test_mandatory_severity(self):
-        """Mandatory severity should be treated as priority 1, needs deviation."""
+        """Unknown/"mandatory" category falls back to priority 3, no deviation
+        (v3.4.0: only ``required`` severity needs deviation — docstring spec)."""
         report = {"groups": {
             "M1.1": {
                 "severity_category": "Mandatory",
@@ -161,7 +162,7 @@ class TestClassifyViolations:
         classified = _classify_violations(report)
         assert len(classified) == 1
         assert classified[0]["severity"] == "mandatory"
-        assert classified[0]["needs_deviation"] is True
+        assert classified[0]["needs_deviation"] is False
 
     def test_unknown_severity_category(self):
         """Unknown severity category should be treated as priority 3."""

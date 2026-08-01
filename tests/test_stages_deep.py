@@ -101,14 +101,17 @@ class TestModuleStoreInitFailure:
 
         import store as store_mod
         orig_store_cls = store_mod.Store
-        orig_stages_store = stages._store
+        orig_stages_store = None  # moved to stages/spec.py
 
         try:
             with mock.patch.object(store_mod, "Store") as mock_store_cls:
                 mock_store_cls.side_effect = RuntimeError("store init mock fail")
-                # Reload to re-execute the module-level try/except
+                # Reload to re-execute the module-level try/except in stages/spec.py
+                import yuleosh.pipeline.stages.spec as spec_mod
+                importlib.reload(spec_mod)
                 importlib.reload(stages)
-            assert stages._store is None
+            from yuleosh.pipeline.stages import spec as spec_mod2
+            assert spec_mod2._store is None
         finally:
             store_mod.Store = orig_store_cls
             importlib.reload(stages)
@@ -131,7 +134,7 @@ class TestParseSpecCacheExceptions:
 
         caplog.set_level(logging.WARNING)
 
-        with mock.patch.object(stages, "_store") as mock_store:
+        with mock.patch.object(stages.spec, "_store") as mock_store:
             mock_store.get_cached_spec_parse.side_effect = RuntimeError("cache read boom")
             # The mock_store is truthy, so the try block is entered
             result = stages._parse_spec(str(spec_file))
@@ -154,7 +157,7 @@ class TestParseSpecCacheExceptions:
         caplog.set_level(logging.WARNING)
 
         # set return_value=None so the cache is a miss → falls through to fresh-parse
-        with mock.patch.object(stages, "_store") as mock_store:
+        with mock.patch.object(stages.spec, "_store") as mock_store:
             mock_store.get_cached_spec_parse.return_value = None  # cache miss
             mock_store.cache_spec_parse.side_effect = RuntimeError("cache write boom")
             result = stages._parse_spec(str(spec_file))
@@ -188,7 +191,7 @@ class TestParseSpecStoreIsNone:
         spec_file.write_text("### Req-001\n- The system SHALL work.\n")
 
         # Patch _store to None — both 'if _store:' guards become False
-        with mock.patch.object(stages, "_store", None):
+        with mock.patch.object(stages.spec, "_store", None):
             result = stages._parse_spec(str(spec_file))
 
         assert "requirements" in result
@@ -456,6 +459,7 @@ class TestCallLlm:
         mock_fn = mock.MagicMock(return_value={"content": "injected"})
         mock_session = mock.MagicMock()
         mock_session.llm_client = mock_fn
+        mock_session.agent_constraints = None  # MagicMock attr is truthy otherwise
 
         result = _call_llm(mock_session, "sys", "user")
 
@@ -468,6 +472,7 @@ class TestCallLlm:
         mock_fallback = mock.MagicMock(return_value={"content": "global"})
         mock_session = mock.MagicMock()
         mock_session.llm_client = None
+        mock_session.agent_constraints = None
 
         # Patch the deferred import target
         with mock.patch("yuleosh.pipeline.run.chat_completion", mock_fallback):
@@ -482,6 +487,7 @@ class TestCallLlm:
         mock_fn = mock.MagicMock(return_value={"content": "kwarg test"})
         mock_session = mock.MagicMock()
         mock_session.llm_client = mock_fn
+        mock_session.agent_constraints = None
 
         result = _call_llm(mock_session, "sys", "user", max_tokens=2048, temperature=0.7)
 

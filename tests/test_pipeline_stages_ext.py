@@ -50,6 +50,7 @@ class TestCallLlm:
         mock_client = MagicMock(return_value={"content": "mock response"})
         session = MagicMock()
         session.llm_client = mock_client
+        session.agent_constraints = None  # MagicMock attr is truthy otherwise
 
         result = _call_llm(session, "system", "user")
         assert result["content"] == "mock response"
@@ -71,6 +72,7 @@ class TestCallLlm:
         mock_client = MagicMock(return_value={"content": "r"})
         session = MagicMock()
         session.llm_client = mock_client
+        session.agent_constraints = None
 
         _call_llm(session, "sys", "usr", max_tokens=2048, temperature=0.5)
         mock_client.assert_called_once_with("sys", "usr", max_tokens=2048, temperature=0.5)
