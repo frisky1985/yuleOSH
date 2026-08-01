@@ -139,29 +139,34 @@ _test_file_cache_mtime: dict = {}
 def get_cache_key_for_dir(project_dir: str) -> str:
     """Build a cache key that changes when test files or dirs change.
 
-    Uses a simple hash of all .py / _test.go files and test directories.
+    Uses a simple hash of all test files (same categories that
+    find_test_files() discovers) and their mtimes. Every category must be
+    hashed — previously .java/.c/.cpp test files were skipped, so two
+    directories with only e.g. *_test.cpp files (or an empty dir vs a
+    cpp-only dir) collided on the same key and find_test_files() returned
+    stale cached results from a different directory.
     """
     import hashlib
     h = hashlib.md5()
     # Walk once to collect relevant paths and their mtimes
     for root, dirs, files in os.walk(project_dir):
-        dirs[:] = [d for d in dirs if not d.startswith(".") 
+        dirs[:] = [d for d in dirs if not d.startswith(".")
                    and d not in ("node_modules", "__pycache__", "venv")]
         for f in files:
-            if f.startswith("test_") and f.endswith(".py"):
-                h.update(f.encode())
-                try:
-                    mtime = os.path.getmtime(os.path.join(root, f))
-                    h.update(str(mtime).encode())
-                except OSError:
-                    pass
-            elif f.endswith("_test.go"):
-                h.update(f.encode())
-                try:
-                    mtime = os.path.getmtime(os.path.join(root, f))
-                    h.update(str(mtime).encode())
-                except OSError:
-                    pass
+            is_test_file = (
+                (f.startswith("test_") and f.endswith(".py"))
+                or (f.startswith("Test") and f.endswith(".java"))
+                or f.endswith("_test.go")
+                or ("_test." in f and (f.endswith(".c") or f.endswith(".cpp")))
+            )
+            if not is_test_file:
+                continue
+            h.update(f.encode())
+            try:
+                mtime = os.path.getmtime(os.path.join(root, f))
+                h.update(str(mtime).encode())
+            except OSError:
+                pass
     return h.hexdigest()
 # Notifications (optional import)
 _notify = None

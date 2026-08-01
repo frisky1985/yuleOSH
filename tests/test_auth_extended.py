@@ -120,8 +120,10 @@ class TestSessionSig:
             assert sig1 == sig2
             assert len(sig1) == 16
 
-            # Reset
-            auth_mod.API_KEY = os.environ.get("YULEOSH_API_KEY", "")
+        # Reset AFTER the patch context exits — inside it the env still
+        # carries the test key, so resetting there leaks API_KEY into later
+        # test files.
+        auth_mod.API_KEY = os.environ.get("YULEOSH_API_KEY", "")
 
 
 class TestAuthentication:
@@ -226,8 +228,11 @@ class TestLoginPage:
             auth_mod.API_KEY = "test-key"
             auth_mod.AUTH_ENABLED = True
             assert auth_mod.AUTH_ENABLED is True
-            auth_mod.API_KEY = os.environ.get("YULEOSH_API_KEY", "")
-            auth_mod.AUTH_ENABLED = bool(auth_mod.API_KEY)
+        # Reset AFTER the patch context exits — inside it the env still has
+        # the test key, so resetting there leaves AUTH_ENABLED=True leaked
+        # into later test files (test_phase0_coverage_boost::test_ui_auth_import).
+        auth_mod.API_KEY = os.environ.get("YULEOSH_API_KEY", "")
+        auth_mod.AUTH_ENABLED = bool(auth_mod.API_KEY)
 
     def test_validate_session_exception_safe(self):
         """GIVEN exception during validation WHEN validate_session THEN returns False."""

@@ -17,9 +17,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 os.environ.setdefault("OSH_HOME", str(Path(__file__).resolve().parent.parent))
-os.environ["YULEOSH_JWT_SECRET"] = "test-middleware-secret-32-chars-minimum!!!"
 
-_JWT_SECRET = os.environ["YULEOSH_JWT_SECRET"]
+# Test JWT secret used to sign tokens in these tests. NOTE: this must NOT be
+# written into os.environ at module level — doing so mutates the global
+# environment for every later test file (collection order dependent) and made
+# auth tests flaky in the single-process suite. The middleware/auth module
+# globals are patched per-test in setup_method() instead.
+_JWT_SECRET = "test-middleware-secret-32-chars-minimum!!!"
 
 
 # ======================================================================
@@ -30,12 +34,23 @@ class TestMiddlewareDeep:
     """require_auth decorator — full coverage."""
 
     def setup_method(self):
-        os.environ["YULEOSH_JWT_SECRET"] = _JWT_SECRET
-        if "yuleosh.api.middleware" in sys.modules:
-            del sys.modules["yuleosh.api.middleware"]
-        import importlib
-        import yuleosh.api.middleware
-        importlib.reload(yuleosh.api.middleware)
+        # Patch the _JWT_SECRET globals directly instead of deleting the
+        # modules from sys.modules. Deleting + re-importing replaces the
+        # module objects that other test files bound at collection time,
+        # leaving the parent package attribute stale and making later
+        # require_auth calls validate with a mismatched secret (401).
+        import yuleosh.api.auth as _auth_mod
+        import yuleosh.api.middleware as _mw_mod
+        self._saved_auth_secret = _auth_mod._JWT_SECRET
+        self._saved_mw_secret = _mw_mod._JWT_SECRET
+        _auth_mod._JWT_SECRET = _JWT_SECRET
+        _mw_mod._JWT_SECRET = _JWT_SECRET
+
+    def teardown_method(self):
+        import yuleosh.api.auth as _auth_mod
+        import yuleosh.api.middleware as _mw_mod
+        _auth_mod._JWT_SECRET = self._saved_auth_secret
+        _mw_mod._JWT_SECRET = self._saved_mw_secret
 
     @patch("yuleosh.store.Store")
     def test_require_auth_success(self, mock_store_class):
@@ -202,12 +217,15 @@ class TestAuthDeep:
     """Additional auth coverage for handle_me, handle_logout, rate limiting."""
 
     def setup_method(self):
-        os.environ["YULEOSH_JWT_SECRET"] = _JWT_SECRET
-        if "yuleosh.api.auth" in sys.modules:
-            del sys.modules["yuleosh.api.auth"]
-        import importlib
-        import yuleosh.api.auth
-        importlib.reload(yuleosh.api.auth)
+        # Patch the module global in place (see TestMiddlewareDeep.setup_method
+        # for why we never delete/re-import yuleosh.api.auth here).
+        import yuleosh.api.auth as _auth_mod
+        self._saved_auth_secret = _auth_mod._JWT_SECRET
+        _auth_mod._JWT_SECRET = _JWT_SECRET
+
+    def teardown_method(self):
+        import yuleosh.api.auth as _auth_mod
+        _auth_mod._JWT_SECRET = self._saved_auth_secret
 
     def test_slugify(self):
         from yuleosh.api.auth import _slugify

@@ -82,6 +82,11 @@ class TestMain:
             osh_dir = os.path.join(tmp, ".osh")
             os.makedirs(osh_dir)
             monkeypatch.chdir(tmp)
+            # main() → generate_evidence() resolves the project dir from
+            # OSH_HOME (fallback cwd). Pin it to the tmp dir so the real
+            # repo .osh/ is never scanned (a polluted repo reviews/ dir
+            # previously made this crash with OSError ENAMETOOLONG).
+            monkeypatch.setenv("OSH_HOME", tmp)
             monkeypatch.setattr(sys, "argv", ["pack"])
             # Should not raise
             try:
@@ -98,6 +103,8 @@ class TestMain:
             with open(spec_path, "w") as f:
                 f.write("# Spec\n")
             monkeypatch.setattr(sys, "argv", ["pack", spec_path])
+            # Same OSH_HOME pinning as test_main_no_args.
+            monkeypatch.setenv("OSH_HOME", tmp)
             # v3.4.0: main delegates to generate_evidence — patch the heavy
             # collector so unit test doesn't scan the real repo .osh/ sessions.
             with mock.patch("yuleosh.evidence.pack.generate_evidence") as m_gen:

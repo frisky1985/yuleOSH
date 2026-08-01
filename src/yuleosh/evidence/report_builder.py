@@ -274,11 +274,23 @@ class ReportBuilderMixin:
         if rev_dir.exists():
             for f in sorted(rev_dir.rglob("*.json")):
                 dest = raw_reviews_dir / f.name
-                # Avoid overwriting collisions by prepending subdir name
+                # Avoid overwriting collisions by prepending subdir name —
+                # bounded, so repeated runs can never grow the name
+                # unboundedly (previously each run re-prefixed "reviews-"
+                # until the path exceeded the OS filename limit →
+                # OSError ENAMETOOLONG / Errno 63).
                 if dest.exists():
-                    dest = raw_reviews_dir / f"{f.parent.name}-{f.name}"
-                import shutil
-                shutil.copy2(str(f), str(dest))
+                    alt_name = f"{f.parent.name}-{f.name}"
+                    if len(alt_name) > 180:
+                        import hashlib as _hl
+                        digest = _hl.sha1(f.name.encode()).hexdigest()[:12]
+                        alt_name = f"{f.parent.name}-{digest}.json"
+                    dest = raw_reviews_dir / alt_name
+                try:
+                    shutil.copy2(str(f), str(dest))
+                except OSError as e:
+                    print(f"  ⚠️  Could not copy review file {f.name}: {e}")
+                    continue
                 copied += 1
         if copied:
             print(f"  📁 Copied {copied} raw review file(s) to {raw_reviews_dir}")

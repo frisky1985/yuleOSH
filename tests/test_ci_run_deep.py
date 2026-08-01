@@ -1354,7 +1354,12 @@ class TestMain:
 
     def test_all(self):
         from yuleosh.ci.run import main
-        with mock.patch("yuleosh.ci.run.run_all", return_value=True):
+        # NOTE: runner.main calls run_all via its own module global (the
+        # definition lives in yuleosh.ci.runner), so the patch target must
+        # be the runner module — patching the ci.run re-export leaves the
+        # real run_all executing, which runs the full CI pipeline against
+        # the repo and recursively spawns ``pytest -x`` subprocesses.
+        with mock.patch("yuleosh.ci.runner.run_all", return_value=True):
             with mock.patch.object(sys, "argv", ["run.py", "all"]):
                 with pytest.raises(SystemExit):
                     main()

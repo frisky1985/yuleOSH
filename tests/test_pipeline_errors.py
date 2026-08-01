@@ -282,27 +282,34 @@ def test_json_decode_error_includes_raw_output():
     import subprocess
 
     with tempfile.TemporaryDirectory() as tmp:
+        # NOTE: the fixture-style monkeypatch auto-restores; a manually
+        # created pytest.MonkeyPatch() does NOT — it must be undone or the
+        # OSH_HOME env var leaks (pointing at a now-deleted tmp dir) and
+        # breaks later tests that resolve OSH_HOME (test_step_handlers_*).
         monkeypatch = pytest.MonkeyPatch()
         monkeypatch.setenv("OSH_HOME", tmp)
-        spec_file = os.path.join(tmp, "spec.md")
-        with open(spec_file, "w") as f:
-            f.write("# Spec")
+        try:
+            spec_file = os.path.join(tmp, "spec.md")
+            with open(spec_file, "w") as f:
+                f.write("# Spec")
 
-        session = PipelineSession("json-err-test", spec_file)
+            session = PipelineSession("json-err-test", spec_file)
 
-        # Mock subprocess.run to return invalid JSON
-        def mock_run(*args, **kwargs):
-            return subprocess.CompletedProcess(
-                args[0], 0,
-                stdout="this is not valid json at all",
-                stderr="",
-            )
+            # Mock subprocess.run to return invalid JSON
+            def mock_run(*args, **kwargs):
+                return subprocess.CompletedProcess(
+                    args[0], 0,
+                    stdout="this is not valid json at all",
+                    stderr="",
+                )
 
-        with mock.patch("yuleosh.pipeline.run.subprocess.run", mock_run):
-            with pytest.raises(PipelineStepError) as exc_info:
-                step_spec_check(session)
+            with mock.patch("yuleosh.pipeline.run.subprocess.run", mock_run):
+                with pytest.raises(PipelineStepError) as exc_info:
+                    step_spec_check(session)
 
-        error_msg = str(exc_info.value)
+            error_msg = str(exc_info.value)
+        finally:
+            monkeypatch.undo()
         assert "not valid JSON" in error_msg or "Invalid" in error_msg or "not valid" in error_msg.lower()
         # Should include raw output preview
         assert "this is not valid json" in error_msg
