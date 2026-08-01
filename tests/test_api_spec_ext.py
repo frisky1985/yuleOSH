@@ -23,6 +23,7 @@ class TestApiSpec:
         mock_path = MagicMock()
         mock_path.is_absolute.return_value = True
         mock_path.exists.return_value = False
+        mock_path.resolve.return_value = mock_path
 
         with patch("yuleosh.api.spec.Path", return_value=mock_path):
             result, code = handle_spec(

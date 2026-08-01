@@ -437,7 +437,9 @@ class TestApiPipeline:
         mock_proc.stdout = "done"
         mock_proc.stderr = ""
         mock_run.return_value = mock_proc
-        with patch("pathlib.Path.exists", return_value=True):
+        # v3.4.0: relative spec resolved under OSH_HOME; exists + is_file checked
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("pathlib.Path.is_file", return_value=True):
             resp, status = _run_pipeline({"spec": "docs/spec.md"})
             assert status in (200, 500)
 
