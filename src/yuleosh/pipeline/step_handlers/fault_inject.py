@@ -190,10 +190,13 @@ class FaultInjectStage:
                  project_root],
                 check=True, capture_output=True, text=True,
             )
+            # P1-10 (S-P1-08): no shell=True — pass -j as an argv element
+            # (shell interpolation of `$(nproc)` is both a shell-injection
+            # surface and unnecessary).
+            cpus = os.cpu_count() or 1
             subprocess.run(
-                ["cmake", "--build", str(self.build_dir), "-j$(nproc)"],
+                ["cmake", "--build", str(self.build_dir), "-j", str(cpus)],
                 check=True, capture_output=True, text=True,
-                shell=True,
             )
             log.info("Build succeeded")
             print("  ✅ Build succeeded")

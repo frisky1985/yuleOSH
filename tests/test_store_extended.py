@@ -206,7 +206,11 @@ def test_create_get_delete_session():
         user = s.create_user(org["id"], "u@t.com")
 
         sess = s.create_session(user["id"], "tok_abc123", ttl_hours=48)
-        assert sess["token"] == "tok_abc123"
+        # P1-6 (S-P1-02): the store persists sha256(token) — never the raw token.
+        assert sess["token"] != "tok_abc123"
+        assert len(sess["token"]) == 64
+        import hashlib
+        assert sess["token"] == hashlib.sha256(b"tok_abc123").hexdigest()
         assert sess["user_id"] == user["id"]
 
         fetched = s.get_session("tok_abc123")

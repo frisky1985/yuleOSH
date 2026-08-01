@@ -139,20 +139,30 @@ class PluginSandbox:
         }
 
     def _restricted_open(self, plugin: Plugin):
-        """受限的 open() — 仅允许读取 Plugin 自身目录下的文件。"""
-        allowed_dir = str(self.plugin_dir)
+        """受限的 open() — 仅允许访问 Plugin 自身目录下的文件。
+
+        P2-2 (S-P2-02): 路径校验从 ``str.startswith(prefix)``（可被
+        ``/allowed_dir_evil`` 之类前缀绕过）改为 ``resolve() + relative_to``
+        （规范化后必须是插件目录的子路径，符号链接/.. 均被解析）。
+        """
+        allowed_dir = Path(self.plugin_dir).resolve()
 
         def safe_open(file, mode="r", *args, **kwargs):
-            # 只读模式下检查路径
-            if "w" in mode or "a" in mode or "x" in mode or "+" in mode:
+            # 读写都校验：插件只能访问自己的目录（读默认允许 → 收紧为同样受控）
+            write_mode = any(ch in mode for ch in "wax+")
+            try:
                 resolved = Path(file).resolve()
-                if not str(resolved).startswith(allowed_dir):
+                resolved.relative_to(allowed_dir)
+            except (ValueError, OSError, RuntimeError) as e:
+                if write_mode:
                     raise SandboxViolation(
-                        f"禁止写入沙箱外文件: {resolved} "
+                        f"禁止写入沙箱外文件: {file} "
                         f"(允许: {allowed_dir})"
-                    )
-            # 写模式只允许在插件目录内
-            # 读模式默认允许（可进一步收紧）
+                    ) from e
+                raise SandboxViolation(
+                    f"禁止读取沙箱外文件: {file} "
+                    f"(允许: {allowed_dir})"
+                ) from e
             return builtins.open(file, mode, *args, **kwargs)
 
         return safe_open

@@ -29,7 +29,7 @@ def step_spec_check(session: PipelineSession) -> str:
         log.info(f"Validating spec: {session.spec_path}")
         result = subprocess.run(
             [sys.executable, "-m", "yuleosh.spec.validate", session.spec_path, "--json"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, timeout=60,
         )
         out_path = session.session_dir / "spec-check.json"
         with open(out_path, "w") as f:

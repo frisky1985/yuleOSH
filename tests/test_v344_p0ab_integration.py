@@ -318,10 +318,18 @@ class TestP0A_MiddlewareDualFormatUnit:
         store = Store()
         now = datetime.now().isoformat()
         expires = (datetime.now() + timedelta(hours=72)).isoformat()
+        # P1-6: sessions are stored as sha256 hashes — never plaintext.
+
+        from yuleosh.store import _session_token_hash
+
         store.conn.execute(
+
             "INSERT OR IGNORE INTO user_sessions "
+
             "(user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (uid, token, now, expires),
+
+            (uid, _session_token_hash(token), now, expires),
+
         )
         store.conn.commit()
 

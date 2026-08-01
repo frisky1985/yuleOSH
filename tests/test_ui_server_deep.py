@@ -205,7 +205,9 @@ class TestHealthEndpoints:
         h = _get_handler_instance()
         result = h._get_status()
         assert result["status"] == "running"
-        assert "osh_home" in result
+        # P1-7 (S-06): absolute path no longer exposed — boolean instead
+        assert "osh_home" not in result
+        assert "osh_home_configured" in result
 
 
 # ======================================================================
@@ -220,20 +222,34 @@ class TestAuth:
             assert h._check_auth() is True
 
     def test_check_auth_enabled_authenticated(self):
-        """v3.4.0: X-API-Key header authenticates."""
+        """v3.4.0 + P1-3: valid X-API-Key authenticates."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.headers = {"X-API-Key": "k123"}
-        with patch("yuleosh.ui.server.AUTH_ENABLED", True):
+        # is_authenticated reads lowercase header keys from dicts
+        h.headers = {"x-api-key": "k123"}
+        with patch("yuleosh.ui.server.AUTH_ENABLED", True), \
+             patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             patch("yuleosh.ui.auth.API_KEY", "k123"):
             assert h._check_auth() is True
 
     def test_check_auth_enabled_no_key(self):
-        """v3.4.0: no API key → allowed (proper auth via auth_routes)."""
+        """P1-3 (W-06): no valid key/cookie → denied (was: always True)."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.headers = {}
-        with patch("yuleosh.ui.server.AUTH_ENABLED", True):
-            assert h._check_auth() is True
+        with patch("yuleosh.ui.server.AUTH_ENABLED", True), \
+             patch("yuleosh.ui.auth.AUTH_ENABLED", True):
+            assert h._check_auth() is False
+
+    def test_check_auth_enabled_wrong_key(self):
+        """P1-3: wrong API key → denied."""
+        from yuleosh.ui.server import OSHHandler
+        h = _get_handler_instance()
+        h.headers = {"X-API-Key": "wrong"}
+        with patch("yuleosh.ui.server.AUTH_ENABLED", True), \
+             patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
+             patch("yuleosh.ui.auth.API_KEY", "k123"):
+            assert h._check_auth() is False
 
 
 # ======================================================================

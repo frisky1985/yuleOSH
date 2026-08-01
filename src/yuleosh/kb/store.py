@@ -429,12 +429,16 @@ class KbStore:
             else:
                 seen[key] = article_id
 
-        # Step 3: Delete duplicates
+        # Step 3: Delete duplicates (P2-8: batch with executemany — avoids a
+        # per-row round trip on large dedup runs)
         removed = 0
-        for del_id in to_delete:
+        if to_delete:
             try:
-                conn.execute("DELETE FROM kb_articles WHERE id=?", (del_id,))
-                removed += 1
+                conn.executemany(
+                    "DELETE FROM kb_articles WHERE id=?",
+                    [(i,) for i in to_delete],
+                )
+                removed = len(to_delete)
             except Exception:
                 pass
         if removed:

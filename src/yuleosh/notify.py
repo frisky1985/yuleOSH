@@ -106,12 +106,16 @@ class NotifyConfig:
         return bool(self.webhook_url)
 
     def to_dict(self) -> dict:
+        # P1-9 (S-P1-07): the SMTP password is NEVER serialized (write-only).
+        # ``email_pass_set`` signals whether one is configured without
+        # leaking any part of it.
         return {
             "feishu_url": self.feishu_url or "",
             "feishu_enabled": self.feishu_enabled,
             "email_smtp": self.email_smtp or "",
             "email_from": self.email_from or "",
             "email_to": self.email_to or "",
+            "email_pass_set": bool(self.email_pass),
             "email_enabled": self.email_enabled,
             "webhook_url": self.webhook_url or "",
             "webhook_enabled": self.webhook_enabled,

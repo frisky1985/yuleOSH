@@ -708,9 +708,8 @@ def run_misra_check(project_dir: str, ci: CIResult,
     except ImportError as e:
         log.warning("Could not import misra_report module: %s", e)
     except Exception as e:
-        log.warning("MISRA report formatting failed: %s", e)
-        import traceback
-        traceback.print_exc()
+        # P2-5 (S-P2-01): structured logging instead of traceback dump.
+        log.warning("MISRA report formatting failed: %s", e, exc_info=True)
 
     # If report was saved but summary creation failed, reload from disk
     if summary is None:

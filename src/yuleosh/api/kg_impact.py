@@ -82,16 +82,18 @@ def handle_kg_impact(handler, params: dict):
         try:
             store = get_store()
         except Exception as e:
-            log.error("Failed to initialize KG store: %s", e)
-            _write_error(handler, 500, f"Knowledge Graph store initialization failed: {e}")
+            # P1-7 (S-P1-05): never echo internal exception details — log
+            # full detail server-side, return a generic message.
+            log.error("Failed to initialize KG store: %s", e, exc_info=True)
+            _write_error(handler, 500, "Internal server error")
             return
 
         # Run impact analysis
         try:
             result = impact_analysis(store, changed_files, layer=layer)
         except Exception as e:
-            log.error("Impact analysis failed: %s", e)
-            _write_error(handler, 500, f"Impact analysis failed: {e}")
+            log.error("Impact analysis failed: %s", e, exc_info=True)
+            _write_error(handler, 500, "Internal server error")
             return
 
         # Post-process result
@@ -114,7 +116,7 @@ def handle_kg_impact(handler, params: dict):
 
     except Exception as e:
         log.error("Unhandled error in kg/query/impact: %s", e, exc_info=True)
-        _write_error(handler, 500, f"Internal server error: {e}")
+        _write_error(handler, 500, "Internal server error")
 
 
 def _write_ok(handler, data: dict):

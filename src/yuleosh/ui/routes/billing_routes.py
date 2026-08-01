@@ -55,12 +55,16 @@ def _send_json(handler: BaseHTTPRequestHandler, data, status: int = 200):
 
 
 def _read_body(handler: BaseHTTPRequestHandler) -> dict:
-    content_length = int(handler.headers.get("Content-Length", 0))
-    if content_length == 0:
-        return {}
+    """Read and parse the request body (P1-5: unified clamped read_body).
+
+    Delegates to yuleosh.api.read_body which clamps Content-Length to 10 MB
+    and converts malformed headers to BadRequest.  Invalid JSON / bad
+    Content-Length yield {} — caller validation returns the 4xx.
+    """
+    from yuleosh.api import read_body, BadRequest
     try:
-        return json.loads(handler.rfile.read(content_length).decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        return read_body(handler)
+    except BadRequest:
         return {}
 
 

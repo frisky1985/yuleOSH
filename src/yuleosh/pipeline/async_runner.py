@@ -127,7 +127,13 @@ def _update_stage(job_id: str, stage_key: str, status: str, progress: int = None
 
 
 def _run_ci_job(job_id: str, project_dir: str, layer: int):
-    """Execute CI layer in background thread."""
+    """Execute CI layer in background thread.
+
+    P1-8 (W-05): failures must be EXPLICIT.  Previously an ImportError or a
+    "signal only in main thread" ValueError turned the job into a simulated
+    pass — CI results were fabricated.  Any failure now marks the job
+    ``failed`` with the reason logged (never a fake pass).
+    """
     job = _PIPELINE_JOBS.get(job_id)
     if not job:
         return
@@ -136,41 +142,27 @@ def _run_ci_job(job_id: str, project_dir: str, layer: int):
     _append_log(job_id, f"Starting CI Layer {layer}...")
 
     try:
-        # Try running actual CI layer — catch signal-in-thread ValueError
-        try:
-            if layer == 1:
-                from yuleosh.ci import run_layer1 as _rl1
-                _append_log(job_id, "Running Layer 1 (compile)...")
-                job["result"] = str(_rl1(project_dir) or "ok")
-            elif layer == 2:
-                from yuleosh.ci import run_layer2 as _rl2
-                _append_log(job_id, "Running Layer 2 (MISRA)...")
-                job["result"] = str(_rl2(project_dir) or "ok")
-            elif layer == 3:
-                from yuleosh.ci import run_layer3 as _rl3
-                _append_log(job_id, "Running Layer 3 (coverage)...")
-                job["result"] = str(_rl3(project_dir) or "ok")
-            else:
-                from yuleosh.ci.run import run_all as _ra
-                _append_log(job_id, "Running all CI layers...")
-                job["result"] = str(_ra(project_dir) or "ok")
-            job["status"] = "passed"
-            _append_log(job_id, "CI Layer completed successfully.")
-        except ValueError as e:
-            if "signal" in str(e):
-                _append_log(job_id, f"CI Layer {layer}: signal only in main thread — simulated pass.")
-                time.sleep(1.5)
-                job["result"] = f"ok (simulated — CI needs main thread for layer {layer})"
-                job["status"] = "passed"
-            else:
-                raise
-        except ImportError as e:
-            log.warning("CI module not available: %s", e)
-            _append_log(job_id, f"CI module not available, simulating: {e}")
-            time.sleep(2)
-            job["result"] = "ok (simulated)"
-            job["status"] = "passed"
+        if layer == 1:
+            from yuleosh.ci import run_layer1 as _rl1
+            _append_log(job_id, "Running Layer 1 (compile)...")
+            job["result"] = str(_rl1(project_dir) or "ok")
+        elif layer == 2:
+            from yuleosh.ci import run_layer2 as _rl2
+            _append_log(job_id, "Running Layer 2 (MISRA)...")
+            job["result"] = str(_rl2(project_dir) or "ok")
+        elif layer == 3:
+            from yuleosh.ci import run_layer3 as _rl3
+            _append_log(job_id, "Running Layer 3 (coverage)...")
+            job["result"] = str(_rl3(project_dir) or "ok")
+        else:
+            from yuleosh.ci.run import run_all as _ra
+            _append_log(job_id, "Running all CI layers...")
+            job["result"] = str(_ra(project_dir) or "ok")
+        job["status"] = "passed"
+        _append_log(job_id, "CI Layer completed successfully.")
     except Exception as e:
+        # P1-8: explicit failure — no simulated pass under any circumstance.
+        log.error("CI layer %s failed for job %s: %s", layer, job_id, e, exc_info=True)
         job["status"] = "failed"
         job["result"] = str(e)[:500]
         _append_log(job_id, f"FAILED: {e}")
@@ -277,11 +269,9 @@ def _run_full_pipeline(
             if compile_result and "failed" in str(compile_result).lower():
                 raise RuntimeError(f"Compile failed: {compile_result}")
             _append_log(job_id, "Compilation passed.")
-        except (ImportError, ValueError) as e:
-            if "signal" in str(e).lower() and "main thread" in str(e):
-                _append_log(job_id, "CI module runs in main thread only — simulated pass.")
-            else:
-                _append_log(job_id, f"CI compile not available (simulated pass). Reason: {e}")
+        except Exception as e:
+            # P1-8: CI stages must fail explicitly — no simulated pass.
+            raise RuntimeError(f"CI compile stage failed: {e}") from e
 
         _update_stage(job_id, "ci_compile", "passed", int(70 / total_stages * 100))
 
@@ -297,11 +287,9 @@ def _run_full_pipeline(
             if misra_result and isinstance(misra_result, dict):
                 violations = misra_result.get("violations", 0)
             _append_log(job_id, f"MISRA check passed. Violations: {violations}")
-        except (ImportError, ValueError) as e:
-            if "signal" in str(e).lower():
-                _append_log(job_id, "MISRA module runs in main thread only — simulated pass.")
-            else:
-                _append_log(job_id, f"MISRA not available (simulated pass). Reason: {e}")
+        except Exception as e:
+            # P1-8: explicit failure — no simulated pass.
+            raise RuntimeError(f"MISRA check stage failed: {e}") from e
 
         _update_stage(job_id, "misra_check", "passed", int(85 / total_stages * 100))
 
@@ -317,11 +305,9 @@ def _run_full_pipeline(
             if cov_result and isinstance(cov_result, dict):
                 coverage_pct = cov_result.get("coverage", 0)
             _append_log(job_id, f"Coverage: {coverage_pct}%")
-        except (ImportError, ValueError) as e:
-            if "signal" in str(e).lower():
-                _append_log(job_id, "Coverage module runs in main thread only — simulated.")
-            else:
-                _append_log(job_id, f"Coverage not available (simulated). Reason: {e}")
+        except Exception as e:
+            # P1-8: explicit failure — no simulated pass.
+            raise RuntimeError(f"Coverage stage failed: {e}") from e
 
         _update_stage(job_id, "coverage", "passed", 100)
 
