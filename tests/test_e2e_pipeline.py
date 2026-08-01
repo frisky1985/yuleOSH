@@ -44,6 +44,16 @@ SPEC_CONTENT_VALID = """# Test Specification
 SPEC_CONTENT_INVALID_EMPTY = "# Empty spec\n"
 
 
+
+# v3.4.1: full-pipeline E2E runs take >2min (real 33-step pipeline, CMake build
+# attempts). CI excludes these files by path; gate behind RUN_E2E=1 so the
+# default suite doesn't hang. Run explicitly: RUN_E2E=1 pytest tests/test_e2e.py
+import os as _os
+if not _os.environ.get("RUN_E2E"):
+    pytestmark = pytest.mark.skip(
+        reason="full-pipeline E2E — set RUN_E2E=1 to run (slow)"
+    )
+
 def _make_fake_llm(content: str = "mock analysis result") -> callable:
     """Build a fake LLM client that returns deterministic content."""
     def fake_llm(system_prompt: str, user_prompt: str, **kwargs) -> dict:

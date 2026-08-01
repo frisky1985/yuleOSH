@@ -28,6 +28,16 @@ PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # Pre-recorded mock LLM response fixture
 # ---------------------------------------------------------------------------
 
+
+# v3.4.1: full-pipeline E2E runs take >2min (real 33-step pipeline, CMake build
+# attempts). CI excludes these files by path; gate behind RUN_E2E=1 so the
+# default suite doesn't hang. Run explicitly: RUN_E2E=1 pytest tests/test_e2e.py
+import os as _os
+if not _os.environ.get("RUN_E2E"):
+    pytestmark = pytest.mark.skip(
+        reason="full-pipeline E2E — set RUN_E2E=1 to run (slow)"
+    )
+
 def _make_mock_llm():
     """Return a mock LLM callable that returns pre-recorded responses.
 
