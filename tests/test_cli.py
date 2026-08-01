@@ -424,15 +424,21 @@ class TestMisraCommands:
         with patch("yuleosh.ci.config.load_ci_config", return_value=cfg):
             main_module.cmd_misra_profile_list()
 
-    def test_profile_set(self, main_module):
-        cfg = MagicMock()
-        cfg.misra.profiles = {"safety": MagicMock(name="Safety")}
-        cfg.misra.active_profile = "testing"
-        with patch("yuleosh.ci.config.load_ci_config", return_value=cfg):
-            config_path = Path(main_module.OSH_HOME) / ".yuleosh" / "ci-config.yaml"
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_path.write_text("misra:\n  profiles: {}\n")
-            main_module.cmd_misra_profile_set("safety")
+    def test_profile_set(self, main_module, tmp_path):
+        """Write the stub config to a temp dir — never pollute the real repo."""
+        import yuleosh.cli.main as main_mod
+        main_mod.OSH_HOME = str(tmp_path)
+        try:
+            cfg = MagicMock()
+            cfg.misra.profiles = {"safety": MagicMock(name="Safety")}
+            cfg.misra.active_profile = "testing"
+            with patch("yuleosh.ci.config.load_ci_config", return_value=cfg):
+                config_path = Path(tmp_path) / ".yuleosh" / "ci-config.yaml"
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                config_path.write_text("misra:\n  profiles: {}\n")
+                main_module.cmd_misra_profile_set("safety")
+        finally:
+            main_mod.OSH_HOME = os.environ.get("OSH_HOME", os.getcwd())
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -681,10 +687,12 @@ class TestMainDispatcher:
     def test_ui(self, main_module):
         # ui.server may not exist - just verify it doesn't crash other things
         with patch.object(sys, "argv", ["yuleosh", "ui"]):
-            try:
-                main_module.main()
-            except (SystemExit, Exception):
-                pass
+            with patch("yuleosh.ui.server.main") as mock_ui_main:
+                try:
+                    main_module.main()
+                except (SystemExit, Exception):
+                    pass
+            mock_ui_main.assert_called_once()
 
     def test_unknown(self, main_module):
         with patch.object(sys, "argv", ["yuleosh", "unknown"]):
