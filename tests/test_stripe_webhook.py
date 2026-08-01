@@ -88,9 +88,10 @@ class TestStripeConfiguration:
 
     def test_07_stripe_routes_in_router(self):
         """GIVEN router WHEN inspected THEN subscription routes present."""
-        from yuleosh.api.router import ROUTES
+        from yuleosh.api.router import ROUTES, _LAZY_HANDLERS
 
-        assert "subscription" in ROUTES, "subscription routes not in ROUTES"
+        # v3.4.0 (AR-P2-01): subscription is a lazy-loaded optional route
+        assert "subscription" in _LAZY_HANDLERS, "subscription route not registered"
 
     def test_08_subscription_api_imports(self):
         """GIVEN subscription API module WHEN imported THEN handler functions exist."""

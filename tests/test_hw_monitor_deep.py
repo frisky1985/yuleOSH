@@ -143,27 +143,28 @@ class TestSerialMonitorOpenSerial:
             assert isinstance(m._serial, _MockSerial)
 
     def test_open_serial_file_not_found(self):
+        """v3.4.0: FileNotFoundError → graceful fallback to mock serial (CI-safe)."""
         m = SerialMonitor("/dev/ttyUSB0")
         with patch("serial.Serial") as mock_serial:
             mock_serial.side_effect = FileNotFoundError("No such file")
-            with pytest.raises(PortNotFoundError):
-                m._open_serial()
+            m._open_serial()
+            assert isinstance(m._serial, _MockSerial)
 
     def test_open_serial_permission_error(self):
+        """v3.4.0: PermissionError → graceful fallback to mock serial."""
         m = SerialMonitor("/dev/ttyUSB0")
         with patch("serial.Serial") as mock_serial:
             mock_serial.side_effect = PermissionError("Permission denied")
-            with pytest.raises(PortNotFoundError) as exc:
-                m._open_serial()
-            assert "Permission denied" in str(exc.value) or "chmod" in str(exc.value)
+            m._open_serial()
+            assert isinstance(m._serial, _MockSerial)
 
     def test_open_serial_other_oserror(self):
+        """v3.4.0: generic OSError → graceful fallback to mock serial."""
         m = SerialMonitor("/dev/ttyUSB0")
         with patch("serial.Serial") as mock_serial:
             mock_serial.side_effect = OSError("Device busy")
-            with pytest.raises(PortNotFoundError) as exc:
-                m._open_serial()
-            assert "Device busy" in str(exc.value)
+            m._open_serial()
+            assert isinstance(m._serial, _MockSerial)
 
 
 class TestSerialMonitorWaitForString:
