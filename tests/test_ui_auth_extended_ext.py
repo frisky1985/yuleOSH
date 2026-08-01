@@ -161,6 +161,7 @@ class TestHandleSignin:
 
     @mock.patch("yuleosh.ui.auth_extended.Store")
     def test_invite_existing_user_no_password(self, mock_store):
+        """P0: password-less existing user cannot sign in via email alone."""
         from yuleosh.ui.auth_extended import handle_signin, _SIGNIN_RATE_LIMIT
         _SIGNIN_RATE_LIMIT.clear()
         mock_store_instance = mock_store.return_value
@@ -169,7 +170,8 @@ class TestHandleSignin:
         result, status = handle_signin({
             "email": "test@example.com", "invite_code": "testorg"
         })
-        assert status == 200
+        assert status == 401
+        assert "Invalid email or password" == result.get("error")
 
     @mock.patch("yuleosh.ui.auth_extended.Store")
     @mock.patch("yuleosh.ui.auth_extended._verify_password")
@@ -255,12 +257,47 @@ class TestHandleOrgCreate:
         from yuleosh.ui.auth_extended import handle_org_create
         mock_store_instance = mock_store.return_value
         mock_store_instance.get_organization.return_value = {"id": 1}
+        token = self._org_setup_token("test@example.com")
         result, status = handle_org_create({
             "org_name": "Test", "org_slug": "test",
             "project_name": "Proj", "project_slug": "proj1",
             "email": "test@example.com"
-        }, "token")
+        }, token)
         assert status == 409
+
+    @staticmethod
+    def _org_setup_token(email: str) -> str:
+        """Build a valid org-setup JWT bound to the given email."""
+        import time as _t
+        from yuleosh.ui.auth_extended import _generate_token
+        return _generate_token(email=email, purpose="org_setup")
+
+    @mock.patch("yuleosh.ui.auth_extended.Store")
+    def test_email_mismatch_rejected(self, mock_store):
+        """P0: org-setup token bound to email A cannot create email B."""
+        from yuleosh.ui.auth_extended import handle_org_create
+        mock_store_instance = mock_store.return_value
+        mock_store_instance.get_organization.return_value = None
+        token = self._org_setup_token("alice@example.com")
+        result, status = handle_org_create({
+            "org_name": "Test", "org_slug": "test",
+            "project_name": "Proj", "project_slug": "proj1",
+            "email": "mallory@example.com"
+        }, token)
+        assert status == 401
+
+    @mock.patch("yuleosh.ui.auth_extended.Store")
+    def test_invalid_token_rejected(self, mock_store):
+        """P0: org-create without a valid session token is refused."""
+        from yuleosh.ui.auth_extended import handle_org_create
+        mock_store_instance = mock_store.return_value
+        mock_store_instance.get_organization.return_value = None
+        result, status = handle_org_create({
+            "org_name": "Test", "org_slug": "test",
+            "project_name": "Proj", "project_slug": "proj1",
+            "email": "test@example.com"
+        }, "not-a-real-token")
+        assert status == 401
 
     @mock.patch("yuleosh.ui.auth_extended.Store")
     def test_successful_creation(self, mock_store):
@@ -269,11 +306,12 @@ class TestHandleOrgCreate:
         mock_store_instance.get_organization.return_value = None
         mock_store_instance.create_organization.return_value = {"id": 1, "slug": "test"}
         mock_store_instance.create_user.return_value = {"id": 1, "org_id": 1}
+        token = self._org_setup_token("test@example.com")
         result, status = handle_org_create({
             "org_name": "Test", "org_slug": "test",
             "project_name": "Proj", "project_slug": "proj1",
             "email": "test@example.com", "password": "Secure1234"
-        }, "token")
+        }, token)
         assert status == 200
         assert "token" in result
 

@@ -16,12 +16,12 @@ class TestKb:
 
     def test_unknown_resource(self):
         """Unknown KB resource returns 404."""
-        result, code = handle_kb("GET", "unknown", {}, {})
+        result, code = handle_kb("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     def test_empty_path(self):
         """Empty path returns 400."""
-        result, code = handle_kb("GET", "", {}, {})
+        result, code = handle_kb("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     def test_parse_id_valid(self):

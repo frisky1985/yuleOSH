@@ -213,7 +213,7 @@ class TestWizardFlow:
         handler.headers = {"Authorization": f"Bearer {token}"}
 
         data, status = handle_wizard(method="POST", path_tail="complete",
-                                     body={}, query={}, handler=None)
+                                     body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert data.get("data", {}).get("completed") is True
 
@@ -226,9 +226,9 @@ class TestWizardFlow:
         handler.headers = {"Authorization": f"Bearer {token}"}
 
         data1, s1 = handle_wizard(method="POST", path_tail="complete",
-                                  body={}, query={}, handler=None)
+                                  body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         data2, s2 = handle_wizard(method="POST", path_tail="complete",
-                                  body={}, query={}, handler=None)
+                                  body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert s1 == 200
         assert s2 == 200
 
@@ -241,7 +241,7 @@ class TestWizardFlow:
         handler.headers = {"Authorization": f"Bearer {token}"}
 
         data, status = handle_wizard(method="GET", path_tail="complete",
-                                     body={}, query={}, handler=None)
+                                     body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status in (200, 405)  # May reject GET on POST-only endpoint
 
     def test_04_wizard_no_auth_returns_401(self):
@@ -251,7 +251,7 @@ class TestWizardFlow:
         handler = mock.MagicMock()
         handler.headers = {}
         data, status = handle_wizard(method="POST", path_tail="complete",
-                                     body={}, query={}, handler=None)
+                                     body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status in (200, 401)  # May work with org_id=0 fallback
 
 
@@ -281,7 +281,7 @@ class TestProjectCreationFlow:
             "description": "Created during onboarding E2E test",
         }
         data, status = handle_project(method="POST", path_tail="",
-                                      body=body, query={}, handler=None)
+                                      body=body, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status in (200, 201, 400, 409)
         if status in (200, 201):
             assert data.get("data", {}).get("name") == "E2E Test Project"
@@ -296,7 +296,7 @@ class TestProjectCreationFlow:
 
         data, status = handle_project(method="POST", path_tail="",
                                       body={"description": "No name"}, query={},
-                                      handler=None)
+                                      current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 400
 
     def test_03_list_user_projects(self):
@@ -308,7 +308,7 @@ class TestProjectCreationFlow:
         handler.headers = {"Authorization": f"Bearer {token}"}
 
         data, status = handle_project(method="GET", path_tail="",
-                                      body={}, query={}, handler=None)
+                                      body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert isinstance(data, dict)
 
@@ -340,11 +340,11 @@ class TestProjectCreationFlow:
 
         body = {"name": "First", "slug": slug}
         data1, s1 = handle_project(method="POST", path_tail="",
-                                   body=body, query={}, handler=None)
+                                   body=body, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
 
         body2 = {"name": "Second", "slug": slug}
         data2, s2 = handle_project(method="POST", path_tail="",
-                                   body=body2, query={}, handler=None)
+                                   body=body2, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         # s2 should indicate conflict
         assert s2 == 409 or s2 in (200, 400)
 
@@ -375,7 +375,7 @@ class TestSpecUploadFlow:
             "content": "## RS-001: System Startup\nSystem SHALL initialize within 100ms.",
         }
         data, status = handle_spec(method="POST", path_tail="",
-                                   body=body, query={}, handler=None)
+                                   body=body, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status in (200, 201, 400, 404)
 
     def test_02_spec_requires_content(self):
@@ -388,7 +388,7 @@ class TestSpecUploadFlow:
 
         data, status = handle_spec(method="POST", path_tail="",
                                    body={"project": "Empty Spec"}, query={},
-                                   handler=None)
+                                   current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
     def test_03_spec_validation_module_exists(self):
@@ -442,7 +442,7 @@ class TestPipelineTriggerFlow:
             "action": "run",
         }
         data, status = handle_pipeline(method="POST", path_tail="",
-                                       body=body, query={}, handler=None)
+                                       body=body, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status in (200, 201, 400, 404, 500)
 
     def test_02_pipeline_requires_project(self):
@@ -455,7 +455,7 @@ class TestPipelineTriggerFlow:
 
         data, status = handle_pipeline(method="POST", path_tail="",
                                        body={"action": "run"}, query={},
-                                       handler=None)
+                                       current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 400
 
     def test_03_pipeline_status_check(self):
@@ -467,7 +467,7 @@ class TestPipelineTriggerFlow:
         handler.headers = {"Authorization": f"Bearer {token}"}
 
         data, status = handle_pipeline(method="GET", path_tail="status",
-                                       body={}, query={}, handler=None)
+                                       body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
 
     def test_04_pipeline_step_handlers_exist(self):
@@ -605,7 +605,7 @@ class TestOnboardingUX:
             "slug": "xss-project",
         }
         data, status = handle_project(method="POST", path_tail="",
-                                      body=body, query={}, handler=None)
+                                      body=body, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status in (200, 201, 400)
 
     def test_04_concurrent_requests_not_crash(self):

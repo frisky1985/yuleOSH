@@ -66,6 +66,11 @@ def handle_get(handler) -> None:
     parsed = urllib.parse.urlparse(handler.path)
     path = parsed.path
 
+    # ── API v1 router (single source of truth for /api/v1/*) ──
+    if path.startswith("/api/v1/"):
+        if _s.api_v1_dispatch(handler, path):
+            return
+
     # Healthcheck — always accessible
     if path == "/api/health":
         handler._json_response(handler._get_health())
@@ -269,6 +274,12 @@ def handle_post(handler) -> None:
     """Route and serve all POST requests (non-API-v1 routes)."""
     parsed = urllib.parse.urlparse(handler.path)
     path = parsed.path
+
+    # ── API v1 router (single source of truth for /api/v1/*) ──
+    if path.startswith("/api/v1/"):
+        from yuleosh.ui import server as _s
+        if _s.api_v1_dispatch(handler, path):
+            return
 
     if path == "/_auth/login":
         handler._handle_login()

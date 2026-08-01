@@ -43,14 +43,14 @@ class TestApiStats:
         mock_conn.execute.return_value = mock_cursor
         mock_cursor.fetchone.return_value = {"c": 15}
 
-        result = handle_stats("GET", "overview", {}, {})
+        result = handle_stats("GET", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
         assert "data" in result[0]
 
     def test_stats_bad_method(self):
         from yuleosh.api.stats import handle_stats
 
-        result = handle_stats("POST", "", {}, {})
+        result = handle_stats("POST", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 405
 
 
@@ -63,7 +63,7 @@ class TestApiReview:
     def test_handle_review_unknown_action(self):
         from yuleosh.api.review import handle_review
 
-        result = handle_review("GET", "unknown", {}, {})
+        result = handle_review("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 404
 
     @mock.patch("yuleosh.api.review._list_reviews")
@@ -71,13 +71,13 @@ class TestApiReview:
         from yuleosh.api.review import handle_review
 
         mock_list.return_value = ({"ok": True, "data": {"reviews": [], "count": 0}}, 200)
-        result = handle_review("GET", "list", {}, {})
+        result = handle_review("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
 
     def test_handle_review_status_returns_404(self):
         from yuleosh.api.review import handle_review
 
-        result = handle_review("GET", "status", {}, {})
+        result = handle_review("GET", "status", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 404  # 'status' is not a valid review sub-resource
 
     def test_get_review_results_no_dir(self, monkeypatch):
@@ -127,7 +127,7 @@ class TestApiProject:
     def test_handle_project_get(self):
         from yuleosh.api.project import handle_project
 
-        result = handle_project("GET", "", {}, {})
+        result = handle_project("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
         assert "projects" in result[0]["data"]
         assert "count" in result[0]["data"]
@@ -135,7 +135,7 @@ class TestApiProject:
     def test_handle_project_bad_method(self):
         from yuleosh.api.project import handle_project
 
-        result = handle_project("DELETE", "", {}, {})
+        result = handle_project("DELETE", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 405
 
 
@@ -211,7 +211,7 @@ class TestApiPipeline:
     def test_handle_pipeline_unknown(self):
         from yuleosh.api.pipeline import handle_pipeline
 
-        result = handle_pipeline("GET", "unknown", {}, {})
+        result = handle_pipeline("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 404
 
     def test_handle_pipeline_list_no_dir(self, monkeypatch):
@@ -219,14 +219,14 @@ class TestApiPipeline:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             monkeypatch.setattr("yuleosh.api.OSH_HOME", tmpdir)
-            result = handle_pipeline("GET", "list", {}, {})
+            result = handle_pipeline("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
         assert result[0]["data"]["count"] == 0
 
     def test_handle_pipeline_list_with_db_runs(self, monkeypatch):
         from yuleosh.api.pipeline import handle_pipeline
 
-        result = handle_pipeline("GET", "list", {}, {})
+        result = handle_pipeline("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
         assert "count" in result[0]["data"]
 
@@ -234,12 +234,12 @@ class TestApiPipeline:
         from yuleosh.api.pipeline import handle_pipeline
 
         # No spec provided -> should return error
-        result = handle_pipeline("POST", "", {}, {})
+        result = handle_pipeline("POST", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 400
         assert "error" in result[0] or "spec" in str(result[0])
 
     def test_handle_pipeline_status(self):
         from yuleosh.api.pipeline import handle_pipeline
 
-        result = handle_pipeline("GET", "status", {}, {})
+        result = handle_pipeline("GET", "status", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200

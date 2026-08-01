@@ -14,7 +14,7 @@ class TestApiReview:
 
     def test_unknown_resource(self):
         """Unknown review resource returns 404."""
-        result, code = handle_review("GET", "unknown", {}, {})
+        result, code = handle_review("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     @patch("yuleosh.api.review.subprocess.run")
@@ -28,7 +28,7 @@ class TestApiReview:
         mock_result.stderr = ""
         mock_subproc.return_value = mock_result
 
-        result, code = handle_review("POST", "auto", {}, {})
+        result, code = handle_review("POST", "auto", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["status"] == "completed"
 
@@ -38,7 +38,7 @@ class TestApiReview:
         """Timeout returns 504."""
         mock_env.return_value = "/tmp"
         mock_subproc.side_effect = __import__("subprocess").TimeoutExpired("cmd", 120)
-        result, code = handle_review("POST", "auto", {}, {})
+        result, code = handle_review("POST", "auto", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 504
 
     @patch("yuleosh.api.review.subprocess.run")
@@ -47,7 +47,7 @@ class TestApiReview:
         """Exception returns 500."""
         mock_env.return_value = "/tmp"
         mock_subproc.side_effect = Exception("error")
-        result, code = handle_review("POST", "auto", {}, {})
+        result, code = handle_review("POST", "auto", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 500
 
     @patch("yuleosh.api.review.subprocess.run")
@@ -60,13 +60,13 @@ class TestApiReview:
         mock_result.stderr = ""
         mock_subproc.return_value = mock_result
 
-        result, code = handle_review("POST", "task", {"task": "my-task", "kind": "feature"}, {})
+        result, code = handle_review("POST", "task", {"task": "my-task", "kind": "feature"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["task"] == "my-task"
 
     def test_task_review_no_name(self):
         """POST without task name returns 400."""
-        result, code = handle_review("POST", "task", {}, {})
+        result, code = handle_review("POST", "task", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     def test_list_reviews_empty(self):
@@ -76,7 +76,7 @@ class TestApiReview:
 
         with patch("yuleosh.api.review.Path", return_value=mock_path):
             with patch("yuleosh.api.OSH_HOME", "/tmp"):
-                result, code = handle_review("GET", "list", {}, {})
+                result, code = handle_review("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
                 assert code == 200
                 assert result["data"]["count"] == 0
 
@@ -86,7 +86,7 @@ class TestApiReview:
             mock_path = MagicMock()
             mock_path.exists.return_value = False
             with patch("yuleosh.api.review.Path", return_value=mock_path):
-                result, code = handle_review("GET", "", {}, {})
+                result, code = handle_review("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
                 assert code == 200
 
     @patch("yuleosh.api.review.subprocess.run")

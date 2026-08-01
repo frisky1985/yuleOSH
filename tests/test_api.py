@@ -347,26 +347,26 @@ class TestSpec:
 
     def test_validate_unknown_resource(self):
         from yuleosh.api.spec import handle_spec
-        result, status = handle_spec("GET", "unknown", {}, {})
+        result, status = handle_spec("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_validate_wrong_method(self):
         from yuleosh.api.spec import handle_spec
-        result, status = handle_spec("GET", "validate", {}, {})
+        result, status = handle_spec("GET", "validate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
         assert "POST" in result["error"]
 
     def test_validate_missing_path(self):
         from yuleosh.api.spec import handle_spec
-        result, status = handle_spec("POST", "validate", {}, {})
+        result, status = handle_spec("POST", "validate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "'path' is required" in result["error"]
 
     def test_validate_outside_project(self):
         from yuleosh.api.spec import handle_spec
-        result, status = handle_spec("POST", "validate", {"path": "/nonexistent/file.md"}, {})
+        result, status = handle_spec("POST", "validate", {"path": "/nonexistent/file.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "within project" in result["error"].lower()
         assert status == 403
@@ -374,7 +374,7 @@ class TestSpec:
     def test_validate_success(self, temp_spec_file):
         """Validate a real spec file."""
         from yuleosh.api.spec import handle_spec
-        result, status = handle_spec("POST", "validate", {"path": temp_spec_file}, {})
+        result, status = handle_spec("POST", "validate", {"path": temp_spec_file}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         data = result["data"]
@@ -389,33 +389,33 @@ class TestSpec:
         """Relative path is resolved against OSH_HOME."""
         from yuleosh.api.spec import handle_spec
         # Use a relative path that exists
-        result, status = handle_spec("POST", "validate", {"path": "docs/spec.md"}, {})
+        result, status = handle_spec("POST", "validate", {"path": "docs/spec.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
 
     def test_diff_wrong_method(self):
         from yuleosh.api.spec import handle_spec
-        result, status = handle_spec("GET", "diff", {}, {})
+        result, status = handle_spec("GET", "diff", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
 
     def test_diff_missing_params(self):
         from yuleosh.api.spec import handle_spec
-        result, status = handle_spec("POST", "diff", {"old": "a.md"}, {})
+        result, status = handle_spec("POST", "diff", {"old": "a.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "'old' and 'new'" in result["error"]
 
     def test_diff_old_not_found(self, temp_spec_file):
         from yuleosh.api.spec import handle_spec
         result, status = handle_spec("POST", "diff",
-                                     {"old": "/nonexistent/old.md", "new": temp_spec_file}, {})
+                                     {"old": "/nonexistent/old.md", "new": temp_spec_file}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "not found" in result["error"].lower()
 
     def test_diff_new_not_found(self, temp_spec_file):
         from yuleosh.api.spec import handle_spec
         result, status = handle_spec("POST", "diff",
-                                     {"old": temp_spec_file, "new": "/nonexistent/new.md"}, {})
+                                     {"old": temp_spec_file, "new": "/nonexistent/new.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "not found" in result["error"].lower()
 
@@ -426,7 +426,7 @@ class TestSpec:
         copy_path = tmp_path / "spec_copy.md"
         shutil.copy2(temp_spec_file, str(copy_path))
         result, status = handle_spec("POST", "diff",
-                                     {"old": temp_spec_file, "new": str(copy_path)}, {})
+                                     {"old": temp_spec_file, "new": str(copy_path)}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
 
@@ -437,7 +437,7 @@ class TestSpec:
         shutil.copy2(temp_spec_file, str(copy_path))
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
         result, status = handle_spec("POST", "diff",
-                                     {"old": "spec_copy.md", "new": "spec_copy.md"}, {})
+                                     {"old": "spec_copy.md", "new": "spec_copy.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
 
@@ -451,26 +451,26 @@ class TestPipeline:
 
     def test_unknown_resource(self):
         from yuleosh.api.pipeline import handle_pipeline
-        result, status = handle_pipeline("GET", "blargh", {}, {})
+        result, status = handle_pipeline("GET", "blargh", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_run_wrong_method(self):
         from yuleosh.api.pipeline import handle_pipeline
-        result, status = handle_pipeline("GET", "run", {}, {})
+        result, status = handle_pipeline("GET", "run", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
 
     def test_run_missing_spec(self):
         from yuleosh.api.pipeline import handle_pipeline
-        result, status = handle_pipeline("POST", "run", {}, {})
+        result, status = handle_pipeline("POST", "run", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "'spec' is required" in result["error"]
 
     def test_run_spec_not_found(self):
         from yuleosh.api.pipeline import handle_pipeline
         result, status = handle_pipeline("POST", "run",
-                                         {"spec": "/nonexistent.md"}, {})
+                                         {"spec": "/nonexistent.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "within project" in result["error"].lower()
         assert status == 403
@@ -482,7 +482,7 @@ class TestPipeline:
         from yuleosh.api.pipeline import handle_pipeline
 
         result, status = handle_pipeline("POST", "run",
-                                         {"spec": temp_spec_file, "name": "my-pipe"}, {})
+                                         {"spec": temp_spec_file, "name": "my-pipe"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         data = result["data"]
@@ -497,7 +497,7 @@ class TestPipeline:
         from yuleosh.api.pipeline import handle_pipeline
 
         result, status = handle_pipeline("POST", "run",
-                                         {"spec": temp_spec_file}, {})
+                                         {"spec": temp_spec_file}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 504
 
@@ -508,7 +508,7 @@ class TestPipeline:
         from yuleosh.api.pipeline import handle_pipeline
 
         result, status = handle_pipeline("POST", "run",
-                                         {"spec": temp_spec_file}, {})
+                                         {"spec": temp_spec_file}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 500
 
@@ -520,7 +520,7 @@ class TestPipeline:
             from yuleosh.api.pipeline import handle_pipeline
 
             result, status = handle_pipeline("POST", "run",
-                                             {"spec": "docs/spec.md"}, {})
+                                             {"spec": "docs/spec.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
 
@@ -528,7 +528,7 @@ class TestPipeline:
         """No sessions dir, returns empty list."""
         from yuleosh.api.pipeline import handle_pipeline
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_pipeline("GET", "status", {}, {})
+            result, status = handle_pipeline("GET", "status", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -548,7 +548,7 @@ class TestPipeline:
 
         # Better: just mock OSH_HOME
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
-        result, status = handle_pipeline("GET", "status", {}, {})
+        result, status = handle_pipeline("GET", "status", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] >= 1
@@ -558,7 +558,7 @@ class TestPipeline:
         """path_tail='' with POST should act like 'run'."""
         from yuleosh.api.pipeline import handle_pipeline
         # Empty path_tail + POST routes to _run_pipeline -> needs spec
-        result, status = handle_pipeline("POST", "", {"spec": "/nonexistent"}, {})
+        result, status = handle_pipeline("POST", "", {"spec": "/nonexistent"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         # Absolute path outside project triggers security guard
         assert "within project" in result["error"].lower()
@@ -568,7 +568,7 @@ class TestPipeline:
         """path_tail='' with GET returns 405 (first condition catches it)."""
         from yuleosh.api.pipeline import handle_pipeline
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_pipeline("GET", "", {}, {})
+            result, status = handle_pipeline("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 405
             assert "Use POST" in result["error"]
 
@@ -576,7 +576,7 @@ class TestPipeline:
         """path_tail='list' with GET returns pipelines list."""
         from yuleosh.api.pipeline import handle_pipeline
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_pipeline("GET", "list", {}, {})
+            result, status = handle_pipeline("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             assert result["data"]["count"] == 0
@@ -591,25 +591,25 @@ class TestCI:
 
     def test_unknown_resource(self):
         from yuleosh.api.ci import handle_ci
-        result, status = handle_ci("GET", "blargh", {}, {})
+        result, status = handle_ci("GET", "blargh", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_list_ci_runs_wrong_method(self):
         from yuleosh.api.ci import handle_ci
-        result, status = handle_ci("POST", "runs", {}, {})
+        result, status = handle_ci("POST", "runs", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_run_wrong_method(self):
         from yuleosh.api.ci import handle_ci
-        result, status = handle_ci("GET", "run/1", {}, {})
+        result, status = handle_ci("GET", "run/1", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
 
     def test_run_invalid_layer(self):
         from yuleosh.api.ci import handle_ci
-        result, status = handle_ci("POST", "run/5", {}, {})
+        result, status = handle_ci("POST", "run/5", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "Invalid CI layer" in result["error"]
 
@@ -617,7 +617,7 @@ class TestCI:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="Passed", stderr="")
             from yuleosh.api.ci import handle_ci
-            result, status = handle_ci("POST", "run/1", {}, {})
+            result, status = handle_ci("POST", "run/1", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -628,7 +628,7 @@ class TestCI:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="Failed", stderr="tests failed")
             from yuleosh.api.ci import handle_ci
-            result, status = handle_ci("POST", "run/2", {}, {})
+            result, status = handle_ci("POST", "run/2", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -640,7 +640,7 @@ class TestCI:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired("cmd", 180)
             from yuleosh.api.ci import handle_ci
-            result, status = handle_ci("POST", "run/3", {}, {})
+            result, status = handle_ci("POST", "run/3", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 504
 
@@ -648,7 +648,7 @@ class TestCI:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = RuntimeError("CI system error")
             from yuleosh.api.ci import handle_ci
-            result, status = handle_ci("POST", "run/1", {}, {})
+            result, status = handle_ci("POST", "run/1", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 500
 
@@ -656,7 +656,7 @@ class TestCI:
         """No ci results dir."""
         from yuleosh.api.ci import handle_ci
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_ci("GET", "runs", {}, {})
+            result, status = handle_ci("GET", "runs", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -675,7 +675,7 @@ class TestCI:
             json.dumps({"layer": 2, "commit": "def", "status": "failed"})
         )
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
-        result, status = handle_ci("GET", "runs", {}, {})
+        result, status = handle_ci("GET", "runs", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 2
@@ -690,19 +690,19 @@ class TestReview:
 
     def test_unknown_resource(self):
         from yuleosh.api.review import handle_review
-        result, status = handle_review("GET", "blargh", {}, {})
+        result, status = handle_review("GET", "blargh", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_auto_wrong_method(self):
         from yuleosh.api.review import handle_review
-        result, status = handle_review("GET", "auto", {}, {})
+        result, status = handle_review("GET", "auto", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_task_wrong_method(self):
         from yuleosh.api.review import handle_review
-        result, status = handle_review("GET", "task", {}, {})
+        result, status = handle_review("GET", "task", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
@@ -710,7 +710,7 @@ class TestReview:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="Review OK", stderr="")
             from yuleosh.api.review import handle_review
-            result, status = handle_review("POST", "auto", {}, {})
+            result, status = handle_review("POST", "auto", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -721,7 +721,7 @@ class TestReview:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired("cmd", 120)
             from yuleosh.api.review import handle_review
-            result, status = handle_review("POST", "auto", {}, {})
+            result, status = handle_review("POST", "auto", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 504
 
@@ -729,13 +729,13 @@ class TestReview:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = RuntimeError("Review error")
             from yuleosh.api.review import handle_review
-            result, status = handle_review("POST", "auto", {}, {})
+            result, status = handle_review("POST", "auto", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 500
 
     def test_task_review_missing_task(self):
         from yuleosh.api.review import handle_review
-        result, status = handle_review("POST", "task", {"kind": "feature"}, {})
+        result, status = handle_review("POST", "task", {"kind": "feature"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "'task' name is required" in result["error"]
 
@@ -744,7 +744,7 @@ class TestReview:
             mock_run.return_value = MagicMock(returncode=0, stdout="Task reviewed", stderr="")
             from yuleosh.api.review import handle_review
             result, status = handle_review("POST", "task",
-                                           {"task": "impl-login", "kind": "feature"}, {})
+                                           {"task": "impl-login", "kind": "feature"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -757,7 +757,7 @@ class TestReview:
             mock_run.side_effect = subprocess.TimeoutExpired("cmd", 120)
             from yuleosh.api.review import handle_review
             result, status = handle_review("POST", "task",
-                                           {"task": "impl-login", "kind": "feature"}, {})
+                                           {"task": "impl-login", "kind": "feature"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 504
 
@@ -766,14 +766,14 @@ class TestReview:
             mock_run.side_effect = RuntimeError("boom")
             from yuleosh.api.review import handle_review
             result, status = handle_review("POST", "task",
-                                           {"task": "impl-login"}, {})
+                                           {"task": "impl-login"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 500
 
     def test_list_reviews_empty(self, tmp_path):
         from yuleosh.api.review import handle_review
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_review("GET", "list", {}, {})
+            result, status = handle_review("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -783,7 +783,7 @@ class TestReview:
         """GET with empty path_tail also lists reviews."""
         from yuleosh.api.review import handle_review
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_review("GET", "", {}, {})
+            result, status = handle_review("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -800,7 +800,7 @@ class TestReview:
             json.dumps({"task": "review-1", "decision": "approved"})
         )
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
-        result, status = handle_review("GET", "list", {}, {})
+        result, status = handle_review("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 1
@@ -816,25 +816,25 @@ class TestEvidence:
 
     def test_unknown_resource(self):
         from yuleosh.api.evidence import handle_evidence
-        result, status = handle_evidence("GET", "blargh", {}, {})
+        result, status = handle_evidence("GET", "blargh", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_generate_wrong_method(self):
         from yuleosh.api.evidence import handle_evidence
-        result, status = handle_evidence("GET", "generate", {}, {})
+        result, status = handle_evidence("GET", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_files_wrong_method(self):
         from yuleosh.api.evidence import handle_evidence
-        result, status = handle_evidence("POST", "files", {}, {})
+        result, status = handle_evidence("POST", "files", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_pack_wrong_method(self):
         from yuleosh.api.evidence import handle_evidence
-        result, status = handle_evidence("POST", "pack", {}, {})
+        result, status = handle_evidence("POST", "pack", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
@@ -843,7 +843,7 @@ class TestEvidence:
             mock_run.return_value = MagicMock(returncode=0, stdout="Pack OK", stderr="")
             from yuleosh.api.evidence import handle_evidence
             result, status = handle_evidence("POST", "generate",
-                                             {"project_dir": "/tmp/test-ev"}, {})
+                                             {"project_dir": "/tmp/test-ev"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -855,7 +855,7 @@ class TestEvidence:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired("cmd", 120)
             from yuleosh.api.evidence import handle_evidence
-            result, status = handle_evidence("POST", "generate", {}, {})
+            result, status = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 504
 
@@ -863,7 +863,7 @@ class TestEvidence:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = OSError("Cannot spawn process")
             from yuleosh.api.evidence import handle_evidence
-            result, status = handle_evidence("POST", "generate", {}, {})
+            result, status = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 500
 
@@ -873,14 +873,14 @@ class TestEvidence:
             mock_run.side_effect = subprocess.CalledProcessError(1, "cmd")
             from yuleosh.api.evidence import handle_evidence
             result, status = handle_evidence("POST", "generate",
-                                             {"project_dir": "/tmp"}, {})
+                                             {"project_dir": "/tmp"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 500
 
     def test_list_files_empty(self, tmp_path):
         from yuleosh.api.evidence import handle_evidence
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_evidence("GET", "files", {}, {})
+            result, status = handle_evidence("GET", "files", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -894,7 +894,7 @@ class TestEvidence:
         (ev_dir / "report.pdf").write_text("report data")
         (ev_dir / "trace.json").write_text("{}")
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
-        result, status = handle_evidence("GET", "files", {}, {})
+        result, status = handle_evidence("GET", "files", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 2
@@ -905,7 +905,7 @@ class TestEvidence:
     def test_download_pack_not_found(self, tmp_path):
         from yuleosh.api.evidence import handle_evidence
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_evidence("GET", "pack", {}, {})
+            result, status = handle_evidence("GET", "pack", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 404
 
@@ -919,8 +919,12 @@ class TestEvidence:
         zip_path.write_bytes(b"zip content")
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
 
-        # Use handler=None (unit test mode — auth injects dummy user)
-        result, status = handle_evidence("GET", "pack", {}, {}, handler=None)
+        # Explicit current_user injection (require_auth fails closed without
+        # a handler context).
+        result, status = handle_evidence(
+            "GET", "pack", {}, {}, handler=None,
+            current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"},
+        )
         assert status == 200
         assert result["ok"] is True
         assert result["data"]["status"] == "ready"
@@ -933,7 +937,10 @@ class TestEvidence:
         zip_path = ev_dir / "compliance-pack.zip"
         zip_path.write_text("zip data")
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
-        result, status = handle_evidence("GET", "pack", {}, {}, handler=None)
+        result, status = handle_evidence(
+            "GET", "pack", {}, {}, handler=None,
+            current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"},
+        )
         assert status == 200
         assert result["ok"] is True
         assert result["data"]["status"] == "ready"
@@ -948,14 +955,14 @@ class TestProject:
 
     def test_wrong_method(self):
         from yuleosh.api.project import handle_project
-        result, status = handle_project("DELETE", "", {}, {})
+        result, status = handle_project("DELETE", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
 
     def test_stats(self, mock_store):
         """Project stats with seeded data."""
         from yuleosh.api.project import handle_project
-        result, status = handle_project("GET", "stats", {}, {})
+        result, status = handle_project("GET", "stats", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         data = result["data"]
@@ -968,7 +975,7 @@ class TestProject:
     def test_stats_empty(self):
         """Stats on empty DB returns zeros."""
         from yuleosh.api.project import handle_project
-        result, status = handle_project("GET", "stats", {}, {})
+        result, status = handle_project("GET", "stats", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["projects"] == 0
@@ -976,37 +983,37 @@ class TestProject:
 
     def test_list_projects(self, mock_store):
         from yuleosh.api.project import handle_project
-        result, status = handle_project("GET", "", {}, {})
+        result, status = handle_project("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] >= 1
 
     def test_list_projects_explicit_list(self, mock_store):
         from yuleosh.api.project import handle_project
-        result, status = handle_project("GET", "list", {}, {})
+        result, status = handle_project("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] >= 1
 
     def test_list_projects_empty(self):
         from yuleosh.api.project import handle_project
-        result, status = handle_project("GET", "", {}, {})
+        result, status = handle_project("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 0
 
     def test_get_project_missing_name(self):
         from yuleosh.api.project import handle_project
-        result, status = handle_project("GET", "", {}, {})
+        result, status = handle_project("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         # Empty path_tail with GET returns list, not get-project
         # For get, we need a name in path_tail
-        result, status = handle_project("GET", "nonexistent", {}, {})
+        result, status = handle_project("GET", "nonexistent", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "not found" in result["error"].lower()
 
     def test_get_project_found(self, mock_store):
         from yuleosh.api.project import handle_project
-        result, status = handle_project("GET", "test-project", {}, {})
+        result, status = handle_project("GET", "test-project", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         p = result["data"]
@@ -1014,7 +1021,7 @@ class TestProject:
 
     def test_create_project_missing_name(self):
         from yuleosh.api.project import handle_project
-        result, status = handle_project("POST", "", {"description": "no name"}, {})
+        result, status = handle_project("POST", "", {"description": "no name"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "'name' is required" in result["error"]
 
@@ -1022,7 +1029,7 @@ class TestProject:
         from yuleosh.api.project import handle_project
         result, status = handle_project("POST", "",
                                         {"name": "new-project", "description": "A new project",
-                                         "spec_path": "docs/spec.md"}, {})
+                                         "spec_path": "docs/spec.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         p = result["data"]
@@ -1032,7 +1039,7 @@ class TestProject:
     def test_create_project_minimal(self):
         from yuleosh.api.project import handle_project
         result, status = handle_project("POST", "",
-                                        {"name": "minimal-project"}, {})
+                                        {"name": "minimal-project"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
 
@@ -1040,7 +1047,7 @@ class TestProject:
         """Creating a project with a duplicate name succeeds (INSERT OR IGNORE)."""
         from yuleosh.api.project import handle_project
         result, status = handle_project("POST", "",
-                                        {"name": "test-project", "description": "duplicate"}, {})
+                                        {"name": "test-project", "description": "duplicate"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         # Description stays the original (IGNORE means no update)
@@ -1059,7 +1066,7 @@ class TestProject:
         )
         store.conn.commit()
 
-        result, status = handle_project("GET", "stats", {}, {})
+        result, status = handle_project("GET", "stats", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["pipeline_statuses"]["completed"] == 1
@@ -1075,27 +1082,27 @@ class TestApiKeys:
 
     def test_unknown_route(self):
         from yuleosh.api.apikeys import handle_apikeys
-        result, status = handle_apikeys("PUT", "", {}, {})
+        result, status = handle_apikeys("PUT", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_generate_missing_label(self):
         from yuleosh.api.apikeys import handle_apikeys
-        result, status = handle_apikeys("POST", "", {}, {})
+        result, status = handle_apikeys("POST", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "label is required" in result["error"]
 
     def test_generate_label_too_long(self):
         from yuleosh.api.apikeys import handle_apikeys
         result, status = handle_apikeys("POST", "",
-                                        {"label": "x" * 101}, {})
+                                        {"label": "x" * 101}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "100 characters" in result["error"]
 
     def test_generate_success(self):
         from yuleosh.api.apikeys import handle_apikeys
         result, status = handle_apikeys("POST", "",
-                                        {"label": "my-key"}, {})
+                                        {"label": "my-key"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         data = result["data"]
@@ -1109,21 +1116,21 @@ class TestApiKeys:
     def test_generate_strip_label(self):
         from yuleosh.api.apikeys import handle_apikeys
         result, status = handle_apikeys("POST", "",
-                                        {"label": "  spaced-key  "}, {})
+                                        {"label": "  spaced-key  "}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["data"]["label"] == "spaced-key"
 
     def test_generate_with_empty_label(self):
         from yuleosh.api.apikeys import handle_apikeys
-        result, status = handle_apikeys("POST", "", {"label": ""}, {})
+        result, status = handle_apikeys("POST", "", {"label": ""}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         # Empty after strip
-        result, status = handle_apikeys("POST", "", {"label": "   "}, {})
+        result, status = handle_apikeys("POST", "", {"label": "   "}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
 
     def test_list_keys_empty(self):
         from yuleosh.api.apikeys import handle_apikeys
-        result, status = handle_apikeys("GET", "", {}, {})
+        result, status = handle_apikeys("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 0
@@ -1131,30 +1138,30 @@ class TestApiKeys:
     def test_list_keys_with_data(self):
         from yuleosh.api.apikeys import handle_apikeys
         # First generate one
-        handle_apikeys("POST", "", {"label": "key-1"}, {})
-        handle_apikeys("POST", "", {"label": "key-2"}, {})
-        result, status = handle_apikeys("GET", "", {}, {})
+        handle_apikeys("POST", "", {"label": "key-1"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
+        handle_apikeys("POST", "", {"label": "key-2"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
+        result, status = handle_apikeys("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 2
 
     def test_revoke_invalid_id(self):
         from yuleosh.api.apikeys import handle_apikeys
-        result, status = handle_apikeys("DELETE", "abc", {}, {})
+        result, status = handle_apikeys("DELETE", "abc", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 400
 
     def test_revoke_not_found(self):
         from yuleosh.api.apikeys import handle_apikeys
-        result, status = handle_apikeys("DELETE", "9999", {}, {})
+        result, status = handle_apikeys("DELETE", "9999", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_revoke_success(self):
         from yuleosh.api.apikeys import handle_apikeys
-        gen = handle_apikeys("POST", "", {"label": "to-revoke"}, {})
+        gen = handle_apikeys("POST", "", {"label": "to-revoke"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         key_id = gen[0]["data"]["id"]
-        result, status = handle_apikeys("DELETE", str(key_id), {}, {})
+        result, status = handle_apikeys("DELETE", str(key_id), {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert result["ok"] is True
         assert result["data"]["revoked"] is True
@@ -1162,10 +1169,10 @@ class TestApiKeys:
     def test_revoke_twice(self):
         """Revoking an already-revoked key returns 404."""
         from yuleosh.api.apikeys import handle_apikeys
-        gen = handle_apikeys("POST", "", {"label": "revoke-2x"}, {})
+        gen = handle_apikeys("POST", "", {"label": "revoke-2x"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         key_id = gen[0]["data"]["id"]
-        handle_apikeys("DELETE", str(key_id), {}, {})
-        result, status = handle_apikeys("DELETE", str(key_id), {}, {})
+        handle_apikeys("DELETE", str(key_id), {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
+        result, status = handle_apikeys("DELETE", str(key_id), {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
@@ -1179,19 +1186,19 @@ class TestStats:
 
     def test_wrong_method(self):
         from yuleosh.api.stats import handle_stats
-        result, status = handle_stats("POST", "overview", {}, {})
+        result, status = handle_stats("POST", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
 
     def test_unknown_resource(self):
         from yuleosh.api.stats import handle_stats
-        result, status = handle_stats("GET", "blargh", {}, {})
+        result, status = handle_stats("GET", "blargh", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_overview_empty(self):
         from yuleosh.api.stats import handle_stats
-        result, status = handle_stats("GET", "overview", {}, {})
+        result, status = handle_stats("GET", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["total_pipelines"] == 0
@@ -1201,7 +1208,7 @@ class TestStats:
 
     def test_overview_with_data(self, mock_store):
         from yuleosh.api.stats import handle_stats
-        result, status = handle_stats("GET", "overview", {}, {})
+        result, status = handle_stats("GET", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["total_pipelines"] == 1
@@ -1222,7 +1229,7 @@ class TestStats:
             ("pipe-2", "docs/spec.md", "failed", datetime.now().isoformat())
         )
         store.conn.commit()
-        result, status = handle_stats("GET", "overview", {}, {})
+        result, status = handle_stats("GET", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         data = result["data"]
         assert data["total_pipelines"] == 2
         assert 49 < data["pipeline_success_rate"] < 51  # 50%
@@ -1230,14 +1237,14 @@ class TestStats:
     def test_trends_invalid_period(self):
         from yuleosh.api.stats import handle_stats
         result, status = handle_stats("GET", "trends", {},
-                                      {"period": ["monthly"]})
+                                      {"period": ["monthly"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 400
 
     def test_trends_empty(self):
         from yuleosh.api.stats import handle_stats
         result, status = handle_stats("GET", "trends", {},
-                                      {"period": ["daily"], "days": ["7"]})
+                                      {"period": ["daily"], "days": ["7"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["period"] == "daily"
@@ -1247,7 +1254,7 @@ class TestStats:
     def test_trends_with_data(self, mock_store):
         from yuleosh.api.stats import handle_stats
         result, status = handle_stats("GET", "trends", {},
-                                      {"period": ["daily"], "days": ["30"]})
+                                      {"period": ["daily"], "days": ["30"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["period"] == "daily"
@@ -1255,7 +1262,7 @@ class TestStats:
 
     def test_trends_default_params(self):
         from yuleosh.api.stats import handle_stats
-        result, status = handle_stats("GET", "trends", {}, {})
+        result, status = handle_stats("GET", "trends", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["period"] == "daily"
@@ -1264,7 +1271,7 @@ class TestStats:
     def test_trends_weekly(self):
         from yuleosh.api.stats import handle_stats
         result, status = handle_stats("GET", "trends", {},
-                                      {"period": ["weekly"], "days": ["30"]})
+                                      {"period": ["weekly"], "days": ["30"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["period"] == "weekly"
@@ -1273,7 +1280,7 @@ class TestStats:
         """Test with bad limit/offset."""
         from yuleosh.api.stats import handle_stats
         result, status = handle_stats("GET", "trends", {},
-                                      {"limit": [0], "offset": [-1]})
+                                      {"limit": [0], "offset": [-1]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200  # Should still work with defaults
 
 
@@ -1286,19 +1293,19 @@ class TestNotify:
 
     def test_unknown_resource(self):
         from yuleosh.api.notify import handle_notify
-        result, status = handle_notify("GET", "blargh", {}, {})
+        result, status = handle_notify("GET", "blargh", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_wrong_method(self):
         from yuleosh.api.notify import handle_notify
-        result, status = handle_notify("POST", "config", {}, {})
+        result, status = handle_notify("POST", "config", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
 
     def test_get_config(self):
         from yuleosh.api.notify import handle_notify
-        result, status = handle_notify("GET", "config", {}, {})
+        result, status = handle_notify("GET", "config", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert "feishu_url" in data
@@ -1307,14 +1314,14 @@ class TestNotify:
 
     def test_get_config_empty_path(self):
         from yuleosh.api.notify import handle_notify
-        result, status = handle_notify("GET", "", {}, {})
+        result, status = handle_notify("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert "feishu_url" in data
 
     def test_put_config_invalid_body(self):
         from yuleosh.api.notify import handle_notify
-        result, status = handle_notify("PUT", "config", "not-a-dict", {})
+        result, status = handle_notify("PUT", "config", "not-a-dict", {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 400
 
@@ -1322,7 +1329,7 @@ class TestNotify:
         from yuleosh.api.notify import handle_notify
         result, status = handle_notify("PUT", "config",
                                        {"feishu_url": "https://feishu.example.com/webhook",
-                                        "email_smtp": "smtp.example.com"}, {})
+                                        "email_smtp": "smtp.example.com"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["feishu_url"] == "https://feishu.example.com/webhook"
@@ -1333,7 +1340,7 @@ class TestNotify:
         from yuleosh.api.notify import handle_notify
         # Update just one field
         result, status = handle_notify("PUT", "config",
-                                       {"email_smtp": "smtp.custom.com"}, {})
+                                       {"email_smtp": "smtp.custom.com"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["email_smtp"] == "smtp.custom.com"
@@ -1460,19 +1467,19 @@ class TestAudit:
 
     def test_wrong_method(self):
         from yuleosh.api.audit import handle_audit
-        result, status = handle_audit("POST", "", {}, {})
+        result, status = handle_audit("POST", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 405
 
     def test_path_tail_not_empty(self):
         from yuleosh.api.audit import handle_audit
-        result, status = handle_audit("GET", "something", {}, {})
+        result, status = handle_audit("GET", "something", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert status == 404
 
     def test_list_audit_empty(self):
         from yuleosh.api.audit import handle_audit
-        result, status = handle_audit("GET", "", {}, {})
+        result, status = handle_audit("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 0
@@ -1482,7 +1489,7 @@ class TestAudit:
         from yuleosh.api.audit import log_request, handle_audit
         log_request("GET", "/api/v1/health", 200, "127.0.0.1", 12.5)
         log_request("POST", "/api/v1/pipeline/run", 400, "10.0.0.1", 3.2)
-        result, status = handle_audit("GET", "", {}, {})
+        result, status = handle_audit("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         data = result["data"]
         assert data["count"] == 2
@@ -1496,7 +1503,7 @@ class TestAudit:
         for i in range(5):
             log_request("GET", f"/api/endpoint/{i}", 200, "::1", 1.0)
         result, _ = handle_audit("GET", "",
-                                 {}, {"limit": ["2"], "offset": ["0"]})
+                                 {}, {"limit": ["2"], "offset": ["0"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["data"]["count"] == 2
         assert result["data"]["total"] == 5
         assert result["data"]["limit"] == 2
@@ -1507,7 +1514,7 @@ class TestAudit:
         for i in range(5):
             log_request("GET", "/api/test", 200, "10.0.0.1", 1.0)
         result, _ = handle_audit("GET", "",
-                                 {}, {"limit": ["999"]})
+                                 {}, {"limit": ["999"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         # Capped to 200
         assert result["data"]["count"] == 5
         assert result["data"]["limit"] == 200
@@ -1515,7 +1522,7 @@ class TestAudit:
     def test_audit_invalid_limit_offset(self):
         from yuleosh.api.audit import handle_audit
         result, _ = handle_audit("GET", "",
-                                 {}, {"limit": ["abc"], "offset": ["def"]})
+                                 {}, {"limit": ["abc"], "offset": ["def"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is True  # Falls back to defaults
         assert result["data"]["limit"] == 50
         assert result["data"]["offset"] == 0
@@ -1749,7 +1756,30 @@ class TestRouter:
 # =============================================================================
 
 class TestWebhooks:
-    """handle_webhooks — GitHub push events."""
+    """handle_webhooks — GitHub push events (P0: HMAC signature enforced)."""
+
+    # Secret used to sign test payloads.  Set per-test so the fail-closed
+    # "no secret configured" case stays testable.
+    _SECRET = "test-webhook-secret-for-unit-tests-only"
+
+    def _signed_handler(self, payload: dict) -> MagicMock:
+        """Build a handler mock carrying the raw body + valid signature."""
+        import hmac, hashlib
+        raw = json.dumps(payload).encode("utf-8")
+        sig = "sha256=" + hmac.new(
+            self._SECRET.encode(), raw, hashlib.sha256
+        ).hexdigest()
+        handler = MagicMock()
+        handler._raw_body = raw
+        handler.headers = {"X-Hub-Signature-256": sig}
+        return handler
+
+    def _call(self, payload: dict, handler=None):
+        from yuleosh.api.webhooks import handle_webhooks
+        with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": self._SECRET}):
+            return handle_webhooks(
+                "POST", "github", body=payload, query={}, handler=handler
+            )
 
     def test_wrong_method(self):
         from yuleosh.api.webhooks import handle_webhooks
@@ -1763,12 +1793,57 @@ class TestWebhooks:
         assert result["ok"] is False
         assert status == 404
 
+    def test_missing_signature_rejected(self):
+        """No X-Hub-Signature-256 header → 401 (fail-closed)."""
+        from yuleosh.api.webhooks import handle_webhooks
+        handler = MagicMock()
+        handler._raw_body = json.dumps({"ref": "refs/heads/main"}).encode()
+        handler.headers = {}
+        with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": self._SECRET}):
+            result, status = handle_webhooks("POST", "github", {}, {}, handler=handler)
+        assert status == 401
+        assert "signature" in result["error"].lower()
+
+    def test_bad_signature_rejected(self):
+        """Mismatched HMAC → 401."""
+        from yuleosh.api.webhooks import handle_webhooks
+        handler = MagicMock()
+        handler._raw_body = json.dumps({"ref": "refs/heads/main"}).encode()
+        handler.headers = {"X-Hub-Signature-256": "sha256=" + "0" * 64}
+        with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": self._SECRET}):
+            result, status = handle_webhooks("POST", "github", {}, {}, handler=handler)
+        assert status == 401
+
+    def test_malformed_signature_rejected(self):
+        """Signature not prefixed with sha256= → 401."""
+        from yuleosh.api.webhooks import handle_webhooks
+        handler = MagicMock()
+        handler._raw_body = json.dumps({"ref": "refs/heads/main"}).encode()
+        handler.headers = {"X-Hub-Signature-256": "md5=deadbeef"}
+        with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": self._SECRET}):
+            result, status = handle_webhooks("POST", "github", {}, {}, handler=handler)
+        assert status == 401
+
+    def test_no_secret_configured_rejected(self):
+        """Secret unset → webhook delivery refused (fail-closed)."""
+        from yuleosh.api.webhooks import handle_webhooks
+        handler = self._signed_handler({"ref": "refs/heads/main"})
+        with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": ""}):
+            result, status = handle_webhooks("POST", "github", {}, {}, handler=handler)
+        assert status == 401
+
+    def test_no_handler_rejected(self):
+        """No HTTP handler → 400 (cannot verify signature)."""
+        from yuleosh.api.webhooks import handle_webhooks
+        result, status = handle_webhooks("POST", "github", {}, {})
+        assert status == 400
+
     def test_github_push_no_ref(self):
         """Minimal payload — no ref, no repository."""
         from yuleosh.api.webhooks import handle_webhooks
         with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
-            result, status = handle_webhooks("POST", "github", {})
+            result, status = self._call({}, handler=self._signed_handler({}))
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -1779,14 +1854,15 @@ class TestWebhooks:
     def test_github_push_with_repo(self):
         """Payload with repo info."""
         from yuleosh.api.webhooks import handle_webhooks
+        payload = {
+            "repository": {"full_name": "user/repo", "name": "repo"},
+            "ref": "refs/heads/main",
+            "head_commit": {"id": "abc123def456", "message": "Update feature"},
+            "pusher": {"name": "dev-user"},
+        }
         with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
-            result, status = handle_webhooks("POST", "github", {
-                "repository": {"full_name": "user/repo", "name": "repo"},
-                "ref": "refs/heads/main",
-                "head_commit": {"id": "abc123def456", "message": "Update feature"},
-                "pusher": {"name": "dev-user"},
-            })
+            result, status = self._call(payload, handler=self._signed_handler(payload))
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
@@ -1800,12 +1876,13 @@ class TestWebhooks:
         mock_trigger_ci.return_value = {"status": "queued", "job_id": "abc123def4567890",
                                         "success": True, "timestamp": "now"}
         from yuleosh.api.webhooks import handle_webhooks
-        result, status = handle_webhooks("POST", "github", {
+        payload = {
             "repository": {"full_name": "user/repo"},
             "ref": "refs/heads/main",
             "head_commit": {"id": "abc123def456"},
             "pusher": {"name": "dev"},
-        })
+        }
+        result, status = self._call(payload, handler=self._signed_handler(payload))
         assert status == 200
         data = result["data"]
         # v3.4.0: webhooks use async runner → pipeline_triggered/job_id keys
@@ -1831,34 +1908,34 @@ class TestWebhooks:
     def test_webhook_exception_handling(self):
         """Even internal exceptions return 200 (GitHub best practice)."""
         from yuleosh.api.webhooks import handle_webhooks
+        payload = {"ref": "refs/heads/main"}
         with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
-            result, status = handle_webhooks("POST", "github", {
-                "ref": "refs/heads/main",
-            })
+            result, status = self._call(payload, handler=self._signed_handler(payload))
             # Should still return 200 even if _trigger_ci fails internally
             assert status == 200
 
     def test_github_push_no_head_commit(self):
         """No head_commit in payload."""
         from yuleosh.api.webhooks import handle_webhooks
+        payload = {
+            "repository": {"full_name": "org/repo"},
+            "ref": "refs/heads/develop",
+        }
         with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
-            result, status = handle_webhooks("POST", "github", {
-                "repository": {"full_name": "org/repo"},
-                "ref": "refs/heads/develop",
-            })
+            result, status = self._call(payload, handler=self._signed_handler(payload))
             assert status == 200
             data = result["data"]
             assert data["commit"] == ""
             assert data["branch"] == "develop"
 
     def test_webhooks_without_body(self):
-        """handle_webhooks with body=None."""
+        """handle_webhooks with empty body."""
         from yuleosh.api.webhooks import handle_webhooks
         with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
-            result, status = handle_webhooks("POST", "github", None)
+            result, status = self._call({}, handler=self._signed_handler({}))
             assert status == 200
 
 

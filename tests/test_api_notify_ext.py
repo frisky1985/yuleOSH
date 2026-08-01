@@ -13,7 +13,7 @@ class TestNotify:
         mock_cfg.to_dict.return_value = {"feishu_url": "https://hooks.feishu.cn/xxx"}
 
         with patch("yuleosh.notify.get_config", return_value=mock_cfg):
-            result, code = handle_notify("GET", "config", {}, {})
+            result, code = handle_notify("GET", "config", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert "feishu_url" in result["data"]
 
@@ -26,12 +26,12 @@ class TestNotify:
             with patch("yuleosh.notify.set_config") as mock_set:
                 result, code = handle_notify(
                     "PUT", "config", {"feishu_url": "https://hooks.feishu.cn/yyy"}, {}
-                )
+                , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
                 assert code == 200
 
     def test_put_config_invalid_body(self):
         """PUT with non-dict body returns 400."""
-        result, code = handle_notify("PUT", "config", "not-a-dict", {})
+        result, code = handle_notify("PUT", "config", "not-a-dict", {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     def test_get_notify_root(self):
@@ -40,7 +40,7 @@ class TestNotify:
         mock_cfg.to_dict.return_value = {"feishu_url": ""}
 
         with patch("yuleosh.notify.get_config", return_value=mock_cfg):
-            result, code = handle_notify("GET", "", {}, {})
+            result, code = handle_notify("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
 
     def test_put_notify_root(self):
@@ -52,15 +52,15 @@ class TestNotify:
             with patch("yuleosh.notify.set_config"):
                 result, code = handle_notify(
                     "PUT", "", {"feishu_url": "url"}, {}
-                )
+                , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
                 assert code == 200
 
     def test_patch_not_allowed(self):
         """PATCH returns 405."""
-        result, code = handle_notify("PATCH", "config", {}, {})
+        result, code = handle_notify("PATCH", "config", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 405
 
     def test_unknown_resource(self):
         """Unknown resource returns 404."""
-        result, code = handle_notify("GET", "unknown", {}, {})
+        result, code = handle_notify("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404

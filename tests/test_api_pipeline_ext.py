@@ -26,12 +26,12 @@ class TestApiPipeline:
         mock_path.stem = "test-spec"
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
-            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {})
+            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
 
     def test_run_pipeline_no_spec(self):
         """POST without spec returns 400."""
-        result, code = handle_pipeline("POST", "run", {}, {})
+        result, code = handle_pipeline("POST", "run", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     def test_run_pipeline_not_found(self):
@@ -42,7 +42,7 @@ class TestApiPipeline:
         mock_path.resolve.return_value = mock_path
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
-            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/nonexistent.md"}, {})
+            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/nonexistent.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 400
 
     @patch("yuleosh.api.pipeline.subprocess.run")
@@ -58,7 +58,7 @@ class TestApiPipeline:
         mock_path.stem = "test"
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
-            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {})
+            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 504
 
     @patch("yuleosh.api.pipeline.subprocess.run")
@@ -74,12 +74,12 @@ class TestApiPipeline:
         mock_path.stem = "test"
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
-            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {})
+            result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 500
 
     def test_get_pipeline_no_post(self):
         """GET on pipeline/run returns 405."""
-        result, code = handle_pipeline("GET", "run", {}, {})
+        result, code = handle_pipeline("GET", "run", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 405
 
     @patch("yuleosh.store.Store")
@@ -94,13 +94,13 @@ class TestApiPipeline:
         mock_path.exists.return_value = False
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
-            result, code = handle_pipeline("GET", "status", {}, {})
+            result, code = handle_pipeline("GET", "status", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
 
     def test_list_pipeline_steps(self):
         """GET /pipeline/steps returns step list."""
         with patch("yuleosh.pipeline.step_handlers.PIPELINE_STEPS", []):
-            result, code = handle_pipeline("GET", "steps", {}, {})
+            result, code = handle_pipeline("GET", "steps", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert result["data"]["count"] == 0
 
@@ -111,7 +111,7 @@ class TestApiPipeline:
 
     def test_unknown_resource(self):
         """Unknown resource returns 404."""
-        result, code = handle_pipeline("GET", "unknown", {}, {})
+        result, code = handle_pipeline("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     @patch("yuleosh.api.pipeline.subprocess.run")

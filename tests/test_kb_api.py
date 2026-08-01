@@ -50,7 +50,16 @@ def patch_store():
 @pytest.fixture
 def handler():
     from yuleosh.api.kb import handle_kb
-    return handle_kb
+
+    def _authed(*args, **kwargs):
+        # Explicit test-only auth injection (require_auth fails closed without
+        # an HTTP handler context).
+        kwargs.setdefault(
+            "current_user",
+            {"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"},
+        )
+        return handle_kb(*args, **kwargs)
+    return _authed
 
 
 class TestKbArticlesAPI:
