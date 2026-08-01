@@ -86,10 +86,32 @@ def require_auth(handler):
         if not payload:
             return json_error("Invalid or expired token", 401)
 
+        # ── Token contract (P0-A): accept BOTH payload formats ──────────
+        #   format A (router/middleware native): {"user_id": ..., "org_id": ...}
+        #   format B (frontend ui/auth_extended): {"sub": "<user_id>", "org": ...}
+        # The frontend login chain (signin → org/create) signs `sub`/`org`;
+        # the middleware must not 401 those tokens (dashboard/KB v1 APIs).
+        user_id = payload.get("user_id")
+        if user_id is None:
+            user_id = payload.get("sub")
+        org_id = payload.get("org_id")
+        if org_id is None:
+            org_id = payload.get("org")
+
+        # auth_extended signs sub as str(user_id) — normalize to int for the store.
+        try:
+            user_id = int(user_id) if user_id is not None else None
+        except (TypeError, ValueError):
+            pass
+        try:
+            org_id = int(org_id) if org_id is not None else None
+        except (TypeError, ValueError):
+            pass
+
         # Validate user exists in store
         from yuleosh.store import Store
         store = Store()
-        user = store.get_user_by_id(payload.get("user_id"))
+        user = store.get_user_by_id(user_id)
         if not user:
             return json_error("User not found", 401)
 
@@ -100,8 +122,8 @@ def require_auth(handler):
 
         # Inject current user into kwargs
         kwargs["current_user"] = {
-            "user_id": payload.get("user_id"),
-            "org_id": payload.get("org_id"),
+            "user_id": user_id,
+            "org_id": org_id,
             "email": payload.get("email", ""),
             "role": user.get("role", "member"),
         }
