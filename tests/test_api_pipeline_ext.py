@@ -39,6 +39,7 @@ class TestApiPipeline:
         mock_path = MagicMock()
         mock_path.is_absolute.return_value = True
         mock_path.exists.return_value = False
+        mock_path.resolve.return_value = mock_path
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
             result, code = handle_pipeline("POST", "run", {"spec": "/tmp/nonexistent.md"}, {})
