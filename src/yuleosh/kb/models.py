@@ -160,16 +160,46 @@ class FmeaEntry:
 
 
 def _strip_html(text: str) -> str:
-    """Remove HTML tags and dangerous patterns from text."""
+    """Remove HTML tags and dangerous patterns from text (XSS write-path guard).
+
+    Defense-in-depth behind the frontend render-time escaping (X-01): KB
+    fields are stored as markdown-ish text, so raw HTML tags are not a
+    supported feature — dangerous tags are stripped entirely while code
+    samples (e.g. `<vector>`, `<int>`) survive because only tag blocks /
+    event attributes / script protocols are removed, not every `<`.
+    """
     if not isinstance(text, str):
         return str(text) if text is not None else ""
+    # Block-level dangerous tags (paired, may span newlines / mixed case)
     text = re.sub(r'<script[^>]*?>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<iframe[^>]*?>.*?</iframe>', '', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<object[^>]*?>.*?</object>', '', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<embed[^>]*?>.*?</embed>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<svg[^>]*?>.*?</svg>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<math[^>]*?>.*?</math>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<video[^>]*?>.*?</video>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<audio[^>]*?>.*?</audio>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<template[^>]*?>.*?</template>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<form[^>]*?>.*?</form>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # Self-closing / void dangerous tags (never valid in code samples)
+    text = re.sub(r'<img\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<embed\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<link\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<meta\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<base\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<svg\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<math\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<video\b[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<audio\b[^>]*>', '', text, flags=re.IGNORECASE)
+    # Event handler attributes — quoted, unquoted, backtick, mixed-case
     text = re.sub(r'\s+on\w+\s*=\s*"[^"]*"', '', text, flags=re.IGNORECASE)
     text = re.sub(r"\s+on\w+\s*=\s*'[^']*'", '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+on\w+\s*=\s*`[^`]*`', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+on\w+\s*=\s*[^\s"\'`>]+', '', text, flags=re.IGNORECASE)
+    # Script protocols (incl. HTML-entity obfuscation, e.g. &#106;avascript:)
     text = re.sub(r'javascript\s*:', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'&#(?:x6a|106|X6A);\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'vbscript\s*:', '', text, flags=re.IGNORECASE)
     return text
 
 def sanitize_kb_article_fields(body: dict) -> dict:
