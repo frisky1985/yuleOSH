@@ -162,17 +162,17 @@ class TestPostJson:
         mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = mock.MagicMock(return_value=False)
 
-        with mock.patch("notify.urlopen", return_value=mock_resp):
+        with mock.patch("yuleosh.notify.urlopen", return_value=mock_resp):
             assert _post_json("https://example.com/hook", {"test": 1}) is True
 
     def test_post_json_http_error(self):
         """GIVEN HTTP 500 WHEN _post_json THEN returns False."""
-        with mock.patch("notify.urlopen", side_effect=URLError("connection refused")):
+        with mock.patch("yuleosh.notify.urlopen", side_effect=URLError("connection refused")):
             assert _post_json("https://example.com/hook", {"test": 1}) is False
 
     def test_post_json_generic_error(self):
         """GIVEN generic Exception WHEN _post_json THEN returns False."""
-        with mock.patch("notify.urlopen", side_effect=RuntimeError("unexpected")):
+        with mock.patch("yuleosh.notify.urlopen", side_effect=RuntimeError("unexpected")):
             assert _post_json("https://example.com/hook", {"test": 1}) is False
 
     def test_post_json_non_2xx_status(self):
@@ -183,7 +183,7 @@ class TestPostJson:
         mock_resp.__enter__ = mock.MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = mock.MagicMock(return_value=False)
 
-        with mock.patch("notify.urlopen", return_value=mock_resp):
+        with mock.patch("yuleosh.notify.urlopen", return_value=mock_resp):
             assert _post_json("https://example.com/hook", {"test": 1}) is False
 
 
@@ -193,13 +193,13 @@ class TestSendFunctions:
     def test_send_feishu_not_configured(self):
         """GIVEN no feishu URL WHEN send_feishu THEN returns False."""
         with mock.patch.dict(os.environ, {}, clear=True):
-            with mock.patch("notify.ENV_FEISHU_URL", "YULEOSH_NOTIFY_FEISHU_URL"):
+            with mock.patch("yuleosh.notify.ENV_FEISHU_URL", "YULEOSH_NOTIFY_FEISHU_URL"):
                 result = send_feishu("Title", "Content")
                 assert result is False
 
     def test_send_feishu_success(self):
         """GIVEN feishu URL WHEN send_feishu THEN calls _post_json."""
-        with mock.patch("notify._post_json", return_value=True) as mock_post:
+        with mock.patch("yuleosh.notify._post_json", return_value=True) as mock_post:
             with mock.patch.dict(os.environ, {ENV_FEISHU_URL: "https://hook.f.com"}):
                 result = send_feishu("Title", "Content")
                 assert result is True
@@ -210,7 +210,7 @@ class TestSendFunctions:
 
     def test_send_feishu_override_url(self):
         """GIVEN explicit webhook_url WHEN send_feishu THEN uses it."""
-        with mock.patch("notify._post_json", return_value=True) as mock_post:
+        with mock.patch("yuleosh.notify._post_json", return_value=True) as mock_post:
             result = send_feishu("T", "C", webhook_url="https://custom.com/hook")
             assert result is True
             assert mock_post.call_args[0][0] == "https://custom.com/hook"
@@ -270,7 +270,7 @@ class TestSendFunctions:
 
     def test_send_webhook_success(self):
         """GIVEN webhook URL WHEN send_webhook THEN calls _post_json."""
-        with mock.patch("notify._post_json", return_value=True) as mock_post:
+        with mock.patch("yuleosh.notify._post_json", return_value=True) as mock_post:
             with mock.patch.dict(os.environ, {ENV_WEBHOOK_URL: "https://wh.com"}):
                 result = send_webhook({"event": "test"})
                 assert result is True
@@ -278,7 +278,7 @@ class TestSendFunctions:
 
     def test_send_webhook_override_url(self):
         """GIVEN explicit URL WHEN send_webhook THEN uses it."""
-        with mock.patch("notify._post_json", return_value=True) as mock_post:
+        with mock.patch("yuleosh.notify._post_json", return_value=True) as mock_post:
             result = send_webhook({"e": "t"}, url="https://custom.com")
             assert result is True
             assert mock_post.call_args[0][0] == "https://custom.com"
@@ -289,9 +289,9 @@ class TestConvenienceNotifications:
 
     def test_notify_pipeline_completed(self):
         """GIVEN completed pipeline WHEN notify_pipeline THEN green card."""
-        with mock.patch("notify.send_feishu") as mock_fs, \
-             mock.patch("notify.send_email") as mock_email, \
-             mock.patch("notify.send_webhook") as mock_wh:
+        with mock.patch("yuleosh.notify.send_feishu") as mock_fs, \
+             mock.patch("yuleosh.notify.send_email") as mock_email, \
+             mock.patch("yuleosh.notify.send_webhook") as mock_wh:
             notify_pipeline("my-pipeline", "completed", 5, 5)
             mock_fs.assert_called_once()
             assert "green" in mock_fs.call_args[0][2].lower() or \
@@ -301,9 +301,9 @@ class TestConvenienceNotifications:
 
     def test_notify_pipeline_failed_with_errors(self):
         """GIVEN failed pipeline with errors WHEN notify_pipeline THEN red card."""
-        with mock.patch("notify.send_feishu") as mock_fs, \
-             mock.patch("notify.send_email") as mock_email, \
-             mock.patch("notify.send_webhook") as mock_wh:
+        with mock.patch("yuleosh.notify.send_feishu") as mock_fs, \
+             mock.patch("yuleosh.notify.send_email") as mock_email, \
+             mock.patch("yuleosh.notify.send_webhook") as mock_wh:
             errors = [f"error_{i}" for i in range(7)]
             notify_pipeline("bad-pipeline", "failed", 10, 3, errors)
             mock_fs.assert_called_once()
@@ -314,9 +314,9 @@ class TestConvenienceNotifications:
 
     def test_notify_ci_passed(self):
         """GIVEN passed CI WHEN notify_ci THEN green card with stages."""
-        with mock.patch("notify.send_feishu") as mock_fs, \
-             mock.patch("notify.send_email") as mock_email, \
-             mock.patch("notify.send_webhook") as mock_wh:
+        with mock.patch("yuleosh.notify.send_feishu") as mock_fs, \
+             mock.patch("yuleosh.notify.send_email") as mock_email, \
+             mock.patch("yuleosh.notify.send_webhook") as mock_wh:
             stages = [
                 {"name": "lint", "status": "passed"},
                 {"name": "test", "status": "passed"},
@@ -329,9 +329,9 @@ class TestConvenienceNotifications:
 
     def test_notify_ci_failed_with_stages_and_errors(self):
         """GIVEN failed CI with mixed stages WHEN notify_ci THEN red card."""
-        with mock.patch("notify.send_feishu") as mock_fs, \
-             mock.patch("notify.send_email") as mock_email, \
-             mock.patch("notify.send_webhook") as mock_wh:
+        with mock.patch("yuleosh.notify.send_feishu") as mock_fs, \
+             mock.patch("yuleosh.notify.send_email") as mock_email, \
+             mock.patch("yuleosh.notify.send_webhook") as mock_wh:
             stages = [
                 {"name": "lint", "status": "passed"},
                 {"name": "test", "status": "failed"},

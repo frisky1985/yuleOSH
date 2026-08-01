@@ -36,9 +36,9 @@ def test_sha256_file_unicode(tmp_path):
 
 
 def test_sha256_file_missing(tmp_path):
-    """GIVEN a missing file WHEN hashing THEN raises FileNotFoundError."""
-    with pytest.raises(FileNotFoundError):
-        _sha256_file(str(tmp_path / "nope.txt"))
+    """GIVEN a missing file WHEN hashing THEN returns empty string (v3.4.0)."""
+    result = _sha256_file(str(tmp_path / "nope.txt"))
+    assert result == ""
 
 
 # ------------------------------------------------------------------
