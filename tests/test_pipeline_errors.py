@@ -233,8 +233,16 @@ def test_step_hermes_review_wraps_non_json_in_error(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_pipeline_llm_failure_stops_pipeline(tmp_path, monkeypatch):
-    """LLM API timeout should cause PipelineStepError, stopping pipeline."""
-    from yuleosh.pipeline.run import run_pipeline, PipelineStepError
+    """LLM API timeout should cause PipelineStepError, stopping pipeline.
+
+    v3.4.0: step handlers run through orchestrator._run_step_with_fallback,
+    which rescues a handler exception via the template fallback chain.  The
+    pipeline only hard-stops when the fallback chain also fails (status !=
+    "fallback") — that path must surface PipelineStepError and mark the
+    session as failed.
+    """
+    from yuleosh.pipeline.run import run_pipeline, PipelineStepError, PIPELINE_STEPS
+    from yuleosh.llm.fallback import FallbackResult
 
     monkeypatch.setenv("OSH_HOME", str(tmp_path))
 
@@ -245,7 +253,18 @@ def test_pipeline_llm_failure_stops_pipeline(tmp_path, monkeypatch):
     def failing_handler(session):
         raise PipelineStepError("LLM API timeout after 60s")
 
-    with mock.patch("yuleosh.pipeline.run.step_super_analysis", failing_handler):
+    # run_pipeline executes handlers resolved via PIPELINE_STEPS (deferred
+    # import at call time), so replace the super-analysis handler there.
+    patched_steps = [
+        (key, agent, name, failing_handler if key == "super-analysis" else handler)
+        for (key, agent, name, handler) in PIPELINE_STEPS
+    ]
+
+    with mock.patch("yuleosh.pipeline.run.PIPELINE_STEPS", patched_steps), \
+            mock.patch(
+                "yuleosh.pipeline.orchestrator.apply_fallback_chain",
+                return_value=FallbackResult(status="abort"),
+            ):
         session = run_pipeline(str(spec_file), name="test-llm-fail", mock=True)
 
     assert session.status == "failed"
