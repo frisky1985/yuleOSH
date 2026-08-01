@@ -22,6 +22,22 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
+@pytest.fixture(autouse=True)
+def _restore_stripe_module_state():
+    """Restore stripe_gateway module globals after every test.
+
+    Tests reload the module while env vars are patched (e.g.
+    STRIPE_SECRET_KEY=sk_test_xxx); without a reload back under the real
+    environment, module-level globals (STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET/
+    BASE_URL) stay patched and leak into later test files (test_v090_modules
+    expects is_stripe_configured() == False).
+    """
+    yield
+    import importlib
+    from yuleosh.usage import stripe_gateway as sg
+    importlib.reload(sg)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Configuration
 # ═══════════════════════════════════════════════════════════════════════

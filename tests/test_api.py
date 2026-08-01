@@ -192,11 +192,14 @@ class TestApiHelpers:
     def test_auth_enabled_false(self):
         """_auth_enabled returns False when ui.auth not available."""
         from yuleosh.api.health import _auth_enabled
+        # NOTE: sys.modules entry is set to None (not deleted) so the
+        # from-import inside _auth_enabled() raises ImportError without
+        # re-importing the module. Deleting the entry would re-import a
+        # *new* module object and leave the parent package attribute
+        # (yuleosh.ui.auth) pointing at a stale object, which breaks
+        # importlib.reload() in later tests (test_ui_auth_deep).
         with patch.dict('sys.modules', {'yuleosh.ui.auth': None}):
             # Import error path
-            import sys
-            if 'yuleosh.ui.auth' in sys.modules:
-                del sys.modules['yuleosh.ui.auth']
             result = _auth_enabled()
         assert result is False
 

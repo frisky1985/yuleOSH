@@ -36,6 +36,9 @@ BASE = f"http://localhost:{TEST_PORT}"
 def test_server():
     """Start test server."""
     from yuleosh.ui import server as srv
+    saved_env = {}
+    for _k in ("YULEOSH_DB", "YULEOSH_JWT_SECRET", "STRIPE_SECRET_KEY", "YULEOSH_RATE_LIMIT"):
+        saved_env[_k] = os.environ.get(_k)
     os.environ["YULEOSH_DB"] = f"/tmp/yuleosh_e2e_onboard_{int(time.time())}.db"
     os.environ["YULEOSH_JWT_SECRET"] = "test-secret-onboard"
     os.environ["STRIPE_SECRET_KEY"] = ""
@@ -52,6 +55,12 @@ def test_server():
     thread.start()
     time.sleep(1.5)
     yield
+    # Restore env vars so later test files see the original environment.
+    for _k, _v in saved_env.items():
+        if _v is None:
+            os.environ.pop(_k, None)
+        else:
+            os.environ[_k] = _v
 
 
 def _api(path, method="GET", body=None, token=None):

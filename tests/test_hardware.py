@@ -808,22 +808,23 @@ class TestHardwareDeployer:
 class TestHardwareStep:
     """HardwareStep 完整流程集成测试。"""
 
-    def test_step_skipped_no_binary(self):
+    def test_step_skipped_no_binary(self, tmp_path):
         """无二进制文件时跳过。"""
-        step = HardwareStep()
+        step = HardwareStep(config={"output_dir": str(tmp_path)})
         result = step.execute({})
         assert result.success is True
         assert result.flash_ok is False
         assert result.report is not None
         assert result.report.error_type == "skipped"
 
-    def test_step_flash_failure(self, monkeypatch, temp_binary):
+    def test_step_flash_failure(self, monkeypatch, temp_binary, tmp_path):
         """刷写失败场景。"""
         _patch_subprocess(monkeypatch, returncode=1, stderr="Error: cannot connect")
         step = HardwareStep(config={
             "flasher": "openocd",
             "flasher_config": {"interface": "stlink", "target": "stm32f4x"},
             "binary_path": temp_binary,
+            "output_dir": str(tmp_path),
         })
         result = step.execute({})
         assert result.success is False
@@ -846,7 +847,7 @@ class TestHardwareStep:
         assert result.flash_ok is True
         assert result.duration_ms > 0
 
-    def test_step_flash_with_retries_exhausted(self, monkeypatch, temp_binary):
+    def test_step_flash_with_retries_exhausted(self, monkeypatch, temp_binary, tmp_path):
         """刷写重试耗尽。"""
         _patch_subprocess(monkeypatch, returncode=1, stderr="Error: timeout")
         step = HardwareStep(config={
@@ -855,12 +856,13 @@ class TestHardwareStep:
             "binary_path": temp_binary,
             "max_retries": 2,
             "retry_delay": 0.1,
+            "output_dir": str(tmp_path),
         })
         result = step.execute({})
         assert result.success is False
         assert result.flash_ok is False
 
-    def test_step_retry_success_on_second_attempt(self, monkeypatch, temp_binary):
+    def test_step_retry_success_on_second_attempt(self, monkeypatch, temp_binary, tmp_path):
         """第一次失败，重试成功。"""
         flash_attempt_count = [0]
 
@@ -890,15 +892,17 @@ class TestHardwareStep:
             "monitor_timeout": 1,
             "max_retries": 2,
             "retry_delay": 0.1,
+            "output_dir": str(tmp_path),
         })
         result = step.execute({})
         assert result.success is True
         assert result.flash_ok is True
         assert flash_attempt_count[0] == 2
 
-    def test_step_binary_not_found(self):
+    def test_step_binary_not_found(self, tmp_path):
         step = HardwareStep(config={
             "binary_path": "/nonexistent/file.elf",
+            "output_dir": str(tmp_path),
         })
         result = step.execute({})
         assert result.success is False
@@ -1101,12 +1105,13 @@ class TestDebuggerEdgeCases:
 class TestIntegrationEdgeCases:
     """集成边界情况。"""
 
-    def test_hardware_step_exception_handling(self, monkeypatch, temp_binary):
+    def test_hardware_step_exception_handling(self, monkeypatch, temp_binary, tmp_path):
         """集成步骤中异常应被捕获并返回错误结果。"""
         step = HardwareStep(config={
             "flasher": "openocd",
             "flasher_config": {"interface": "stlink", "target": "stm32f4x"},
             "binary_path": temp_binary,
+            "output_dir": str(tmp_path),
         })
 
         def throw_error(*args, **kwargs):

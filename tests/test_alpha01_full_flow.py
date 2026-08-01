@@ -59,6 +59,9 @@ def test_server():
     """Start a test server instance for the module."""
     # Set env vars BEFORE any imports so module-level globals (e.g._JWT_SECRET)
     # pick up the test values rather than auto-generated fallbacks.
+    saved_env = {}
+    for _k in ("YULEOSH_DB", "YULEOSH_JWT_SECRET", "STRIPE_SECRET_KEY", "YULEOSH_RATE_LIMIT"):
+        saved_env[_k] = os.environ.get(_k)
     db_path = Path(f"/tmp/yuleosh_e2e_{int(time.time())}.db")
     os.environ["YULEOSH_DB"] = str(db_path)
     os.environ["YULEOSH_JWT_SECRET"] = "test-secret-for-e2e"
@@ -86,6 +89,14 @@ def test_server():
         except Exception:
             time.sleep(0.5)
     yield
+    # Restore env vars so later test files see the original environment
+    # (these were previously leaked for the rest of the suite, breaking
+    # auth/JWT-dependent tests that run afterwards).
+    for _k, _v in saved_env.items():
+        if _v is None:
+            os.environ.pop(_k, None)
+        else:
+            os.environ[_k] = _v
     # Cleanup
     if db_path.exists():
         os.unlink(db_path)

@@ -21,6 +21,27 @@ from yuleosh import ui as _ui
 import yuleosh.ui.auth as auth_mod
 
 
+@pytest.fixture(autouse=True)
+def _restore_auth_module_state():
+    """Restore yuleosh.ui.auth module globals after every test.
+
+    The reload-based tests (test_auth_enabled_with_key / _without_key)
+    re-execute the module body under a patched env (YULEOSH_API_KEY), which
+    permanently mutates the shared module globals (AUTH_ENABLED/API_KEY) —
+    without restoring them, later test files see AUTH_ENABLED=True and fail
+    (e.g. test_phase0_coverage_boost::test_ui_auth_import).
+    """
+    saved = {
+        "API_KEY": auth_mod.API_KEY,
+        "AUTH_ENABLED": auth_mod.AUTH_ENABLED,
+        "_sessions": auth_mod._sessions,
+    }
+    yield
+    auth_mod.API_KEY = saved["API_KEY"]
+    auth_mod.AUTH_ENABLED = saved["AUTH_ENABLED"]
+    auth_mod._sessions = saved["_sessions"]
+
+
 class TestAuthConfig:
     """GIVEN auth module WHEN loaded THEN config reflects env."""
 
