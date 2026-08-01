@@ -546,6 +546,9 @@ def update_misra_report_deviations(
 
     report["deviations"] = deviations_dict
 
+    # Ensure the reports directory exists before writing (v3.4.2 fix:
+    # creating a new report when .yuleosh/reports/ is absent crashed)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
 
