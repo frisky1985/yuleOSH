@@ -123,8 +123,7 @@ def _parse_multipart_body(handler: BaseHTTPRequestHandler) -> Optional[bytes]:
 
 def _extract_zip_from_multipart(raw: bytes, content_type: str) -> Optional[bytes]:
     """Extract the ZIP file content from a multipart body."""
-    import cgi
-    from io import BytesIO
+    from io import BytesIO  # noqa: F401 (kept for parity; unused)
 
     # Parse the boundary from content-type
     boundary = None
@@ -285,11 +284,13 @@ def _handle_zip_upload(preview_id: str, zip_data: bytes, handler) -> tuple:
     # Start background analysis
     _analyze_in_background(preview_id, temp_dir)
 
-    return json_ok({
+    # Fix (v3.4.2b): json_ok() accepts a single argument — passing 202 raised
+    # TypeError and broke the analyzing response at runtime.
+    return {"ok": True, "data": {
         "preview_id": preview_id,
         "status": "analyzing",
         "estimated_seconds": 30,
-    }, 202)
+    }}, 202
 
 
 def _handle_git_url(preview_id: str, repo_url: str, handler) -> tuple:
@@ -373,11 +374,13 @@ def _handle_git_url(preview_id: str, repo_url: str, handler) -> tuple:
     thread = threading.Thread(target=_clone_and_analyze, daemon=True)
     thread.start()
 
-    return json_ok({
+    # Fix (v3.4.2b): json_ok() accepts a single argument — passing 202 raised
+    # TypeError and broke the analyzing response at runtime.
+    return {"ok": True, "data": {
         "preview_id": preview_id,
         "status": "analyzing",
         "estimated_seconds": 60,
-    }, 202)
+    }}, 202
 
 
 def _get_dir_size(path: Path) -> int:
