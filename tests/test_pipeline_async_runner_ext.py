@@ -18,6 +18,14 @@ class TestAsyncRunner:
         import yuleosh.pipeline.async_runner as ar
         ar._PIPELINE_JOBS.clear()
 
+    @pytest.fixture(autouse=True)
+    def _mock_ci_worker(self):
+        """Replace the heavy CI worker so no real CI layer runs in tests."""
+        import yuleosh.pipeline.async_runner as ar
+        with patch.object(ar, "_run_ci_job",
+                          side_effect=lambda jid, pd, layer: None):
+            yield
+
     def test_submit_and_check(self):
         """Submit pipeline and check job exists."""
         job_id = submit_pipeline("/tmp/test", layer=1)

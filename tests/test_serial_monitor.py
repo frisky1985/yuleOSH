@@ -40,7 +40,7 @@ from yuleosh.cross.serial_monitor import (
 @pytest.fixture
 def mock_pyserial():
     """Mock the ``serial`` module to avoid real hardware."""
-    with mock.patch("cross.serial_monitor.__import__") as mock_import:
+    with mock.patch("yuleosh.cross.serial_monitor.__import__") as mock_import:
         mock_serial = mock.MagicMock()
         mock_serial.Serial = mock.MagicMock
 
@@ -288,7 +288,7 @@ class TestSerialMonitorOpen:
         mon._pyserial_mod = None  # force re-import
 
         with mock.patch(
-            "cross.serial_monitor.SerialMonitor._import_pyserial",
+            "yuleosh.cross.serial_monitor.SerialMonitor._import_pyserial",
             side_effect=RuntimeError("pyserial is required"),
         ):
             with pytest.raises(RuntimeError, match="pyserial is required"):
@@ -416,7 +416,7 @@ class TestSerialMonitorOpen:
         mon = SerialMonitor(port="/dev/ttyTEST", baud=115200)
 
         with mock.patch(
-            "cross.serial_monitor.SerialMonitor._import_pyserial",
+            "yuleosh.cross.serial_monitor.SerialMonitor._import_pyserial",
             side_effect=RuntimeError("pyserial is required"),
         ):
             with pytest.raises(RuntimeError, match="pyserial is required"):

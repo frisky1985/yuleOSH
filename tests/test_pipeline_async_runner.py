@@ -24,7 +24,7 @@ def _clear_state():
 
 def test_submit_pipeline():
     _clear_state()
-    with patch("yuleosh.pipeline.async_runner._run_pipeline_job"):
+    with patch("yuleosh.pipeline.async_runner._run_ci_job"):
         job_id = submit_pipeline("/tmp/test", layer=1)
         assert job_id, "should return a job_id"
         assert len(job_id) == 16, "token_hex(8) produces 16 chars"
@@ -37,7 +37,7 @@ def test_submit_pipeline():
 
 def test_submit_pipeline_default_layer():
     _clear_state()
-    with patch("yuleosh.pipeline.async_runner._run_pipeline_job"):
+    with patch("yuleosh.pipeline.async_runner._run_ci_job"):
         job_id = submit_pipeline("/tmp/test")
         status = get_job_status(job_id)
         assert status["layer"] == 1
@@ -125,84 +125,84 @@ def test_get_pipeline_stats_all_categories():
 
 
 def test_run_pipeline_job_passed():
+    """v3.4.0: layer 0 dispatch → run_all returns 0 → job passed."""
     _clear_state()
     import yuleosh.pipeline.async_runner as ar
     ar._PIPELINE_JOBS["job_x"] = {
         "status": "queued", "project_dir": "/tmp/x", "layer": 0,
         "started_at": None, "completed_at": None, "result": None,
     }
-    with patch("ci.run.run_all", return_value=0):
-        ar._run_pipeline_job("job_x", "/tmp/x", 0)
+    with patch("yuleosh.ci.run.run_all", return_value=0):
+        ar._run_ci_job("job_x", "/tmp/x", 0)
     status = ar._PIPELINE_JOBS["job_x"]
     assert status["status"] == "passed"
     assert status["completed_at"] is not None
 
 
 def test_run_pipeline_job_failed():
-    import sys
-    from unittest.mock import MagicMock
+    """v3.4.0: exception in worker → job marked failed with error text."""
     _clear_state()
-    # Mock the ci.run module that's imported inside _run_pipeline_job
-    mock_run = MagicMock()
-    mock_run.run_all.side_effect = RuntimeError("boom")
-    sys.modules["ci"] = MagicMock()
-    sys.modules["ci"].run = mock_run
-    sys.modules["ci.run"] = mock_run
-    
     import yuleosh.pipeline.async_runner as ar
     ar._PIPELINE_JOBS["job_y"] = {
         "status": "queued", "project_dir": "/tmp/y", "layer": 0,
         "started_at": None, "completed_at": None, "result": None,
     }
-    ar._run_pipeline_job("job_y", "/tmp/y", 0)
+    with patch("yuleosh.ci.run.run_all", side_effect=RuntimeError("boom")):
+        ar._run_ci_job("job_y", "/tmp/y", 0)
     status = ar._PIPELINE_JOBS["job_y"]
     assert status["status"] == "failed"
     assert "boom" in status["result"]
-    del sys.modules["ci.run"]
-    del sys.modules["ci"]
 
 
 def test_run_pipeline_job_passed_import_error():
-    """Test that _run_pipeline_job handles import failure gracefully."""
+    """v3.4.0: import failure in worker → simulated pass (non-fatal)."""
     import sys
-    from unittest.mock import MagicMock
     _clear_state()
-    mock_run = MagicMock()
-    mock_run.run_all.return_value = 0
-    sys.modules["ci"] = MagicMock()
-    sys.modules["ci"].run = mock_run
-    sys.modules["ci.run"] = mock_run
-    
+    # Remove run_all from the module so ``from yuleosh.ci.run import run_all``
+    # raises ImportError inside _run_ci_job.
+    import yuleosh.ci.run as _ci_run_mod
+    saved = getattr(_ci_run_mod, "run_all", None)
+    try:
+        delattr(_ci_run_mod, "run_all")
+    except AttributeError:
+        pass
+
     import yuleosh.pipeline.async_runner as ar
     ar._PIPELINE_JOBS["job_z"] = {
         "status": "queued", "project_dir": "/tmp/z", "layer": 0,
         "started_at": None, "completed_at": None, "result": None,
     }
-    ar._run_pipeline_job("job_z", "/tmp/z", 0)
+    ar._run_ci_job("job_z", "/tmp/z", 0)
     status = ar._PIPELINE_JOBS["job_z"]
     assert status["status"] == "passed"
-    del sys.modules["ci.run"]
-    del sys.modules["ci"]
+    if saved is not None:
+        _ci_run_mod.run_all = saved
+    else:
+        delattr(_ci_run_mod, "run_all")
 
 
 def test_run_single_layer_unknown():
+    """v3.4.0: unknown layer number falls back to run_all."""
     import yuleosh.pipeline.async_runner as ar
-    result = ar._run_single_layer("/tmp", 99)
-    assert "Unknown layer" in result
+    _clear_state()
+    ar._PIPELINE_JOBS["job_u"] = {
+        "status": "queued", "project_dir": "/tmp", "layer": 99,
+        "started_at": None, "completed_at": None, "result": None,
+    }
+    with patch("yuleosh.ci.run.run_all", return_value=0):
+        ar._run_ci_job("job_u", "/tmp", 99)
+    assert ar._PIPELINE_JOBS["job_u"]["status"] == "passed"
 
 
 def test_run_single_layer_known():
-    import sys
-    from unittest.mock import MagicMock
+    """v3.4.0: layer 1 dispatch → run_layer1 result recorded."""
     import yuleosh.pipeline.async_runner as ar
-    
-    mock_ci_run = MagicMock()
-    mock_ci_run.run_layer1.return_value = "layer1_ok"
-    sys.modules["ci"] = MagicMock()
-    sys.modules["ci"].run = mock_ci_run
-    sys.modules["ci.run"] = mock_ci_run
-    
-    result = ar._run_single_layer("/tmp", 1)
-    assert result == "layer1_ok"
-    del sys.modules["ci.run"]
-    del sys.modules["ci"]
+    _clear_state()
+    ar._PIPELINE_JOBS["job_l"] = {
+        "status": "queued", "project_dir": "/tmp", "layer": 1,
+        "started_at": None, "completed_at": None, "result": None,
+    }
+    with patch("yuleosh.ci.run_layer1", return_value=True):
+        ar._run_ci_job("job_l", "/tmp", 1)
+    assert ar._PIPELINE_JOBS["job_l"]["status"] == "passed"
+    assert "True" in ar._PIPELINE_JOBS["job_l"]["result"]

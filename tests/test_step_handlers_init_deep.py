@@ -51,8 +51,10 @@ class TestPipelineStepsStructure:
     """PIPELINE_STEPS has correct structure and count."""
 
     def test_pipeline_steps_has_10_entries(self):
+        """v3.4.0: PIPELINE_STEPS has grown from 10 to 33 steps (multi-reviewer
+        workflow, BSP/build/power/stack/MMIO reviews, fault-injection, merge-gate)."""
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
-        assert len(PIPELINE_STEPS) == 10
+        assert len(PIPELINE_STEPS) == 33
 
     def test_each_entry_has_4_elements(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
@@ -68,26 +70,35 @@ class TestPipelineStepsStructure:
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         keys = [e[0] for e in PIPELINE_STEPS]
         expected = [
-            "spec-check", "super-analysis", "prd", "internal-review",
-            "architecture", "development", "test-planning",
-            "self-test", "code-review", "final-report",
+            "spec-check", "super-analysis", "prd", "prd-review",
+            "architecture", "arch-review", "development", "devplan-review",
+            "internal-code-review", "test-planning", "self-test", "self-test-review",
+            "c-unit-test", "integration-test", "code-review", "misra-review",
+            "coverage-review", "qemu-run", "c-coverage-gate",
+            "review-linker", "review-startup", "review-rtos", "review-memory",
+            "review-bsp", "review-build", "review-power", "review-stack",
+            "review-mmio", "review-critical-safety", "fault-injection",
+            "merge-gate", "test-qualification", "final-report",
         ]
         assert keys == expected
 
     def test_agents(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         agents = {e[1] for e in PIPELINE_STEPS}
-        assert agents == {"小明", "Claude", "Hermes"}
+        assert agents == {"小明", "Claude", "Hermes", "小克", "小马", "QEMU"}
 
     def test_internal_review_is_unresolved_fn(self):
         """step_internal_review and step_claude_test are plain functions."""
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         from yuleosh.pipeline.step_handlers.analysis import step_internal_review
         from yuleosh.pipeline.step_handlers.execution import step_claude_test
+        from yuleosh.pipeline.step_handlers.review_code import step_review_code
 
         for key, _, _, handler in PIPELINE_STEPS:
-            if key == "internal-review":
-                assert handler is step_internal_review
+            if key == "internal-code-review":
+                # v3.4.0: registry binds step_review_code (the real handler);
+                # legacy step_internal_review is kept as a re-export alias.
+                assert handler is step_review_code
             if key == "self-test":
                 assert handler is step_claude_test
 
@@ -167,4 +178,4 @@ class TestModuleReExports:
             PIPELINE_STEPS,
         )
         assert callable(step_spec_check)
-        assert len(PIPELINE_STEPS) == 10
+        assert len(PIPELINE_STEPS) == 33
