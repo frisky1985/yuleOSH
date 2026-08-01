@@ -147,7 +147,8 @@ class TestWrapClosures:
             return "ok"
         wrapped = _wrap(my_handler, tmp_project, 1)
         assert wrapped.__name__ == "my_handler"
-        assert wrapped.__qualname__ == "my_handler"
+        # __qualname__ mirrors the wrapped handler (nested fn → includes scope)
+        assert wrapped.__qualname__ == my_handler.__qualname__
 
 
 # ── Layer 2 helpers ───────────────────────────────────────────────────
@@ -249,25 +250,28 @@ class TestMainCLI:
             assert result is None
 
     def test_main_run_layer1(self, tmp_project):
-        """GIVEN layer 1 with resume WHEN main() THEN exits."""
+        """GIVEN layer 1 with resume WHEN main() THEN exits 0."""
         test_args = ["ci_checkpoint.py", "1", "--resume", "--project-dir", tmp_project]
         with mock.patch.object(sys, "argv", test_args):
             with mock.patch("yuleosh.engine.ci_checkpoint.CheckpointEngine.run", return_value=True):
-                result = main()
-                assert result is None or result == 0
+                with pytest.raises(SystemExit) as ei:
+                    main()
+                assert ei.value.code == 0
 
     def test_main_run_inject_at(self, tmp_project):
         """GIVEN --inject-at flag WHEN main() THEN runs with injection."""
         test_args = ["ci_checkpoint.py", "1", "--inject-at", "misra-check", "--project-dir", tmp_project]
         with mock.patch.object(sys, "argv", test_args):
             with mock.patch("yuleosh.engine.ci_checkpoint.CheckpointEngine.run", return_value=True):
-                result = main()
-                assert result is None or result == 0
+                with pytest.raises(SystemExit) as ei:
+                    main()
+                assert ei.value.code == 0
 
     def test_main_layer2_5(self, tmp_project):
         """GIVEN layer 2.5 WHEN main() THEN runs."""
         test_args = ["ci_checkpoint.py", "2.5", "--project-dir", tmp_project]
         with mock.patch.object(sys, "argv", test_args):
             with mock.patch("yuleosh.engine.ci_checkpoint.CheckpointEngine.run", return_value=True):
-                result = main()
-                assert result is None or result == 0
+                with pytest.raises(SystemExit) as ei:
+                    main()
+                assert ei.value.code == 0

@@ -566,14 +566,17 @@ def broken(:
         assert result["functions"] == 0
 
     def test_non_python_files_ignored(self, tmp_store, tmp_path):
-        """GIVEN non-Python files WHEN scanned THEN they are ignored."""
+        """GIVEN non-Python files WHEN scanned THEN they are counted as code files
+        (P0-4a) but produce no function nodes."""
         src = tmp_path / "src" / "yuleosh"
         src.mkdir(parents=True)
         (src / "data.json").write_text('{"key": "value"}')
         (src / "config.yaml").write_text("key: value\n")
         (src / "main.c").write_text("int main() { return 0; }\n")
         result = scan_directory(tmp_store, str(tmp_path))
-        assert result["code_files"] == 0  # no .py files
+        # v3.4.0 (P0-4a): .c/.h/.json/.yaml are indexed as code_file nodes
+        assert result["code_files"] == 3
+        assert result["functions"] == 0
 
     def test_nested_package_structure(self, tmp_store, tmp_path):
         """GIVEN nested package structure WHEN scanned THEN all .py files found."""

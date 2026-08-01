@@ -138,7 +138,7 @@ def test_load_misra_rules(misra_rules_path):
     assert data is not None
     assert "meta" in data
     assert data["meta"]["standard"] == "MISRA C"
-    assert data["meta"]["version"] == "2023-preview"
+    assert data["meta"]["version"] == "2023"
 
     # Check that we have rule entries (non-meta keys)
     rule_keys = [k for k in data.keys() if k != "meta"]

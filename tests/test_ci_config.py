@@ -102,7 +102,8 @@ class TestLoadCIConfigDefaults:
         cfg = load_ci_config(tmp_project)
         assert cfg.coverage.threshold_line == DEFAULT_COVERAGE_THRESHOLD_LINE
         assert cfg.coverage.threshold_condition == DEFAULT_COVERAGE_THRESHOLD_COND
-        assert cfg.coverage.strict is False
+        # v3.4.0: DEFAULT_STRICT is True (stricter default gate)
+        assert cfg.coverage.strict is True
         assert cfg.coverage.module_thresholds == {}
 
     def test_default_hardware_test(self, tmp_project):

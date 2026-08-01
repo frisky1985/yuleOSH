@@ -51,12 +51,16 @@ class TestDeep:
 
     def test_ci_check_dep(self):
         from yuleosh.ci.run import check_layer_dependency
-        with patch("yuleosh.ci.run.get_latest_layer_result", return_value=None):
+        # get_latest_layer_result is bound inside layer_config at import —
+        # patch there (C2 mock semantics).
+        with patch("yuleosh.ci.layers.layer_config.get_latest_layer_result", return_value=None):
             result = check_layer_dependency(2, "/tmp/proj")
-            assert result is None or result == ""
+            # v3.4.0: missing dep returns a descriptive blocking message
+            assert isinstance(result, str)
+            assert "Layer 1 has no recorded result" in result
 
     def test_ci_check_dep_passed(self):
-        with patch("yuleosh.ci.run.get_latest_layer_result") as mock_gllr:
+        with patch("yuleosh.ci.layers.layer_config.get_latest_layer_result") as mock_gllr:
             mock_result = MagicMock()
             mock_result.get.return_value = "passed"
             mock_gllr.return_value = mock_result
