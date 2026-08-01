@@ -109,7 +109,7 @@ class TestModuleHelpers:
         assert hasattr(OSHHandler, "do_GET") or hasattr(OSHHandler, "do_POST")
 
     def test_send_gzipped_json(self):
-        from yuleosh.ui.server import _send_gzipped_json
+        from yuleosh.ui.routes.helpers import _send_gzipped_json
         handler = MagicMock()
         handler.wfile = io.BytesIO()
         handler.wfile.write = lambda x: None
@@ -117,7 +117,7 @@ class TestModuleHelpers:
         assert result is None
 
     def test_send_gzipped_json_with_gzip(self):
-        from yuleosh.ui.server import _send_gzipped_json
+        from yuleosh.ui.routes.helpers import _send_gzipped_json
         handler = MagicMock()
         handler.wfile = io.BytesIO()
         handler.headers = {"Accept-Encoding": "gzip"}
@@ -128,7 +128,7 @@ class TestModuleHelpers:
         assert result is None
 
     def test_compute_etag(self):
-        from yuleosh.ui.server import _compute_etag
+        from yuleosh.ui.routes.helpers import _compute_etag
         etag1 = _compute_etag(b"hello")
         etag2 = _compute_etag(b"hello")
         etag3 = _compute_etag(b"world")
@@ -136,23 +136,23 @@ class TestModuleHelpers:
         assert etag1 != etag3
 
     def test_format_parse_roundtrip(self):
-        from yuleosh.ui.server import _format_http_datetime, _parse_http_datetime
+        from yuleosh.ui.routes.helpers import _format_http_datetime, _parse_http_datetime
         formatted = _format_http_datetime(1000000.0)
         parsed = _parse_http_datetime(formatted)
         assert abs(parsed - 1000000.0) < 2.0
 
     def test_parse_http_datetime_fallback_format(self):
-        from yuleosh.ui.server import _parse_http_datetime
+        from yuleosh.ui.routes.helpers import _parse_http_datetime
         result = _parse_http_datetime("Mon, 01 Jan 2024 00:00:00 GMT")
         assert result > 0
 
     def test_parse_http_datetime_bad_string(self):
-        from yuleosh.ui.server import _parse_http_datetime
+        from yuleosh.ui.routes.helpers import _parse_http_datetime
         result = _parse_http_datetime("not a date")
         assert result == 0.0
 
     def test_send_security_headers(self):
-        from yuleosh.ui.server import _send_security_headers
+        from yuleosh.ui.routes.helpers import _send_security_headers
         handler = MagicMock()
         _send_security_headers(handler)
         assert handler.send_header.call_count >= 5
@@ -164,7 +164,7 @@ class TestModuleHelpers:
 
 class TestJSONResponse:
     def test_json_response_plain(self):
-        from yuleosh.ui.server import _send_gzipped_json
+        from yuleosh.ui.routes.helpers import _send_gzipped_json
         handler = MagicMock()
         handler.wfile = io.BytesIO()
         handler.headers = {"Accept-Encoding": ""}
