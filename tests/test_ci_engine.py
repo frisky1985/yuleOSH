@@ -3,6 +3,7 @@
 
 """Tests for CI engine — includes A-01 blocking logic verification."""
 import sys, os, tempfile, json, subprocess, time
+from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from yuleosh.ci.run import (
@@ -149,7 +150,9 @@ def test_clang_tidy_tool_missing(tmp_path):
     (src_dir / "main.c").write_text("int main(void) { return 0; }")
 
     ci = CIResult(1, "test")
-    result = run_clang_tidy(str(tmp_path), ci)
+    # Simulate the tool being absent regardless of host environment
+    with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+        result = run_clang_tidy(str(tmp_path), ci)
     assert result is False, "clang-tidy missing should block (return False)"
     stage = [s for s in ci.stages if s["name"] == "clang-tidy"][0]
     # Should be "skipped" (tool not found) but still block

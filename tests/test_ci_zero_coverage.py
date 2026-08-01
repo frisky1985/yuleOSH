@@ -140,10 +140,11 @@ class TestCoverageTrend:
 class TestGcovCoverage:
     """Cover gcov_coverage public API."""
 
-    def test_generate_c_coverage_report_no_lcov(self):
+    def test_generate_c_coverage_report_no_lcov(self, tmp_path):
         from yuleosh.ci.gcov_coverage import generate_c_coverage_report
-        with mock.patch("shutil.which", return_value=None):
-            result = generate_c_coverage_report(build_dir="/tmp")
+        # Simulate lcov missing regardless of host environment
+        with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+            result = generate_c_coverage_report(build_dir=str(tmp_path))
             assert not result
 
     def test_parse_lcov_output(self):

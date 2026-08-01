@@ -140,6 +140,8 @@ def _id_to_level(req_id: str) -> str:
 def _id_to_parent(req_id: str) -> str:
     """Derive parent ID. SWR-001.1 parent = RS-001."""
     prefix, major, minor = _parse_id(req_id)
+    if not prefix:
+        return ""
     # SWR child → RS parent; project-specific child → project parent
     if prefix == "SWR" and minor is not None:
         return f"RS-{major:03d}"
