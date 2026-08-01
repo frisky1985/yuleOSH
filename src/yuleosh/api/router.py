@@ -249,7 +249,14 @@ def dispatch(handler: BaseHTTPRequestHandler, path: str):
             return
         return _respond(handler, *json_error(f"Unknown resource: {resource}", 404))
 
-    body = read_body(handler)
+    body = None
+    # P1-5 (W-08): read_body can raise BadRequest (invalid/oversized
+    # Content-Length) — respond 400 instead of letting it bubble into a 500.
+    try:
+        body = read_body(handler)
+    except BadRequest as e:
+        _respond(handler, *json_error(str(e), 400))
+        return
 
     # ── Audit log helper ─────────────────────────────────────────────
     def _do_audit_log(status_code: int):

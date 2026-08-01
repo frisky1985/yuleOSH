@@ -154,8 +154,8 @@ def test_run_pipeline_job_failed():
     assert "boom" in status["result"]
 
 
-def test_run_pipeline_job_passed_import_error():
-    """v3.4.0: import failure in worker → simulated pass (non-fatal)."""
+def test_run_pipeline_job_passed_import_error_fails_explicitly():
+    """P1-8 (W-05): import failure in worker → job FAILED (no simulated pass)."""
     import sys
     _clear_state()
     # Remove run_all from the module so ``from yuleosh.ci.run import run_all``
@@ -174,7 +174,7 @@ def test_run_pipeline_job_passed_import_error():
     }
     ar._run_ci_job("job_z", "/tmp/z", 0)
     status = ar._PIPELINE_JOBS["job_z"]
-    assert status["status"] == "passed"
+    assert status["status"] == "failed"
     if saved is not None:
         _ci_run_mod.run_all = saved
     else:

@@ -204,10 +204,11 @@ def _handle_github_push(payload: dict, handler=None) -> tuple:
 
     except Exception as e:
         log.error(f"Error processing GitHub webhook: {e}", exc_info=True)
-        # Return 200 per GitHub best practices (don't retry on server errors)
+        # Return 200 per GitHub best practices (don't retry on server errors).
+        # P1-7 (S-P1-05): never echo internal exception details.
         return json_ok({
             "status": "received",
-            "error": str(e),
+            "error": "An error occurred while processing the webhook",
             "pipeline_triggered": False,
         })
 

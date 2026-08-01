@@ -105,7 +105,14 @@ def handle_api_action(handler: BaseHTTPRequestHandler, action: str):
 
     try:
         if action == "signin":
-            result, status = handle_signin(body)
+            # P1-2: pass the client IP so signin can enforce a per-IP
+            # attempt cap (bounds cross-email lockout DoS).
+            client_ip = ""
+            try:
+                client_ip = handler.client_address[0]
+            except (AttributeError, IndexError, TypeError):
+                pass
+            result, status = handle_signin(body, ip=client_ip)
             _send_json_response(handler, result, status)
         elif action == "session":
             result, status = handle_session_info(token)
@@ -135,14 +142,16 @@ def handle_api_action(handler: BaseHTTPRequestHandler, action: str):
 
 
 def _read_body(handler: BaseHTTPRequestHandler) -> dict:
-    """Read and parse JSON request body."""
-    content_length = int(handler.headers.get("Content-Length", 0))
-    if content_length == 0:
-        return {}
+    """Read and parse the request body (P1-5: unified clamped read_body).
+
+    Delegates to yuleosh.api.read_body which clamps Content-Length to 10 MB
+    and converts malformed headers to BadRequest.  Invalid JSON / bad
+    Content-Length yield {} — caller validation returns the 4xx.
+    """
+    from yuleosh.api import read_body, BadRequest
     try:
-        body = handler.rfile.read(content_length).decode("utf-8")
-        return json.loads(body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        return read_body(handler)
+    except BadRequest:
         return {}
 
 

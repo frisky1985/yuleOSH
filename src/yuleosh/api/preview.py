@@ -95,6 +95,14 @@ CLONE_TIMEOUT = 120  # seconds
 ANALYSIS_TIMEOUT = 300  # 5 minutes
 RESULT_TTL = 24 * 3600  # 24 hours
 
+# Zip-bomb limits (P2-6 / S-P1-03): member count, per-member expanded size
+# and total expanded size are all capped BEFORE extraction, and symlink /
+# absolute-path members are rejected (zip-slip defense in depth — stdlib
+# already blocks traversal, but the preflight keeps resource use bounded).
+MAX_ZIP_MEMBERS = 1000
+MAX_ZIP_MEMBER_BYTES = 100 * 1024 * 1024  # 100 MB per member
+MAX_ZIP_EXPANDED_BYTES = 500 * 1024 * 1024  # 500 MB total expanded
+
 SUPPORTED_GIT_HOSTS = {"github.com", "gitlab.com", "bitbucket.org"}
 
 # ── In-memory state — thread-safe ────────────────────────────────────────
@@ -261,10 +269,44 @@ def _handle_zip_upload(preview_id: str, zip_data: bytes, handler) -> tuple:
     # Extract to temp directory
     import zipfile
     import io
+    import stat
 
     try:
         temp_dir = Path(tempfile.mkdtemp(prefix="yuleosh_preview_"))
         with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            infos = zf.infolist()
+
+            # P2-6 (S-P1-03): zip-bomb preflight before any extraction.
+            if len(infos) > MAX_ZIP_MEMBERS:
+                return json_error({
+                    "error": "archive_too_large",
+                    "message": f"ZIP contains too many members (max {MAX_ZIP_MEMBERS}).",
+                }, 413)
+            total_expanded = 0
+            for info in infos:
+                if stat.S_ISLNK(info.external_attr >> 16):
+                    return json_error({
+                        "error": "invalid_archive",
+                        "message": "ZIP members must not be symlinks.",
+                    }, 400)
+                name = info.filename.replace("\\", "/")
+                if name.startswith("/") or ".." in Path(name).parts:
+                    return json_error({
+                        "error": "invalid_archive",
+                        "message": "ZIP contains an unsafe member path.",
+                    }, 400)
+                if info.file_size > MAX_ZIP_MEMBER_BYTES:
+                    return json_error({
+                        "error": "archive_too_large",
+                        "message": f"ZIP member too large (max {MAX_ZIP_MEMBER_BYTES // (1024*1024)} MB).",
+                    }, 413)
+                total_expanded += info.file_size
+                if total_expanded > MAX_ZIP_EXPANDED_BYTES:
+                    return json_error({
+                        "error": "archive_too_large",
+                        "message": f"ZIP expands beyond {MAX_ZIP_EXPANDED_BYTES // (1024*1024)} MB.",
+                    }, 413)
+
             zf.extractall(str(temp_dir))
     except zipfile.BadZipFile:
         return json_error({
@@ -397,32 +439,72 @@ def _get_dir_size(path: Path) -> int:
 
 # ── Rate limiter ────────────────────────────────────────────────────────
 
-_store_lock = threading.Lock()
-_preview_request_log: dict[str, list[float]] = {}
+# P1-4 (W-03 / S-P1-01): thread-safe state — the read-modify-write of the
+# per-IP timestamp list is atomic under _ThreadSafeDict's lock, and stale
+# IP entries are purged opportunistically (bounded memory growth).
+_preview_request_log = _ThreadSafeDict()
 _PREVIEW_AUTH_LIMIT = 3  # unauth: 3 per 24h
 _PREVIEW_AUTHED_LIMIT = 20  # authed: 20 per 24h
 _PREVIEW_WINDOW = 24 * 3600  # 24 hours
+_PREVIEW_LOG_MAX_IPS = 5000  # hard cap before opportunistic cleanup
 
 
 def _check_preview_rate_limit(ip: str, is_authenticated: bool = False) -> tuple[bool, int]:
-    """Check rate limit per IP (PREVIEW-REQ-005)."""
+    """Check rate limit per IP (PREVIEW-REQ-005).  Atomic under lock."""
     now = time.time()
     limit = _PREVIEW_AUTHED_LIMIT if is_authenticated else _PREVIEW_AUTH_LIMIT
 
-    if ip not in _preview_request_log:
-        _preview_request_log[ip] = []
+    with _preview_request_log._lock:
+        # NOTE: use the underlying dict directly — the public accessors
+        # re-acquire the same (non-reentrant) lock and would deadlock.
+        ts_list = _preview_request_log._dict.get(ip) or []
+        # Purge old entries
+        ts_list = [t for t in ts_list if now - t < _PREVIEW_WINDOW]
 
-    # Purge old entries
-    _preview_request_log[ip] = [t for t in _preview_request_log[ip]
-                                 if now - t < _PREVIEW_WINDOW]
+        if len(ts_list) >= limit:
+            oldest = ts_list[0]
+            retry_after = int(_PREVIEW_WINDOW - (now - oldest)) + 1
+            return False, retry_after
 
-    if len(_preview_request_log[ip]) >= limit:
-        oldest = _preview_request_log[ip][0]
-        retry_after = int(_PREVIEW_WINDOW - (now - oldest)) + 1
-        return False, retry_after
+        ts_list.append(now)
+        _preview_request_log._dict[ip] = ts_list
 
-    _preview_request_log[ip].append(now)
+        # Opportunistic cleanup: when the tracking table grows large, drop
+        # IPs whose every timestamp is outside the window (bounded memory).
+        if len(_preview_request_log._dict) > _PREVIEW_LOG_MAX_IPS:
+            cutoff = now - _PREVIEW_WINDOW
+            stale = [
+                k for k, v in _preview_request_log._dict.items()
+                if not any(t > cutoff for t in v)
+            ]
+            for k in stale:
+                _preview_request_log._dict.pop(k, None)
+
     return True, 0
+
+
+def _is_authed(handler) -> bool:
+    """Real authentication check for preview rate-limit tiers (P1-4).
+
+    Previously any header PRESENCE (Authorization / X-API-Key) granted the
+    higher authed quota — a fake/malformed header was enough.  Now:
+      - Bearer JWT must decode and resolve to a live session;
+      - X-API-Key must match a non-revoked stored key (sha256).
+    Fail closed on any error.
+    """
+    try:
+        auth = handler.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            from yuleosh.ui.auth_extended import get_session_user
+            return get_session_user(auth[7:]) is not None
+        key = handler.headers.get("X-API-Key", "")
+        if key:
+            from yuleosh.store import Store
+            rec = Store().get_api_key_by_hash(hashlib.sha256(key.encode("utf-8")).hexdigest())
+            return rec is not None and not rec.get("revoked")
+    except Exception:
+        return False
+    return False
 
 
 # ── Cache by repo URL ──────────────────────────────────────────────────
@@ -543,8 +625,7 @@ def handle_preview(method: str, path_tail: str, body: dict, query: dict,
         content_type = handler.headers.get("Content-Type", "")
 
         # Rate limiting (PREVIEW-REQ-005)
-        is_authed = bool(handler.headers.get("Authorization") or
-                         handler.headers.get("X-API-Key"))
+        is_authed = _is_authed(handler)
         allowed, retry_after = _check_preview_rate_limit(ip, is_authed)
         if not allowed:
             return json_error({

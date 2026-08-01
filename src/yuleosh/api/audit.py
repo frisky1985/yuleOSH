@@ -47,7 +47,10 @@ def _ensure_table():
 
 @require_auth
 def handle_audit(method: str, path_tail: str, body: dict, query: dict, **kwargs) -> tuple[dict, int]:
-    """GET /api/v1/audit — list recent audit entries (admin only).
+    """GET /api/v1/audit — list recent audit entries (admin/auditor only).
+
+    RBAC (P1-1): requires audit:view permission (admin or auditor role);
+    member/developer roles receive 403.
 
     Query params:
         limit (int, default 50): max entries to return
@@ -58,6 +61,16 @@ def handle_audit(method: str, path_tail: str, body: dict, query: dict, **kwargs)
 
     if path_tail:
         return json_error("Not found", 404)
+
+    # RBAC (P1-1 / C-W-02): "admin only" was documented but never enforced —
+    # any authenticated user (incl. member role) could read the audit log.
+    # Require audit:view permission (admin / auditor) via the shared RBAC
+    # model, matching ui/routes/audit_routes.py.  Fail closed when the
+    # current_user context is missing.
+    from yuleosh.rbac import check_role
+    current_user = kwargs.get("current_user")
+    if not current_user or not check_role(current_user, "audit", "view"):
+        return json_error("Insufficient permissions. Admin or Auditor role required.", 403)
 
     _ensure_table()
 

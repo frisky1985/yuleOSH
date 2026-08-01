@@ -48,17 +48,20 @@ class TestHandleStatus:
         handler = _make_mock_handler()
         result = handle_status(handler)
         assert result["status"] == "running"
-        assert "osh_home" in result
+        # P1-7 (S-06): absolute path no longer exposed
+        assert "osh_home" not in result
+        assert result["osh_home_configured"] is True
         assert "version" in result
         assert "timestamp" in result
 
     def test_status_uses_osh_home_env(self):
-        """GIVEN OSH_HOME env WHEN handle_status THEN uses it."""
+        """GIVEN OSH_HOME env WHEN handle_status THEN configured flag set."""
         from yuleosh.ui.routes.api_routes import handle_status
         handler = _make_mock_handler()
         with mock.patch.dict(os.environ, {"OSH_HOME": "/custom/path"}):
             result = handle_status(handler)
-            assert result["osh_home"] == "/custom/path"
+            assert "osh_home" not in result
+            assert result["osh_home_configured"] is True
 
 
 # =====================================================================
@@ -103,12 +106,13 @@ class TestHandleHealth:
         assert result["tenant_auth"] is True
 
     def test_health_uses_osh_home_env(self):
-        """GIVEN OSH_HOME env WHEN handle_health THEN used."""
+        """GIVEN OSH_HOME env WHEN handle_health THEN configured flag set."""
         from yuleosh.ui.routes.api_routes import handle_health
         handler = _make_mock_handler()
         with mock.patch.dict(os.environ, {"OSH_HOME": "/custom/home"}):
             result = handle_health(handler)
-            assert result["osh_home"] == "/custom/home"
+            assert "osh_home" not in result
+            assert result["osh_home_configured"] is True
 
 
 # =====================================================================

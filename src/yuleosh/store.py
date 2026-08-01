@@ -16,6 +16,16 @@ from typing import Optional
 from yuleosh.store_interface import AbstractStore
 
 
+def _session_token_hash(token: str) -> str:
+    """Return the sha256 hexdigest of a session token (P1-6).
+
+    The raw JWT is never persisted — only this hash, so a database leak
+    does not yield usable bearer tokens.
+    """
+    import hashlib
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 class Store(AbstractStore):
     """SQLite-backed persistent store. Thread-safe, testable.
 
@@ -149,6 +159,19 @@ class Store(AbstractStore):
                 FOREIGN KEY (org_id) REFERENCES organizations(id)
             );
         """)
+        self.conn.commit()
+
+        # Session token hashing (P1-6 / S-P1-02): legacy plaintext JWT rows
+        # (sha256 hexdigests are always exactly 64 chars) are migrated to
+        # their sha256 hash so the DB never stores usable bearer tokens.
+        legacy = self.conn.execute(
+            "SELECT id, token FROM user_sessions WHERE length(token) != 64"
+        ).fetchall()
+        for row in legacy:
+            self.conn.execute(
+                "UPDATE user_sessions SET token=? WHERE id=?",
+                (_session_token_hash(row["token"]), row["id"]),
+            )
         self.conn.commit()
 
         # API keys table (v4)
@@ -396,23 +419,29 @@ class Store(AbstractStore):
         # isoformat() with 'T' separator sorts differently from SQLite's space.
         now_str = now.isoformat(sep=" ")
         exp_str = expires.isoformat(sep=" ")
+        # P1-6 (S-P1-02): store only sha256(token) — the raw JWT (which
+        # embeds user identity and stays valid for the TTL) must never be
+        # persisted in the DB where a leak would enable session hijacking.
+        token_hash = _session_token_hash(token)
         self.conn.execute(
             "INSERT OR REPLACE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (user_id, token, now_str, exp_str)
+            (user_id, token_hash, now_str, exp_str)
         )
         self.conn.commit()
-        return {"user_id": user_id, "token": token, "created_at": now_str, "expires_at": exp_str}
+        return {"user_id": user_id, "token": token_hash, "created_at": now_str, "expires_at": exp_str}
 
     def get_session(self, token: str) -> Optional[dict]:
+        token_hash = _session_token_hash(token)
         cur = self.conn.execute(
             "SELECT * FROM user_sessions WHERE token=? AND expires_at > datetime('now')",
-            (token,)
+            (token_hash,)
         )
         row = cur.fetchone()
         return dict(row) if row else None
 
     def delete_session(self, token: str):
-        self.conn.execute("DELETE FROM user_sessions WHERE token=?", (token,))
+        token_hash = _session_token_hash(token)
+        self.conn.execute("DELETE FROM user_sessions WHERE token=?", (token_hash,))
         self.conn.commit()
 
     def cleanup_expired_sessions(self):

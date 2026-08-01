@@ -273,13 +273,15 @@ class TestZipUpload:
         with patch.object(P, "MAX_ZIP_SIZE", 10):
             result, status = P._handle_zip_upload("p1", b"x" * 100, None)
         assert status == 413
-        assert result["error"]["error"] == "file_too_large"
+        # W-07 contract: error is a flat string + details object
+        assert result["error"] == "file_too_large"
+        assert result["details"]["max_size_mb"] == 0
 
     def test_invalid_zip(self):
         """GIVEN non-zip bytes WHEN upload THEN 400."""
         result, status = P._handle_zip_upload("p1", b"garbage", None)
         assert status == 400
-        assert result["error"]["error"] == "invalid_archive"
+        assert result["error"] == "invalid_archive"
 
     def test_bad_zip_file(self):
         """GIVEN corrupt zip file WHEN upload THEN 400."""
@@ -310,7 +312,7 @@ class TestGitUrl:
         """GIVEN unsupported host WHEN git url THEN 400."""
         result, status = P._handle_git_url("p1", "https://evil.com/r", None)
         assert status == 400
-        assert result["error"]["error"] == "unsupported_git_host"
+        assert result["error"] == "unsupported_git_host"
 
     def test_valid_url_starts_background(self, tmp_path, monkeypatch):
         """GIVEN valid URL WHEN git url THEN 202 + entry stored."""
@@ -645,7 +647,7 @@ class TestHandlePreview:
         P._preview_request_log["9.9.9.9"] = [time.time()] * 3
         result, status = P.handle_preview("POST", "assess", {}, {}, handler)
         assert status == 429
-        assert result["error"]["error"] == "rate_limited"
+        assert result["error"] == "rate_limited"
 
     def test_post_zip_upload(self, tmp_path, monkeypatch):
         """GIVEN multipart zip WHEN POST THEN 202."""
@@ -678,7 +680,7 @@ class TestHandlePreview:
         )
         result, status = P.handle_preview("POST", "assess", {}, {}, handler)
         assert status == 400
-        assert result["error"]["error"] == "input_required"
+        assert result["error"] == "input_required"
 
     def test_post_json_repo_url_new(self, tmp_path, monkeypatch):
         """GIVEN json repo_url WHEN POST THEN 202 + cached."""
@@ -715,7 +717,7 @@ class TestHandlePreview:
                               client_address=("1.1.1.5", 0))
         result, status = P.handle_preview("POST", "assess", {}, {}, handler)
         assert status == 400
-        assert result["error"]["error"] == "input_required"
+        assert result["error"] == "input_required"
 
     def test_post_unsupported_content_type(self):
         """GIVEN text/plain body WHEN POST THEN 400."""

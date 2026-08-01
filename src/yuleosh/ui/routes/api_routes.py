@@ -13,10 +13,17 @@ from http.server import BaseHTTPRequestHandler
 
 
 def handle_status(handler: BaseHTTPRequestHandler) -> dict:
-    """Return basic server status."""
+    """Return basic server status.
+
+    P1-7 (S-06): the absolute OSH_HOME path is no longer exposed — a
+    boolean indicates configuration presence instead (path is an
+    information leak).
+    """
     return {
         "status": "running",
-        "osh_home": os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "osh_home_configured": bool(
+            os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ),
         "version": "1.0.0",
         "timestamp": __import__("datetime").datetime.now().isoformat(),
     }
@@ -40,7 +47,10 @@ def handle_health(handler: BaseHTTPRequestHandler) -> dict:
         "uptime_seconds": None,
         "auth_enabled": AUTH_ENABLED,
         "tenant_auth": tenant_auth,
-        "osh_home": os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        # P1-7 (S-06): do not expose the absolute OSH_HOME path.
+        "osh_home_configured": bool(
+            os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ),
     }
 
 
@@ -137,6 +147,9 @@ def handle_usage(handler: BaseHTTPRequestHandler) -> dict:
         summary = get_usage_summary(store, user["org_id"])
         return summary
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}, 500
+        # P2-5 (S-P2-01): no raw traceback dump to stdout — structured log.
+        import logging
+        logging.getLogger("api.usage").error(
+            "Failed to build usage summary: %s", e, exc_info=True
+        )
+        return {"error": "Internal server error"}, 500

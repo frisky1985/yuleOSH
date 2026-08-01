@@ -69,13 +69,28 @@ def _validate_password_strength(password: str) -> list[str]:
 # NOTE (S-P2-02): The in-memory rate limiter does NOT work across multiple
 # processes or workers. For production deployments with >1 worker, replace
 # with a shared store (Redis/Memcached) or database-backed rate limiter.
-_SIGNIN_RATE_LIMIT: dict[str, tuple[int, int]] = {}  # email -> (attempts, window_start)
+#
+# P1-2 (W-04 / S-P1-06): lockout-DoS hardening.
+#   - Per-email limit now counts FAILED attempts only (recorded at the point
+#     of verification failure).  Correct-password logins never consume the
+#     budget, and enumeration is still foiled because the same unified
+#     message is returned for unknown-user / no-password / wrong-password.
+#   - A per-IP attempt cap bounds how many distinct accounts a single
+#     attacker can lock out (30 attempts / 5 min per IP).
+_SIGNIN_RATE_LIMIT: dict[str, tuple[int, int]] = {}  # email -> (failed_attempts, window_start)
+_SIGNIN_IP_LIMIT: dict[str, tuple[int, int]] = {}  # ip -> (attempts, window_start)
 _MAX_SIGNIN_ATTEMPTS = 10
 _RATE_WINDOW_SECONDS = 300  # 5 minutes
+_MAX_SIGNIN_IP_ATTEMPTS = 30
+_IP_WINDOW_SECONDS = 300  # 5 minutes
 
 
 def _check_rate_limit(email: str) -> bool:
-    """Check signin rate limit. Returns True if blocked.
+    """Check whether the email is currently blocked. Returns True if blocked.
+
+    P1-2: pure check — does NOT increment.  Failed attempts are recorded by
+    _record_failed_attempt() at the failure site so correct logins never
+    lock a user out.
 
     Process-local only (S-P2-02): does not span workers.
     Stale entries are cleaned up opportunistically.
@@ -85,16 +100,49 @@ def _check_rate_limit(email: str) -> bool:
     if entry:
         attempts, window_start = entry
         if now - window_start > _RATE_WINDOW_SECONDS:
-            _SIGNIN_RATE_LIMIT[email] = (1, now)
+            _SIGNIN_RATE_LIMIT.pop(email, None)
             return False
         if attempts >= _MAX_SIGNIN_ATTEMPTS:
             return True
-        _SIGNIN_RATE_LIMIT[email] = (attempts + 1, window_start)
+    return False
+
+
+def _record_failed_attempt(email: str) -> None:
+    """Record one FAILED signin attempt for the email (P1-2)."""
+    now = int(time.time())
+    entry = _SIGNIN_RATE_LIMIT.get(email)
+    if entry:
+        attempts, window_start = entry
+        if now - window_start > _RATE_WINDOW_SECONDS:
+            _SIGNIN_RATE_LIMIT[email] = (1, now)
+        else:
+            _SIGNIN_RATE_LIMIT[email] = (attempts + 1, window_start)
     else:
         _SIGNIN_RATE_LIMIT[email] = (1, now)
         # Opportunistic stale entry cleanup (every ~11th new entry)
         if len(_SIGNIN_RATE_LIMIT) > 1000 and hash(email) % 11 == 0:
             _cleanup_stale_rate_entries()
+
+
+def _check_ip_rate_limit(ip: str) -> bool:
+    """Per-IP signin attempt cap (P1-2). Returns True if blocked.
+
+    Bounds the number of distinct emails a single source can lock out.
+    """
+    if not ip:
+        return False
+    now = int(time.time())
+    entry = _SIGNIN_IP_LIMIT.get(ip)
+    if entry:
+        attempts, window_start = entry
+        if now - window_start > _IP_WINDOW_SECONDS:
+            _SIGNIN_IP_LIMIT[ip] = (1, now)
+            return False
+        if attempts >= _MAX_SIGNIN_IP_ATTEMPTS:
+            return True
+        _SIGNIN_IP_LIMIT[ip] = (attempts + 1, window_start)
+    else:
+        _SIGNIN_IP_LIMIT[ip] = (1, now)
     return False
 
 
@@ -159,8 +207,15 @@ def _slugify(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def get_session_user(token: str) -> dict | None:
-    """Resolve a bearer token to a user dict with org info."""
+    """Resolve a bearer token to a user dict with org info.
+
+    P1-6 (S-P1-02): the JWT signature is verified first (defense in depth —
+    only signed tokens can resolve a session), then the session row is
+    looked up by its sha256 hash.  Random/forged strings never resolve.
+    """
     if not token:
+        return None
+    if _decode_token(token) is None:
         return None
     store = Store()
     session = store.get_session(token)
@@ -186,16 +241,23 @@ def get_session_user(token: str) -> dict | None:
 # Auth endpoints
 # ---------------------------------------------------------------------------
 
-def handle_signin(body: dict) -> dict:
+def handle_signin(body: dict, ip: str = "") -> dict:
     """POST /api/auth/signin — Password-based signin/signup.
 
     Body: {email, password, [invite_code]}
 
     Flow:
-    1. Rate limit check
+    1. Rate limit check (per-email failed-attempt budget + per-IP cap)
     2. If user exists with password → verify password → login
     3. If invite_code → join org (signup without password first time)
     4. If email-only (backward compat) → first-time org creation flow
+
+    P1-2 (W-04 / S-P1-06):
+    - Users without a password_hash can NEVER log in with email alone
+      (fail-closed, matches api/auth.py) — unified error message prevents
+      account enumeration.
+    - Failed attempts are counted per-email (max 10 / 5 min) AND per-IP
+      (max 30 / 5 min) to bound account-lockout DoS.
     """
     email = (body.get("email") or "").strip().lower()
     password = (body.get("password") or "").strip()
@@ -204,9 +266,11 @@ def handle_signin(body: dict) -> dict:
     if not email or not EMAIL_RE.match(email):
         return {"error": "Valid email is required"}, 400
 
-    # Rate limit
+    # Rate limit (P1-2): per-email lockout check + per-IP attempt cap
     if _check_rate_limit(email):
         return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
+    if _check_ip_rate_limit(ip):
+        return {"error": f"Too many attempts. Try again in {_IP_WINDOW_SECONDS // 60} minutes."}, 429
 
     store = Store()
 
@@ -224,10 +288,13 @@ def handle_signin(body: dict) -> dict:
             # authenticated by email alone — unified message prevents
             # account enumeration.
             if not existing_user.get("password_hash"):
+                _record_failed_attempt(email)
                 return {"error": "Invalid email or password"}, 401
             if not password:
+                _record_failed_attempt(email)
                 return {"error": "Invalid email or password"}, 401
             if not _verify_password(password, existing_user["password_hash"]):
+                _record_failed_attempt(email)
                 return {"error": "Invalid email or password"}, 401
             return _create_login_response(store, existing_user)
         else:
@@ -247,10 +314,13 @@ def handle_signin(body: dict) -> dict:
                 # Fail closed: password-less users cannot log in with email
                 # alone (matches api/auth.py _login_user semantics).
                 if not user.get("password_hash"):
+                    _record_failed_attempt(email)
                     return {"error": "Invalid email or password"}, 401
                 if not password:
+                    _record_failed_attempt(email)
                     return {"error": "Invalid email or password"}, 401
                 if not _verify_password(password, user["password_hash"]):
+                    _record_failed_attempt(email)
                     return {"error": "Invalid email or password"}, 401
                 return _create_login_response(store, user)
 

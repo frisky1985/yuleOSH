@@ -248,7 +248,9 @@ class TestHealth:
         assert data["store"]["projects"] == 1
         assert "uptime_seconds" in data
         assert data["version"] == "0.1.0"
-        assert data["osh_home"] == os.environ["OSH_HOME"]
+        # P1-7 (S-06): the absolute path is no longer exposed.
+        assert "osh_home" not in data
+        assert data["osh_home_configured"] is True
 
     def test_health_disks_ok(self, mock_store):
         """Disk check returns valid values."""
@@ -1559,9 +1561,16 @@ def _seed_auth_for_dispatch(handler):
         "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
         (1, 1, "t@t.com", "member", now)
     )
+    # P1-6: sessions are stored as sha256 hashes — never plaintext.
+
+    from yuleosh.store import _session_token_hash
+
     store.conn.execute(
+
         "INSERT OR IGNORE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
-        (1, valid_token, now, "2099-12-31")
+
+        (1, _session_token_hash(valid_token), now, "2099-12-31")
+
     )
     store.conn.commit()
     original_get = handler.headers.get
@@ -1661,9 +1670,16 @@ class TestRouter:
             "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
             (1, 1, "t@t.com", "member", now)
         )
+        # P1-6: sessions are stored as sha256 hashes — never plaintext.
+
+        from yuleosh.store import _session_token_hash
+
         store.conn.execute(
+
             "INSERT OR IGNORE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (1, valid_token, now, "2099-12-31")
+
+            (1, _session_token_hash(valid_token), now, "2099-12-31")
+
         )
         store.conn.commit()
         now = datetime.now().isoformat()
@@ -1671,9 +1687,16 @@ class TestRouter:
             "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
             (1, 1, "t@t.com", "member", now)
         )
+        # P1-6: sessions are stored as sha256 hashes — never plaintext.
+
+        from yuleosh.store import _session_token_hash
+
         store.conn.execute(
+
             "INSERT OR IGNORE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (1, valid_token, now, "2099-12-31")
+
+            (1, _session_token_hash(valid_token), now, "2099-12-31")
+
         )
         store.conn.commit()
         handler.headers.get.side_effect = lambda k, d="": {

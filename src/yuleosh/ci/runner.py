@@ -54,18 +54,20 @@ def _save_layer_result(
 
 
 def git_commit_hash() -> str:
+    # P2-8 (S-P2-05): default timeout — a hung git process must not block CI.
     result = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=30,
     )
     return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
 def get_changed_files(base_ref: str = "HEAD") -> list[str]:
     """Get list of changed files."""
+    # P2-8 (S-P2-05): default timeout — a hung git process must not block CI.
     result = subprocess.run(
         ["git", "diff", "--name-only", base_ref],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=30,
     )
     if result.returncode == 0:
         return [f.strip() for f in result.stdout.split("\n") if f.strip()]

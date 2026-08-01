@@ -32,6 +32,12 @@ def _put_config(body: dict):
     """PUT /api/v1/notify/config — update notification config.
 
     All fields are optional. Only provided fields are updated.
+
+    P1-9 (S-P1-07): the SMTP password is write-only:
+      - A non-empty ``email_pass`` is accepted and applied to the process
+        environment (it is never returned by GET — to_dict omits it).
+      - An empty/missing ``email_pass`` NEVER clears or overwrites the
+        existing password (prevents accidental/forged password wipe).
     """
     from yuleosh.notify import get_config, set_config, NotifyConfig
 
@@ -39,13 +45,18 @@ def _put_config(body: dict):
         return json_error("Body must be a JSON object", 400)
 
     current = get_config()
+    email_pass = body.get("email_pass")
+    if email_pass is None or email_pass == "":
+        # P1-9: refuse to clear/overwrite the password with an empty value.
+        email_pass = current.email_pass
+
     cfg = NotifyConfig(
         feishu_url=body.get("feishu_url", current.feishu_url),
         email_smtp=body.get("email_smtp", current.email_smtp),
         email_from=body.get("email_from", current.email_from),
         email_to=body.get("email_to", current.email_to),
         email_user=body.get("email_user", current.email_user),
-        email_pass=body.get("email_pass", current.email_pass),
+        email_pass=email_pass,
         email_port=int(body.get("email_port", current.email_port)),
         email_tls=body.get("email_tls", current.email_tls) if "email_tls" in body else current.email_tls,
         webhook_url=body.get("webhook_url", current.webhook_url),

@@ -397,15 +397,16 @@ def auto_review(project_dir: str = None):
         project_dir = os.environ.get("OSH_HOME", os.getcwd())
     
     # Find changed files
+    # P2-8 (S-P2-05): default timeout — a hung git process must not hang the review.
     result = subprocess.run(
         ["git", "diff", "--name-only", "HEAD"],
-        capture_output=True, text=True, cwd=project_dir,
+        capture_output=True, text=True, cwd=project_dir, timeout=30,
     )
     changed_files = [f.strip() for f in result.stdout.split("\n") if f.strip()]
     if not changed_files:
         result = subprocess.run(
             ["git", "diff", "--name-only", "--cached"],
-            capture_output=True, text=True, cwd=project_dir,
+            capture_output=True, text=True, cwd=project_dir, timeout=30,
         )
         changed_files = [f.strip() for f in result.stdout.split("\n") if f.strip()]
     
@@ -451,7 +452,7 @@ def main():
         kind = sys.argv[3] if len(sys.argv) > 3 else "feature"
         result = subprocess.run(
             ["git", "diff", "--name-only", "HEAD"],
-            capture_output=True, text=True, cwd=project_dir,
+            capture_output=True, text=True, cwd=project_dir, timeout=30,
         )
         changed = [f.strip() for f in result.stdout.split("\n") if f.strip()]
         run_review(sys.argv[2], kind, project_dir, changed)
