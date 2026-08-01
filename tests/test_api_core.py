@@ -143,40 +143,36 @@ class TestProjectAPI:
 
     def test_create_project(self):
         from yuleosh.api.project import handle_project
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         body = {"name": "API Test Project", "slug": "api-test-project"}
         data, s = handle_project(method="POST", path_tail="",
-                                 body=body, query={}, handler=handler)
+                                 body=body, query={}, handler=None)
         assert s in (200, 201, 400, 409)
 
     def test_create_project_missing_name(self):
         from yuleosh.api.project import handle_project
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         data, s = handle_project(method="POST", path_tail="",
-                                 body={"slug": "no-name"}, query={}, handler=handler)
+                                 body={"slug": "no-name"}, query={}, handler=None)
         assert s == 400
 
     def test_list_projects(self):
         from yuleosh.api.project import handle_project
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         data, s = handle_project(method="GET", path_tail="",
-                                 body={}, query={}, handler=handler)
+                                 body={}, query={}, handler=None)
         assert s == 200
 
     def test_create_duplicate_slug(self):
         from yuleosh.api.project import handle_project
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         slug = f"dup-slug-{int(id(self))}"
         body = {"name": "First", "slug": slug}
         data1, s1 = handle_project(method="POST", path_tail="",
-                                   body=body, query={}, handler=handler)
+                                   body=body, query={}, handler=None)
         body2 = {"name": "Second", "slug": slug}
         data2, s2 = handle_project(method="POST", path_tail="",
-                                   body=body2, query={}, handler=handler)
+                                   body=body2, query={}, handler=None)
         assert s2 in (200, 400, 409)
 
 
@@ -189,10 +185,9 @@ class TestWizardAPI:
 
     def test_wizard_complete(self):
         from yuleosh.api.wizard import handle_wizard
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         data, s = handle_wizard(method="POST", path_tail="complete",
-                                body={}, query={}, handler=handler)
+                                body={}, query={}, handler=None)
         assert s in (200, 401)
 
 
@@ -205,23 +200,21 @@ class TestSpecAPI:
 
     def test_spec_upload(self):
         from yuleosh.api.spec import handle_spec
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         body = {
             "project": "Spec Test",
             "name": "RS-001",
             "content": "## RS-001\nSystem SHALL init within 100ms.",
         }
         data, s = handle_spec(method="POST", path_tail="",
-                              body=body, query={}, handler=handler)
+                              body=body, query={}, handler=None)
         assert s in (200, 201, 400, 404)
 
     def test_spec_missing_content(self):
         from yuleosh.api.spec import handle_spec
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         data, s = handle_spec(method="POST", path_tail="",
-                              body={"project": "Empty"}, query={}, handler=handler)
+                              body={"project": "Empty"}, query={}, handler=None)
         assert s == 404
 
 
@@ -234,27 +227,24 @@ class TestPipelineAPI:
 
     def test_pipeline_trigger(self):
         from yuleosh.api.pipeline import handle_pipeline
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         body = {"project": "Pipe Test", "name": "Pipe Test", "action": "run"}
         data, s = handle_pipeline(method="POST", path_tail="",
-                                  body=body, query={}, handler=handler)
+                                  body=body, query={}, handler=None)
         assert s in (200, 201, 400, 404, 500)
 
     def test_pipeline_missing_project(self):
         from yuleosh.api.pipeline import handle_pipeline
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         data, s = handle_pipeline(method="POST", path_tail="",
-                                  body={"action": "run"}, query={}, handler=handler)
+                                  body={"action": "run"}, query={}, handler=None)
         assert s == 400
 
     def test_pipeline_status(self):
         from yuleosh.api.pipeline import handle_pipeline
-        handler = mock.MagicMock()
-        handler.headers = {"Authorization": "Bearer test"}
+        # Unit-test mode: handler=None → auth injects dummy user (v3.4.0)
         data, s = handle_pipeline(method="GET", path_tail="status",
-                                  body={}, query={}, handler=handler)
+                                  body={}, query={}, handler=None)
         assert s == 200
 
 
