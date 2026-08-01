@@ -1,6 +1,6 @@
 # Code Generation (D3 编码生成闭环) — 使用说明
 
-> yuleOSH v3.4.0 · Harness Coding 能力补全
+> yuleOSH v3.4.4 · Harness Coding 能力补全
 
 ## 1. 是什么
 

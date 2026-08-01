@@ -1,6 +1,6 @@
 # Skills 技能库 — 扩展指南
 
-> yuleOSH v3.4.0 · `src/yuleosh/skills/` 从空模块升级为真实技能库
+> yuleOSH v3.4.4 · `src/yuleosh/skills/` 从空模块升级为真实技能库
 
 ## 1. 概念
 
