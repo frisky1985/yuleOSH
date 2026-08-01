@@ -27,13 +27,34 @@ class BadRequest(Exception):
     """Raised when a request body cannot be parsed."""
 
 
+# Unified request-body cap (P1-5 / W-08): protects against memory-exhaustion
+# via a huge declared Content-Length (memory DoS).
+MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
 def json_ok(data: Any = None) -> tuple[dict, int]:
     """Return a success JSON response."""
     return {"ok": True, "data": data}, 200
 
 
-def json_error(msg: str, status: int = 400) -> tuple[dict, int]:
-    """Return an error JSON response."""
+def json_error(msg: str | dict, status: int = 400) -> tuple[dict, int]:
+    """Return an error JSON response (W-07 contract fix).
+
+    Accepts either a plain message string or a structured error dict
+    ``{"error": <str>, ...extra fields}``.  The dict form is normalized so
+    the ``error`` field is ALWAYS a string (API contract), with extra fields
+    moved to a ``details`` object.  Example::
+
+        json_error({"error": "file_too_large", "max_size_mb": 50}, 413)
+        # -> {"ok": False, "error": "file_too_large", "details": {"max_size_mb": 50}}
+    """
+    if isinstance(msg, dict):
+        err = msg.get("error", "error")
+        details = {k: v for k, v in msg.items() if k != "error"}
+        payload = {"ok": False, "error": str(err)}
+        if details:
+            payload["details"] = details
+        return payload, status
     return {"ok": False, "error": msg}, status
 
 
@@ -44,9 +65,21 @@ def read_body(handler) -> dict:
     - application/x-www-form-urlencoded → query-string decode
     - other / no content-type → try JSON, fall back to query-string
 
+    Security (P1-5 / W-08):
+    - Content-Length is clamped to MAX_BODY_BYTES (10 MB) — oversized or
+      malformed (non-numeric/negative) headers raise BadRequest (400)
+      instead of attempting an unbounded rfile.read() or a 500.
+
     Returns a dict on success, raises BadRequest on parse failure.
     """
-    content_length = int(handler.headers.get("Content-Length", 0))
+    raw_header = handler.headers.get("Content-Length", "0") or "0"
+    try:
+        content_length = int(raw_header)
+    except (ValueError, TypeError):
+        raise BadRequest("Invalid Content-Length header")
+    if content_length < 0:
+        raise BadRequest("Invalid Content-Length header")
+    content_length = min(content_length, MAX_BODY_BYTES)
     if content_length == 0:
         return {}
     raw = handler.rfile.read(content_length)
@@ -56,7 +89,7 @@ def read_body(handler) -> dict:
         handler._raw_body = raw
     except Exception:
         pass
-    raw_text = raw.decode("utf-8")
+    raw_text = raw.decode("utf-8", errors="replace")
 
     content_type = (handler.headers.get("Content-Type", "") or "").lower().split(";")[0].strip()
 

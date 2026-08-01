@@ -265,14 +265,17 @@ class OSHHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _check_auth(self) -> bool:
-        """If AUTH_ENABLED, check session.  Returns True if OK."""
+        """If AUTH_ENABLED, check session/API key.  Returns True if OK.
+
+        P1-3 (W-06): previously returned True unconditionally, leaving every
+        legacy (non-/api/v1/) endpoint unauthenticated.  Now delegates to the
+        real implementation (ui.auth.is_authenticated — API key compare_digest
+        + signed session cookie).
+        """
         if not AUTH_ENABLED:
             return True
-        # Simplified: checks for X-API-Key header
-        api_key = self.headers.get("X-API-Key", "")
-        if api_key:
-            return True
-        return True  # Allow for now; proper auth uses auth_routes
+        from yuleosh.ui.auth import is_authenticated
+        return is_authenticated(self.headers)
 
     def _get_health(self) -> dict:
         from yuleosh.ui.routes import handle_health
@@ -331,8 +334,10 @@ class OSHHandler(BaseHTTPRequestHandler):
         try:
             handle_post(self)
         except Exception as e:
-            logging.error("POST %s: %s", self.path, e)
-            self._json_response({"error": str(e)}, 500)
+            # P1-7 (S-P1-05): never echo internal exception details to the
+            # client — log full detail server-side, return a generic message.
+            logging.error("POST %s: %s", self.path, e, exc_info=True)
+            self._json_response({"error": "Internal server error"}, 500)
         finally:
             self._response_status = getattr(self, "_response_status", 200)
             log_audit(self)
@@ -343,8 +348,9 @@ class OSHHandler(BaseHTTPRequestHandler):
         try:
             handle_delete(self)
         except Exception as e:
-            logging.error("DELETE %s: %s", self.path, e)
-            self._json_response({"error": str(e)}, 500)
+            # P1-7 (S-P1-05): generic message to client, details to logs.
+            logging.error("DELETE %s: %s", self.path, e, exc_info=True)
+            self._json_response({"error": "Internal server error"}, 500)
         finally:
             self._response_status = getattr(self, "_response_status", 200)
             log_audit(self)

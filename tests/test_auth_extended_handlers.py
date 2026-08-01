@@ -30,6 +30,7 @@ from yuleosh.ui.auth_extended import (
     _hash_password,
     _verify_password,
     _check_rate_limit,
+    _record_failed_attempt,
     _slugify,
     SESSION_TTL_HOURS,
     EMAIL_RE,
@@ -38,28 +39,61 @@ from yuleosh.ui.auth_extended import (
 
 
 class TestRateLimit:
-    """GIVEN rate limit mechanism WHEN checks THEN correct blocking."""
+    """GIVEN rate limit mechanism WHEN checks THEN correct blocking.
+
+    P1-2 (W-04 / S-P1-06): the per-email budget counts FAILED attempts only
+    (recorded via _record_failed_attempt); _check_rate_limit is a pure check.
+    A per-IP cap (_check_ip_rate_limit) bounds cross-email lockout DoS.
+    """
 
     def test_not_blocked_initially(self):
         """GIVEN no prior attempts WHEN _check_rate_limit THEN not blocked."""
         assert _check_rate_limit("new@test.com") is False
 
-    def test_blocked_after_max_attempts(self):
-        """GIVEN max attempts WHEN check THEN blocked."""
-        email = "flood@test.com"
-        for _ in range(10):
+    def test_check_does_not_increment(self):
+        """GIVEN pure check WHEN called THEN no budget consumed."""
+        email = "checkonly@test.com"
+        for _ in range(20):
             assert _check_rate_limit(email) is False
+
+    def test_blocked_after_max_failed_attempts(self):
+        """GIVEN max failed attempts WHEN check THEN blocked."""
+        email = "flood@test.com"
+        for _ in range(9):  # 9 failures: still allowed
+            _record_failed_attempt(email)
+            assert _check_rate_limit(email) is False
+        _record_failed_attempt(email)  # 10th failure → blocked
         assert _check_rate_limit(email) is True
+
+    def test_successful_login_does_not_consume_budget(self):
+        """GIVEN one failure + many successful checks WHEN check THEN not blocked."""
+        email = "ok@test.com"
+        _record_failed_attempt(email)
+        assert _check_rate_limit(email) is False
 
     def test_window_reset(self):
         """GIVEN expired window WHEN check THEN not blocked."""
         from yuleosh.ui.auth_extended import _SIGNIN_RATE_LIMIT, _RATE_WINDOW_SECONDS
         email = "reset@test.com"
         for _ in range(10):
-            _check_rate_limit(email)
+            _record_failed_attempt(email)
         # Artificially expire the window
         _SIGNIN_RATE_LIMIT[email] = (10, int(time.time()) - _RATE_WINDOW_SECONDS - 60)
         assert _check_rate_limit(email) is False
+
+    def test_ip_rate_limit_blocks(self):
+        """GIVEN per-IP cap exceeded WHEN _check_ip_rate_limit THEN blocked."""
+        from yuleosh.ui.auth_extended import _check_ip_rate_limit, _MAX_SIGNIN_IP_ATTEMPTS
+        ip = "203.0.113.9"
+        for _ in range(_MAX_SIGNIN_IP_ATTEMPTS):
+            assert _check_ip_rate_limit(ip) is False
+        assert _check_ip_rate_limit(ip) is True
+
+    def test_ip_rate_limit_empty_ip_never_blocks(self):
+        """GIVEN no IP WHEN _check_ip_rate_limit THEN not blocked."""
+        from yuleosh.ui.auth_extended import _check_ip_rate_limit
+        assert _check_ip_rate_limit("") is False
+        assert _check_ip_rate_limit(None) is False
 
 
 class TestPasswordHashing:

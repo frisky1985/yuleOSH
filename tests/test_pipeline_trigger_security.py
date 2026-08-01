@@ -83,9 +83,16 @@ def _seed_user_session():
         "INSERT OR IGNORE INTO users (id, org_id, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
         (_TEST_USER_ID, 1, "t@t.com", "admin", now)
     )
+    # P1-6: sessions are stored as sha256 hashes — never plaintext.
+
+    from yuleosh.store import _session_token_hash
+
     store.conn.execute(
+
         "INSERT OR IGNORE INTO user_sessions (user_id, token, created_at, expires_at) VALUES (?, ?, ?, ?)",
-        (_TEST_USER_ID, token, now, "2099-12-31")
+
+        (_TEST_USER_ID, _session_token_hash(token), now, "2099-12-31")
+
     )
     store.conn.commit()
     yield

@@ -359,13 +359,18 @@ def handle_delete(handler) -> None:
 
 
 def handle_options(handler) -> None:
-    """Serve OPTIONS preflight response."""
+    """Serve OPTIONS preflight response.
+
+    P1-11 (S-P1-09): the preflight used to hardcode
+    ``Access-Control-Allow-Origin: *``, bypassing the cors.py whitelist.
+    ``_add_cors_header`` now enforces the same origin policy as normal
+    responses (development: *; production: validated Origin echo).
+    """
     handler.send_response(204)
     _add_cors_header(handler)
     _send_security_headers(handler)
     handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
-    handler.send_header("Access-Control-Allow-Origin", "*")
     handler.end_headers()
 
 

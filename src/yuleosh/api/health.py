@@ -54,7 +54,8 @@ def handle_health(method: str, **kwargs):
         "uptime_seconds": uptime_seconds,
         "version": "0.1.0",
         "auth_enabled": _auth_enabled(),
-        "osh_home": OSH_HOME,
+        # P1-7 (S-06): never expose the absolute OSH_HOME path.
+        "osh_home_configured": bool(OSH_HOME),
     })
 
 

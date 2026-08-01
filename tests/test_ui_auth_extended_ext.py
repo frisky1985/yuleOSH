@@ -98,12 +98,12 @@ class TestCheckRateLimit:
             assert result is False
 
     def test_rate_limited(self):
-        from yuleosh.ui.auth_extended import _check_rate_limit, _MAX_SIGNIN_ATTEMPTS
+        from yuleosh.ui.auth_extended import _check_rate_limit, _MAX_SIGNIN_ATTEMPTS, _record_failed_attempt
         from yuleosh.ui.auth_extended import _SIGNIN_RATE_LIMIT
         _SIGNIN_RATE_LIMIT.clear()
-        # Exhaust attempts
+        # P1-2: the budget counts FAILED attempts (recorded at failure site)
         for _ in range(_MAX_SIGNIN_ATTEMPTS):
-            _check_rate_limit("test@example.com")
+            _record_failed_attempt("test@example.com")
         # Should now be blocked
         assert _check_rate_limit("test@example.com") is True
 
@@ -139,11 +139,13 @@ class TestHandleSignin:
 
     @mock.patch("yuleosh.ui.auth_extended.Store")
     def test_rate_limited(self, mock_store):
-        from yuleosh.ui.auth_extended import handle_signin, _SIGNIN_RATE_LIMIT, _MAX_SIGNIN_ATTEMPTS
+        from yuleosh.ui.auth_extended import (
+            handle_signin, _SIGNIN_RATE_LIMIT, _MAX_SIGNIN_ATTEMPTS, _record_failed_attempt,
+        )
         _SIGNIN_RATE_LIMIT.clear()
+        # P1-2: budget counts FAILED attempts
         for _ in range(_MAX_SIGNIN_ATTEMPTS):
-            from yuleosh.ui.auth_extended import _check_rate_limit
-            _check_rate_limit("test@example.com")
+            _record_failed_attempt("test@example.com")
         result, status = handle_signin({"email": "test@example.com", "password": "test1234"})
         assert status == 429
         assert "Too many" in result.get("error", "")
