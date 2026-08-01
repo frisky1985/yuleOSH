@@ -369,3 +369,54 @@ class TestWhitelistFieldValidation:
         e = store.create_fmea({"item": "Sensor", "failure_mode": "F1"})
         updated = store.update_fmea(e.id, {})
         assert updated.item == "Sensor"
+
+
+# ======================================================================
+# YULEOSH_KB_DB env-var isolation (P2-C1)
+# ======================================================================
+
+class TestEnvVarIsolation:
+    """KbStore honours YULEOSH_KB_DB for database isolation."""
+
+    def test_env_var_controls_db_path(self):
+        """GIVEN YULEOSH_KB_DB set WHEN KbStore() THEN uses that path."""
+        import os as _os
+        import tempfile as _tf
+        with _tf.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        old = _os.environ.get("YULEOSH_KB_DB")
+        _os.environ["YULEOSH_KB_DB"] = db_path
+        try:
+            s = KbStore()
+            assert s._db_path == db_path
+            s.create_article({"title": "Env DB", "content": "isolated"})
+            assert len(s.list_articles()) == 1
+            s.close()
+        finally:
+            if old is None:
+                _os.environ.pop("YULEOSH_KB_DB", None)
+            else:
+                _os.environ["YULEOSH_KB_DB"] = old
+            _os.unlink(db_path)
+
+    def test_explicit_db_path_wins_over_env(self):
+        """GIVEN explicit db_path AND env var THEN explicit path wins."""
+        import os as _os
+        import tempfile as _tf
+        with _tf.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            explicit = f.name
+        with _tf.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            env_db = f.name
+        old = _os.environ.get("YULEOSH_KB_DB")
+        _os.environ["YULEOSH_KB_DB"] = env_db
+        try:
+            s = KbStore(db_path=explicit)
+            assert s._db_path == explicit
+            s.close()
+        finally:
+            if old is None:
+                _os.environ.pop("YULEOSH_KB_DB", None)
+            else:
+                _os.environ["YULEOSH_KB_DB"] = old
+            _os.unlink(explicit)
+            _os.unlink(env_db)
