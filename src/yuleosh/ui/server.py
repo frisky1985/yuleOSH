@@ -267,9 +267,7 @@ class OSHHandler(BaseHTTPRequestHandler):
 
     def _handle_api(self, action: str) -> None:
         from yuleosh.ui.routes import handle_api_action
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length) if content_length else b"{}"
-        result = handle_api_action(self, action, body)
+        result = handle_api_action(self, action)
         self._json_response(result)
 
     def _handle_login(self) -> None:
