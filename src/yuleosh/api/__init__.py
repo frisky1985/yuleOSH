@@ -49,24 +49,31 @@ def read_body(handler) -> dict:
     content_length = int(handler.headers.get("Content-Length", 0))
     if content_length == 0:
         return {}
-    raw = handler.rfile.read(content_length).decode("utf-8")
+    raw = handler.rfile.read(content_length)
+    # Stash raw bytes on the handler so signature-verifying handlers
+    # (e.g. GitHub webhooks) can verify HMACs against the exact payload.
+    try:
+        handler._raw_body = raw
+    except Exception:
+        pass
+    raw_text = raw.decode("utf-8")
 
     content_type = (handler.headers.get("Content-Type", "") or "").lower().split(";")[0].strip()
 
     if content_type == "application/json":
         try:
-            return json.loads(raw)
+            return json.loads(raw_text)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             raise BadRequest(f"Invalid JSON body: {e}")
     elif content_type == "application/x-www-form-urlencoded":
-        parsed = parse_qs(raw)
+        parsed = parse_qs(raw_text)
         return {k: v[0] if len(v) == 1 else v for k, v in parsed.items()}
     else:
         # Unknown or no Content-Type: try JSON first, then query-string
         try:
-            return json.loads(raw)
+            return json.loads(raw_text)
         except (json.JSONDecodeError, UnicodeDecodeError):
-            parsed = parse_qs(raw)
+            parsed = parse_qs(raw_text)
             if parsed:
                 return {k: v[0] if len(v) == 1 else v for k, v in parsed.items()}
             raise BadRequest("Unable to parse request body. Use application/json or application/x-www-form-urlencoded.")

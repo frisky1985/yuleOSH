@@ -19,7 +19,7 @@ class TestApiProject:
         mock_store.conn.execute.return_value = mock_cursor
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_project("GET", "", {}, {})
+        result, code = handle_project("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["count"] == 1
 
@@ -32,7 +32,7 @@ class TestApiProject:
         mock_store.conn.execute.return_value = mock_cursor
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_project("GET", "list", {}, {})
+        result, code = handle_project("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
 
     @patch("yuleosh.store.Store")
@@ -44,7 +44,7 @@ class TestApiProject:
         }
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_project("GET", "myproj", {}, {})
+        result, code = handle_project("GET", "myproj", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["name"] == "myproj"
 
@@ -55,7 +55,7 @@ class TestApiProject:
         mock_store.get_project.return_value = None
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_project("GET", "nonexistent", {}, {})
+        result, code = handle_project("GET", "nonexistent", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     @patch("yuleosh.store.Store")
@@ -71,14 +71,14 @@ class TestApiProject:
 
         result, code = handle_project(
             "POST", "", {"name": "newproj", "description": "desc"}, {}
-        )
+        , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["name"] == "newproj"
 
     @patch("yuleosh.store.Store")
     def test_create_project_no_name(self, mock_store_cls):
         """POST /project without name returns 400."""
-        result, code = handle_project("POST", "", {"description": "desc"}, {})
+        result, code = handle_project("POST", "", {"description": "desc"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     @patch("yuleosh.store.Store")
@@ -92,7 +92,7 @@ class TestApiProject:
 
         result, code = handle_project(
             "POST", "", {"name": "p", "spec_path": "spec.md"}, {}
-        )
+        , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
 
     @patch("yuleosh.store.Store")
@@ -109,10 +109,10 @@ class TestApiProject:
         ]
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_project("GET", "stats", {}, {})
+        result, code = handle_project("GET", "stats", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
 
     def test_unsupported_method(self):
         """PUT returns 405."""
-        result, code = handle_project("PUT", "", {}, {})
+        result, code = handle_project("PUT", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 405

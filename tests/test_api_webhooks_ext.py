@@ -1,5 +1,10 @@
 """Tests for api/webhooks.py — GitHub Webhook handler (updated for pipeline trigger)."""
 
+import hmac
+import hashlib
+import json
+import os
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.webhooks import (
@@ -7,6 +12,24 @@ from yuleosh.api.webhooks import (
     _handle_github_push,
     _trigger_pipeline,
 )
+
+
+WEBHOOK_SECRET = "test-webhook-secret-for-ext-tests"
+
+
+def _signed(payload: dict) -> MagicMock:
+    """Build a handler mock with a valid X-Hub-Signature-256."""
+    raw = json.dumps(payload).encode()
+    sig = "sha256=" + hmac.new(WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    handler = MagicMock()
+    handler._raw_body = raw
+    handler.headers = {"X-Hub-Signature-256": sig}
+    return handler
+
+
+def _call(payload: dict):
+    with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": WEBHOOK_SECRET}):
+        return handle_webhooks("POST", "github", payload, {}, handler=_signed(payload))
 
 
 class TestWebhooks:
@@ -44,10 +67,20 @@ class TestWebhooks:
             "pusher": {"name": "devuser"},
         }
 
-        result, code = handle_webhooks("POST", "github", payload, {})
+        result, code = _call(payload)
         assert code == 200
         assert result["data"]["status"] == "received"
         assert result["data"]["pipeline_triggered"] is True
+
+    def test_github_push_bad_signature(self):
+        """P0: webhook with invalid HMAC is rejected with 401."""
+        payload = {"ref": "refs/heads/main", "repository": {"full_name": "org/repo"}}
+        handler = MagicMock()
+        handler._raw_body = json.dumps(payload).encode()
+        handler.headers = {"X-Hub-Signature-256": "sha256=" + "a" * 64}
+        with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": WEBHOOK_SECRET}):
+            result, code = handle_webhooks("POST", "github", payload, {}, handler=handler)
+        assert code == 401
 
     @patch("yuleosh.api.webhooks._trigger_pipeline")
     def test_github_push_no_commit(self, mock_trigger_pipeline):

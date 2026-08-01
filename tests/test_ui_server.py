@@ -173,14 +173,50 @@ class TestAuditLog:
 
 
 class TestApiV1Dispatch:
-    """api_v1_dispatch — API routing."""
+    """api_v1_dispatch — API routing delegation to the modular router."""
 
-    def test_api_v1_dispatch_returns_false(self):
-        """GIVEN any path WHEN api_v1_dispatch THEN returns False (static mode)."""
+    def test_api_v1_dispatch_non_api_path_returns_false(self):
+        """GIVEN a non-/api/v1 path WHEN api_v1_dispatch THEN False (fallback)."""
         from yuleosh.ui.server import api_v1_dispatch
         handler = mock.MagicMock(spec=BaseHTTPRequestHandler)
-        result = api_v1_dispatch(handler, "/api/v1/test")
+        result = api_v1_dispatch(handler, "/api/health")
         assert result is False
+
+    def test_api_v1_dispatch_delegates_to_router(self, make_handler):
+        """GIVEN /api/v1/health WHEN api_v1_dispatch THEN router responds JSON 200."""
+        from yuleosh.ui.server import api_v1_dispatch
+        handler = make_handler(method="GET", path="/api/v1/health")
+        # BaseHTTPRequestHandler.__init__ already processed the request once;
+        # read the response written by this direct dispatch call by using a
+        # fresh output buffer.
+        import io as _io
+        out = _io.BytesIO()
+        handler.wfile = out
+        handler._raw_body = None
+        handled = api_v1_dispatch(handler, "/api/v1/health")
+        assert handled is True
+        data = out.getvalue()
+        assert b"HTTP/1.0 200 OK" in data
+        body = data.split(b"\r\n\r\n", 1)[1]
+        payload = json.loads(body)
+        assert payload["ok"] is True
+        assert payload["data"]["status"] == "healthy"
+
+    def test_api_v1_dispatch_wired_through_handle_get(self, make_handler):
+        """GIVEN GET /api/v1/health WHEN handle_get THEN JSON 200 (router)."""
+        from yuleosh.ui.routes.handler_helpers import handle_get
+        import io as _io
+        handler = make_handler(method="GET", path="/api/v1/health")
+        out = _io.BytesIO()
+        handler.wfile = out
+        handler._raw_body = None
+        handle_get(handler)
+        data = out.getvalue()
+        assert b"HTTP/1.0 200 OK" in data
+        body = data.split(b"\r\n\r\n", 1)[1]
+        payload = json.loads(body)
+        assert payload["ok"] is True
+        assert payload["data"]["status"] == "healthy"
 
 
 class TestOSHHandlerInit:

@@ -10,7 +10,7 @@ class TestEvidence:
 
     def test_unknown_resource(self):
         """Unknown evidence resource returns 404."""
-        result, code = handle_evidence("GET", "unknown", {}, {})
+        result, code = handle_evidence("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     @patch("yuleosh.api.evidence.subprocess.run")
@@ -24,7 +24,7 @@ class TestEvidence:
         mock_result.stderr = ""
         mock_subproc.return_value = mock_result
 
-        result, code = handle_evidence("POST", "generate", {}, {})
+        result, code = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["status"] == "completed"
 
@@ -34,7 +34,7 @@ class TestEvidence:
         """Timeout returns 504."""
         mock_env.return_value = "/tmp"
         mock_subproc.side_effect = __import__("subprocess").TimeoutExpired("cmd", 120)
-        result, code = handle_evidence("POST", "generate", {}, {})
+        result, code = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 504
 
     @patch("yuleosh.api.evidence.subprocess.run")
@@ -43,21 +43,22 @@ class TestEvidence:
         """OSError returns 500."""
         mock_env.return_value = "/tmp"
         mock_subproc.side_effect = OSError("No such file")
-        result, code = handle_evidence("POST", "generate", {}, {})
+        result, code = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 500
 
     def test_list_evidence_files_empty(self, tmp_path):
         """GET /evidence/files handles missing evidence dir."""
         # The real project may have .osh/evidence/ so patch OSH_HOME to tmp_path
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, code = handle_evidence("GET", "files", {}, {})
+            result, code = handle_evidence("GET", "files", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert result["data"]["count"] == 0
 
     def test_download_pack_not_found(self, tmp_path):
         """GET /evidence/pack when pack doesn't exist."""
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, code = handle_evidence("GET", "pack", {}, {}, handler=None)
+            result, code = handle_evidence("GET", "pack", {}, {}, handler=None,
+                   current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 404
 
     @patch("yuleosh.api.evidence.subprocess.run")

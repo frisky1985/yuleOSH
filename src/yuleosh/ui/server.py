@@ -121,8 +121,37 @@ def _audit_log(method: str, path: str, status_code: int,
 # ── API v1 dispatch ────────────────────────────────────────────────────────
 
 def api_v1_dispatch(handler: BaseHTTPRequestHandler, path: str) -> bool:
-    """Dispatch /api/v1/* requests.  Returns True if handled."""
-    return False  # Not implemented in static-only mode
+    """Dispatch /api/v1/* requests to the modular router.
+
+    Returns True when the router handled the request (response written).
+    Returns False only for non-API paths, so callers fall back to
+    page/static serving.
+
+    P0-1 guarantee: a /api/v1/* path is NEVER degraded to an HTML page.
+    If the router cannot serve it (e.g. missing YULEOSH_JWT_SECRET raises
+    at import time, or any other unexpected failure), a JSON 500 error is
+    written instead, so API clients always receive machine-readable
+    responses.
+    """
+    if not path.startswith("/api/v1/"):
+        return False
+    try:
+        from yuleosh.api.router import dispatch
+        dispatch(handler, path)
+    except Exception as e:
+        # Fail closed for API paths — never fall through to HTML page
+        # serving (the P0-1 symptom: /api/v1/* answered with a 200 HTML
+        # landing page).
+        try:
+            handler._json_response(
+                {"ok": False, "error": f"API dispatch failed: {e}"}, 500
+            )
+        except Exception:
+            # No live HTTP plumbing (e.g. bare mock in unit tests) —
+            # nothing writable, but still report handled so callers do
+            # not serve an HTML page for an API path.
+            pass
+    return True
 
 
 # ── OSHHandler ─────────────────────────────────────────────────────────────
