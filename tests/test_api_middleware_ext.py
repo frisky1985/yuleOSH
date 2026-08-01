@@ -63,17 +63,30 @@ class TestMiddleware:
         assert result is None
 
     def test_require_auth_no_handler(self):
-        """require_auth without handler injects dummy user."""
+        """require_auth without handler fails closed (401, no dummy user)."""
 
         @require_auth
         def my_handler(**kwargs):
-            assert "current_user" in kwargs
-            return {"ok": True, "user": kwargs["current_user"]}, 200
+            return {"ok": True}, 200
 
         result, code = my_handler(method="GET", path_tail="", body={}, query={})
+        assert code == 401
+        assert result["ok"] is False
+
+    def test_require_auth_explicit_current_user(self):
+        """Explicit current_user injection bypasses auth (test channel)."""
+
+        @require_auth
+        def my_handler(**kwargs):
+            assert kwargs["current_user"]["user_id"] == 42
+            return {"ok": True, "user": kwargs["current_user"]}, 200
+
+        result, code = my_handler(
+            method="GET", path_tail="", body={}, query={},
+            current_user={"user_id": 42, "org_id": 1, "email": "u@t.com", "role": "member"},
+        )
         assert code == 200
-        assert result["ok"] is True
-        assert result["user"]["user_id"] == "test-unit"
+        assert result["user"]["user_id"] == 42
 
     def test_require_auth_no_token(self):
         """require_auth without token returns 401."""

@@ -10,12 +10,12 @@ class TestApiSpec:
 
     def test_unknown_resource(self):
         """Unknown spec resource returns 404."""
-        result, code = handle_spec("GET", "unknown", {}, {})
+        result, code = handle_spec("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     def test_validate_no_path(self):
         """POST without path returns 400."""
-        result, code = handle_spec("POST", "validate", {}, {})
+        result, code = handle_spec("POST", "validate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     def test_validate_file_not_found(self):
@@ -28,12 +28,12 @@ class TestApiSpec:
         with patch("yuleosh.api.spec.Path", return_value=mock_path):
             result, code = handle_spec(
                 "POST", "validate", {"path": "/tmp/nonexistent.md"}, {}
-            )
+            , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 400
 
     def test_validate_get_method(self):
         """GET request returns 405."""
-        result, code = handle_spec("GET", "validate", {}, {})
+        result, code = handle_spec("GET", "validate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 405
 
     @patch("yuleosh.spec.validate.validate_spec")
@@ -53,18 +53,18 @@ class TestApiSpec:
         with patch("yuleosh.api.spec.Path", return_value=mock_path):
             result, code = handle_spec(
                 "POST", "validate", {"path": "/tmp/test.md"}, {}
-            )
+            , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert result["data"]["issue_count"] == 0
 
     def test_diff_no_paths(self):
         """POST without old/new returns 400."""
-        result, code = handle_spec("POST", "diff", {}, {})
+        result, code = handle_spec("POST", "diff", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     def test_diff_get_method(self):
         """GET request returns 405."""
-        result, code = handle_spec("GET", "diff", {}, {})
+        result, code = handle_spec("GET", "diff", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 405
 
     def test_diff_old_not_found(self):
@@ -76,7 +76,7 @@ class TestApiSpec:
         with patch("yuleosh.api.spec.Path", return_value=mock_path):
             result, code = handle_spec(
                 "POST", "diff", {"old": "/tmp/old.md", "new": "/tmp/new.md"}, {}
-            )
+            , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 400
 
     @patch("yuleosh.spec.validate.diff_specs")
@@ -93,6 +93,6 @@ class TestApiSpec:
         with patch("yuleosh.api.spec.Path", return_value=mock_path):
             result, code = handle_spec(
                 "POST", "diff", {"old": "/tmp/old.md", "new": "/tmp/new.md"}, {}
-            )
+            , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert "old" in result["data"]

@@ -23,7 +23,7 @@ class TestApiStats:
         mock_store.conn.execute.return_value = mock_cursor
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_stats("GET", "overview", {}, {})
+        result, code = handle_stats("GET", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         data = result["data"]
         assert data["total_pipelines"] == 10
@@ -57,7 +57,7 @@ class TestApiStats:
 
         result, code = handle_stats(
             "GET", "trends", {}, {"period": ["daily"], "days": ["7"]}
-        )
+        , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["period"] == "daily"
         assert result["data"]["total_points"] >= 0
@@ -73,7 +73,7 @@ class TestApiStats:
 
         result, code = handle_stats(
             "GET", "trends", {}, {"period": ["weekly"], "days": ["30"]}
-        )
+        , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["period"] == "weekly"
 
@@ -81,17 +81,17 @@ class TestApiStats:
         """Invalid period returns 400."""
         result, code = handle_stats(
             "GET", "trends", {}, {"period": ["monthly"]}
-        )
+        , current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     def test_not_get_method(self):
         """POST returns 405."""
-        result, code = handle_stats("POST", "overview", {}, {})
+        result, code = handle_stats("POST", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 405
 
     def test_unknown_stats_resource(self):
         """Unknown stats resource returns 404."""
-        result, code = handle_stats("GET", "unknown", {}, {})
+        result, code = handle_stats("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     @patch("yuleosh.api.stats.Store")

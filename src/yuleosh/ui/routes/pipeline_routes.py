@@ -25,6 +25,10 @@ log = logging.getLogger("routes.pipeline")
 def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dict:
     """POST /api/v1/pipeline/trigger — Start a new pipeline run.
 
+    Security (P0): requires a valid Bearer session (tenant_routes._require_auth);
+    project_dir must resolve inside OSH_HOME; type/layer are whitelisted;
+    arxml_content is size-capped; submissions are throttled.
+
     Request body (JSON):
         {
             "config_json": "...",     # Optional: JSON string of config
@@ -34,6 +38,12 @@ def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dic
             "layer": 1                # CI layer (1/2/3, default: 1, only for type=ci)
         }
     """
+    # Auth first — fail closed.
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        return {"ok": False, "error": "Authentication required"}
+
     try:
         data = json.loads(body) if body else {}
     except json.JSONDecodeError as e:
@@ -48,18 +58,38 @@ def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dic
     if not project_dir:
         return {"ok": False, "error": "project_dir is required or set OSH_HOME"}
 
+    # Path whitelist: resolved project_dir must stay inside OSH_HOME.
+    osh_home = Path(os.environ.get("OSH_HOME", "")).resolve()
+    try:
+        resolved = Path(project_dir).expanduser().resolve()
+        resolved.relative_to(osh_home)
+    except (ValueError, OSError):
+        return {"ok": False, "error": "project_dir must be inside OSH_HOME"}
+
+    # Type/layer whitelist.
+    if pipeline_type not in ("full", "full_pipeline", "ci"):
+        return {"ok": False, "error": "type must be one of: full, ci"}
+    if layer not in (1, 2, 3):
+        return {"ok": False, "error": "layer must be 1, 2 or 3"}
+
+    # Size caps (prevent memory/disk abuse).
+    if arxml_content and len(arxml_content) > 1_000_000:
+        return {"ok": False, "error": "arxml_content too large (max 1MB)"}
+    if config_json and len(config_json) > 1_000_000:
+        return {"ok": False, "error": "config_json too large (max 1MB)"}
+
     from yuleosh.pipeline.async_runner import submit_pipeline, submit_full_pipeline
 
     try:
         if pipeline_type == "full" or pipeline_type == "full_pipeline":
             job_id = submit_full_pipeline(
-                project_dir=project_dir,
+                project_dir=str(resolved),
                 config_json=config_json,
                 arxml_content=arxml_content,
             )
         else:
             job_id = submit_pipeline(
-                project_dir=project_dir,
+                project_dir=str(resolved),
                 layer=layer,
             )
 

@@ -95,9 +95,9 @@ class TestMiddlewareDeep:
         result, status = my_handler(
             method="GET", path_tail="", body={}, query={}
         )
-        # v3.4.0: no HTTP handler → unit-test mode injects dummy user → 200
-        assert result["ok"] is True
-        assert status == 200
+        # P0 fix: no HTTP handler → fail closed with 401 (no dummy user)
+        assert result["ok"] is False
+        assert status == 401
 
     def test_require_auth_no_token(self):
         from yuleosh.api.middleware import require_auth
@@ -424,14 +424,14 @@ class TestCIDeep:
     def test_list_ci_runs_empty_dir(self, tmp_path):
         from yuleosh.api.ci import handle_ci
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_ci("GET", "runs", {}, {})
+            result, status = handle_ci("GET", "runs", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["data"]["count"] == 0
 
     def test_list_ci_runs_no_ci_dir(self, tmp_path):
         from yuleosh.api.ci import handle_ci
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_ci("GET", "runs", {}, {})
+            result, status = handle_ci("GET", "runs", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["data"]["count"] == 0
 
@@ -444,11 +444,11 @@ class TestCIDeep:
         (ci_dir / "layer1-broken.json").write_text("not-valid-json")
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
             with pytest.raises(json.JSONDecodeError):
-                handle_ci("GET", "runs", {}, {})
+                handle_ci("GET", "runs", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
 
     def test_run_invalid_layer_zero(self):
         from yuleosh.api.ci import handle_ci
-        result, status = handle_ci("POST", "run/0", {}, {})
+        result, status = handle_ci("POST", "run/0", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         assert "Invalid CI layer" in result["error"]
 
@@ -456,7 +456,7 @@ class TestCIDeep:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
             from yuleosh.api.ci import handle_ci
-            result, status = handle_ci("POST", "run/3", {}, {})
+            result, status = handle_ci("POST", "run/3", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["data"]["layer"] == 3
 

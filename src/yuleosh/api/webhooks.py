@@ -11,6 +11,8 @@ Enhancements:
 Endpoint: POST /api/v1/webhooks/github
 """
 
+import hmac
+import hashlib
 import json
 import logging
 import os
@@ -21,6 +23,45 @@ from typing import Optional
 from . import json_ok, json_error, OSH_HOME
 
 log = logging.getLogger("webhooks")
+
+# GitHub webhook secret — read from environment.  When unset, webhook
+# delivery is refused (fail-closed).
+WEBHOOK_SECRET_ENV = "YULEOSH_GITHUB_WEBHOOK_SECRET"
+
+
+def _verify_github_signature(payload: Optional[bytes], signature_header: str) -> bool:
+    """Verify X-Hub-Signature-256 HMAC-SHA256 against the raw payload.
+
+    Fail-closed: returns False when the secret is not configured, the
+    signature header is missing/malformed, or the HMAC does not match.
+    Comparisons use hmac.compare_digest (constant-time).
+    """
+    secret = os.environ.get(WEBHOOK_SECRET_ENV, "")
+    if not secret:
+        return False
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    if payload is None:
+        return False
+    expected = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature_header[len("sha256="):].strip(), expected)
+
+
+def _read_raw_body(handler) -> bytes:
+    """Read the raw request body bytes for signature verification."""
+    # Prefer the body buffered by api.read_body (router flow) — re-reading
+    # rfile after the router consumed it would return empty bytes.
+    raw = getattr(handler, "_raw_body", None)
+    if raw is not None:
+        return raw
+    try:
+        length = int(handler.headers.get("Content-Length", "0") or "0")
+    except (ValueError, TypeError, AttributeError):
+        return b""
+    try:
+        return handler.rfile.read(length) if length > 0 else b""
+    except Exception:
+        return b""
 
 # Repo → project type mapping
 REPO_PROJECT_MAP = {
@@ -57,19 +98,39 @@ def handle_webhooks(method: str, path_tail: str = "", body: dict = None,
     """Handle webhook-related API calls.
 
     POST /api/v1/webhooks/github — Receive GitHub push webhook and trigger pipeline.
+
+    Security (P0): every delivery must carry a valid X-Hub-Signature-256
+    HMAC computed with YULEOSH_GITHUB_WEBHOOK_SECRET.  Missing secret,
+    missing/malformed signature, or HMAC mismatch → 401 (fail-closed).
     """
     if method != "POST":
         return json_error("Method not allowed. Use POST.", 405)
 
-    if body is None:
-        body = {}
-
-    provider = path_tail.strip("/") if path_tail else ""
-
+    provider = (path_tail or "").strip("/")
     if provider != "github":
         return json_error(f"Unknown webhook provider: '{provider}'. Supported: github", 404)
 
-    return _handle_github_push(body, handler)
+    if handler is None:
+        return json_error("Webhook requires an HTTP handler", 400)
+
+    raw = _read_raw_body(handler)
+    signature = ""
+    headers = getattr(handler, "headers", {})
+    if callable(getattr(headers, "get", None)):
+        signature = headers.get("X-Hub-Signature-256", "") or ""
+    elif isinstance(headers, dict):
+        signature = headers.get("X-Hub-Signature-256", "") or ""
+
+    if not _verify_github_signature(raw, signature):
+        log.warning("Webhook rejected: invalid or missing X-Hub-Signature-256")
+        return json_error("Invalid webhook signature", 401)
+
+    try:
+        parsed = json.loads(raw.decode("utf-8")) if raw else {}
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return json_error("Invalid JSON payload", 400)
+
+    return _handle_github_push(parsed, handler)
 
 
 def _handle_github_push(payload: dict, handler=None) -> tuple:

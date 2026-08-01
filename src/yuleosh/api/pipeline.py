@@ -7,11 +7,35 @@ import json
 import os
 import sys
 import subprocess
+import threading
+import time
 from pathlib import Path
 from datetime import datetime
 
 from . import json_ok, json_error
 from .middleware import require_auth
+
+# ── Submission throttle (P0): protect the async thread pool from DoS ──
+_TRIGGER_GATE_LOCK = threading.Lock()
+_TRIGGER_GATE_TIMES: list[float] = []
+_TRIGGER_MAX_PER_WINDOW = 10        # max pipeline submissions per window
+_TRIGGER_WINDOW_SECONDS = 60.0
+_MAX_ARXML_BYTES = 1_000_000        # 1 MB
+_MAX_CONFIG_JSON_BYTES = 1_000_000  # 1 MB
+
+
+def _check_trigger_throttle() -> bool:
+    """Return True if a new submission is allowed (sliding window)."""
+    global _TRIGGER_GATE_TIMES
+    now = time.time()
+    with _TRIGGER_GATE_LOCK:
+        _TRIGGER_GATE_TIMES = [
+            t for t in _TRIGGER_GATE_TIMES if now - t < _TRIGGER_WINDOW_SECONDS
+        ]
+        if len(_TRIGGER_GATE_TIMES) >= _TRIGGER_MAX_PER_WINDOW:
+            return False
+        _TRIGGER_GATE_TIMES.append(now)
+        return True
 
 
 @require_auth
@@ -21,6 +45,11 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
         if method == "POST":
             return _run_pipeline(body)
         return json_error("Use POST to run pipeline", 405)
+
+    if path_tail == "trigger":
+        if method == "POST":
+            return _trigger_pipeline(body)
+        return json_error("Use POST to trigger pipeline", 405)
 
     if path_tail == "status":
         if method == "GET":
@@ -86,6 +115,72 @@ def _run_pipeline(body: dict) -> tuple[dict, int]:
         return json_error("Pipeline timed out after 300s", 504)
     except Exception as e:
         return json_error(f"Pipeline error: {e}", 500)
+
+
+def _trigger_pipeline(body: dict) -> tuple[dict, int]:
+    """POST /api/v1/pipeline/trigger — start a pipeline run.
+
+    Security (P0):
+      - requires authentication (enforced by @require_auth on handle_pipeline)
+      - project_dir must resolve inside OSH_HOME (blocks ../ traversal)
+      - type/layer whitelist
+      - arxml_content / config_json size caps
+      - sliding-window submission throttle (protects the async thread pool)
+    """
+    if not isinstance(body, dict):
+        return json_error("Request body must be a JSON object", 400)
+
+    project_dir = body.get("project_dir") or os.environ.get("OSH_HOME", "")
+    if not project_dir:
+        return json_error("project_dir is required or set OSH_HOME", 400)
+
+    osh_home = Path(os.environ.get("OSH_HOME", "")).resolve()
+    try:
+        resolved = Path(project_dir).expanduser().resolve()
+        resolved.relative_to(osh_home)
+    except (ValueError, OSError):
+        return json_error("project_dir must be inside OSH_HOME", 403)
+
+    pipeline_type = body.get("type", "full")
+    if pipeline_type not in ("full", "full_pipeline", "ci"):
+        return json_error("type must be one of: full, ci", 400)
+
+    layer = body.get("layer", 1)
+    if layer not in (1, 2, 3):
+        return json_error("layer must be 1, 2 or 3", 400)
+
+    arxml_content = body.get("arxml_content") or ""
+    if len(arxml_content) > _MAX_ARXML_BYTES:
+        return json_error(f"arxml_content too large (max {_MAX_ARXML_BYTES} bytes)", 400)
+
+    config_json = body.get("config_json")
+    if config_json is not None and len(config_json) > _MAX_CONFIG_JSON_BYTES:
+        return json_error(f"config_json too large (max {_MAX_CONFIG_JSON_BYTES} bytes)", 400)
+
+    if not _check_trigger_throttle():
+        return json_error(
+            "Too many pipeline submissions. Try again later.", 429)
+
+    from yuleosh.pipeline.async_runner import submit_pipeline, submit_full_pipeline
+
+    try:
+        if pipeline_type in ("full", "full_pipeline"):
+            job_id = submit_full_pipeline(
+                project_dir=str(resolved),
+                config_json=config_json,
+                arxml_content=arxml_content,
+            )
+        else:
+            job_id = submit_pipeline(project_dir=str(resolved), layer=layer)
+
+        return json_ok({
+            "job_id": job_id,
+            "status": "queued",
+            "type": pipeline_type,
+            "poll_url": f"/api/v1/pipeline/status/{job_id}",
+        })
+    except Exception as e:
+        return json_error(f"Pipeline trigger failed: {e}", 500)
 
 
 def _list_pipeline_steps() -> tuple[dict, int]:

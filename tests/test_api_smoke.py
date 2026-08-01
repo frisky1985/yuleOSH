@@ -250,7 +250,7 @@ class TestApiNotify:
         mock_cfg.to_dict.return_value = {"feishu_url": ""}
         mock_get_config.return_value = mock_cfg
         resp, status = handle_notify(method="GET", path_tail="config",
-                                     body={}, query={})
+                                     body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert "feishu_url" in resp["data"]
 
@@ -265,13 +265,13 @@ class TestApiNotify:
         mock_nc.return_value = mock_cfg
         resp, status = handle_notify(method="PUT", path_tail="config",
                                      body={"feishu_url": "https://hooks.feishu.cn"},
-                                     query={})
+                                     query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
 
     def test_handle_notify_unknown_resource(self):
         from yuleosh.api.notify import handle_notify
         resp, status = handle_notify(method="GET", path_tail="foobar",
-                                     body={}, query={})
+                                     body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
 
@@ -287,7 +287,7 @@ class TestApiApikeys:
         mock_store.return_value = store_instance
         store_instance.list_api_keys.return_value = []
         resp, status = handle_apikeys(method="GET", path_tail="",
-                                      body={}, query={})
+                                      body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert resp["data"]["keys"] == []
 
@@ -300,7 +300,7 @@ class TestApiApikeys:
             "id": 1, "created_at": "2025-01-01"
         }
         resp, status = handle_apikeys(method="POST", path_tail="",
-                                      body={"label": "test-key"}, query={})
+                                      body={"label": "test-key"}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert resp["data"]["key"].startswith("yule_")
 
@@ -308,13 +308,13 @@ class TestApiApikeys:
     def test_handle_apikeys_generate_no_label(self, mock_store):
         from yuleosh.api.apikeys import handle_apikeys
         resp, status = handle_apikeys(method="POST", path_tail="",
-                                      body={}, query={})
+                                      body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 400
 
     def test_handle_apikeys_unsupported(self):
         from yuleosh.api.apikeys import handle_apikeys
         resp, status = handle_apikeys(method="PATCH", path_tail="",
-                                      body={}, query={})
+                                      body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
     def test_handle_apikeys_revoke_invalid_id(self):
@@ -354,19 +354,19 @@ class TestApiAudit:
         store.conn.execute.side_effect = execute_side_effect
         mock_get_store.return_value = store
         resp, status = handle_audit(method="GET", path_tail="",
-                                    body={}, query={})
+                                    body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
 
     def test_handle_audit_not_get(self):
         from yuleosh.api.audit import handle_audit
         resp, status = handle_audit(method="POST", path_tail="",
-                                    body={}, query={})
+                                    body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 405
 
     def test_handle_audit_not_found(self):
         from yuleosh.api.audit import handle_audit
         resp, status = handle_audit(method="GET", path_tail="extra",
-                                    body={}, query={})
+                                    body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
 
@@ -390,7 +390,7 @@ class TestApiCi:
     def test_handle_ci_unknown(self):
         from yuleosh.api.ci import handle_ci
         resp, status = handle_ci(method="GET", path_tail="foobar",
-                                 body={}, query={})
+                                 body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
     def test__run_ci_layer_invalid(self):
@@ -409,14 +409,14 @@ class TestApiEvidence:
         import yuleosh.api
         with patch.object(yuleosh.api, "OSH_HOME", "/tmp/fake-osh"):
             resp, status = handle_evidence(method="GET", path_tail="files",
-                                           body={}, query={})
+                                           body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert resp["data"]["files"] == []
 
     def test_handle_evidence_unknown(self):
         from yuleosh.api.evidence import handle_evidence
         resp, status = handle_evidence(method="GET", path_tail="foobar",
-                                       body={}, query={})
+                                       body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
     def test_handle_evidence_smoke_export(self):
@@ -451,7 +451,7 @@ class TestApiPipeline:
     def test_handle_pipeline_unknown(self):
         from yuleosh.api.pipeline import handle_pipeline
         resp, status = handle_pipeline(method="GET", path_tail="foobar",
-                                       body={}, query={})
+                                       body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
 
@@ -471,7 +471,7 @@ class TestApiProject:
         store.conn = conn
         mock_store.return_value = store
         resp, status = handle_project(method="GET", path_tail="list",
-                                      body={}, query={})
+                                      body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
 
     @patch("yuleosh.store.Store")
@@ -506,7 +506,7 @@ class TestApiReview:
     def test_handle_review_unknown(self):
         from yuleosh.api.review import handle_review
         resp, status = handle_review(method="GET", path_tail="foobar",
-                                     body={}, query={})
+                                     body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
     @patch("yuleosh.api.review.subprocess.run")
@@ -531,7 +531,7 @@ class TestApiReview:
         with patch.object(yuleosh.api, "OSH_HOME", "/tmp/nonexist"):
             from yuleosh.api.review import handle_review
             resp, status = handle_review(method="GET", path_tail="list",
-                                         body={}, query={})
+                                         body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert resp["data"]["count"] == 0
         assert resp["data"]["count"] == 0
@@ -568,7 +568,7 @@ class TestApiSpec:
     def test_handle_spec_unknown(self):
         from yuleosh.api.spec import handle_spec
         resp, status = handle_spec(method="GET", path_tail="foobar",
-                                   body={}, query={})
+                                   body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
     @patch("yuleosh.spec.validate.diff_specs", return_value={})
@@ -600,20 +600,20 @@ class TestApiStats:
         store.conn = conn
         mock_store.return_value = store
         resp, status = handle_stats(method="GET", path_tail="overview",
-                                    body={}, query={})
+                                    body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 200
         assert resp["data"]["pipeline_success_rate"] == 70.0
 
     def test_handle_stats_bad_method(self):
         from yuleosh.api.stats import handle_stats
         resp, status = handle_stats(method="POST", path_tail="overview",
-                                    body={}, query={})
+                                    body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 405
 
     def test_handle_stats_unknown_resource(self):
         from yuleosh.api.stats import handle_stats
         resp, status = handle_stats(method="GET", path_tail="foobar",
-                                    body={}, query={})
+                                    body={}, query={}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert status == 404
 
 
@@ -634,8 +634,22 @@ class TestApiWebhooks:
                                        body={}, query={})
         assert status == 404
 
+    def test_handle_webhooks_missing_signature(self):
+        """P0: webhook without valid HMAC signature is rejected."""
+        from yuleosh.api.webhooks import handle_webhooks
+        handler = MagicMock()
+        handler._raw_body = b"{}"
+        handler.headers = {}
+        with patch.dict(
+            os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": "smoke-secret"}
+        ):
+            resp, status = handle_webhooks(method="POST", path_tail="github",
+                                           body={}, query={}, handler=handler)
+        assert status == 401
+
     @patch("yuleosh.api.webhooks._trigger_pipeline")
     def test_handle_github_push(self, mock_trigger):
+        import hmac, hashlib
         from yuleosh.api.webhooks import handle_webhooks
         mock_trigger.return_value = {"status": "queued", "job_id": "j1234567890abcdef",
                                      "success": True}
@@ -645,8 +659,15 @@ class TestApiWebhooks:
             "head_commit": {"id": "abc123def456", "message": "fix"},
             "pusher": {"name": "dev"},
         }
-        resp, status = handle_webhooks(method="POST", path_tail="github",
-                                       body=payload, query={})
+        raw = json.dumps(payload).encode()
+        secret = "smoke-secret"
+        sig = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+        handler = MagicMock()
+        handler._raw_body = raw
+        handler.headers = {"X-Hub-Signature-256": sig}
+        with patch.dict(os.environ, {"YULEOSH_GITHUB_WEBHOOK_SECRET": secret}):
+            resp, status = handle_webhooks(method="POST", path_tail="github",
+                                           body=payload, query={}, handler=handler)
         assert status == 200
         # v3.4.0: async-runner keys
         assert resp["data"]["pipeline_triggered"] is True
@@ -776,5 +797,6 @@ class TestApiMiddleware:
         def fake_handler(**kwargs):
             return {"ok": True}, 200
         resp, status = fake_handler(method="GET", path_tail="", body={}, query={})
-        # v3.4.0: no HTTP handler → unit-test mode injects dummy user → 200
-        assert status == 200
+        # P0 fix: no HTTP handler → fail closed with 401 (no dummy user)
+        assert status == 401
+        assert resp["ok"] is False

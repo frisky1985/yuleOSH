@@ -40,31 +40,32 @@ class TestHandleEvidence:
     @mock.patch("yuleosh.api.evidence._generate_evidence")
     def test_generate_route(self, mock_gen):
         mock_gen.return_value = ({"status": "ok"}, 200)
-        result = handle_evidence("POST", "generate", {}, {})
+        result = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result == ({"status": "ok"}, 200)
         mock_gen.assert_called_once()
 
     @mock.patch("yuleosh.api.evidence._list_evidence_files")
     def test_files_route(self, mock_list):
         mock_list.return_value = ({"files": []}, 200)
-        result = handle_evidence("GET", "files", {}, {})
+        result = handle_evidence("GET", "files", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
         mock_list.assert_called_once()
 
     @mock.patch("yuleosh.api.evidence._download_pack")
     def test_pack_route(self, mock_dl):
         mock_dl.return_value = ({"path": "/tmp/zip"}, 200)
-        result = handle_evidence("GET", "pack", {}, {}, handler=None)
+        result = handle_evidence("GET", "pack", {}, {}, handler=None,
+                   current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
         mock_dl.assert_called_once()
 
     def test_unknown_route(self):
-        result = handle_evidence("GET", "unknown", {}, {})
+        result = handle_evidence("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 404
         assert "error" in result[0]
 
     def test_generate_non_post(self):
-        result = handle_evidence("GET", "generate", {}, {})
+        result = handle_evidence("GET", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 404
 
 
@@ -199,22 +200,22 @@ class TestHandleCi:
     @mock.patch("yuleosh.api.ci._list_ci_runs")
     def test_list_runs(self, mock_list):
         mock_list.return_value = ({"results": []}, 200)
-        result = handle_ci("GET", "runs", {}, {})
+        result = handle_ci("GET", "runs", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
 
     @mock.patch("yuleosh.api.ci._run_ci_layer")
     def test_run_layer(self, mock_run):
         mock_run.return_value = ({"layer": 1, "status": "passed"}, 200)
-        result = handle_ci("POST", "run/1", {}, {})
+        result = handle_ci("POST", "run/1", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 200
         mock_run.assert_called_with("1")
 
     def test_run_layer_wrong_method(self):
-        result = handle_ci("GET", "run/1", {}, {})
+        result = handle_ci("GET", "run/1", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 405
 
     def test_unknown_resource(self):
-        result = handle_ci("GET", "unknown", {}, {})
+        result = handle_ci("GET", "unknown", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result[1] == 404
 
 

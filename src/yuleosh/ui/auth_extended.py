@@ -125,7 +125,8 @@ def _verify_password(password: str, hashed: str) -> bool:
 # Token helpers
 # ---------------------------------------------------------------------------
 
-def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "") -> str:
+def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "",
+                    purpose: Optional[str] = None) -> str:
     """Generate a signed JWT with embedded user/org claims and expiration."""
     now = int(time.time())
     payload = {
@@ -135,6 +136,8 @@ def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "") -> str:
         "iat": now,
         "exp": now + SESSION_TTL_HOURS * 3600,
     }
+    if purpose:
+        payload["purpose"] = purpose
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
@@ -217,12 +220,15 @@ def handle_signin(body: dict) -> dict:
     if target_org:
         existing_user = store.get_user(target_org["id"], email)
         if existing_user:
-            # Verify password if user has one
-            if existing_user.get("password_hash"):
-                if not password:
-                    return {"error": "Password required"}, 400
-                if not _verify_password(password, existing_user["password_hash"]):
-                    return {"error": "Invalid password"}, 401
+            # Fail closed (P0): a user without a password_hash cannot be
+            # authenticated by email alone — unified message prevents
+            # account enumeration.
+            if not existing_user.get("password_hash"):
+                return {"error": "Invalid email or password"}, 401
+            if not password:
+                return {"error": "Invalid email or password"}, 401
+            if not _verify_password(password, existing_user["password_hash"]):
+                return {"error": "Invalid email or password"}, 401
             return _create_login_response(store, existing_user)
         else:
             # New member — require password for signup into existing org
@@ -238,15 +244,18 @@ def handle_signin(body: dict) -> dict:
         for org in orgs:
             user = store.get_user(org["id"], email)
             if user:
-                if user.get("password_hash"):
-                    if not password:
-                        return {"error": "Password required"}, 400
-                    if not _verify_password(password, user["password_hash"]):
-                        return {"error": "Invalid password"}, 401
+                # Fail closed: password-less users cannot log in with email
+                # alone (matches api/auth.py _login_user semantics).
+                if not user.get("password_hash"):
+                    return {"error": "Invalid email or password"}, 401
+                if not password:
+                    return {"error": "Invalid email or password"}, 401
+                if not _verify_password(password, user["password_hash"]):
+                    return {"error": "Invalid email or password"}, 401
                 return _create_login_response(store, user)
 
         # First-time user — need to create org
-        token = _generate_token(email=email)
+        token = _generate_token(email=email, purpose="org_setup")
         return {"token": token, "redirect": "/org/setup", "needs_org": True}, 200
 
 
@@ -272,6 +281,13 @@ def handle_org_create(body: dict, session_token: str) -> dict:
         return {"error": "Project slug must be lowercase alphanumeric with hyphens"}, 400
     if not email:
         return {"error": "Email is required for org creation"}, 400
+
+    # Security (P0): the org-setup token is bound to the email that requested
+    # it — refuse to create an account for a different email.
+    token_payload = _decode_token(session_token) if session_token else None
+    token_email = (token_payload or {}).get("email", "")
+    if not token_email or token_email.lower() != email:
+        return {"error": "Invalid or expired session for this email"}, 401
 
     store = Store()
 

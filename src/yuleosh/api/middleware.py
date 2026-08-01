@@ -66,16 +66,17 @@ def require_auth(handler):
                 **kwargs):
         # Extract headers from the handler object
         http_handler = kwargs.get("handler")
-        if not http_handler:
-            # No HTTP handler context or MagicMock — unit test mode
-            kwargs["current_user"] = {
-                "user_id": "test-unit",
-                "org_id": "test-org",
-                "email": "test@unit.test",
-                "role": "member",
-            }
-            return handler(method=method, path_tail=path_tail, body=body,
-                           query=query, **kwargs)
+        if http_handler is None:
+            # Fail closed (P0): never fabricate an authenticated user when no
+            # HTTP handler context is available.  The only sanctioned bypass
+            # is an explicit current_user kwarg, which is unreachable from
+            # HTTP (router.dispatch only ever passes handler=).
+            injected_user = kwargs.get("current_user")
+            if injected_user is not None:
+                return handler(method=method, path_tail=path_tail, body=body,
+                               query=query, **kwargs)
+            return json_error(
+                "Authorization header with Bearer token required", 401)
 
         token = _extract_token(getattr(http_handler, "headers", {}))
         if not token:

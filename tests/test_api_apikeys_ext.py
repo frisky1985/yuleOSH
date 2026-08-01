@@ -15,19 +15,19 @@ class TestApiKeys:
 
     def test_generate_key_missing_label(self):
         """POST without label returns 400."""
-        result, code = handle_apikeys("POST", "", {}, {})
+        result, code = handle_apikeys("POST", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
         assert result["ok"] is False
 
     def test_generate_key_empty_label(self):
         """POST with empty label returns 400."""
-        result, code = handle_apikeys("POST", "", {"label": "  "}, {})
+        result, code = handle_apikeys("POST", "", {"label": "  "}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
         assert result["ok"] is False
 
     def test_generate_key_label_too_long(self):
         """POST with label > 100 chars returns 400."""
-        result, code = handle_apikeys("POST", "", {"label": "x" * 101}, {})
+        result, code = handle_apikeys("POST", "", {"label": "x" * 101}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
         assert result["ok"] is False
 
@@ -40,7 +40,7 @@ class TestApiKeys:
         }
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_apikeys("POST", "", {"label": "My Key"}, {})
+        result, code = handle_apikeys("POST", "", {"label": "My Key"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["ok"] is True
         data = result["data"]
@@ -56,7 +56,7 @@ class TestApiKeys:
         mock_store.create_api_key.side_effect = Exception("DB error")
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_apikeys("POST", "", {"label": "My Key"}, {})
+        result, code = handle_apikeys("POST", "", {"label": "My Key"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 500
 
     @patch("yuleosh.api.apikeys.Store")
@@ -68,7 +68,7 @@ class TestApiKeys:
         ]
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_apikeys("GET", "", {}, {})
+        result, code = handle_apikeys("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["count"] == 1
         assert result["data"]["keys"][0]["prefix"] == "yule_abcd"
@@ -80,7 +80,7 @@ class TestApiKeys:
         mock_store.revoke_api_key.return_value = True
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_apikeys("DELETE", "1", {}, {})
+        result, code = handle_apikeys("DELETE", "1", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["revoked"] is True
 
@@ -91,17 +91,17 @@ class TestApiKeys:
         mock_store.revoke_api_key.return_value = False
         mock_store_cls.return_value = mock_store
 
-        result, code = handle_apikeys("DELETE", "999", {}, {})
+        result, code = handle_apikeys("DELETE", "999", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     def test_revoke_key_invalid_id(self):
         """DELETE with non-numeric id returns 400."""
-        result, code = handle_apikeys("DELETE", "abc", {}, {})
+        result, code = handle_apikeys("DELETE", "abc", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
     def test_unsupported_method(self):
         """PUT returns 404."""
-        result, code = handle_apikeys("PUT", "", {}, {})
+        result, code = handle_apikeys("PUT", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     # Direct function tests for branch coverage

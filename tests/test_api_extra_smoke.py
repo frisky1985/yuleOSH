@@ -23,7 +23,7 @@ class TestApiExtra:
 
     def test_pipeline_handle_bad(self):
         from yuleosh.api.pipeline import handle_pipeline
-        r, s = handle_pipeline("GET", "", {}, {})
+        r, s = handle_pipeline("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert s == 405
 
     def test_project_get_nonexistent(self):

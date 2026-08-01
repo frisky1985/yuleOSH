@@ -22,16 +22,16 @@ class TestAudit:
         mock_store_cls.return_value = mock_store
 
         with patch("yuleosh.api.audit.get_store", return_value=mock_store):
-            result, code = handle_audit("GET", "", {}, {})
+            result, code = handle_audit("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert result["data"]["count"] == 1
 
     def test_handle_audit_post(self):
-        result, code = handle_audit("POST", "", {}, {})
+        result, code = handle_audit("POST", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 405
 
     def test_handle_audit_with_path_tail(self):
-        result, code = handle_audit("GET", "invalid", {}, {})
+        result, code = handle_audit("GET", "invalid", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 404
 
     @patch("yuleosh.store.Store")
@@ -46,7 +46,7 @@ class TestAudit:
         mock_store_cls.return_value = mock_store
 
         with patch("yuleosh.api.audit.get_store", return_value=mock_store):
-            result, code = handle_audit("GET", "", {}, {"limit": ["10"], "offset": ["5"]})
+            result, code = handle_audit("GET", "", {}, {"limit": ["10"], "offset": ["5"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert result["data"]["limit"] == 10
             assert result["data"]["offset"] == 5
@@ -63,7 +63,7 @@ class TestAudit:
         mock_store_cls.return_value = mock_store
 
         with patch("yuleosh.api.audit.get_store", return_value=mock_store):
-            result, code = handle_audit("GET", "", {}, {"limit": ["500"]})
+            result, code = handle_audit("GET", "", {}, {"limit": ["500"]}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert code == 200
             assert result["data"]["limit"] == 200
 
