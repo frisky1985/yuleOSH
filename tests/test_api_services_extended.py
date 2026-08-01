@@ -621,20 +621,20 @@ class TestCompliance:
 
     def test_wrong_method(self):
         from yuleosh.api.compliance import handle_compliance
-        result, status = handle_compliance("POST", "overview", {}, {}, None)
+        result, status = handle_compliance("POST", "overview", {}, {}, handler=None)
         assert result["ok"] is False
         assert status == 405
 
     def test_unknown_path(self):
         from yuleosh.api.compliance import handle_compliance
-        result, status = handle_compliance("GET", "nonexistent", {}, {}, None)
+        result, status = handle_compliance("GET", "nonexistent", {}, {}, handler=None)
         assert result["ok"] is False
         assert status == 404
 
     def test_overview_no_reports(self, tmp_path):
         from yuleosh.api.compliance import handle_compliance
         with patch("yuleosh.api.compliance.OSH_HOME", tmp_path):
-            result, status = handle_compliance("GET", "overview", {}, {}, None)
+            result, status = handle_compliance("GET", "overview", {}, {}, handler=None)
             assert status == 200
             data = result["data"]
             assert data["misra_total"] == 0
@@ -681,7 +681,7 @@ class TestCompliance:
             registry.create.return_value = composite
             mock_reg.return_value = registry
 
-            result, status = handle_compliance("GET", "overview", {}, {}, None)
+            result, status = handle_compliance("GET", "overview", {}, {}, handler=None)
             assert status == 200
             data = result["data"]
             assert data["misra_total"] == 15
@@ -717,7 +717,7 @@ class TestCompliance:
         (reports_dir / "gscr-extended-compliance.json").write_text(json.dumps(ext_report))
 
         with patch("yuleosh.api.compliance.OSH_HOME", tmp_path):
-            result, status = handle_compliance("GET", "overview", {}, {}, None)
+            result, status = handle_compliance("GET", "overview", {}, {}, handler=None)
             assert status == 200
             data = result["data"]
             assert data["misra_total"] == 25
@@ -728,5 +728,5 @@ class TestCompliance:
 
     def test_overview_empty_path_tail(self):
         from yuleosh.api.compliance import handle_compliance
-        result, status = handle_compliance("GET", "", {}, {}, None)
+        result, status = handle_compliance("GET", "", {}, {}, handler=None)
         assert status == 200

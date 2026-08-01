@@ -80,8 +80,9 @@ class TestMiddlewareDeep:
         result, status = my_handler(
             method="GET", path_tail="", body={}, query={}
         )
-        assert result["ok"] is False
-        assert status == 500
+        # v3.4.0: no HTTP handler → unit-test mode injects dummy user → 200
+        assert result["ok"] is True
+        assert status == 200
 
     def test_require_auth_no_token(self):
         from yuleosh.api.middleware import require_auth
@@ -450,56 +451,29 @@ class TestWebhooksDeep:
     """Additional webhook coverage — trigger_ci success and failure."""
 
     def test_trigger_ci_success(self):
-        from yuleosh.api.webhooks import _trigger_ci
-        import builtins
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == 'yuleosh.ci.run':
-                class FakeRun:
-                    @staticmethod
-                    def run_layer1(project_dir):
-                        return True
-                return FakeRun()
-            if name == 'yuleosh.store':
-                # Need Store class accessible for from-import
-                class FakeStore:
-                    class Store:
-                        def __init__(self):
-                            pass
-                        def save_ci(self, data):
-                            pass
-                return FakeStore
-            return real_import(name, *args, **kwargs)
-
-        with patch('builtins.__import__', side_effect=mock_import):
-            result = _trigger_ci("user/repo", "main", "abc123def", "commit message")
-            assert result["status"] == "passed"
-            assert result["success"] is True
+        """_trigger_pipeline submits a job via async runner (v3.4.0)."""
+        from yuleosh.api.webhooks import _trigger_pipeline
+        with patch("yuleosh.pipeline.async_runner.submit_pipeline",
+                   return_value="job-1234567890abcdef") as m_submit:
+            with patch("yuleosh.store.Store") as m_store:
+                m_store.return_value.save_ci.return_value = None
+                result = _trigger_pipeline(
+                    "/tmp/proj", "user/repo", "generic-embedded-c",
+                    "main", "abc123def", "commit message",
+                )
+        assert result is not None
+        assert result["status"] == "queued"
+        assert result["job_id"] == "job-1234567890abcdef"
+        assert result["type"] == "ci"
+        m_submit.assert_called_once()
 
     def test_trigger_ci_failure(self):
-        from yuleosh.api.webhooks import _trigger_ci
-        import builtins
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == 'yuleosh.ci.run':
-                class FakeRun:
-                    @staticmethod
-                    def run_layer1(project_dir):
-                        return False
-                return FakeRun()
-            if name == 'yuleosh.store':
-                class FakeStore:
-                    class Store:
-                        def __init__(self):
-                            pass
-                        def save_ci(self, data):
-                            pass
-                return FakeStore
-            return real_import(name, *args, **kwargs)
-
-        with patch('builtins.__import__', side_effect=mock_import):
-            result = _trigger_ci("user/repo", "main", "abc123", "msg")
-            assert result["status"] == "failed"
-            assert result["success"] is False
+        """_trigger_pipeline returns None when the runner fails."""
+        from yuleosh.api.webhooks import _trigger_pipeline
+        with patch("yuleosh.pipeline.async_runner.submit_pipeline",
+                   side_effect=RuntimeError("boom")):
+            result = _trigger_pipeline(
+                "/tmp/proj", "user/repo", "generic-embedded-c",
+                "main", "abc123def", "commit message",
+            )
+        assert result is None

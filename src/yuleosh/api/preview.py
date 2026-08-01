@@ -45,6 +45,15 @@ class _ThreadSafeDict:
         with self._lock:
             return self._dict.get(key, default)
 
+    def clear(self):
+        """Remove all entries (test isolation / state reset)."""
+        with self._lock:
+            self._dict.clear()
+
+    def pop(self, key, default=None):
+        with self._lock:
+            return self._dict.pop(key, default)
+
     def __getitem__(self, key):
         with self._lock:
             return self._dict[key]
