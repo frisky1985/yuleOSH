@@ -64,6 +64,45 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
             return _list_pipeline_steps()
         return json_error("Use GET for steps", 405)
 
+    # ── P0-B: legacy pipeline sub-routes restored ───────────────────────
+    # These endpoints predate the modular router (served by
+    # ui/routes/pipeline_routes via handler_helpers) and were shadowed into
+    # 404/401 dead code after the router wiring.  Delegate to the same
+    # legacy handlers so consumers (incl. old frontends/scripts) keep
+    # working: 401 without valid auth, 200 data with auth.
+    if path_tail == "runs" and method == "GET":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_runs
+        result = handle_pipeline_runs(kwargs.get("handler"))
+        return (result, 200) if isinstance(result, dict) else result
+
+    if path_tail == "stats" and method == "GET":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_stats
+        result = handle_pipeline_stats(kwargs.get("handler"))
+        return (result, 200) if isinstance(result, dict) else result
+
+    if path_tail == "yuleasr-status" and method == "GET":
+        from yuleosh.ui.routes.pipeline_routes import handle_yuleasr_status
+        result = handle_yuleasr_status(kwargs.get("handler"))
+        return (result, 200) if isinstance(result, dict) else result
+
+    if path_tail == "validate" and method == "GET":
+        from yuleosh.pipeline.config_validator import validate_pipeline_config
+        result = validate_pipeline_config(
+            project_dir=os.environ.get("OSH_HOME", ""))
+        return {"ok": True, **result}, 200
+
+    if path_tail.startswith("status/") and method == "GET":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_status
+        full_path = f"/api/v1/pipeline/{path_tail}"
+        result = handle_pipeline_status(kwargs.get("handler"), full_path)
+        return (result, 200) if isinstance(result, dict) else result
+
+    if path_tail == "yuleasr-notify" and method == "POST":
+        from yuleosh.ui.routes.pipeline_routes import handle_yuleasr_notify
+        raw = json.dumps(body).encode("utf-8") if body else b"{}"
+        result = handle_yuleasr_notify(kwargs.get("handler"), raw)
+        return (result, 200) if isinstance(result, dict) else result
+
     return json_error(f"Unknown pipeline resource: {path_tail}", 404)
 
 
