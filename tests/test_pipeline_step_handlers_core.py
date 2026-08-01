@@ -308,9 +308,11 @@ class TestEmbeddedReviewHandlers:
     def test_step_review_selftest_module_exports(self):
         """GIVEN review_selftest module WHEN checked THEN has core helpers."""
         from yuleosh.pipeline.step_handlers import review_selftest as mod
-        assert hasattr(mod, "_call_llm")
-        assert hasattr(mod, "_parse_spec")
+        from yuleosh.pipeline.step_handlers.review_selftest import core as core_mod
+        # v3.4.0: _call_llm/_parse_spec live in core.py (package split)
+        assert hasattr(core_mod, "_call_llm") or hasattr(mod, "_call_llm")
         assert hasattr(mod, "_parse_junit_xml")
+        assert hasattr(mod, "step_review_selftest")
 
     def test_step_review_misra_ci_imports(self):
         """GIVEN review_misra_ci module WHEN imported THEN handler exists."""
