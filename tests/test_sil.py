@@ -349,7 +349,7 @@ class TestErrorHandling:
         assert isinstance(result, SimResult)
         assert len(result.participants) == 0
 
-    @patch("sil.adapter.SILKitAdapter.shutdown")
+    @patch("yuleosh.sil.adapter.SILKitAdapter.shutdown")
     def test_adapter_cleanup_called(self, mock_shutdown: MagicMock, adapter: SILKitAdapter):
         adapter.shutdown()
         mock_shutdown.assert_called_once()
