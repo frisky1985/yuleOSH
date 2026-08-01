@@ -39,7 +39,11 @@
 - [x] D3. 提交推送 origin/main，报告含 commit hash + 每模块覆盖率前后对比
 
 > D1 全量回归：单进程 CI 等价命令（忽略 e2e 文件），perf 标记用例自动跳过。
-> 新增 276 测试（12 文件）全部通过；全量结果见 v3.4.2 交付报告。
+> 结果（HEAD 45de5d8 单进程全量）：**9169 passed / 71 skipped / 11 xfailed / 0 failed / 0 timeout**（344s）。
+> 基线对照：36612a1 收集 8975 tests，HEAD 收集 9251 tests（= 基线 + 276 新增，完全对账）；
+> 基线 8961 passed/0 failed 中通过用例全部仍在通过，无新增失败；2 个 kg 超时用例已豁免（perf 跳过，单跑可验证）。
+> 整体覆盖率：76% → **79.31%**（门禁 30% 通过）。
+> 新增 276 测试（12 文件）全部通过。
 > 真实 bug 小修（不重构）：misra_c2023_phase1.upgrade_rules_yaml KeyError（backward_compat 缺失）→ setdefault；misra_deviations.update_misra_report_deviations FileNotFoundError（reports 目录缺失）→ parent.mkdir。
 
 ## 2. 范围外（不做）
