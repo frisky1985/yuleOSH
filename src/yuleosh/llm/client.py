@@ -372,7 +372,7 @@ def chat_completion(
             # Create a new Request for each attempt (CQ-P1-02: don't reuse consumed Request)
             req = _ur.Request(
                 url,
-                data=payload,
+                data=body,
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {api_key}",
