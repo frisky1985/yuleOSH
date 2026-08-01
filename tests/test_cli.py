@@ -104,11 +104,11 @@ class TestTemplateCommands:
         (temp_project / "existing").mkdir()
         with patch("yuleosh.templates.resolve_template", return_value={"name": "x"}):
             with patch("yuleosh.templates.get_template_dir", return_value=temp_project / "tpl"):
-                # Should exit with error since directory exists
-                try:
-                    main_module.cmd_template_init("existing", parent_dir=str(temp_project))
-                except SystemExit:
-                    pass  # Expected
+                # Interactive path reads stdin — simulate EOF (non-TTY CI).
+                # The CLI treats EOF as "invalid selection" → SystemExit.
+                with patch("builtins.input", side_effect=EOFError):
+                    with pytest.raises(SystemExit):
+                        main_module.cmd_template_init("existing", parent_dir=str(temp_project))
 
     def test_template_init_missing(self, main_module):
         with patch("yuleosh.templates.resolve_template", return_value=None):

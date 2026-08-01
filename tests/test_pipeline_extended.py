@@ -122,9 +122,12 @@ class TestPipelineOrchestrator:
     def test_run_pipeline_without_llm_key(self, spec_file, osh_home):
         """Pipeline should exit when no LLM key and no mock."""
         with mock.patch.dict(os.environ, {}, clear=True):
-            with mock.patch("sys.exit") as mock_exit:
+            # sys.exit must *raise* (real semantics) so the pipeline stops at
+            # the key-check instead of running all 33 steps with mocked exit.
+            with mock.patch("sys.exit", side_effect=SystemExit(1)) as mock_exit:
                 from yuleosh.pipeline.orchestrator import run_pipeline
-                run_pipeline(str(spec_file))
+                with pytest.raises(SystemExit):
+                    run_pipeline(str(spec_file))
                 mock_exit.assert_called_once_with(1)
 
     def test_status_pipeline_no_sessions(self, osh_home):
@@ -151,8 +154,9 @@ class TestPipelineOrchestrator:
 
         from yuleosh.pipeline.orchestrator import run_pipeline
         session = run_pipeline(str(spec_file), mock=True, llm_client=_broken_llm)
-        # Should complete with 'failed' status
-        assert session.status == "failed"
+        # v3.4.0: LLM failures are non-fatal — fallback templates keep the
+        # pipeline running; session ends with 'completed' (errors recorded).
+        assert session.status == "completed"
 
     def test_pipeline_orchestrator_main_no_args(self):
         """Test orchestrator main entry with no args."""
@@ -537,7 +541,8 @@ class TestStepHandlersInit:
 
     def test_pipeline_steps_registry(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
-        assert len(PIPELINE_STEPS) == 10
+        # v3.4.0: registry grew 10 → 33 with multi-reviewer workflow steps
+        assert len(PIPELINE_STEPS) == 33
         assert PIPELINE_STEPS[0][0] == "spec-check"
         assert PIPELINE_STEPS[-1][0] == "final-report"
 
@@ -628,7 +633,9 @@ class TestCIMisraIntegration:
 
     def test_misra_exported_from_layers(self):
         """Verify run_misra_check is imported in layers."""
-        from yuleosh.ci.layers import run_misra_check
+        # v3.4.0: run_misra_check lives in ci.stages (split refactor);
+        # layers/layer_executor consumes it from there.
+        from yuleosh.ci.stages import run_misra_check
         assert run_misra_check is not None
 
     def test_misra_re_exported_from_run(self):
