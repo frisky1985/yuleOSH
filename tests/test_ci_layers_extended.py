@@ -49,6 +49,11 @@ misra:
   enabled: false
   addon: misra
   fail_on_required: false
+  active_profile: safety
+  profiles:
+    safety:
+      rules: [mandatory, required]
+      block_on: [mandatory]
 docsync:
   enabled: false
 """)
