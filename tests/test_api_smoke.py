@@ -54,7 +54,22 @@ class TestApiInit:
     def test_read_body_json(self):
         from yuleosh.api import read_body
         handler = MagicMock()
-        handler.headers.get.return_value = len(b'{"a":1}')
+        handler.headers.get.side_effect = {
+            "Content-Length": len(b'{"a":1}'),
+            "Content-Type": "application/json",
+        }.get
+        handler.rfile.read.return_value = b'{"a":1}'
+        result = read_body(handler)
+        assert result == {"a": 1}
+
+    def test_read_body_no_content_type_json_fallback(self):
+        """Unknown/missing Content-Type falls back to JSON parsing."""
+        from yuleosh.api import read_body
+        handler = MagicMock()
+        handler.headers.get.side_effect = {
+            "Content-Length": len(b'{"a":1}'),
+            "Content-Type": "",
+        }.get
         handler.rfile.read.return_value = b'{"a":1}'
         result = read_body(handler)
         assert result == {"a": 1}
@@ -617,10 +632,11 @@ class TestApiWebhooks:
                                        body={}, query={})
         assert status == 404
 
-    @patch("yuleosh.api.webhooks._trigger_ci")
+    @patch("yuleosh.api.webhooks._trigger_pipeline")
     def test_handle_github_push(self, mock_trigger):
         from yuleosh.api.webhooks import handle_webhooks
-        mock_trigger.return_value = {"status": "passed", "success": True}
+        mock_trigger.return_value = {"status": "queued", "job_id": "j1234567890abcdef",
+                                     "success": True}
         payload = {
             "repository": {"full_name": "test/repo"},
             "ref": "refs/heads/main",
@@ -630,7 +646,9 @@ class TestApiWebhooks:
         resp, status = handle_webhooks(method="POST", path_tail="github",
                                        body=payload, query={})
         assert status == 200
-        assert resp["data"]["ci_triggered"] is True
+        # v3.4.0: async-runner keys
+        assert resp["data"]["pipeline_triggered"] is True
+        assert resp["data"]["job_id"] == "j1234567890abcdef"
 
 
 # ======================================================================
@@ -639,7 +657,7 @@ class TestApiWebhooks:
 
 class TestApiRouter:
     def test_router_routes_defined(self):
-        from yuleosh.api.router import ROUTES
+        from yuleosh.api.router import ROUTES, _LAZY_HANDLERS
         assert "health" in ROUTES
         assert "spec" in ROUTES
         assert "pipeline" in ROUTES
@@ -650,7 +668,8 @@ class TestApiRouter:
         assert "stats" in ROUTES
         assert "notify" in ROUTES
         assert "apikeys" in ROUTES
-        assert "webhooks" in ROUTES
+        # v3.4.0 (AR-P2-01): optional routes are lazy-loaded
+        assert "webhooks" in _LAZY_HANDLERS
         assert "audit" in ROUTES
         assert "auth" in ROUTES
         assert "wizard" in ROUTES
@@ -755,4 +774,5 @@ class TestApiMiddleware:
         def fake_handler(**kwargs):
             return {"ok": True}, 200
         resp, status = fake_handler(method="GET", path_tail="", body={}, query={})
-        assert status == 500
+        # v3.4.0: no HTTP handler → unit-test mode injects dummy user → 200
+        assert status == 200

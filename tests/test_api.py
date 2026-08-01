@@ -1763,7 +1763,7 @@ class TestWebhooks:
     def test_github_push_no_ref(self):
         """Minimal payload — no ref, no repository."""
         from yuleosh.api.webhooks import handle_webhooks
-        with patch("yuleosh.api.webhooks._trigger_ci") as mock_ci:
+        with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
             result, status = handle_webhooks("POST", "github", {})
             assert status == 200
@@ -1776,7 +1776,7 @@ class TestWebhooks:
     def test_github_push_with_repo(self):
         """Payload with repo info."""
         from yuleosh.api.webhooks import handle_webhooks
-        with patch("yuleosh.api.webhooks._trigger_ci") as mock_ci:
+        with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
             result, status = handle_webhooks("POST", "github", {
                 "repository": {"full_name": "user/repo", "name": "repo"},
@@ -1791,11 +1791,11 @@ class TestWebhooks:
             assert data["branch"] == "main"
             assert data["commit"] == "abc123de"  # truncated to 8 chars
 
-    @patch("yuleosh.api.webhooks._trigger_ci")
+    @patch("yuleosh.api.webhooks._trigger_pipeline")
     def test_github_push_ci_triggered(self, mock_trigger_ci):
         """CI is triggered on push."""
-        mock_trigger_ci.return_value = {"status": "passed", "success": True,
-                                         "timestamp": "now"}
+        mock_trigger_ci.return_value = {"status": "queued", "job_id": "abc123def4567890",
+                                        "success": True, "timestamp": "now"}
         from yuleosh.api.webhooks import handle_webhooks
         result, status = handle_webhooks("POST", "github", {
             "repository": {"full_name": "user/repo"},
@@ -1805,61 +1805,30 @@ class TestWebhooks:
         })
         assert status == 200
         data = result["data"]
-        assert data["ci_triggered"] is True
-        assert data["ci_status"] == "passed"
+        # v3.4.0: webhooks use async runner → pipeline_triggered/job_id keys
+        assert data["pipeline_triggered"] is True
+        assert data["job_id"] == "abc123def4567890"
 
     def test_trigger_ci_import_error(self):
-        """When CI module is unavailable, returns skipped."""
-        from yuleosh.api.webhooks import _trigger_ci
-        import builtins
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == 'yuleosh.ci.run':
-                raise ImportError("no CI module")
-            return real_import(name, *args, **kwargs)
-
-        with patch('builtins.__import__', side_effect=mock_import):
-            result = _trigger_ci("repo", "main", "abc123", "msg")
-            assert result["status"] == "skipped"
+        """When the async runner is unavailable, _trigger_pipeline returns None."""
+        from yuleosh.api.webhooks import _trigger_pipeline
+        with patch("yuleosh.pipeline.async_runner.submit_pipeline",
+                   side_effect=ImportError("no CI module")):
+            result = _trigger_pipeline("/tmp/proj", "repo", "generic-embedded-c", "main", "abc123", "msg")
+            assert result is None
 
     def test_trigger_ci_exception(self):
-        """Generic exception in trigger_ci returns error."""
-        from yuleosh.api.webhooks import _trigger_ci
-        import builtins
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == 'yuleosh.ci.run':
-                # Simulate importing run_layer1 successfully
-                class FakeModule:
-                    @staticmethod
-                    def run_layer1(project_dir):
-                        raise RuntimeError("CI execution error")
-                return FakeModule()
-            if name == 'yuleosh.store':
-                class FakeStore:
-                    def __init__(self):
-                        self.conn = type('obj', (object,), {
-                            'execute': lambda self, q, p: type('o', (object,), {
-                                'fetchone': lambda self: {'c': 0}
-                            }),
-                            'commit': lambda self: None
-                        })()
-
-                    def save_ci(self, data):
-                        pass
-                return FakeStore()
-            return real_import(name, *args, **kwargs)
-
-        with patch('builtins.__import__', side_effect=mock_import):
-            result = _trigger_ci("repo", "main", "abc123", "msg")
-            assert result["status"] == "error"
+        """Generic exception in trigger path returns None (handled upstream)."""
+        from yuleosh.api.webhooks import _trigger_pipeline
+        with patch("yuleosh.pipeline.async_runner.submit_pipeline",
+                   side_effect=RuntimeError("CI execution error")):
+            result = _trigger_pipeline("/tmp/proj", "repo", "generic-embedded-c", "main", "abc123", "msg")
+            assert result is None
 
     def test_webhook_exception_handling(self):
         """Even internal exceptions return 200 (GitHub best practice)."""
         from yuleosh.api.webhooks import handle_webhooks
-        with patch("yuleosh.api.webhooks._trigger_ci") as mock_ci:
+        with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
             result, status = handle_webhooks("POST", "github", {
                 "ref": "refs/heads/main",
@@ -1870,7 +1839,7 @@ class TestWebhooks:
     def test_github_push_no_head_commit(self):
         """No head_commit in payload."""
         from yuleosh.api.webhooks import handle_webhooks
-        with patch("yuleosh.api.webhooks._trigger_ci") as mock_ci:
+        with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
             result, status = handle_webhooks("POST", "github", {
                 "repository": {"full_name": "org/repo"},
@@ -1884,7 +1853,7 @@ class TestWebhooks:
     def test_webhooks_without_body(self):
         """handle_webhooks with body=None."""
         from yuleosh.api.webhooks import handle_webhooks
-        with patch("yuleosh.api.webhooks._trigger_ci") as mock_ci:
+        with patch("yuleosh.api.webhooks._trigger_pipeline") as mock_ci:
             mock_ci.return_value = {"status": "passed", "success": True, "timestamp": "now"}
             result, status = handle_webhooks("POST", "github", None)
             assert status == 200
