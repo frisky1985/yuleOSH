@@ -363,7 +363,11 @@ class OSHHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         """Override default stderr logging with module-level logger."""
-        logging.info("%s - %s", self.client_address[0], format % args)
+        try:
+            msg = format % args if args else format
+        except (TypeError, ValueError):
+            msg = format
+        logging.info("%s - %s", self.client_address[0], msg)
 
 
 # ── Server launcher ────────────────────────────────────────────────────────

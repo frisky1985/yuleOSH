@@ -45,8 +45,9 @@ class TestIDParsing:
 
     def test_parse_invalid_id(self):
         """Invalid ID returns None tuple."""
-        p, maj, min_ = _parse_id("XXX-001")
-        assert p is None
+        for bad in ("", "abc", "1.2", "REQ-", "SWR-001.x", "!!!"):
+            p, maj, min_ = _parse_id(bad)
+            assert p is None, f"{bad!r} should be invalid, got prefix={p!r}"
 
     def test_parse_case_insensitive(self):
         """Case insensitive parsing."""
