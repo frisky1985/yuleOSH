@@ -9,12 +9,12 @@
     <a href="https://github.com/frisky1985/yuleOSH/actions">
       <img src="https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square" alt="CI">
     </a>
-    <img src="https://img.shields.io/badge/version-2.2.0-blue?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/version-3.4.4-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-%E2%89%A53.10-ff69b4?style=flat-square" alt="Python">
-    <img src="https://img.shields.io/badge/tests-3600%2B%20passing-brightgreen?style=flat-square" alt="Tests">
-    <img src="https://img.shields.io/badge/KG-11K%20nodes%2F16K%20edges-blueviolet?style=flat-square" alt="KG">
-    <img src="https://img.shields.io/badge/ASPICE%20Review%20R3-85%2F100%20%E2%9C%85-success?style=flat-square" alt="ASPICE R3">
+    <img src="https://img.shields.io/badge/tests-9500%2B%20passing-brightgreen?style=flat-square" alt="Tests">
+    <img src="https://img.shields.io/badge/coverage-83%25-success?style=flat-square" alt="Coverage">
+    <img src="https://img.shields.io/badge/ASPICE%20SWE.1-6-traceable-success?style=flat-square" alt="ASPICE">
   </p>
 
   <p>
@@ -116,6 +116,18 @@ Next.js web dashboard with PostgreSQL multi-tenant storage, JWT authentication, 
 ### 📋 Compliance
 One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — assists in preparing ASPICE SWE.1~SWE.6 audit evidence.
 
+### ⚙️ D3 Code Generation Loop (v3.4+)
+Generate code directly from spec/architecture in `generate-code` mode. Every generated file is automatically compile-verified (Python/C), with an auto-repair loop (up to 3 rounds) that feeds compiler errors back into the LLM until it passes.
+
+### 🧩 Skills Library (v3.4+)
+Built-in skills (`autosar-coding`, `misra-fix`, `python-testing`) that are injected into LLM prompts for domain-consistent code generation. Extensible registry + CLI (`yuleosh skills list/show`).
+
+### 🔄 Loop Engineering (v3.0+)
+Four closed-loop feedback systems: defect→spec traceability, field defect→FMEA safety analysis, KPI→RCA→improvement tickets, and self-evolving knowledge graph with confidence scoring.
+
+### 🧠 Knowledge Graph
+Knowledge graph store (SQLite BFS / PostgreSQL recursive CTE) for traceability, impact analysis, and incremental CI hooks.
+
 ### Full Automation Pipeline
 ```
 User Story → OpenSpec → SDD → DDD → Code Gen → Internal Review →
@@ -204,11 +216,18 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 |:-------|:-----|:--------|
 | Evidence Engine | `src/yuleosh/evidence/` | Traceability matrix + acceptance matrix + compliance ZIP |
 | Review Engine | `src/yuleosh/review/` | 4-agent parallel review + resource predictor |
+| CodeGen Engine | `src/yuleosh/codegen/` | D3 code generation + compile verification + auto-repair loop |
+| Skills Library | `src/yuleosh/skills/` | Skill registry (`autosar-coding`/`misra-fix`/`python-testing`) + prompt injection |
+| Loop Engine | `src/yuleosh/loop_engine/` | 4 closed-loop feedback (defect/FMEA/KPI/KG) |
+| Knowledge Graph | `src/yuleosh/knowledge_graph/` | KG store (SQLite BFS / PostgreSQL CTE) + incremental CI |
+| Knowledge Base | `src/yuleosh/kb/` | Persistent KB store (env-isolatable via `YULEOSH_KB_DB`) |
 | Test Generation | `src/yuleosh/testgen/` | Auto-generate test harness from spec scenarios |
 | Plugins | `src/yuleosh/plugins/` | Plugin registry + sandboxed execution |
-| Usage/Billing | `src/yuleosh/usage/` | Metering + Stripe gateway (for SaaS) |
-| CLI | `src/yuleosh/cli/` | 12+ subcommands |
-| API | `src/yuleosh/api/` | REST API v1 with 14 resource handlers |
+| Usage/Billing | `src/yuleosh/usage/` `src/yuleosh/billing/` | Metering + Stripe gateway (for SaaS) |
+| Auth/RBAC/Audit | `src/yuleosh/api/` `src/yuleosh/rbac/` `src/yuleosh/audit/` | JWT auth + role-based access + audit log |
+| ALM | `src/yuleosh/alm/` | ALM tool integration (Jira/linear etc.) |
+| CLI | `src/yuleosh/cli/` | 25 subcommands (`pipeline`/`skills`/`kg`/`kpi`/`coverage`/…) |
+| API | `src/yuleosh/api/` | Modular REST API v1 (14+ resource handlers, HMAC webhooks) |
 | Dashboard UI | `frontend/` | Next.js web dashboard |
 | Preview | `src/yuleosh/preview/` | Pre-pipeline analysis & scoring |
 
@@ -234,20 +253,27 @@ yuleOSH/
 │   ├── pipeline/      Agent pipeline orchestrator (10 steps)
 │   ├── ci/            3-layer CI/CD with dependency chaining
 │   ├── review/        4-agent parallel review + resource predictor
+│   ├── codegen/       D3 code generation + compile verify + auto-repair
+│   ├── skills/        Skills registry + prompt injection
 │   ├── evidence/      Traceability + acceptance + compliance ZIP
 │   ├── hardware/      Flash, monitor, debug orchestration
 │   ├── cross/         Cross-compilation + HIL/SIL runners
 │   ├── testgen/       Auto test harness generation
 │   ├── llm/           LLM-agnostic agent client
 │   ├── plugins/       Plugin registry + sandbox
-│   ├── api/           REST API v1 (14 handlers)
+│   ├── api/           Modular REST API v1 (JWT + HMAC webhooks)
 │   ├── ui/            Dashboard server (auth, routes)
-│   ├── cli/           CLI subcommands
+│   ├── cli/           CLI subcommands (25)
+│   ├── loop_engine/   Loop Engineering 4 closed loops
+│   ├── knowledge_graph/  KG store (SQLite/PostgreSQL)
+│   ├── kb/            Knowledge base store
+│   ├── alm/           ALM tool integration
+│   ├── audit/ rbac/ billing/ tenant/   Enterprise features
 │   ├── usage/         Metering + billing integration
 │   ├── preview/       Pre-pipeline analysis & scoring
 │   └── store.py       Multi-tenant SQLite/PostgreSQL backend
 ├── frontend/          Next.js SaaS dashboard
-├── tests/             250+ tests (all passing)
+├── tests/             9500+ tests (356 files, all passing)
 ├── docs/              Specifications, guides, reports
 ├── deploy/            Production deployment configs
 ├── Dockerfile         Multi-stage production Dockerfile
@@ -317,9 +343,13 @@ yuleOSH offers three editions tailored to different needs. See the full **[Editi
 | v0.1.0 | Foundation — OpenSpec, agent pipeline, CI/CD, evidence | ✅ |
 | v0.2.0 | ASPICE compliance — strict mode, bidirectional tracing | ✅ |
 | v0.3.0 | Ground reinforcement — test planning, hierarchy, cross-compile | ✅ |
-| v1.0.0 | Production — HIL adapter, plugin marketplace, scaling | 🚧 |
-| v1.1.0 | Enterprise — RBAC, audit logging, SAML SSO | 📋 |
-| v1.2.0 | Cloud — multi-region, data residency, managed hosting | 📋 |
+| v1.0.0 | Production — HIL adapter, plugin marketplace, scaling | ✅ |
+| v2.x | SaaS multi-tenant, knowledge graph, enterprise modules | ✅ |
+| v3.0.0 | Loop Engineering — 4 closed-loop feedback (defect/FMEA/KPI/KG) | ✅ |
+| v3.3.0 | Production sprint — quality gates, ASPICE evidence, coverage 76% | ✅ |
+| v3.4.x | D3 codegen loop + Skills library + coverage 83% + ultra-review P0 security | ✅ |
+| v3.5.0 | Coverage 85-90% + P1/P2 backlog from ultra-review + SaaS GA | 🚧 |
+| v4.0.0 | Cloud — multi-region, data residency, managed hosting | 📋 |
 
 ---
 
@@ -404,6 +434,18 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 ### 📋 合规审计
 一键生成追溯矩阵、验收矩阵和合规证据 ZIP 包——辅助 ASPICE SWE.1~SWE.6 证据准备。
 
+### ⚙️ D3 编码生成闭环（v3.4+）
+`generate-code` 模式直接从 spec/架构生成代码，自动编译验证（Python/C），失败自动修复循环（最多 3 轮，编译错误回喂 LLM）。
+
+### 🧩 技能库（v3.4+）
+内置技能（`autosar-coding`/`misra-fix`/`python-testing`）注入 LLM prompt，保证生成代码的领域一致性。可扩展注册表 + CLI（`yuleosh skills list/show`）。
+
+### 🔄 Loop Engineering（v3.0+）
+四大闭环：缺陷→需求回溯、现场→FMEA 安全分析、KPI→RCA→改进工单、知识图谱自进化（置信度评分）。
+
+### 🧠 知识图谱
+知识图谱存储（SQLite BFS / PostgreSQL 递归 CTE），支撑追溯、影响分析、增量 CI 钩子。
+
 ### AI 辅助流水线
 ```
 用户需求 → OpenSpec → 系统设计 → 详细设计 → 代码生成 → 内审 →
@@ -440,9 +482,9 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 
 ```
 yuleOSH/
-├── src/yuleosh/    核心源码模块
+├── src/yuleosh/    核心源码模块（spec/pipeline/ci/codegen/skills/kg/loop_engine/api/cli…）
 ├── frontend/       Next.js SaaS 管理面板
-├── tests/          250+ 测试（全部通过）
+├── tests/          9500+ 测试（356 文件，全部通过）
 ├── docs/           需求文档、指南、报告
 ├── deploy/         生产部署配置
 ├── Dockerfile      多阶段 Docker 构建
@@ -512,9 +554,13 @@ yuleOSH 提供三个版本。完整功能对比详见 **[版本分界线 · 功�
 | v0.1.0 | 基础—OpenSpec、代理流水线、CI/CD、证据 | ✅ |
 | v0.2.0 | ASPICE合规—严格模式、双向追溯 | ✅ |
 | v0.3.0 | 地基加固—测试规划、层级、交叉编译 | ✅ |
-| v1.0.0 | 生产就绪—HIL适配器、插件市场、扩展 | 🚧 |
-| v1.1.0 | 企业版—RBAC、审计日志、SAML SSO | 📋 |
-| v1.2.0 | 云端—多区域、数据驻留、托管服务 | 📋 |
+| v1.0.0 | 生产就绪—HIL适配器、插件市场、扩展 | ✅ |
+| v2.x | SaaS 多租户、知识图谱、企业模块 | ✅ |
+| v3.0.0 | Loop Engineering—四大闭环（缺陷/FMEA/KPI/KG） | ✅ |
+| v3.3.0 | 量产冲刺—质量门禁、ASPICE 证据、覆盖率 76% | ✅ |
+| v3.4.x | D3 编码生成闭环 + 技能库 + 覆盖率 83% + ultra-review P0 安全 | ✅ |
+| v3.5.0 | 覆盖率 85-90% + ultra-review P1/P2 backlog + SaaS GA | 🚧 |
+| v4.0.0 | 云端—多区域、数据驻留、托管服务 | 📋 |
 
 ---
 
