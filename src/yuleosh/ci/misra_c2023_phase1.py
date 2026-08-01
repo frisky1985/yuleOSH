@@ -249,7 +249,7 @@ def upgrade_rules_yaml(
 
     # Step 2: Update backward compatibility mapping
     if not dry_run:
-        compat = meta.get("backward_compat", {}).get("mapping", {})
+        compat = meta.setdefault("backward_compat", {}).get("mapping", {})
 
         # Add mapping entries for new C:2023 rules
         for rule_id, info in C2023_NEW_RULES.items():
