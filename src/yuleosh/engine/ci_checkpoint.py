@@ -211,7 +211,7 @@ def _dummy_memory_check(project_dir: str, ci) -> bool:
 
 def _detect_hil_target_dummy(project_dir: str, ci) -> bool:
     """HIL 目标检测 — 简化版以支持 checkpoint。"""
-    return _detect_hil_target(project_dir, ci, mock=True, strict=False)
+    return _detect_hil_target(project_dir, ci, mock_mode=True, strict=False)
 
 
 def _hil_tests_wrapper(project_dir: str, ci) -> bool:
@@ -221,7 +221,7 @@ def _hil_tests_wrapper(project_dir: str, ci) -> bool:
 
 def _save_hil_report_stub(project_dir: str, ci) -> bool:
     """HIL 报告保存存根。"""
-    _save_hil_report(project_dir, True, "checkpoint", mock=True, boot_pattern="Boot Complete")
+    _save_hil_report(project_dir, True, "checkpoint", mock_mode=True, boot_pattern="Boot Complete")
     return True
 
 

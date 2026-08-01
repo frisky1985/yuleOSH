@@ -31,9 +31,12 @@ class TestGetMisraTrendAvg:
 
     def test_multiple_entries(self):
         with tempfile.TemporaryDirectory() as td:
+            from datetime import datetime, timedelta
+            ts1 = (datetime.now() - timedelta(days=2)).isoformat()
+            ts2 = (datetime.now() - timedelta(days=1)).isoformat()
             _write_trend_file(td, "misra-trend.jsonl", [
-                {"total_violations": 10, "required": 3, "advisory": 5, "timestamp": "2026-07-01T00:00:00"},
-                {"total_violations": 20, "required": 6, "advisory": 10, "timestamp": "2026-07-10T00:00:00"},
+                {"total_violations": 10, "required": 3, "advisory": 5, "timestamp": ts1},
+                {"total_violations": 20, "required": 6, "advisory": 10, "timestamp": ts2},
             ])
             result = _get_misra_trend_avg(td, days=28)
             assert result["avg_total_violations"] == 15.0
@@ -41,9 +44,12 @@ class TestGetMisraTrendAvg:
 
     def test_min_max(self):
         with tempfile.TemporaryDirectory() as td:
+            from datetime import datetime, timedelta
+            ts1 = (datetime.now() - timedelta(days=2)).isoformat()
+            ts2 = (datetime.now() - timedelta(days=1)).isoformat()
             _write_trend_file(td, "misra-trend.jsonl", [
-                {"total_violations": 5, "required": 1, "advisory": 2, "timestamp": "2026-07-01T00:00:00"},
-                {"total_violations": 25, "required": 8, "advisory": 12, "timestamp": "2026-07-10T00:00:00"},
+                {"total_violations": 5, "required": 1, "advisory": 2, "timestamp": ts1},
+                {"total_violations": 25, "required": 8, "advisory": 12, "timestamp": ts2},
             ])
             result = _get_misra_trend_avg(td, days=28)
             assert result["min_total_violations"] == 5

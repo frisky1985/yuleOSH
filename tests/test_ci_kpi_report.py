@@ -164,10 +164,12 @@ class TestKpiBaselineSave:
     def test_baseline_with_process_and_defect_escape(self):
         """Save baseline with process stability and defect escape data."""
         with tempfile.TemporaryDirectory() as td:
+            from datetime import datetime, timedelta
+            ts = (datetime.now() - timedelta(days=1)).isoformat()
             _write_process_kpi(td, [
                 {"build_success": True, "build_duration_s": 30.0, "layer": 1,
                  "total_stages": 10, "passed_stages": 10, "regression_triggered": False,
-                 "misra_required_new": 0, "timestamp": "2026-07-01T00:00:00", "date": "2026-07-01"}
+                 "misra_required_new": 0, "timestamp": ts, "date": ts[:10]}
             ])
             baseline = kpi_baseline_save(td, label="with-process")
             assert baseline["process_stability_28d"]["total_builds"] == 1
