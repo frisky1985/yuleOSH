@@ -70,6 +70,16 @@ def _validate_review_session_json(data: dict, source: str) -> bool:
     return _validate_json_schema(data, source, REVIEW_SESSION_JSON_SCHEMA, "ReviewSession")
 
 
+_SCHEMA_TYPE_CHECKERS = {
+    "string": str,
+    "number": (int, float),
+    "integer": int,
+    "boolean": bool,
+    "list": list,
+    "dict": dict,
+}
+
+
 def _validate_json_schema(data: dict, source: str, schema: dict, label: str) -> bool:
     """Generic JSON schema validator (no external jsonschema lib dependency).
 
@@ -96,10 +106,11 @@ def _validate_json_schema(data: dict, source: str, schema: dict, label: str) -> 
         prop = props.get(key)
         if prop is None:
             continue  # additionalProperties allowed
-        # Type check
+        # Type check — map JSON schema type names to Python types safely
         expected_type = prop.get("type")
         if expected_type and expected_type != "object" and expected_type != "array":
-            if not isinstance(value, eval(expected_type.capitalize())):
+            checker = _SCHEMA_TYPE_CHECKERS.get(expected_type)
+            if checker is not None and not isinstance(value, checker):
                 log.warning(f"{label} field '{key}' in {source}: expected {expected_type}, got {type(value).__name__}")
         # Enum check
         enum_vals = prop.get("enum")

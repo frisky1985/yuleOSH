@@ -3,6 +3,7 @@
 import sys
 import os
 import tempfile
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -97,7 +98,11 @@ class TestMain:
             with open(spec_path, "w") as f:
                 f.write("# Spec\n")
             monkeypatch.setattr(sys, "argv", ["pack", spec_path])
-            try:
-                main()
-            except SystemExit:
-                pass
+            # v3.4.0: main delegates to generate_evidence — patch the heavy
+            # collector so unit test doesn't scan the real repo .osh/ sessions.
+            with mock.patch("yuleosh.evidence.pack.generate_evidence") as m_gen:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+                m_gen.assert_called_once()
