@@ -254,7 +254,14 @@ class TestRouterIntegration:
         mock_handler.rfile = io.BytesIO(b"")
         mock_handler.wfile = io.BytesIO()
 
-        dispatch(mock_handler, "/api/v1/kb/articles")
+        # v3.4.0: require_auth validates user+session in Store for real
+        # handlers — stub the store so the KB route is reached.
+        from yuleosh.api import middleware as _mw
+        with patch.object(_mw, "_extract_token", return_value="tok"), \
+             patch.object(_mw, "_decode_token", return_value={"user_id": 1}), \
+             patch("yuleosh.store.Store.get_user_by_id", return_value={"role": "admin"}), \
+             patch("yuleosh.store.Store.get_session", return_value={"token": "tok"}):
+            dispatch(mock_handler, "/api/v1/kb/articles")
 
         # Should have sent a 200 response
         assert mock_handler.send_response.call_args[0][0] == 200

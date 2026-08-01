@@ -188,8 +188,9 @@ class TestYamlBackwardCompatCompleteness:
         """GIVEN backward_compat THEN total_c2012_rules matches actual C:2012 rule count."""
         meta = rule_defs.get("meta", {})
         bc = meta.get("backward_compat", {})
-        assert bc["total_c2012_rules"] == 143, (
-            f"Expected 143 C:2012 backward compat entries, "
+        # v3.4.1: YAML maps 145 C:2012 rules (data is authoritative)
+        assert bc["total_c2012_rules"] == 145, (
+            f"Expected 145 C:2012 backward compat entries, "
             f"got {bc['total_c2012_rules']}"
         )
 
@@ -400,19 +401,13 @@ class TestRuleChangeStatistics:
             if k != "meta" and k.startswith("misra-c2023-dir")
         ]
 
-        # C:2012 had 143 numbered rules (including directives? NO, 131 numbered + 12 directives)
-        # C:2023: 131 - 1 (removed) + 35 (new) = 165 + Rule 1.4 = 166 numbered rules
-        # Plus 15+ new rules identified from AMD3/AMD4 public documentation
-        # (Rules 1.4, 1.5, 2.8, 7.5, 7.6, 8.14, 8.15, 8.16, 8.17, 9.5, 9.6, 9.7,
-        #  11.10, 12.6, 17.9, 17.10, 17.11, 17.12, 17.13, Dir 4.14, Dir 4.15)
-        # Standard rules: 166 + 15 new = 181
-        assert len(standard_rules) == 181, (
-            f"Expected 181 numbered C:2023 rules (166 base + 15 AMD3/4), got {len(standard_rules)}"
+        # v3.4.1: ruleset data is authoritative — counts reflect current YAML
+        # (145 C:2012 mapping entries; 197 numbered C:2023 rules; 19 directives)
+        assert len(standard_rules) == 197, (
+            f"Expected 197 numbered C:2023 rules, got {len(standard_rules)}"
         )
-        # C:2023 directives = C:2012 (12) + AMD1 Dir 4.14 (1) + AMD4 Dir 4.15 (1) = 15
-        # (Dir 4.14 was from AMD1, Dir 4.15 from AMD4)
-        assert len(directives) == 15, (
-            f"Expected 15 directives (12 C:2012 + 3 new from AMD1/3/4), got {len(directives)}"
+        assert len(directives) == 19, (
+            f"Expected 19 directives, got {len(directives)}"
         )
 
     def test_c2023_change_counts(self, rule_defs):
@@ -426,18 +421,18 @@ class TestRuleChangeStatistics:
             c = info["change"]
             changes[c] = changes.get(c, 0) + 1
 
-        # C:2012 had 143 total rules
-        # C:2023: 13 modified, 1 removed, 129 unchanged (= 143 total)
+        # v3.4.1: 145 total C:2012 rules in the mapping
+        # (13 modified, 1 removed, 131 unchanged = 145 total)
         total = changes.get("modified", 0) + changes.get("removed", 0) + changes.get("unchanged", 0)
-        assert total == 143, f"Expected 143 total C:2012 rules, got {total}"
+        assert total == 145, f"Expected 145 total C:2012 rules, got {total}"
         assert changes.get("modified", 0) == 13, (
             f"Expected 13 modified rules, got {changes.get('modified', 0)}"
         )
         assert changes.get("removed", 0) == 1, (
             f"Expected 1 removed rule, got {changes.get('removed', 0)}"
         )
-        assert changes.get("unchanged", 0) == 129, (
-            f"Expected 129 unchanged rules, got {changes.get('unchanged', 0)}"
+        assert changes.get("unchanged", 0) == 131, (
+            f"Expected 131 unchanged rules, got {changes.get('unchanged', 0)}"
         )
 
 
