@@ -138,7 +138,8 @@ class TestListDedupedMisraArticles:
         all_articles = store.list_deduped_misra_articles(limit=10)
         assert len(all_articles) == 5
         paginated = store.list_deduped_misra_articles(limit=2, offset=2)
-        assert len(paginated) == 3
+        # 5 unique items, offset=2 limit=2 → items[2:4]
+        assert len(paginated) == 2
 
     def test_articles_without_rule_file_kept(self, store):
         """GIVEN articles with empty fields WHEN listing THEN included."""
