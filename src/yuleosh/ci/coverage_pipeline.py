@@ -129,6 +129,11 @@ def generate_branch_coverage_report(
 
     # Step 3b: Module-level threshold checks
     module_gates = []
+    try:
+        _cfg = _get_ci_config(build_dir)
+        module_thresholds = _cfg.coverage.module_thresholds
+    except Exception:
+        module_thresholds = {}
     if module_thresholds:
         for module_name, module_fail_under in module_thresholds.items():
             module_cov = _compute_module_line_coverage(parsed["files"], module_name)

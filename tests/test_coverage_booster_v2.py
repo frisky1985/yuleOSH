@@ -182,7 +182,9 @@ class TestPipelineInit:
 
     def test_pipeline_init(self):
         import yuleosh.pipeline
-        assert hasattr(yuleosh.pipeline, "stages")
+        # v3.4.0: submodules are imported on demand — verify importability
+        import yuleosh.pipeline.stages  # noqa: F401
+        assert yuleosh.pipeline.stages is not None
 
 
 class TestCiInit:
@@ -328,7 +330,8 @@ class TestStoreEdge:
     def test_store_create_user_full(self):
         from yuleosh.store import Store
         store = Store()
-        org = store.create_organization("Coverage Test", "coverage-test")
+        slug = f"coverage-test-{int(time.time() * 1000)}"
+        org = store.create_organization("Coverage Test", slug)
         user = store.create_user(org["id"], "coverage@test.com", "admin", "hash123")
         assert user["id"] > 0
         assert user["email"] == "coverage@test.com"
@@ -338,8 +341,9 @@ class TestStoreEdge:
     def test_store_create_org_project(self):
         from yuleosh.store import Store
         store = Store()
-        org = store.create_organization("Proj Test", "proj-test-2")
-        proj = store.create_org_project(org["id"], "Test Project", "test-project-2")
+        slug = f"proj-test-{int(time.time() * 1000)}"
+        org = store.create_organization("Proj Test", slug)
+        proj = store.create_org_project(org["id"], "Test Project", f"test-project-{int(time.time() * 1000)}")
         assert proj["id"] > 0
         assert proj["name"] == "Test Project"
 
