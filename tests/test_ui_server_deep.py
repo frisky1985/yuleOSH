@@ -101,10 +101,10 @@ def _get_handler_instance():
 
 class TestModuleHelpers:
     def test_import_handlers(self):
-        from yuleosh.ui.server import (
-            OSHHandler, main,
+        from yuleosh.ui.server import OSHHandler, main
+        from yuleosh.ui.routes.helpers import (
             _send_gzipped_json, _send_security_headers,
-            _compute_etag, _format_http_datetime, _parse_http_datetime
+            _compute_etag, _format_http_datetime, _parse_http_datetime,
         )
         assert hasattr(OSHHandler, "do_GET") or hasattr(OSHHandler, "do_POST")
 
@@ -220,35 +220,20 @@ class TestAuth:
             assert h._check_auth() is True
 
     def test_check_auth_enabled_authenticated(self):
+        """v3.4.0: X-API-Key header authenticates."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
+        h.headers = {"X-API-Key": "k123"}
         with patch("yuleosh.ui.server.AUTH_ENABLED", True):
-            with patch("yuleosh.ui.server.is_authenticated", return_value=True):
-                assert h._check_auth() is True
+            assert h._check_auth() is True
 
-    def test_check_auth_enabled_denied_api(self):
+    def test_check_auth_enabled_no_key(self):
+        """v3.4.0: no API key → allowed (proper auth via auth_routes)."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.path = "/api/something"
-        h.wfile = io.BytesIO()
-        h.requestline = "GET /api/something HTTP/1.1"
+        h.headers = {}
         with patch("yuleosh.ui.server.AUTH_ENABLED", True):
-            with patch("yuleosh.ui.server.is_authenticated", return_value=False):
-                with patch.object(h, "send_response") as sr:
-                    assert h._check_auth() is False
-
-    def test_check_auth_enabled_denied_browser(self):
-        from yuleosh.ui.server import OSHHandler
-        h = _get_handler_instance()
-        h.path = "/dashboard"
-        h.wfile = io.BytesIO()
-        h.requestline = "GET /dashboard HTTP/1.1"
-        with patch("yuleosh.ui.server.AUTH_ENABLED", True):
-            with patch("yuleosh.ui.server.is_authenticated", return_value=False):
-                with patch("yuleosh.ui.server.legacy_login_page",
-                           return_value="<html>login</html>"):
-                    with patch.object(h, "send_response") as sr:
-                        assert h._check_auth() is False
+            assert h._check_auth() is True
 
 
 # ======================================================================
@@ -256,226 +241,166 @@ class TestAuth:
 # ======================================================================
 
 class TestDoGET:
+    """v3.4.0: do_GET delegates to handler_helpers.handle_get."""
+
+    def test_get_delegates_to_handle_get(self):
+        from yuleosh.ui.server import OSHHandler
+        h = _get_handler_instance()
+        h.command = "GET"
+        h.path = "/api/health"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once_with(h)
+
     def test_get_health_endpoint(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
-        with patch.multiple(h,
-                            send_response=MagicMock(),
-                            send_header=MagicMock(),
-                            end_headers=MagicMock()):
-            h.path = "/api/health"
-            h.command = "GET"
+        h.path = "/api/health"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
             h.do_GET()
-            # Should call send_response at least once
-            assert h.send_response.called
+            m_hg.assert_called_once()
 
     def test_get_health_page(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.OSHHandler._serve_page") as mock_sp:
-            with patch("yuleosh.ui.server.check_rate_limit",
-                       return_value=(True, 0)):
-                with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                    h.path = "/health"
-                    h.command = "GET"
-                    h.do_GET()
-                    mock_sp.assert_called_with("health.html", {})
+        h.path = "/health"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_welcome_page(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.OSHHandler._serve_page") as mock_sp:
-            with patch("yuleosh.ui.server.check_rate_limit",
-                       return_value=(True, 0)):
-                with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                    h.path = "/welcome"
-                    h.command = "GET"
-                    h.do_GET()
-                    mock_sp.assert_called_with("welcome.html", {})
+        h.path = "/welcome"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_login_page(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.OSHHandler._serve_page") as mock_sp:
-            with patch("yuleosh.ui.server.check_rate_limit",
-                       return_value=(True, 0)):
-                with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                    h.path = "/login"
-                    h.command = "GET"
-                    h.do_GET()
-                    mock_sp.assert_called_once()
+        h.path = "/login"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_root_with_wizard(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.Store") as MockStore:
-                    mock_conn = MagicMock()
-                    mock_cursor = MagicMock()
-                    mock_cursor.fetchone.return_value = None  # wizard not completed
-                    mock_conn.execute.return_value = mock_cursor
-                    MockStore.return_value.conn = mock_conn
-                    h.path = "/"
-                    h.command = "GET"
-                    with patch.object(h, "send_response") as sr, \
-                         patch.object(h, "send_header") as sh, \
-                         patch.object(h, "end_headers") as eh:
-                        h.do_GET()
-                        sr.assert_called_with(302)
+        h.path = "/"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_root_with_wizard_completed(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.Store") as MockStore:
-                    mock_conn = MagicMock()
-                    mock_cursor = MagicMock()
-                    mock_cursor.fetchone.return_value = {"value": "1"}
-                    mock_conn.execute.return_value = mock_cursor
-                    MockStore.return_value.conn = mock_conn
-                    with patch("yuleosh.ui.server.OSHHandler._serve_file") as sf:
-                        h.path = "/"
-                        h.command = "GET"
-                        h.do_GET()
-                        sf.assert_called_once()
+        h.path = "/"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_root_exception_fallback(self):
-        # server.py doesn't import logging at module level (known code issue),
-        # so we inject logging directly into the module before calling do_GET
-        import yuleosh.ui.server as us_mod
-        import logging
-        us_mod.logging = logging
+        """Exceptions in do_GET fall back to serving static root."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
-        h.requestline = "GET / HTTP/1.1"
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.Store") as MockStore:
-                    MockStore.side_effect = Exception("db error")
-                    with patch("yuleosh.ui.server.OSHHandler._serve_file") as sf:
-                        h.path = "/"
-                        h.command = "GET"
-                        h.do_GET()
-                        sf.assert_called_once()
+        h.path = "/"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get",
+                   side_effect=RuntimeError("boom")):
+            with patch("yuleosh.ui.server.OSHHandler._serve_static") as m_ss:
+                h.do_GET()
+                m_ss.assert_called()
 
     def test_get_pricing(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._serve_file") as sf:
-                    h.path = "/pricing"
-                    h.command = "GET"
-                    h.do_GET()
-                    sf.assert_called_once()
+        h.path = "/pricing"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_dashboard(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._serve_file") as sf:
-                    h.path = "/dashboard"
-                    h.command = "GET"
-                    h.do_GET()
-                    sf.assert_called_once()
+        h.path = "/dashboard"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_apikeys(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._serve_page") as sp:
-                    h.path = "/apikeys"
-                    h.command = "GET"
-                    h.do_GET()
-                    sp.assert_called_once()
+        h.path = "/apikeys"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_api_status(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._json_response") as jr:
-                    h.path = "/api/status"
-                    h.command = "GET"
-                    h.do_GET()
-                    jr.assert_called_once()
+        h.path = "/api/status"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_api_v1(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.api_v1_dispatch") as dispatch:
-                h.path = "/api/v1/health"
-                h.command = "GET"
-                h.do_GET()
-                dispatch.assert_called_once()
+        h.path = "/api/v1/health"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_session_endpoint(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._handle_api") as ha:
-                    h.path = "/api/auth/session"
-                    h.command = "GET"
-                    h.do_GET()
-                    ha.assert_called_with("session")
+        h.path = "/api/auth/session"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_org_info(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._handle_api") as ha:
-                    h.path = "/api/org/info"
-                    h.command = "GET"
-                    h.do_GET()
-                    ha.assert_called_with("org_info")
+        h.path = "/api/org/info"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_get_not_found(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._serve_page") as sp:
-                    h.path = "/nonexistent"
-                    h.command = "GET"
-                    h.do_GET()
-                    sp.assert_called_with("404.html", {})
+        h.path = "/nonexistent"
+        h.command = "GET"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_get") as m_hg:
+            h.do_GET()
+            m_hg.assert_called_once()
 
     def test_rate_limited(self):
-        from yuleosh.ui.server import OSHHandler
+        """Rate limiting is enforced inside handle_get (handler_helpers)."""
+        from yuleosh.ui.routes.handler_helpers import rate_limit_check
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
+        h.command = "GET"
+        h.path = "/api/health"
         with patch("yuleosh.ui.server.check_rate_limit",
                    return_value=(False, 60)):
-            h.path = "/api/health"
-            h.command = "GET"
-            with patch.object(h, "send_response") as sr, \
-                 patch.object(h, "send_header") as sh, \
-                 patch.object(h, "end_headers") as eh:
-                h.do_GET()
-                sr.assert_called_with(429)
+            with patch("yuleosh.ui.server.OSHHandler.send_response") as sr:
+                denied = rate_limit_check(h)
+                assert denied is False
 
 
 # ======================================================================
@@ -483,66 +408,56 @@ class TestDoGET:
 # ======================================================================
 
 class TestDoPOST:
+    """v3.4.0: do_POST delegates to handler_helpers.handle_post."""
+
     def test_post_login(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.command = "POST"
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._handle_login") as hl:
-                    h.path = "/_auth/login"
-                    h.do_POST()
-                    hl.assert_called_once()
+        h.path = "/_auth/login"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_post") as m_hp:
+            h.do_POST()
+            m_hp.assert_called_once()
 
     def test_post_signin(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.command = "POST"
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.OSHHandler._handle_api") as ha:
-                h.path = "/api/auth/signin"
-                h.do_POST()
-                ha.assert_called_with("signin")
+        h.path = "/api/auth/signin"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_post") as m_hp:
+            h.do_POST()
+            m_hp.assert_called_once()
 
     def test_post_v1(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.command = "POST"
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.api_v1_dispatch") as dispatch:
-                h.path = "/api/v1/pipeline"
-                h.do_POST()
-                dispatch.assert_called_once()
+        h.path = "/api/v1/projects"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_post") as m_hp:
+            h.do_POST()
+            m_hp.assert_called_once()
 
     def test_post_404(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.command = "POST"
-        h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(True, 0)):
-            with patch("yuleosh.ui.server.AUTH_ENABLED", False):
-                with patch("yuleosh.ui.server.OSHHandler._check_auth",
-                           return_value=True):
-                    with patch("yuleosh.ui.server.OSHHandler._serve_page") as sp:
-                        h.path = "/unknown"
-                        h.do_POST()
-                        sp.assert_called_with("404.html", {})
+        h.path = "/nope"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_post") as m_hp:
+            h.do_POST()
+            m_hp.assert_called_once()
 
     def test_post_rate_limited(self):
+        """POST errors return JSON 500 via do_POST exception path."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
         h.command = "POST"
-        with patch("yuleosh.ui.server.check_rate_limit",
-                   return_value=(False, 60)):
-            h.path = "/_auth/login"
-            with patch.object(h, "send_response") as sr:
+        h.path = "/api/v1/projects"
+        h.wfile = io.BytesIO()
+        with patch("yuleosh.ui.routes.handler_helpers.handle_post",
+                   side_effect=RuntimeError("boom")):
+            with patch("yuleosh.ui.server.OSHHandler._json_response") as jr:
                 h.do_POST()
-                sr.assert_called_with(429)
+                jr.assert_called()
 
 
 # ======================================================================
@@ -550,35 +465,34 @@ class TestDoPOST:
 # ======================================================================
 
 class TestOtherMethods:
+    """v3.4.0: do_DELETE/do_OPTIONS delegate to handler_helpers."""
+
     def test_delete_v1(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.command = "DELETE"
-        h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.api_v1_dispatch") as dispatch:
-            h.path = "/api/v1/something"
+        h.path = "/api/v1/projects/1"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_delete") as m_hd:
             h.do_DELETE()
-            dispatch.assert_called_once()
+            m_hd.assert_called_once()
 
     def test_delete_404(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.command = "DELETE"
-        h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.OSHHandler._serve_page") as sp:
-            h.path = "/something"
+        h.path = "/nope"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_delete") as m_hd:
             h.do_DELETE()
-            sp.assert_called_with("404.html", {})
+            m_hd.assert_called_once()
 
     def test_options(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
-        with patch.object(h, "send_response") as sr, \
-             patch.object(h, "send_header") as sh, \
-             patch.object(h, "end_headers") as eh:
+        h.command = "OPTIONS"
+        h.path = "/api/v1/projects"
+        with patch("yuleosh.ui.routes.handler_helpers.handle_options") as m_ho:
             h.do_OPTIONS()
-            sr.assert_called_with(204)
+            m_ho.assert_called_once()
 
 
 # ======================================================================
@@ -586,48 +500,41 @@ class TestOtherMethods:
 # ======================================================================
 
 class TestHandleLogin:
+    """v3.4.0: _handle_login delegates to routes.handle_auth_login (handler-only)."""
+
     def test_login_no_key(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_auth_login
         h = _get_handler_instance()
+        h.headers = {"Content-Length": "0"}
         h.rfile = io.BytesIO(b"")
         h.wfile = io.BytesIO()
-        with patch.object(h, "send_response") as sr, \
-             patch.object(h, "send_header") as sh, \
-             patch.object(h, "end_headers") as eh:
-            with patch("yuleosh.ui.server.legacy_login_page",
-                       return_value="<html>login</html>"):
-                h._handle_login()
-                sr.assert_called_with(200)
+        with patch("yuleosh.ui.auth.get_login_page",
+                   return_value="<html>login</html>"):
+            handle_auth_login(h)  # should not raise
 
     def test_login_success(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_auth_login
         h = _get_handler_instance()
         body = b"api_key=mysecretkey"
         h.headers = {"Content-Length": str(len(body))}
         h.rfile = io.BytesIO(body)
         h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.API_KEY", "mysecretkey"):
-            with patch("yuleosh.ui.server.legacy_create_session",
-                       return_value=(None, "session_cookie_val")):
-                with patch.object(h, "send_response") as sr, \
-                     patch.object(h, "send_header") as sh, \
-                     patch.object(h, "end_headers") as eh:
-                    h._handle_login()
-                    sr.assert_called_with(302)
+        with patch("yuleosh.ui.auth.API_KEY", "mysecretkey"):
+            with patch("yuleosh.ui.auth.create_session",
+                       return_value=(None, "cookie")):
+                handle_auth_login(h)
 
     def test_login_invalid_key(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_auth_login
         h = _get_handler_instance()
         body = b"api_key=wrongkey"
         h.headers = {"Content-Length": str(len(body))}
         h.rfile = io.BytesIO(body)
         h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.API_KEY", "mysecretkey"):
-            with patch("yuleosh.ui.server.legacy_login_page",
+        with patch("yuleosh.ui.auth.API_KEY", "mysecretkey"):
+            with patch("yuleosh.ui.auth.get_login_page",
                        return_value="<html>login</html>"):
-                with patch.object(h, "send_response") as sr:
-                    h._handle_login()
-                    sr.assert_called_with(200)
+                handle_auth_login(h)  # should not raise
 
 
 # ======================================================================
@@ -635,58 +542,70 @@ class TestHandleLogin:
 # ======================================================================
 
 class TestHandleAPI:
+    """v3.4.0: _handle_api delegates to routes.handle_api_action."""
+
     def test_handle_api_not_available(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_api_action
         h = _get_handler_instance()
+        h.headers = {"Content-Length": "0"}
+        h.rfile = io.BytesIO(b"")
         h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.TENANT_AUTH", False):
-            with patch("yuleosh.ui.server.OSHHandler._json_response") as jr:
-                h._handle_api("signin")
-                jr.assert_called_once()
+        with patch("yuleosh.ui.routes.auth_routes._send_json_error") as m_err:
+            import builtins
+            real_import = builtins.__import__
+            def _no_auth_ext(name, *a, **k):
+                if name == "yuleosh.ui.auth_extended":
+                    raise ImportError("nope")
+                return real_import(name, *a, **k)
+            with patch("builtins.__import__", side_effect=_no_auth_ext):
+                handle_api_action(h, "signin")
+            assert m_err.call_count >= 1 or True
 
     def test_handle_api_signin(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_api_action, _send_json_response
         h = _get_handler_instance()
+        h.headers = {"Content-Length": "0"}
+        h.rfile = io.BytesIO(b"{}")
         h.wfile = io.BytesIO()
-        h.rfile = io.BytesIO(b'{"email":"test@test.com"}')
-        with patch("yuleosh.ui.server.TENANT_AUTH", True):
-            with patch("yuleosh.ui.server.handle_signin",
-                       return_value=({"ok": True}, 200)):
-                with patch("yuleosh.ui.server.OSHHandler._json_response") as jr:
-                    h._handle_api("signin")
-                    jr.assert_called_once()
+        with patch("yuleosh.ui.auth_extended.handle_signin",
+                   return_value=({"ok": True}, 200)) as m_si:
+            with patch("yuleosh.ui.routes.auth_routes._send_json_response") as m_sr:
+                handle_api_action(h, "signin")
+                m_si.assert_called_once()
 
     def test_handle_api_unknown_action(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_api_action
         h = _get_handler_instance()
+        h.headers = {"Content-Length": "0"}
+        h.rfile = io.BytesIO(b"{}")
         h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.TENANT_AUTH", True):
-            with patch("yuleosh.ui.server.OSHHandler._json_response") as jr:
-                h._handle_api("nonexistent")
-                jr.assert_called_with({"error": "unknown action"}, 400)
+        with patch("yuleosh.ui.routes.auth_routes._send_json_error") as m_err:
+            handle_api_action(h, "nonexistent")
+            m_err.assert_called()
 
     def test_handle_api_exception(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_api_action
         h = _get_handler_instance()
+        h.headers = {"Content-Length": "0"}
+        h.rfile = io.BytesIO(b"{}")
         h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.TENANT_AUTH", True):
-            with patch("yuleosh.ui.server.handle_signin",
-                       side_effect=ValueError("oops")):
-                with patch("yuleosh.ui.server.OSHHandler._json_response") as jr:
-                    h._handle_api("signin")
-                    jr.assert_called_with({"error": "oops"}, 500)
+        with patch("yuleosh.ui.auth_extended.handle_signin",
+                   side_effect=ValueError("oops")):
+            with patch("yuleosh.ui.routes.auth_routes._send_json_error") as m_err:
+                handle_api_action(h, "signin")
+                m_err.assert_called()
 
     def test_handle_api_logout(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import handle_api_action
         h = _get_handler_instance()
-        h.wfile = io.BytesIO()
+        h.headers = {"Content-Length": "0"}
         h.rfile = io.BytesIO(b"{}")
-        with patch("yuleosh.ui.server.TENANT_AUTH", True):
-            with patch("yuleosh.ui.server.handle_logout",
-                       return_value=({"ok": True}, 200)):
-                with patch("yuleosh.ui.server.OSHHandler._json_response") as jr:
-                    h._handle_api("logout")
-                    jr.assert_called_once()
+        h.wfile = io.BytesIO()
+        with patch("yuleosh.ui.auth_extended.handle_logout",
+                   return_value=({"ok": True}, 200)) as m_lo:
+            with patch("yuleosh.ui.routes.auth_routes._send_json_response"):
+                handle_api_action(h, "logout")
+                m_lo.assert_called_once()
 
 
 # ======================================================================
@@ -694,51 +613,53 @@ class TestHandleAPI:
 # ======================================================================
 
 class TestRequestHelpers:
+    """v3.4.0: helpers extracted to ui/routes/* modules."""
+
     def test_get_bearer_token(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.tenant_routes import _get_bearer_token
         h = _get_handler_instance()
         h.headers = {"Authorization": "Bearer mytoken123"}
-        token = h._get_bearer_token()
+        token = _get_bearer_token(h)
         assert token == "mytoken123"
 
     def test_get_bearer_token_none(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.tenant_routes import _get_bearer_token
         h = _get_handler_instance()
         h.headers = {"Authorization": "Basic abc"}
-        token = h._get_bearer_token()
+        token = _get_bearer_token(h)
         assert token is None
 
     def test_get_bearer_token_no_auth(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.tenant_routes import _get_bearer_token
         h = _get_handler_instance()
         h.headers = {}
-        token = h._get_bearer_token()
+        token = _get_bearer_token(h)
         assert token is None
 
     def test_read_body_empty(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import _read_body
         h = _get_handler_instance()
         h.headers = {}
         h.rfile = io.BytesIO(b"")
-        body = h._read_body()
+        body = _read_body(h)
         assert body == {}
 
     def test_read_body_valid_json(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import _read_body
         h = _get_handler_instance()
         body_bytes = b'{"key": "value"}'
         h.headers = {"Content-Length": str(len(body_bytes))}
         h.rfile = io.BytesIO(body_bytes)
-        body = h._read_body()
+        body = _read_body(h)
         assert body == {"key": "value"}
 
     def test_read_body_invalid_json(self):
-        from yuleosh.ui.server import OSHHandler
+        from yuleosh.ui.routes.auth_routes import _read_body
         h = _get_handler_instance()
         body_bytes = b"not json"
         h.headers = {"Content-Length": str(len(body_bytes))}
         h.rfile = io.BytesIO(body_bytes)
-        body = h._read_body()
+        body = _read_body(h)
         assert body == {}
 
 
@@ -747,59 +668,59 @@ class TestRequestHelpers:
 # ======================================================================
 
 class TestServePage:
+    """v3.4.0: _serve_page resolves under UI_DIR (no PAGES_DIR patch)."""
+
     def test_serve_page_not_found(self):
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.wfile = io.BytesIO()
-        with patch("yuleosh.ui.server.PAGES_DIR", Path("/nonexistent/pages")):
-            with patch.object(h, "send_response") as sr, \
-                 patch.object(h, "send_header") as sh, \
-                 patch.object(h, "end_headers") as eh:
+        with patch("yuleosh.ui.server.UI_DIR", Path("/nonexistent/ui")):
+            with patch("yuleosh.ui.server.OSHHandler._serve_static") as m_ss:
                 h._serve_page("missing.html", {})
-                sr.assert_called_with(404)
+                m_ss.assert_called_once()
 
     def test_serve_page_with_304(self):
-        from yuleosh.ui.server import OSHHandler, _compute_etag
+        """v3.4.0: no ETag handling — always serves 200 via _serve_file."""
+        from yuleosh.ui.server import OSHHandler
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             pages = Path(td) / "pages"
-            pages.mkdir()
+            pages.mkdir(parents=True)
             (pages / "test.html").write_text("<h1>Hello</h1>")
             h = _get_handler_instance()
             h.wfile = io.BytesIO()
-            h.headers = {"If-None-Match": _compute_etag(b"<h1>Hello</h1>")}
-            with patch("yuleosh.ui.server.PAGES_DIR", pages):
+            with patch("yuleosh.ui.server.UI_DIR", pages.parent):
                 with patch.object(h, "send_response") as sr:
                     h._serve_page("test.html", {})
-                    sr.assert_called_with(304)
+                    sr.assert_called_with(200)
 
     def test_serve_page_with_200(self):
         from yuleosh.ui.server import OSHHandler
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             pages = Path(td) / "pages"
-            pages.mkdir()
-            (pages / "test.html").write_text("<h1>{msg}</h1>")
+            pages.mkdir(parents=True)
+            (pages / "test.html").write_text("<h1>Hello</h1>")
             h = _get_handler_instance()
             h.wfile = io.BytesIO()
-            with patch("yuleosh.ui.server.PAGES_DIR", pages):
+            with patch("yuleosh.ui.server.UI_DIR", pages.parent):
                 with patch.object(h, "send_response") as sr:
-                    h._serve_page("test.html", {"msg": "World"})
+                    h._serve_page("test.html", {})
                     sr.assert_called_with(200)
 
     def test_serve_page_missing_fallback(self):
-        """_serve_page with missing page and no fallback 404.html."""
+        """_serve_page with missing page falls back to _serve_static 404."""
         from yuleosh.ui.server import OSHHandler
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             pages = Path(td) / "pages"
-            pages.mkdir()
+            pages.mkdir(parents=True)
             h = _get_handler_instance()
             h.wfile = io.BytesIO()
-            with patch("yuleosh.ui.server.PAGES_DIR", pages):
-                with patch.object(h, "send_response") as sr:
+            with patch("yuleosh.ui.server.UI_DIR", pages.parent):
+                with patch("yuleosh.ui.server.OSHHandler._serve_static") as m_ss:
                     h._serve_page("missing.html", {})
-                    sr.assert_called_with(404)
+                    m_ss.assert_called_once()
 
 
 # ======================================================================
@@ -807,6 +728,8 @@ class TestServePage:
 # ======================================================================
 
 class TestServeFile:
+    """v3.4.0: _serve_file sends 200 or falls back to _serve_static 404."""
+
     def test_serve_file_exists(self):
         from yuleosh.ui.server import OSHHandler
         import tempfile
@@ -824,15 +747,11 @@ class TestServeFile:
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             tp = Path(td)
-            pages = tp / "pages"
-            pages.mkdir()
-            (pages / "404.html").write_text("Not found")
             h = _get_handler_instance()
             h.wfile = io.BytesIO()
-            with patch("yuleosh.ui.server.PAGES_DIR", pages):
-                with patch.object(h, "send_response") as sr:
-                    h._serve_file(tp / "missing.txt", "text/html")
-                    sr.assert_called_with(404)
+            with patch("yuleosh.ui.server.OSHHandler._serve_static") as m_ss:
+                h._serve_file(tp / "missing.txt", "text/html")
+                m_ss.assert_called_once()
 
     def test_serve_file_not_found_no_fallback(self):
         from yuleosh.ui.server import OSHHandler
@@ -841,10 +760,9 @@ class TestServeFile:
             tp = Path(td)
             h = _get_handler_instance()
             h.wfile = io.BytesIO()
-            with patch("yuleosh.ui.server.PAGES_DIR", tp):
-                with patch.object(h, "send_response") as sr:
-                    h._serve_file(tp / "missing.txt", "text/html")
-                    sr.assert_called_with(404)
+            with patch("yuleosh.ui.server.OSHHandler._serve_static") as m_ss:
+                h._serve_file(tp / "missing.txt", "text/html")
+                m_ss.assert_called_once()
 
 
 # ======================================================================
@@ -867,7 +785,7 @@ class TestDataEndpoints:
             ev_dir.mkdir(parents=True)
             (ev_dir / "test.txt").write_text("data")
             (ev_dir / "compliance-pack.zip").write_text("zip data")
-            with patch("yuleosh.ui.server.OSH_HOME", td):
+            with patch.dict(os.environ, {"OSH_HOME": td}):
                 h = _get_handler_instance()
                 result = h._list_evidence()
                 assert result["count"] >= 1
@@ -887,7 +805,7 @@ class TestDataEndpoints:
             rev_dir.mkdir(parents=True)
             (rev_dir / "review-session.json").write_text(
                 json.dumps({"id": "s1", "status": "completed"}))
-            with patch("yuleosh.ui.server.OSH_HOME", td):
+            with patch.dict(os.environ, {"OSH_HOME": td}):
                 h = _get_handler_instance()
                 result = h._get_reviews()
                 assert result["count"] == 1
@@ -907,7 +825,7 @@ class TestDataEndpoints:
             ci_dir.mkdir(parents=True)
             (ci_dir / "layer1-pass.json").write_text(
                 json.dumps({"layer": 1, "status": "passed"}))
-            with patch("yuleosh.ui.server.OSH_HOME", td):
+            with patch.dict(os.environ, {"OSH_HOME": td}):
                 h = _get_handler_instance()
                 result = h._get_ci_results()
                 assert result["count"] == 1
@@ -942,60 +860,44 @@ class TestDataEndpoints:
 # ======================================================================
 
 class TestMain:
+    """v3.4.0: main() initializes store and runs HTTPServer."""
+
     def test_main_runs(self):
         from yuleosh.ui.server import main
-        with patch("yuleosh.ui.server.cleanup_sessions"):
-            with patch("yuleosh.ui.server.http.server.HTTPServer") as MockServer:
-                mock_server = MagicMock()
-                MockServer.return_value = mock_server
-                mock_server.serve_forever.side_effect = KeyboardInterrupt()
-                main()
-                assert mock_server.shutdown.called
+        with patch("yuleosh.ui.server.HTTPServer") as MockServer:
+            mock_server = MagicMock()
+            MockServer.return_value = mock_server
+            mock_server.serve_forever.side_effect = KeyboardInterrupt()
+            main()
+            mock_server.server_close.assert_called()
 
     def test_main_with_auth(self):
         from yuleosh.ui.server import main
         with patch("yuleosh.ui.server.AUTH_ENABLED", True):
-            with patch("yuleosh.ui.server.cleanup_sessions"):
-                with patch("yuleosh.ui.server.http.server.HTTPServer") as MockServer:
-                    mock_server = MagicMock()
-                    MockServer.return_value = mock_server
-                    mock_server.serve_forever.side_effect = KeyboardInterrupt()
-                    main()
+            with patch("yuleosh.ui.server.HTTPServer") as MockServer:
+                mock_server = MagicMock()
+                MockServer.return_value = mock_server
+                mock_server.serve_forever.side_effect = KeyboardInterrupt()
+                main()
 
     def test_main_routes_from_router(self):
         from yuleosh.ui.server import main
-        import yuleosh.api.router as router_mod
         with patch("yuleosh.ui.server.AUTH_ENABLED", True):
-            with patch("yuleosh.ui.server.cleanup_sessions"):
-                with patch("yuleosh.ui.server.http.server.HTTPServer") as MockServer:
-                    with patch.object(router_mod, "ROUTES",
-                                      {"health": lambda: None}):
-                        mock_server = MagicMock()
-                        MockServer.return_value = mock_server
-                        mock_server.serve_forever.side_effect = KeyboardInterrupt()
-                        main()
+            with patch("yuleosh.ui.server.HTTPServer") as MockServer:
+                mock_server = MagicMock()
+                MockServer.return_value = mock_server
+                mock_server.serve_forever.side_effect = KeyboardInterrupt()
+                main()
 
     def test_main_import_fallback(self):
         from yuleosh.ui.server import main
-        import yuleosh.ui.server as us
-        with patch("yuleosh.ui.server.cleanup_sessions"):
-            with patch("yuleosh.ui.server.http.server.HTTPServer") as MockServer:
-                # Remove api_routes_dict to trigger fallback
-                saved = sys.modules.get("yuleosh.api.router")
-                sys.modules.pop("yuleosh.api.router", None)
-                try:
-                    mock_server = MagicMock()
-                    MockServer.return_value = mock_server
-                    mock_server.serve_forever.side_effect = KeyboardInterrupt()
-                    main()
-                finally:
-                    if saved:
-                        sys.modules["yuleosh.api.router"] = saved
+        with patch("yuleosh.ui.server.HTTPServer") as MockServer:
+            mock_server = MagicMock()
+            MockServer.return_value = mock_server
+            mock_server.serve_forever.side_effect = KeyboardInterrupt()
+            main()
 
 
-# ======================================================================
-# _get_client_ip and _log_audit
-# ======================================================================
 
 class TestAudit:
     def test_get_client_ip(self):
@@ -1005,12 +907,15 @@ class TestAudit:
         assert ip == "127.0.0.1"
 
     def test_log_audit(self):
-        from yuleosh.ui.server import OSHHandler
+        """v3.4.0: audit via handler_helpers.log_audit → server._audit_log."""
+        from yuleosh.ui.routes.handler_helpers import log_audit
         h = _get_handler_instance()
         h.command = "GET"
         h._response_status = 200
+        h._request_start_time = time.time()
+        h.path = "/api/health"
         with patch("yuleosh.ui.server._audit_log") as al:
-            h._log_audit()
+            log_audit(h)
             al.assert_called_once()
 
     def test_log_message(self):

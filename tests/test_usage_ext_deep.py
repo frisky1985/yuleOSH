@@ -139,14 +139,14 @@ class TestCheckTierLimit:
         assert "limit reached" in result["message"]
 
     def test_enterprise_unlimited(self, mock_store):
-        """GIVEN enterprise tier WHEN checking THEN always allowed."""
+        """GIVEN enterprise tier WHEN checking THEN high limits allowed."""
         mock_store.get_organization_by_id.return_value = {
             "id": 1, "name": "Ent", "slug": "ent",
             "tier": "enterprise", "created_at": datetime.now().isoformat(),
         }
         mock_store.get_monthly_usage.return_value = {
-            "project_count": 99999, "pipeline_runs": 99999,
-            "llm_tokens": 99999, "storage_mb": 99999,
+            "project_count": 500, "pipeline_runs": 50000,
+            "llm_tokens": 50000000, "storage_mb": 5000,
         }
         result = check_tier_limit(mock_store, 1, "projects")
         assert result["allowed"] is True
@@ -207,10 +207,11 @@ class TestHandleStripeWebhook:
 
     def test_verification_failed(self):
         """GIVEN invalid webhook signature WHEN processing THEN error."""
+        mock_stripe_mod = mock.MagicMock()
         with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
             with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_xxx"):
-                with mock.patch("yuleosh.usage.stripe_gateway.stripe.Webhook.construct_event",
-                               side_effect=Exception("Bad signature")):
+                with mock.patch.dict("sys.modules", {"stripe": mock_stripe_mod}):
+                    mock_stripe_mod.Webhook.construct_event.side_effect = Exception("Bad signature")
                     result = handle_stripe_webhook(b"{}", "bad_sig")
                     assert result["status"] == "error"
 
@@ -230,12 +231,13 @@ class TestHandleStripeWebhook:
         mock_event = mock.MagicMock()
         mock_event.__getitem__.side_effect = mock_stripe_event.__getitem__
         mock_event.get.side_effect = mock_stripe_event.get
+        mock_stripe_mod = mock.MagicMock()
 
         with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
             with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_xxx"):
-                with mock.patch("yuleosh.usage.stripe_gateway.stripe.Webhook.construct_event",
-                               return_value=mock_stripe_event):
-                    with mock.patch("yuleosh.usage.stripe_gateway.Store") as MockStore:
+                with mock.patch.dict("sys.modules", {"stripe": mock_stripe_mod}):
+                    mock_stripe_mod.Webhook.construct_event.return_value = mock_stripe_event
+                    with mock.patch("yuleosh.store.Store") as MockStore:
                         mock_store = mock.MagicMock()
                         MockStore.return_value = mock_store
                         result = handle_stripe_webhook(b"{}", "sig")
@@ -247,6 +249,7 @@ class TestHandleStripeWebhook:
 
     def test_customer_subscription_updated(self):
         """GIVEN customer.subscription.updated event WHEN processing THEN updates."""
+        mock_stripe_mod = mock.MagicMock()
         mock_stripe_event = {
             "type": "customer.subscription.updated",
             "data": {
@@ -259,9 +262,9 @@ class TestHandleStripeWebhook:
         }
         with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
             with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_xxx"):
-                with mock.patch("yuleosh.usage.stripe_gateway.stripe.Webhook.construct_event",
-                               return_value=mock_stripe_event):
-                    with mock.patch("yuleosh.usage.stripe_gateway.Store") as MockStore:
+                with mock.patch.dict("sys.modules", {"stripe": mock_stripe_mod}):
+                    mock_stripe_mod.Webhook.construct_event.return_value = mock_stripe_event
+                    with mock.patch("yuleosh.store.Store") as MockStore:
                         mock_store = mock.MagicMock()
                         mock_store.get_org_by_stripe_subscription.return_value = {"id": 1}
                         MockStore.return_value = mock_store
@@ -270,6 +273,7 @@ class TestHandleStripeWebhook:
 
     def test_subscription_deleted(self):
         """GIVEN customer.subscription.deleted event WHEN processing THEN downgrades."""
+        mock_stripe_mod = mock.MagicMock()
         mock_stripe_event = {
             "type": "customer.subscription.deleted",
             "data": {
@@ -278,9 +282,9 @@ class TestHandleStripeWebhook:
         }
         with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
             with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_xxx"):
-                with mock.patch("yuleosh.usage.stripe_gateway.stripe.Webhook.construct_event",
-                               return_value=mock_stripe_event):
-                    with mock.patch("yuleosh.usage.stripe_gateway.Store") as MockStore:
+                with mock.patch.dict("sys.modules", {"stripe": mock_stripe_mod}):
+                    mock_stripe_mod.Webhook.construct_event.return_value = mock_stripe_event
+                    with mock.patch("yuleosh.store.Store") as MockStore:
                         mock_store = mock.MagicMock()
                         mock_store.get_org_by_stripe_subscription.return_value = {"id": 1}
                         MockStore.return_value = mock_store
@@ -290,6 +294,7 @@ class TestHandleStripeWebhook:
 
     def test_canceled_subscription_downgrades(self):
         """GIVEN subscription updated to canceled WHEN processing THEN downgrades tier."""
+        mock_stripe_mod = mock.MagicMock()
         mock_stripe_event = {
             "type": "customer.subscription.updated",
             "data": {
@@ -302,9 +307,9 @@ class TestHandleStripeWebhook:
         }
         with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
             with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_WEBHOOK_SECRET", "whsec_xxx"):
-                with mock.patch("yuleosh.usage.stripe_gateway.stripe.Webhook.construct_event",
-                               return_value=mock_stripe_event):
-                    with mock.patch("yuleosh.usage.stripe_gateway.Store") as MockStore:
+                with mock.patch.dict("sys.modules", {"stripe": mock_stripe_mod}):
+                    mock_stripe_mod.Webhook.construct_event.return_value = mock_stripe_event
+                    with mock.patch("yuleosh.store.Store") as MockStore:
                         mock_store = mock.MagicMock()
                         mock_store.get_org_by_stripe_subscription.return_value = {"id": 1}
                         MockStore.return_value = mock_store
@@ -319,17 +324,23 @@ class TestCreateCheckoutSession:
     def test_not_configured(self):
         """GIVEN Stripe not configured WHEN creating session THEN returns error."""
         with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", ""):
-            result = create_checkout_session(mock.MagicMock(), 1, "pro")
+            result = create_checkout_session(1, "pro", "x@y.com", "test-org")
             assert "error" in result
 
     def test_stripe_not_installed(self):
         """GIVEN stripe package not available WHEN creating session THEN returns error."""
+        import builtins
+        real_import = builtins.__import__
+
+        def _no_stripe(name, *args, **kwargs):
+            if name == "stripe":
+                raise ImportError("no stripe")
+            return real_import(name, *args, **kwargs)
+
         with mock.patch("yuleosh.usage.stripe_gateway.STRIPE_SECRET_KEY", "sk_test_xxx"):
-            with mock.patch.dict("sys.modules", {"stripe": None}):
-                with mock.patch("yuleosh.usage.stripe_gateway.import_stripe",
-                               side_effect=ImportError("no stripe")):
-                    result = create_checkout_session(mock.MagicMock(), 1, "pro")
-                    assert "error" in result
+            with mock.patch("builtins.__import__", side_effect=_no_stripe):
+                result = create_checkout_session(1, "pro", "x@y.com", "test-org")
+                assert "error" in result
 
 
 # ── is_stripe_configured ─────────────────────────────────────────────
