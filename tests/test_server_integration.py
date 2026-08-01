@@ -62,11 +62,12 @@ class TestServerIntegration:
         assert status == 200
         assert data["status"] == "ok"
 
-    @pytest.mark.skip(reason="v3.4.1: server auth flow refactored to password-based "
-                          "signin (auth_extended); v1 email-only flow + live-server "
-                          "assertions are covered by test_ui_server_deep/auth routes")
     def test_signin_new_user(self):
-        """GIVEN new email WHEN signin THEN needs_org response."""
+        """GIVEN new email WHEN signin THEN needs_org response.
+
+        v3.4.1: auth flow is password-based, but the email-only first-time
+        path is kept for backward compat and returns needs_org=True (200).
+        """
         data, status = self._api("/api/auth/signin", method="POST",
                                   body={"email": "itest@v1.com"})
         assert status == 200
@@ -75,11 +76,13 @@ class TestServerIntegration:
     def test_unauthorized_session(self):
         """GIVEN invalid token WHEN session info THEN 401."""
         data, status = self._api("/api/auth/session", token="bad-token")
-        assert status in (401, 500)
+        assert status == 401
 
     def test_usage_unauthorized(self):
-        """GIVEN no token WHEN usage API THEN 401."""
-        # v3.4.1: /api/v1/usage is served via tenant/{slug}/usage — a bare
-        # /api/v1/usage returns an HTML page (200/404) or 401 with auth.
+        """GIVEN no token WHEN usage API THEN 401 or 200.
+
+        v3.4.1: /api/v1/usage is served via tenant/{slug}/usage — a bare
+        /api/v1/usage returns 200 (HTML page) or 401 (auth enforced).
+        """
         data, status = self._api("/api/v1/usage")
-        assert status in (200, 401, 404)
+        assert status in (200, 401)
