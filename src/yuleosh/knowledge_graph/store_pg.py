@@ -817,7 +817,11 @@ class KGStorePG:
                     for k, v in sorted(test_map.items())
                 ]
 
-        all_reqs = direct_reqs + [r for r in indirect_reqs if r not in direct_reqs]
+        # Fix (v3.4.2b): dedup by req_id — comparing full dicts (incl. the
+        # 'confidence' field) failed to drop indirect duplicates.
+        direct_ids = {r["req_id"] for r in direct_reqs}
+        all_reqs = direct_reqs + [r for r in indirect_reqs
+                                  if r["req_id"] not in direct_ids]
         total_tests = sum(len(t["functions"]) for t in affected_tests)
 
         return {
