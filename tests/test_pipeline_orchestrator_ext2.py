@@ -28,14 +28,18 @@ def test_status_pipeline_no_sessions(mock_path_cls):
     """status_pipeline with no sessions."""
     mock_base = MagicMock()
     mock_path_cls.return_value = mock_base
-    mock_base.__truediv__.return_value.__truediv__.return_value = MagicMock()
-    mock_base.__truediv__.return_value.__truediv__.return_value.exists.return_value = False
+    # base / .osh / sessions / <name> — session dir does not exist
+    sessions_dir = mock_base.__truediv__.return_value.__truediv__.return_value
+    sdir = sessions_dir.__truediv__.return_value
+    sdir.exists.return_value = False
+    sessions_dir.exists.return_value = False
 
     status_pipeline("session-1")  # should not raise
 
 
+@patch("builtins.open")
 @patch("yuleosh.pipeline.orchestrator.Path")
-def test_status_pipeline_list_all(mock_path_cls):
+def test_status_pipeline_list_all(mock_path_cls, mock_open):
     """status_pipeline lists all sessions."""
     mock_base = MagicMock()
     mock_path_cls.return_value = mock_base
@@ -43,17 +47,20 @@ def test_status_pipeline_list_all(mock_path_cls):
     mock_base.__truediv__.return_value = mock_osh
     mock_sessions = MagicMock()
     mock_osh.__truediv__.return_value = mock_sessions
+    mock_sessions.exists.return_value = True
+    mock_sessions.is_dir.return_value = True
 
     mock_dir = MagicMock()
     mock_dir.name = "s1"
     mock_dir.is_dir.return_value = True
     mock_sessions.iterdir.return_value = [mock_dir]
+    mock_sessions.__truediv__.return_value = mock_dir
 
-    mock_sfile = MagicMock()
-    mock_sfile.exists.return_value = True
-    mock_sfile.read_text.return_value = (
+    mock_fh = MagicMock()
+    mock_fh.__enter__.return_value.read.return_value = (
         '{"status": "completed", "steps": [{"status": "completed"}]}'
     )
-    mock_dir.__truediv__.return_value = mock_sfile
+    mock_open.return_value = mock_fh
+    mock_dir.__truediv__.return_value = MagicMock()
 
     status_pipeline(None)
