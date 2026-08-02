@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 from . import json_ok, json_error
+from ._errors import internal_error
 from .middleware import require_auth
 from yuleosh.api.cors import get_cors_origin
 
@@ -26,10 +27,22 @@ def handle_evidence(method: str, path_tail: str, body: dict, query: dict, handle
 
 
 def _generate_evidence(body: dict) -> tuple[dict, int]:
-    """POST /api/v1/evidence/generate — run evidence generation."""
-    project_dir = body.get("project_dir") or os.environ.get(
+    """POST /api/v1/evidence/generate — run evidence generation.
+
+    SECURITY (SEC-C1): project_dir must resolve inside OSH_HOME — same
+    guard as the pipeline trigger.  Otherwise an authenticated user could
+    run the pack script with an arbitrary cwd (e.g. /etc) and probe/write
+    anywhere on the server.
+    """
+    from . import OSH_HOME as _api_osh_home
+    raw_dir = body.get("project_dir") or os.environ.get(
         "OSH_HOME", str(Path(__file__).resolve().parent.parent.parent)
     )
+    try:
+        project_dir = str(Path(raw_dir).expanduser().resolve())
+        Path(project_dir).relative_to(Path(_api_osh_home).resolve())
+    except (ValueError, TypeError, OSError):
+        return json_error("project_dir must be inside OSH_HOME", 403)
 
     try:
         result = subprocess.run(
@@ -46,7 +59,8 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
     except subprocess.TimeoutExpired:
         return json_error("Evidence generation timed out", 504)
     except (OSError, subprocess.CalledProcessError) as e:
-        return json_error("Evidence generation error: " + str(e), 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("evidence", e)
 
 
 def _list_evidence_files() -> tuple[dict, int]:
