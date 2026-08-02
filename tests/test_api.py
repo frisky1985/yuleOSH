@@ -840,17 +840,18 @@ class TestEvidence:
         assert result["ok"] is False
         assert status == 404
 
-    def test_generate_success(self):
+    def test_generate_success(self, osh_home):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="Pack OK", stderr="")
             from yuleosh.api.evidence import handle_evidence
+            # SEC-C1: project_dir must be inside OSH_HOME
             result, status = handle_evidence("POST", "generate",
-                                             {"project_dir": "/tmp/test-ev"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
+                                             {"project_dir": osh_home}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert status == 200
             assert result["ok"] is True
             data = result["data"]
             assert data["status"] == "completed"
-            assert data["project_dir"] == "/tmp/test-ev"
+            assert data["project_dir"] == str(Path(osh_home).resolve())
 
     def test_generate_timeout(self):
         import subprocess
@@ -869,13 +870,13 @@ class TestEvidence:
             assert result["ok"] is False
             assert status == 500
 
-    def test_generate_called_process_error(self):
+    def test_generate_called_process_error(self, osh_home):
         import subprocess
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(1, "cmd")
             from yuleosh.api.evidence import handle_evidence
             result, status = handle_evidence("POST", "generate",
-                                             {"project_dir": "/tmp"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
+                                             {"project_dir": osh_home}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
             assert result["ok"] is False
             assert status == 500
 
