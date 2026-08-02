@@ -70,6 +70,26 @@ from yuleosh.store import Store
 AUTH_ENABLED = os.environ.get("YULEOSH_AUTH_DISABLED", "").lower() not in (
     "true", "1", "yes"
 )
+
+# Public paths that never require auth (SEC-C3 whitelist):
+#   - health/status + health dashboard page
+#   - login / registration / tenant onboarding pages (the tenant flow
+#     keeps its token in localStorage — no cookie — so these pages must
+#     be reachable without credentials)
+#   - tenant auth endpoints (self-authenticating via Bearer JWT)
+#   - frontend app pages (static HTML shells; all DATA comes from the
+#     gated /api/* endpoints)
+_PUBLIC_PATHS = frozenset({
+    "/api/health", "/api/status", "/health",
+    "/login", "/register", "/welcome", "/org/setup", "/project/select",
+    "/api/auth/signin", "/api/auth/session", "/api/auth/logout",
+    "/api/org/create", "/api/org/info",
+    "/api/project/create", "/api/project/list",
+    "/", "/index.html", "/dashboard", "/kanban", "/audit-dashboard",
+    "/billing", "/pipeline-flow", "/apikeys", "/onboarding", "/demo",
+    "/pricing", "/en", "/en/index.html", "/en/pricing",
+})
+_PUBLIC_PREFIXES = ("/static/", "/assets/", "/_next/")
 OSH_HOME = os.environ.get(
     "OSH_HOME",
     str(Path(os.environ.get("HOME", ".")) / ".openclaw" / "workspace" / "tasks" / "yuleOSH"),
@@ -270,9 +290,18 @@ class OSHHandler(BaseHTTPRequestHandler):
         P1-3 (W-06): previously returned True unconditionally, leaving every
         legacy (non-/api/v1/) endpoint unauthenticated.  Now delegates to the
         real implementation (ui.auth.is_authenticated — API key compare_digest
-        + signed session cookie).
+        + signed session cookie + tenant JWT bearer).
+
+        SEC-C3: AUTH_ENABLED is fail-closed by default (only
+        YULEOSH_AUTH_DISABLED=1 turns it off).  A whitelist of public
+        paths (health/status, login & tenant onboarding pages, tenant auth
+        endpoints, static assets) is served without credentials; every
+        other path — including the legacy /api/* data endpoints — requires
+        a valid API key, session cookie or tenant JWT.
         """
         if not AUTH_ENABLED:
+            return True
+        if self.path in _PUBLIC_PATHS or self.path.startswith(_PUBLIC_PREFIXES):
             return True
         from yuleosh.ui.auth import is_authenticated
         return is_authenticated(self.headers)
