@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 from . import json_ok, json_error
+from ._errors import internal_error
 from .middleware import require_auth
 
 
@@ -51,7 +52,8 @@ def _run_ci_layer(layer: str) -> tuple[dict, int]:
     except subprocess.TimeoutExpired:
         return json_error("CI run timed out after 180s", 504)
     except Exception as e:
-        return json_error(f"CI error: {e}", 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("ci", e)
 
 
 def _list_ci_runs() -> tuple[dict, int]:

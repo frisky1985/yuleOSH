@@ -26,6 +26,7 @@ from yuleosh.usage import (
     TRIAL_DAYS,
 )
 from . import json_ok, json_error
+from ._errors import internal_error
 
 logger = logging.getLogger("yuleosh.api.subscription")
 
@@ -256,8 +257,8 @@ def _handle_sub_cancel(body: dict, handler=None) -> tuple:
     except ImportError:
         return json_error("stripe package not installed. pip install stripe", 500)
     except Exception as e:
-        logger.error("Stripe cancel error: %s", e)
-        return json_error(f"Failed to cancel: {e}", 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("subscription", e)
 
 
 # ---------------------------------------------------------------------------

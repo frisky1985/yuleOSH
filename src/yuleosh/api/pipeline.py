@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 
 from . import json_ok, json_error
+from ._errors import internal_error
 from .middleware import require_auth
 
 # ── Submission throttle (P0): protect the async thread pool from DoS ──
@@ -153,7 +154,8 @@ def _run_pipeline(body: dict) -> tuple[dict, int]:
     except subprocess.TimeoutExpired:
         return json_error("Pipeline timed out after 300s", 504)
     except Exception as e:
-        return json_error(f"Pipeline error: {e}", 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("pipeline", e)
 
 
 def _trigger_pipeline(body: dict) -> tuple[dict, int]:
@@ -219,7 +221,8 @@ def _trigger_pipeline(body: dict) -> tuple[dict, int]:
             "poll_url": f"/api/v1/pipeline/status/{job_id}",
         })
     except Exception as e:
-        return json_error(f"Pipeline trigger failed: {e}", 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("pipeline", e)
 
 
 def _list_pipeline_steps() -> tuple[dict, int]:
