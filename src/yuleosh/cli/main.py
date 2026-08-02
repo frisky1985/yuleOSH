@@ -1863,7 +1863,7 @@ def cmd_swe6_check(args):
     if getattr(args, "report", False):
         # Generate full report
         try:
-            lrt = __import__("yuleosh.alm.traceability", from_list=["generate_lrt"]).generate_lrt(project_dir, str(spec_file))
+            lrt = __import__("yuleosh.alm.traceability", fromlist=["generate_lrt"]).generate_lrt(project_dir, str(spec_file))
             report = {
                 "swe6_check": {
                     "spec_defined": True,

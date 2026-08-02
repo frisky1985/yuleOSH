@@ -27,18 +27,6 @@ def main_module():
     return m
 
 
-_REAL_IMPORT = __import__
-
-
-def _fix_import_kwargs(name, *args, **kwargs):
-    """Translate main.py's invalid ``__import__(..., from_list=...)`` kwarg
-    (real kwarg is ``fromlist``) so the SWE.6 report path is reachable.
-    This is a test-side shim; the main.py typo is tracked separately."""
-    if "from_list" in kwargs:
-        kwargs["fromlist"] = kwargs.pop("from_list")
-    return _REAL_IMPORT(name, *args, **kwargs)
-
-
 @pytest.fixture
 def osh_home(main_module, tmp_path, monkeypatch):
     """Point main_module.OSH_HOME at a temp dir and restore afterwards."""
@@ -510,22 +498,23 @@ class TestSwe6:
         (osh_home / "docs").mkdir()
         (osh_home / "docs" / "swe6-confirmation-spec.md").write_text("# SWE6")
         lrt = {"lrm": {"summary": {"total": 3, "coverage_pct": 66.7}}}
-        with patch("builtins.__import__", side_effect=_fix_import_kwargs):
-            with patch("yuleosh.alm.traceability.generate_lrt", return_value=lrt):
-                with patch("builtins.print"):
-                    main_module.cmd_swe6_check(SimpleNamespace(report=True))
+        # Real product path: main.py's __import__("yuleosh.alm.traceability",
+        # fromlist=["generate_lrt"]) must work natively (regression: the old
+        # ``from_list`` typo made report generation always fail).
+        with patch("yuleosh.alm.traceability.generate_lrt", return_value=lrt):
+            with patch("builtins.print"):
+                main_module.cmd_swe6_check(SimpleNamespace(report=True))
         assert (osh_home / ".yuleosh" / "reports" / "swe6-report.json").exists()
 
     def test_check_report_exception(self, main_module, osh_home):
         (osh_home / "docs").mkdir()
         (osh_home / "docs" / "swe6-confirmation-spec.md").write_text("# SWE6")
-        with patch("builtins.__import__", side_effect=_fix_import_kwargs):
-            with patch("yuleosh.alm.traceability.generate_lrt",
-                       side_effect=RuntimeError("boom")):
-                with patch("builtins.print") as mp:
-                    main_module.cmd_swe6_check(SimpleNamespace(report=True))
-                    out = " ".join(str(c) for c in mp.call_args_list)
-                    assert "boom" in out
+        with patch("yuleosh.alm.traceability.generate_lrt",
+                   side_effect=RuntimeError("boom")):
+            with patch("builtins.print") as mp:
+                main_module.cmd_swe6_check(SimpleNamespace(report=True))
+                out = " ".join(str(c) for c in mp.call_args_list)
+                assert "boom" in out
 
 
 # ═══════════════════════════════════════════════════════════════════════
