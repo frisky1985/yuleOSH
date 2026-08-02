@@ -87,26 +87,38 @@ def _build_host(target_dir: Path) -> bool:
     build_dir = target_dir / "build_host"
     build_dir.mkdir(exist_ok=True)
 
+    def _run(cmd, timeout, label):
+        """Run a build command with an explicit timeout (W-7 / SEC-W6 / Fix 10).
+
+        ``subprocess.run`` kills the child on timeout; the error is surfaced
+        as an explicit failure instead of an infinite hang.
+        """
+        try:
+            r = subprocess.run(cmd, cwd=str(build_dir),
+                               capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            print(f"  {_red('❌')}  {label} 超时 ({timeout}s) — 已终止")
+            return None
+        return r
+
     print(f"\n  {_cyan('ℹ')}  Running cmake (host mode)...")
-    cmake_result = subprocess.run(
-        ["cmake", "-DTARGET=host", ".."],
-        cwd=str(build_dir),
-        capture_output=True, text=True,
-    )
-    if cmake_result.returncode != 0:
-        print(f"  {_red('❌')}  CMake failed:\n{cmake_result.stderr}")
+    cmake_result = _run(["cmake", "-DTARGET=host", ".."], 120, "CMake")
+    if cmake_result is None or cmake_result.returncode != 0:
+        stderr = cmake_result.stderr if cmake_result else ""
+        print(f"  {_red('❌')}  CMake failed:\n{stderr}")
         return False
 
     print(f"  {_green('✅')}  CMake configured")
 
     print(f"  {_cyan('ℹ')}  Running make...")
-    make_result = subprocess.run(
-        ["make", "-j$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)"],
-        cwd=str(build_dir),
-        capture_output=True, text=True, shell=True,
+    # W-7 (SEC-W6 / Fix 10): argv form — no shell=True, no ``$()``
+    # interpolation (shell-injection surface); -j is a plain argv element.
+    make_result = _run(
+        ["make", "-j", str(os.cpu_count() or 4)], 300, "make"
     )
-    if make_result.returncode != 0:
-        print(f"  {_red('❌')}  Build failed:\n{make_result.stderr}")
+    if make_result is None or make_result.returncode != 0:
+        stderr = make_result.stderr if make_result else ""
+        print(f"  {_red('❌')}  Build failed:\n{stderr}")
         return False
 
     print(f"  {_green('✅')}  Build succeeded")
@@ -115,7 +127,11 @@ def _build_host(target_dir: Path) -> bool:
     demo_exe = build_dir / "uart_demo_host"
     if demo_exe.exists():
         print(f"\n  {_bold('━━━ Running UART Demo ━━━')}\n")
-        result = subprocess.run([str(demo_exe)], cwd=str(build_dir))
+        try:
+            result = subprocess.run([str(demo_exe)], cwd=str(build_dir), timeout=120)
+        except subprocess.TimeoutExpired:
+            print(f"  {_red('❌')}  Demo 运行超时 (120s) — 已终止")
+            return False
         print(f"\n  {_green('✅')}  Demo exited with code {result.returncode}")
         return result.returncode == 0
 

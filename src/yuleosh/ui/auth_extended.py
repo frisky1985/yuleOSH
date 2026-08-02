@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import secrets
+import threading
 import time
 from typing import Optional
 
@@ -77,12 +78,74 @@ def _validate_password_strength(password: str) -> list[str]:
 #     message is returned for unknown-user / no-password / wrong-password.
 #   - A per-IP attempt cap bounds how many distinct accounts a single
 #     attacker can lock out (30 attempts / 5 min per IP).
-_SIGNIN_RATE_LIMIT: dict[str, tuple[int, int]] = {}  # email -> (failed_attempts, window_start)
-_SIGNIN_IP_LIMIT: dict[str, tuple[int, int]] = {}  # ip -> (attempts, window_start)
+
+class _ThreadSafeDict:
+    """A dict wrapper that serializes all access with a lock.
+
+    W-2 (COR-W2 / SEC-W2 / Fix 5): the signin rate-limit tables were plain
+    dicts — the read-modify-write in ``_record_failed_attempt`` /
+    ``_check_ip_rate_limit`` raced under concurrent signins (limit bypass)
+    and ``_SIGNIN_IP_LIMIT`` grew without bound.  Same semantics as the
+    ``_ThreadSafeDict`` in ``yuleosh/api/preview.py`` (mirrored here to keep
+    the ui -> api dependency direction clean).
+
+    NOTE: internal read-modify-write helpers use ``._dict`` directly under
+    ``._lock`` — the public accessors re-acquire the same non-reentrant lock
+    and would deadlock (same pattern as preview.py).
+    """
+    def __init__(self):
+        self._dict: dict = {}
+        self._lock = threading.Lock()
+
+    def get(self, key, default=None):
+        with self._lock:
+            return self._dict.get(key, default)
+
+    def clear(self):
+        """Remove all entries (test isolation / state reset)."""
+        with self._lock:
+            self._dict.clear()
+
+    def pop(self, key, default=None):
+        with self._lock:
+            return self._dict.pop(key, default)
+
+    def __getitem__(self, key):
+        with self._lock:
+            return self._dict[key]
+
+    def __setitem__(self, key, value):
+        with self._lock:
+            self._dict[key] = value
+
+    def __delitem__(self, key):
+        with self._lock:
+            del self._dict[key]
+
+    def __contains__(self, key):
+        with self._lock:
+            return key in self._dict
+
+    def __len__(self):
+        with self._lock:
+            return len(self._dict)
+
+    def items(self):
+        with self._lock:
+            return list(self._dict.items())
+
+    def keys(self):
+        with self._lock:
+            return list(self._dict.keys())
+
+
+_SIGNIN_RATE_LIMIT = _ThreadSafeDict()  # email -> (failed_attempts, window_start)
+_SIGNIN_IP_LIMIT = _ThreadSafeDict()  # ip -> (attempts, window_start)
 _MAX_SIGNIN_ATTEMPTS = 10
 _RATE_WINDOW_SECONDS = 300  # 5 minutes
 _MAX_SIGNIN_IP_ATTEMPTS = 30
 _IP_WINDOW_SECONDS = 300  # 5 minutes
+_IP_LIMIT_CLEANUP_THRESHOLD = 2000  # W-2: bounded IP-table growth (was unbounded DoS)
 
 
 def _check_rate_limit(email: str) -> bool:
@@ -94,64 +157,123 @@ def _check_rate_limit(email: str) -> bool:
 
     Process-local only (S-P2-02): does not span workers.
     Stale entries are cleaned up opportunistically.
+
+    W-2: the read is atomic under the container lock (a plain-dict check
+    raced with concurrent records and could let a burst past the cap).
     """
     now = int(time.time())
-    entry = _SIGNIN_RATE_LIMIT.get(email)
-    if entry:
-        attempts, window_start = entry
-        if now - window_start > _RATE_WINDOW_SECONDS:
-            _SIGNIN_RATE_LIMIT.pop(email, None)
-            return False
-        if attempts >= _MAX_SIGNIN_ATTEMPTS:
-            return True
+    with _SIGNIN_RATE_LIMIT._lock:
+        entry = _SIGNIN_RATE_LIMIT._dict.get(email)
+        if entry:
+            attempts, window_start = entry
+            if now - window_start > _RATE_WINDOW_SECONDS:
+                _SIGNIN_RATE_LIMIT._dict.pop(email, None)
+                return False
+            if attempts >= _MAX_SIGNIN_ATTEMPTS:
+                return True
     return False
 
 
 def _record_failed_attempt(email: str) -> None:
-    """Record one FAILED signin attempt for the email (P1-2)."""
+    """Record one FAILED signin attempt for the email (P1-2).
+
+    W-2: the read-modify-write is atomic under the container lock.
+    """
     now = int(time.time())
-    entry = _SIGNIN_RATE_LIMIT.get(email)
-    if entry:
-        attempts, window_start = entry
-        if now - window_start > _RATE_WINDOW_SECONDS:
-            _SIGNIN_RATE_LIMIT[email] = (1, now)
+    with _SIGNIN_RATE_LIMIT._lock:
+        entry = _SIGNIN_RATE_LIMIT._dict.get(email)
+        if entry:
+            attempts, window_start = entry
+            if now - window_start > _RATE_WINDOW_SECONDS:
+                _SIGNIN_RATE_LIMIT._dict[email] = (1, now)
+            else:
+                _SIGNIN_RATE_LIMIT._dict[email] = (attempts + 1, window_start)
         else:
-            _SIGNIN_RATE_LIMIT[email] = (attempts + 1, window_start)
-    else:
-        _SIGNIN_RATE_LIMIT[email] = (1, now)
-        # Opportunistic stale entry cleanup (every ~11th new entry)
-        if len(_SIGNIN_RATE_LIMIT) > 1000 and hash(email) % 11 == 0:
+            _SIGNIN_RATE_LIMIT._dict[email] = (1, now)
+            # Opportunistic stale entry cleanup (every ~11th new entry)
+            if len(_SIGNIN_RATE_LIMIT._dict) > 1000 and hash(email) % 11 == 0:
+                _cleanup_stale_rate_entries()
+
+
+def _check_and_record_failed_attempt(email: str) -> bool:
+    """Atomically check the email budget AND record a failure (W-2).
+
+    MAY-W2.6: the signin failure path uses this combined operation so the
+    check+record read-modify-write is one critical section — N concurrent
+    wrong-password submissions can never push the failed count past
+    ``_MAX_SIGNIN_ATTEMPTS + ε`` (the limit check and the increment cannot
+    interleave).  Returns True when the failure was recorded, False when
+    the email is already blocked (the attempt is refused without counting).
+    """
+    now = int(time.time())
+    with _SIGNIN_RATE_LIMIT._lock:
+        entry = _SIGNIN_RATE_LIMIT._dict.get(email)
+        if entry:
+            attempts, window_start = entry
+            if now - window_start > _RATE_WINDOW_SECONDS:
+                _SIGNIN_RATE_LIMIT._dict[email] = (1, now)
+                return True
+            if attempts >= _MAX_SIGNIN_ATTEMPTS:
+                return False
+            _SIGNIN_RATE_LIMIT._dict[email] = (attempts + 1, window_start)
+            return True
+        _SIGNIN_RATE_LIMIT._dict[email] = (1, now)
+        if len(_SIGNIN_RATE_LIMIT._dict) > 1000 and hash(email) % 11 == 0:
             _cleanup_stale_rate_entries()
+        return True
 
 
 def _check_ip_rate_limit(ip: str) -> bool:
     """Per-IP signin attempt cap (P1-2). Returns True if blocked.
 
     Bounds the number of distinct emails a single source can lock out.
+
+    W-2: read-modify-write atomic under lock; the IP table now gets the
+    same opportunistic cleanup as the email table (>2000 entries) so it can
+    no longer grow without bound.
     """
     if not ip:
         return False
     now = int(time.time())
-    entry = _SIGNIN_IP_LIMIT.get(ip)
-    if entry:
-        attempts, window_start = entry
-        if now - window_start > _IP_WINDOW_SECONDS:
-            _SIGNIN_IP_LIMIT[ip] = (1, now)
-            return False
-        if attempts >= _MAX_SIGNIN_IP_ATTEMPTS:
-            return True
-        _SIGNIN_IP_LIMIT[ip] = (attempts + 1, window_start)
-    else:
-        _SIGNIN_IP_LIMIT[ip] = (1, now)
+    with _SIGNIN_IP_LIMIT._lock:
+        entry = _SIGNIN_IP_LIMIT._dict.get(ip)
+        if entry:
+            attempts, window_start = entry
+            if now - window_start > _IP_WINDOW_SECONDS:
+                _SIGNIN_IP_LIMIT._dict[ip] = (1, now)
+                return False
+            if attempts >= _MAX_SIGNIN_IP_ATTEMPTS:
+                return True
+            _SIGNIN_IP_LIMIT._dict[ip] = (attempts + 1, window_start)
+        else:
+            _SIGNIN_IP_LIMIT._dict[ip] = (1, now)
+            # W-2: bounded growth — purge expired IP windows when the table
+            # gets large (mirrors the email-table pattern).  Cleanup only
+            # touches entries outside the window; live entries are untouched.
+            if (len(_SIGNIN_IP_LIMIT._dict) > _IP_LIMIT_CLEANUP_THRESHOLD
+                    and hash(ip) % 11 == 0):
+                _cleanup_stale_ip_entries()
     return False
 
 
 def _cleanup_stale_rate_entries():
-    """Remove rate-limit entries older than the window."""
+    """Remove rate-limit entries older than the window.
+
+    W-2: operates on ``._dict`` directly — callers hold the container lock
+    (the public accessors would re-acquire the non-reentrant lock).
+    """
     cutoff = int(time.time()) - _RATE_WINDOW_SECONDS
-    stale = [k for k, (_, ws) in _SIGNIN_RATE_LIMIT.items() if ws < cutoff]
+    stale = [k for k, (_, ws) in _SIGNIN_RATE_LIMIT._dict.items() if ws < cutoff]
     for k in stale:
-        del _SIGNIN_RATE_LIMIT[k]
+        del _SIGNIN_RATE_LIMIT._dict[k]
+
+
+def _cleanup_stale_ip_entries():
+    """Remove IP-limit entries older than the IP window (W-2)."""
+    cutoff = int(time.time()) - _IP_WINDOW_SECONDS
+    stale = [k for k, (_, ws) in _SIGNIN_IP_LIMIT._dict.items() if ws < cutoff]
+    for k in stale:
+        del _SIGNIN_IP_LIMIT._dict[k]
 
 
 # ── Password hashing ─────────────────────────────────────────────────────────
@@ -288,13 +410,16 @@ def handle_signin(body: dict, ip: str = "") -> dict:
             # authenticated by email alone — unified message prevents
             # account enumeration.
             if not existing_user.get("password_hash"):
-                _record_failed_attempt(email)
+                if not _check_and_record_failed_attempt(email):
+                    return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
                 return {"error": "Invalid email or password"}, 401
             if not password:
-                _record_failed_attempt(email)
+                if not _check_and_record_failed_attempt(email):
+                    return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
                 return {"error": "Invalid email or password"}, 401
             if not _verify_password(password, existing_user["password_hash"]):
-                _record_failed_attempt(email)
+                if not _check_and_record_failed_attempt(email):
+                    return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
                 return {"error": "Invalid email or password"}, 401
             return _create_login_response(store, existing_user)
         else:
@@ -314,13 +439,16 @@ def handle_signin(body: dict, ip: str = "") -> dict:
                 # Fail closed: password-less users cannot log in with email
                 # alone (matches api/auth.py _login_user semantics).
                 if not user.get("password_hash"):
-                    _record_failed_attempt(email)
+                    if not _check_and_record_failed_attempt(email):
+                        return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
                     return {"error": "Invalid email or password"}, 401
                 if not password:
-                    _record_failed_attempt(email)
+                    if not _check_and_record_failed_attempt(email):
+                        return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
                     return {"error": "Invalid email or password"}, 401
                 if not _verify_password(password, user["password_hash"]):
-                    _record_failed_attempt(email)
+                    if not _check_and_record_failed_attempt(email):
+                        return {"error": f"Too many attempts. Try again in {_RATE_WINDOW_SECONDS // 60} minutes."}, 429
                     return {"error": "Invalid email or password"}, 401
                 return _create_login_response(store, user)
 

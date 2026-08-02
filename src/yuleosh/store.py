@@ -8,7 +8,7 @@ Usage:
     YULEOSH_DB_URL=postgresql://user:pass@host:5432/dbname  → PostgreSQL
     YULEOSH_DB=/path/to/store.db or unset                  → SQLite (default)
 """
-import json, os, sqlite3, threading
+import json, os, re, sqlite3, threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -164,13 +164,26 @@ class Store(AbstractStore):
         # Session token hashing (P1-6 / S-P1-02): legacy plaintext JWT rows
         # (sha256 hexdigests are always exactly 64 chars) are migrated to
         # their sha256 hash so the DB never stores usable bearer tokens.
+        #
+        # W-4 (COR-W3 / Fix 7): the old ``WHERE length(token) != 64``
+        # predicate assumed "64 chars == already hashed", but a plaintext JWT
+        # whose payload happens to be exactly 64 characters (e.g. base64url
+        # with ``-``/``_``) slipped through untouched.  Migration now checks
+        # the token is a real sha256 hexdigest (``[0-9a-f]{64}``) and only
+        # skips those; Python-side filtering avoids SQLite GLOB quirks and is
+        # idempotent (already-hashed rows are untouched).
         legacy = self.conn.execute(
-            "SELECT id, token FROM user_sessions WHERE length(token) != 64"
+            "SELECT id, token FROM user_sessions"
         ).fetchall()
+        _TOKEN_HEX64 = re.compile(r"[0-9a-f]{64}")
         for row in legacy:
+            token = row["token"]
+            # NULL/empty tokens: skip safely (W-4.4) — nothing to migrate.
+            if not token or _TOKEN_HEX64.fullmatch(token):
+                continue
             self.conn.execute(
                 "UPDATE user_sessions SET token=? WHERE id=?",
-                (_session_token_hash(row["token"]), row["id"]),
+                (_session_token_hash(token), row["id"]),
             )
         self.conn.commit()
 

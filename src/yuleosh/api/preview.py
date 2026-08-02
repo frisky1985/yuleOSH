@@ -507,13 +507,56 @@ def _is_authed(handler) -> bool:
     return False
 
 
+def _get_user_key(handler) -> str:
+    """Derive the preview-cache owner key from the request identity (W-6).
+
+    SEC-W4 / Fix 9: the repo cache used to be keyed by URL only, so any
+    caller who knew a repo URL could hit another user's cached analysis
+    (the report leaks repository structure).  The cache key is now
+    ``(user_key, url_hash)``:
+      - authenticated session  -> ``u:<user_id>``
+      - valid API key          -> ``k:<key_id>``
+      - anonymous              -> ``ip:<sha256(client_ip)>`` (same dimension
+        as the rate limiter; NAT peers still share a key — a documented
+        limitation, fixed properly by Track2 auth consolidation).
+
+    Same identity must always derive the same key (deterministic).
+    """
+    try:
+        auth = handler.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            from yuleosh.ui.auth_extended import get_session_user
+            u = get_session_user(auth[7:])
+            if u and u.get("user_id") is not None:
+                return f"u:{u['user_id']}"
+        key = handler.headers.get("X-API-Key", "")
+        if key:
+            from yuleosh.store import Store
+            rec = Store().get_api_key_by_hash(
+                hashlib.sha256(key.encode("utf-8")).hexdigest()
+            )
+            if rec is not None and not rec.get("revoked"):
+                return f"k:{rec['id']}"
+    except Exception:
+        # Fail closed to the anonymous (IP) dimension.
+        pass
+    ip = handler.client_address[0]
+    return f"ip:{hashlib.sha256(ip.encode('utf-8')).hexdigest()}"
+
+
 # ── Cache by repo URL ──────────────────────────────────────────────────
 
-def _get_cached_preview(repo_url: str) -> Optional[dict]:
-    """Check if a cached assessment result exists (PREVIEW-REQ-007)."""
+def _get_cached_preview(repo_url: str, user_key: str) -> Optional[dict]:
+    """Check if a cached assessment result exists (PREVIEW-REQ-007).
+
+    W-6 (SEC-W4 / Fix 9): the key is now ``(user_key, url_hash)`` — a
+    cached analysis is only visible to the SAME user (or same anonymous IP)
+    who created it.  Cross-user hits are impossible even when the repo URL
+    is identical and the result is fresh.
+    """
     url_hash = hashlib.sha256(repo_url.encode()).hexdigest()
-    if url_hash in _repo_cache:
-        preview_id = _repo_cache[url_hash]
+    if (user_key, url_hash) in _repo_cache:
+        preview_id = _repo_cache[(user_key, url_hash)]
         entry = _assessment_store.get(preview_id)
         if entry and entry.get("status") == "completed":
             age = time.time() - entry.get("completed_at", 0)
@@ -653,8 +696,11 @@ def handle_preview(method: str, path_tail: str, body: dict, query: dict,
         elif "application/json" in content_type or not content_type:
             repo_url = body.get("repo_url") if body else None
             if repo_url:
+                # W-6 (SEC-W4): cache is owner-scoped — key derivation must
+                # be identical on the hit and the store paths.
+                user_key = _get_user_key(handler)
                 # Check cache (PREVIEW-REQ-007)
-                cached = _get_cached_preview(repo_url)
+                cached = _get_cached_preview(repo_url, user_key)
                 if cached:
                     return json_ok(cached)
 
@@ -662,7 +708,7 @@ def handle_preview(method: str, path_tail: str, body: dict, query: dict,
 
                 # Cache the result
                 url_hash = hashlib.sha256(repo_url.encode()).hexdigest()
-                _repo_cache[url_hash] = preview_id
+                _repo_cache[(user_key, url_hash)] = preview_id
 
                 return result
 

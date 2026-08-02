@@ -198,12 +198,19 @@ class TestPreviewRateLimit:
 
 
 class TestPreviewCache:
-    """Repo cache (PREVIEW-REQ-007)."""
+    """Repo cache (PREVIEW-REQ-007).
+
+    W-6 (SEC-W4 / Fix 9): keys are now ``(user_key, url_hash)`` tuples —
+    the caller must pass the requester-derived user_key on both hit and
+    store paths."""
+
+    def _ukey(self):
+        return "u:test"
 
     def test_get_cached_preview_not_cached(self):
         from yuleosh.api.preview import _get_cached_preview, _repo_cache
         _repo_cache.clear()
-        result = _get_cached_preview("https://github.com/user/repo")
+        result = _get_cached_preview("https://github.com/user/repo", self._ukey())
         assert result is None
 
     def test_get_cached_preview_expired(self):
@@ -213,12 +220,12 @@ class TestPreviewCache:
         _assessment_store.clear()
         url = "https://github.com/user/repo"
         url_hash = hashlib.sha256(url.encode()).hexdigest()
-        _repo_cache[url_hash] = "prev-expired"
+        _repo_cache[(self._ukey(), url_hash)] = "prev-expired"
         _assessment_store["prev-expired"] = {
             "status": "completed",
             "completed_at": 0,
         }
-        result = _get_cached_preview(url)
+        result = _get_cached_preview(url, self._ukey())
         assert result is None
 
     def test_get_cached_preview_valid(self):
@@ -228,13 +235,13 @@ class TestPreviewCache:
         _assessment_store.clear()
         url = "https://github.com/user/project"
         url_hash = hashlib.sha256(url.encode()).hexdigest()
-        _repo_cache[url_hash] = "prev-valid"
+        _repo_cache[(self._ukey(), url_hash)] = "prev-valid"
         _assessment_store["prev-valid"] = {
             "status": "completed",
             "completed_at": time.time(),
             "report": {"summary": "ok"},
         }
-        result = _get_cached_preview(url)
+        result = _get_cached_preview(url, self._ukey())
         assert result is not None
         assert result["cached"] is True
         assert result["status"] == "completed"

@@ -67,10 +67,27 @@ class SandboxViolation(Exception):
 class PluginSandbox:
     """插件沙箱 — 安全执行 Plugin 代码。"""
 
-    def __init__(self, plugin_dir: Path | str, manifest: PluginManifest | None = None):
+    def __init__(self, plugin_dir: Path | str, manifest: PluginManifest | None = None,
+                 extra_read_dirs: Optional[list] = None):
+        """初始化沙箱。
+
+        W-5 (COR-W5 / Fix 8): plugins whose read needs extend outside their
+        own directory must declare it EXPLICITLY — either via the constructor
+        (host code granting access) or via
+        ``manifest.permissions["extra_read_dirs"]``.  This is a READ-only
+        whitelist: write access stays strictly inside the plugin directory.
+        """
         self.plugin_dir = Path(plugin_dir).resolve()
         self.manifest = manifest
         self._timeout = (manifest.timeout if manifest and manifest.timeout > 0 else 30)
+        extra: list = []
+        if extra_read_dirs:
+            extra.extend(extra_read_dirs)
+        if manifest and manifest.permissions:
+            declared = manifest.permissions.get("extra_read_dirs")
+            if declared:
+                extra.extend(declared)
+        self._extra_read_dirs = [Path(p).resolve() for p in extra]
 
     # ---- 公共执行接口 ----
 
@@ -144,24 +161,51 @@ class PluginSandbox:
         P2-2 (S-P2-02): 路径校验从 ``str.startswith(prefix)``（可被
         ``/allowed_dir_evil`` 之类前缀绕过）改为 ``resolve() + relative_to``
         （规范化后必须是插件目录的子路径，符号链接/.. 均被解析）。
+
+        W-5 (COR-W5 / Fix 8): read mode additionally honors the explicit
+        ``extra_read_dirs`` whitelist (constructor arg or manifest
+        ``permissions.extra_read_dirs``) — each whitelist dir is also
+        ``resolve()``-checked so symlink/``..`` escapes are still rejected.
+        Write mode is unchanged: plugin dir only, extra_read_dirs NEVER
+        grants write access (read/write isolation).
         """
         allowed_dir = Path(self.plugin_dir).resolve()
+        extra_dirs = [d for d in self._extra_read_dirs if d != allowed_dir]
+
+        def _read_allowed(resolved: Path) -> bool:
+            try:
+                resolved.relative_to(allowed_dir)
+                return True
+            except (ValueError, OSError, RuntimeError):
+                pass
+            for d in extra_dirs:
+                try:
+                    resolved.relative_to(d)
+                    return True
+                except (ValueError, OSError, RuntimeError):
+                    continue
+            return False
 
         def safe_open(file, mode="r", *args, **kwargs):
             # 读写都校验：插件只能访问自己的目录（读默认允许 → 收紧为同样受控）
             write_mode = any(ch in mode for ch in "wax+")
             try:
                 resolved = Path(file).resolve()
-                resolved.relative_to(allowed_dir)
+                if write_mode:
+                    resolved.relative_to(allowed_dir)
+                elif not _read_allowed(resolved):
+                    raise ValueError(f"outside read whitelist: {resolved}")
             except (ValueError, OSError, RuntimeError) as e:
                 if write_mode:
                     raise SandboxViolation(
                         f"禁止写入沙箱外文件: {file} "
                         f"(允许: {allowed_dir})"
                     ) from e
+                allowed = str(allowed_dir)
+                if extra_dirs:
+                    allowed += " + 白名单: " + ",".join(str(d) for d in extra_dirs)
                 raise SandboxViolation(
-                    f"禁止读取沙箱外文件: {file} "
-                    f"(允许: {allowed_dir})"
+                    f"禁止读取沙箱外文件: {file} (允许: {allowed})"
                 ) from e
             return builtins.open(file, mode, *args, **kwargs)
 

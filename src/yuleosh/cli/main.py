@@ -26,10 +26,12 @@ Usage:
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 # OSH_HOME defaults to CWD for pip-installed environments;
 # in dev mode, set OSH_HOME explicitly or rely on the project root.
@@ -571,10 +573,16 @@ def cmd_review_task(task: str, kind: str = "feature"):
     import subprocess
     from yuleosh.review.run import run_review
 
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD"],
-        capture_output=True, text=True, cwd=OSH_HOME,
-    )
+    try:
+        # W-7 (SEC-W6 / Fix 10): bound git calls so a hung repo never
+        # blocks the CLI indefinitely.
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            capture_output=True, text=True, cwd=OSH_HOME, timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        print("❌ git diff 超时 (30s) — 已终止")
+        sys.exit(1)
     changed = [f.strip() for f in result.stdout.split("\n") if f.strip()]
     run_review(task, kind, OSH_HOME, changed)
 
@@ -661,28 +669,38 @@ def _cmd_coverage_gate(args):
     import subprocess
     import sys as _sys
 
-    result = subprocess.run(
-        [
-            _sys.executable, "-m", "coverage", "run",
-            "--source=src/yuleosh",
-            "-m", "pytest", "tests/",
-            "-q", "--ignore=tests/test_e2e.py",
-            "-x", "--tb=short",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                _sys.executable, "-m", "coverage", "run",
+                "--source=src/yuleosh",
+                "-m", "pytest", "tests/",
+                "-q", "--ignore=tests/test_e2e.py",
+                "-x", "--tb=short",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,  # W-7: test run is the long pole — bound it explicitly
+        )
+    except subprocess.TimeoutExpired:
+        print("❌ coverage run 超时 (300s) — 已终止")
+        _sys.exit(1)
     print(result.stdout)
     if result.returncode != 0:
         print(result.stderr)
         print(f"  ❌ Tests failed, cannot measure coverage")
         _sys.exit(1)
 
-    report_result = subprocess.run(
-        [_sys.executable, "-m", "coverage", "report", "--fail-under", str(fail_under)],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        report_result = subprocess.run(
+            [_sys.executable, "-m", "coverage", "report", "--fail-under", str(fail_under)],
+            capture_output=True,
+            text=True,
+            timeout=120,  # W-7
+        )
+    except subprocess.TimeoutExpired:
+        print("❌ coverage report 超时 (120s) — 已终止")
+        _sys.exit(1)
     print(report_result.stdout)
     if report_result.stderr:
         print(report_result.stderr)
@@ -1846,18 +1864,73 @@ def cmd_swe6_check(args):
     print(f"   SWE.6 合格性测试检查")
     print(f"  {'=' * 70}")
 
-    # Simulate checks
+    # W-3 (COR-C3 / Fix 6): real checks — the old report hardcoded True for
+    # "测试用例定义" / "测试环境配置" and a fake ``test_cases: 5``, a
+    # false-positive compliance report for customers/auditors.  The test-case
+    # count now comes from actually parsing the spec (reusing
+    # yuleosh.spec.validate.parse_spec), and the env-config check verifies
+    # the .osh/ci-config.yaml file really exists.
+    tc_count: Optional[int] = None
+    tc_parse_ok = False
+    tc_field = "SpecDocument.scenarios"
+    try:
+        from yuleosh.spec.validate import parse_spec
+        doc = parse_spec(str(spec_file))
+        tc_count = len(doc.scenarios)
+        tc_parse_ok = True
+        # W-3: the repo's own swe6 spec lists cases as ``### TC-CONF-001:``
+        # headings rather than OpenSpec ``## Scenario:`` blocks.  When no
+        # Scenario blocks exist, fall back to counting those identifiable
+        # case headings so the report shows the real number (SHALL-W3.1
+        # allows identifiable case entries; the counting basis is always
+        # stated in the report via test_cases_field).
+        if tc_count == 0:
+            try:
+                heading_cases = len(re.findall(
+                    r"^#{2,4}\s+TC-[\w.-]+\s*:",
+                    spec_file.read_text(encoding="utf-8"),
+                    re.MULTILINE,
+                ))
+            except OSError:
+                heading_cases = 0
+            if heading_cases > 0:
+                tc_count = heading_cases
+                tc_field = "TC-* headings"
+    except Exception:
+        tc_count = None
+        tc_parse_ok = False
+
+    ci_config_path = Path(project_dir) / ".osh" / "ci-config.yaml"
+
+    if tc_parse_ok and tc_count is not None and tc_count > 0:
+        tc_defined = True
+        tc_detail = f"{tc_count} 个 (解析自 spec)"
+    elif tc_parse_ok:
+        tc_defined = False
+        tc_detail = f"{tc_count} 个 (解析自 spec)"
+    else:
+        tc_defined = False
+        tc_detail = "unknown (manual)"
+
+    # Tri-state checks: True (✅) / False (❌) / "probe" (⚠️ — cannot be
+    # verified automatically, manual verification required).
     checks = [
         ("SWE.6 规范定义", spec_file.exists(), "存在" if spec_file.exists() else "缺失"),
-        ("测试用例定义", True, "存在 (从 spec 解析)"),
-        ("测试环境配置", True, "已定义 (Dev/SIL)"),
-        ("测试执行脚本", True, "tests/test_swe6/"),
-        ("追溯矩阵", True, "可生成"),
-        ("测试报告", True, "可在 CI 中生成"),
+        ("测试用例定义", tc_defined, tc_detail),
+        ("测试环境配置", ci_config_path.exists(),
+         "已定义 (.osh/ci-config.yaml)" if ci_config_path.exists() else "缺失 (.osh/ci-config.yaml)"),
+        ("测试执行脚本", "probe", "probe (manual verification required) — tests/test_swe6/"),
+        ("追溯矩阵", "probe", "probe (manual verification required) — 可生成"),
+        ("测试报告", "probe", "probe (manual verification required) — 可在 CI 中生成"),
     ]
 
     for name, passed, detail in checks:
-        icon = "✅" if passed else "❌"
+        if passed is True:
+            icon = "✅"
+        elif passed is False:
+            icon = "❌"
+        else:
+            icon = "⚠️"
         print(f"   {icon} {name}: {detail}")
 
     if getattr(args, "report", False):
@@ -1866,8 +1939,12 @@ def cmd_swe6_check(args):
             lrt = __import__("yuleosh.alm.traceability", fromlist=["generate_lrt"]).generate_lrt(project_dir, str(spec_file))
             report = {
                 "swe6_check": {
-                    "spec_defined": True,
-                    "test_cases": 5,
+                    "spec_defined": spec_file.exists(),
+                    # W-3: real parsed count (None when the spec is
+                    # unparseable); the source is always stated explicitly.
+                    "test_cases": tc_count,
+                    "test_cases_source": "parsed from spec" if tc_parse_ok else "unknown (manual)",
+                    "test_cases_field": tc_field,
                     "traceability": lrt.get("lrm", {}).get("summary", {}),
                 },
                 "generated_at": __import__("datetime").datetime.now().isoformat(),
@@ -1880,8 +1957,11 @@ def cmd_swe6_check(args):
         except Exception as e:
             print(f"   ⚠️ 追溯报告生成: {e}")
 
+    passed_n = sum(1 for _, p, _ in checks if p is True)
+    probe_n = sum(1 for _, p, _ in checks if p == "probe")
     print(f"\n  {'─' * 70}")
-    print(f"   检查完成: {sum(1 for _, p, _ in checks if p)}/{len(checks)} 通过")
+    print(f"   检查完成: {passed_n}/{len(checks)} 通过"
+          + (f" (+{probe_n} 项待人工核验)" if probe_n else ""))
     print()
 
 

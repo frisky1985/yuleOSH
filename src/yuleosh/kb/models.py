@@ -3,6 +3,7 @@
 
 """Knowledge Base data models — dataclasses for kb_articles, lessons, fmea_entries."""
 
+import html.parser
 import re
 
 from dataclasses import dataclass, field
@@ -162,45 +163,161 @@ class FmeaEntry:
 def _strip_html(text: str) -> str:
     """Remove HTML tags and dangerous patterns from text (XSS write-path guard).
 
-    Defense-in-depth behind the frontend render-time escaping (X-01): KB
-    fields are stored as markdown-ish text, so raw HTML tags are not a
-    supported feature — dangerous tags are stripped entirely while code
-    samples (e.g. `<vector>`, `<int>`) survive because only tag blocks /
-    event attributes / script protocols are removed, not every `<`.
+    M-1 (ARC-W6 / Fix 12, route A — 小明拍板 2026-08-02): the old regex
+    blacklist (known dangerous tags + event attributes + script protocols)
+    could be bypassed by nested / mixed-case / entity-obfuscated variants.
+    This implementation parses with ``html.parser`` (stdlib) instead:
+      - all KNOWN HTML tags are stripped; text content of benign tags is kept
+        (``<b>hello</b>`` -> ``hello``);
+      - dangerous tag BLOCKS (script/iframe/svg/...) are dropped entirely
+        including their content;
+      - tags that are NOT known HTML (code samples like ``<vector>``,
+        ``<int>``) survive as literal text — unless they contain dangerous
+        substrings, in which case the fragment is dropped;
+      - a final regex pass neutralizes anything that survived as literal
+        text (e.g. entity double-encoding ``&#106;avascript:``).
+
+    KNOWN LIMITATION (documented): html.parser is a sanitizer, NOT a
+    security boundary.  The frontend render-time escaping (escape-first,
+    X-01) remains the primary XSS defense; this is defense-in-depth on the
+    write path.
     """
     if not isinstance(text, str):
         return str(text) if text is not None else ""
-    # Block-level dangerous tags (paired, may span newlines / mixed case)
-    text = re.sub(r'<script[^>]*?>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<iframe[^>]*?>.*?</iframe>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<object[^>]*?>.*?</object>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<embed[^>]*?>.*?</embed>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<svg[^>]*?>.*?</svg>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<math[^>]*?>.*?</math>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<video[^>]*?>.*?</video>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<audio[^>]*?>.*?</audio>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<template[^>]*?>.*?</template>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<form[^>]*?>.*?</form>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    # Self-closing / void dangerous tags (never valid in code samples)
-    text = re.sub(r'<img\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<embed\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<link\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<meta\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<base\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<svg\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<math\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<video\b[^>]*>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<audio\b[^>]*>', '', text, flags=re.IGNORECASE)
+    stripper = _HTMLStripper()
+    stripper.feed(text)
+    stripper.close()
+    cleaned = "".join(stripper._out)
+    # Post-pass (defense in depth): neutralize dangerous patterns that
+    # survived as literal text (entity double-encoding, residual fragments).
+    cleaned = re.sub(r'<script[^>]*?>.*?</script>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r'<iframe[^>]*?>.*?</iframe>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r'<object[^>]*?>.*?</object>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r'<svg[^>]*?>.*?</svg>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r'<math[^>]*?>.*?</math>', '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r'<img\b[^>]*>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<meta\b[^>]*>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<link\b[^>]*>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<base\b[^>]*>', '', cleaned, flags=re.IGNORECASE)
     # Event handler attributes — quoted, unquoted, backtick, mixed-case
-    text = re.sub(r'\s+on\w+\s*=\s*"[^"]*"', '', text, flags=re.IGNORECASE)
-    text = re.sub(r"\s+on\w+\s*=\s*'[^']*'", '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s+on\w+\s*=\s*`[^`]*`', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s+on\w+\s*=\s*[^\s"\'`>]+', '', text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s+on\w+\s*=\s*"[^"]*"', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+on\w+\s*=\s*'[^']*'", '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s+on\w+\s*=\s*`[^`]*`', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s+on\w+\s*=\s*[^\s"\'`>]+', '', cleaned, flags=re.IGNORECASE)
     # Script protocols (incl. HTML-entity obfuscation, e.g. &#106;avascript:)
-    text = re.sub(r'javascript\s*:', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'&#(?:x6a|106|X6A);\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'vbscript\s*:', '', text, flags=re.IGNORECASE)
-    return text
+    cleaned = re.sub(r'javascript\s*:', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'&#(?:x6a|106|X6A);\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'vbscript\s*:', '', cleaned, flags=re.IGNORECASE)
+    return cleaned
+
+
+# ── M-1: html.parser whitelist stripper ────────────────────────────────────
+
+# Dangerous tag BLOCKS — the tag shell AND its content are dropped entirely.
+# These are never valid inside markdown-ish KB text, and their content is
+# the payload carrier (script bodies, svg onload, etc.).
+_DROP_CONTENT_TAGS = frozenset({
+    "script", "style", "iframe", "object", "svg", "math",
+    "video", "audio", "template", "form", "noscript", "applet",
+    "frameset", "frame", "portal", "head", "title",
+})
+
+# Void/self-closing dangerous tags — the tag shell is dropped, but they
+# CANNOT contain content so they must never enter the drop-depth state
+# (an unclosed ``<img>`` would otherwise swallow every following line of
+# legitimate text).  This matches the pre-M-1 regex behavior which removed
+# only the ``<img ...>`` token itself.
+_DROP_VOID_TAGS = frozenset({
+    "img", "embed", "input", "meta", "link", "base", "source",
+    "track", "area",
+})
+
+# Known benign HTML tags — shell stripped, inner TEXT preserved.
+_STRIP_SHELL_TAGS = frozenset({
+    "a", "abbr", "address", "article", "aside", "b", "bdi", "bdo",
+    "big", "blockquote", "body", "br", "button", "caption", "center",
+    "cite", "code", "col", "colgroup", "data", "datalist", "dd", "del",
+    "details", "dfn", "dialog", "dir", "div", "dl", "dt", "em",
+    "fieldset", "figcaption", "figure", "font", "footer", "h1", "h2",
+    "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "html", "i",
+    "ins", "kbd", "label", "legend", "li", "main", "map", "mark",
+    "menu", "menuitem", "meter", "nav", "nobr", "ol", "optgroup",
+    "option", "output", "p", "param", "picture", "pre", "progress",
+    "q", "rp", "rt", "ruby", "s", "samp", "section", "select",
+    "small", "span", "strike", "strong", "sub", "summary", "sup",
+    "table", "tbody", "td", "textarea", "tfoot", "th", "thead", "time",
+    "tr", "tt", "u", "ul", "var", "wbr", "xmp",
+})
+
+# Dirty substrings: unknown tags containing any of these are dropped whole
+# instead of being preserved as literal text (obfuscated tag names such as
+# ``scr<script``, event attributes, script protocols).
+_DIRTY_TAG_RE = re.compile(
+    r"script|iframe|svg|math|object|embed|form|style|template|video|audio|"
+    r"meta|link|base|applet|frame|frameset|portal|on[a-z]+\s*=|javascript:|vbscript:",
+    re.IGNORECASE,
+)
+
+
+class _HTMLStripper(html.parser.HTMLParser):
+    """Whitelist-style HTML stripper (M-1).
+
+    - known dangerous tags -> drop shell AND content (tracked depth);
+    - known benign tags    -> drop shell, keep inner text;
+    - unknown tags         -> keep as literal text if clean, else drop
+      (code samples like ``<vector>``/``<int>`` survive, obfuscated tag
+      names like ``<scr<script>`` do not).
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._out: list[str] = []
+        self._drop_depth = 0
+
+    @staticmethod
+    def _clean_unknown(raw: str) -> bool:
+        return not _DIRTY_TAG_RE.search(raw)
+
+    def _emit_unknown(self, raw: str) -> None:
+        if self._clean_unknown(raw):
+            self._out.append(raw)
+        # else: drop the dirty fragment entirely — no residue.
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        t = tag.lower()
+        if t in _DROP_CONTENT_TAGS:
+            self._drop_depth += 1
+        elif t in _DROP_VOID_TAGS:
+            return  # drop the shell; no content to track
+        elif t not in _STRIP_SHELL_TAGS:
+            # Unknown tag: preserve as literal text only when clean.
+            self._emit_unknown(self.get_starttag_text() or f"<{tag}>")
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        t = tag.lower()
+        if t in _DROP_CONTENT_TAGS or t in _DROP_VOID_TAGS or t in _STRIP_SHELL_TAGS:
+            return
+        self._emit_unknown(self.get_starttag_text() or f"<{tag}/>")
+
+    def handle_endtag(self, tag: str) -> None:
+        t = tag.lower()
+        if t in _DROP_CONTENT_TAGS:
+            self._drop_depth = max(0, self._drop_depth - 1)
+        elif t in _DROP_VOID_TAGS:
+            return  # stray </img> etc. — drop silently
+        elif t not in _STRIP_SHELL_TAGS:
+            raw = f"</{tag}>"
+            if self._clean_unknown(raw):
+                self._out.append(raw)
+
+    def handle_data(self, data: str) -> None:
+        if self._drop_depth == 0:
+            self._out.append(data)
+
+    # Comments / declarations / processing instructions: HTMLParser's
+    # defaults are no-ops (never forwarded to handle_data), so they are
+    # dropped automatically.
+
 
 def sanitize_kb_article_fields(body: dict) -> dict:
     """Extract and validate only the allowed fields for a KbArticle."""
