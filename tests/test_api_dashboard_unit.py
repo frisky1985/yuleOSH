@@ -85,6 +85,24 @@ class TestRouting:
         assert payload["ok"] is True
         assert payload["data"]["status"] == "failed"  # CLI not real here
 
+    def test_evidence_generate_rejects_outside_osh_home(self, tmp_path):
+        """SEC-C1: dashboard evidence project_dir escaping OSH_HOME → 403,
+        and no task record is created."""
+        payload, status = _handle("POST", "evidence/generate",
+                                  {"project_id": "p1", "project_dir": "/etc"},
+                                  {}, handler=None)
+        assert status == 403
+        assert "inside OSH_HOME" in payload["error"]
+        assert D._ev_tasks == {}  # fail fast before task creation
+
+    def test_evidence_generate_rejects_traversal(self, tmp_path):
+        """SEC-C1: ../ traversal in project_dir → 403."""
+        payload, status = _handle("POST", "evidence/generate",
+                                  {"project_dir": str(tmp_path / "..")},
+                                  {}, handler=None)
+        assert status == 403
+        assert "inside OSH_HOME" in payload["error"]
+
     def test_evidence_status_route(self):
         """GIVEN GET evidence/status WHEN handle THEN task lookup."""
         D._ev_tasks["ev-task-abc"] = {"task_id": "ev-task-abc", "status": "running"}

@@ -490,8 +490,21 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
     """POST /api/v1/dashboard/evidence/generate — trigger evidence pack generation.
 
     Creates an async task and returns task_id for polling.
+
+    SECURITY (SEC-C1): project_dir must resolve inside OSH_HOME (same
+    guard as the pipeline trigger) — otherwise an authenticated user
+    could run the evidence CLI with an arbitrary cwd.
     """
     project_id = body.get("project_id") or _get_query_param(query, "project_id", "default")
+
+    # Fail fast BEFORE creating the task record if project_dir escapes OSH_HOME.
+    raw_dir = body.get("project_dir") or OSH_HOME
+    try:
+        project_dir = str(Path(raw_dir).expanduser().resolve())
+        Path(project_dir).relative_to(Path(OSH_HOME).resolve())
+    except (ValueError, TypeError, OSError):
+        return json_error("project_dir must be inside OSH_HOME", 403)
+
     task_id = f"ev-task-{uuid.uuid4().hex[:12]}"
 
     # Record the task
@@ -508,8 +521,6 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
 
     # Attempt real evidence generation via yuleosh evidence pack CLI
     try:
-        project_dir = body.get("project_dir") or OSH_HOME
-
         _ev_tasks[task_id]["progress_pct"] = 10
         _ev_tasks[task_id]["status"] = "running"
 

@@ -71,46 +71,64 @@ class TestHandleEvidence:
 
 class TestGenerateEvidence:
     @mock.patch("yuleosh.api.evidence.subprocess.run")
-    def test_success(self, mock_run):
+    def test_success(self, mock_run, monkeypatch, tmp_path):
         proc = mock.Mock()
         proc.returncode = 0
         proc.stdout = "Evidence generated successfully"
         proc.stderr = ""
         mock_run.return_value = proc
+        # SEC-C1: project_dir must be inside OSH_HOME
+        monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
 
-        result = _generate_evidence({"project_dir": "/tmp/test"})
+        result = _generate_evidence({"project_dir": str(tmp_path)})
         assert result[1] == 200
         assert result[0]["data"]["status"] == "completed"
         assert "Evidence" in result[0]["data"]["stdout"]
 
     @mock.patch("yuleosh.api.evidence.subprocess.run")
-    def test_subprocess_timeout(self, mock_run):
+    def test_subprocess_timeout(self, mock_run, monkeypatch, tmp_path):
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 120)
-        result = _generate_evidence({"project_dir": "/tmp/test"})
+        monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
+        result = _generate_evidence({"project_dir": str(tmp_path)})
         assert result[1] == 504
         assert "timed out" in result[0]["error"]
 
     @mock.patch("yuleosh.api.evidence.subprocess.run")
-    def test_os_error(self, mock_run):
+    def test_os_error(self, mock_run, monkeypatch, tmp_path):
         mock_run.side_effect = OSError("Permission denied")
-        result = _generate_evidence({"project_dir": "/tmp/test"})
+        monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
+        result = _generate_evidence({"project_dir": str(tmp_path)})
         assert result[1] == 500
+
+    def test_rejects_outside_osh_home(self, monkeypatch, tmp_path):
+        """SEC-C1: project_dir escaping OSH_HOME is rejected with 403."""
+        monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
+        # Absolute path outside OSH_HOME
+        result = _generate_evidence({"project_dir": "/etc"})
+        assert result[1] == 403
+        assert "inside OSH_HOME" in result[0]["error"]
+        # ../ traversal escape
+        result = _generate_evidence({"project_dir": str(tmp_path / "sub" / ".." / "..")})
+        assert result[1] == 403
+        assert "inside OSH_HOME" in result[0]["error"]
 
     @mock.patch("yuleosh.api.evidence.os.environ.get")
     @mock.patch("yuleosh.api.evidence.subprocess.run")
-    def test_default_project_dir(self, mock_run, mock_env_get):
+    def test_default_project_dir(self, mock_run, mock_env_get, monkeypatch, tmp_path):
         proc = mock.Mock()
         proc.returncode = 0
         proc.stdout = "ok"
         proc.stderr = ""
         mock_run.return_value = proc
-        mock_env_get.return_value = None  # OSH_HOME not set
+        mock_env_get.return_value = str(tmp_path)  # OSH_HOME env points at tmp
+        monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
 
         result = _generate_evidence({})
         assert result[1] == 200
-        # Should use the default path
+        # Should use the default path (env OSH_HOME, no body project_dir)
         mock_run.assert_called_once()
         assert "src/evidence/pack.py" in str(mock_run.call_args[0])
+        assert mock_run.call_args.kwargs["cwd"] == str(Path(tmp_path).resolve())
 
 
 class TestListEvidenceFiles:
@@ -260,9 +278,11 @@ class TestRunCiLayer:
     @mock.patch("yuleosh.api.ci.subprocess.run",
                 side_effect=Exception("generic error"))
     def test_generic_exception(self, mock_run):
+        """SEC-C2: exception details are masked — generic message only."""
         result = _run_ci_layer("1")
         assert result[1] == 500
-        assert "generic error" in result[0]["error"]
+        assert result[0]["error"] == "Internal server error"
+        assert "generic error" not in result[0]["error"]
 
 
 class TestListCiRuns:
