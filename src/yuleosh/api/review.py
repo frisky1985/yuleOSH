@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 from . import json_ok, json_error
+from ._errors import internal_error
 from .middleware import require_auth
 
 
@@ -46,7 +47,8 @@ def _run_auto_review(body: dict) -> tuple[dict, int]:
     except subprocess.TimeoutExpired:
         return json_error("Auto-review timed out", 504)
     except Exception as e:
-        return json_error(f"Review error: {e}", 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("review", e)
 
 
 def _run_task_review(body: dict) -> tuple[dict, int]:
@@ -74,7 +76,8 @@ def _run_task_review(body: dict) -> tuple[dict, int]:
     except subprocess.TimeoutExpired:
         return json_error("Task review timed out", 504)
     except Exception as e:
-        return json_error(f"Task review error: {e}", 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("review", e)
 
 
 def _list_reviews() -> tuple[dict, int]:

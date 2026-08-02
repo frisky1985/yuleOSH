@@ -13,6 +13,7 @@ import os
 import secrets
 
 from . import json_ok, json_error
+from ._errors import internal_error
 from .middleware import require_auth
 from yuleosh.store import Store
 
@@ -56,8 +57,8 @@ def _generate_key(body: dict) -> tuple[dict, int]:
     try:
         record = store.create_api_key(key_hash, label, prefix)
     except Exception as e:
-        # Hash collision or DB error — extremely unlikely
-        return json_error(f"Failed to create key: {e}", 500)
+        # SEC-C2: never echo internal exception details to the client.
+        return internal_error("apikeys", e)
 
     return json_ok({
         "id": record["id"],
