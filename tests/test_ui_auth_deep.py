@@ -55,8 +55,19 @@ class TestAuthConfig:
             assert a.API_KEY == "sk-test"
 
     def test_auth_disabled_without_key(self):
-        """GIVEN no API_KEY WHEN auth imported THEN AUTH_ENABLED False."""
+        """SEC-C3: auth is fail-closed by default — NO API key configured
+        still leaves AUTH_ENABLED True (legacy endpoints must not be open
+        on default deployments).  Opt out explicitly with
+        YULEOSH_AUTH_DISABLED=1."""
         with patch.dict(os.environ, {}, clear=True):
+            import importlib
+            import yuleosh.ui.auth as a
+            importlib.reload(a)
+            assert a.AUTH_ENABLED is True
+
+    def test_auth_disabled_with_explicit_env(self):
+        """SEC-C3: YULEOSH_AUTH_DISABLED=1 turns auth off (dev mode)."""
+        with patch.dict(os.environ, {"YULEOSH_AUTH_DISABLED": "1"}, clear=True):
             import importlib
             import yuleosh.ui.auth as a
             importlib.reload(a)

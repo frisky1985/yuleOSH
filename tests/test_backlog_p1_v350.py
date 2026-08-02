@@ -166,6 +166,7 @@ class TestCheckAuthDelegation:
              mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
              mock.patch("yuleosh.ui.auth.API_KEY", "secret"):
             h = object.__new__(OSHHandler)
+            h.path = "/api/evidence"  # gated path (SEC-C3 whitelist)
             h.headers = {}
             assert h._check_auth() is False
 
@@ -175,6 +176,7 @@ class TestCheckAuthDelegation:
              mock.patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
              mock.patch("yuleosh.ui.auth.API_KEY", "secret"):
             h = object.__new__(OSHHandler)
+            h.path = "/api/evidence"  # gated path (SEC-C3 whitelist)
             h.headers = {"x-api-key": "secret"}
             assert h._check_auth() is True
 

@@ -25,7 +25,15 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 API_KEY = os.environ.get("YULEOSH_API_KEY", "")
-AUTH_ENABLED = bool(API_KEY)
+
+# Fail-closed by default (SEC-C3): auth is ON unless explicitly disabled
+# for local development via YULEOSH_AUTH_DISABLED=1.  Previously
+# ``bool(API_KEY)`` meant a default deployment (no API key set) left every
+# legacy endpoint unauthenticated.
+_AUTH_DISABLED = os.environ.get("YULEOSH_AUTH_DISABLED", "").lower() in (
+    "1", "true", "yes"
+)
+AUTH_ENABLED = not _AUTH_DISABLED
 
 # In-memory session store: token -> timestamp
 _sessions: dict[str, float] = {}
@@ -177,9 +185,11 @@ body {{
 # ---------------------------------------------------------------------------
 
 def is_authenticated(headers: dict) -> bool:
-    """Check if the request carries a valid API key or session cookie.
+    """Check if the request carries a valid API key, session cookie, or
+    tenant JWT bearer token.
 
-    Returns True when auth is disabled (no API key set).
+    Fail-closed (SEC-C3): with no credentials the request is NOT
+    authenticated — the caller decides what to do with the denial.
     """
     if not AUTH_ENABLED:
         return True
@@ -195,6 +205,20 @@ def is_authenticated(headers: dict) -> bool:
     if "osh_session" in cookies:
         if validate_session(cookies["osh_session"].value):
             return True
+
+    # 3. Check tenant JWT bearer token (the frontend sends
+    #    ``Authorization: Bearer <jwt>`` to every endpoint).  Full
+    #    validation via auth_extended (signature + DB session row).
+    auth_header = headers.get("authorization", "") or headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            from yuleosh.ui.auth_extended import get_session_user
+            if get_session_user(auth_header[7:]) is not None:
+                return True
+        except Exception:
+            # Fail closed: an unresolvable tenant auth layer never
+            # authenticates the request.
+            pass
 
     return False
 
