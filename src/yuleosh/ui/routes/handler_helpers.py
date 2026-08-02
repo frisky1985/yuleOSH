@@ -57,6 +57,28 @@ def rate_limit_check(handler) -> bool:
 
 
 # ------------------------------------------------------------------
+# Auth denial
+# ------------------------------------------------------------------
+
+def _send_auth_denied(handler) -> None:
+    """Respond to an unauthenticated request (SEC-C3 fail-closed).
+
+    Legacy /api/* paths get a 401 JSON payload; browser page requests get
+    the tenant login page (same UX as /login).
+    """
+    parsed = urllib.parse.urlparse(handler.path)
+    path = parsed.path
+    if path.startswith("/api/"):
+        handler._json_response({
+            "ok": False,
+            "error": "unauthorized",
+            "message": "Authentication required",
+        }, 401)
+    else:
+        handler._serve_page("login.html", {"msg": ""})
+
+
+# ------------------------------------------------------------------
 # Dispatch: GET, POST, DELETE, OPTIONS
 # ------------------------------------------------------------------
 
@@ -118,6 +140,7 @@ def handle_get(handler) -> None:
 
     # Legacy auth check for all other routes
     if not handler._check_auth():
+        _send_auth_denied(handler)
         return
 
     UI_DIR = Path(__file__).resolve().parent.parent
@@ -348,6 +371,7 @@ def handle_post(handler) -> None:
         return
 
     if not handler._check_auth():
+        _send_auth_denied(handler)
         return
 
     handler._serve_page("404.html", {})

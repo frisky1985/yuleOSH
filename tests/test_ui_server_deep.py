@@ -221,10 +221,21 @@ class TestAuth:
         with patch("yuleosh.ui.server.AUTH_ENABLED", False):
             assert h._check_auth() is True
 
+    def test_check_auth_public_path_bypasses(self):
+        """SEC-C3: whitelisted public paths never require credentials."""
+        from yuleosh.ui.server import OSHHandler, _PUBLIC_PATHS
+        h = _get_handler_instance()
+        for p in ("/api/health", "/login", "/welcome", "/dashboard"):
+            h.path = p
+            with patch("yuleosh.ui.server.AUTH_ENABLED", True):
+                assert h._check_auth() is True, f"{p} should be public"
+        assert "/api/evidence" not in _PUBLIC_PATHS
+
     def test_check_auth_enabled_authenticated(self):
         """v3.4.0 + P1-3: valid X-API-Key authenticates."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
+        h.path = "/api/evidence"  # gated path
         # is_authenticated reads lowercase header keys from dicts
         h.headers = {"x-api-key": "k123"}
         with patch("yuleosh.ui.server.AUTH_ENABLED", True), \
@@ -233,9 +244,10 @@ class TestAuth:
             assert h._check_auth() is True
 
     def test_check_auth_enabled_no_key(self):
-        """P1-3 (W-06): no valid key/cookie → denied (was: always True)."""
+        """P1-3 (W-06) + SEC-C3: no valid key/cookie/token → denied."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
+        h.path = "/api/evidence"
         h.headers = {}
         with patch("yuleosh.ui.server.AUTH_ENABLED", True), \
              patch("yuleosh.ui.auth.AUTH_ENABLED", True):
@@ -245,6 +257,7 @@ class TestAuth:
         """P1-3: wrong API key → denied."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
+        h.path = "/api/evidence"
         h.headers = {"X-API-Key": "wrong"}
         with patch("yuleosh.ui.server.AUTH_ENABLED", True), \
              patch("yuleosh.ui.auth.AUTH_ENABLED", True), \
