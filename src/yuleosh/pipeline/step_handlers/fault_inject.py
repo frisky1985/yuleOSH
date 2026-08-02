@@ -183,12 +183,15 @@ class FaultInjectStage:
         print("  🔧 Building fault-inject test firmware...")
 
         try:
+            # W-7 (SEC-W6 / Fix 10): build steps get generous timeouts
+            # (cmake configure 120s; build 300s) so a hung toolchain fails
+            # explicitly instead of blocking the pipeline forever.
             subprocess.run(
                 ["cmake", "-B", str(self.build_dir),
                  "-DFAULT_INJECT_TESTS=ON",
                  "-DFAULT_INJECT_BUILD_TEST=ON",
                  project_root],
-                check=True, capture_output=True, text=True,
+                check=True, capture_output=True, text=True, timeout=120,
             )
             # P1-10 (S-P1-08): no shell=True — pass -j as an argv element
             # (shell interpolation of `$(nproc)` is both a shell-injection
@@ -196,11 +199,18 @@ class FaultInjectStage:
             cpus = os.cpu_count() or 1
             subprocess.run(
                 ["cmake", "--build", str(self.build_dir), "-j", str(cpus)],
-                check=True, capture_output=True, text=True,
+                check=True, capture_output=True, text=True, timeout=300,
             )
             log.info("Build succeeded")
             print("  ✅ Build succeeded")
             return True
+        except subprocess.TimeoutExpired as e:
+            # W-7: timeout must fail explicitly (subprocess.run has already
+            # killed the child) — never let it bubble up as an unhandled
+            # crash nor hang.
+            log.error("Build timed out: %s", e)
+            print(f"  ❌ Build timed out after {e.timeout}s (已终止)")
+            return False
         except subprocess.CalledProcessError as e:
             log.error("Build failed: %s", e.stderr)
             print(f"  ❌ Build failed: {e.stderr[:200]}")

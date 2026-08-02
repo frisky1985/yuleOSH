@@ -13,6 +13,7 @@ Covers the AI Preview Assessment API offline:
   - handle_preview routing (POST/GET/DELETE + error paths)
 """
 
+import hashlib
 import io
 import os
 import sys
@@ -519,14 +520,20 @@ class TestRateLimit:
 # ── Repo cache ─────────────────────────────────────────────────────────
 
 class TestRepoCache:
+    """W-6 (SEC-W4 / Fix 9): cache keys are (user_key, url_hash) — a
+    cached analysis is only visible to the SAME user who created it."""
+
+    def _ukey(self, user="u:1"):
+        return user
+
     def test_cached_fresh(self):
         """GIVEN completed fresh entry WHEN cached THEN returned."""
         pid = "prev-cache1"
         P._assessment_store[pid] = {"status": "completed",
                                     "completed_at": time.time(),
                                     "report": {"grade": "B"}}
-        P._repo_cache[_url_hash("https://github.com/u/r")] = pid
-        result = P._get_cached_preview("https://github.com/u/r")
+        P._repo_cache[(self._ukey(), _url_hash("https://github.com/u/r"))] = pid
+        result = P._get_cached_preview("https://github.com/u/r", self._ukey())
         assert result is not None
         assert result["cached"] is True
 
@@ -536,20 +543,20 @@ class TestRepoCache:
         P._assessment_store[pid] = {"status": "completed",
                                     "completed_at": time.time() - 48 * 3600,
                                     "report": {}}
-        P._repo_cache[_url_hash("https://github.com/u/r2")] = pid
-        assert P._get_cached_preview("https://github.com/u/r2") is None
+        P._repo_cache[(self._ukey(), _url_hash("https://github.com/u/r2"))] = pid
+        assert P._get_cached_preview("https://github.com/u/r2", self._ukey()) is None
 
     def test_cached_not_completed(self):
         """GIVEN analyzing entry WHEN cached THEN None."""
         pid = "prev-cache3"
         P._assessment_store[pid] = {"status": "analyzing",
                                     "created_at": time.time()}
-        P._repo_cache[_url_hash("https://github.com/u/r3")] = pid
-        assert P._get_cached_preview("https://github.com/u/r3") is None
+        P._repo_cache[(self._ukey(), _url_hash("https://github.com/u/r3"))] = pid
+        assert P._get_cached_preview("https://github.com/u/r3", self._ukey()) is None
 
     def test_cached_no_entry(self):
         """GIVEN unknown hash WHEN cached THEN None."""
-        assert P._get_cached_preview("https://github.com/u/nope") is None
+        assert P._get_cached_preview("https://github.com/u/nope", self._ukey()) is None
 
 
 # ── Cleanup ────────────────────────────────────────────────────────────
@@ -697,12 +704,18 @@ class TestHandlePreview:
         assert len(P._repo_cache.items()) == 1
 
     def test_post_json_repo_url_cached(self, tmp_path):
-        """GIVEN cached repo_url WHEN POST THEN cached response."""
+        """GIVEN cached repo_url WHEN POST THEN cached response.
+
+        W-6: the cache key includes the requester's derived user_key (here
+        the anonymous IP dimension for client 1.1.1.4) — a same-identity
+        repeat still hits its own cache.
+        """
         pid = "prev-cache-rt"
         P._assessment_store[pid] = {"status": "completed",
                                     "completed_at": time.time(),
                                     "report": {"grade": "S"}}
-        P._repo_cache[_url_hash("https://github.com/u/r")] = pid
+        ip_key = "ip:" + hashlib.sha256(b"1.1.1.4").hexdigest()
+        P._repo_cache[(ip_key, _url_hash("https://github.com/u/r"))] = pid
         handler = FakeHandler(headers=_json_headers(),
                               client_address=("1.1.1.4", 0))
         result, status = P.handle_preview(
