@@ -67,9 +67,10 @@ from yuleosh.store import Store
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
-AUTH_ENABLED = os.environ.get("YULEOSH_AUTH_DISABLED", "").lower() not in (
-    "true", "1", "yes"
-)
+# M-3 (v3.6.1 P2-①): single source of truth for AUTH_ENABLED — the
+# environment-variable interpretation lives only in yuleosh/ui/auth.py.
+# server.py must NOT re-derive it (a second copy drifted in v3.6.x).
+from yuleosh.ui.auth import AUTH_ENABLED
 
 # Public paths that never require auth (SEC-C3 whitelist):
 #   - health/status + health dashboard page
@@ -280,9 +281,39 @@ class OSHHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        # M-2 (SEC-P2): cache-control for static assets.
+        #   - content-hashed build artifacts (_next/static/*.js etc.) are
+        #     immutable → long-lived public cache;
+        #   - HTML documents are NEVER long-cached (updates must be visible);
+        #   - non-hashed assets get a short max-age only (no immutable).
+        if self._is_immutable_asset(file_path):
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        elif ext == ".html" or file_path.name == "index.html":
+            self.send_header("Cache-Control", "no-cache")
+        else:
+            self.send_header("Cache-Control", "public, max-age=3600")
         self._add_security_headers()
         self.end_headers()
         self.wfile.write(data)
+
+    @staticmethod
+    def _is_immutable_asset(file_path: Path) -> bool:
+        """True for content-hashed build artifacts (M-2).
+
+        Conservative rule: the file must live under a build output dir
+        (``_next/static`` or ``static``) AND its name must look like
+        ``<8+ alnum/-/_>.<ext>`` — the Next.js ``[name].[hash].js`` pattern.
+        User-uploaded resources never match (no hash in name, or not under
+        a build dir), so they are never marked immutable.
+        """
+        rel = str(file_path)
+        if "/_next/static/" not in rel and "/static/" not in rel:
+            return False
+        name = file_path.name
+        stem = name.rsplit(".", 1)[0] if "." in name else ""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,}", stem or ""):
+            return False
+        return file_path.suffix.lower() in (".js", ".css", ".woff", ".woff2", ".png", ".svg")
 
     def _check_auth(self) -> bool:
         """If AUTH_ENABLED, check session/API key.  Returns True if OK.
@@ -301,7 +332,13 @@ class OSHHandler(BaseHTTPRequestHandler):
         """
         if not AUTH_ENABLED:
             return True
-        if self.path in _PUBLIC_PATHS or self.path.startswith(_PUBLIC_PREFIXES):
+        # M-4 (v3.6.1 P2-②): strip the query string before whitelist matching
+        # so ``/api/health?source=monitor&v=2`` is public like ``/api/health``.
+        # Security boundary: the query is ONLY used to relax matching for
+        # already-public paths — a non-public path with any query still
+        # requires credentials (no query-based bypass).
+        path_only = urllib.parse.urlsplit(self.path).path
+        if path_only in _PUBLIC_PATHS or path_only.startswith(_PUBLIC_PREFIXES):
             return True
         from yuleosh.ui.auth import is_authenticated
         return is_authenticated(self.headers)
@@ -351,8 +388,24 @@ class OSHHandler(BaseHTTPRequestHandler):
         try:
             handle_get(self)
         except Exception as e:
-            logging.error("GET %s: %s", self.path, e)
-            self._serve_static("/")
+            # W-1 (COR-C2 / Fix 4): never silently degrade an exception to a
+            # 200 landing page — that hid real failures from monitoring (and
+            # mismatched do_POST/do_DELETE, which already answer JSON 500).
+            # API paths get a machine-readable JSON 500; page paths get a
+            # plain 500 error page; full traceback goes to the logs.
+            logging.error("GET %s: %s", self.path, e, exc_info=True)
+            if self.path.startswith("/api/"):
+                self._json_response({"error": "Internal server error"}, 500)
+            else:
+                body = b"<h1>500 Internal Server Error</h1>"
+                self.send_response(500)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self._add_security_headers()
+                self.end_headers()
+                self.wfile.write(body)
+            # W-1: audit must record the failure, not a phantom 200.
+            self._response_status = 500
         finally:
             self._response_status = getattr(self, "_response_status", 200)
             log_audit(self)

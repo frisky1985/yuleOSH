@@ -513,10 +513,16 @@ def cmd_onboard(project_dir: str = ".",
             project_dir = os.path.join(project_dir, repo_name)
             if not os.path.exists(project_dir):
                 print(f"\n  {_ROCKET} Cloning repository: {repo}")
-                result = subprocess.run(
-                    ["git", "clone", repo, project_dir],
-                    capture_output=True, text=True,
-                )
+                try:
+                    # W-7 (SEC-W6 / Fix 10): bound the network clone so a
+                    # hung git never blocks onboarding forever.
+                    result = subprocess.run(
+                        ["git", "clone", repo, project_dir],
+                        capture_output=True, text=True, timeout=120,
+                    )
+                except subprocess.TimeoutExpired:
+                    print(f"  {_RED}❌ Clone 超时 (120s) — 已终止:{_RESET}")
+                    sys.exit(1)
                 if result.returncode != 0:
                     print(f"  {_RED}❌ Clone failed:{_RESET} {result.stderr}")
                     sys.exit(1)

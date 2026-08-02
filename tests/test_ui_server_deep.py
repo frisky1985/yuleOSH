@@ -336,16 +336,22 @@ class TestDoGET:
             m_hg.assert_called_once()
 
     def test_get_root_exception_fallback(self):
-        """Exceptions in do_GET fall back to serving static root."""
+        """W-1 (COR-C2 / Fix 4): exceptions in do_GET answer 500 — never a
+        200 landing page (previously exceptions silently degraded to
+        serving the home page, hiding real failures)."""
         from yuleosh.ui.server import OSHHandler
         h = _get_handler_instance()
         h.path = "/"
         h.command = "GET"
+        h.wfile = io.BytesIO()
         with patch("yuleosh.ui.routes.handler_helpers.handle_get",
                    side_effect=RuntimeError("boom")):
             with patch("yuleosh.ui.server.OSHHandler._serve_static") as m_ss:
-                h.do_GET()
-                m_ss.assert_called()
+                with patch("yuleosh.ui.server.OSHHandler.send_response") as m_sr:
+                    h.do_GET()
+                    m_ss.assert_not_called()
+                    m_sr.assert_called_with(500)
+        assert h._response_status == 500
 
     def test_get_pricing(self):
         from yuleosh.ui.server import OSHHandler

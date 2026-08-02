@@ -31,6 +31,11 @@ def handle_status(handler: BaseHTTPRequestHandler) -> dict:
 
 def handle_health(handler: BaseHTTPRequestHandler) -> dict:
     """Return health check data."""
+    # M-3 (v3.6.1 P2-①): AUTH_ENABLED has a single definition source
+    # (yuleosh/ui/auth.py); server.py imports it.  This local fallback is
+    # NOT a third semantic — it only guards against a broken import graph
+    # (defensive; ui/auth.py is stdlib-only so the ImportError path is
+    # effectively dead code) and never re-interprets the env var.
     try:
         from yuleosh.ui.auth import AUTH_ENABLED
     except ImportError:
