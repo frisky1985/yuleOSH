@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 from yuleosh.adapter.vector_adapter import (
     VectorCANoeAdapter,
     _CANOE_NS,

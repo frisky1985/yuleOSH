@@ -24,7 +24,7 @@ from datetime import datetime
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.knowledge_graph.store_pg import KGStorePG
 from yuleosh.knowledge_graph.models_pg import NodePG, EdgePG, SnapshotPG

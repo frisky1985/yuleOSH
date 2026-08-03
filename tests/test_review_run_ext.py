@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.review.run import (
     ReviewFinding,

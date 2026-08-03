@@ -14,7 +14,7 @@ from unittest.mock import patch, MagicMock, mock_open
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -120,7 +120,7 @@ class TestTemplateCommands:
             {"name": "g", "version": "1", "description": "Generic"},
         ]):
             with patch("builtins.input", return_value="1"):
-                with patch("yuleosh.cli.main.cmd_template_init") as mc:
+                with patch("yuleosh.cli.commands.misc.cmd_template_init") as mc:
                     main_module._interactive_template_init("t", str(temp_project))
                     mc.assert_called_once()
 

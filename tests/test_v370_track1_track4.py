@@ -32,7 +32,7 @@ from unittest.mock import patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 # ── Local fixtures (mirror test_cli_main_adv_unit.py) ───────────────────────

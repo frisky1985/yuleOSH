@@ -5,7 +5,7 @@ line that gets hit is free coverage.
 """
 
 import os, sys
-sys.path.insert(0, "src")
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 class TestMaxImport:

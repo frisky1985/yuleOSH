@@ -229,7 +229,6 @@ def _spawn_server(env_extra: dict | None = None):
         [
             sys.executable,
             "-c",
-            "import sys; sys.path.insert(0, 'src');"
             f"from yuleosh.ui.server import main; main(host='127.0.0.1', port={port})",
         ],
         cwd=str(REPO_ROOT),
@@ -401,7 +400,6 @@ class TestAuthUnit:
         env["YULEOSH_JWT_SECRET"] = "x" * 20
         out = subprocess.run(
             [sys.executable, "-c",
-             "import sys; sys.path.insert(0,'src');"
              "from yuleosh.ui.auth import AUTH_ENABLED; print(AUTH_ENABLED)"],
             cwd=str(REPO_ROOT), env=env, capture_output=True, text=True,
             timeout=30)

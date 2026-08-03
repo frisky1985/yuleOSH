@@ -4,7 +4,7 @@
 """Tests for CI engine — includes A-01 blocking logic verification."""
 import sys, os, tempfile, json, subprocess, time
 from unittest import mock
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.ci.run import (
     CIResult, find_test_files, run_layer1, run_layer2, run_layer3,

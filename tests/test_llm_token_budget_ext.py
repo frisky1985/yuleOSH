@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.llm.token_budget import TokenBudgetChecker, BudgetCheckResult
 from yuleosh.llm.providers.base import LLMConfig, PRICING_TABLE, TASK_BUDGETS
