@@ -252,6 +252,9 @@ def handle_post(handler) -> None:
     if path == "/api/auth/signin":
         handler._handle_api("signin")
         return
+    if path == "/api/auth/refresh":
+        handler._handle_api("refresh")
+        return
     if path == "/api/org/create":
         handler._handle_api("org_create")
         return
