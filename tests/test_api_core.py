@@ -21,10 +21,37 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 _TEST_JWT_SECRET = "test-api-core-secret-32-chars-min!!"
 
 
+_SAVED_ENV_SECRET = None
+_SAVED_AE_SECRET = None
+
+
 def _setup_jwt():
+    """Set the unified JWT secret for this test module.
+
+    A1 (v3.8.0): the single source of truth is ui/auth_extended.JWT_SECRET
+    (api/auth.py and middleware import it).  Patch BOTH the env var and the
+    unified module constant, and record the old values so tests never leak
+    a mutated secret into later test files (order-independent suite).
+    """
+    global _SAVED_ENV_SECRET, _SAVED_AE_SECRET
+    import yuleosh.ui.auth_extended as _ae
+    _SAVED_ENV_SECRET = os.environ.get("YULEOSH_JWT_SECRET")
+    _SAVED_AE_SECRET = _ae.JWT_SECRET
     os.environ["YULEOSH_JWT_SECRET"] = _TEST_JWT_SECRET
-    import yuleosh.api.auth
-    yuleosh.api.auth._JWT_SECRET = _TEST_JWT_SECRET
+    _ae.JWT_SECRET = _TEST_JWT_SECRET
+
+
+def _teardown_jwt():
+    """Restore the unified JWT secret after each test (no cross-file leak)."""
+    global _SAVED_ENV_SECRET, _SAVED_AE_SECRET
+    import yuleosh.ui.auth_extended as _ae
+    if _SAVED_ENV_SECRET is not None:
+        os.environ["YULEOSH_JWT_SECRET"] = _SAVED_ENV_SECRET
+    else:
+        os.environ.pop("YULEOSH_JWT_SECRET", None)
+    if _SAVED_AE_SECRET is not None:
+        _ae.JWT_SECRET = _SAVED_AE_SECRET
+    _SAVED_ENV_SECRET = _SAVED_AE_SECRET = None
 
 
 # ===================================================================
@@ -52,6 +79,9 @@ class TestAuthAPI:
 
     def setup_method(self):
         _setup_jwt()
+
+    def teardown_method(self):
+        _teardown_jwt()
 
     def test_register_success(self):
         from yuleosh.api.auth import handle_auth
@@ -140,6 +170,9 @@ class TestProjectAPI:
 
     def setup_method(self):
         _setup_jwt()
+
+    def teardown_method(self):
+        _teardown_jwt()
 
     def test_create_project(self):
         from yuleosh.api.project import handle_project
