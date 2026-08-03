@@ -418,6 +418,48 @@ def get_session_user(token: str) -> dict | None:
 # Auth endpoints
 # ---------------------------------------------------------------------------
 
+def register(body: dict) -> tuple:
+    """Unified v1 register — org + admin user + token (A1, SHALL-A1.4).
+
+    v1 semantics (POST /api/v1/auth/register):
+      {email, password, organization_name} -> org (or reuse by slug) +
+      admin user + session token; 409 when the email already exists in the
+      target org; 400 on validation errors.
+
+    This is the single implementation of the org+user+token signup flow
+    used by the v1 API (the frontend uses handle_signin + handle_org_create).
+    Returns ``(dict, status)`` with ``token/user_id/org_id/role`` on
+    success or ``{"error": ...}`` on failure.
+    """
+    email = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+    org_name = (body.get("organization_name") or "").strip()
+
+    if not email or not EMAIL_RE.match(email):
+        return {"error": "Valid email is required"}, 400
+    if not password or len(password) < 8:
+        return {"error": "Password must be at least 8 characters"}, 400
+    if not org_name:
+        return {"error": "organization_name is required"}, 400
+
+    store = Store()
+    org_slug = _slugify(org_name)
+    org = store.get_organization(org_slug)
+    if org:
+        existing = store.get_user(org["id"], email)
+        if existing:
+            return {"error": "Email already registered in this organization"}, 409
+    else:
+        org = store.create_organization(org_name, org_slug)
+
+    password_hash = _hash_password(password)
+    user = store.create_user(org["id"], email, "admin", password_hash)
+    token = _generate_token(user["id"], org["id"], email)
+    store.create_session(user["id"], token, SESSION_TTL_HOURS)
+    return {"token": token, "user_id": user["id"],
+            "org_id": org["id"], "role": "admin"}, 200
+
+
 def handle_signin(body: dict, ip: str = "") -> dict:
     """POST /api/auth/signin — Password-based signin/signup.
 
