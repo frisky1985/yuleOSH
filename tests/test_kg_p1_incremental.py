@@ -574,8 +574,20 @@ class TestIncrementalBootstrap:
 
 class TestKgCliCommands:
 
-    def test_cmd_stats(self, store):
+    def _patch_store(self, monkeypatch, store):
+        """让 CLI 命令读取 fixture 的 in-memory store（避免磁盘库依赖）.
+
+        修复既有问题：cmd_* 默认经 _get_store(project_dir) 打开磁盘库
+        .yuleosh/knowledge_graph.db，而 fixture store 是 :memory:，
+        数据进不到被测函数（干净环境必挂）。这里 monkeypatch
+        _get_store 直接返回 fixture 实例，测试自包含。
+        """
+        from yuleosh.knowledge_graph import kg_cli
+        monkeypatch.setattr(kg_cli, "_get_store", lambda project_dir, kwargs=None: store)
+
+    def test_cmd_stats(self, store, monkeypatch):
         """kg stats command returns valid statistics."""
+        self._patch_store(monkeypatch, store)
         # Add some data
         store.upsert_node(Node(entity_type="requirement", entity_id="R-001", label="R-001"))
         store.upsert_node(Node(entity_type="code_file", entity_id="src/main.py", label="main.py"))
@@ -590,8 +602,9 @@ class TestKgCliCommands:
         result = cmd_stats(Args())
         assert result.get("total_nodes", 0) >= 2
 
-    def test_cmd_snapshot_list(self, store):
+    def test_cmd_snapshot_list(self, store, monkeypatch):
         """kg snapshot list returns snapshots."""
+        self._patch_store(monkeypatch, store)
         from yuleosh.knowledge_graph.kg_cli import cmd_snapshot_list
 
         # Create a snapshot first
@@ -604,8 +617,9 @@ class TestKgCliCommands:
         result = cmd_snapshot_list(Args())
         assert len(result.get("snapshots", [])) >= 1
 
-    def test_cmd_snapshot_diff_with_build_ids(self, store):
+    def test_cmd_snapshot_diff_with_build_ids(self, store, monkeypatch):
         """kg snapshot diff with valid build IDs."""
+        self._patch_store(monkeypatch, store)
         from yuleosh.knowledge_graph.kg_cli import cmd_snapshot_diff
 
         # Create two snapshots

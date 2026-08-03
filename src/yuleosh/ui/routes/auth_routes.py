@@ -148,6 +148,25 @@ def handle_api_action(handler: BaseHTTPRequestHandler, action: str):
             _send_json_response(handler, result, status,
                                 set_cookies=_clear_cookie_headers())
         elif action == "refresh":
+            # P2-1 (v3.9.1): per-IP rate limit on the refresh endpoint.
+            # Rotation already makes each refresh token single-use
+            # (SHALL-T1.13); the limiter adds brute-force protection on
+            # top (复验 P2-1 观察项闭环).
+            from yuleosh.ui import server as _server
+            client_ip = ""
+            try:
+                client_ip = handler.client_address[0]
+            except (AttributeError, IndexError, TypeError):
+                pass
+            allowed, retry_after = _server.check_rate_limit(client_ip)
+            if not allowed:
+                _send_json_error(
+                    handler,
+                    "Rate limit exceeded. Retry after {} seconds.".format(
+                        retry_after),
+                    429,
+                )
+                return
             # T1 (v3.9.0, SHALL-T1.5): POST /api/auth/refresh — cookie
             # mode renewal.  The refresh token comes from the yuleosh_rt
             # cookie (or an explicit Bearer for API clients).
