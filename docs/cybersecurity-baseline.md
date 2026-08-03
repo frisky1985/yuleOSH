@@ -257,6 +257,21 @@
 
 ---
 
+## 12.5 CSP 覆盖拓扑（v3.9.0 Track3 T2）
+
+Content-Security-Policy 的覆盖边界（纵深防御第二道防线，与 X-01 内容层消毒并存）：
+
+| 拓扑 | CSP 机制 | 说明 |
+|------|----------|------|
+| Python 后端直连（生产 nginx 代理 + 本地） | 响应头 CSP（`ui/server.py` CSP_POLICY_TEMPLATE） | 每请求 nonce 放行内联 RSC 脚本（B5①）；`style-src 'self' 'unsafe-inline'` + `style-src-attr 'unsafe-inline'`（静态导出的内联 style 属性 + React 运行时注入的 <style> 元素）；`object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'`；**已移除 'unsafe-eval'**（产物唯一 `Function("return this")` 为 core-js global 检测短路死代码，见 server.py 注释） |
+| GitHub Pages 静态托管（gh-pages 分支） | HTML `<meta http-equiv="Content-Security-Policy">`（`frontend/scripts/inject-meta-csp.py` 构建后注入） | **静态托管无法自定义响应头**（T-T2-12-neg）→ meta 降级方案：内联 RSC 脚本用 sha256 hash 白名单（最强静态选项）；style-src-attr 'unsafe-inline' 同 Python 策略；不静默声称与响应头同等强度 |
+| nginx | **不设置 CSP** | 后端每请求 nonce 策略已覆盖；nginx 若叠加静态 CSP 会与 nonce 策略取交集、拦截内联脚本（双头冲突）。nginx.conf 注释注明单一来源 = `ui/server.py` |
+| API JSON 响应 | `default-src 'self'` | 非页面场景，保持 v3.8.0 语义（T-T2-11） |
+
+外域放行（cdn.tailwindcss.com / js.stripe.com / fonts.googleapis.com / fonts.gstatic.com / api.stripe.com）已全部移除——产物实测零引用（T-T2-02）。
+
+---
+
 ## 12. 参考文档
 
 - ISA/IEC 62443-3-3:2013 — System Security Requirements and Security Levels
