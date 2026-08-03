@@ -10,7 +10,9 @@ class TestApiStats:
 
     @patch("yuleosh.api.stats.Store")
     def test_overview(self, mock_store_cls):
-        """GET /stats/overview returns counts."""
+        """GET /stats/overview returns counts.
+
+        A4 (v3.8.0): ci_pass_count goes through Store.count_ci_passed."""
         mock_store = MagicMock()
         mock_store.get_usage_stats.return_value = {
             "total_pipelines": 10,
@@ -18,9 +20,7 @@ class TestApiStats:
             "total_ci_runs": 20,
             "total_reviews": 5,
         }
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = {"c": 15}
-        mock_store.conn.execute.return_value = mock_cursor
+        mock_store.count_ci_passed.return_value = 15
         mock_store_cls.return_value = mock_store
 
         result, code = handle_stats("GET", "overview", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
