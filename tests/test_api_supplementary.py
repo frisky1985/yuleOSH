@@ -268,7 +268,9 @@ class TestAuthDeep:
         token = _generate_token(1, 1, "test@test.com")
         payload = _decode_token(token)
         assert payload is not None
-        assert payload["user_id"] == 1
+        # A1 (v3.8.0): claims unified to sub/org (SHALL-A1.3).
+        assert payload["sub"] == "1"
+        assert payload["org"] == 1
         assert payload["email"] == "test@test.com"
 
     def test_decode_token_expired(self):
@@ -292,7 +294,12 @@ class TestAuthDeep:
         assert _extract_token("") is None
 
     def test_check_rate_limit(self):
-        from yuleosh.api.auth import _check_rate_limit, _SIGNIN_RATE_LIMIT, _MAX_SIGNIN_ATTEMPTS
+        # A1 (v3.8.0): shared limiter counts FAILED attempts only
+        # (SHALL-A1.6); _check_rate_limit is a pure check.
+        from yuleosh.api.auth import (
+            _check_rate_limit, _SIGNIN_RATE_LIMIT,
+            _check_and_record_failed_attempt, _MAX_SIGNIN_ATTEMPTS,
+        )
         _SIGNIN_RATE_LIMIT.clear()
         email = "spammer@example.com"
 
@@ -300,9 +307,9 @@ class TestAuthDeep:
         blocked = _check_rate_limit(email)
         assert blocked is False
 
-        # Fill rate limit
-        for _ in range(_MAX_SIGNIN_ATTEMPTS - 1):
-            _check_rate_limit(email)
+        # Fill rate limit (failed attempts)
+        for _ in range(_MAX_SIGNIN_ATTEMPTS):
+            _check_and_record_failed_attempt(email)
 
         # Now should be blocked
         blocked = _check_rate_limit(email)

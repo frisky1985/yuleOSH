@@ -25,10 +25,17 @@ import pytest
 
 @pytest.fixture
 def mock_store():
-    """Patch yuleosh.store.Store to return a MagicMock."""
-    with patch("yuleosh.api.auth.Store") as m:
+    """Patch both api.auth.Store and ui.auth_extended.Store.
+
+    A1 (v3.8.0): handlers delegate to auth_extended (register/signin/logout
+    and get_session_user all instantiate auth_extended.Store), so both
+    namespaces must resolve to the same mock instance.
+    """
+    with patch("yuleosh.api.auth.Store") as m, \
+         patch("yuleosh.ui.auth_extended.Store") as m2:
         instance = MagicMock()
         m.return_value = instance
+        m2.return_value = instance
         yield instance
 
 
@@ -89,8 +96,9 @@ class TestJWTToken:
         assert isinstance(token, str)
         payload = _decode_token(token)
         assert payload is not None
-        assert payload["user_id"] == 1
-        assert payload["org_id"] == 10
+        # A1 (v3.8.0): claims unified to sub/org (SHALL-A1.3).
+        assert payload["sub"] == "1"
+        assert payload["org"] == 10
         assert payload["email"] == "user@test.com"
 
     def test_decode_expired(self):
@@ -100,7 +108,7 @@ class TestJWTToken:
         # Decode with the same secret should work (it's not expired yet)
         payload = _decode_token(token)
         assert payload is not None
-        assert payload["user_id"] == 1
+        assert payload["sub"] == "1"
 
     def test_decode_invalid_token(self):
         from yuleosh.api.auth import _decode_token
@@ -113,7 +121,8 @@ class TestJWTToken:
 
     def test_decode_expired_sig(self):
         from yuleosh.api.auth import _decode_token
-        with patch("yuleosh.api.auth.jwt.decode") as mock_decode:
+        # A1: the unified decoder lives in ui/auth_extended.
+        with patch("yuleosh.ui.auth_extended.jwt.decode") as mock_decode:
             import jwt as jwt_mod
             mock_decode.side_effect = jwt_mod.ExpiredSignatureError()
             result = _decode_token("expired")
@@ -121,7 +130,8 @@ class TestJWTToken:
 
     def test_decode_invalid_error(self):
         from yuleosh.api.auth import _decode_token
-        with patch("yuleosh.api.auth.jwt.decode") as mock_decode:
+        # A1: the unified decoder lives in ui/auth_extended.
+        with patch("yuleosh.ui.auth_extended.jwt.decode") as mock_decode:
             import jwt as jwt_mod
             mock_decode.side_effect = jwt_mod.InvalidTokenError()
             result = _decode_token("bad")
@@ -171,24 +181,31 @@ class TestRateLimit:
     def test_under_limit(self):
         from yuleosh.api.auth import _check_rate_limit, _SIGNIN_RATE_LIMIT
         _SIGNIN_RATE_LIMIT.clear()
-        _check_rate_limit("a@b.com")  # 1st attempt
-        assert _check_rate_limit("a@b.com") is False  # 2nd attempt
+        assert _check_rate_limit("a@b.com") is False  # no entry yet
+        assert _check_rate_limit("a@b.com") is False  # still not blocked
 
     def test_over_limit(self):
-        from yuleosh.api.auth import _check_rate_limit, _SIGNIN_RATE_LIMIT, _MAX_SIGNIN_ATTEMPTS
+        # A1 (v3.8.0): the shared rate limiter counts FAILED attempts only
+        # (recorded via _record_failed_attempt / _check_and_record_failed_attempt);
+        # _check_rate_limit is a pure check.  Merge semantics (SHALL-A1.6).
+        from yuleosh.api.auth import (
+            _check_rate_limit, _SIGNIN_RATE_LIMIT,
+            _check_and_record_failed_attempt, _MAX_SIGNIN_ATTEMPTS,
+        )
         _SIGNIN_RATE_LIMIT.clear()
         for _ in range(_MAX_SIGNIN_ATTEMPTS):
-            _check_rate_limit("spam@test.com")
+            _check_and_record_failed_attempt("spam@test.com")
         # Now we're at the limit
         assert _check_rate_limit("spam@test.com") is True
 
     def test_window_expires(self):
-        from yuleosh.api.auth import _check_rate_limit, _SIGNIN_RATE_LIMIT, _MAX_SIGNIN_ATTEMPTS, _RATE_WINDOW_SECONDS
+        from yuleosh.api.auth import (
+            _check_rate_limit, _SIGNIN_RATE_LIMIT,
+            _MAX_SIGNIN_ATTEMPTS, _RATE_WINDOW_SECONDS,
+        )
         _SIGNIN_RATE_LIMIT.clear()
-        for _ in range(_MAX_SIGNIN_ATTEMPTS):
-            _check_rate_limit("expire@test.com")
-        # Simulate window expired
-        _SIGNIN_RATE_LIMIT["expire@test.com"] = (_MAX_SIGNIN_ATTEMPTS, int(time.time()) - _RATE_WINDOW_SECONDS - 1)
+        _SIGNIN_RATE_LIMIT["expire@test.com"] = (
+            _MAX_SIGNIN_ATTEMPTS, int(time.time()) - _RATE_WINDOW_SECONDS - 1)
         assert _check_rate_limit("expire@test.com") is False  # window reset
 
 
@@ -434,50 +451,44 @@ class TestHandleMe:
         from yuleosh.api.auth import _handle_me
         handler = MagicMock()
         handler.headers = {"Authorization": "Bearer validtoken"}
-        mock_store.get_session.return_value = None
-        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"):
-            with patch("yuleosh.api.auth._decode_token",
-                       return_value={"user_id": 1, "org_id": 10}):
-                result = _handle_me(handler=handler)
-                assert result[1] == 401
+        # A1: _handle_me delegates to the unified get_session_user — mock
+        # it to return None (no live session) instead of patching the old
+        # local decode path.
+        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"), \
+             patch("yuleosh.api.auth.get_session_user", return_value=None):
+            result = _handle_me(handler=handler)
+        assert result[1] == 401
 
     def test_user_not_found(self, mock_store):
         from yuleosh.api.auth import _handle_me
         handler = MagicMock()
         handler.headers = {"Authorization": "Bearer validtoken"}
-        mock_store.get_session.return_value = {"id": 1}
-        mock_store.get_user_by_id.return_value = None
-        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"):
-            with patch("yuleosh.api.auth._decode_token",
-                       return_value={"user_id": 1, "org_id": 10}):
-                result = _handle_me(handler=handler)
-                assert result[1] == 401
+        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"), \
+             patch("yuleosh.api.auth.get_session_user", return_value=None):
+            result = _handle_me(handler=handler)
+        assert result[1] == 401
 
     def test_org_not_found(self, mock_store):
         from yuleosh.api.auth import _handle_me
         handler = MagicMock()
         handler.headers = {"Authorization": "Bearer validtoken"}
-        mock_store.get_session.return_value = {"id": 1}
-        mock_store.get_user_by_id.return_value = {"id": 1, "email": "u@t.com"}
-        mock_store.get_organization_by_id.return_value = None
-        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"):
-            with patch("yuleosh.api.auth._decode_token",
-                       return_value={"user_id": 1, "org_id": 10}):
-                result = _handle_me(handler=handler)
-                assert result[1] == 401
+        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"), \
+             patch("yuleosh.api.auth.get_session_user", return_value=None):
+            result = _handle_me(handler=handler)
+        assert result[1] == 401
 
     def test_success(self, mock_store):
         from yuleosh.api.auth import _handle_me
         handler = MagicMock()
         handler.headers = {"Authorization": "Bearer validtoken"}
-        mock_store.get_session.return_value = {"id": 1}
-        mock_store.get_user_by_id.return_value = {"id": 1, "email": "u@t.com", "role": "admin"}
-        mock_store.get_organization_by_id.return_value = {"id": 10, "name": "Org", "slug": "org"}
-        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"):
-            with patch("yuleosh.api.auth._decode_token",
-                       return_value={"user_id": 1, "org_id": 10}):
-                result = _handle_me(handler=handler)
-                assert result[0].get("ok")
+        info = {
+            "user_id": 1, "org_id": 10, "email": "u@t.com",
+            "role": "admin", "org_name": "Org", "org_slug": "org",
+        }
+        with patch("yuleosh.api.auth._extract_token", return_value="validtoken"), \
+             patch("yuleosh.api.auth.get_session_user", return_value=info):
+            result = _handle_me(handler=handler)
+        assert result[0].get("ok")
 
 
 # ======================================================================

@@ -742,13 +742,14 @@ class TestApiAuth:
         assert _verify_password("mypassword", hashed) is True
         assert _verify_password("wrong", hashed) is False
 
-    @patch("yuleosh.api.auth.secrets.token_urlsafe", return_value="fake-secret-32-bytes-long---!")
-    def test_generate_token(self, mock_secret):
+    def test_generate_token(self):
         from yuleosh.api.auth import _generate_token
-        with patch("yuleosh.api.auth.os.environ.get", return_value=None):
-            token = _generate_token(1, 1, "test@test.com")
-            assert isinstance(token, str)
-            assert len(token) > 10
+        # A1 (v3.8.0): token generation delegates to the unified
+        # auth_extended implementation (single source — no secrets/os
+        # fallback patching needed).
+        token = _generate_token(1, 1, "test@test.com")
+        assert isinstance(token, str)
+        assert len(token) > 10
 
     @patch("yuleosh.api.auth.Store")
     def test_handle_auth_register(self, mock_store):

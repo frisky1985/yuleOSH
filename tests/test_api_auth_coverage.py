@@ -49,7 +49,7 @@ class TestAuthInternalHelpers:
         assert _MAX_SIGNIN_ATTEMPTS == 10
         assert _RATE_WINDOW_SECONDS == 300
 
-    @mock.patch("yuleosh.api.auth.bcrypt.hashpw")
+    @mock.patch("yuleosh.ui.auth_extended.bcrypt.hashpw")
     def test_hash_password(self, mock_hash):
         from yuleosh.api.auth import _hash_password
 
@@ -58,14 +58,14 @@ class TestAuthInternalHelpers:
         assert result is not None
         assert isinstance(result, str)
 
-    @mock.patch("yuleosh.api.auth.bcrypt.checkpw")
+    @mock.patch("yuleosh.ui.auth_extended.bcrypt.checkpw")
     def test_verify_password_correct(self, mock_check):
         from yuleosh.api.auth import _verify_password
 
         mock_check.return_value = True
         assert _verify_password("testpass", "hashed") is True
 
-    @mock.patch("yuleosh.api.auth.bcrypt.checkpw")
+    @mock.patch("yuleosh.ui.auth_extended.bcrypt.checkpw")
     def test_verify_password_incorrect(self, mock_check):
         from yuleosh.api.auth import _verify_password
 
@@ -85,7 +85,9 @@ class TestAuthInternalHelpers:
         token = _generate_token(user_id=1, org_id=2, email="test@example.com")
         decoded = _decode_token(token)
         assert decoded is not None
-        assert decoded["user_id"] == 1
+        # A1 (v3.8.0): claims unified to sub/org (SHALL-A1.3).
+        assert decoded["sub"] == "1"
+        assert decoded["org"] == 2
 
     def test_decode_token_invalid(self):
         from yuleosh.api.auth import _decode_token
