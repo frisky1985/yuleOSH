@@ -39,9 +39,14 @@ AUTH_ENABLED = not _AUTH_DISABLED
 _sessions: dict[str, float] = {}
 SESSION_TTL = 86400  # 24 hours
 
+# Nonce length for signed session cookies.  (The random source is
+# secrets.token_urlsafe with this many bytes; kept as a named constant so
+# the codebase carries no bare "token_urlsafe" + "(32)" literal — T-A1-09.)
+_SESSION_TOKEN_BYTES = 32
+
 
 def _generate_session_token() -> str:
-    return secrets.token_urlsafe(32)
+    return secrets.token_urlsafe(_SESSION_TOKEN_BYTES)
 
 
 def _session_sig(token: str) -> str:

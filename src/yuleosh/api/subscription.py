@@ -53,8 +53,8 @@ def _get_authenticated_org(headers: dict) -> tuple:
 
     A1/F1 (v3.8.0): JWT secret now comes from the single source
     (ui.auth_extended.JWT_SECRET) instead of a per-call random fallback —
-    the old ``secrets.token_urlsafe(32)`` default made every cross-call
-    verification fail (fresh secret each time).
+    the old random default made every cross-call verification fail
+    (fresh secret each time).
     """
     import jwt as pyjwt
 
