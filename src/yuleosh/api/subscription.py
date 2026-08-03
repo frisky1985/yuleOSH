@@ -25,6 +25,7 @@ from yuleosh.usage import (
     TIERS,
     TRIAL_DAYS,
 )
+from yuleosh.ui.auth_extended import JWT_SECRET, JWT_ALGORITHM  # A1/F1: unified source
 from . import json_ok, json_error
 from ._errors import internal_error
 
@@ -48,18 +49,21 @@ def _extract_token(headers: dict) -> str:
 
 
 def _get_authenticated_org(headers: dict) -> tuple:
-    """Get org_id from JWT token. Returns (org_id, user_id, org_slug) or raises."""
+    """Get org_id from JWT token. Returns (org_id, user_id, org_slug) or raises.
+
+    A1/F1 (v3.8.0): JWT secret now comes from the single source
+    (ui.auth_extended.JWT_SECRET) instead of a per-call random fallback —
+    the old ``secrets.token_urlsafe(32)`` default made every cross-call
+    verification fail (fresh secret each time).
+    """
     import jwt as pyjwt
-    import os
-    import secrets
 
     token = _extract_token(headers)
     if not token:
         raise PermissionError("Authentication required")
 
-    secret = os.environ.get("YULEOSH_JWT_SECRET", secrets.token_urlsafe(32))
     try:
-        payload = pyjwt.decode(token, secret, algorithms=["HS256"])
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except Exception:
         raise PermissionError("Invalid or expired token")
 
