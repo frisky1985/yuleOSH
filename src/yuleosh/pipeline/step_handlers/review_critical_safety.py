@@ -358,9 +358,11 @@ class CriticalSafetyScanner:
                 if (lhs.startswith(('arg', 'param', 'in_', 'raw')) or
                     rhs.startswith(('arg', 'param', 'in_', 'raw'))) and \
                    'uint32' not in stripped and 'uint64' not in stripped:
+                    _m = re.search(r'[\+\-\*]', stripped)
+                    _op = _m.group() if _m else "?"
                     self.violations.append(CriticalViolation(
                         "CRIT-INT-001", str(filepath), lineno,
-                        f"潜在整型溢出：{dst} = {lhs} {re.search(r'[\+\-\*]', stripped).group()} {rhs}",
+                        f"潜在整型溢出：{dst} = {lhs} {_op} {rhs}",
                         snippet=stripped,
                         fix_suggestion="加宽类型至 uint32_t 或添加边界检查"
                     ))

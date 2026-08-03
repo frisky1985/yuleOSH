@@ -148,7 +148,8 @@ class BaseRuleSet(abc.ABC):
             # 检查 severity 是否合法
             sev = rdef.get("severity", "").upper()
             if sev not in ("S0", "S1", "S2"):
-                errors.append(f"{rid}: invalid severity '{rdef.get("severity", "")}'")
+                _sev = rdef.get("severity", "")
+                errors.append(f"{rid}: invalid severity '{_sev}'")
 
             # 检查 mapped_misra_ids 格式
             misra_ids = rdef.get("mapped_misra_ids", [])
