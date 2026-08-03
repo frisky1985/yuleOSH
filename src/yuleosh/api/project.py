@@ -33,10 +33,12 @@ def handle_project(method: str, path_tail: str, body: dict, query: dict, **kwarg
 
 
 def _list_projects(store) -> tuple[dict, int]:
-    """GET /api/v1/project — list all projects."""
-    conn = store.conn
-    cur = conn.execute("SELECT * FROM projects ORDER BY created_at DESC")
-    projects = [dict(r) for r in cur.fetchall()]
+    """GET /api/v1/project — list all projects.
+
+    A4 (v3.8.0): goes through the Store interface (SHALL-A4.1) — no bare
+    raw SQL calls in api/project.py anymore.
+    """
+    projects = store.list_projects()
     return json_ok({"projects": projects, "count": len(projects)})
 
 
@@ -62,35 +64,17 @@ def _create_project(store, body: dict) -> tuple[dict, int]:
     store.init_project(name, description)
 
     if spec_path:
-        conn = store.conn
-        conn.execute("UPDATE projects SET spec_path=? WHERE name=?", (spec_path, name))
-        conn.commit()
+        # A4: spec_path update via the Store interface (SHALL-A4.1).
+        store.update_project_spec_path(name, spec_path)
 
     p = store.get_project(name)
     return json_ok(p)
 
 
 def _project_stats(store) -> tuple[dict, int]:
-    """GET /api/v1/project/stats — aggregate project statistics."""
-    # Count across all store tables
-    conn = store.conn
-    pipe_count = conn.execute("SELECT COUNT(*) as c FROM pipelines").fetchone()["c"]
-    ci_count = conn.execute("SELECT COUNT(*) as c FROM ci_runs").fetchone()["c"]
-    review_count = conn.execute("SELECT COUNT(*) as c FROM reviews").fetchone()["c"]
-    ev_count = conn.execute("SELECT COUNT(*) as c FROM evidence").fetchone()["c"]
-    proj_count = conn.execute("SELECT COUNT(*) as c FROM projects").fetchone()["c"]
+    """GET /api/v1/project/stats — aggregate project statistics.
 
-    # Count pipeline statuses
-    pipe_statuses = conn.execute(
-        "SELECT status, COUNT(*) as c FROM pipelines GROUP BY status"
-    ).fetchall()
-    statuses = {r["status"]: r["c"] for r in pipe_statuses}
-
-    return json_ok({
-        "projects": proj_count,
-        "pipelines": pipe_count,
-        "pipeline_statuses": statuses,
-        "ci_runs": ci_count,
-        "reviews": review_count,
-        "evidence_files": ev_count,
-    })
+    A4 (v3.8.0): via Store.get_project_stats (SHALL-A4.1) — the v3.7.0
+    bare-SQL counts moved into the Store implementation (SHALL-A4.4).
+    """
+    return json_ok(store.get_project_stats())

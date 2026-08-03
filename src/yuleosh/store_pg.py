@@ -682,6 +682,67 @@ class PostgresStore(AbstractStore):
             "ci_by_layer": ci_layers,
         }
 
+    # A4 (v3.8.0): Store interface methods — PG 同步实现（SHALL-A4.3）.
+
+    def list_projects(self) -> list:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT * FROM projects ORDER BY created_at DESC")
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    def update_project_spec_path(self, name: str, spec_path: str):
+        with self.conn.cursor() as cur:
+            cur.execute("UPDATE projects SET spec_path=%s WHERE name=%s",
+                        (spec_path, name))
+        self.conn.commit()
+
+    def get_project_stats(self) -> dict:
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM pipelines"); pipe = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM ci_runs"); ci = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM reviews"); rv = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM evidence"); ev = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM projects"); pj = cur.fetchone()[0]
+            cur.execute("SELECT status, COUNT(*) as c FROM pipelines GROUP BY status")
+            pipe_statuses = {r[0]: r[1] for r in cur.fetchall()}
+        return {
+            "projects": pj, "pipelines": pipe,
+            "pipeline_statuses": pipe_statuses,
+            "ci_runs": ci, "reviews": rv, "evidence_files": ev,
+        }
+
+    def count_ci_passed(self) -> int:
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM ci_runs WHERE status='passed'")
+                return cur.fetchone()[0]
+        except Exception:
+            return 0
+
+    def get_pipeline_trend_rows(self, start_iso: str) -> list:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT created_at, status FROM pipelines "
+                "WHERE created_at >= %s ORDER BY created_at", (start_iso,))
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    def get_ci_trend_rows(self, start_iso: str) -> list:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT started_at, status FROM ci_runs "
+                "WHERE started_at >= %s ORDER BY started_at", (start_iso,))
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    def get_review_trend_rows(self, start_iso: str) -> list:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT created_at FROM reviews "
+                "WHERE created_at >= %s ORDER BY created_at", (start_iso,))
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, r)) for r in cur.fetchall()]
+
     def get_migration_version(self) -> int:
         with self.conn.cursor() as cur:
             cur.execute("SELECT value FROM _meta WHERE key='migration_version'")

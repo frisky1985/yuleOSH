@@ -42,16 +42,9 @@ def _overview():
 
     ci_pass_rate = 0
     if stats["total_ci_runs"] > 0:
-        passed = 0
-        try:
-            conn = store.conn
-            passed = conn.execute(
-                "SELECT COUNT(*) as c FROM ci_runs WHERE status='passed'"
-            ).fetchone()["c"]
-        except Exception as e:
-            import logging; logging.getLogger("api.stats").warning("Stats query error: %s", e)
-            passed = 0
-            pass
+        # A4 (v3.8.0): ci_pass_count via the Store interface (SHALL-A4.2) —
+        # no bare raw SQL in api/stats.py anymore.
+        passed = store.count_ci_passed()
         ci_pass_rate = round(passed / stats["total_ci_runs"] * 100, 1)
 
     return json_ok({
@@ -76,29 +69,16 @@ def _trends(query: dict):
         return json_error("period must be 'daily' or 'weekly'", 400)
 
     store = Store()
-    conn = store.conn
 
     now = datetime.now()
     start_date = now - timedelta(days=days)
     start_str = start_date.isoformat()
 
-    # Gather pipeline runs by date
-    pipe_rows = conn.execute(
-        "SELECT created_at, status FROM pipelines WHERE created_at >= ? ORDER BY created_at",
-        (start_str,)
-    ).fetchall()
-
-    # Gather CI runs by date
-    ci_rows = conn.execute(
-        "SELECT started_at, status FROM ci_runs WHERE started_at >= ? ORDER BY started_at",
-        (start_str,)
-    ).fetchall()
-
-    # Gather reviews by date
-    review_rows = conn.execute(
-        "SELECT created_at FROM reviews WHERE created_at >= ? ORDER BY created_at",
-        (start_str,)
-    ).fetchall()
+    # A4 (v3.8.0): trend rows via the Store interface (SHALL-A4.2) — no
+    # bare raw SQL in api/stats.py anymore.
+    pipe_rows = store.get_pipeline_trend_rows(start_str)
+    ci_rows = store.get_ci_trend_rows(start_str)
+    review_rows = store.get_review_trend_rows(start_str)
 
     def _bucket_key(iso_date: str, period: str) -> str:
         """Convert ISO datetime to bucket key."""

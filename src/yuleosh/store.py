@@ -329,6 +329,75 @@ class Store(AbstractStore):
             "ci_by_layer": {str(r["layer"]): r["c"] for r in ci_layers},
         }
 
+    # A4 (v3.8.0): Store interface methods — eliminate bare conn.execute
+    # in api/project.py / api/stats.py (SHALL-A4.1/4.2).
+
+    def list_projects(self) -> list:
+        """SELECT * FROM projects ORDER BY created_at DESC (A4)."""
+        cur = self.conn.execute(
+            "SELECT * FROM projects ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+    def update_project_spec_path(self, name: str, spec_path: str):
+        """UPDATE projects SET spec_path=? WHERE name=? (A4)."""
+        self.conn.execute(
+            "UPDATE projects SET spec_path=? WHERE name=?", (spec_path, name))
+        self.conn.commit()
+
+    def get_project_stats(self) -> dict:
+        """Aggregate project statistics across all store tables (A4).
+
+        Mirrors the v3.7.0 api/project.py _project_stats query exactly
+        (SHALL-A4.4): counts + pipeline status distribution.
+        """
+        conn = self.conn
+        pipe_count = conn.execute("SELECT COUNT(*) as c FROM pipelines").fetchone()["c"]
+        ci_count = conn.execute("SELECT COUNT(*) as c FROM ci_runs").fetchone()["c"]
+        review_count = conn.execute("SELECT COUNT(*) as c FROM reviews").fetchone()["c"]
+        ev_count = conn.execute("SELECT COUNT(*) as c FROM evidence").fetchone()["c"]
+        proj_count = conn.execute("SELECT COUNT(*) as c FROM projects").fetchone()["c"]
+        pipe_statuses = conn.execute(
+            "SELECT status, COUNT(*) as c FROM pipelines GROUP BY status"
+        ).fetchall()
+        return {
+            "projects": proj_count,
+            "pipelines": pipe_count,
+            "pipeline_statuses": {r["status"]: r["c"] for r in pipe_statuses},
+            "ci_runs": ci_count,
+            "reviews": review_count,
+            "evidence_files": ev_count,
+        }
+
+    def count_ci_passed(self) -> int:
+        """SELECT COUNT(*) FROM ci_runs WHERE status='passed' (A4)."""
+        try:
+            cur = self.conn.execute(
+                "SELECT COUNT(*) as c FROM ci_runs WHERE status='passed'")
+            return cur.fetchone()["c"]
+        except Exception:
+            return 0
+
+    def get_pipeline_trend_rows(self, start_iso: str) -> list:
+        """Pipeline rows since a start timestamp (A4 — stats trends)."""
+        cur = self.conn.execute(
+            "SELECT created_at, status FROM pipelines WHERE created_at >= ? "
+            "ORDER BY created_at", (start_iso,))
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_ci_trend_rows(self, start_iso: str) -> list:
+        """CI run rows since a start timestamp (A4 — stats trends)."""
+        cur = self.conn.execute(
+            "SELECT started_at, status FROM ci_runs WHERE started_at >= ? "
+            "ORDER BY started_at", (start_iso,))
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_review_trend_rows(self, start_iso: str) -> list:
+        """Review rows since a start timestamp (A4 — stats trends)."""
+        cur = self.conn.execute(
+            "SELECT created_at FROM reviews WHERE created_at >= ? "
+            "ORDER BY created_at", (start_iso,))
+        return [dict(r) for r in cur.fetchall()]
+
     # ------------------------------------------------------------------
     # Multi-tenant: Organizations
     # ------------------------------------------------------------------
