@@ -43,7 +43,15 @@ def _decode_token(token: str) -> Optional[dict]:
 
 
 def _extract_token(headers) -> Optional[str]:
-    """Extract Bearer token from request headers."""
+    """Extract Bearer token from request headers, falling back to the
+    access cookie (T1 v3.9.0, SHALL-T1.4).
+
+    Priority: ``Authorization: Bearer <token>`` first (API clients,
+    desktop app); when NO Authorization header is present, the
+    ``yuleosh_at`` access cookie is read (browser cookie mode).  An
+    Authorization header that is present but not Bearer fails closed
+    (no cookie fallback) — same token verdict via either channel.
+    """
     if callable(getattr(headers, "get", None)):
         auth = headers.get("Authorization", "")
     elif isinstance(headers, dict):
@@ -51,9 +59,14 @@ def _extract_token(headers) -> Optional[str]:
     else:
         return None
 
-    if auth and auth.startswith("Bearer "):
-        return auth[7:]
-    return None
+    if auth:
+        if auth.startswith("Bearer "):
+            return auth[7:]
+        return None
+
+    # T1 (v3.9.0): no Authorization header → cookie fallback.
+    from yuleosh.ui.auth_cookies import ACCESS_COOKIE_NAME, read_cookie_value
+    return read_cookie_value(headers, ACCESS_COOKIE_NAME)
 
 
 def require_auth(handler):

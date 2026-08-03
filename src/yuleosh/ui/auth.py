@@ -214,16 +214,36 @@ def is_authenticated(headers: dict) -> bool:
     # 3. Check tenant JWT bearer token (the frontend sends
     #    ``Authorization: Bearer <jwt>`` to every endpoint).  Full
     #    validation via auth_extended (signature + DB session row).
+    #    T1 (v3.9.0): an Authorization header that is present but NOT
+    #    Bearer fails closed — no cookie fallback (same rule as the
+    #    API middleware, T-T1-07 equivalence).
     auth_header = headers.get("authorization", "") or headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        try:
-            from yuleosh.ui.auth_extended import get_session_user
-            if get_session_user(auth_header[7:]) is not None:
-                return True
-        except Exception:
-            # Fail closed: an unresolvable tenant auth layer never
-            # authenticates the request.
-            pass
+    if auth_header:
+        if auth_header.startswith("Bearer "):
+            try:
+                from yuleosh.ui.auth_extended import get_session_user
+                if get_session_user(auth_header[7:]) is not None:
+                    return True
+            except Exception:
+                # Fail closed: an unresolvable tenant auth layer never
+                # authenticates the request.
+                pass
+        return False
+
+    # 4. T1 (v3.9.0, SHALL-T1.4): tenant access cookie (yuleosh_at) — the
+    #    browser cookie mode.  Only the ACCESS cookie authenticates here;
+    #    the refresh cookie (yuleosh_rt) is rejected by get_session_user
+    #    and can never be used as a page-level credential (T1.5).
+    try:
+        from yuleosh.ui.auth_cookies import ACCESS_COOKIE_NAME, read_cookie_value
+        from yuleosh.ui.auth_extended import get_session_user
+        access_cookie = read_cookie_value(headers, ACCESS_COOKIE_NAME)
+        if access_cookie and get_session_user(access_cookie) is not None:
+            return True
+    except Exception:
+        # Fail closed: an unresolvable tenant auth layer never
+        # authenticates the request.
+        pass
 
     return False
 
