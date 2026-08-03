@@ -14,12 +14,13 @@ from typing import Optional
 import jwt
 
 from . import json_error
-from .auth import _JWT_SECRET
+from yuleosh.ui.auth_extended import JWT_SECRET as _JWT_SECRET  # A1: unified source (SHALL-A1.1)
 
 logger = logging.getLogger("yuleosh.api.middleware")
 
 
-# JWT secret — imported from .auth to ensure a single source of truth
+# JWT secret — single source of truth (v3.8.0 A1): the value comes from
+# ui/auth_extended.py.JWT_SECRET, never re-read from the environment here.
 _JWT_ALGORITHM = "HS256"
 
 

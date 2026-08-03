@@ -42,7 +42,7 @@ _YULEOSH_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
 if not _YULEOSH_JWT_SECRET_ENV:
     raise RuntimeError(
         "YULEOSH_JWT_SECRET environment variable is required for multi-tenant auth. "
-        "Generate one with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        "Generate one with: openssl rand -base64 48"
     )
 JWT_SECRET = _YULEOSH_JWT_SECRET_ENV
 JWT_ALGORITHM = "HS256"
