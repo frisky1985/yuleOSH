@@ -514,11 +514,11 @@ def _get_user_key(handler) -> str:
     caller who knew a repo URL could hit another user's cached analysis
     (the report leaks repository structure).  The cache key is now
     ``(user_key, url_hash)``:
-      - authenticated session  -> ``u:<user_id>``
+      - authenticated session  -> ``u:<user_id>``  (F2.1: 认证收敛后
+        一律用 user_id — A1 统一 verify 后 JWT 请求恒走此分支)
       - valid API key          -> ``k:<key_id>``
-      - anonymous              -> ``ip:<sha256(client_ip)>`` (same dimension
-        as the rate limiter; NAT peers still share a key — a documented
-        limitation, fixed properly by Track2 auth consolidation).
+      - anonymous              -> ``ip:<sha256(client_ip)>`` (无凭据
+        请求的隔离维度；NAT 同 IP 仍共享 — 已知限制注释于 W-6)
 
     Same identity must always derive the same key (deterministic).
     """
