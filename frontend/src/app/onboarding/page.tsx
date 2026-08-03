@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { getToken, setToken } from "@/lib/api";
+// T1 (v3.9.0): 认证走 httpOnly cookie，onboarding 不再手工拼 Bearer
 
 type StepStatus = "pending" | "active" | "done";
 
@@ -65,13 +65,11 @@ export default function OnboardingPage() {
   async function createProject() {
     setLoading(true);
     try {
-      const token = getToken();
       const slug = projectName.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-");
       const resp = await fetch("/api/v1/project", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: projectName,
@@ -92,12 +90,10 @@ export default function OnboardingPage() {
   async function saveSpec() {
     setLoading(true);
     try {
-      const token = getToken();
       const resp = await fetch("/api/v1/spec", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           project: projectName,
@@ -118,12 +114,10 @@ export default function OnboardingPage() {
     setLoading(true);
     setPipelineStatus("running");
     try {
-      const token = getToken();
       const resp = await fetch("/api/v1/pipeline", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name: projectName, action: "run" }),
       });

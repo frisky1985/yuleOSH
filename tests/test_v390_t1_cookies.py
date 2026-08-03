@@ -336,7 +336,9 @@ class TestSigninOrgCreateWire:
 
     def test_chain_signin_orgcreate(self):
         from yuleosh.ui.routes.auth_routes import handle_api_action
-        # signin（新用户 → needs_org，org_setup token，无 cookie）
+        from yuleosh.ui.auth_cookies import ACCESS_COOKIE_NAME
+        # signin（新用户 → needs_org：org_setup token 进 yuleosh_at cookie，
+        # 使后续 org/create 纯 cookie 可用 — T-T1-19）
         email = f"chain.{int(time.time())}@t.com"
         body = json.dumps({"email": email, "password": "TestPass123!"}).encode()
         h1 = _make_mock_handler(headers={"Content-Length": str(len(body))},
@@ -345,7 +347,13 @@ class TestSigninOrgCreateWire:
                         return_value=({"token": "setup-jwt", "redirect": "/org/setup",
                                        "needs_org": True}, 200)):
             handle_api_action(h1, "signin")
-        assert _set_cookie_calls(h1) == []  # 无用户会话 → 不设 cookie
+        cookies = _set_cookie_calls(h1)
+        assert len(cookies) == 1  # 仅 access 槽位放 org_setup token（无 user 会话）
+        attrs = _parse_set_cookie(cookies[0][1])
+        assert attrs["name"] == ACCESS_COOKIE_NAME
+        assert attrs["value"] == "setup-jwt"
+        assert attrs["httponly"] is True
+        assert attrs["max_age"] == 1800
 
         # org/create（真实 store 流程 → 双 cookie）
         from yuleosh.store import Store
@@ -357,7 +365,7 @@ class TestSigninOrgCreateWire:
         }).encode()
         h2 = _make_mock_handler(
             headers={"Content-Length": str(len(body2)),
-                     "Authorization": "Bearer setup-jwt"},
+                     "Cookie": f"{ACCESS_COOKIE_NAME}=setup-jwt"},
             method="POST", body=body2)
         # 真实 handle_org_create：org_setup token 需与 email 匹配 —— 用真实实现
         from yuleosh.ui.auth_extended import handle_org_create, _generate_token
