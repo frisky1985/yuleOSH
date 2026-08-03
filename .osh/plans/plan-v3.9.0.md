@@ -96,8 +96,38 @@ python3 -m pytest tests/ -q --ignore=tests/test_e2e.py --ignore=tests/test_e2e_p
   needs_org signin 现将 org_setup token 放 yuleosh_at cookie（30min）→ 纯 cookie 链可用
 - 安全债 grep：localStorage.*yuleosh_token / Authorization.*Bearer 零命中
 - jest 33 全绿 + tsc + build 通过；局部回归 438 passed
-- ⏳ 全量回归运行中
+- ✅ 全量回归（P4 后）：9999 passed / 0 failed（基线 9953 +46）；覆盖率 84.11% ⚠️ < 84.14%
+  → P5 补覆盖测试后终验
 
-### [P5] 待完成（T2 CSP）
+### [P5] 2026-08-03 ~23:55 — ✅ commit 01f6eff（T2 CSP Phase 1）
+- server.py：CSP 单一来源（_base_csp_directives/_csp_for_html）
+  - nonce 方案（B5①，服务端改写内联 RSC 脚本，每请求随机 nonce）
+  - script-src 无 unsafe-inline/unsafe-eval（B6：core-js Function("return this") 短路死代码，
+    Chrome 实测 0 violation）
+  - ⚠️ 契约前提修正：『产物零引用』仅对 frontend/out 成立；生产路由实际服务 legacy 模板页
+    （/dashboard→dashboard-v5.html、/→marketing/index.html 等），其中真实引用
+    Google Fonts（dashboard-v5/pipeline-flow/onboarding）+ Tailwind CDN（onboarding/marketing）
+    → 按模板字节扫描追加实际引用外域（T2.2 例外条款『注明用途』），frontend/out 保持严格；
+    已在报告中标注供小明/小马复核
+  - 修复 _serve_file 双 Content-Length（Chrome ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_LENGTH）
+- nginx：移除 CSP add_header（nonce 双头冲突），注释注明单一来源
+- inject-meta-csp.py：gh-pages meta CSP（B8①，sha256 hash 白名单）
+- docs/cybersecurity-baseline.md：CSP 覆盖拓扑章节（T-T2-12-neg）
+- 测试 18 用例；Chrome headless：5 生产页 + React out 页全部 0 violation
+- 局部回归：307 passed / 0 failed
 
-### [P6] 待完成（F1 重建+发布）
+### [P6] 2026-08-04 00:05 — ✅ commit 1ce183f + gh-pages 63e1178（F1 B7/B8）
+- npm run build 重建 out/（17 页）→ inject-meta-csp.py 注入 meta CSP
+- 保留 gh-pages 独立静态页（app/ architecture.html docs.html en/ .nojekyll，
+  v3.6.1 教训：逐字节一致零变更，未覆盖丢失）→ worktree 推 gh-pages
+- 线上验证：index 200 + meta CSP 在、architecture/app-dashboard 200、404 兜底正常
+- X-01 红线：markdown 10 + kb_sanitize 15 全绿
+- ✅ 最终全量回归（P6 后）：10017 passed / 0 failed（基线 9953 +64，恰为新用例数）
+  覆盖率 84.17% ≥ 84.14%（门禁通过，+0.03%）
+- ✅ 安全债 6 项 grep 全过；报告 reports/yuleOSH-v390-dev-report.md
+- ⏳ tag v3.9.0：待小马复验后打（契约交付项）
+
+## 提交链（P1→P6）
+bf17275 P1 双 cookie 签发 → 71765ef P2 cookie 回退 → b3d31ad P3 refresh 端点 →
+42e3cb2 P4 前端去 localStorage → 01f6eff P5 CSP Phase 1 → 1ce183f P6 重建+发布
+（gh-pages 63e1178；tag 待小马复验后打）
