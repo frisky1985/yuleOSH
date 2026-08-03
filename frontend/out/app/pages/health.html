@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>yuleOSH — System Health</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+    .container { max-width: 800px; width: 100%; }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 0.9rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card.full { grid-column: 1 / -1; }
+    .card h3 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.75rem;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .status-healthy { background: #064e3b; color: #6ee7b7; }
+    .status-degraded { background: #78350f; color: #fcd34d; }
+    .status-error { background: #7f1d1d; color: #fca5a5; }
+    .status-ok { background: #064e3b; color: #6ee7b7; }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: #94a3b8; }
+    .stat-value { color: #f1f5f9; font-weight: 600; }
+    .disk-bar {
+      height: 8px;
+      background: #334155;
+      border-radius: 4px;
+      margin: 0.5rem 0;
+      overflow: hidden;
+    }
+    .disk-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .disk-warning .disk-fill { background: linear-gradient(90deg, #facc15, #f97316); }
+    .disk-danger .disk-fill { background: linear-gradient(90deg, #f97316, #ef4444); }
+    .meta { color: #64748b; font-size: 0.8rem; margin-top: 2rem; text-align: center; }
+    .refresh-btn {
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.75rem;
+      transition: background 0.2s;
+    }
+    .refresh-btn:hover { background: #7dd3fc; }
+    .error-card {
+      background: #7f1d1d;
+      border: 1px solid #dc2626;
+      color: #fecaca;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .dot-green { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7; }
+    .dot-yellow { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #fcd34d; }
+    .dot-red { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #fca5a5; }
+    @media (max-width: 600px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔬 System Health</h1>
+    <p class="subtitle">yuleOSH runtime status dashboard</p>
+
+    <div id="error-area" style="display:none;"></div>
+
+    <div class="grid" id="overall-card">
+      <div class="card full">
+        <h3>Overall Status</h3>
+        <div id="overall-badge"></div>
+        <p style="margin-top: 0.5rem; color: #94a3b8;" id="uptime-display"></p>
+      </div>
+    </div>
+
+    <div class="grid" id="dashboard-grid">
+      <!-- Database -->
+      <div class="card">
+        <h3>Database</h3>
+        <div id="db-status"></div>
+        <div style="margin-top: 0.75rem; font-size: 0.85rem;">
+          <div>Path: <code id="db-path" style="color: #38bdf8;"></code></div>
+        </div>
+      </div>
+
+      <!-- Store Counts -->
+      <div class="card">
+        <h3>Store</h3>
+        <div id="store-summary"></div>
+      </div>
+
+      <!-- Disk -->
+      <div class="card full">
+        <h3>Disk (.yuleosh/)</h3>
+        <div id="disk-display"></div>
+      </div>
+    </div>
+
+    <div style="text-align: center;">
+      <button class="refresh-btn" onclick="fetchHealth()">🔄 Refresh</button>
+    </div>
+
+    <div class="meta">
+      <span id="version-display"></span> &middot;
+      <span>OSH Home: <code id="osh-home-display"></code></span>
+    </div>
+  </div>
+
+  <script>
+    async function fetchHealth() {
+      try {
+        const resp = await fetch('/api/v1/health');
+        const json = await resp.json();
+        renderHealth(json);
+      } catch (err) {
+        document.getElementById('error-area').style.display = 'block';
+        document.getElementById('error-area').className = 'error-card';
+        document.getElementById('error-area').textContent = 'Failed to fetch health data: ' + err.message;
+      }
+    }
+
+    function renderHealth(json) {
+      const data = json.data || json;
+      const errorArea = document.getElementById('error-area');
+      errorArea.style.display = 'none';
+
+      // Overall
+      const overallBadge = document.getElementById('overall-badge');
+      const statusClass = data.status === 'healthy' ? 'status-healthy' : 'status-degraded';
+      const dotClass = data.status === 'healthy' ? 'dot-green' : 'dot-yellow';
+      overallBadge.innerHTML = '<span class="status-badge ' + statusClass + '"><span class="' + dotClass + '"></span> ' + data.status + '</span>';
+
+      // Uptime
+      const uptime = data.uptime_seconds || 0;
+      const days = Math.floor(uptime / 86400);
+      const hours = Math.floor((uptime % 86400) / 3600);
+      const mins = Math.floor((uptime % 3600) / 60);
+      const secs = uptime % 60;
+      let uptimeStr = '';
+      if (days > 0) uptimeStr += days + 'd ';
+      if (hours > 0 || days > 0) uptimeStr += hours + 'h ';
+      uptimeStr += mins + 'm ' + secs + 's';
+      document.getElementById('uptime-display').textContent = 'Uptime: ' + uptimeStr;
+
+      // DB
+      const dbDiv = document.getElementById('db-status');
+      const dbOk = data.db === 'ok';
+      dbDiv.innerHTML = '<span class="status-badge ' + (dbOk ? 'status-ok' : 'status-error') + '">' +
+        '<span class="' + (dbOk ? 'dot-green' : 'dot-red') + '"></span> ' + data.db + '</span>';
+      const dbPathEl = document.getElementById('db-path');
+      if (data.osh_home) {
+        dbPathEl.textContent = data.osh_home + '/.yuleosh/store.db';
+      }
+
+      // Store
+      const store = data.store || {};
+      const storeDiv = document.getElementById('store-summary');
+      storeDiv.innerHTML =
+        '<div class="stat-row"><span class="stat-label">Pipelines</span><span class="stat-value">' + (store.pipelines ?? '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">CI Runs</span><span class="stat-value">' + (store.ci_runs ?? '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Reviews</span><span class="stat-value">' + (store.reviews ?? '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Projects</span><span class="stat-value">' + (store.projects ?? '—') + '</span></div>';
+
+      // Disk
+      const disk = data.disk || {};
+      const diskDiv = document.getElementById('disk-display');
+      if (disk.error) {
+        diskDiv.innerHTML = '<span class="status-badge status-error">⚠️ ' + disk.error + '</span>';
+      } else {
+        const usedPct = disk.used_pct || 0;
+        let barClass = '';
+        if (usedPct > 85) barClass = ' disk-danger';
+        else if (usedPct > 70) barClass = ' disk-warning';
+        diskDiv.innerHTML =
+          '<div class="stat-row"><span class="stat-label">Path</span><span class="stat-value" style="font-family:monospace;font-size:0.8rem;">' + (disk.path || '—') + '</span></div>' +
+          '<div class="stat-row"><span class="stat-label">Total</span><span class="stat-value">' + (disk.total_mb || 0) + ' MB</span></div>' +
+          '<div class="stat-row"><span class="stat-label">Free</span><span class="stat-value">' + (disk.free_mb || 0) + ' MB</span></div>' +
+          '<div class="stat-row"><span class="stat-label">Used</span><span class="stat-value">' + (disk.used_mb || 0) + ' MB (' + usedPct + '%)</span></div>' +
+          '<div class="disk-bar' + barClass + '"><div class="disk-fill" style="width:' + Math.min(usedPct, 100) + '%;"></div></div>';
+      }
+
+      // Meta
+      document.getElementById('version-display').textContent = 'v' + (data.version || '—');
+      document.getElementById('osh-home-display').textContent = data.osh_home || '—';
+    }
+
+    // Initial load
+    fetchHealth();
+    // Auto-refresh every 30 seconds
+    setInterval(fetchHealth, 30000);
+  </script>
+</body>
+</html>

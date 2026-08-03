@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔱 OSH-Fusion — Select Project</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2332;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 { font-size: 18px; font-weight: 800; }
+.header h1 .green { color: var(--green); }
+.header h1 .blue { color: var(--blue); }
+.header .user-info { font-size: 13px; color: var(--text2); }
+.header .user-info strong { color: var(--text); }
+.container {
+  max-width: 720px;
+  margin: 48px auto;
+  padding: 0 24px;
+}
+.container h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.container p { color: var(--text2); font-size: 14px; margin-bottom: 24px; }
+.project-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.project-card:hover { border-color: var(--green); background: var(--surface2); }
+.project-card .name { font-size: 16px; font-weight: 600; }
+.project-card .slug { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.project-card .arrow { color: var(--text2); font-size: 18px; }
+.create-card {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: border-color .15s;
+  text-align: center;
+  color: var(--text2);
+  font-size: 14px;
+}
+.create-card:hover { border-color: var(--green); color: var(--green); }
+.msg { color: var(--red); font-size: 13px; margin-bottom: 12px; text-align: center; min-height: 20px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div><h1><span class="green">🔱 OSH</span><span class="blue">-Fusion</span></h1></div>
+  <div class="user-info">
+    <span id="orgName"></span> &middot;
+    <span id="userEmail"></span> &middot;
+    <a href="/api/auth/logout" style="color:var(--text2);text-decoration:none;font-size:12px;" onclick="return handleLogout()">logout</a>
+  </div>
+</div>
+<div class="container">
+  <h2>Select Project</h2>
+  <p>Choose a project to work on, or create a new one.</p>
+  <div class="msg" id="msg"></div>
+  <div id="projectList"></div>
+  <div class="create-card" onclick="showCreateProject()">+ New Project</div>
+</div>
+
+<script>
+let orgId = null;
+let userId = null;
+let userRole = null;
+
+async function loadSession() {
+  const token = localStorage.getItem('osh_token');
+  if (!token) { window.location.href = '/login'; return; }
+
+  try {
+    const resp = await fetch('/api/auth/session', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      localStorage.removeItem('osh_token');
+      window.location.href = '/login';
+      return;
+    }
+    orgId = data.org_id;
+    userId = data.user_id;
+    userRole = data.role;
+    document.getElementById('orgName').textContent = data.org_name || '';
+    document.getElementById('userEmail').textContent = data.email || '';
+
+    loadProjects();
+  } catch (e) {
+    window.location.href = '/login';
+  }
+}
+
+async function loadProjects() {
+  const token = localStorage.getItem('osh_token');
+  const msgEl = document.getElementById('msg');
+  const listEl = document.getElementById('projectList');
+
+  try {
+    const resp = await fetch('/api/project/list', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    const data = await resp.json();
+
+    if (resp.ok && data.projects) {
+      if (data.projects.length === 0) {
+        listEl.innerHTML = '<p style="color:var(--text2);text-align:center;padding:24px;">No projects yet. Create one to get started.</p>';
+      } else {
+        listEl.innerHTML = data.projects.map(p => `
+          <div class="project-card" onclick="selectProject('${p.slug}')">
+            <div>
+              <div class="name">${p.name}</div>
+              <div class="slug">${p.slug}</div>
+            </div>
+            <div class="arrow">→</div>
+          </div>
+        `).join('');
+      }
+    } else {
+      msgEl.textContent = data.error || 'Failed to load projects';
+    }
+  } catch (e) {
+    msgEl.textContent = 'Network error';
+  }
+}
+
+function selectProject(slug) {
+  const token = localStorage.getItem('osh_token');
+  localStorage.setItem('osh_project_slug', slug);
+  window.location.href = '/';
+}
+
+function showCreateProject() {
+  const name = prompt('Project name:');
+  if (!name) return;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!slug) return;
+
+  createProject(name, slug);
+}
+
+async function createProject(name, slug) {
+  const token = localStorage.getItem('osh_token');
+  const msgEl = document.getElementById('msg');
+
+  try {
+    const resp = await fetch('/api/project/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ name, slug }),
+    });
+    const data = await resp.json();
+
+    if (resp.ok) {
+      loadProjects();
+    } else {
+      msgEl.textContent = data.error || 'Failed to create project';
+    }
+  } catch (e) {
+    msgEl.textContent = 'Network error';
+  }
+}
+
+async function handleLogout() {
+  const token = localStorage.getItem('osh_token');
+  if (token) {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+  }
+  localStorage.removeItem('osh_token');
+  localStorage.removeItem('osh_project_slug');
+  return true;
+}
+
+loadSession();
+</script>
+</body>
+</html>

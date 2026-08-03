@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yuleOSH · 500 - 服务器错误</title>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --blue: #3b82f6;
+  --green: #10b981;
+  --red: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.container {
+  text-align: center;
+  max-width: 480px;
+}
+.error-icon { font-size: 64px; margin-bottom: 16px; }
+h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+p { color: var(--text2); line-height: 1.7; margin-bottom: 24px; font-size: 14px; }
+.links { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+a {
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+a.primary {
+  background: var(--blue);
+  color: #fff;
+}
+a.primary:hover { background: #2563eb; transform: translateY(-1px); }
+a.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+a.secondary:hover { border-color: var(--blue); }
+.info-box {
+  background: rgba(239,68,68,.1);
+  border: 1px solid rgba(239,68,68,.3);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--red);
+  margin: 20px 0;
+  text-align: left;
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="error-icon">⚠️</div>
+  <h1>500</h1>
+  <p>服务器内部错误<br>出了点问题，我们的团队已收到通知。</p>
+  <div class="info-box">
+    <strong>建议：</strong><br>
+    1. 刷新页面重试<br>
+    2. 稍后再试<br>
+    3. 如果问题持续，检查服务器日志
+  </div>
+  <div class="links">
+    <a href="/dashboard" class="primary">← 回到 Dashboard</a>
+    <a href="/health" class="secondary">🔬 系统状态</a>
+  </div>
+</div>
+</body>
+</html>
