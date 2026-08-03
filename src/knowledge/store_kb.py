@@ -153,10 +153,16 @@ class KnowledgeBaseStore:
                 clauses.append(f"a.dtc_codes && {_p(list(val))}")
             elif key == 'platform':
                 # JSONB path query: hw_bom contains object with matching platform
-                clauses.append(f"a.hw_bom @> {_p('[{\"platform\": \"' + val + '\"}]')}")
+                clauses.append(
+                    "a.hw_bom @> {}".format(
+                        _p('[{"platform": "' + val + '"}]')
+                    )
+                )
             elif key == 'safety_goal_id':
                 clauses.append(
-                    f"a.safety_goals @> {_p('[{\"safety_goal_id\": \"' + val + '\"}]')}"
+                    "a.safety_goals @> {}".format(
+                        _p('[{"safety_goal_id": "' + val + '"}]')
+                    )
                 )
             elif key == 'code_path_stale':
                 clauses.append(f"a.code_path_stale = {_p(bool(val))}")
@@ -166,7 +172,7 @@ class KnowledgeBaseStore:
                     f" @@ plainto_tsquery('english', {_p(val)})"
                 )
             elif key == 'dtc_code_prefix':
-                clauses.append(f"EXISTS (SELECT 1 FROM unnest(a.dtc_codes) AS c WHERE c LIKE {_p(val || '%')})")
+                clauses.append(f"EXISTS (SELECT 1 FROM unnest(a.dtc_codes) AS c WHERE c LIKE {_p(str(val) + '%')})")
 
         return clauses, params, idx
 

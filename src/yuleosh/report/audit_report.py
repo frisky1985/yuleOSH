@@ -528,6 +528,8 @@ class AuditReportGenerator:
                 swe6_items = []
                 for tc in tcs:
                     level = tc.get("test_level", "SWE.5")
+                    _reqs = tc.get("requirement_ids") or []
+                    _tags = tc.get("tags") or []
                     item = EvidenceItem(
                         process=level,
                         category="test",
@@ -535,7 +537,7 @@ class AuditReportGenerator:
                         ref_id=tc.get("id", ""),
                         path=f"data/tests/test-cases.json",
                         status="passed" if (tc.get("last_run") or {}).get("status") == "passed" else "unknown",
-                        details=f"Req: {','.join((tc.get("requirement_ids") or []))} | Tags: {','.join((tc.get("tags") or []))}",
+                        details=f"Req: {','.join(_reqs)} | Tags: {','.join(_tags)}",
                         timestamp=(tc.get("last_run") or {}).get("timestamp", ""),
                         evidence_type="test",
                     )
