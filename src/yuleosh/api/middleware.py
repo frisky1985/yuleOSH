@@ -14,26 +14,32 @@ from typing import Optional
 import jwt
 
 from . import json_error
-from yuleosh.ui.auth_extended import JWT_SECRET as _JWT_SECRET  # A1: unified source (SHALL-A1.1)
+from yuleosh.ui.auth_extended import (
+    JWT_SECRET as _JWT_SECRET,          # A1: unified source (SHALL-A1.1)
+    JWT_ALGORITHM as _JWT_ALGORITHM,    # A1: unified source
+    verify_token,                        # A1: unified verify (SHALL-A1.2)
+)
 
 logger = logging.getLogger("yuleosh.api.middleware")
 
 
 # JWT secret — single source of truth (v3.8.0 A1): the value comes from
 # ui/auth_extended.py.JWT_SECRET, never re-read from the environment here.
+# ``_decode_token`` below is a THIN DELEGATION to the unified decoder —
+# middleware must not implement JWT verification itself (SHALL-A1.2).
 _JWT_ALGORITHM = "HS256"
 
 
 def _decode_token(token: str) -> Optional[dict]:
-    """Decode and validate a JWT token. Returns payload or None."""
-    try:
-        return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        logger.debug("JWT expired in middleware")
-        return None
-    except jwt.InvalidTokenError as e:
-        logger.debug("JWT invalid in middleware: %s", e)
-        return None
+    """Decode and validate a JWT token. Returns payload or None.
+
+    A1 (v3.8.0): thin delegation to the unified decoder in
+    ``ui/auth_extended.py`` — kept as a named wrapper so existing callers
+    (and tests) keep a stable import surface, but the implementation is
+    single-sourced.
+    """
+    from yuleosh.ui.auth_extended import _decode_token as _unified_decode
+    return _unified_decode(token)
 
 
 def _extract_token(headers) -> Optional[str]:
@@ -83,49 +89,21 @@ def require_auth(handler):
         if not token:
             return json_error("Authorization header with Bearer token required", 401)
 
-        payload = _decode_token(token)
-        if not payload:
-            return json_error("Invalid or expired token", 401)
-
-        # ── Token contract (P0-A): accept BOTH payload formats ──────────
-        #   format A (router/middleware native): {"user_id": ..., "org_id": ...}
-        #   format B (frontend ui/auth_extended): {"sub": "<user_id>", "org": ...}
-        # The frontend login chain (signin → org/create) signs `sub`/`org`;
-        # the middleware must not 401 those tokens (dashboard/KB v1 APIs).
-        user_id = payload.get("user_id")
-        if user_id is None:
-            user_id = payload.get("sub")
-        org_id = payload.get("org_id")
-        if org_id is None:
-            org_id = payload.get("org")
-
-        # auth_extended signs sub as str(user_id) — normalize to int for the store.
-        try:
-            user_id = int(user_id) if user_id is not None else None
-        except (TypeError, ValueError):
-            pass
-        try:
-            org_id = int(org_id) if org_id is not None else None
-        except (TypeError, ValueError):
-            pass
-
-        # Validate user exists in store
-        from yuleosh.store import Store
-        store = Store()
-        user = store.get_user_by_id(user_id)
+        # ── A1 (v3.8.0): unified verify — same function as the ui side ──
+        #   (ui/auth_extended.verify_token).  Accepts BOTH payload formats
+        #   (sub/org from the frontend chain, user_id/org_id from the v1
+        #   API) and performs decode + session check + user check in ONE
+        #   place.  The middleware no longer re-implements JWT verification
+        #   (SHALL-A1.2); verdicts match v3.7.0 exactly.
+        user = verify_token(token)
         if not user:
-            return json_error("User not found", 401)
-
-        # Validate session exists and is not expired
-        session = store.get_session(token)
-        if not session:
-            return json_error("Session expired or revoked", 401)
+            return json_error("Invalid or expired token", 401)
 
         # Inject current user into kwargs
         kwargs["current_user"] = {
-            "user_id": user_id,
-            "org_id": org_id,
-            "email": payload.get("email", ""),
+            "user_id": user["user_id"],
+            "org_id": user["org_id"],
+            "email": user.get("email", ""),
             "role": user.get("role", "member"),
         }
 

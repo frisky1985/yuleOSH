@@ -283,12 +283,16 @@ class TestP0A_MiddlewareDualFormatUnit:
     def _secret(self):
         import yuleosh.api.middleware as mw
         import yuleosh.api.auth as auth_mod
-        saved = (mw._JWT_SECRET, auth_mod._JWT_SECRET)
+        import yuleosh.ui.auth_extended as ae
+        saved = (mw._JWT_SECRET, auth_mod._JWT_SECRET, ae.JWT_SECRET)
         secret = "dual-format-unit-secret-32chars!!"
         mw._JWT_SECRET = secret
         auth_mod._JWT_SECRET = secret
+        # A1 (v3.8.0): the unified decoder/verify lives in auth_extended —
+        # patch the UNIFIED secret too, or signed tokens fail verification.
+        ae.JWT_SECRET = secret
         yield secret
-        mw._JWT_SECRET, auth_mod._JWT_SECRET = saved
+        mw._JWT_SECRET, auth_mod._JWT_SECRET, ae.JWT_SECRET = saved
 
     @pytest.fixture(autouse=True)
     def _seed_user(self):

@@ -28,13 +28,19 @@ _TEST_USER_ID = 987654321  # unique id: avoid colliding with shared-store user 1
 def _jwt_secret():
     import yuleosh.api.auth as _auth_mod
     import yuleosh.api.middleware as _mw_mod
+    import yuleosh.ui.auth_extended as _ae_mod
     saved_a = _auth_mod._JWT_SECRET
     saved_m = _mw_mod._JWT_SECRET
+    saved_ae = _ae_mod.JWT_SECRET
     _auth_mod._JWT_SECRET = _TEST_SECRET
     _mw_mod._JWT_SECRET = _TEST_SECRET
+    # A1 (v3.8.0): the unified decoder lives in ui/auth_extended — patch
+    # the unified secret too, or signed tokens fail verification.
+    _ae_mod.JWT_SECRET = _TEST_SECRET
     yield
     _auth_mod._JWT_SECRET = saved_a
     _mw_mod._JWT_SECRET = saved_m
+    _ae_mod.JWT_SECRET = saved_ae
 
 
 def _authed_handler(token: str):
