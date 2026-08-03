@@ -140,6 +140,23 @@ def handle_api_action(handler: BaseHTTPRequestHandler, action: str):
             # cookies (Max-Age=0) — the browser session is fully gone.
             _send_json_response(handler, result, status,
                                 set_cookies=_clear_cookie_headers())
+        elif action == "refresh":
+            # T1 (v3.9.0, SHALL-T1.5): POST /api/auth/refresh — cookie
+            # mode renewal.  The refresh token comes from the yuleosh_rt
+            # cookie (or an explicit Bearer for API clients).
+            from yuleosh.ui.auth_cookies import (
+                REFRESH_COOKIE_NAME, read_cookie_value,
+            )
+            from yuleosh.ui.auth_extended import handle_refresh
+            rt = read_cookie_value(handler.headers, REFRESH_COOKIE_NAME) \
+                or token  # Bearer fallback for non-browser clients
+            result, status = handle_refresh(rt)
+            if status == 200:
+                cookies = _auth_cookie_headers(result)
+            else:
+                # T1.5 neg: refresh failed/expired → clear both cookies.
+                cookies = _clear_cookie_headers()
+            _send_json_response(handler, result, status, set_cookies=cookies)
         else:
             _send_json_error(handler, "unknown action", 400)
     except Exception as e:
