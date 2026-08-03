@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { api, setToken } from "@/lib/api";
+import { api } from "@/lib/api";  // T1 (v3.9.0): token 由服务端 Set-Cookie，前端不再落盘
 
 type AuthMode = "login" | "register";
 
@@ -73,7 +73,6 @@ export default function LoginPage() {
           }
 
           if (orgResult.token) {
-            setToken(orgResult.token);
             router.push("/dashboard");
             return;
           }
@@ -84,7 +83,6 @@ export default function LoginPage() {
 
         // Normal login
         if (result.token) {
-          setToken(result.token);
           router.push("/dashboard");
         } else {
           setError("登录失败，请重试");
@@ -136,7 +134,6 @@ export default function LoginPage() {
           }
 
           if (orgResult.token) {
-            setToken(orgResult.token);
             router.push("/dashboard");
             return;
           }
@@ -150,7 +147,6 @@ export default function LoginPage() {
           return;
         }
         if (result.token) {
-          setToken(result.token);
           router.push("/dashboard");
           return;
         }

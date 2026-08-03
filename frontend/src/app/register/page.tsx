@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { api, setToken } from "@/lib/api";
+import { api } from "@/lib/api";  // T1 (v3.9.0): token 由服务端 Set-Cookie
 
 export default function RegisterPage() {
   return (
@@ -94,7 +94,6 @@ function RegisterForm() {
       }
 
       if (orgResult.token) {
-        setToken(orgResult.token);
         setSuccess(true);
 
         // Step 3: Redirect to onboarding or dashboard

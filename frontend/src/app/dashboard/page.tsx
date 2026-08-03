@@ -51,8 +51,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
-  getToken,
-  clearToken,
   getDashboardProjects,
   getSWEStatus,
   getGapAnalysis,
@@ -317,15 +315,15 @@ export default function DashboardPage() {
       setPageLoading(true);
       setError("");
 
-      const token = getToken();
-      if (token) {
-        try {
-          const { api } = await import("@/lib/api");
-          const s = await api.auth.session();
-          setSession(s);
-        } catch {
-          // Token invalid — proceed without session
-        }
+      // T1 (v3.9.0): 会话由 httpOnly cookie 携带，前端无法读 token。
+      // 直接探测 session 端点；未登录时 request() 会触发无感续期，
+      // 续期失败则 redirectToLogin（/login）。
+      try {
+        const { api } = await import("@/lib/api");
+        const s = await api.auth.session();
+        setSession(s);
+      } catch {
+        // No valid session — proceed without session (redirect already fired)
       }
 
       await loadProjects();
@@ -481,7 +479,7 @@ export default function DashboardPage() {
     } catch {
       // Ignore
     }
-    clearToken();
+    // T1 (v3.9.0): 服务端 logout 已清双 cookie（Max-Age=0），无需 clearToken
     window.location.href = "/login";
   };
 
@@ -550,7 +548,7 @@ export default function DashboardPage() {
 
             {/* User menu */}
             <div className="flex items-center gap-2">
-              {getToken() ? (
+              {session ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
                     <Avatar className="w-7 h-7 border border-[#1e293b]">

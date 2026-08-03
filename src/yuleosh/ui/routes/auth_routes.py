@@ -115,8 +115,15 @@ def handle_api_action(handler: BaseHTTPRequestHandler, action: str):
             result, status = handle_signin(body, ip=client_ip)
             # T1 (v3.9.0, SHALL-T1.1): successful login issues the
             # access+refresh httpOnly cookie pair (JSON body contract
-            # unchanged — refresh_token is cookie-only).
-            cookies = _auth_cookie_headers(result)
+            # unchanged — refresh_token is cookie-only).  First-time
+            # users (needs_org) have no session yet — the org_setup
+            # token rides in the access cookie so the follow-up
+            # org/create works cookie-only (T-T1-19).
+            if status == 200 and result.get("needs_org") and result.get("token"):
+                from yuleosh.ui.auth_cookies import org_setup_cookie_headers
+                cookies = org_setup_cookie_headers(result["token"])
+            else:
+                cookies = _auth_cookie_headers(result)
             _send_json_response(handler, result, status, set_cookies=cookies)
         elif action == "session":
             result, status = handle_session_info(token)

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { api, getToken } from "@/lib/api";
+import { api } from "@/lib/api";  // T1 (v3.9.0): cookie 认证
 
 interface SubscriptionStatus {
   tier: string;
@@ -50,7 +50,7 @@ export default function SubscriptionPage() {
   async function loadStatus() {
     try {
       const resp = await fetch("/api/v1/subscription/status", {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        // T1 (v3.9.0): cookie 自动携带
       });
       const json = await resp.json();
       if (json.error) {
@@ -72,7 +72,6 @@ export default function SubscriptionPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({ tier }),
       });
@@ -96,7 +95,6 @@ export default function SubscriptionPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
         },
       });
       const json = await resp.json();
