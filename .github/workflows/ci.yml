@@ -25,6 +25,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
+        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
 
     - name: Run tests with coverage gate
       run: |
@@ -58,11 +59,14 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[dev]" 2>/dev/null || true
+        pip install -e ".[dev]"
+        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck 2>/dev/null || true
         pip install ruff bandit mypy coverage
         # v3.10.0 Track1: workflow 语法门禁（防 ci.yml YAML 解析错误再犯）
         curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash
         pip install yamllint
+        # v3.10.0 Track1: Layer 2 静态分析依赖（test_layer2_cppcheck 断言 cppcheck 已装）
+        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
 
     - name: Workflow Lint (actionlint + yamllint)
       run: |
@@ -132,7 +136,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[dev]" pip-audit
+        pip install -e ".[dev]"
+        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck pip-audit
 
     - name: Python CVE scan (pip-audit)
       run: |
