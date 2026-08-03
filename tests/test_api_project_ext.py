@@ -10,13 +10,13 @@ class TestApiProject:
 
     @patch("yuleosh.store.Store")
     def test_list_projects(self, mock_store_cls):
-        """GET /project lists all projects."""
+        """GET /project lists all projects.
+
+        A4 (v3.8.0): list goes through Store.list_projects (interface)."""
         mock_store = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = [
+        mock_store.list_projects.return_value = [
             {"name": "proj1", "created_at": "2025-01-01"}
         ]
-        mock_store.conn.execute.return_value = mock_cursor
         mock_store_cls.return_value = mock_store
 
         result, code = handle_project("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
@@ -27,9 +27,7 @@ class TestApiProject:
     def test_list_projects_explicit(self, mock_store_cls):
         """GET /project/list lists all projects."""
         mock_store = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = []
-        mock_store.conn.execute.return_value = mock_cursor
+        mock_store.list_projects.return_value = []
         mock_store_cls.return_value = mock_store
 
         result, code = handle_project("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
