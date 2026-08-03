@@ -1,6 +1,6 @@
 # Phase 1 — 端到端 MVP 作战计划
 
-> **目标**: 4 周打通 CI push → MISRA 分析 → 知识库 → Web 浏览
+> kind: feature | 目标: 4 周打通 CI push → MISRA 分析 → 知识库 → Web 浏览
 > **核心原则**: 先跑通，再漂亮
 
 ## Week 1: 知识管理服务骨架
