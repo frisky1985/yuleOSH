@@ -89,7 +89,7 @@ jobs:
     - name: Coverage Gate (fail-under=30)
       run: |
         E2E_IGNORES="--ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py"
-        python -m yuleosh coverage gate --fail-under=30 || \
+        yuleosh coverage gate --fail-under=30 || \
           python -c "import subprocess,sys; subprocess.run([sys.executable,'-m','coverage','run','--source=yuleosh','-m','pytest','tests/','-q',*'$E2E_IGNORES'.split(),'-x','--tb=short']); r2=subprocess.run([sys.executable,'-m','coverage','report','--fail-under=30']); sys.exit(r2.returncode)"
 
     - name: Coverage Regression Check
@@ -112,7 +112,9 @@ jobs:
 
     - name: Upload bandit SARIF
       uses: github/codeql-action/upload-sarif@v4
-      if: always()
+      # v3.10.0 Track1: bandit 步骤 continue-on-error，文件可能未生成；
+      # 只有文件存在时才上传（否则 upload-sarif 报 Path does not exist）
+      if: always() && hashFiles('bandit-results.sarif') != ''
       with:
         sarif_file: bandit-results.sarif
         category: bandit
@@ -164,19 +166,19 @@ jobs:
     - name: Run plan-lint
       run: |
         python -c "
-                import os
-                issues = 0
-                for root, dirs, files in os.walk('.'):
-                    for f in files:
-                        if 'task' in f.lower() and f.endswith('.md'):
-                            content = open(os.path.join(root, f)).read()
-                            if not any(k in content.lower() for k in ['feature','bugfix','refactor','docs']):
-                                print('⚠️  Missing kind: ' + os.path.join(root, f))
-                                issues += 1
-                if issues:
-                    exit(1)
-                print('✅ plan-lint passed')
-                "
+        import os
+        issues = 0
+        for root, dirs, files in os.walk('.'):
+            for f in files:
+                if 'task' in f.lower() and f.endswith('.md'):
+                    content = open(os.path.join(root, f)).read()
+                    if not any(k in content.lower() for k in ['feature','bugfix','refactor','docs']):
+                        print('⚠️  Missing kind: ' + os.path.join(root, f))
+                        issues += 1
+        if issues:
+            exit(1)
+        print('✅ plan-lint passed')
+        "
 
   evidence:
     runs-on: ubuntu-latest

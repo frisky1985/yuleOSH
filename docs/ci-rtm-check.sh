@@ -91,10 +91,15 @@ except FileNotFoundError:
     sys.exit(0)
 
 # Parse SHALL rows from markdown tables — each row with SHALL keyword and status emoji
+# (v3.10.0 Track1: 排除表头行「需求 ID | 类型 | SHALL 语句」——12 处重复表头曾
+#  被误计入总数，导致覆盖率虚低：98 行含表头 12+，真实 SHALL 仅 ~82 行)
 lines = content.split('\n')
 shall_rows = []
 for line in lines:
     if line.startswith('|') and 'SHALL' in line:
+        # 跳过表头/分隔行（不含具体需求数据）
+        if '需求 ID' in line or '---' in line.replace('|', ' '):
+            continue
         shall_rows.append(line)
 
 covered = 0
