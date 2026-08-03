@@ -942,16 +942,29 @@ class TestAudit:
         assert ip == "127.0.0.1"
 
     def test_log_audit(self):
-        """v3.4.0: audit via handler_helpers.log_audit → server._audit_log."""
+        """A2 (v3.8.0): audit unified — log_audit persists legacy /api/*
+        requests to the DB via api.audit.log_request (ring removed)."""
         from yuleosh.ui.routes.handler_helpers import log_audit
         h = _get_handler_instance()
         h.command = "GET"
         h._response_status = 200
         h._request_start_time = time.time()
-        h.path = "/api/health"
-        with patch("yuleosh.ui.server._audit_log") as al:
+        h.path = "/api/evidence"
+        with patch("yuleosh.api.audit.log_request") as al:
             log_audit(h)
             al.assert_called_once()
+
+    def test_log_audit_skips_pages(self):
+        """B3: page paths are not persisted."""
+        from yuleosh.ui.routes.handler_helpers import log_audit
+        h = _get_handler_instance()
+        h.command = "GET"
+        h._response_status = 200
+        h._request_start_time = time.time()
+        h.path = "/dashboard"
+        with patch("yuleosh.api.audit.log_request") as al:
+            log_audit(h)
+            al.assert_not_called()
 
     def test_log_message(self):
         from yuleosh.ui.server import OSHHandler

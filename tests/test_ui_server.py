@@ -148,28 +148,45 @@ class TestRateLimit:
 
 
 class TestAuditLog:
-    """_audit_log — in-memory ring buffer."""
+    """A2 (v3.8.0): audit unified — ring removed (裁决 B2), legacy /api/*
+    requests persist to the audit_log table via api.audit.log_request."""
 
-    def test_audit_log_appends_entry(self):
-        """GIVEN request details WHEN _audit_log THEN entry appended."""
-        from yuleosh.ui.server import _audit_log, _audit_log_ring
-        _audit_log_ring.clear()
-        _audit_log("GET", "/api/health", 200, "127.0.0.1", 12.3)
-        assert len(_audit_log_ring) == 1
-        entry = _audit_log_ring[0]
-        assert entry["method"] == "GET"
-        assert entry["path"] == "/api/health"
-        assert entry["status"] == 200
-        assert entry["ip"] == "127.0.0.1"
-        assert entry["duration_ms"] == 12.3
+    def _handler(self, path: str, method: str = "GET"):
+        from yuleosh.ui.server import OSHHandler
+        h = OSHHandler.__new__(OSHHandler)
+        h.path = path
+        h.command = method
+        h._response_status = 200
+        h._request_start_time = time.time()
+        h.client_address = ("127.0.0.1", 0)
+        return h
 
-    def test_audit_log_ring_max(self):
-        """GIVEN entries exceed AUDIT_RING_MAX WHEN _audit_log THEN oldest pruned."""
-        from yuleosh.ui.server import _audit_log, _audit_log_ring, AUDIT_RING_MAX
-        _audit_log_ring.clear()
-        for i in range(AUDIT_RING_MAX + 10):
-            _audit_log("GET", f"/path/{i}", 200, "10.0.0.1", 1.0)
-        assert len(_audit_log_ring) == AUDIT_RING_MAX
+    def test_legacy_api_request_persisted(self):
+        """GIVEN a legacy /api/* request WHEN log_audit THEN DB write path."""
+        from yuleosh.ui.routes.handler_helpers import log_audit
+        h = self._handler("/api/evidence")
+        with mock.patch("yuleosh.api.audit.log_request") as lr:
+            log_audit(h)
+            lr.assert_called_once()
+            # log_request(method, path, status_code, ip, duration_ms)
+            assert lr.call_args.kwargs["path"] == "/api/evidence"
+            assert lr.call_args.kwargs["status_code"] == 200
+
+    def test_page_request_not_persisted(self):
+        """B3: non-/api/ page requests are NOT audited."""
+        from yuleosh.ui.routes.handler_helpers import log_audit
+        h = self._handler("/dashboard")
+        with mock.patch("yuleosh.api.audit.log_request") as lr:
+            log_audit(h)
+            lr.assert_not_called()
+
+    def test_v1_request_not_double_logged(self):
+        """A2.7: /api/v1/* is persisted by router — log_audit must skip it."""
+        from yuleosh.ui.routes.handler_helpers import log_audit
+        h = self._handler("/api/v1/health")
+        with mock.patch("yuleosh.api.audit.log_request") as lr:
+            log_audit(h)
+            lr.assert_not_called()
 
 
 class TestApiV1Dispatch:

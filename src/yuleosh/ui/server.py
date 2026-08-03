@@ -118,27 +118,6 @@ def check_rate_limit(client_ip: str, max_requests: int = RATE_LIMIT_MAX,
     return True, 0.0
 
 
-# ── Audit log (in-memory ring) ─────────────────────────────────────────────
-
-_audit_log_ring: list[dict] = []
-AUDIT_RING_MAX = 5000
-
-
-def _audit_log(method: str, path: str, status_code: int,
-               ip: str, duration_ms: float) -> None:
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "method": method,
-        "path": path,
-        "status": status_code,
-        "ip": ip,
-        "duration_ms": duration_ms,
-    }
-    _audit_log_ring.append(entry)
-    if len(_audit_log_ring) > AUDIT_RING_MAX:
-        _audit_log_ring.pop(0)
-
-
 # ── API v1 dispatch ────────────────────────────────────────────────────────
 
 def api_v1_dispatch(handler: BaseHTTPRequestHandler, path: str) -> bool:
