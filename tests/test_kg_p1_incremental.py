@@ -25,7 +25,7 @@ from unittest import mock
 import pytest
 
 # Ensure src is on sys.path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.knowledge_graph.store import KGStore
 from yuleosh.knowledge_graph.models import Node, Edge

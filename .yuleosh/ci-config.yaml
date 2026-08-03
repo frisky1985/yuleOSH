@@ -2,94 +2,104 @@ misra:
   profiles:
     safety:
       rules:
-        - mandatory
-        - required
-        - advisory
+      - mandatory
+      - required
+      - advisory
       block_on:
-        - mandatory
-        - required
+      - mandatory
+      - required
       exclude_paths:
-        - tests/**
-        - third_party/**
-      description: "Full MISRA compliance — all rules enforced, mandatory and required block"
+      - tests/**
+      - third_party/**
+      description: Full MISRA compliance — all rules enforced, mandatory and required
+        block
     motor:
       rules:
-        - mandatory
-        - required
+      - mandatory
+      - required
       block_on:
-        - mandatory
+      - mandatory
       exclude_paths:
-        - tests/**
-        - third_party/**
-        - examples/**
-      description: "Motor control profile — mandatory blocks, required is advisory"
+      - tests/**
+      - third_party/**
+      - examples/**
+      description: Motor control profile — mandatory blocks, required is advisory
     benchmark:
       rules:
-        - mandatory
+      - mandatory
       block_on:
-        - mandatory
+      - mandatory
       exclude_paths:
-        - tests/**
-        - third_party/**
-        - examples/**
-        - demos/**
-      description: "Benchmark profile — only mandatory rules block"
+      - tests/**
+      - third_party/**
+      - examples/**
+      - demos/**
+      description: Benchmark profile — only mandatory rules block
   active_profile: safety
   deviations:
-    - rule: "Dir 4.1"
-      file: "tests/unity/**"
-      reason: "Unity test framework uses non-compliant patterns intentionally"
-    - rule: "R 10.1"
-      file: "src/hal/**"
-      reason: "Hardware abstraction layer — value range verified by runtime checks"
+  - rule: Dir 4.1
+    file: tests/unity/**
+    reason: Unity test framework uses non-compliant patterns intentionally
+  - rule: R 10.1
+    file: src/hal/**
+    reason: Hardware abstraction layer — value range verified by runtime checks
   exclude_paths:
-    - "tests/**"
-    - "third_party/**"
-    - "build/**"
+  - tests/**
+  - third_party/**
+  - build/**
   code_categories:
     template:
       paths:
-        - "src/yuleosh/templates/**"
-        - "test-dogfood/**"
-      action: "exclude"
+      - src/yuleosh/templates/**
+      - test-dogfood/**
+      action: exclude
       block_on: false
     third_party:
       paths:
-        - "third_party/**"
-        - "Drivers/**"
-        - "Middlewares/**"
-        - "CMSIS/**"
-        - "vendor/**"
-        - "lib/**"
-      action: "alert"
+      - third_party/**
+      - Drivers/**
+      - Middlewares/**
+      - CMSIS/**
+      - vendor/**
+      - lib/**
+      action: alert
       block_on: false
     business:
       paths:
-        - "src/**"
-      action: "enforce"
+      - src/**
+      action: enforce
       block_on: true
-
 coverage:
-  # 全局覆盖率阈值 —— 对齐 pyproject.toml/pytest.ini fail_under=5
   threshold_line: 5.0
   threshold_condition: 5.0
   strict: false
   c_fail_under: 70
   module_thresholds: {}
+default_agent_spec: '# Default Agent Spec
 
-# Default agent spec used when .yuleosh/agents/ directory does not exist.
-# The pipeline loads this and injects it into the LLM system prompt.
-default_agent_spec: |
-  # Default Agent Spec
 
   ## Roles
+
   - 小明: Project Manager / Orchestrator
+
   - 小克: Architect / Developer / Tester
+
   - 小马: Quality Architect / Reviewer
 
+
   ## Core Rules (QG-005)
+
   - P0/P1 issues MUST be resolved before phase completion. Zero-tolerance policy.
-  - Context safety: when session context exceeds 50%, split the work into a new sub-agent session.
-  - Loop Chain: when the pipeline discovers a failure, fix it immediately and re-verify. Do not ask for permission.
-  - Expert review required at phase completion: no phase advances without a passing review.
+
+  - Context safety: when session context exceeds 50%, split the work into a new sub-agent
+  session.
+
+  - Loop Chain: when the pipeline discovers a failure, fix it immediately and re-verify.
+  Do not ask for permission.
+
+  - Expert review required at phase completion: no phase advances without a passing
+  review.
+
   - Spec version downgrade is prohibited.
+
+  '

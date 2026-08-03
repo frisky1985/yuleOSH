@@ -3,7 +3,7 @@
 
 """Extended tests for spec engine - CLI and edge cases."""
 import sys, os, json, tempfile
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "spec"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.spec.validate import parse_spec, validate_spec, diff_specs, SpecDocument, _compute_coverage
 

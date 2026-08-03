@@ -18,7 +18,7 @@ from unittest import mock
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 class TestServerIntegration:
@@ -154,7 +154,7 @@ class TestServerMisconfigured:
             [
                 sys.executable,
                 "-c",
-                "import sys; sys.path.insert(0, 'src');"
+                "from yuleosh.ui.server import main as _main; _main('127.0.0.1', {port})" if False else ""
                 f"from yuleosh.ui.server import main; main(host='127.0.0.1', port={port})",
             ],
             cwd=str(repo_root),

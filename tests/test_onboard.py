@@ -27,9 +27,6 @@ import pytest
 # Ensure src/ is on sys.path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _SRC = _PROJECT_ROOT / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
-
 from yuleosh.cli.onboard import (
     _detect_project_type,
     _ensure_osh_project,

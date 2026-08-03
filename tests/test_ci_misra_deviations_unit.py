@@ -21,7 +21,7 @@ from unittest import mock
 import pytest
 import yaml
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.ci import misra_deviations as MD
 from yuleosh.ci.misra_deviations import Deviation

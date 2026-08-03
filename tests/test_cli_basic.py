@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "cli"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 # ===================================================================
 # cli/stats.py

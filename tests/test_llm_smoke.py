@@ -3,7 +3,7 @@ import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 class TestLlmClient:

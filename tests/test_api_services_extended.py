@@ -16,7 +16,7 @@ from unittest.mock import patch, MagicMock, ANY
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 os.environ.setdefault("OSH_HOME", str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("YULEOSH_JWT_SECRET", "test-services-secret-32-chars!!")
 
