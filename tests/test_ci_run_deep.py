@@ -52,7 +52,7 @@ sys.modules["evidence.pack"] = _mev_pack
 del _mev, _mev_pack
 del _mock_cross, _sub, _m, _types
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 # ==================================================================

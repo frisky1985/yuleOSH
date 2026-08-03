@@ -22,7 +22,7 @@ import pytest
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 # ═══════════════════════════════════════════════════════════════════════════

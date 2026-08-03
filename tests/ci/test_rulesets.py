@@ -8,17 +8,10 @@ Unit tests for yuleosh.ci.rulesets
 Tests the Ruleset Plugin System (BaseRuleSet, MisraC2023RuleSet, RulesetRegistry).
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
-
-# ── Ensure src is on path ──────────────────────────────────────────
-_project_root = Path(__file__).resolve().parent.parent.parent / "src"
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
-
 
 # ── Module under test ──────────────────────────────────────────────
 from yuleosh.ci.rulesets import (

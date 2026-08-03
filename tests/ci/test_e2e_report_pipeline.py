@@ -24,8 +24,8 @@ import pytest
 
 # Add project source to path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_PROJECT_ROOT / "src" / "yuleosh" / "ci"))
-sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 # Import modules under test
 from yuleosh.ci.misra_report import (
@@ -55,7 +55,7 @@ from yuleosh.ci.tool_drivers import (
 )
 
 # Import mock data generators
-sys.path.insert(0, str(_PROJECT_ROOT / "tests" / "ci"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 from mock_report_data import (
     make_misra_output,
     make_misra_output_empty,

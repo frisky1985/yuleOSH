@@ -25,11 +25,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Import the modules under test
 # ---------------------------------------------------------------------------
-import sys
-_SRC_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "yuleosh" / "ci"
-sys.path.insert(0, str(_SRC_DIR))
-
-from misra_report import (
+from yuleosh.ci.misra_report import (
     parse_cppcheck_output,
     compute_summary_stats,
     group_by_rule,
@@ -39,13 +35,6 @@ from misra_report import (
     _PATTERN_MISRA_RULE,
     _PATTERN_TEXT_RULE,
 )
-
-# Import review_selftest functions
-_REVIEW_DIR = (
-    Path(__file__).resolve().parent.parent.parent
-    / "src" / "yuleosh" / "pipeline" / "step_handlers"
-)
-sys.path.insert(0, str(_REVIEW_DIR.parent.parent.parent.parent))  # project root
 
 from yuleosh.pipeline.step_handlers.review_selftest import (
     _parse_junit_xml,

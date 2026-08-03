@@ -23,7 +23,7 @@ import tempfile
 import subprocess
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 import pytest
 

@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 # Ensure src is importable
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.knowledge_graph.store import KGStore
 from yuleosh.knowledge_graph.models import Node, Edge

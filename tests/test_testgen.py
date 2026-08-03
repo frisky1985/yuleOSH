@@ -22,7 +22,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Ensure src/testgen is on the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.testgen.generator import TestGenerator, TestCase
 from yuleosh.testgen.runner import TestRunner, TestReport, TestResult, CoverageReport

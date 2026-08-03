@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open, ANY
 
 # Ensure src is on path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 os.environ.setdefault("OSH_HOME", str(Path(__file__).resolve().parent.parent))
 
 

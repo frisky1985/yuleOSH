@@ -19,9 +19,6 @@ from pathlib import Path
 import pytest
 
 SRC = Path(__file__).resolve().parent.parent / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
 
 # ===========================================================================
 # Test data: MISRA C:2012 rules that map to C:2023

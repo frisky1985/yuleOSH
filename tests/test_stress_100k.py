@@ -36,7 +36,7 @@ os.environ.setdefault("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("stress_100k")
 
-sys.path.insert(0, str(PROJECT_ROOT))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.knowledge_graph.store import KGStore
 from yuleosh.knowledge_graph.models import Node, Edge

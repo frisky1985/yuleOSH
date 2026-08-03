@@ -51,7 +51,6 @@ def _spawn_server(env_extra: dict | None = None):
         [
             sys.executable,
             "-c",
-            "import sys; sys.path.insert(0, 'src');"
             f"from yuleosh.ui.server import main; main(host='127.0.0.1', port={port})",
         ],
         cwd=str(REPO_ROOT),

@@ -20,7 +20,7 @@ from pathlib import Path
 
 # Ensure the project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 from yuleosh.review.c_review import (
     review_embedded_c,

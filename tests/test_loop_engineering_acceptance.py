@@ -61,7 +61,7 @@ class _AcceptanceEventBus:
 
     def __init__(self, workspace):
         import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+        # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
         from yuleosh.loop_engine.event_bus import SystemEventBus, LoopEventType, LoopEvent
         # I4: create bus with source validation and rate limiting OFF by default
         # so basic pub/sub tests work. Tests that specifically test these
@@ -438,7 +438,7 @@ class TestLoop1DefectToRequirement:
     def loop1_handler(self, temp_workspace):
         """Build and return a Loop1 handler with mocked KG store."""
         import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+        # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
         from yuleosh.loop_engine.feedback_handlers.loop1_defect_to_req import Loop1DefectToReqHandler
 
         handler = Loop1DefectToReqHandler(
@@ -518,7 +518,7 @@ class TestLoop1DefectToRequirement:
     def test_acc_104_candidate_persisted_to_disk(self, temp_workspace):
         """ACC-104: spec-delta candidate persisted as JSON file."""
         import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+        # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
         from yuleosh.loop_engine.spec_delta_gen import SpecDeltaGenerator
 
         gen = SpecDeltaGenerator(output_dir=str(temp_workspace))
@@ -1089,7 +1089,7 @@ class TestCLICommands:
     def cli_runner(self, temp_workspace):
         """Build CLI runner with mocked internals."""
         import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+        # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
         from yuleosh.loop_engine.cli import cmd_status, cmd_run, cmd_config
 
         class MockCLI:
@@ -1200,7 +1200,7 @@ class TestCLICommands:
     def test_acc_507_help_lists_subcommands(self, temp_workspace, capsys):
         """ACC-507: 'loop --help' lists all subcommands."""
         import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+        # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
         from yuleosh.loop_engine.cli import build_loop_subparser
         import argparse
 

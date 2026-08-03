@@ -19,22 +19,12 @@ from unittest import mock
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 def _get_misra_report_module():
-    """Lazy-load ci.misra_report with safe sys.path handling."""
-    import sys as _sys
-    from pathlib import Path as _Path
-    _root = str(_Path(__file__).resolve().parent.parent)
-    if _root not in _sys.path:
-        _sys.path.insert(0, _root)
-    try:
-        from ci import misra_report as _mr
-        return _mr
-    except ImportError:
-        _sys.path.insert(0, _root)  # retry
-        from ci import misra_report as _mr
-        return _mr
+    """Lazy-load ci.misra_report via the package (A5: no sys.path hacks)."""
+    from yuleosh.ci import misra_report as _mr
+    return _mr
 
 
 

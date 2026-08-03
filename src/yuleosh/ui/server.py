@@ -399,6 +399,9 @@ class OSHHandler(BaseHTTPRequestHandler):
             # client — log full detail server-side, return a generic message.
             logging.error("POST %s: %s", self.path, e, exc_info=True)
             self._json_response({"error": "Internal server error"}, 500)
+            # F3 (v3.8.0): audit must record the failure as 500, not the
+            # finally-fallback 200 (aligned with do_GET's W-1 fix).
+            self._response_status = 500
         finally:
             self._response_status = getattr(self, "_response_status", 200)
             log_audit(self)
@@ -412,6 +415,8 @@ class OSHHandler(BaseHTTPRequestHandler):
             # P1-7 (S-P1-05): generic message to client, details to logs.
             logging.error("DELETE %s: %s", self.path, e, exc_info=True)
             self._json_response({"error": "Internal server error"}, 500)
+            # F3 (v3.8.0): audit must record the failure as 500, not 200.
+            self._response_status = 500
         finally:
             self._response_status = getattr(self, "_response_status", 200)
             log_audit(self)
@@ -423,12 +428,20 @@ class OSHHandler(BaseHTTPRequestHandler):
     # ── Serve file/page (called by routes) ────────────────────────────────
 
     def _serve_file(self, file_path: Path, content_type: str) -> None:
-        """Serve a file by its absolute path."""
+        """Serve a file by its absolute path.
+
+        F4 (v3.8.0): HTML documents get ``Cache-Control: no-cache`` (aligned
+        with M-2's ``_serve_static`` semantics) so page updates are always
+        visible; non-HTML content keeps the default (no long-lived cache).
+        """
         try:
             data = file_path.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
+            # F4: pages must not be stale-cached (M-2 HTML rule).
+            if "html" in content_type or file_path.suffix.lower() in (".html", ".htm"):
+                self.send_header("Cache-Control", "no-cache")
             self._add_security_headers()
             self.end_headers()
             self.wfile.write(data)

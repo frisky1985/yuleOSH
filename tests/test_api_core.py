@@ -15,7 +15,7 @@ from unittest import mock
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 # Test JWT secret — must match what auth module reads
 _TEST_JWT_SECRET = "test-api-core-secret-32-chars-min!!"
