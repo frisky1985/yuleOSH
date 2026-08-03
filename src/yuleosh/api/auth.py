@@ -5,95 +5,66 @@
 
 Mounted at /api/v1/auth/ in the REST API router.
 
-Uses bcrypt for password hashing and PyJWT (HS256) for session tokens.
-JWT secret from YULEOSH_JWT_SECRET env var (auto-generated fallback).
+A1 (v3.8.0 认证合一): this module is a thin CONTRACT ADAPTER over the
+unified auth implementation in ``ui/auth_extended.py``.
+
+- JWT secret / bcrypt / token signing+decoding / rate limiting all have
+  ONE implementation in auth_extended (SHALL-A1.1/1.3/1.5/1.6).  This
+  module only imports them (adapter-layer references — T-A1-15).
+- ``handle_auth`` keeps the v1 response contract
+  ({token, user:{id,email,role,org:{id,name,slug}}}) while the heavy
+  lifting (credential verify, session creation, rate-limit budget) is
+  delegated to auth_extended (SHALL-A1.4).  The shared rate-limit table
+  means /api/v1/auth/login and /api/auth/signin share one budget
+  (SHALL-A1.6, T-A1-08).
 """
 
 import logging
-import os
 import re
-import secrets
-import time
 from typing import Optional
 
-import bcrypt
-import jwt
-
 from yuleosh.store import Store
+from yuleosh.ui.auth_extended import (  # A1: unified implementations
+    EMAIL_RE,
+    JWT_ALGORITHM as _JWT_ALGORITHM,
+    JWT_SECRET as _JWT_SECRET,
+    _SIGNIN_RATE_LIMIT,
+    _MAX_SIGNIN_ATTEMPTS,
+    _RATE_WINDOW_SECONDS,
+    _check_and_record_failed_attempt,
+    _check_rate_limit,
+    _decode_token,
+    _generate_token,
+    _hash_password,
+    _slugify,
+    _verify_password,
+    get_session_user,
+    handle_logout as _auth_extended_logout,
+    register as _auth_extended_register,
+)
 from . import json_ok, json_error
 
 logger = logging.getLogger("yuleosh.api.auth")
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+# v1 register/login session TTL (24h) — kept for the v1 contract; the
+# unified auth_extended flow uses its own SESSION_TTL_HOURS for the JWT
+# expiry claim.  Both share the same store.session row expiry semantics.
 TOKEN_TTL_HOURS = 24
 
-# JWT secret — single source of truth (SHALL-A1.1, v3.8.0): api/auth.py
-# must NOT read YULEOSH_JWT_SECRET itself; ui/auth_extended.py.JWT_SECRET
-# is the only interpretation.  Fail-fast preserved: importing auth_extended
-# without the env var raises RuntimeError, which propagates here.
-from yuleosh.ui.auth_extended import (  # A1: unified source
-    JWT_SECRET as _JWT_SECRET,
-    JWT_ALGORITHM as _JWT_ALGORITHM,
-)
-
-# In-memory rate limit tracking: email -> (attempts, window_start)
-_SIGNIN_RATE_LIMIT: dict[str, tuple[int, int]] = {}
-_MAX_SIGNIN_ATTEMPTS = 10
-_RATE_WINDOW_SECONDS = 300  # 5 minutes
+# In-memory rate limit tracking — shared table with the ui signin flow
+# (SHALL-A1.6): email -> (failed_attempts, window_start).  Defined in
+# auth_extended; re-exported here for adapter/test compatibility.
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Internal helpers (adapter layer)
 # ---------------------------------------------------------------------------
 
-def _slugify(text: str) -> str:
-    """Convert text to URL-friendly slug."""
-    return re.sub(r"[^a-z0-9-]", "", text.lower().replace(" ", "-"))
-
-
-def _hash_password(password: str) -> str:
-    """Hash a password with bcrypt (12 salt rounds)."""
-    return bcrypt.hashpw(
-        password.encode("utf-8"), bcrypt.gensalt(rounds=12)
-    ).decode("utf-8")
-
-
-def _verify_password(password: str, hashed: str) -> bool:
-    """Verify a password against its bcrypt hash."""
-    try:
-        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
-    except (ValueError, TypeError):
-        return False
-
-
-def _generate_token(user_id: int, org_id: int, email: str) -> str:
-    """Generate a signed JWT token with user claims and expiration."""
-    now = int(time.time())
-    payload = {
-        "user_id": user_id,
-        "org_id": org_id,
-        "email": email,
-        "iat": now,
-        "exp": now + TOKEN_TTL_HOURS * 3600,
-    }
-    return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALGORITHM)
-
-
-def _decode_token(token: str) -> Optional[dict]:
-    """Decode and validate a JWT token. Returns payload or None."""
-    try:
-        return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        logger.debug("JWT expired")
-        return None
-    except jwt.InvalidTokenError as e:
-        logger.debug("JWT invalid: %s", e)
-        return None
-
+# NOTE (A1): _slugify / _hash_password / _verify_password / _generate_token /
+# _decode_token / _check_rate_limit / _SIGNIN_RATE_LIMIT / _MAX_SIGNIN_ATTEMPTS /
+# _RATE_WINDOW_SECONDS / EMAIL_RE are IMPORTED from ui/auth_extended above —
+# they are the unified single implementations (T-A1-15: adapter-layer
+# references only, zero `def` of duplicated crypto in this module).
 
 def _extract_token(headers: dict) -> Optional[str]:
     """Extract Bearer token from request headers.
@@ -113,25 +84,8 @@ def _extract_token(headers: dict) -> Optional[str]:
     return None
 
 
-def _check_rate_limit(email: str) -> bool:
-    """Check signin rate limit. Returns True if blocked."""
-    now = int(time.time())
-    entry = _SIGNIN_RATE_LIMIT.get(email)
-    if entry:
-        attempts, window_start = entry
-        if now - window_start > _RATE_WINDOW_SECONDS:
-            _SIGNIN_RATE_LIMIT[email] = (1, now)
-            return False
-        if attempts >= _MAX_SIGNIN_ATTEMPTS:
-            return True
-        _SIGNIN_RATE_LIMIT[email] = (attempts + 1, window_start)
-    else:
-        _SIGNIN_RATE_LIMIT[email] = (1, now)
-    return False
-
-
 def _user_response(user: dict, org: dict) -> dict:
-    """Build the user info response dict, stripping sensitive fields."""
+    """Build the v1 user info response dict, stripping sensitive fields."""
     return {
         "id": user["id"],
         "email": user.get("email", ""),
@@ -147,7 +101,8 @@ def _user_response(user: dict, org: dict) -> dict:
 def _login_user(email: str, password: str, store: Store) -> Optional[dict]:
     """Attempt to authenticate a user across all orgs.
 
-    Returns the user dict on success, None on failure.
+    Uses the unified password verifier (A1). Returns the user dict on
+    success, None on failure.
     """
     orgs = store.list_organizations()
     for org in orgs:
@@ -201,41 +156,17 @@ def _handle_register(body: dict) -> tuple:
     Body: {email, password, organization_name}
     Returns: {token, user: {id, email, role, org}}
     """
-    email = (body.get("email") or "").strip().lower()
-    password = (body.get("password") or "").strip()
-    org_name = (body.get("organization_name") or "").strip()
-
-    # ── Validation ──────────────────────────────────────────────────────
-    if not email or not EMAIL_RE.match(email):
-        return json_error("Valid email is required", 400)
-    if not password or len(password) < 8:
-        return json_error("Password must be at least 8 characters", 400)
-    if not org_name:
-        return json_error("organization_name is required", 400)
+    # A1: delegate to the unified register (org+user+token) and convert
+    # the response to the v1 contract.
+    resp, status = _auth_extended_register(body)
+    if status != 200:
+        return json_error(resp.get("error", "Registration failed"), status)
 
     store = Store()
-    org_slug = _slugify(org_name)
-
-    # Create org if it doesn't exist; otherwise check for email conflict
-    org = store.get_organization(org_slug)
-    if org:
-        # Org exists — check if email already registered
-        existing = store.get_user(org["id"], email)
-        if existing:
-            return json_error("Email already registered in this organization", 409)
-    else:
-        org = store.create_organization(org_name, org_slug)
-
-    # Create user with admin role (first user in org)
-    password_hash = _hash_password(password)
-    user = store.create_user(org["id"], email, "admin", password_hash)
-
-    # Generate JWT and create session
-    token = _generate_token(user["id"], org["id"], email)
-    store.create_session(user["id"], token, TOKEN_TTL_HOURS)
-
+    user = store.get_user_by_id(resp["user_id"])
+    org = store.get_organization_by_id(resp["org_id"])
     return json_ok({
-        "token": token,
+        "token": resp["token"],
         "user": _user_response(user, org),
     })
 
@@ -258,7 +189,7 @@ def _handle_login(body: dict) -> tuple:
     if not password:
         return json_error("Password is required", 400)
 
-    # Rate limit check
+    # Shared rate-limit budget with /api/auth/signin (SHALL-A1.6).
     if _check_rate_limit(email):
         retry_after = _RATE_WINDOW_SECONDS // 60
         return json_error(
@@ -267,7 +198,7 @@ def _handle_login(body: dict) -> tuple:
 
     store = Store()
 
-    # Search for user across all orgs
+    # Search for user across all orgs (same semantics as handle_signin).
     orgs = store.list_organizations()
     authenticated_user = None
     authenticated_org = None
@@ -282,6 +213,7 @@ def _handle_login(body: dict) -> tuple:
                 break
 
     if not authenticated_user or not authenticated_org:
+        _check_and_record_failed_attempt(email)
         return json_error("Invalid email or password", 401)
 
     # Generate JWT and create session
@@ -315,30 +247,22 @@ def _handle_me(handler=None) -> tuple:
     if not token:
         return json_error("Authorization header with Bearer token required", 401)
 
-    payload = _decode_token(token)
-    if not payload:
+    # A1: unified session resolve (same verify as the ui side).
+    info = get_session_user(token)
+    if not info:
         return json_error("Invalid or expired token", 401)
-
-    store = Store()
-
-    user_id = payload.get("user_id")
-    org_id = payload.get("org_id")
-
-    # Verify the session still exists in the DB (not logged out or expired)
-    session = store.get_session(token)
-    if not session:
-        return json_error("Invalid or expired token", 401)
-
-    user = store.get_user_by_id(user_id)
-    if not user:
-        return json_error("User not found", 401)
-
-    org = store.get_organization_by_id(org_id or user.get("org_id", 0))
-    if not org:
-        return json_error("Organization not found", 401)
 
     return json_ok({
-        "user": _user_response(user, org),
+        "user": {
+            "id": info["user_id"],
+            "email": info["email"],
+            "role": info["role"],
+            "org": {
+                "id": info["org_id"],
+                "name": info["org_name"],
+                "slug": info["org_slug"],
+            },
+        },
     })
 
 
@@ -350,14 +274,13 @@ def _handle_logout(handler=None) -> tuple:
     """Logout — invalidate the session token.
 
     Header: Authorization: Bearer <token>
-    Returns: {ok: true}
+    Returns: {message: "Logged out successfully"}
     """
     if handler:
         token = _extract_token(handler.headers)
         if token:
             try:
-                store = Store()
-                store.delete_session(token)
+                _auth_extended_logout(token)
             except Exception as e:
                 logger.warning("Failed to delete session on logout: %s", e)
 

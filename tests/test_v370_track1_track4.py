@@ -1151,8 +1151,9 @@ class TestM5JwtSecretGovernance:
         tok = _generate_token(user_id=1, org_id=2, email="jwt@test.com")
         payload = _decode_token(tok)
         assert payload is not None
-        assert payload["user_id"] == 1
-        assert payload["org_id"] == 2
+        # A1 (v3.8.0): claims unified to sub/org (SHALL-A1.3).
+        assert payload["sub"] == "1"
+        assert payload["org"] == 2
         assert payload["email"] == "jwt@test.com"
 
     def test_t_m5_03_no_hardcoded_fallback(self):
