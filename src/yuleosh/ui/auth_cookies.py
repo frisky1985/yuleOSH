@@ -18,6 +18,8 @@ in this module — one place for names/attributes (SHALL-T1.1, T-T1-22).
 
 from typing import Optional
 
+import http.cookies
+
 # Cookie names (裁决 B1) — never collide with legacy ``osh_session`` (T1.8).
 ACCESS_COOKIE_NAME = "yuleosh_at"
 REFRESH_COOKIE_NAME = "yuleosh_rt"
@@ -79,3 +81,28 @@ def clear_cookie_headers() -> list:
         make_auth_cookie(ACCESS_COOKIE_NAME, "", 0),
         make_auth_cookie(REFRESH_COOKIE_NAME, "", 0),
     ]
+
+
+def read_cookie_value(headers, name: str) -> Optional[str]:
+    """Extract a cookie value from request headers (dict or object).
+
+    T1 (v3.9.0, SHALL-T1.4): the cookie fallback reader used by the
+    middleware and the auth routes.  Accepts both a plain dict
+    (``{"Cookie": ...}``) and an object with ``.get`` (real
+    ``BaseHTTPRequestHandler.headers`` is case-insensitive).  Returns None
+    when the cookie is absent or unparseable — never raises.
+    """
+    if callable(getattr(headers, "get", None)):
+        cookie_raw = headers.get("Cookie", "") or headers.get("cookie", "")
+    elif isinstance(headers, dict):
+        cookie_raw = headers.get("Cookie", "") or headers.get("cookie", "")
+    else:
+        return None
+    if not cookie_raw:
+        return None
+    try:
+        parsed = http.cookies.SimpleCookie(cookie_raw)
+    except Exception:
+        return None
+    morsel = parsed.get(name)
+    return morsel.value if morsel is not None else None
