@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && python3 scripts/inject-meta-csp.py",
     "start": "next start",
     "lint": "eslint",
     "test": "jest --passWithNoTests"
