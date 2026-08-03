@@ -80,6 +80,10 @@ class TestRegistrationFlow:
         # failures when running the full suite).
         import yuleosh.api.auth
         yuleosh.api.auth._JWT_SECRET = TEST_JWT_SECRET
+        # A1 (v3.8.0): signing/decoding is unified in ui/auth_extended —
+        # patch the unified secret too so the E2E chain verifies.
+        import yuleosh.ui.auth_extended
+        yuleosh.ui.auth_extended.JWT_SECRET = TEST_JWT_SECRET
 
     def test_01_register_creates_org_and_user(self):
         """GIVEN valid credentials WHEN register THEN org + user created."""
@@ -203,6 +207,9 @@ class TestWizardFlow:
         os.environ["YULEOSH_JWT_SECRET"] = TEST_JWT_SECRET
         import yuleosh.api.auth
         yuleosh.api.auth._JWT_SECRET = TEST_JWT_SECRET
+        # A1 (v3.8.0): unified secret lives in ui/auth_extended.
+        import yuleosh.ui.auth_extended
+        yuleosh.ui.auth_extended.JWT_SECRET = TEST_JWT_SECRET
 
     def test_01_wizard_complete_with_valid_token(self):
         """GIVEN valid JWT WHEN POST wizard/complete THEN completed."""
@@ -266,6 +273,9 @@ class TestProjectCreationFlow:
         os.environ["YULEOSH_JWT_SECRET"] = TEST_JWT_SECRET
         import yuleosh.api.auth
         yuleosh.api.auth._JWT_SECRET = TEST_JWT_SECRET
+        # A1 (v3.8.0): unified secret lives in ui/auth_extended.
+        import yuleosh.ui.auth_extended
+        yuleosh.ui.auth_extended.JWT_SECRET = TEST_JWT_SECRET
 
     def test_01_create_project_with_valid_data(self):
         """GIVEN valid project data WHEN POST project THEN created."""
@@ -360,6 +370,9 @@ class TestSpecUploadFlow:
         os.environ["YULEOSH_JWT_SECRET"] = TEST_JWT_SECRET
         import yuleosh.api.auth
         yuleosh.api.auth._JWT_SECRET = TEST_JWT_SECRET
+        # A1 (v3.8.0): unified secret lives in ui/auth_extended.
+        import yuleosh.ui.auth_extended
+        yuleosh.ui.auth_extended.JWT_SECRET = TEST_JWT_SECRET
 
     def test_01_spec_upload_with_content(self):
         """GIVEN valid spec content WHEN POST spec THEN saved."""
@@ -427,6 +440,9 @@ class TestPipelineTriggerFlow:
         os.environ["YULEOSH_JWT_SECRET"] = TEST_JWT_SECRET
         import yuleosh.api.auth
         yuleosh.api.auth._JWT_SECRET = TEST_JWT_SECRET
+        # A1 (v3.8.0): unified secret lives in ui/auth_extended.
+        import yuleosh.ui.auth_extended
+        yuleosh.ui.auth_extended.JWT_SECRET = TEST_JWT_SECRET
 
     def test_01_pipeline_trigger_with_project(self):
         """GIVEN valid project WHEN POST pipeline THEN run started."""

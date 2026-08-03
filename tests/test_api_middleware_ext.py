@@ -19,7 +19,10 @@ class TestMiddleware:
         payload = {"user_id": 1, "org_id": 2, "email": "test@test.com"}
         token = jwt.encode(payload, secret, algorithm="HS256")
 
-        with patch("yuleosh.api.middleware._JWT_SECRET", secret):
+        # A1 (v3.8.0): decode delegates to the unified decoder in
+        # ui/auth_extended — patch the UNIFIED secret, not the middleware
+        # module attr (which is no longer read by the decoder).
+        with patch("yuleosh.ui.auth_extended.JWT_SECRET", secret):
             result = _decode_token(token)
             assert result is not None
             assert result["user_id"] == 1
@@ -31,7 +34,7 @@ class TestMiddleware:
         payload = {"user_id": 1, "exp": int(time.time()) - 3600}
         token = jwt.encode(payload, secret, algorithm="HS256")
 
-        with patch("yuleosh.api.middleware._JWT_SECRET", secret):
+        with patch("yuleosh.ui.auth_extended.JWT_SECRET", secret):
             result = _decode_token(token)
             assert result is None
 
@@ -116,7 +119,7 @@ class TestMiddleware:
         )
         assert code == 401
 
-    @patch("yuleosh.store.Store")
+    @patch("yuleosh.ui.auth_extended.Store")
     def test_require_auth_user_not_found(self, mock_store_cls):
         """require_auth with valid token but missing user returns 401."""
         import jwt, time
@@ -131,7 +134,9 @@ class TestMiddleware:
         mock_handler = MagicMock()
         mock_handler.headers = {"Authorization": f"Bearer {token}"}
 
-        with patch("yuleosh.api.middleware._JWT_SECRET", secret):
+        # A1 (v3.8.0): verify delegates to ui/auth_extended.verify_token —
+        # patch the unified Store + JWT secret, not the middleware module.
+        with patch("yuleosh.ui.auth_extended.JWT_SECRET", secret):
             @require_auth
             def my_handler(**kwargs):
                 return {"ok": True}, 200
@@ -141,7 +146,7 @@ class TestMiddleware:
             )
             assert code == 401
 
-    @patch("yuleosh.store.Store")
+    @patch("yuleosh.ui.auth_extended.Store")
     def test_require_auth_no_session(self, mock_store_cls):
         """require_auth with no active session returns 401."""
         import jwt, time
@@ -157,7 +162,7 @@ class TestMiddleware:
         mock_handler = MagicMock()
         mock_handler.headers = {"Authorization": f"Bearer {token}"}
 
-        with patch("yuleosh.api.middleware._JWT_SECRET", secret):
+        with patch("yuleosh.ui.auth_extended.JWT_SECRET", secret):
             @require_auth
             def my_handler(**kwargs):
                 return {"ok": True}, 200
@@ -167,7 +172,7 @@ class TestMiddleware:
             )
             assert code == 401
 
-    @patch("yuleosh.store.Store")
+    @patch("yuleosh.ui.auth_extended.Store")
     def test_require_auth_success(self, mock_store_cls):
         """require_auth with valid everything returns handler result."""
         import jwt, time
@@ -183,7 +188,7 @@ class TestMiddleware:
         mock_handler = MagicMock()
         mock_handler.headers = {"Authorization": f"Bearer {token}"}
 
-        with patch("yuleosh.api.middleware._JWT_SECRET", secret):
+        with patch("yuleosh.ui.auth_extended.JWT_SECRET", secret):
             @require_auth
             def my_handler(**kwargs):
                 assert "current_user" in kwargs

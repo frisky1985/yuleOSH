@@ -324,6 +324,61 @@ def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9-]", "", text.lower().replace(" ", "-"))
 
 
+def verify_token(token: str) -> dict | None:
+    """Unified bearer-token verify (A1, SHALL-A1.2).
+
+    Single source of truth for JWT bearer verification used by the
+    v1 API middleware (``api.middleware.require_auth``) AND the ui side.
+    Verdict semantics are identical to the v3.7.0 middleware path:
+
+      - token signature / expiry invalid  -> None
+      - session row missing (logged out / expired) -> None
+      - user row missing                -> None
+
+    Returns the current-user dict ``{user_id, org_id, email, role}`` on
+    success (the same shape ``require_auth`` injected in v3.7.0), or None.
+    """
+    if not token:
+        return None
+    payload = _decode_token(token)
+    if payload is None:
+        return None
+
+    # ── Token contract (P0-A): accept BOTH payload formats ──────────
+    #   format A (router/middleware native): {"user_id": ..., "org_id": ...}
+    #   format B (frontend ui/auth_extended): {"sub": "<user_id>", "org": ...}
+    user_id = payload.get("user_id")
+    if user_id is None:
+        user_id = payload.get("sub")
+    org_id = payload.get("org_id")
+    if org_id is None:
+        org_id = payload.get("org")
+
+    # auth_extended signs sub as str(user_id) — normalize to int for the store.
+    try:
+        user_id = int(user_id) if user_id is not None else None
+    except (TypeError, ValueError):
+        pass
+    try:
+        org_id = int(org_id) if org_id is not None else None
+    except (TypeError, ValueError):
+        pass
+
+    store = Store()
+    user = store.get_user_by_id(user_id)
+    if not user:
+        return None
+    session = store.get_session(token)
+    if not session:
+        return None
+    return {
+        "user_id": user_id,
+        "org_id": org_id,
+        "email": payload.get("email", ""),
+        "role": user.get("role", "member"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Session helpers
 # ---------------------------------------------------------------------------

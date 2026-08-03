@@ -41,18 +41,25 @@ class TestMiddlewareDeep:
         # require_auth calls validate with a mismatched secret (401).
         import yuleosh.api.auth as _auth_mod
         import yuleosh.api.middleware as _mw_mod
+        import yuleosh.ui.auth_extended as _ae_mod
         self._saved_auth_secret = _auth_mod._JWT_SECRET
         self._saved_mw_secret = _mw_mod._JWT_SECRET
+        self._saved_ae_secret = _ae_mod.JWT_SECRET
         _auth_mod._JWT_SECRET = _JWT_SECRET
         _mw_mod._JWT_SECRET = _JWT_SECRET
+        # A1 (v3.8.0): the unified decoder lives in ui/auth_extended — patch
+        # the unified secret too, or signed tokens fail verification.
+        _ae_mod.JWT_SECRET = _JWT_SECRET
 
     def teardown_method(self):
         import yuleosh.api.auth as _auth_mod
         import yuleosh.api.middleware as _mw_mod
+        import yuleosh.ui.auth_extended as _ae_mod
         _auth_mod._JWT_SECRET = self._saved_auth_secret
         _mw_mod._JWT_SECRET = self._saved_mw_secret
+        _ae_mod.JWT_SECRET = self._saved_ae_secret
 
-    @patch("yuleosh.store.Store")
+    @patch("yuleosh.ui.auth_extended.Store")
     def test_require_auth_success(self, mock_store_class):
         from yuleosh.api.middleware import require_auth
 
@@ -125,7 +132,7 @@ class TestMiddlewareDeep:
         assert result["ok"] is False
         assert status == 401
 
-    @patch("yuleosh.store.Store")
+    @patch("yuleosh.ui.auth_extended.Store")
     def test_require_auth_user_not_found(self, mock_store_class):
         from yuleosh.api.middleware import require_auth
 
@@ -149,7 +156,7 @@ class TestMiddlewareDeep:
         assert result["ok"] is False
         assert status == 401
 
-    @patch("yuleosh.store.Store")
+    @patch("yuleosh.ui.auth_extended.Store")
     def test_require_auth_session_not_found(self, mock_store_class):
         from yuleosh.api.middleware import require_auth
 
