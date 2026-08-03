@@ -5,120 +5,136 @@
 
 Provides REST endpoints for tenant CRUD and tenant-scoped data access.
 
-All routes require a valid session token (Authorization: Bearer <token>).
+A3 (v3.8.0): migrated from the legacy ``fn(handler, slug)`` signature to
+the new-style ``fn(method, path_tail, body, query, handler) -> tuple`` so
+these endpoints are served by the router's ROUTES table (single dispatch
+path — no ``_dispatch_legacy``).  Response bodies / status codes are
+unchanged (SHALL-A3.4): handlers return PLAIN dicts (not the ok/data
+wrapper) exactly as the legacy ``_send_json`` wrote them.
 """
 
-import json
 import logging
-from http.server import BaseHTTPRequestHandler
 from typing import Optional
 
 from yuleosh.tenant.model import TenantStore
-from yuleosh.ui.auth_extended import get_session_user, _decode_token
+from yuleosh.ui.auth_extended import get_session_user
 
 
 logger = logging.getLogger("tenant.routes")
 
 
-def _require_auth(handler: BaseHTTPRequestHandler) -> Optional[dict]:
-    """Extract and validate session. Returns user info dict or sends 401."""
-    token = _get_bearer_token(handler)
-    if not token:
-        _send_json(handler, {"error": "Authorization required"}, 401)
-        return None
-    user_info = get_session_user(token)
-    if not user_info:
-        _send_json(handler, {"error": "Invalid or expired session"}, 401)
-        return None
-    return user_info
-
-
-def _get_bearer_token(handler: BaseHTTPRequestHandler) -> Optional[str]:
+def _get_bearer_token(handler) -> Optional[str]:
     auth = handler.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[7:]
     return None
 
 
-def _send_json(handler: BaseHTTPRequestHandler, data: dict, status: int = 200):
-    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
+def _require_auth(handler) -> Optional[dict]:
+    """Extract and validate session. Returns user info dict or None.
 
-
-def _read_body(handler: BaseHTTPRequestHandler) -> dict:
-    """Read and parse the request body (P1-5: unified clamped read_body).
-
-    Delegates to yuleosh.api.read_body which clamps Content-Length to 10 MB
-    and converts malformed headers to BadRequest.  Invalid JSON / bad
-    Content-Length yield {} — caller validation returns the 4xx.
+    Legacy semantics: no token → 401 {"error": "Authorization required"};
+    invalid/expired session → 401 {"error": "Invalid or expired session"}.
+    Handlers disambiguate via ``_get_bearer_token``.
     """
-    from yuleosh.api import read_body, BadRequest
-    try:
-        return read_body(handler)
-    except BadRequest:
-        return {}
+    token = _get_bearer_token(handler)
+    if not token:
+        return None
+    return get_session_user(token)
 
 
-# ── Tenant API handlers ─────────────────────────────────────────────────────
+def _auth_error(handler) -> tuple:
+    """401 — exact legacy body for a missing vs invalid session (SHALL-A3.4)."""
+    if not _get_bearer_token(handler):
+        return {"error": "Authorization required"}, 401
+    return {"error": "Invalid or expired session"}, 401
 
-def handle_tenant_info(handler: BaseHTTPRequestHandler, slug: str):
+
+# ── Tenant API handlers (new-style) ─────────────────────────────────────────
+
+def handle_tenant(method: str, path_tail: str, body: dict, query: dict,
+                  handler=None) -> tuple:
+    """Dispatcher for /api/v1/tenant/* (A3, B7).
+
+    path_tail examples:
+      "acme"              → tenant info (GET) / update (PUT)
+      "acme/projects"     → list projects (GET) / create project (POST)
+      "acme/usage"        → usage check (GET)
+    """
+    parts = (path_tail or "").split("/")
+    slug = parts[0] if parts and parts[0] else ""
+    sub = parts[1] if len(parts) > 1 else ""
+
+    if method == "GET":
+        if not sub:
+            return handle_tenant_info(method, path_tail, body, query, handler)
+        if sub == "projects":
+            return handle_tenant_projects(method, path_tail, body, query, handler)
+        if sub == "usage":
+            return handle_usage_check(method, path_tail, body, query, handler)
+    elif method == "PUT":
+        if not sub:
+            return handle_tenant_update(method, path_tail, body, query, handler)
+    elif method == "POST":
+        if sub == "projects":
+            return handle_tenant_project_create(method, path_tail, body, query,
+                                                handler)
+    return {"error": "Method not allowed"}, 405
+
+
+def handle_tenant_info(method: str, path_tail: str, body: dict, query: dict,
+                       handler=None) -> tuple:
     """GET /api/v1/tenant/{slug} — Get tenant info."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
+    slug = (path_tail or "").split("/")[0]
+    if not slug:
+        return {"error": "Tenant slug required"}, 400
 
     store = TenantStore()
     tenant = store.get(slug)
     if not tenant:
-        _send_json(handler, {"error": "Tenant not found"}, 404)
-        return
+        return {"error": "Tenant not found"}, 404
 
-    # Only allow access to own tenant for non-admin users
-    if str(user.get("org_id")) != slug and user.get("role") != "admin":
-        # Fall back to org slug check
-        pass
-
-    _send_json(handler, {
+    return {
         "id": tenant.id,
         "name": tenant.name,
         "plan": tenant.plan,
         "created_at": tenant.created_at,
         "limits": tenant.limits,
-    })
+    }, 200
 
 
-def handle_tenant_update(handler: BaseHTTPRequestHandler, slug: str):
+def handle_tenant_update(method: str, path_tail: str, body: dict, query: dict,
+                         handler=None) -> tuple:
     """PUT /api/v1/tenant/{slug} — Update tenant settings."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
     if user.get("role") not in ("admin", "owner"):
-        _send_json(handler, {"error": "Admin role required"}, 403)
-        return
+        return {"error": "Admin role required"}, 403
 
-    body = _read_body(handler)
+    slug = (path_tail or "").split("/")[0]
     store = TenantStore()
     try:
         tenant = store.update(slug, **body)
-        _send_json(handler, {
+        return {
             "id": tenant.id,
             "name": tenant.name,
             "plan": tenant.plan,
             "updated_at": tenant.updated_at,
-        })
+        }, 200
     except ValueError as e:
-        _send_json(handler, {"error": str(e)}, 400)
+        return {"error": str(e)}, 400
 
 
-def handle_tenant_list(handler: BaseHTTPRequestHandler):
+def handle_tenant_list(method: str, path_tail: str, body: dict, query: dict,
+                       handler=None) -> tuple:
     """GET /api/v1/tenants — List all tenants (admin only)."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
 
     store = TenantStore()
     if user.get("role") == "admin":
@@ -128,32 +144,35 @@ def handle_tenant_list(handler: BaseHTTPRequestHandler):
         t = store.get(str(user.get("org_slug", "")))
         tenants = [t] if t else []
 
-    _send_json(handler, {
+    return {
         "tenants": [
             {"id": t.id, "name": t.name, "plan": t.plan, "created_at": t.created_at}
             for t in tenants
         ],
-    })
+    }, 200
 
 
-def handle_tenant_projects(handler: BaseHTTPRequestHandler, slug: str):
+def handle_tenant_projects(method: str, path_tail: str, body: dict, query: dict,
+                           handler=None) -> tuple:
     """GET /api/v1/tenant/{slug}/projects — List projects for a tenant."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
 
+    slug = (path_tail or "").split("/")[0]
     store = TenantStore()
     projects = store.list_projects(slug)
-    _send_json(handler, {"projects": projects})
+    return {"projects": projects}, 200
 
 
-def handle_tenant_project_create(handler: BaseHTTPRequestHandler, slug: str):
+def handle_tenant_project_create(method: str, path_tail: str, body: dict,
+                                 query: dict, handler=None) -> tuple:
     """POST /api/v1/tenant/{slug}/projects — Create a project."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
 
-    body = _read_body(handler)
+    slug = (path_tail or "").split("/")[0]
     store = TenantStore()
 
     # Check plan limits
@@ -161,29 +180,29 @@ def handle_tenant_project_create(handler: BaseHTTPRequestHandler, slug: str):
     if tenant:
         projects = store.list_projects(slug)
         if len(projects) >= tenant.limits.get("max_projects", 1):
-            _send_json(handler, {
+            return {
                 "error": f"Project limit reached ({tenant.limits['max_projects']}). Upgrade your plan."
-            }, 403)
-            return
+            }, 403
 
     project = store.save_project(slug, body)
-    _send_json(handler, {"project": project}, 201)
+    return {"project": project}, 201
 
 
-def handle_usage_check(handler: BaseHTTPRequestHandler, slug: str):
+def handle_usage_check(method: str, path_tail: str, body: dict, query: dict,
+                       handler=None) -> tuple:
     """GET /api/v1/tenant/{slug}/usage — Check current usage vs limits."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
 
+    slug = (path_tail or "").split("/")[0]
     store = TenantStore()
     tenant = store.get(slug)
     if not tenant:
-        _send_json(handler, {"error": "Tenant not found"}, 404)
-        return
+        return {"error": "Tenant not found"}, 404
 
     projects = store.list_projects(slug)
-    _send_json(handler, {
+    return {
         "tenant": tenant.id,
         "plan": tenant.plan,
         "usage": {
@@ -191,4 +210,4 @@ def handle_usage_check(handler: BaseHTTPRequestHandler, slug: str):
             "projects_limit": tenant.limits["max_projects"],
         },
         "limits": tenant.limits,
-    })
+    }, 200

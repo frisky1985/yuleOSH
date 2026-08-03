@@ -48,130 +48,16 @@ logger = logging.getLogger("yuleosh.api.router")
 
 
 # ─────────────────────────────────────────────────────────────────────
-# P0-B: legacy UI route handlers
+# A3 (v3.8.0): legacy UI route handlers — migrated to new-style.
 #
-# Before the modular router wiring (af1245a), the following /api/v1/*
-# endpoints were served by yuleosh/ui/routes/handler_helpers.py (and the
-# route modules tenant_routes/billing_routes/project_routes/audit_routes).
-# The wiring shadowed them into 404 dead code.  They are restored here by
-# delegating to the same legacy handler modules, which perform their own
-# session-token auth and write their own JSON response.
-#
-# Legacy handler convention: fn(handler, ...) → writes response directly
-# via handler.send_response(...), returns None.  Hence _dispatch_legacy
-# returns True once a legacy module took the request; the router must NOT
-# read the body first (legacy handlers read rfile themselves).
+# tenant/billing/projects/tenants previously lived in handler_helpers and
+# were served through ``_dispatch_legacy`` (deleted in v3.8.0 — SHALL-A3.2).
+# They now use the SAME new-style signature as every other handler:
+#   fn(method, path_tail, body, query, handler) -> (dict, status)
+# and are registered below (裁决 B7: plural resources tenant/billing/
+# projects).  ``/api/v1/audit`` is served ONLY by api.audit.handle_audit
+# (SHALL-A3.7).
 # ─────────────────────────────────────────────────────────────────────
-
-def _dispatch_legacy(handler: BaseHTTPRequestHandler, path: str, method: str) -> bool:
-    """Route /api/v1/* paths to pre-modular-router legacy handlers.
-
-    Returns True if a legacy handler wrote the response, False if the path
-    is not a legacy route (caller should 404).
-    """
-    clean = path.rstrip("/")
-    try:
-        # ── Tenant (SAAS-1) ────────────────────────────────────────────
-        if clean.startswith("/api/v1/tenant/"):
-            from yuleosh.ui.routes.tenant_routes import (
-                handle_tenant_info,
-                handle_tenant_projects,
-                handle_usage_check,
-                handle_tenant_project_create,
-            )
-            parts = clean.split("/")
-            # /api/v1/tenant/{slug}
-            if len(parts) == 5:
-                slug = parts[4]
-                if method == "GET":
-                    handle_tenant_info(handler, slug)
-                    return True
-                return False
-            # /api/v1/tenant/{slug}/projects | /usage
-            if len(parts) == 6:
-                slug = parts[4]
-                sub = parts[5]
-                if method == "GET":
-                    if sub == "projects":
-                        handle_tenant_projects(handler, slug)
-                        return True
-                    if sub == "usage":
-                        handle_usage_check(handler, slug)
-                        return True
-                if method == "POST" and sub == "projects":
-                    handle_tenant_project_create(handler, slug)
-                    return True
-            return False
-
-        # ── Tenants list (SAAS-1) ──────────────────────────────────────
-        if clean == "/api/v1/tenants":
-            if method != "GET":
-                return False
-            from yuleosh.ui.routes.tenant_routes import handle_tenant_list
-            handle_tenant_list(handler)
-            return True
-
-        # ── Billing (SAAS-5) ───────────────────────────────────────────
-        if clean.startswith("/api/v1/billing/"):
-            from yuleosh.ui.routes.billing_routes import (
-                handle_get_usage,
-                handle_get_plan,
-                handle_upgrade_plan,
-            )
-            sub = clean.split("/")[-1]
-            if method == "GET" and sub == "usage":
-                handle_get_usage(handler)
-                return True
-            if method == "GET" and sub == "plan":
-                handle_get_plan(handler)
-                return True
-            if method == "POST" and sub == "upgrade":
-                handle_upgrade_plan(handler)
-                return True
-            return False
-
-        # ── Projects (SAAS-3, plural) ──────────────────────────────────
-        if clean.startswith("/api/v1/projects"):
-            from yuleosh.ui.routes.project_routes import (
-                handle_get_project,
-                handle_create_project,
-                handle_update_project,
-            )
-            if method == "GET" and clean != "/api/v1/projects":
-                handle_get_project(handler, clean)
-                return True
-            if method == "POST" and clean == "/api/v1/projects":
-                handle_create_project(handler)
-                return True
-            if method == "POST" and clean != "/api/v1/projects":
-                handle_update_project(handler, clean)
-                return True
-            return False
-
-        # ── Audit (SAAS-4, legacy UI audit events) ─────────────────────
-        if clean == "/api/v1/audit":
-            from yuleosh.ui.routes.audit_routes import (
-                handle_get_audit_logs,
-                handle_post_audit_event,
-            )
-            if method == "GET":
-                handle_get_audit_logs(handler)
-                return True
-            if method == "POST":
-                handle_post_audit_event(handler)
-                return True
-            return False
-    except Exception as e:  # pragma: no cover - defensive
-        logger.error(
-            "Legacy API dispatch failed [path=%s] [method=%s]: %s",
-            path, method, e, exc_info=True,
-        )
-        try:
-            _respond(handler, *json_error("Internal server error", 500))
-        except Exception:
-            pass
-        return True
-    return False
 
 
 # Resource routing map: resource_name -> handler function
@@ -193,6 +79,17 @@ ROUTES: dict[str, object] = {
     "auth": handle_auth,
     "kb": handle_kb,
 }
+
+# A3: tenant/billing/projects (复数资源，裁决 B7) — migrated legacy
+# handlers, lazily imported from ui/routes/* on first request.  Each
+# module exposes a new-style dispatcher that routes sub-resources by
+# path_tail (e.g. tenant/acme/projects).
+_LAZY_HANDLERS.update({
+    "tenant": ("yuleosh.ui.routes.tenant_routes", "handle_tenant"),
+    "tenants": ("yuleosh.ui.routes.tenant_routes", "handle_tenant_list"),
+    "billing": ("yuleosh.ui.routes.billing_routes", "handle_billing"),
+    "projects": ("yuleosh.ui.routes.project_routes", "handle_projects"),
+})
 
 
 def dispatch(handler: BaseHTTPRequestHandler, path: str):
@@ -238,15 +135,9 @@ def dispatch(handler: BaseHTTPRequestHandler, path: str):
             except (ImportError, AttributeError):
                 pass
     if handler_fn is None:
-        # ── P0-B: legacy UI route handlers (pre-modular-router endpoints) ──
-        # tenant/billing/projects/tenants lived in handler_helpers before the
-        # router wiring and were shadowed into 404 dead code.  Restore them by
-        # delegating to the legacy handler modules, which perform their own
-        # auth (session token) and write their own JSON response.
-        # NOTE: body is deliberately NOT read here — legacy handlers read
-        # rfile themselves (their _read_body reads from the socket).
-        if _dispatch_legacy(handler, clean_path, method):
-            return
+        # A3 (v3.8.0): no legacy dispatch path — tenant/billing/projects
+        # are registered new-style above (SHALL-A3.2).  Unknown resources
+        # get the standard 404.
         return _respond(handler, *json_error(f"Unknown resource: {resource}", 404))
 
     body = None

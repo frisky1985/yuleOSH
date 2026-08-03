@@ -65,8 +65,8 @@ def handle_audit(method: str, path_tail: str, body: dict, query: dict, **kwargs)
     # RBAC (P1-1 / C-W-02): "admin only" was documented but never enforced —
     # any authenticated user (incl. member role) could read the audit log.
     # Require audit:view permission (admin / auditor) via the shared RBAC
-    # model, matching ui/routes/audit_routes.py.  Fail closed when the
-    # current_user context is missing.
+    # model (previously mirrored by ui/routes/audit_routes, removed in
+    # v3.8.0 A2).  Fail closed when the current_user context is missing.
     from yuleosh.rbac import check_role
     current_user = kwargs.get("current_user")
     if not current_user or not check_role(current_user, "audit", "view"):

@@ -18,12 +18,17 @@ class TestRouter:
     """Test API router."""
 
     def test_routes_contains_all_resources(self):
-        """All expected resources are in ROUTES or _LAZY_HANDLERS (AR-P2-01)."""
+        """All expected resources are in ROUTES or _LAZY_HANDLERS (AR-P2-01).
+
+        A3 (v3.8.0): tenant/tenants/billing/projects registered as plural
+        resources (裁决 B7) — removed from legacy dispatch.
+        """
         expected = {
             "health", "wizard", "spec", "pipeline", "ci", "review",
             "evidence", "project", "stats", "notify", "apikeys",
             "webhooks", "audit", "auth", "demo", "subscription",
             "preview", "dashboard", "kb",
+            "tenant", "tenants", "billing", "projects",
         }
         all_resources = set(ROUTES.keys()) | set(_LAZY_HANDLERS.keys())
         assert all_resources == expected

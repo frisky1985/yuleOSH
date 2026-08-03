@@ -748,12 +748,12 @@ class AuditLog:
             if len(self._entries) > self._max_entries:
                 self._entries = self._entries[-self._max_entries:]
 
-        # 持久化到 Store (如已配置)
-        if self._store is not None:
-            try:
-                self._store.insert("audit_log", entry)
-            except Exception as e:
-                log.warning("AuditLog: persist error: %s", e)
+        # A2/B5 (v3.8.0): loop-event audit persistence is EXPLICITLY removed.
+        # The old ``self._store.insert("audit_log", entry)`` branch was
+        # silent dead code — store has no ``insert`` method, so it raised
+        # AttributeError that was swallowed by the except.  Loop event
+        # audit stays in-memory only (bounded by _max_entries); durable
+        # loop event persistence is a separate workstream.
 
     def list(self, limit: int = 50,
              event_type: Optional[str] = None,
@@ -871,11 +871,9 @@ class AuditLog:
             if len(self._entries) > self._max_entries:
                 self._entries = self._entries[-self._max_entries:]
 
-        if self._store is not None:
-            try:
-                self._store.insert("audit_log", entry)
-            except Exception as e:
-                log.warning("AuditLog: persist error: %s", e)
+        # A2/B5 (v3.8.0): no store persist — see AuditLog.record comment.
+        # Loop-event audit entries are in-memory only (bounded); durable
+        # persistence is a separate workstream.
 
     def _compute_duration_ms(self, start_timestamp: str, end_timestamp: str) -> float:
         """计算两个 ISO 时间戳之间的毫秒差。"""

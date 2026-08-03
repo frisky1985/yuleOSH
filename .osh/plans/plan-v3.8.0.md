@@ -18,6 +18,23 @@
 
 ## Checkpoints
 
-（每批完成后追加：commit、测试结果、下一步）
+### P0 ✅（2026-08-03）A1 Step 0-1 + F1
+- Commits: `15515f0`（Step 0 F1 subscription/wizard secret 单一来源）、`4c4c7e3`（Step 1 secret 单一来源，auth_extended 为基）
+- 测试：auth/subscription/wizard 相关 96 passed；全量 auth 子集 548 passed
+
+### P1 ✅（2026-08-03）A1 Step 2 middleware verify 统一
+- Commit: `2848514`
+- 新增 `ui/auth_extended.verify_token`（统一 verify，双格式兼容，判定与 v3.7.0 一致）
+- middleware require_auth 改调 verify_token；`_decode_token` 退化为薄委托
+- 测试：middleware/supplementary/v344/pipeline_trigger/onboarding 全绿（适配 patch 目标）
+
+### P2 ✅（2026-08-03）A1 Step 3-5 handler 委托 + 删重复 + 全量
+- Commits: `c5b2dd5`（Step 3-4）、`5959094`（Step 5 前置 T-A1 验收测试）、`536e1f1`（修复全量 8 项）
+- auth_extended 新增统一 register；api/auth.py 重构为 v1 契约适配层；删除重复实现（T-A1-15 零命中）
+- 新增 tests/test_v380_a1_auth_unify.py 18 用例（T-A1-01..15 含负例）
+- 全量回归：**9891 passed / 0 failed**（基线 9873 +18）；`token_urlsafe(32)` grep 零命中
+
+### P3 ⏳ A2 审计统一 + A3 路由去双轨
+- 裁决：B2 删 ring / B3 仅 /api/ 入表 / B4 POST 405 保持 / B5 event_bus 显式移除
 
 ---
