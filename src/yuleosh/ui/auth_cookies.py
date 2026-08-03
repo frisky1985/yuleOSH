@@ -75,6 +75,21 @@ def token_cookie_headers(access: str, refresh: str) -> list:
     ]
 
 
+def org_setup_cookie_headers(setup_token: str) -> list:
+    """Set-Cookie for the needs_org (pre-user) flow (T1 v3.9.0, T-T1-19).
+
+    A first-time signin has no user session yet, so no access/refresh pair
+    exists.  The org_setup token is carried in the access cookie slot so
+    the follow-up ``POST /api/org/create`` works cookie-only (the React
+    login/register pages never attach a Bearer header).  The token cannot
+    authenticate any API endpoint: ``verify_token`` fails on the user
+    lookup (sub=0 → no user row) and the refresh endpoint rejects the
+    non-refresh purpose.  Short Max-Age (30min) bounds exposure.
+    """
+    return [make_auth_cookie(ACCESS_COOKIE_NAME, setup_token,
+                             int(ACCESS_TTL_HOURS * 3600))]
+
+
 def clear_cookie_headers() -> list:
     """Set-Cookie header values that delete both tenant cookies (T1.6)."""
     return [

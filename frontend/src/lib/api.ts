@@ -1,20 +1,19 @@
 /**
  * yuleOSH Unified API Client
  *
- * Centralizes all backend API calls. Handles auth token management,
- * request/response formatting, and 401 auto-redirect.
+ * Centralizes all backend API calls. Handles auth via httpOnly cookies
+ * (T1 v3.9.0 — no more localStorage JWT): the browser carries
+ * ``yuleosh_at``/``yuleosh_rt`` automatically; on 401 the client tries
+ * one silent refresh and replays the request once.
  */
 
-export const TOKEN_KEY = "yuleosh_token";
-
-// ⚠️  SECURITY NOTE (S-P2-03): Token is stored in localStorage (not httpOnly),
-//    meaning any XSS vulnerability can exfiltrate it.
-//
-//    For production hardening, consider one of:
-//    - Use httpOnly session cookies instead of bearer tokens
-//    - Implement a BFF (Backend-for-Frontend) proxy that stores the token
-//      server-side and issues a short-lived httpOnly cookie to the browser
-//    - At minimum, keep token lifetime short and rotate on each page load
+// ⚠️  SECURITY NOTE (S-P2-03, RESOLVED in v3.9.0 T1):
+//    The tenant JWT used to live in localStorage where any XSS could
+//    exfiltrate it.  It is now delivered as HttpOnly cookies
+//    (yuleosh_at access + yuleosh_rt refresh) issued by the server —
+//    JavaScript can neither read nor forge them.  The legacy token
+//    helpers below are memory-only (no persistence) and are kept only
+//    for import-surface compatibility; nothing writes them anymore.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,28 +73,28 @@ export interface SigninResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Token helpers (T1 v3.9.0: memory-only — HttpOnly cookies are the store)
+// ---------------------------------------------------------------------------
+
+// Kept for import-surface compatibility (dashboard/onboarding no longer use
+// it).  In cookie mode nothing ever writes this, so it stays null.
+let memoryToken: string | null = null;
+
 function getToken(): string | null {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem(TOKEN_KEY);
-  }
-  return null;
+  return memoryToken;
 }
 
 function setToken(token: string) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(TOKEN_KEY, token);
-  }
+  memoryToken = token;
 }
 
 function clearToken() {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem(TOKEN_KEY);
-  }
+  memoryToken = null;
 }
 
 function redirectToLogin() {
   if (typeof window !== "undefined") {
-    clearToken();
     window.location.href = "/login";
   }
 }
@@ -104,26 +103,61 @@ function redirectToLogin() {
 // Base request
 // ---------------------------------------------------------------------------
 
+// ── T1 (v3.9.0): single-flight refresh — concurrent 401s share one call ──
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefreshSession(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        credentials: "same-origin",
+      });
+      return res.status === 200;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+// Endpoints whose 401 means "credentials rejected" (not "session expired")
+// must NOT trigger a refresh — a failed login is not a renewal case, and
+// the refresh endpoint itself must never loop back into refresh.
+const NO_REFRESH_PATHS = ["/api/auth/signin", "/api/auth/refresh"];
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(path, {
+  // T1 (v3.9.0): no manual Authorization header — the browser sends the
+  // httpOnly access cookie itself (SHALL-T1.3, T-T1-09-neg).
+  const fetchOptions: RequestInit = {
     ...options,
     headers,
-  });
+    credentials: "same-origin",
+  };
+  let res = await fetch(path, fetchOptions);
 
-  // 401 → auto-redirect to login
+  // T1 (v3.9.0, SHALL-T1.5): 401 on an expired access token → silent
+  // refresh (single-flight) → replay the original request exactly once.
+  if (res.status === 401 && !NO_REFRESH_PATHS.includes(path)) {
+    if (await tryRefreshSession()) {
+      res = await fetch(path, fetchOptions);
+    }
+  }
+
+  // 401 → auto-redirect to login (refresh failed or credentials rejected)
   if (res.status === 401) {
     redirectToLogin();
     throw new Error("Unauthorized — redirecting to login");

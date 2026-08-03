@@ -4,7 +4,7 @@
  */
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { api, setToken } from "@/lib/api";
+import { api } from "@/lib/api";
 
 // Mock the API module
 jest.mock("@/lib/api", () => ({
@@ -15,8 +15,6 @@ jest.mock("@/lib/api", () => ({
       createOrg: jest.fn(),
     },
   },
-  setToken: jest.fn(),
-  getToken: jest.fn(() => null),
 }));
 
 // Mock next/navigation
@@ -151,7 +149,7 @@ describe("LoginPage submit flow", () => {
 
     await waitFor(() => {
       expect(mockedSignin).toHaveBeenCalledWith("alice@test.com", "secret123");
-      expect(setToken).toHaveBeenCalledWith("test-token");
+      // T1 (v3.9.0): 登录成功后不再落盘 token，直接跳转（cookie 由服务端 Set-Cookie）
       expect(mockPush).toHaveBeenCalledWith("/dashboard");
     });
   });
