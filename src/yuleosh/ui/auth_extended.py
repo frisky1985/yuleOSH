@@ -27,6 +27,10 @@ import bcrypt
 import jwt  # PyJWT
 
 from yuleosh.store import Store
+from yuleosh.ui.auth_cookies import (  # T1 (v3.9.0): single cookie policy source
+    ACCESS_TTL_HOURS,     # 0.5h — short-lived access token (SHALL-T1.2)
+    REFRESH_TTL_HOURS,    # 168h — long-lived refresh token (SHALL-T1.2)
+)
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +39,7 @@ from yuleosh.store import Store
 
 EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-SESSION_TTL_HOURS = 72
+SESSION_TTL_HOURS = 72  # legacy single-token default (kept for direct callers)
 
 # ── JWT ──────────────────────────────────────────────────────────────────────
 _YULEOSH_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
@@ -296,15 +300,22 @@ def _verify_password(password: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "",
-                    purpose: Optional[str] = None) -> str:
-    """Generate a signed JWT with embedded user/org claims and expiration."""
+                    purpose: Optional[str] = None,
+                    ttl_hours: float = SESSION_TTL_HOURS) -> str:
+    """Generate a signed JWT with embedded user/org claims and expiration.
+
+    T1 (v3.9.0): ``ttl_hours`` overrides the lifetime per token — the
+    access/refresh pair uses ACCESS_TTL_HOURS / REFRESH_TTL_HOURS while
+    the legacy default (SESSION_TTL_HOURS=72h) is preserved for direct
+    callers (org_setup tokens, tests, API clients).
+    """
     now = int(time.time())
     payload = {
         "sub": str(user_id),
         "org": org_id,
         "email": email,
         "iat": now,
-        "exp": now + SESSION_TTL_HOURS * 3600,
+        "exp": now + int(ttl_hours * 3600),
     }
     if purpose:
         payload["purpose"] = purpose
@@ -322,6 +333,38 @@ def _decode_token(token: str) -> dict | None:
 
 def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9-]", "", text.lower().replace(" ", "-"))
+
+
+def _is_refresh_token(payload: dict) -> bool:
+    """T1 (v3.9.0): True when the JWT is a refresh token (purpose="refresh").
+
+    Refresh tokens are ONLY valid at ``POST /api/auth/refresh`` (SHALL-T1.5)
+    and must never authenticate ordinary API requests — otherwise the
+    7-day refresh token would be a full-strength bearer credential and the
+    short access TTL would be meaningless.  Both verify paths reject them
+    (SHALL-T1.4, T-T1-07).
+    """
+    return bool(payload) and payload.get("purpose") == "refresh"
+
+
+def _issue_token_pair(store: Store, user_id: int, org_id: int,
+                      email: str) -> tuple:
+    """T1 (v3.9.0): issue an access + refresh token pair (dual httpOnly cookies).
+
+    - access  : short TTL (ACCESS_TTL_HOURS=30min) — used by API auth paths
+    - refresh : long TTL (REFRESH_TTL_HOURS=7d) + purpose="refresh" — only
+      accepted by the refresh endpoint (see _is_refresh_token)
+
+    Both tokens get their own ``user_sessions`` row (sha256-hashed), so
+    access expiry and refresh expiry are enforced independently by the DB
+    (SHALL-T1.2: expires_at aligns with refresh lifetime).
+    """
+    access = _generate_token(user_id, org_id, email, ttl_hours=ACCESS_TTL_HOURS)
+    refresh = _generate_token(user_id, org_id, email, purpose="refresh",
+                              ttl_hours=REFRESH_TTL_HOURS)
+    store.create_session(user_id, access, ACCESS_TTL_HOURS)
+    store.create_session(user_id, refresh, REFRESH_TTL_HOURS)
+    return access, refresh
 
 
 def verify_token(token: str) -> dict | None:
@@ -342,6 +385,9 @@ def verify_token(token: str) -> dict | None:
         return None
     payload = _decode_token(token)
     if payload is None:
+        return None
+    # T1 (v3.9.0): refresh tokens never authenticate API requests.
+    if _is_refresh_token(payload):
         return None
 
     # ── Token contract (P0-A): accept BOTH payload formats ──────────
@@ -392,7 +438,11 @@ def get_session_user(token: str) -> dict | None:
     """
     if not token:
         return None
-    if _decode_token(token) is None:
+    payload = _decode_token(token)
+    if payload is None:
+        return None
+    # T1 (v3.9.0): refresh tokens never resolve as a session credential.
+    if _is_refresh_token(payload):
         return None
     store = Store()
     session = store.get_session(token)
@@ -454,9 +504,10 @@ def register(body: dict) -> tuple:
 
     password_hash = _hash_password(password)
     user = store.create_user(org["id"], email, "admin", password_hash)
-    token = _generate_token(user["id"], org["id"], email)
-    store.create_session(user["id"], token, SESSION_TTL_HOURS)
-    return {"token": token, "user_id": user["id"],
+    token, refresh_token = _issue_token_pair(  # T1 (v3.9.0): access+refresh
+        store, user["id"], org["id"], email)
+    return {"token": token, "refresh_token": refresh_token,
+            "user_id": user["id"],
             "org_id": org["id"], "role": "admin"}, 200
 
 
@@ -604,12 +655,12 @@ def handle_org_create(body: dict, session_token: str) -> dict:
     # Create first project
     store.create_org_project(org["id"], project_name, project_slug)
 
-    # Create session
-    token = _generate_token(user["id"], org["id"], email)
-    store.create_session(user["id"], token, SESSION_TTL_HOURS)
+    # Create session — access + refresh pair (T1 v3.9.0, SHALL-T1.1)
+    token, refresh_token = _issue_token_pair(store, user["id"], org["id"], email)
 
     return {
         "token": token,
+        "refresh_token": refresh_token,
         "redirect": "/project/select",
         "org_id": org["id"],
         "org_slug": org_slug,
@@ -723,11 +774,17 @@ def handle_org_info(session_token: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _create_login_response(store: Store, user: dict) -> dict:
-    """Create a session for the user and return the response."""
-    token = _generate_token(user["id"], user.get("org_id", 0), user.get("email", ""))
-    store.create_session(user["id"], token, SESSION_TTL_HOURS)
+    """Create a session for the user and return the response.
+
+    T1 (v3.9.0): issues the access + refresh pair; the route layer pops
+    ``refresh_token`` and emits it as the httpOnly refresh cookie, keeping
+    the JSON body contract identical to v3.8.0 (SHALL-T1.1).
+    """
+    token, refresh_token = _issue_token_pair(
+        store, user["id"], user.get("org_id", 0), user.get("email", ""))
     return {
         "token": token,
+        "refresh_token": refresh_token,
         "redirect": "/project/select",
         "user_id": user["id"],
         "org_id": user.get("org_id", 0),

@@ -113,13 +113,18 @@ def handle_api_action(handler: BaseHTTPRequestHandler, action: str):
             except (AttributeError, IndexError, TypeError):
                 pass
             result, status = handle_signin(body, ip=client_ip)
-            _send_json_response(handler, result, status)
+            # T1 (v3.9.0, SHALL-T1.1): successful login issues the
+            # access+refresh httpOnly cookie pair (JSON body contract
+            # unchanged — refresh_token is cookie-only).
+            cookies = _auth_cookie_headers(result)
+            _send_json_response(handler, result, status, set_cookies=cookies)
         elif action == "session":
             result, status = handle_session_info(token)
             _send_json_response(handler, result, status)
         elif action == "org_create":
             result, status = handle_org_create(body, token)
-            _send_json_response(handler, result, status)
+            cookies = _auth_cookie_headers(result)
+            _send_json_response(handler, result, status, set_cookies=cookies)
         elif action == "org_info":
             result, status = handle_org_info(token)
             _send_json_response(handler, result, status)
@@ -131,7 +136,10 @@ def handle_api_action(handler: BaseHTTPRequestHandler, action: str):
             _send_json_response(handler, result, status)
         elif action == "logout":
             result, status = handle_logout(token)
-            _send_json_response(handler, result, status)
+            # T1 (v3.9.0, SHALL-T1.6): logout also clears both tenant
+            # cookies (Max-Age=0) — the browser session is fully gone.
+            _send_json_response(handler, result, status,
+                                set_cookies=_clear_cookie_headers())
         else:
             _send_json_error(handler, "unknown action", 400)
     except Exception as e:
@@ -155,6 +163,29 @@ def _read_body(handler: BaseHTTPRequestHandler) -> dict:
         return {}
 
 
+def _auth_cookie_headers(result: dict) -> list:
+    """T1 (v3.9.0): convert a login response's tokens into Set-Cookie values.
+
+    The refresh token never leaves the server in the JSON body (SHALL-T1.1
+    body contract preserved); it is delivered exclusively via the httpOnly
+    cookie.  Returns [] for non-login responses (no tokens to set).
+    """
+    if not isinstance(result, dict):
+        return []
+    access = result.get("token")
+    refresh = result.pop("refresh_token", None)
+    if not access or not refresh:
+        return []
+    from yuleosh.ui.auth_cookies import token_cookie_headers
+    return token_cookie_headers(access, refresh)
+
+
+def _clear_cookie_headers() -> list:
+    """T1 (v3.9.0): Set-Cookie values that delete both tenant cookies."""
+    from yuleosh.ui.auth_cookies import clear_cookie_headers
+    return clear_cookie_headers()
+
+
 def _get_bearer_token(handler: BaseHTTPRequestHandler) -> Optional[str]:
     """Extract bearer token from Authorization header."""
     auth = handler.headers.get("Authorization", "")
@@ -163,15 +194,28 @@ def _get_bearer_token(handler: BaseHTTPRequestHandler) -> Optional[str]:
     return None
 
 
-def _send_json_response(handler: BaseHTTPRequestHandler, data, status: int = 200):
-    """Send a JSON response via handler's standard mechanism."""
+def _send_json_response(handler: BaseHTTPRequestHandler, data, status: int = 200,
+                        set_cookies: Optional[list] = None):
+    """Send a JSON response via handler's standard mechanism.
+
+    T1 (v3.9.0): ``set_cookies`` is a list of raw Set-Cookie header values
+    (from auth_cookies) emitted on the response before end_headers.
+    """
+    extra = [("Set-Cookie", c) for c in (set_cookies or [])]
     # Delegate to handler's json_response if available, otherwise inline
     if hasattr(handler, "_json_response"):
-        handler._json_response(data, status)
+        # Only pass extra_headers when present — keeps the common call
+        # signature stable for existing tests/callers.
+        if extra:
+            handler._json_response(data, status, extra_headers=extra)
+        else:
+            handler._json_response(data, status)
     else:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         handler.send_response(status)
         handler.send_header("Content-Type", "application/json")
+        for name, value in extra:
+            handler.send_header(name, value)
         _send_security_headers(handler)
         _add_cors_header(handler)
         handler.end_headers()
