@@ -197,13 +197,31 @@ def _respond(handler: BaseHTTPRequestHandler, data: dict, status: int = 200):
     - Development mode (YULEOSH_ENV=development): Access-Control-Allow-Origin: *
     - Production mode: validates Origin against allowed origins list.
       localhost:18789 (desktop client) is always permitted.
+
+    T1 (v3.9.0): a ``_auth_refresh_token`` marker set by the v1 register
+    adapter is converted into the access+refresh Set-Cookie pair and
+    stripped from the body before writing (SHALL-T1.1 / T-T1-03).
     """
     # Determine CORS origin based on request Origin header
     request_origin = handler.headers.get("Origin")
     cors_origin = get_cors_origin(request_origin)
 
+    # T1 (v3.9.0): v1 register cookie issuance (marker stripped here).
+    # NOTE: Set-Cookie must be sent AFTER send_response (below) so the
+    # status line stays first on the wire.
+    refresh = None
+    if isinstance(data, dict):
+        refresh = data.pop("_auth_refresh_token", None)
+
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
+    if refresh:
+        inner = data.get("data") if isinstance(data.get("data"), dict) else None
+        access = inner.get("token") if inner else None
+        if access:
+            from yuleosh.ui.auth_cookies import token_cookie_headers
+            for cookie in token_cookie_headers(access, refresh):
+                handler.send_header("Set-Cookie", cookie)
     handler.send_header("Access-Control-Allow-Origin", cors_origin)
     if cors_origin != "*":
         handler.send_header("Vary", "Origin")

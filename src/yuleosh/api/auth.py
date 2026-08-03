@@ -165,10 +165,15 @@ def _handle_register(body: dict) -> tuple:
     store = Store()
     user = store.get_user_by_id(resp["user_id"])
     org = store.get_organization_by_id(resp["org_id"])
-    return json_ok({
+    payload, status = json_ok({
         "token": resp["token"],
         "user": _user_response(user, org),
     })
+    # T1 (v3.9.0, SHALL-T1.1 / T-T1-03): hand the refresh token to the
+    # router so it can emit the httpOnly cookie pair; the router strips
+    # this marker before the JSON body is written (contract unchanged).
+    payload["_auth_refresh_token"] = resp.get("refresh_token")
+    return payload, status
 
 
 # ---------------------------------------------------------------------------

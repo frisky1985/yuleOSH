@@ -61,6 +61,7 @@ import urllib.parse
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from yuleosh.store import Store
@@ -172,11 +173,16 @@ class OSHHandler(BaseHTTPRequestHandler):
     def _get_client_ip(self) -> str:
         return self.client_address[0]
 
-    def _json_response(self, data: dict, status: int = 200) -> None:
+    def _json_response(self, data: dict, status: int = 200,
+                       extra_headers: Optional[list] = None) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        # T1 (v3.9.0): extra headers before end_headers — used by the
+        # tenant auth flow to emit Set-Cookie (access/refresh pair).
+        for name, value in (extra_headers or []):
+            self.send_header(name, value)
         self._add_security_headers()
         self.end_headers()
         self.wfile.write(body)
@@ -344,8 +350,12 @@ class OSHHandler(BaseHTTPRequestHandler):
 
     def _handle_api(self, action: str) -> None:
         from yuleosh.ui.routes import handle_api_action
-        result = handle_api_action(self, action)
-        self._json_response(result)
+        # FIX (v3.9.0 P1): handle_api_action already sends the response
+        # (via auth_routes._send_json_response → self._json_response).  The
+        # previous ``result = ...; self._json_response(result)`` emitted a
+        # SECOND HTTP response ("…}HTTP/1.0 200 OK…null") on the same
+        # connection — corrupted wire output for every /api/auth/* route.
+        handle_api_action(self, action)
 
     def _handle_login(self) -> None:
         from yuleosh.ui.routes import handle_auth_login
