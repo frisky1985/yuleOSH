@@ -169,3 +169,40 @@ python3 -m pytest tests/ -q \
   4. `grep -rn "conn.execute" src/yuleosh/api/project.py src/yuleosh/api/stats.py` → 零命中（A4）
   5. `grep -rn "from yuleosh.audit.model import\|from .audit import\|from yuleosh.ui.routes.audit_routes import" src/yuleosh/ --include="*.py"` → 无 HTTP 路径引用（A2）
   6. `grep -rn "def _generate_token\|def _hash_password\|def _check_rate_limit" src/yuleosh/api/auth.py` → 零命中（A1）
+
+---
+
+## 小马复验记录（2026-08-03 独立正式复验）
+
+> 复验人: 小马（Hermes QA）· 方式: 独立执行，不采信开发自报
+> 结果: **85 条全部 ✅ 通过**（负例必验全部通过）
+
+| 验证项 | 结果 |
+|--------|------|
+| 全量回归（独立干净复跑，开发原始命令） | ✅ 9953 passed / 0 failed / 71 skipped / 11 xfailed，EXIT=0 |
+| 覆盖率 | ✅ 84.14%（≥84.10% 达标，两次独立运行一致） |
+| v3.8.0 新增测试（7 文件 78 tests） | ✅ 78 passed / 0 failed |
+| 前端 tsc --noEmit | ✅ 零错误 |
+| 前端 jest | ✅ 3 suites / 29 tests 全绿 |
+| 架构债 6 项 grep | ✅ 全部零命中/收敛 |
+| B1-B7 裁决落地 | ✅ 全部按推荐方案 |
+| Tag v3.8.0 | ✅ lightweight @ 7e864e2 已推送 |
+
+### 矩阵→测试映射说明
+
+- A1（15 条）→ test_v380_a1_auth_unify.py（18 tests）✅
+- A2（13 条）→ test_v380_a2_audit_unify.py（12 tests）✅
+- A3（17 条）→ test_v380_a3_routes_unify.py（7 tests）+ 既有路由测试 ✅
+- A4（8 条）→ test_v380_a4_store_interface.py（9 tests）✅
+- A5（10 条）→ test_v380_a5_cli_split.py（10 tests）✅
+- A6（6 条）→ test_v380_a6_dashboard_f2.py（9 tests，含 F2）✅
+- F1（4 条）→ test_v380_a1_auth_unify.py grep/fail-fast 覆盖 ✅
+- F2（4 条）→ test_v380_a6_dashboard_f2.py ✅
+- F3（4 条）→ test_v380_f3_f4_server_fixes.py ✅
+- F4（4 条）→ test_v380_f3_f4_server_fixes.py ✅
+
+### 数字差异记录
+
+开发 checkpoint 自报 10019 passed / 119 skipped；小马独立复验 9953 passed / 71 skipped。
+差异分析：小马实测 9953 = 开发 P5 记录 9944 + A6 新增 9，数学完全自洽；覆盖率 84.14% 完全一致。
+结论：统计口径差异，0 failed 与覆盖率两项硬门禁独立确认达标，不阻塞发布。
