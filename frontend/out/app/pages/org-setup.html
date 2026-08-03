@@ -110,12 +110,10 @@ async function handleOrgCreate(e) {
   e.preventDefault();
   const msgEl = document.getElementById('msg');
   const btn = document.getElementById('submitBtn');
-  const token = localStorage.getItem('osh_token');
 
-  if (!token) {
-    window.location.href = '/login';
-    return false;
-  }
+  // P2-3 (v3.9.1): token 经 HttpOnly cookie (yuleosh_at) 同源携带 ——
+  // HttpOnly cookie (yuleosh_at)，fetch 同源自动携带，后端从 cookie
+  // 回退读取（middleware._get_bearer_token）。401 时回登录页。
 
   const data = {
     org_name: document.getElementById('org_name').value.trim(),
@@ -130,11 +128,16 @@ async function handleOrgCreate(e) {
   try {
     const resp = await fetch('/api/org/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify(data),
     });
     const result = await resp.json();
 
+    if (resp.status === 401) {
+      window.location.href = '/login';
+      return false;
+    }
     if (resp.ok) {
       window.location.href = result.redirect || '/project/select';
     } else {
