@@ -12,16 +12,19 @@ Endpoints:
     GET    /api/v1/projects/{slug}    → Get project detail with kanban items
     POST   /api/v1/projects/{slug}    → Update project / move kanban items
     GET    /api/v1/projects/{slug}/items → Get kanban items only
+
+A3 (v3.8.0): migrated to the new-style router signature
+``fn(method, path_tail, body, query, handler) -> tuple``; responses are
+plain dicts identical to the legacy handlers (SHALL-A3.4).
 """
 
-import json
 import logging
+import re
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler
-from pathlib import Path
 from typing import Optional
 
 from yuleosh.tenant.model import TenantStore
+from yuleosh.ui.auth_extended import get_session_user
 
 
 logger = logging.getLogger("project.routes")
@@ -32,47 +35,25 @@ KANBAN_STATUS_EN = ["requirement", "development", "review", "testing", "release"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
-def _get_token(handler: BaseHTTPRequestHandler) -> Optional[str]:
+def _get_token(handler) -> Optional[str]:
     auth = handler.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[7:]
     return None
 
 
-def _require_auth(handler: BaseHTTPRequestHandler) -> Optional[dict]:
-    from yuleosh.ui.auth_extended import get_session_user
+def _require_auth(handler) -> Optional[dict]:
     token = _get_token(handler)
     if not token:
-        _send_json(handler, {"error": "Authorization required"}, 401)
         return None
-    user_info = get_session_user(token)
-    if not user_info:
-        _send_json(handler, {"error": "Invalid session"}, 401)
-        return None
-    return user_info
+    return get_session_user(token)
 
 
-def _send_json(handler: BaseHTTPRequestHandler, data, status: int = 200):
-    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
-def _read_body(handler: BaseHTTPRequestHandler) -> dict:
-    """Read and parse the request body (P1-5: unified clamped read_body).
-
-    Delegates to yuleosh.api.read_body which clamps Content-Length to 10 MB
-    and converts malformed headers to BadRequest.  Invalid JSON / bad
-    Content-Length yield {} — caller validation returns the 4xx.
-    """
-    from yuleosh.api import read_body, BadRequest
-    try:
-        return read_body(handler)
-    except BadRequest:
-        return {}
+def _auth_error(handler) -> tuple:
+    """401 — exact legacy body for a missing vs invalid session."""
+    if not _get_token(handler):
+        return {"error": "Authorization required"}, 401
+    return {"error": "Invalid session"}, 401
 
 
 def _get_tenant_slug(user_info: dict) -> str:
@@ -89,7 +70,6 @@ def _get_tenant_slug(user_info: dict) -> str:
 
 def _new_project(name: str, description: str = "", owner: str = "") -> dict:
     now = datetime.now().isoformat()
-    import re
     slug = re.sub(r"[^a-z0-9-]", "", name.lower().replace(" ", "-"))
     return {
         "slug": slug,
@@ -107,18 +87,51 @@ def _new_project(name: str, description: str = "", owner: str = "") -> dict:
     }
 
 
+def handle_projects(method: str, path_tail: str, body: dict, query: dict,
+                    handler=None) -> tuple:
+    """Dispatcher for /api/v1/projects (plural, A3/B7).
+
+    path_tail:
+      ""            → list (GET) / create (POST)
+      "{slug}"      → get (GET) / update (POST)
+    """
+    slug = (path_tail or "").strip().rstrip("/").split("/")[0]
+    if method == "GET":
+        if not slug:
+            # GET /api/v1/projects — list all for the tenant
+            return handle_list_projects(method, path_tail, body, query, handler)
+        return handle_get_project(method, path_tail, body, query, handler)
+    if method == "POST":
+        if not slug:
+            return handle_create_project(method, path_tail, body, query, handler)
+        return handle_update_project(method, path_tail, body, query, handler)
+    return {"error": "Method not allowed"}, 405
+
+
+def handle_list_projects(method: str, path_tail: str, body: dict, query: dict,
+                         handler=None) -> tuple:
+    """GET /api/v1/projects — List projects for the caller's tenant."""
+    user = _require_auth(handler)
+    if not user:
+        return _auth_error(handler)
+    tenant_slug = _get_tenant_slug(user)
+    store = TenantStore()
+    projects = store.list_projects(tenant_slug)
+    return {"projects": projects}, 200
+
+
 # ── GET handlers ────────────────────────────────────────────────────────────
 
-def handle_get_project(handler: BaseHTTPRequestHandler, path: str):
+def handle_get_project(method: str, path_tail: str, body: dict, query: dict,
+                       handler=None) -> tuple:
     """GET /api/v1/projects/{slug} — Get project detail."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
 
-    slug = path.split("/")[-1]
+    slug = (path_tail or "").split("/")[0]
     if not slug:
-        _send_json(handler, {"error": "Project slug required"}, 400)
-        return
+        return {"error": "Project slug required"}, 400
 
     tenant_slug = _get_tenant_slug(user)
     store = TenantStore()
@@ -126,84 +139,75 @@ def handle_get_project(handler: BaseHTTPRequestHandler, path: str):
     # Check tenant
     tenant = store.get(tenant_slug)
     if not tenant:
-        _send_json(handler, {"error": "Tenant not found"}, 404)
-        return
+        return {"error": "Tenant not found"}, 404
 
     project = store.get_project(tenant_slug, slug)
     if not project:
-        _send_json(handler, {"error": "Project not found"}, 404)
-        return
+        return {"error": "Project not found"}, 404
 
-    _send_json(handler, {"project": project})
+    return {"project": project}, 200
 
 
 # ── POST handlers ───────────────────────────────────────────────────────────
 
-def handle_create_project(handler: BaseHTTPRequestHandler):
+def handle_create_project(method: str, path_tail: str, body: dict, query: dict,
+                          handler=None) -> tuple:
     """POST /api/v1/projects — Create a new project."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
 
-    body = _read_body(handler)
     name = body.get("name", "").strip()
     description = body.get("description", "").strip()
     if not name:
-        _send_json(handler, {"error": "Project name is required"}, 400)
-        return
+        return {"error": "Project name is required"}, 400
 
     tenant_slug = _get_tenant_slug(user)
 
     from yuleosh.rbac import check_role
     if not check_role(user, "project", "create"):
-        _send_json(handler, {"error": "Insufficient permissions"}, 403)
-        return
+        return {"error": "Insufficient permissions"}, 403
 
     store = TenantStore()
     tenant = store.get(tenant_slug)
     if not tenant:
-        _send_json(handler, {"error": "Tenant not found, create org first"}, 404)
-        return
+        return {"error": "Tenant not found, create org first"}, 404
 
     # Check plan limits
     projects = store.list_projects(tenant_slug)
     if len(projects) >= tenant.limits["max_projects"]:
-        _send_json(handler, {
+        return {
             "error": f"Project limit reached ({tenant.limits['max_projects']}). "
                      f"Current plan: {tenant.plan}. Upgrade to add more projects."
-        }, 403)
-        return
+        }, 403
 
     project = _new_project(name, description, user.get("email", ""))
     store.save_project(tenant_slug, project)
 
-    _send_json(handler, {"project": project}, 201)
+    return {"project": project}, 201
 
 
-def handle_update_project(handler: BaseHTTPRequestHandler, path: str):
+def handle_update_project(method: str, path_tail: str, body: dict, query: dict,
+                          handler=None) -> tuple:
     """POST /api/v1/projects/{slug} — Update project or move kanban items."""
     user = _require_auth(handler)
     if not user:
-        return
+        return _auth_error(handler)
 
-    slug = path.split("/")[-1]
+    slug = (path_tail or "").split("/")[0]
     if not slug:
-        _send_json(handler, {"error": "Project slug required"}, 400)
-        return
+        return {"error": "Project slug required"}, 400
 
-    body = _read_body(handler)
     tenant_slug = _get_tenant_slug(user)
 
     from yuleosh.rbac import check_role
     if not check_role(user, "project", "edit"):
-        _send_json(handler, {"error": "Insufficient permissions"}, 403)
-        return
+        return {"error": "Insufficient permissions"}, 403
 
     store = TenantStore()
     project = store.get_project(tenant_slug, slug)
     if not project:
-        _send_json(handler, {"error": "Project not found"}, 404)
-        return
+        return {"error": "Project not found"}, 404
 
     # Update fields
     if "name" in body:
@@ -221,4 +225,4 @@ def handle_update_project(handler: BaseHTTPRequestHandler, path: str):
     project["updated_at"] = datetime.now().isoformat()
     store.save_project(tenant_slug, project)
 
-    _send_json(handler, {"project": project})
+    return {"project": project}, 200
