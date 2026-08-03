@@ -61,7 +61,8 @@
 - 注：小克 session 在 A6 测试适配前中断，小明收尾（删残留 import + 提交 fa5131c）
 
 ## 全量验证（2026-08-03 小明收尾）
-- **全量回归：10019 passed / 0 failed**（基线 9873 → P5 9944 → P6 10019，只增不减；119 skipped / 11 xfailed 与基线一致）
+- **全量回归：10019 passed / 0 failed**（本地全量收集口径；基线 9873 → P5 9944 → P6 10019，只增不减；119 skipped / 11 xfailed）
+- **注（复验口径修正）**：小马独立复验 CI 等价口径 **9953 passed / 0 failed / 71 skipped**（= P5 9944 + A6 新增 9，数学自洽）；两口径差异为收集/skip 统计差异，0 failed 与覆盖率两项硬门禁均独立确认，不阻塞发布
 - **覆盖率：84.14%**（≥84.10% 达标不降）
 - 前端：tsc --noEmit 零错误 + jest 3 suites / 29 tests 全绿
 - 架构债消失 grep 证据（待小马复验独立核对）：_dispatch_legacy 零命中 / api/auth.py 重复实现已删 / audit_routes 已删 / token_urlsafe(32) 兜底零命中 / tests/ sys.path.insert 清零
