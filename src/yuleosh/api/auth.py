@@ -31,15 +31,14 @@ logger = logging.getLogger("yuleosh.api.auth")
 EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 TOKEN_TTL_HOURS = 24
 
-# JWT secret from env var (required for production — no random fallback)
-_YULEOSH_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
-if not _YULEOSH_JWT_SECRET_ENV:
-    raise RuntimeError(
-        "YULEOSH_JWT_SECRET environment variable is required. "
-        "Generate one with: python3 -c 'import secrets; print(secrets.token_urlsafe(32))'"
-    )
-_JWT_SECRET = _YULEOSH_JWT_SECRET_ENV
-_JWT_ALGORITHM = "HS256"
+# JWT secret — single source of truth (SHALL-A1.1, v3.8.0): api/auth.py
+# must NOT read YULEOSH_JWT_SECRET itself; ui/auth_extended.py.JWT_SECRET
+# is the only interpretation.  Fail-fast preserved: importing auth_extended
+# without the env var raises RuntimeError, which propagates here.
+from yuleosh.ui.auth_extended import (  # A1: unified source
+    JWT_SECRET as _JWT_SECRET,
+    JWT_ALGORITHM as _JWT_ALGORITHM,
+)
 
 # In-memory rate limit tracking: email -> (attempts, window_start)
 _SIGNIN_RATE_LIMIT: dict[str, tuple[int, int]] = {}

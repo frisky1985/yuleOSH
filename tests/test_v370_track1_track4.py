@@ -1156,20 +1156,30 @@ class TestM5JwtSecretGovernance:
         assert payload["email"] == "jwt@test.com"
 
     def test_t_m5_03_no_hardcoded_fallback(self):
-        """T-M5-03: neither auth module has a hardcoded secret default —
-        the env lookup is bare ``os.environ.get(\"YULEOSH_JWT_SECRET\")``
-        (no default argument) in both files."""
-        for rel in ("src/yuleosh/api/auth.py",
-                    "src/yuleosh/ui/auth_extended.py"):
-            src = (Path(__file__).resolve().parent.parent / rel)
-            text = src.read_text(encoding="utf-8")
-            assert 'os.environ.get("YULEOSH_JWT_SECRET")' in text
-            assert 'os.environ.get("YULEOSH_JWT_SECRET",' not in text
-            # No fallback literal anywhere near the secret handling.
+        """T-M5-03: the JWT secret has exactly ONE source of truth.
+
+        v3.7.0: both auth modules read the env var bare (no default).
+        v3.8.0 A1 (SHALL-A1.1): only ``ui/auth_extended.py`` reads
+        ``YULEOSH_JWT_SECRET`` (bare, fail-fast); ``api/auth.py`` imports
+        it from auth_extended — it must NOT re-read the environment.
+        """
+        repo = Path(__file__).resolve().parent.parent
+        # The single source: auth_extended reads env bare (no default arg).
+        ae_text = (repo / "src/yuleosh/ui/auth_extended.py").read_text(
+            encoding="utf-8")
+        assert 'os.environ.get("YULEOSH_JWT_SECRET")' in ae_text
+        assert 'os.environ.get("YULEOSH_JWT_SECRET",' not in ae_text
+        assert "token_urlsafe" not in ae_text.split(
+            'YULEOSH_JWT_SECRET environment variable is required')[0]
+        # api/auth.py must NOT re-read the env — it imports the unified source.
+        api_text = (repo / "src/yuleosh/api/auth.py").read_text(
+            encoding="utf-8")
+        assert 'os.environ.get("YULEOSH_JWT_SECRET")' not in api_text
+        assert "from yuleosh.ui.auth_extended import" in api_text
+        # No hardcoded fallback literals anywhere in the auth modules.
+        for text in (ae_text, api_text):
             assert '"dev-secret"' not in text
             assert '"test-secret"' not in text
-            assert "token_urlsafe" not in text.split(
-                'YULEOSH_JWT_SECRET environment variable is required')[0]
 
     def test_t_m5_04_deploy_doc(self):
         """T-M5-04: deployment docs + env examples document the secret's
