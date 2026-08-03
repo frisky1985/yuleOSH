@@ -55,6 +55,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import sys
 import time
 import urllib.parse
@@ -97,6 +98,114 @@ OSH_HOME = os.environ.get(
     "OSH_HOME",
     str(Path(os.environ.get("HOME", ".")) / ".openclaw" / "workspace" / "tasks" / "yuleOSH"),
 )
+
+# ── T2 (v3.9.0): CSP — single source for every HTML response ────────────
+#   script-src uses a per-request nonce (裁决 B5 ①): _serve_static/
+#   _serve_file rewrite inline RSC <script> tags and inject the matching
+#   nonce into the policy — no build coupling, per-response randomness.
+#   'unsafe-inline' is allowed in style-src / style-src-attr: the static
+#   export has 31 inline style= attributes AND the React runtime injects
+#   <style> elements dynamically (hash-impossible) — style injection is
+#   not an XSS vector, so script-src stays strict while styles keep
+#   'unsafe-inline' (verified by browser test T-T2-08).
+#   'unsafe-eval' is REMOVED (裁决 B6): the only Function( in the bundle is
+#   core-js's global-detection fallback
+#   (frontend/out/_next/static/chunks/0cz1d0mv5g_q7.js:
+#   ``Function("return this")``) — short-circuited dead code wherever
+#   globalThis exists (all modern browsers), so it is never executed.
+#   nginx (deploy/nginx/nginx.conf) intentionally does NOT set its own
+#   CSP — a static nginx CSP would AND with this per-request nonce policy
+#   and block the inline RSC scripts (single source, T-T2-10).
+def _format_csp(directives: dict) -> str:
+    """Serialize a {directive: [sources]} dict into a CSP header value."""
+    return "; ".join(
+        f"{k} {' '.join(v)}" for k, v in directives.items()
+    ) + ";"
+
+
+def _base_csp_directives(nonce: str) -> dict:
+    """The strict base policy — single source for every HTML response.
+
+    - script-src: per-request nonce ONLY (裁决 B5 ①) — no 'unsafe-inline',
+      no 'unsafe-eval' (B6: core-js Function("return this") fallback is
+      short-circuited dead code wherever globalThis exists).
+    - style-src 'unsafe-inline': static export's inline style= attributes
+      AND the React runtime's dynamically injected <style> elements
+      (hash-impossible; style injection is not an XSS vector).
+    """
+    return {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", f"'nonce-{nonce}'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "style-src-attr": ["'unsafe-inline'"],
+        "font-src": ["'self'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "connect-src": ["'self'"],
+        "frame-src": ["'self'"],  # defensive: nothing uses frames today
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "frame-ancestors": ["'self'"],
+        "form-action": ["'self'"],
+    }
+
+
+# ── T2.2 exception (注明用途) ──────────────────────────────────────────────
+#   The legacy Python templates (ui/pages/*, ui/marketing/*) genuinely
+#   load a few external resources at runtime (verified by byte-scan of
+#   each template + Chrome console).  The contract's "产物零引用" premise
+#   holds for frontend/out/ (Next.js export) but NOT for these served
+#   templates — so the origins they actually reference are appended to
+#   the policy, per T2.2's own exception clause ("实际在用，注明用途").
+#   The scan is by template bytes, so the allowlist can never drift from
+#   the templates themselves.  js.stripe.com is listed here only if a
+#   template starts referencing it — none do today.
+_LEGACY_EXTERNAL = [
+    # (marker_bytes, directive, origin)
+    (b"fonts.googleapis.com", "style-src", "https://fonts.googleapis.com"),
+    (b"fonts.googleapis.com", "font-src", "https://fonts.gstatic.com"),
+    (b"cdn.tailwindcss.com", "script-src", "https://cdn.tailwindcss.com"),
+    (b"js.stripe.com", "script-src", "https://js.stripe.com"),
+    (b"js.stripe.com", "frame-src", "https://js.stripe.com"),
+    (b"js.stripe.com", "connect-src", "https://api.stripe.com"),
+]
+
+
+def _csp_for_html(nonce: str, html: bytes) -> str:
+    """Build the CSP for one HTML response.
+
+    Starts from the strict base and appends the external origins the
+    template actually references (legacy templates only — frontend/out
+    pages reference nothing external, so they stay strict).
+    """
+    directives = _base_csp_directives(nonce)
+    for marker, directive, origin in _LEGACY_EXTERNAL:
+        if marker in html and origin not in directives[directive]:
+            directives[directive].append(origin)
+    return _format_csp(directives)
+
+
+# Strict-form template (no legacy extras) — kept for tests/comments.
+CSP_POLICY_TEMPLATE = _format_csp(_base_csp_directives("{nonce}"))
+
+# Inline <script> without a src attribute (RSC flight data + legacy page
+# inline JS).  External scripts are never touched.
+_INLINE_SCRIPT_RE = re.compile(rb"<script(?![^>]*\bsrc=)([^>]*)>", re.IGNORECASE)
+
+
+def _inject_csp_nonce(html: bytes):
+    """Rewrite inline <script> tags with a per-request nonce (B5 ①).
+
+    Returns ``(rewritten_html, nonce)``.  The nonce is random per
+    response; the caller must pair it with the CSP header built from
+    ``CSP_POLICY_TEMPLATE``.
+    """
+    nonce = secrets.token_urlsafe(16)
+    rewritten = _INLINE_SCRIPT_RE.sub(
+        lambda m: b'<script nonce="' + nonce.encode() + b'"' + m.group(1) + b">",
+        html,
+    )
+    return rewritten, nonce
+
 
 # ── Rate limiting ───────────────────────────────────────────────────────────
 
@@ -266,6 +375,13 @@ class OSHHandler(BaseHTTPRequestHandler):
         data = file_path.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
+        # T2 (v3.9.0, SHALL-T2.1): HTML responses get the nonce CSP header
+        # (inline RSC scripts are rewritten with the matching nonce).  The
+        # body length changes after injection — set it after the rewrite.
+        if ext == ".html" or file_path.name == "index.html":
+            data, nonce = _inject_csp_nonce(data)
+            self.send_header("Content-Security-Policy",
+                             _csp_for_html(nonce, data))
         self.send_header("Content-Length", str(len(data)))
         # M-2 (SEC-P2): cache-control for static assets.
         #   - content-hashed build artifacts (_next/static/*.js etc.) are
@@ -449,10 +565,17 @@ class OSHHandler(BaseHTTPRequestHandler):
             data = file_path.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(data)))
             # F4: pages must not be stale-cached (M-2 HTML rule).
             if "html" in content_type or file_path.suffix.lower() in (".html", ".htm"):
                 self.send_header("Cache-Control", "no-cache")
+                # T2 (v3.9.0, SHALL-T2.1): HTML responses carry the CSP
+                # header with a per-request nonce covering the inline RSC
+                # scripts (B5 ①).  Content-Length is set once, AFTER the
+                # nonce rewrite (body length changes).
+                data, nonce = _inject_csp_nonce(data)
+                self.send_header("Content-Security-Policy",
+                                 _csp_for_html(nonce, data))
+            self.send_header("Content-Length", str(len(data)))
             self._add_security_headers()
             self.end_headers()
             self.wfile.write(data)
