@@ -74,4 +74,30 @@ python3 -m pytest tests/ -q --ignore=tests/test_e2e.py --ignore=tests/test_e2e_p
 ### [P0] 2026-08-03 22:05 — 开工
 契约核对完成，设计定稿，本 plan 落盘。开始 P1。
 
-### [P1] 待完成
+### [P1] 2026-08-03 ~22:30 — ✅ commit bf17275
+- auth_cookies.py 常量/属性单一来源；_issue_token_pair（access 30min + refresh 7d）
+- signin/org_create/v1 register Set-Cookie 双 cookie；logout Max-Age=0 清除
+- 修复既有 bug：_handle_api 双响应（wire 拼接）→ 单响应
+- 测试 16 用例 + 局部回归 408 passed
+
+### [P2] 2026-08-03 ~22:50 — ✅ commit 71765ef
+- middleware/auth_routes cookie 回退读取（无 Authorization → yuleosh_at）
+- is_authenticated 第 4 链（租户 access cookie）；refresh 永不作为凭据
+- 测试 20 用例（含伪造 401/双链互认/不混用）+ wire 纯 cookie 全链路 200
+
+### [P3] 2026-08-03 ~23:05 — ✅ commit b3d31ad
+- POST /api/auth/refresh 端点（轮换单次使用 + 失效清 cookie）
+- 🔧 jti 唯一化：同秒重签 JWT 完全确定（sha256 行冲突）→ 轮换失效根因修复
+- 测试 10 用例 + wire 轮换验证
+
+### [P4] 2026-08-03 ~23:30 — ✅ commit 42e3cb2
+- 前端去 localStorage（api.ts + 5 页面）+ 401 无感续期（单飞）
+- 🔧 修复 v3.8.0 既有 bug：自动建组织 createOrg 从未带 org_setup token → 永远 401；
+  needs_org signin 现将 org_setup token 放 yuleosh_at cookie（30min）→ 纯 cookie 链可用
+- 安全债 grep：localStorage.*yuleosh_token / Authorization.*Bearer 零命中
+- jest 33 全绿 + tsc + build 通过；局部回归 438 passed
+- ⏳ 全量回归运行中
+
+### [P5] 待完成（T2 CSP）
+
+### [P6] 待完成（F1 重建+发布）
