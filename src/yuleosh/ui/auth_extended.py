@@ -316,6 +316,11 @@ def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "",
         "email": email,
         "iat": now,
         "exp": now + int(ttl_hours * 3600),
+        # T1 (v3.9.0): unique per-token id — the JWT is otherwise fully
+        # deterministic for a given second (same user/org/iat/exp), so a
+        # refresh issued within the same second would be byte-identical to
+        # its predecessor and defeat rotation (session row hash collision).
+        "jti": secrets.token_hex(16),
     }
     if purpose:
         payload["purpose"] = purpose
@@ -665,6 +670,54 @@ def handle_org_create(body: dict, session_token: str) -> dict:
         "org_id": org["id"],
         "org_slug": org_slug,
     }, 200
+
+
+def handle_refresh(refresh_token: str) -> tuple:
+    """POST /api/auth/refresh — issue a new access+refresh pair (T1.5).
+
+    Accepts ONLY a refresh token (purpose="refresh"): signature/expiry +
+    DB session row + user row must all be valid.  On success the old
+    refresh session is rotated out (single-use, SHALL-T1.13 — B2 chose
+    the dedicated endpoint so rotation is SHALL) and a fresh pair is
+    issued.  The route layer converts the pair to Set-Cookie and clears
+    both cookies on failure (T-T1-11-neg).
+    """
+    if not refresh_token:
+        return {"error": "Refresh token required"}, 401
+    payload = _decode_token(refresh_token)
+    if payload is None or not _is_refresh_token(payload):
+        return {"error": "Invalid or expired refresh token"}, 401
+
+    user_id = payload.get("sub") or payload.get("user_id")
+    try:
+        user_id = int(user_id) if user_id is not None else None
+    except (TypeError, ValueError):
+        user_id = None
+    if user_id is None:
+        return {"error": "Invalid or expired refresh token"}, 401
+
+    store = Store()
+    # DB session row must still exist (logout / expiry invalidates).
+    session = store.get_session(refresh_token)
+    if not session:
+        return {"error": "Invalid or expired refresh token"}, 401
+    user = store.get_user_by_id(user_id)
+    if not user:
+        return {"error": "Invalid or expired refresh token"}, 401
+
+    org_id = payload.get("org") or payload.get("org_id")
+    try:
+        org_id = int(org_id) if org_id is not None else None
+    except (TypeError, ValueError):
+        org_id = None
+    if org_id is None:
+        org_id = user.get("org_id", 0)
+    email = payload.get("email") or user.get("email", "")
+
+    # Rotation (SHALL-T1.13): the old refresh token is single-use.
+    store.delete_session(refresh_token)
+    access, new_refresh = _issue_token_pair(store, user_id, org_id, email)
+    return {"token": access, "refresh_token": new_refresh}, 200
 
 
 def handle_session_info(session_token: str) -> dict:

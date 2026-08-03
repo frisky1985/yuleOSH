@@ -85,6 +85,7 @@ _PUBLIC_PATHS = frozenset({
     "/api/health", "/api/status", "/health",
     "/login", "/register", "/welcome", "/org/setup", "/project/select",
     "/api/auth/signin", "/api/auth/session", "/api/auth/logout",
+    "/api/auth/refresh",
     "/api/org/create", "/api/org/info",
     "/api/project/create", "/api/project/list",
     "/", "/index.html", "/dashboard", "/kanban", "/audit-dashboard",
