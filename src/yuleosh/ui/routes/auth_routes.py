@@ -187,11 +187,19 @@ def _clear_cookie_headers() -> list:
 
 
 def _get_bearer_token(handler: BaseHTTPRequestHandler) -> Optional[str]:
-    """Extract bearer token from Authorization header."""
+    """Extract bearer token from Authorization header, with cookie fallback.
+
+    T1 (v3.9.0, SHALL-T1.4): no Authorization header → read the
+    ``yuleosh_at`` access cookie (browser cookie mode).  An Authorization
+    header that is present but not Bearer fails closed (no fallback).
+    """
     auth = handler.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[7:]
-    return None
+    if auth:
+        if auth.startswith("Bearer "):
+            return auth[7:]
+        return None
+    from yuleosh.ui.auth_cookies import ACCESS_COOKIE_NAME, read_cookie_value
+    return read_cookie_value(handler.headers, ACCESS_COOKIE_NAME)
 
 
 def _send_json_response(handler: BaseHTTPRequestHandler, data, status: int = 200,
