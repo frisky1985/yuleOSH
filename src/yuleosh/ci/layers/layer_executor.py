@@ -30,6 +30,7 @@ from yuleosh.ci.stages import (
     run_misra_check, run_yaml_validation,
     run_spec_validation, run_architecture_review,
     run_requirements_trace, run_docsync_gate,
+    run_methodology_gate,
 )
 from yuleosh.ci.stage_utils import (
     _detect_hil_target, _run_hil_mock_tests, _run_hil_real_tests,
@@ -232,6 +233,7 @@ def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
         print(f"    \u26a0\ufe0f  Could not validate MISRA profiles: {e}")
 
     stages = [
+        ("methodology-gate", run_methodology_gate),
         ("yaml-validation", run_yaml_validation),
         ("spec-validation", run_spec_validation),
         ("architecture-review", run_architecture_review),
