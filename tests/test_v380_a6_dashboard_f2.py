@@ -54,6 +54,11 @@ class TestA6Components:
 
     def test_tsc_passes(self):
         """T-A6-02: tsc --noEmit 零错误."""
+        # v3.10.0 Track1: CI test job 只装 pip 依赖不装 npm 依赖；无 node_modules 时
+        # npx 会拉真 tsc 但缺 react/clsx/tailwind-merge 类型 → 误报失败。
+        # 前端构建门禁由前端 job（Track4 恢复）承担，此处无依赖即 skip。
+        if not (FRONTEND / "node_modules").is_dir():
+            pytest.skip("frontend deps not installed (npm ci) — run in frontend-capable job")
         r = subprocess.run(
             ["npx", "tsc", "--noEmit"],
             cwd=str(FRONTEND), capture_output=True, text=True, timeout=300,
