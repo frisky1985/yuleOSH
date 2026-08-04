@@ -16,6 +16,7 @@ Covers the AI Preview Assessment API offline:
 import hashlib
 import io
 import os
+import errno
 import sys
 import time
 import zipfile
@@ -467,19 +468,24 @@ class TestDirSize:
 
     def test_dir_size_ignores_errors(self, tmp_path, monkeypatch):
         """GIVEN stat failure WHEN _get_dir_size THEN skipped."""
+        from pathlib import Path
         (tmp_path / "a.c").write_text("x" * 5)
-        real_stat = os.stat
-        calls = {}
+        real_stat = Path.stat
 
-        def flaky_stat(path, *a, **kw):
-            key = str(path)
-            if key.endswith("a.c"):
-                calls[key] = calls.get(key, 0) + 1
-                if calls[key] >= 2:  # is_file() ok, f.stat() fails
-                    raise OSError("nope")
-            return real_stat(path, *a, **kw)
+        # B 类修复（v3.10.0 Track1，组 3）：3.10 的 pathlib _NormalAccessor.stat
+        # 绑定的是导入时的 os.stat 引用（monkeypatch os.stat 无效），3.13 才是
+        # 运行时查 os 模块——原测试在 3.10 上 stat 永远不抛错，a.c 被计入。
+        # 改为直接 patch Path.stat：is_file() 内部 stat 抛 OSError → 返回 False
+        # → 跳过 → 0，两版本行为一致（语义仍是“stat 错误被忽略”）。
+        def flaky_stat(self, *a, **kw):
+            if str(self).endswith("a.c"):
+                # 3.10 pathlib is_file() 用 _ignore_error(e) 判断：仅忽略
+                # errno∈(ENOENT, ENOTDIR) 的 OSError。单参 FileNotFoundError("nope")
+                # errno=None → 不忽略 → 冒泡。必须带 errno 构造。
+                raise OSError(errno.ENOENT, "nope")
+            return real_stat(self, *a, **kw)
 
-        monkeypatch.setattr(os, "stat", flaky_stat)
+        monkeypatch.setattr(Path, "stat", flaky_stat)
         assert P._get_dir_size(tmp_path) == 0
 
 

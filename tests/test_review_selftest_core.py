@@ -237,7 +237,11 @@ class TestGetToolVersion:
     def test_tool_found(self):
         """GIVEN tool exists WHEN getting version THEN returns version string."""
         from yuleosh.pipeline.step_handlers.review_selftest.core import _get_tool_version
-        result = _get_tool_version(sys.executable.split('/')[-1] or "python3")
+        # B 类修复（v3.10.0 Track1，组 3）：原用 sys.executable.split('/')[-1]
+        # （如 "python"），venv 下该名字不在 PATH → subprocess 找不到 → "unknown"
+        # （3.13 系统 python 在 PATH 所以假通过）。改用 sys.executable 绝对路径，
+        # 两版本一致可执行。
+        result = _get_tool_version(sys.executable)
         assert result != "unknown"
 
     def test_tool_not_found(self):
