@@ -297,7 +297,13 @@ class TestEvidenceCommands:
     def test_audit_evidence(self, main_module, temp_project):
         with patch("yuleosh.cli.main.json.load") as mock_load:
             mock_load.return_value = {}
-            with patch("builtins.open", mock_open()):
+            # v3.10.0 Track1 CI 修复: cmd_audit_evidence 会对 .osh/ci/layer*.json 调
+            # shutil.copy2; builtins.open 被 mock 后, Linux 上 shutil 的 sendfile
+            # 快路径把 MagicMock 的 __index__ (=1) 当 fd → os.sendfile(1,1,...)
+            # 自复制无限循环(写满 runner 磁盘, 4 个 test job 全挂)。macOS 走
+            # FCOPYFILE 路径免疫 → 本地全绿。这里 mock copy2, 校验逻辑不受影响。
+            with patch("builtins.open", mock_open()), \
+                    patch("shutil.copy2"):
                 r = main_module.cmd_audit_evidence(output_dir=str(temp_project / "out"), create_zip=False)
                 assert "artifacts" in r
                 assert "generated_at" in r
