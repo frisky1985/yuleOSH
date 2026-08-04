@@ -23,6 +23,7 @@ dependencies = [
     "pillow>=12.3.0",  # Multiple CVEs
     "setuptools>=83.0.0",  # PYSEC-2026-3447
     "jinja2>=3.1.0",
+    "openpyxl>=3.1.0",  # evidence/excel_writer.py 依赖（此前未声明导致 CI 干净环境 18 个测试失败）
     "tomli>=2.0; python_version < '3.11'",  # tomllib 3.11+ / tomli 3.10 fallback
 ]
 classifiers = [
