@@ -18,8 +18,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
 from yuleosh.ci.stages.methodology_gate import (
     CHECKS,
     run_methodology_gate,
@@ -146,6 +144,17 @@ def test_gate_blocks_on_missing_context(tmp_path):
     ok = run_methodology_gate(str(tmp_path), ci)
     assert not ok
     assert any(name == "methodology-domain-model" and status == "failed"
+               for name, status, _ in ci.stages)
+
+
+def test_gate_skips_non_methodology_project(tmp_path):
+    """无 spec/CONTEXT/.yuleosh 的临时项目 → 门禁跳过，不阻断。"""
+    (tmp_path / ".yuleosh").mkdir()
+    (tmp_path / ".yuleosh" / "ci-config.yaml").write_text("ci:\n  layers: [1]\n", encoding="utf-8")
+    ci = FakeCI()
+    ok = run_methodology_gate(str(tmp_path), ci)
+    assert ok
+    assert any(name == "methodology-gate" and status == "skipped"
                for name, status, _ in ci.stages)
 
 
