@@ -266,7 +266,10 @@ def _run_e2e_tests(project_dir: str, ci) -> bool:
 
 def _run_version_check(project_dir: str, ci) -> bool:
     """版本检查。"""
-    import tomllib
+    try:
+        import tomllib  # Python 3.11+
+    except ModuleNotFoundError:
+        import tomli as tomllib  # Python 3.10 fallback
     pyproject = os.path.join(project_dir, "pyproject.toml")
     if os.path.exists(pyproject):
         with open(pyproject, "rb") as f:

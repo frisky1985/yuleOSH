@@ -587,7 +587,10 @@ def run_layer3(project_dir: Optional[str] = None) -> bool:
     print("  \U0001f4e6 CI: version check...")
     pyproject = os.path.join(project_dir, "pyproject.toml")
     if os.path.exists(pyproject):
-        import tomllib
+        try:
+            import tomllib  # Python 3.11+
+        except ModuleNotFoundError:
+            import tomli as tomllib  # Python 3.10 fallback
         with open(pyproject, "rb") as f:
             data = tomllib.load(f)
         version = data.get("project", {}).get("version", "unknown")
