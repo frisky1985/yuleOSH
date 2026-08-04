@@ -116,28 +116,28 @@ jobs:
 
       - name: Upload Semgrep SARIF (Python)
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: hashFiles('semgrep-python.sarif') != ''
         with:
           sarif_file: semgrep-python.sarif
           category: semgrep-python
 
       - name: Upload Semgrep SARIF (C/C++)
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: hashFiles('semgrep-c.sarif') != ''
         with:
           sarif_file: semgrep-c.sarif
           category: semgrep-c
 
       - name: Upload Semgrep SARIF (Dataflow)
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: hashFiles('semgrep-dataflow.sarif') != ''
         with:
           sarif_file: semgrep-dataflow.sarif
           category: semgrep-dataflow
 
       - name: Upload Semgrep SARIF (Remote Rules)
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: hashFiles('semgrep-remote.sarif') != ''
         with:
           sarif_file: semgrep-remote.sarif
           category: semgrep-remote
