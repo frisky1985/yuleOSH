@@ -1,0 +1,6 @@
+# 本模板的 .yuleosh/ 必须入库（作为方法论宿主包内容分发）。
+# 根 .gitignore 的 `.yuleosh/` 规则在此目录被覆盖（最近目录优先）。
+!.yuleosh/
+!.yuleosh/**
+!.yuleosh/agents/
+!.yuleosh/agents/*
