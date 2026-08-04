@@ -160,13 +160,40 @@ CHECKS: dict[str, tuple[str, str, CheckFn]] = {
 }
 
 
+def _is_methodology_project(project_dir: str) -> bool:
+    """检测项目是否走方法论流程。
+
+    判定依据（任一）:
+      - .osh/specs/ 或 .osh/plans/ 存在（OpenSpec 流程产物）
+      - .yuleosh/agents/ 存在（agent 约束）
+      - CONTEXT.md / CONTEXT-MAP.md 存在（统一语言）
+
+    仅 docs/spec.md、specs/misra-*.md 等通用文档不算——那是任意项目
+    都有的文档，不是方法论流程标志。临时测试项目不会误伤。
+    """
+    root = Path(project_dir)
+    has_spec = bool(_find_files(project_dir, [".osh/specs/*/spec.md"]))
+    has_ctx = (root / "CONTEXT.md").exists() or (root / "CONTEXT-MAP.md").exists()
+    has_agents = (root / ".yuleosh" / "agents").is_dir()
+    has_specs_dir = (root / ".osh" / "specs").is_dir() or (root / ".osh" / "plans").is_dir()
+    return has_spec or has_ctx or has_agents or has_specs_dir
+
+
 def run_methodology_gate(project_dir: str, ci) -> bool:
     """Run the methodology gate. Returns True if pipeline should continue.
 
     Hard violations → stage failed → return False (block).
     Soft violations → stage warning → return True (non-blocking).
+
+    非方法论项目（无 spec/CONTEXT/.yuleosh）→ 全部降级为跳过，不阻断。
     """
     print("  📐 CI: methodology gate (L2 方法论契约门禁)...")
+
+    if not _is_methodology_project(project_dir):
+        msg = "非方法论项目（无 spec/CONTEXT/.yuleosh）— 门禁跳过"
+        ci.add_stage("methodology-gate", "skipped", msg)
+        print(f"    ⏭️  {msg}")
+        return True
 
     hard_failures: list[str] = []
     soft_failures: list[str] = []
