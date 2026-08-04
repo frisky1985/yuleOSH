@@ -136,8 +136,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck pip-audit
+        pip install -e ".[dev]" pip-audit
 
     - name: Python CVE scan (pip-audit)
       run: |
