@@ -179,20 +179,24 @@ def _is_methodology_project(project_dir: str) -> bool:
     return has_spec or has_ctx or has_agents or has_specs_dir
 
 
-def run_methodology_gate(project_dir: str, ci) -> bool:
+def run_methodology_gate(project_dir: str, ci, log=None) -> bool:
     """Run the methodology gate. Returns True if pipeline should continue.
 
     Hard violations → stage failed → return False (block).
     Soft violations → stage warning → return True (non-blocking).
 
     非方法论项目（无 spec/CONTEXT/.yuleosh）→ 全部降级为跳过，不阻断。
+
+    log: 可选日志回调 log(msg: str) -> None。默认用 print（stdout）。
+         传入 stderr 写入函数可在 --json 模式下把人类日志与 JSON 分离。
     """
-    print("  📐 CI: methodology gate (L2 方法论契约门禁)...")
+    out = log if log is not None else print
+    out("  📐 CI: methodology gate (L2 方法论契约门禁)...")
 
     if not _is_methodology_project(project_dir):
         msg = "非方法论项目（无 spec/CONTEXT/.yuleosh）— 门禁跳过"
         ci.add_stage("methodology-gate", "skipped", msg)
-        print(f"    ⏭️  {msg}")
+        out(f"    ⏭️  {msg}")
         return True
 
     hard_failures: list[str] = []
@@ -204,31 +208,31 @@ def run_methodology_gate(project_dir: str, ci) -> bool:
             ok, msg = fn(project_dir)
         except Exception as e:  # pragma: no cover - defensive
             ok, msg = False, f"check crashed: {e}"
-            log.exception("methodology gate %s crashed", key)
+            log.exception("methodology gate %s crashed", key) if log else None
 
         if ok:
             passes.append(f"{label}: {msg}")
             ci.add_stage(f"methodology-{key}", "passed", msg)
-            print(f"    ✅ {label}: {msg}")
+            out(f"    ✅ {label}: {msg}")
         elif severity == "hard":
             hard_failures.append(f"{label}: {msg}")
             ci.add_stage(f"methodology-{key}", "failed", msg)
-            print(f"    ❌ {label}: {msg}")
+            out(f"    ❌ {label}: {msg}")
         else:
             soft_failures.append(f"{label}: {msg}")
             ci.add_stage(f"methodology-{key}", "warning", msg)
-            print(f"    ⚠️  {label}: {msg}")
+            out(f"    ⚠️  {label}: {msg}")
 
     summary = (
         f"{len(passes)} pass, {len(soft_failures)} soft, {len(hard_failures)} hard"
     )
     ci.add_stage("methodology-gate", "passed" if not hard_failures else "failed", summary)
-    print(f"  📐 methodology gate: {summary}")
+    out(f"  📐 methodology gate: {summary}")
 
     if hard_failures:
-        print("    ❌ 硬性违反（阻断）:")
+        out("    ❌ 硬性违反（阻断）:")
         for f in hard_failures:
-            print(f"      - {f}")
+            out(f"      - {f}")
         return False
 
     return True

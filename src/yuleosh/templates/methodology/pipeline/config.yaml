@@ -1,0 +1,13 @@
+steps:
+  - spec-parse
+  - requirements-analysis
+  - methodology-gate
+  - code-gen
+  - unit-test
+ci_layers:
+  - L1
+  - L2
+review_gates:
+  two_axis_review: true
+  acceptance_matrix: true
+  grilling_recorded: true

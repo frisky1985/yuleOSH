@@ -346,6 +346,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kg_events_history.add_argument("--limit", type=int, default=50, help="Max events to show")
     p_kg_events_history.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
 
+    # methodology (L3 方法论宿主包) — build_parser in cli/commands/methodology.py
+    from yuleosh.cli.commands.methodology import build_parser as _build_methodology
+    _build_methodology(sub)
+
     # coverage
     p_coverage = sub.add_parser("coverage", help="Code coverage management")
     csub = p_coverage.add_subparsers(dest="coverage_sub")
@@ -841,6 +845,16 @@ def main():
     elif args.command == "loop":
         from yuleosh.loop_engine.cli import handle_loop_command
         sys.exit(handle_loop_command(args))
+
+    elif args.command == "methodology":
+        from yuleosh.cli.commands.methodology import cmd_methodology_check, cmd_methodology_init
+        if args.methodology_sub == "init":
+            cmd_methodology_init(args.dir, force=args.force)
+        elif args.methodology_sub == "check":
+            cmd_methodology_check(args.dir, json_out=args.json)
+        else:
+            parser.print_help()
+            sys.exit(1)
 
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main

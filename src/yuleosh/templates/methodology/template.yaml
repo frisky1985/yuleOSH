@@ -1,0 +1,12 @@
+name: methodology
+version: 1.0.0
+description: 方法论宿主包 — yuleOSH L1 行为约束 + L2 门禁骨架（METHODOLOGY/RULES/HOOKS/AGENTS + CONTEXT 统一语言 + ci-config 门禁片段）
+platforms: [generic]
+tags: [methodology, agent-constraints, openspec, harness, gate]
+spec_sections:
+  - Methodology Contract
+  - Domain Glossary
+  - Review Criteria
+pipeline_config:
+  default_steps: [spec-parse, requirements-analysis, code-gen, internal-review, unit-test]
+  ci_layers: [L1]
