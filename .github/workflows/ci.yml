@@ -30,7 +30,10 @@ jobs:
 
     - name: Run tests with coverage gate
       run: |
-        python -m pytest tests/ -q --ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py --cov=yuleosh --cov-fail-under=30
+        # v3.10.0 Track1: coverage C tracer 在 CI 崩溃（collectors[-1] is self，
+        # 与 code-quality 之前同因，已从该 job 移除）→ test job 去 --cov，
+        # 覆盖率门禁由 code-quality/evidence 承担，此处专注测试结果
+        python -m pytest tests/ -q --ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py
 
     - name: KG snapshot (P0-3)
       run: |
