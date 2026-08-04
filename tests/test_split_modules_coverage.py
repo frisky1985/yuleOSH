@@ -40,6 +40,11 @@ for _sub in ("sil_runner", "target_config", "flash", "hil_runner"):
     setattr(_m, "hil_test", None)
     setattr(_m, "flash_firmware", None)
     sys.modules[f"cross.{_sub}"] = _m
+    # B 类修复（v3.10.0 Track1，组 1）：与 test_ci_run_deep.py 同款——
+    # Python 3.13 mock.patch 宽容回退 sys.modules，3.10 严格从包对象属性
+    # 解析 → 未 setattr 时 mock.patch("cross.sil_runner.sil_test") 报
+    # AttributeError: module 'cross' has no attribute 'sil_runner'
+    setattr(_mock_cross, _sub, _m)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

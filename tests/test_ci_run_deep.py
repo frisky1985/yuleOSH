@@ -40,6 +40,11 @@ for _sub in ("sil_runner", "target_config", "flash", "hil_runner"):
     setattr(_m, "hil_test", None)
     setattr(_m, "flash_firmware", None)
     sys.modules[f"cross.{_sub}"] = _m
+    # B 类修复（v3.10.0 Track1，组 1）：把子模块挂到 cross 包对象上。
+    # Python 3.13 的 mock.patch 可回退 sys.modules 查找（宽容），3.10 严格
+    # 从包对象属性解析 → 未 setattr 时 mock.patch("cross.sil_runner.sil_test")
+    # 报 AttributeError。测试注入需与包属性一致。
+    setattr(_mock_cross, _sub, _m)
 
 # Also inject evidence module for run_layer3
 _mev = _types.ModuleType("evidence")
@@ -49,6 +54,9 @@ sys.modules["evidence"] = _mev
 _mev_pack = _types.ModuleType("evidence.pack")
 _mev_pack.generate_evidence = lambda *a, **kw: None
 sys.modules["evidence.pack"] = _mev_pack
+# B 类修复（v3.10.0 Track1，组 1）：evidence 包对象挂 pack 属性
+# （与 cross 同模式——3.13 mock.patch 宽容回退 sys.modules，3.10 严格属性解析）
+setattr(_mev, "pack", _mev_pack)
 del _mev, _mev_pack
 del _mock_cross, _sub, _m, _types
 
