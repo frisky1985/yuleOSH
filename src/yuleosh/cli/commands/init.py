@@ -20,7 +20,9 @@ def cmd_template_init(project_name, parent_dir=".", template_name=None):
         print("Error: No templates available")
         sys.exit(1)
     if template_name is None:
-        template_dirs = [d for d in templates_dir.iterdir() if d.is_dir()]
+        # v3.10.0 Track1: iterdir() 顺序依赖文件系统（macOS 创建序/Linux 哈希序
+        # 不一致 → CI 选到 second_tpl）→ 显式排序保证自动选择确定性（字母序）
+        template_dirs = sorted(d for d in templates_dir.iterdir() if d.is_dir())
         if not template_dirs:
             print("Error: No templates found")
             sys.exit(1)
