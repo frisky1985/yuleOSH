@@ -264,7 +264,10 @@ class TestSkillsCli:
         out = capsys.readouterr().out
         assert rc == 0
         data = json.loads(out)
-        assert {s["name"] for s in data} == set(BUILTIN_SKILL_NAMES)
+        names = {s["name"] for s in data}
+        # 内置技能必须在列；v3.10.0 起含持久化导入的 mattpocock 技能
+        assert set(BUILTIN_SKILL_NAMES) <= names
+        assert len(names) >= len(BUILTIN_SKILL_NAMES)
 
     def test_show_existing_skill(self, capsys):
         rc = handle_skills_command(_Args(skills_sub="show", name="misra-fix"))
