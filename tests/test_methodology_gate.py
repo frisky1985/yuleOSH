@@ -81,10 +81,37 @@ def test_grilling_pass_with_decision_log(proj):
 
 
 def test_grilling_fail_without_log(tmp_path):
+    """存量项目（无 .osh/specs/ 活跃流程）无决策记录 → 降级 pass（soft 提示）。"""
     (tmp_path / "specs").mkdir()
     (tmp_path / "specs" / "spec.md").write_text("# Spec\n\nSHALL do X\n", encoding="utf-8")
-    ok, _ = _check_grilling(str(tmp_path))
+    ok, msg = _check_grilling(str(tmp_path))
+    assert ok
+    assert "存量项目降级" in msg
+
+
+def test_grilling_hard_fail_active_openspec_without_log(tmp_path):
+    """活跃 OpenSpec 项目（有 .osh/specs/）无决策记录 → hard fail（阻断）。"""
+    (tmp_path / ".osh" / "specs" / "v1.0.0").mkdir(parents=True)
+    (tmp_path / ".osh" / "specs" / "v1.0.0" / "spec.md").write_text(
+        "# Spec\n\nSHALL do X\n", encoding="utf-8"
+    )
+    ok, msg = _check_grilling(str(tmp_path))
     assert not ok
+    assert "无 grilling/决策记录痕迹" in msg
+
+
+def test_grilling_ignores_requirements_matrix(tmp_path):
+    """需求追溯表 module-requirements.md 不应被当作 spec 检查。"""
+    (tmp_path / "specs").mkdir()
+    (tmp_path / "specs" / "module-requirements.md").write_text(
+        "# Module Requirements\n\n| ID | Requirement |\n", encoding="utf-8"
+    )
+    (tmp_path / "specs" / "bsw-services-spec.md").write_text(
+        "# Spec\n\nSHALL do X\n", encoding="utf-8"
+    )
+    ok, msg = _check_grilling(str(tmp_path))
+    assert ok
+    assert "存量项目降级" in msg
 
 
 def test_domain_model_pass(proj):

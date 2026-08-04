@@ -32,6 +32,7 @@ OUTPUT = DIST_DIR / "methodology-gate.py"
 # 需要提取的顶层函数/变量（按源码顺序）。_CliCI 是 CLI 模块里的，standalone 自建。
 EXPORT_NAMES = [
     "_find_files",
+    "_find_spec_files",
     "_check_grilling",
     "_check_domain_model",
     "_check_two_axis_review",
@@ -75,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
 
     root = str(Path(args.project_dir).resolve())
     ci = _CliCI()
-    passed = run_methodology_gate(root, ci, log=_log)
+    passed = run_methodology_gate(root, ci, log_fn=_log)
 
     if args.json:
         payload = {
