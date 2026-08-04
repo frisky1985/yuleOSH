@@ -47,6 +47,10 @@ from yuleosh.ci.stages.validation import (
     run_architecture_review,
 )
 
+from yuleosh.ci.stages.methodology_gate import (
+    run_methodology_gate,
+)
+
 from yuleosh.ci.stages.test import (
     run_unit_tests,
     run_coverage_check,
