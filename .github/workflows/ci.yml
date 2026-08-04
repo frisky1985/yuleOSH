@@ -10,6 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false  # v3.10.0 Track1: 关 fail-fast，4 版本全跑完暴露真实失败面
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13']
 
