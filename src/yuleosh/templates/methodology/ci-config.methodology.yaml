@@ -1,0 +1,17 @@
+# ci-config.yaml — {{PROJECT_NAME}} CI 配置（方法论宿主包片段）
+# 这是 L2 methodology gate 的最小配置。完整配置参考 yuleOSH 仓库 .yuleosh/ci-config.yaml。
+
+misra:
+  profiles:
+    safety:
+      rules: [mandatory, required, advisory]
+      block_on: [mandatory, required]
+      exclude_paths: [tests/**, third_party/**]
+      description: Full MISRA compliance
+coverage:
+  threshold_line: 80.0
+  threshold_branch: 70.0
+methodology:
+  enabled: true
+  hard_checks: [grilling-alignment, domain-model]
+  soft_checks: [two-axis-review, tight-loop-debug, vertical-slices, handoff]
