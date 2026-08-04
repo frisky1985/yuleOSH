@@ -160,6 +160,8 @@ def get_registry() -> SkillRegistry:
         from yuleosh.skills.builtin import builtin_skills
 
         _registry.register_many(builtin_skills())
+        # v3.10.0: 自动加载持久化技能（.osh/skills/skills.json，含 mattpocock 导入）
+        _registry.load_default()
     return _registry
 
 
