@@ -159,10 +159,12 @@ class TestCompileVerification:
         assert result["ok"] is False
 
     def test_compile_verify_build_cmd(self, tmp_path):
+        shell = os.environ.get("SHELL", "/bin/sh")
         result = compile_verify([tmp_path / "ignored.c"],
-                                build_cmd=[os.environ.get("SHELL", "/bin/sh"), "-c", "exit 0"])
+                                build_cmd=[shell, "-c", "exit 0"])
         assert result["ok"] is True
-        assert result["command"].startswith("/bin/sh")
+        # 平台敏感：macOS SHELL=/bin/zsh、CI 为 /bin/sh —— 后缀匹配实际 shell 而非硬编码
+        assert result["command"].endswith(f"{os.path.basename(shell)} -c exit 0")
 
 
 # ==================================================================
