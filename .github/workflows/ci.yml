@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45  # v3.10.0 Track1: 防失控测试挂满 6h（曾现 sendfile 自复制写盘死循环）
     strategy:
       fail-fast: false  # v3.10.0 Track1: 关 fail-fast，4 版本全跑完暴露真实失败面
       matrix:
@@ -28,12 +29,23 @@ jobs:
         pip install -e ".[dev]"
         sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
 
-    - name: Run tests with coverage gate
+    - name: Run tests
       run: |
-        # v3.10.0 Track1: coverage C tracer 在 CI 崩溃（collectors[-1] is self，
-        # 与 code-quality 之前同因，已从该 job 移除）→ test job 去 --cov，
-        # 覆盖率门禁由 code-quality/evidence 承担，此处专注测试结果
-        python -m pytest tests/ -q --ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py
+        # v3.10.0 Track1: pytest.ini addopts 仍带 --cov（9bf3e5ab 只删了 CLI 参数
+        # 未真正生效）→ 用 --no-cov 显式关闭，test job 专注测试结果；
+        # 覆盖率门禁由 code-quality/evidence 承担
+        # 另: 输出 tee 落盘 + artifact 上传（if: always）——GitHub test job 日志
+        # blob 系统性缺失（BlobNotFound），artifact 是唯一可靠的失败取证通道
+        set -o pipefail
+        python -m pytest tests/ -q --no-cov --ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py 2>&1 | tee pytest-${{ matrix.python-version }}.log
+
+    - name: Upload pytest log (always)
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: pytest-log-${{ matrix.python-version }}
+        path: pytest-${{ matrix.python-version }}.log
+        if-no-files-found: ignore
 
     - name: KG snapshot (P0-3)
       run: |
