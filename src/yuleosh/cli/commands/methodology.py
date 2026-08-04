@@ -144,7 +144,7 @@ def cmd_methodology_check(project_dir: str = ".", json_out: bool = False) -> Non
 
     root = str(Path(project_dir).resolve())
     ci = _CliCI()
-    passed = run_methodology_gate(root, ci, log=_log)
+    passed = run_methodology_gate(root, ci, log_fn=_log)
 
     if json_out:
         payload = {

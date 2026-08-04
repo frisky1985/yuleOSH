@@ -49,11 +49,40 @@ def _find_files(project_dir: str, globs: list[str]) -> list[Path]:
     return found
 
 
+def _find_spec_files(project_dir: str) -> list[Path]:
+    """找 spec 文件（grilling 检查用）。
+
+    优先 OpenSpec 结构化目录（.osh/specs/*/spec.md），其次 docs/spec*.md，
+    再其次 specs/ 下**文件名含 spec 字样**的文档。排除需求追溯表
+    （module-requirements.md）、验收矩阵（*acceptance-matrix*.md）等
+    非 spec 文档——那些是项目通用文档，不需要 grilling 决策记录。
+    """
+    found = _find_files(project_dir, [".osh/specs/*/spec.md", "docs/spec*.md"])
+    if found:
+        return found
+    # 退路: specs/ 下文件名含 'spec' 的（排除 misra/requirements/matrix）
+    for p in _find_files(project_dir, ["specs/*.md"]):
+        name = p.name.lower()
+        if "spec" in name and "matrix" not in name and "requirement" not in name and "misra" not in name:
+            found.append(p)
+    return found
+
+
 def _check_grilling(project_dir: str) -> tuple[bool, str]:
-    """§1 grilling 对齐：最新 spec 必须含决策记录/澄清痕迹。"""
-    specs = _find_files(project_dir, [".osh/specs/*/spec.md", "specs/*.md", "docs/spec*.md"])
+    """§1 grilling 对齐：最新 spec 必须含决策记录/澄清痕迹。
+
+    语义分层（存量项目 vs 活跃 OpenSpec 流程）:
+      - 项目有 .osh/specs/（活跃 OpenSpec 目录，新 spec 在此编写）→ hard:
+        最新 spec 必须含决策记录，否则违反（阻断）。
+      - 项目只有 docs/spec*.md / specs/*spec*.md（存量后补规范文档，
+        无 .osh/specs/ 结构）→ soft: 存量 spec 无法追溯对齐过程，
+        提示补充决策记录但不阻断（渐进式方法论落地）。
+    """
+    root = Path(project_dir)
+    active_openspec = bool(_find_files(project_dir, [".osh/specs/*/spec.md"]))
+    specs = _find_spec_files(project_dir)
     if not specs:
-        return False, "no spec file found (specs/*.md or .osh/specs/*/spec.md)"
+        return False, "no spec file found (.osh/specs/*/spec.md or docs/spec*.md)"
     latest = sorted(specs, key=lambda p: p.stat().st_mtime)[-1]
     try:
         content = latest.read_text(errors="replace")
@@ -64,9 +93,14 @@ def _check_grilling(project_dir: str) -> tuple[bool, str]:
         "澄清", "对齐", "recommended answer", "推荐答案",
     ]
     hits = [m for m in markers if m in content]
-    if not hits:
-        return False, f"{latest.name} 无 grilling/决策记录痕迹（应含 '决策记录' 或 'Grilling'）"
-    return True, f"{latest.name} 含决策记录: {', '.join(hits[:3])}"
+    if hits:
+        return True, f"{latest.name} 含决策记录: {', '.join(hits[:3])}"
+    if not active_openspec:
+        return True, (
+            f"{latest.name} 无决策记录 — 存量项目降级（无 .osh/specs/ 活跃流程，"
+            "建议后续新 spec 补充 Grilling 记录，不阻断）"
+        )
+    return False, f"{latest.name} 无 grilling/决策记录痕迹（应含 '决策记录' 或 'Grilling'）"
 
 
 def _check_domain_model(project_dir: str) -> tuple[bool, str]:
@@ -179,7 +213,7 @@ def _is_methodology_project(project_dir: str) -> bool:
     return has_spec or has_ctx or has_agents or has_specs_dir
 
 
-def run_methodology_gate(project_dir: str, ci, log=None) -> bool:
+def run_methodology_gate(project_dir: str, ci, log_fn=None) -> bool:
     """Run the methodology gate. Returns True if pipeline should continue.
 
     Hard violations → stage failed → return False (block).
@@ -187,10 +221,11 @@ def run_methodology_gate(project_dir: str, ci, log=None) -> bool:
 
     非方法论项目（无 spec/CONTEXT/.yuleosh）→ 全部降级为跳过，不阻断。
 
-    log: 可选日志回调 log(msg: str) -> None。默认用 print（stdout）。
+    log_fn: 可选日志回调 log_fn(msg: str) -> None。默认用 print（stdout）。
          传入 stderr 写入函数可在 --json 模式下把人类日志与 JSON 分离。
+         注意参数名不用 log——避免遮蔽模块级 logging logger。
     """
-    out = log if log is not None else print
+    out = log_fn if log_fn is not None else print
     out("  📐 CI: methodology gate (L2 方法论契约门禁)...")
 
     if not _is_methodology_project(project_dir):
@@ -208,7 +243,7 @@ def run_methodology_gate(project_dir: str, ci, log=None) -> bool:
             ok, msg = fn(project_dir)
         except Exception as e:  # pragma: no cover - defensive
             ok, msg = False, f"check crashed: {e}"
-            log.exception("methodology gate %s crashed", key) if log else None
+            log.exception("methodology gate %s crashed", key)  # 模块级 logger，不依赖 log 回调
 
         if ok:
             passes.append(f"{label}: {msg}")
