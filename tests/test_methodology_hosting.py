@@ -188,3 +188,127 @@ def test_cli_entry_registered():
             subparsers = action.choices
     assert subparsers is not None
     assert "methodology" in subparsers
+
+
+# ── B 部分: standalone 引擎 ──
+
+DIST_GATE = Path(__file__).resolve().parent.parent / "dist" / "methodology-gate.py"
+
+
+def _run_standalone(project_dir: Path) -> subprocess.CompletedProcess:
+    import os
+
+    env = dict(os.environ)
+    proc = subprocess.run(
+        [sys.executable, str(DIST_GATE), str(project_dir)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+    )
+    return proc
+
+
+def test_standalone_exists_and_executable():
+    """B2: dist/methodology-gate.py 存在、可执行、零第三方依赖。"""
+    assert DIST_GATE.exists()
+    content = DIST_GATE.read_text(encoding="utf-8")
+    assert "#!/usr/bin/env python3" in content
+    # 零第三方依赖：import 只允许标准库
+    import ast
+
+    tree = ast.parse(content)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert not alias.name.startswith("yuleosh"), f"standalone imports {alias.name}"
+        elif isinstance(node, ast.ImportFrom):
+            assert not (node.module or "").startswith("yuleosh"), f"standalone imports {node.module}"
+
+
+def test_standalone_regenerated_from_source(tmp_path):
+    """B1: 生成器再跑一次，产物应与提交版一致（单一实现无漂移）。"""
+    import importlib.util
+
+    builder_path = Path(__file__).resolve().parent.parent / "scripts" / "build-methodology-gate-standalone.py"
+    spec = importlib.util.spec_from_file_location("build_gate_builder", builder_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    current = DIST_GATE.read_text(encoding="utf-8")
+    rebuilt = mod._build()
+    assert rebuilt == current, "dist/methodology-gate.py 过期 — 请重跑 scripts/build-methodology-gate-standalone.py"
+
+
+def test_standalone_passes_mounted_project(tmp_path):
+    """B2: standalone 在挂载+spec 项目 → exit 0。"""
+    cmd_methodology_init(str(tmp_path))
+    (tmp_path / ".osh" / "specs" / "v1.0.0").mkdir(parents=True)
+    (tmp_path / ".osh" / "specs" / "v1.0.0" / "spec.md").write_text(
+        "# Spec v1.0.0\n\n## 9. 决策记录（Grilling/对齐沉淀）\n\n- **决策（X-1）**: 采用 A 方案。\n",
+        encoding="utf-8",
+    )
+    proc = _run_standalone(tmp_path)
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_standalone_hard_fails_without_spec(tmp_path):
+    """B2: standalone 在缺 spec 项目 → exit 1。"""
+    cmd_methodology_init(str(tmp_path))
+    proc = _run_standalone(tmp_path)
+    assert proc.returncode == 1
+
+
+def test_standalone_skips_non_methodology_project(tmp_path):
+    """B2: standalone 在非方法论项目 → skip exit 0。"""
+    (tmp_path / "readme.md").write_text("hello", encoding="utf-8")
+    proc = _run_standalone(tmp_path)
+    assert proc.returncode == 0
+    assert "跳过" in proc.stdout
+
+
+def test_standalone_json_matches_yuleosh_check(tmp_path):
+    """B3: standalone --json 与 yuleosh methodology check --json 逐 stage 一致。"""
+    import json
+    import os
+
+    cmd_methodology_init(str(tmp_path))
+    (tmp_path / ".osh" / "specs" / "v1.0.0").mkdir(parents=True)
+    (tmp_path / ".osh" / "specs" / "v1.0.0" / "spec.md").write_text(
+        "# Spec v1.0.0\n\n## 9. 决策记录\n\n- **决策（X-1）**: 采用 A 方案。\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "reports" / "review.md").write_text(
+        "# Review\n\n## Standards\n- ok\n\n## Spec\n- ok\n", encoding="utf-8"
+    )
+
+    # standalone
+    p1 = subprocess.run(
+        [sys.executable, str(DIST_GATE), str(tmp_path), "--json"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert p1.returncode == 0
+    d1 = json.loads(p1.stdout)
+
+    # yuleosh check
+    src = str(Path(__file__).resolve().parent.parent / "src")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = src + os.pathsep + env.get("PYTHONPATH", "")
+    p2 = subprocess.run(
+        [sys.executable, "-m", "yuleosh._entry", "methodology", "check", str(tmp_path), "--json"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(Path(__file__).resolve().parent.parent),
+        timeout=60,
+    )
+    assert p2.returncode == 0, p2.stderr
+    d2 = json.loads(p2.stdout)
+
+    assert d1["passed"] == d2["passed"]
+    s1 = {(s["name"].replace("methodology-", ""), s["status"]) for s in d1["stages"]}
+    s2 = {(s["name"].replace("methodology-", ""), s["status"]) for s in d2["stages"]}
+    assert s1 == s2

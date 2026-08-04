@@ -54,7 +54,22 @@ yuleosh methodology check . --json | jq '.passed'
 
 ### 2.3 接入 CI
 
-在目标项目的 CI workflow 中加一步（GitHub Actions 示例）:
+**方式一（推荐，零依赖）**: 直接用 standalone 引擎，无需安装 yuleosh。
+`dist/methodology-gate.py` 是自包含脚本（仅标准库），任何 CI 拉取即用:
+
+```yaml
+# GitHub Actions 示例
+- name: Methodology Gate (L2) — standalone
+  run: |
+    curl -fsSL -o methodology-gate.py https://raw.githubusercontent.com/frisky1985/yuleOSH/main/dist/methodology-gate.py
+    python3 methodology-gate.py . --json | jq '.passed'
+  continue-on-error: false   # hard 违反阻断合并
+```
+
+standalone 与 `yuleosh methodology check` 行为完全一致（同一实现自动生成，
+CI 一致性测试保证无漂移），退出码 0=通过/跳过 / 1=hard 违反。
+
+**方式二**: 安装 yuleosh 后调用:
 
 ```yaml
 - name: Methodology Gate (L2)
@@ -90,6 +105,10 @@ yuleosh methodology check . --json | jq '.passed'
 - CLI: `src/yuleosh/cli/commands/methodology.py`（A5 拆分风格，不 import cli.main 避免循环）
 - 门禁复用: `yuleosh methodology check` 直接调 `src/yuleosh/ci/stages/methodology_gate.py::run_methodology_gate`
   （L2 引擎与 L3 CLI 同源，单一实现不重复）
+- **standalone 引擎 (B)**: `scripts/build-methodology-gate-standalone.py` 用 AST 从
+  `methodology_gate.py` 提取核心函数生成 `dist/methodology-gate.py`（零第三方依赖）。
+  单一实现 + 生成器 + 一致性测试（`test_standalone_regenerated_from_source` +
+  `test_standalone_json_matches_yuleosh_check`），杜绝双实现漂移。
 - 注册: `cli/main.py` `_build_parser()` 内 `_build_methodology(sub)` + dispatch 分支
 
 ## 6. 验收清单
