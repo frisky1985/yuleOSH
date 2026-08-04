@@ -42,7 +42,7 @@ Homepage = "https://github.com/frisky1985/yuleOSH"
 Repository = "https://github.com/frisky1985/yuleOSH"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "pytest-mock"]
+dev = ["pytest", "pytest-cov", "pytest-mock", "pytest-asyncio>=0.23"]
 
 [project.scripts]
 yuleosh = "yuleosh._entry:main"
