@@ -5,7 +5,7 @@
  * Implements: HAL_GPIO_WritePin, HAL_GPIO_ReadPin, HAL_GPIO_TogglePin,
  *             HAL_GPIO_Init, HAL_GPIO_DeInit
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #ifndef HAL_MOCK_GPIO_H

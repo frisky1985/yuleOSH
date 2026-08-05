@@ -9,6 +9,6 @@
   "max_yuleosh_version": "0.5.0",
   "tags": ["esp32", "freertos", "sample"],
   "dependencies": {},
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "timeout": 10
 }

@@ -9,7 +9,7 @@
  *   gcc -Isrc/cross -Isrc/cross/hal_mock tests/test_hal_mock.c src/cross/hal_mock/hal_mock_impl.c -o /tmp/test_hal_mock
  *   /tmp/test_hal_mock
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #include "hal_mock/uart_mock.h"

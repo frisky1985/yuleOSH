@@ -5,7 +5,7 @@
  * Implements: HAL_I2C_Master_Transmit, HAL_I2C_Master_Receive,
  *             HAL_I2C_Mem_Write, HAL_I2C_Mem_Read
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #ifndef HAL_MOCK_I2C_H

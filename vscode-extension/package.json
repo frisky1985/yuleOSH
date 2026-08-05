@@ -4,7 +4,7 @@
   "description": "AI-Powered Embedded Development Pipeline",
   "version": "0.1.0",
   "publisher": "frisky1985",
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "engines": {
     "vscode": "^1.96.0"
   },
