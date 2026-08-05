@@ -182,6 +182,20 @@ class FaultInjectStage:
         log.info("Building fault-inject test firmware...")
         print("  🔧 Building fault-inject test firmware...")
 
+        # If the project has no CMakeLists.txt yet (e.g. fresh init or
+        # planning-only run), skip the CMake step cleanly instead of
+        # emitting a confusing "source directory does not contain
+        # CMakeLists.txt" error.  Tests then run in SIMULATED mode.
+        root = Path(project_root)
+        if not (root / "CMakeLists.txt").exists():
+            log.warning(
+                "No CMakeLists.txt in %s — skipping firmware build "
+                "(tests will be SIMULATED)", root,
+            )
+            print("  ⚠️  No CMakeLists.txt found — skipping build "
+                  "(tests will be SIMULATED)")
+            return False
+
         try:
             # W-7 (SEC-W6 / Fix 10): build steps get generous timeouts
             # (cmake configure 120s; build 300s) so a hung toolchain fails

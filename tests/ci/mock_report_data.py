@@ -107,7 +107,9 @@ def _random_violation_line(file: str, code_line: str) -> tuple[str, str]:
         (violation_line_raw, context_code_lines)
     """
     rule = random.choice(_MISRA_RULES)
-    sev = random.choice(_SEVERITIES)
+    # information 级（checkersReport/unmatchedSuppression 等）不是违规，
+    # parser 会跳过它们 — fixture 只应生成真实违规以便计数断言成立。
+    sev = random.choice([s for s in _SEVERITIES if s != "information"])
     line_num = random.randint(1, 200)
     col_num = random.randint(1, 40)
     msg = _SAMPLE_MESSAGES.get(rule, "violation")

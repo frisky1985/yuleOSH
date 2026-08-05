@@ -56,85 +56,137 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════════════════
 
 
+def _find_go_modules(project_dir: str) -> list[str]:
+    """Find all directories containing go.mod under *project_dir*.
+
+    Returns the project root itself when it has go.mod; otherwise every
+    subdirectory with go.mod (e.g. backend/dkcs, backend/cloud/hub).
+    """
+    mods: list[str] = []
+    for root, dirs, files in os.walk(project_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".")
+                   and d not in ("node_modules", "target", "vendor", ".git", "build")]
+        if "go.mod" in files:
+            mods.append(root)
+            dirs[:] = []  # do not descend into a module's subdirs
+    return sorted(mods)
+
+
 def _run_go_build(project_dir: str, ci: CIResult, timeout: int) -> bool:
-    """Run ``go build ./...``."""
+    """Run ``go build ./...`` in every Go module (monorepo-aware)."""
     print("  \U0001f3d7\ufe0f  CI: go build...")
-    try:
-        result = subprocess.run(
-            ["go", "build", "./..."],
-            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
-        )
-        if result.returncode == 0:
-            ci.add_stage("go-build", "passed")
-            print(f"    \u2705 go build passed")
-            return True
-        ci.add_stage("go-build", "failed", result.stderr[:500])
-        print(f"    \u274c go build failed")
-        return False
-    except FileNotFoundError:
-        ci.add_stage("go-build", "error", "go not installed")
-        print(f"    \u274c go not installed")
-        return False
-    except subprocess.TimeoutExpired:
-        ci.add_stage("go-build", "error", f"go build timed out ({timeout}s)")
-        print(f"    \u274c go build timed out")
-        return False
+    mods = _find_go_modules(project_dir) or [project_dir]
+    ok = True
+    for mod in mods:
+        rel = os.path.relpath(mod, project_dir)
+        try:
+            result = subprocess.run(
+                ["go", "build", "./..."],
+                capture_output=True, text=True, timeout=timeout, cwd=mod,
+            )
+            if result.returncode == 0:
+                print(f"    \u2705 go build passed ({rel})")
+            else:
+                ci.add_stage("go-build", "failed", f"[{rel}] {result.stderr[:400]}")
+                print(f"    \u274c go build failed ({rel})")
+                ok = False
+        except FileNotFoundError:
+            ci.add_stage("go-build", "error", "go not installed")
+            print(f"    \u274c go not installed")
+            return False
+        except subprocess.TimeoutExpired:
+            ci.add_stage("go-build", "error", f"go build timed out ({timeout}s)")
+            print(f"    \u274c go build timed out")
+            return False
+    if ok:
+        ci.add_stage("go-build", "passed")
+    return ok
 
 
 def _run_go_vet(project_dir: str, ci: CIResult, timeout: int) -> bool:
-    """Run ``go vet ./...``."""
+    """Run ``go vet ./...`` in every Go module (monorepo-aware)."""
     print("  \U0001f50d CI: go vet...")
-    try:
-        result = subprocess.run(
-            ["go", "vet", "./..."],
-            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
-        )
-        if result.returncode == 0:
-            ci.add_stage("go-vet", "passed")
-            print(f"    \u2705 go vet passed")
-            return True
-        ci.add_stage("go-vet", "failed", result.stderr[:500])
-        print(f"    \u274c go vet failed")
-        return False
-    except FileNotFoundError:
-        ci.add_stage("go-vet", "error", "go not installed")
-        print(f"    \u274c go not installed")
-        return False
-    except subprocess.TimeoutExpired:
-        ci.add_stage("go-vet", "error", f"go vet timed out ({timeout}s)")
-        print(f"    \u274c go vet timed out")
-        return False
+    mods = _find_go_modules(project_dir) or [project_dir]
+    ok = True
+    for mod in mods:
+        rel = os.path.relpath(mod, project_dir)
+        try:
+            result = subprocess.run(
+                ["go", "vet", "./..."],
+                capture_output=True, text=True, timeout=timeout, cwd=mod,
+            )
+            if result.returncode == 0:
+                print(f"    \u2705 go vet passed ({rel})")
+            else:
+                ci.add_stage("go-vet", "failed", f"[{rel}] {result.stderr[:400]}")
+                print(f"    \u274c go vet failed ({rel})")
+                ok = False
+        except FileNotFoundError:
+            ci.add_stage("go-vet", "error", "go not installed")
+            print(f"    \u274c go not installed")
+            return False
+        except subprocess.TimeoutExpired:
+            ci.add_stage("go-vet", "error", f"go vet timed out ({timeout}s)")
+            print(f"    \u274c go vet timed out")
+            return False
+    if ok:
+        ci.add_stage("go-vet", "passed")
+    return ok
 
 
 def _run_go_test(project_dir: str, ci: CIResult, timeout: int) -> bool:
-    """Run ``go test ./...``."""
+    """Run ``go test ./...`` in every Go module (monorepo-aware)."""
     print("  \U0001f9ea CI: go test...")
+    mods = _find_go_modules(project_dir) or [project_dir]
+    ok = True
+    for mod in mods:
+        rel = os.path.relpath(mod, project_dir)
+        try:
+            result = subprocess.run(
+                ["go", "test", "./..."],
+                capture_output=True, text=True, timeout=timeout, cwd=mod,
+            )
+            if result.returncode == 0:
+                print(f"    \u2705 go test passed ({rel})")
+            else:
+                ci.add_stage("go-test", "failed", f"[{rel}] {result.stderr[:400]}")
+                print(f"    \u274c go test failed ({rel})")
+                ok = False
+        except FileNotFoundError:
+            ci.add_stage("go-test", "error", "go not installed")
+            print(f"    \u274c go not installed")
+            return False
+        except subprocess.TimeoutExpired:
+            ci.add_stage("go-test", "error", f"go test timed out ({timeout}s)")
+            print(f"    \u274c go test timed out")
+            return False
+    if ok:
+        ci.add_stage("go-test", "passed")
+    return ok
+
+
+def _run_embedded_misra_check(project_dir: str, ci: CIResult) -> bool:
+    """Run MISRA check for embedded C sources in mixed-language projects.
+
+    Go/Python projects may also contain embedded C code (e.g. yuleDKCS).
+    ``run_misra_check`` skips itself when no C sources are found, so calling
+    it unconditionally is safe for pure Go/Python repos.
+    """
     try:
-        result = subprocess.run(
-            ["go", "test", "./..."],
-            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
-        )
-        if result.returncode == 0:
-            ci.add_stage("go-test", "passed")
-            print(f"    \u2705 go test passed")
-            return True
-        ci.add_stage("go-test", "failed", result.stderr[:500])
-        print(f"    \u274c go test failed")
-        return False
-    except FileNotFoundError:
-        ci.add_stage("go-test", "error", "go not installed")
-        print(f"    \u274c go not installed")
-        return False
-    except subprocess.TimeoutExpired:
-        ci.add_stage("go-test", "error", f"go test timed out ({timeout}s)")
-        print(f"    \u274c go test timed out")
+        passed = run_misra_check(project_dir, ci, mode="full")
+        if not passed:
+            ci.errors.append("misra-check failed")
+        return passed
+    except Exception as e:
+        ci.add_stage("misra-check", "error", str(e))
+        ci.errors.append(f"misra-check: {e}")
         return False
 
 
 def _run_go_layer1(project_dir: str, ci: CIResult, timeout: int) -> bool:
     """Run Layer 1 CI checks for a Go project.
 
-    Stages: go build, go vet, go test
+    Stages: go build, go vet, go test, plus embedded-C MISRA (mixed repos).
     """
     print(f"  \U0001f433 Detected: Go project")
     print()
@@ -154,6 +206,10 @@ def _run_go_layer1(project_dir: str, ci: CIResult, timeout: int) -> bool:
             ci.add_stage(name, "error", str(e))
             ci.errors.append(f"{name}: {e}")
             all_passed = False
+
+    # Embedded C MISRA — mixed-language repos (e.g. yuleDKCS)
+    if not _run_embedded_misra_check(project_dir, ci):
+        all_passed = False
 
     return all_passed
 
@@ -193,6 +249,10 @@ def _run_python_layer1(project_dir: str, ci: CIResult, timeout: int) -> bool:
         ci.add_stage("python-tests", "skipped", f"pytest timed out ({timeout}s)")
         print(f"    \u23ed\ufe0f  pytest timed out — skipping")
 
+    # Embedded C MISRA — mixed-language repos (e.g. yuleOSH src/fault-inject)
+    if not _run_embedded_misra_check(project_dir, ci):
+        all_passed = False
+
     return all_passed
 
 
@@ -205,7 +265,7 @@ def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
     """Core implementation of Layer 1, called inside the timeout guard."""
     lang = _detect_project_language(project_dir)
 
-    if lang == "go":
+    if lang in ("go", "mixed"):
         return _run_go_layer1(project_dir, ci, timeout)
 
     if lang == "python":
@@ -566,6 +626,12 @@ def run_layer3(project_dir: Optional[str] = None) -> bool:
             if result.returncode == 0:
                 ci.add_stage("e2e-tests", "passed")
                 print(f"    \u2705 E2E tests passed")
+            elif result.returncode == 5:
+                # pytest exit code 5 = no tests collected. The directory
+                # exists but has no Python tests (e.g. Go-only e2e dirs
+                # like yuleDKCS tests/e2e) — that's a skip, not a failure.
+                ci.add_stage("e2e-tests", "skipped", "no Python tests collected")
+                print(f"    \u23ed\ufe0f  E2E dir has no Python tests — skipped")
             else:
                 ci.add_stage("e2e-tests", "failed", result.stdout[:200])
                 print(f"    \u274c E2E tests failed")

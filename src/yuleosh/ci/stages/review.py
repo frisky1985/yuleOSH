@@ -102,6 +102,20 @@ def _format_null_pointer_fix(category: str, file_path: str) -> str:
     return fix_text
 
 
+def _find_c_sources(project_dir: str, scan_dirs: list[str]) -> list[str]:
+    """Walk *scan_dirs* (configurable, default src/benchmark/ref) for C/C++ files."""
+    c_files: list[str] = []
+    for scan_subdir in scan_dirs:
+        subdir = os.path.join(project_dir, scan_subdir)
+        if os.path.isdir(subdir):
+            for root, dirs, files in os.walk(subdir):
+                dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+                for f in files:
+                    if f.endswith((".c", ".cpp")):
+                        c_files.append(os.path.join(root, f))
+    return c_files
+
+
 def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: str) -> list[str]:
     """Filter out files matching any of the exclude patterns (glob-style).
 
@@ -120,6 +134,8 @@ def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: s
                 rel = f
         else:
             rel = f
+        # Normalize — strip "./" prefixes so patterns like "embedded/**" match
+        rel = os.path.normpath(rel)
 
         excluded = False
         for pattern in exclude_patterns:
@@ -197,6 +213,17 @@ def _scan_include_dirs(project_dir: str) -> list[str]:
     )
 
     scan_roots = ["src", "include", "tests", "third_party"]
+    # Extend with configurable misra.scan_dirs so mixed-language repos
+    # (e.g. yuleDKCS embedded/) get their include dirs discovered too.
+    try:
+        from yuleosh.ci.config import _get_ci_config
+        _cfg = _get_ci_config(project_dir)
+        if _cfg and _cfg.misra.scan_dirs:
+            for _sd in _cfg.misra.scan_dirs:
+                if _sd not in scan_roots:
+                    scan_roots.append(_sd)
+    except Exception:
+        pass
 
     found: list[str] = []
     seen: set[str] = set()
@@ -414,15 +441,9 @@ def run_misra_check(project_dir: str, ci: CIResult,
                        if f.endswith((".c", ".cpp")) and os.path.isfile(
                            os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
         if not c_files:
-            # Scan src/ + benchmark/ + ref/ for C/C++ source files
-            for scan_subdir in ("src", "benchmark", "ref"):
-                subdir = os.path.join(project_dir, scan_subdir)
-                if os.path.isdir(subdir):
-                    for root, dirs, files in os.walk(subdir):
-                        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
-                        for f in files:
-                            if f.endswith((".c", ".cpp")):
-                                c_files.append(os.path.join(root, f))
+            # Full scan: walk configurable scan_dirs (default src/benchmark/ref)
+            scan_dirs = misra_cfg.scan_dirs if misra_cfg and misra_cfg.scan_dirs else ["src", "benchmark", "ref"]
+            c_files = _find_c_sources(project_dir, scan_dirs)
     else:
         # auto mode (default) — same as before
         if target_files is not None:
@@ -450,15 +471,9 @@ def run_misra_check(project_dir: str, ci: CIResult,
                 pass
 
             if not c_files:
-                # Fallback: scan src/, benchmark/, ref/ for C/C++ source files
-                for scan_subdir in ("src", "benchmark", "ref"):
-                    subdir = os.path.join(project_dir, scan_subdir)
-                    if os.path.isdir(subdir):
-                        for root, dirs, files in os.walk(subdir):
-                            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
-                            for f in files:
-                                if f.endswith((".c", ".cpp")):
-                                    c_files.append(os.path.join(root, f))
+                # Fallback: walk configurable scan_dirs (default src/benchmark/ref)
+                scan_dirs = misra_cfg.scan_dirs if misra_cfg and misra_cfg.scan_dirs else ["src", "benchmark", "ref"]
+                c_files = _find_c_sources(project_dir, scan_dirs)
 
     if not c_files:
         ci.add_stage("misra-check", "skipped", "No C/C++ source files found")
@@ -516,8 +531,24 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
     # ── Auto-detect include paths and add -I flags ──
     include_paths = _detect_include_paths(project_dir)
+    # Extra configured include dirs (e.g. embedded/freestanding_includes)
+    if misra_cfg and misra_cfg.include_paths:
+        for inc in misra_cfg.include_paths:
+            inc_resolved = os.path.join(project_dir, inc) if not os.path.isabs(inc) else inc
+            if os.path.isdir(inc_resolved) and inc_resolved not in include_paths:
+                include_paths.append(inc_resolved)
     include_args = []
     for inc in include_paths:
+        # Use project-relative -I so cppcheck emits relative file paths in its
+        # output — otherwise absolute -I makes included .h paths absolute and
+        # they never match project-relative suppressions-list entries.
+        if os.path.isabs(inc):
+            try:
+                rel_inc = os.path.relpath(inc, project_dir)
+                if not rel_inc.startswith(".."):
+                    inc = rel_inc
+            except ValueError:
+                pass
         include_args.extend(["-I", inc])
     if include_args:
         log.info("Adding include paths: %s", " ".join(
@@ -587,8 +618,26 @@ def run_misra_check(project_dir: str, ci: CIResult,
         "--std=" + cppcheck_std,
         "--enable=all",
         "--suppress=missingIncludeSystem",
+        "--suppress=missingInclude",
+        "--suppress=normalCheckLevelMaxBranches",
         "-q",
-    ] + suppressions_list_args + define_args + include_args + suppress_args + c_files
+    ] + suppressions_list_args + define_args + include_args + suppress_args
+
+    # Pass relative paths to cppcheck so output paths match suppressions-list
+    # entries (which use project-relative paths like embedded/...). Absolute
+    # paths would produce absolute output paths that never match the baseline.
+    rel_c_files = []
+    for f in c_files:
+        if os.path.isabs(f):
+            try:
+                rel = os.path.relpath(f, project_dir)
+                if not rel.startswith(".."):
+                    rel_c_files.append(rel)
+                    continue
+            except ValueError:
+                pass
+        rel_c_files.append(f)
+    cmd += rel_c_files
 
     try:
         start = time.perf_counter()

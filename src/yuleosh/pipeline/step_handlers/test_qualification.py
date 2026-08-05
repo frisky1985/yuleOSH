@@ -99,12 +99,22 @@ def _discover_scenarios(spec_path: str) -> list[Scenario]:
         log.warning(f"Cannot read spec file {spec_path}: {e}")
         return scenarios
 
-    # Split on ### lines that contain GIVEN/WHEN/THEN
-    blocks = re.split(r"\n(?=###\s)", content)
+    # Split on header lines (### or ##) that may introduce a scenario block.
+    # A scenario block is recognized by containing GIVEN/WHEN/THEN keywords,
+    # regardless of the heading level used by the spec author.
+    blocks = re.split(r"\n(?=#{2,3}\s)", content)
     for block in blocks:
         if "GIVEN" in block.upper() and "WHEN" in block.upper():
             scenario = Scenario(block.strip())
             scenarios.append(scenario)
+
+    # If no heading-delimited blocks matched, fall back to scanning the whole
+    # text for contiguous GIVEN/WHEN/THEN runs (e.g. plain bullet scenarios).
+    if not scenarios:
+        for block in re.split(r"\n\s*\n", content):
+            if "GIVEN" in block.upper() and "WHEN" in block.upper():
+                scenario = Scenario(block.strip())
+                scenarios.append(scenario)
 
     return scenarios
 

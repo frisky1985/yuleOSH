@@ -23,6 +23,12 @@ log = logging.getLogger("ci.yaml_validator")
 # ------------------------------------------------------------------
 
 _CI_CONFIG_SCHEMA = {
+    "project": {
+        "type": "dict",
+        "keys": {
+            "language": {"type": "str"},
+        },
+    },
     "ci": {
         "type": "dict",
         "keys": {
@@ -71,6 +77,8 @@ _CI_CONFIG_SCHEMA = {
             "alm": {"type": "dict"},
             "profiles": {"type": "dict"},
             "exclude_paths": {"type": "list"},
+            "scan_dirs": {"type": "list"},
+            "include_paths": {"type": "list"},
             "code_categories": {"type": "dict"},
         },
     },

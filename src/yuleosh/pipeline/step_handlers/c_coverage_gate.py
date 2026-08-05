@@ -80,8 +80,10 @@ def coverage_gate_step(session: PipelineSession) -> str:
             "line_rate": 0.0,
             "branch_rate": 0.0,
             "errors": [],
-            "warnings": [],
+            "warnings": ["Mock mode — coverage gate skipped (no real build artifacts)"],
         }
+        log.info("C Coverage Gate skipped (mock mode)")
+        print("  ⏭️  [小克] C 覆盖率门禁跳过 (mock 模式，无真实构建产物)")
         return _write_results(session, results)
 
     results = {
