@@ -162,6 +162,36 @@ class TestParseSpecScenarios:
             # 'system returns error' is the THEN statement
             assert "returns error" in doc.scenarios[1].then[0]
 
+    def test_then_with_shall_not_captured_as_requirement(self):
+        """Regression (v3.12.0): 'THEN the driver SHALL ...' lines inside a
+        scenario must stay in the scenario — the standalone-bullet SHALL
+        fallback must not steal them into requirements."""
+        spec = """# Spec
+
+## Requirements
+
+- The system SHALL provide a UART driver.
+
+## Scenario: UART init
+
+- GIVEN a valid channel
+- WHEN the driver initializes
+- THEN the driver SHALL return success
+- AND the channel SHALL be ready
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "spec.md")
+            with open(path, "w") as f:
+                f.write(spec)
+            doc = parse_spec(path)
+            assert len(doc.requirements) == 1, (
+                f"Expected 1 requirement, got {len(doc.requirements)}"
+            )
+            assert len(doc.scenarios) == 1
+            sc = doc.scenarios[0]
+            assert sc.then == ["the driver SHALL return success",
+                               "the channel SHALL be ready"], sc.then
+
 
 class TestParseSpecTableFormat:
     def test_parse_table_format(self):
