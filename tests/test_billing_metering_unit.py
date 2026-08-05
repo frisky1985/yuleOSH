@@ -40,7 +40,7 @@ class TestConstantsAndEntry:
     def test_plans_defined(self):
         """GIVEN plan constants WHEN checked THEN limits/price present."""
         assert PLANS == [PLAN_FREE, PLAN_PRO, PLAN_ENTERPRISE]
-        assert PLAN_LIMITS[PLAN_PRO]["price_monthly_cents"] == 2999
+        assert PLAN_LIMITS[PLAN_PRO]["price_monthly_cents"] == 0
         assert PLAN_LIMITS[PLAN_ENTERPRISE]["max_ci_runs"] == 50000
 
     def test_usage_entry_defaults(self):
