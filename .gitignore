@@ -79,3 +79,44 @@ reports/*.md
 /test
 /test_cs
 /cov.baseline.json
+
+# === 商业秘密保护 (2026-08-05) ===
+# 内部文档/报告/评审 — 已移至 yuleOSH-private/
+yuleOSH-business-report.md
+TASK_STATUS.md
+coverage-phase1-report.md
+aspice-report.txt
+dashboard.html
+plans/
+reports/
+expert-review/
+push9-delivery/
+reviews/
+sessions/
+project-docs/
+.osh/
+specs/
+knowledge-graph/
+data/
+docs/pricing.md
+docs/customer-demo-plan-and-review.md
+docs/misra-2023-roadmap.md
+docs/coverage-attack-plan.md
+docs/edition-matrix.md
+docs/cl2-dry-run-checklist.md
+docs/benchmark-run-log-07-13.md
+benchmark/
+
+# === 误提交垃圾 ===
+desktop/node_modules/
+node_modules/
+*.dump
+check
+dbg3
+debug
+debug2
+diag
+diag2
+.cov.all
+.cov.quick
+.cov.verify
