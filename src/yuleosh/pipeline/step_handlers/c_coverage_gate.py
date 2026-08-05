@@ -58,7 +58,7 @@ def coverage_gate_step(session: PipelineSession) -> str:
     PipelineStepError
         If coverage gate blocks the pipeline (line rate < c_fail_under).
     """
-    project_dir = str(session.session_dir.parent.parent)
+    project_dir = str(session.session_dir.parent.parent.parent)
     log.info("C Coverage Gate: project_dir=%s", project_dir)
 
     # ── Mock mode: skip real gate ──────────────────────────────────

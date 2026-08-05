@@ -16,12 +16,19 @@ log = logging.getLogger("pipeline.stages.utils")
 
 
 def timed_step(handler):
-    """Decorate a step handler to measure and log execution time."""
+    """Decorate a step handler to measure and log execution time.
+
+    Accepts *args/**kwargs so it works both on plain functions
+    ``step_xxx(session)`` and on bound methods like
+    ``BaseHandler.__call__(self, session)`` — a fixed ``wrapper(session)``
+    signature dropped ``self`` and broke callable handler instances
+    (QemuTestHandler, v3.12.0 regression).
+    """
     @functools.wraps(handler)
-    def wrapper(session):
+    def wrapper(*args, **kwargs):
         t0 = time.perf_counter()
         try:
-            result = handler(session)
+            result = handler(*args, **kwargs)
             elapsed = time.perf_counter() - t0
             log.info(f"Step {handler.__name__} took {elapsed:.3f}s")
             return result
