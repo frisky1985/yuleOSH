@@ -266,7 +266,7 @@ STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxx
    - 名称：`yuleOSH Pro`
    - 描述：`SaaS Pro — 无限项目 · 完整流水线 · ASPICE 合规`
    - 定价模式：`Recurring → Monthly`
-   - 金额：`定价请联系销售`（RMB）
+   - 金额：按当前销售报价设置（RMB）
 
 2. 记录生成的 **Price ID**（以 `price_` 开头）
 

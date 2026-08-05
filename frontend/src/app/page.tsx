@@ -389,27 +389,27 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#722ed1]/30 bg-[#722ed1]/5 text-[#722ed1] text-xs font-medium mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-[#722ed1]"></span>
-            透明定价 · 即用即省
+            开源免费 · 企业版按需定制
           </span>
           <h2 className="text-3xl sm:text-4xl font-black text-[#e2e8f0] mb-4">
             找到适合你的<span className="gradient-text">方案</span>
           </h2>
           <p className="text-[#94a3b8] mb-12 max-w-xl mx-auto">
-            从个人开发者到企业团队，免费起步，按需升级。无需 NDA，无需销售对接。
+            开源版（Elastic License 2.0）免费使用，企业版按团队规模与部署方式定制。
           </p>
 
-          <div className="grid md:grid-cols-4 gap-4 text-left max-w-5xl mx-auto">
-            {/* Free */}
+          <div className="grid md:grid-cols-3 gap-4 text-left max-w-5xl mx-auto">
+            {/* Open Source */}
             <div className="rounded-2xl border border-[#1e293b] bg-[#111827] p-6 flex flex-col">
-              <h3 className="text-lg font-bold text-[#e2e8f0]">Free</h3>
+              <h3 className="text-lg font-bold text-[#e2e8f0]">开源版</h3>
               <div className="mt-2 mb-4">
-                <span className="text-3xl font-black text-[#e2e8f0]">¥0</span>
-                <span className="text-xs text-[#64748b] ml-1">永久免费</span>
+                <span className="text-3xl font-black text-[#e2e8f0]">免费</span>
+                <span className="text-xs text-[#64748b] ml-1">Elastic License 2.0</span>
               </div>
               <ul className="space-y-2 text-xs text-[#94a3b8] flex-1">
                 <li className="flex items-start gap-2">
                   <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
-                  1-3 人 · 基础 Pipeline · 3 项目
+                  核心流水线 · 合规报告
                 </li>
                 <li className="flex items-start gap-2">
                   <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
@@ -425,16 +425,15 @@ export default function LandingPage() {
 
             {/* Team */}
             <div className="rounded-2xl border border-[#1e293b] bg-[#111827] p-6 flex flex-col">
-              <h3 className="text-lg font-bold text-[#e2e8f0]">Team</h3>
+              <h3 className="text-lg font-bold text-[#e2e8f0]">团队版</h3>
               <div className="mt-2 mb-4">
-                <span className="text-3xl font-black text-[#e2e8f0]">定价请联系销售</span>
-                <span className="text-xs text-[#64748b] ml-1">/月</span>
-                <div className="text-[10px] text-[#64748b] mt-0.5">年付 ¥1,999</div>
+                <span className="text-3xl font-black text-[#e2e8f0]">联系销售</span>
+                <span className="text-xs text-[#64748b] ml-1">3-10 人团队</span>
               </div>
               <ul className="space-y-2 text-xs text-[#94a3b8] flex-1">
                 <li className="flex items-start gap-2">
                   <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
-                  无限项目 · 10 人团队
+                  全流水线 · 基础合规包
                 </li>
                 <li className="flex items-start gap-2">
                   <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
@@ -445,44 +444,18 @@ export default function LandingPage() {
                   ASPICE 合规包（基础）
                 </li>
               </ul>
-              <a href="/register" className="mt-4 block w-full text-center py-2 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#1677ff]/40 text-xs font-semibold transition-all">选择 Team</a>
-            </div>
-
-            {/* Pro (Featured) */}
-            <div className="rounded-2xl border-2 border-[#722ed1]/40 bg-[#111827] p-6 flex flex-col relative scale-[1.03]">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white text-[10px] font-bold shadow-lg whitespace-nowrap">
-                最受欢迎
-              </div>
-              <h3 className="text-lg font-bold text-[#e2e8f0]">Pro</h3>
-              <div className="mt-2 mb-4">
-                <span className="text-3xl font-black text-[#e2e8f0]">定价请联系销售</span>
-                <span className="text-xs text-[#64748b] ml-1">/月</span>
-                <div className="text-[10px] text-[#64748b] mt-0.5">年付 定价请联系销售</div>
-              </div>
-              <ul className="space-y-2 text-xs text-[#94a3b8] flex-1">
-                <li className="flex items-start gap-2">
-                  <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
-                  无限项目 · 无限成员
-                </li>
-                <li className="flex items-start gap-2">
-                  <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
-                  硬件在环 + 并行 4-Agent
-                </li>
-                <li className="flex items-start gap-2">
-                  <svg className="w-3.5 h-3.5 text-[#10b981] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
-                  一键 ASPICE 完整合规包
-                </li>
-              </ul>
-              <a href="/register" className="mt-4 block w-full text-center py-2 rounded-lg bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white hover:from-[#722ed1]/90 hover:to-[#1677ff]/90 text-xs font-semibold shadow-lg shadow-[#722ed1]/20 transition-all">免费试用 Pro</a>
+              <a href="mailto:sales@yuleosh.com" className="mt-4 block w-full text-center py-2 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#1677ff]/40 text-xs font-semibold transition-all">联系销售</a>
             </div>
 
             {/* Enterprise */}
-            <div className="rounded-2xl border border-[#1e293b] bg-[#111827] p-6 flex flex-col">
-              <h3 className="text-lg font-bold text-[#e2e8f0]">Enterprise</h3>
+            <div className="rounded-2xl border-2 border-[#722ed1]/40 bg-[#111827] p-6 flex flex-col">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white text-[10px] font-bold shadow-lg whitespace-nowrap">
+                企业定制
+              </div>
+              <h3 className="text-lg font-bold text-[#e2e8f0]">企业版</h3>
               <div className="mt-2 mb-4">
                 <span className="text-3xl font-black text-[#e2e8f0]">定制</span>
-                <span className="text-xs text-[#64748b] ml-1">/月起</span>
-                <div className="text-[10px] text-[#64748b] mt-0.5">+ ASPICE 咨询 定制报价/年</div>
+                <span className="text-xs text-[#64748b] ml-1">私有化部署</span>
               </div>
               <ul className="space-y-2 text-xs text-[#94a3b8] flex-1">
                 <li className="flex items-start gap-2">
@@ -504,7 +477,7 @@ export default function LandingPage() {
 
           <div className="mt-10">
             <Link href="/pricing" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-[#1e293b] text-[#94a3b8] hover:border-white/20 hover:text-white text-sm font-medium transition-all">
-              查看完整定价对比
+              查看完整对比
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
             </Link>
           </div>
