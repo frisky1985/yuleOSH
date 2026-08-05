@@ -42,6 +42,19 @@ def step_integration_test(session: PipelineSession) -> str:
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
 
+        # ── Mock mode: skip real review ──────────────────────────
+        # In --mock runs the LLM emits placeholder code; scanning the real
+        # project tree would produce false findings and block the demo.
+        # Strict `is True` keeps MagicMock sessions honest.
+        from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
+        if is_mock(session):
+            print("  ⏭️  [小克] 接口集成测试跳过 — mock 模式")
+            return write_mock_skip(
+                session, "integration-test",
+                "mock mode — no real code to review",
+            )
+
+
         # 1. Read spec for scenario-level test cases
         spec_scenarios = _parse_scenarios(session.spec_path)
         spec_data = _parse_spec(session.spec_path)

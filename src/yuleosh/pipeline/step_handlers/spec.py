@@ -11,15 +11,34 @@ Exports:
 
 import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+import yuleosh
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
 log = logging.getLogger("pipeline.step_handlers.spec")
 
 __all__ = ["step_spec_check"]
+
+
+def _spec_validator_env() -> dict:
+    """Build env so the spec-validator subprocess can import yuleosh.
+
+    yuleosh_cli.py may be invoked by absolute path from an arbitrary cwd;
+    the child process inherits PYTHONPATH and would fail with
+    ``No module named 'yuleosh'`` unless the package src dir is injected.
+    """
+    env = os.environ.copy()
+    pkg_root = str(Path(yuleosh.__file__).resolve().parent.parent)
+    current = env.get("PYTHONPATH", "").strip()
+    env["PYTHONPATH"] = os.pathsep.join(
+        [pkg_root] + ([current] if current else [])
+    )
+    return env
 
 
 def step_spec_check(session: PipelineSession) -> str:
@@ -30,6 +49,7 @@ def step_spec_check(session: PipelineSession) -> str:
         result = subprocess.run(
             [sys.executable, "-m", "yuleosh.spec.validate", session.spec_path, "--json"],
             capture_output=True, text=True, timeout=60,
+            env=_spec_validator_env(),
         )
         out_path = session.session_dir / "spec-check.json"
         with open(out_path, "w") as f:
