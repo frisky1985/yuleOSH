@@ -61,6 +61,29 @@ def coverage_gate_step(session: PipelineSession) -> str:
     project_dir = str(session.session_dir.parent.parent)
     log.info("C Coverage Gate: project_dir=%s", project_dir)
 
+    # ── Mock mode: skip real gate ──────────────────────────────────
+    # In --mock runs the LLM emits placeholder code; a coverage build of
+    # that code would fail and produce a false P0 block. Record a SKIPPED
+    # report and pass. Strict `is True` keeps MagicMock sessions honest.
+    if getattr(session, "mock_mode", None) is True:
+        log.info("⏭️  C Coverage Gate skipped — mock mode (no real code to measure)")
+        results = {
+            "session": session.name,
+            "step": "c-coverage-gate",
+            "timestamp": datetime.now().isoformat(),
+            "project_dir": project_dir,
+            "phases": {},
+            "gate_passed": True,
+            "skipped": True,
+            "reason": "mock mode — LLM outputs are placeholders, no real code to measure",
+            "c_fail_under": 70,
+            "line_rate": 0.0,
+            "branch_rate": 0.0,
+            "errors": [],
+            "warnings": [],
+        }
+        return _write_results(session, results)
+
     results = {
         "session": session.name,
         "step": "c-coverage-gate",

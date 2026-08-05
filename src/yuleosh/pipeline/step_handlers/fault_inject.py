@@ -487,6 +487,32 @@ def step_fault_injection(session) -> str:
     """
     log.info("FaultInject stage started")
 
+    # ── Mock mode: skip real fault injection ────────────────────────
+    # In --mock runs there is no real firmware to build/inject; building
+    # placeholder code would fail and degrade to simulation anyway.
+    # Record a SKIPPED report and pass. Strict `is True` keeps MagicMock
+    # sessions honest.
+    if getattr(session, "mock_mode", None) is True:
+        report = {
+            "step": "fault-injection",
+            "session": session.name,
+            "status": "skipped",
+            "reason": "mock mode — no real firmware to inject faults into",
+            "tests": [],
+        }
+        report_path = os.path.join(
+            str(getattr(session, "session_dir", ".")),
+            "fault-injection-report.md"
+        )
+        os.makedirs(os.path.dirname(report_path), exist_ok=True)
+        with open(report_path, "w") as f:
+            f.write("# Fault Injection — SKIPPED (mock mode)\n\n")
+            f.write("mock mode — no real firmware to inject faults into\n")
+        print("  ⏭️  故障注入跳过 — mock 模式")
+        session.fault_inject_report = report
+        session.artifacts["fault-injection"] = report_path
+        return report_path
+
     # Read configuration from session context
     build_dir = getattr(session, "build_dir", "build")
     target = getattr(session, "target_name", None)

@@ -45,6 +45,30 @@ def step_c_unit_test(session: PipelineSession) -> str:
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
 
+        # ── Mock mode: skip real test run ──────────────────────────
+        # In --mock runs the LLM emits placeholder code; compiling every
+        # *test*.c in the project would fail on missing headers and block
+        # the demo/CI smoke. Record a SKIPPED report and pass.
+        # Strict `is True` keeps MagicMock sessions honest.
+        if getattr(session, "mock_mode", None) is True:
+            report = {
+                "step": "c-unit-test",
+                "agent": "小克",
+                "session": session.name,
+                "timestamp": __import__("datetime").datetime.now().isoformat(),
+                "status": "skipped",
+                "reason": "mock mode — LLM outputs are placeholders, no real code to test",
+                "c_files": 0,
+                "c_test_files": 0,
+                "test_runner": "none",
+            }
+            out_path = session.session_dir / "c-unit-test.json"
+            with open(out_path, "w") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+            print("  ⏭️  [小克] 跳过 C 单元测试 — mock 模式")
+            log.info("C unit test skipped: mock mode")
+            return str(out_path)
+
         # 1. Check for C source files
         c_files = list(project_dir.rglob("*.c"))
         c_header_files = list(project_dir.rglob("*.h"))

@@ -93,6 +93,10 @@ class PipelineSession:
         self.development_mode: Optional[str] = development_mode
         # Arbitrary session config (e.g. {"codegen": {...}}).
         self.config: dict = config or {}
+        # Mock mode flag — set by run_pipeline(..., mock=True).
+        # When True, LLM outputs are placeholders and code-quality gates
+        # (coverage, critical safety) SHALL skip real scanning.
+        self.mock_mode: bool = False
 
     def _ensure_session_dir(self) -> Path:
         """Ensure the session directory exists and return its path."""
