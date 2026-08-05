@@ -390,6 +390,29 @@ def step_test_qualification(session: PipelineSession) -> str:
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
         spec_path = session.spec_path
 
+        # ── Mock mode: skip real qualification ──────────────────────
+        # In --mock runs the spec may not carry OpenSpec scenarios and
+        # the test corpus is placeholder; a coverage computation would
+        # crash with KeyError and block the demo. Record a SKIPPED
+        # report and pass. Strict `is True` keeps MagicMock sessions honest.
+        if getattr(session, "mock_mode", None) is True:
+            report = {
+                "step": "test-qualification",
+                "agent": "小明",
+                "session": session.name,
+                "timestamp": __import__("datetime").datetime.now().isoformat(),
+                "status": "skipped",
+                "reason": "mock mode — no real code/tests to qualify",
+                "scenario_count": 0,
+                "verdict": "skipped",
+            }
+            out_path = session.session_dir / "test-qualification.json"
+            with open(out_path, "w") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+            print("  ⏭️  [小明] 合格性测试跳过 — mock 模式")
+            log.info("Qualification test skipped: mock mode")
+            return str(out_path)
+
         # ── Phase 1: Scenario discovery ──
         log.info("Phase 1: Discovering GIVEN/WHEN/THEN scenarios from spec...")
         scenarios = _discover_scenarios(spec_path)

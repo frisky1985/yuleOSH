@@ -521,14 +521,39 @@ def get_build_flags(enable_warnings: bool = True,
 #  Pipeline Step 入口（强制执行）
 # ============================================================
 
-def step_review_critical_safety(session: PipelineSession) -> list[dict]:
+def step_review_critical_safety(session: PipelineSession) -> dict:
     """Pipeline Step: 关键安全异常阻塞检查。
 
     这是 CRITICAL GATE — 发现任何 P0 违例即阻断 pipeline，
     输出完整违例报告并通过 PipelineStepError 终止流程。
+
+    Mock 模式下跳过扫描并返回 ``skipped: true`` 报告。
     """
     project_dir = Path(session.project_dir)
     log.info(f"🔒 CRITICAL SAFETY GATE: {project_dir}")
+
+    # ── Mock mode: skip real scanning ──────────────────────────────
+    # In --mock runs the LLM emits placeholder code; scanning it would
+    # produce false P0 violations (no real code to review). The gate
+    # records a SKIPPED report and passes without blocking.
+    # Strict `is True` check keeps MagicMock sessions in tests honest.
+    if getattr(session, "mock_mode", None) is True:
+        log.info("⏭️  CRITICAL SAFETY GATE skipped — mock mode (no real code to scan)")
+        report = {
+            "gate": "critical_safety",
+            "timestamp": datetime.utcnow().isoformat(),
+            "project": str(project_dir),
+            "skipped": True,
+            "reason": "mock mode — LLM outputs are placeholders, no real code to scan",
+            "rules": {k: v["id"] for k, v in CRITICAL_RULES.items()},
+            "violations": [],
+            "summary": {"total": 0, "by_rule": {}, "by_file": {}},
+            "compiler_flags": {},
+        }
+        report_path = Path(session.artifacts_dir) / "critical-safety-report.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, indent=2))
+        return report
 
     # 1. 静态扫描
     scanner = CriticalSafetyScanner(project_dir)

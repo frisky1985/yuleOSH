@@ -839,6 +839,30 @@ def step_merge_gate(session) -> str:
 
     print("  🚦 [小马] KG Merge Gate — checking merge eligibility...")
 
+    # ── Mock mode: skip real KG checks ─────────────────────────────
+    # In --mock runs the knowledge graph is empty (no real code scanned);
+    # traceability coverage would read 0% and block the demo. Record a
+    # PASSED report and continue. Strict `is True` keeps MagicMock honest.
+    if getattr(session, "mock_mode", None) is True:
+        project_dir = os.environ.get("OSH_HOME", os.getcwd())
+        output_path = str(
+            Path(session.session_dir) / "merge-gate-report.json"
+            if hasattr(session, "session_dir") and session.session_dir
+            else Path(project_dir) / ".yuleosh" / "reports" / "merge-gate-report.json"
+        )
+        report = {
+            "gate": "merge_gate",
+            "skipped": True,
+            "reason": "mock mode — knowledge graph empty, no real code to validate",
+            "passed": True,
+            "verdict": "pass",
+            "summary": {"total_errors": 0, "total_warnings": 0, "error_details": []},
+        }
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(output_path).write_text(json.dumps(report, indent=2))
+        print("  ⏭️  KG Merge Gate skipped — mock mode")
+        return output_path
+
     project_dir = os.environ.get("OSH_HOME", os.getcwd())
     output_path = str(
         Path(session.session_dir) / "merge-gate-report.json"

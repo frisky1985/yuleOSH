@@ -184,3 +184,58 @@ class TestStepReviewCriticalSafety:
             scanner = CriticalSafetyScanner(project_dir)
             violations = scanner.scan_all()
             assert violations == []
+
+    def test_mock_mode_skips_scanning(self):
+        """Mock mode: gate passes without scanning placeholder code."""
+        with tempfile.TemporaryDirectory() as td:
+            project_dir = Path(td)
+            src_dir = project_dir / "src"
+            src_dir.mkdir()
+            # Placeholder code with obvious P0 patterns — would trip the
+            # scanner, but mock mode must skip it entirely.
+            (src_dir / "bad.c").write_text("""void foo() {
+                int x = 10 / 0;
+                uint8_t big[2048];
+                strcpy(dst, src);
+            }""")
+
+            session = MagicMock()
+            session.project_dir = str(project_dir)
+            session.artifacts_dir = str(project_dir / ".yuleosh")
+            Path(session.artifacts_dir).mkdir(parents=True, exist_ok=True)
+            session.name = "mock-session"
+            session.mock_mode = True
+
+            result = step_review_critical_safety(session)
+            assert isinstance(result, dict)
+            assert result.get("skipped") is True
+            assert result["summary"]["total"] == 0
+
+            report_path = Path(session.artifacts_dir) / "critical-safety-report.json"
+            assert report_path.exists()
+            data = json.loads(report_path.read_text())
+            assert data["skipped"] is True
+
+    def test_magicmock_default_not_skipped(self):
+        """MagicMock sessions (no mock_mode attr) must NOT skip — a
+        truthy MagicMock attribute would break the `is True` guard."""
+        with tempfile.TemporaryDirectory() as td:
+            project_dir = Path(td)
+            src_dir = project_dir / "src"
+            src_dir.mkdir()
+            (src_dir / "bad.c").write_text("int x = 10 / 0;")
+
+            session = MagicMock()
+            session.project_dir = str(project_dir)
+            session.artifacts_dir = str(project_dir / ".yuleosh")
+            Path(session.artifacts_dir).mkdir(parents=True, exist_ok=True)
+            session.name = "real-session"
+
+            from yuleosh.pipeline.session import PipelineStepError
+            with patch("yuleosh.pipeline.step_handlers.review_critical_safety.get_build_flags",
+                       return_value=[]):
+                try:
+                    step_review_critical_safety(session)
+                    assert False, "Should have raised PipelineStepError"
+                except PipelineStepError:
+                    pass
