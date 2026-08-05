@@ -884,7 +884,26 @@ def step_merge_gate(session) -> str:
     )
 
     gate = MergeGate(store, project_dir=project_dir, config=config)
-    result = gate.run()
+
+    # Scope the gate to THIS session's artifacts instead of the whole
+    # working tree.  `git diff HEAD~1` picks up unrelated local changes
+    # (stashes, prior manual edits), which makes the gate fail on noise.
+    # Artifacts written under the session dir are the pipeline's own output.
+    session_scope = []
+    try:
+        sdir = Path(session.session_dir)
+        if sdir.is_dir():
+            session_scope = sorted(
+                str(p.relative_to(Path(project_dir).resolve()))
+                for p in sdir.rglob("*")
+                if p.is_file() and p.suffix.lower() in (".md", ".json", ".xlsx", ".c", ".h")
+            )
+    except Exception as _e:  # pragma: no cover - defensive
+        log.debug("Session scoping failed, falling back to git diff: %s", _e)
+    if session_scope:
+        result = gate.run(changed_files=session_scope)
+    else:
+        result = gate.run()
 
     passed = result.get("passed", False)
     verdict = result.get("verdict", "fail")

@@ -148,15 +148,18 @@ class TestPipelineOrchestrator:
         status_pipeline(session.name)
 
     def test_pipeline_error_handling(self, spec_file, osh_home):
-        """Pipeline should handle step failures gracefully."""
+        """Pipeline should fail fast when a step hard-fails (LLM transport)."""
         def _broken_llm(system, user, **kwargs):
             raise RuntimeError("LLM failure")
 
         from yuleosh.pipeline.orchestrator import run_pipeline
         session = run_pipeline(str(spec_file), mock=True, llm_client=_broken_llm)
-        # v3.4.0: LLM failures are non-fatal — fallback templates keep the
-        # pipeline running; session ends with 'completed' (errors recorded).
-        assert session.status == "completed"
+        # Since v3.10.0: PipelineStepError (e.g. LLM transport failure in
+        # S.U.P.E.R analysis) is NOT softened by template fallback — the
+        # pipeline stops and the session is marked failed.  Fallback templates
+        # would poison all downstream steps with placeholder content.
+        assert session.status == "failed"
+        assert len(session.errors) >= 1
 
     def test_pipeline_orchestrator_main_no_args(self):
         """Test orchestrator main entry with no args."""

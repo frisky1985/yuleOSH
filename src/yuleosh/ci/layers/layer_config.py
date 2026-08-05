@@ -94,7 +94,8 @@ def check_layer_dependency(target_layer: int, project_dir: str) -> Optional[str]
 def _detect_project_language(project_dir: str) -> str:
     """Detect the project language type by examining marker files.
 
-    Checks in order:
+    Configuration override: ``project.language`` in ``.yuleosh/ci-config.yaml``
+    wins when set (values: go/python/c/mixed). Otherwise checks in order:
     1. ``go.mod`` → Go project
     2. ``pyproject.toml`` or ``setup.py`` → Python project
     3. ``CMakeLists.txt`` or ``Makefile`` → C project
@@ -104,9 +105,18 @@ def _detect_project_language(project_dir: str) -> str:
     Returns
     -------
     str
-        One of ``"go"``, ``"python"``, or ``"c"``.
+        One of ``"go"``, ``"python"``, ``"c"``, or ``"mixed"``.
     """
     project_path = Path(project_dir)
+
+    # 0. Config override (mixed-language repos)
+    try:
+        from yuleosh.ci.config import _get_ci_config
+        cfg = _get_ci_config(project_dir)
+        if cfg and cfg.project_language:
+            return cfg.project_language
+    except Exception:
+        pass
 
     # 1. Go project
     if (project_path / "go.mod").exists():

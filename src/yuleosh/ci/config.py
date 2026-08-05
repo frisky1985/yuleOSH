@@ -149,6 +149,8 @@ class MisraConfig:
     active_profile: str = "safety"  # "safety" | "performance" | "testing"
     profiles: dict[str, MisraProfile] = field(default_factory=dict)
     exclude_paths: list[str] = field(default_factory=lambda: ["tests/**", "third_party/**", "build/**"])
+    scan_dirs: list[str] = field(default_factory=lambda: ["src", "benchmark", "ref"])
+    include_paths: list[str] = field(default_factory=list)  # extra -I dirs beyond auto-detect
     code_categories: dict = field(default_factory=lambda: {
         "template": {
             "paths": ["src/yuleosh/templates/**", "test-dogfood/**"],
@@ -212,6 +214,7 @@ class CiConfig:
     layer_dependencies: dict[int, list[int]] = field(
         default_factory=lambda: dict(DEFAULT_LAYER_DEPENDENCIES)
     )
+    project_language: str = ""  # "go" | "python" | "c" | "mixed" — overrides auto-detect
     coverage: CoverageConfig = field(default_factory=CoverageConfig)
     hardware_test: HardwareTestConfig = field(default_factory=HardwareTestConfig)
     misra: MisraConfig = field(default_factory=MisraConfig)
@@ -330,6 +333,13 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
 
     cfg = CiConfig()
 
+    # Project block — language override for mixed-language repos
+    project_block = raw.get("project", {})
+    if isinstance(project_block, dict):
+        lang = project_block.get("language", "")
+        if lang in ("go", "python", "c", "mixed"):
+            cfg.project_language = str(lang)
+
     # CI block
     ci_block = raw.get("ci", {})
     if isinstance(ci_block, dict):
@@ -381,6 +391,16 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
         exclude = misra_block.get("exclude_paths", ["tests/**", "third_party/**", "build/**"])
         if isinstance(exclude, list):
             cfg.misra.exclude_paths = [str(p) for p in exclude]
+
+        # Parse scan_dirs (directories scanned in full mode)
+        scan_dirs = misra_block.get("scan_dirs", ["src", "benchmark", "ref"])
+        if isinstance(scan_dirs, list):
+            cfg.misra.scan_dirs = [str(d) for d in scan_dirs]
+
+        # Parse include_paths (extra -I dirs beyond auto-detect)
+        inc_paths = misra_block.get("include_paths", [])
+        if isinstance(inc_paths, list):
+            cfg.misra.include_paths = [str(p) for p in inc_paths]
 
         # Parse code_categories (三级分类)
         code_cat = misra_block.get("code_categories", None)

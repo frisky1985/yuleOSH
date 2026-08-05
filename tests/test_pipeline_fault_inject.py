@@ -67,12 +67,25 @@ class TestFaultInjectStageInit:
 
 class TestFaultInjectBuildFirmware:
     def test_build_success(self):
+        import tempfile
         stage = FaultInjectStage()
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            result = stage.build_test_firmware("/tmp/project")
-            assert result is True
-            assert mock_run.call_count >= 2
+        with tempfile.TemporaryDirectory() as td:
+            Path(td, "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.16)\n")
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                result = stage.build_test_firmware(td)
+                assert result is True
+                assert mock_run.call_count >= 2
+
+    def test_build_skips_without_cmake_lists(self):
+        """No CMakeLists.txt → skip build cleanly (no cmake invocation)."""
+        import tempfile
+        stage = FaultInjectStage()
+        with tempfile.TemporaryDirectory() as td:
+            with patch("subprocess.run") as mock_run:
+                result = stage.build_test_firmware(td)
+                assert result is False
+                mock_run.assert_not_called()
 
     def test_build_cmake_not_found(self):
         stage = FaultInjectStage()

@@ -130,6 +130,12 @@ def parse_cppcheck_output(text: str) -> list[dict]:
         col_str = match.group("col") or match.group("col2")
         column = int(col_str) if col_str else 0
         severity = (match.group("severity") or match.group("severity2")).lower()
+
+        # Skip informational lines (checkersReport, unmatchedSuppression,
+        # missingInclude, branch-limit notices) — they are NOT violations.
+        if severity == "information" or "information" in severity:
+            continue
+
         message = match.group("message").strip()
 
         # Extract rule ID from message

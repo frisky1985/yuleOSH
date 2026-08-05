@@ -387,13 +387,27 @@ def _save_hil_report(project_dir: str, all_passed: bool, commit: str,
     print(f"    ✅ HIL report saved to {report_path}")
     return report
 def _find_c_sources(project_dir: str) -> tuple[list[str], str, str]:
-    """Find C/C++ source files and cross-compile paths."""
-    src_dir = os.path.join(project_dir, "src")
+    """Find C/C++ source files and cross-compile paths.
+
+    Uses ``misra.scan_dirs`` from ci-config.yaml when available (default src/),
+    so mixed-language repos (e.g. yuleDKCS embedded/) are covered.
+    """
+    scan_dirs = ["src"]
+    try:
+        from yuleosh.ci.config import _get_ci_config
+        cfg = _get_ci_config(project_dir)
+        if cfg and cfg.misra.scan_dirs:
+            scan_dirs = cfg.misra.scan_dirs
+    except Exception:
+        pass
     c_files = []
-    for root, dirs, files in os.walk(src_dir):
-        for f in files:
-            if f.endswith((".c", ".cpp")):
-                c_files.append(os.path.join(root, f))
+    for scan_dir in scan_dirs:
+        sdir = os.path.join(project_dir, scan_dir)
+        if os.path.isdir(sdir):
+            for root, dirs, files in os.walk(sdir):
+                for f in files:
+                    if f.endswith((".c", ".cpp")):
+                        c_files.append(os.path.join(root, f))
     cross_src = os.path.join(project_dir, "src", "cross", "hello.c")
     build_dir = os.path.join(project_dir, "build")
     return c_files, cross_src, build_dir

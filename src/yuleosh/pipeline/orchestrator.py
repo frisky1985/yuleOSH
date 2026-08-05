@@ -545,11 +545,11 @@ def _run_step_with_fallback(
     try:
         output_path = handler(session)
         return str(output_path)
-    except PipelineStepError:
+    except PipelineStepError as e:
         # ⛔ Gate/blocking errors must NOT fall back — a failed gate is a
         # failed gate. Falling back here would silently mark the step done
         # and let the pipeline "complete" on placeholder output.
-        log.error("Step [%s] raised PipelineStepError — blocking (no fallback)", step_key)
+        log.error("Step [%s] hard-failed (no fallback): %s", step_key, e)
         raise
     except Exception as e:
         log.error("Step [%s] handler raised: %s", step_key, e)
