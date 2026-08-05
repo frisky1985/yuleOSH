@@ -59,8 +59,8 @@ PLAN_LIMITS = {
         "max_storage_mb": 1024,
         "features": ["basic_pipeline", "misra_check", "audit_log", "kanban",
                       "rbac", "ci_cd", "evidence_export"],
-        "price_monthly_cents": 2999,  # $29.99/month
-        "stripe_price_id": "price_pro_monthly_mock",
+        "price_monthly_cents": 0,  # 价格由 Stripe Dashboard / 销售报价管理
+        "stripe_price_id": None,  # Set via Stripe Dashboard
         "label": "Pro",
     },
     PLAN_ENTERPRISE: {
@@ -69,8 +69,8 @@ PLAN_LIMITS = {
         "max_ci_runs": 50000,
         "max_storage_mb": 102400,
         "features": ["all"],
-        "price_monthly_cents": 9999,  # $99.99/month
-        "stripe_price_id": "price_enterprise_monthly_mock",
+        "price_monthly_cents": 0,  # 价格由 Stripe Dashboard / 销售报价管理
+        "stripe_price_id": None,  # Set via Stripe Dashboard
         "label": "Enterprise",
     },
 }

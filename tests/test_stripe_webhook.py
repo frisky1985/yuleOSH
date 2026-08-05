@@ -405,7 +405,7 @@ class TestCheckoutSession:
                 "pro": {
                     "name": "Pro",
                     "stripe_price_id": "price_test123",
-                    "price_monthly": 599,
+                    "price_monthly": 0,
                 }
             }):
                 import importlib as il

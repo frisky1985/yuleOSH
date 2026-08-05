@@ -158,13 +158,13 @@ def _handle_sub_status(handler=None) -> tuple:
             {
                 "name": "Pro",
                 "tier": "pro",
-                "price_monthly": TIERS.get("pro", {}).get("price_monthly", 299),
+                "price_monthly": TIERS.get("pro", {}).get("price_monthly", 0),
             },
             {
                 "name": "Enterprise",
                 "tier": "enterprise",
                 "price_monthly": TIERS.get("enterprise", {}).get(
-                    "price_monthly", 2999
+                    "price_monthly", 0
                 ),
             },
         ],
