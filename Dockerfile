@@ -35,6 +35,9 @@ WORKDIR /app
 COPY --from=builder /root/.local /usr/local
 COPY . .
 
+# /data 卷归 osh 用户所有（store/audit/evidence 写路径）
+RUN mkdir -p /data && chown -R osh:osh /data
+
 ENV PATH=/usr/local/bin:${PATH} \
     PYTHONPATH=/app/src:${PYTHONPATH} \
     OSH_HOME=/app \

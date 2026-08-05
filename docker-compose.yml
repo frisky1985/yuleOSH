@@ -21,6 +21,7 @@ services:
     environment:
       - OSH_PORT=8080
       - YULEOSH_AUTH_DISABLED=true    # 本地体验模式，无认证
+      - YULEOSH_JWT_SECRET=${YULEOSH_JWT_SECRET:-local-dev-secret-change-me}
       - YULEOSH_STORE_DIR=/data
       - YULEOSH_LOG_LEVEL=INFO
     volumes:
