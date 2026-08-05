@@ -399,7 +399,9 @@ def parse_spec(filepath: str) -> SpecDocument:
 
         # Fallback: capture standalone bullet-point SHALLs outside a requirement section
         # (e.g. bullet-point specs like bsw-services-spec.md, mcal-drivers-spec.md)
-        if not current_req and not in_shall_table:
+        # Exclude scenario blocks — "THEN the driver SHALL ..." lines belong to
+        # the scenario, not to standalone requirement capture.
+        if not current_req and not in_shall_table and current_section != "scenario":
             if stripped.startswith("- ") or stripped.startswith("* ") or stripped.startswith("+ "):
                 if re.search(r'\bSHALL\b', stripped, re.IGNORECASE):
                     statement = stripped.strip()
