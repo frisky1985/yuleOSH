@@ -29,6 +29,12 @@ COPY .yuleosh/ /root/.yuleosh/
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:8080/api/health || exit 1
 
+ENV PYTHONPATH=/app/src \
+    YULEOSH_HOST=0.0.0.0 \
+    YULEOSH_PORT=8080 \
+    YULEOSH_AUTH_DISABLED=true \
+    PYTHONUNBUFFERED=1
+
 EXPOSE 8080
 
-CMD ["python3", "-m", "yuleosh", "serve", "--port", "8080", "--host", "0.0.0.0"]
+CMD ["python3", "-m", "yuleosh", "ui"]
