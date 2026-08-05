@@ -37,6 +37,15 @@ def step_hermes_review(session: PipelineSession) -> str:
     """
     try:
         print("  🔮 [Hermes] Running AI-powered code review...")
+        # ── Mock mode: skip real review ──────────────────────────
+        from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
+        if is_mock(session):
+            print("  ⏭️  [Hermes] 集成代码审查跳过 — mock 模式")
+            return write_mock_skip(
+                session, "code-review",
+                "mock mode — no real code to review",
+            )
+
         log.info("Running AI-powered code review")
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()

@@ -1043,6 +1043,15 @@ def step_review_selftest(session: PipelineSession) -> str:
     """
     try:
         print("  🔍 [小克] 自测结果审查开始...")
+        # ── Mock mode: skip real review ──────────────────────────
+        from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
+        if is_mock(session):
+            print("  ⏭️  [自测结果审查]跳过 — mock 模式")
+            return write_mock_skip(
+                session, "self-test-review",
+                "mock mode — no real code to review",
+            )
+
         log.info("Running self-test review (enhanced)")
 
         spec_path = Path(session.spec_path)

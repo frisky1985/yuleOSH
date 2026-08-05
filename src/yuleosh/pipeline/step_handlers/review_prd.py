@@ -240,6 +240,15 @@ def step_review_prd(session: PipelineSession) -> str:
     """
     try:
         print("  🔮 [小马] Running PRD/Super Analysis quality review...")
+        # ── Mock mode: skip real review ──────────────────────────
+        from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
+        if is_mock(session):
+            print("  ⏭️  [PRD 质量审查]跳过 — mock 模式")
+            return write_mock_skip(
+                session, "prd-review",
+                "mock mode — no real code to review",
+            )
+
         log.info("Running PRD/Super Analysis quality review")
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()

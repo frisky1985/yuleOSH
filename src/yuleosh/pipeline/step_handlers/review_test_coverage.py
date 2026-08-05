@@ -308,6 +308,19 @@ def step_review_test_coverage(session: PipelineSession) -> str:
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
 
+        # ── Mock mode: skip real review ──────────────────────────
+        # In --mock runs the LLM emits placeholder code; scanning the real
+        # project tree would produce false findings and block the demo.
+        # Strict `is True` keeps MagicMock sessions honest.
+        from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
+        if is_mock(session):
+            print("  ⏭️  [小克] 测试覆盖审查跳过 — mock 模式")
+            return write_mock_skip(
+                session, "coverage-review",
+                "mock mode — no real code to review",
+            )
+
+
         # --- 1. Load coverage data ---
         ci_result = _find_latest_ci_result(project_dir, layer=1)
         prev_ci_result = _find_latest_ci_result(project_dir, layer=1)

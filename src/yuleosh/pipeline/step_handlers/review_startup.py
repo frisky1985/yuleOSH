@@ -688,6 +688,19 @@ def step_review_startup(session: PipelineSession) -> str:
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
 
+        # ── Mock mode: skip real review ──────────────────────────
+        # In --mock runs the LLM emits placeholder code; scanning the real
+        # project tree would produce false findings and block the demo.
+        # Strict `is True` keeps MagicMock sessions honest.
+        from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
+        if is_mock(session):
+            print("  ⏭️  [小克] 启动代码审查跳过 — mock 模式")
+            return write_mock_skip(
+                session, "review-startup",
+                "mock mode — no real code to review",
+            )
+
+
         # ── Part A: Static checks ──
         log.info("Running static startup checks...")
         static_findings = _static_startup_review(project_dir)

@@ -273,6 +273,47 @@ def test_pipeline_llm_failure_stops_pipeline(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# PipelineStepError must NOT be swallowed by template fallback (v3.12.0)
+# ---------------------------------------------------------------------------
+
+def test_pipelinesteperror_not_swallowed_by_fallback(tmp_path, monkeypatch):
+    """A handler raising PipelineStepError blocks the pipeline — the
+    template fallback chain must NOT turn a gate failure into a pass.
+
+    v3.12.0: _run_step_with_fallback re-raises PipelineStepError before
+    attempting fallback. Regression guard for "LLM 挂了就停，不假装完成".
+    """
+    from yuleosh.pipeline.run import run_pipeline, PipelineStepError, PIPELINE_STEPS
+    from unittest.mock import Mock
+
+    monkeypatch.setenv("OSH_HOME", str(tmp_path))
+
+    spec_file = tmp_path / "test-spec.md"
+    spec_file.write_text("# Test Spec\nFeature: auth\nRED\nGREEN\nREFACTOR")
+
+    # A gate handler that raises PipelineStepError (simulating a failed gate)
+    def failing_gate_handler(session):
+        raise PipelineStepError("CRITICAL SAFETY GATE FAILED — 48 violation(s)")
+
+    patched_steps = [
+        (key, agent, name, failing_gate_handler if key == "super-analysis" else handler)
+        for (key, agent, name, handler) in PIPELINE_STEPS
+    ]
+
+    # If the fallback chain is invoked at all, the fix is broken.
+    fallback_mock = Mock(side_effect=AssertionError("fallback must not run for PipelineStepError"))
+
+    with mock.patch("yuleosh.pipeline.run.PIPELINE_STEPS", patched_steps), \
+            mock.patch("yuleosh.pipeline.orchestrator.apply_fallback_chain", fallback_mock):
+        session = run_pipeline(str(spec_file), name="test-gate-block", mock=True)
+
+    assert session.status == "failed"
+    assert fallback_mock.call_count == 0
+    errors_str = " ".join(session.errors).lower()
+    assert "critical safety" in errors_str
+
+
+# ---------------------------------------------------------------------------
 # JSON parse error includes raw output (first 500 chars)
 # ---------------------------------------------------------------------------
 
