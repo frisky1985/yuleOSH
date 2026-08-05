@@ -120,3 +120,15 @@ diag2
 .cov.all
 .cov.quick
 .cov.verify
+
+# === 第四轮安全清扫：内部定价/营销静态页 ===
+docs/positioning-unified.md
+docs/faq.md
+docs/hil-demo-plan.md
+docs/terms-of-service-template.md
+yuleOSH-capability-matrix.md
+pricing.html
+index.html
+src/yuleosh/ui/marketing/pricing.html
+src/yuleosh/ui/marketing/index.html
+frontend/out/

@@ -324,15 +324,13 @@ yuleosh help
 
 ## Pricing & Editions
 
-yuleOSH offers three editions tailored to different needs. See the full **[Edition Matrix →](docs/edition-matrix.md)** for a detailed feature comparison.
+yuleOSH offers multiple editions tailored to different needs. The open source edition is free under the Elastic License 2.0; commercial editions are priced by team size and deployment model — [contact sales](mailto:sales@yuleosh.com) for a quote.
 
 | Edition | Price | Best For |
 |:--------|:------|:---------|
-| **Community** (MIT) | ¥0 | Individual developers, open-source projects |
-| **SaaS Pro** | 定价请联系销售/mo (定价请联系销售/yr) | Embedded teams needing ASPICE compliance + full pipeline |
-| **Enterprise** | 定价请联系销售/yr | Large organizations needing private deployment + RMB contract support |
-
-> 📖 [Full Edition Matrix →](docs/edition-matrix.md) — Detailed feature comparison across all editions.
+| **Open Source** (Elastic License 2.0) | Free | Individual developers, open-source projects |
+| **Team / Pro** | Contact sales | Embedded teams needing ASPICE compliance + full pipeline |
+| **Enterprise** | Contact sales | Large organizations needing private deployment + RMB contract support |
 
 ---
 
@@ -535,15 +533,13 @@ yuleosh help
 
 ## 定价与版本
 
-yuleOSH 提供三个版本。完整功能对比详见 **[版本分界线 · 功能矩阵 →](docs/edition-matrix.md)**。
+yuleOSH 提供多个版本。开源版基于 Elastic License 2.0 免费使用；商业版按团队规模与部署方式定价，请 [联系销售](mailto:sales@yuleosh.com) 获取报价。
 
 | 版本 | 定价 | 适用场景 |
 |:-----|:-----|:---------|
-| **社区版** (MIT) | ¥0 | 个人开发者、开源项目 |
-| **SaaS Pro** | 定价请联系销售/月 (定价请联系销售/年) | 嵌入式合规团队，全功能流水线 |
-| **企业版** | 定价请联系销售/年 | 大型企业，私有化部署 + 人民币合同支持 |
-
-> 📖 [完整版本矩阵 →](docs/edition-matrix.md)
+| **开源版** (Elastic License 2.0) | 免费 | 个人开发者、开源项目 |
+| **团队版 / Pro** | 联系销售 | 嵌入式合规团队，全功能流水线 |
+| **企业版** | 联系销售 | 大型企业，私有化部署 + 人民币合同支持 |
 
 ---
 

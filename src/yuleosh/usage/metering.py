@@ -49,7 +49,7 @@ TIERS = {
         "max_llm_tokens": 500000,
         "max_storage_mb": 1000,
         "llm_enabled": True,
-        "price_monthly": 599,
+        "price_monthly": 0,  # 价格由 Stripe Dashboard / 销售报价管理
         "stripe_price_id": None,  # Set via Stripe Dashboard
     },
     "enterprise": {
@@ -59,7 +59,7 @@ TIERS = {
         "max_llm_tokens": 99999999,
         "max_storage_mb": 10240,
         "llm_enabled": True,
-        "price_monthly": 8167,
+        "price_monthly": 0,  # 价格由 Stripe Dashboard / 销售报价管理
         "stripe_price_id": None,
     },
 }
