@@ -131,12 +131,18 @@ def parse_cppcheck_output(text: str) -> list[dict]:
         column = int(col_str) if col_str else 0
         severity = (match.group("severity") or match.group("severity2")).lower()
 
-        # Skip informational lines (checkersReport, unmatchedSuppression,
-        # missingInclude, branch-limit notices) — they are NOT violations.
-        if severity == "information" or "information" in severity:
-            continue
-
         message = match.group("message").strip()
+
+        # Skip ONLY genuine cppcheck meta/diagnostic lines — they are NOT
+        # violations:
+        #   * unmatchedSuppression  — "Suppressed 'x' from 'file'" notice
+        #   * branch-limit          — "Branch limit of N exceeded" notice
+        # Genuine information-level findings (missingInclude, checkersReport,
+        # plain information messages) ARE kept as violations with severity
+        # "information"; the report pipeline counts them (see
+        # tests/ci/test_report_pipeline.py).
+        if "unmatchedSuppression" in message or "branch-limit" in message:
+            continue
 
         # Extract rule ID from message
         rule_match = _PATTERN_MISRA_RULE.search(message) or _PATTERN_TEXT_RULE.search(message)

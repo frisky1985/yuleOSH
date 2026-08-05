@@ -830,7 +830,7 @@ class TestW7SubprocessTimeout:
         import yuleosh.ci.run  # noqa: F401
         assert True
 
-    def test_t_w7_07_neg_hang(self, capsys):
+    def test_t_w7_07_neg_hang(self, capsys, tmp_path):
         """T-W7-07-neg: fault-inject build returns False on timeout — the
         hung child never blocks the pipeline."""
         import yuleosh.pipeline.step_handlers.fault_inject as fi
@@ -842,10 +842,20 @@ class TestW7SubprocessTimeout:
             def run(self, *a, **kw):
                 raise subprocess.TimeoutExpired(a[0], timeout=kw.get("timeout", 300))
 
+        # Project root must contain CMakeLists.txt so the build path runs
+        # (otherwise fault_inject skips to SIMULATED mode and the timeout
+        # termination path this test verifies is never exercised).
+        proj = tmp_path / "fi-proj"
+        proj.mkdir()
+        (proj / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.16)\nproject(fi_test C)\n",
+            encoding="utf-8",
+        )
+
         inst = fi.FaultInjectStage("build")
         inst.build_dir = Path(tempfile.mkdtemp())
         with patch.object(fi, "subprocess", _FakeSP()):
-            ok = inst.build_test_firmware(".")
+            ok = inst.build_test_firmware(str(proj))
         assert ok is False
         assert "已终止" in capsys.readouterr().out
 

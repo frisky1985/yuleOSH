@@ -613,8 +613,22 @@ class OSHHandler(BaseHTTPRequestHandler):
 
 # ── Server launcher ────────────────────────────────────────────────────────
 
-def main(host: str = "127.0.0.1", port: int = 8080):
-    """Start the yuleOSH Dashboard Server."""
+def main(host: str = "", port: int = 0):
+    """Start the yuleOSH Dashboard Server.
+
+    Host/port resolution order (for Docker/deploy flexibility):
+      1. explicit args (if provided)
+      2. YULEOSH_HOST / YULEOSH_PORT (or legacy OSH_HOST / OSH_PORT)
+      3. defaults 127.0.0.1:8080
+    """
+    import os as _os
+    if not host:
+        host = _os.environ.get("YULEOSH_HOST") or _os.environ.get("OSH_HOST") or "127.0.0.1"
+    if not port:
+        try:
+            port = int(_os.environ.get("YULEOSH_PORT") or _os.environ.get("OSH_PORT") or "8080")
+        except ValueError:
+            port = 8080
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s] %(levelname)s %(message)s",

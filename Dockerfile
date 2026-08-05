@@ -32,12 +32,14 @@ RUN addgroup --system --gid 1001 osh && \
     adduser --system --uid 1001 --ingroup osh --no-create-home osh
 
 WORKDIR /app
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /root/.local /usr/local
 COPY . .
 
-ENV PATH=/root/.local/bin:${PATH} \
+ENV PATH=/usr/local/bin:${PATH} \
     PYTHONPATH=/app/src:${PYTHONPATH} \
     OSH_HOME=/app \
+    YULEOSH_HOST=0.0.0.0 \
+    YULEOSH_PORT=8080 \
     PYTHONUNBUFFERED=1
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
@@ -45,4 +47,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 8080
 USER osh
-ENTRYPOINT ["python3", "src/ui/server.py"]
+ENTRYPOINT ["python3", "-m", "yuleosh", "ui"]

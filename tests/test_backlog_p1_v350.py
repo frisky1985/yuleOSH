@@ -436,11 +436,20 @@ class TestNotifyPasswordWriteOnly:
 # ---------------------------------------------------------------------------
 
 class TestFaultInjectNoShell:
-    def test_cmake_build_uses_argv_and_no_shell(self):
+    def test_cmake_build_uses_argv_and_no_shell(self, tmp_path):
         from yuleosh.pipeline.step_handlers.fault_inject import FaultInjectStage
+        # Fixture needs a real project root with CMakeLists.txt so the build
+        # path is exercised (otherwise fault_inject skips to SIMULATED mode
+        # and never reaches the cmake argv calls this test verifies).
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.16)\nproject(fi_test C)\n",
+            encoding="utf-8",
+        )
         stage = FaultInjectStage(build_dir="/tmp/fi-build")
         with mock.patch("yuleosh.pipeline.step_handlers.fault_inject.subprocess.run") as m_run:
-            ok = stage.build_test_firmware(project_root="/tmp/proj")
+            ok = stage.build_test_firmware(project_root=str(proj))
         assert ok is True
         calls = [c for c in m_run.call_args_list]
         assert len(calls) == 2
