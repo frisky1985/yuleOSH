@@ -159,6 +159,15 @@ def parse_generated_files(llm_output: str) -> list[GeneratedFile]:
         if len(fences) >= 2:
             lang = fences[0].group("lang")
             content = body[fences[0].end(): fences[-1].start()]
+        elif fences:
+            # Truncated response: only an opening fence (or unpaired fences).
+            # Strip a leading fence so the file content itself is clean.
+            lang = fences[0].group("lang")
+            content = body[fences[0].end():]
+            # If there is a trailing fence without a matching opener, drop it.
+            if content.rstrip().endswith("```"):
+                idx = content.rstrip().rfind("```")
+                content = content[:idx]
         files.append(GeneratedFile(path=path, content=content.strip("\n"),
                                    language=lang))
     return files

@@ -85,7 +85,11 @@ def _check_llm_key() -> Optional[str]:
     Returns the key if found, or None if neither LLM_API_KEY nor
     OPENAI_API_KEY is set.
     """
-    key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    key = (
+        os.environ.get("LLM_API_KEY")
+        or os.environ.get("DEEPSEEK_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+    )
     if not key:
         print("""
 ❌ LLM API key not found
@@ -93,8 +97,9 @@ def _check_llm_key() -> Optional[str]:
 yuleOSH's pipeline requires an LLM API key to run AI agent steps.
 Set one of these environment variables:
 
-    export LLM_API_KEY=sk-...    # OpenAI/OpenAI-compatible API
-    export OPENAI_API_KEY=sk-... # OpenAI
+    export LLM_API_KEY=sk-...        # OpenAI/OpenAI-compatible API
+    export DEEPSEEK_API_KEY=sk-...   # DeepSeek
+    export OPENAI_API_KEY=sk-...     # OpenAI
 
 Then re-run: yuleosh pipeline run <spec>
 

@@ -423,6 +423,11 @@ class TestAnalysisHandlers:
         from yuleosh.pipeline.step_handlers.analysis import step_super_analysis
 
         session = PipelineSession("test", str(spec_file))
+
+        def _failing_llm(system_prompt, user_prompt, **kwargs):
+            raise RuntimeError("LLM transport failure (simulated)")
+
+        session.llm_client = _failing_llm
         with pytest.raises(Exception):
             step_super_analysis(session)
 
