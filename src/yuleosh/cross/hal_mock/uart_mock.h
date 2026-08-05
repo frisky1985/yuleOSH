@@ -4,7 +4,7 @@
  *
  * Implements: HAL_UART_Transmit, HAL_UART_Receive, HAL_UART_Abort
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #ifndef HAL_MOCK_UART_H

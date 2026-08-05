@@ -146,7 +146,7 @@ export default function LandingPage() {
                 <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
                 <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
                 <Star className="w-3 h-3 text-[#f59e0b] fill-[#f59e0b]" />
-                <span className="ml-1">5.0 · 社区驱动 · MIT 开源</span>
+                <span className="ml-1">5.0 · 社区驱动 · Elastic License 2.0</span>
               </div>
             </div>
 

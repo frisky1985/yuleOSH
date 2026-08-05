@@ -14,7 +14,7 @@
  *   mock_assert_call_count("HAL_UART_Transmit", 1);
  *   mock_assert_call_order("HAL_GPIO_WritePin", "HAL_UART_Transmit");
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #ifndef HAL_MOCK_CORE_H

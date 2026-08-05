@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "yuleOSH Desktop — 嵌入式AI开发全流程平台",
   "author": "frisky1985",
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

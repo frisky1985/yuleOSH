@@ -132,3 +132,19 @@ index.html
 src/yuleosh/ui/marketing/pricing.html
 src/yuleosh/ui/marketing/index.html
 frontend/out/
+
+# === 第四轮安全清扫 补充 ===
+docs/launch-checklist.md
+docs/user-personas.md
+docs/ci-rtm-check.sh
+docs/maintenance-patterns.md
+docs/misra-rules-index.md
+docs/iso26262-tcl-assessment.md
+docs/safety/third-party-tools.md
+docs/integrations/gitlab-integration.md
+src/yuleosh/ui/marketing/docs.html
+src/yuleosh/ui/marketing/en/index.html
+src/yuleosh/ui/marketing/en/pricing.html
+dist/*.whl
+dist/*.tar.gz
+docs/iso26262-tcl-assessment.md

@@ -4,7 +4,7 @@
  *
  * Implements: HAL_SPI_Transmit, HAL_SPI_Receive, HAL_SPI_TransmitReceive
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #ifndef HAL_MOCK_SPI_H

@@ -10,7 +10,7 @@
       <img src="https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square" alt="CI">
     </a>
     <img src="https://img.shields.io/badge/version-3.4.4-blue?style=flat-square" alt="Version">
-    <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
+    <img src="https://img.shields.io/badge/license-Elastic%202.0-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-%E2%89%A53.10-ff69b4?style=flat-square" alt="Python">
     <img src="https://img.shields.io/badge/tests-9500%2B%20passing-brightgreen?style=flat-square" alt="Tests">
     <img src="https://img.shields.io/badge/coverage-83%25-success?style=flat-square" alt="Coverage">
@@ -578,7 +578,7 @@ yuleOSH 是一款 ASPICE 合规辅助工具，不替代正式的 ASPICE 认证�
 
 ## 许可证
 
-MIT 许可证 — 详见 [LICENSE](LICENSE)。Copyright (c) 2025 frisky1985。
+Elastic License 2.0 — 详见 [LICENSE](LICENSE)。Copyright (c) 2025 frisky1985。
 
 ---
 

@@ -12,7 +12,7 @@
  * Compile with:
  *   gcc -I src/cross -I src/cross/hal_mock tests/test_hal_mock.c src/cross/hal_mock/hal_mock_impl.c
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #include "hal_mock/mock_core.h"

@@ -5,7 +5,7 @@
  * Implements: HAL_TIM_Base_Start, HAL_TIM_Base_Stop, HAL_GetTick,
  *             HAL_TIM_PeriodElapsedCallback (weak default)
  *
- * License: MIT
+ * License: Elastic License 2.0
  */
 
 #ifndef HAL_MOCK_TIMER_H
