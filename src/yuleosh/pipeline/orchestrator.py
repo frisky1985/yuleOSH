@@ -359,6 +359,10 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
 
                 session.complete_step(step_idx, str(output_path))
                 session.set_artifact(step_key, str(output_path))
+                # Propagate step-artifact verdicts (e.g. review JSON with
+                # status=failed) into session state so the final summary
+                # reflects real step outcomes instead of always "completed".
+                _propagate_step_verdict(session, step_idx, step_key, output_path)
                 if step_key == "final-report":
                     session._save()
                 log.info(f"Step {step_idx+1} completed: {step_key}")
@@ -382,6 +386,9 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             print(f"Pipeline: {session.status} ❌")
         print(f"Session: {session.session_dir}")
         print(f"Errors: {len(session.errors)}")
+        if session.status == "completed" and session.errors:
+            print("⚠️  Completed with step verdict failures — review session.errors "
+                  "before treating this run as passing.")
         print()
         
         log.info(f"Pipeline finished: {session.status}, errors={len(session.errors)}")
@@ -461,6 +468,60 @@ def status_pipeline(name: Optional[str] = None) -> None:
 # ------------------------------------------------------------------
 # LLM Fallback Integration
 # ------------------------------------------------------------------
+
+
+def _propagate_step_verdict(
+    session: "PipelineSession",
+    step_idx: int,
+    step_key: str,
+    output_path: str,
+) -> None:
+    """Propagate a step artifact's ``status`` field into session state.
+
+    Review/test steps write their verdict into a JSON artifact (e.g.
+    ``build-review.json`` with ``status: "failed"``) without raising.
+    Without propagation, the session would report every step as
+    ``completed`` and the final ``Errors`` count stays 0 even when
+    reviews failed — a misleading "all green" summary.
+
+    Semantics:
+      - artifact status ``failed`` → step marked ``failed`` (non-blocking),
+        a warning is recorded in ``session.errors``.
+      - artifact status ``retry``/``warn`` → step marked ``completed`` with
+        the note recorded in errors (informational).
+      - otherwise → step stays ``completed``.
+
+    This never raises; verdict propagation must not break the pipeline.
+    """
+    try:
+        if not output_path:
+            return
+        p = Path(str(output_path))
+        if not p.exists() or p.suffix.lower() != ".json":
+            return
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return
+        verdict = str(data.get("status", "")).strip().lower()
+        if not verdict:
+            return
+        if verdict == "failed":
+            if step_idx < len(session.steps):
+                session.steps[step_idx]["status"] = "failed"
+                session.steps[step_idx]["completed_at"] = (
+                    datetime.now().isoformat()
+                )
+            msg = f"[{step_key}] step verdict: FAILED ({p.name})"
+            if msg not in session.errors:
+                session.errors.append(msg)
+            session.updated_at = datetime.now().isoformat()
+            log.warning("Step %s artifact verdict: failed (%s)", step_key, p.name)
+        elif verdict in ("retry", "warn", "warning"):
+            msg = f"[{step_key}] step verdict: {verdict.upper()} ({p.name})"
+            if msg not in session.errors:
+                session.errors.append(msg)
+    except Exception as e:  # pragma: no cover - defensive
+        log.debug("Verdict propagation skipped for %s: %s", output_path, e)
 
 
 def _run_step_with_fallback(

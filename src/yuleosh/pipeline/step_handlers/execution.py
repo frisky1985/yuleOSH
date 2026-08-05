@@ -194,7 +194,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             output_dir=cfg.get("output_dir"),
             max_retries=int(cfg.get("max_retries", 3)),
             llm_client=getattr(session, "llm_client", None),
-            max_tokens=4096,
+            max_tokens=int(cfg.get("max_tokens", 8192)),
         )
         result = engine.generate(
             session, system_prompt, user_prompt,
