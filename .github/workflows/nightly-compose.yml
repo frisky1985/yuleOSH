@@ -1,0 +1,109 @@
+# =============================================================================
+# yuleOSH — Nightly Compose Validation (P0-1)
+# =============================================================================
+# 每晚验证生产 compose 语义:
+#   1) `docker compose config` 渲染成功，且渲染产物无弱默认口令
+#      (changeme123) / 掩码字面量 (***) —— 密码必须来自环境变量插值；
+#   2) 真实拉起 postgres + backend，等待 postgres healthy；
+#   3) backend /api/health 返回 200，且容器内 YULEOSH_DB_URL 已用环境变量
+#      注入的真实密码渲染（db connected 语义），无掩码残留。
+# 手动触发: workflow_dispatch（调试用）。
+# =============================================================================
+name: Nightly Compose Validation
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 每晚 02:00 UTC
+  workflow_dispatch:      # 手动触发调试
+
+permissions:
+  contents: read
+
+jobs:
+  prod-compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Render & gate prod compose config
+      env:
+        PG_PASSWORD: ci-test-password
+        YULEOSH_JWT_SECRET: ci-test-jwt-secret
+        YULEOSH_DB_PASSWORD: ci-test-password
+      run: |
+        set -euo pipefail
+        docker compose -f deploy/docker-compose.prod.yml config > /tmp/prod-render.yml
+        docker compose -f deploy/docker-compose.yml config > /tmp/deploy-render.yml
+        for f in /tmp/prod-render.yml /tmp/deploy-render.yml; do
+          if grep -n 'changeme123' "$f"; then
+            echo "::error::P0-1 regression: 'changeme123' leaked into $f"; exit 1
+          fi
+          if grep -n '\*\*\*' "$f"; then
+            echo "::error::P0-1 regression: masked literal '***' found in $f"; exit 1
+          fi
+        done
+        # 密码必须来自环境变量插值（渲染产物中出现注入值即证明非字面量）
+        grep -q 'postgresql://yuleosh:ci-test-password@postgres:5432/yuleosh' /tmp/prod-render.yml
+        grep -q 'postgresql://yuleosh:ci-test-password@db:5432/yuleosh' /tmp/deploy-render.yml
+        echo "✅ compose config 渲染通过：无弱默认口令 / 掩码字面量，密码来自环境变量"
+
+    - name: Boot postgres + backend and healthcheck DB connectivity
+      env:
+        PG_PASSWORD: ci-test-password
+        YULEOSH_JWT_SECRET: ci-test-jwt-secret
+      run: |
+        set -euo pipefail
+        cleanup() { docker compose -f deploy/docker-compose.prod.yml down -v --remove-orphans >/dev/null 2>&1 || true; }
+        trap cleanup EXIT
+
+        docker compose -f deploy/docker-compose.prod.yml up -d --build postgres yuleosh
+        docker compose -f deploy/docker-compose.prod.yml ps
+
+        # 1) postgres 健康（db connected 前置条件）
+        pg_cid="$(docker compose -f deploy/docker-compose.prod.yml ps -q postgres)"
+        for i in $(seq 1 60); do
+          st="$(docker inspect -f '{{.State.Health.Status}}' "$pg_cid" 2>/dev/null || echo starting)"
+          [ "$st" = "healthy" ] && break
+          if [ "$i" -eq 60 ]; then
+            echo "::error::postgres 60x5s 内未 healthy"
+            docker compose -f deploy/docker-compose.prod.yml logs postgres
+            exit 1
+          fi
+          sleep 5
+        done
+        echo "✅ postgres healthy"
+
+        # 2) backend 容器内 DB URL 必须由环境变量注入（无 *** / changeme123）
+        be_cid="$(docker compose -f deploy/docker-compose.prod.yml ps -q yuleosh)"
+        dburl="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$be_cid" | grep '^YULEOSH_DB_URL=' || true)"
+        echo "backend DB URL 前缀: ${dburl%yuleosh*}"
+        case "$dburl" in
+          *'***'*|*changeme123*)
+            echo "::error::backend 容器内 DB URL 含掩码/弱口令"; exit 1 ;;
+          *ci-test-password@postgres:5432/yuleosh*)
+            echo "✅ backend YULEOSH_DB_URL 已用环境变量密码渲染" ;;
+          *)
+            echo "::error::backend YULEOSH_DB_URL 渲染结果异常"; exit 1 ;;
+        esac
+
+        # 3) backend /api/health -> 200（健康端点公开，见 server.py 白名单）
+        for i in $(seq 1 60); do
+          code="$(docker exec "$be_cid" python3 -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8080/api/health',timeout=5).status)" 2>/dev/null || echo 000)"
+          [ "$code" = "200" ] && break
+          if [ "$i" -eq 60 ]; then
+            echo "::error::backend /api/health 60x5s 内未返回 200"
+            docker compose -f deploy/docker-compose.prod.yml logs yuleosh
+            exit 1
+          fi
+          sleep 5
+        done
+        echo "✅ backend /api/health -> 200（db connected）"
+
+        # 4) 附带门禁：生产默认不应关闭认证（fail-closed）
+        body="$(docker exec "$be_cid" python3 -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8080/api/health',timeout=5).read().decode())" 2>/dev/null || true)"
+        if echo "$body" | grep -q '"auth_enabled": true'; then
+          echo "✅ 生产默认认证开启（auth_enabled=true，fail-closed）"
+        else
+          echo "::warning::health 载荷未显示 auth_enabled=true（可能默认关闭认证，需人工确认）"
+        fi

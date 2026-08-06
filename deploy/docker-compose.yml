@@ -33,7 +33,7 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
       POSTGRES_USER: ${YULEOSH_DB_USER:-yuleosh}
-      POSTGRES_PASSWORD: ${YULEOSH_DB_PASSWORD:-changeme123}
+      POSTGRES_PASSWORD: ${YULEOSH_DB_PASSWORD:?YULEOSH_DB_PASSWORD is required}
       POSTGRES_DB: ${YULEOSH_DB_NAME:-yuleosh}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${YULEOSH_DB_USER:-yuleosh}"]
@@ -57,7 +57,7 @@ services:
       - path: .env
         required: false
     environment:
-      YULEOSH_DB_URL: "postgresql://${YULEOSH_DB_USER:-yuleosh}:${YULEOSH_DB_PASSWORD:-changeme123}@db:5432/${YULEOSH_DB_NAME:-yuleosh}"
+      YULEOSH_DB_URL: "postgresql://${YULEOSH_DB_USER:-yuleosh}:${YULEOSH_DB_PASSWORD:?YULEOSH_DB_PASSWORD is required}@db:5432/${YULEOSH_DB_NAME:-yuleosh}"
       YULEOSH_JWT_SECRET: ${YULEOSH_JWT_SECRET}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}

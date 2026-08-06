@@ -29,10 +29,15 @@ COPY .yuleosh/ /root/.yuleosh/
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:8080/api/health || exit 1
 
+# 生产镜像默认开启认证（fail-closed）。仅本地/沙箱需要显式关闭:
+#   构建时:  docker build --build-arg YULEOSH_AUTH_DISABLED=1 ...
+#   运行时:  docker run -e YULEOSH_AUTH_DISABLED=1 ...  (compose environment 同理)
+ARG YULEOSH_AUTH_DISABLED=false
+
 ENV PYTHONPATH=/app/src \
     YULEOSH_HOST=0.0.0.0 \
     YULEOSH_PORT=8080 \
-    YULEOSH_AUTH_DISABLED=true \
+    YULEOSH_AUTH_DISABLED=${YULEOSH_AUTH_DISABLED} \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8080
