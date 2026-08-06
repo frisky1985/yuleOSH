@@ -7,6 +7,7 @@ marking each base practice as ✅ (present), ⚠️ (partial), or ❌ (gap).
 """
 
 import os
+import re as _re
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -89,6 +90,149 @@ class ComplianceChecker:
         """Check if evidence directory has generated files."""
         ev_dir = self.project_dir / ".osh" / "evidence"
         return ev_dir.is_dir() and any(ev_dir.iterdir())
+
+    # ------------------------------------------------------------------
+    # Source layout helpers (Go multi-module aware)
+    # ------------------------------------------------------------------
+
+    #: Candidate source directories, covering Go multi-module projects
+    #: (backend/, embedded/, frontend/ ...) and classic src/ layouts.
+    _SOURCE_DIRS = (
+        "src", "backend", "embedded", "frontend",
+        "internal", "cmd", "pkg", "lib", "firmware",
+    )
+
+    #: Source file extensions considered "real code" for presence checks.
+    _SOURCE_EXTS = {
+        ".c", ".h", ".go", ".py", ".rs", ".cpp", ".cc", ".cxx",
+        ".java", ".swift", ".kt", ".ts", ".js", ".cs", ".zig",
+    }
+
+    def _has_source_code(self) -> bool:
+        """True if any candidate source dir contains real source files.
+
+        Recognizes Go multi-module projects (backend/...), embedded C
+        (embedded/, firmware/) and classic src/ layouts instead of the
+        naive ``src/``-only probe.
+        """
+        for d in self._SOURCE_DIRS:
+            base = self.project_dir / d
+            if base.is_dir():
+                for f in base.rglob("*"):
+                    if f.is_file() and f.suffix in self._SOURCE_EXTS:
+                        return True
+        return False
+
+    def _count_source_files(self) -> int:
+        """Count real source files across candidate source dirs."""
+        n = 0
+        for d in self._SOURCE_DIRS:
+            base = self.project_dir / d
+            if base.is_dir():
+                n += sum(
+                    1 for f in base.rglob("*") if f.is_file() and f.suffix in self._SOURCE_EXTS
+                )
+        return n
+
+    # ------------------------------------------------------------------
+    # SRS parsing helpers (SWE.1 — requirement structure checks)
+    # ------------------------------------------------------------------
+
+    def _srs_path(self) -> Optional[Path]:
+        """Locate the requirements specification document."""
+        for p in ("docs/software-requirements.md", "docs/requirements.md", "docs/spec.md"):
+            if self._file_exists(p):
+                return self.project_dir / p
+        return None
+
+    def _read_srs(self) -> str:
+        """Read the SRS text (empty string when absent/unreadable)."""
+        p = self._srs_path()
+        if p is None:
+            return ""
+        try:
+            return p.read_text(errors="replace")
+        except Exception:
+            return ""
+
+    def _count_req_ids(self) -> int:
+        """Count unique REQ-xxx identifiers in the SRS (or its machine table)."""
+        content = self._read_srs()
+        if content:
+            ids = set(_re.findall(r"\bREQ-\d{3}\b", content))
+            if ids:
+                return len(ids)
+        # Fallback: machine-readable SHALL table projection
+        table = self.project_dir / "specs" / "requirements-shall-table.md"
+        if table.exists():
+            try:
+                return len(set(_re.findall(r"\bREQ-\d{3}\b", table.read_text(errors="replace"))))
+            except Exception:
+                return 0
+        return 0
+
+    def _srs_has_shall_statements(self) -> bool:
+        """True if the SRS actually contains SHALL statements."""
+        content = self._read_srs()
+        if not content:
+            return False
+        return bool(_re.search(r"\bREQ-\d{3}-S\d+\b", content)) or "SHALL" in content
+
+    def _srs_has_functional_areas(self) -> bool:
+        """True if requirements are organized by functional area."""
+        content = self._read_srs()
+        if content:
+            if "功能域" in content:
+                return True
+            if _re.search(r"(?:功能域|functional area|domain)\s*[A-C]?\s*[-—]", content, _re.IGNORECASE):
+                return True
+        # Fallback: specs/ directory organized into per-area files
+        specs_dir = self.project_dir / "specs"
+        if specs_dir.is_dir():
+            md_files = list(specs_dir.glob("*.md"))
+            if len(md_files) >= 3:
+                return True
+        return False
+
+    def _srs_has_attributes(self) -> bool:
+        """True if requirements carry attributes (priority, status, ...)."""
+        content = self._read_srs()
+        if not content:
+            return False
+        if "**优先级**" in content and "**状态**" in content:
+            return True
+        if _re.search(r"priority", content, _re.IGNORECASE) and _re.search(r"status", content, _re.IGNORECASE):
+            return True
+        return False
+
+    # ------------------------------------------------------------------
+    # SWE.5 / SWE.6 evidence helpers
+    # ------------------------------------------------------------------
+
+    def _integration_strategy_has_stubs(self) -> bool:
+        """True if the integration strategy identifies stubs/drivers."""
+        target = self.project_dir / "docs" / "integration-strategy.md"
+        if not target.exists():
+            return False
+        try:
+            content = target.read_text(errors="replace").lower()
+        except Exception:
+            return False
+        return any(k in content for k in ("stub", "driver", "桩", "驱动"))
+
+    def _evidence_archived(self) -> bool:
+        """True if test evidence has been archived under .osh/evidence/."""
+        if not self._evidence_dir_exists():
+            return False
+        ev_dir = self.project_dir / ".osh" / "evidence"
+        try:
+            md_json = any(
+                f.is_file() and f.suffix in (".md", ".json", ".zip")
+                for f in ev_dir.iterdir()
+            )
+        except OSError:
+            return False
+        return md_json or (ev_dir / "compliance-pack.zip").exists()
 
     # ------------------------------------------------------------------
     # BP-level check execution
@@ -312,6 +456,10 @@ class ComplianceChecker:
                 found = self._file_exists(ev_path)
             elif ev_type == "source":
                 found = self._dir_has_files(ev_path) if ev_path.endswith("/") else self._file_exists(ev_path)
+                if not found:
+                    # Go multi-module / embedded layouts: fall back to a real
+                    # source-code probe across candidate dirs (backend/, ...)
+                    found = self._has_source_code()
             elif ev_type == "test":
                 found = self._dir_has_files(ev_path)
                 if not found and ev_path == "tests/":
@@ -345,7 +493,44 @@ class ComplianceChecker:
                 continue
             # KG returned None — fall through to file-based check
 
-            if "SHALL" in check_item or "shall" in check_item:
+            if "req-" in check_item.lower() or "unique identifier" in check_item.lower():
+                # REQ-xxx unique identifiers parsed from the SRS
+                n_req = self._count_req_ids()
+                if n_req > 0:
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} ({n_req} unique REQ IDs parsed)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no REQ-xxx IDs found in SRS)")
+            elif "functional area" in check_item.lower():
+                if self._srs_has_functional_areas():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item}")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no functional-area grouping found)")
+            elif "attribute" in check_item.lower() or "priority" in check_item.lower():
+                if self._srs_has_attributes():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item}")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no priority/status attributes found)")
+            elif "stub" in check_item.lower() or "driver" in check_item.lower():
+                if self._integration_strategy_has_stubs():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item}")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no stubs/drivers in integration strategy)")
+            elif "archived" in check_item.lower():
+                if self._evidence_archived():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item}")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no archived evidence found)")
+            elif "SHALL" in check_item or "shall" in check_item:
                 # Requirement-related checks
                 has_req = False
                 for req_doc in ["docs/requirements.md", "docs/software-requirements.md", "docs/spec.md"]:
@@ -449,8 +634,7 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             elif "function" in check_item.lower() or "complexity" in check_item.lower():
-                src_dir = self.project_dir / "src"
-                if src_dir.is_dir() and any(src_dir.rglob("*.c")):
+                if self._has_source_code():
                     passed += 1
                     details.append(f"  ✅ Check: {check_item} (source code present)")
                 else:

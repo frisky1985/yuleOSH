@@ -265,3 +265,123 @@ class TestComplianceChecker:
         assert shall_passes == 0, (
             f"No spec.md exists — SHALL checks should not pass ({shall_passes} passed)"
         )
+
+    # ------------------------------------------------------------------ #
+    # P1-1 regression tests: SWE.1 SRS parsing, Go multi-module sources,
+    # SWE.5 stubs/drivers, SWE.6 evidence archive
+    # ------------------------------------------------------------------ #
+
+    def test_swe1_req_identifier_check_parses_srs(self, tmp_path):
+        """CMP-ACC-09: SWE.1.BP1 REQ-xxx identifier check parses the SRS."""
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "software-requirements.md").write_text(
+            "# SRS\n"
+            "## 2. 功能域概览\n"
+            "| 功能域 | 范围 |\n"
+            "|:-------|:-----|\n"
+            "| A. System | REQ-001~009 |\n"
+            "\n"
+            "#### REQ-001: 用户设备注册\n"
+            "- **域**: System | **优先级**: P0 | **状态**: Approved | **来源**: RS-001\n"
+            "- REQ-001-S1: The system SHALL allow a user to register a device.\n"
+            "\n"
+            "#### REQ-002: 多设备配钥\n"
+            "- **域**: System | **优先级**: P1 | **状态**: Approved | **来源**: RS-002\n"
+            "- REQ-002-S1: The system SHALL provision a key.\n",
+            encoding="utf-8",
+        )
+        # 1/3 check requires traceability evidence
+        ev_dir = tmp_path / ".osh" / "evidence"
+        ev_dir.mkdir(parents=True)
+        (ev_dir / "traceability-matrix.md").write_text("# Traceability\n")
+
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+        checker = ComplianceChecker(str(tmp_path))
+        report = checker.run()
+        swe1 = report["swe_sections"]["swe.1"]
+        bps = {bp["id"]: bp for bp in swe1["base_practices"]}
+
+        assert bps["SWE.1.BP1"]["status"] == "✅", bps["SWE.1.BP1"]["details"]
+        assert bps["SWE.1.BP2"]["status"] == "✅", bps["SWE.1.BP2"]["details"]
+
+        # No "unknown check type" left in SWE.1
+        unknown = [
+            d for bp in swe1["base_practices"] for d in bp["details"]
+            if "unknown check type" in d
+        ]
+        assert unknown == [], f"unexpected unknown checks: {unknown}"
+
+    def test_swe1_checks_fail_without_srs(self, tmp_path):
+        """CMP-ACC-10: SWE.1 REQ-identifier/area/attribute checks fail without SRS."""
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+        checker = ComplianceChecker(str(tmp_path))
+        report = checker.run()
+        swe1 = report["swe_sections"]["swe.1"]
+        bps = {bp["id"]: bp for bp in swe1["base_practices"]}
+
+        # No requirement doc at all → these checks must not auto-pass
+        for detail in bps["SWE.1.BP1"]["details"] + bps["SWE.1.BP2"]["details"]:
+            if "unique identifier" in detail or "functional area" in detail or "attributes" in detail:
+                assert "❌" in detail, f"should fail without SRS: {detail}"
+
+    def test_swe3_source_check_go_multimodule(self, tmp_path):
+        """CMP-ACC-11: SWE.3.BP1 source checks recognize Go multi-module (backend/)."""
+        backend = tmp_path / "backend" / "cloud" / "hub"
+        backend.mkdir(parents=True)
+        (backend / "main.go").write_text("package main\nfunc main() {}\n")
+        # NOTE: no src/ directory at all
+
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+        checker = ComplianceChecker(str(tmp_path))
+        report = checker.run()
+        swe3 = report["swe_sections"]["swe.3"]
+        bp1 = next(bp for bp in swe3["base_practices"] if bp["id"] == "SWE.3.BP1")
+
+        source_ok = any("✅" in d for d in bp1["details"])
+        assert source_ok, f"Go multi-module sources not detected: {bp1['details']}"
+
+    def test_swe5_stubs_drivers_check(self, tmp_path):
+        """CMP-ACC-12: SWE.5.BP1 stubs/drivers check parses integration strategy."""
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "integration-strategy.md").write_text(
+            "# 集成策略\n"
+            "## 2. 桩/驱动 (Stubs & Drivers)\n"
+            "| 桩/驱动 | 用途 |\n"
+            "| MobileClient 驱动 | 模拟手机端 |\n"
+            "| MCAL stubs | 车端驱动桩 |\n",
+            encoding="utf-8",
+        )
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+        checker = ComplianceChecker(str(tmp_path))
+        report = checker.run()
+        swe5 = report["swe_sections"]["swe.5"]
+        bp1 = next(bp for bp in swe5["base_practices"] if bp["id"] == "SWE.5.BP1")
+
+        stub_ok = any(
+            "✅" in d and "stub" in d.lower() or ("✅" in d and "drivers" in d.lower())
+            for d in bp1["details"]
+        )
+        assert stub_ok, f"stubs/drivers check should pass: {bp1['details']}"
+
+    def test_swe6_evidence_archived_check(self, tmp_path):
+        """CMP-ACC-13: SWE.6.BP2 'evidence is archived' passes with evidence dir."""
+        ev_dir = tmp_path / ".osh" / "evidence"
+        ev_dir.mkdir(parents=True)
+        (ev_dir / "traceability-matrix.md").write_text("# Traceability\n")
+        (ev_dir / "requirement-coverage.md").write_text("# Coverage\n")
+
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+        checker = ComplianceChecker(str(tmp_path))
+        report = checker.run()
+        swe6 = report["swe_sections"]["swe.6"]
+        bp2 = next(bp for bp in swe6["base_practices"] if bp["id"] == "SWE.6.BP2")
+
+        archived_ok = any("✅" in d and "archived" in d.lower() for d in bp2["details"])
+        assert archived_ok, f"evidence archive check should pass: {bp2['details']}"

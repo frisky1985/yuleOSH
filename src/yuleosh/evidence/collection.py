@@ -181,6 +181,103 @@ class DataCollectionMixin:
         self.scenarios = all_scenarios
         print(f"  📋 Total: {len(self.requirements)} requirements, {len(self.scenarios)} scenarios")
 
+        # Apply legacy → current REQ mapping (specs/legacy-shall-mapping.md)
+        self._apply_legacy_mapping()
+
+    # ------------------------------------------------------------------ #
+    # Legacy SHALL ID mapping (superseded spec numbering)
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _parse_legacy_mapping(mapping_path: Path) -> list[dict]:
+        """Parse specs/legacy-shall-mapping.md into filter rules.
+
+        Expected table format (4 columns):
+
+            | 遗留 ID 模式 | 状态 | 现需求 ID | 说明 |
+
+        ``遗留 ID 模式`` may be an exact requirement name or a prefix ending
+        in ``*``. ``状态`` must be one of ``superseded`` / ``deprecated``
+        (drop from index) or ``mapped`` (rename to the target REQ ID).
+        """
+        rules: list[dict] = []
+        try:
+            lines = mapping_path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            return rules
+        for line in lines:
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            cols = [c.strip() for c in stripped.strip("|").split("|")]
+            if len(cols) < 4:
+                continue
+            pattern, status, target, _note = cols[0], cols[1].lower(), cols[2], cols[3]
+            if "模式" in pattern or pattern in ("", "id"):
+                continue  # header row
+            if status not in ("superseded", "deprecated", "mapped"):
+                continue  # separator or unknown status
+            rules.append({"pattern": pattern, "status": status, "target": target.strip()})
+        return rules
+
+    @staticmethod
+    def _match_legacy_rule(name: str, rules: list[dict]) -> Optional[dict]:
+        """Return the first rule matching a requirement name (prefix or exact)."""
+        for rule in rules:
+            pat = rule["pattern"]
+            if pat.endswith("*"):
+                if name.startswith(pat[:-1]):
+                    return rule
+            elif pat == name:
+                return rule
+        return None
+
+    def _apply_legacy_mapping(self):
+        """Filter/remap legacy requirement IDs using the mapping doc.
+
+        Projects that migrated from a legacy SHALL numbering (e.g.
+        ``KL-SHALL-01``) to a current ``REQ-xxx`` numbering list the
+        superseded entries in ``specs/legacy-shall-mapping.md``. Without
+        this filter the evidence index double-counts legacy IDs that have
+        no test mapping, which breaks the coverage gate.
+        """
+        mapping_path = Path(self.project_dir) / "specs" / "legacy-shall-mapping.md"
+        if not mapping_path.exists():
+            return
+
+        rules = self._parse_legacy_mapping(mapping_path)
+        if not rules:
+            return
+
+        kept: list[dict] = []
+        dropped = 0
+        renamed = 0
+        seen: set[str] = set()
+        for req in self.requirements:
+            name = req.get("name", "")
+            rule = self._match_legacy_rule(name, rules)
+            if rule is None:
+                kept.append(req)
+                seen.add(name)
+                continue
+            if rule["status"] in ("superseded", "deprecated"):
+                dropped += 1
+                continue
+            # mapped: rename to the current REQ ID (dedupe with existing)
+            target = rule["target"]
+            if not target or target in seen:
+                dropped += 1
+                continue
+            req["name"] = target
+            req["req_id"] = target
+            kept.append(req)
+            seen.add(target)
+            renamed += 1
+
+        self.requirements = kept
+        print(f"  🗂️  Legacy mapping: {dropped} superseded/duplicate dropped, "
+              f"{renamed} renamed → {len(kept)} requirements in index")
+
     def collect_reviews(self):
         """Collect review records from .osh/reviews/.
 
