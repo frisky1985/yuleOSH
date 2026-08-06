@@ -62,6 +62,19 @@ def build_memory_subparser(subparsers) -> argparse.ArgumentParser:
                    choices=["note", "decision", "review"],
                    help="Note kind (default: note)")
 
+    # memory context — preview of the context injected into LLM calls
+    p = msub.add_parser(
+        "context",
+        help="Preview project-memory context injected into LLM calls",
+    )
+    p.add_argument("query", help="Search text")
+    p.add_argument("--max-facts", type=int, default=5,
+                   help="Max facts (default: 5)")
+    p.add_argument("--max-sessions", type=int, default=3,
+                   help="Max sessions (default: 3)")
+    p.add_argument("--max-chars", type=int, default=2000,
+                   help="Max context chars (default: 2000)")
+
     return mem
 
 
@@ -135,6 +148,22 @@ def handle_memory_command(args) -> int:
                                   kind=args.kind)
         print(f"✅ Logged session note [#{entry['id']}] "
               f"kind={entry['kind']} at {entry['created_at']}")
+
+    elif args.memory_sub == "context":
+        from yuleosh.memory.llm_context import MemoryContextAssembler
+        context = MemoryContextAssembler(
+            max_facts=args.max_facts,
+            max_sessions=args.max_sessions,
+            max_chars=args.max_chars,
+        ).assemble(args.query)
+        if not context:
+            print(f"🧠 No project memory context for '{args.query}'.")
+            return 0
+        print("🧠 Project memory context (injected into LLM system prompt):")
+        print("=" * 72)
+        print(context)
+        print("=" * 72)
+        print(f"(chars={len(context)}, max_chars={args.max_chars})")
 
     return 0
 

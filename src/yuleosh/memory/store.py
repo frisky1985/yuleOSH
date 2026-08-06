@@ -181,10 +181,16 @@ class MemoryStore:
         return [dict(r) for r in rows]
 
     def recall(self, query: str, entity: str | None = None,
-               category: str | None = None, limit: int = 20) -> list[dict]:
+               category: str | None = None, limit: int = 20,
+               reinforce: bool = True) -> list[dict]:
         """Recall facts matching query text (LIKE over content/tags) with
         optional entity/category filters. Matching facts get a small trust
-        bump (use-based reinforcement)."""
+        bump (use-based reinforcement) unless ``reinforce=False``.
+
+        ``reinforce=False`` is used by automated retrieval (e.g. LLM context
+        injection) so background reads do not pollute trust scores — only
+        explicit user recalls reinforce.
+        """
         conn = self._get_conn()
         clauses = ["(content LIKE ? OR tags LIKE ? OR entity LIKE ?)"]
         params = [f"%{query}%", f"%{query}%", f"%{query}%"]
@@ -204,15 +210,16 @@ class MemoryStore:
 
         # Trust reinforcement: each hit increments recall_count + trust,
         # capped at TRUST_MAX. Facts used often become more trusted.
-        for r in results:
-            new_count = r["recall_count"] + 1
-            new_trust = min(self.TRUST_MAX, r["trust"] + self.TRUST_DELTA)
-            conn.execute(
-                "UPDATE memory_facts SET recall_count = ?, trust = ?, "
-                "updated_at = ? WHERE id = ?",
-                (new_count, new_trust, _now(), r["id"]),
-            )
-        conn.commit()
+        if reinforce:
+            for r in results:
+                new_count = r["recall_count"] + 1
+                new_trust = min(self.TRUST_MAX, r["trust"] + self.TRUST_DELTA)
+                conn.execute(
+                    "UPDATE memory_facts SET recall_count = ?, trust = ?, "
+                    "updated_at = ? WHERE id = ?",
+                    (new_count, new_trust, _now(), r["id"]),
+                )
+            conn.commit()
         return results
 
     def forget(self, fact_id: int) -> bool:
