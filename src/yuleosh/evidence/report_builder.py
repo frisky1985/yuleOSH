@@ -307,6 +307,9 @@ class ReportBuilderMixin:
             f"# Acceptance Matrix\n",
             f"> Generated: {self.generated_at}",
             f"> Version: {self.version}\n",
+            f"> **状态列语义**: ✅ = 该需求已有测试文件映射（exact/keyword 匹配），❌ = 无测试映射。"
+            f"本矩阵只表达『需求 ↔ 测试』追溯映射，**不等同于全量验收验证**；"
+            f"逐需求的验收状态（✅/🟡/⬜）以 `docs/qualification-strategy.md` §2 为准。\n",
             f"| Req ID | Requirement | SHALL | 验证方法 | 测试文件 | 匹配方式 | 置信度 | 状态 |",
             f"|:------:|:-----------|:------|:---------|:--------|:--------:|:------:|:----:|",
         ]
