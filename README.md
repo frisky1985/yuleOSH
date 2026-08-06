@@ -376,6 +376,7 @@ yuleOSH is built to be **secure and auditable** — the toolchain's own audit tr
 - **Append-only audit log**: every state-changing operation (project/pipeline/review/auth/billing/evidence) is recorded to `data/audit/YYYY-MM-DD.jsonl` — no edits, no deletes.
 - **SHA-256 hash chain**: each event's hash covers its payload plus the previous event's hash. Editing, deleting, or reordering any recorded event breaks the chain.
 - **`yuleosh audit verify`**: replay the chain to prove integrity. Exit code 0 = intact, 1 = tampering detected (with the exact broken position).
+- **Evidence packs embed the proof**: `yuleosh audit evidence` automatically runs the verification and ships `audit-log-verification.json` inside the bundle — your ASPICE evidence pack carries its own audit-trail integrity statement.
 - **Legacy compatible**: logs written before the hash-chain feature remain readable and are seamlessly anchored into the chain.
 
 ```bash
