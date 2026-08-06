@@ -249,6 +249,17 @@ class DataCollectionMixin:
         if not rules:
             return
 
+        # Pass 1: names of requirements NOT governed by the mapping doc are
+        # authoritative (e.g. the machine-readable REQ table rows). Mapped
+        # legacy entries whose target already exists there are duplicates
+        # and must be dropped, so the authoritative entry (with its full
+        # SHALL statements) wins.
+        kept_names = {
+            r.get("name", "")
+            for r in self.requirements
+            if self._match_legacy_rule(r.get("name", ""), rules) is None
+        }
+
         kept: list[dict] = []
         dropped = 0
         renamed = 0
@@ -257,15 +268,20 @@ class DataCollectionMixin:
             name = req.get("name", "")
             rule = self._match_legacy_rule(name, rules)
             if rule is None:
+                # No rule: keep, but never duplicate an already-indexed name.
+                if name in seen:
+                    dropped += 1
+                    continue
                 kept.append(req)
                 seen.add(name)
                 continue
             if rule["status"] in ("superseded", "deprecated"):
                 dropped += 1
                 continue
-            # mapped: rename to the current REQ ID (dedupe with existing)
+            # mapped: rename to the current REQ ID — unless the authoritative
+            # REQ entry already exists (dedupe, keep the authoritative one).
             target = rule["target"]
-            if not target or target in seen:
+            if not target or target in kept_names or target in seen:
                 dropped += 1
                 continue
             req["name"] = target
