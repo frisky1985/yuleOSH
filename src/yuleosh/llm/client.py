@@ -42,6 +42,7 @@ from yuleosh.llm.providers.base import (
 from yuleosh.llm.providers.mock import MockProvider
 from yuleosh.llm.token_budget import TokenBudgetChecker
 from yuleosh.llm.cost import CostLogger, LLMCallLog
+from yuleosh.llm.provider_fallback import call_with_fallback, fallback_enabled
 from yuleosh.llm.rag.engine import RAGEngine, get_default_engine
 
 log = logging.getLogger("llm.client")
@@ -246,18 +247,28 @@ class LLMClient:
         budget_check = TokenBudgetChecker.check(
             prompt, resolved_config, system_prompt
         )
+        budget_skip_primary: str | None = None
         if not budget_check.passed:
-            log.warning(
-                "Token budget check FAILED: %s", budget_check.reason
-            )
-            return LLMResponse(
-                content="",
-                model=resolved_config.model,
-                provider=resolved_config.provider,
-                token_usage={},
-                cost=0.0,
-                error=f"Budget check failed: {budget_check.reason}",
-            )
+            if fallback_enabled(resolved_config):
+                # 预算超限 → warning + 降级（provider_fallback 跳过主 provider，
+                # 降级到链上可用 provider；mock 免费兜底）。不直接报错。
+                log.warning(
+                    "Token budget check FAILED: %s — 降级到备用 provider",
+                    budget_check.reason,
+                )
+                budget_skip_primary = "budget_exceeded"
+            else:
+                log.warning(
+                    "Token budget check FAILED: %s", budget_check.reason
+                )
+                return LLMResponse(
+                    content="",
+                    model=resolved_config.model,
+                    provider=resolved_config.provider,
+                    token_usage={},
+                    cost=0.0,
+                    error=f"Budget check failed: {budget_check.reason}",
+                )
 
         # 3. RAG context assembly (if enabled)
         effective_system = system_prompt or ""
@@ -310,65 +321,43 @@ class LLMClient:
         else:
             msgs = messages
 
-        # 5. Get provider and call
-        provider = _get_provider(resolved_config.provider)
+        # 5. Get provider and call — via the provider-level fallback chain
+        # (provider_fallback.py). Transport failures degrade to the next
+        # provider; business errors (4xx) and disabled fallback return an
+        # error response as before.
         start_time = time.time()
+        response = await call_with_fallback(
+            msgs,
+            resolved_config,
+            skip_primary_reason=budget_skip_primary,
+        )
+        duration = time.time() - start_time
+        response.duration_s = duration
 
+        # 6. Log the call — the provider field records the provider actually
+        # used (after any degradation), not the configured primary.
         try:
-            response = await provider.chat(msgs, resolved_config)
-            duration = time.time() - start_time
-            response.duration_s = duration
-
-            # 6. Log the call
-            try:
-                CostLogger.log_dict(
-                    timestamp=datetime.utcnow().isoformat() + "Z",
-                    task_type=resolved_config.task_type or "unknown",
-                    model=response.model,
-                    provider=resolved_config.provider,
-                    tokens_in=response.token_usage.get("prompt", 0),
-                    tokens_out=response.token_usage.get("completion", 0),
-                    cost=response.cost,
-                    duration_s=duration,
-                    status="success",
-                    task_id=resolved_config.task_id,
-                    user_id=resolved_config.user_id,
-                )
-            except Exception as e:
-                log.warning("Failed to log LLM call: %s", e)
-
-            return response
-
-        except Exception as exc:
-            duration = time.time() - start_time
-            log.error("LLM call failed after %.2fs: %s", duration, exc)
-
-            # Log failure
-            try:
-                CostLogger.log_dict(
-                    timestamp=datetime.utcnow().isoformat() + "Z",
-                    task_type=resolved_config.task_type or "unknown",
-                    model=resolved_config.model,
-                    provider=resolved_config.provider,
-                    tokens_in=0,
-                    tokens_out=0,
-                    cost=0.0,
-                    duration_s=duration,
-                    status=f"failed: {exc}",
-                    task_id=resolved_config.task_id,
-                    user_id=resolved_config.user_id,
-                )
-            except Exception as log_err:
-                log.warning("Failed to log LLM failure call: %s", log_err)
-
-            return LLMResponse(
-                content="",
-                model=resolved_config.model,
-                provider=resolved_config.provider,
-                token_usage={},
-                cost=0.0,
-                error=str(exc),
+            CostLogger.log_dict(
+                timestamp=datetime.utcnow().isoformat() + "Z",
+                task_type=resolved_config.task_type or "unknown",
+                model=response.model,
+                provider=response.provider or resolved_config.provider,
+                tokens_in=response.token_usage.get("prompt", 0),
+                tokens_out=response.token_usage.get("completion", 0),
+                cost=response.cost,
+                duration_s=duration,
+                status=(
+                    "success"
+                    if not response.error
+                    else f"failed: {response.error}"
+                ),
+                task_id=resolved_config.task_id,
+                user_id=resolved_config.user_id,
             )
+        except Exception as e:
+            log.warning("Failed to log LLM call: %s", e)
+
+        return response
 
     @classmethod
     def configure_providers(cls, providers: Dict[str, AbstractProvider]):

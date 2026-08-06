@@ -29,6 +29,10 @@ class ClaudeProvider(AbstractProvider):
     DEFAULT_MODEL = "claude-4-sonnet"
     API_KEY_ENV = "ANTHROPIC_API_KEY"
 
+    # Provider-level fallback (provider_fallback.py) skips skeleton providers
+    # WITHOUT calling chat() — calling would raise NotImplementedError.
+    is_skeleton: bool = True
+
     @property
     def provider_name(self) -> str:
         return "anthropic"

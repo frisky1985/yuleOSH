@@ -80,6 +80,55 @@ class CostLogger:
         entry = LLMCallLog(**kwargs)
         cls.log(entry)
 
+    # ------------------------------------------------------------------
+    # Provider fallback event log (provider_fallback.py)
+    # ------------------------------------------------------------------
+
+    _fallback_log_path: str | None = None
+
+    @classmethod
+    def _ensure_fallback_log_path(cls) -> str:
+        """Return the provider fallback event log path, creating dirs if needed."""
+        if cls._fallback_log_path is None:
+            if cls._log_dir is None:
+                cls._log_dir = ".osh/logs"
+            log_dir = Path(cls._log_dir)
+            log_dir.mkdir(parents=True, exist_ok=True)
+            cls._fallback_log_path = str(log_dir / "provider_fallback_events.jsonl")
+        return cls._fallback_log_path
+
+    @classmethod
+    def log_fallback_event(
+        cls,
+        from_provider: str,
+        to_provider: str,
+        reason: str,
+        duration_s: float = 0.0,
+        error: str = "",
+    ) -> None:
+        """Append a provider degradation event to the audit log.
+
+        Args:
+            from_provider: Provider that failed (or the primary provider).
+            to_provider: Provider degraded to ("(abort)" if chain stopped,
+                "(none)" if chain exhausted).
+            reason: degradation reason (connection_error/timeout/http_5xx/
+                rate_limit/budget_exceeded/skeleton/no_key/non_degradable).
+            duration_s: time spent on the failed attempt.
+            error: exception message from the failed attempt (optional).
+        """
+        path = cls._ensure_fallback_log_path()
+        record = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "from_provider": from_provider,
+            "to_provider": to_provider,
+            "reason": reason,
+            "duration_s": duration_s,
+            "error": error,
+        }
+        with open(path, "a") as f:
+            f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+
     @classmethod
     def get_daily_summary(cls, date_str: Optional[str] = None) -> dict:
         """Aggregate call statistics for a specific date.
