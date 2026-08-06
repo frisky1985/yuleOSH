@@ -716,6 +716,58 @@ def _cmd_coverage_trend(args):
     print(result)
 
 
+def _collect_audit_log_verification(project_dir: Path, out_path: Path):
+    """安全可审计: verify the audit log hash chain and collect the proof.
+
+    Runs AuditLog.verify() over the project's audit logs and writes
+    ``audit-log-verification.json`` into the evidence bundle. The manifest
+    entry records the verdict — an intact chain is evidence the toolchain's
+    own audit trail has not been tampered with.
+    """
+    import json as _json
+    from datetime import datetime as _dt
+
+    try:
+        from yuleosh.audit import AuditLog
+
+        log = AuditLog(data_root=str(project_dir / "data"))
+        result = log.verify()
+
+        verification = {
+            "type": "audit-log-verification",
+            "generated_at": _dt.now().isoformat(),
+            "tool": "yuleosh audit verify",
+            "valid": result["valid"],
+            "checked_events": result["checked"],
+            "legacy_events": result["legacy"],
+            "files_covered": len(result["files"]),
+            "broken_at": result["broken_at"],
+            "reason": result["reason"],
+            "files": result["files"],
+        }
+        # Write the proof into the bundle (also into reports/ for reuse).
+        verify_path = out_path / "audit-log-verification.json"
+        verify_path.write_text(_json.dumps(verification, ensure_ascii=False, indent=2))
+        reports_dir = project_dir / ".yuleosh" / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        (reports_dir / "audit-log-verification.json").write_text(
+            _json.dumps(verification, ensure_ascii=False, indent=2))
+
+        verdict = "✅ 完整" if result["valid"] else "🔴 检测到篡改"
+        print(f"   🛡️ Audit Log Verification: {verdict} "
+              f"({result['checked']} events)")
+        return {
+            "type": "audit-log-verification",
+            "source": str(verify_path),
+            "valid": result["valid"],
+            "checked_events": result["checked"],
+            "legacy_events": result["legacy"],
+        }
+    except Exception as e:  # noqa: BLE001 — evidence collection must not crash
+        print(f"   ⚠️  Cannot verify audit log: {e}")
+        return None
+
+
 def cmd_audit_evidence(output_dir: str | None = None, create_zip: bool = True):
     """Generate CL2 audit evidence bundle.
 
@@ -960,6 +1012,13 @@ def cmd_audit_evidence(output_dir: str | None = None, create_zip: bool = True):
                 })
             except OSError:
                 pass
+
+    # 12.5 安全可审计: verify audit log hash chain (2026-08-07)
+    # Proves the toolchain's own audit trail is intact — tampering with any
+    # recorded event breaks the chain and fails this evidence gate.
+    audit_verification = _collect_audit_log_verification(project_dir, out_path)
+    if audit_verification is not None:
+        evidence["artifacts"].append(audit_verification)
 
     # Write audit manifest
     manifest_path = out_path / "audit-manifest.json"
