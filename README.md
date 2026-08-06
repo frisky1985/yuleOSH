@@ -9,11 +9,11 @@
     <a href="https://github.com/frisky1985/yuleOSH/actions">
       <img src="https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square" alt="CI">
     </a>
-    <img src="https://img.shields.io/badge/version-3.4.4-blue?style=flat-square" alt="Version">
+    <img src="https://img.shields.io/badge/version-3.12.1-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-Elastic%202.0-green?style=flat-square" alt="License">
     <img src="https://img.shields.io/badge/python-%E2%89%A53.10-ff69b4?style=flat-square" alt="Python">
-    <img src="https://img.shields.io/badge/tests-9500%2B%20passing-brightgreen?style=flat-square" alt="Tests">
-    <img src="https://img.shields.io/badge/coverage-83%25-success?style=flat-square" alt="Coverage">
+    <img src="https://img.shields.io/badge/tests-10000%2B%20passing-brightgreen?style=flat-square" alt="Tests">
+    <img src="https://img.shields.io/badge/coverage-84%25-success?style=flat-square" alt="Coverage">
     <img src="https://img.shields.io/badge/ASPICE%20SWE.1-6-traceable-success?style=flat-square" alt="ASPICE">
   </p>
 
@@ -121,6 +121,12 @@ Generate code directly from spec/architecture in `generate-code` mode. Every gen
 
 ### 🧩 Skills Library (v3.4+)
 Built-in skills (`autosar-coding`, `misra-fix`, `python-testing`) that are injected into LLM prompts for domain-consistent code generation. Extensible registry + CLI (`yuleosh skills list/show`).
+
+### 🧭 Methodology Platform (v3.10+)
+Three-layer enforcement gates blending engineering methodology into agent behavior: L1 behavior constraints → L2 methodology contract gates (executable) → L3-B standalone gate engine (zero-dependency, one-click mount to any project with a standalone gate CLI). Piloted on yuleASR.
+
+### 🌐 Mixed-Language CI (v3.12+)
+Embedded C MISRA gates extended to **Go/Python projects** (`project_language: mixed`), Go monorepo multi-module build/vet/test; cppcheck relative-path/exclude/scan_dirs fixes. yuleDKCS measured **690 → 0 MISRA C:2023 violations** (57 files).
 
 ### 🔄 Loop Engineering (v3.0+)
 Four closed-loop feedback systems: defect→spec traceability, field defect→FMEA safety analysis, KPI→RCA→improvement tickets, and self-evolving knowledge graph with confidence scoring.
@@ -273,7 +279,7 @@ yuleOSH/
 │   ├── preview/       Pre-pipeline analysis & scoring
 │   └── store.py       Multi-tenant SQLite/PostgreSQL backend
 ├── frontend/          Next.js SaaS dashboard
-├── tests/             9500+ tests (356 files, all passing)
+├── tests/             10000+ tests (392 files, all passing)
 ├── docs/              Specifications, guides, reports
 ├── deploy/            Production deployment configs
 ├── Dockerfile         Multi-stage production Dockerfile
@@ -438,6 +444,12 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 ### 🧩 技能库（v3.4+）
 内置技能（`autosar-coding`/`misra-fix`/`python-testing`）注入 LLM prompt，保证生成代码的领域一致性。可扩展注册表 + CLI（`yuleosh skills list/show`）。
 
+### 🧭 方法论平台化（v3.10+）
+融合工程方法论的**三层门禁体系**：L1 行为约束层 → L2 方法论契约门禁（可执行化）→ L3-B 独立门禁引擎（standalone 零依赖，一键挂载到任意项目，含独立门禁 CLI）。已在 yuleASR 试点成功。
+
+### 🌐 混合语言 CI（v3.12+）
+嵌入式 C MISRA 门禁扩展支持 **Go/Python 项目**（`project_language: mixed`），Go monorepo 多模块 build/vet/test；cppcheck 相对路径/exclude/scan_dirs 修复。yuleDKCS 实测 MISRA C:2023 **690 → 0 违规**（57 文件）。
+
 ### 🔄 Loop Engineering（v3.0+）
 四大闭环：缺陷→需求回溯、现场→FMEA 安全分析、KPI→RCA→改进工单、知识图谱自进化（置信度评分）。
 
@@ -482,7 +494,7 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 yuleOSH/
 ├── src/yuleosh/    核心源码模块（spec/pipeline/ci/codegen/skills/kg/loop_engine/api/cli…）
 ├── frontend/       Next.js SaaS 管理面板
-├── tests/          9500+ 测试（356 文件，全部通过）
+├── tests/          10000+ 测试（392 文件，全部通过）
 ├── docs/           需求文档、指南、报告
 ├── deploy/         生产部署配置
 ├── Dockerfile      多阶段 Docker 构建
@@ -555,7 +567,14 @@ yuleOSH 提供多个版本。开源版基于 Elastic License 2.0 免费使用；
 | v3.0.0 | Loop Engineering—四大闭环（缺陷/FMEA/KPI/KG） | ✅ |
 | v3.3.0 | 量产冲刺—质量门禁、ASPICE 证据、覆盖率 76% | ✅ |
 | v3.4.x | D3 编码生成闭环 + 技能库 + 覆盖率 83% + ultra-review P0 安全 | ✅ |
-| v3.5.0 | 覆盖率 85-90% + ultra-review P1/P2 backlog + SaaS GA | 🚧 |
+| v3.5.x | 覆盖率 84% + ultra-review P1/P2 backlog + SaaS 加固 | ✅ |
+| v3.6.x | 架构/质量冲刺 + yuleDKCS 试点 | ✅ |
+| v3.7.x | 工具链 + 交叉编译加固 | ✅ |
+| v3.8.x | 量产冲刺 + 门禁体系 | ✅ |
+| v3.9.x | 全量测试 10017 passed / 0 failed，覆盖率 84.17% | ✅ |
+| v3.10.x | 方法论约束层（L1）+ 真实 LLM 集成 + CI 门禁复活 | ✅ |
+| v3.11.0 | 方法论契约门禁（L2）可执行化 | ✅ |
+| v3.12.x | 方法论平台化（L3-B 门禁引擎）+ 混合语言 CI（Go/Python/C MISRA）+ yuleDKCS 690→0 违规 | ✅ |
 | v4.0.0 | 云端—多区域、数据驻留、托管服务 | 📋 |
 
 ---
