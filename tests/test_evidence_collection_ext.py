@@ -227,7 +227,7 @@ class TestLegacyMapping:
         return tmp
 
     def test_legacy_ids_dropped_and_rs_mapped(self, tmp_path):
-        """Legacy SHALL IDs dropped; RS entries mapped into REQ; REQ kept."""
+        """Legacy SHALL IDs dropped; RS entries deduped into existing REQ; REQ kept."""
         tmp = self._make_project(tmp_path)
         from yuleosh.evidence.collection import DataCollectionMixin
 
@@ -244,11 +244,14 @@ class TestLegacyMapping:
         c.collect_requirements()
 
         names = sorted(r.get("name", "") for r in c.requirements)
-        # legacy KL-/PE- entries dropped; RS entry 用户设备注册 mapped → REQ-001 (deduped)
+        # legacy KL-/PE- entries dropped; RS entry 用户设备注册 mapped → REQ-001
+        # but the authoritative REQ-001 table row already exists → deduped
         assert not any(n.startswith("KL-SHALL") or n.startswith("PE-SHALL") for n in names), names
         assert "用户设备注册" not in names, names
-        assert "REQ-001" in names and "REQ-010" in names, names
-        assert len(names) == 2, names
+        assert names == ["REQ-001", "REQ-010"], names
+        # The authoritative table row (with SHALL statement) must be the one kept
+        req001 = next(r for r in c.requirements if r.get("name") == "REQ-001")
+        assert len(req001.get("shall", [])) == 1, req001
 
     def test_no_mapping_doc_no_filter(self, tmp_path):
         """Without the mapping doc, collection behaves as before."""
