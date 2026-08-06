@@ -1135,3 +1135,36 @@ def cmd_kpi_ci_alert(args):
     print()
 
 
+
+
+def cmd_audit_verify(tenant: str = "", from_date: str = "",
+                     to_date: str = "", as_json: bool = False):
+    """Verify audit log hash-chain integrity (安全可审计, 2026-08-07).
+
+    Replays every audit event in the covered date range and confirms the
+    SHA-256 hash chain is unbroken. Any edit, deletion, or reordering of a
+    recorded event is detected. Exit code 0 = chain intact, 1 = tampered.
+    """
+    from yuleosh.audit import AuditLog
+
+    log = AuditLog()
+    result = log.verify(tenant=tenant, from_date=from_date, to_date=to_date)
+
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0 if result["valid"] else 1)
+
+    if result["valid"]:
+        print("✅ 审计日志哈希链完整（安全可审计）")
+        print(f"   校验事件数: {result['checked']}")
+        print(f"   旧格式事件(legacy): {result['legacy']}")
+        print(f"   覆盖文件: {len(result['files'])} 个")
+        for f in result["files"]:
+            print(f"     - {f}")
+        sys.exit(0)
+    else:
+        print("🔴 审计日志哈希链校验失败 — 检测到篡改！")
+        print(f"   断裂位置: 第 {result['broken_at']} 个事件")
+        print(f"   原因: {result['reason']}")
+        print(f"   已校验事件数: {result['checked']}")
+        sys.exit(1)
