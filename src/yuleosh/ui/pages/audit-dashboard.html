@@ -187,15 +187,11 @@ body {
 </div>
 
 <script>
-function getToken() {
-  return localStorage.getItem('yuleosh_token') || '';
-}
-
+// P1-2 (v3.13): token 经 HttpOnly cookie (yuleosh_at) 同源携带，前端零本地存储。
 async function api(method, path) {
-  const token = getToken();
-  const opts = {method, headers: {}};
-  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  const opts = {method, headers: {}, credentials: 'same-origin'};
   const resp = await fetch(path, opts);
+  if (resp.status === 401) { window.location.href = '/login'; return {}; }
   return resp.json();
 }
 

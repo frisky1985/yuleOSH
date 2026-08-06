@@ -97,20 +97,16 @@ let orgId = null;
 let userId = null;
 let userRole = null;
 
+// P1-2 (v3.13): token 经 HttpOnly cookie (yuleosh_at) 同源携带，
+// 前端零本地存储；401 时跳转登录页。
 async function loadSession() {
-  const token = localStorage.getItem('osh_token');
-  if (!token) { window.location.href = '/login'; return; }
-
   try {
     const resp = await fetch('/api/auth/session', {
-      headers: { 'Authorization': 'Bearer ' + token },
+      credentials: 'same-origin',
     });
+    if (resp.status === 401) { window.location.href = '/login'; return; }
     const data = await resp.json();
-    if (!resp.ok) {
-      localStorage.removeItem('osh_token');
-      window.location.href = '/login';
-      return;
-    }
+    if (!resp.ok) { window.location.href = '/login'; return; }
     orgId = data.org_id;
     userId = data.user_id;
     userRole = data.role;
@@ -124,14 +120,14 @@ async function loadSession() {
 }
 
 async function loadProjects() {
-  const token = localStorage.getItem('osh_token');
   const msgEl = document.getElementById('msg');
   const listEl = document.getElementById('projectList');
 
   try {
     const resp = await fetch('/api/project/list', {
-      headers: { 'Authorization': 'Bearer ' + token },
+      credentials: 'same-origin',
     });
+    if (resp.status === 401) { window.location.href = '/login'; return; }
     const data = await resp.json();
 
     if (resp.ok && data.projects) {
@@ -157,8 +153,8 @@ async function loadProjects() {
 }
 
 function selectProject(slug) {
-  const token = localStorage.getItem('osh_token');
-  localStorage.setItem('osh_project_slug', slug);
+  // P1-2: 原 osh_project_slug 为死存储（无任何页面读取），
+  // 移除后直接进入 Dashboard（项目上下文由服务端会话维护）。
   window.location.href = '/';
 }
 
@@ -172,15 +168,16 @@ function showCreateProject() {
 }
 
 async function createProject(name, slug) {
-  const token = localStorage.getItem('osh_token');
   const msgEl = document.getElementById('msg');
 
   try {
     const resp = await fetch('/api/project/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ name, slug }),
     });
+    if (resp.status === 401) { window.location.href = '/login'; return; }
     const data = await resp.json();
 
     if (resp.ok) {
@@ -194,16 +191,12 @@ async function createProject(name, slug) {
 }
 
 async function handleLogout() {
-  const token = localStorage.getItem('osh_token');
-  if (token) {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token },
-    });
-  }
-  localStorage.removeItem('osh_token');
-  localStorage.removeItem('osh_project_slug');
-  return true;
+  await fetch('/api/auth/logout', {
+    method: 'POST',
+    credentials: 'same-origin',
+  });
+  window.location.href = '/login';
+  return false;
 }
 
 loadSession();

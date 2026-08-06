@@ -113,20 +113,18 @@ async function handleAuth(e) {
   btn.textContent = 'Please wait...';
 
   try {
+    // P1-2 (v3.13): token 经 HttpOnly cookie (yuleosh_at) 由服务端设置，
+    // 前端零本地存储；fetch 同源自动携带 cookie。
     const resp = await fetch('/api/auth/signin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ email, invite_code }),
     });
     const data = await resp.json();
 
     if (resp.ok) {
-      if (data.redirect) {
-        window.location.href = data.redirect;
-      } else if (data.token) {
-        localStorage.setItem('osh_token', data.token);
-        window.location.href = data.redirect || '/project/select';
-      }
+      window.location.href = data.redirect || '/project/select';
     } else {
       msgEl.textContent = data.error || 'Something went wrong';
       btn.disabled = false;

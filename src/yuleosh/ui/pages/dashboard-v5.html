@@ -388,8 +388,8 @@ body::before{
 </div>
 
 <script>
-const T=localStorage.getItem('yuleosh_token');
-async function api(p,o={}){const h={'Content-Type':'application/json'};if(T)h['Authorization']='Bearer '+T;const r=await fetch(p,{headers:h,...o});return r.json()}
+// P1-2 (v3.13): token 经 HttpOnly cookie (yuleosh_at) 同源携带，前端零本地存储。
+async function api(p,o={}){const h={'Content-Type':'application/json'};const r=await fetch(p,{headers:h,credentials:'same-origin',...o});if(r.status===401){window.location.href='/login';return{}}return r.json()}
 
 // ── yuleASR widget ──
 async function loadYuleASR() {
