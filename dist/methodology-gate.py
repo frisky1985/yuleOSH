@@ -42,12 +42,20 @@ def _find_files(project_dir: str, globs: list[str]) -> list[Path]:
 def _find_spec_files(project_dir: str) -> list[Path]:
     """找 spec 文件（grilling 检查用）。
 
-    优先 OpenSpec 结构化目录（.osh/specs/*/spec.md），其次 docs/spec*.md，
-    再其次 specs/ 下**文件名含 spec 字样**的文档。排除需求追溯表
+    优先 OpenSpec 结构化目录（.osh/specs/*/spec.md），其次 docs/spec*.md
+    及 docs/spec/、docs/specs/ 子目录（常见 spec 组织方式），再其次
+    specs/ 下**文件名含 spec 字样**的文档，最后退路: 项目根下
+    *spec*.md（如 spec-contract.md / spec.md）。排除需求追溯表
     （module-requirements.md）、验收矩阵（*acceptance-matrix*.md）等
     非 spec 文档——那些是项目通用文档，不需要 grilling 决策记录。
     """
-    found = _find_files(project_dir, [".osh/specs/*/spec.md", "docs/spec*.md"])
+    found = _find_files(project_dir, [
+        ".osh/specs/*/spec.md",
+        "docs/spec*.md",
+        "docs/spec/*.md",
+        "docs/specs/*.md",
+        "docs/specification/*.md",
+    ])
     if found:
         return found
     # 退路: specs/ 下文件名含 'spec' 的（排除 misra/requirements/matrix）
@@ -55,6 +63,20 @@ def _find_spec_files(project_dir: str) -> list[Path]:
         name = p.name.lower()
         if "spec" in name and "matrix" not in name and "requirement" not in name and "misra" not in name:
             found.append(p)
+    if found:
+        return found
+    # 第三退路: 项目根下 *spec*.md（如 spec-contract.md / spec.md）
+    # 排除 docs/ specs/ 等已扫描目录中的文件（避免重复）
+    for p in _find_files(project_dir, ["*spec*.md", "*spec*.markdown"]):
+        rel = p.relative_to(project_dir)
+        if rel.parts and rel.parts[0] in (".git", "node_modules", "docs", "specs", "spec", ".yuleosh"):
+            continue
+        name = p.name.lower()
+        if "matrix" in name or "requirement" in name or "misra" in name:
+            continue
+        if "acceptance" in name:
+            continue
+        found.append(p)
     return found
 
 def _check_grilling(project_dir: str) -> tuple[bool, str]:

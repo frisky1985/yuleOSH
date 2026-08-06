@@ -188,15 +188,15 @@ def test_kg_summary_text(project_with_kg):
 # kpi_status integration
 # ══════════════════════════════════════════════════════════════════════
 
-def test_kpi_status_includes_kg(mocker, project_with_kg):
+def test_kpi_status_includes_kg(monkeypatch, project_with_kg):
     """kpi_status() should include KG entries in output."""
-    mocker.patch("yuleosh.ci.kpi.report._load_latest_misra_entry", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report._load_latest_coverage_entry", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report._get_misra_trend_avg", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report._get_coverage_trend_avg", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report.get_process_stability_summary", return_value="{}")
-    mocker.patch("yuleosh.ci.kpi.report.get_defect_escape_summary",
-                 return_value=json.dumps({}))
+    monkeypatch.setattr("yuleosh.ci.kpi.report._load_latest_misra_entry", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report._load_latest_coverage_entry", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report._get_misra_trend_avg", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report._get_coverage_trend_avg", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report.get_process_stability_summary", lambda *a, **k: "{}")
+    monkeypatch.setattr("yuleosh.ci.kpi.report.get_defect_escape_summary",
+                        lambda *a, **k: json.dumps({}))
 
     from yuleosh.ci.kpi.report import kpi_status
     result = kpi_status(project_with_kg, as_json=True)
@@ -205,15 +205,15 @@ def test_kpi_status_includes_kg(mocker, project_with_kg):
     assert "kg_coverage_pct" in entry_metrics
 
 
-def test_kpi_status_text_renders_kg(mocker, project_with_kg):
+def test_kpi_status_text_renders_kg(monkeypatch, project_with_kg):
     """Dashboard text output should render KG entries."""
-    mocker.patch("yuleosh.ci.kpi.report._load_latest_misra_entry", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report._load_latest_coverage_entry", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report._get_misra_trend_avg", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report._get_coverage_trend_avg", return_value={})
-    mocker.patch("yuleosh.ci.kpi.report.get_process_stability_summary", return_value="{}")
-    mocker.patch("yuleosh.ci.kpi.report.get_defect_escape_summary",
-                 return_value=json.dumps({}))
+    monkeypatch.setattr("yuleosh.ci.kpi.report._load_latest_misra_entry", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report._load_latest_coverage_entry", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report._get_misra_trend_avg", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report._get_coverage_trend_avg", lambda *a, **k: {})
+    monkeypatch.setattr("yuleosh.ci.kpi.report.get_process_stability_summary", lambda *a, **k: "{}")
+    monkeypatch.setattr("yuleosh.ci.kpi.report.get_defect_escape_summary",
+                        lambda *a, **k: json.dumps({}))
     from yuleosh.ci.kpi.report import kpi_status
     result = kpi_status(project_with_kg, as_json=False)
     assert "KG 需求覆盖率" in result

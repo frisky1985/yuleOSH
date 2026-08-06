@@ -12,7 +12,7 @@ services:
     environment:
       POSTGRES_DB: yuleosh
       POSTGRES_USER: yuleosh
-      POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme123}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD is required}
     ports:
       - "127.0.0.1:5432:5432"   # localhost-only for backups/tools
     volumes:
