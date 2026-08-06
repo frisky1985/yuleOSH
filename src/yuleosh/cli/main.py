@@ -104,6 +104,7 @@ from yuleosh.cli.commands.misc import (  # noqa: E402
     _cmd_coverage_gate,
     _cmd_coverage_trend,
     cmd_audit_evidence,
+    cmd_audit_verify,
     cmd_kpi_status,
     cmd_kpi_baseline_save,
     cmd_kpi_baseline_compare,
@@ -393,6 +394,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_audit_sync.add_argument("--save", action="store_true", default=True,
                                help="Save evidence to .yuleosh/reports/docsync-evidence.json")
 
+    p_audit_verify = asub.add_parser(
+        "verify", help="Verify audit log hash-chain integrity (tamper detection)")
+    p_audit_verify.add_argument("--tenant", default="",
+                                 help="Tenant slug to verify (default: global log)")
+    p_audit_verify.add_argument("--from-date", default="",
+                                 help="Start date YYYY-MM-DD (default: 30 days ago)")
+    p_audit_verify.add_argument("--to-date", default="",
+                                 help="End date YYYY-MM-DD (default: today)")
+    p_audit_verify.add_argument("--json", action="store_true",
+                                 help="Output as JSON")
+
     # autosar
     p_autosar = sub.add_parser("autosar", help="AUTOSAR management (parse, gen-stub)")
     asub = p_autosar.add_subparsers(dest="autosar_sub")
@@ -664,6 +676,13 @@ def main():
                 project_dir=getattr(args, "project_dir", OSH_HOME),
                 base_ref=getattr(args, "base_ref", "HEAD"),
                 save=getattr(args, "save", True),
+            )
+        elif args.audit_sub == "verify":
+            cmd_audit_verify(
+                tenant=getattr(args, "tenant", ""),
+                from_date=getattr(args, "from_date", ""),
+                to_date=getattr(args, "to_date", ""),
+                as_json=getattr(args, "json", False),
             )
         else:
             parser.print_help()

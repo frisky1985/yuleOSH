@@ -116,6 +116,9 @@ Next.js web dashboard with PostgreSQL multi-tenant storage, JWT authentication, 
 ### 📋 Compliance
 One-click generation of traceability matrices, acceptance matrices, and compliance evidence ZIP archives — assists in preparing ASPICE SWE.1~SWE.6 audit evidence.
 
+### 🛡️ Security & Auditability (安全可审计, v3.13+)
+Every state-changing operation is recorded in an **append-only, tamper-evident audit log**. Each event carries a SHA-256 hash chained to the previous event — any edit, deletion, or reordering is detected by `yuleosh audit verify`. Built for teams whose compliance story depends on being able to say: *"our toolchain's own audit trail is intact."*
+
 ### ⚙️ D3 Code Generation Loop (v3.4+)
 Generate code directly from spec/architecture in `generate-code` mode. Every generated file is automatically compile-verified (Python/C), with an auto-repair loop (up to 3 rounds) that feeds compiler errors back into the LLM until it passes.
 
@@ -365,6 +368,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code conventions, 
 ## Security
 
 See [SECURITY.md](SECURITY.md) for our vulnerability disclosure process.
+
+### Auditability (安全可审计)
+
+yuleOSH is built to be **secure and auditable** — the toolchain's own audit trail is tamper-evident:
+
+- **Append-only audit log**: every state-changing operation (project/pipeline/review/auth/billing/evidence) is recorded to `data/audit/YYYY-MM-DD.jsonl` — no edits, no deletes.
+- **SHA-256 hash chain**: each event's hash covers its payload plus the previous event's hash. Editing, deleting, or reordering any recorded event breaks the chain.
+- **`yuleosh audit verify`**: replay the chain to prove integrity. Exit code 0 = intact, 1 = tampering detected (with the exact broken position).
+- **Legacy compatible**: logs written before the hash-chain feature remain readable and are seamlessly anchored into the chain.
+
+```bash
+# Prove your audit trail is intact — any tampering fails the check
+yuleosh audit verify
+# ✅ 审计日志哈希链完整（安全可审计）
+
+# Machine-readable output for CI / evidence packs
+yuleosh audit verify --json
+```
 
 ## License
 
