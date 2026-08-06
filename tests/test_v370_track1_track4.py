@@ -731,7 +731,7 @@ class TestW7SubprocessTimeout:
 
     def test_t_w7_01_demo_uart_argv(self):
         """T-W7-01: make runs as argv with a numeric -j, no shell=True."""
-        from src.cli.commands.demo_uart import _build_host
+        from yuleosh.cli.commands.demo_uart import _build_host
         build_dir = Path(tempfile.mkdtemp()) / "build_host"
         build_dir.mkdir(parents=True, exist_ok=True)
         (build_dir / "uart_demo_host").write_text("#!/bin/sh\n", encoding="utf-8")
@@ -750,7 +750,7 @@ class TestW7SubprocessTimeout:
 
     def test_t_w7_02_no_shell_inspect(self):
         """T-W7-02: demo_uart.py source has no shell=True / shell interpolation."""
-        src = Path(__file__).resolve().parent.parent / "src" / "cli" / "commands" / "demo_uart.py"
+        src = Path(__file__).resolve().parent.parent / "src" / "yuleosh" / "cli" / "commands" / "demo_uart.py"
         text = src.read_text(encoding="utf-8")
         assert "shell=True)" not in text  # no shell=True at any call site
         assert "-j$(" not in text
@@ -759,7 +759,7 @@ class TestW7SubprocessTimeout:
 
     def test_t_w7_03_timeout_fail(self, capsys):
         """T-W7-03-neg: a hanging subprocess fails explicitly on timeout."""
-        from src.cli.commands.demo_uart import _build_host
+        from yuleosh.cli.commands.demo_uart import _build_host
         build_dir = Path(tempfile.mkdtemp()) / "build_host"
         build_dir.mkdir(parents=True, exist_ok=True)
 
@@ -773,7 +773,7 @@ class TestW7SubprocessTimeout:
 
     def test_t_w7_04_timeout_normal(self):
         """T-W7-04: normal completion keeps v3.6.1 semantics (success)."""
-        from src.cli.commands.demo_uart import _build_host
+        from yuleosh.cli.commands.demo_uart import _build_host
         build_dir = Path(tempfile.mkdtemp()) / "build_host"
         build_dir.mkdir(parents=True, exist_ok=True)
         (build_dir / "uart_demo_host").write_text("#!/bin/sh\n", encoding="utf-8")
