@@ -89,6 +89,25 @@ def test_grilling_fail_without_log(tmp_path):
     assert "存量项目降级" in msg
 
 
+def test_grilling_finds_spec_in_docs_spec_dir(tmp_path):
+    """spec 位于 docs/spec/ 子目录（常见组织方式）→ 应识别并降级 pass（soft）。"""
+    (tmp_path / "docs" / "spec").mkdir(parents=True)
+    (tmp_path / "docs" / "spec" / "spec-multi-device.md").write_text(
+        "# Spec\n\nSHALL do X\n", encoding="utf-8"
+    )
+    ok, msg = _check_grilling(str(tmp_path))
+    assert ok
+    assert "存量项目降级" in msg
+
+
+def test_grilling_finds_spec_in_root_spec_contract(tmp_path):
+    """spec 位于项目根（spec-contract.md）→ 应识别并降级 pass（soft）。"""
+    (tmp_path / "spec-contract.md").write_text("# Spec Contract\n\nSHALL do X\n", encoding="utf-8")
+    ok, msg = _check_grilling(str(tmp_path))
+    assert ok
+    assert "存量项目降级" in msg
+
+
 def test_grilling_hard_fail_active_openspec_without_log(tmp_path):
     """活跃 OpenSpec 项目（有 .osh/specs/）无决策记录 → hard fail（阻断）。"""
     (tmp_path / ".osh" / "specs" / "v1.0.0").mkdir(parents=True)
