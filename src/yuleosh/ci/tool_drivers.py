@@ -190,7 +190,18 @@ class CppcheckDriver(BaseToolDriver):
             suppress_opts.append(f"--suppress={s}")
 
         extra_args = self._config.get("extra_args", [])
-        args = ["cppcheck", f"--addon={addon}", f"--enable={enable}"] + suppress_opts + extra_args
+        args = ["cppcheck", f"--addon={addon}", f"--enable={enable}"] + suppress_opts
+
+        # MISRA addon 需要把 .dump 中间文件写到源码所在目录；当源码位于只读
+        # 安装/检出目录（如容器内 root 属主的 /app）时 addon 会整体失败。
+        # 默认将中间产物重定向到可写临时目录；调用方可用 extra_args 显式
+        # 指定 --cppcheck-build-dir 覆盖此行为。
+        build_dir = None
+        if not any(a.startswith("--cppcheck-build-dir") for a in extra_args):
+            import tempfile as _tempfile
+            build_dir = _tempfile.mkdtemp(prefix="yuleosh-cppcheck-")
+            args.append(f"--cppcheck-build-dir={build_dir}")
+        args += extra_args
 
         if target_path.is_file():
             args.append(str(target_path))
@@ -217,6 +228,10 @@ class CppcheckDriver(BaseToolDriver):
         except subprocess.TimeoutExpired:
             log.error("cppcheck timed out after %ss", run_timeout)
             return "(error: cppcheck timed out)"
+        finally:
+            if build_dir:
+                import shutil
+                shutil.rmtree(build_dir, ignore_errors=True)
 
     def generate_report(self, violations: list[dict]) -> dict:
         """从违规列表生成结构化 MISRA 报告。

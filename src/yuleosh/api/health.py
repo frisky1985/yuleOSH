@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 from . import json_ok, json_error, OSH_HOME
+from yuleosh import __version__
 from yuleosh.store import Store
 
 # Uptime tracking
@@ -52,7 +53,7 @@ def handle_health(method: str, **kwargs):
         "store": store_status,
         "disk": disk_status,
         "uptime_seconds": uptime_seconds,
-        "version": "0.1.0",
+        "version": __version__,
         "auth_enabled": _auth_enabled(),
         # P1-7 (S-06): never expose the absolute OSH_HOME path.
         "osh_home_configured": bool(OSH_HOME),

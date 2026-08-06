@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler
 
+from yuleosh import __version__
+
 
 def handle_status(handler: BaseHTTPRequestHandler) -> dict:
     """Return basic server status.
@@ -24,7 +26,7 @@ def handle_status(handler: BaseHTTPRequestHandler) -> dict:
         "osh_home_configured": bool(
             os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         ),
-        "version": "1.0.0",
+        "version": __version__,
         "timestamp": __import__("datetime").datetime.now().isoformat(),
     }
 
@@ -48,7 +50,7 @@ def handle_health(handler: BaseHTTPRequestHandler) -> dict:
 
     return {
         "status": "ok",
-        "version": "1.0.0",
+        "version": __version__,
         "uptime_seconds": None,
         "auth_enabled": AUTH_ENABLED,
         "tenant_auth": tenant_auth,
