@@ -185,3 +185,90 @@ class TestDataCollectionMixin:
             c = FakeCollector(tmp)
             c.collect_sil_reports()  # should not raise
             assert c.sil_reports == []
+
+
+class TestLegacyMapping:
+    """Legacy SHALL ID → current REQ mapping filter (P1-2)."""
+
+    def _make_project(self, tmp):
+        """Project with a spec file (legacy + REQ rows) and a mapping doc."""
+        specs = tmp / "specs"
+        specs.mkdir(parents=True)
+        (specs / "requirements-shall-table.md").write_text(
+            "# REQ 需求表\n"
+            "\n"
+            "| ID | SHALL 语句 | ASIL | 范围 |\n"
+            "|:---|:-----------|:-----|:-----|\n"
+            "| REQ-001 | SHALL register a device | QM | 全部 |\n"
+            "| REQ-010 | SHALL bind a key | ASIL-B | DKCS Core |\n",
+            encoding="utf-8",
+        )
+        (specs / "legacy-shall-mapping.md").write_text(
+            "# 遗留 SHALL ID 映射\n"
+            "\n"
+            "| 遗留 ID 模式 | 状态 | 现需求 ID | 说明 |\n"
+            "|:-------------|:-----|:----------|:-----|\n"
+            "| KL-SHALL-* | superseded | REQ-010~014 | 钥匙生命周期 → 密钥绑定/解绑/撤销/列表/分享 |\n"
+            "| PE-SHALL-* | superseded | REQ-004 | 性能指标 |\n"
+            "| 用户设备注册 | mapped | REQ-001 | 系统需求下放为软件需求 |\n",
+            encoding="utf-8",
+        )
+        # A legacy spec file with table-style SHALL rows
+        (specs / "spec-fix-p0.md").write_text(
+            "# 修复 P0 遗留\n"
+            "\n"
+            "| ID | 描述 |\n"
+            "|:---|:-----|\n"
+            "| KL-SHALL-01 | 支持钥匙生命周期 |\n"
+            "| KL-SHALL-02 | 非对称密钥对 |\n"
+            "| PE-SHALL-01 | 解锁响应 ≤1s |\n",
+            encoding="utf-8",
+        )
+        return tmp
+
+    def test_legacy_ids_dropped_and_rs_mapped(self, tmp_path):
+        """Legacy SHALL IDs dropped; RS entries mapped into REQ; REQ kept."""
+        tmp = self._make_project(tmp_path)
+        from yuleosh.evidence.collection import DataCollectionMixin
+
+        class FakeCollector(DataCollectionMixin):
+            def __init__(self, project_dir):
+                self.project_dir = project_dir
+                self.requirements = []
+                self.scenarios = []
+
+            def _find_latest_pipeline_spec(self):
+                return None
+
+        c = FakeCollector(str(tmp))
+        c.collect_requirements()
+
+        names = sorted(r.get("name", "") for r in c.requirements)
+        # legacy KL-/PE- entries dropped; RS entry 用户设备注册 mapped → REQ-001 (deduped)
+        assert not any(n.startswith("KL-SHALL") or n.startswith("PE-SHALL") for n in names), names
+        assert "用户设备注册" not in names, names
+        assert "REQ-001" in names and "REQ-010" in names, names
+        assert len(names) == 2, names
+
+    def test_no_mapping_doc_no_filter(self, tmp_path):
+        """Without the mapping doc, collection behaves as before."""
+        specs = tmp_path / "specs"
+        specs.mkdir()
+        (specs / "spec-fix-p0.md").write_text(
+            "# 修复\n\n| ID | 描述 |\n|:---|:-----|\n| KL-SHALL-01 | 生命周期 |\n",
+            encoding="utf-8",
+        )
+        from yuleosh.evidence.collection import DataCollectionMixin
+
+        class FakeCollector(DataCollectionMixin):
+            def __init__(self, project_dir):
+                self.project_dir = project_dir
+                self.requirements = []
+                self.scenarios = []
+
+            def _find_latest_pipeline_spec(self):
+                return None
+
+        c = FakeCollector(str(tmp_path))
+        c.collect_requirements()
+        assert [r.get("name") for r in c.requirements] == ["KL-SHALL-01"]
