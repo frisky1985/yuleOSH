@@ -161,15 +161,18 @@ def test_known_positive(c_file, expected_rules):
     if fn_rules:
         expected_data = _load_expected()
         cls = _case_class(c_file.name, expected_data)
-        # Documented FN cases (class == "fn") are known addon limitations.
-        # TP cases whose expected rule is missing (and unknown-class cases)
-        # reflect toolchain drift vs the recorded report snapshot — track as
-        # xfail so the benchmark measures without blocking the suite, while
-        # a change in detection behavior would flip the outcome visibly.
+        # ── 已知限制（P0-3 诚实化）─────────────────────────────────────
+        # 这些场景的预期规则确实未被 cppcheck misra addon 检出，属真实工具链
+        # 限制，而非回归：benchmark/results/misra-benchmark-report.json 的快照
+        # （cppcheck 2.17.1 实测）已记录 actual_count 高于预期且不含预期规则。
+        # 使用显式 skip（而非 xfail）——基准绝不把"工具检不出"的场景冒充为
+        # 通过；如需消除 skip，请升级工具链后重新生成基准快照并复核预期规则。
         if cls in ("fn", "tp", "unknown"):
-            pytest.xfail(
-                f"工具链漂移 (toolchain drift) — 预期 {sorted(fn_rules)} 未检出 "
-                f"(class={cls})"
+            pytest.skip(
+                f"已知工具链限制 (known limitation) — 预期规则 {sorted(fn_rules)} "
+                f"未被 cppcheck misra addon 检出 (class={cls})；"
+                f"详见 README 'MISRA benchmark 已知限制' 与 "
+                f"benchmark/results/misra-benchmark-report.json"
             )
         extra = detected - expected_set
         detail = (
@@ -206,8 +209,9 @@ def test_clean_code(c_file):
 
     Cases whose recorded validation is ``false_positive`` are known cppcheck
     misra-addon limitations (tracked in misra-benchmark-report.json) — they
-    are marked xfail so the suite stays green while still detecting NEW
-    regressions (an unexpected change in the detected set flips the result).
+    are SKIPPED explicitly (P0-3 honesty: never masquerade tool limitations
+    as green) while still detecting NEW regressions (an unexpected change in
+    the detected set flips the result).
     """
     detected = _run_cppcheck(c_file)
 
@@ -224,7 +228,14 @@ def test_clean_code(c_file):
                 f"基准改善 (regression fixed) — '{c_file.name}' 不再产生误报，"
                 f"请更新 misra-benchmark-report.json 的 validation 字段"
             )
-        pytest.xfail(f"已知误报 (documented FP): {sorted(detected)}")
+        # ── 已知限制（P0-3 诚实化）─────────────────────────────────────
+        # 记录在案的已知误报（misra-benchmark-report.json validation=
+        # false_positive，cppcheck 2.17.1 实测）：工具在"干净代码"上仍报违规。
+        # 显式 skip + 注释，不冒充全绿；工具链升级后应重新生成基准快照。
+        pytest.skip(
+            f"已知误报 (documented FP, 工具链限制): {sorted(detected)} — "
+            f"详见 README 'MISRA benchmark 已知限制'"
+        )
 
     if detected:
         _bench_stats["fp"] += len(detected)

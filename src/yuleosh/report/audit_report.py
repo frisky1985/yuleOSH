@@ -9,6 +9,12 @@ Produces ASPICE-aligned audit reports by traversing yuleOSH evidence
 data and organizing findings by ASPICE process dimensions
 (SWE.1–SWE.6, SYS.1–SYS.5, MAN.3, SUP.1, SUP.9, SUP.10).
 
+HONEST GRADING (P0-4): dimension scores are EVIDENCE-COVERAGE grades
+(E1/E2/E3/NI) computed from the passing-evidence ratio. They are NOT
+Automotive SPICE capability levels (AL) and do NOT constitute any formal
+ASPICE assessment result — see the disclaimer rendered in every report
+(HTML legend / text export).
+
 Output formats:
   - HTML (self-contained report)
   - JSON (machine-readable)
@@ -64,10 +70,10 @@ class EvidenceItem:
 
 @dataclass
 class ProcessDimension:
-    """ASPICE process dimension evaluation."""
+    """ASPICE process dimension evaluation (evidence-coverage grading, P0-4)."""
     process_id: str          # e.g. "SWE.1"
     title: str               # e.g. "Software Requirements Analysis"
-    score: str               # "AL1" | "AL2" | "AL3" | "NI"
+    score: str               # "E1" | "E2" | "E3" | "NI"  — 证据覆盖度等级，非 ASPICE 能力等级
     coverage_pct: float      # 0.0–100.0
     evidence_count: int
     gap_count: int
@@ -85,7 +91,7 @@ class AspiceReport:
     version: str
     generated_at: str
     report_id: str
-    overall_score: str        # "AL1" | "AL2" | "AL3"
+    overall_score: str        # "E1" | "E2" | "E3" | "NI"  — 证据覆盖度等级，非 ASPICE 能力等级
     overall_coverage_pct: float
     total_evidences: int
     total_gaps: int
@@ -406,12 +412,15 @@ class AuditReportGenerator:
                 coverage_pct = round((passing / evidence_count) * 100, 1)
                 gap_count = failing
 
+                # P0-4: E1–E3 are EVIDENCE-COVERAGE grades derived from the
+                # passing-evidence ratio — explicitly NOT ASPICE capability
+                # levels (AL). Never present them as a formal assessment.
                 if coverage_pct >= 90 and failing == 0:
-                    score = "AL3"
+                    score = "E3"
                 elif coverage_pct >= 70 and failing < evidence_count * 0.2:
-                    score = "AL2"
+                    score = "E2"
                 elif coverage_pct >= 30:
-                    score = "AL1"
+                    score = "E1"
                 else:
                     score = "NI"
 
@@ -455,12 +464,14 @@ class AuditReportGenerator:
         ) if dimensions else 0.0
 
         avg_coverage = overall_coverage
+        # P0-4: same evidence-coverage grading as per-dimension scores —
+        # NOT an ASPICE capability level.
         if avg_coverage >= 90 and total_gaps == 0:
-            overall_score = "AL3"
+            overall_score = "E3"
         elif avg_coverage >= 70:
-            overall_score = "AL2"
+            overall_score = "E2"
         elif avg_coverage >= 30:
-            overall_score = "AL1"
+            overall_score = "E1"
         else:
             overall_score = "NI"
 
@@ -564,7 +575,7 @@ class AuditReportGenerator:
                 recs.append(
                     f"[{pid}] ❌ 无可用证据 — 请提供符合过程 {pid} ({dim.title}) 的工作产品"
                 )
-            elif dim.score == "AL1" and dim.evidence_count > 0:
+            elif dim.score == "E1" and dim.evidence_count > 0:
                 missing = [f for f in dim.findings if f.get("type") == "missing_evidence"]
                 if missing:
                     recs.append(
@@ -573,13 +584,13 @@ class AuditReportGenerator:
                 failed = [f for f in dim.findings if f.get("type") == "failed_evidence"]
                 if failed:
                     recs.append(
-                        f"[{pid}] 🔴 {len(failed)} 项证据未通过 — 需修复后才可提升至 AL2"
+                        f"[{pid}] 🔴 {len(failed)} 项证据未通过 — 需修复后才可提升至 E2"
                     )
-            elif dim.score == "AL2":
+            elif dim.score == "E2":
                 failed = [f for f in dim.findings if f.get("type") == "failed_evidence"]
                 if not failed:
                     recs.append(
-                        f"[{pid}] ✅ AL2 已满足 — 可通过增加过程绩效指标证据提升至 AL3"
+                        f"[{pid}] ✅ E2 已满足 — 可通过增加过程绩效指标证据提升至 E3"
                     )
 
         # Cross-dimension recommendations
@@ -640,18 +651,18 @@ class AuditReportGenerator:
 
     def _render_html(self, report: AspiceReport) -> str:
         """Render the ASPICE report as a standalone HTML page."""
-        # Color mapping for scores
+        # Color mapping for scores (P0-4: evidence-coverage grades)
         score_color = {
-            "AL3": "#22c55e",
-            "AL2": "#eab308",
-            "AL1": "#f97316",
+            "E3": "#22c55e",
+            "E2": "#eab308",
+            "E1": "#f97316",
             "NI":  "#ef4444",
         }
         score_label = {
-            "AL3": "AL3 — Fully Achieved",
-            "AL2": "AL2 — Largely Achieved",
-            "AL1": "AL1 — Partially Achieved",
-            "NI":  "NI — Not Achieved",
+            "E3": "E3 — 证据覆盖度高 (≥90% 通过, 0 失败)",
+            "E2": "E2 — 证据覆盖度中 (≥70% 通过, <20% 失败)",
+            "E1": "E1 — 证据覆盖度低 (≥30% 通过)",
+            "NI":  "NI — 无证据或覆盖度 <30%",
         }
 
         dim_rows = ""
@@ -765,14 +776,21 @@ class AuditReportGenerator:
 
 <h2>Score Legend</h2>
 <table>
-<thead><tr><th>Level</th><th>Description</th><th>Requirements</th></tr></thead>
+<thead><tr><th>Level</th><th>Description</th><th>Criteria (evidence coverage)</th></tr></thead>
 <tbody>
-  <tr><td><span class="badge badge-green">AL3</span></td><td>Fully Achieved</td><td>≥90% coverage, zero gaps</td></tr>
-  <tr><td><span class="badge badge-yellow">AL2</span></td><td>Largely Achieved</td><td>≥70% coverage, <20% failures</td></tr>
-  <tr><td><span class="badge badge-orange">AL1</span></td><td>Partially Achieved</td><td>≥30% coverage</td></tr>
-  <tr><td><span class="badge badge-red">NI</span></td><td>Not Achieved</td><td>&lt;30% coverage or no evidence</td></tr>
+  <tr><td><span class="badge badge-green">E3</span></td><td>证据覆盖度高</td><td>≥90% coverage, zero failing</td></tr>
+  <tr><td><span class="badge badge-yellow">E2</span></td><td>证据覆盖度中</td><td>≥70% coverage, &lt;20% failures</td></tr>
+  <tr><td><span class="badge badge-orange">E1</span></td><td>证据覆盖度低</td><td>≥30% coverage</td></tr>
+  <tr><td><span class="badge badge-red">NI</span></td><td>无证据 / 覆盖度不足</td><td>&lt;30% coverage or no evidence</td></tr>
 </tbody>
 </table>
+
+<div class="recs" style="border-left: 4px solid #f97316;">
+  <strong>⚠️ 重要说明（非 ASPICE 能力等级）：</strong>
+  E1–E3 仅为<strong>证据覆盖度分级</strong>，由通过状态证据的占比计算得出，
+  <strong>不是 Automotive SPICE 能力等级（Capability Level）</strong>，也不构成任何
+  正式的 ASPICE 评估结论（如 CL1 等）。如需正式评估，请咨询经认可的评估机构。
+</div>
 
 <div class="footer">
   Generated by yuleOSH Audit Report Generator — {html.escape(report.generated_at)}
@@ -835,6 +853,9 @@ class AuditReportGenerator:
         lines.append(f"  Overall Coverage: {report.overall_coverage_pct}%")
         lines.append(f"  Total Evidence: {report.total_evidences}")
         lines.append(f"  Total Gaps: {report.total_gaps}")
+        lines.append("")
+        lines.append("  ⚠️ 重要说明: E1–E3 仅为证据覆盖度分级，不是 Automotive SPICE")
+        lines.append("  能力等级 (Capability Level)，也不构成任何正式的 ASPICE 评估结论。")
         lines.append("")
 
         # By dimension
