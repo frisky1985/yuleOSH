@@ -63,6 +63,20 @@
 - **依赖声明补全**: openpyxl>=3.1.0、pytest-asyncio>=0.23
 - **技能库**: 导入 mattpocock 41 技能 + 项目管理 SOP
 
+## 🧠 Memory 记忆能力集成（2026-08-06，v3.12.1 增量）
+
+将 Hermes agent 记忆能力移植到 yuleOSH：跨会话结构化事实存储 + 会话全文检索（方案 B）。
+
+| 命令 | 说明 |
+|:-----|:-----|
+| `yuleosh memory remember/recall/forget/list/stats` | 结构化事实存储（entity/category/tags/trust/recall_count），信任强化（recall 命中 +0.1，上限 1.0） |
+| `yuleosh memory log` + `yuleosh session search` | FTS5 全文检索会话/决策记录 |
+
+- 独立 SQLite（`YULEOSH_MEMORY_DB` 可隔离），遵循 kb 模块模式
+- FTS5 外部内容表 + AFTER INSERT/DELETE 触发器 + rebuild backfill（外部内容表不自动索引）
+- 测试 `tests/test_memory_store.py` 13 passed；ruff memory 包 0 错误
+- 后续（方案 C，未排期）：KG/RAG/LLM 联动，记忆注入 LLM 上下文
+
 ---
 
 ## ✅ 质量状态

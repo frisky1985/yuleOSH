@@ -227,6 +227,7 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 | Loop Engine | `src/yuleosh/loop_engine/` | 4 closed-loop feedback (defect/FMEA/KPI/KG) |
 | Knowledge Graph | `src/yuleosh/knowledge_graph/` | KG store (SQLite BFS / PostgreSQL CTE) + incremental CI |
 | Knowledge Base | `src/yuleosh/kb/` | Persistent KB store (env-isolatable via `YULEOSH_KB_DB`) |
+| Memory | `src/yuleosh/memory/` | Cross-session fact store + FTS5 session search (`yuleosh memory` / `yuleosh session`) |
 | Test Generation | `src/yuleosh/testgen/` | Auto-generate test harness from spec scenarios |
 | Plugins | `src/yuleosh/plugins/` | Plugin registry + sandboxed execution |
 | Usage/Billing | `src/yuleosh/usage/` `src/yuleosh/billing/` | Metering + Stripe gateway (for SaaS) |

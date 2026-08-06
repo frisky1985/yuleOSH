@@ -266,6 +266,11 @@ def _build_parser() -> argparse.ArgumentParser:
     from yuleosh.kb.cli import build_kb_subparser
     build_kb_subparser(sub)
 
+    # memory (cross-session fact store + session search)
+    from yuleosh.memory.cli import build_memory_subparser, build_session_subparser
+    build_memory_subparser(sub)
+    build_session_subparser(sub)
+
     # kg (knowledge graph)
     p_kg = sub.add_parser("kg", help="Knowledge Graph management")
     kgsub = p_kg.add_subparsers(dest="kg_sub")
@@ -705,6 +710,14 @@ def main():
     elif args.command == "kb":
         from yuleosh.kb.cli import handle_kb_command
         sys.exit(handle_kb_command(args))
+
+    elif args.command == "memory":
+        from yuleosh.memory.cli import handle_memory_command
+        sys.exit(handle_memory_command(args))
+
+    elif args.command == "session":
+        from yuleosh.memory.cli import handle_session_command
+        sys.exit(handle_session_command(args))
 
     elif args.command == "kpi":
         if args.kpi_sub == "status":
