@@ -806,8 +806,9 @@ def main():
     elif args.command == "kg":
         from yuleosh.knowledge_graph.kg_cli import (
             cmd_build, cmd_bootstrap, cmd_snapshot_list, cmd_snapshot_diff,
-            cmd_query_impact, cmd_stats, cmd_report, cmd_events, cmd_check_merge,
+            cmd_query_impact, cmd_stats as kg_cmd_stats, cmd_report, cmd_events,
         )
+        from yuleosh.knowledge_graph.merge_gate import cmd_check_merge
         if args.kg_sub == "build":
             cmd_build(args)
         elif args.kg_sub == "bootstrap":
@@ -827,7 +828,7 @@ def main():
                 parser.print_help()
                 sys.exit(1)
         elif args.kg_sub == "stats":
-            cmd_stats(args)
+            kg_cmd_stats(args)
         elif args.kg_sub == "report":
             cmd_report(args)
         elif args.kg_sub == "events":
