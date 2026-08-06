@@ -1,8 +1,10 @@
-"""Unit tests for yuleosh.api.dashboard (v3.4.2b Wave 2a).
+"""Unit tests for yuleosh.api.dashboard (v3.4.2b Wave 2a; P0-2 revised).
 
 Covers the dashboard API routes offline:
   - handle_dashboard routing (all 7 routes + unknown -> 404)
-  - projects (real store path / mock fallback / project_id filter)
+  - projects (P0-2: real org-scoped data only — org filter, 503 on store
+    failure, 401 fail-closed without org_id, 404 for unknown project_id;
+    NO mock fallback)
   - swe-status (manifest path / mock fallback / corrupt manifest)
   - gap-analysis (real manifest items / pagination / severity filter)
   - evidence generate (subprocess success/failure/timeout/FileNotFound)
@@ -27,6 +29,24 @@ from yuleosh.api import dashboard as D
 # The auth wrapper injects current_user as a kwarg, but handle_dashboard
 # has no **kwargs; unit tests call the wrapped original directly.
 _handle = D.handle_dashboard.__wrapped__
+
+
+def _req(method="GET", path="projects", body=None, query=None, org_id=1,
+         current_user=None):
+    """Call the wrapped handler with an authenticated current_user (P0-2)."""
+    if current_user is None:
+        current_user = {"user_id": 42, "org_id": org_id,
+                        "email": "t@example.com", "role": "admin"}
+    return _handle(method, path, body or {}, query or {}, handler=None,
+                   current_user=current_user)
+
+
+def _fake_store(projects):
+    """Build a fake Store emulating list_org_projects (WHERE org_id=?)."""
+    class FakeStore:
+        def list_org_projects(self, org_id):
+            return [dict(p) for p in projects if p.get("org_id") == org_id]
+    return FakeStore
 
 
 @pytest.fixture(autouse=True)
@@ -61,10 +81,12 @@ def _resp(result):
 
 class TestRouting:
     def test_projects_route(self):
-        """GIVEN GET projects WHEN handle THEN ok payload."""
-        payload, status = _handle("GET", "projects", {}, {}, handler=None)
-        assert status == 200 and payload["ok"] is True
-        assert payload["data"]["count"] == 3
+        """GIVEN GET projects WHEN handle THEN explicit error (no mock, P0-2)."""
+        payload, status = _req("GET", "projects")
+        # Offline unit env has no real store — endpoint must fail explicitly
+        # (503), never silently fall back to demo data.
+        assert status == 503 and payload["ok"] is False
+        assert "加载失败" in payload["error"]
 
     def test_swe_status_route(self):
         """GIVEN GET swe-status WHEN handle THEN swe dict + pct."""
@@ -133,60 +155,89 @@ class TestRouting:
         assert status == 404
 
 
-# ── projects ───────────────────────────────────────────────────────────
+# ── projects (P0-2: real org-scoped data only, no mock fallback) ───────
 
 class TestProjects:
-    def test_mock_fallback(self):
-        """GIVEN no real store WHEN projects THEN mock + demo note."""
-        payload, status = _handle("GET", "projects", {}, {}, handler=None)
-        assert status == 200
-        assert payload["data"]["note"] == "⚠️ 演示数据 — 需连接实际项目"
-        assert payload["data"]["count"] == 3
+    def test_store_unavailable_returns_503(self):
+        """GIVEN store raising WHEN projects THEN 503, never mock fallback."""
+        payload, status = _req("GET", "projects")
+        assert status == 503
+        assert payload["ok"] is False
+        assert "加载失败" in payload["error"]
+        # No demo-data note / no fabricated project rows
+        assert "count" not in payload.get("data", {})
 
-    def test_project_id_filter(self):
-        """GIVEN project_id WHEN projects THEN single project."""
-        payload, _ = _handle(
-            "GET", "projects", {}, {"project_id": "proj-bootloader"}, None)
+    def test_missing_org_id_fails_closed(self):
+        """GIVEN no current_user.org_id WHEN projects THEN 401 (fail closed)."""
+        payload, status = _req("GET", "projects",
+                               current_user={"user_id": 1, "email": "x@y"})
+        assert status == 401
+        assert "org_id" in payload["error"]
+
+    def test_project_id_filter(self, monkeypatch):
+        """GIVEN project_id WHEN projects THEN single project from real data."""
+        monkeypatch.setattr("yuleosh.store.Store", _fake_store([
+            {"id": 1, "org_id": 1, "name": "Alpha", "slug": "alpha",
+             "description": "d", "created_at": "2026-01-01"},
+            {"id": 2, "org_id": 1, "name": "Beta", "slug": "beta",
+             "description": "d", "created_at": "2026-01-02"},
+        ]))
+        payload, _ = _req("GET", "projects", query={"project_id": "2"})
         assert payload["data"]["count"] == 1
-        assert payload["data"]["projects"][0]["id"] == "proj-bootloader"
+        assert payload["data"]["projects"][0]["name"] == "Beta"
 
-    def test_project_id_not_found(self):
+    def test_project_id_not_found(self, monkeypatch):
         """GIVEN unknown project_id WHEN projects THEN 404."""
-        payload, status = _handle(
-            "GET", "projects", {}, {"project_id": "nope"}, None)
+        monkeypatch.setattr("yuleosh.store.Store", _fake_store([
+            {"id": 1, "org_id": 1, "name": "Alpha", "slug": "alpha",
+             "description": "d", "created_at": "2026-01-01"},
+        ]))
+        payload, status = _req("GET", "projects", query={"project_id": "nope"})
         assert status == 404
+        assert "not found" in payload["error"].lower()
 
     def test_real_projects_from_store(self, monkeypatch):
-        """GIVEN real store rows WHEN projects THEN real data used."""
-        class FakeCur:
-            def fetchall(self):
-                return [{"id": "1", "name": "RealProj", "slug": "real-proj",
-                         "description": "d", "updated_at": "2026-01-01",
-                         "created_at": "2026-01-01"}]
-
-        class FakeConn:
-            def execute(self, sql):
-                return FakeCur()
-
-        class FakeStore:
-            def __init__(self):
-                self.conn = FakeConn()
-
-        monkeypatch.setattr("yuleosh.store.Store", FakeStore)
-        payload, _ = _handle("GET", "projects", {}, {}, handler=None)
+        """GIVEN real org_projects rows WHEN projects THEN real data used."""
+        monkeypatch.setattr("yuleosh.store.Store", _fake_store([
+            {"id": 1, "org_id": 1, "name": "RealProj", "slug": "real-proj",
+             "description": "d", "created_at": "2026-01-01"},
+        ]))
+        payload, _ = _req("GET", "projects")
         assert payload["data"]["count"] == 1
         assert payload["data"]["projects"][0]["name"] == "RealProj"
         assert payload["data"]["note"] is None
         assert payload["data"]["projects"][0]["swe_total"] == 6
 
-    def test_real_projects_store_error_falls_back(self, monkeypatch):
-        """GIVEN store raising WHEN projects THEN mock fallback."""
+    def test_org_filtering_isolates_orgs(self, monkeypatch):
+        """GIVEN projects in two orgs WHEN projects THEN only current org's."""
+        monkeypatch.setattr("yuleosh.store.Store", _fake_store([
+            {"id": 1, "org_id": 1, "name": "Org1Proj", "slug": "o1",
+             "description": "d", "created_at": "2026-01-01"},
+            {"id": 2, "org_id": 2, "name": "Org2Proj", "slug": "o2",
+             "description": "d", "created_at": "2026-01-02"},
+        ]))
+        payload, _ = _req("GET", "projects", org_id=1)
+        names = [p["name"] for p in payload["data"]["projects"]]
+        assert names == ["Org1Proj"]  # Org2's project must NOT leak
+
+    def test_org_with_zero_projects_returns_empty(self, monkeypatch):
+        """GIVEN org with no projects WHEN projects THEN 200 empty (real state)."""
+        monkeypatch.setattr("yuleosh.store.Store", _fake_store([]))
+        payload, status = _req("GET", "projects", org_id=9)
+        assert status == 200
+        assert payload["data"]["count"] == 0
+        assert payload["data"]["projects"] == []
+        assert payload["data"]["note"] is None  # not demo data
+
+    def test_store_error_returns_503(self, monkeypatch):
+        """GIVEN store raising WHEN projects THEN 503, no fallback."""
         def boom():
             raise RuntimeError("db down")
 
         monkeypatch.setattr("yuleosh.store.Store", boom)
-        payload, _ = _handle("GET", "projects", {}, {}, handler=None)
-        assert payload["data"]["count"] == 3
+        payload, status = _req("GET", "projects")
+        assert status == 503
+        assert "count" not in payload.get("data", {})
 
 
 # ── swe-status ─────────────────────────────────────────────────────────

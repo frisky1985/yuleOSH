@@ -5,8 +5,8 @@ Covers:
   - EvidenceScanner: scan_all (missing dir, corrupt files, dict/list),
     _classify_evidence (process field, type mappings, path fallback),
     _classify_system, _to_evidence_item
-  - AuditReportGenerator.generate_aspice_report: scoring (AL3/AL2/AL1/NI),
-    dedup, findings, supplementary sources, recommendations
+  - AuditReportGenerator.generate_aspice_report: scoring (E3/E2/E1/NI 证据覆盖度分级,
+    P0-4 — 非 ASPICE 能力等级), dedup, findings, supplementary sources, recommendations
   - exports: json/html/text/pdf (with/without weasyprint)
   - main() CLI
 """
@@ -59,11 +59,11 @@ class TestDataclasses:
     def test_process_dimension_to_dict(self):
         """GIVEN ProcessDimension WHEN to_dict THEN evidence list included."""
         dim = ProcessDimension(process_id="SWE.1", title="SWE.1",
-                               score="AL2", coverage_pct=75.0,
+                               score="E2", coverage_pct=75.0,
                                evidence_count=2, gap_count=0,
                                findings=[], evidences=[_ev()])
         d = dim.to_dict()
-        assert d["score"] == "AL2"
+        assert d["score"] == "E2"
         assert d["evidences"] == [_ev()]
 
     def test_aspice_report_to_dict(self):
@@ -201,8 +201,8 @@ class TestGenerateAspiceReport:
         assert report.report_id.startswith("ASPICE-AUDIT-")
         assert all(d.score == "NI" for d in report.dimensions)
 
-    def test_scoring_al3(self, tmp_path):
-        """GIVEN all passing evidence WHEN generate THEN AL3."""
+    def test_scoring_e3(self, tmp_path):
+        """GIVEN all passing evidence WHEN generate THEN E3 (证据覆盖度高)."""
         ev_dir = tmp_path / "evidence"
         ev_dir.mkdir()
         for pid in ("SWE.1", "SWE.2"):
@@ -210,11 +210,11 @@ class TestGenerateAspiceReport:
         gen = AuditReportGenerator(evidence_dir=str(ev_dir))
         report = gen.generate_aspice_report()
         dim_swe1 = next(d for d in report.dimensions if d.process_id == "SWE.1")
-        assert dim_swe1.score == "AL3"
+        assert dim_swe1.score == "E3"
         assert dim_swe1.coverage_pct == 100.0
 
-    def test_scoring_al2_and_findings(self, tmp_path):
-        """GIVEN partial failures WHEN generate THEN AL2 + failed findings."""
+    def test_scoring_e1_and_findings(self, tmp_path):
+        """GIVEN partial failures WHEN generate THEN E1 + failed findings."""
         ev_dir = tmp_path / "evidence"
         ev_dir.mkdir()
         (ev_dir / "swe1.json").write_text(json.dumps([
@@ -226,7 +226,7 @@ class TestGenerateAspiceReport:
         report = gen.generate_aspice_report()
         dim = next(d for d in report.dimensions if d.process_id == "SWE.1")
         assert dim.coverage_pct == pytest.approx(66.7, abs=0.1)
-        assert dim.score == "AL1"
+        assert dim.score == "E1"
         assert any(f["type"] == "failed_evidence" for f in dim.findings)
 
     def test_dedup_by_ref_id(self, tmp_path):
@@ -283,18 +283,18 @@ class TestGenerateAspiceReport:
             ProcessDimension(process_id="SWE.1", title="t", score="NI",
                              coverage_pct=0.0, evidence_count=0, gap_count=1,
                              findings=[{"type": "missing_evidence"}], evidences=[]),
-            ProcessDimension(process_id="SWE.2", title="t", score="AL1",
+            ProcessDimension(process_id="SWE.2", title="t", score="E1",
                              coverage_pct=50.0, evidence_count=2, gap_count=1,
                              findings=[{"type": "failed_evidence", "ref_id": "x"}],
                              evidences=[]),
-            ProcessDimension(process_id="SWE.3", title="t", score="AL2",
+            ProcessDimension(process_id="SWE.3", title="t", score="E2",
                              coverage_pct=80.0, evidence_count=4, gap_count=0,
                              findings=[], evidences=[]),
         ]
         recs = gen._generate_recommendations(dims)
         joined = "\n".join(recs)
         assert "SWE.1" in joined and "SWE.2" in joined
-        assert "AL2 已满足" in joined
+        assert "E2 已满足" in joined
         assert "SWE 维度无证据" in joined
 
 
@@ -329,6 +329,22 @@ class TestExports:
         assert "<html" in content
         assert "ASPICE Audit Report" in content
         assert "No evidence" in content  # escaped finding rendered
+
+    def test_export_html_declares_not_aspice_level(self, tmp_path):
+        """P0-4: rendered HTML legend must disclaim ASPICE capability levels."""
+        gen = AuditReportGenerator(evidence_dir=str(tmp_path / "e"))
+        out = gen.export_html(_make_report(), str(tmp_path / "r2.html"))
+        content = Path(out).read_text()
+        assert "非 ASPICE 能力等级" in content
+        assert "证据覆盖度分级" in content
+        # No legacy ASPICE capability-level grades in the rendered report
+        assert "AL1" not in content and "AL2" not in content and "AL3" not in content
+
+    def test_export_text_declares_not_aspice_level(self):
+        """P0-4: text export carries the same honesty disclaimer."""
+        gen = AuditReportGenerator(evidence_dir=str(Path("/tmp/nonexistent")))
+        text = gen.export_text(_make_report())
+        assert "非 ASPICE 能力等级" in text or "不是 Automotive SPICE" in text
 
     def test_export_text(self, tmp_path):
         """GIVEN report WHEN export_text THEN text content."""

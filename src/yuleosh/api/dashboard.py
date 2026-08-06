@@ -5,8 +5,11 @@
 """
 Dashboard API — serves compliance dashboard data for the Quality Manager Dashboard MVP.
 
-Provides mock data annotated with "⚠️ 演示数据" for all dashboard endpoints.
-Ready to connect to real data sources (evidence pack, coverage, gap analysis) when available.
+Projects endpoint serves REAL org-scoped data only (P0-2): no mock fallback —
+when the store is unavailable it fails explicitly (503) instead of silently
+serving demo data. Other endpoints (swe-status / gap-analysis / coverage /
+misra-trend) still fall back to clearly-annotated demo data ("⚠️ 演示数据")
+until their real data sources are connected.
 
 Mounted at /api/v1/dashboard/ in the main server router.
 """
@@ -34,37 +37,7 @@ OSH_HOME = os.environ.get("OSH_HOME", str(PROJECT_ROOT))
 # ── In-memory task tracking for evidence pack generation ──
 _ev_tasks: dict[str, dict] = {}
 
-# ── Mock data ──
-
-MOCK_PROJECTS = [
-    {
-        "id": "proj-core-firmware",
-        "name": "Core Firmware",
-        "slug": "core-firmware",
-        "description": "Main MCU firmware for embedded control unit",
-        "last_updated": "2026-07-05T12:00:00Z",
-        "swe_completed_count": 4,
-        "swe_total": 6,
-    },
-    {
-        "id": "proj-bootloader",
-        "name": "Bootloader",
-        "slug": "bootloader",
-        "description": "Secure bootloader for OTA firmware updates",
-        "last_updated": "2026-07-04T09:30:00Z",
-        "swe_completed_count": 2,
-        "swe_total": 6,
-    },
-    {
-        "id": "proj-can-stack",
-        "name": "CAN Stack",
-        "slug": "can-stack",
-        "description": "CAN/CAN-FD protocol stack implementation",
-        "last_updated": "2026-07-03T16:45:00Z",
-        "swe_completed_count": 5,
-        "swe_total": 6,
-    },
-]
+# ── Mock data (other endpoints only; projects is real-data-only since P0-2) ──
 
 MOCK_SWE_STATUS = {
     "SWE1": {
@@ -280,7 +253,7 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
     the decorated signature stays compatible (P0-A token contract fix).
 
     Supported routes:
-        GET  /api/v1/dashboard/projects             — 项目列表
+        GET  /api/v1/dashboard/projects             — 项目列表（仅真实数据，按 org 过滤，P0-2）
         GET  /api/v1/dashboard/swe-status           — SWE.1~SWE.6 合规状态
         GET  /api/v1/dashboard/gap-analysis         — 差距分析
         POST /api/v1/dashboard/evidence/generate    — 一键生成证据包
@@ -288,8 +261,14 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
         GET  /api/v1/dashboard/coverage             — 覆盖率数据
         GET  /api/v1/dashboard/misra-trend          — MISRA 违规趋势
     """
+    # P0-2: current_user is injected by require_auth (user_id/org_id/email/role).
+    # Projects listing is scoped to the authenticated user's org — never serve
+    # another org's projects and never fall back to demo data.
+    current_user = kwargs.get("current_user") or {}
+    org_id = current_user.get("org_id")
+
     if path_tail == "projects" and method == "GET":
-        return _dashboard_projects(query)
+        return _dashboard_projects(query, org_id)
     if path_tail == "swe-status" and method == "GET":
         return _dashboard_swe_status(query)
     if path_tail == "gap-analysis" and method == "GET":
@@ -306,52 +285,53 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
     return json_error(f"Unknown dashboard sub-path or method: {method} {path_tail}", 404)
 
 
-def _dashboard_projects(query: dict) -> tuple[dict, int]:
-    """GET /api/v1/dashboard/projects — list projects for dashboard.
+def _dashboard_projects(query: dict, org_id: Any = None) -> tuple[dict, int]:
+    """GET /api/v1/dashboard/projects — list projects for the current org.
+
+    P0-2: REAL data only, scoped to the authenticated user's org. There is
+    NO mock/demo fallback:
+      - org_id missing (auth contract broken)  → 401, fail closed
+      - store unavailable / query failure       → 503, explicit error
+      - org has zero projects                   → 200 with empty list (real state)
 
     Returns project list with compliance summary per project.
     """
     project_id = _get_query_param(query, "project_id")
 
-    # Try to get real projects from the store
+    if org_id is None:
+        log.error("dashboard/projects called without current_user.org_id — failing closed")
+        return json_error("无法识别当前用户组织 (org_id 缺失)", 401)
+
     try:
         from yuleosh.store import Store
         store = Store()
-        conn = store.conn
-        cur = conn.execute("SELECT * FROM projects ORDER BY created_at DESC")
-        real_projects = [dict(r) for r in cur.fetchall()]
-        if real_projects and not project_id:
-            # Return real project data if available
-            projects = []
-            for p in real_projects:
-                projects.append({
-                    "id": str(p.get("id", p.get("name", "unknown"))),
-                    "name": p.get("name", "Unnamed"),
-                    "slug": p.get("slug", p.get("name", "").lower().replace(" ", "-")),
-                    "description": p.get("description", ""),
-                    "last_updated": p.get("updated_at", p.get("created_at", "")),
-                    "swe_completed_count": _estimate_swe_completed(p),
-                    "swe_total": 6,
-                })
-            return json_ok({
-                "projects": projects,
-                "count": len(projects),
-                "note": None,
-            })
-    except Exception:
-        pass
+        # Org-scoped projects only — never leak other orgs' projects.
+        real_projects = store.list_org_projects(org_id)
+    except Exception as e:
+        log.error("Failed to load dashboard projects: %s", e)
+        return json_error("项目数据加载失败，请稍后重试", 503)
 
-    # Fallback: mock data
-    projects = MOCK_PROJECTS
     if project_id:
-        projects = [p for p in projects if p["id"] == project_id]
-        if not projects:
+        real_projects = [p for p in real_projects if str(p.get("id")) == project_id]
+        if not real_projects:
             return json_error(f"Project not found: {project_id}", 404)
+
+    projects = []
+    for p in real_projects:
+        projects.append({
+            "id": str(p.get("id", p.get("name", "unknown"))),
+            "name": p.get("name", "Unnamed"),
+            "slug": p.get("slug", p.get("name", "").lower().replace(" ", "-")),
+            "description": p.get("description", ""),
+            "last_updated": p.get("updated_at", p.get("created_at", "")),
+            "swe_completed_count": _estimate_swe_completed(p),
+            "swe_total": 6,
+        })
 
     return json_ok({
         "projects": projects,
         "count": len(projects),
-        "note": _mock_note(),
+        "note": None,
     })
 
 
