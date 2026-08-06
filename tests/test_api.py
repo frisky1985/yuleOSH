@@ -247,7 +247,8 @@ class TestHealth:
         assert data["store"]["reviews"] == 1
         assert data["store"]["projects"] == 1
         assert "uptime_seconds" in data
-        assert data["version"] == "0.1.0"
+        from yuleosh import __version__
+        assert data["version"] == __version__
         # P1-7 (S-06): the absolute path is no longer exposed.
         assert "osh_home" not in data
         assert data["osh_home_configured"] is True

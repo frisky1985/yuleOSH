@@ -77,7 +77,8 @@ class TestHandleHealth:
         handler = _make_mock_handler()
         result = handle_health(handler)
         assert result["status"] == "ok"
-        assert result["version"] == "1.0.0"
+        from yuleosh import __version__
+        assert result["version"] == __version__
         assert "auth_enabled" in result
         assert "tenant_auth" in result
 

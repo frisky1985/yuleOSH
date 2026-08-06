@@ -24,10 +24,7 @@ from pathlib import Path
 
 import pytest
 
-# Ensure src/ is importable
-SRC = Path(__file__).resolve().parent.parent / "src"
-if str(SRC) not in __import__("sys").path:
-    __import__("sys").path.insert(0, str(SRC))
+# A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -350,7 +347,11 @@ class TestKpiBaseline:
 class TestKpiCliCommands:
     def test_cli_has_kpi_commands(self):
         """The CLI module has cmd_kpi_status, cmd_kpi_baseline_save, cmd_kpi_baseline_compare."""
-        from yuleosh_cli import cmd_kpi_status, cmd_kpi_baseline_save, cmd_kpi_baseline_compare
+        from yuleosh.cli.commands.misc import (
+            cmd_kpi_status,
+            cmd_kpi_baseline_save,
+            cmd_kpi_baseline_compare,
+        )
 
         assert callable(cmd_kpi_status)
         assert callable(cmd_kpi_baseline_save)
