@@ -590,6 +590,39 @@ yuleOSH 提供多个版本。开源版基于 Elastic License 2.0 免费使用；
 
 ---
 
+## MISRA 基准测试（Benchmark）已知限制
+
+> **诚实声明（2026-08-07 修订）：** `tests/test_misra_benchmark.py` 中的 MISRA
+> 误报/漏报基准当前有 **11 个场景**（5 个 known-positive 漏检 + 6 个 clean-code
+> 已知误报）受 cppcheck misra addon 工具链限制影响，无法通过验证。这些场景在测试中
+> 以**显式 skip + 注释**标记，**不冒充全绿**；实测快照见
+> `benchmark/results/misra-benchmark-report.json`（cppcheck 2.17.1 记录）。
+
+已知限制明细：
+
+- **漏检（FN，5 个）**：`case001`/`case009`/`case010`/`case011`/`case012` 的预期规则
+  （10.1 / 18.2 / 8.2 / 10.1 / 14.3）未被 cppcheck misra addon 检出。记录快照的
+  `actual_count` 已显示同一现象（检出了其他规则但非预期规则），属工具链固有行为而非回归。
+- **已知误报（FP，6 个）**：`case002`~`case007` 为记录在案的误报场景（基准报告
+  `validation: false_positive`），工具在"干净代码"上仍报告违规。
+
+因此：**本基准的通过数不代表 MISRA 合规全绿**。工具链升级（cppcheck / misra addon
+版本变化）后，应重新生成基准快照并复核这些场景，再移除对应的 skip。
+
+---
+
+## 合规评级说明（话术修正）
+
+审计报告（`yuleosh audit-report`）中的 **E1–E3 等级是"证据覆盖度"分级**：由通过状态
+证据占该过程维度证据总数的比例计算得出（E3 ≥90% 且零失败 / E2 ≥70% 且失败 <20% /
+E1 ≥30% / NI 无证据或 <30%）。
+
+**E1–E3 不是 Automotive SPICE 能力等级（Capability Level），也不代表任何正式评估
+结论**（如 CL1 等），仅用于内部量化"证据链是否完整"。如需正式 ASPICE 评估，请咨询
+经认可的评估机构。详见下方法律免责声明。
+
+---
+
 ## 法律免责声明
 
 yuleOSH 是一款 ASPICE 合规辅助工具，不替代正式的 ASPICE 认证评估。合规状态取决于组织级项目管理流程，工具生成的结果仅供参考。
