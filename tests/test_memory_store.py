@@ -89,6 +89,19 @@ def test_recall_bumps_trust_and_count(store):
     assert updated["trust"] == pytest.approx(1.0)
 
 
+def test_recall_reinforce_false_does_not_bump(store):
+    """Automated retrieval (LLM injection) must not pollute trust."""
+    fact = store.remember("hub gRPC port is 8080", entity="hub",
+                          category="architecture")
+
+    hits = store.recall("hub gRPC", reinforce=False)
+    assert len(hits) == 1
+
+    updated = store.get_fact(fact["id"])
+    assert updated["recall_count"] == 0
+    assert updated["trust"] == pytest.approx(0.5)
+
+
 def test_recall_filters(store):
     store.remember("alpha config", entity="ecu_a", category="config")
     store.remember("alpha config", entity="ecu_b", category="config")

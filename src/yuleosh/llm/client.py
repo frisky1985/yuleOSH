@@ -135,6 +135,9 @@ def resolve_config(
         rag_sources=TASK_RAG_SOURCES.get(task_type, []),
         max_cost_usd=task_budget.get("max_cost_usd", 0.50),
         task_type=task_type,
+        # Project memory follows the same routing rule as RAG: cheap
+        # "simple_summary" tasks skip memory injection too.
+        memory_enabled=task_type not in ("simple_summary",),
     )
 
 
@@ -224,6 +227,29 @@ class LLMClient:
                         )
                 except Exception as e:
                     log.warning("RAG retrieval failed (non-fatal): %s", e)
+
+        # 3.5 Project memory injection (if enabled) — memory facts +
+        # session history as the "project memory" RAG knowledge source.
+        if resolved_config.memory_enabled:
+            try:
+                from yuleosh.memory.llm_context import assemble_memory_context
+
+                memory_context = assemble_memory_context(
+                    query=prompt,
+                    max_facts=resolved_config.memory_max_facts,
+                    max_sessions=resolved_config.memory_max_sessions,
+                    max_chars=resolved_config.memory_max_chars,
+                )
+                if memory_context:
+                    effective_system = (
+                        f"{effective_system}\n\n{memory_context}"
+                        if effective_system
+                        else memory_context
+                    )
+            except Exception as e:  # noqa: BLE001 — memory must never block LLM
+                log.warning(
+                    "Project memory injection failed (non-fatal): %s", e
+                )
 
         # 4. Build messages
         if messages is None:

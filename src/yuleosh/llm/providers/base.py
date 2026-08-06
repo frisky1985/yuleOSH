@@ -37,6 +37,12 @@ class LLMConfig:
     rag_enabled: bool = True
     rag_sources: List[str] = field(default_factory=lambda: ["misra", "best_practices"])
 
+    # Project memory (memory facts + session history → LLM context)
+    memory_enabled: bool = True
+    memory_max_facts: int = 5
+    memory_max_sessions: int = 3
+    memory_max_chars: int = 2000
+
     # Cost control
     max_cost_usd: float = 0.50
 
