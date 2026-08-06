@@ -54,7 +54,8 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       YULEOSH_DB_URL: "postgresql://${YULEOSH_DB_USER:-yuleosh}:${YULEOSH_DB_PASSWORD:-changeme123}@db:5432/${YULEOSH_DB_NAME:-yuleosh}"
       YULEOSH_JWT_SECRET: ${YULEOSH_JWT_SECRET}

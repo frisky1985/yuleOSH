@@ -2,8 +2,8 @@
 # yuleOSH — Multi-stage Docker build
 # =============================================================================
 # Usage:
-#   docker build -t yuleosh:0.7.0 .
-#   docker run -p 8080:8080 yuleosh:0.7.0
+#   docker build -t yuleosh:3.12.1 .
+#   docker run -p 8080:8080 yuleosh:3.12.1
 # =============================================================================
 
 # Stage 1: Install dependencies + package
@@ -21,7 +21,7 @@ FROM python:3.13-slim
 
 LABEL org.opencontainers.image.title="yuleOSH"
 LABEL org.opencontainers.image.description="Embedded AI Dev Lifecycle Platform — OpenSpec+Superpowers+Harness Engineering"
-LABEL org.opencontainers.image.version="0.7.0"
+LABEL org.opencontainers.image.version="3.12.1"
 LABEL org.opencontainers.image.source="https://github.com/frisky1985/yuleOSH"
 
 # Runtime-only deps

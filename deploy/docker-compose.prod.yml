@@ -12,7 +12,7 @@ services:
     environment:
       POSTGRES_DB: yuleosh
       POSTGRES_USER: yuleosh
-      POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD is required}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme123}
     ports:
       - "127.0.0.1:5432:5432"   # localhost-only for backups/tools
     volumes:
@@ -44,7 +44,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"   # internal — exposed via Nginx only
     environment:
-      - YULEOSH_DB_URL=postgresql://yuleosh:${PG_PASSWORD}@postgres:5432/yuleosh
+      - YULEOSH_DB_URL=postgresql://yuleosh:${PG_PASSWORD:-changeme123}@postgres:5432/yuleosh
       - YULEOSH_JWT_SECRET=${YULEOSH_JWT_SECRET:?JWT secret is required}
       - YULEOSH_API_KEY=${YULEOSH_API_KEY:-}
       - YULEOSH_BASE_URL=${YULEOSH_BASE_URL:-https://yuleosh.io}

@@ -362,6 +362,11 @@ def run_pilot_scan(
                 if not cppcheck_path:
                     cppcheck_path = "cppcheck"
 
+                # misra addon 需要写 .dump 中间文件到源码目录；只读安装目录下
+                # 会失败，重定向到可写临时目录。
+                import tempfile as _tf
+                _build_dir = _tf.mkdtemp(prefix="yuleosh-pilot-cppcheck-")
+
                 result = subprocess.run(
                     [
                         cppcheck_path,
@@ -370,12 +375,15 @@ def run_pilot_scan(
                         "--suppress=missingInclude",
                         "--suppress=missingIncludeSystem",
                         "--language=c",
+                        f"--cppcheck-build-dir={_build_dir}",
                         "--output-file",
                     ] + [str(s) for s in sources],
                     capture_output=True,
                     text=True,
                     timeout=60,
                 )
+                import shutil as _sh
+                _sh.rmtree(_build_dir, ignore_errors=True)
                 pilot_results["module_results"][module]["exit_code"] = result.returncode
                 pilot_results["module_results"][module]["stdout"] = result.stdout[:2000]
                 pilot_results["module_results"][module]["stderr"] = result.stderr[:2000]

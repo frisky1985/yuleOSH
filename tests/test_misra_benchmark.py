@@ -62,32 +62,42 @@ def _normalize_rule_id(rule_id: str) -> str:
 
 
 def _run_cppcheck(c_file: Path) -> set[str]:
-    """在给定 C 文件上运行 cppcheck --addon=misra，返回检测到的归一化规则 ID 集合。"""
-    cmd = [
-        "cppcheck",
-        "--addon=misra",
-        "--language=c",
-        "--std=c11",
-        "--enable=all",
-        "--suppress=missingIncludeSystem",
-        "-q",
-        str(c_file),
-    ]
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60
-        )
-    except FileNotFoundError:
-        pytest.fail("cppcheck 未安装 — 请先安装 cppcheck")
-    except subprocess.TimeoutExpired:
-        pytest.fail(f"cppcheck 超时: {c_file.name}")
+    """在给定 C 文件上运行 cppcheck --addon=misra，返回检测到的归一化规则 ID 集合。
 
-    output = result.stderr or result.stdout or ""
-    detected: set[str] = set()
-    for m in _RULE_PATTERN.finditer(output):
-        raw_rule = f"misra-c{m.group(1)}-{m.group(2)}"
-        detected.add(_normalize_rule_id(raw_rule))
-    return detected
+    注意：misra addon 需要把 .dump 中间文件写到源码所在目录；当源码位于只读
+    安装目录（如容器内 root 属主的 /app/benchmark）时 addon 会整体执行失败，
+    导致所有 case 检测结果为空。因此通过 --cppcheck-build-dir 把中间产物
+    重定向到可写的临时目录（cppcheck >= 2.1 支持）。
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="yuleosh-misra-bench-") as build_dir:
+        cmd = [
+            "cppcheck",
+            "--addon=misra",
+            "--language=c",
+            "--std=c11",
+            "--enable=all",
+            "--suppress=missingIncludeSystem",
+            f"--cppcheck-build-dir={build_dir}",
+            "-q",
+            str(c_file),
+        ]
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=60
+            )
+        except FileNotFoundError:
+            pytest.fail("cppcheck 未安装 — 请先安装 cppcheck")
+        except subprocess.TimeoutExpired:
+            pytest.fail(f"cppcheck 超时: {c_file.name}")
+
+        output = result.stderr or result.stdout or ""
+        detected: set[str] = set()
+        for m in _RULE_PATTERN.finditer(output):
+            raw_rule = f"misra-c{m.group(1)}-{m.group(2)}"
+            detected.add(_normalize_rule_id(raw_rule))
+        return detected
 
 
 def _load_expected() -> dict:
