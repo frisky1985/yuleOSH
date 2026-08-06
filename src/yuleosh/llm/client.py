@@ -77,6 +77,37 @@ TASK_RAG_SOURCES: Dict[str, List[str]] = {
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# 方案 A — provider 配置优先级体系
+# ═══════════════════════════════════════════════════════════════════════
+#
+# 优先级（resolve_config，config is None 时）:
+#   1. 显式 LLMConfig.provider           （调用方传入，直接 return）
+#   2. YULEOSH_LLM_PROVIDER env          （deepseek|anthropic|openai|mock）
+#   3. TASK_ROUTES 默认映射              （既有行为）
+#
+# LLM_MODEL env 覆盖模型名（保持既有 chat_completion 语义）；provider
+# 随 env 或模型名推断。LLM_BASE_URL / LLM_API_KEY 由 provider 层读取。
+
+VALID_PROVIDERS: tuple = ("deepseek", "anthropic", "openai", "mock")
+
+# Provider env 覆盖时使用的默认模型（与 docs/llm-strategy.md 路由表一致）。
+PROVIDER_DEFAULT_MODELS: dict[str, str] = {
+    "anthropic": "claude-4-sonnet",
+    "deepseek": "deepseek-v4",
+    "openai": "gpt-4o",
+    "mock": "deepseek-v4",
+}
+
+# 逻辑模型名 → provider（TASK_ROUTES 默认映射用）。
+PROVIDER_MODEL_MAP: dict[str, str] = {
+    "claude-4-sonnet": "anthropic",
+    "claude-4-haiku": "anthropic",
+    "deepseek-v4": "deepseek",
+    "gpt-4o": "openai",
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Provider registry (lazy-loaded)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -111,19 +142,38 @@ def resolve_config(
     """Resolve the effective LLMConfig for a call.
 
     Fills in defaults based on task type when config is None.
+
+    方案 A provider 优先级（config is None 时）:
+        1. 显式 ``LLMConfig.provider``（调用方传入，直接返回）
+        2. ``YULEOSH_LLM_PROVIDER`` env（deepseek|anthropic|openai|mock）
+        3. TASK_ROUTES 默认映射（既有行为）
+
+    同时尊重 ``LLM_MODEL`` env（覆盖模型名；provider 随 env 或模型名推断）。
     """
     if config is not None:
         return config
 
     task_type = task_type or "code_generation"
-    model = TASK_ROUTES.get(task_type, "deepseek-v4")
-    provider_map = {
-        "claude-4-sonnet": "anthropic",
-        "claude-4-haiku": "anthropic",
-        "deepseek-v4": "deepseek",
-        "gpt-4o": "openai",
-    }
-    provider = provider_map.get(model, "deepseek")
+
+    provider_env = os.environ.get("YULEOSH_LLM_PROVIDER")
+    if provider_env is not None:
+        provider_env = provider_env.strip().lower()
+        if provider_env not in VALID_PROVIDERS:
+            raise ValueError(
+                f"YULEOSH_LLM_PROVIDER 必须是 {list(VALID_PROVIDERS)} 之一，"
+                f"当前值: '{provider_env}'"
+            )
+
+    model_env = os.environ.get("LLM_MODEL")
+    model_env = model_env.strip() if model_env else None
+
+    if provider_env:
+        provider = provider_env
+        model = model_env or PROVIDER_DEFAULT_MODELS[provider]
+    else:
+        model = model_env or TASK_ROUTES.get(task_type, "deepseek-v4")
+        provider = PROVIDER_MODEL_MAP.get(model, "deepseek")
+
     task_budget = TASK_BUDGETS.get(task_type, TASK_BUDGETS["code_generation"])
 
     return LLMConfig(
