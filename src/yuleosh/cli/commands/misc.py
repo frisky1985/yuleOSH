@@ -580,7 +580,7 @@ def cmd_review_task(task: str, kind: str = "feature"):
 
 def cmd_demo_uart(target_dir: str = None, do_build: bool = False, skip_cmake: bool = False):
     """Create and run the STM32+ESP32 UART demo project."""
-    from src.cli.commands.demo_uart import cmd_demo_uart
+    from yuleosh.cli.commands.demo_uart import cmd_demo_uart
     sys.exit(cmd_demo_uart(target_dir, do_build, skip_cmake))
 
 

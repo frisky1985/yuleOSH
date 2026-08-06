@@ -262,7 +262,7 @@ class TestSpecMerge:
 
 class TestDemoUart:
     def test_uart_dispatches(self, main_module):
-        with patch("src.cli.commands.demo_uart.cmd_demo_uart", return_value=0) as mc:
+        with patch("yuleosh.cli.commands.demo_uart.cmd_demo_uart", return_value=0) as mc:
             with pytest.raises(SystemExit) as e:
                 main_module.cmd_demo_uart(target_dir="/tmp/d", do_build=True, skip_cmake=True)
             assert e.value.code == 0
