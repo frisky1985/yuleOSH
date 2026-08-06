@@ -46,6 +46,11 @@ class LLMConfig:
     # Cost control
     max_cost_usd: float = 0.50
 
+    # Provider-level fallback (provider_fallback.py) — degrade to a backup
+    # provider when the primary fails at transport level.
+    fallback_enabled: bool = True
+    fallback_order: list[str] | None = None  # e.g. ["anthropic", "openai", "mock"]
+
     # Metadata
     task_type: Optional[str] = None
     task_id: Optional[str] = None
