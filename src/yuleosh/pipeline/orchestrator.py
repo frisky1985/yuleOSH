@@ -343,6 +343,10 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             step_idx = len(session.steps)
             session.add_step(step_key, agent, step_name)
             session.start_step(step_idx)
+            # 方案 A (2026-08-07): expose the current step key so the
+            # unified knowledge injection at _call_llm can match per-step
+            # skills and produce step-specific context.
+            session.pipeline_knowledge_step_key = step_key
             
             print(f"  [{step_idx+1}/{len(_steps)}] {agent}: {step_name}")
             log.info(f"Step {step_idx+1}/{len(_steps)}: [{agent}] {step_name}")

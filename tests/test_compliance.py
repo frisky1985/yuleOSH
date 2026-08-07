@@ -74,7 +74,13 @@ def sample_project(tmp_path):
     (tmp_path / ".osh" / "reviews").mkdir()
     (tmp_path / ".osh" / "reviews" / "review-1.md").write_text("# Review\n- Finding 1\n")
     (tmp_path / ".osh" / "evidence").mkdir()
-    (tmp_path / ".osh" / "evidence" / "traceability-matrix.md").write_text("# Traceability\n")
+    (tmp_path / ".osh" / "evidence" / "traceability-matrix.md").write_text(
+        "# Traceability\n"
+        "| REQ ID | Test |\n"
+        "|--------|------|\n"
+        "| REQ-001 | test_main.py |\n"
+        "| REQ-002 | test_utils.py |\n"
+    )
     (tmp_path / ".clang-format").write_text("BasedOnStyle: LLVM\n")
     return tmp_path
 

@@ -15,6 +15,7 @@ Sources:
   4. CI results (.osh/ci/layer1-*.json)
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -102,7 +103,7 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
     in_given_when_then = False  # Skip GIVEN/WHEN/THEN scenario blocks
 
     # Pattern to match spec-defined IDs like **SWE-MISRA-S1**: or [REQ-MISRA-S1.1]
-    spec_id_pattern = re.compile(r'(?:\*\*(\w[\w-]+)\*\*\s*:|\[([\w][\w.-]+)\])')
+    spec_id_pattern = re.compile(r'(?:\*\*([\w][\w.\-]+)\*\*\s*:|\[([\w][\w.\-]+)\])')
 
     # Pattern to match requirement section headers
     section_req_id_pattern = re.compile(
@@ -232,7 +233,7 @@ def extract_shall_from_text(text: str) -> list[dict]:
     current_section = ""
 
     shall_keyword_pattern = re.compile(r'\bSHALL\b|\bshall\b|\bMUST\b|\bmust\b')
-    spec_id_pattern = re.compile(r'(?:\*\*(\w[\w-]+)\*\*\s*:|\[([\w][\w.-]+)\])')
+    spec_id_pattern = re.compile(r'(?:\*\*([\w][\w.\-]+)\*\*\s*:|\[([\w][\w.\-]+)\])')
 
     # Table parsing state
     in_shall_table = False
@@ -482,6 +483,94 @@ def scan_ci_results(project_dir: str) -> list[dict]:
 # ── LRM: Lateral Requirements Matrix ────────────────────────────────────
 
 
+# ── SWR mapping table (requirement-traceability-matrix.md) ─────────────
+
+
+#: Header detection for the SWR mapping table:
+#: ``| SHALL ID | Spec Source | Test File | Test Function | Status |``
+_SWR_MAPPING_HEADER_RE = re.compile(
+    r"SHALL\s*ID.*(?:Test\s*File|测试|用例).*Status", re.IGNORECASE
+)
+
+
+#: SWR-style requirement IDs: SWR-001.1-01, SWR-002.1-01, SWR-003.2 ...
+_SWR_ID_RE = re.compile(r"SWR-\d+(?:\.\d+)*(?:-\d+)?")
+
+
+#: Requirement IDs that count as traceable requirement rows in any table.
+_REQ_ROW_ID_RE = re.compile(
+    r"(?:SWR-\d+(?:\.\d+)*(?:-\d+)?|REQ-\d+(?:-S\d+)?|"
+    r"[A-Z][A-Z0-9]*-(?:REQ|SHALL)-\d+|SHALL-\d+)",
+    re.IGNORECASE,
+)
+
+
+def load_swr_mapping_table(project_dir: str) -> list[dict]:
+    """Read ``docs/requirement-traceability-matrix.md`` (SWR mapping table).
+
+    The SWR mapping table is the authoritative requirement → test mapping
+    produced for the project (SWR ID | Spec Source | Test File | Test
+    Function | Status).  Rows with a ✅/PASS status become requirements
+    marked as covered by the mapped test file.
+
+    Returns list of dicts:
+        - id:           SWR requirement ID (e.g. SWR-001.1-01)
+        - req_id:       same as id
+        - statement:    human-readable statement (``SWR-xxx test mapping``)
+        - test_file:    mapped test file path
+        - test_function: mapped test function name
+        - status:       row status token (✅/PASS/...) or ""
+        - has_test:     True when the row is a covered mapping
+    """
+    candidates = [
+        Path(project_dir) / "docs" / "requirement-traceability-matrix.md",
+        Path(project_dir) / "docs" / "traceability-matrix.md",
+    ]
+    for cand in candidates:
+        if not cand.is_file():
+            continue
+        try:
+            lines = cand.read_text(encoding="utf-8").splitlines()
+        except OSError as e:
+            log.warning("Cannot read mapping table %s: %s", cand, e)
+            continue
+        rows: list[dict] = []
+        in_table = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("|") and _SWR_MAPPING_HEADER_RE.search(stripped):
+                in_table = True
+                continue
+            if not in_table:
+                continue
+            if not stripped.startswith("|") or _is_table_separator(stripped):
+                continue
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            if len(cells) < 3:
+                continue
+            row_id = cells[0]
+            if not _SWR_ID_RE.fullmatch(row_id):
+                continue
+            test_file = cells[2] if len(cells) > 2 else ""
+            test_function = cells[3] if len(cells) > 3 else ""
+            status = cells[4] if len(cells) > 4 else ""
+            covered = bool(re.search(r"✅|PASS", status)) or status.strip() in {"Implemented", "Covered"}
+            rows.append({
+                "id": row_id,
+                "req_id": row_id,
+                "statement": f"SWR requirement {row_id} (mapped to test)",
+                "section": "SWR Mapping Table",
+                "test_file": test_file,
+                "test_function": test_function,
+                "status": status,
+                "has_test": covered,
+            })
+        if rows:
+            log.info("Loaded %d SWR mapping rows from %s", len(rows), cand)
+            return rows
+    return []
+
+
 def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     """Generate LRM (Lateral Requirements Matrix).
 
@@ -505,6 +594,11 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     docs_spec = Path(project_dir) / "docs" / "spec.md"
     if str(docs_spec) not in spec_files and docs_spec.exists():
         spec_files.append(str(docs_spec))
+
+    # Auto-discover docs/software-requirements.md (SWR-xxx SRS)
+    docs_swr = Path(project_dir) / "docs" / "software-requirements.md"
+    if str(docs_swr) not in spec_files and docs_swr.exists():
+        spec_files.append(str(docs_swr))
 
     # Auto-discover ALL specs/*.md files
     specs_dir = Path(project_dir) / "specs"
@@ -565,6 +659,70 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
             "has_review": len(matching_reviews) > 0,
             "step_handlers": _find_step_handlers_for_requirement(project_dir, req_id, shall),
         })
+
+    # Merge SWR mapping table rows (docs/requirement-traceability-matrix.md):
+    #   1. Enrich existing requirements whose req_id matches a mapped SWR row.
+    #   2. Add mapped rows that have no matching SHALL statement yet, so the
+    #      SWR requirement → test links are present in the matrix.
+    swr_mapping = load_swr_mapping_table(project_dir)
+    if swr_mapping:
+        by_id: dict[str, dict] = {}
+        for m in swr_mapping:
+            by_id.setdefault(m["id"].upper(), m)
+        # Enrich existing requirements — the SWR mapping table is the
+        # authoritative requirement → test mapping, so the mapped test link
+        # is always attached (deduplicated against pytest-scanned matches).
+        for req in requirements:
+            for key in (str(req.get("req_id") or "").upper(), str(req.get("id") or "").upper()):
+                mapped = by_id.get(key)
+                if mapped is not None:
+                    if mapped["has_test"]:
+                        mapped_entry = {
+                            "file": mapped["test_file"],
+                            "function": mapped["test_function"],
+                            "status": "passed",
+                            "source": "SWR mapping table",
+                        }
+                        existing = [
+                            t for t in req["test_reports"]
+                            if isinstance(t, dict)
+                            and t.get("file") == mapped["test_file"]
+                            and t.get("function") == mapped["test_function"]
+                        ]
+                        if not existing:
+                            req["test_reports"].insert(0, mapped_entry)
+                        req["has_test"] = True
+                    break
+        # Add mapping rows with no matching requirement.
+        existing_ids = {
+            str(r.get("req_id") or r.get("id") or "").upper()
+            for r in requirements
+        }
+        for m in swr_mapping:
+            if m["id"].upper() in existing_ids:
+                continue
+            test_entry = []
+            if m["has_test"]:
+                test_entry = [{
+                    "file": m["test_file"],
+                    "function": m["test_function"],
+                    "status": "passed",
+                    "source": "SWR mapping table",
+                }]
+            requirements.append({
+                "id": m["id"],
+                "req_id": m["id"],
+                "statement": m["statement"],
+                "section": m["section"],
+                "code_files": _find_code_by_keywords_for_id(src_dir, m["id"]),
+                "test_reports": test_entry,
+                "reviews": [],
+                "has_code": False,
+                "has_test": m["has_test"],
+                "has_review": False,
+                "step_handlers": [],
+                "swr_mapping": True,
+            })
 
     # Summary
     total = len(requirements)
@@ -998,6 +1156,68 @@ def _find_tests_for_requirement(test_reports: list[dict], req_id: str,
     return matching
 
 
+def compute_trace_integrity(project_dir: str,
+                            spec_path: Optional[str] = None) -> dict:
+    """Compute a tamper-evident traceability integrity summary.
+
+    Builds on :func:`generate_lrt` (bidirectional Requirement ↔ Code ↔
+    Test ↔ Review matrix + gap analysis) and distils it into a compact,
+    hashable integrity record.  The record's ``integrity_hash`` covers the
+    canonical JSON of the whole summary, so any later mutation of the
+    report (post-hoc back-filling of a broken link) is detectable when the
+    hash is anchored in the SHA-256 audit chain (see the ``check`` CLI).
+
+    Returns a dict with:
+
+    - ``status``: ``ok`` when no broken links and no orphaned tests,
+      otherwise ``broken``.
+    - ``requirements_total`` / ``requirements_with_code`` /
+      ``requirements_with_test`` / ``requirements_with_review``.
+    - ``test_coverage_pct``: requirements with a test mapping / total.
+    - ``broken_links``: list of gap dicts (no_code / no_test / no_review).
+    - ``orphaned_tests``: list of test artifacts with no requirement link.
+    - ``integrity_hash``: SHA-256 over the canonical JSON of this summary
+      (without the hash field itself).
+    - ``generated_at``: ISO timestamp.
+    """
+    lrt = generate_lrt(project_dir, spec_path)
+    lrm = lrt.get("lrm", {})
+    summary = lrm.get("summary", {})
+    gaps = lrt.get("gap_analysis", {})
+    orphaned = lrt.get("orphaned_test_files", [])
+
+    total = summary.get("total", 0)
+    with_test = summary.get("with_test", 0)
+    broken_links = gaps.get("gaps", []) if gaps else []
+
+    record = {
+        "requirements_total": total,
+        "requirements_with_code": summary.get("with_code", 0),
+        "requirements_with_test": with_test,
+        "requirements_with_review": summary.get("with_review", 0),
+        "test_coverage_pct": round(
+            (with_test / total * 100.0) if total else 0.0, 2
+        ),
+        "broken_links": broken_links,
+        "orphaned_tests": orphaned,
+        "generated_at": lrt.get("generated_at", ""),
+    }
+
+    status = "ok"
+    if broken_links or orphaned:
+        status = "broken"
+    record["status"] = status
+
+    # SHA-256 over the canonical JSON of everything except the hash itself.
+    digest = hashlib.sha256()
+    body = {k: v for k, v in record.items() if k != "integrity_hash"}
+    canonical = json.dumps(body, sort_keys=True, ensure_ascii=False, default=str)
+    digest.update(canonical.encode("utf-8"))
+    record["integrity_hash"] = digest.hexdigest()
+
+    return record
+
+
 __all__ = [
     "extract_shall_statements",
     "extract_shall_from_text",
@@ -1007,4 +1227,5 @@ __all__ = [
     "generate_lrm",
     "generate_lrt",
     "generate_traceability_report",
+    "compute_trace_integrity",
 ]

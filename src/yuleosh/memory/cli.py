@@ -14,8 +14,11 @@ Usage:
 """
 
 import argparse
+import logging
 
 from .store import MemoryStore
+
+log = logging.getLogger("yuleosh.memory.cli")
 
 
 def build_memory_subparser(subparsers) -> argparse.ArgumentParser:
@@ -94,6 +97,22 @@ def handle_memory_command(args) -> int:
               f"{' / ' + fact['entity'] if fact['entity'] else ''})"
               f" trust={fact['trust']:.2f}")
         print(f"   {fact['content']}")
+
+        # 方案 B (2026-08-07): memory 沉淀 → 自动入"待生效"知识索引。
+        try:
+            from yuleosh.knowledge.indexer import KnowledgeIndexer
+
+            entry = KnowledgeIndexer().record(
+                kind="memory_remember",
+                content=fact["content"],
+                source=f"fact:{fact['id']}",
+                meta={"entity": fact.get("entity", ""), "category": fact.get("category", "")},
+            )
+            if entry:
+                print(f"   📥 已自动入待生效知识索引 (hash={entry['hash']})")
+                print("      → yuleosh knowledge approve <hash> 确认注入")
+        except Exception as e:  # noqa: BLE001 — 沉淀 hook 永不阻塞 remember
+            log.warning("Knowledge indexer hook failed (non-fatal): %s", e)
 
     elif args.memory_sub == "recall":
         facts = store.recall(args.query, entity=args.entity,

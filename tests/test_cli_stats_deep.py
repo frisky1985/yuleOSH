@@ -177,6 +177,26 @@ class TestComputeSpecCoverage:
                 assert result["total_shall"] == 3
                 assert result["score"] == 100
 
+    def test_generic_fallback_survives_validate_cache_pollution(self):
+        """REG-2026-08-07: a top-level ``validate`` module cached by
+        ``yuleosh.spec.diff`` (module-level path insertion + bare
+        ``from validate import ...``) must NOT make ``compute_spec_coverage``
+        use the tool's own parser for a project that has no local
+        ``src/spec/validate.py`` — the generic fallback must still win and
+        report ``analyzer == "generic"``.
+        """
+        import yuleosh.spec.diff  # noqa: F401 — pollutes sys.modules["validate"]
+        from yuleosh.cli.stats import compute_spec_coverage
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = Path(tmp) / "docs"
+            docs.mkdir()
+            (docs / "spec.md").write_text(
+                "# Spec\n- WDGM-REQ-01 The module SHALL init.\n"
+            )
+            result = compute_spec_coverage(tmp)
+            assert result["analyzer"] == "generic"
+            assert result["requirements"] == 1
+
 
 # ======================================================================
 # cli/stats.py — count_pipeline_runs edge cases
