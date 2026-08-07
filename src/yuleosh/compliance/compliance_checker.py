@@ -765,7 +765,10 @@ class ComplianceChecker:
                 from yuleosh.knowledge_graph.queries import get_aspice_coverage
                 cov = get_aspice_coverage(kg_store)
                 unit_covers = cov.get("unit", {}).get("total_covers", 0) if isinstance(cov, dict) else 0
-                return unit_covers > 0
+                # 假绿修复 (2026-08-07)：1 条 covers 边不算单元测试通过。
+                # 需达到最低实质覆盖（>=3 条 covers 边，且对应测试文件非空）。
+                unit_files = cov.get("unit", {}).get("files", []) if isinstance(cov, dict) else []
+                return unit_covers >= 3 and len(unit_files) > 0
             except Exception:
                 return None
 
@@ -799,7 +802,15 @@ class ComplianceChecker:
                     for layer in cov.values()
                     if isinstance(layer, dict)
                 )
-                return total_covers > 0
+                total_files = sum(
+                    len(layer.get("files", []))
+                    for layer in cov.values()
+                    if isinstance(layer, dict)
+                )
+                # 假绿修复 (2026-08-07)：total_covers>0 不再算覆盖率达标。
+                # 覆盖率类检查需达到最低实质覆盖（>=3 covers 边 + 有测试文件），
+                # 与文件级 _coverage_metrics_met（阈值 60%）口径一致。
+                return total_covers >= 3 and total_files > 0
             except Exception:
                 return None
 
@@ -870,7 +881,11 @@ class ComplianceChecker:
                     return None
                 for layer in ("integration", "sil"):
                     layer_data = cov.get(layer, {})
-                    if isinstance(layer_data, dict) and layer_data.get("total_covers", 0) > 0:
+                    # 假绿修复 (2026-08-07)：空层不算验收证据。
+                    # 要求该层有 >=1 条 covers 边 AND 对应测试文件非空。
+                    if (isinstance(layer_data, dict)
+                            and layer_data.get("total_covers", 0) > 0
+                            and len(layer_data.get("files", [])) > 0):
                         return True
                 return False
             except Exception:
@@ -1030,15 +1045,20 @@ class ComplianceChecker:
                     details.append(f"  ❌ Check: {check_item} (no archived evidence found)")
             elif "SHALL" in check_item or "shall" in check_item:
                 # Requirement-related checks — the SRS must have substantive
-                # content (SHALL statements), not just a file that exists.
+                # content AND actual SHALL statements, not just a file that
+                # exists (假绿修复 2026-08-07：接线 _srs_has_shall_statements，
+                # 无 SHALL 语句的需求文档不再算通过)。
                 has_req = False
                 for req_doc in ["docs/requirements.md", "docs/software-requirements.md", "docs/spec.md"]:
                     if self._file_has_content(req_doc, min_chars=100):
                         has_req = True
                         break
-                if has_req:
+                if has_req and self._srs_has_shall_statements():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item} (SRS with substantive content)")
+                    details.append(f"  ✅ Check: {check_item} (SRS with SHALL statements)")
+                elif has_req:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (SRS exists but no SHALL statements found)")
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no substantive SRS content found)")

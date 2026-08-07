@@ -36,8 +36,18 @@ jobs:
         # 覆盖率门禁由 code-quality/evidence 承担
         # 另: 输出 tee 落盘 + artifact 上传（if: always）——GitHub test job 日志
         # blob 系统性缺失（BlobNotFound），artifact 是唯一可靠的失败取证通道
+        # 假绿修复 (2026-08-07): --no-cov 时覆盖率门禁由下方独立步骤执行；
+        # benchmark 数据已入库（.gitignore 移除整体忽略）→ misra-benchmark 可真实运行。
         set -o pipefail
         python -m pytest tests/ -q --no-cov --ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py 2>&1 | tee pytest-${{ matrix.python-version }}.log
+
+    - name: Coverage gate (fail-under 60)
+      if: matrix.python-version == '3.12'
+      run: |
+        python -m pytest tests/ -q --no-header --cov=src/yuleosh --cov-fail-under=60 \
+          --ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py \
+          --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py \
+          --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py 2>&1 | tail -20
 
     - name: Upload pytest log (always)
       if: always()
@@ -184,18 +194,21 @@ jobs:
       uses: actions/setup-python@v6
       with:
         python-version: '3.13'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     - name: RTM Gate Check (ASPICE SWE.4)
       run: |
         bash docs/ci-rtm-check.sh 80 project-docs/spec.md tests/
 
     - name: Generate evidence pack
       run: |
-    - name: Generate evidence pack
-      run: |
-        python -m yuleosh.evidence.pack || echo "Evidence pack requires API key, skipped"
+        python -m yuleosh.evidence.pack
 
     - name: Upload compliance pack
       uses: actions/upload-artifact@v7
       with:
         name: compliance-evidence
         path: .osh/evidence/
+        if-no-files-found: error

@@ -73,7 +73,10 @@ def coverage_gate_step(session: PipelineSession) -> str:
             "timestamp": datetime.now().isoformat(),
             "project_dir": project_dir,
             "phases": {},
-            "gate_passed": True,
+            # 假绿修复 (2026-08-07)：mock 报告不再伪装 gate_passed=True。
+            # 覆盖率门禁报告是证据产物，mock 未做真实构建/测量 → gate_passed=False，
+            # 下游不得把 mock 产物当"覆盖率门禁通过"证据。
+            "gate_passed": False,
             "skipped": True,
             "reason": "mock mode — LLM outputs are placeholders, no real code to measure",
             "c_fail_under": 70,
