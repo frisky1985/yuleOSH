@@ -20,6 +20,7 @@ Usage:
     yuleosh evidence pack                    — Generate ASPICE compliance pack
     yuleosh audit evidence [-o <dir>]        — Generate CL2 audit evidence bundle
     yuleosh stats [--json]                   — Show project statistics
+    yuleosh gap close [--yes|--no|--list]    — ASPICE 差距 → 改进工单 (受控生成)
     yuleosh ui                              — Start dashboard server (:8080)
 """
 
@@ -79,6 +80,12 @@ from yuleosh.cli.commands.swe6 import (  # noqa: E402
     cmd_swe6_check,
 )
 from yuleosh.cli.commands.review_diff import cmd_review_diff  # noqa: E402
+
+# gap (v3.9.0): ASPICE 差距 → 改进工单（受控生成，需人工确认）
+from yuleosh.cli.commands.gap import (  # noqa: E402
+    cmd_gap_close,
+    build_parser as _build_gap,
+)
 
 # ── A5: remaining command groups extracted to cli/commands/misc.py ─────
 from yuleosh.cli.commands.misc import (  # noqa: E402
@@ -253,6 +260,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # traceability (A5: commands extracted to cli/commands/traceability.py)
     from yuleosh.cli.commands.traceability import build_parser as _build_traceability
     _build_traceability(sub)
+
+    # gap (v3.9.0): ASPICE 差距 → 改进工单（受控生成）
+    _build_gap(sub)
 
     # misra
     # hook
@@ -892,6 +902,14 @@ def main():
             cmd_methodology_init(args.dir, force=args.force)
         elif args.methodology_sub == "check":
             cmd_methodology_check(args.dir, json_out=args.json)
+        else:
+            parser.print_help()
+            sys.exit(1)
+
+    elif args.command == "gap":
+        # v3.9.0: ASPICE 差距 → 改进工单（受控生成）
+        if args.gap_sub == "close":
+            cmd_gap_close(args)
         else:
             parser.print_help()
             sys.exit(1)
