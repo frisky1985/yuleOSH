@@ -173,7 +173,8 @@ class TestComputeSpecCoverage:
                 result = compute_spec_coverage(tmp)
                 assert result["analyzer"] == "generic"
                 assert result["requirements"] == 2
-                assert result["total_shall"] == 2
+                # 3 SHALL tokens: WDGM-REQ-01 行 1 个 + SHALL-2 行 2 个（ID 前缀 + 句子）
+                assert result["total_shall"] == 3
                 assert result["score"] == 100
 
 
