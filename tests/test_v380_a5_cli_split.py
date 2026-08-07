@@ -65,7 +65,7 @@ class TestA5ParserContract:
         for grp in ("traceability", "misra", "swe6", "review"):
             assert grp in subs
         tr = subs["traceability"]._subparsers._group_actions[0].choices
-        assert set(tr.keys()) == {"report", "matrix", "export"}
+        assert set(tr.keys()) == {"report", "matrix", "export", "check"}
         ms = subs["misra"]._subparsers._group_actions[0].choices
         assert set(ms.keys()) == {"trend", "report", "profile", "deviate"}
         s6 = subs["swe6"]._subparsers._group_actions[0].choices

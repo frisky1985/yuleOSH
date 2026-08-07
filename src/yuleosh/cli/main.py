@@ -62,6 +62,7 @@ from yuleosh.cli.commands.traceability import (  # noqa: E402
     cmd_traceability_report,
     cmd_traceability_export,
     cmd_traceability_matrix,
+    cmd_traceability_check,
 )
 from yuleosh.cli.commands.misra import (  # noqa: E402
     cmd_misra_deviate,
@@ -713,6 +714,8 @@ def main():
             cmd_traceability_matrix(args)
         elif args.traceability_sub == "export":
             cmd_traceability_export(args)
+        elif args.traceability_sub == "check":
+            cmd_traceability_check(args)
         else:
             parser.print_help()
             sys.exit(1)
