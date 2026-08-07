@@ -64,7 +64,15 @@ def run_unit_tests(project_dir: str, ci: CIResult) -> bool:
                 [sys.executable, "-m", "pytest", tf, "-x", "--tb=short", "-q"],
                 capture_output=True, text=True, timeout=60,
             )
-            if result.returncode != 0:
+            if result.returncode == 5:
+                # pytest exit 5 = no tests collected (e.g. third-party
+                # helper scripts named test_*.py that are CLI tools, not
+                # pytest tests). Treat as skipped — same semantics as the
+                # e2e stage. (fix 2026-08-07: yuleASR L1 failed on
+                # mbedtls framework scripts)
+                ci.add_stage("unit-tests", "skipped", f"{rel}: no tests collected")
+                print(f"    ⏭️  {rel} has no pytest tests — skipped")
+            elif result.returncode != 0:
                 ci.add_stage("unit-tests", "failed", f"{rel}: {result.stdout[:200]}")
                 print(f"    ❌ {rel} FAILED")
                 return False
