@@ -17,6 +17,29 @@ from typing import Any, Optional
 _DEFAULT_TEMPLATE = Path(__file__).resolve().parent / "aspice_v3.1.yaml"
 
 
+# ── Requirement ID extraction ──────────────────────────────────────────
+# Classic form:            REQ-001
+# AUTOSAR BSW module IDs:  WDGM-REQ-01, MCAL-SHALL-001, ECUAL-SHALL-001,
+#                          SVC-SHALL-001, NFR-SHALL-001, CRYIF-SHALL-001 ...
+# Generic SHALL IDs:       SHALL-1, SHALL-10
+# SRS-style IDs:           SWR-001.1-01
+_REQ_ID_PATTERNS = [
+    r"\bREQ-\d{3}(?:-S\d+)?\b",
+    r"\b[A-Z][A-Z0-9]*-REQ-\d+(?:-\d+)?\b",
+    r"\b[A-Z][A-Z0-9]*-SHALL-\d+\b",
+    r"\bSHALL-\d+\b",
+    r"\bSWR-\d+(?:\.\d+)*-\d+\b",
+]
+
+
+def _extract_req_ids(text: str) -> set[str]:
+    """Extract unique requirement identifiers matching any known ID form."""
+    ids: set[str] = set()
+    for pat in _REQ_ID_PATTERNS:
+        ids.update(_re.findall(pat, text))
+    return ids
+
+
 class ComplianceChecker:
     """Check a project directory for ASPICE v3.1 compliance."""
 
@@ -156,17 +179,22 @@ class ComplianceChecker:
             return ""
 
     def _count_req_ids(self) -> int:
-        """Count unique REQ-xxx identifiers in the SRS (or its machine table)."""
+        """Count unique requirement identifiers in the SRS (or its machine table).
+
+        Supports the common AUTOSAR/embedded ID conventions in addition to
+        the classic ``REQ-xxx`` form, e.g. ``WDGM-REQ-01``, ``ECUAL-SHALL-001``,
+        ``SVC-SHALL-001``, ``SHALL-1``, ``SWR-001.1-01``, ``MCAL-SHALL-001``.
+        """
         content = self._read_srs()
         if content:
-            ids = set(_re.findall(r"\bREQ-\d{3}\b", content))
+            ids = _extract_req_ids(content)
             if ids:
                 return len(ids)
         # Fallback: machine-readable SHALL table projection
         table = self.project_dir / "specs" / "requirements-shall-table.md"
         if table.exists():
             try:
-                return len(set(_re.findall(r"\bREQ-\d{3}\b", table.read_text(errors="replace"))))
+                return len(_extract_req_ids(table.read_text(errors="replace")))
             except Exception:
                 return 0
         return 0
@@ -176,7 +204,7 @@ class ComplianceChecker:
         content = self._read_srs()
         if not content:
             return False
-        return bool(_re.search(r"\bREQ-\d{3}-S\d+\b", content)) or "SHALL" in content
+        return bool(_extract_req_ids(content)) or "SHALL" in content
 
     def _srs_has_functional_areas(self) -> bool:
         """True if requirements are organized by functional area."""
