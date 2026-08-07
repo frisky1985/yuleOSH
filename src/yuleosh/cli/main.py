@@ -264,8 +264,11 @@ def _build_parser() -> argparse.ArgumentParser:
     build_plan_subparser(sub)
 
     # kb (knowledge base)
-    from yuleosh.kb.cli import build_kb_subparser
+    from yuleosh.kb.cli import build_kb_subparser, build_lesson_subparser
     build_kb_subparser(sub)
+
+    # lesson (工单→Lessons Learned 一键沉淀) — 顶层命令 yuleosh lesson create
+    build_lesson_subparser(sub)
 
     # memory (cross-session fact store + session search)
     from yuleosh.memory.cli import build_memory_subparser, build_session_subparser
@@ -729,6 +732,10 @@ def main():
     elif args.command == "kb":
         from yuleosh.kb.cli import handle_kb_command
         sys.exit(handle_kb_command(args))
+
+    elif args.command == "lesson":
+        from yuleosh.kb.cli import handle_lesson_command
+        sys.exit(handle_lesson_command(args))
 
     elif args.command == "memory":
         from yuleosh.memory.cli import handle_memory_command

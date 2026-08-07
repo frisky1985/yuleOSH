@@ -76,6 +76,8 @@ class KbStore:
                 root_cause TEXT NOT NULL DEFAULT '',
                 project_id TEXT NOT NULL DEFAULT '',
                 severity TEXT NOT NULL DEFAULT 'medium',
+                ticket_id TEXT NOT NULL DEFAULT '',
+                requirement_id TEXT NOT NULL DEFAULT '',
                 created_at TEXT
             );
 
@@ -94,6 +96,15 @@ class KbStore:
             );
         """)
         conn.commit()
+        # ── 兼容迁移：旧库已有的 lessons 表缺少 ticket_id/requirement_id 列。
+        # ALTER TABLE ADD COLUMN 在列已存在时抛 OperationalError，捕获后跳过，
+        # 因此该迁移是幂等的（新库由上方 CREATE TABLE 直接建全，也会被跳过）。
+        for _col in ("ticket_id", "requirement_id"):
+            try:
+                conn.execute(f"ALTER TABLE lessons ADD COLUMN {_col} TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # 列已存在（幂等）
 
     # ── helpers ──────────────────────────────────────────────────────────
 
@@ -122,6 +133,8 @@ class KbStore:
             root_cause=row["root_cause"],
             project_id=row["project_id"],
             severity=row["severity"],
+            ticket_id=row["ticket_id"],
+            requirement_id=row["requirement_id"],
             created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
         )
 
@@ -217,11 +230,13 @@ class KbStore:
         now = self._now()
         conn = self._get_conn()
         cur = conn.execute(
-            """INSERT INTO lessons (title, problem, solution, root_cause, project_id, severity, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO lessons (title, problem, solution, root_cause, project_id, severity,
+                                    ticket_id, requirement_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (fields.get("title", ""), fields.get("problem", ""),
              fields.get("solution", ""), fields.get("root_cause", ""),
-             fields.get("project_id", ""), fields.get("severity", "medium"), now),
+             fields.get("project_id", ""), fields.get("severity", "medium"),
+             fields.get("ticket_id", ""), fields.get("requirement_id", ""), now),
         )
         conn.commit()
         return self.get_lesson(cur.lastrowid)
@@ -233,6 +248,7 @@ class KbStore:
         return self._row_to_lesson(row) if row else None
 
     def list_lessons(self, project_id: Optional[str] = None, severity: Optional[str] = None,
+                     ticket_id: Optional[str] = None,
                      limit: int = 100, offset: int = 0) -> list[Lesson]:
         conn = self._get_conn()
         conditions = []
@@ -243,6 +259,9 @@ class KbStore:
         if severity:
             conditions.append("severity = ?")
             params.append(severity)
+        if ticket_id:
+            conditions.append("ticket_id = ?")
+            params.append(ticket_id)
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         cur = conn.execute(
             f"SELECT * FROM lessons {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -250,7 +269,8 @@ class KbStore:
         )
         return [self._row_to_lesson(r) for r in cur.fetchall()]
 
-    def count_lessons(self, project_id: Optional[str] = None, severity: Optional[str] = None) -> int:
+    def count_lessons(self, project_id: Optional[str] = None, severity: Optional[str] = None,
+                      ticket_id: Optional[str] = None) -> int:
         conn = self._get_conn()
         conditions = []
         params = []
@@ -260,12 +280,16 @@ class KbStore:
         if severity:
             conditions.append("severity = ?")
             params.append(severity)
+        if ticket_id:
+            conditions.append("ticket_id = ?")
+            params.append(ticket_id)
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         cur = conn.execute(f"SELECT COUNT(*) FROM lessons {where}", params)
         return cur.fetchone()[0]
 
     def update_lesson(self, lesson_id: int, fields: dict) -> Optional[Lesson]:
-        _allowed = {"title", "problem", "solution", "root_cause", "project_id", "severity"}
+        _allowed = {"title", "problem", "solution", "root_cause", "project_id", "severity",
+                    "ticket_id", "requirement_id"}
         safe_fields = {k: v for k, v in fields.items() if k in _allowed}
         if not safe_fields:
             return self.get_lesson(lesson_id)
