@@ -854,8 +854,11 @@ def step_merge_gate(session) -> str:
             "gate": "merge_gate",
             "skipped": True,
             "reason": "mock mode — knowledge graph empty, no real code to validate",
-            "passed": True,
-            "verdict": "pass",
+            # 假绿修复 (2026-08-07)：mock 报告不再伪装 passed=True。
+            # 门禁报告是证据产物，mock 未做真实检查 → passed=False + verdict=skipped，
+            # 避免下游把 mock 产物当"门禁通过"证据消费。
+            "passed": False,
+            "verdict": "skipped",
             "summary": {"total_errors": 0, "total_warnings": 0, "error_details": []},
         }
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)

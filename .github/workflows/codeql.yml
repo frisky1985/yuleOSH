@@ -82,7 +82,7 @@ jobs:
       - name: Semgrep — Python Security Rules
         run: |
           semgrep --config=.semgrep/security-python.yml \
-                  --sarif=semgrep-python.sarif \
+                  --sarif-output=semgrep-python.sarif \
                   --error --metrics=off \
                   src/
         continue-on-error: true
@@ -90,7 +90,7 @@ jobs:
       - name: Semgrep — C/C++ Security Rules
         run: |
           semgrep --config=.semgrep/security-c.yml \
-                  --sarif=semgrep-c.sarif \
+                  --sarif-output=semgrep-c.sarif \
                   --error --metrics=off \
                   src/ || true
         continue-on-error: true
@@ -98,7 +98,7 @@ jobs:
       - name: Semgrep — 数据流分析 (Taint Tracking)
         run: |
           semgrep --config=.semgrep/dataflow-python.yml \
-                  --sarif=semgrep-dataflow.sarif \
+                  --sarif-output=semgrep-dataflow.sarif \
                   --error --metrics=off \
                   src/
         continue-on-error: true
@@ -109,7 +109,7 @@ jobs:
                   --config=p/owasp-top-ten \
                   --config=p/command-injection \
                   --config=p/sql-injection \
-                  --sarif=semgrep-remote.sarif \
+                  --sarif-output=semgrep-remote.sarif \
                   --error --metrics=off \
                   src/
         continue-on-error: true

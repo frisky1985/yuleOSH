@@ -105,7 +105,11 @@ docs/coverage-attack-plan.md
 docs/edition-matrix.md
 docs/cl2-dry-run-checklist.md
 docs/benchmark-run-log-07-13.md
-benchmark/
+# 假绿修复 (2026-08-07): benchmark/ 不再整体忽略 ——
+# 基准用例 + 期望结果入库，CI 才能真跑 test_misra_benchmark。
+# 仅忽略中间产物（cppcheck dump / raw 输出）。
+benchmark/**/*.dump
+benchmark/**/raw_results*.txt
 
 # === 误提交垃圾 ===
 desktop/node_modules/

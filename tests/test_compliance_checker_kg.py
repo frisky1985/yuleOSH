@@ -162,7 +162,7 @@ def test_kg_check_with_store(mock_get_store, tmp_path, aspice_yaml_path):
                                "validates": 3, "verifies": 1},
         }),
         get_aspice_coverage=mock.MagicMock(return_value={
-            "unit": {"total_covers": 3, "files": []},
+            "unit": {"total_covers": 3, "files": ["test_a.py", "test_b.py"]},
             "integration": {"total_covers": 0, "files": []},
         }),
         get_confirmation_trace=mock.MagicMock(return_value=[{"id": 1}, {"id": 2}]),
@@ -580,9 +580,9 @@ def test_kg_new_mappings_with_data(mock_get_store, mock_impact, tmp_path, aspice
             "edges_by_type": {"implements": 5, "covers": 12, "validates": 3},
         }),
         get_aspice_coverage=mock.MagicMock(return_value={
-            "unit": {"total_covers": 4, "files": []},
-            "integration": {"total_covers": 2, "files": []},
-            "sil": {"total_covers": 1, "files": []},
+            "unit": {"total_covers": 4, "files": ["test_unit_a.py", "test_unit_b.py"]},
+            "integration": {"total_covers": 2, "files": ["test_integration.py"]},
+            "sil": {"total_covers": 1, "files": ["test_sil.py"]},
             "hil": {"total_covers": 0, "files": []},
             "system": {"total_covers": 0, "files": []},
         }),

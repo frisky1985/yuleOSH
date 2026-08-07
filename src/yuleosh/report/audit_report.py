@@ -63,6 +63,9 @@ class EvidenceItem:
     details: str = ""        # Additional detail
     timestamp: str = ""      # ISO timestamp
     evidence_type: str = "test"  # "test" | "review" | "analysis" | "document"
+    substance: bool = True   # False when the evidence JSON carries no real content
+                            # (e.g. only {"type","status"} — self-reported pass with
+                            #  no details/title/verdict). 防止空对象冒充证据。
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -327,6 +330,26 @@ class EvidenceScanner:
         rel_path = str(file_path.relative_to(self.evidence_dir.parent)
                        if file_path.is_relative_to(self.evidence_dir.parent)
                        else file_path)
+        # 实质内容判定：仅 {"type","status"} 的空对象（自报 passed 无内容）不算证据。
+        # 有 title/description/details/output/verdict/comment/conclusion 等任一实质字段，
+        # 或排除元数据字段后仍有 >=1 个真实数据键（真实报告型 JSON 通常含结果数据）才算有内容。
+        substance = False
+        for _key in ("title", "description", "details", "output", "content",
+                     "verdict", "comment", "conclusion", "summary", "result",
+                     "evidence", "findings", "review", "checks", "items"):
+            _val = data.get(_key)
+            if isinstance(_val, str) and _val.strip():
+                substance = True
+                break
+            if isinstance(_val, (list, dict)) and _val:
+                substance = True
+                break
+        if not substance:
+            _meta_keys = {"type", "evidence_type", "status", "process", "result",
+                          "timestamp", "generated_at", "id", "req_id", "test_id"}
+            _real_keys = [k for k in data if k not in _meta_keys]
+            if _real_keys:
+                substance = True
         return EvidenceItem(
             process=data.get("process", ""),
             category=data.get("type", data.get("evidence_type", "unknown")),
@@ -337,6 +360,7 @@ class EvidenceScanner:
             details=data.get("details", data.get("output", "")),
             timestamp=data.get("timestamp", data.get("generated_at", "")),
             evidence_type=data.get("type", data.get("evidence_type", "document")),
+            substance=substance,
         )
 
 
@@ -401,8 +425,14 @@ class AuditReportGenerator:
             total_evidences += evidence_count
 
             # Determine scoring thresholds per process
-            passing = sum(1 for e in deduped if e.status in ("passed", "approved", "ok"))
-            failing = sum(1 for e in deduped if e.status in ("failed", "not_reviewed", "rejected"))
+            # 假绿修复 (2026-08-07)：只有 status 自报绿且带实质内容的证据才算 passing。
+            # 空对象 {"status":"passed"}（无 title/details/verdict）不再能撑起维度绿。
+            passing = sum(1 for e in deduped
+                          if e.status in ("passed", "approved", "ok") and e.substance)
+            failing = sum(1 for e in deduped
+                          if e.status in ("failed", "not_reviewed", "rejected") and e.substance)
+            empty_passed = sum(1 for e in deduped
+                               if e.status in ("passed", "approved", "ok") and not e.substance)
 
             if evidence_count == 0:
                 coverage_pct = 0.0
@@ -410,14 +440,14 @@ class AuditReportGenerator:
                 gap_count = 1  # Complete absence = 1 gap
             else:
                 coverage_pct = round((passing / evidence_count) * 100, 1)
-                gap_count = failing
+                gap_count = failing + empty_passed  # 空洞自报证据也算 gap
 
                 # P0-4: E1–E3 are EVIDENCE-COVERAGE grades derived from the
                 # passing-evidence ratio — explicitly NOT ASPICE capability
                 # levels (AL). Never present them as a formal assessment.
-                if coverage_pct >= 90 and failing == 0:
+                if coverage_pct >= 90 and failing == 0 and empty_passed == 0:
                     score = "E3"
-                elif coverage_pct >= 70 and failing < evidence_count * 0.2:
+                elif coverage_pct >= 70 and (failing + empty_passed) < evidence_count * 0.2:
                     score = "E2"
                 elif coverage_pct >= 30:
                     score = "E1"
@@ -437,6 +467,14 @@ class AuditReportGenerator:
                         "ref_id": ev.ref_id,
                         "title": ev.title,
                         "details": ev.details,
+                    })
+                elif ev.status in ("passed", "approved", "ok") and not ev.substance:
+                    findings.append({
+                        "type": "empty_evidence",
+                        "ref_id": ev.ref_id,
+                        "title": ev.title,
+                        "details": "Evidence self-reports pass but carries no substantive "
+                                   "content (title/details/verdict) — treated as gap.",
                     })
 
             # Generate recommendations for this dimension
