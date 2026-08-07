@@ -50,7 +50,7 @@ def generate_json_report(
     excluded_rules = excluded_rules or _extract_excluded_rules()
     excluded_files = excluded_files or _extract_excluded_files()
 
-    stats = compute_summary_stats(violations, groups, rule_defs)
+    stats = compute_summary_stats(violations, groups, rule_defs, deviations=deviation_list)
     category_bd = _compute_category_breakdown(violations)
 
     # Diff against previous report
@@ -178,17 +178,22 @@ def _deviation_to_dict(d) -> dict:
 
     Supports both deviation objects (dataclass with .rule_id/.reason/.expires)
     and plain dicts (from run_misra_check which now stores full dicts).
+    Preserves file_pattern so persisted deviations remain matchable.
     """
     if isinstance(d, dict):
         return {
             "rule_id": d.get("rule_id", str(d)),
+            "file_pattern": d.get("file_pattern", d.get("file", "")),
             "reason": d.get("reason", ""),
             "expires": d.get("expires", None),
+            "approved_by": d.get("approved_by", ""),
         }
     return {
         "rule_id": getattr(d, "rule_id", str(d)),
+        "file_pattern": getattr(d, "file_pattern", ""),
         "reason": getattr(d, "reason", ""),
         "expires": getattr(d, "expires", None),
+        "approved_by": getattr(d, "approved_by", ""),
     }
 
 
