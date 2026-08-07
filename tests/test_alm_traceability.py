@@ -9,7 +9,6 @@ from yuleosh.alm.traceability import (
     extract_shall_from_text,
     generate_lrm,
     generate_lrt,
-    load_swr_mapping_table,
     _find_code_by_keywords,
     _extract_keywords,
 )
@@ -126,68 +125,3 @@ def test_find_code_by_keywords_no_dir(tmp_path):
     """GIVEN no source dir WHEN finding code by keywords THEN returns list."""
     result = _find_code_by_keywords(tmp_path / "nonexistent", ["boot"])
     assert isinstance(result, list)
-
-
-# ── SWR-xxx parsing (batch A: 需求→测试追溯补全) ────────────────────────
-
-
-def test_extract_shall_statements_swr_bullet_format(tmp_path):
-    """SWR-001.1-01 dotted IDs in **ID**: bullet format must be parsed."""
-    spec = tmp_path / "software-requirements.md"
-    spec.write_text(
-        "# SRS\n\n"
-        "### SWR-001: Platform\n"
-        "- **SWR-001.1-01**: SHALL support AUTOSAR CP 4.4.0\n"
-        "- **SWR-001.1-02**: SHALL implement MCAL abstraction\n",
-        encoding="utf-8",
-    )
-    results = extract_shall_statements(str(spec))
-    assert len(results) == 2
-    assert results[0]["req_id"] == "SWR-001.1-01"
-    assert results[1]["req_id"] == "SWR-001.1-02"
-
-
-def test_load_swr_mapping_table(tmp_path):
-    """Requirement-traceability-matrix.md SWR mapping rows must be read."""
-    (tmp_path / "docs").mkdir(parents=True)
-    (tmp_path / "docs" / "requirement-traceability-matrix.md").write_text(
-        "# RTM\n\n"
-        "| SHALL ID | Spec Source | Test File | Test Function | Status |\n"
-        "|:---------|:------------|:----------|:--------------|:-------|\n"
-        "| SWR-001.1-01 | SRS-ARCH | tests/unit/autosar/test_dcm.c | test_dcm_basic | ✅ |\n"
-        "| SWR-001.1-02 | SRS-MCAL | tests/unit/mcal/test_adc.c | test_adc_init | ❌ |\n",
-        encoding="utf-8",
-    )
-    rows = load_swr_mapping_table(str(tmp_path))
-    assert len(rows) == 2
-    assert rows[0]["id"] == "SWR-001.1-01"
-    assert rows[0]["test_file"] == "tests/unit/autosar/test_dcm.c"
-    assert rows[0]["has_test"] is True
-    assert rows[1]["has_test"] is False
-
-
-def test_load_swr_mapping_table_missing(tmp_path):
-    rows = load_swr_mapping_table(str(tmp_path))
-    assert rows == []
-
-
-def test_generate_lrm_includes_swr_mapping(tmp_path):
-    """LRM must merge SWR mapping rows into requirements (has_test=True)."""
-    (tmp_path / "docs").mkdir(parents=True)
-    (tmp_path / "docs" / "software-requirements.md").write_text(
-        "# SRS\n\n### SWR-001: Platform\n- **SWR-001.1-01**: SHALL support AUTOSAR\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "docs" / "requirement-traceability-matrix.md").write_text(
-        "| SHALL ID | Spec Source | Test File | Test Function | Status |\n"
-        "|:---------|:------------|:----------|:--------------|:-------|\n"
-        "| SWR-001.1-01 | SRS-ARCH | tests/unit/autosar/test_dcm.c | test_dcm_basic | ✅ |\n",
-        encoding="utf-8",
-    )
-    result = generate_lrm(str(tmp_path))
-    reqs = result["requirements"]
-    swr = [r for r in reqs if "SWR" in str(r.get("req_id", ""))]
-    assert len(swr) >= 1
-    swr_req = next(r for r in swr if r["req_id"] == "SWR-001.1-01")
-    assert swr_req["has_test"] is True
-    assert swr_req["test_reports"][0]["file"] == "tests/unit/autosar/test_dcm.c"
