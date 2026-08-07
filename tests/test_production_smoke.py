@@ -545,10 +545,19 @@ class TestEnvironmentConfig:
         assert (DEPLOY_DIR / ".env.example").exists()
 
     def test_04_critical_vars_have_clear_defaults(self):
-        """GIVEN docker-compose.yml WHEN inspected THEN critical vars have safe defaults."""
+        """GIVEN docker-compose.yml WHEN inspected THEN critical vars fail closed.
+
+        2026-08-07 P0-1: 密码从弱默认（changeme123）改为强制必填（:?），
+        生产默认认证开启（fail-closed），不再存在弱口令回落。
+        """
         compose = _load_compose()
         backend_env = compose["services"]["backend"]["environment"]
 
-        # DB password should have a default (even if weak) for development
+        # DB password must be required (no weak fallback) — fail closed.
         db_url = backend_env.get("YULEOSH_DB_URL", "")
-        assert "changeme123" in db_url or "${YULEOSH_DB_PASSWORD:-changeme123}" in db_url
+        assert "changeme123" not in db_url
+        assert "${YULEOSH_DB_USER:" in db_url
+        # Password var itself is required (not a weak default).
+        pg_password = compose["services"].get("db", {}).get("environment", {}).get(
+            "POSTGRES_PASSWORD", "")
+        assert "${YULEOSH_DB_PASSWORD:?" in str(pg_password)

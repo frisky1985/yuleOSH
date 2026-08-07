@@ -292,7 +292,9 @@ def _load_kb_lessons(project_dir: str) -> list[dict]:
     """读取 KB lessons 并提取需求 / 工单关联（只读，不修改 kb）。
 
     - 优先使用项目内 ``.yuleosh/kb.db``（若存在）；
-    - 否则交给 ``KbStore()`` 解析（YULEOSH_KB_DB 环境变量或仓库默认）；
+    - 否则若设置了 ``YULEOSH_KB_DB`` 环境变量则使用它（显式指定）；
+    - 都不存在时返回空列表（**不回退全局默认库**——避免把其他项目的
+      lessons 混入本项目的追溯闭环，也保证测试隔离）。
     - 关联方式（三层信号，取并集）：
         1. lesson.requirement_id / lesson.ticket_id 结构化字段
            （kb.models.Lesson 新增列，getattr 兼容旧版本模型）；
@@ -309,8 +311,12 @@ def _load_kb_lessons(project_dir: str) -> list[dict]:
     try:
         if local_db.is_file():
             store = KbStore(db_path=str(local_db))
+        elif os.environ.get("YULEOSH_KB_DB"):
+            store = KbStore(db_path=os.environ["YULEOSH_KB_DB"])
         else:
-            store = KbStore()
+            # No project-local KB and no explicit override — empty closure,
+            # never fall back to the global default store (test isolation).
+            return []
     except Exception as e:  # noqa: BLE001
         log.warning("Cannot open KB store for traceability closure: %s", e)
         return []
