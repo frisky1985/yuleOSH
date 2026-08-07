@@ -917,6 +917,24 @@ class AuditLog:
 # EventQueuePersistence — 持久化 + 崩溃后自动恢复 (ACC-005, ACC-008)
 # ═══════════════════════════════════════════════════════════════════════
 
+def _default_persistence_path() -> str:
+    """Return a safe default for EventQueuePersistence base_path.
+
+    v3.12.x CI 真跑修复 (2026-08-07): 原先默认 OSH_HOME=/tmp 时写
+    /tmp/.yuleosh/loop，persistence 关闭时写死 /tmp/yuleosh-loop——两处
+    都污染 CI runner 的 /tmp，导致任何 pytest tmp_path（祖先链含 /tmp）
+    被 _is_yuleosh_project 误判为 yuleosh 项目（test_hooks 失败）。
+
+    新逻辑：优先 OSH_HOME（用户显式指定），否则退到 tempfile 隔离目录
+    （带 uid，避免多进程冲突），绝不裸写系统 /tmp。
+    """
+    _home = os.environ.get("OSH_HOME")
+    if _home:
+        return os.path.join(_home, ".yuleosh", "loop")
+    import tempfile
+    return os.path.join(tempfile.gettempdir(), f"yuleosh-loop-{os.getuid()}")
+
+
 class EventQueuePersistence:
     """事件队列持久化 — 崩溃后自动恢复未消费的事件。
 
@@ -939,8 +957,9 @@ class EventQueuePersistence:
 
     def __init__(self, base_path: Optional[str] = None):
         if base_path is None:
-            _home = os.environ.get("OSH_HOME", "/tmp")
-            base_path = os.path.join(_home, ".yuleosh", "loop")
+            # v3.12.x CI 真跑修复: 原先 os.environ.get("OSH_HOME", "/tmp")
+            # 裸写 /tmp/.yuleosh/loop 污染 CI /tmp。统一走隔离 helper。
+            base_path = _default_persistence_path()
         self._base_path = base_path
         self._pending_path = os.path.join(base_path, "pending_events.json")
         self._processed_path = os.path.join(base_path, "processed_events.json")
@@ -1391,8 +1410,12 @@ class SystemEventBus:
                         target=self._worker_loop, daemon=True
                     )
         else:
+            # v3.12.x CI 真跑修复: persistence 关闭时原先写死 /tmp/yuleosh-loop，
+            # 与默认分支（OSH_HOME=/tmp → /tmp/.yuleosh/loop）一样会污染
+            # CI 的 /tmp，导致 test_hooks::test_no_project_marker 在 tmp_path
+            # 祖先链（/tmp）命中 .yuleosh 误判。统一走 _default_persistence_path()。
             self._persistence = EventQueuePersistence(
-                base_path=persistence_base_path or "/tmp/yuleosh-loop"
+                base_path=persistence_base_path or _default_persistence_path()
             )
 
         # ── ACC-106, ACC-406: CoalescingManager — 时间窗口聚合 ──

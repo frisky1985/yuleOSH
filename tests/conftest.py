@@ -1,23 +1,18 @@
 """pytest configuration for yuleOSH tests."""
 
 import os
-import tempfile
 
 # Require a test JWT secret so auth modules don't raise at import time.
 # The exact value is irrelevant for tests; any non-empty string works.
 os.environ.setdefault("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for-production")
 
-# Isolate OSH_HOME per pytest process so modules that default to
-# OSH_HOME (e.g. loop_engine.event_bus EventQueuePersistence) write to a
-# private temp dir instead of polluting /tmp/.yuleosh.
-#
-# Why: pytest's tmp_path on CI lives under /tmp/pytest-of-runner/..., so its
-# ancestor chain includes /tmp. If any earlier test creates /tmp/.yuleosh
-# (the old OSH_HOME=/tmp default), test_hooks.py::test_no_project_marker
-# wrongly detects a yuleosh project and fails. Setting OSH_HOME to a
-# per-process temp dir keeps the whole suite hermetic.
-_PID = os.getpid()
-os.environ.setdefault("OSH_HOME", os.path.join(tempfile.gettempdir(), f"yuleosh-pytest-{_PID}"))
+# NOTE (v3.12.x CI 真跑修复): OSH_HOME 不在此全局设置。
+# 曾尝试 per-process 隔离 (yuleosh-pytest-<pid>) 防 event_bus 污染 /tmp，
+# 但副作用是 test_api.py 等模块用 setdefault 自己设 OSH_HOME=repo 根时
+# 被 conftest 抢占，导致 docs/spec.md 相对解析失败（11 errors）。
+# /tmp 污染的真正根因已在 loop_engine/event_bus.py 修复：
+# EventQueuePersistence 默认路径改为 _default_persistence_path()
+# （OSH_HOME 优先，否则 tempfile 隔离目录），不再裸写 /tmp/.yuleosh。
 
 
 def pytest_collection_modifyitems(config, items):

@@ -326,10 +326,13 @@ class OSHHandler(BaseHTTPRequestHandler):
         OSH_HOME_DIR = Path(os.environ.get("HOME", "."))
         # Look for frontend/out at the repo root
         candidates = [
-            # v3.12.x CI 真跑修复: repo-root checkout (CI download-artifact
-            # places frontend/out here). This is the canonical location.
-            _REPO_ROOT / "frontend" / "out",
+            # OSH_HOME 优先（含测试 mock）：显式指定的项目根。
             Path(OSH_HOME) / "frontend" / "out",
+            # v3.12.x CI 真跑修复: repo-root checkout 兜底（CI
+            # download-artifact 将 frontend/out 放在 checkout 根）。
+            # OSH_HOME 默认值已与 _REPO_ROOT 一致，仅当 OSH_HOME 被
+            # 显式覆盖（如测试 mock）时此处才成为独立候选。
+            _REPO_ROOT / "frontend" / "out",
             OSH_HOME_DIR / ".openclaw" / "workspace" / "tasks" / "yuleOSH" / "frontend" / "out",
         ]
         static_dir = None
