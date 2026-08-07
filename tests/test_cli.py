@@ -453,22 +453,22 @@ class TestMisraCommands:
 
 
 class TestTraceabilityCommands:
-    def test_report(self, main_module):
+    def test_report(self, main_module, tmp_path):
         r = {"coverage_summary": {"requirements_total": 5, "test_coverage_pct": 80.0}}
         with patch("yuleosh.alm.traceability.generate_traceability_report", return_value=r):
             class A:
-                project_dir = "/tmp"
+                project_dir = str(tmp_path)
                 spec = None
             with patch("builtins.print"):
                 main_module.cmd_traceability_report(A())
 
-    def test_matrix(self, main_module):
+    def test_matrix(self, main_module, tmp_path):
         r = {"lrm": {"generated_at": "2026-01-01", "requirements": [
             {"req_id": "RS-001", "id": "S1", "has_code": True, "has_test": True, "has_review": True, "section": "S"},
         ], "summary": {"total": 1, "with_code": 1, "with_test": 1, "with_review": 1, "without_code": 0, "without_test": 0, "without_review": 0, "coverage_pct": 100}}, "gap_analysis": {"gaps": []}}
         with patch("yuleosh.alm.traceability.generate_lrt", return_value=r):
             class A:
-                project_dir = "/tmp"
+                project_dir = str(tmp_path)
                 spec = None
                 build_id = None
             with patch("builtins.print"):
@@ -481,20 +481,20 @@ class TestTraceabilityCommands:
 
 
 class TestAuditCommands:
-    def test_sync_check_pass(self, main_module, mock_subprocess):
+    def test_sync_check_pass(self, main_module, mock_subprocess, tmp_path):
         r = {"status": "passed", "rule_results": []}
         with patch("yuleosh.ci.sync_check.run_sync_check", return_value=r):
-            with patch("yuleosh.ci.sync_check.save_sync_evidence", return_value="/tmp/e.json"):
+            with patch("yuleosh.ci.sync_check.save_sync_evidence", return_value=str(tmp_path / "e.json")):
                 with patch("yuleosh.ci.sync_check.print_sync_result"):
-                    main_module.cmd_audit_sync_check(project_dir="/tmp")
+                    main_module.cmd_audit_sync_check(project_dir=str(tmp_path))
 
-    def test_sync_check_fail(self, main_module, mock_subprocess):
+    def test_sync_check_fail(self, main_module, mock_subprocess, tmp_path):
         r = {"status": "failed", "rule_results": []}
         with patch("yuleosh.ci.sync_check.run_sync_check", return_value=r):
-            with patch("yuleosh.ci.sync_check.save_sync_evidence", return_value="/tmp/e.json"):
+            with patch("yuleosh.ci.sync_check.save_sync_evidence", return_value=str(tmp_path / "e.json")):
                 with patch("yuleosh.ci.sync_check.print_sync_result"):
                     with pytest.raises(SystemExit):
-                        main_module.cmd_audit_sync_check(project_dir="/tmp")
+                        main_module.cmd_audit_sync_check(project_dir=str(tmp_path))
 
 
 # ═══════════════════════════════════════════════════════════════════════
