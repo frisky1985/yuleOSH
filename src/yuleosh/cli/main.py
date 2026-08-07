@@ -436,11 +436,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p_skills_show = sksub.add_parser("show", help="Show full skill content")
     p_skills_show.add_argument("name", help="Skill name (e.g. autosar-coding)")
 
-    # knowledge (方案 B, v3.12.x): 沉淀知识索引 pending/approve/reject/audit
-    from yuleosh.knowledge.cli import build_knowledge_subparser
-
-    build_knowledge_subparser(sub)
-
     # misra (A5: commands extracted to cli/commands/misra.py)
     from yuleosh.cli.commands.misra import build_parser as _build_misra
     _build_misra(sub)
@@ -837,11 +832,6 @@ def main():
     elif args.command == "skills":
         from yuleosh.skills.cli import handle_skills_command
         sys.exit(handle_skills_command(args))
-
-    elif args.command == "knowledge":
-        # 方案 B (2026-08-07): 沉淀知识索引 pending/approve/reject/audit
-        from yuleosh.knowledge.cli import handle_knowledge_command
-        sys.exit(handle_knowledge_command(args))
 
     elif args.command == "misra":
         if args.misra_sub == "trend":

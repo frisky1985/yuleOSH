@@ -284,23 +284,6 @@ def run_pre_commit(cwd: Optional[str] = None) -> int:
     except Exception as exc:
         log.warning("Failed to create KB entries: %s", exc)
 
-    # 7. 方案 B (2026-08-07): MISRA 新违例 → 自动入"待生效"知识索引。
-    try:
-        from yuleosh.knowledge.indexer import KnowledgeIndexer
-
-        indexer = KnowledgeIndexer(project_dir=project_root)
-        for v in new_violations:
-            rule_id = v.get("rule_id") or "unknown"
-            ref = f"{v.get('file', '?')}:{v.get('line', 0)}"
-            indexer.record(
-                kind="kb_article_created",
-                content=f"MISRA-{rule_id} @ {ref}: {v.get('message', '')[:200]}",
-                source=f"pre_commit:{ref}",
-                meta={"rule_id": rule_id, "ref": ref},
-            )
-    except Exception as exc:  # noqa: BLE001 — hook 永不阻塞 pre-commit
-        log.warning("Knowledge indexer hook failed (non-fatal): %s", exc)
-
     # Always return 0 — do NOT block the commit
     return 0
 
