@@ -201,3 +201,183 @@ def test_test_check_passes_with_evidence(tmp_path):
         "SWE.4",
     )
     assert status["status"] == "✅"
+
+
+# ── metric-level: acceptance matrix covered ≥ threshold ────────────────
+
+def test_acceptance_matrix_covered_meets_threshold(tmp_path):
+    """Summary reports coverage meeting threshold → PASS."""
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/acceptance-matrix.md",
+           "# Acceptance Matrix\n\n"
+           "| Req | Status |\n|---|:---:|\n"
+           "| REQ-1 | ✅ |\n\n"
+           "## Summary\n"
+           "- Total SHALL statements: 2\n"
+           "- Covered by tests: 2 (100%)\n"
+           "- Threshold: 100% → ✅ PASS\n")
+    assert c._acceptance_matrix_covered() is True
+
+
+def test_acceptance_matrix_covered_zero_fails(tmp_path):
+    """Summary showing 0% coverage must NOT count as acceptance evidence."""
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/acceptance-matrix.md",
+           "# Acceptance Matrix\n\n"
+           "| Req | Status |\n|---|:---:|\n"
+           "| REQ-1 | ❌ |\n\n"
+           "## Summary\n"
+           "- Total SHALL statements: 1\n"
+           "- Covered by tests: 0 (0%)\n"
+           "- Threshold: 100% → ❌ FAIL\n")
+    assert c._acceptance_matrix_covered() is False
+
+
+def test_acceptance_matrix_covered_no_summary_fallback(tmp_path):
+    """No summary block → fall back to ✅/PASS row ratio."""
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/acceptance-matrix.md",
+           "| Req | Status |\n"
+           "|-----|--------|\n"
+           "| REQ-1 | PASS |\n"
+           "| REQ-2 | PASS |\n"
+           "| REQ-3 | ❌ |\n")
+    assert c._acceptance_matrix_covered() is True
+
+
+def test_acceptance_matrix_covered_missing(tmp_path):
+    c = _make_checker(tmp_path)
+    assert c._acceptance_matrix_covered() is False
+
+
+# ── metric-level: traceability ≥60% ────────────────────────────────────
+
+def test_traceability_metrics_met_json(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/traceability-matrix.json",
+           json.dumps({"summary": {"total_requirements": 10, "with_test_coverage": 7}}))
+    assert c._traceability_metrics_met() is True
+
+
+def test_traceability_metrics_zero_fails(tmp_path):
+    """A matrix that traces 0% must NOT pass the traceability check."""
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/traceability-matrix.json",
+           json.dumps({"summary": {"total_requirements": 10, "with_test_coverage": 0}}))
+    assert c._traceability_metrics_met() is False
+
+
+def test_traceability_metrics_md_rows(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/traceability-matrix.md",
+           "### REQ-1\n- Status: ✅ Covered\n"
+           "### REQ-2\n- Status: ✅ Covered\n"
+           "### REQ-3\n- Status: ❌ Not Covered\n")
+    assert c._traceability_metrics_met() is True
+
+
+# ── metric-level: coverage line rate ───────────────────────────────────
+
+def test_coverage_metrics_met_line_rate(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".yuleosh/reports/c-coverage.json",
+           json.dumps({"line_rate": 75.84}))
+    assert c._coverage_metrics_met(threshold=60.0) is True
+
+
+def test_coverage_metrics_below_threshold_fails(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/ci/coverage.json",
+           json.dumps({"totals": {"lines": {"found": 100, "hit": 10}}}))
+    assert c._coverage_metrics_met(threshold=60.0) is False
+
+
+def test_coverage_metrics_zero_report_fails(tmp_path):
+    """A coverage report showing 0% must NOT count as coverage evidence."""
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".yuleosh/reports/c-coverage.json",
+           json.dumps({"line_rate": 0.0}))
+    assert c._coverage_metrics_met(threshold=1.0) is False
+
+
+# ── metric-level: SIL real passing run ─────────────────────────────────
+
+def test_sil_results_real_module_passing(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/ci/sil-test-results.json",
+           json.dumps({
+               "stage": "sil-tests",
+               "all_passed": True,
+               "results": [
+                   {"elf": "crc_smoke.elf", "passed": True},
+                   {"elf": "e2e_smoke.elf", "passed": True},
+               ],
+           }))
+    assert c._has_sil_results() is True
+
+
+def test_sil_results_hello_elf_demo_fails(tmp_path):
+    """hello.elf demo fixture must NOT count as SIL qualification evidence."""
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/ci/sil-test-results.json",
+           json.dumps({
+               "stage": "sil-tests",
+               "all_passed": True,
+               "results": [{"elf": "hello.elf", "passed": True}],
+           }))
+    assert c._has_sil_results() is False
+
+
+def test_sil_results_failed_run_fails(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/ci/sil-test-results.json",
+           json.dumps({
+               "stage": "sil-tests",
+               "all_passed": False,
+               "results": [{"elf": "crc_smoke.elf", "passed": False}],
+           }))
+    assert c._has_sil_results() is False
+
+
+# ── metric-level: review records ───────────────────────────────────────
+
+def test_review_records_substantive(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/reviews/review-1.md",
+           "# Review\n\n- Finding 1: fix A\n- Finding 2: fix B\n- Finding 3: fix C\n- Verdict: pass\n")
+    assert c._has_review_records() is True
+
+
+def test_review_records_empty_dir_fails(tmp_path):
+    c = _make_checker(tmp_path)
+    (tmp_path / ".osh" / "reviews").mkdir(parents=True)
+    assert c._has_review_records() is False
+
+
+def test_review_records_log_json(tmp_path):
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/review-log.json",
+           json.dumps([{"review": "r1", "findings": ["x"]}]))
+    assert c._has_review_records() is True
+
+
+# ── end-to-end: qualification BP with 0% acceptance matrix → ❌ ─────────
+
+def test_qualification_check_rejects_zero_coverage_matrix(tmp_path):
+    """SWE.6 qualification check must FAIL when acceptance matrix is 0%."""
+    c = _make_checker(tmp_path)
+    _write(tmp_path, ".osh/evidence/acceptance-matrix.md",
+           "# Acceptance Matrix\n\n"
+           "| Req | Status |\n|---|:---:|\n"
+           "| REQ-1 | ❌ |\n\n"
+           "## Summary\n"
+           "- Total SHALL statements: 1\n"
+           "- Covered by tests: 0 (0%)\n"
+           "- Threshold: 100% → ❌ FAIL\n")
+    status = c._check_bp(
+        {"id": "SWE.6.BP3", "title": "Qualification Traceability",
+         "check": ["Qualification tests are traceable to requirements"],
+         "output_evidence": []},
+        "SWE.6",
+    )
+    assert status["status"] == "❌"
