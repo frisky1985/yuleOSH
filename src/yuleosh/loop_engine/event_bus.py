@@ -118,6 +118,23 @@ class LoopEventType(str, enum.Enum):
     LOOP4_CONFIDENCE_UP = "loop4.confidence_up"
     """Loop 4 置信度上升事件。"""
 
+    # ── 沉淀事件 (方案 B, 2026-08-07) ──
+    # 新知识沉淀 → KnowledgeIndexer.record() 自动入"待生效"索引 → 人工 approve。
+    LESSON_CREATE = "lesson_create"
+    """Lesson 沉淀事件 — 新 Lesson 创建。"""
+
+    MEMORY_REMEMBER = "memory_remember"
+    """Memory 沉淀事件 — 新事实被记住。"""
+
+    KB_ARTICLE_CREATED = "kb_article_created"
+    """KB 沉淀事件 — 新知识库文章创建。"""
+
+    SKILL_CREATED = "skill_created"
+    """Skill 沉淀事件 — 新技能注册。"""
+
+    KG_EDGE_MERGED = "kg_edge_merged"
+    """KG 沉淀事件 — 新知识图谱边合并。"""
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Event Data Model

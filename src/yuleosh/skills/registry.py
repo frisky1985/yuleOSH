@@ -60,6 +60,19 @@ class SkillRegistry:
             return False
         self._skills[skill.name] = skill
         log.debug("Skill %s registered (v%s)", skill.name, skill.version)
+
+        # 方案 B (2026-08-07): 技能沉淀 → 自动入"待生效"知识索引。
+        # 非致命：索引失败只记 warning，不影响技能注册本身。
+        try:
+            from yuleosh.knowledge.indexer import KnowledgeIndexer
+
+            KnowledgeIndexer().record(
+                kind="skill_created",
+                content=f"[Skill {skill.name}] {skill.title}: {skill.description}",
+                source=f"skills.registry:{skill.name}",
+            )
+        except Exception as e:  # noqa: BLE001 — indexer must never block skill registration
+            log.warning("Knowledge indexer hook failed (non-fatal): %s", e)
         return True
 
     def register_many(self, skills: list[Skill], overwrite: bool = False) -> int:
