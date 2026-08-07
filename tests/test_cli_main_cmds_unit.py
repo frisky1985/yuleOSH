@@ -410,7 +410,8 @@ class TestAuditEvidenceFull:
         with patch.object(main_module, "OSH_HOME", str(tmp_path)):
             with patch("builtins.print"):
                 evidence = main_module.cmd_audit_evidence(create_zip=False)
-        assert evidence["artifacts"] == []
+        # 安全可审计（2026-08-07）: 证据包总是包含 audit-log-verification。
+        assert [a["type"] for a in evidence["artifacts"]] == ["audit-log-verification"]
 
     def test_bad_ci_layer_json(self, main_module, tmp_path):
         ci = tmp_path / ".osh" / "ci"
@@ -421,7 +422,9 @@ class TestAuditEvidenceFull:
                 evidence = main_module.cmd_audit_evidence(create_zip=False)
                 out = " ".join(str(c) for c in mp.call_args_list)
                 assert "Cannot read" in out
-        assert evidence["artifacts"] == []
+        # Bad CI layer skipped, but audit-log-verification still present.
+        types = [a["type"] for a in evidence["artifacts"]]
+        assert "audit-log-verification" in types
 
 
 # ═══════════════════════════════════════════════════════════════════════
