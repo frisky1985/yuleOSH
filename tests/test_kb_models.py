@@ -105,6 +105,8 @@ class TestLesson:
             root_cause="Missing null assignment",
             project_id="brake-light",
             severity="high",
+            ticket_id="IMP-2026-08-04-misra_vi",
+            requirement_id="REQ-BCM-001",
             created_at=datetime(2025, 3, 10, 14, 0),
         )
         d = l.to_dict()
@@ -112,6 +114,8 @@ class TestLesson:
         assert d["title"] == "Bad pointer usage"
         assert d["severity"] == "high"
         assert d["project_id"] == "brake-light"
+        assert d["ticket_id"] == "IMP-2026-08-04-misra_vi"
+        assert d["requirement_id"] == "REQ-BCM-001"
 
     def test_from_dict(self):
         """Lesson.from_dict() reconstructs from dict."""
@@ -123,10 +127,32 @@ class TestLesson:
             "root_cause": "R",
             "project_id": "proj",
             "severity": "critical",
+            "ticket_id": "IMP-001",
+            "requirement_id": "REQ-002",
         }
         l = Lesson.from_dict(d)
         assert l.title == "Test"
         assert l.severity == "critical"
+        assert l.ticket_id == "IMP-001"
+        assert l.requirement_id == "REQ-002"
+
+    def test_from_dict_missing_links_default_empty(self):
+        """Lesson.from_dict() defaults ticket_id/requirement_id to '' when absent."""
+        l = Lesson.from_dict({"title": "T", "severity": "low"})
+        assert l.ticket_id == ""
+        assert l.requirement_id == ""
+
+    def test_roundtrip(self):
+        """Lesson to_dict → from_dict roundtrip preserves link fields."""
+        l = Lesson(
+            title="Roundtrip",
+            severity="high",
+            ticket_id="IMP-2026-08-05-coverage",
+            requirement_id="REQ-003",
+        )
+        l2 = Lesson.from_dict(l.to_dict())
+        assert l2.ticket_id == "IMP-2026-08-05-coverage"
+        assert l2.requirement_id == "REQ-003"
 
     def test_from_dict_invalid_severity(self):
         """Lesson.from_dict() defaults to 'medium' for invalid severity."""

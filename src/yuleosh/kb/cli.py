@@ -21,6 +21,23 @@ from pathlib import Path
 from .store import KbStore
 
 
+def build_lesson_subparser(subparsers):
+    """Add the 'lesson' subcommand group (yuleosh lesson create / kb lesson create)."""
+    lesson_p = subparsers.add_parser("lesson", help="Lessons learned commands (create from improvement ticket)")
+    lesson_sub = lesson_p.add_subparsers(dest="lesson_sub", required=True)
+
+    create_p = lesson_sub.add_parser("create", help="Create a Lesson from an improvement ticket (工单一键沉淀知识)")
+    create_p.add_argument("--ticket", required=True,
+                          help="Improvement ticket ID (e.g. IMP-2026-08-04-misra_vi)")
+    create_p.add_argument("--req", default="", help="Requirement ID (e.g. REQ-xxx, optional)")
+    create_p.add_argument("--title", default="",
+                          help="Lesson title (default: ticket metric)")
+    create_p.add_argument("--severity", default="",
+                          choices=["", "low", "medium", "high", "critical"],
+                          help="Severity (default: from ticket)")
+    return lesson_p
+
+
 def build_kb_subparser(subparsers):
     """Add the 'kb' subcommand parser."""
     kb_parser = subparsers.add_parser("kb", help="Knowledge base commands")
@@ -49,7 +66,11 @@ def build_kb_subparser(subparsers):
     lessons_p.add_argument("--project", default="", help="Filter by project")
     lessons_p.add_argument("--severity", default="", choices=["", "low", "medium", "high", "critical"],
                           help="Filter by severity")
+    lessons_p.add_argument("--ticket", default="", help="Filter by ticket ID (e.g. IMP-xxx)")
     lessons_p.add_argument("--limit", type=int, default=20, help="Max results")
+
+    # kb lesson create — 从改进工单一键沉淀 Lesson（工单→知识闭环）
+    build_lesson_subparser(kb_sub)
 
     # kb fmea
     fmea_p = kb_sub.add_parser("fmea", help="List FMEA entries")
@@ -122,11 +143,13 @@ def handle_kb_command(args) -> int:
         lessons = store.list_lessons(
             project_id=args.project or None,
             severity=args.severity or None,
+            ticket_id=getattr(args, "ticket", "") or None,
             limit=args.limit,
         )
         total = store.count_lessons(
             project_id=args.project or None,
             severity=args.severity or None,
+            ticket_id=getattr(args, "ticket", "") or None,
         )
         if not lessons:
             print("No lessons found.")
@@ -136,11 +159,16 @@ def handle_kb_command(args) -> int:
         for l in lessons:
             sev_icon = {"low": "🟢", "medium": "🟡", "high": "🟠", "critical": "🔴"}.get(l.severity, "⚪")
             proj = f" [{l.project_id}]" if l.project_id else ""
-            print(f"\n  {sev_icon} [{l.id}] {l.title}{proj}")
+            ticket_link = f" [ticket: {l.ticket_id}]" if l.ticket_id else ""
+            req_link = f" [req: {l.requirement_id}]" if l.requirement_id else ""
+            print(f"\n  {sev_icon} [{l.id}] {l.title}{proj}{ticket_link}{req_link}")
             print(f"      Severity: {l.severity}")
             print(f"      Problem:  {l.problem[:120].replace(chr(10), ' ')}")
             print(f"      Solution: {l.solution[:120].replace(chr(10), ' ')}")
         print(f"\n{'='*70}\n")
+
+    elif args.kb_sub == "lesson":
+        return handle_lesson_command(args)
 
     elif args.kb_sub == "fmea":
         entries = store.list_fmea(
@@ -164,6 +192,91 @@ def handle_kb_command(args) -> int:
     elif args.kb_sub == "ingest-misra":
         return _handle_ingest_misra(args, store)
 
+    return 0
+
+
+# ── Lesson create — 工单一键沉淀知识 ──────────────────────────────────
+
+def _resolve_ticket_path(ticket_id: str) -> Path:
+    """定位 improvement_tickets/{ticket_id}.yaml。
+
+    搜索顺序：OSH_HOME 环境变量 → 当前工作目录 → 仓库根（本文件上溯 4 层）。
+    """
+    candidates = []
+    osh_home = os.environ.get("OSH_HOME")
+    if osh_home:
+        candidates.append(Path(osh_home) / "improvement_tickets" / f"{ticket_id}.yaml")
+    candidates.append(Path.cwd() / "improvement_tickets" / f"{ticket_id}.yaml")
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
+    candidates.append(repo_root / "improvement_tickets" / f"{ticket_id}.yaml")
+    for p in candidates:
+        if p.exists():
+            return p
+    return candidates[0]
+
+
+def _load_ticket(ticket_id: str) -> dict:
+    """从 improvement_tickets/{ticket_id}.yaml 读取工单，返回 improvement_ticket 字段 dict。
+
+    Raises:
+        FileNotFoundError: 工单文件不存在。
+        ValueError: YAML 解析失败或缺少 improvement_ticket 节点。
+    """
+    import yaml
+    path = _resolve_ticket_path(ticket_id)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"工单不存在: {path}（预期位置 improvement_tickets/{ticket_id}.yaml）"
+        )
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"工单 YAML 解析失败: {path}: {exc}") from exc
+    ticket = data.get("improvement_ticket") if isinstance(data, dict) else None
+    if not isinstance(ticket, dict):
+        raise ValueError(f"工单缺少 improvement_ticket 节点: {path}")
+    return ticket
+
+
+def handle_lesson_command(args) -> int:
+    """Dispatch the top-level 'lesson' subcommand (or kb lesson)."""
+    if getattr(args, "lesson_sub", None) == "create":
+        return _handle_lesson_create(args)
+    print("Usage: yuleosh lesson create --ticket IMP-xxx [--req REQ-xxx] [--title ...] [--severity ...]")
+    return 1
+
+
+def _handle_lesson_create(args) -> int:
+    """Create a Lesson from an improvement ticket (工单一键沉淀知识)."""
+    store = KbStore()
+    ticket_id = args.ticket
+    try:
+        ticket = _load_ticket(ticket_id)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"❌ {exc}", file=sys.stderr)
+        return 1
+
+    # 工单字段 → Lesson 字段映射
+    title = args.title or ticket.get("metric") or ticket_id
+    severity = args.severity or ticket.get("severity", "medium")
+    requirement_id = args.req or ticket.get("requirement_id", "")
+
+    lesson = store.create_lesson({
+        "title": title,
+        "problem": ticket.get("problem_description", ""),
+        "solution": ticket.get("recommended_actions", ""),
+        "root_cause": ticket.get("root_cause", ""),
+        "severity": severity,
+        "ticket_id": ticket_id,
+        "requirement_id": requirement_id,
+    })
+
+    print(f"✅ Lesson created: [{lesson.id}] {lesson.title}")
+    print(f"   🎫 关联工单: {ticket_id}")
+    if requirement_id:
+        print(f"   📎 关联需求: {requirement_id}")
+    if str(ticket.get("status", "")).lower() == "closed":
+        print("   ♻️  已从 closed 工单沉淀（工单已闭环，知识已归档）")
     return 0
 
 

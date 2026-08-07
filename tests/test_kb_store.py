@@ -132,6 +132,66 @@ class TestLessonStore:
         assert fetched.title == "Null check lesson"
         assert fetched.project_id == "brake-light"
 
+    def test_create_lesson_with_ticket_links(self, store):
+        """create_lesson persists ticket_id/requirement_id; get_lesson round-trips them."""
+        l = store.create_lesson({
+            "title": "MISRA violation lesson",
+            "problem": "Violations above threshold",
+            "solution": "Run cppcheck + fix high severity",
+            "root_cause": "New code not MISRA-checked",
+            "severity": "critical",
+            "ticket_id": "IMP-2026-08-04-misra_vi",
+            "requirement_id": "REQ-BCM-042",
+        })
+        assert l.ticket_id == "IMP-2026-08-04-misra_vi"
+        assert l.requirement_id == "REQ-BCM-042"
+
+        fetched = store.get_lesson(l.id)
+        assert fetched.ticket_id == "IMP-2026-08-04-misra_vi"
+        assert fetched.requirement_id == "REQ-BCM-042"
+
+        d = fetched.to_dict()
+        assert d["ticket_id"] == "IMP-2026-08-04-misra_vi"
+        assert d["requirement_id"] == "REQ-BCM-042"
+
+    def test_create_lesson_defaults_links_empty(self, store):
+        """Lessons created without links default to empty strings (back-compat)."""
+        l = store.create_lesson({"title": "Plain lesson"})
+        assert l.ticket_id == ""
+        assert l.requirement_id == ""
+
+    def test_list_lessons_filter_by_ticket(self, store):
+        """list_lessons filters by ticket_id."""
+        store.create_lesson({"title": "L1", "ticket_id": "IMP-001", "severity": "high"})
+        store.create_lesson({"title": "L2", "ticket_id": "IMP-002", "severity": "low"})
+        store.create_lesson({"title": "L3", "ticket_id": "IMP-001", "severity": "medium"})
+
+        results = store.list_lessons(ticket_id="IMP-001")
+        assert len(results) == 2
+        assert {r.title for r in results} == {"L1", "L3"}
+        assert store.count_lessons(ticket_id="IMP-001") == 2
+        assert store.count_lessons(ticket_id="IMP-999") == 0
+
+    def test_list_lessons_filter_by_ticket_and_severity(self, store):
+        """list_lessons combines ticket_id with other filters."""
+        store.create_lesson({"title": "L1", "ticket_id": "IMP-001", "severity": "high"})
+        store.create_lesson({"title": "L2", "ticket_id": "IMP-001", "severity": "low"})
+        store.create_lesson({"title": "L3", "ticket_id": "IMP-002", "severity": "high"})
+
+        results = store.list_lessons(ticket_id="IMP-001", severity="high")
+        assert len(results) == 1
+        assert results[0].title == "L1"
+
+    def test_update_lesson_ticket_links(self, store):
+        """update_lesson accepts ticket_id/requirement_id."""
+        l = store.create_lesson({"title": "Lesson A"})
+        updated = store.update_lesson(l.id, {
+            "ticket_id": "IMP-007",
+            "requirement_id": "REQ-007",
+        })
+        assert updated.ticket_id == "IMP-007"
+        assert updated.requirement_id == "REQ-007"
+
     def test_list_lessons_filter_by_project(self, store):
         """list_lessons filters by project_id."""
         store.create_lesson({"title": "L1", "project_id": "proj-a", "severity": "high"})
@@ -372,8 +432,68 @@ class TestWhitelistFieldValidation:
 
 
 # ======================================================================
-# YULEOSH_KB_DB env-var isolation (P2-C1)
+# 兼容迁移：旧库 lessons 表缺少 ticket_id/requirement_id 列 (工单→Lesson 闭环)
 # ======================================================================
+
+class TestLessonSchemaMigration:
+    """KbStore._init_db migrates legacy lessons tables (idempotent)."""
+
+    def _make_legacy_db(self, db_path):
+        """Create a DB whose lessons table predates the link columns."""
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        conn.executescript("""
+            CREATE TABLE lessons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL DEFAULT '',
+                problem TEXT NOT NULL DEFAULT '',
+                solution TEXT NOT NULL DEFAULT '',
+                root_cause TEXT NOT NULL DEFAULT '',
+                project_id TEXT NOT NULL DEFAULT '',
+                severity TEXT NOT NULL DEFAULT 'medium',
+                created_at TEXT
+            );
+            INSERT INTO lessons (title, severity) VALUES ('legacy lesson', 'high');
+        """)
+        conn.commit()
+        conn.close()
+
+    def test_migration_adds_columns_and_preserves_rows(self):
+        """Legacy lessons rows survive migration; new columns default to ''."""
+        import sqlite3
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            self._make_legacy_db(db_path)
+            s = KbStore(db_path)
+            try:
+                # 旧行可读，且新列为空字符串
+                rows = s.list_lessons()
+                assert len(rows) == 1
+                assert rows[0].title == "legacy lesson"
+                assert rows[0].ticket_id == ""
+                assert rows[0].requirement_id == ""
+
+                # 迁移后可写入新列
+                l = s.create_lesson({
+                    "title": "migrated write",
+                    "ticket_id": "IMP-009",
+                    "requirement_id": "REQ-009",
+                })
+                assert l.ticket_id == "IMP-009"
+                assert l.requirement_id == "REQ-009"
+            finally:
+                s.close()
+            # 幂等：再次打开不报错（ALTER 列已存在被跳过）
+            s2 = KbStore(db_path)
+            s2.close()
+            conn = sqlite3.connect(db_path)
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(lessons)")}
+            conn.close()
+            assert "ticket_id" in cols
+            assert "requirement_id" in cols
+        finally:
+            os.unlink(db_path)
 
 class TestEnvVarIsolation:
     """KbStore honours YULEOSH_KB_DB for database isolation."""

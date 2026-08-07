@@ -67,6 +67,9 @@ class Lesson:
     root_cause: str = ""
     project_id: str = ""
     severity: str = "medium"
+    # 工单→Lesson 闭环：关联改进工单 (IMP-xxx) 与需求 (REQ-xxx)
+    ticket_id: str = ""
+    requirement_id: str = ""
     created_at: Optional[datetime] = None
 
     VALID_SEVERITIES = {"low", "medium", "high", "critical"}
@@ -80,6 +83,8 @@ class Lesson:
             "root_cause": self.root_cause,
             "project_id": self.project_id,
             "severity": self.severity,
+            "ticket_id": self.ticket_id,
+            "requirement_id": self.requirement_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -99,6 +104,8 @@ class Lesson:
             root_cause=d.get("root_cause", ""),
             project_id=d.get("project_id", ""),
             severity=sev,
+            ticket_id=d.get("ticket_id", ""),
+            requirement_id=d.get("requirement_id", ""),
             created_at=created,
         )
 
@@ -331,7 +338,8 @@ def sanitize_kb_article_fields(body: dict) -> dict:
 
 def sanitize_lesson_fields(body: dict) -> dict:
     """Extract and validate only the allowed fields for a Lesson."""
-    allowed = {"title", "problem", "solution", "root_cause", "project_id", "severity"}
+    allowed = {"title", "problem", "solution", "root_cause", "project_id", "severity",
+               "ticket_id", "requirement_id"}
     cleaned = {}
     for k, v in body.items():
         if k in allowed:
