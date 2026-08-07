@@ -146,7 +146,7 @@ class TestCountTests:
 
 class TestComputeSpecCoverage:
     def test_spec_no_validate_import(self):
-        """Test with spec.md but validate module unavailable."""
+        """Test with spec.md but validate module unavailable (generic fallback)."""
         from yuleosh.cli.stats import compute_spec_coverage
         with tempfile.TemporaryDirectory() as tmp:
             docs = Path(tmp) / "docs"
@@ -155,8 +155,26 @@ class TestComputeSpecCoverage:
             # Disable the validate module's spec subpackage
             with patch.dict("sys.modules", {"spec": None}):
                 result = compute_spec_coverage(tmp)
-                assert result["score"] == 0
-                assert "message" in result
+                # Falls back to the generic analyzer (no local src/spec/validate.py)
+                assert result["analyzer"] == "generic"
+                assert result["score"] == 0  # no requirement IDs / SHALLs in empty spec
+                assert result["requirements"] == 0
+
+    def test_spec_generic_fallback_counts_reqs(self):
+        """Generic fallback extracts requirement IDs and SHALLs from spec/docs."""
+        from yuleosh.cli.stats import compute_spec_coverage
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = Path(tmp) / "docs"
+            docs.mkdir()
+            (docs / "spec.md").write_text(
+                "# Spec\n- WDGM-REQ-01 The module SHALL init.\n- SHALL-2 The driver SHALL reset.\n"
+            )
+            with patch.dict("sys.modules", {"spec": None}):
+                result = compute_spec_coverage(tmp)
+                assert result["analyzer"] == "generic"
+                assert result["requirements"] == 2
+                assert result["total_shall"] == 2
+                assert result["score"] == 100
 
 
 # ======================================================================
