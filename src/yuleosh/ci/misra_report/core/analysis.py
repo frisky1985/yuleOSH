@@ -114,17 +114,32 @@ def compute_summary_stats(
     violations: list[dict],
     groups: dict,
     rule_defs: dict | None = None,
+    deviations: list | None = None,
 ) -> dict:
-    """Compute summary statistics from violations and groups."""
+    """Compute summary statistics from violations and groups.
+
+    Violations matching a configured deviation (rule + file pattern) are
+    counted under ``acknowledged`` instead of their native rule type, so
+    approved deviations do not inflate the required/advisory totals.
+    """
+    from yuleosh.ci.misra_report.deviation import _match_deviation
+
     total = len(violations)
     by_severity = defaultdict(int)
     by_rule_type = defaultdict(int)
+    acknowledged = 0
 
     for v in violations:
         by_severity[v.get("severity", "unknown")] += 1
         # Use severity_category from enrichment (set from rule defs) when available,
         # fall back to heuristic for backward compat
         rule_type = v.get("severity_category", v.get("rule_type", _classify_rule_type(v.get("rule_id"))))
+        if deviations:
+            matched, _ = _match_deviation(v.get("rule_id"), v.get("file") or "", deviations)
+            if matched:
+                acknowledged += 1
+                by_rule_type["acknowledged"] += 1
+                continue
         by_rule_type[rule_type] += 1
 
     total_file_count = len({v.get("file") for v in violations if v.get("file")})
@@ -132,7 +147,7 @@ def compute_summary_stats(
         list({v["file"] for v in violations if v.get("file")})
     ) if violations else 0
 
-    return {
+    result = {
         "total_violations": total,
         "unique_rules": len(groups),
         "affected_files": total_file_count,
@@ -141,6 +156,9 @@ def compute_summary_stats(
         "by_rule_type": dict(by_rule_type),
         "density_per_kloc": round(total / max(total_source_lines, 1) * 1000, 2),
     }
+    if acknowledged:
+        result["acknowledged_violations"] = acknowledged
+    return result
 
 
 def _load_prev_report(output_dir: str | Path) -> dict | None:

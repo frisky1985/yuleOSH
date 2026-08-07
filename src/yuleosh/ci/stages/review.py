@@ -733,7 +733,6 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
         groups = group_by_rule(violations)
         enriched_violations = enrich_with_definitions(violations, rule_defs)
-        summary = compute_summary_stats(enriched_violations, groups, rule_defs)
 
         output_dir = Path(project_dir) / ".yuleosh" / "reports"
 
@@ -749,6 +748,11 @@ def run_misra_check(project_dir: str, ci: CIResult,
                     "expires": dev.expires or None,
                     "approved_by": dev.approved_by or "",
                 })
+
+        # Count with deviation exemptions applied (approved deviations are
+        # reported as acknowledged, not as required/advisory).
+        summary = compute_summary_stats(enriched_violations, groups, rule_defs,
+                                        deviations=deviations_used)
 
         save_report(enriched_violations, groups, summary, rule_defs, output_dir,
                     deviations=deviations_used)
