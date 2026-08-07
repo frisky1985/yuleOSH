@@ -6,6 +6,7 @@ v3.1 SWE.1~SWE.6 checkpoint templates, and produces a compliance report
 marking each base practice as ✅ (present), ⚠️ (partial), or ❌ (gap).
 """
 
+import json
 import os
 import re as _re
 import yaml
@@ -78,6 +79,192 @@ class ComplianceChecker:
             return pattern.lower() in content.lower()
         except Exception:
             return False
+
+    def _file_has_content(self, *parts: str, min_chars: int = 40) -> bool:
+        """True when a file exists AND has substantive content.
+
+        Guards against the "empty template counts as evidence" trap: a
+        markdown file with only a heading, or a stub with a few characters,
+        is NOT evidence of the artefact actually being produced.
+        """
+        target = self.project_dir.joinpath(*parts)
+        if not target.exists() or not target.is_file():
+            return False
+        try:
+            content = target.read_text(errors="replace")
+        except Exception:
+            return False
+        if len(content.strip()) < min_chars:
+            return False
+        # A file whose only non-whitespace lines are headings/placeholders
+        # is not substantive content either.
+        meaningful = [
+            ln.strip()
+            for ln in content.splitlines()
+            if ln.strip() and not ln.strip().startswith(("#", ">", "---", "<!--"))
+            and not ln.strip() in {"", "TODO", "TBD", "N/A", "None", "待补充", "占位"}
+        ]
+        return len(meaningful) >= 3
+
+    def _file_min_size(self, min_bytes: int, *parts: str) -> bool:
+        """True when a file exists and is at least ``min_bytes`` bytes."""
+        target = self.project_dir.joinpath(*parts)
+        if not target.exists() or not target.is_file():
+            return False
+        try:
+            return target.stat().st_size >= min_bytes
+        except OSError:
+            return False
+
+    def _json_has_keys(self, required_keys: list[str], *parts: str) -> bool:
+        """True when a JSON file exists, parses, and has all required keys.
+
+        Returns False (not just "missing") when the file is present but the
+        expected data shape is absent — an empty object is not evidence.
+        """
+        target = self.project_dir.joinpath(*parts)
+        if not target.exists() or not target.is_file():
+            return False
+        try:
+            import json as _json
+
+            data = _json.loads(target.read_text(errors="replace"))
+        except Exception:
+            return False
+        if isinstance(data, dict):
+            return all(k in data for k in required_keys)
+        if isinstance(data, list):
+            return bool(data) and all(
+                isinstance(item, dict) and all(k in item for k in required_keys)
+                for item in data
+            )
+        return False
+
+    def _has_arch_document(self) -> bool:
+        """True when an architecture document exists WITH substantive content.
+
+        Prefer a real architecture description over an empty template:
+        the file must be non-trivial (>= 200 chars) and mention at least
+        one of the architecture keywords expected in a design description.
+        """
+        candidates = [
+            self.project_dir / "docs" / "architecture.md",
+            self.project_dir / "ARCHITECTURE.md",
+            self.project_dir / "docs" / "arch" / "architecture.md",
+        ]
+        arch_keywords = (
+            "component", "module", "layer", "architecture", "设计",
+            "组件", "模块", "架构", "接口", "interface",
+        )
+        for cand in candidates:
+            if not cand.is_file():
+                continue
+            try:
+                content = cand.read_text(errors="replace")
+            except Exception:
+                continue
+            if len(content.strip()) < 150:
+                continue
+            lowered = content.lower()
+            if any(k.lower() in lowered for k in arch_keywords):
+                return True
+        return False
+
+    def _has_code_standard(self) -> bool:
+        """True when a coding-standard config exists AND has real rules.
+
+        A .clang-format that only contains comments/whitespace (or a
+        pyproject.toml without tool config) is not a coding standard.
+        """
+        candidates = [
+            self.project_dir / ".clang-format",
+            self.project_dir / ".editorconfig",
+            self.project_dir / "pyproject.toml",
+        ]
+        for cand in candidates:
+            if not cand.is_file():
+                continue
+            try:
+                content = cand.read_text(errors="replace")
+            except Exception:
+                continue
+            stripped = content.strip()
+            if len(stripped) < 30:
+                continue
+            # Skip pure-comment / empty-value files
+            non_comment = [
+                ln.strip()
+                for ln in stripped.splitlines()
+                if ln.strip() and not ln.strip().startswith(("#", ";", "//", "*"))
+            ]
+            if len(non_comment) >= 2:
+                return True
+        return False
+
+    def _test_suite_passes(self) -> bool:
+        """True when there is evidence tests actually ran and passed.
+
+        Looks for a pytest/junit JSON/XML result with failed == 0, or a CI
+        result file whose status is success/passed.
+        """
+        # 1. pytest JSON result files (.yuleosh/ci/*.json with a test summary)
+        ci_dir = self.project_dir / ".osh" / "ci"
+        if ci_dir.is_dir():
+            for f in sorted(ci_dir.glob("*.json")):
+                try:
+                    data = json.loads(f.read_text(errors="replace"))
+                except Exception:
+                    continue
+                if isinstance(data, dict):
+                    status = str(data.get("status", "")).lower()
+                    failed = data.get("failed", data.get("failures", None))
+                    passed = data.get("passed", data.get("tests", None))
+                    if status in ("passed", "success", "ok"):
+                        return True
+                    if isinstance(failed, int) and failed == 0 and isinstance(passed, int) and passed > 0:
+                        return True
+        # 2. JUnit XML with failures="0"
+        for pattern in ("**/junit*.xml", "**/TEST-*.xml"):
+            for f in self.project_dir.glob(pattern):
+                try:
+                    text = f.read_text(errors="replace")
+                except Exception:
+                    continue
+                if 'failures="0"' in text and 'tests="' in text:
+                    return True
+        # 3. CI layer-1 result marker (legacy)
+        if self._ci_results_exist():
+            for f in sorted(ci_dir.glob("*.json")):
+                try:
+                    data = json.loads(f.read_text(errors="replace"))
+                except Exception:
+                    continue
+                if isinstance(data, dict) and str(data.get("status", "")).lower() in (
+                    "passed", "success", "ok", "green"
+                ):
+                    return True
+        return False
+
+    def _acceptance_matrix_nonempty(self) -> bool:
+        """True when an acceptance matrix exists and is not an empty stub."""
+        for cand in (
+            self.project_dir / ".osh" / "evidence" / "acceptance-matrix.md",
+            self.project_dir / "docs" / "acceptance-matrix.md",
+        ):
+            if not cand.is_file():
+                continue
+            try:
+                content = cand.read_text(errors="replace")
+            except Exception:
+                continue
+            meaningful = [
+                ln.strip()
+                for ln in content.splitlines()
+                if ln.strip() and not ln.strip().startswith(("#", "|--", "---", "<!--"))
+            ]
+            if len(meaningful) >= 5:
+                return True
+        return False
 
     def _has_traced_requirements(self) -> bool:
         """Check for requirement traceability evidence."""
@@ -559,33 +746,41 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no archived evidence found)")
             elif "SHALL" in check_item or "shall" in check_item:
-                # Requirement-related checks
+                # Requirement-related checks — the SRS must have substantive
+                # content (SHALL statements), not just a file that exists.
                 has_req = False
                 for req_doc in ["docs/requirements.md", "docs/software-requirements.md", "docs/spec.md"]:
-                    if self._file_exists(req_doc):
+                    if self._file_has_content(req_doc, min_chars=100):
                         has_req = True
                         break
                 if has_req:
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} (SRS with substantive content)")
                 else:
                     failed += 1
-                    details.append(f"  ❌ Check: {check_item}")
+                    details.append(f"  ❌ Check: {check_item} (no substantive SRS content found)")
             elif "test" in check_item.lower() or "unit test" in check_item.lower():
+                # Unit tests: files must exist AND there must be evidence they
+                # actually ran and passed — a test file that never runs is not
+                # unit verification (SWE.4).
                 ntests = self._count_unit_tests()
-                if ntests > 0:
+                suite_passes = self._test_suite_passes()
+                if ntests > 0 and suite_passes:
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} ({ntests} test files, suite passed)")
+                elif ntests > 0:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} ({ntests} test files but no passing-run evidence)")
                 else:
                     failed += 1
-                    details.append(f"  ❌ Check: {check_item}")
+                    details.append(f"  ❌ Check: {check_item} (no test files found)")
             elif "architecture" in check_item.lower():
-                if self._file_exists("docs", "architecture.md") or self._file_exists("ARCHITECTURE.md") or self._file_exists("docs", "arch"):
+                if self._has_arch_document():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} (architecture doc with substantive content)")
                 else:
                     failed += 1
-                    details.append(f"  ❌ Check: {check_item}")
+                    details.append(f"  ❌ Check: {check_item} (no substantive architecture doc found)")
             elif "traceability" in check_item.lower() or "traced" in check_item.lower() or "trace" in check_item.lower():
                 if self._has_traced_requirements():
                     passed += 1
@@ -602,18 +797,30 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             elif "standard" in check_item.lower() or "coding standard" in check_item.lower():
-                if self._file_exists(".clang-format") or self._file_exists(".editorconfig") or self._file_exists("pyproject.toml"):
+                if self._has_code_standard():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} (coding-standard config with rules)")
                 else:
                     failed += 1
-                    details.append(f"  ❌ Check: {check_item}")
+                    details.append(f"  ❌ Check: {check_item} (no coding-standard config with real rules)")
             elif "interface" in check_item.lower():
                 inc_dirs = ["include", "inc", "src/include", "src/inc"]
                 found = any(self._dir_has_files(d) for d in inc_dirs)
                 if found:
-                    passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    # headers must have substantive content (declarations), not
+                    # empty stubs — check the first candidate dir with files
+                    for d in inc_dirs:
+                        base = self.project_dir / d
+                        if base.is_dir():
+                            hdrs = [f for f in base.rglob("*.h")
+                                    if f.is_file() and f.stat().st_size >= 100]
+                            if hdrs:
+                                passed += 1
+                                details.append(f"  ✅ Check: {check_item} ({len(hdrs)} substantive headers)")
+                                break
+                    else:
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} (interface headers empty/stub)")
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
@@ -631,26 +838,32 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             elif "integration" in check_item.lower():
-                if self._file_exists("tests", "integration") or self._dir_has_files("tests", "integration"):
+                if self._test_suite_passes():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} (integration suite passed)")
+                elif self._dir_has_files("tests", "integration"):
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (integration tests exist but no passing-run evidence)")
                 elif self._ci_results_exist():
-                    passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (CI results exist but no integration pass evidence)")
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             elif "qualification" in check_item.lower() or "acceptance" in check_item.lower():
-                if self._file_exists(".osh", "evidence", "acceptance-matrix.md"):
+                if self._acceptance_matrix_nonempty():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} (acceptance matrix with content)")
                 else:
                     failed += 1
-                    details.append(f"  ❌ Check: {check_item}")
+                    details.append(f"  ❌ Check: {check_item} (no substantive acceptance matrix)")
             elif "regression" in check_item.lower():
-                if self._ci_results_exist():
+                if self._test_suite_passes():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item}")
+                    details.append(f"  ✅ Check: {check_item} (regression suite passed)")
+                elif self._ci_results_exist():
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (CI results exist but no passing-run evidence)")
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
