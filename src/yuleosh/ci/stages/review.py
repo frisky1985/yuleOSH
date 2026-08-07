@@ -23,11 +23,12 @@ import fnmatch
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from yuleosh.ci.config import is_strict, is_misra_fail_fast, _get_ci_config
@@ -116,6 +117,44 @@ def _find_c_sources(project_dir: str, scan_dirs: list[str]) -> list[str]:
     return c_files
 
 
+def _glob_to_regex(pattern: str) -> re.Pattern:
+    """Convert a glob pattern (with recursive ``**``) to an anchored regex.
+
+    ``**`` matches across path separators (any depth), single ``*`` matches
+    within one segment, ``?`` matches one character.  Everything else is
+    matched literally.
+    """
+    # ``**`` must be handled before single ``*``
+    segments = []
+    for seg in pattern.split("/"):
+        if seg == "**":
+            segments.append(".*")
+        elif "**" in seg:
+            segments.append(seg.replace("**", ".*"))
+        else:
+            escaped = re.escape(seg)
+            escaped = escaped.replace(r"\*", "[^/]*").replace(r"\?", "[^/]")
+            segments.append(escaped)
+    return re.compile("^" + "/".join(segments) + "$")
+
+
+def _matches_glob(rel: str, pattern: str) -> bool:
+    """Glob-style match supporting recursive ``**``.
+
+    ``fnmatch`` treats ``**`` as a single ``*`` (does not cross path
+    separators), so patterns like ``tests/**`` silently fail to match
+    nested paths such as ``src/foo/tests/bar.c``.  This helper converts
+    the pattern to a regex with true ``**`` recursion, and additionally
+    tries a ``**/``-prefixed form so patterns written as ``tests/**``
+    also match at any depth (``src/**/tests/**``).
+    """
+    if _glob_to_regex(pattern).match(rel):
+        return True
+    if not pattern.startswith("**/"):
+        return bool(_glob_to_regex("**/" + pattern).match(rel))
+    return False
+
+
 def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: str) -> list[str]:
     """Filter out files matching any of the exclude patterns (glob-style).
 
@@ -139,7 +178,7 @@ def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: s
 
         excluded = False
         for pattern in exclude_patterns:
-            if fnmatch.fnmatch(rel, pattern):
+            if _matches_glob(rel, pattern):
                 excluded = True
                 break
 
