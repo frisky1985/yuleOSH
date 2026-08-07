@@ -38,32 +38,11 @@ def complete_project():
         docs = Path(tmpdir) / "docs"
         docs.mkdir()
         (docs / "spec.md").write_text("# Test\n- REQ-001: SHALL work\n")
-        (docs / "software-requirements.md").write_text(
-            "# SW Requirements\n"
-            "## Functional Area A\n"
-            "- REQ-001: The system SHALL authenticate the user before unlock.\n"
-            "- REQ-002: The system SHALL log every access attempt.\n"
-        )
-        (docs / "architecture.md").write_text(
-            "# Architecture\n"
-            "The system is layered: an application component, a core service\n"
-            "module, and an interface layer. Components communicate via a bus.\n"
-        )
-        (docs / "impact-analysis.md").write_text(
-            "# Impact Analysis\n"
-            "Adding BLE unlock affects the authentication module and the key\n"
-            "manager. Estimated effort: 3 days. Risk: low — no protocol change.\n"
-        )
-        (docs / "integration-strategy.md").write_text(
-            "# Integration Strategy\n"
-            "Integration sequence: bottom-up. The key manager integrates first,\n"
-            "followed by the BLE stack. Stubs are used for the secure element.\n"
-        )
-        (docs / "qualification-strategy.md").write_text(
-            "# Qualification Strategy\n"
-            "Each requirement gets an acceptance test executed on the target\n"
-            "environment. Full regression before release.\n"
-        )
+        (docs / "software-requirements.md").write_text("# SW Requirements\n")
+        (docs / "architecture.md").write_text("# Architecture\n")
+        (docs / "impact-analysis.md").write_text("# Impact Analysis\n")
+        (docs / "integration-strategy.md").write_text("# Integration\n")
+        (docs / "qualification-strategy.md").write_text("# Qualification\n")
 
         # source code
         src_dir = Path(tmpdir) / "src"
@@ -86,24 +65,9 @@ def complete_project():
         (osh_dir / "ci" / "build-001.json").write_text('{"status": "passed"}')
         (osh_dir / "ci" / "sil-test-001.json").write_text('{"status": "passed"}')
         (osh_dir / "evidence").mkdir(parents=True)
-        (osh_dir / "evidence" / "traceability-matrix.md").write_text(
-            "# Traceability\n"
-            "| REQ ID | Test |\n"
-            "|--------|------|\n"
-            "| REQ-001 | test_main.py |\n"
-            "| REQ-002 | test_driver.py |\n"
-        )
-        (osh_dir / "evidence" / "acceptance-matrix.md").write_text(
-            "# Acceptance\n"
-            "| REQ ID | Acceptance Test | Status |\n"
-            "|--------|-----------------|--------|\n"
-            "| REQ-001 | AT-001 unlock | PASS |\n"
-            "| REQ-002 | AT-002 audit log | PASS |\n"
-        )
-        (osh_dir / "evidence" / "requirement-coverage.md").write_text(
-            "# Coverage\n"
-            "All 12 requirements are covered by unit or integration tests.\n"
-        )
+        (osh_dir / "evidence" / "traceability-matrix.md").write_text("# Traceability\n")
+        (osh_dir / "evidence" / "acceptance-matrix.md").write_text("# Acceptance\n")
+        (osh_dir / "evidence" / "requirement-coverage.md").write_text("# Coverage\n")
         (osh_dir / "reviews").mkdir()
         (osh_dir / "reviews" / "review-001.json").write_text('{"result": "pass"}')
 
@@ -330,13 +294,7 @@ class TestComplianceChecker:
         # 1/3 check requires traceability evidence
         ev_dir = tmp_path / ".osh" / "evidence"
         ev_dir.mkdir(parents=True)
-        (ev_dir / "traceability-matrix.md").write_text(
-            "# Traceability\n"
-            "| REQ ID | Test |\n"
-            "|--------|------|\n"
-            "| REQ-001 | test_register.py |\n"
-            "| REQ-002 | test_provision.py |\n"
-        )
+        (ev_dir / "traceability-matrix.md").write_text("# Traceability\n")
 
         from yuleosh.compliance.compliance_checker import ComplianceChecker
 
@@ -415,16 +373,8 @@ class TestComplianceChecker:
         """CMP-ACC-13: SWE.6.BP2 'evidence is archived' passes with evidence dir."""
         ev_dir = tmp_path / ".osh" / "evidence"
         ev_dir.mkdir(parents=True)
-        (ev_dir / "traceability-matrix.md").write_text(
-            "# Traceability\n"
-            "| REQ ID | Test |\n"
-            "|--------|------|\n"
-            "| REQ-001 | test_unlock.py |\n"
-        )
-        (ev_dir / "requirement-coverage.md").write_text(
-            "# Coverage\n"
-            "All requirements are covered by qualification tests.\n"
-        )
+        (ev_dir / "traceability-matrix.md").write_text("# Traceability\n")
+        (ev_dir / "requirement-coverage.md").write_text("# Coverage\n")
 
         from yuleosh.compliance.compliance_checker import ComplianceChecker
 
