@@ -97,13 +97,6 @@ class PipelineSession:
         # When True, LLM outputs are placeholders and code-quality gates
         # (coverage, critical safety) SHALL skip real scanning.
         self.mock_mode: bool = False
-        # 方案 A (2026-08-07): pipeline knowledge injection state.
-        # pipeline_knowledge_step_key — current step key (set by orchestrator).
-        # pipeline_knowledge_config — cached .yuleosh/pipeline-knowledge.yaml.
-        self.pipeline_knowledge_step_key: str = ""
-        # Type is yuleosh.pipeline.knowledge_injection.PipelineKnowledgeConfig
-        # (avoid import cycle; cached by _call_llm on first use).
-        self.pipeline_knowledge_config: object = None
 
     def _ensure_session_dir(self) -> Path:
         """Ensure the session directory exists and return its path."""

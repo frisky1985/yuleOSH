@@ -77,39 +77,6 @@ class PipelineStep:
         """
         raise NotImplementedError
 
-    def _assemble_context(
-        self,
-        step_key: str,
-        spec_content: str,
-        prompt: str,
-    ) -> str:
-        """Assemble unified knowledge context for this step (方案 A).
-
-        Combines [user prompt] + [project memory facts] + [RAG rules] +
-        [matched skills] + [active knowledge index] into a capped,
-        non-fatal context block.  Returns "" on total failure — the LLM
-        call must proceed regardless.
-
-        Delegates to :func:`yuleosh.pipeline.knowledge_injection.
-        assemble_pipeline_knowledge` so legacy function handlers and
-        class-based steps share one implementation.  The orchestrator's
-        ``session.pipeline_knowledge_context`` (assembled with the real
-        user prompt at ``_call_llm`` time) is the authoritative injection
-        for pipeline steps; this method is the reusable building block
-        for subclasses that need a custom query.
-        """
-        from yuleosh.pipeline.knowledge_injection import (
-            assemble_pipeline_knowledge,
-        )
-
-        return assemble_pipeline_knowledge(
-            step_key=step_key or self.step_key,
-            spec_content=spec_content,
-            prompt=prompt,
-        )
-
-
-
     def process_result(
         self,
         session: PipelineSession,
