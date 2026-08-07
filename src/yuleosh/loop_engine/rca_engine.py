@@ -606,6 +606,9 @@ class RCAEngine:
             "assigned_to": "",
             "status": "open",
             "created_at": report.timestamp,
+            # 需求关联: 若 report 携带 requirement_id/requirements 则接上, 否则默认空
+            "requirement_id": getattr(report, "requirement_id", "") or "",
+            "requirements": list(getattr(report, "requirements", None) or []),
             "tags": ["loop3", "kpi_improvement", f"sev_{report.severity}", report.metric],
         }
         return ticket
@@ -640,6 +643,8 @@ class RCAEngine:
             f"  deadline: {ticket['deadline']}",
             f"  assigned_to: \"{ticket['assigned_to']}\"",
             f"  created_at: {ticket['created_at']}",
+            f"  requirement_id: \"{ticket['requirement_id']}\"",
+            f"  requirements: {ticket['requirements']}",
             f"  problem_description: >",
             f"    {ticket['problem_description']}",
             f"  root_cause: >",

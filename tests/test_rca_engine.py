@@ -23,6 +23,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 from yuleosh.loop_engine.rca_engine import (
     RCAEngine,
@@ -277,6 +278,66 @@ class TestRCAEngineBasic:
         assert "deadline" in ticket
         assert "status" in ticket
         assert ticket["status"] == "open"
+        # 需求关联字段: 默认空
+        assert "requirement_id" in ticket
+        assert ticket["requirement_id"] == ""
+        assert "requirements" in ticket
+        assert ticket["requirements"] == []
+
+    def test_generate_improvement_ticket_wires_requirement(self):
+        """report 携带需求信息时, 工单自动关联 requirement_id/requirements。"""
+        report = self.engine.analyze(
+            metric="misra_violations",
+            value=150,
+            threshold=100,
+            data_points_count=5,
+        )
+        # 模拟 report 携带需求关联信息 (dataclass 允许动态附加属性)
+        setattr(report, "requirement_id", "RS-001")
+        setattr(report, "requirements", ["RS-001", "RS-002"])
+
+        ticket = self.engine.generate_improvement_ticket(report)
+
+        assert ticket["requirement_id"] == "RS-001"
+        assert ticket["requirements"] == ["RS-001", "RS-002"]
+
+    def test_old_ticket_yaml_without_requirement_fields_compatible(self, tmp_path):
+        """旧工单 YAML (无 requirement_id/requirements) 读取不报错。"""
+        old_yaml = """\
+---
+improvement_ticket:
+  ticket_id: "IMP-2026-08-04-misra_vi"
+  status: open
+  priority: P1
+  severity: high
+  metric: misra_violations
+  current_value: 150
+  threshold: 100
+  deadline: "2026-08-07T00:00:00+00:00"
+  assigned_to: ""
+  created_at: "2026-08-04T10:00:00+00:00"
+  problem_description: >
+    MISRA violations exceeded threshold
+  root_cause: >
+    Static analysis regressions
+  recommended_actions: >
+    Fix violations
+  tags:
+    - loop3
+...
+"""
+        old_file = os.path.join(str(tmp_path), "IMP-2026-08-04-misra_vi.yaml")
+        with open(old_file, "w", encoding="utf-8") as f:
+            f.write(old_yaml)
+
+        # 旧 YAML 可正常解析, 无 requirement_id 键时用 .get() 取默认值
+        with open(old_file, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        ticket = data["improvement_ticket"]
+
+        assert ticket["ticket_id"] == "IMP-2026-08-04-misra_vi"
+        assert ticket.get("requirement_id", "") == ""
+        assert ticket.get("requirements", []) == []
 
     def test_improvement_ticket_priority_based_deadline(self):
         """P0 工单截止日期 < 24h。"""
@@ -309,6 +370,28 @@ class TestRCAEngineBasic:
         assert "improvement_ticket:" in content
         assert "ticket_id:" in content
         assert "problem_description:" in content
+        # 需求关联字段写入 YAML
+        assert "requirement_id: \"\"" in content
+        assert "requirements: []" in content
+
+    def test_write_improvement_ticket_yaml_parseable_with_requirement_fields(self, tmp_path):
+        """写入的工单 YAML 可解析且 requirement 字段类型正确。"""
+        engine = RCAEngine()
+        report = engine.analyze(
+            metric="misra_violations",
+            value=150,
+            threshold=100,
+            data_points_count=5,
+        )
+        setattr(report, "requirement_id", "RS-001")
+        setattr(report, "requirements", ["RS-001"])
+        filepath = engine.write_improvement_ticket(report, output_dir=str(tmp_path))
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        ticket = data["improvement_ticket"]
+        assert ticket["requirement_id"] == "RS-001"
+        assert ticket["requirements"] == ["RS-001"]
 
     # ── KPI_METADATA ─────────────────────────────────────────────────────
 
