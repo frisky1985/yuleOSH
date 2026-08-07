@@ -15,7 +15,6 @@ Sources:
   4. CI results (.osh/ci/layer1-*.json)
 """
 
-import hashlib
 import json
 import logging
 import os
@@ -999,68 +998,6 @@ def _find_tests_for_requirement(test_reports: list[dict], req_id: str,
     return matching
 
 
-def compute_trace_integrity(project_dir: str,
-                            spec_path: Optional[str] = None) -> dict:
-    """Compute a tamper-evident traceability integrity summary.
-
-    Builds on :func:`generate_lrt` (bidirectional Requirement ↔ Code ↔
-    Test ↔ Review matrix + gap analysis) and distils it into a compact,
-    hashable integrity record.  The record's ``integrity_hash`` covers the
-    canonical JSON of the whole summary, so any later mutation of the
-    report (post-hoc back-filling of a broken link) is detectable when the
-    hash is anchored in the SHA-256 audit chain (see the ``check`` CLI).
-
-    Returns a dict with:
-
-    - ``status``: ``ok`` when no broken links and no orphaned tests,
-      otherwise ``broken``.
-    - ``requirements_total`` / ``requirements_with_code`` /
-      ``requirements_with_test`` / ``requirements_with_review``.
-    - ``test_coverage_pct``: requirements with a test mapping / total.
-    - ``broken_links``: list of gap dicts (no_code / no_test / no_review).
-    - ``orphaned_tests``: list of test artifacts with no requirement link.
-    - ``integrity_hash``: SHA-256 over the canonical JSON of this summary
-      (without the hash field itself).
-    - ``generated_at``: ISO timestamp.
-    """
-    lrt = generate_lrt(project_dir, spec_path)
-    lrm = lrt.get("lrm", {})
-    summary = lrm.get("summary", {})
-    gaps = lrt.get("gap_analysis", {})
-    orphaned = lrt.get("orphaned_test_files", [])
-
-    total = summary.get("total", 0)
-    with_test = summary.get("with_test", 0)
-    broken_links = gaps.get("gaps", []) if gaps else []
-
-    record = {
-        "requirements_total": total,
-        "requirements_with_code": summary.get("with_code", 0),
-        "requirements_with_test": with_test,
-        "requirements_with_review": summary.get("with_review", 0),
-        "test_coverage_pct": round(
-            (with_test / total * 100.0) if total else 0.0, 2
-        ),
-        "broken_links": broken_links,
-        "orphaned_tests": orphaned,
-        "generated_at": lrt.get("generated_at", ""),
-    }
-
-    status = "ok"
-    if broken_links or orphaned:
-        status = "broken"
-    record["status"] = status
-
-    # SHA-256 over the canonical JSON of everything except the hash itself.
-    digest = hashlib.sha256()
-    body = {k: v for k, v in record.items() if k != "integrity_hash"}
-    canonical = json.dumps(body, sort_keys=True, ensure_ascii=False, default=str)
-    digest.update(canonical.encode("utf-8"))
-    record["integrity_hash"] = digest.hexdigest()
-
-    return record
-
-
 __all__ = [
     "extract_shall_statements",
     "extract_shall_from_text",
@@ -1070,5 +1007,4 @@ __all__ = [
     "generate_lrm",
     "generate_lrt",
     "generate_traceability_report",
-    "compute_trace_integrity",
 ]
