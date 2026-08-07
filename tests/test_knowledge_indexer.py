@@ -16,10 +16,13 @@
 """
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from yuleosh.knowledge.indexer import KnowledgeIndexer  # noqa: E402
 from yuleosh.knowledge.cli import handle_knowledge_command  # noqa: E402
