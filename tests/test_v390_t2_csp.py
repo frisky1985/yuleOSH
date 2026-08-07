@@ -211,11 +211,25 @@ class TestGhPagesBoundary:
 class TestWireCsp:
     """真实 HTTP：/dashboard 与 /index.html 响应头验证."""
 
+    def _ensure_wizard(self):
+        """预置 wizard_completed=1，使 GET / 走 marketing 页而非 302。
+
+        v3.12.x CI 真跑修复 (2026-08-07): 此前依赖本地开发环境残留的
+        store.db wizard 记录；CI 干净 checkout 无记录 → GET / 302 /welcome
+        → 断言 CSP 失败。Store 为进程内单例（key=default 共享 OSH_HOME
+        db），测试预置后 server 线程读取同一状态。
+        """
+        from yuleosh.store import Store
+        s = Store()
+        s.complete_wizard()
+
     def _serve_once(self, path):
         import socket
         import threading
         from http.server import ThreadingHTTPServer
         from yuleosh.ui.server import OSHHandler
+
+        self._ensure_wizard()
 
         class H(ThreadingHTTPServer):
             def __init__(self, addr):

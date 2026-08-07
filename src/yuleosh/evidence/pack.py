@@ -85,3 +85,11 @@ def main():
     if args:
         spec_path = args[0]
     generate_evidence(spec_path=spec_path)
+
+
+if __name__ == "__main__":
+    # 假绿修复 (2026-08-07): CI 用 `python -m yuleosh.evidence.pack` 调用本模块，
+    # 但此前缺入口，导入即静默退出 0 → .osh/evidence/ 从未生成 →
+    # 下一步 upload-artifact (if-no-files-found: error) 失败。
+    # 与 evidence/check.py、compliance.py 等模块保持一致，补 __main__ 入口。
+    main()

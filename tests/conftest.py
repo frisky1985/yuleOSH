@@ -1,10 +1,23 @@
 """pytest configuration for yuleOSH tests."""
 
 import os
+import tempfile
 
 # Require a test JWT secret so auth modules don't raise at import time.
 # The exact value is irrelevant for tests; any non-empty string works.
 os.environ.setdefault("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for-production")
+
+# Isolate OSH_HOME per pytest process so modules that default to
+# OSH_HOME (e.g. loop_engine.event_bus EventQueuePersistence) write to a
+# private temp dir instead of polluting /tmp/.yuleosh.
+#
+# Why: pytest's tmp_path on CI lives under /tmp/pytest-of-runner/..., so its
+# ancestor chain includes /tmp. If any earlier test creates /tmp/.yuleosh
+# (the old OSH_HOME=/tmp default), test_hooks.py::test_no_project_marker
+# wrongly detects a yuleosh project and fails. Setting OSH_HOME to a
+# per-process temp dir keeps the whole suite hermetic.
+_PID = os.getpid()
+os.environ.setdefault("OSH_HOME", os.path.join(tempfile.gettempdir(), f"yuleosh-pytest-{_PID}"))
 
 
 def pytest_collection_modifyitems(config, items):

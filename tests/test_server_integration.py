@@ -27,7 +27,15 @@ class TestServerIntegration:
     @classmethod
     def setup_class(cls):
         """Start server in background thread for integration tests."""
+        from yuleosh.store import Store
         from yuleosh.ui import server as srv
+        # v3.12.x CI 真跑修复: GET / 在 wizard 未完成时 302 /welcome，
+        # CI 干净 checkout 无 store.db 记录 → test_static_mode_preserved
+        # 期望 200 会失败。预置 wizard_completed=1（进程内单例共享）。
+        try:
+            Store().complete_wizard()
+        except Exception:
+            pass  # store 不可用时降级，避免 setup 本身阻塞
         cls.server_thread = threading.Thread(
             target=srv.main, kwargs={"port": 19876}, daemon=True
         )
