@@ -94,9 +94,18 @@ _PUBLIC_PATHS = frozenset({
     "/pricing", "/en", "/en/index.html", "/en/pricing",
 })
 _PUBLIC_PREFIXES = ("/static/", "/assets/", "/_next/")
+
+# Repo root inferred from this file (src/yuleosh/ui/server.py -> repo root).
+# v3.12.x CI 真跑修复 (2026-08-07): the old default pointed at a hard-coded
+# dev-machine path (~/.openclaw/workspace/tasks/yuleOSH), which does not exist
+# on CI runners -> _serve_static returned 500 "Static files not found" and 4
+# tests failed in CI. Inferring from __file__ works everywhere (local repo,
+# CI checkout, installed package).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
 OSH_HOME = os.environ.get(
     "OSH_HOME",
-    str(Path(os.environ.get("HOME", ".")) / ".openclaw" / "workspace" / "tasks" / "yuleOSH"),
+    str(_REPO_ROOT),
 )
 
 # ── T2 (v3.9.0): CSP — single source for every HTML response ────────────
@@ -317,6 +326,9 @@ class OSHHandler(BaseHTTPRequestHandler):
         OSH_HOME_DIR = Path(os.environ.get("HOME", "."))
         # Look for frontend/out at the repo root
         candidates = [
+            # v3.12.x CI 真跑修复: repo-root checkout (CI download-artifact
+            # places frontend/out here). This is the canonical location.
+            _REPO_ROOT / "frontend" / "out",
             Path(OSH_HOME) / "frontend" / "out",
             OSH_HOME_DIR / ".openclaw" / "workspace" / "tasks" / "yuleOSH" / "frontend" / "out",
         ]

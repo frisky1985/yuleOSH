@@ -7,7 +7,46 @@ on:
     branches: [ main ]
 
 jobs:
+  frontend-build:
+    # v3.12.x CI 真跑修复 (2026-08-07): tests 依赖 frontend/out/ 静态产物
+    # （test_server_integration / test_v390_t2_csp），但 out/ 被 .gitignore
+    # 排除不入库 → CI checkout 无此目录 → 4 个测试 500 失败。
+    # 复用 desktop-build.yml 的 frontend-build 模式：独立 job 构建一次，
+    # test matrix 下载 artifact，避免 4 个 Python 版本各自 npm build。
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Build frontend (static export)
+      run: |
+        cd frontend
+        npm run build
+
+    - name: Verify frontend build
+      run: |
+        ls -la frontend/out/index.html
+
+    - name: Upload frontend build artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: frontend-out
+        path: frontend/out/
+        if-no-files-found: error
+
   test:
+    needs: frontend-build
     runs-on: ubuntu-latest
     timeout-minutes: 45  # v3.10.0 Track1: 防失控测试挂满 6h（曾现 sendfile 自复制写盘死循环）
     strategy:
@@ -28,6 +67,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
         sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
+
+    - name: Download frontend build
+      # v3.12.x CI 真跑修复: 静态文件测试需要 frontend/out/（不入库）
+      uses: actions/download-artifact@v8
+      with:
+        name: frontend-out
+        path: frontend/out/
 
     - name: Run tests
       run: |
