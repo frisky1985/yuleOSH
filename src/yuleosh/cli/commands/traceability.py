@@ -493,6 +493,72 @@ def _print_closure_section(closure: dict):
               f" — 建议补全 requirement_id / 需求 ID 关联")
 
 
+def cmd_traceability_check(args):
+    """Check traceability integrity; exit 1 when broken links / orphans exist.
+
+    Computes a tamper-evident integrity summary (:func:`compute_trace_integrity`),
+    anchors it into the SHA-256 audit chain (``AuditLog.record``), prints a
+    human-readable verdict, and exits non-zero when the matrix is broken
+    (missing code/test/review mapping or orphaned tests) — so the command
+    can be used as a CI gate (``yuleosh traceability check``).
+    """
+    from yuleosh.alm.traceability import compute_trace_integrity
+    from yuleosh.audit import AuditLog
+
+    project_dir = getattr(args, "project_dir", _osh_home())
+    spec_path = getattr(args, "spec", None)
+    data_root = getattr(args, "data_root", None)
+
+    record = compute_trace_integrity(project_dir, spec_path)
+
+    # Anchor the integrity hash into the SHA-256 audit chain.
+    # OSH_HOME is honored by AuditLog; tests pass an explicit --data-root.
+    try:
+        audit_log = AuditLog(data_root=data_root)
+        audit_log.record(
+            actor="yuleosh-cli",
+            action="traceability.check",
+            target=str(Path(project_dir).resolve()),
+            detail={
+                "status": record["status"],
+                "requirements_total": record["requirements_total"],
+                "test_coverage_pct": record["test_coverage_pct"],
+                "broken_link_count": len(record["broken_links"]),
+                "orphaned_test_count": len(record["orphaned_tests"]),
+                "integrity_hash": record["integrity_hash"],
+            },
+        )
+    except Exception as e:  # noqa: BLE001 — audit failure must not crash the gate
+        log.warning("Cannot anchor traceability check into audit chain: %s", e)
+
+    print("\n  🔒 追溯完整性检查")
+    print("  " + "─" * 50)
+    print(f"  需求总数:        {record['requirements_total']}")
+    print(f"  测试覆盖率:      {record['test_coverage_pct']}%")
+    print(f"  断链数:          {len(record['broken_links'])}")
+    print(f"  孤立测试:        {len(record['orphaned_tests'])}")
+    print(f"  完整性哈希:      {record['integrity_hash'][:16]}…")
+    if record["status"] == "ok":
+        print("\n  ✅ 追溯矩阵完整 — 无断链、无孤立测试")
+    else:
+        print("\n  ❌ 追溯矩阵存在断链/孤立测试 — 完整性检查未通过")
+        for g in record["broken_links"][:10]:
+            rid = g.get("req_id", "?")
+            stmt = (g.get("statement") or "")[:50]
+            print(f"    • [{g['type']}] {rid}: {stmt}...")
+        if len(record["broken_links"]) > 10:
+            print(f"    ... 还有 {len(record['broken_links']) - 10} 个断链")
+        for t in record["orphaned_tests"][:5]:
+            print(f"    • [orphan] {t}")
+    print()
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
+
+    if record["status"] != "ok":
+        raise SystemExit(1)
+
+
 def build_parser(sub):
     """Register the traceability command group (A5)."""
     p_trace = sub.add_parser("traceability", help="Traceability matrix management")
@@ -504,6 +570,12 @@ def build_parser(sub):
     p_trace_matrix.add_argument("--project-dir", default=_osh_home(), help="Project root directory")
     p_trace_matrix.add_argument("--spec", default=None, help="Path to spec file")
     p_trace_matrix.add_argument("--build-id", default=None, help="Filter by build ID")
+    p_trace_check = tsub.add_parser("check", help="Check traceability integrity (CI gate, exit 1 on broken)")
+    p_trace_check.add_argument("--project-dir", default=_osh_home(), help="Project root directory")
+    p_trace_check.add_argument("--spec", default=None, help="Path to spec file")
+    p_trace_check.add_argument("--data-root", default=None, help="Audit log data root (default: OSH_HOME/data)")
+    p_trace_check.add_argument("--json", action="store_true", dest="json_output",
+                               help="Also print the full integrity record as JSON")
     p_trace_export = tsub.add_parser("export", help="Export traceability matrix in OEM-compatible format")
     p_trace_export.add_argument("--template", default="generic",
                                 choices=["generic", "vw", "bmw", "mercedes", "oem_common"],

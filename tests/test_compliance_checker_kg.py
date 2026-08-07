@@ -39,7 +39,13 @@ def sample_project(tmp_path):
     """Create a minimal project directory for compliance testing."""
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "requirements.md").write_text("# Requirements\n- REQ-001: The system SHALL do X\n")
-    (tmp_path / "docs" / "architecture.md").write_text("# Architecture\n")
+    (tmp_path / "docs" / "architecture.md").write_text(
+        "# Architecture\n"
+        "\n"
+        "The system is split into three layers: a hardware abstraction module,\n"
+        "a core service component, and an interface layer exposing the public API.\n"
+        "Components communicate through a message bus module with bounded queues.\n"
+    )
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "main.c").write_text("int main(void) { return 0; }")
     (tmp_path / "include").mkdir()
@@ -50,9 +56,20 @@ def sample_project(tmp_path):
     (tmp_path / ".osh" / "ci").mkdir(parents=True)
     (tmp_path / ".osh" / "ci" / "layer1-abc123.json").write_text('{"status": "passed"}')
     (tmp_path / ".osh" / "reviews").mkdir()
-    (tmp_path / ".osh" / "reviews" / "review-1.md").write_text("# Review\n")
+    (tmp_path / ".osh" / "reviews" / "review-1.md").write_text(
+        "# Review\n"
+        "Reviewer: Alice\n"
+        "Verdict: PASS — the architecture satisfies the allocation of SWE.2 requirements.\n"
+        "No open findings.\n"
+    )
     (tmp_path / ".osh" / "evidence").mkdir()
-    (tmp_path / ".osh" / "evidence" / "traceability-matrix.md").write_text("# Traceability\n")
+    (tmp_path / ".osh" / "evidence" / "traceability-matrix.md").write_text(
+        "# Traceability\n"
+        "| REQ ID | Test |\n"
+        "|--------|------|\n"
+        "| REQ-001 | test_main.py |\n"
+        "| REQ-002 | test_utils.py |\n"
+    )
     (tmp_path / ".clang-format").write_text("BasedOnStyle: LLVM\n")
     return tmp_path
 
