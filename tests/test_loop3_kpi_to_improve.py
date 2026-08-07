@@ -22,6 +22,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from yuleosh.loop_engine.event_bus import LoopEvent, LoopEventType
 from yuleosh.loop_engine.feedback_handlers.loop3_kpi_to_improve import (
@@ -141,6 +142,29 @@ class TestLoop3HandlerBasic:
         assert result.success
         assert result.evidence_ref is not None
         assert "yaml" in result.evidence_ref.lower() or "improvement_tickets" in result.evidence_ref
+
+    def test_handle_breach_ticket_contains_requirement_fields(self, temp_handler, kpi_breach_event):
+        """改进工单 YAML 包含需求关联字段 (requirement_id/requirements)。"""
+        temp_handler.handle(kpi_breach_event)
+        assert len(temp_handler.tickets_created) == 1
+
+        ticket_id = temp_handler.tickets_created[0]
+        ticket_path = os.path.join(
+            str(temp_handler.output_dir), "improvement_tickets", f"{ticket_id}.yaml"
+        )
+        assert os.path.exists(ticket_path)
+
+        with open(ticket_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        assert "requirement_id: \"\"" in content
+        assert "requirements: []" in content
+
+        # YAML 可解析且默认值为空
+        with open(ticket_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        ticket = data["improvement_ticket"]
+        assert ticket["requirement_id"] == ""
+        assert ticket["requirements"] == []
 
     def test_handle_no_breach_skips(self, handler, kpi_no_breach_event):
         """KPI 未超阈值时不执行 RCA。"""
