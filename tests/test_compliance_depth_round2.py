@@ -134,11 +134,21 @@ class TestCiSilResultsSubstantive:
         assert checker._has_sil_results() is False
 
     def test_populated_sil_json_counts(self, checker, tmp_path):
+        # f2169cd9 指标级校验: SIL 结果需 all_passed==true 且含真实产品模块
+        # （hello.elf demo fixture 不算）。
         _write(
             tmp_path / ".osh" / "ci" / "sil-test-001.json",
-            '{"passed": 12, "failed": 0}',
+            '{"all_passed": true, "results": [{"elf": "unlock_svc.elf", "passed": true}]}',
         )
         assert checker._has_sil_results() is True
+
+    def test_sil_demo_fixture_does_not_count(self, checker, tmp_path):
+        # hello.elf demo 不算 SIL 证据（f2169cd9 新逻辑）。
+        _write(
+            tmp_path / ".osh" / "ci" / "sil-test-001.json",
+            '{"all_passed": true, "results": [{"elf": "hello.elf", "passed": true}]}',
+        )
+        assert checker._has_sil_results() is False
 
 
 # ------------------------------------------------------------------ #

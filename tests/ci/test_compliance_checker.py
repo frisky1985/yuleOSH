@@ -332,10 +332,10 @@ class TestComplianceChecker:
         ev_dir.mkdir(parents=True)
         (ev_dir / "traceability-matrix.md").write_text(
             "# Traceability\n"
-            "| REQ ID | Test |\n"
-            "|--------|------|\n"
-            "| REQ-001 | test_register.py |\n"
-            "| REQ-002 | test_provision.py |\n"
+            "| REQ ID | Test | Status |\n"
+            "|--------|------|--------|\n"
+            "| REQ-001 | test_register.py | Status: ✅ Covered |\n"
+            "| REQ-002 | test_provision.py | Status: ✅ Covered |\n"
         )
 
         from yuleosh.compliance.compliance_checker import ComplianceChecker
