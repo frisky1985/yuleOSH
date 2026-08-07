@@ -277,26 +277,6 @@ def _handle_lesson_create(args) -> int:
         print(f"   📎 关联需求: {requirement_id}")
     if str(ticket.get("status", "")).lower() == "closed":
         print("   ♻️  已从 closed 工单沉淀（工单已闭环，知识已归档）")
-
-    # 方案 B (2026-08-07): lesson 沉淀 → 自动入"待生效"知识索引。
-    try:
-        from yuleosh.knowledge.indexer import KnowledgeIndexer
-
-        entry = KnowledgeIndexer().record(
-            kind="lesson_create",
-            content=f"[Lesson {lesson.id}] {title}: {lesson.solution or lesson.problem}",
-            source=f"ticket:{ticket_id}",
-            meta={"ticket_id": ticket_id, "requirement_id": requirement_id},
-        )
-        if entry:
-            print(f"   📥 已自动入待生效知识索引 (hash={entry['hash']})")
-            print("      → yuleosh knowledge approve <hash> 确认注入")
-    except Exception as e:  # noqa: BLE001 — 沉淀 hook 永不阻塞 lesson 创建
-        import logging as _logging
-
-        _logging.getLogger("yuleosh.kb.cli").warning(
-            "Knowledge indexer hook failed (non-fatal): %s", e
-        )
     return 0
 
 

@@ -125,23 +125,6 @@ def run_post_merge(cwd: Optional[str] = None) -> int:
         else:
             print("✅ All violations already in KB. No new articles created.")
 
-        # 方案 B (2026-08-07): MISRA→KB 沉淀 → 自动入"待生效"知识索引。
-        try:
-            from yuleosh.knowledge.indexer import KnowledgeIndexer
-
-            indexer = KnowledgeIndexer(project_dir=project_root)
-            for v in violations:
-                rule_id = v.get("rule_id") or "unknown"
-                ref = f"{v.get('file', '')}:{v.get('line', 0)}"
-                indexer.record(
-                    kind="kb_article_created",
-                    content=f"MISRA-{rule_id} @ {ref}: {v.get('message', '')[:200]}",
-                    source=f"post_merge:{ref}",
-                    meta={"rule_id": rule_id, "ref": ref},
-                )
-        except Exception as exc:  # noqa: BLE001 — hook 永不阻塞 post-merge
-            log.warning("Knowledge indexer hook failed (non-fatal): %s", exc)
-
     except Exception as exc:
         log.error("Post-merge hook failed: %s", exc)
         return 1
