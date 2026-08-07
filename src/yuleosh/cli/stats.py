@@ -150,7 +150,18 @@ def compute_spec_coverage(project_dir: str) -> dict:
         return {"score": 0, "requirements": 0, "scenarios": 0, "message": "No spec.md found"}
 
     try:
-        sys.path.insert(0, str(Path(project_dir) / "src" / "spec"))
+        local_spec_dir = Path(project_dir) / "src" / "spec"
+        if not (local_spec_dir / "validate.py").is_file():
+            # No project-local spec parser — do not attempt the import at
+            # all.  Relying on a bare ``from validate import ...`` here is
+            # unsafe: any earlier ``yuleosh.spec.diff`` import caches a
+            # top-level ``validate`` module in ``sys.modules`` (its module-
+            # level ``sys.path.insert`` + ``from validate import``), so the
+            # import can succeed against the *tool's own* parser even when
+            # the project under analysis has none — silently bypassing the
+            # generic fallback and returning a dict without ``analyzer``.
+            raise ImportError("no project-local spec parser")
+        sys.path.insert(0, str(local_spec_dir))
         from validate import parse_spec, validate_spec, _compute_coverage
 
         doc = parse_spec(str(spec_path))
