@@ -73,7 +73,7 @@ class TestPipelineStepsStructure:
             "spec-check", "super-analysis", "prd", "prd-review",
             "architecture", "arch-review", "development", "devplan-review",
             "internal-code-review", "test-planning", "self-test", "self-test-review",
-            "c-unit-test", "integration-test", "code-review", "misra-review",
+            "c-unit-test", "code-review", "integration-test", "misra-review",
             "coverage-review", "qemu-run", "c-coverage-gate",
             "review-linker", "review-startup", "review-rtos", "review-memory",
             "review-bsp", "review-build", "review-power", "review-stack",

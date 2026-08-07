@@ -160,9 +160,13 @@ PIPELINE_STEPS = [
     ("c-unit-test", "小克", "C 单元测试 (Unity)", step_c_unit_test),
 
     # ── Right side: SWE.5 Integration Testing ───────
-    ("integration-test", "小克", "接口集成测试", step_integration_test),
+    # 顺序说明 (2026-08-07 优化): code-review 前移到 integration-test 之前——
+    # 代码终审应在集成测试执行前完成（发现缺陷越早成本越低，避免测试白跑）；
+    # misra-review / coverage-review 保持测试后评估（读 misra-report.json /
+    # .yuleosh/reports），符合 ASPICE SWE.5「先执行后评估」的 V 模型。
     ("code-review", "Hermes", "集成代码审查",
      _resolve_handler("code-review", step_hermes_review)),
+    ("integration-test", "小克", "接口集成测试", step_integration_test),
     ("misra-review", "小马", "MISRA 合规审查",
      _resolve_handler("misra-review", step_review_misra_ci)),
     ("coverage-review", "小马", "测试覆盖审查",
