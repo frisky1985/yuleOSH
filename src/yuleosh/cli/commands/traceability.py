@@ -10,12 +10,15 @@ these functions for backward-compatible imports.
 
 import argparse
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger("yuleosh.cli.traceability")
 
 # OSH_HOME / sys.path bootstrap — mirrored from cli/main.py so command
 # modules run standalone under pytest (SHALL-A5.5: no import of cli.main).
@@ -68,7 +71,28 @@ def cmd_traceability_report(args):
         for r in recs:
             print(f"  {r}")
 
+    # ── 问题与知识闭环（需求 ↔ 工单 ↔ lessons）──────────────────────────
+    # 扫描 improvement_tickets/*.yaml 与 KB lessons，统计每个需求的
+    # 开放工单数与关联知识数，展示「需求↔问题↔知识」闭环。
+    closure = _build_closure_stats(
+        report.get("lrm", {}).get("requirements", []),
+        _load_improvement_tickets(project_dir),
+        _load_kb_lessons(project_dir),
+    )
+    report["closure"] = closure
+    _print_closure_section(closure)
+
+    # 合并写入同一份 JSON 报告（在 alm 生成的报告上追加 closure 一节）
     report_path = os.path.join(project_dir, ".yuleosh", "reports", "traceability-report.json")
+    try:
+        Path(report_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(report_path).write_text(
+            json.dumps(report, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        log.warning("Cannot write merged traceability report: %s", e)
+
     print(f"\n  完整报告: {report_path}\n")
 
 
@@ -186,6 +210,281 @@ def cmd_traceability_matrix(args):
     # Also output full JSON to stdout for pipe/redirect
     print(">>> Full JSON:", file=sys.stderr)
     print(json.dumps(lrt, indent=2, ensure_ascii=False, default=str))
+
+
+# ── 问题与知识闭环（需求 ↔ 工单 ↔ lessons）────────────────────────────
+# 统计每个需求关联的 improvement tickets 与 KB lessons，
+# 展示「需求↔问题↔知识」闭环（A 评审闭环要求）。
+# 全部为只读扫描：不修改 alm/traceability.py，不修改 kb 数据。
+
+# 工单 ID 形如 IMP-2026-08-04-misra_vi
+_TICKET_ID_RE = re.compile(r"\bIMP-\d{4}-\d{2}-\d{2}-[A-Za-z0-9][A-Za-z0-9._-]*\b")
+# 需求 ID 形如 REQ-MISRA-S1 / SWE-MISRA-S1 / KL-SHALL-01（与
+# alm.traceability 的 spec_id_pattern / section_req_id_pattern 风格一致）
+_REQ_ID_RE = re.compile(
+    r"\b(?:REQ|SWE|KL|SYS|HIL|FUSA)-[A-Z0-9][A-Z0-9._-]*\b", re.IGNORECASE
+)
+# 视为已关闭的工单状态（其余一律按开放统计）
+_CLOSED_STATUSES = frozenset({
+    "closed", "done", "resolved", "complete", "completed",
+    "已关闭", "已完成", "已解决", "取消", "cancelled", "canceled",
+})
+
+
+def _load_improvement_tickets(project_dir: str) -> list[dict]:
+    """扫描 ``improvement_tickets/*.yaml``，提取工单的需求关联。
+
+    每个工单读取 ``id`` / ``title`` / ``status`` / ``requirement_id``
+    （requirement_id 可为单个字符串或列表；缺失时视为未关联工单）。
+    目录不存在、YAML 不可解析或 PyYAML 未安装时优雅降级为空列表。
+    """
+    tickets: list[dict] = []
+    tickets_dir = Path(project_dir) / "improvement_tickets"
+    if not tickets_dir.is_dir():
+        return tickets
+    try:
+        import yaml  # type: ignore[import-untyped]
+    except ImportError:
+        log.warning("PyYAML not installed — cannot scan improvement tickets")
+        return tickets
+    for tfile in sorted(tickets_dir.glob("*.y*ml")):
+        try:
+            data = yaml.safe_load(tfile.read_text(encoding="utf-8")) or {}
+        except Exception as e:  # noqa: BLE001 — 单文件解析失败不阻塞整体
+            log.warning("Cannot parse ticket file %s: %s", tfile, e)
+            continue
+        if not isinstance(data, dict):
+            continue
+        rid = data.get("requirement_id")
+        if isinstance(rid, list):
+            req_ids = [str(r).strip() for r in rid if str(r).strip()]
+        elif rid is not None:
+            req_ids = [str(rid).strip()]
+        else:
+            req_ids = []
+        status = str(data.get("status", "open")).strip().lower()
+        tickets.append({
+            "id": str(data.get("id") or tfile.stem),
+            "title": str(data.get("title", "")),
+            "status": status,
+            "open": status not in _CLOSED_STATUSES,
+            "requirement_ids": req_ids,
+            "file": str(tfile),
+        })
+    return tickets
+
+
+def _extract_requirement_ids(text: str) -> list[str]:
+    """从文本中提取 REQ 风格需求 ID（去重、保序、大写归一）。"""
+    if not text:
+        return []
+    return list(dict.fromkeys(m.group(0).upper() for m in _REQ_ID_RE.finditer(text)))
+
+
+def _extract_ticket_ids(text: str) -> list[str]:
+    """从文本中提取 IMP- 风格工单 ID（去重、保序）。"""
+    if not text:
+        return []
+    return list(dict.fromkeys(m.group(0) for m in _TICKET_ID_RE.finditer(text)))
+
+
+def _load_kb_lessons(project_dir: str) -> list[dict]:
+    """读取 KB lessons 并提取需求 / 工单关联（只读，不修改 kb）。
+
+    - 优先使用项目内 ``.yuleosh/kb.db``（若存在）；
+    - 否则交给 ``KbStore()`` 解析（YULEOSH_KB_DB 环境变量或仓库默认）；
+    - 关联方式（三层信号，取并集）：
+        1. lesson.requirement_id / lesson.ticket_id 结构化字段
+           （kb.models.Lesson 新增列，getattr 兼容旧版本模型）；
+        2. lesson.project_id 精确匹配需求 ID；
+        3. 从 title/problem/solution/root_cause 文本中正则提取需求 ID
+           与工单 ID（旧数据兜底）。
+    - 无 kb 库 / 表结构缺失 / 任意异常时优雅降级为空列表。
+    """
+    try:
+        from yuleosh.kb.store import KbStore
+    except ImportError:
+        return []
+    local_db = Path(project_dir) / ".yuleosh" / "kb.db"
+    try:
+        if local_db.is_file():
+            store = KbStore(db_path=str(local_db))
+        else:
+            store = KbStore()
+    except Exception as e:  # noqa: BLE001
+        log.warning("Cannot open KB store for traceability closure: %s", e)
+        return []
+    lessons: list[dict] = []
+    try:
+        offset = 0
+        while True:
+            batch = store.list_lessons(limit=500, offset=offset)
+            if not batch:
+                break
+            for lesson in batch:
+                text = " ".join([
+                    lesson.title or "", lesson.problem or "",
+                    lesson.solution or "", lesson.root_cause or "",
+                ])
+                req_ids = _extract_requirement_ids(text)
+                ticket_ids = _extract_ticket_ids(text)
+                # 结构化字段（新模型才有；getattr 兼容旧版本）
+                struct_req = str(getattr(lesson, "requirement_id", "") or "").strip()
+                struct_ticket = str(getattr(lesson, "ticket_id", "") or "").strip()
+                if struct_req:
+                    req_ids.append(struct_req.upper())
+                if struct_ticket:
+                    ticket_ids.append(struct_ticket)
+                pid = (lesson.project_id or "").strip()
+                if pid and _REQ_ID_RE.fullmatch(pid):
+                    req_ids.append(pid.upper())
+                lessons.append({
+                    "id": lesson.id,
+                    "title": lesson.title,
+                    "project_id": pid,
+                    "severity": lesson.severity,
+                    "requirement_ids": list(dict.fromkeys(req_ids)),
+                    "ticket_ids": list(dict.fromkeys(ticket_ids)),
+                })
+            offset += len(batch)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Cannot read lessons from KB store: %s", e)
+    finally:
+        try:
+            store.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return lessons
+
+
+def _build_closure_stats(requirements: list[dict],
+                         tickets: list[dict],
+                         lessons: list[dict]) -> dict:
+    """构建每需求（requirement_id）的工单 / lesson 关联统计。
+
+    - ``requirements``：来自 report['lrm']['requirements']，取
+      ``req_id``（spec 定义 ID）优先、``id``（SHALL ID）兜底；
+    - 工单按 ``requirement_id`` 精确关联；lessons 按需求 ID 直接关联，
+      另统计经由工单（lesson 文本引用 IMP-xxx）的间接知识关联；
+    - 未关联到已知需求的工单 / lessons 计入 orphan 列表。
+    """
+    known: dict[str, str] = {}  # upper-id -> canonical id
+    for r in requirements:
+        rid = (r.get("req_id") or r.get("id") or "").strip()
+        if rid:
+            known[rid.upper()] = rid
+    per_req = {
+        rid: {
+            "req_id": rid,
+            "open_tickets": 0,
+            "total_tickets": 0,
+            "ticket_ids": [],
+            "lessons": 0,
+            "lesson_ids": [],
+            "lessons_via_tickets": 0,
+            "lesson_via_ticket_ids": [],
+        }
+        for rid in known.values()
+    }
+    ticket_by_id = {t["id"]: t for t in tickets}
+    orphan_tickets: list[dict] = []
+    orphan_lessons: list[dict] = []
+
+    for t in tickets:
+        linked = False
+        for rid in t["requirement_ids"]:
+            rec = per_req.get(rid.upper())
+            if rec is not None:
+                rec["total_tickets"] += 1
+                rec["ticket_ids"].append(t["id"])
+                if t["open"]:
+                    rec["open_tickets"] += 1
+                linked = True
+        if not linked:
+            orphan_tickets.append({
+                "id": t["id"], "status": t["status"],
+                "requirement_ids": t["requirement_ids"],
+            })
+
+    for lesson in lessons:
+        direct = {rid for rid in lesson["requirement_ids"] if rid.upper() in known}
+        via_tickets = set()
+        for tid in lesson["ticket_ids"]:
+            t = ticket_by_id.get(tid)
+            if t:
+                for rid in t["requirement_ids"]:
+                    if rid.upper() in known:
+                        via_tickets.add(known[rid.upper()])
+        for rid in direct:
+            rec = per_req[known[rid.upper()]]
+            rec["lessons"] += 1
+            rec["lesson_ids"].append(lesson["id"])
+        for rid in via_tickets:
+            rec = per_req[rid]
+            rec["lessons_via_tickets"] += 1
+            rec["lesson_via_ticket_ids"].append(lesson["id"])
+        if not direct and not via_tickets:
+            orphan_lessons.append({
+                "id": lesson["id"], "title": lesson["title"],
+                "requirement_ids": lesson["requirement_ids"],
+                "ticket_ids": lesson["ticket_ids"],
+            })
+
+    rows = sorted(per_req.values(), key=lambda x: x["req_id"])
+    total_open = sum(r["open_tickets"] for r in rows)
+    total_linked_lessons = sum(r["lessons"] + r["lessons_via_tickets"] for r in rows)
+    return {
+        "requirements": rows,
+        "summary": {
+            "requirements_total": len(rows),
+            "with_tickets": sum(1 for r in rows if r["total_tickets"] > 0),
+            "with_lessons": sum(1 for r in rows if r["lessons"] + r["lessons_via_tickets"] > 0),
+            "closed_loop": sum(1 for r in rows
+                               if r["total_tickets"] > 0
+                               and r["lessons"] + r["lessons_via_tickets"] > 0),
+            "open_tickets_total": total_open,
+            "tickets_total": len(tickets),
+            "lessons_linked_total": total_linked_lessons,
+            "lessons_total": len(lessons),
+            "orphan_tickets": len(orphan_tickets),
+            "orphan_lessons": len(orphan_lessons),
+        },
+        "orphan_tickets": orphan_tickets,
+        "orphan_lessons": orphan_lessons,
+    }
+
+
+def _print_closure_section(closure: dict):
+    """打印「问题与知识闭环」统计表（与控制台整体风格一致）。"""
+    rows = closure.get("requirements", [])
+    summary = closure.get("summary", {})
+    print()
+    print(f"  🔄 问题与知识闭环（需求 ↔ 工单 ↔ lessons）")
+    print(f"  {'─' * 70}")
+    if not rows:
+        print(f"  （无需求可统计 — 跳过闭环分析）")
+        return
+    print(f"  {'req_id':<22} {'工单(开放/总)':<16} {'Lessons':<9} {'经工单Lesson':<13} 闭环")
+    print(f"  {'─' * 70}")
+    for r in rows:
+        loop = "✅" if (r["total_tickets"] > 0
+                        and r["lessons"] + r["lessons_via_tickets"] > 0) else "—"
+        print(f"  {r['req_id']:<22} "
+              f"{r['open_tickets']}/{r['total_tickets']:<12} "
+              f"{r['lessons']:<9} {r['lessons_via_tickets']:<13} {loop}")
+    print(f"  {'─' * 70}")
+    print(f"  需求数: {summary.get('requirements_total', 0)}"
+          f"  |  有工单: {summary.get('with_tickets', 0)}"
+          f"  |  有知识: {summary.get('with_lessons', 0)}"
+          f"  |  闭环: {summary.get('closed_loop', 0)}")
+    print(f"  开放工单: {summary.get('open_tickets_total', 0)}"
+          f"/{summary.get('tickets_total', 0)}"
+          f"  |  关联 lessons: {summary.get('lessons_linked_total', 0)}"
+          f"/{summary.get('lessons_total', 0)}")
+    if summary.get("orphan_tickets") or summary.get("orphan_lessons"):
+        print(f"  ⚠️  未关联工单: {summary.get('orphan_tickets', 0)} 个"
+              f" | 未关联 lessons: {summary.get('orphan_lessons', 0)} 条"
+              f" — 建议补全 requirement_id / 需求 ID 关联")
 
 
 def build_parser(sub):
