@@ -38,10 +38,10 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
-from yuleosh.pipeline.stages import timed_step, _call_llm
+from yuleosh.pipeline.stages import _call_llm, timed_step
 
 log = logging.getLogger("pipeline.step_handlers.base")
 
@@ -116,7 +116,7 @@ class CheckpointManager:
                 return False
         return True
 
-    def save(self, metadata: Optional[dict] = None) -> None:
+    def save(self, metadata: dict | None = None) -> None:
         """保存检查点。"""
         data = {
             "timestamp": datetime.now().isoformat(),
@@ -126,7 +126,7 @@ class CheckpointManager:
         self._checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         self._checkpoint_path.write_text(json.dumps(data, indent=2))
 
-    def load(self) -> Optional[dict]:
+    def load(self) -> dict | None:
         """读取检查点内容。"""
         if not self.exists:
             return None
@@ -196,12 +196,12 @@ class BaseHandler(ABC):
             pre_ok = self.pre_check(session)
             if pre_ok is not True:
                 logger.info("Pre-check skipped step [%s]: %s", self.step_name, pre_ok)
-                return str(self.build_output_path(session))
+                return str(self._write_skip_report(session, f"pre-check: {pre_ok}"))
 
             # 3. 跳过条件
             if self.should_skip(session):
                 logger.info("Step [%s] skipped by should_skip()", self.step_name)
-                return str(self.build_output_path(session))
+                return str(self._write_skip_report(session, "should_skip()"))
 
             # 4. 检查点
             checkpoint = CheckpointManager(
@@ -272,11 +272,34 @@ class BaseHandler(ABC):
         """生成输出文件路径。"""
         return session.session_dir / f"{self.step_name}.json"
 
+    def _write_skip_report(self, session: PipelineSession, reason: str) -> Path:
+        """B2-2: 产物一致性门禁 —— 跳过/pre-check 失败时必须产出真实文件。
+
+        旧行为：返回 build_output_path 但不创建文件 → CheckpointEngine 产物
+        门禁判定「声称完成但产物缺失」→ 步骤 FAILED。现在写入一个
+        status=skipped 的 JSON 报告（与 mock_skip 同语义），文件真实存在。
+        """
+        import json as _json
+        from datetime import datetime as _dt
+        out_path = self.build_output_path(session)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            _json.dumps({
+                "step": self.step_name,
+                "session": getattr(session, "name", ""),
+                "timestamp": _dt.now().isoformat(),
+                "status": "skipped",
+                "reason": reason,
+            }, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return out_path
+
     def should_skip(self, session: PipelineSession) -> bool:
         """跳过条件。返回 True 则跳过执行。"""
         return False
 
-    def get_llm_prompts(self, session: PipelineSession) -> Optional[tuple[str, str]]:
+    def get_llm_prompts(self, session: PipelineSession) -> tuple[str, str] | None:
         """构建 LLM prompt。返回 (system_prompt, user_prompt) 或 None。"""
         return None
 
@@ -312,8 +335,8 @@ class BaseHandler(ABC):
         return str(out_path)
 
     def report_status(self, session: PipelineSession, status: str,
-                      findings: Optional[list] = None, summary: str = "",
-                      extra: Optional[dict] = None) -> str:
+                      findings: list | None = None, summary: str = "",
+                      extra: dict | None = None) -> str:
         """生成标准化的 step status report JSON。"""
         report = {
             "session": session.name,

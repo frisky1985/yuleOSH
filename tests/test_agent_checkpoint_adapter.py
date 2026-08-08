@@ -193,18 +193,24 @@ class TestVerdictValidation:
 
 
 class TestEngineIntegration:
+    def _artifact(self, tmp_path, name):
+        """B2-2: 产物门禁要求 output_path 真实存在。"""
+        p = tmp_path / name
+        p.write_text("{}", encoding="utf-8")
+        return str(p)
+
     def test_legacy_noarg_handler_still_works(self, tmp_path):
         """旧用例：无参 handler 不经适配层，engine 行为不变。"""
         engine = CheckpointEngine("legacy", str(tmp_path))
 
         def handler():
-            return "/tmp/legacy.json"
+            return self._artifact(tmp_path, "legacy.json")
 
         engine.add_step("s1", "旧步骤", handler)
         assert engine.run() is True
         rec = engine._state.steps[0]
         assert rec.status == StepStatus.PASSED
-        assert rec.output_path == "/tmp/legacy.json"
+        assert rec.output_path == str(tmp_path / "legacy.json")
 
     def test_session_handler_via_adapter_runs_green(self, tmp_path):
         """新适配层：session 风格 handler 经 HandlerAdapter 注册后 run 全绿。"""
@@ -213,13 +219,13 @@ class TestEngineIntegration:
         def handler(session):
             assert session.step_id == "s1"
             assert session.agent == "小明"
-            return "/tmp/adapter.json"
+            return self._artifact(tmp_path, "adapter.json")
 
         engine.add_step("s1", "第一步", HandlerAdapter(handler), agent="小明")
         assert engine.run() is True
         rec = engine._state.steps[0]
         assert rec.status == StepStatus.PASSED
-        assert rec.output_path == "/tmp/adapter.json"
+        assert rec.output_path == str(tmp_path / "adapter.json")
 
     def test_resume_with_adapter_continues(self, tmp_path):
         """恢复模式：首次全量成功，第二次 resume 返回 True（无待跑步骤）。"""
@@ -228,7 +234,7 @@ class TestEngineIntegration:
 
         def handler(session):
             calls.append(session.step_id)
-            return "/tmp/out.json"
+            return self._artifact(tmp_path, "out.json")
 
         engine.add_step("s1", "第一步", HandlerAdapter(handler))
         engine.add_step("s2", "第二步", HandlerAdapter(handler))
@@ -245,7 +251,7 @@ class TestEngineIntegration:
 
         def handler(session):
             calls.append(session.step_id)
-            return "/tmp/out.json"
+            return self._artifact(tmp_path, "out.json")
 
         engine.add_step("s1", "第一步", HandlerAdapter(handler))
         engine.add_step("s2", "第二步", HandlerAdapter(handler))
