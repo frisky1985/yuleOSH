@@ -19,8 +19,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
-
 from yuleosh.ci.honesty_gate import (  # noqa: E402
     check_empty_evidence,
     check_missing_artifacts,

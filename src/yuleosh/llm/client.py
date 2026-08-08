@@ -109,6 +109,85 @@ PROVIDER_MODEL_MAP: dict[str, str] = {
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# 方案 C (C3) — agent → model 路由表 + 任务风险等级
+# ═══════════════════════════════════════════════════════════════════════
+#
+# 评审决议 (2026-08-08):
+#   - 路由键必须是 agent × 任务风险等级（L0 工具 / L1 生成 / L2 结构化 /
+#     L3 审查 / L4 决策）；
+#   - L3/L4 判定任务（审查 / 设计决策）禁止下钻小模型（防幻觉硬规则）。
+#
+# AGENT_MODEL_ROUTES 默认值 = 现状（deepseek-v4 / deepseek），不改变任何
+# 现有 TASK_ROUTES 映射，保证 golden 测试不碎。task_type 字段用于承接
+# TASK_BUDGETS / TASK_RAG_SOURCES / TASK_RISK_LEVELS 等既有体系。
+
+# 已知小模型（低成本 / 快速，幻觉风险高）：L3/L4 任务禁止下钻到这些模型。
+SMALL_MODELS: tuple = (
+    "deepseek-chat",
+    "deepseek-v3",
+    "claude-4-haiku",
+    "gpt-4o-mini",
+    "mock",
+)
+
+# agent 标签（见 agent_registry.AGENT_ROLES）→ 路由条目。
+AGENT_MODEL_ROUTES: dict[str, dict[str, str]] = {
+    "小明": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "review_blocking",
+        "risk_level": "L4",
+    },
+    "小克": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "code_generation",
+        "risk_level": "L4",
+    },
+    "小马": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "misra_review",
+        "risk_level": "L3",
+    },
+    "Hermes": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "architecture_design",
+        "risk_level": "L4",
+    },
+    "Claude": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "architecture_design",
+        "risk_level": "L4",
+    },
+    "QEMU": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "simple_summary",
+        "risk_level": "L1",
+    },
+}
+
+# task_type → 风险等级。按 TASK_ROUTES 实际存在的 key 登记；评审建议的
+# code_review / requirements_analysis / summary 等 key 在 TASK_ROUTES 中
+# 不存在，故由 misra_review / review_*（审查类）与 simple_summary 承担。
+TASK_RISK_LEVELS: dict[str, str] = {
+    "architecture_design": "L4",  # 设计决策
+    "code_generation": "L4",  # 代码生成（安全关键产物）
+    "safety_code_generation": "L4",  # 安全关键代码生成
+    "test_generation": "L2",  # 结构化测试生成
+    "misra_review": "L3",  # MISRA 合规审查
+    "misra_fix": "L3",  # 审查后修复判定
+    "review_blocking": "L4",  # 阻塞性门禁决策
+    "review_selfcheck": "L3",  # 审查自查
+    "simple_summary": "L1",  # 简单摘要
+}
+
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Provider registry (lazy-loaded)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -150,11 +229,28 @@ def resolve_config(
         3. TASK_ROUTES 默认映射（既有行为）
 
     同时尊重 ``LLM_MODEL`` env（覆盖模型名；provider 随 env 或模型名推断）。
+
+    方案 C (C3) 增强:
+        - ``task_type`` 为 agent 标签（如 "小克"）时，先查
+          ``AGENT_MODEL_ROUTES`` 映射到 {model, provider, task_type}，
+          再走既有 env / 预算 / RAG 逻辑；
+        - L3/L4 判定任务（审查 / 设计决策）禁止下钻小模型：显式传入
+          task_type 且其风险等级为 L3/L4 时，即使 ``LLM_MODEL`` env 覆盖
+          为已知小模型（SMALL_MODELS），也回退到该任务的默认模型并
+          log warning（防幻觉硬规则）。未显式传 task_type 时保持既有
+          env 覆盖语义（历史 golden 测试兼容）。
     """
     if config is not None:
         return config
 
+    # C3: 仅显式传入 task_type 时启用 L3/L4 禁下钻硬规则；未传时保持
+    # 既有 LLM_MODEL env 覆盖语义（test_llm_provider_deepseek 等历史用例）。
+    task_type_explicit = task_type is not None
     task_type = task_type or "code_generation"
+
+    # C3: agent 标签路由 → {model, provider, task_type}
+    agent_route = AGENT_MODEL_ROUTES.get(task_type)
+    route_task_type = agent_route["task_type"] if agent_route is not None else task_type
 
     provider_env = os.environ.get("YULEOSH_LLM_PROVIDER")
     if provider_env is not None:
@@ -168,27 +264,51 @@ def resolve_config(
     model_env = os.environ.get("LLM_MODEL")
     model_env = model_env.strip() if model_env else None
 
+    # 无 LLM_MODEL 覆盖时的默认模型
+    # （方案 A 优先级：env provider > agent 路由 > TASK_ROUTES）。
     if provider_env:
+        default_model = PROVIDER_DEFAULT_MODELS[provider_env]
         provider = provider_env
-        model = model_env or PROVIDER_DEFAULT_MODELS[provider]
+    elif agent_route is not None:
+        default_model = agent_route["model"]
+        provider = agent_route["provider"]
     else:
-        model = model_env or TASK_ROUTES.get(task_type, "deepseek-v4")
-        provider = PROVIDER_MODEL_MAP.get(model, "deepseek")
+        default_model = TASK_ROUTES.get(route_task_type, "deepseek-v4")
+        provider = "deepseek"
 
-    task_budget = TASK_BUDGETS.get(task_type, TASK_BUDGETS["code_generation"])
+    model = model_env or default_model
+    if not provider_env:
+        provider = PROVIDER_MODEL_MAP.get(model, provider)
+
+    # C3 硬规则：L3/L4 判定任务禁止下钻小模型（防幻觉）。
+    risk_level = TASK_RISK_LEVELS.get(route_task_type)
+    if task_type_explicit and risk_level in ("L3", "L4") and model in SMALL_MODELS:
+        log.warning(
+            "L3/L4 硬规则：task_type=%s (risk=%s) 禁止下钻小模型 %r，"
+            "回退到默认模型 %r",
+            route_task_type,
+            risk_level,
+            model,
+            default_model,
+        )
+        model = default_model
+        if not provider_env:
+            provider = PROVIDER_MODEL_MAP.get(model, provider)
+
+    task_budget = TASK_BUDGETS.get(route_task_type, TASK_BUDGETS["code_generation"])
 
     return LLMConfig(
         model=model,
         provider=provider,
         max_tokens=min(4096, int(task_budget.get("max_tokens_out", 4096))),
         temperature=0.3,
-        rag_enabled=task_type not in ("simple_summary",),
-        rag_sources=TASK_RAG_SOURCES.get(task_type, []),
+        rag_enabled=route_task_type not in ("simple_summary",),
+        rag_sources=TASK_RAG_SOURCES.get(route_task_type, []),
         max_cost_usd=task_budget.get("max_cost_usd", 0.50),
-        task_type=task_type,
+        task_type=route_task_type,
         # Project memory follows the same routing rule as RAG: cheap
         # "simple_summary" tasks skip memory injection too.
-        memory_enabled=task_type not in ("simple_summary",),
+        memory_enabled=route_task_type not in ("simple_summary",),
     )
 
 
@@ -360,6 +480,65 @@ class LLMClient:
         return response
 
     @classmethod
+    def call_sync(
+        cls,
+        prompt: str,
+        system_prompt: str | None = None,
+        task_type: str | None = None,
+        config: LLMConfig | None = None,
+        messages: list[dict[str, str]] | None = None,
+    ) -> dict:
+        """Synchronous bridge to :meth:`call` (方案 C, C1).
+
+        Drives the async unified entry point from synchronous callers
+        (e.g. the legacy ``chat_completion`` pipeline path) and adapts the
+        returned ``LLMResponse`` back to the legacy dict shape::
+
+            {"content": ..., "model": ..., "usage": {
+                "prompt_tokens": N, "completion_tokens": N, "total_tokens": N}}
+
+        Event-loop safety: when no loop is running in the current thread
+        ``asyncio.run`` is used; when a loop is already running (async
+        caller), a private loop is created with ``new_event_loop`` +
+        ``run_until_complete`` so the running loop is never re-entered.
+
+        Raises:
+            RuntimeError: when the underlying LLMResponse carries an error,
+                preserving the legacy ``chat_completion`` failure semantics.
+        """
+        coro = cls.call(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            task_type=task_type,
+            config=config,
+            messages=messages,
+        )
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop running in this thread → asyncio.run is safe.
+            response = asyncio.run(coro)
+        else:
+            # An event loop is already running. Python 3.12 forbids nesting
+            # another loop's run_until_complete inside a running loop
+            # ("Cannot run the event loop while another loop is running"),
+            # so drive the coroutine on a worker thread via asyncio.run.
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                response = pool.submit(asyncio.run, coro).result()
+
+        if response.error:
+            raise RuntimeError(f"LLM request failed: {response.error}")
+
+        return {
+            "content": response.content,
+            "model": response.model,
+            "usage": _adapt_token_usage(response.token_usage),
+        }
+
+    @classmethod
     def configure_providers(cls, providers: Dict[str, AbstractProvider]):
         """Inject custom provider instances (for testing)."""
         _PROVIDER_REGISTRY.clear()
@@ -375,6 +554,23 @@ class LLMClient:
 # ═══════════════════════════════════════════════════════════════════════
 # Backward-compatible shims
 # ═══════════════════════════════════════════════════════════════════════
+
+
+def _adapt_token_usage(token_usage: dict[str, int]) -> dict[str, int]:
+    """Adapt ``LLMResponse.token_usage`` to the legacy OpenAI-style usage dict.
+
+    ``LLMResponse`` uses ``{"prompt", "completion", "total"}`` while legacy
+    callers expect ``{"prompt_tokens", "completion_tokens", "total_tokens"}``.
+    Dicts that are already OpenAI-style pass through unchanged.
+    """
+    tu = token_usage or {}
+    if "prompt" in tu or "completion" in tu or "total" in tu:
+        return {
+            "prompt_tokens": tu.get("prompt", 0),
+            "completion_tokens": tu.get("completion", 0),
+            "total_tokens": tu.get("total", 0),
+        }
+    return dict(tu)
 
 
 def chat_completion(
@@ -401,6 +597,25 @@ def chat_completion(
     .. deprecated:: 2.0
         Use ``LLMClient.call()`` instead.
     """
+    # 方案 C (C2): YULEOSH_LLM_UNIFIED=1 时走 LLMClient.call_sync 统一入口，
+    # 获得预算检查 / provider 回退 / 成本审计；未设置时保留原 urllib 实现。
+    if os.environ.get("YULEOSH_LLM_UNIFIED") == "1":
+        cfg = LLMConfig(
+            model=os.environ.get("LLM_MODEL", "deepseek-chat"),
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout_s=timeout,
+            max_retries=retries,
+            # 保持旧 chat_completion 语义：不注入 RAG / project memory。
+            rag_enabled=False,
+            memory_enabled=False,
+        )
+        return LLMClient.call_sync(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            config=cfg,
+        )
+
     import json as _json
     import os as _os
     import time as _time

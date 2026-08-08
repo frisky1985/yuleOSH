@@ -112,6 +112,16 @@ def _build_role_scoped_prompt(
     )
 
 
+def _gateway_step_keys() -> set:
+    """Parse ``YULEOSH_LLM_GATEWAY_STEPS`` (comma-separated step keys).
+
+    方案 C (C5, 2026-08-08): 灰度迁移名单。命中名单的步骤改走
+    ``llm_gateway.call_step_llm`` 统一入口，其余步骤保持旧路径。
+    """
+    raw = os.environ.get("YULEOSH_LLM_GATEWAY_STEPS", "")
+    return {s.strip() for s in raw.split(",") if s.strip()}
+
+
 def _call_llm(
     session: PipelineSession,
     system_prompt: str,
@@ -136,9 +146,38 @@ def _call_llm(
     always proceeds.  Mock mode skips injection so placeholder runs stay
     deterministic and fast.
 
+    灰度迁移 (方案 C, C5, 2026-08-08): 当
+    ``session.pipeline_knowledge_step_key`` 命中 ``YULEOSH_LLM_GATEWAY_STEPS``
+    （逗号分隔 step_key 列表）时改走 ``llm_gateway.call_step_llm`` 统一
+    入口（token 预算 + usage 记录 + 失败包装），返回 dict 形态不变
+    （``{"content": ...}``，usage 由网关直接记入 session，避免 handler
+    二次累计）；其余步骤保持旧路径，签名与行为完全向后兼容。
+
     For backward-compatible test mock paths, the global fallback is looked up
     through the ``run`` shim module at call time (deferred import avoids cycles).
     """
+    # 方案 C (C5): 灰度切换到 llm_gateway 统一入口。
+    step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
+    if isinstance(step_key, str) and step_key in _gateway_step_keys():
+        from yuleosh.pipeline.llm_gateway import call_step_llm
+
+        temperature = kwargs.pop("temperature", 0.3)
+        max_tokens = kwargs.pop("max_tokens", 4096)
+        if kwargs:
+            log.warning(
+                "llm_gateway step '%s': unsupported kwargs ignored: %s",
+                step_key,
+                sorted(kwargs),
+            )
+        content = call_step_llm(
+            session,
+            system_prompt,
+            user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return {"content": content}
+
     # Inject agent constraints into the system prompt
     effective_system = _build_effective_system_prompt(session, system_prompt)
 
