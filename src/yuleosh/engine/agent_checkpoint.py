@@ -5,32 +5,91 @@
 """
 Agent Pipeline 的 Checkpoint 封装。
 
-将 PIPELINE_STEPS（29~30 步）适配到 CheckpointEngine，
+将 PIPELINE_STEPS（33 步）适配到 CheckpointEngine，
 支持任意 agent step 注入 + 自动续跑。
 """
 
 import argparse
 import os
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from yuleosh.engine.checkpoint import CheckpointEngine
+from yuleosh.engine.handler_adapter import HandlerAdapter
+from yuleosh.pipeline.session import PipelineSession
 from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+
+# 项目内默认 spec 路径（相对 project_dir）
+_DEFAULT_SPEC_NAME = "docs/spec.md"
+
+
+def _resolve_spec_path(project_dir: str, spec_path: str | None) -> str:
+    """解析 spec 路径：显式传入优先，否则取项目下默认 docs/spec.md。
+
+    不做存在性校验 —— PipelineSession 只记录路径、不要求文件存在
+    （spec 缺失时由具体 handler 侧体现，session 构造永不因此失败）。
+    """
+    if spec_path:
+        return str(Path(spec_path))
+    return str(Path(project_dir) / _DEFAULT_SPEC_NAME)
+
+
+def _make_session_factory(project_dir: str, spec_path: str | None,
+                          mock_mode: bool = False) -> Callable[[dict], PipelineSession]:
+    """构造真实 PipelineSession 的工厂（B1-2）。
+
+    工厂接收 step_def dict（CheckpointEngine._execute_steps 透传），返回
+    PipelineSession 实例：
+
+    - name: agent-pipeline-<时间戳>（与 orchestrator 的 run-<时间戳> 同风格）
+    - spec_path: 调用方传入或项目默认 docs/spec.md（不校验存在）
+    - llm_client: None（B1 阶段不接 LLM，由调用方后续注入）
+    - mock_mode: 由调用方控制（CLI --mock / 测试直接传参）
+    - project_dir: 覆盖为调用方传入的项目目录（PipelineSession 默认取
+      OSH_HOME，这里与 CheckpointEngine.project_dir 对齐）
+    - step_id / step_name / agent: 附上当前 step 上下文，方便 handler 读取
+    """
+    resolved_spec = _resolve_spec_path(project_dir, spec_path)
+    abs_project_dir = os.path.abspath(project_dir)
+
+    def _factory(step_def: dict) -> PipelineSession:
+        session = PipelineSession(
+            name=f"agent-pipeline-{time.strftime('%Y%m%d-%H%M%S')}",
+            spec_path=resolved_spec,
+            llm_client=None,
+        )
+        session.project_dir = abs_project_dir
+        session.mock_mode = bool(mock_mode)
+        session.step_id = step_def.get("step_id")
+        session.step_name = step_def.get("name")
+        session.agent = step_def.get("agent", "")
+        return session
+
+    return _factory
 
 
 def create_agent_pipeline(project_dir: str,
-                          spec_path: Optional[str] = None) -> CheckpointEngine:
+                          spec_path: str | None = None,
+                          mock_mode: bool = False) -> CheckpointEngine:
     """
     创建 Agent 流水线的 Checkpoint 版本。
 
-    与 PIPELINE_STEPS 定义严格对齐。handler 保持原始无参签名
-    （由 PIPELINE_STEPS 定义的 handler 已经是无参的 step 函数）。
+    与 PIPELINE_STEPS 定义严格对齐（33 步）。每个 handler 均用
+    HandlerAdapter 包装（fallback_safe=False 默认 —— 异常绝不静默降质），
+    并在 engine 上注入 session_factory：运行时 HandlerAdapter 分支会收到
+    构造好的真实 PipelineSession（而非 SimpleNamespace）。
     """
-    engine = CheckpointEngine("agent-pipeline", project_dir)
+    engine = CheckpointEngine(
+        "agent-pipeline",
+        project_dir,
+        session_factory=_make_session_factory(project_dir, spec_path, mock_mode),
+    )
 
     for step_key, agent, step_name, handler in PIPELINE_STEPS:
-        engine.add_step(step_key, step_name, handler, agent=agent)
+        engine.add_step(step_key, step_name, HandlerAdapter(handler), agent=agent)
 
     return engine
 
@@ -65,7 +124,15 @@ def main():
                         help="项目目录")
     parser.add_argument("--clear", action="store_true",
                         help="清除 checkpoint 状态")
+    parser.add_argument("--executor", default="inline",
+                        help="执行器: inline（当前唯一支持；subprocess 将在 B2 加入）")
+    parser.add_argument("--mock", action="store_true",
+                        help="mock 模式（session.mock_mode=True，gate 类步骤跳过真实扫描）")
     args = parser.parse_args()
+
+    if args.executor != "inline":
+        print(f"❌ 不支持的执行器: {args.executor}（当前仅支持 inline，subprocess 将在 B2 加入）")
+        sys.exit(2)
 
     project_dir = os.path.abspath(args.project_dir)
 
@@ -101,7 +168,7 @@ def main():
         return
 
     # ── run ──
-    engine = create_agent_pipeline(project_dir, args.spec)
+    engine = create_agent_pipeline(project_dir, args.spec, mock_mode=args.mock)
     result = engine.run(inject_at=args.inject_at, resume=args.resume)
     sys.exit(0 if result else 1)
 
