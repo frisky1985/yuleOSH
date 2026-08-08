@@ -16,9 +16,9 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
 
 log = logging.getLogger("pipeline.session")
 
@@ -29,7 +29,7 @@ log = logging.getLogger("pipeline.session")
 
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    from store import Store  # noqa: E402
+    from store import Store
     _store = Store()
 except Exception as e:
     logging.getLogger("pipeline.session").warning("Store init failed: %s", e)
@@ -51,7 +51,6 @@ class PipelineStepError(RuntimeError):
     Replaces silent degradation (try/except/pass) with an explicit,
     interruptible error that stops the pipeline.
     """
-    pass
 
 
 # ------------------------------------------------------------------
@@ -65,10 +64,10 @@ class PipelineSession:
         self,
         name: str,
         spec_path: str,
-        llm_client: Optional[Callable] = None,
-        agent_constraints: Optional[str] = None,
-        development_mode: Optional[str] = None,
-        config: Optional[dict] = None,
+        llm_client: Callable | None = None,
+        agent_constraints: str | None = None,
+        development_mode: str | None = None,
+        config: dict | None = None,
     ):
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
@@ -98,13 +97,23 @@ class PipelineSession:
         self.token_usage_steps: list[dict] = []
         # D3 codegen: "planning" (default) or "generate-code".
         # Accepts None (default planning), "generate-code", or "planning".
-        self.development_mode: Optional[str] = development_mode
+        self.development_mode: str | None = development_mode
         # Arbitrary session config (e.g. {"codegen": {...}}).
         self.config: dict = config or {}
         # Mock mode flag — set by run_pipeline(..., mock=True).
         # When True, LLM outputs are placeholders and code-quality gates
         # (coverage, critical safety) SHALL skip real scanning.
         self.mock_mode: bool = False
+        # B1/B2 (2026-08-08): current step context — set by
+        # agent_checkpoint._make_session_factory / subprocess worker so
+        # handlers can read which step they're running as.  Declared here
+        # for type-checker cleanliness (assigned dynamically otherwise).
+        self.step_id: str = ""
+        self.step_name: str = ""
+        self.agent: str = ""
+        # B2-2 (2026-08-08): artifact consistency markers —
+        # {artifact_key: "missing"|"empty"} set by set_artifact soft check.
+        self.artifact_missing: dict = {}
         # 方案 A (2026-08-07): pipeline knowledge injection state.
         # pipeline_knowledge_step_key — current step key (set by orchestrator).
         # pipeline_knowledge_config — cached .yuleosh/pipeline-knowledge.yaml.
@@ -165,8 +174,23 @@ class PipelineSession:
             self._save()
 
     def set_artifact(self, key: str, path: str) -> None:
-        """Register a generated artifact and persist session state."""
+        """Register a generated artifact and persist session state.
+
+        B2-2 (2026-08-08): consistency check — a registered artifact whose
+        file is missing or empty is flagged (non-fatal warning + marker).
+        Hard enforcement lives in CheckpointEngine (step FAILED); this is a
+        soft check so orchestrator-path callers aren't broken by missing
+        files that later steps may legitimately generate.
+        """
         self.artifacts[key] = str(path)
+        # B2-2 soft check: flag missing/empty artifacts without raising.
+        _ap = Path(str(path))
+        if not _ap.exists():
+            self.artifact_missing[key] = "missing"
+        elif _ap.stat().st_size == 0:
+            self.artifact_missing[key] = "empty"
+        else:
+            self.artifact_missing.pop(key, None)
         self._save(persist=False)
 
     def _save(self, persist: bool = True) -> None:

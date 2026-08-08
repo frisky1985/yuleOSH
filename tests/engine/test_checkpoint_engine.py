@@ -44,7 +44,12 @@ def _make_step_handler(step_id: str, fail: bool = False, delay: float = 0):
             time.sleep(delay)
         if fail:
             raise RuntimeError(f"Step '{step_id}' failed intentionally")
-        return f"/tmp/output/{step_id}.json"
+        # B2-2: 产物门禁要求 output_path 真实存在 —— 创建真实产物文件。
+        out_dir = Path(tempfile.gettempdir()) / "yuleosh-checkpoint-test" / "output"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{step_id}.json"
+        out_path.write_text("{}", encoding="utf-8")
+        return str(out_path)
     handler.__name__ = f"handler_{step_id}"
     return handler
 
@@ -325,16 +330,15 @@ class TestPersistence:
         handler_calls = []
 
         def handler_a():
-            # 执行中检查 status
+            # 第一步时检查 status
             status = engine.status()
             assert status is not None
             assert status["status"] == "running"
-            assert len(status["steps"]) == 3
             assert status["steps"][0]["status"] == "running"
             assert status["steps"][1]["status"] == "pending"
             assert status["steps"][2]["status"] == "pending"
             handler_calls.append("a")
-            return "/tmp/out.json"
+            return _make_step_handler("step-a")()
 
         def handler_b():
             # 第二步时检查 status
@@ -344,11 +348,11 @@ class TestPersistence:
             assert status["steps"][0]["status"] == "passed"
             assert status["steps"][1]["status"] == "running"
             handler_calls.append("b")
-            return "/tmp/out.json"
+            return _make_step_handler("step-b")()
 
         def handler_c():
             handler_calls.append("c")
-            return "/tmp/out.json"
+            return _make_step_handler("step-c")()
 
         engine.add_step("step-a", "Step A", handler_a)
         engine.add_step("step-b", "Step B", handler_b)

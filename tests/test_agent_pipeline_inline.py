@@ -34,6 +34,14 @@ from yuleosh.engine.handler_adapter import HandlerAdapter
 from yuleosh.pipeline.orchestrator import _mock_llm_client, run_pipeline
 from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
 
+
+def _real_artifact(tmp_path, name: str) -> str:
+    """B2-2: 产物门禁要求 output_path 真实存在 —— 测试创建真实产物文件。"""
+    p = tmp_path / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{}", encoding="utf-8")
+    return str(p)
+
 # ---------------------------------------------------------------------------
 # 共享常量 / fixture
 # ---------------------------------------------------------------------------
@@ -212,17 +220,17 @@ class TestB14Resume:
 
         def h1():
             calls.append("s1")
-            return "/tmp/out1.json"
+            return _real_artifact(tmp_path, "out1.json")
 
         def h2():
             calls.append("s2")
             if state["fail"]:
                 raise RuntimeError("注入失败: step2 boom")
-            return "/tmp/out2.json"
+            return _real_artifact(tmp_path, "out2.json")
 
         def h3():
             calls.append("s3")
-            return "/tmp/out3.json"
+            return _real_artifact(tmp_path, "out3.json")
 
         engine.add_step("s1", "第一步", h1, agent="小明")
         engine.add_step("s2", "第二步", h2, agent="小克")
@@ -253,17 +261,17 @@ class TestB14Resume:
 
         def h1():
             calls.append("s1")
-            return "/tmp/o1.json"
+            return _real_artifact(tmp_path, "o1.json")
 
         def h2():
             calls.append("s2")
             if state["fail"]:
                 raise RuntimeError("boom")
-            return "/tmp/o2.json"
+            return _real_artifact(tmp_path, "o2.json")
 
         def h3():
             calls.append("s3")
-            return "/tmp/o3.json"
+            return _real_artifact(tmp_path, "o3.json")
 
         engine.add_step("s1", "一", h1)
         engine.add_step("s2", "二", h2)
@@ -281,7 +289,7 @@ class TestB14Resume:
 
         def h():
             calls.append(1)
-            return "/tmp/o.json"
+            return _real_artifact(tmp_path, "o.json")
 
         engine.add_step("s1", "一", h)
         engine.add_step("s2", "二", h)
@@ -298,7 +306,7 @@ class TestB14Resume:
 
         def h():
             calls.append("x")
-            return "/tmp/o.json"
+            return _real_artifact(tmp_path, "o.json")
 
         engine.add_step("s1", "一", h)
         engine.add_step("s2", "二", h)
@@ -318,7 +326,7 @@ class TestB14Resume:
 
         def handler():
             calls.append("x")
-            return "/tmp/o.json"
+            return _real_artifact(tmp_path, "o.json")
 
         engine.add_step("s1", "一", handler)
         engine.add_step("s2", "二", handler)
@@ -345,7 +353,7 @@ class TestB14Resume:
             calls.append(session.step_id)
             if session.step_id == "s2" and state["fail"]:
                 raise RuntimeError("adapter boom")
-            return "/tmp/o.json"
+            return _real_artifact(tmp_path, "o.json")
 
         engine.add_step("s1", "一", HandlerAdapter(handler))
         engine.add_step("s2", "二", HandlerAdapter(handler))
@@ -367,15 +375,15 @@ class TestB14Resume:
         state = {"fail": True}
 
         def h1():
-            return "/tmp/o1.json"
+            return _real_artifact(tmp_path, "o1.json")
 
         def h2():
             if state["fail"]:
                 raise RuntimeError("persist-me")
-            return "/tmp/o2.json"
+            return _real_artifact(tmp_path, "o2.json")
 
         def h3():
-            return "/tmp/o3.json"
+            return _real_artifact(tmp_path, "o3.json")
 
         engine.add_step("s1", "一", h1)
         engine.add_step("s2", "二", h2)

@@ -19,6 +19,14 @@ from yuleosh.engine.checkpoint import CheckpointEngine, StepStatus
 from yuleosh.engine.handler_adapter import HandlerAdapter
 from yuleosh.pipeline.session import PipelineSession
 
+
+def _real_artifact(tmp_path, name: str = "out.json") -> str:
+    """B2-2: 产物门禁要求 output_path 真实存在 —— 测试创建真实产物文件。"""
+    p = tmp_path / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{}", encoding="utf-8")
+    return str(p)
+
 # ---------------------------------------------------------------------------
 # CheckpointEngine.session_factory 钩子（B1-1）
 # ---------------------------------------------------------------------------
@@ -33,7 +41,7 @@ class TestSessionFactoryHook:
 
         def handler(session):
             seen["session"] = session
-            return "/tmp/out.json"
+            return _real_artifact(tmp_path, "out.json")
 
         engine.add_step("s1", "第一步", HandlerAdapter(handler), agent="小明")
         assert engine.run() is True
@@ -54,7 +62,7 @@ class TestSessionFactoryHook:
 
         def handler(session):
             handler_seen.append(session)
-            return "/tmp/out.json"
+            return _real_artifact(tmp_path, "out.json")
 
         engine.add_step("s1", "第一步", HandlerAdapter(handler))
         assert engine.run() is True
@@ -73,7 +81,7 @@ class TestSessionFactoryHook:
         engine = CheckpointEngine("stepdef", str(tmp_path), session_factory=factory)
 
         def handler(session):
-            return "/tmp/out.json"
+            return _real_artifact(tmp_path, "out.json")
 
         engine.add_step("s1", "第一步", HandlerAdapter(handler), agent="小克")
         assert engine.run() is True
@@ -103,7 +111,7 @@ class TestSessionFactoryHook:
             assert isinstance(session, PipelineSession)
             assert session.mock_mode is True
             assert session.project_dir == str(tmp_path)
-            return "/tmp/out.json"
+            return _real_artifact(tmp_path, "out.json")
 
         engine.add_step("s1", "第一步", HandlerAdapter(handler))
         assert engine.run() is True
@@ -119,7 +127,7 @@ class TestSessionFactoryHook:
             return SimpleNamespace(step_id=step_def["step_id"])
 
         def handler(session):
-            return "/tmp/out.json"
+            return _real_artifact(tmp_path, "out.json")
 
         engine = CheckpointEngine("modes", str(tmp_path), session_factory=factory)
         for sid in ("s1", "s2", "s3"):
@@ -206,9 +214,9 @@ class TestAgentPipelineSessionFactory:
         # 替换为轻量 handler，避免真实 handler 依赖项目文件（引擎机制验证）
         engine._step_defs = [{
             "step_id": "smoke", "name": "冒烟", "agent": "小明",
-            "handler": HandlerAdapter(lambda session: "/tmp/smoke.json"),
+            "handler": HandlerAdapter(lambda session: _real_artifact(tmp_path, "smoke.json")),
         }]
         assert engine.run() is True
         rec = engine._state.steps[0]
         assert rec.status == StepStatus.PASSED
-        assert rec.output_path == "/tmp/smoke.json"
+        assert rec.output_path == str(tmp_path / "smoke.json")

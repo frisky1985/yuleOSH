@@ -15,7 +15,6 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Optional
 
 from yuleosh.engine.checkpoint import CheckpointEngine
 from yuleosh.engine.handler_adapter import HandlerAdapter
@@ -94,7 +93,7 @@ def create_agent_pipeline(project_dir: str,
     return engine
 
 
-def list_injection_points(engine: Optional[CheckpointEngine] = None,
+def list_injection_points(engine: CheckpointEngine | None = None,
                           project_dir: str = ".") -> None:
     """打印所有注入点（即所有步骤）。"""
     if engine is None:
@@ -125,14 +124,11 @@ def main():
     parser.add_argument("--clear", action="store_true",
                         help="清除 checkpoint 状态")
     parser.add_argument("--executor", default="inline",
-                        help="执行器: inline（当前唯一支持；subprocess 将在 B2 加入）")
+                        choices=["inline", "subprocess"],
+                        help="执行器: inline（默认，当前进程直跑）/ subprocess（B2，独立进程臂）")
     parser.add_argument("--mock", action="store_true",
                         help="mock 模式（session.mock_mode=True，gate 类步骤跳过真实扫描）")
     args = parser.parse_args()
-
-    if args.executor != "inline":
-        print(f"❌ 不支持的执行器: {args.executor}（当前仅支持 inline，subprocess 将在 B2 加入）")
-        sys.exit(2)
 
     project_dir = os.path.abspath(args.project_dir)
 
@@ -169,6 +165,18 @@ def main():
 
     # ── run ──
     engine = create_agent_pipeline(project_dir, args.spec, mock_mode=args.mock)
+    if args.executor == "subprocess":
+        # B2-1: 注入 subprocess runner —— 步骤在独立进程臂执行。
+        # 固定 session 名（时间戳级）：主进程与所有 worker 共用同一
+        # 会话目录，产物交接链依赖路径一致。
+        import time as _time
+
+        from yuleosh.engine.subprocess_executor import make_subprocess_runner
+        session_name = f"agent-pipeline-{_time.strftime('%Y%m%d-%H%M%S')}"
+        engine.runner = make_subprocess_runner(
+            project_dir, mock_mode=args.mock, spec_path=args.spec,
+            session_name=session_name,
+        )
     result = engine.run(inject_at=args.inject_at, resume=args.resume)
     sys.exit(0 if result else 1)
 

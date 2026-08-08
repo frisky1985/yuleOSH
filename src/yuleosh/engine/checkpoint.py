@@ -23,12 +23,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Optional
+from typing import Any
 
 from yuleosh.engine.handler_adapter import HandlerAdapter
 
@@ -56,11 +57,11 @@ class StepRecord:
     name: str
     agent: str = ""
     status: StepStatus = StepStatus.PENDING
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    started_at: str | None = None
+    completed_at: str | None = None
     duration_s: float = 0.0
-    error: Optional[str] = None
-    output_path: Optional[str] = None
+    error: str | None = None
+    output_path: str | None = None
 
 
 @dataclass
@@ -69,7 +70,7 @@ class CheckpointState:
     pipeline_name: str
     profile: str = "default"
     steps: list[StepRecord] = field(default_factory=list)
-    inject_at: Optional[str] = None   # 注入点
+    inject_at: str | None = None   # 注入点
     created_at: str = ""
     updated_at: str = ""
     status: str = "created"  # created | running | completed | failed
@@ -99,7 +100,7 @@ class CheckpointState:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CheckpointState":
+    def from_dict(cls, data: dict) -> CheckpointState:
         steps = []
         for s_data in data.get("steps", []):
             s = StepRecord(
@@ -145,7 +146,9 @@ class CheckpointEngine:
     STATE_FILENAME = ".yuleosh/checkpoint-state.json"
 
     def __init__(self, pipeline_name: str, project_dir: str = ".",
-                 session_factory: Callable | None = None):
+                 session_factory: Callable | None = None,
+                 runner: Callable | None = None,
+                 state_backend: str = "json"):
         """
         Args:
             pipeline_name: 流水线名称。
@@ -154,19 +157,30 @@ class CheckpointEngine:
                 （B1-1，additive）。提供时，HandlerAdapter 分支用它构造真实
                 session（如 PipelineSession）；为 None 时保持原有
                 SimpleNamespace 行为（旧用例不碎）。
+            runner: 可选。接收 step_def dict、返回 StepResult 的执行器钩子
+                （B2-1，additive）。提供时（如 subprocess runner），步骤在
+                执行器侧运行，本进程不再直接调 handler；为 None 时保持
+                原有内联逻辑（默认路径不变）。
+            state_backend: 状态持久化后端（B2-3，additive）。
+                "json"（默认，保持 .yuleosh/checkpoint-state.json 行为不变）
+                或 "sqlite"（WAL + busy_timeout + connection-per-call，
+                多进程并发写不损坏）。
         """
         self.pipeline_name = pipeline_name
         self.project_dir = os.path.abspath(project_dir)
         self.session_factory = session_factory
+        self.runner = runner
+        self.state_backend = state_backend
         self._step_defs: list[dict[str, Any]] = []  # [{step_id, name, handler, agent}]
-        self._state: Optional[CheckpointState] = None
+        self._state: CheckpointState | None = None
         self._state_path = Path(self.project_dir) / self.STATE_FILENAME
+        self._state_db_path = Path(self.project_dir) / ".yuleosh/checkpoint-state.db"
 
     # ------------------------------------------------------------------
     # Registration
     # ------------------------------------------------------------------
 
-    def add_step(self, step_id: str, name: str, handler: Optional[Callable],
+    def add_step(self, step_id: str, name: str, handler: Callable | None,
                  agent: str = "") -> None:
         """注册一个流水线步骤。"""
         self._step_defs.append({
@@ -193,7 +207,7 @@ class CheckpointEngine:
     # Public run / status
     # ------------------------------------------------------------------
 
-    def run(self, inject_at: Optional[str] = None,
+    def run(self, inject_at: str | None = None,
             resume: bool = False) -> bool:
         """
         运行流水线。
@@ -219,9 +233,7 @@ class CheckpointEngine:
         # ---- 无步骤可执行（空引擎或全部已完成的情况） ----
         if not steps_to_run:
             # 注入点不存在时 _prepare_inject 设置了 state.status=failed
-            if self._state and self._state.status == "failed":
-                return False
-            return True
+            return not (self._state and self._state.status == "failed")
 
         # ---- 执行剩余的步骤 ----
         self._save_state()
@@ -231,7 +243,7 @@ class CheckpointEngine:
         self._finalize(all_passed, inject_at, resume, start_idx)
         return all_passed
 
-    def status(self) -> Optional[dict]:
+    def status(self) -> dict | None:
         """读取持久化的 checkpoint 状态（只读）。"""
         state = self._load_state()
         if not state:
@@ -239,8 +251,28 @@ class CheckpointEngine:
         return state.to_dict()
 
     @staticmethod
-    def clear_state(project_dir: str = ".") -> None:
-        """清除 checkpoint 状态文件。"""
+    def clear_state(project_dir: str = ".", backend: str = "json") -> None:
+        """清除 checkpoint 状态（json 或 sqlite，B2-3）。
+
+        Args:
+            project_dir: 项目目录。
+            backend: "json"（默认，删 checkpoint-state.json）
+                    或 "sqlite"（清 checkpoint-state.db 表）。
+        """
+        if backend == "sqlite":
+            import sqlite3
+            db_path = Path(project_dir) / ".yuleosh/checkpoint-state.db"
+            if db_path.exists():
+                try:
+                    conn = sqlite3.connect(str(db_path), timeout=10.0)
+                    conn.execute("PRAGMA busy_timeout=10000")
+                    conn.execute("DELETE FROM checkpoint_state")
+                    conn.commit()
+                    conn.close()
+                    log.info("Cleared sqlite checkpoint state at %s", db_path)
+                except sqlite3.Error as e:
+                    log.warning("Failed to clear sqlite checkpoint state: %s", e)
+            return
         path = Path(project_dir) / CheckpointEngine.STATE_FILENAME
         if path.exists():
             path.unlink()
@@ -389,19 +421,42 @@ class CheckpointEngine:
 
             t0 = datetime.now()
             handler = step_def.get("handler")
-            if handler is None:
+            if self.runner is not None:
+                # B2-1: runner 模式下，步骤一律由 runner 执行（即使 handler 为
+                # None —— runner 侧根据 step_id 解析真实 handler）。
+                pass
+            elif handler is None:
                 # 没有 handler — 以模拟通过测试场景时自动标记为 PASSED
                 # (agent_checkpoint 的 handler 由外部注入)
                 record.status = StepStatus.PASSED
                 record.completed_at = datetime.now().isoformat()
                 record.duration_s = (datetime.now() - t0).total_seconds()
                 self._save_state()
-                print(f"    ⏭️  (no handler — marked passed)")
+                print("    ⏭️  (no handler — marked passed)")
                 continue
 
             try:
                 t0 = datetime.now()
-                if isinstance(handler, HandlerAdapter):
+                if self.runner is not None:
+                    # B2-1: 外部执行器（如 subprocess）——步骤在独立进程臂运行，
+                    # 结果以 StepResult 回传；主进程不直接调 handler。
+                    # B2-产物交接：把已完成步骤的 artifacts 注册表（step_id →
+                    # output_path）传给 runner，供 worker 预填 session.artifacts
+                    # （subprocess 模式下 session 不跨进程共享，前序产物必须
+                    # 通过显式注册表交接）。
+                    artifacts = self._completed_artifacts()
+                    result = self.runner(step_def, artifacts)
+                    output_path = result.output_path
+                    if result.verdict == "failed":
+                        raise RuntimeError(
+                            result.error or f"step '{step_def['step_id']}' failed"
+                        )
+                    if result.verdict == "warn":
+                        log.warning(
+                            "step %s returned warn: %s",
+                            step_def["step_id"], result.error,
+                        )
+                elif isinstance(handler, HandlerAdapter):
                     # 适配层：真实 pipeline handler 均为 session 风格（handler(session)）
                     if self.session_factory is not None:
                         # B1-1: 注入真实 session（如 PipelineSession）。
@@ -436,9 +491,26 @@ class CheckpointEngine:
                                 step_def.get("step_id"), e,
                             )
                 else:
-                    # 旧语义：无参 handler() 保持兼容
-                    output_path = handler()
+                    # 旧语义：无参 handler() 保持兼容（此处 handler 非 None：
+                    # 前面的 `elif handler is None` 已拦截并 continue）
+                    output_path = handler()  # type: ignore[union-attr]
                 t1 = datetime.now()
+
+                # B2-2: 产物一致性门禁 —— 步骤声称完成时必须产出真实文件。
+                # 缺失 / 空文件 → 该步 FAILED（error 含 artifact），不再静默 PASS。
+                # output_path 为 None 的步骤（无产物步骤，如纯 gate）不强制。
+                if output_path:
+                    _artifact_path = Path(str(output_path))
+                    if not _artifact_path.exists():
+                        raise RuntimeError(
+                            f"artifact consistency: output_path '{output_path}' "
+                            f"does not exist (step {step_def['step_id']})"
+                        )
+                    if _artifact_path.stat().st_size == 0:
+                        raise RuntimeError(
+                            f"artifact consistency: output_path '{output_path}' "
+                            f"is empty (step {step_def['step_id']})"
+                        )
 
                 record.status = StepStatus.PASSED
                 record.completed_at = datetime.now().isoformat()
@@ -462,7 +534,23 @@ class CheckpointEngine:
 
         return all_passed
 
-    def _finalize(self, all_passed: bool, inject_at: Optional[str],
+    def _completed_artifacts(self) -> dict[str, str]:
+        """构建已完成步骤的 artifacts 注册表（step_id → output_path）。
+
+        B2-产物交接：runner 模式（subprocess）下 session 不跨进程共享，
+        前序步骤产物必须通过显式注册表传给 worker，worker 预填
+        session.artifacts 后真实 handler 才能读取（如 devplan-review 读
+        development-plan 产物）。仅包含 PASSED 且有 output_path 的步骤。
+        """
+        artifacts: dict[str, str] = {}
+        if not self._state:
+            return artifacts
+        for rec in self._state.steps:
+            if rec.status == StepStatus.PASSED and rec.output_path:
+                artifacts[rec.step_id] = rec.output_path
+        return artifacts
+
+    def _finalize(self, all_passed: bool, inject_at: str | None,
                   resume: bool, start_idx: int) -> None:
         """写入最终状态并打印摘要。"""
         self._state.status = "completed" if all_passed else "failed"
@@ -491,11 +579,18 @@ class CheckpointEngine:
     # ------------------------------------------------------------------
 
     def _save_state(self) -> None:
+        """持久化当前状态到所选后端（json 默认 / sqlite opt-in，B2-3）。"""
+        if self.state_backend == "sqlite":
+            self._save_state_sqlite()
+            return
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._state_path, "w") as f:
             json.dump(self._state.to_dict(), f, indent=2)
 
-    def _load_state(self) -> Optional[CheckpointState]:
+    def _load_state(self) -> CheckpointState | None:
+        """从所选后端读取状态（json 默认 / sqlite opt-in，B2-3）。"""
+        if self.state_backend == "sqlite":
+            return self._load_state_sqlite()
         if not self._state_path.exists():
             return None
         try:
@@ -504,3 +599,66 @@ class CheckpointEngine:
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
             log.warning("Corrupted checkpoint state file: %s (%s)", self._state_path, e)
             return None
+
+    # -- sqlite backend (B2-3) ----------------------------------------
+
+    def _sqlite_conn(self):
+        """创建 sqlite 连接：WAL + busy_timeout + connection-per-call。
+
+        每个调用独立连接（不跨调用持有），多进程并发写同一 db 时
+        busy_timeout 让写者等待锁而不是抛 'database is locked'。
+        """
+        import sqlite3
+        self._state_db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self._state_db_path), timeout=10.0)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=10000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
+
+    def _save_state_sqlite(self) -> None:
+        import sqlite3
+        if self._state is None:
+            return
+        conn = self._sqlite_conn()
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS checkpoint_state (
+                    pipeline_name TEXT PRIMARY KEY,
+                    state_json TEXT NOT NULL,
+                    updated_at TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT OR REPLACE INTO checkpoint_state "
+                "(pipeline_name, state_json, updated_at) VALUES (?, ?, ?)",
+                (
+                    self.pipeline_name,
+                    json.dumps(self._state.to_dict(), ensure_ascii=False),
+                    datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+        except sqlite3.Error as e:
+            log.warning("sqlite checkpoint save failed: %s", e)
+        finally:
+            conn.close()
+
+    def _load_state_sqlite(self) -> CheckpointState | None:
+        import sqlite3
+        conn = self._sqlite_conn()
+        try:
+            cur = conn.execute(
+                "SELECT state_json FROM checkpoint_state WHERE pipeline_name=?",
+                (self.pipeline_name,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return CheckpointState.from_dict(json.loads(row[0]))
+        except (sqlite3.Error, json.JSONDecodeError, KeyError,
+                TypeError, ValueError) as e:
+            log.warning("Corrupted sqlite checkpoint state: %s", e)
+            return None
+        finally:
+            conn.close()
