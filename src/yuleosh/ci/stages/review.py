@@ -117,6 +117,92 @@ def _find_c_sources(project_dir: str, scan_dirs: list[str]) -> list[str]:
     return c_files
 
 
+def _collect_delta_files(project_dir: str) -> list[str]:
+    """Collect changed C/C++ files from three sources (union, no dedup loss).
+
+    Sources (per brainstorm-yuleosh-efficiency-20260808 §1.3):
+      1. ``git diff HEAD~1 --name-only``   — already committed changes
+      2. ``git diff --name-only``          — working tree (staged + unstaged)
+      3. ``git ls-files --others --exclude-standard`` — untracked new files
+
+    Returns project-relative paths filtered to ``*.c/*.cpp/*.h`` (headers are
+    expanded into dependents by :func:`_expand_header_dependents`).
+    """
+    changed: set[str] = set()
+    commands = [
+        ["git", "diff", "--name-only", "HEAD~1"],
+        ["git", "diff", "--name-only"],
+        ["git", "ls-files", "--others", "--exclude-standard"],
+    ]
+    for cmd in commands:
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=15, cwd=project_dir,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode != 0:
+            continue
+        for line in result.stdout.splitlines():
+            f = line.strip()
+            if f and f.endswith((".c", ".cpp", ".h")):
+                changed.add(f)
+    return sorted(changed)
+
+
+def _expand_header_dependents(project_dir: str, changed_files: list[str]) -> list[str]:
+    """Expand changed headers into the .c/.cpp files that include them.
+
+    When a header changes (macros / inline functions / declarations), every
+    translation unit that ``#include``-s it can gain or lose MISRA violations.
+    A naive delta that only scans the changed ``.c/.cpp`` files would miss
+    these — e.g. changing ``string.h`` alone yields an empty scan set.
+
+    Uses a lightweight include graph (grep of ``#include`` lines) across the
+    project source tree.  Only files that already exist on disk are added.
+
+    Returns the union of the original changed files plus dependent .c/.cpp
+    files (project-relative paths).
+    """
+    headers = [f for f in changed_files if f.endswith(".h")]
+    if not headers:
+        return changed_files
+
+    # Map header basename -> changed header paths (include name may differ in path)
+    header_names = {os.path.basename(h) for h in headers}
+
+    # Find all .c/.cpp files in the project that #include any changed header.
+    dependents: set[str] = set()
+    include_re = re.compile(r'^\s*#\s*include\s*[<"]([^">]+)[>"]')
+    for root, dirs, files in os.walk(project_dir):
+        # Skip VCS / build / dependency dirs — same policy as _find_c_sources
+        dirs[:] = [d for d in dirs
+                   if not d.startswith(".") and d != "__pycache__"
+                   and d not in ("node_modules", "build", "dist", "third_party")]
+        for name in files:
+            if not name.endswith((".c", ".cpp")):
+                continue
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, project_dir)
+            if rel.startswith(".."):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        m = include_re.match(line)
+                        if not m:
+                            continue
+                        inc = os.path.basename(m.group(1))
+                        if inc in header_names:
+                            dependents.add(rel)
+                            break
+            except OSError:
+                continue
+
+    merged = list(dict.fromkeys(changed_files + sorted(dependents)))
+    return merged
+
+
 def _glob_to_regex(pattern: str) -> re.Pattern:
     """Convert a glob pattern (with recursive ``**``) to an anchored regex.
 
@@ -456,21 +542,20 @@ def run_misra_check(project_dir: str, ci: CIResult,
                        if f.endswith((".c", ".cpp")) and os.path.isfile(
                            os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
         else:
+            # Three-source union: committed diff + working tree + untracked,
+            # then expand changed headers into dependent .c/.cpp files so a
+            # header-only change (macros/inlines) never goes unscanned.
             try:
-                git_result = subprocess.run(
-                    ["git", "diff", "--name-only", "HEAD~1"],
-                    capture_output=True, text=True, timeout=10,
-                    cwd=project_dir,
-                )
-                if git_result.returncode == 0:
-                    changed_files = [f.strip() for f in git_result.stdout.splitlines() if f.strip()]
-                    c_files = [
-                        os.path.join(project_dir, f) if not os.path.isabs(f) else f
-                        for f in changed_files
-                        if f.endswith((".c", ".cpp"))
-                    ]
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                pass
+                changed = _collect_delta_files(project_dir)
+                changed = _expand_header_dependents(project_dir, changed)
+                c_files = [
+                    os.path.join(project_dir, f) if not os.path.isabs(f) else f
+                    for f in changed
+                    if f.endswith((".c", ".cpp"))
+                ]
+            except Exception as exc:  # pragma: no cover — defensive
+                log.warning("delta file collection failed: %s", exc)
+                c_files = []
             # If no git diff, fall back to empty (skip delta check)
     elif mode == "full":
         # L2: full scan + delta blocking on new Required
