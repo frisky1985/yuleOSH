@@ -27,7 +27,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, Optional
+
+from yuleosh.engine.handler_adapter import HandlerAdapter
 
 log = logging.getLogger("engine.checkpoint")
 
@@ -387,7 +390,18 @@ class CheckpointEngine:
 
             try:
                 t0 = datetime.now()
-                output_path = handler()
+                if isinstance(handler, HandlerAdapter):
+                    # 适配层：真实 pipeline handler 均为 session 风格（handler(session)）
+                    session = SimpleNamespace(
+                        step_id=step_def.get("step_id"),
+                        name=step_def.get("name"),
+                        agent=step_def.get("agent", ""),
+                        project_dir=self.project_dir,
+                    )
+                    output_path = handler(session).output_path
+                else:
+                    # 旧语义：无参 handler() 保持兼容
+                    output_path = handler()
                 t1 = datetime.now()
 
                 record.status = StepStatus.PASSED

@@ -85,6 +85,14 @@ class PipelineSession:
         self.llm_client = llm_client
         # Agent constraints loaded from .yuleosh/agents/ or default spec
         self.agent_constraints = agent_constraints or ""
+        # A1-A4 (2026-08-08): per-role agent constraints (role isolation).
+        #   agent_constraints_by_role — dict[role, text] scanned from
+        #     .yuleosh/agents/*.md (see yuleosh.agent_registry).  Empty
+        #     dict means "legacy path" (use self.agent_constraints).
+        #   agent_shared_baseline — role-agnostic minimal safety baseline
+        #     injected alongside the current step's role constraints.
+        self.agent_constraints_by_role: dict = {}
+        self.agent_shared_baseline: str = ""
         # Token usage tracking across all steps
         self.token_usage_total: int = 0
         self.token_usage_steps: list[dict] = []

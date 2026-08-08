@@ -17,6 +17,11 @@ from typing import Optional
 
 from yuleosh.pipeline.session import PipelineSession
 from yuleosh.llm.client import chat_completion
+from yuleosh.agent_registry import (
+    AGENT_SAFE_BASELINE,
+    resolve_agent_for_step,
+    resolve_agent_role,
+)
 
 log = logging.getLogger("pipeline.stages.llm")
 
@@ -25,20 +30,37 @@ def _build_effective_system_prompt(
     session: PipelineSession,
     system_prompt: str,
 ) -> str:
-    """Prepend agent constraints from .yuleosh/agents/ to the system prompt.
+    """Prepend agent constraints to the system prompt.
 
-    The constraints (loaded into ``session.agent_constraints`` by the
-    orchestrator) are added before the step-specific system prompt so that
-    they act as foundational behavior rules.
+    A1-A4 (2026-08-08): constraints are injected per role.  When the
+    session carries ``agent_constraints_by_role`` (dict[role, text]),
+    only the *current step's* role constraints are injected together
+    with the shared safety baseline.  If the current step's role has no
+    matching file, only the shared baseline is injected — other roles'
+    rules are never mixed in.  Sessions without
+    ``agent_constraints_by_role`` keep the legacy
+    ``session.agent_constraints`` behaviour.
 
-    If the step's system prompt already contains agent constraint markers,
-    the constraints are not duplicated.
+    The wrapper marker starts with ``[Agent Constraints``; if the step
+    prompt already contains it (or the legacy ``# AGENTS.md`` /
+    ``# RULES.md`` markers), constraints are not duplicated.
     """
-    if not session.agent_constraints:
+    # 统一去重标记 (A3): wrapper 标记前缀 + 兼容旧标记。
+    if (
+        "[Agent Constraints" in system_prompt
+        or "# AGENTS.md" in system_prompt
+        or "# RULES.md" in system_prompt
+    ):
         return system_prompt
 
-    # Avoid duplicate injection: check if constraints are already present
-    if "# AGENTS.md" in system_prompt or "# RULES.md" in system_prompt:
+    # A1-A4: per-role isolation path (real dict only — MagicMock sessions
+    # without the field must keep falling through to the legacy path).
+    by_role = getattr(session, "agent_constraints_by_role", None)
+    if isinstance(by_role, dict) and by_role:
+        return _build_role_scoped_prompt(session, system_prompt, by_role)
+
+    # 向后兼容：session 无 by_role 字段时走原 session.agent_constraints 逻辑
+    if not session.agent_constraints:
         return system_prompt
 
     effective = (
@@ -48,6 +70,46 @@ def _build_effective_system_prompt(
         f"{system_prompt}"
     )
     return effective
+
+
+def _build_role_scoped_prompt(
+    session: PipelineSession,
+    system_prompt: str,
+    by_role: dict,
+) -> str:
+    """Inject only the current step's role constraints + shared baseline.
+
+    Resolution chain (A1): session.pipeline_knowledge_step_key ->
+    resolve_agent_for_step -> resolve_agent_role -> by_role lookup.
+    Never mixes other roles' constraints: when the step's role has no
+    matching file, only the shared safety baseline is injected (绝不
+    静默混合其他角色).
+    """
+    step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
+    if not isinstance(step_key, str):
+        step_key = ""
+    agent = resolve_agent_for_step(step_key)
+    role = resolve_agent_role(agent) if agent else None
+
+    baseline = getattr(session, "agent_shared_baseline", "") or AGENT_SAFE_BASELINE
+    parts: list[str] = []
+    if baseline:
+        parts.append(baseline.strip())
+    role_constraints = by_role.get(role) if role else None
+    if role_constraints:
+        parts.append(role_constraints.strip())
+
+    if not parts:
+        return system_prompt
+
+    body = "\n\n".join(parts)
+    scope = role or "shared"
+    return (
+        f"[Agent Constraints — role-scoped ({scope})]\n\n"
+        f"{body}\n\n"
+        "[End Agent Constraints]\n\n"
+        f"{system_prompt}"
+    )
 
 
 def _call_llm(
