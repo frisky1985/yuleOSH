@@ -36,6 +36,32 @@ import jwt as pyjwt
 # ═══════════════════════════════════════════════════════════════════════
 
 TEST_JWT_SECRET = "test-onboarding-secret-32-chars-min!!"
+
+
+@pytest.fixture(autouse=True)
+def _restore_jwt_secret():
+    """Save and restore the real JWT secret around each test.
+
+    The setup_method blocks below override YULEOSH_JWT_SECRET (and the
+    module-level auth secrets) with TEST_JWT_SECRET for the E2E chain to
+    verify. Without restoring them afterwards, every later test file that
+    signs tokens with the real secret gets "Signature verification failed"
+    (auth_extended.py:335) and fails with 401.  This fixture keeps the
+    override scoped to this file only.
+    """
+    import yuleosh.api.auth
+    import yuleosh.ui.auth_extended
+
+    saved_env = os.environ.get("YULEOSH_JWT_SECRET")
+    saved_api = yuleosh.api.auth._JWT_SECRET
+    saved_ui = yuleosh.ui.auth_extended.JWT_SECRET
+    yield
+    if saved_env is None:
+        os.environ.pop("YULEOSH_JWT_SECRET", None)
+    else:
+        os.environ["YULEOSH_JWT_SECRET"] = saved_env
+    yuleosh.api.auth._JWT_SECRET = saved_api
+    yuleosh.ui.auth_extended.JWT_SECRET = saved_ui
 TEST_ORG_SLUG = "test-org"
 TEST_ORG_NAME = "Test Organization"
 TEST_EMAIL = f"onboard.{int(time.time())}@yuleosh.com"

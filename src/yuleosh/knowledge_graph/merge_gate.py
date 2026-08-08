@@ -86,6 +86,50 @@ class MergeGateConfig:
 # ═══════════════════════════════════════════════════════════════════════
 
 
+def _node_matches_scope(node: dict, scope_files: list[str]) -> bool:
+    """True if a node's entity_id ties it to one of the scope files.
+
+    Path-like ids (contain ``/`` or end with a source extension) match by
+    substring so a changed file picks up its file node and any requirement
+    that names it; bare requirement ids match only via exact equality.
+    See ``GraphConsistencyChecker._scoped_nodes`` for the rationale.
+    """
+    nid = node.get("entity_id", "") or ""
+    if not nid:
+        return False
+    looks_like_path = "/" in nid or nid.lower().endswith(
+        (".c", ".h", ".cpp", ".hpp", ".py", ".md", ".json", ".yaml", ".yml")
+    )
+    for f in scope_files:
+        if not f:
+            continue
+        if nid == f:
+            return True
+        if looks_like_path and (nid.endswith("/" + f) or f in nid):
+            return True
+    return False
+
+
+def _filter_nodes_by_scope(nodes: list[dict], scope_files: list[str] | None) -> list[dict]:
+    """Narrow nodes to the session-artifact subgraph.
+
+    ``None``/empty scope = full graph (compat with legacy callers/tests).
+    """
+    if not scope_files:
+        return nodes
+    return [n for n in nodes if _node_matches_scope(n, scope_files)]
+
+
+def _filter_edges_by_scope(edges: list[dict], scoped_ids: set) -> list[dict]:
+    """Keep edges touching any of the scoped node ids."""
+    if not scoped_ids:
+        return []
+    return [
+        e for e in edges
+        if e.get("source_id") in scoped_ids or e.get("target_id") in scoped_ids
+    ]
+
+
 class GraphConsistencyChecker:
     """Performs graph consistency verification on the knowledge graph.
 
@@ -132,27 +176,7 @@ class GraphConsistencyChecker:
         file nodes; requirement ids are matched only via exact equality
         or when the changed file literally appears in the id.
         """
-        nodes = self.store.get_all_nodes()
-        if not self.scope_files:
-            return nodes
-        matched = []
-        for node in nodes:
-            nid = node.get("entity_id", "") or ""
-            if not nid:
-                continue
-            looks_like_path = "/" in nid or nid.lower().endswith(
-                (".c", ".h", ".cpp", ".hpp", ".py", ".md", ".json", ".yaml", ".yml")
-            )
-            for f in self.scope_files:
-                if not f:
-                    continue
-                if nid == f:
-                    matched.append(node)
-                    break
-                if looks_like_path and (nid.endswith("/" + f) or f in nid):
-                    matched.append(node)
-                    break
-        return matched
+        return _filter_nodes_by_scope(self.store.get_all_nodes(), self.scope_files)
 
     def _scoped_edges(self) -> list[dict]:
         """Return edges, optionally filtered to scope_files' node ids.
@@ -164,13 +188,7 @@ class GraphConsistencyChecker:
         if not self.scope_files:
             return edges
         scoped_ids = {n.get("entity_id") for n in self._scoped_nodes() if n.get("entity_id")}
-        matched = []
-        for edge in edges:
-            src = edge.get("source_id")
-            tgt = edge.get("target_id")
-            if src in scoped_ids or tgt in scoped_ids:
-                matched.append(edge)
-        return matched
+        return _filter_edges_by_scope(edges, scoped_ids)
 
     def check_all(self) -> dict:
         """Run all consistency checks and return results."""
@@ -424,9 +442,27 @@ class ConfidenceChecker:
     - Requirements with low confidence
     """
 
-    def __init__(self, store, config: MergeGateConfig):
+    def __init__(self, store, config: MergeGateConfig,
+                 scope_files: list[str] | None = None):
         self.store = store
         self.config = config
+        # 2026-08-08 (D): 与 GraphConsistencyChecker 同步收窄到 session 产物子图。
+        # 传 changed_files 时，置信度/覆盖率只统计这些文件相关的节点/边，
+        # 不再扫全图，避免全图历史噪声（stash、手工改动）误伤门禁。
+        # None/[] = 全图（兼容旧调用与测试）。
+        self.scope_files: list[str] | None = scope_files
+
+    def _scoped_nodes(self) -> list[dict]:
+        """Nodes narrowed to scope_files (None/[] = full graph)."""
+        return _filter_nodes_by_scope(self.store.get_all_nodes(), self.scope_files)
+
+    def _scoped_edges(self) -> list[dict]:
+        """Edges narrowed to scope_files' node ids (None/[] = full graph)."""
+        edges = self.store.get_all_edges()
+        if not self.scope_files:
+            return edges
+        scoped_ids = {n.get("entity_id") for n in self._scoped_nodes() if n.get("entity_id")}
+        return _filter_edges_by_scope(edges, scoped_ids)
 
     def check_all(self) -> dict:
         """Run confidence checks and return results."""
@@ -434,8 +470,8 @@ class ConfidenceChecker:
         warnings: list[dict] = []
 
         try:
-            edges = self.store.get_all_edges()
-            nodes = self.store.get_all_nodes()
+            edges = self._scoped_edges()
+            nodes = self._scoped_nodes()
 
             # Collect confidence per node
             node_confidences: dict[str, list[float]] = {}
@@ -489,26 +525,31 @@ class ConfidenceChecker:
             requirements_with_trace = len(node_confidences)
             coverage = requirements_with_trace / requirement_count if requirement_count > 0 else 0.0
 
-            if coverage < self.config.min_coverage:
+            # 2026-08-08 (D): 收窄到 session 产物后，子图内可能没有 requirement
+            # 节点（会话只产出文件/文档节点）——覆盖率无从评估，只警告不阻断，
+            # 避免会话产物不含需求时门禁误伤。全图模式（scope_files 为空）保持原行为。
+            scope_has_no_reqs = requirement_count == 0 and self.scope_files
+            if coverage < self.config.min_coverage and not scope_has_no_reqs:
                 errors.append({
-                    "check": "coverage",
-                    "severity": "error",
-                    "message": (
-                        f"Requirement traceability coverage below threshold: "
-                        f"{coverage:.1%} (min {self.config.min_coverage:.0%})"
-                    ),
-                    "details": {
-                        "total_requirements": requirement_count,
-                        "with_traceability": requirements_with_trace,
-                        "coverage": coverage,
-                    },
-                })
+                        "check": "coverage",
+                        "severity": "error",
+                        "message": (
+                            f"Requirement traceability coverage below threshold: "
+                            f"{coverage:.1%} (min {self.config.min_coverage:.0%})"
+                        ),
+                        "details": {
+                            "total_requirements": requirement_count,
+                            "with_traceability": requirements_with_trace,
+                            "coverage": coverage,
+                        },
+                    })
 
             if requirement_count == 0:
+                scope_note = "in scope" if self.scope_files else "in graph"
                 warnings.append({
                     "check": "coverage",
                     "severity": "warning",
-                    "message": "No requirement nodes found in graph — cannot assess coverage",
+                    "message": f"No requirement nodes found {scope_note} — cannot assess coverage",
                 })
 
         except Exception as e:
@@ -610,8 +651,9 @@ class MergeGate:
         consistency = checker.check_all()
         checks["consistency"] = consistency
 
-        # Step 4: Confidence check
-        conf_checker = ConfidenceChecker(self.store, self.config)
+        # Step 4: Confidence check (2026-08-08 D: 与一致性检查同一 scope，
+        # 收窄到 session 产物子图，不扫全图)
+        conf_checker = ConfidenceChecker(self.store, self.config, scope_files=self._changed_files)
         confidence = conf_checker.check_all()
         checks["confidence"] = confidence
 
@@ -964,7 +1006,10 @@ def step_merge_gate(session) -> str:
     if session_scope:
         result = gate.run(changed_files=session_scope)
     else:
-        result = gate.run()
+        # 2026-08-08 (D): 无 session 产物时退化为全图扫描——显式传 [] 使
+        # scope_files=[]（一致性/置信度检查扫全图），不再走 git diff
+        # （会拾取工作区 stash/手工改动噪声）。报告 change_summary 记录 0 changes。
+        result = gate.run(changed_files=[])
 
     passed = result.get("passed", False)
     verdict = result.get("verdict", "fail")

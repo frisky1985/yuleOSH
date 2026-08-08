@@ -420,6 +420,65 @@ class TestConfidenceChecker:
         result = checker.check_all()
         assert result["passed"] is False
 
+    def test_scope_files_narrows_confidence_checks(self, mock_store):
+        """D-1: scope_files SHALL narrow confidence checks to the subgraph.
+
+        A low-confidence requirement INSIDE scope blocks the merge; the
+        same node OUTSIDE scope must not (only session artifacts count).
+        """
+        config = MergeGateConfig(min_confidence=0.9, min_coverage=0.0)
+        mock_store.get_all_nodes.return_value = [
+            {"entity_id": "REQ-LOW", "entity_type": "requirement", "name": "Low"},
+            {"entity_id": "REQ-OK", "entity_type": "requirement", "name": "Ok"},
+            {"entity_id": "func_x", "entity_type": "function", "name": "Func"},
+        ]
+        mock_store.get_all_edges.return_value = [
+            {"id": 1, "source_id": "REQ-LOW", "target_id": "func_x",
+             "relation_type": "covers", "confidence": 0.3},
+            {"id": 2, "source_id": "REQ-OK", "target_id": "func_x",
+             "relation_type": "covers", "confidence": 0.95},
+        ]
+
+        # Unscoped: low-confidence requirement detected (full graph)
+        full = ConfidenceChecker(mock_store, config)
+        full_result = full.check_all()
+        assert any(e["check"] == "confidence" for e in full_result["errors"])
+
+        # Scoped away from REQ-LOW: out-of-scope change does not trigger
+        scoped = ConfidenceChecker(mock_store, config, scope_files=["REQ-OK"])
+        scoped_result = scoped.check_all()
+        assert not any(e["check"] == "confidence" for e in scoped_result["errors"])
+
+        # Scoped to REQ-LOW: in-scope change still detected
+        scoped_bad = ConfidenceChecker(mock_store, config, scope_files=["REQ-LOW"])
+        scoped_bad_result = scoped_bad.check_all()
+        assert any(e["check"] == "confidence" for e in scoped_bad_result["errors"])
+
+    def test_scope_no_requirements_in_scope_warns_not_blocks(self, mock_store):
+        """D-2: scoped check with no requirements in scope SHALL warn, not block.
+
+        Session artifacts may only produce file/doc nodes; coverage is
+        then not assessable and must not fail the gate (full-graph mode
+        keeps the original behavior).
+        """
+        config = MergeGateConfig(min_confidence=0.7, min_coverage=0.8)
+        mock_store.get_all_nodes.return_value = [
+            {"entity_id": "sessions/s1/report.md", "entity_type": "file"},
+            {"entity_id": "REQ-OLD", "entity_type": "requirement", "name": "Old"},
+        ]
+        mock_store.get_all_edges.return_value = []
+
+        # Unscoped: full graph has an untraced requirement -> coverage error
+        full = ConfidenceChecker(mock_store, config)
+        full_result = full.check_all()
+        assert any(e["check"] == "coverage" for e in full_result["errors"])
+
+        # Scoped to the session artifact: no requirement in scope -> warn only
+        scoped = ConfidenceChecker(mock_store, config, scope_files=["sessions/s1/report.md"])
+        scoped_result = scoped.check_all()
+        assert not any(e["check"] == "coverage" for e in scoped_result["errors"])
+        assert any(w["check"] == "coverage" for w in scoped_result["warnings"])
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Tests: MergeGate
@@ -557,6 +616,44 @@ class TestMergeGate:
         result = gate.run(changed_files=[])
         assert any("pass" in r.lower() or "✅" in r
                     for r in result["recommendations"])
+
+    def test_scope_narrows_gate_to_session_subgraph(self, mock_store, tmp_path):
+        """D-3: MergeGate SHALL scope BOTH checkers to the session subgraph.
+
+        Out-of-scope noise (bad node type, low-confidence requirement)
+        must not fail the gate when session artifacts are given; the same
+        defects inside scope still block.
+        """
+        config = MergeGateConfig(
+            min_confidence=0.9,
+            min_coverage=0.0,
+            auto_build=False,
+        )
+        mock_store.get_all_nodes.return_value = [
+            {"entity_id": "sessions/s1/report.md", "entity_type": "file"},
+            {"entity_id": "sessions/s1/bad_data.json", "entity_type": "not_a_type"},
+            {"entity_id": "src/legacy_bad.c", "entity_type": "not_a_type"},
+            {"entity_id": "REQ-OLD", "entity_type": "requirement", "name": "Old"},
+        ]
+        mock_store.get_all_edges.return_value = [
+            {"id": 1, "source_id": "REQ-OLD", "target_id": "func_x",
+             "relation_type": "covers", "confidence": 0.1},
+        ]
+
+        # Unscoped ([] scope = full graph): out-of-scope noise fails the gate
+        full = MergeGate(mock_store, project_dir=str(tmp_path), config=config)
+        full_result = full.run(changed_files=[])
+        assert full_result["verdict"] == "fail"
+
+        # Scoped to a healthy session artifact: noise ignored, gate passes
+        scoped = MergeGate(mock_store, project_dir=str(tmp_path), config=config)
+        scoped_result = scoped.run(changed_files=["sessions/s1/report.md"])
+        assert scoped_result["verdict"] == "pass"
+
+        # Scoped to a bad in-scope artifact: still detected and blocks
+        scoped_bad = MergeGate(mock_store, project_dir=str(tmp_path), config=config)
+        scoped_bad_result = scoped_bad.run(changed_files=["sessions/s1/bad_data.json"])
+        assert scoped_bad_result["verdict"] == "fail"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -710,6 +807,75 @@ class TestStepMergeGate:
                     step_merge_gate(session)
                 assert "BLOCKED" in str(exc.value)
                 assert "Low confidence" in str(exc.value)
+
+    def test_pipeline_step_scopes_to_session_artifacts(self, tmp_path):
+        """D-4: session artifacts SHALL be passed as the gate's changed_files.
+
+        Only .md/.json/.xlsx/.c/.h files under the session dir are in
+        scope; other suffixes are ignored.
+        """
+        from yuleosh.pipeline.session import PipelineSession
+
+        with patch.dict(os.environ, {"OSH_HOME": str(tmp_path)}):
+            session = PipelineSession(
+                name="test-artifacts",
+                spec_path=str(tmp_path / "spec.md"),
+            )
+            (session.session_dir / "devplan.md").write_text("# devplan")
+            (session.session_dir / "review.json").write_text("{}")
+            (session.session_dir / "notes.txt").write_text("ignored")
+            with patch("yuleosh.knowledge_graph.merge_gate.MergeGate.run") as mock_run:
+                mock_run.return_value = {
+                    "verdict": "pass",
+                    "passed": True,
+                    "duration_seconds": 0.1,
+                    "change_summary": {"detected_changes": 0},
+                    "summary": {"total_errors": 0, "total_warnings": 0,
+                                "error_details": [], "warning_details": []},
+                    "checks": {},
+                    "config": {},
+                    "recommendations": ["✅ All checks passed"],
+                    "timestamp": "2026-01-01T00:00:00",
+                }
+                step_merge_gate(session)
+                assert mock_run.call_count == 1
+                scope = mock_run.call_args.kwargs.get("changed_files")
+                assert scope is not None
+                assert any(f.endswith("devplan.md") for f in scope)
+                assert any(f.endswith("review.json") for f in scope)
+                assert not any(f.endswith("notes.txt") for f in scope)
+
+    def test_pipeline_step_no_artifacts_falls_back_full_graph(self, tmp_path):
+        """D-5: no session artifacts SHALL degrade to a full-graph scan.
+
+        The gate runs with changed_files=[] (scope_files=[] → full graph)
+        instead of git diff, which would pick up working-tree noise.
+        """
+        from yuleosh.pipeline.session import PipelineSession
+
+        with patch.dict(os.environ, {"OSH_HOME": str(tmp_path)}):
+            session = PipelineSession(
+                name="test-empty",
+                spec_path=str(tmp_path / "spec.md"),
+            )
+            # Fresh session dir contains no artifacts yet
+            assert not list(session.session_dir.iterdir())
+            with patch("yuleosh.knowledge_graph.merge_gate.MergeGate.run") as mock_run:
+                mock_run.return_value = {
+                    "verdict": "pass",
+                    "passed": True,
+                    "duration_seconds": 0.1,
+                    "change_summary": {"detected_changes": 0},
+                    "summary": {"total_errors": 0, "total_warnings": 0,
+                                "error_details": [], "warning_details": []},
+                    "checks": {},
+                    "config": {},
+                    "recommendations": ["✅ All checks passed"],
+                    "timestamp": "2026-01-01T00:00:00",
+                }
+                step_merge_gate(session)
+                assert mock_run.call_count == 1
+                assert mock_run.call_args.kwargs.get("changed_files") == []
 
 
 # ═══════════════════════════════════════════════════════════════════════
