@@ -144,9 +144,20 @@ class CheckpointEngine:
 
     STATE_FILENAME = ".yuleosh/checkpoint-state.json"
 
-    def __init__(self, pipeline_name: str, project_dir: str = "."):
+    def __init__(self, pipeline_name: str, project_dir: str = ".",
+                 session_factory: Callable | None = None):
+        """
+        Args:
+            pipeline_name: 流水线名称。
+            project_dir: 项目目录（checkpoint 状态文件所在位置）。
+            session_factory: 可选。接收 step_def dict、返回 session 对象的工厂
+                （B1-1，additive）。提供时，HandlerAdapter 分支用它构造真实
+                session（如 PipelineSession）；为 None 时保持原有
+                SimpleNamespace 行为（旧用例不碎）。
+        """
         self.pipeline_name = pipeline_name
         self.project_dir = os.path.abspath(project_dir)
+        self.session_factory = session_factory
         self._step_defs: list[dict[str, Any]] = []  # [{step_id, name, handler, agent}]
         self._state: Optional[CheckpointState] = None
         self._state_path = Path(self.project_dir) / self.STATE_FILENAME
@@ -392,13 +403,38 @@ class CheckpointEngine:
                 t0 = datetime.now()
                 if isinstance(handler, HandlerAdapter):
                     # 适配层：真实 pipeline handler 均为 session 风格（handler(session)）
-                    session = SimpleNamespace(
-                        step_id=step_def.get("step_id"),
-                        name=step_def.get("name"),
-                        agent=step_def.get("agent", ""),
-                        project_dir=self.project_dir,
-                    )
+                    if self.session_factory is not None:
+                        # B1-1: 注入真实 session（如 PipelineSession）。
+                        # 工厂接收 step_def dict，返回 session 或任意对象。
+                        session = self.session_factory(step_def)
+                    else:
+                        # 默认行为（additive 红线）：不传 session_factory 时
+                        # 保持原有 SimpleNamespace 兼容路径。
+                        session = SimpleNamespace(
+                            step_id=step_def.get("step_id"),
+                            name=step_def.get("name"),
+                            agent=step_def.get("agent", ""),
+                            project_dir=self.project_dir,
+                        )
                     output_path = handler(session).output_path
+                    # B1-1 增强：注册产物到 session（对齐 orchestrator 的
+                    # set_artifact 交接语义——真实 handler 依赖
+                    # session.artifacts 读取前序步骤产物）。SimpleNamespace
+                    # 无 set_artifact，自动跳过（additive 兼容）。
+                    if (
+                        output_path
+                        and hasattr(session, "set_artifact")
+                        and callable(session.set_artifact)
+                    ):
+                        try:
+                            session.set_artifact(
+                                step_def.get("step_id"), str(output_path)
+                            )
+                        except Exception as e:  # noqa: BLE001
+                            log.warning(
+                                "set_artifact failed for %s: %s",
+                                step_def.get("step_id"), e,
+                            )
                 else:
                     # 旧语义：无参 handler() 保持兼容
                     output_path = handler()
