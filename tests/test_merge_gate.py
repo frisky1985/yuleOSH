@@ -12,24 +12,19 @@ Tests cover:
 
 import json
 import os
-import sys
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
-
 from yuleosh.knowledge_graph.merge_gate import (
-    MergeGateConfig,
-    GraphConsistencyChecker,
     ConfidenceChecker,
+    GraphConsistencyChecker,
     MergeGate,
+    MergeGateConfig,
     cmd_check_merge,
     step_merge_gate,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Fixtures
@@ -306,6 +301,46 @@ class TestGraphConsistencyChecker:
         # orphan1 has no edges at all
         assert result["passed"] is True  # below threshold
         assert any(w["check"] == "orphan_nodes" for w in result.get("warnings", []))
+
+    def test_scope_files_narrows_node_checks(self, mock_store):
+        """P1-3: scope_files SHALL narrow structural checks to a subgraph.
+
+        An invalid node type OUTSIDE the scope must not fail the gate;
+        the same node INSIDE the scope must still be detected.
+        """
+        config = MergeGateConfig()
+        mock_store.get_all_nodes.return_value = [
+            {"entity_id": "src/main.c", "entity_type": "file"},
+            {"entity_id": "src/bad_thing.c", "entity_type": "not_a_type"},
+            {"entity_id": "REQ-001", "entity_type": "requirement"},
+        ]
+        mock_store.get_all_edges.return_value = []
+
+        # Without scope: invalid type detected
+        full = GraphConsistencyChecker(mock_store, config)
+        full_result = full.check_all()
+        assert any(e["check"] == "node_type" for e in full_result["errors"])
+
+        # Scoped to src/main.c: bad node excluded -> no node_type error
+        scoped = GraphConsistencyChecker(mock_store, config, scope_files=["src/main.c"])
+        scoped_result = scoped.check_all()
+        assert not any(e["check"] == "node_type" for e in scoped_result["errors"])
+
+        # Scoped to the bad file: still detected
+        scoped_bad = GraphConsistencyChecker(mock_store, config, scope_files=["src/bad_thing.c"])
+        scoped_bad_result = scoped_bad.check_all()
+        assert any(e["check"] == "node_type" for e in scoped_bad_result["errors"])
+
+    def test_scope_files_empty_means_full_graph(self, mock_store):
+        """P1-3: empty scope_files SHALL behave like full graph (compat)."""
+        config = MergeGateConfig()
+        mock_store.get_all_nodes.return_value = [
+            {"entity_id": "src/bad.c", "entity_type": "not_a_type"},
+        ]
+        mock_store.get_all_edges.return_value = []
+        checker = GraphConsistencyChecker(mock_store, config, scope_files=[])
+        result = checker.check_all()
+        assert any(e["check"] == "node_type" for e in result["errors"])
 
 
 # ═══════════════════════════════════════════════════════════════════════
