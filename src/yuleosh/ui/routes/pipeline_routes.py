@@ -18,6 +18,7 @@ import os
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger("routes.pipeline")
 
@@ -329,4 +330,67 @@ def handle_yuleasr_notify(handler: BaseHTTPRequestHandler, body: bytes) -> dict:
         "ok": True,
         "notify_file": str(notify_file),
         "message": f"Notification queued for {project}",
+    }
+
+
+def handle_pipeline_checkpoint(handler: BaseHTTPRequestHandler, path: str) -> dict:
+    """GET /api/v1/pipeline/checkpoint — CheckpointEngine 33 步实时状态（看板数据源）。
+
+    B3-看板（2026-08-08）：从 CheckpointEngine 持久化状态（sqlite 优先，
+    JSON 兜底）读取当前/最近一次 pipeline 的步骤级状态，供前端看板渲染。
+    这是只读视图 —— 状态真相源始终是 CheckpointEngine（B2-3 sqlite）。
+
+    Query params:
+        project_dir: 项目目录（默认取 OSH_HOME）
+        pipeline:    指定 pipeline 名（默认 agent-pipeline-* 最新一条）
+    """
+    parsed = urlparse(path)
+    qs = parse_qs(parsed.query)
+    project_dir = (qs.get("project_dir") or [None])[0]
+    pipeline_name = (qs.get("pipeline") or [None])[0]
+
+    # Auth（与其它 pipeline 接口一致，fail-closed）
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        return {"ok": False, "error": "Authentication required"}
+
+    if not project_dir:
+        project_dir = os.environ.get("OSH_HOME", "")
+
+    try:
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        engine = CheckpointEngine(
+            pipeline_name or "agent-pipeline",
+            project_dir or ".",
+            state_backend="sqlite",
+        )
+        state = engine.status()
+        if state is None:
+            # sqlite 无记录 → 尝试 JSON 后端兜底
+            engine = CheckpointEngine(
+                pipeline_name or "agent-pipeline",
+                project_dir or ".",
+                state_backend="json",
+            )
+            state = engine.status()
+    except Exception as e:  # noqa: BLE001 — 看板接口必须容错
+        log.warning("checkpoint status read failed: %s", e)
+        return {"ok": False, "error": f"Failed to read checkpoint: {e}"}
+
+    if state is None:
+        return {"ok": True, "state": None, "steps": []}
+
+    steps = state.get("steps", [])
+    return {
+        "ok": True,
+        "state": {
+            "pipeline_name": state.get("pipeline_name"),
+            "status": state.get("status"),
+            "inject_at": state.get("inject_at"),
+            "created_at": state.get("created_at"),
+            "updated_at": state.get("updated_at"),
+        },
+        "steps": steps,
+        "count": len(steps),
     }

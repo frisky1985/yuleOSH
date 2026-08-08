@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline 执行看板 — yuleOSH</title>
+<style>
+:root {
+  --bg: #0f1115; --surface: #181b22; --surface2: #1f232c;
+  --border: #2a2f3a; --text: #e8eaed; --text2: #9aa3b2;
+  --green: #3fb950; --red: #f85149; --yellow: #d29922;
+  --blue: #58a6ff; --purple: #bc8cff; --orange: #db6d28; --cyan: #39c5cf;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',-apple-system,'PingFang SC',sans-serif; padding:24px; }
+h1 { font-size:20px; margin-bottom:4px; display:flex; align-items:center; gap:10px; }
+h1 .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+h1 .live-dot.idle { background:var(--text2); animation:none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.subtitle { color:var(--text2); font-size:13px; margin-bottom:20px; }
+.summary-bar { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+.stat { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 16px; min-width:110px; }
+.stat .label { font-size:11px; color:var(--text2); }
+.stat .num { font-size:22px; font-weight:700; margin-top:2px; }
+.stat .num.passed { color:var(--green); } .stat .num.failed { color:var(--red); }
+.stat .num.running { color:var(--yellow); } .stat .num.pending { color:var(--text2); }
+.board { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; }
+.agent-col { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.agent-header { padding:12px 16px; font-weight:700; font-size:14px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); }
+.agent-header .count { font-size:12px; color:var(--text2); font-weight:500; }
+.agent-body { padding:10px; display:flex; flex-direction:column; gap:8px; }
+.step-card { background:var(--surface2); border:1px solid var(--border); border-left:4px solid var(--text2); border-radius:8px; padding:10px 12px; transition:all .15s; }
+.step-card.passed { border-left-color:var(--green); }
+.step-card.failed { border-left-color:var(--red); }
+.step-card.running { border-left-color:var(--yellow); animation:glow 1.5s infinite; }
+.step-card.pending { opacity:.55; }
+.step-card.skipped { border-left-color:var(--cyan); opacity:.7; }
+@keyframes glow { 0%,100%{box-shadow:0 0 0 rgba(210,153,34,0)} 50%{box-shadow:0 0 12px rgba(210,153,34,.25)} }
+.step-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.step-id { font-size:11px; font-weight:700; color:var(--text2); font-family:'JetBrains Mono',monospace; }
+.step-name { font-size:13px; font-weight:600; margin-top:2px; }
+.step-meta { display:flex; gap:10px; margin-top:6px; font-size:11px; color:var(--text2); flex-wrap:wrap; }
+.step-meta .err { color:var(--red); max-width:100%; word-break:break-all; }
+.status-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; text-transform:uppercase; }
+.status-badge.passed { background:rgba(63,185,80,.15); color:var(--green); }
+.status-badge.failed { background:rgba(248,81,73,.15); color:var(--red); }
+.status-badge.running { background:rgba(210,153,34,.15); color:var(--yellow); }
+.status-badge.pending { background:rgba(154,163,178,.15); color:var(--text2); }
+.status-badge.skipped { background:rgba(57,197,207,.15); color:var(--cyan); }
+.step-actions { margin-top:8px; display:flex; gap:8px; }
+.btn { background:var(--surface); border:1px solid var(--border); color:var(--text); font-size:11px; padding:4px 10px; border-radius:6px; cursor:pointer; transition:all .15s; }
+.btn:hover { border-color:var(--blue); color:var(--blue); }
+.btn.retry { border-color:rgba(88,166,255,.4); color:var(--blue); }
+.btn.retry:hover { background:rgba(88,166,255,.1); }
+.btn.primary { background:var(--blue); border-color:var(--blue); color:#0f1115; font-weight:700; }
+.btn.primary:hover { opacity:.85; }
+.empty { color:var(--text2); text-align:center; padding:60px 20px; font-size:14px; }
+.empty .big { font-size:48px; margin-bottom:12px; }
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--surface2); border:1px solid var(--border); padding:10px 20px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .3s; z-index:100; }
+.toast.show { opacity:1; }
+.toast.ok { border-color:var(--green); color:var(--green); }
+.toast.err { border-color:var(--red); color:var(--red); }
+#refreshBar { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-bottom:12px; font-size:11px; color:var(--text2); }
+.legend { display:flex; gap:14px; font-size:11px; color:var(--text2); flex-wrap:wrap; }
+.legend .dot { width:10px; height:10px; border-radius:3px; display:inline-block; margin-right:4px; vertical-align:middle; }
+</style>
+</head>
+<body>
+
+<h1><span class="live-dot" id="liveDot"></span> 🔱 Pipeline 执行看板</h1>
+<div class="subtitle" id="subtitle">加载中…</div>
+
+<div id="refreshBar">
+  <div class="legend">
+    <span><span class="dot" style="background:var(--green)"></span>通过</span>
+    <span><span class="dot" style="background:var(--red)"></span>失败</span>
+    <span><span class="dot" style="background:var(--yellow)"></span>运行中</span>
+    <span><span class="dot" style="background:var(--cyan)"></span>跳过</span>
+    <span><span class="dot" style="background:var(--text2)"></span>待执行</span>
+  </div>
+  <span>自动刷新 3s</span>
+  <button class="btn" onclick="loadBoard(true)">↻ 立即刷新</button>
+  <button class="btn primary" onclick="resumePipeline()">▶ 续跑</button>
+</div>
+
+<div class="summary-bar" id="summaryBar"></div>
+<div class="board" id="board"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/v1/pipeline/checkpoint';
+let autoRefresh = null;
+
+async function api(path, opts = {}) {
+  const resp = await fetch(path, opts);
+  const data = await resp.json().catch(() => ({}));
+  return data;
+}
+
+function toast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + (ok ? 'ok' : 'err');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+async function loadBoard(manual = false) {
+  const data = await api(API);
+  if (!data.ok) {
+    document.getElementById('board').innerHTML =
+      '<div class="empty"><div class="big">⚠️</div>' + (data.error || '加载失败') + '</div>';
+    return;
+  }
+  const steps = data.steps || [];
+  const st = data.state || {};
+
+  // Live dot
+  const dot = document.getElementById('liveDot');
+  const running = st.status === 'running' || steps.some(s => s.status === 'running');
+  dot.className = 'live-dot' + (running ? '' : ' idle');
+
+  document.getElementById('subtitle').textContent =
+    (st.pipeline_name || 'agent-pipeline') + ' · ' + (st.status || 'unknown') +
+    (st.updated_at ? ' · 更新于 ' + new Date(st.updated_at).toLocaleTimeString() : '');
+
+  // Summary
+  const counts = {passed:0, failed:0, running:0, pending:0, skipped:0};
+  steps.forEach(s => { if (counts[s.status] !== undefined) counts[s.status]++; });
+  document.getElementById('summaryBar').innerHTML =
+    stat('通过', counts.passed, 'passed') + stat('失败', counts.failed, 'failed') +
+    stat('运行中', counts.running, 'running') + stat('待执行', counts.pending, 'pending') +
+    stat('跳过', counts.skipped, 'pending') + stat('总计', steps.length, 'pending');
+
+  if (!steps.length) {
+    document.getElementById('board').innerHTML =
+      '<div class="empty"><div class="big">📋</div>暂无 pipeline 执行记录<br>先运行一次 pipeline（agent_checkpoint run）后刷新</div>';
+    return;
+  }
+
+  // Group by agent
+  const groups = {};
+  steps.forEach(s => {
+    const agent = s.agent || '未指定';
+    if (!groups[agent]) groups[agent] = [];
+    groups[agent].push(s);
+  });
+
+  let html = '';
+  for (const [agent, list] of Object.entries(groups)) {
+    const okCount = list.filter(s => s.status === 'passed').length;
+    html += `<div class="agent-col">
+      <div class="agent-header">🤖 ${escapeHtml(agent)}
+        <span class="count">${okCount}/${list.length}</span>
+      </div>
+      <div class="agent-body">${list.map(stepCard).join('')}</div>
+    </div>`;
+  }
+  document.getElementById('board').innerHTML = html;
+
+  if (manual) toast('已刷新 · ' + new Date().toLocaleTimeString());
+}
+
+function stat(label, num, cls) {
+  return `<div class="stat"><div class="label">${label}</div><div class="num ${cls}">${num}</div></div>`;
+}
+
+function stepCard(s) {
+  const status = s.status || 'pending';
+  const dur = s.duration_s ? s.duration_s.toFixed(1) + 's' : '';
+  const errHtml = s.error ? `<div class="err">✕ ${escapeHtml(s.error)}</div>` : '';
+  const outHtml = s.output_path ? `<span title="${escapeHtml(s.output_path)}">📄 ${shortPath(s.output_path)}</span>` : '';
+  const retryBtn = (status === 'failed' || status === 'skipped')
+    ? `<button class="btn retry" data-step="${escapeHtml(s.step_id)}">↻ 重试</button>` : '';
+  return `<div class="step-card ${status}">
+    <div class="step-top">
+      <span class="step-id">${escapeHtml(s.step_id)}</span>
+      <span class="status-badge ${status}">${status}</span>
+    </div>
+    <div class="step-name">${escapeHtml(s.name || '')}</div>
+    <div class="step-meta">
+      ${dur ? `<span>⏱ ${dur}</span>` : ''}
+      ${s.started_at ? `<span>▶ ${new Date(s.started_at).toLocaleTimeString()}</span>` : ''}
+      ${outHtml}
+      ${errHtml}
+    </div>
+    ${retryBtn ? `<div class="step-actions">${retryBtn}</div>` : ''}
+  </div>`;
+}
+
+function shortPath(p) {
+  const parts = String(p).split('/');
+  return parts.slice(-2).join('/');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[c]);
+}
+
+async function retryStep(stepId) {
+  const resp = await api('/api/v1/pipeline/retry', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({step_id: stepId})
+  });
+  if (resp.ok) {
+    toast('↻ 已从 ' + stepId + ' 重试，状态变化稍后刷新');
+    setTimeout(() => loadBoard(true), 800);
+  } else {
+    toast((resp.error || '重试失败'), false);
+  }
+}
+
+async function resumePipeline() {
+  const resp = await api('/api/v1/pipeline/resume', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  });
+  if (resp.ok) {
+    toast('▶ 已提交续跑，状态变化稍后刷新');
+    setTimeout(() => loadBoard(true), 800);
+  } else {
+    toast((resp.error || '续跑失败'), false);
+  }
+}
+
+loadBoard();
+autoRefresh = setInterval(() => loadBoard(false), 3000);
+
+// 事件委托：重试按钮（data-step 属性，避免 inline onclick 的注入风险）
+document.getElementById('board').addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn.retry');
+  if (btn) retryStep(btn.dataset.step);
+});
+</script>
+</body>
+</html>

@@ -182,6 +182,8 @@ def handle_get(handler) -> None:
         handler._serve_page("onboarding.html", {})
     elif path == "/pipeline-flow":
         handler._serve_file(UI_DIR / "pages" / "pipeline-flow.html", "text/html; charset=utf-8")
+    elif path == "/pipeline-board":
+        handler._serve_file(UI_DIR / "pages" / "pipeline-board.html", "text/html; charset=utf-8")
     elif path == "/demo":
         handler._serve_page("demo.html", {})
     elif path.startswith("/api/v1/pipeline/status/"):
@@ -205,6 +207,9 @@ def handle_get(handler) -> None:
         from yuleosh.pipeline.config_validator import validate_pipeline_config
         result = validate_pipeline_config(project_dir=os.environ.get("OSH_HOME", ""))
         handler._json_response({"ok": True, **result})
+    elif path == "/api/v1/pipeline/checkpoint":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_checkpoint
+        handler._json_response(handle_pipeline_checkpoint(handler, path))
     # ── Loop Engineering API routes ──
     elif path == "/api/loops/summary":
         from yuleosh.api.loops import get_all_loops_data
