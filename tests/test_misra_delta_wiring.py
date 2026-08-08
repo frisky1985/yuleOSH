@@ -13,8 +13,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
 from yuleosh.ci.stages.review import (  # noqa: E402
     _collect_delta_files,
     _expand_header_dependents,
