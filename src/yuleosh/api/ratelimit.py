@@ -5,6 +5,18 @@
 
 Per-IP rate limiting using a sliding time window.
 Configurable via YULEOSH_RATE_LIMIT env var (default 100 requests per minute).
+
+NOTE (D-3 / 2026-08-08): This module is TEST/COMPATIBILITY-ONLY — production
+code does not import it (verified: zero references under src/). The live
+rate limiters are:
+  - ui/server.check_rate_limit    — static/API entry (60 req/min/IP)
+  - ui/auth_extended rate limiting — login lockout (10 failed / 5 min per email)
+Keep this module for tests and historical compat, but do NOT wire new
+production call sites into it. Removing it entirely is deferred to v3.13.
+
+NOTE (S-P2-02): The in-memory rate limiter does NOT work across multiple
+processes or workers. For production deployments with >1 worker, replace
+with a shared store (Redis/Memcached) or database-backed rate limiter.
 """
 
 import os

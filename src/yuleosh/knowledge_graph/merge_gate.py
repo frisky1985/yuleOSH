@@ -110,9 +110,67 @@ class GraphConsistencyChecker:
         "derived_from", "conflicts_with", "related_to",
     }
 
-    def __init__(self, store, config: MergeGateConfig):
+    def __init__(self, store, config: MergeGateConfig,
+                 scope_files: list[str] | None = None):
         self.store = store
         self.config = config
+        # 2026-08-08 (P1-3): 收窄到 session 产物。传 changed_files 时，
+        # 结构检查只看这些文件相关的节点/边子图，避免全图噪声（stash、
+        # 历史手工改动）导致 gate 误判。None = 全图（兼容旧调用与测试）。
+        self.scope_files: list[str] | None = scope_files
+
+    def _scoped_nodes(self) -> list[dict]:
+        """Return nodes, optionally filtered to scope_files.
+
+        Node entity_id for code/test files is the cleaned relative path
+        (e.g. ``src/main.c``); requirements use their req id.  Matching is
+        substring on the relative path so a changed file picks up its
+        file node and any requirement that names it.  To avoid a broad
+        path substring matching a requirement id by accident (e.g. changed
+        file ``REQ`` vs req ``REQ-001``), only treat entity_ids that look
+        like paths (contain ``/`` or end with a source extension) as
+        file nodes; requirement ids are matched only via exact equality
+        or when the changed file literally appears in the id.
+        """
+        nodes = self.store.get_all_nodes()
+        if not self.scope_files:
+            return nodes
+        matched = []
+        for node in nodes:
+            nid = node.get("entity_id", "") or ""
+            if not nid:
+                continue
+            looks_like_path = "/" in nid or nid.lower().endswith(
+                (".c", ".h", ".cpp", ".hpp", ".py", ".md", ".json", ".yaml", ".yml")
+            )
+            for f in self.scope_files:
+                if not f:
+                    continue
+                if nid == f:
+                    matched.append(node)
+                    break
+                if looks_like_path and (nid.endswith("/" + f) or f in nid):
+                    matched.append(node)
+                    break
+        return matched
+
+    def _scoped_edges(self) -> list[dict]:
+        """Return edges, optionally filtered to scope_files' node ids.
+
+        Edges touching a scoped node are kept so orphan/cycle checks see
+        the same subgraph the node checks do.
+        """
+        edges = self.store.get_all_edges()
+        if not self.scope_files:
+            return edges
+        scoped_ids = {n.get("entity_id") for n in self._scoped_nodes() if n.get("entity_id")}
+        matched = []
+        for edge in edges:
+            src = edge.get("source_id")
+            tgt = edge.get("target_id")
+            if src in scoped_ids or tgt in scoped_ids:
+                matched.append(edge)
+        return matched
 
     def check_all(self) -> dict:
         """Run all consistency checks and return results."""
@@ -199,7 +257,7 @@ class GraphConsistencyChecker:
         """Check all nodes have recognized entity types."""
         errors = []
         try:
-            nodes = self.store.get_all_nodes()
+            nodes = self._scoped_nodes()
             for node in nodes:
                 etype = node.get("entity_type", "")
                 if etype and etype not in self.VALID_NODE_TYPES:
@@ -221,7 +279,7 @@ class GraphConsistencyChecker:
         """Check all edges have recognized relation types."""
         errors = []
         try:
-            edges = self.store.get_all_edges()
+            edges = self._scoped_edges()
             for edge in edges:
                 rtype = edge.get("relation_type", "")
                 if rtype and rtype not in self.VALID_EDGE_TYPES:
@@ -243,8 +301,8 @@ class GraphConsistencyChecker:
         """Find nodes with no edges (no incoming or outgoing connections)."""
         orphans = []
         try:
-            nodes = self.store.get_all_nodes()
-            edges = self.store.get_all_edges()
+            nodes = self._scoped_nodes()
+            edges = self._scoped_edges()
 
             connected_ids = set()
             for edge in edges:
@@ -267,9 +325,9 @@ class GraphConsistencyChecker:
         """Find edges whose source or target node doesn't exist."""
         orphan_edges = []
         try:
-            nodes = self.store.get_all_nodes()
+            nodes = self._scoped_nodes()
             node_ids = {n.get("entity_id") for n in nodes}
-            edges = self.store.get_all_edges()
+            edges = self._scoped_edges()
 
             for edge in edges:
                 src = edge.get("source_id")
@@ -296,7 +354,7 @@ class GraphConsistencyChecker:
         """Detect directed cycles in the graph using DFS."""
         cycles = []
         try:
-            edges = self.store.get_all_edges()
+            edges = self._scoped_edges()
             adj: dict[str, list[str]] = {}
             for edge in edges:
                 src = edge.get("source_id")
@@ -333,7 +391,7 @@ class GraphConsistencyChecker:
         """Find nodes with the same entity_id but different attributes."""
         dupes = []
         try:
-            nodes = self.store.get_all_nodes()
+            nodes = self._scoped_nodes()
             seen: dict[str, list[dict]] = {}
             for node in nodes:
                 eid = node.get("entity_id")
@@ -548,7 +606,7 @@ class MergeGate:
             checks["incremental_build"] = build_result
 
         # Step 3: Graph consistency check
-        checker = GraphConsistencyChecker(self.store, self.config)
+        checker = GraphConsistencyChecker(self.store, self.config, scope_files=self._changed_files)
         consistency = checker.check_all()
         checks["consistency"] = consistency
 
