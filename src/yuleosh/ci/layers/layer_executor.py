@@ -171,9 +171,11 @@ def _run_embedded_misra_check(project_dir: str, ci: CIResult) -> bool:
     Go/Python projects may also contain embedded C code (e.g. yuleDKCS).
     ``run_misra_check`` skips itself when no C sources are found, so calling
     it unconditionally is safe for pure Go/Python repos.
+
+    L1 uses delta mode (changed files only); full scans live in L2/release.
     """
     try:
-        passed = run_misra_check(project_dir, ci, mode="full")
+        passed = run_misra_check(project_dir, ci, mode="delta")
         if not passed:
             ci.errors.append("misra-check failed")
         return passed
@@ -301,7 +303,7 @@ def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
         ("plan-lint", run_plan_lint),
         ("docsync-gate", run_docsync_gate),
         ("clang-tidy", run_clang_tidy),
-        ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="full")),
+        ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="delta")),
         ("unit-tests", run_unit_tests),
         ("coverage", run_coverage_check),
         ("coverage-regression", run_coverage_regression),
@@ -553,6 +555,18 @@ def run_layer2(project_dir: Optional[str] = None) -> bool:
         all_passed = False
 
     if not _static_analysis_stage(c_files, project_dir, ci, misra_ff, strict):
+        all_passed = False
+
+    # L2 keeps the full MISRA scan (addon + trend baseline + new-Required
+    # blocking).  L1 only does delta scans of changed files — the full
+    # safety net lives here and in release/nightly runs.
+    try:
+        if not run_misra_check(project_dir, ci, mode="full"):
+            all_passed = False
+            ci.errors.append("misra-check (full) failed")
+    except Exception as e:
+        ci.add_stage("misra-check", "error", str(e))
+        ci.errors.append(f"misra-check: {e}")
         all_passed = False
 
     print("  \U0001f5a5\ufe0f  CI: SIL tests...")
