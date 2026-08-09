@@ -208,9 +208,9 @@ def get_reviews_for_commit(
                     entry = json.loads(line)
                     entry_commit = entry.get("commit", "")
                     if entry_commit.startswith(commit):
-                        entries.append(entry)
                         if len(entries) >= limit:
                             break
+                        entries.append(entry)
                 except (json.JSONDecodeError, ValueError):
                     continue
 
@@ -297,6 +297,8 @@ def get_findings_for_file(
                     for finding in entry.get("findings", []):
                         fpath = finding.get("file", "")
                         if file_path in fpath:
+                            if len(findings) >= limit:
+                                return findings
                             findings.append({
                                 "review_id": review_id,
                                 "commit": commit,
@@ -308,8 +310,6 @@ def get_findings_for_file(
                                 "message": finding.get("message", ""),
                                 "category": finding.get("category", ""),
                             })
-                            if len(findings) >= limit:
-                                return findings
                 except (json.JSONDecodeError, ValueError):
                     continue
 
