@@ -56,7 +56,11 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
             return _list_pipelines()
         return json_error("Use GET for status", 405)
 
-    if path_tail == "list" or (path_tail == "" and method == "GET"):
+    # B5-看板 (2026-08-10): "list" 委托到 handle_pipeline_list（看板选择器
+    # 数据源，见下），不能在这里被 _list_pipelines()（sessions 视图）拦截。
+    # Phase 4 覆盖率攻坚发现：真实 HTTP 请求 /api/v1/pipeline/list 曾错误
+    # 返回 sessions —— 前端看板选择器拿到空列表。
+    if path_tail == "" and method == "GET":
         return _list_pipelines()
 
     if path_tail == "steps":
