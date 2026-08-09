@@ -629,3 +629,51 @@ class TestPipelineOpsWithPipelineName:
             assert resp["data"]["pipeline"] == "my-pipe"
         finally:
             api_pipeline._ENGINE_OP_ACTIVE.pop("my-pipe", None)
+
+
+class TestCheckpointOpActive:
+    """B5-操作状态同步：checkpoint 接口返回 op_active（后端 _ENGINE_OP_ACTIVE）。"""
+
+    def test_no_op_active_by_default(self, tmp_path, monkeypatch):
+        """无控制操作在跑 → op_active=False。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.api import pipeline as api_pipeline
+        api_pipeline._ENGINE_OP_ACTIVE.clear()
+        try:
+            resp = _call(
+                f"/api/v1/pipeline/checkpoint?project_dir={tmp_path}",
+                token=_valid_token())
+            assert resp["ok"] is True
+            assert resp["op_active"] is False
+        finally:
+            api_pipeline._ENGINE_OP_ACTIVE.clear()
+
+    def test_op_active_true_when_running(self, tmp_path, monkeypatch):
+        """_ENGINE_OP_ACTIVE 有该 pipeline → op_active=True。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.api import pipeline as api_pipeline
+        api_pipeline._ENGINE_OP_ACTIVE.clear()
+        try:
+            api_pipeline._ENGINE_OP_ACTIVE["agent-pipeline"] = True
+            resp = _call(
+                f"/api/v1/pipeline/checkpoint?project_dir={tmp_path}",
+                token=_valid_token())
+            assert resp["ok"] is True
+            assert resp["op_active"] is True
+        finally:
+            api_pipeline._ENGINE_OP_ACTIVE.clear()
+
+    def test_op_active_pipeline_specific(self, tmp_path, monkeypatch):
+        """只有指定 pipeline 的操作才算（不同 pipeline 互不影响）。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.api import pipeline as api_pipeline
+        api_pipeline._ENGINE_OP_ACTIVE.clear()
+        try:
+            api_pipeline._ENGINE_OP_ACTIVE["other-pipe"] = True
+            resp = _call(
+                f"/api/v1/pipeline/checkpoint?project_dir={tmp_path}&pipeline=my-pipe",
+                token=_valid_token())
+            assert resp["ok"] is True
+            assert resp["op_active"] is False
+        finally:
+            api_pipeline._ENGINE_OP_ACTIVE.clear()

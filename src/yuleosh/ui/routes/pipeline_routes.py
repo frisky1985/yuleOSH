@@ -464,8 +464,15 @@ def handle_pipeline_checkpoint(handler: BaseHTTPRequestHandler, path: str) -> di
         log.warning("checkpoint status read failed: %s", e)
         return {"ok": False, "error": f"Failed to read checkpoint: {e}"}
 
+    # B5-操作状态同步：当前 pipeline 是否有控制操作（retry/resume/rerun）在跑
+    try:
+        from yuleosh.api import pipeline as api_pipeline
+        op_active = bool(api_pipeline._ENGINE_OP_ACTIVE.get(pipeline_name or "agent-pipeline"))
+    except Exception:  # noqa: BLE001 — 读不到就视为无操作，看板不崩
+        op_active = False
+
     if state is None:
-        return {"ok": True, "state": None, "steps": []}
+        return {"ok": True, "state": None, "steps": [], "op_active": op_active}
 
     steps = state.get("steps", [])
     return {
@@ -478,5 +485,6 @@ def handle_pipeline_checkpoint(handler: BaseHTTPRequestHandler, path: str) -> di
             "updated_at": state.get("updated_at"),
         },
         "steps": steps,
+        "op_active": op_active,
         "count": len(steps),
     }
