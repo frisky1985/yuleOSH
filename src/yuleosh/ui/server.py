@@ -7,6 +7,14 @@
 Serves the yuleOSH web dashboard with API routes, auth, static files,
 and project management.  Routes are extracted to yuleosh/ui/routes/*.
 
+TD-004 split (pure relocation): the HTTP security domain (rate limiting,
+CSP, security headers) moved to yuleosh/ui/http_security.py, static &
+page serving to yuleosh/ui/static_serving.py, API dispatch to
+yuleosh/ui/api_dispatch.py and the server launcher to
+yuleosh/ui/http_app.py.  This module keeps the OSHHandler orchestration
+class and re-exports every public symbol so imports and test patches
+keep working.
+
 ## Configuration
 
 Environment variables:
@@ -54,18 +62,14 @@ Environment variables:
 import json
 import logging
 import os
-import re
-import secrets
-import sys
 import time
 import urllib.parse
-from collections import defaultdict
-from datetime import datetime
+from http.server import BaseHTTPRequestHandler
+from http.server import HTTPServer  # noqa: F401 — test-patch seam (mock.patch("yuleosh.ui.server.HTTPServer"))
 from pathlib import Path
 from typing import Optional
-from http.server import HTTPServer, BaseHTTPRequestHandler
 
-from yuleosh.store import Store
+from yuleosh.store import Store  # noqa: F401 — test-patch seam (mock.patch("yuleosh.ui.server.Store"))
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
@@ -108,171 +112,43 @@ OSH_HOME = os.environ.get(
     str(_REPO_ROOT),
 )
 
-# ── T2 (v3.9.0): CSP — single source for every HTML response ────────────
-#   script-src uses a per-request nonce (裁决 B5 ①): _serve_static/
-#   _serve_file rewrite inline RSC <script> tags and inject the matching
-#   nonce into the policy — no build coupling, per-response randomness.
-#   'unsafe-inline' is allowed in style-src / style-src-attr: the static
-#   export has 31 inline style= attributes AND the React runtime injects
-#   <style> elements dynamically (hash-impossible) — style injection is
-#   not an XSS vector, so script-src stays strict while styles keep
-#   'unsafe-inline' (verified by browser test T-T2-08).
-#   'unsafe-eval' is REMOVED (裁决 B6): the only Function( in the bundle is
-#   core-js's global-detection fallback
-#   (frontend/out/_next/static/chunks/0cz1d0mv5g_q7.js:
-#   ``Function("return this")``) — short-circuited dead code wherever
-#   globalThis exists (all modern browsers), so it is never executed.
-#   nginx (deploy/nginx/nginx.conf) intentionally does NOT set its own
-#   CSP — a static nginx CSP would AND with this per-request nonce policy
-#   and block the inline RSC scripts (single source, T-T2-10).
-def _format_csp(directives: dict) -> str:
-    """Serialize a {directive: [sources]} dict into a CSP header value."""
-    return "; ".join(
-        f"{k} {' '.join(v)}" for k, v in directives.items()
-    ) + ";"
+# ── TD-004: 职责域模块（纯搬移）────────────────────────────────────────
+#   限流 + CSP + 安全响应头 → yuleosh/ui/http_security.py
+#   兼容 re-export：tests/test_ui_server.py、tests/test_v391_p2_fixes.py、
+#   tests/test_v390_t2_csp.py、tests/test_coverage_phase3_lowcov.py、
+#   src/yuleosh/ui/routes/auth_routes.py 通过 server.<sym> 访问/打 patch。
+from yuleosh.ui.http_security import (
+    CSP_POLICY_TEMPLATE,  # noqa: F401 — 兼容 re-export (test_v390_t2_csp)
+    RATE_LIMIT_MAX,  # noqa: F401 — 兼容 re-export (test_v391_p2_fixes)
+    _add_security_headers,
+    _csp_for_html,  # noqa: F401 — 兼容 re-export (test_v390_t2_csp)
+    _inject_csp_nonce,  # noqa: F401 — 兼容 re-export (test_v390_t2_csp)
+    _rate_limit_buckets,  # noqa: F401 — 兼容 re-export (test_ui_server/test_v391)
+    check_rate_limit,  # noqa: F401 — 兼容 re-export (auth_routes/phase3 tests)
+)
 
+#   静态资源/页面文件服务 → yuleosh/ui/static_serving.py（方法体挂回 OSHHandler）
+from yuleosh.ui.static_serving import (
+    _is_immutable_asset as _is_immutable_asset_fn,
+    _serve_file,
+    _serve_page,
+    _serve_static,
+)
 
-def _base_csp_directives(nonce: str) -> dict:
-    """The strict base policy — single source for every HTML response.
+#   API v1 网关 + legacy API 委托 → yuleosh/ui/api_dispatch.py（方法体挂回 OSHHandler）
+from yuleosh.ui.api_dispatch import (
+    _get_ci_results,
+    _get_health,
+    _get_reviews,
+    _get_status,
+    _handle_api,
+    _handle_login,
+    _list_evidence,
+    api_v1_dispatch,  # noqa: F401 — 兼容 re-export (test_coverage_phase3_lowcov mock.patch)
+)
 
-    - script-src: per-request nonce ONLY (裁决 B5 ①) — no 'unsafe-inline',
-      no 'unsafe-eval' (B6: core-js Function("return this") fallback is
-      short-circuited dead code wherever globalThis exists).
-    - style-src 'unsafe-inline': static export's inline style= attributes
-      AND the React runtime's dynamically injected <style> elements
-      (hash-impossible; style injection is not an XSS vector).
-    """
-    return {
-        "default-src": ["'self'"],
-        "script-src": ["'self'", f"'nonce-{nonce}'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-        "style-src-attr": ["'unsafe-inline'"],
-        "font-src": ["'self'"],
-        "img-src": ["'self'", "data:", "blob:"],
-        "connect-src": ["'self'"],
-        "frame-src": ["'self'"],  # defensive: nothing uses frames today
-        "object-src": ["'none'"],
-        "base-uri": ["'self'"],
-        "frame-ancestors": ["'self'"],
-        "form-action": ["'self'"],
-    }
-
-
-# ── T2.2 exception (注明用途) ──────────────────────────────────────────────
-#   The legacy Python templates (ui/pages/*, ui/marketing/*) genuinely
-#   load a few external resources at runtime (verified by byte-scan of
-#   each template + Chrome console).  The contract's "产物零引用" premise
-#   holds for frontend/out/ (Next.js export) but NOT for these served
-#   templates — so the origins they actually reference are appended to
-#   the policy, per T2.2's own exception clause ("实际在用，注明用途").
-#   The scan is by template bytes, so the allowlist can never drift from
-#   the templates themselves.  js.stripe.com is listed here only if a
-#   template starts referencing it — none do today.
-_LEGACY_EXTERNAL = [
-    # (marker_bytes, directive, origin)
-    (b"fonts.googleapis.com", "style-src", "https://fonts.googleapis.com"),
-    (b"fonts.googleapis.com", "font-src", "https://fonts.gstatic.com"),
-    (b"cdn.tailwindcss.com", "script-src", "https://cdn.tailwindcss.com"),
-    (b"js.stripe.com", "script-src", "https://js.stripe.com"),
-    (b"js.stripe.com", "frame-src", "https://js.stripe.com"),
-    (b"js.stripe.com", "connect-src", "https://api.stripe.com"),
-]
-
-
-def _csp_for_html(nonce: str, html: bytes) -> str:
-    """Build the CSP for one HTML response.
-
-    Starts from the strict base and appends the external origins the
-    template actually references (legacy templates only — frontend/out
-    pages reference nothing external, so they stay strict).
-    """
-    directives = _base_csp_directives(nonce)
-    for marker, directive, origin in _LEGACY_EXTERNAL:
-        if marker in html and origin not in directives[directive]:
-            directives[directive].append(origin)
-    return _format_csp(directives)
-
-
-# Strict-form template (no legacy extras) — kept for tests/comments.
-CSP_POLICY_TEMPLATE = _format_csp(_base_csp_directives("{nonce}"))
-
-# Inline <script> without a src attribute (RSC flight data + legacy page
-# inline JS).  External scripts are never touched.
-_INLINE_SCRIPT_RE = re.compile(rb"<script(?![^>]*\bsrc=)([^>]*)>", re.IGNORECASE)
-
-
-def _inject_csp_nonce(html: bytes):
-    """Rewrite inline <script> tags with a per-request nonce (B5 ①).
-
-    Returns ``(rewritten_html, nonce)``.  The nonce is random per
-    response; the caller must pair it with the CSP header built from
-    ``CSP_POLICY_TEMPLATE``.
-    """
-    nonce = secrets.token_urlsafe(16)
-    rewritten = _INLINE_SCRIPT_RE.sub(
-        lambda m: b'<script nonce="' + nonce.encode() + b'"' + m.group(1) + b">",
-        html,
-    )
-    return rewritten, nonce
-
-
-# ── Rate limiting ───────────────────────────────────────────────────────────
-
-_rate_limit_buckets: dict[str, list[float]] = defaultdict(list)
-RATE_LIMIT_MAX = 60          # requests per window
-RATE_LIMIT_WINDOW = 60.0     # seconds
-
-
-def check_rate_limit(client_ip: str, max_requests: int = RATE_LIMIT_MAX,
-                      window: float = RATE_LIMIT_WINDOW) -> tuple[bool, float]:
-    """Check if client_ip is within rate limits.  Returns (allowed, retry_after)."""
-    now = time.time()
-    bucket = _rate_limit_buckets[client_ip]
-    # Prune old entries
-    while bucket and bucket[0] < now - window:
-        bucket.pop(0)
-    if len(bucket) >= max_requests:
-        retry_after = window - (now - bucket[0])
-        return False, round(retry_after, 1)
-    bucket.append(now)
-    return True, 0.0
-
-
-# ── API v1 dispatch ────────────────────────────────────────────────────────
-
-def api_v1_dispatch(handler: BaseHTTPRequestHandler, path: str) -> bool:
-    """Dispatch /api/v1/* requests to the modular router.
-
-    Returns True when the router handled the request (response written).
-    Returns False only for non-API paths, so callers fall back to
-    page/static serving.
-
-    P0-1 guarantee: a /api/v1/* path is NEVER degraded to an HTML page.
-    If the router cannot serve it (e.g. missing YULEOSH_JWT_SECRET raises
-    at import time, or any other unexpected failure), a JSON 500 error is
-    written instead, so API clients always receive machine-readable
-    responses.
-    """
-    if not path.startswith("/api/v1/"):
-        return False
-    try:
-        from yuleosh.api.router import dispatch
-        dispatch(handler, path)
-    except Exception as e:
-        # Fail closed for API paths — never fall through to HTML page
-        # serving (the P0-1 symptom: /api/v1/* answered with a 200 HTML
-        # landing page).
-        try:
-            handler._json_response(
-                {"ok": False, "error": f"API dispatch failed: {e}"}, 500
-            )
-        except Exception:
-            # No live HTTP plumbing (e.g. bare mock in unit tests) —
-            # nothing writable, but still report handled so callers do
-            # not serve an HTML page for an API path.
-            pass
-    return True
-
+#   HTTP 服务启动编排 → yuleosh/ui/http_app.py
+from yuleosh.ui.http_app import main
 
 # ── OSHHandler ─────────────────────────────────────────────────────────────
 
@@ -315,122 +191,13 @@ class OSHHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _add_security_headers(self) -> None:
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("X-XSS-Protection", "1; mode=block")
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-
-    def _serve_static(self, path: str) -> None:
-        """Serve a static file from frontend/out/."""
-        OSH_HOME_DIR = Path(os.environ.get("HOME", "."))
-        # Look for frontend/out at the repo root
-        candidates = [
-            # OSH_HOME 优先（含测试 mock）：显式指定的项目根。
-            Path(OSH_HOME) / "frontend" / "out",
-            # v3.12.x CI 真跑修复: repo-root checkout 兜底（CI
-            # download-artifact 将 frontend/out 放在 checkout 根）。
-            # OSH_HOME 默认值已与 _REPO_ROOT 一致，仅当 OSH_HOME 被
-            # 显式覆盖（如测试 mock）时此处才成为独立候选。
-            _REPO_ROOT / "frontend" / "out",
-            OSH_HOME_DIR / ".openclaw" / "workspace" / "tasks" / "yuleOSH" / "frontend" / "out",
-        ]
-        static_dir = None
-        for c in candidates:
-            if c.exists():
-                static_dir = c
-                break
-
-        if not static_dir:
-            self._json_response({"error": "Static files not found"}, 500)
-            return
-
-        # Resolve file path
-        if path == "/" or path == "":
-            file_path = static_dir / "index.html"
-        else:
-            # Strip leading / and sanitize
-            rel = path.lstrip("/")
-            file_path = static_dir / rel
-            # If path is a directory, try index.html
-            if file_path.is_dir():
-                file_path = file_path / "index.html"
-
-        # Security: prevent directory traversal
-        try:
-            file_path = file_path.resolve()
-            if not str(file_path).startswith(str(static_dir.resolve())):
-                file_path = static_dir / "404.html"
-        except (ValueError, OSError):
-            file_path = static_dir / "404.html"
-
-        if not file_path.exists():
-            file_path = static_dir / "404.html"
-            if not file_path.exists():
-                self._json_response({"error": "Not found"}, 404)
-                return
-
-        mime_map = {
-            ".html": "text/html; charset=utf-8",
-            ".css": "text/css; charset=utf-8",
-            ".js": "application/javascript; charset=utf-8",
-            ".json": "application/json",
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".svg": "image/svg+xml",
-            ".ico": "image/x-icon",
-            ".woff": "font/woff",
-            ".woff2": "font/woff2",
-        }
-        ext = file_path.suffix.lower()
-        content_type = mime_map.get(ext, "application/octet-stream")
-
-        data = file_path.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        # T2 (v3.9.0, SHALL-T2.1): HTML responses get the nonce CSP header
-        # (inline RSC scripts are rewritten with the matching nonce).  The
-        # body length changes after injection — set it after the rewrite.
-        if ext == ".html" or file_path.name == "index.html":
-            data, nonce = _inject_csp_nonce(data)
-            self.send_header("Content-Security-Policy",
-                             _csp_for_html(nonce, data))
-        self.send_header("Content-Length", str(len(data)))
-        # M-2 (SEC-P2): cache-control for static assets.
-        #   - content-hashed build artifacts (_next/static/*.js etc.) are
-        #     immutable → long-lived public cache;
-        #   - HTML documents are NEVER long-cached (updates must be visible);
-        #   - non-hashed assets get a short max-age only (no immutable).
-        if self._is_immutable_asset(file_path):
-            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
-        elif ext == ".html" or file_path.name == "index.html":
-            self.send_header("Cache-Control", "no-cache")
-        else:
-            self.send_header("Cache-Control", "public, max-age=3600")
-        self._add_security_headers()
-        self.end_headers()
-        self.wfile.write(data)
-
-    @staticmethod
-    def _is_immutable_asset(file_path: Path) -> bool:
-        """True for content-hashed build artifacts (M-2).
-
-        Conservative rule: the file must live under a build output dir
-        (``_next/static`` or ``static``) AND its name must look like
-        ``<8+ alnum/-/_>.<ext>`` — the Next.js ``[name].[hash].js`` pattern.
-        User-uploaded resources never match (no hash in name, or not under
-        a build dir), so they are never marked immutable.
-        """
-        rel = str(file_path)
-        if "/_next/static/" not in rel and "/static/" not in rel:
-            return False
-        name = file_path.name
-        stem = name.rsplit(".", 1)[0] if "." in name else ""
-        if not re.fullmatch(r"[A-Za-z0-9_-]{8,}", stem or ""):
-            return False
-        return file_path.suffix.lower() in (".js", ".css", ".woff", ".woff2", ".png", ".svg")
+    # TD-004: 方法体已搬移至职责域模块（纯搬移，挂回本类保持
+    # ``mock.patch("yuleosh.ui.server.OSHHandler.*")`` 语义不变）
+    _add_security_headers = _add_security_headers
+    _serve_static = _serve_static
+    _is_immutable_asset = staticmethod(_is_immutable_asset_fn)
+    _serve_file = _serve_file
+    _serve_page = _serve_page
 
     def _check_auth(self) -> bool:
         """If AUTH_ENABLED, check session/API key.  Returns True if OK.
@@ -460,46 +227,14 @@ class OSHHandler(BaseHTTPRequestHandler):
         from yuleosh.ui.auth import is_authenticated
         return is_authenticated(self.headers)
 
-    def _get_health(self) -> dict:
-        from yuleosh.ui.routes import handle_health
-        return handle_health(self)
-
-    def _get_status(self) -> dict:
-        from yuleosh.ui.routes import handle_status
-        return handle_status(self)
-
-    def _list_evidence(self) -> list:
-        from yuleosh.ui.routes import list_evidence
-        return list_evidence(self)
-
-    def _get_reviews(self) -> list:
-        from yuleosh.ui.routes import list_reviews
-        return list_reviews(self)
-
-    def _get_ci_results(self) -> list:
-        from yuleosh.ui.routes import list_ci_results
-        return list_ci_results(self)
-
-    def _handle_api(self, action: str) -> None:
-        from yuleosh.ui.routes import handle_api_action
-        # FIX (v3.9.0 P1): handle_api_action already sends the response
-        # (via auth_routes._send_json_response → self._json_response).  The
-        # previous ``result = ...; self._json_response(result)`` emitted a
-        # SECOND HTTP response ("…}HTTP/1.0 200 OK…null") on the same
-        # connection — corrupted wire output for every /api/auth/* route.
-        handle_api_action(self, action)
-
-    def _handle_login(self) -> None:
-        from yuleosh.ui.routes import handle_auth_login
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length) if content_length else b"{}"
-        result = handle_auth_login(self, body)
-        if isinstance(result, dict):
-            self._json_response(result)
-        else:
-            self.send_response(302)
-            self.send_header("Location", "/dashboard")
-            self.end_headers()
+    # TD-004: legacy API 委托已搬移至 yuleosh/ui/api_dispatch.py
+    _get_health = _get_health
+    _get_status = _get_status
+    _list_evidence = _list_evidence
+    _get_reviews = _get_reviews
+    _get_ci_results = _get_ci_results
+    _handle_api = _handle_api
+    _handle_login = _handle_login
 
     # ── HTTP method handlers ──────────────────────────────────────────────
 
@@ -567,56 +302,6 @@ class OSHHandler(BaseHTTPRequestHandler):
         from yuleosh.ui.routes.handler_helpers import handle_options
         handle_options(self)
 
-    # ── Serve file/page (called by routes) ────────────────────────────────
-
-    def _serve_file(self, file_path: Path, content_type: str) -> None:
-        """Serve a file by its absolute path.
-
-        F4 (v3.8.0): HTML documents get ``Cache-Control: no-cache`` (aligned
-        with M-2's ``_serve_static`` semantics) so page updates are always
-        visible; non-HTML content keeps the default (no long-lived cache).
-        """
-        try:
-            data = file_path.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            # F4: pages must not be stale-cached (M-2 HTML rule).
-            if "html" in content_type or file_path.suffix.lower() in (".html", ".htm"):
-                self.send_header("Cache-Control", "no-cache")
-                # T2 (v3.9.0, SHALL-T2.1): HTML responses carry the CSP
-                # header with a per-request nonce covering the inline RSC
-                # scripts (B5 ①).  Content-Length is set once, AFTER the
-                # nonce rewrite (body length changes).
-                data, nonce = _inject_csp_nonce(data)
-                self.send_header("Content-Security-Policy",
-                                 _csp_for_html(nonce, data))
-            self.send_header("Content-Length", str(len(data)))
-            self._add_security_headers()
-            self.end_headers()
-            self.wfile.write(data)
-        except FileNotFoundError:
-            self._serve_static("/404.html")
-
-    def _serve_page(self, template_name: str, context: dict) -> None:
-        """Render a dashboard template page."""
-        ui_dir = UI_DIR
-        template_path = ui_dir / template_name
-        if template_path.exists():
-            self._serve_file(template_path, "text/html; charset=utf-8")
-            return
-        # Fallback to pages/
-        pages_path = ui_dir / "pages" / template_name
-        if pages_path.exists():
-            self._serve_file(pages_path, "text/html; charset=utf-8")
-            return
-        # Fallback to marketing/
-        marketing_path = ui_dir / "marketing" / template_name
-        if marketing_path.exists():
-            self._serve_file(marketing_path, "text/html; charset=utf-8")
-            return
-        # Not found
-        self._serve_static("/404.html")
-
     def log_message(self, format, *args):
         """Override default stderr logging with module-level logger."""
         try:
@@ -624,52 +309,6 @@ class OSHHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             msg = format
         logging.info("%s - %s", self.client_address[0], msg)
-
-
-# ── Server launcher ────────────────────────────────────────────────────────
-
-def main(host: str = "", port: int = 0):
-    """Start the yuleOSH Dashboard Server.
-
-    Host/port resolution order (for Docker/deploy flexibility):
-      1. explicit args (if provided)
-      2. YULEOSH_HOST / YULEOSH_PORT (or legacy OSH_HOST / OSH_PORT)
-      3. defaults 127.0.0.1:8080
-    """
-    import os as _os
-    if not host:
-        host = _os.environ.get("YULEOSH_HOST") or _os.environ.get("OSH_HOST") or "127.0.0.1"
-    if not port:
-        try:
-            port = int(_os.environ.get("YULEOSH_PORT") or _os.environ.get("OSH_PORT") or "8080")
-        except ValueError:
-            port = 8080
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    # Ensure OSH_HOME exists
-    os.makedirs(OSH_HOME, exist_ok=True)
-    os.environ.setdefault("OSH_HOME", OSH_HOME)
-
-    # Initialize store
-    try:
-        store = Store()
-        logging.info("Store initialized at %s", store.db_path if hasattr(store, 'db_path') else "memory")
-    except Exception as e:
-        logging.warning("Store init failed (dashboard will work without it): %s", e)
-
-    server = HTTPServer((host, port), OSHHandler)
-    logging.info("yuleOSH Dashboard Server running on http://%s:%d", host, port)
-    logging.info("AUTH_ENABLED=%s, OSH_HOME=%s", AUTH_ENABLED, OSH_HOME)
-
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        logging.info("Shutting down...")
-        server.server_close()
 
 
 if __name__ == "__main__":

@@ -17,12 +17,17 @@ production call sites into it. Removing it entirely is deferred to v3.13.
 NOTE (S-P2-02): The in-memory rate limiter does NOT work across multiple
 processes or workers. For production deployments with >1 worker, replace
 with a shared store (Redis/Memcached) or database-backed rate limiter.
+
+NOTE (W2 / 2026-08-10): shared-storage counterpart now lives in
+``api/ratelimit_shared`` (SQLite-backed, multi-worker safe):
+``check_rate_limit_shared(key, limit, window_seconds, db_path)`` with the
+same sliding-window semantics and env ``YULEOSH_RATE_LIMIT`` default.
+This module's behavior is unchanged.
 """
 
 import os
 import time
 from collections import defaultdict
-
 
 _requests: dict[str, list[float]] = defaultdict(list)
 
