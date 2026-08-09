@@ -215,20 +215,45 @@ class TestApiPipeline:
         assert result[1] == 404
 
     def test_handle_pipeline_list_no_dir(self, monkeypatch):
+        # B5.2: list 委托到 handle_pipeline_list（看板选择器数据源），
+        # 需要 handler 上下文。旧行为（sessions 视图）已由 "" 和 status 承载。
         from yuleosh.api.pipeline import handle_pipeline
 
+        handler = mock.MagicMock()
+        handler.headers = {"Authorization": "Bearer x"}
         with tempfile.TemporaryDirectory() as tmpdir:
             monkeypatch.setattr("yuleosh.api.OSH_HOME", tmpdir)
-            result = handle_pipeline("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
+            with mock.patch("yuleosh.api.middleware.verify_token",
+                            return_value={"user_id": 1, "org_id": 1}), \
+                 mock.patch("yuleosh.ui.routes.tenant_routes._require_auth",
+                            return_value={"user_id": 1}), \
+                 mock.patch("yuleosh.ui.routes.pipeline_routes._scan_project_checkpoints",
+                            return_value=[]):
+                result = handle_pipeline("GET", "list", {}, {},
+                                         current_user={"user_id": 1, "org_id": 1},
+                                         handler=handler)
         assert result[1] == 200
-        assert result[0]["data"]["count"] == 0
+        assert result[0]["pipelines"] == []
 
     def test_handle_pipeline_list_with_db_runs(self, monkeypatch):
         from yuleosh.api.pipeline import handle_pipeline
 
-        result = handle_pipeline("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
+        handler = mock.MagicMock()
+        handler.headers = {"Authorization": "Bearer x"}
+        with mock.patch("yuleosh.api.middleware.verify_token",
+                        return_value={"user_id": 1, "org_id": 1}), \
+             mock.patch("yuleosh.ui.routes.tenant_routes._require_auth",
+                        return_value={"user_id": 1}), \
+             mock.patch("yuleosh.ui.routes.pipeline_routes._iter_project_dirs",
+                        return_value=[Path("/tmp/fake-proj")]), \
+             mock.patch("yuleosh.ui.routes.pipeline_routes._scan_project_checkpoints",
+                        return_value=[{"name": "p1", "status": "completed"}]):
+            result = handle_pipeline("GET", "list", {}, {},
+                                     current_user={"user_id": 1, "org_id": 1},
+                                     handler=handler)
         assert result[1] == 200
-        assert "count" in result[0]["data"]
+        assert "pipelines" in result[0]
+        assert result[0]["pipelines"][0]["name"] == "p1"
 
     def test_handle_pipeline_start_no_spec(self):
         from yuleosh.api.pipeline import handle_pipeline

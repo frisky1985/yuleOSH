@@ -9,12 +9,12 @@ verifying both happy paths and error paths.
 
 import json
 import os
-import time
-import tempfile
 import shutil
-from pathlib import Path
-from unittest.mock import patch, MagicMock, ANY
+import tempfile
+import time
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -34,6 +34,7 @@ def reset_store(tmp_path):
     are not polluted by other test files setting it at module level.
     """
     import importlib
+
     from yuleosh.store import Store
     Store.reset()
     # Use an in-memory database via env var
@@ -204,9 +205,10 @@ class TestApiHelpers:
         assert result is False
 
     def test_auth_enabled_exception(self):
-        from yuleosh.api.health import _auth_enabled
         # Direct approach: mock the import to raise
         import builtins
+
+        from yuleosh.api.health import _auth_enabled
         real_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -576,13 +578,31 @@ class TestPipeline:
             assert "Use POST" in result["error"]
 
     def test_list_pipelines_explicit(self, tmp_path):
-        """path_tail='list' with GET returns pipelines list."""
+        """B5.2: path_tail='list' with GET delegates to handle_pipeline_list.
+
+        旧行为（sessions 视图 data.count）已由 path_tail='' 和 'status' 承载；
+        'list' 现在是看板选择器数据源（pipelines 视图），需要 handler 上下文。
+        """
+        from unittest import mock as _mock
+
         from yuleosh.api.pipeline import handle_pipeline
-        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
-            result, status = handle_pipeline("GET", "list", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
-            assert status == 200
-            assert result["ok"] is True
-            assert result["data"]["count"] == 0
+
+        handler = _mock.MagicMock()
+        handler.headers = {"Authorization": "Bearer x"}
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)), \
+             patch("yuleosh.api.middleware.verify_token",
+                   return_value={"user_id": 1, "org_id": 1}), \
+             patch("yuleosh.ui.routes.tenant_routes._require_auth",
+                   return_value={"user_id": 1}), \
+             patch("yuleosh.ui.routes.pipeline_routes._scan_project_checkpoints",
+                   return_value=[]):
+            result, status = handle_pipeline(
+                "GET", "list", {}, {},
+                current_user={"user_id": 1, "org_id": 1},
+                handler=handler)
+        assert status == 200
+        assert result["ok"] is True
+        assert result["pipelines"] == []
 
 
 # =============================================================================
@@ -1059,7 +1079,7 @@ class TestProject:
 
     def test_project_stats_with_statuses(self, mock_store):
         """Test pipeline status aggregation."""
-        from yuleosh.api.project import handle_project, _project_stats
+        from yuleosh.api.project import _project_stats, handle_project
         from yuleosh.store import Store
         store = Store()
 
@@ -1390,7 +1410,7 @@ class TestValidateModule:
         assert "not found" in err
 
     def test_validate_spec_path_not_a_file(self, tmp_path):
-        from yuleosh.api.validate import validate_spec_path, OSH_HOME
+        from yuleosh.api.validate import OSH_HOME, validate_spec_path
         # Create a directory that looks like a spec
         d = tmp_path / "mydir.md"
         d.mkdir()
@@ -1490,7 +1510,7 @@ class TestAudit:
         assert data["total"] == 0
 
     def test_log_request(self):
-        from yuleosh.api.audit import log_request, handle_audit
+        from yuleosh.api.audit import handle_audit, log_request
         log_request("GET", "/api/v1/health", 200, "127.0.0.1", 12.5)
         log_request("POST", "/api/v1/pipeline/run", 400, "10.0.0.1", 3.2)
         result, status = handle_audit("GET", "", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
@@ -1503,7 +1523,7 @@ class TestAudit:
         assert entries[1]["method"] == "GET"
 
     def test_audit_pagination(self):
-        from yuleosh.api.audit import log_request, handle_audit
+        from yuleosh.api.audit import handle_audit, log_request
         for i in range(5):
             log_request("GET", f"/api/endpoint/{i}", 200, "::1", 1.0)
         result, _ = handle_audit("GET", "",
@@ -1514,7 +1534,7 @@ class TestAudit:
         assert result["data"]["offset"] == 0
 
     def test_audit_large_limit_capped(self):
-        from yuleosh.api.audit import log_request, handle_audit
+        from yuleosh.api.audit import handle_audit, log_request
         for i in range(5):
             log_request("GET", "/api/test", 200, "10.0.0.1", 1.0)
         result, _ = handle_audit("GET", "",
@@ -1549,6 +1569,7 @@ class TestAudit:
 def _seed_auth_for_dispatch(handler):
     """Seed store with test user + session, and set auth header on handler."""
     from datetime import datetime
+
     from yuleosh.store import Store
     store = Store()
     test_secret = os.environ.get("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for-production")
@@ -1658,6 +1679,7 @@ class TestRouter:
 
         # Seed auth and save the valid token for the headers
         from datetime import datetime
+
         from yuleosh.api import auth as _auth_mod
         test_secret = _auth_mod._JWT_SECRET
         import jwt as _jwt
@@ -1753,8 +1775,9 @@ class TestRouter:
 
     def test_dispatch_evidence_download(self, tmp_path):
         """Evidence download returns None from handler; dispatch returns without responding."""
-        from yuleosh.api.router import dispatch
         from pathlib import Path
+
+        from yuleosh.api.router import dispatch
         # Create the compliance pack zip
         ev_dir = Path(str(tmp_path)) / ".osh" / "evidence"
         ev_dir.mkdir(parents=True, exist_ok=True)
@@ -1789,7 +1812,8 @@ class TestWebhooks:
 
     def _signed_handler(self, payload: dict) -> MagicMock:
         """Build a handler mock carrying the raw body + valid signature."""
-        import hmac, hashlib
+        import hashlib
+        import hmac
         raw = json.dumps(payload).encode("utf-8")
         sig = "sha256=" + hmac.new(
             self._SECRET.encode(), raw, hashlib.sha256
@@ -2039,6 +2063,7 @@ class TestRateLimit:
         which breaks coverage instrumentation.
         """
         import importlib
+
         import yuleosh.api.ratelimit
         old_val = os.environ.get("YULEOSH_RATE_LIMIT")
         os.environ["YULEOSH_RATE_LIMIT"] = "10"
@@ -2060,8 +2085,9 @@ class TestRateLimit:
 
     def test_pruning(self):
         """Old timestamps are pruned."""
-        from yuleosh.api.ratelimit import check_rate_limit, _requests, _WINDOW_SECONDS
         import time
+
+        from yuleosh.api.ratelimit import _WINDOW_SECONDS, _requests, check_rate_limit
 
         # Add an old timestamp
         old = time.time() - _WINDOW_SECONDS - 10
@@ -2071,7 +2097,7 @@ class TestRateLimit:
 
     def test_retry_after_calculation(self):
         """When rate limited, retry_after is > 0."""
-        from yuleosh.api.ratelimit import check_rate_limit, _RATE_LIMIT, reset
+        from yuleosh.api.ratelimit import _RATE_LIMIT, check_rate_limit, reset
         reset()
 
         ip = "rate-limited-ip"
