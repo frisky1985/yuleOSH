@@ -126,12 +126,34 @@ function setOpButtonsDisabled(disabled) {
   });
 }
 
+// 请求开始：标记进行中 + 置灰（后端 op_active 与前端 opInFlight 合并生效）
+function beginOp() {
+  opInFlight = true;
+  setOpButtonsDisabled(true);
+}
+
+// 请求结束：清除标记（按钮状态由下一次轮询的 op_active 决定）
+function endOp() {
+  opInFlight = false;
+}
+
 // 加载可用 pipeline 列表填充选择器
+// 记住/恢复上次选择的 pipeline（localStorage，刷新后保持）
+const STORAGE_KEY = 'yuleosh.board.pipeline';
+
+function savePipelineSelection(name) {
+  try { localStorage.setItem(STORAGE_KEY, name); } catch (e) { /* ignore */ }
+}
+
+function restorePipelineSelection() {
+  try { return localStorage.getItem(STORAGE_KEY) || ''; } catch (e) { return ''; }
+}
+
 async function loadPipelines(keepSelection = false) {
   const data = await api(LIST_API);
   if (!data.ok) return;
   const select = document.getElementById('pipelineSelect');
-  const previous = keepSelection ? currentPipeline : '';
+  const previous = keepSelection ? currentPipeline : (restorePipelineSelection() || '');
   const pipelines = data.pipelines || [];
   const options = pipelines.map(p => {
     const label = p.name + ' · ' + (p.status || '?') +
@@ -148,6 +170,7 @@ async function loadPipelines(keepSelection = false) {
 
 function onPipelineChange() {
   currentPipeline = document.getElementById('pipelineSelect').value;
+  savePipelineSelection(currentPipeline);
   loadBoard(true);
 }
 
@@ -170,8 +193,14 @@ async function loadBoard(manual = false) {
   // 停止按钮：仅 running 时显示（没有运行中 pipeline 时点停止无意义）
   document.getElementById('stopBtn').style.display = running ? '' : 'none';
 
+  // B5-操作状态同步：后端有控制操作在跑 → 置灰操作按钮 + 状态提示
+  // 前端请求进行中（opInFlight）或后端 op_active 任一为真 → 禁用
+  const opActive = !!data.op_active;
+  setOpButtonsDisabled(opActive || opInFlight);
+
   document.getElementById('subtitle').textContent =
     (st.pipeline_name || 'agent-pipeline') + ' · ' + (st.status || 'unknown') +
+    (opActive ? ' · ⏳ 操作进行中' : '') +
     (st.updated_at ? ' · 更新于 ' + new Date(st.updated_at).toLocaleTimeString() : '');
 
   // Summary
@@ -250,13 +279,13 @@ function escapeHtml(s) {
 }
 
 async function retryStep(stepId) {
-  setOpButtonsDisabled(true);
+  beginOp();
   const resp = await api('/api/v1/pipeline/retry', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({step_id: stepId, pipeline: currentPipeline})
   });
-  setOpButtonsDisabled(false);
+  endOp();
   if (resp.ok) {
     toast('↻ 已从 ' + stepId + ' 重试，状态变化稍后刷新');
     setTimeout(() => loadBoard(true), 800);
@@ -266,13 +295,13 @@ async function retryStep(stepId) {
 }
 
 async function resumePipeline() {
-  setOpButtonsDisabled(true);
+  beginOp();
   const resp = await api('/api/v1/pipeline/resume', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({pipeline: currentPipeline})
   });
-  setOpButtonsDisabled(false);
+  endOp();
   if (resp.ok) {
     toast('▶ 已提交续跑，状态变化稍后刷新');
     setTimeout(() => loadBoard(true), 800);
@@ -283,13 +312,13 @@ async function resumePipeline() {
 
 async function rerunPipeline() {
   if (!confirm('从头重跑将清空当前执行状态并重新执行全部步骤，确定吗？')) return;
-  setOpButtonsDisabled(true);
+  beginOp();
   const resp = await api('/api/v1/pipeline/rerun', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({pipeline: currentPipeline})
   });
-  setOpButtonsDisabled(false);
+  endOp();
   if (resp.ok) {
     toast('🔄 已提交全量重跑，状态变化稍后刷新');
     setTimeout(() => loadBoard(true), 800);
@@ -300,13 +329,13 @@ async function rerunPipeline() {
 
 async function stopPipeline() {
   if (!confirm('停止后当前步骤执行完即停，剩余步骤保留待执行（可续跑）。确定停止？')) return;
-  setOpButtonsDisabled(true);
+  beginOp();
   const resp = await api('/api/v1/pipeline/stop', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({pipeline: currentPipeline})
   });
-  setOpButtonsDisabled(false);
+  endOp();
   if (resp.ok) {
     toast('⏹ 停止请求已记录，当前步骤结束后生效');
     setTimeout(() => loadBoard(true), 800);
