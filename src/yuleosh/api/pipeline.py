@@ -116,6 +116,12 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
     if path_tail == "resume" and method == "POST":
         return _resume_pipeline(body)
 
+    if path_tail == "rerun" and method == "POST":
+        return _rerun_pipeline(body)
+
+    if path_tail == "stop" and method == "POST":
+        return _stop_pipeline(body)
+
     return json_error(f"Unknown pipeline resource: {path_tail}", 404)
 
 
@@ -310,7 +316,7 @@ def _resolve_pipeline_ctx(body: dict) -> tuple[tuple[str, str] | None, str | Non
 
 
 def _run_engine_op(pipeline_name: str, project_dir: str, op: str, step_id: str = "") -> None:
-    """后台线程执行 CheckpointEngine 控制操作（retry/resume）。
+    """后台线程执行 CheckpointEngine 控制操作（retry/resume/rerun）。
 
     状态真相源始终是 CheckpointEngine（B2-3 sqlite），本函数只负责触发
     执行并释放锁；前端看板轮询 checkpoint 接口看到状态变化。
@@ -323,6 +329,9 @@ def _run_engine_op(pipeline_name: str, project_dir: str, op: str, step_id: str =
         )
         if op == "retry":
             engine.run(inject_at=step_id)
+        elif op == "rerun":
+            # 全量重跑：无参 run() = _prepare_full()，从头开始
+            engine.run()
         else:
             engine.run(resume=True)
     except Exception as e:  # noqa: BLE001 — 后台任务必须兜底，不能吞进程
@@ -398,4 +407,73 @@ def _resume_pipeline(body: dict) -> tuple[dict, int]:
         "op": "resume",
         "pipeline": pipeline_name,
         "note": "状态变化通过 /api/v1/pipeline/checkpoint 轮询",
+    })
+
+
+def _rerun_pipeline(body: dict) -> tuple[dict, int]:
+    """POST /api/v1/pipeline/rerun — 全量重跑（从头开始，_prepare_full）。
+
+    与 retry/resume 共用同一异步执行器 + 并发锁；无参 engine.run()
+    即走 _prepare_full() 全量模式（B4-看板「从头重跑」按钮）。
+    """
+    if not isinstance(body, dict):
+        return json_error("Request body must be a JSON object", 400)
+
+    ctx, err = _resolve_pipeline_ctx(body)
+    if err or ctx is None:
+        return json_error(err or "Failed to resolve pipeline context", 400)
+    pipeline_name, project_dir = ctx
+
+    with _ENGINE_OP_LOCK:
+        if _ENGINE_OP_ACTIVE.get(pipeline_name):
+            return json_error(
+                f"Pipeline '{pipeline_name}' already has a control operation running", 409)
+        _ENGINE_OP_ACTIVE[pipeline_name] = True
+
+    t = threading.Thread(
+        target=_run_engine_op,
+        args=(pipeline_name, project_dir, "rerun"),
+        daemon=True,
+        name=f"pipeline-rerun-{pipeline_name}",
+    )
+    t.start()
+    return json_ok({
+        "status": "started",
+        "op": "rerun",
+        "pipeline": pipeline_name,
+        "note": "全量重跑已提交，状态变化通过 /api/v1/pipeline/checkpoint 轮询",
+    })
+
+
+def _stop_pipeline(body: dict) -> tuple[dict, int]:
+    """POST /api/v1/pipeline/stop — 请求停止当前运行（步骤边界生效）。
+
+    B4-停止语义（方案 B1）：同步执行器无暂停原语，停止 = 写停止标志，
+    引擎在步骤边界检查，当前步骤结束后不再执行后续步骤；剩余步骤保持
+    PENDING，之后可 resume 续跑。本请求是瞬时的（只写标志文件），
+    不需要后台线程；若当前没有运行中的 pipeline，幂等返回 ok。
+    """
+    if not isinstance(body, dict):
+        return json_error("Request body must be a JSON object", 400)
+
+    ctx, err = _resolve_pipeline_ctx(body)
+    if err or ctx is None:
+        return json_error(err or "Failed to resolve pipeline context", 400)
+    pipeline_name, project_dir = ctx
+
+    try:
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        engine = CheckpointEngine(
+            pipeline_name, project_dir,
+            state_backend="sqlite",
+        )
+        engine.request_stop()
+    except Exception as e:  # noqa: BLE001 — 内部异常不外泄细节
+        return internal_error("pipeline", e)
+
+    return json_ok({
+        "status": "stopping",
+        "op": "stop",
+        "pipeline": pipeline_name,
+        "note": "停止请求已记录，当前步骤结束后生效；剩余步骤可 resume 续跑",
     })

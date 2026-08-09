@@ -25,7 +25,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from types import SimpleNamespace
@@ -144,6 +144,7 @@ class CheckpointEngine:
     """
 
     STATE_FILENAME = ".yuleosh/checkpoint-state.json"
+    STOP_FLAG_FILENAME = ".yuleosh/checkpoint-stop.flag"
 
     def __init__(self, pipeline_name: str, project_dir: str = ".",
                  session_factory: Callable | None = None,
@@ -173,6 +174,7 @@ class CheckpointEngine:
         self.state_backend = state_backend
         self._step_defs: list[dict[str, Any]] = []  # [{step_id, name, handler, agent}]
         self._state: CheckpointState | None = None
+        self._stop_triggered = False
         self._state_path = Path(self.project_dir) / self.STATE_FILENAME
         self._state_db_path = Path(self.project_dir) / ".yuleosh/checkpoint-state.db"
 
@@ -204,6 +206,36 @@ class CheckpointEngine:
         )
 
     # ------------------------------------------------------------------
+    # Stop control (B4-看板停止语义, 2026-08-10)
+    # ------------------------------------------------------------------
+    # 同步执行器没有"暂停"原语；B1「停止」语义 = 步骤边界检查停止标志：
+    #   1. API 写 checkpoint-stop.flag（request_stop）
+    #   2. _execute_steps 每步开始前检查标志，发现则不再执行后续步骤
+    #   3. 剩余步骤保持 PENDING（不标 SKIPPED），之后可 resume 续跑
+    #   4. state.status = "stopped"（新增终态，看板显示 ⏹）
+
+    def request_stop(self) -> None:
+        """请求停止当前运行（写停止标志文件，幂等）。"""
+        flag = Path(self.project_dir) / self.STOP_FLAG_FILENAME
+        flag.parent.mkdir(parents=True, exist_ok=True)
+        flag.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+        log.info("stop requested for %s (%s)", self.pipeline_name, flag)
+
+    def clear_stop(self) -> None:
+        """清除停止标志（新运行开始时调用，防残留）。"""
+        flag = Path(self.project_dir) / self.STOP_FLAG_FILENAME
+        try:
+            if flag.exists():
+                flag.unlink()
+                log.info("cleared stop flag for %s", self.pipeline_name)
+        except OSError as e:  # 清标志失败不阻塞运行
+            log.warning("clear stop flag failed: %s", e)
+
+    def stop_requested(self) -> bool:
+        """停止标志是否存在（步骤边界检查）。"""
+        return (Path(self.project_dir) / self.STOP_FLAG_FILENAME).exists()
+
+    # ------------------------------------------------------------------
     # Public run / status
     # ------------------------------------------------------------------
 
@@ -217,8 +249,12 @@ class CheckpointEngine:
             resume: 从上次中断位置继续（读取存储的状态）。
 
         Returns:
-            True 表示全部步骤通过，False 表示有步骤失败。
+            True 表示全部步骤通过，False 表示有步骤失败或用户请求停止。
         """
+        # 新运行开始时清除上一次可能残留的停止标志（幂等）
+        self.clear_stop()
+        self._stop_triggered = False
+
         steps_to_run: list[dict] = []
         start_idx = 0
 
@@ -238,6 +274,16 @@ class CheckpointEngine:
         # ---- 执行剩余的步骤 ----
         self._save_state()
         all_passed = self._execute_steps(steps_to_run)
+
+        # ---- 用户请求停止：保持剩余 PENDING，状态标 stopped（可 resume）----
+        if self._stop_triggered and self._state is not None:
+            self._state.status = "stopped"
+            self._state.updated_at = datetime.now(timezone.utc).isoformat()
+            self._save_state()
+            # 停止已生效，清除标志（下次 run/resume 从干净状态开始）
+            self.clear_stop()
+            print("⏹ 已按请求停止（剩余步骤保持待执行，可 resume 续跑）")
+            return False
 
         # ---- 写入最终状态 ----
         self._finalize(all_passed, inject_at, resume, start_idx)
@@ -409,6 +455,12 @@ class CheckpointEngine:
         all_passed = True
 
         for i, step_def in enumerate(steps_to_run):
+            # B4-停止语义：步骤边界检查停止标志（用户点 ⏹ 停止后不再执行后续步骤）
+            if self.stop_requested():
+                self._stop_triggered = True
+                print("⏹ 检测到停止请求，不再执行后续步骤")
+                break
+
             abs_idx = self.find_step_index(step_def["step_id"])
             record = self._state.steps[abs_idx]
 
