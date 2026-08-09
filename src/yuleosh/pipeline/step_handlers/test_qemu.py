@@ -246,8 +246,12 @@ class QemuTestHandler(BaseHandler):
         Falls back to cortex-m3 (lm3s6965evb).
         """
         # Check session context
-        target = getattr(session, "target", None) or session.context.get("target", "")
-        arch = getattr(session, "arch", None) or session.context.get("arch", "")
+        # 修复: PipelineSession 未定义 context 属性（session.py 无 self.context），
+        # 直接访问 session.context 会 AttributeError。用 getattr 防御，
+        # 同时兼容 target/arch 直挂 session 的情况。
+        ctx = getattr(session, "context", None) or {}
+        target = getattr(session, "target", None) or ctx.get("target", "")
+        arch = getattr(session, "arch", None) or ctx.get("arch", "")
 
         # Resolve by target name
         for key, cfg in QEMU_TARGETS.items():
@@ -387,7 +391,10 @@ class QemuTestHandler(BaseHandler):
             return False
 
         # Default: if QEMU ran without crashing, consider it passed
-        if "qemu:" in output_upper and "error" in output_upper.lower():
+        # Phase 5 修复: output_upper 已全部大写，但字面量 "qemu:" 是小写，
+        # 导致 qemu 崩溃检测分支永远不命中（死代码，覆盖率报告证实该行从未执行）。
+        # 根因: upper() 后的字符串里不可能出现小写 "qemu:"。改为小写比较。
+        if "qemu:" in output_upper.lower() and "error" in output_upper.lower():
             return False
 
         return True
