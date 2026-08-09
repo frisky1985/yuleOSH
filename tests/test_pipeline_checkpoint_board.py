@@ -597,6 +597,104 @@ class TestPipelineList:
         assert resp["ok"] in (True, False)
 
 
+class TestPipelineListGrouped:
+    """B5.2-看板项目分组：GET /api/v1/pipeline/list 自动发现多项目。"""
+
+    def _make_project(self, root, name, pipelines):
+        """创建项目目录 + 写 sqlite checkpoint 记录。"""
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        from yuleosh.engine.handler_adapter import HandlerAdapter
+
+        proj = root / name
+        proj.mkdir(parents=True, exist_ok=True)
+        for pname in pipelines:
+            engine = CheckpointEngine(pname, str(proj), state_backend="sqlite")
+            out = proj / f"{pname}.json"
+            out.write_text("{}", encoding="utf-8")
+
+            def handler(session, _out=out):
+                return str(_out)
+
+            engine.add_step("s1", "步骤一", HandlerAdapter(handler))
+            engine.run()
+        return proj
+
+    def test_auto_discovers_projects(self, tmp_path, monkeypatch):
+        """OSH_HOME 下两个项目各有 pipeline → 返回 projects 分组。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        self._make_project(tmp_path, "proj-a", ["pipe-1", "pipe-common"])
+        self._make_project(tmp_path, "proj-b", ["pipe-2", "pipe-common"])
+
+        resp = _call_list("/api/v1/pipeline/list", token=_valid_token())
+        assert resp["ok"] is True
+        assert resp["count"] == 4
+        projects = {p["name"]: p for p in resp["projects"]}
+        assert set(projects) == {"proj-a", "proj-b"}
+        assert {p["name"] for p in projects["proj-a"]["pipelines"]} == {"pipe-1", "pipe-common"}
+        assert {p["name"] for p in projects["proj-b"]["pipelines"]} == {"pipe-2", "pipe-common"}
+        # 扁平列表含全部（倒序）
+        assert len(resp["pipelines"]) == 4
+
+    def test_same_name_pipeline_distinguished_by_project_path(self, tmp_path, monkeypatch):
+        """同名 pipeline 在不同项目 → 分组 path 可区分。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        proj_a = self._make_project(tmp_path, "proj-a", ["agent-pipeline"])
+        proj_b = self._make_project(tmp_path, "proj-b", ["agent-pipeline"])
+
+        resp = _call_list("/api/v1/pipeline/list", token=_valid_token())
+        assert resp["ok"] is True
+        projects = {p["name"]: p for p in resp["projects"]}
+        a_path = str(proj_a.resolve())
+        b_path = str(proj_b.resolve())
+        assert projects["proj-a"]["path"] == a_path
+        assert projects["proj-b"]["path"] == b_path
+        # 每个项目里都有 agent-pipeline
+        for proj in resp["projects"]:
+            assert [p["name"] for p in proj["pipelines"]] == ["agent-pipeline"]
+
+    def test_skip_dirs_without_checkpoint(self, tmp_path, monkeypatch):
+        """无 checkpoint 的目录（含无关子目录）不应成为项目。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        self._make_project(tmp_path, "proj-a", ["pipe-1"])
+        # 无 checkpoint 的目录 + 深层无关目录
+        (tmp_path / "no-state").mkdir()
+        (tmp_path / "no-state" / ".yuleosh").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "deep" / "nested" / "x").mkdir(parents=True)
+
+        resp = _call_list("/api/v1/pipeline/list", token=_valid_token())
+        assert resp["ok"] is True
+        names = {p["name"] for p in resp["projects"]}
+        assert names == {"proj-a"}
+
+    def test_explicit_project_dir_keeps_single_view(self, tmp_path, monkeypatch):
+        """显式 project_dir → 单项目视图（pipelines 兼容旧前端）。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        proj_a = self._make_project(tmp_path, "proj-a", ["pipe-1", "pipe-2"])
+        self._make_project(tmp_path, "proj-b", ["pipe-3"])
+
+        resp = _call_list(f"/api/v1/pipeline/list?project_dir={proj_a}",
+                          token=_valid_token())
+        assert resp["ok"] is True
+        names = {p["name"] for p in resp["pipelines"]}
+        assert names == {"pipe-1", "pipe-2"}
+        # projects 分组也存在（单项目）
+        assert len(resp["projects"]) == 1
+        assert resp["projects"][0]["name"] == "proj-a"
+        assert resp["count"] == 2
+
+    def test_discovery_skips_git_node_modules(self, tmp_path, monkeypatch):
+        """.git / node_modules 目录不参与项目发现。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        self._make_project(tmp_path, "proj-a", ["pipe-1"])
+        (tmp_path / ".git" / ".yuleosh").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "node_modules" / "pkg" / ".yuleosh").mkdir(parents=True, exist_ok=True)
+
+        resp = _call_list("/api/v1/pipeline/list", token=_valid_token())
+        assert resp["ok"] is True
+        names = {p["name"] for p in resp["projects"]}
+        assert names == {"proj-a"}
+
+
 class TestPipelineOpsWithPipelineName:
     """B5-操作 API 应透传 pipeline 名（retry/resume/rerun 共用 _resolve_pipeline_ctx）。"""
 
