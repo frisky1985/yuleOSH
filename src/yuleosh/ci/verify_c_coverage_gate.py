@@ -309,18 +309,19 @@ def _parse_gcov_text(gcda_dir: Path) -> Optional[dict]:
                     pass
 
             # Fallback: parse gcov plain text output
+            # Phase 5 修复: gcov 文本输出的计数列是右对齐的（真实计数行如
+            # "      12:" 只有 7 个前导空格），原判断 line.startswith("        ")
+            # 只匹配 >=8 位宽的计数（"#####"/"-" 等非数字标记），真实计数行永远
+            # 不命中 → total_lines 恒为 0 → 整个 gcov 文本回退解析恒返回 None，
+            # 即使 gcov 输出完全正常也会误报"无法解析覆盖率"。改为正则提取行首计数。
+            # （原 "run" in count_str 分支是死代码：int() 成功后 count_str 必为纯数字。）
+            import re as _re
             for line in result.stdout.split("\n"):
-                if line.startswith("        "):
-                    parts = line.strip().split(":")
-                    if len(parts) >= 2:
-                        count_str = parts[0].strip()
-                        try:
-                            count = int(count_str)
-                            total_lines += 1
-                            if count > 0 or "run" in count_str:
-                                total_hit += 1
-                        except ValueError:
-                            pass
+                m = _re.match(r"^\s*(\d+):", line)
+                if m:
+                    total_lines += 1
+                    if int(m.group(1)) > 0:
+                        total_hit += 1
 
             files_data.append({
                 "file": str(gcda_path),
