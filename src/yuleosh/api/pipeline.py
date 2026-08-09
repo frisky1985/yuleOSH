@@ -98,6 +98,16 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
         result = handle_pipeline_checkpoint(kwargs.get("handler"), full_path)
         return (result, 200) if isinstance(result, dict) else result
 
+    if path_tail == "list" and method == "GET":
+        # B5-看板 (2026-08-10): 列出可用 pipeline（选择器数据源）。
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_list
+        full_path = f"/api/v1/pipeline/{path_tail}"
+        handler = kwargs.get("handler")
+        if handler is None:
+            return json_error("handler required", 500)
+        result = handle_pipeline_list(handler, full_path)
+        return (result, 200) if isinstance(result, dict) else result
+
     if path_tail.startswith("status/") and method == "GET":
         from yuleosh.ui.routes.pipeline_routes import handle_pipeline_status
         full_path = f"/api/v1/pipeline/{path_tail}"

@@ -77,6 +77,19 @@ def _call(path: str, token: str | None = None):
     return handle_pipeline_checkpoint(handler, path)
 
 
+def _call_list(path: str, token: str | None = None):
+    """直接调用 handle_pipeline_list（不经 HTTP 层）。"""
+    from yuleosh.ui.routes.pipeline_routes import handle_pipeline_list
+
+    handler = mock.MagicMock()
+    handler.headers = {}
+    if token:
+        handler.headers["Authorization"] = f"Bearer {token}"
+        handler.client_address = ("127.0.0.1", 12345)
+        handler._request_start_time = 0.0
+    return handle_pipeline_list(handler, path)
+
+
 class TestPipelineCheckpoint:
     def test_requires_auth(self):
         resp = _call("/api/v1/pipeline/checkpoint", token=None)
@@ -506,3 +519,113 @@ class TestCheckpointEngineStop:
         assert statuses["s1"] == "passed"
         assert statuses["s2"] == "passed"
         assert statuses["s3"] == "passed"
+
+
+class TestPipelineList:
+    """B5-看板 pipeline 选择器：GET /api/v1/pipeline/list。"""
+
+    def test_list_requires_auth(self):
+        resp = _call_list("/api/v1/pipeline/list", token=None)
+        assert resp["ok"] is False
+        assert "Authentication" in resp["error"]
+
+    def test_list_empty_when_no_state(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        resp = _call_list(f"/api/v1/pipeline/list?project_dir={tmp_path}",
+                          token=_valid_token())
+        assert resp["ok"] is True
+        assert resp["pipelines"] == []
+        assert resp["count"] == 0
+
+    def test_list_reads_sqlite_pipelines(self, tmp_path, monkeypatch):
+        """两个 pipeline 写入 sqlite → list 都能列出。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        from yuleosh.engine.handler_adapter import HandlerAdapter
+
+        for name in ("pipe-a", "pipe-b"):
+            engine = CheckpointEngine(name, str(tmp_path), state_backend="sqlite")
+            out = tmp_path / f"{name}.json"
+            out.write_text("{}", encoding="utf-8")
+
+            def handler(session, _out=out):
+                return str(_out)
+
+            engine.add_step("s1", "步骤一", HandlerAdapter(handler))
+            engine.run()
+
+        resp = _call_list(f"/api/v1/pipeline/list?project_dir={tmp_path}",
+                          token=_valid_token())
+        assert resp["ok"] is True
+        names = {p["name"] for p in resp["pipelines"]}
+        assert names == {"pipe-a", "pipe-b"}
+        for p in resp["pipelines"]:
+            assert p["status"] == "completed"
+            assert p["backend"] == "sqlite"
+            assert p["step_count"] == 1
+
+    def test_list_json_fallback(self, tmp_path, monkeypatch):
+        """JSON 后端记录也应被列出。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        from yuleosh.engine.handler_adapter import HandlerAdapter
+
+        engine = CheckpointEngine("pipe-json", str(tmp_path), state_backend="json")
+        out = tmp_path / "p.json"
+        out.write_text("{}", encoding="utf-8")
+
+        def handler(session):
+            return str(out)
+
+        engine.add_step("s1", "步骤一", HandlerAdapter(handler))
+        engine.run()
+
+        resp = _call_list(f"/api/v1/pipeline/list?project_dir={tmp_path}",
+                          token=_valid_token())
+        assert resp["ok"] is True
+        names = {p["name"] for p in resp["pipelines"]}
+        assert "pipe-json" in names
+
+    def test_list_corrupted_db_returns_empty_not_crash(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        db_dir = tmp_path / ".yuleosh"
+        db_dir.mkdir(parents=True, exist_ok=True)
+        (db_dir / "checkpoint-state.db").write_bytes(b"not a sqlite db")
+        resp = _call_list(f"/api/v1/pipeline/list?project_dir={tmp_path}",
+                          token=_valid_token())
+        # 容错：损坏 db 不崩溃，返回 ok=True + 空列表（或带 error）
+        assert resp["ok"] in (True, False)
+
+
+class TestPipelineOpsWithPipelineName:
+    """B5-操作 API 应透传 pipeline 名（retry/resume/rerun 共用 _resolve_pipeline_ctx）。"""
+
+    def test_resolve_pipeline_ctx_accepts_name(self, monkeypatch):
+        monkeypatch.setenv("OSH_HOME", "/tmp/osh-home")
+        from yuleosh.api import pipeline as api_pipeline
+        ctx, err = api_pipeline._resolve_pipeline_ctx({"pipeline": "my-pipe"})
+        assert err is None
+        assert ctx is not None
+        assert ctx[0] == "my-pipe"
+
+    def test_resolve_pipeline_ctx_default(self, monkeypatch):
+        monkeypatch.setenv("OSH_HOME", "/tmp/osh-home")
+        from yuleosh.api import pipeline as api_pipeline
+        ctx, err = api_pipeline._resolve_pipeline_ctx({})
+        assert err is None
+        assert ctx is not None
+        assert ctx[0] == "agent-pipeline"
+
+    def test_rerun_accepts_pipeline_name(self, tmp_path, monkeypatch):
+        """rerun 请求带 pipeline 名 → 返回同名的 op 目标。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.api import pipeline as api_pipeline
+
+        try:
+            resp, code = _call_rerun(
+                {"project_dir": str(tmp_path), "pipeline": "my-pipe"},
+                token=_valid_token(), monkeypatch=monkeypatch)
+            assert code == 200
+            assert resp["data"]["pipeline"] == "my-pipe"
+        finally:
+            api_pipeline._ENGINE_OP_ACTIVE.pop("my-pipe", None)

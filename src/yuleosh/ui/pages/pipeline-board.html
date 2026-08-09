@@ -50,6 +50,10 @@ h1 .live-dot.idle { background:var(--text2); animation:none; }
 .step-actions { margin-top:8px; display:flex; gap:8px; }
 .btn { background:var(--surface); border:1px solid var(--border); color:var(--text); font-size:11px; padding:4px 10px; border-radius:6px; cursor:pointer; transition:all .15s; }
 .btn:hover { border-color:var(--blue); color:var(--blue); }
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+.btn:disabled:hover { border-color:var(--border); color:var(--text); }
+select.btn { padding:4px 6px; max-width:260px; }
+select.btn option { background:var(--surface2); color:var(--text); }
 .btn.retry { border-color:rgba(88,166,255,.4); color:var(--blue); }
 .btn.retry:hover { background:rgba(88,166,255,.1); }
 .btn.danger { border-color:rgba(248,81,73,.5); color:var(--red); }
@@ -80,11 +84,14 @@ h1 .live-dot.idle { background:var(--text2); animation:none; }
     <span><span class="dot" style="background:var(--cyan)"></span>跳过</span>
     <span><span class="dot" style="background:var(--text2)"></span>待执行</span>
   </div>
+  <select id="pipelineSelect" class="btn" onchange="onPipelineChange()" title="选择 pipeline">
+    <option value="">加载中…</option>
+  </select>
   <span>自动刷新 3s</span>
   <button class="btn" onclick="loadBoard(true)">↻ 立即刷新</button>
   <button class="btn danger" id="stopBtn" onclick="stopPipeline()" style="display:none">⏹ 停止</button>
   <button class="btn" id="rerunBtn" onclick="rerunPipeline()">🔄 从头重跑</button>
-  <button class="btn primary" onclick="resumePipeline()">▶ 续跑</button>
+  <button class="btn primary" id="resumeBtn" onclick="resumePipeline()">▶ 续跑</button>
 </div>
 
 <div class="summary-bar" id="summaryBar"></div>
@@ -92,8 +99,11 @@ h1 .live-dot.idle { background:var(--text2); animation:none; }
 <div class="toast" id="toast"></div>
 
 <script>
-const API = '/api/v1/pipeline/checkpoint';
+const CHECKPOINT_API = '/api/v1/pipeline/checkpoint';
+const LIST_API = '/api/v1/pipeline/list';
 let autoRefresh = null;
+let currentPipeline = '';
+let opInFlight = false;  // 控制操作进行中（置灰按钮防重复提交）
 
 async function api(path, opts = {}) {
   const resp = await fetch(path, opts);
@@ -108,8 +118,42 @@ function toast(msg, ok = true) {
   setTimeout(() => el.classList.remove('show'), 3000);
 }
 
+// 控制操作按钮禁用态：操作进行中置灰，完成后恢复
+function setOpButtonsDisabled(disabled) {
+  ['stopBtn', 'rerunBtn', 'resumeBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = disabled;
+  });
+}
+
+// 加载可用 pipeline 列表填充选择器
+async function loadPipelines(keepSelection = false) {
+  const data = await api(LIST_API);
+  if (!data.ok) return;
+  const select = document.getElementById('pipelineSelect');
+  const previous = keepSelection ? currentPipeline : '';
+  const pipelines = data.pipelines || [];
+  const options = pipelines.map(p => {
+    const label = p.name + ' · ' + (p.status || '?') +
+      (p.step_count !== undefined ? ' (' + p.step_count + '步)' : '');
+    return `<option value="${escapeHtml(p.name)}">${escapeHtml(label)}</option>`;
+  }).join('');
+  select.innerHTML = options ||
+    '<option value="">暂无 pipeline（先运行 agent_checkpoint run）</option>';
+  if (previous && pipelines.some(p => p.name === previous)) {
+    select.value = previous;
+  }
+  currentPipeline = select.value;
+}
+
+function onPipelineChange() {
+  currentPipeline = document.getElementById('pipelineSelect').value;
+  loadBoard(true);
+}
+
 async function loadBoard(manual = false) {
-  const data = await api(API);
+  const params = currentPipeline ? '?pipeline=' + encodeURIComponent(currentPipeline) : '';
+  const data = await api(CHECKPOINT_API + params);
   if (!data.ok) {
     document.getElementById('board').innerHTML =
       '<div class="empty"><div class="big">⚠️</div>' + (data.error || '加载失败') + '</div>';
@@ -206,11 +250,13 @@ function escapeHtml(s) {
 }
 
 async function retryStep(stepId) {
+  setOpButtonsDisabled(true);
   const resp = await api('/api/v1/pipeline/retry', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({step_id: stepId})
+    body: JSON.stringify({step_id: stepId, pipeline: currentPipeline})
   });
+  setOpButtonsDisabled(false);
   if (resp.ok) {
     toast('↻ 已从 ' + stepId + ' 重试，状态变化稍后刷新');
     setTimeout(() => loadBoard(true), 800);
@@ -220,11 +266,13 @@ async function retryStep(stepId) {
 }
 
 async function resumePipeline() {
+  setOpButtonsDisabled(true);
   const resp = await api('/api/v1/pipeline/resume', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({})
+    body: JSON.stringify({pipeline: currentPipeline})
   });
+  setOpButtonsDisabled(false);
   if (resp.ok) {
     toast('▶ 已提交续跑，状态变化稍后刷新');
     setTimeout(() => loadBoard(true), 800);
@@ -235,11 +283,13 @@ async function resumePipeline() {
 
 async function rerunPipeline() {
   if (!confirm('从头重跑将清空当前执行状态并重新执行全部步骤，确定吗？')) return;
+  setOpButtonsDisabled(true);
   const resp = await api('/api/v1/pipeline/rerun', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({})
+    body: JSON.stringify({pipeline: currentPipeline})
   });
+  setOpButtonsDisabled(false);
   if (resp.ok) {
     toast('🔄 已提交全量重跑，状态变化稍后刷新');
     setTimeout(() => loadBoard(true), 800);
@@ -250,11 +300,13 @@ async function rerunPipeline() {
 
 async function stopPipeline() {
   if (!confirm('停止后当前步骤执行完即停，剩余步骤保留待执行（可续跑）。确定停止？')) return;
+  setOpButtonsDisabled(true);
   const resp = await api('/api/v1/pipeline/stop', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({})
+    body: JSON.stringify({pipeline: currentPipeline})
   });
+  setOpButtonsDisabled(false);
   if (resp.ok) {
     toast('⏹ 停止请求已记录，当前步骤结束后生效');
     setTimeout(() => loadBoard(true), 800);
@@ -263,7 +315,10 @@ async function stopPipeline() {
   }
 }
 
-loadBoard();
+(async function init() {
+  await loadPipelines();
+  loadBoard();
+})();
 autoRefresh = setInterval(() => loadBoard(false), 3000);
 
 // 事件委托：重试按钮（data-step 属性，避免 inline onclick 的注入风险）

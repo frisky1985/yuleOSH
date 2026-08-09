@@ -333,6 +333,92 @@ def handle_yuleasr_notify(handler: BaseHTTPRequestHandler, body: bytes) -> dict:
     }
 
 
+def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
+    """GET /api/v1/pipeline/list — 列出可用 pipeline（看板选择器数据源）。
+
+    B5-看板（2026-08-10）：从 sqlite checkpoint_state 表 + JSON 兜底文件
+    扫描所有 pipeline 记录，返回名称 + 状态 + 更新时间，供前端下拉选择。
+    只读视图，401 fail-closed，损坏容错。
+
+    Query params:
+        project_dir: 项目目录（默认取 OSH_HOME）
+    """
+    parsed = urlparse(path)
+    qs = parse_qs(parsed.query)
+    project_dir = (qs.get("project_dir") or [None])[0]
+
+    # Auth（与其它 pipeline 接口一致，fail-closed）
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        return {"ok": False, "error": "Authentication required"}
+
+    if not project_dir:
+        project_dir = os.environ.get("OSH_HOME", "")
+
+    pipelines: dict[str, dict] = {}
+
+    # ── 1. sqlite 后端：checkpoint_state 表全量列出 ──
+    try:
+        import sqlite3
+        db_path = Path(project_dir) / ".yuleosh" / "checkpoint-state.db"
+        if db_path.exists():
+            conn = sqlite3.connect(str(db_path), timeout=5.0)
+            try:
+                conn.execute("PRAGMA busy_timeout=5000")
+                rows = conn.execute(
+                    "SELECT pipeline_name, state_json, updated_at "
+                    "FROM checkpoint_state"
+                ).fetchall()
+                for name, state_json, updated_at in rows:
+                    try:
+                        state = json.loads(state_json)
+                    except (json.JSONDecodeError, TypeError):
+                        state = {}
+                    pipelines[name] = {
+                        "name": name,
+                        "status": state.get("status", "unknown"),
+                        "updated_at": updated_at or state.get("updated_at"),
+                        "created_at": state.get("created_at"),
+                        "step_count": len(state.get("steps", [])),
+                        "backend": "sqlite",
+                    }
+            finally:
+                conn.close()
+    except Exception as e:  # noqa: BLE001 — 看板接口必须容错
+        log.warning("pipeline list sqlite read failed: %s", e)
+
+    # ── 2. JSON 兜底：checkpoint-state.json 单文件（agent-pipeline）──
+    try:
+        json_path = Path(project_dir) / ".yuleosh" / "checkpoint-state.json"
+        if json_path.exists():
+            state = json.loads(json_path.read_text(encoding="utf-8"))
+            name = state.get("pipeline_name", "agent-pipeline")
+            if name not in pipelines:
+                pipelines[name] = {
+                    "name": name,
+                    "status": state.get("status", "unknown"),
+                    "updated_at": state.get("updated_at"),
+                    "created_at": state.get("created_at"),
+                    "step_count": len(state.get("steps", [])),
+                    "backend": "json",
+                }
+    except Exception as e:  # noqa: BLE001
+        log.warning("pipeline list json fallback failed: %s", e)
+
+    # 按更新时间倒序（最新在前）
+    ordered = sorted(
+        pipelines.values(),
+        key=lambda p: p.get("updated_at") or "",
+        reverse=True,
+    )
+    return {
+        "ok": True,
+        "pipelines": ordered,
+        "count": len(ordered),
+    }
+
+
 def handle_pipeline_checkpoint(handler: BaseHTTPRequestHandler, path: str) -> dict:
     """GET /api/v1/pipeline/checkpoint — CheckpointEngine 33 步实时状态（看板数据源）。
 
