@@ -52,6 +52,8 @@ h1 .live-dot.idle { background:var(--text2); animation:none; }
 .btn:hover { border-color:var(--blue); color:var(--blue); }
 .btn.retry { border-color:rgba(88,166,255,.4); color:var(--blue); }
 .btn.retry:hover { background:rgba(88,166,255,.1); }
+.btn.danger { border-color:rgba(248,81,73,.5); color:var(--red); }
+.btn.danger:hover { background:rgba(248,81,73,.1); }
 .btn.primary { background:var(--blue); border-color:var(--blue); color:#0f1115; font-weight:700; }
 .btn.primary:hover { opacity:.85; }
 .empty { color:var(--text2); text-align:center; padding:60px 20px; font-size:14px; }
@@ -80,6 +82,8 @@ h1 .live-dot.idle { background:var(--text2); animation:none; }
   </div>
   <span>自动刷新 3s</span>
   <button class="btn" onclick="loadBoard(true)">↻ 立即刷新</button>
+  <button class="btn danger" id="stopBtn" onclick="stopPipeline()" style="display:none">⏹ 停止</button>
+  <button class="btn" id="rerunBtn" onclick="rerunPipeline()">🔄 从头重跑</button>
   <button class="btn primary" onclick="resumePipeline()">▶ 续跑</button>
 </div>
 
@@ -118,6 +122,9 @@ async function loadBoard(manual = false) {
   const dot = document.getElementById('liveDot');
   const running = st.status === 'running' || steps.some(s => s.status === 'running');
   dot.className = 'live-dot' + (running ? '' : ' idle');
+
+  // 停止按钮：仅 running 时显示（没有运行中 pipeline 时点停止无意义）
+  document.getElementById('stopBtn').style.display = running ? '' : 'none';
 
   document.getElementById('subtitle').textContent =
     (st.pipeline_name || 'agent-pipeline') + ' · ' + (st.status || 'unknown') +
@@ -223,6 +230,36 @@ async function resumePipeline() {
     setTimeout(() => loadBoard(true), 800);
   } else {
     toast((resp.error || '续跑失败'), false);
+  }
+}
+
+async function rerunPipeline() {
+  if (!confirm('从头重跑将清空当前执行状态并重新执行全部步骤，确定吗？')) return;
+  const resp = await api('/api/v1/pipeline/rerun', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  });
+  if (resp.ok) {
+    toast('🔄 已提交全量重跑，状态变化稍后刷新');
+    setTimeout(() => loadBoard(true), 800);
+  } else {
+    toast((resp.error || '重跑失败'), false);
+  }
+}
+
+async function stopPipeline() {
+  if (!confirm('停止后当前步骤执行完即停，剩余步骤保留待执行（可续跑）。确定停止？')) return;
+  const resp = await api('/api/v1/pipeline/stop', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  });
+  if (resp.ok) {
+    toast('⏹ 停止请求已记录，当前步骤结束后生效');
+    setTimeout(() => loadBoard(true), 800);
+  } else {
+    toast((resp.error || '停止失败'), false);
   }
 }
 

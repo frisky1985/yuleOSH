@@ -199,6 +199,25 @@ def _call_resume(body: dict, token: str | None = None, monkeypatch=None):
     return api_pipeline._resume_pipeline(body)
 
 
+def _call_rerun(body: dict, token: str | None = None, monkeypatch=None):
+    """直接调用 _rerun_pipeline（不经 HTTP 层）。"""
+    from yuleosh.api import pipeline as api_pipeline
+
+    if monkeypatch:
+        monkeypatch.setattr(
+            api_pipeline, "_run_engine_op",
+            lambda *a, **kw: None,
+        )
+    return api_pipeline._rerun_pipeline(body)
+
+
+def _call_stop(body: dict, token: str | None = None):
+    """直接调用 _stop_pipeline（不经 HTTP 层）。"""
+    from yuleosh.api import pipeline as api_pipeline
+
+    return api_pipeline._stop_pipeline(body)
+
+
 class TestPipelineRetry:
     def test_retry_requires_step_id(self, monkeypatch):
         resp, code = _call_retry({}, token=_valid_token(), monkeypatch=monkeypatch)
@@ -292,3 +311,198 @@ class TestPipelineResume:
             assert code == 409
         finally:
             api_pipeline._ENGINE_OP_ACTIVE.pop("agent-pipeline", None)
+
+
+class TestPipelineRerun:
+    """B4-看板「从头重跑」：POST /api/v1/pipeline/rerun（全量 _prepare_full）。"""
+
+    def test_rerun_requires_project_dir(self, monkeypatch):
+        # test_api.py 导入时 setdefault OSH_HOME，此处需清掉才能测"两者皆无"
+        monkeypatch.delenv("OSH_HOME", raising=False)
+        resp, code = _call_rerun({}, token=_valid_token(), monkeypatch=monkeypatch)
+        assert code == 400
+        assert "project_dir" in resp["error"]
+
+    def test_rerun_rejects_path_traversal(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        resp, code = _call_rerun(
+            {"project_dir": "/etc"},
+            token=_valid_token(), monkeypatch=monkeypatch)
+        assert code in (400, 403)
+        assert resp["ok"] is False
+
+    def test_rerun_starts_and_returns_started(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.api import pipeline as api_pipeline
+
+        try:
+            resp, code = _call_rerun(
+                {"project_dir": str(tmp_path)},
+                token=_valid_token(), monkeypatch=monkeypatch)
+            assert code == 200
+            assert resp["ok"] is True
+            data = resp["data"]
+            assert data["status"] == "started"
+            assert data["op"] == "rerun"
+        finally:
+            api_pipeline._ENGINE_OP_ACTIVE.pop("agent-pipeline", None)
+
+    def test_rerun_locks_second(self, tmp_path, monkeypatch):
+        """并发保护：已有操作在跑时返回 409。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.api import pipeline as api_pipeline
+
+        api_pipeline._ENGINE_OP_ACTIVE["agent-pipeline"] = True
+        try:
+            _resp, code = _call_rerun(
+                {"project_dir": str(tmp_path)},
+                token=_valid_token(), monkeypatch=monkeypatch)
+            assert code == 409
+            assert "already has a control operation" in _resp["error"]
+        finally:
+            api_pipeline._ENGINE_OP_ACTIVE.pop("agent-pipeline", None)
+
+    def test_run_engine_op_rerun_calls_full(self, tmp_path, monkeypatch):
+        """_run_engine_op(op='rerun') 应走无参 engine.run()（= _prepare_full 全量）。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from unittest import mock
+
+        from yuleosh.api import pipeline as api_pipeline
+        from yuleosh.engine.checkpoint import CheckpointEngine
+
+        called = {}
+
+        def fake_engine_run(self, *a, **kw):
+            called["mode"] = "full" if not a and not kw else (a, kw)
+            return True
+
+        with mock.patch.object(CheckpointEngine, "run", fake_engine_run):
+            api_pipeline._run_engine_op(
+                "agent-pipeline", str(tmp_path), "rerun")
+        assert called["mode"] == "full"
+
+
+class TestPipelineStop:
+    """B4-看板「停止」：POST /api/v1/pipeline/stop（步骤边界生效）。"""
+
+    def test_stop_requires_project_dir(self, monkeypatch):
+        monkeypatch.delenv("OSH_HOME", raising=False)
+        resp, code = _call_stop({}, token=_valid_token())
+        assert code == 400
+        assert "project_dir" in resp["error"]
+
+    def test_stop_rejects_path_traversal(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        resp, code = _call_stop(
+            {"project_dir": "/etc"}, token=_valid_token())
+        assert code in (400, 403)
+        assert resp["ok"] is False
+
+    def test_stop_writes_flag_and_returns_stopping(self, tmp_path, monkeypatch):
+        """停止请求写入 checkpoint-stop.flag，返回 status=stopping。"""
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        resp, code = _call_stop(
+            {"project_dir": str(tmp_path)}, token=_valid_token())
+        assert code == 200
+        assert resp["ok"] is True
+        data = resp["data"]
+        assert data["status"] == "stopping"
+        assert data["op"] == "stop"
+
+        flag = tmp_path / ".yuleosh" / "checkpoint-stop.flag"
+        assert flag.exists(), "stop 应写入停止标志文件"
+        # 幂等：再次请求仍然 ok
+        resp2, code2 = _call_stop(
+            {"project_dir": str(tmp_path)}, token=_valid_token())
+        assert code2 == 200
+        assert resp2["ok"] is True
+
+
+class TestCheckpointEngineStop:
+    """CheckpointEngine 停止语义（B4-方案 B1）：步骤边界检查 + stopped 终态。"""
+
+    def _make_engine(self, tmp_path, steps=("s1", "s2", "s3")):
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        from yuleosh.engine.handler_adapter import HandlerAdapter
+
+        engine = CheckpointEngine(
+            "stop-engine-test", str(tmp_path), state_backend="json")
+        for sid in steps:
+            out = tmp_path / f"{sid}.json"
+
+            def handler(session, _sid=sid, _out=out):
+                _out.write_text("{}", encoding="utf-8")
+                return str(_out)
+
+            engine.add_step(sid, f"步骤 {sid}", HandlerAdapter(handler))
+        return engine
+
+    def test_stop_flag_stops_before_next_step(self, tmp_path):
+        """停止标志在 s1 完成后写入 → s2/s3 不执行，状态 stopped，剩余 PENDING。"""
+        engine = self._make_engine(tmp_path)
+        # 在 s1 的 handler 里请求停止：s1 执行完 → s2 边界检查到 → 停
+        from yuleosh.engine.handler_adapter import HandlerAdapter
+
+        def handler_s1(session, engine=engine):
+            (tmp_path / "s1.json").write_text("{}", encoding="utf-8")
+            engine.request_stop()  # 步骤内请求停止
+            return str(tmp_path / "s1.json")
+
+        engine._step_defs[0]["handler"] = HandlerAdapter(handler_s1)
+
+        result = engine.run()
+        assert result is False
+        state = engine.status()
+        assert state is not None
+        assert state["status"] == "stopped"
+        statuses = {s["step_id"]: s["status"] for s in state["steps"]}
+        assert statuses["s1"] == "passed"
+        assert statuses["s2"] == "pending"
+        assert statuses["s3"] == "pending"
+        # 停止生效后标志应被清除（下次 run/resume 干净开始）
+        assert not (tmp_path / ".yuleosh" / "checkpoint-stop.flag").exists()
+
+    def test_run_clears_stale_flag(self, tmp_path):
+        """新 run() 应清除上次残留的停止标志（防误停）。"""
+        engine = self._make_engine(tmp_path)
+        flag = tmp_path / ".yuleosh" / "checkpoint-stop.flag"
+        flag.parent.mkdir(parents=True, exist_ok=True)
+        flag.write_text("stale", encoding="utf-8")
+
+        result = engine.run()
+        assert result is True
+        assert not flag.exists(), "run 后残留标志应被清除"
+        state = engine.status()
+        assert state is not None
+        assert state["status"] == "completed"
+        statuses = {s["step_id"]: s["status"] for s in state["steps"]}
+        assert all(v == "passed" for v in statuses.values())
+
+    def test_resume_after_stop_continues(self, tmp_path):
+        """停止后 resume 应从剩余 PENDING 步骤继续（stopped 不是 failed）。"""
+        engine = self._make_engine(tmp_path)
+        from yuleosh.engine.handler_adapter import HandlerAdapter
+
+        def handler_s1(session, engine=engine):
+            (tmp_path / "s1.json").write_text("{}", encoding="utf-8")
+            engine.request_stop()
+            return str(tmp_path / "s1.json")
+
+        engine._step_defs[0]["handler"] = HandlerAdapter(handler_s1)
+        engine.run()
+        state1 = engine.status()
+        assert state1 is not None
+        assert state1["status"] == "stopped"
+
+        # 重新构造引擎（模拟新请求），resume 应从 s2 继续
+        engine2 = self._make_engine(tmp_path)
+        engine2._step_defs[0]["handler"] = HandlerAdapter(handler_s1)
+        result = engine2.run(resume=True)
+        assert result is True
+        state = engine2.status()
+        assert state is not None
+        assert state["status"] == "completed"
+        statuses = {s["step_id"]: s["status"] for s in state["steps"]}
+        assert statuses["s1"] == "passed"
+        assert statuses["s2"] == "passed"
+        assert statuses["s3"] == "passed"
