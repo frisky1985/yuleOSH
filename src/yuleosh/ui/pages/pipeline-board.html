@@ -103,6 +103,7 @@ const CHECKPOINT_API = '/api/v1/pipeline/checkpoint';
 const LIST_API = '/api/v1/pipeline/list';
 let autoRefresh = null;
 let currentPipeline = '';
+let currentProjectDir = '';  // B5.2: 当前选中 pipeline 所属项目目录（空=OSH_HOME 默认）
 let opInFlight = false;  // 控制操作进行中（置灰按钮防重复提交）
 
 async function api(path, opts = {}) {
@@ -138,45 +139,88 @@ function endOp() {
 }
 
 // 加载可用 pipeline 列表填充选择器
+// B5.2: 按项目目录分组（optgroup），value 编码 project_dir|pipeline（同名 pipeline 可区分）
 // 记住/恢复上次选择的 pipeline（localStorage，刷新后保持）
 const STORAGE_KEY = 'yuleosh.board.pipeline';
+const SELECTION_SEP = '|';  // value 分隔符（项目目录 与 pipeline 名）
 
-function savePipelineSelection(name) {
-  try { localStorage.setItem(STORAGE_KEY, name); } catch (e) { /* ignore */ }
+function encodeSelection(projectDir, name) {
+  return (projectDir || '') + SELECTION_SEP + name;
+}
+
+function decodeSelection(value) {
+  const idx = value.indexOf(SELECTION_SEP);
+  if (idx < 0) return {projectDir: '', pipeline: value};
+  return {projectDir: value.slice(0, idx), pipeline: value.slice(idx + 1)};
+}
+
+function savePipelineSelection(projectDir, name) {
+  try { localStorage.setItem(STORAGE_KEY, encodeSelection(projectDir, name)); } catch (e) { /* ignore */ }
 }
 
 function restorePipelineSelection() {
   try { return localStorage.getItem(STORAGE_KEY) || ''; } catch (e) { return ''; }
 }
 
+function pipelineOptionLabel(p) {
+  return p.name + ' · ' + (p.status || '?') +
+    (p.step_count !== undefined ? ' (' + p.step_count + '步)' : '');
+}
+
 async function loadPipelines(keepSelection = false) {
   const data = await api(LIST_API);
   if (!data.ok) return;
   const select = document.getElementById('pipelineSelect');
-  const previous = keepSelection ? currentPipeline : (restorePipelineSelection() || '');
-  const pipelines = data.pipelines || [];
-  const options = pipelines.map(p => {
-    const label = p.name + ' · ' + (p.status || '?') +
-      (p.step_count !== undefined ? ' (' + p.step_count + '步)' : '');
-    return `<option value="${escapeHtml(p.name)}">${escapeHtml(label)}</option>`;
-  }).join('');
-  select.innerHTML = options ||
-    '<option value="">暂无 pipeline（先运行 agent_checkpoint run）</option>';
-  if (previous && pipelines.some(p => p.name === previous)) {
-    select.value = previous;
+  const previous = keepSelection ? encodeSelection(currentProjectDir, currentPipeline)
+    : (restorePipelineSelection() || '');
+  const projects = data.projects || [];
+  let html = '';
+  if (projects.length) {
+    // 多项目分组：<optgroup label="项目名">
+    html = projects.map(proj => {
+      const opts = (proj.pipelines || []).map(p => {
+        const v = encodeSelection(proj.path, p.name);
+        return `<option value="${escapeHtml(v)}">${escapeHtml(pipelineOptionLabel(p))}</option>`;
+      }).join('');
+      const name = proj.name || proj.path || '项目';
+      return `<optgroup label="${escapeHtml(name)}">${opts || '<option value="">（无 pipeline）</option>'}</optgroup>`;
+    }).join('');
+  } else {
+    // 无分组（旧后端/空数据）：扁平渲染，projectDir 为空（OSH_HOME 默认）
+    html = (data.pipelines || []).map(p => {
+      const v = encodeSelection('', p.name);
+      return `<option value="${escapeHtml(v)}">${escapeHtml(pipelineOptionLabel(p))}</option>`;
+    }).join('');
   }
-  currentPipeline = select.value;
+  select.innerHTML = html ||
+    '<option value="">暂无 pipeline（先运行 agent_checkpoint run）</option>';
+  if (previous) {
+    // 遍历 options 匹配 value（不用 CSS.escape 属性选择器，避免转义兼容问题）
+    let matched = false;
+    for (const opt of select.options) {
+      if (opt.value === previous) { select.value = previous; matched = true; break; }
+    }
+    if (!matched && select.options.length) select.value = select.options[0].value;
+  }
+  const sel = decodeSelection(select.value || '');
+  currentProjectDir = sel.projectDir;
+  currentPipeline = sel.pipeline;
 }
 
 function onPipelineChange() {
-  currentPipeline = document.getElementById('pipelineSelect').value;
-  savePipelineSelection(currentPipeline);
+  const sel = decodeSelection(document.getElementById('pipelineSelect').value);
+  currentProjectDir = sel.projectDir;
+  currentPipeline = sel.pipeline;
+  savePipelineSelection(currentProjectDir, currentPipeline);
   loadBoard(true);
 }
 
 async function loadBoard(manual = false) {
-  const params = currentPipeline ? '?pipeline=' + encodeURIComponent(currentPipeline) : '';
-  const data = await api(CHECKPOINT_API + params);
+  const params = [];
+  if (currentPipeline) params.push('pipeline=' + encodeURIComponent(currentPipeline));
+  if (currentProjectDir) params.push('project_dir=' + encodeURIComponent(currentProjectDir));
+  const qs = params.length ? '?' + params.join('&') : '';
+  const data = await api(CHECKPOINT_API + qs);
   if (!data.ok) {
     document.getElementById('board').innerHTML =
       '<div class="empty"><div class="big">⚠️</div>' + (data.error || '加载失败') + '</div>';
@@ -283,7 +327,7 @@ async function retryStep(stepId) {
   const resp = await api('/api/v1/pipeline/retry', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({step_id: stepId, pipeline: currentPipeline})
+    body: JSON.stringify({step_id: stepId, pipeline: currentPipeline, project_dir: currentProjectDir})
   });
   endOp();
   if (resp.ok) {
@@ -299,7 +343,7 @@ async function resumePipeline() {
   const resp = await api('/api/v1/pipeline/resume', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({pipeline: currentPipeline})
+    body: JSON.stringify({pipeline: currentPipeline, project_dir: currentProjectDir})
   });
   endOp();
   if (resp.ok) {
@@ -316,7 +360,7 @@ async function rerunPipeline() {
   const resp = await api('/api/v1/pipeline/rerun', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({pipeline: currentPipeline})
+    body: JSON.stringify({pipeline: currentPipeline, project_dir: currentProjectDir})
   });
   endOp();
   if (resp.ok) {
@@ -333,7 +377,7 @@ async function stopPipeline() {
   const resp = await api('/api/v1/pipeline/stop', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({pipeline: currentPipeline})
+    body: JSON.stringify({pipeline: currentPipeline, project_dir: currentProjectDir})
   });
   endOp();
   if (resp.ok) {

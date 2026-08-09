@@ -333,35 +333,21 @@ def handle_yuleasr_notify(handler: BaseHTTPRequestHandler, body: bytes) -> dict:
     }
 
 
-def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
-    """GET /api/v1/pipeline/list — 列出可用 pipeline（看板选择器数据源）。
+def _scan_project_checkpoints(project_dir: str) -> list[dict]:
+    """扫描单个项目目录下的全部 pipeline checkpoint 记录。
 
-    B5-看板（2026-08-10）：从 sqlite checkpoint_state 表 + JSON 兜底文件
-    扫描所有 pipeline 记录，返回名称 + 状态 + 更新时间，供前端下拉选择。
-    只读视图，401 fail-closed，损坏容错。
+    B5.2-项目分组（2026-08-10）：从 sqlite checkpoint_state 表 + JSON 兜底
+    文件扫描所有 pipeline，返回名称 + 状态 + 更新时间（列表序，新→旧）。
 
-    Query params:
-        project_dir: 项目目录（默认取 OSH_HOME）
+    只读视图，损坏容错（坏 db / 坏 json 不抛异常，返回已收集部分）。
     """
-    parsed = urlparse(path)
-    qs = parse_qs(parsed.query)
-    project_dir = (qs.get("project_dir") or [None])[0]
-
-    # Auth（与其它 pipeline 接口一致，fail-closed）
-    from yuleosh.ui.routes.tenant_routes import _require_auth
-    user = _require_auth(handler)
-    if not user:
-        return {"ok": False, "error": "Authentication required"}
-
-    if not project_dir:
-        project_dir = os.environ.get("OSH_HOME", "")
-
+    project = Path(project_dir)
     pipelines: dict[str, dict] = {}
 
     # ── 1. sqlite 后端：checkpoint_state 表全量列出 ──
     try:
         import sqlite3
-        db_path = Path(project_dir) / ".yuleosh" / "checkpoint-state.db"
+        db_path = project / ".yuleosh" / "checkpoint-state.db"
         if db_path.exists():
             conn = sqlite3.connect(str(db_path), timeout=5.0)
             try:
@@ -386,11 +372,11 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
             finally:
                 conn.close()
     except Exception as e:  # noqa: BLE001 — 看板接口必须容错
-        log.warning("pipeline list sqlite read failed: %s", e)
+        log.warning("pipeline list sqlite read failed (%s): %s", project_dir, e)
 
     # ── 2. JSON 兜底：checkpoint-state.json 单文件（agent-pipeline）──
     try:
-        json_path = Path(project_dir) / ".yuleosh" / "checkpoint-state.json"
+        json_path = project / ".yuleosh" / "checkpoint-state.json"
         if json_path.exists():
             state = json.loads(json_path.read_text(encoding="utf-8"))
             name = state.get("pipeline_name", "agent-pipeline")
@@ -404,17 +390,138 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
                     "backend": "json",
                 }
     except Exception as e:  # noqa: BLE001
-        log.warning("pipeline list json fallback failed: %s", e)
+        log.warning("pipeline list json fallback failed (%s): %s", project_dir, e)
 
     # 按更新时间倒序（最新在前）
-    ordered = sorted(
+    return sorted(
         pipelines.values(),
         key=lambda p: p.get("updated_at") or "",
         reverse=True,
     )
+
+
+def _iter_project_dirs(osh_home: str) -> list[Path]:
+    """发现 OSH_HOME 下含 pipeline checkpoint 状态的项目目录（B5.2）。
+
+    遍历规则：
+      - OSH_HOME 本身是一个候选项目（根 .yuleosh/ 下可能有状态）
+      - 子目录含 .yuleosh/checkpoint-state.db|json 的算独立项目（深度 ≤ 3）
+      - 跳过 .git / node_modules / __pycache__ / .venv 等无关目录
+      - 损坏/不可读目录跳过（不抛异常）
+    """
+    home = Path(osh_home)
+    found: list[Path] = []
+    if not home.exists():
+        return found
+
+    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox", "dist", "build"}
+
+    def _has_checkpoint(p: Path) -> bool:
+        y = p / ".yuleosh"
+        return (y / "checkpoint-state.db").exists() or (y / "checkpoint-state.json").exists()
+
+    try:
+        for root, dirs, _files in os.walk(home):
+            root_path = Path(root)
+            try:
+                rel = root_path.relative_to(home)
+            except ValueError:
+                rel = Path("")
+            depth = len(rel.parts)
+
+            # 剪枝：深度 > 3 的目录不再下钻；无关目录直接跳过
+            dirs[:] = [d for d in dirs if d not in skip]
+            if depth > 3:
+                dirs[:] = []
+                continue
+
+            if _has_checkpoint(root_path):
+                found.append(root_path)
+    except OSError as e:  # 发现阶段容错
+        log.warning("pipeline list project discovery failed: %s", e)
+
+    return found
+
+
+def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
+    """GET /api/v1/pipeline/list — 列出可用 pipeline（看板选择器数据源）。
+
+    B5-看板（2026-08-10）：从 sqlite checkpoint_state 表 + JSON 兜底文件
+    扫描 pipeline 记录，返回名称 + 状态 + 更新时间，供前端下拉选择。
+    只读视图，401 fail-closed，损坏容错。
+
+    B5.2-项目分组（2026-08-10）：不传 project_dir 时自动发现 OSH_HOME 下
+    所有含 checkpoint 状态的项目目录，按项目分组返回（projects[]）；
+    显式传 project_dir 时保持单项目视图（pipelines[] 兼容旧前端）。
+
+    Query params:
+        project_dir: 项目目录（默认自动发现 OSH_HOME 下全部项目）
+    """
+    parsed = urlparse(path)
+    qs = parse_qs(parsed.query)
+    project_dir = (qs.get("project_dir") or [None])[0]
+
+    # Auth（与其它 pipeline 接口一致，fail-closed）
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        return {"ok": False, "error": "Authentication required"}
+
+    osh_home = os.environ.get("OSH_HOME", "")
+
+    # 显式 project_dir → 单项目视图（pipelines 兼容旧前端，另附 projects 分组）
+    if project_dir:
+        pipes = _scan_project_checkpoints(project_dir)
+        return {
+            "ok": True,
+            "pipelines": pipes,
+            "projects": [
+                {
+                    "name": Path(project_dir).name or project_dir,
+                    "path": str(Path(project_dir)),
+                    "pipelines": pipes,
+                    "count": len(pipes),
+                }
+            ],
+            "count": len(pipes),
+        }
+
+    # 自动发现：扫 OSH_HOME 下全部项目目录
+    projects: list[dict] = []
+    seen: set[str] = set()
+    for pdir in _iter_project_dirs(osh_home):
+        try:
+            pipes = _scan_project_checkpoints(str(pdir))
+        except Exception as e:  # noqa: BLE001 — 单项目失败不拖垮整体
+            log.warning("pipeline list project scan failed (%s): %s", pdir, e)
+            continue
+        if not pipes:
+            continue
+        key = str(pdir)
+        if key in seen:
+            continue
+        seen.add(key)
+        projects.append(
+            {
+                "name": pdir.name or str(pdir),
+                "path": key,
+                "pipelines": pipes,
+                "count": len(pipes),
+            }
+        )
+
+    # 全量扁平列表（按更新时间倒序）
+    flat = [p for proj in projects for p in proj["pipelines"]]
+    ordered = sorted(
+        flat,
+        key=lambda p: p.get("updated_at") or "",
+        reverse=True,
+    )
+
     return {
         "ok": True,
         "pipelines": ordered,
+        "projects": projects,
         "count": len(ordered),
     }
 
