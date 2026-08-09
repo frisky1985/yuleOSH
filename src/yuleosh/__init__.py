@@ -7,5 +7,5 @@ yuleOSH — 嵌入式AI开发全流程平台。
 OpenSpec + Superpowers + Harness Engineering 三位一体。
 """
 
-__version__ = "3.12.1"
+__version__ = "3.13.0"
 

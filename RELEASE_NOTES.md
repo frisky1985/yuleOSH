@@ -1,3 +1,63 @@
+# yuleOSH v3.13.0 — 多 Agent 隔离 + 统一 LLM 入口 + 覆盖率 85% 里程碑发布
+
+> **发布日期**: 2026-08-09
+> **版本**: v3.13.0
+> **上一个发布 tag**: v3.12.1 (2026-08-05)
+> **版本跨度**: v3.12.1 → v3.13.0
+
+---
+
+## 🎯 本版核心
+
+从 v3.12.1 到 v3.13.0 共 **75 个 commit**，主线：**多 Agent 隔离体系（PR0+A/B1/B2/B3）+ 统一 LLM 入口 + 覆盖率 85% 里程碑 + 假绿系统性修复**。
+
+---
+
+## 🚀 v3.13.0 — 多 Agent 隔离 + 统一 LLM 入口
+
+### 多 Agent 隔离 Pipeline（方案 PR0 + A + B1/B2/B3）
+- **PR0**: `engine/handler_adapter.py` 签名适配层 — 33 个 handler 零改动兼容（session/noarg/invalid 三态 + StepResult 规范化）
+- **A1-A4**: `agent_registry.py` 角色注册表 + 约束按角色隔离加载（pm/developer/qa 基线拆分，绝不混合其他角色注入）
+- **方案 B1**: CheckpointEngine 驱动真实 Pipeline — session_factory + set_artifact 交接 + mock 全链 33 步
+- **方案 B2**: subprocess 隔离执行器 — 进程级隔离 + 产物一致性门禁 + sqlite 状态（monkeypatch 污染根因修复）
+- **方案 B3**: 执行看板 — `pages/pipeline-board.html` 按 agent 分组步骤卡片 + 3s 轮询 + retry/resume 操作入口（`/api/v1/pipeline/checkpoint|retry|resume`，401 fail-closed + 模块级锁防并发）
+
+### 统一 LLM 入口（方案 C）
+- `LLMClient.call_sync` 同步桥接（Py3.12 嵌套 loop 安全）+ LLMResponse→旧 dict 适配
+- `AGENT_MODEL_ROUTES` agent→model 路由 + `TASK_RISK_LEVELS` 9 级分级 + **L3/L4 禁下钻硬规则**
+- 双轨合一：pipeline 全部可走 LLMClient.call（token 预算 / provider 回退 / 成本审计）
+- provider 级 fallback 降级链（LLM 调用失败自动降级备用 provider）
+
+### 覆盖率 85% 里程碑（84% → 85.37%）
+- 补 KG/handler/async/billing/tenant 测试（TestTenantRoutes 30 用例 → 97%）
+- QG-007 layers 死代码修复 + KG Merge Gate scope_files 收窄（变更检测只统计 session 产物子图）
+- `run_coverage_full.py` .coverage 损坏根因修复（外层 cov 与 pytest-cov 并发写冲突 → 独立 data_file + `-p no:cov`）
+
+### 假绿系统性修复（T1-T10）
+- audit 实质内容校验 / KG 阈值对齐 / CI 真跑去 `|| echo` 伪装 / coverage fail-under / mock 门禁不伪装 / security 指向真实模块
+- H1-H8 注入式自检套件（防回退）+ H4 新鲜度 gate + MISRA L1 增量扫描接线
+- traceability tamper-evident integrity gate（ASPICE P0）+ SWR-xxx 格式解析 + compliance 指标级校验（Covered≥Threshold / 追溯≥60% / SIL 真实通过 / review 实质内容）
+
+### 知识注入 + 安全 + 其他
+- 方案 A: pipeline 步骤统一知识注入层（14 新测试）；方案 B: 沉淀知识 hook 自动收集+人工确认生效
+- `yuleosh audit verify` 审计日志 SHA-256 哈希链 + 证据包自动内嵌审计完整性证明
+- 生产部署 fail-closed（compose 密码强制变量）+ 代码域 P0 清零（dashboard 去 mock / AL 评级改证据覆盖度）
+- MISRA 工具链修复（_exclude_paths ** 递归 / deviations 持久化 file_pattern / spec coverage 通用 fallback）
+- 测试环境隔离修复（event_bus /tmp 污染根治 + test_cli tmp_path + onboarding secret 恢复）
+
+---
+
+## ✅ 质量状态（v3.13.0）
+
+| 指标 | 值 |
+|:-----|:---|
+| 全量测试 | 10814 passed / 0 failed（1 flaky 复跑 3 轮全过）/ 130 skipped，715s |
+| 覆盖率 | **85.37%**（行 87.67% + 分支 78.52% 加权） |
+| CI | 三层全绿（yuleOSH CI 23m56s / Honesty Gate / CodeQL+Semgrep） |
+| ruff | 全部改动文件零新增 |
+
+---
+
 # yuleOSH v3.12.1 — 工具链打通 + CI 门禁复活发布
 
 > **发布日期**: 2026-08-05
