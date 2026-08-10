@@ -269,7 +269,8 @@ def _mock_llm_client() -> Callable:
 
 
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
-                mock: bool = False, profile: Optional[str] = None, org_id: int = 0):
+                mock: bool = False, profile: Optional[str] = None, org_id: int = 0,
+                user_id: int | None = None, user_email: str | None = None):
     """Run the full OSH pipeline for a given spec.
     
     Args:
@@ -282,6 +283,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             responses — no API key needed (for demo/testing).
         profile: Optional profile name override (default: from ci-config.yaml or "safety").
         org_id: 消费计量归属组织（Portal 方案 B, 2026-08-10；CLI 默认 0）。
+        user_id/user_email: 用户归因（Phase 9, 2026-08-10；CLI 默认 None）。
     """
 
     # Deferred import from run shim so that test mocks on
@@ -361,6 +363,8 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             llm_client=llm_client,
             agent_constraints=agent_constraints,
             org_id=org_id,
+            user_id=user_id,
+            user_email=user_email,
         )
         # A1-A4: 角色隔离所需的新字段 —— 按角色分组的约束 + 共享安全基线。
         session.agent_constraints_by_role = constraints_by_role
@@ -444,6 +448,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
 
         # Portal 方案 B (2026-08-10): 消费计量——LLM token 用量写入 usage_log。
         # 仅 org_id>0 时记录（CLI 无 org 上下文默认 0，单机部署不计量）；失败不阻塞 pipeline。
+        # Phase 9 (2026-08-10): 携带用户归因（user_id/user_email/run_id）。
         if getattr(session, "org_id", 0):
             try:
                 from yuleosh.store import Store
@@ -451,6 +456,9 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 record_pipeline_run(
                     Store(), session.org_id, 0,
                     llm_tokens=getattr(session, "token_usage_total", 0) or 0,
+                    user_id=getattr(session, "user_id", None),
+                    user_email=getattr(session, "user_email", None),
+                    run_id=getattr(session, "run_id", None),
                 )
                 log.info("Usage recorded: org=%s llm_tokens=%d", session.org_id, session.token_usage_total)
             except Exception as _usage_err:
@@ -501,21 +509,42 @@ def status_pipeline(name: Optional[str] = None) -> None:
 
     Args:
         name: Optional session name. If None, lists all sessions.
+
+    Phase 9 (2026-08-10): session directories are named by run_id (unique
+    per run). Display name comes from session.json['name'], not the dir
+    name. Legacy name-dirs (pre-v9) are still matched for backward compat.
     """
     base = Path(os.environ.get("OSH_HOME", ".")) / ".osh" / "sessions"
-    
+
     sessions = []
     if name:
-        sdir = base / name
-        if sdir.exists():
-            sessions.append(name)
+        # Match by display name — scan dirs, compare session.json['name'].
+        if base.exists():
+            for d in sorted(base.iterdir()):
+                if not d.is_dir():
+                    continue
+                sfile = d / "session.json"
+                if not sfile.exists():
+                    # Legacy: dir name itself is the session name.
+                    if d.name == name:
+                        sessions.append(d.name)
+                    continue
+                try:
+                    with open(sfile) as f:
+                        data = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    if d.name == name:
+                        sessions.append(d.name)
+                    continue
+                if data.get("name") == name:
+                    sessions.append(d.name)
     else:
         sessions = sorted([d.name for d in base.iterdir() if d.is_dir()])
-    
+
     if not sessions:
         print("No pipeline sessions found.")
         return
-    
+
     for sname in sessions:
         sfile = base / sname / "session.json"
         if sfile.exists():

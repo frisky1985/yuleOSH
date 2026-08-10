@@ -83,6 +83,9 @@ def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dic
 
     # Portal 方案 B (2026-08-10): 消费计量归属触发用户所在组织。
     _org_id = user.get("org_id", 0) or 0
+    # Phase 9 (2026-08-10): 用户归因 — 传入触发用户，usage_log 按用户拆分。
+    _user_id = user.get("user_id")
+    _user_email = user.get("email") or ""
 
     try:
         if pipeline_type == "full" or pipeline_type == "full_pipeline":
@@ -91,12 +94,16 @@ def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dic
                 config_json=config_json,
                 arxml_content=arxml_content,
                 org_id=_org_id,
+                user_id=_user_id,
+                user_email=_user_email,
             )
         else:
             job_id = submit_pipeline(
                 project_dir=str(resolved),
                 layer=layer,
                 org_id=_org_id,
+                user_id=_user_id,
+                user_email=_user_email,
             )
 
         return {

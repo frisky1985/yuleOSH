@@ -186,7 +186,10 @@ class PostgresStore(AbstractStore):
                     project_id INTEGER,
                     resource TEXT NOT NULL,
                     amount INTEGER NOT NULL DEFAULT 1,
-                    recorded_at TEXT NOT NULL
+                    recorded_at TEXT NOT NULL,
+                    user_id INTEGER,
+                    run_id TEXT,
+                    user_email TEXT
                 );
                 CREATE TABLE IF NOT EXISTS subscriptions (
                     id SERIAL PRIMARY KEY,
@@ -243,6 +246,13 @@ class PostgresStore(AbstractStore):
             cur.execute("SELECT * FROM organizations WHERE id=%s", (org_id,))
             row = cur.fetchone()
             return self._row_to_dict(cur, row) if row else None
+
+    def count_org_users(self, org_id: int) -> int:
+        """Count users belonging to an org (Phase 9, billing usage)."""
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM users WHERE org_id=%s", (org_id,))
+            row = cur.fetchone()
+            return row[0] if row else 0
 
     def list_organizations(self) -> list[dict]:
         with self.conn.cursor() as cur:
@@ -559,14 +569,37 @@ class PostgresStore(AbstractStore):
     # Usage & Subscription
     # ------------------------------------------------------------------
 
-    def record_usage(self, org_id: int, project_id: int, resource: str, amount: int):
+    def record_usage(self, org_id: int, project_id: int, resource: str, amount: int,
+                     user_id: int | None = None, run_id: str | None = None,
+                     user_email: str | None = None):
         now = datetime.now().isoformat()
         with self.conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO usage_log (org_id, project_id, resource, amount, recorded_at) VALUES (%s,%s,%s,%s,%s)",
-                (org_id, project_id, resource, amount, now)
+                "INSERT INTO usage_log (org_id, project_id, resource, amount, recorded_at,"
+                " user_id, run_id, user_email) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                (org_id, project_id, resource, amount, now, user_id, run_id, user_email)
             )
         self.conn.commit()
+
+    def get_monthly_usage_by_user(self, org_id: int) -> list[dict]:
+        with self.conn.cursor() as cur:
+            month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+            cur.execute(
+                "SELECT user_id, user_email,"
+                " SUM(CASE WHEN resource='llm_tokens' THEN amount ELSE 0 END) AS llm_tokens,"
+                " SUM(CASE WHEN resource='pipeline_runs' THEN amount ELSE 0 END) AS pipeline_runs"
+                " FROM usage_log"
+                " WHERE org_id=%s AND recorded_at>=%s AND user_id IS NOT NULL"
+                " GROUP BY user_id, user_email ORDER BY llm_tokens DESC",
+                (org_id, month_start)
+            )
+            rows = cur.fetchall()
+            return [{
+                "user_id": r[0],
+                "user_email": r[1] or "",
+                "llm_tokens": r[2] or 0,
+                "pipeline_runs": r[3] or 0,
+            } for r in rows]
 
     def get_monthly_usage(self, org_id: int) -> dict:
         with self.conn.cursor() as cur:
