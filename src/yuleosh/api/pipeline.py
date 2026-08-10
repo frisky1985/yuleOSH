@@ -84,6 +84,12 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
         result = handle_pipeline_stats(kwargs.get("handler"))
         return (result, 200) if isinstance(result, dict) else result
 
+    # Portal 方案 B (2026-08-10): pipeline LLM 消费明细（角色分层: admin 全量 / member 本 org）
+    if path_tail == "usage" and method == "GET":
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_usage
+        result = handle_pipeline_usage(kwargs.get("handler"), f"/api/v1/pipeline/{path_tail}")
+        return (result, 200) if isinstance(result, dict) else result
+
     if path_tail == "yuleasr-status" and method == "GET":
         from yuleosh.ui.routes.pipeline_routes import handle_yuleasr_status
         result = handle_yuleasr_status(kwargs.get("handler"))

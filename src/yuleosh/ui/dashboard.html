@@ -209,6 +209,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
       <div class="stat-label">Active Projects</div>
     </div>
     <div class="stat-card">
+      <div class="stat-value stat-green" id="statTokens">—</div>
+      <div class="stat-label">Token 消耗</div>
+    </div>
+    <div class="stat-card">
       <div class="stat-value stat-green" id="statPipeRate">—</div>
       <div class="stat-label">Pipeline Success</div>
       <div class="stat-rate" id="statPipeRateDetail"></div>
@@ -611,6 +615,15 @@ async function loadStats() {
     document.getElementById('statPipeRateDetail').textContent = 'of ' + d.total_pipelines + ' runs';
     document.getElementById('statCIRate').textContent = (d.ci_pass_rate ?? 0) + '%';
     document.getElementById('statCIRateDetail').textContent = 'of ' + d.total_ci_runs + ' runs';
+    // Portal 方案 B (2026-08-10): 真实 LLM 消费（角色分层由后端 /api/v1/pipeline/usage 处理）
+    try {
+      const u = await loadJSON('/api/v1/pipeline/usage');
+      if (u && u.ok) {
+        const t = u.total_tokens || 0;
+        document.getElementById('statTokens').textContent =
+          t >= 1000 ? (t / 1000).toFixed(1) + 'k' : String(t);
+      }
+    } catch (e) { /* 保持 — */ }
     addLogEntry('Stats loaded: ' + d.total_pipelines + ' pipes, ' + d.total_ci_runs + ' CI', 'info');
   } catch(e) {
     addLogEntry('Stats load failed: ' + e, 'warning');
