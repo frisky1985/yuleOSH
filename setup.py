@@ -13,7 +13,7 @@ setup(
     description="嵌入式AI开发全流程平台 — OpenSpec+Superpowers+Harness Engineering 三位一体",
     packages=find_packages(where=["src"]),
     package_dir={"": "src"},
-    python_requires=">=3.10",
+    python_requires=">=3.12,<3.13",
     install_requires=[
         "bcrypt>=5.0",
         "pyjwt>=2.13",
