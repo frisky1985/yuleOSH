@@ -269,7 +269,7 @@ def _mock_llm_client() -> Callable:
 
 
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
-                mock: bool = False, profile: Optional[str] = None):
+                mock: bool = False, profile: Optional[str] = None, org_id: int = 0):
     """Run the full OSH pipeline for a given spec.
     
     Args:
@@ -281,6 +281,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         mock: If True, run with a fake LLM that returns placeholder
             responses — no API key needed (for demo/testing).
         profile: Optional profile name override (default: from ci-config.yaml or "safety").
+        org_id: 消费计量归属组织（Portal 方案 B, 2026-08-10；CLI 默认 0）。
     """
 
     # Deferred import from run shim so that test mocks on
@@ -359,6 +360,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             spec_path,
             llm_client=llm_client,
             agent_constraints=agent_constraints,
+            org_id=org_id,
         )
         # A1-A4: 角色隔离所需的新字段 —— 按角色分组的约束 + 共享安全基线。
         session.agent_constraints_by_role = constraints_by_role
@@ -439,6 +441,20 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         print()
         
         log.info(f"Pipeline finished: {session.status}, errors={len(session.errors)}")
+
+        # Portal 方案 B (2026-08-10): 消费计量——LLM token 用量写入 usage_log。
+        # 仅 org_id>0 时记录（CLI 无 org 上下文默认 0，单机部署不计量）；失败不阻塞 pipeline。
+        if getattr(session, "org_id", 0):
+            try:
+                from yuleosh.store import Store
+                from yuleosh.usage import record_pipeline_run
+                record_pipeline_run(
+                    Store(), session.org_id, 0,
+                    llm_tokens=getattr(session, "token_usage_total", 0) or 0,
+                )
+                log.info("Usage recorded: org=%s llm_tokens=%d", session.org_id, session.token_usage_total)
+            except Exception as _usage_err:
+                log.warning("Usage recording failed (non-fatal): %s", _usage_err)
 
         # Token usage summary
         if session.token_usage_total > 0:

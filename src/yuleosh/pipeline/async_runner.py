@@ -42,9 +42,25 @@ def _get_pool():
     return _pool
 
 
+def _record_pipeline_usage(org_id: int) -> None:
+    """Portal 方案 B (2026-08-10): 记录 pipeline_run 计量到 usage_log。
+
+    6 阶段模拟器无 LLM 调用，llm_tokens=0；真实 token 消费在
+    run_pipeline（33 步）结束处计量。失败不阻塞；org_id=0（CLI/单机）跳过。
+    """
+    if not org_id:
+        return
+    try:
+        from yuleosh.store import Store
+        from yuleosh.usage import record_pipeline_run
+        record_pipeline_run(Store(), org_id, 0, llm_tokens=0)
+    except Exception as _usage_err:
+        log.warning("Usage recording failed (non-fatal): %s", _usage_err)
+
+
 # ── Main API ──────────────────────────────────────────────────────────────
 
-def submit_pipeline(project_dir: str, layer: int = 1) -> str:
+def submit_pipeline(project_dir: str, layer: int = 1, org_id: int = 0) -> str:
     """Submit a CI-layer pipeline job for async execution. Returns job_id."""
     job_id = secrets.token_hex(8)
     _PIPELINE_JOBS[job_id] = {
@@ -53,6 +69,7 @@ def submit_pipeline(project_dir: str, layer: int = 1) -> str:
         "type": "ci_layer",
         "project_dir": project_dir,
         "layer": layer,
+        "org_id": org_id,
         "progress": 0,
         "current_stage": "queued",
         "stages": [],
@@ -62,7 +79,7 @@ def submit_pipeline(project_dir: str, layer: int = 1) -> str:
         "logs": [],
     }
     pool = _get_pool()
-    pool.submit(_run_ci_job, job_id, project_dir, layer)
+    pool.submit(_run_ci_job, job_id, project_dir, layer, org_id)
     return job_id
 
 
@@ -70,6 +87,7 @@ def submit_full_pipeline(
     project_dir: str,
     config_json: Optional[str] = None,
     arxml_content: Optional[str] = None,
+    org_id: int = 0,
 ) -> str:
     """Submit a full yuleOSH pipeline (RTE → CI → MISRA) with optional config.
     
@@ -77,6 +95,7 @@ def submit_full_pipeline(
         project_dir: Base project directory for pipeline artifacts.
         config_json: Optional JSON string of module configurations.
         arxml_content: Optional ARXML string.
+        org_id: 消费计量归属组织（Portal 方案 B, 2026-08-10；默认 0 不计量）。
     
     Returns: job_id for status polling.
     """
@@ -90,6 +109,7 @@ def submit_full_pipeline(
         "project_dir": project_dir,
         "config_json": config_json,
         "arxml_content": arxml_content,
+        "org_id": org_id,
         "progress": 0,
         "current_stage": "queued",
         "stages": [dict(s, status="pending") for s in stages],
@@ -99,7 +119,7 @@ def submit_full_pipeline(
         "logs": [],
     }
     pool = _get_pool()
-    pool.submit(_run_full_pipeline, job_id, project_dir, config_json, arxml_content)
+    pool.submit(_run_full_pipeline, job_id, project_dir, config_json, arxml_content, org_id)
     return job_id
 
 
@@ -126,7 +146,7 @@ def _update_stage(job_id: str, stage_key: str, status: str, progress: int = None
         job["updated_at"] = datetime.now().isoformat()
 
 
-def _run_ci_job(job_id: str, project_dir: str, layer: int):
+def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0):
     """Execute CI layer in background thread.
 
     P1-8 (W-05): failures must be EXPLICIT.  Previously an ImportError or a
@@ -170,11 +190,13 @@ def _run_ci_job(job_id: str, project_dir: str, layer: int):
     job["progress"] = 100
     job["completed_at"] = datetime.now().isoformat()
     job["updated_at"] = datetime.now().isoformat()
+    _record_pipeline_usage(org_id)
 
 
 def _run_full_pipeline(
     job_id: str, project_dir: str,
     config_json: Optional[str], arxml_content: Optional[str],
+    org_id: int = 0,
 ):
     """Execute full pipeline (ARXML parse → validate → RTE → CI → MISRA)."""
     job = _PIPELINE_JOBS.get(job_id)
@@ -329,6 +351,7 @@ def _run_full_pipeline(
     job["progress"] = 100
     job["completed_at"] = datetime.now().isoformat()
     job["updated_at"] = datetime.now().isoformat()
+    _record_pipeline_usage(org_id)
 
     # ── Notification on completion (for all autosar / full_pipeline types) ──
     _notify_pipeline_completion(job_id)

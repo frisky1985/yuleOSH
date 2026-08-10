@@ -68,10 +68,13 @@ class PipelineSession:
         agent_constraints: str | None = None,
         development_mode: str | None = None,
         config: dict | None = None,
+        org_id: int = 0,
     ):
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
         self.project_dir = str(Path(os.environ.get("OSH_HOME", ".")).resolve())
+        # Portal 方案 B (2026-08-10): 消费计量归属组织（JWT org_id，CLI 默认 0）。
+        self.org_id: int = org_id
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
         self.status = "created"  # created -> running -> completed | failed
@@ -224,6 +227,9 @@ class PipelineSession:
             "steps": self.steps,
             "artifacts": self.artifacts,
             "errors": self.errors,
+            "org_id": self.org_id,
+            "token_usage_total": self.token_usage_total,
+            "token_usage_steps": self.token_usage_steps,
         }
 
 

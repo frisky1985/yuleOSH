@@ -158,7 +158,8 @@ class TestRecordPipelineRun:
     def test_basic_record(self, mock_store):
         """GIVEN pipeline run WHEN recording THEN calls store methods."""
         record_pipeline_run(mock_store, 1, 1)
-        mock_store.record_usage.assert_called_with(1, 1, "pipeline_run", 1)
+        # 修复 (2026-08-10): resource 名统一为 "pipeline_runs"（与 get_monthly_usage 聚合 key 一致）
+        mock_store.record_usage.assert_called_with(1, 1, "pipeline_runs", 1)
 
     def test_with_llm_tokens(self, mock_store):
         """GIVEN pipeline run with tokens WHEN recording THEN records both."""

@@ -81,17 +81,22 @@ def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dic
 
     from yuleosh.pipeline.async_runner import submit_pipeline, submit_full_pipeline
 
+    # Portal 方案 B (2026-08-10): 消费计量归属触发用户所在组织。
+    _org_id = user.get("org_id", 0) or 0
+
     try:
         if pipeline_type == "full" or pipeline_type == "full_pipeline":
             job_id = submit_full_pipeline(
                 project_dir=str(resolved),
                 config_json=config_json,
                 arxml_content=arxml_content,
+                org_id=_org_id,
             )
         else:
             job_id = submit_pipeline(
                 project_dir=str(resolved),
                 layer=layer,
+                org_id=_org_id,
             )
 
         return {
@@ -166,6 +171,66 @@ def handle_pipeline_stats(handler: BaseHTTPRequestHandler) -> dict:
     from yuleosh.pipeline.async_runner import get_pipeline_stats
     stats = get_pipeline_stats()
     return {"ok": True, **stats}
+
+
+def handle_pipeline_usage(handler: BaseHTTPRequestHandler, path: str) -> dict:
+    """GET /api/v1/pipeline/usage — Pipeline LLM token consumption by run.
+
+    Portal 方案 B (2026-08-10): 扫描 ``{OSH_HOME}/.osh/sessions/*/session.json``
+    聚合每次 run 的 token 消费（session.to_dict 已持久化 org_id/token_usage_*）。
+
+    角色分层: admin 看全量; member 只看本 org（org_id 匹配）的 run。
+    损坏容错: 坏 json / 缺文件跳过，不抛异常。
+    """
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        return {"ok": False, "error": "Authentication required"}
+    role = user.get("role", "member") or "member"
+    org_id = user.get("org_id", 0) or 0
+
+    osh_home = Path(os.environ.get("OSH_HOME", ".")).resolve()
+    sessions_root = osh_home / ".osh" / "sessions"
+    runs: list[dict] = []
+    total_tokens = 0
+    total_calls = 0
+
+    if sessions_root.exists():
+        dirs = [p for p in sessions_root.iterdir() if p.is_dir()]
+        dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for sdir in dirs:
+            sj = sdir / "session.json"
+            if not sj.exists():
+                continue
+            try:
+                data = json.loads(sj.read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+            run_org = data.get("org_id", 0) or 0
+            # 角色分层: member 只看本组织 run（org_id=0 的旧 run 仅 admin 可见）
+            if role != "admin" and run_org != org_id:
+                continue
+            tok = data.get("token_usage_total", 0) or 0
+            steps = data.get("token_usage_steps", []) or []
+            runs.append({
+                "name": data.get("name", sdir.name),
+                "status": data.get("status", "unknown"),
+                "created_at": data.get("created_at", ""),
+                "org_id": run_org,
+                "token_total": tok,
+                "llm_calls": len(steps),
+                "steps": steps[-20:],
+            })
+            total_tokens += tok
+            total_calls += len(steps)
+
+    return {
+        "ok": True,
+        "runs": runs,
+        "total_tokens": total_tokens,
+        "total_llm_calls": total_calls,
+        "role": role,
+    }
 
 
 def handle_yuleasr_status(handler: BaseHTTPRequestHandler) -> dict:
