@@ -37,6 +37,7 @@ def reset_store(tmp_path):
 
     from yuleosh.store import Store
     Store.reset()
+    old_db = os.environ.get("YULEOSH_DB")
     # Use an in-memory database via env var
     os.environ["YULEOSH_DB"] = str(tmp_path / "test_store.db")
     # Reset rate limit env var to default — prevents cross-module pollution
@@ -48,6 +49,8 @@ def reset_store(tmp_path):
     # Restore env var for other tests that might depend on it
     if old_rl is not None:
         os.environ["YULEOSH_RATE_LIMIT"] = old_rl
+    if old_db is not None:
+        os.environ["YULEOSH_DB"] = old_db
     Store.reset()
 
 

@@ -30,13 +30,20 @@ if str(SRC) not in sys.path:
 def osh_env(tmp_path):
     """Isolated OSH_HOME + Store per test."""
     old = os.environ.get("OSH_HOME")
+    old_db = os.environ.get("YULEOSH_DB")
     os.environ["OSH_HOME"] = str(tmp_path)
     os.environ["YULEOSH_JWT_SECRET"] = "test-secret"
+    # 防止其他测试文件泄漏的 YULEOSH_DB 覆盖 OSH_HOME 路径（Store.__new__ 优先读它）
+    os.environ.pop("YULEOSH_DB", None)
     yield tmp_path
     if old is None:
         os.environ.pop("OSH_HOME", None)
     else:
         os.environ["OSH_HOME"] = old
+    if old_db is None:
+        os.environ.pop("YULEOSH_DB", None)
+    else:
+        os.environ["YULEOSH_DB"] = old_db
 
 
 def _fresh_store(tmp_path):

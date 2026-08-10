@@ -53,6 +53,8 @@ def _write_session(sessions, name, status, steps=None):
     if steps is None:
         steps = [status]
     data = {
+        # Phase 9: 目录名 = run_id，显示名走 session.json['name']
+        "name": name,
         "status": status,
         "steps": [{"status": s, "name": f"step-{i}"} for i, s in enumerate(steps)],
     }
