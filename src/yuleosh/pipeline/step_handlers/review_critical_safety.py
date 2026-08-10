@@ -173,10 +173,10 @@ class CriticalSafetyScanner:
                     snippet=stripped,
                     fix_suggestion="除数检查：if (divisor == 0) return error;"
                 ))
-            # 未检查的变量除数
-            if re.match(r'^[^/]*/(\w+)\s*[;=]', stripped):
-                var = re.search(r'/(\w+)', stripped)
-                if var and not re.search(r'/(\w+)\.(\w+)', stripped):
+            # 未检查的变量除数（允许 / 与变量间有空格；排除常量 0）
+            if re.match(r'^[^/]*/\s*([A-Za-z_]\w*)\s*[;=]', stripped):
+                var = re.search(r'/\s*([A-Za-z_]\w*)', stripped)
+                if var and not re.search(r'/\s*([A-Za-z_]\w*)\.(\w+)', stripped):
                     vname = var.group(1)
                     # 往前搜索该变量是否被检查过 non-zero
                     checked = False
@@ -258,10 +258,10 @@ class CriticalSafetyScanner:
                     ))
 
             # 函数返回指针直接解引用（无 NULL 检查）
-            m2 = re.search(r'(\w+(?:->)?[A-Za-z_]\w*)\s*->\s*\w+', stripped)
+            m2 = re.search(r'([&\w.]+)\s*->\s*\w+', stripped)
             if m2:
                 deref_obj = m2.group(1).strip()
-                # 剔除点号表达式
+                # 剔除点号表达式（obj.field->x 是成员解引用，跳过）
                 if '.' in deref_obj:
                     continue
                 # 往前看该变量最近一次赋值是否 checked
@@ -282,13 +282,17 @@ class CriticalSafetyScanner:
 
     # ── 4. 无限递归 ──────────────────────────────────────
 
+    _C_KEYWORDS = frozenset({
+        "if", "for", "while", "switch", "return", "sizeof", "do", "else",
+    })
+
     def _scan_unbounded_recursion(self, filepath: Path, lines: list[str]):
         """匹配递归调用但缺少递归深度限制。"""
         # 收集函数名
         func_stack = []
         for lineno, line in enumerate(lines, 1):
             m = re.match(r'(\w+)\s*\(', line.strip())
-            if m:
+            if m and m.group(1) not in self._C_KEYWORDS:
                 func_stack.append(m.group(1))
             if len(func_stack) > 20:
                 func_stack.pop(0)
@@ -296,6 +300,9 @@ class CriticalSafetyScanner:
         # 检测递归：函数内调用自己
         for lineno, line in enumerate(lines, 1):
             stripped = line.strip()
+            # 跳过函数定义行（foo(void) { / foo() {）——定义不是递归调用
+            if re.match(r'^\w+\s*\([^)]*\)\s*\{?\s*$', stripped):
+                continue
             for fn in func_stack[-5:]:
                 if re.search(rf'\b{fn}\s*\(', stripped):
                     # 检查同一函数内是否有 if(...) return 作为终止条件
