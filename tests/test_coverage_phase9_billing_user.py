@@ -17,6 +17,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -264,9 +265,10 @@ class TestBillingUsageMerge:
 
     def _call(self, user_dict):
         from yuleosh.ui.routes import billing_routes as br
-        br._require_auth = lambda h: user_dict
-        br.UsageMeter = FakeMeter
-        return br.handle_get_usage("GET", "usage", {}, {}, FakeHandler())
+        # mock.patch.object 自动恢复，防模块级状态泄漏到后续测试文件
+        with mock.patch.object(br, "_require_auth", lambda h: user_dict), \
+                mock.patch.object(br, "UsageMeter", FakeMeter):
+            return br.handle_get_usage("GET", "usage", {}, {}, FakeHandler())
 
     def test_usage_merges_llm_tokens_and_ci(self, osh_env):
         _store, org = self._setup(osh_env)
@@ -287,9 +289,10 @@ class TestBillingUsageMerge:
     def test_usage_missing_slug_org_ok(self, osh_env):
         """Billing must not 500 when sqlite org missing for a slug."""
         from yuleosh.ui.routes import billing_routes as br
-        br._require_auth = lambda h: {"org_slug": "no-such-org", "role": "admin"}
-        br.UsageMeter = FakeMeter
-        result, code = br.handle_get_usage("GET", "usage", {}, {}, FakeHandler())
+        with mock.patch.object(br, "_require_auth",
+                               lambda h: {"org_slug": "no-such-org", "role": "admin"}), \
+                mock.patch.object(br, "UsageMeter", FakeMeter):
+            result, code = br.handle_get_usage("GET", "usage", {}, {}, FakeHandler())
         assert code == 200
         assert result["usage"]["llm_tokens"] == 0
         assert result["by_user"] == []
@@ -306,25 +309,23 @@ class TestBillingUsageMerge:
 class TestBillingAuth:
     def test_billing_requires_auth(self, osh_env):
         from yuleosh.ui.routes import billing_routes as br
-        br._require_auth = lambda h: None
-        _resp, code = br.handle_get_usage("GET", "usage", {}, {}, FakeHandler())
+        with mock.patch.object(br, "_require_auth", lambda h: None):
+            _resp, code = br.handle_get_usage("GET", "usage", {}, {}, FakeHandler())
         assert code == 401
 
     def test_billing_rbac_403(self, osh_env):
         """rbac still enforced: role without billing:view → 403."""
         from yuleosh.ui.routes import billing_routes as br
-        br._require_auth = lambda h: {"org_slug": "x", "role": "viewer"}
-        br.UsageMeter = FakeMeter
         # rbac.check_role is imported inside the handler — simulate deny by
         # patching the real rbac module used at call time.
         from yuleosh import rbac
-        _orig = rbac.check_role
 
         def deny(user, res, action):
             return False
-        rbac.check_role = deny
-        try:
+
+        with mock.patch.object(br, "_require_auth",
+                               lambda h: {"org_slug": "x", "role": "viewer"}), \
+                mock.patch.object(br, "UsageMeter", FakeMeter), \
+                mock.patch.object(rbac, "check_role", deny):
             _resp, code = br.handle_get_usage("GET", "usage", {}, {}, FakeHandler())
-            assert code == 403
-        finally:
-            rbac.check_role = _orig
+        assert code == 403
