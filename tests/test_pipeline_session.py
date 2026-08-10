@@ -77,7 +77,10 @@ class TestPipelineSessionInit:
             with mock.patch.dict(os.environ, {"OSH_HOME": tmpdir}):
                 session = PipelineSession("test-session", "/tmp/spec.md")
                 assert session.session_dir.exists()
-                assert session.session_dir.name == "test-session"
+                # Phase 9: 目录按 run_id 命名（同 name 不碰撞），name 存 session.json
+                assert session.run_id
+                assert session.session_dir.name == session.run_id
+                assert session.session_dir.name != "test-session"
                 assert ".osh" in str(session.session_dir)
                 assert "sessions" in str(session.session_dir)
 
