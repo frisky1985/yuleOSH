@@ -157,6 +157,34 @@ class TestSessionRunId:
 
 
 class TestStatusPipelineCompat:
+    def test_make_subprocess_runner_shared_run_id(self, osh_env):
+        """Phase 9: runner 自动生成共享 run_id，worker 与主进程同目录。
+
+        make_subprocess_runner 未传 run_id 时生成固定共享 run_id；
+        _run_step_in_subprocess 把 run_id 传进 worker cmd（--run-id），
+        worker 侧 PipelineSession 用同一 run_id 目录 → artifacts 交接链一致。
+        """
+        from unittest import mock as _mock
+
+        from yuleosh.engine import subprocess_executor as se
+
+        # 直接调 runner 单步（mock subprocess.run 避免真起进程）。
+        step_def = {"step_id": "openspec-check", "name": "OpenSpec 合规检查",
+                    "agent": "小明", "spec_path": "/tmp/spec.md"}
+        with _mock.patch.object(se.subprocess, "run") as m_run:
+            m_run.return_value = type("P", (), {
+                "returncode": 0,
+                "stdout": json.dumps({"verdict": "passed", "output_path": "/tmp/o"}),
+                "stderr": "",
+            })()
+            se._run_step_in_subprocess(
+                step_def, "/tmp/proj", True, "/tmp/spec.md",
+                session_name="shared", run_id="run-abc",
+            )
+            cmd = m_run.call_args[0][0]
+            assert "--run-id" in cmd
+            assert cmd[cmd.index("--run-id") + 1] == "run-abc"
+
     def test_status_pipeline_matches_by_json_name(self, osh_env):
         """status_pipeline(name) matches run_id dirs via session.json name."""
         from yuleosh.pipeline.session import PipelineSession
