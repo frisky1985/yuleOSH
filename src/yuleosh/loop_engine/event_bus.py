@@ -40,6 +40,7 @@ Usage:
 import enum
 import hashlib
 import hmac
+import itertools
 import json
 import logging
 import os
@@ -1346,6 +1347,10 @@ class SystemEventBus:
         self._store = store  # 可选的持久化后端
         self._worker_thread: Optional[threading.Thread] = None
         self._work_queue: queue.PriorityQueue = queue.PriorityQueue()
+        # 修复 (2026-08-11, Phase 7 覆盖率攻坚发现): 入队元组 (priority, idx, event) 的
+        # idx 曾用常量 0——两条同优先级事件入队时 heapq 继续比较 LoopEvent 实例
+        # （dataclass 无 __lt__）→ TypeError。全局单调计数器保证 idx 唯一，永不比较事件。
+        self._emit_seq = itertools.count()
         self._running = False
         self._max_workers = max_workers
 
@@ -1399,7 +1404,7 @@ class SystemEventBus:
                 log.info("EventBus: recovering %d unconsumed event(s) from crash",
                          len(recovered))
                 for idx, recovered_event in enumerate(recovered):
-                    self._work_queue.put((recovered_event.priority, idx, recovered_event))
+                    self._work_queue.put((recovered_event.priority, next(self._emit_seq), recovered_event))
                     with self._lock:
                         self._stats["total_recovered"] += 1
 
@@ -1409,6 +1414,9 @@ class SystemEventBus:
                     self._worker_thread = threading.Thread(
                         target=self._worker_loop, daemon=True
                     )
+                    # 修复 (2026-08-11, Phase 7 覆盖率攻坚发现): 此处漏了 .start()，
+                    # 恢复的事件入队后没有线程消费（对比 emit_async L1816 有 start）。
+                    self._worker_thread.start()
         else:
             # v3.12.x CI 真跑修复: persistence 关闭时原先写死 /tmp/yuleosh-loop，
             # 与默认分支（OSH_HOME=/tmp → /tmp/.yuleosh/loop）一样会污染
@@ -1536,8 +1544,15 @@ class SystemEventBus:
     def off(self, sub_id: str):
         """取消订阅。"""
         with self._lock:
-            for event_type, subs in self._subscriptions.items():
-                self._subscriptions[event_type] = [s for s in subs if s.id != sub_id]
+            # 修复 (2026-08-11, Phase 7 覆盖率攻坚发现): 过滤后曾保留空列表键，
+            # active_subscriptions() 返回 {"ci.failure": 0} 而非移除该类型。
+            # 现在空列表直接删除该事件类型键。
+            for event_type in list(self._subscriptions.keys()):
+                filtered = [s for s in self._subscriptions[event_type] if s.id != sub_id]
+                if filtered:
+                    self._subscriptions[event_type] = filtered
+                else:
+                    self._subscriptions.pop(event_type, None)
             self._callbacks.pop(sub_id, None)
         log.debug("EventBus: unsubscribed %s", sub_id[:8])
 
@@ -1805,7 +1820,7 @@ class SystemEventBus:
             priority=priority,
             dedup_key=dedup_key,
         )
-        self._work_queue.put((event.priority, 0, event))
+        self._work_queue.put((event.priority, next(self._emit_seq), event))
 
         # 启动 worker 线程（如果需要）
         if not self._running:
@@ -1976,7 +1991,7 @@ class SystemEventBus:
         recovered = self._persistence.recover_unconsumed()
         count = 0
         for idx, event in enumerate(recovered):
-            self._work_queue.put((event.priority, idx, event))
+            self._work_queue.put((event.priority, next(self._emit_seq), event))
             with self._lock:
                 self._stats["total_recovered"] += 1
                 self._stats["total_emitted"] += 1
