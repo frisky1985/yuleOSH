@@ -32,7 +32,9 @@ def osh_env(tmp_path):
     old = os.environ.get("OSH_HOME")
     old_db = os.environ.get("YULEOSH_DB")
     os.environ["OSH_HOME"] = str(tmp_path)
-    os.environ["YULEOSH_JWT_SECRET"] = "test-secret"
+    # 不设置 YULEOSH_JWT_SECRET：auth_extended.JWT_SECRET 是模块导入时快照，
+    # 改 env 会污染同进程后跑的 auth 测试（v380_a1_auth_unify 断言快照==env）。
+    # conftest 已提供 ≥16 的 CI 值，billing 路由认证全部 mock，不依赖具体值。
     # 防止其他测试文件泄漏的 YULEOSH_DB 覆盖 OSH_HOME 路径（Store.__new__ 优先读它）
     os.environ.pop("YULEOSH_DB", None)
     yield tmp_path
