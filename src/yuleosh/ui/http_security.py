@@ -134,9 +134,12 @@ RATE_LIMIT_MAX = 60          # requests per window
 RATE_LIMIT_WINDOW = 60.0     # seconds
 
 
-def check_rate_limit(client_ip: str, max_requests: int = RATE_LIMIT_MAX,
-                      window: float = RATE_LIMIT_WINDOW) -> tuple[bool, float]:
-    """Check if client_ip is within rate limits.  Returns (allowed, retry_after)."""
+def check_rate_limit_memory(client_ip: str, max_requests: int = RATE_LIMIT_MAX,
+                            window: float = RATE_LIMIT_WINDOW) -> tuple[bool, float]:
+    """In-memory rate limit check — kept for tests / single-process fallback.
+
+    Multi-worker deployments must use :func:`check_rate_limit` (shared SQLite).
+    """
     now = time.time()
     bucket = _rate_limit_buckets[client_ip]
     # Prune old entries
@@ -147,6 +150,29 @@ def check_rate_limit(client_ip: str, max_requests: int = RATE_LIMIT_MAX,
         return False, round(retry_after, 1)
     bucket.append(now)
     return True, 0.0
+
+
+def check_rate_limit(client_ip: str, max_requests: int = RATE_LIMIT_MAX,
+                     window: float = RATE_LIMIT_WINDOW) -> tuple[bool, float]:
+    """Check if client_ip is within rate limits.  Returns (allowed, retry_after).
+
+    W2 (2026-08-11): backed by the shared SQLite store
+    (``api.ratelimit_shared.RateLimitStore``) so multiple workers share one
+    budget.  db path resolves via ``YULEOSH_RATE_DB`` → ``$OSH_HOME/.yuleosh`` →
+    temp dir; fall back to the in-memory limiter when the shared store is
+    unavailable so a storage hiccup cannot take the API down.
+    """
+    try:
+        from yuleosh.api.ratelimit_shared import RateLimitStore, default_db_path
+        store = RateLimitStore(db_path=default_db_path())
+        allowed, _remaining = store.check(
+            client_ip, limit=max_requests, window_seconds=int(window))
+        if allowed:
+            return True, 0.0
+        retry_after = store.window_remaining_seconds(client_ip, int(window))
+        return False, round(retry_after, 1)
+    except Exception:  # noqa: BLE001 — degrade gracefully, never 500 the API
+        return check_rate_limit_memory(client_ip, max_requests, window)
 
 # ── Security response headers (OSHHandler._add_security_headers) ──────────
 

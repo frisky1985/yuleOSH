@@ -195,6 +195,24 @@ class RateLimitStore:
         finally:
             conn.close()
 
+    def window_remaining_seconds(self, key: str, window_seconds: int) -> float:
+        """Seconds until the current window slides for ``key`` (0 when absent/expired).
+
+        Used by callers that need a ``Retry-After`` value matching the old
+        in-memory limiter's semantics (window - time since window start).
+        """
+        now = self._clock()
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                f"SELECT window_start FROM {_TABLE} WHERE key=?", (key,)
+            ).fetchone()
+            if row is None:
+                return 0.0
+            return max(0.0, window_seconds - (now - row[0]))
+        finally:
+            conn.close()
+
     def reset(self) -> None:
         """Clear all rate-limit state (useful in tests)."""
         conn = self._connect()
