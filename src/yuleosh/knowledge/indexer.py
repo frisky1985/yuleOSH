@@ -190,11 +190,11 @@ class KnowledgeIndexer:
         approved = []
         remaining = list(pending)
         for item in selected:
-            item["status"] = "active"
-            item["approved_at"] = _now()
-            approved.append(item)
             if item in remaining:
                 remaining.remove(item)
+                item["status"] = "active"
+                item["approved_at"] = _now()
+                approved.append(item)
 
         active = _load_json(self.active_path)
         active.extend(approved)
