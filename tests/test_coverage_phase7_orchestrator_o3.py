@@ -369,7 +369,8 @@ def test_pipeline_success_with_final_report(osh_home, tmp_path):
     assert session.status == "completed"
     assert len(session.steps) == 2
     assert all(s["status"] == "completed" for s in session.steps)
-    assert (tmp_path / ".osh" / "sessions" / "o3-test" / "session.json").exists()
+    # Phase 9: session 目录按 run_id 命名（不再按 name）
+    assert (tmp_path / ".osh" / "sessions" / session.run_id / "session.json").exists()
 
 
 def test_pipeline_without_final_report_status_created(osh_home, tmp_path, capsys):
