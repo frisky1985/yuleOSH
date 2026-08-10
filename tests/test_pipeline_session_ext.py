@@ -98,11 +98,13 @@ class TestPipelineSession:
             assert len(d["steps"]) == 1
 
     def test_session_dir_creation(self, tmp_path):
-        """Session directory is created."""
+        """Session directory is created (Phase 9: run_id 命名)."""
         with patch("yuleosh.pipeline.session.os.environ.get") as mock_env:
             mock_env.return_value = str(tmp_path)
             session = PipelineSession("test-dir", "/spec.md")
-            expected_dir = tmp_path / ".osh" / "sessions" / "test-dir"
+            # Phase 9: 目录按 run_id 命名（同 name 不碰撞）
+            assert session.run_id
+            expected_dir = tmp_path / ".osh" / "sessions" / session.run_id
             assert session.session_dir == expected_dir
             assert expected_dir.exists()
 
