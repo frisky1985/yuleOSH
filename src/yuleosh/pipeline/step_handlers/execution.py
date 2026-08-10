@@ -464,34 +464,45 @@ def step_claude_test(session: PipelineSession) -> str:
                 log.warning(f"Go test error: {e}")
                 test_summary = f"Go test error: {e}"
         else:
-            try:
-                result = subprocess.run(
-                    [sys.executable, "-m", "pytest", "tests/", "-q", "--ignore=tests/test_e2e.py"],
-                    capture_output=True, text=True, timeout=120, cwd=project_dir
+            if os.environ.get("PYTEST_CURRENT_TEST"):
+                # 递归保护 (2026-08-10, P1): step_claude_test 若在 pytest 会话内被真调用
+                # （例如某测试未 mock subprocess.run），再 spawn 全量 pytest 会无限递归
+                # （实测 25+ 进程失控，CPU 打满）。pytest 运行时设置 PYTEST_CURRENT_TEST，
+                # 检测到即跳过真实执行——只生成跳过说明报告，不产生子进程。
+                log.warning(
+                    "Skipping nested pytest: running inside a pytest session (PYTEST_CURRENT_TEST set)"
                 )
-                test_output = result.stdout + "\n" + result.stderr
-                for line in result.stdout.split("\n"):
-                    line = line.strip()
-                    if "passed" in line or "failed" in line:
-                        test_summary = line
-                        m = re.search(r"(\d+) passed", line)
-                        if m:
-                            passed = int(m.group(1))
-                        m = re.search(r"(\d+) failed", line)
-                        if m:
-                            failed = int(m.group(1))
-                        total = passed + failed
-                if not test_summary:
-                    test_summary = f"pytest completed (exit code {result.returncode})"
-            except FileNotFoundError:
-                log.warning("pytest not installed \u2014 tests cannot run")
-                test_summary = "pytest not installed \u2014 tests skipped"
-            except subprocess.TimeoutExpired:
-                log.warning("Tests timed out")
-                test_summary = "Tests timed out"
-            except Exception as e:
-                log.warning(f"Test error: {e}")
-                test_summary = f"Test error: {e}"
+                test_summary = "pytest skipped (nested execution guard)"
+                test_output = ""
+            else:
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-m", "pytest", "tests/", "-q", "--ignore=tests/test_e2e.py"],
+                        capture_output=True, text=True, timeout=120, cwd=project_dir
+                    )
+                    test_output = result.stdout + "\n" + result.stderr
+                    for line in result.stdout.split("\n"):
+                        line = line.strip()
+                        if "passed" in line or "failed" in line:
+                            test_summary = line
+                            m = re.search(r"(\d+) passed", line)
+                            if m:
+                                passed = int(m.group(1))
+                            m = re.search(r"(\d+) failed", line)
+                            if m:
+                                failed = int(m.group(1))
+                            total = passed + failed
+                    if not test_summary:
+                        test_summary = f"pytest completed (exit code {result.returncode})"
+                except FileNotFoundError:
+                    log.warning("pytest not installed \u2014 tests cannot run")
+                    test_summary = "pytest not installed \u2014 tests skipped"
+                except subprocess.TimeoutExpired:
+                    log.warning("Tests timed out")
+                    test_summary = "Tests timed out"
+                except Exception as e:
+                    log.warning(f"Test error: {e}")
+                    test_summary = f"Test error: {e}"
 
         # Read spec scenarios for mapping
         spec_scenarios = []

@@ -136,6 +136,7 @@ class TestClaudeArchLLMFailure:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("arch-llm-fail", str(spec_file), llm_client=_mock_llm_fail())
@@ -154,6 +155,7 @@ class TestClaudeArchWriteError:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("arch-write-err", str(spec_file), llm_client=_mock_llm())
@@ -173,6 +175,7 @@ class TestClaudeArchGenericError:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("arch-generic-err", str(spec_file), llm_client=_mock_llm())
@@ -200,6 +203,7 @@ class TestClaudeDevGitException:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text(
             "# Spec\n"
@@ -227,6 +231,7 @@ class TestClaudeDevWriteError:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Spec")
         session = PipelineSession("dev-write-err", str(spec_file), llm_client=_mock_llm())
@@ -247,6 +252,7 @@ class TestClaudeDevArtifactsMissing:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Spec")
         session = PipelineSession("dev-art-missing", str(spec_file), llm_client=_mock_llm())
@@ -270,6 +276,7 @@ class TestClaudeDevGenericError:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("dev-generic-err", str(spec_file), llm_client=_mock_llm())
@@ -293,6 +300,7 @@ class TestClaudeDevGitLogNonzeroReturncode:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Spec")
         session = PipelineSession("dev-git-nonzero", str(spec_file), llm_client=_mock_llm())
@@ -320,6 +328,7 @@ class TestTestPlanningSpecNotFound:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "nonexistent.md"
         session = PipelineSession("plan-no-spec", str(spec_file), llm_client=_mock_llm())
         result = step_test_planning(session)
@@ -336,6 +345,7 @@ class TestTestPlanningLLMFailure:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("plan-llm-fail", str(spec_file), llm_client=_mock_llm_fail())
@@ -354,6 +364,7 @@ class TestTestPlanningWriteError:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("plan-write-err", str(spec_file), llm_client=_mock_llm())
@@ -373,6 +384,7 @@ class TestTestPlanningGenericError:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("plan-generic-err", str(spec_file), llm_client=_mock_llm())
@@ -396,10 +408,11 @@ class TestClaudeTestGoProject:
     THEN it takes the Go test path."""
 
     def test_go_success(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-go-ok", str(spec_file), llm_client=_mock_llm())
@@ -419,10 +432,11 @@ class TestClaudeTestGoProject:
         assert "2" in content  # total packages
 
     def test_go_timeout(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-go-timeout", str(spec_file), llm_client=_mock_llm())
@@ -438,10 +452,11 @@ class TestClaudeTestGoProject:
         assert "timed out" in content.lower()
 
     def test_go_file_not_found(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-go-no-go", str(spec_file), llm_client=_mock_llm())
@@ -457,10 +472,11 @@ class TestClaudeTestGoProject:
         assert "not installed" in content
 
     def test_go_generic_exception(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-go-exc", str(spec_file), llm_client=_mock_llm())
@@ -475,10 +491,11 @@ class TestClaudeTestGoProject:
 
     def test_go_fail_packages(self, tmp_path, monkeypatch):
         """Go test with a mix of ok and FAIL lines."""
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-go-mixed", str(spec_file), llm_client=_mock_llm())
@@ -494,10 +511,11 @@ class TestClaudeTestGoProject:
 
     def test_go_fail_only(self, tmp_path, monkeypatch):
         """Go test with only FAIL lines."""
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-go-fail", str(spec_file), llm_client=_mock_llm())
@@ -518,10 +536,11 @@ class TestClaudeTestPytest:
     THEN it takes the pytest path."""
 
     def test_pytest_success(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-ok", str(spec_file), llm_client=_mock_llm())
@@ -537,10 +556,11 @@ class TestClaudeTestPytest:
         assert "pytest" in content
 
     def test_pytest_timeout(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-timeout", str(spec_file), llm_client=_mock_llm())
@@ -555,10 +575,11 @@ class TestClaudeTestPytest:
         assert "timed out" in content.lower()
 
     def test_pytest_not_found(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-noexe", str(spec_file), llm_client=_mock_llm())
@@ -573,10 +594,11 @@ class TestClaudeTestPytest:
         assert "not installed" in content
 
     def test_pytest_generic_error(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-err", str(spec_file), llm_client=_mock_llm())
@@ -590,10 +612,11 @@ class TestClaudeTestPytest:
 
     def test_pytest_no_passed_failed_in_output(self, tmp_path, monkeypatch):
         """pytest output without 'passed' or 'failed' strings."""
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-other", str(spec_file), llm_client=_mock_llm())
@@ -609,10 +632,11 @@ class TestClaudeTestPytest:
         assert "pytest completed" in content
 
     def test_pytest_failed_only(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-fail", str(spec_file), llm_client=_mock_llm())
@@ -626,10 +650,11 @@ class TestClaudeTestPytest:
         assert result is not None
 
     def test_pytest_write_error(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
-        from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+        from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-write", str(spec_file), llm_client=_mock_llm())
@@ -650,10 +675,11 @@ class TestClaudeTestGenericCatch:
     THEN PipelineStepError is raised."""
 
     def test_generic_error(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
-        from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+        from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-generic", str(spec_file), llm_client=_mock_llm())
@@ -719,6 +745,7 @@ class TestClaudeArchSrcDirWithExtensions:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("arch-ext", str(spec_file), llm_client=_mock_llm())
@@ -749,6 +776,7 @@ class TestClaudeArchKeyFileReadException:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("arch-read-err", str(spec_file), llm_client=_mock_llm())
@@ -785,6 +813,7 @@ class TestClaudeDevGitSuccess:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Spec\n### Req-001\n- SHALL work.")
         session = PipelineSession("dev-git-ok", str(spec_file), llm_client=_mock_llm())
@@ -809,6 +838,7 @@ class TestClaudeDevFileReadExceptions:
         from yuleosh.pipeline.session import PipelineSession
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Spec\n### Req-001\n- SHALL work.")
         session = PipelineSession("dev-read-exc", str(spec_file), llm_client=_mock_llm())
@@ -850,6 +880,7 @@ class TestClaudeDevLLMFailure:
         from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Spec")
         session = PipelineSession("dev-llm-fail", str(spec_file), llm_client=_mock_llm_fail())
@@ -865,10 +896,11 @@ class TestClaudeTestGoFailBranches:
     THEN the 'FAIL ' prefix is matched."""
 
     def test_go_fail_matches(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-go-fail-match", str(spec_file), llm_client=_mock_llm())
@@ -889,10 +921,11 @@ class TestClaudeTestPytestTimeoutHandler:
     THEN timeout handler is exercised."""
 
     def test_pytest_timeout_handler(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test\n### GIVEN something\nWHEN action\nTHEN result")
         session = PipelineSession("test-pytest-timeout2", str(spec_file), llm_client=_mock_llm())
@@ -913,10 +946,11 @@ class TestClaudeTestPytestExceptionHandler:
     THEN generic exception handler is exercised."""
 
     def test_pytest_exception_handler(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text("# Test")
         session = PipelineSession("test-pytest-exc2", str(spec_file), llm_client=_mock_llm())
@@ -935,10 +969,11 @@ class TestClaudeTestSpecScenarios:
     THEN spec_scenarios are extracted and included in the report."""
 
     def test_spec_scenarios_included(self, tmp_path, monkeypatch):
-        from yuleosh.pipeline.step_handlers.execution import step_claude_test
         from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
 
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         spec_file = tmp_path / "spec.md"
         spec_file.write_text(
             "# Test\n"
@@ -960,3 +995,50 @@ class TestClaudeTestSpecScenarios:
         content = Path(result).read_text()
         assert "user is logged in" in content
         assert "user has admin role" in content
+
+
+class TestClaudeTestNestedGuard:
+    """GIVEN step_claude_test is invoked inside a running pytest session
+    WHEN PYTEST_CURRENT_TEST is set (pytest sets it at runtime)
+    THEN nested pytest execution is skipped — recursion guard works."""
+
+    def test_skips_nested_pytest(self, tmp_path, monkeypatch):
+        from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
+
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_x.py::test_y")
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("# Test")
+        session = PipelineSession("test-nested-guard", str(spec_file), llm_client=_mock_llm())
+
+        with mock.patch(
+            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            side_effect=AssertionError("subprocess.run must not be called"),
+        ) as mrun:
+            result = step_claude_test(session)
+        assert result is not None
+        mrun.assert_not_called()
+        content = Path(result).read_text()
+        assert "nested execution guard" in content
+
+    def test_normal_execution_when_not_in_pytest(self, tmp_path, monkeypatch):
+        """GIVEN no PYTEST_CURRENT_TEST WHEN step_claude_test runs THEN pytest branch executes."""
+        from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.execution import step_claude_test
+
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("# Test")
+        session = PipelineSession("test-normal-pytest", str(spec_file), llm_client=_mock_llm())
+
+        with mock.patch(
+            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            return_value=MockProc(returncode=0, stdout="2 passed in 0.1s\n"),
+        ) as mrun:
+            result = step_claude_test(session)
+        assert result is not None
+        mrun.assert_called_once()
+        content = Path(result).read_text()
+        assert "2 passed" in content
