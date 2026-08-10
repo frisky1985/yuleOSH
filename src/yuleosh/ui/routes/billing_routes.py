@@ -70,7 +70,13 @@ def handle_billing(method: str, path_tail: str, body: dict, query: dict,
 
 def handle_get_usage(method: str, path_tail: str, body: dict, query: dict,
                      handler=None) -> tuple:
-    """GET /api/v1/billing/usage — Get current month usage."""
+    """GET /api/v1/billing/usage — Get current month usage.
+
+    Phase 9 (2026-08-10): dual-source merge — ci_runs/api_calls/storage_mb
+    from jsonl UsageMeter (tenant slug) + llm_tokens/pipeline_runs from
+    sqlite usage_log (org_id). The slug → org bridge closes the gap that
+    previously made LLM consumption invisible on the billing page.
+    """
     user = _require_auth(handler)
     if not user:
         return _auth_error(handler)
@@ -83,9 +89,62 @@ def handle_get_usage(method: str, path_tail: str, body: dict, query: dict,
     if not tenant_slug:
         return {"error": "No organization found"}, 404
 
+    # ── Source 1: jsonl UsageMeter (ci_runs / api_calls / storage_mb) ──
     meter = UsageMeter()
     usage = meter.get_usage_summary(tenant_slug)
-    return usage, 200
+    usage_data = usage.get("usage", {})
+    limits = usage.get("limits", {})
+
+    # ── Source 2: sqlite usage_log via slug → org bridge (llm_tokens) ──
+    llm_tokens_used = 0
+    pipeline_runs_used = 0
+    project_count = 0
+    user_count = 0
+    llm_tokens_limit = 0
+    by_user: list[dict] = []
+    from yuleosh.store import Store
+    org = None
+    try:
+        store = Store()
+        org = store.get_organization(tenant_slug)
+        if org:
+            org_usage = store.get_monthly_usage(org["id"])
+            llm_tokens_used = org_usage.get("llm_tokens", 0) or 0
+            pipeline_runs_used = org_usage.get("pipeline_runs", 0) or 0
+            project_count = org_usage.get("project_count", 0) or 0
+            user_count = store.count_org_users(org["id"])
+            by_user = store.get_monthly_usage_by_user(org["id"])
+            # LLM token quota from TIERS (tier-aware), merged into limits.
+            from yuleosh.usage.metering import TIERS
+            _tier = org.get("tier", "community") or "community"
+            _cfg = TIERS.get(_tier, TIERS.get("community", {}))
+            llm_tokens_limit = _cfg.get("max_llm_tokens", 0) or 0
+    except Exception as e:  # noqa: BLE001 — billing read must never 500
+        logger.warning("billing usage sqlite merge failed: %s", e)
+
+    # ── Merge: flat contract (frontend expects usage.ci_runs style keys) ──
+    merged_limits = dict(limits)
+    if llm_tokens_limit:
+        merged_limits["llm_tokens"] = llm_tokens_limit
+    merged = {
+        "tenant": usage.get("tenant", tenant_slug),
+        "plan": usage.get("plan", "free"),
+        "period": usage.get("period", ""),
+        "role": user.get("role", "member"),
+        "usage": {
+            "ci_runs": usage_data.get("ci_runs", 0),
+            "api_calls": usage_data.get("api_calls", 0),
+            "storage_mb": usage_data.get("storage_mb", 0),
+            "llm_tokens": llm_tokens_used,
+            "pipeline_runs": pipeline_runs_used,
+            "projects": project_count,
+            "users": user_count,
+        },
+        "limits": merged_limits,
+        "by_user": by_user,
+        "within_limits": usage.get("within_limits", True),
+    }
+    return merged, 200
 
 
 # ── GET: Plan info ──────────────────────────────────────────────────────────
