@@ -15,16 +15,13 @@ Covers:
 
 import json
 import os
-import sys
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
-# Ensure src is importable
-SRC = Path(__file__).resolve().parents[2] / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+# src 可导入：pytest.ini 已配置 pythonpath = src，测试文件不自行改 sys.path
+# （A5 架构纪律：tests/ 下禁止路径注入）
 
 
 @pytest.fixture()
