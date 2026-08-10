@@ -149,5 +149,7 @@ class TestUsageRecording:
             job = async_runner._PIPELINE_JOBS[job_id]
             assert job["org_id"] == 3
             # pool.submit 传了 org_id 给 _run_full_pipeline
+            # Phase 9: 签名扩展为 (job_id, project_dir, config_json, arxml, org_id, user_id, user_email)
+            # submit_args[0] 是 fn，位置参数从 [1] 开始
             submit_args = m_pool.return_value.submit.call_args[0]
-            assert submit_args[-1] == 3
+            assert submit_args[5] == 3
