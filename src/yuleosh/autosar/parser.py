@@ -465,7 +465,8 @@ class ARXMLParser:
                         runnable.period_ms = float(period.text) * 1000.0
                     except (ValueError, TypeError):
                         pass
-                    runnable.timing_event = f"TimingEvent_{int(runnable.period_ms)}ms"
+                    if runnable.period_ms is not None:
+                        runnable.timing_event = f"TimingEvent_{int(runnable.period_ms)}ms"
                 continue
 
             # Data Received Event
@@ -499,7 +500,8 @@ class ARXMLParser:
                     runnable.period_ms = float(period.text) * 1000.0
                 except (ValueError, TypeError):
                     pass
-                runnable.timing_event = f"TimingEvent_{int(runnable.period_ms)}ms"
+                if runnable.period_ms is not None:
+                    runnable.timing_event = f"TimingEvent_{int(runnable.period_ms)}ms"
 
     # ------------------------------------------------------------------
     # Reference name extraction

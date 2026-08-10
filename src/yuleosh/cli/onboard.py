@@ -254,13 +254,16 @@ def _step_kg_bootstrap(project_dir: str, analysis: dict) -> dict:
     kg_stats = {"nodes": 0, "edges": 0}
     try:
         from yuleosh.knowledge_graph import get_store
-        from yuleosh.knowledge_graph.importer import import_coverage_from_default
+        from yuleosh.knowledge_graph.coverage_importer import (
+            import_coverage_from_default,
+        )
 
         print("  → 正在构建知识图谱...", end="", flush=True)
         store = get_store()
 
-        # Setup schema
-        store.setup()
+        # Setup schema (KGStorePG needs it; KGStore self-initializes in __new__)
+        if hasattr(store, "setup"):
+            store.setup()
 
         # Try importing from code scanner
         try:
