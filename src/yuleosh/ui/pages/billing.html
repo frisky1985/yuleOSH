@@ -199,6 +199,21 @@ body {
       <div class="bar"><div class="bar-fill" id="barUsers" style="width:0%;background:var(--purple)"></div></div>
       <div class="limit" id="limitUsers">上限: -</div>
     </div>
+    <div class="usage-card">
+      <div class="num" id="usageTokens">-</div>
+      <div class="label">LLM Token 消耗 <span style="color:var(--text2);font-weight:400;">(组织汇总)</span></div>
+      <div class="bar"><div class="bar-fill" id="barTokens" style="width:0%;background:var(--orange)"></div></div>
+      <div class="limit" id="limitTokens">上限: -</div>
+    </div>
+  </div>
+
+  <!-- Per-user breakdown (Phase 9: admin-only, audit) -->
+  <h3 style="font-size:14px;margin-bottom:12px;color:var(--text2);display:none" id="byUserTitle">按用户拆分（admin）</h3>
+  <div class="breakdown" id="byUserSection" style="display:none">
+    <table>
+      <tr><th>用户</th><th>本月 Token</th><th>运行次数</th></tr>
+      <tbody id="byUserBody"></tbody>
+    </table>
   </div>
 
   <!-- Plan options -->
@@ -287,13 +302,47 @@ async function loadUsage() {
   const ciPct = limits.ci_runs > 0 ? Math.min(100, (usage.ci_runs / limits.ci_runs) * 100) : 0;
   document.getElementById('barCi').style.width = ciPct + '%';
 
-  // Projects
-  document.getElementById('usageProjects').textContent = '-';
+  // Projects (Phase 9: real count from sqlite)
+  document.getElementById('usageProjects').textContent = usage.projects || 0;
   document.getElementById('limitProjects').textContent = `上限: ${limits.projects || '?'}`;
+  const projPct = limits.projects > 0 ? Math.min(100, ((usage.projects || 0) / limits.projects) * 100) : 0;
+  document.getElementById('barProjects').style.width = projPct + '%';
 
-  // Users
-  document.getElementById('usageUsers').textContent = '-';
+  // Users (Phase 9: real count from sqlite)
+  document.getElementById('usageUsers').textContent = usage.users || 0;
   document.getElementById('limitUsers').textContent = `上限: ${limits.users || '?'}`;
+  const userPct = limits.users > 0 ? Math.min(100, ((usage.users || 0) / limits.users) * 100) : 0;
+  document.getElementById('barUsers').style.width = userPct + '%';
+
+  // LLM Tokens (Phase 9: org total from sqlite usage_log)
+  const tok = usage.llm_tokens || 0;
+  const tokStr = tok >= 1000000 ? (tok / 1000000).toFixed(1) + 'M' : tok >= 1000 ? (tok / 1000).toFixed(1) + 'k' : String(tok);
+  document.getElementById('usageTokens').textContent = tokStr;
+  const tokLimit = limits.llm_tokens;
+  document.getElementById('limitTokens').textContent = tokLimit ? `上限: ${tokLimit >= 1000000 ? (tokLimit / 1000000).toFixed(0) + 'M' : tokLimit} / 月` : '未启用';
+  const tokPct = tokLimit > 0 ? Math.min(100, (tok / tokLimit) * 100) : 0;
+  document.getElementById('barTokens').style.width = tokPct + '%';
+
+  // Per-user breakdown (Phase 9: admin-only)
+  const byUser = data.by_user || [];
+  const isAdmin = data.role === 'admin';
+  if (isAdmin && byUser.length > 0) {
+    document.getElementById('byUserTitle').style.display = '';
+    document.getElementById('byUserSection').style.display = '';
+    const body = document.getElementById('byUserBody');
+    body.innerHTML = '';
+    byUser.forEach(u => {
+      const tr = document.createElement('tr');
+      const email = u.user_email || `#${u.user_id}`;
+      const tokN = u.llm_tokens || 0;
+      const tokNs = tokN >= 1000 ? (tokN / 1000).toFixed(1) + 'k' : String(tokN);
+      tr.innerHTML = `<td>${escHtml(email)}</td><td>${tokNs}</td><td>${u.pipeline_runs || 0}</td>`;
+      body.appendChild(tr);
+    });
+  } else {
+    document.getElementById('byUserTitle').style.display = 'none';
+    document.getElementById('byUserSection').style.display = 'none';
+  }
 }
 
 async function upgrade(plan) {
