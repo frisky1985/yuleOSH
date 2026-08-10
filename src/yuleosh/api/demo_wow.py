@@ -243,7 +243,14 @@ def create_demo_project(example: str, work_dir: str) -> Path:
 
     # Write minimal source stubs
     src_file = project_dir / "src" / f"{example.replace('-', '_')}.c"
-    src_file.write_text(_DEMO_SRC_TEMPLATE.format(example=example.replace('-', '_').title().replace('_', '')))
+    # 修复 (2026-08-11, Phase 7 覆盖率攻坚发现): 原模板用 {example.lower()} 调用——
+    # str.format 不支持方法调用 → AttributeError: 'str' object has no attribute 'lower()'，
+    # create_demo_project 对任何 example 必然崩溃。header_name 是实际生成的
+    # include 文件名（example.replace('-','_')，见下方 hdr_file）。
+    src_file.write_text(_DEMO_SRC_TEMPLATE.format(
+        example=example.replace('-', '_').title().replace('_', ''),
+        header_name=example.replace('-', '_'),
+    ))
 
     hdr_file = project_dir / "include" / f"{example.replace('-', '_')}.h"
     hdr_file.write_text(_DEMO_HEADER_TEMPLATE.format(
@@ -435,7 +442,7 @@ _DEMO_SRC_TEMPLATE = """/**
  * Replace with actual implementation for real development.
  */
 
-#include "{example.lower()}.h"
+#include "{header_name}.h"
 
 // Placeholder: state machine runs in main loop
 void {example}_init(void) {{
@@ -530,6 +537,11 @@ def run_wow_demo(example: str, work_dir: str, do_build: bool = False) -> dict:
 
     # Step 3: Generate evidence pack (≤2min)
     print("  Step 4/4: Generating evidence pack...")
+    # 修复 (2026-08-11, Phase 7 覆盖率攻坚发现): 证据步骤此前无条件设置 OSH_HOME
+    # 且从不恢复——L517-525 的 finally 已把 OSH_HOME 还原为调用前值，这里再次
+    # 设置后函数返回时泄漏为 demo 项目目录，进程内后续调用（测试/工具链）会拿到
+    # 错误的 OSH_HOME。修复: 记录调用前值，返回前恢复（与 pipeline 段同一模式）。
+    old_osh_evidence = os.environ.get("OSH_HOME", "")
     os.environ["OSH_HOME"] = str(project_dir)
     from yuleosh.evidence.generator import EvidenceCollector
     from yuleosh.evidence.compliance import pack_compliance_zip
@@ -663,6 +675,12 @@ def run_wow_demo(example: str, work_dir: str, do_build: bool = False) -> dict:
     print(f"  📊 Artifacts: {len(artifacts)}")
     print(f"{'='*60}")
     print()
+
+    # 恢复调用前 OSH_HOME（与 pipeline 段 finally 同一语义，见 L540 根因注释）
+    if old_osh_evidence:
+        os.environ["OSH_HOME"] = old_osh_evidence
+    else:
+        os.environ.pop("OSH_HOME", None)
 
     return {
         "status": "completed",
