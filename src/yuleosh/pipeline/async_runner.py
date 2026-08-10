@@ -42,25 +42,30 @@ def _get_pool():
     return _pool
 
 
-def _record_pipeline_usage(org_id: int) -> None:
+def _record_pipeline_usage(org_id: int, user_id: int | None = None,
+                           user_email: str | None = None) -> None:
     """Portal 方案 B (2026-08-10): 记录 pipeline_run 计量到 usage_log。
 
     6 阶段模拟器无 LLM 调用，llm_tokens=0；真实 token 消费在
     run_pipeline（33 步）结束处计量。失败不阻塞；org_id=0（CLI/单机）跳过。
+    Phase 9 (2026-08-10): 携带用户归因（user_id/user_email）。
     """
     if not org_id:
         return
     try:
         from yuleosh.store import Store
         from yuleosh.usage import record_pipeline_run
-        record_pipeline_run(Store(), org_id, 0, llm_tokens=0)
+        record_pipeline_run(Store(), org_id, 0, llm_tokens=0,
+                            user_id=user_id, user_email=user_email)
     except Exception as _usage_err:
         log.warning("Usage recording failed (non-fatal): %s", _usage_err)
 
 
 # ── Main API ──────────────────────────────────────────────────────────────
 
-def submit_pipeline(project_dir: str, layer: int = 1, org_id: int = 0) -> str:
+def submit_pipeline(project_dir: str, layer: int = 1, org_id: int = 0,
+                    user_id: int | None = None,
+                    user_email: str | None = None) -> str:
     """Submit a CI-layer pipeline job for async execution. Returns job_id."""
     job_id = secrets.token_hex(8)
     _PIPELINE_JOBS[job_id] = {
@@ -70,6 +75,8 @@ def submit_pipeline(project_dir: str, layer: int = 1, org_id: int = 0) -> str:
         "project_dir": project_dir,
         "layer": layer,
         "org_id": org_id,
+        "user_id": user_id,
+        "user_email": user_email,
         "progress": 0,
         "current_stage": "queued",
         "stages": [],
@@ -79,7 +86,7 @@ def submit_pipeline(project_dir: str, layer: int = 1, org_id: int = 0) -> str:
         "logs": [],
     }
     pool = _get_pool()
-    pool.submit(_run_ci_job, job_id, project_dir, layer, org_id)
+    pool.submit(_run_ci_job, job_id, project_dir, layer, org_id, user_id, user_email)
     return job_id
 
 
@@ -88,6 +95,8 @@ def submit_full_pipeline(
     config_json: Optional[str] = None,
     arxml_content: Optional[str] = None,
     org_id: int = 0,
+    user_id: int | None = None,
+    user_email: str | None = None,
 ) -> str:
     """Submit a full yuleOSH pipeline (RTE → CI → MISRA) with optional config.
     
@@ -96,6 +105,7 @@ def submit_full_pipeline(
         config_json: Optional JSON string of module configurations.
         arxml_content: Optional ARXML string.
         org_id: 消费计量归属组织（Portal 方案 B, 2026-08-10；默认 0 不计量）。
+        user_id/user_email: 用户归因（Phase 9, 2026-08-10；CLI 为 None）。
     
     Returns: job_id for status polling.
     """
@@ -110,6 +120,8 @@ def submit_full_pipeline(
         "config_json": config_json,
         "arxml_content": arxml_content,
         "org_id": org_id,
+        "user_id": user_id,
+        "user_email": user_email,
         "progress": 0,
         "current_stage": "queued",
         "stages": [dict(s, status="pending") for s in stages],
@@ -119,7 +131,8 @@ def submit_full_pipeline(
         "logs": [],
     }
     pool = _get_pool()
-    pool.submit(_run_full_pipeline, job_id, project_dir, config_json, arxml_content, org_id)
+    pool.submit(_run_full_pipeline, job_id, project_dir, config_json, arxml_content,
+                org_id, user_id, user_email)
     return job_id
 
 
@@ -146,7 +159,8 @@ def _update_stage(job_id: str, stage_key: str, status: str, progress: int = None
         job["updated_at"] = datetime.now().isoformat()
 
 
-def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0):
+def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0,
+                user_id: int | None = None, user_email: str | None = None):
     """Execute CI layer in background thread.
 
     P1-8 (W-05): failures must be EXPLICIT.  Previously an ImportError or a
@@ -190,13 +204,15 @@ def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0):
     job["progress"] = 100
     job["completed_at"] = datetime.now().isoformat()
     job["updated_at"] = datetime.now().isoformat()
-    _record_pipeline_usage(org_id)
+    _record_pipeline_usage(org_id, user_id, user_email)
 
 
 def _run_full_pipeline(
     job_id: str, project_dir: str,
     config_json: Optional[str], arxml_content: Optional[str],
     org_id: int = 0,
+    user_id: int | None = None,
+    user_email: str | None = None,
 ):
     """Execute full pipeline (ARXML parse → validate → RTE → CI → MISRA)."""
     job = _PIPELINE_JOBS.get(job_id)
@@ -351,7 +367,7 @@ def _run_full_pipeline(
     job["progress"] = 100
     job["completed_at"] = datetime.now().isoformat()
     job["updated_at"] = datetime.now().isoformat()
-    _record_pipeline_usage(org_id)
+    _record_pipeline_usage(org_id, user_id, user_email)
 
     # ── Notification on completion (for all autosar / full_pipeline types) ──
     _notify_pipeline_completion(job_id)

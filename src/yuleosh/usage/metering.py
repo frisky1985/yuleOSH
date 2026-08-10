@@ -131,14 +131,23 @@ def check_tier_limit(store, org_id: int, resource: str) -> dict:
     return {"allowed": True, "limit": limit, "used": used, "message": ""}
 
 
-def record_pipeline_run(store, org_id: int, project_id: int, llm_tokens: int = 0):
-    """Record a pipeline run for usage metering."""
+def record_pipeline_run(store, org_id: int, project_id: int, llm_tokens: int = 0,
+                        user_id: int | None = None, run_id: str | None = None,
+                        user_email: str | None = None):
+    """Record a pipeline run for usage metering.
+
+    user_id / run_id / user_email (v8, 2026-08-10): optional user
+    attribution for per-user split / audit. Callers without auth context
+    (CLI) omit them → NULL columns, still counted in org totals.
+    """
     # 修复 (2026-08-10, Portal 方案 B 测试发现): resource 名必须与
     # get_monthly_usage 的聚合 key 一致——原来是 "pipeline_run"（单数），
     # 导致 usage["pipeline_runs"] 永远 0。零调用点时代修正，无存量数据影响。
-    store.record_usage(org_id, project_id, "pipeline_runs", 1)
+    store.record_usage(org_id, project_id, "pipeline_runs", 1,
+                       user_id=user_id, run_id=run_id, user_email=user_email)
     if llm_tokens:
-        store.record_usage(org_id, project_id, "llm_tokens", llm_tokens)
+        store.record_usage(org_id, project_id, "llm_tokens", llm_tokens,
+                           user_id=user_id, run_id=run_id, user_email=user_email)
 
 
 def get_usage_summary(store, org_id: int) -> dict:

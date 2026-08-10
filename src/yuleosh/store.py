@@ -63,7 +63,7 @@ class Store(AbstractStore):
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 7  # v0.9.0: usage/subscription tables + org tier
+    _MIGRATION_VERSION = 8  # v0.9.0: usage/subscription tables + org tier; v8: usage_log user attribution
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -221,6 +221,8 @@ class Store(AbstractStore):
             self._run_migration_v6()
         if version < 7:
             self._run_migration_v7()
+        if version < 8:
+            self._run_migration_v8()
 
         # Record migration version
         self.conn.execute(
@@ -270,6 +272,25 @@ class Store(AbstractStore):
             )
         except OperationalError:
             pass
+        self.conn.commit()
+
+    def _run_migration_v8(self):
+        """Migration v8: usage_log user attribution (Portal billing, 2026-08-10).
+
+        Adds user_id / run_id / user_email columns so LLM token consumption
+        can be attributed to the triggering user (audit / per-user split)
+        without affecting historical rows (NULL).
+        """
+        from sqlite3 import OperationalError
+        for sql in (
+            "ALTER TABLE usage_log ADD COLUMN user_id INTEGER",
+            "ALTER TABLE usage_log ADD COLUMN run_id TEXT",
+            "ALTER TABLE usage_log ADD COLUMN user_email TEXT",
+        ):
+            try:
+                self.conn.execute(sql)
+            except OperationalError:
+                pass
         self.conn.commit()
 
     # ------------------------------------------------------------------
@@ -420,6 +441,13 @@ class Store(AbstractStore):
         cur = self.conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,))
         row = cur.fetchone()
         return dict(row) if row else None
+
+    def count_org_users(self, org_id: int) -> int:
+        """Count users belonging to an org (Phase 9, billing usage)."""
+        row = self.conn.execute(
+            "SELECT COUNT(*) FROM users WHERE org_id=?", (org_id,)
+        ).fetchone()
+        return row[0] if row else 0
 
     def list_organizations(self) -> list[dict]:
         cur = self.conn.execute("SELECT * FROM organizations ORDER BY created_at DESC")
@@ -695,12 +723,20 @@ class Store(AbstractStore):
 
     # ── v0.9.0: Usage & Subscription ─────────────────────────────────────────
 
-    def record_usage(self, org_id: int, project_id: int, resource: str, amount: int):
-        """Record a usage event."""
+    def record_usage(self, org_id: int, project_id: int, resource: str, amount: int,
+                     user_id: int | None = None, run_id: str | None = None,
+                     user_email: str | None = None):
+        """Record a usage event.
+
+        user_id / run_id / user_email (v8, 2026-08-10): optional user
+        attribution so LLM token consumption can be split per user.
+        Historical callers omit them → NULL columns, fully backward compatible.
+        """
         now = datetime.now().isoformat()
         self.conn.execute(
-            "INSERT INTO usage_log (org_id, project_id, resource, amount, recorded_at) VALUES (?, ?, ?, ?, ?)",
-            (org_id, project_id, resource, amount, now)
+            "INSERT INTO usage_log (org_id, project_id, resource, amount, recorded_at,"
+            " user_id, run_id, user_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (org_id, project_id, resource, amount, now, user_id, run_id, user_email)
         )
         self.conn.commit()
 
@@ -720,6 +756,32 @@ class Store(AbstractStore):
         ).fetchone()[0]
         usage["project_count"] = proj_count
         return usage
+
+    def get_monthly_usage_by_user(self, org_id: int) -> list[dict]:
+        """Per-user usage breakdown for the current month (v8, Portal billing).
+
+        Returns rows: {user_id, user_email, llm_tokens, pipeline_runs}
+        — only rows carrying user attribution (user_id NOT NULL); historical
+        NULL rows are excluded from the per-user split (still counted in the
+        org total via get_monthly_usage).
+        """
+        month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        rows = self.conn.execute(
+            "SELECT user_id, user_email,"
+            " SUM(CASE WHEN resource='llm_tokens' THEN amount ELSE 0 END) AS llm_tokens,"
+            " SUM(CASE WHEN resource='pipeline_runs' THEN amount ELSE 0 END) AS pipeline_runs"
+            " FROM usage_log"
+            " WHERE org_id=? AND recorded_at >= ? AND user_id IS NOT NULL"
+            " GROUP BY user_id, user_email"
+            " ORDER BY llm_tokens DESC",
+            (org_id, month_start)
+        ).fetchall()
+        return [{
+            "user_id": r["user_id"],
+            "user_email": r["user_email"] or "",
+            "llm_tokens": r["llm_tokens"] or 0,
+            "pipeline_runs": r["pipeline_runs"] or 0,
+        } for r in rows]
 
     def get_subscription(self, org_id: int):
         """Get subscription info for an org."""

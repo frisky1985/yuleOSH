@@ -19,6 +19,7 @@ import sys
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 log = logging.getLogger("pipeline.session")
 
@@ -69,12 +70,22 @@ class PipelineSession:
         development_mode: str | None = None,
         config: dict | None = None,
         org_id: int = 0,
+        user_id: int | None = None,
+        user_email: str | None = None,
+        run_id: str | None = None,
     ):
         self.name = name
         self.spec_path = str(Path(spec_path).resolve())
         self.project_dir = str(Path(os.environ.get("OSH_HOME", ".")).resolve())
         # Portal 方案 B (2026-08-10): 消费计量归属组织（JWT org_id，CLI 默认 0）。
         self.org_id: int = org_id
+        # Phase 9 (2026-08-10): 用户归因 + run 唯一标识。
+        #   user_id/user_email — 触发用户（JWT 上下文；CLI 为 None）。
+        #   run_id — 每次运行唯一（uuid4 hex 短码），目录命名以此为准，
+        #     根治同名 pipeline 跨用户/跨次覆盖 session.json 的问题。
+        self.user_id: int | None = user_id
+        self.user_email: str | None = user_email
+        self.run_id: str = run_id or uuid4().hex[:12]
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
         self.status = "created"  # created -> running -> completed | failed
@@ -126,9 +137,14 @@ class PipelineSession:
         self.pipeline_knowledge_config: object = None
 
     def _ensure_session_dir(self) -> Path:
-        """Ensure the session directory exists and return its path."""
+        """Ensure the session directory exists and return its path.
+
+        Phase 9 (2026-08-10): directory is named by run_id (unique per run)
+        instead of pipeline name — two runs of the same pipeline (or by two
+        users) no longer overwrite each other's session.json.
+        """
         base = Path(os.environ.get("OSH_HOME", "."))
-        sdir = base / ".osh" / "sessions" / self.name
+        sdir = base / ".osh" / "sessions" / self.run_id
         sdir.mkdir(parents=True, exist_ok=True)
         return sdir
 
@@ -219,6 +235,7 @@ class PipelineSession:
         """Serialize session to a dictionary for storage."""
         return {
             "name": self.name,
+            "run_id": self.run_id,
             "spec_path": self.spec_path,
             "status": self.status,
             "current_step": self.current_step,
@@ -228,6 +245,8 @@ class PipelineSession:
             "artifacts": self.artifacts,
             "errors": self.errors,
             "org_id": self.org_id,
+            "user_id": self.user_id,
+            "user_email": self.user_email,
             "token_usage_total": self.token_usage_total,
             "token_usage_steps": self.token_usage_steps,
         }
