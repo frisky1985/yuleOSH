@@ -73,7 +73,9 @@ def _parse_rtm_table(md_text: str) -> list[dict]:
 
         cells = [c.strip() for c in stripped.strip("|").split("|")]
 
-        while cells and not cells[-1]:
+        # 弹掉行尾多余的空列，但保留至少 4 列：RTM 5 列格式中
+        # 测试函数/状态列允许为空（如 "| RS-001 | src | tests/a.py |  |  |"）。
+        while len(cells) > 4 and not cells[-1]:
             cells.pop()
 
         if all(c in ("", "-", "---", ":---", ":---:") for c in cells):
