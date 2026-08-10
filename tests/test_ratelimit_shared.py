@@ -340,3 +340,63 @@ def test_time_is_monotonic_reasonable():
     """Sanity: default clock is time.time (matches ratelimit.py)."""
     store = RateLimitStore(db_path=":memory:", limit=1)
     assert abs(store._clock() - time.time()) < 1.0
+
+
+# ---------------------------------------------------------------------------
+# W2 server 接线：ui/http_security.check_rate_limit → 共享 SQLite
+# ---------------------------------------------------------------------------
+
+
+def test_http_security_check_rate_limit_shared_backed(tmp_path, monkeypatch):
+    """check_rate_limit 现在走共享 SQLite（W2），同 db 两个 store 共享计数。"""
+    db = str(tmp_path / "rl-http.db")
+    monkeypatch.setenv("YULEOSH_RATE_DB", db)
+    from yuleosh.ui.http_security import check_rate_limit
+    allowed, retry_after = check_rate_limit("10.0.0.1", max_requests=3, window=60)
+    assert allowed is True
+    assert retry_after == 0.0
+    assert check_rate_limit("10.0.0.1", max_requests=3, window=60)[0] is True
+    assert check_rate_limit("10.0.0.1", max_requests=3, window=60)[0] is True
+    allowed, retry_after = check_rate_limit("10.0.0.1", max_requests=3, window=60)
+    assert allowed is False
+    assert retry_after > 0  # Retry-After 秒数
+
+
+def test_http_security_shared_persists_across_store_instances(tmp_path, monkeypatch):
+    """同一 db 文件两个 store 实例共享计数 → 多 worker 语义。"""
+    db = str(tmp_path / "rl-http2.db")
+    monkeypatch.setenv("YULEOSH_RATE_DB", db)
+    from yuleosh.api.ratelimit_shared import RateLimitStore, reset_shared
+    from yuleosh.ui.http_security import check_rate_limit
+    reset_shared(db)
+    assert check_rate_limit("10.0.0.2", max_requests=2, window=60)[0] is True
+    assert check_rate_limit("10.0.0.2", max_requests=2, window=60)[0] is True
+    # 第二个 store 实例（模拟另一个 worker）看到同一个计数 → 已满
+    store2 = RateLimitStore(db_path=db, limit=2)
+    assert store2.check("10.0.0.2") == (False, 0)
+
+
+def test_http_security_memory_fallback_preserved():
+    """check_rate_limit_memory 保留原内存语义（单进程回退/测试）。"""
+    from yuleosh.ui.http_security import _rate_limit_buckets, check_rate_limit_memory
+    _rate_limit_buckets.clear()
+    assert check_rate_limit_memory("10.0.0.3", max_requests=1, window=60) == (True, 0.0)
+    ok, retry = check_rate_limit_memory("10.0.0.3", max_requests=1, window=60)
+    assert ok is False
+    assert retry > 0
+
+
+def test_http_security_degrades_to_memory_on_store_error(monkeypatch):
+    """共享 store 异常时降级内存限流，绝不让 API 500。"""
+    from yuleosh.ui import http_security as hs
+    monkeypatch.setenv("YULEOSH_RATE_DB", "/nonexistent-dir/rl.db")
+    import yuleosh.api.ratelimit_shared as rls
+
+    class BoomStore(rls.RateLimitStore):
+        def check(self, *a, **k):
+            raise RuntimeError("sqlite unavailable")
+
+    monkeypatch.setattr(rls, "RateLimitStore", BoomStore)
+    ok, retry = hs.check_rate_limit("10.0.0.4", max_requests=5, window=60)
+    assert ok is True  # 降级到内存后放行
+    assert retry == 0.0
