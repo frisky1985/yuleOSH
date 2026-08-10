@@ -943,6 +943,9 @@ class TestRunStepInSubprocess:
     def test_artifacts_written_to_session_dir(self, tmp_path, monkeypatch):
         import yuleosh.engine.subprocess_executor as spe
 
+        # 防御 test_api.py 模块级 setdefault("OSH_HOME", repo根) 的存量泄漏：
+        # _resolve_session_dir 优先读 OSH_HOME，泄漏时 artifacts.json 会写到别处。
+        monkeypatch.delenv("OSH_HOME", raising=False)
         monkeypatch.setattr(spe.subprocess, "run", lambda *a, **kw: self._fake_proc())
         _run_step_in_subprocess(
             {"step_id": "s1"}, str(tmp_path), False, None,
