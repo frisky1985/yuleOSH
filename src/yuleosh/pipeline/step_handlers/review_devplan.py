@@ -58,12 +58,12 @@ def _extract_tasks(devplan_content: str) -> list[dict]:
     )
     # Pattern 2: "- [ ] Task X.Y: ..." (checkbox list)
     checkbox_re = re.compile(
-        r'^\s*[-*]\s*\[\s*[xX ]?\s*\]\s*(?:Task|任务|Step)?\s*(\S*)\s*[:：]?(.+?)(?:\s*\((\d+[dhms])\))?\s*$',
+        r'^\s*[-*]\s*\[\s*[xX ]?\s*\]\s*(?:Task|任务|Step)?\s*([^\s:：]*)\s*[:：]?(.+?)(?:\s*\((\d+[dhms])\))?\s*$',
         re.IGNORECASE,
     )
     # Pattern 3: "X. Task: ..." (numbered list)
     numbered_re = re.compile(
-        r'^\s*\d+[.、]\s*(?:Task|任务|Step)?\s*(\S*)\s*[:：]?(.+)$',
+        r'^\s*\d+[.、]\s*(?:Task|任务|Step)?\s*([^\s:：]*)\s*[:：]?(.+)$',
         re.IGNORECASE,
     )
 
