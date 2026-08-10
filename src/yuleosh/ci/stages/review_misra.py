@@ -576,6 +576,16 @@ def run_misra_check(project_dir: str, ci: CIResult,
 
     total_violations = summary["total_violations"]
 
+    # Save raw output for debugging — BEFORE any early return so the raw
+    # cppcheck output is always available even on the zero-violation path.
+    try:
+        misra_dir = Path(project_dir) / ".yuleosh" / "reports"
+        misra_dir.mkdir(parents=True, exist_ok=True)
+        raw_path = misra_dir / "misra-raw-output.txt"
+        raw_path.write_text(output)
+    except OSError as _we:
+        log.warning("Failed to write misra raw output: %s", _we)
+
     # --- Determine pass/fail with enhanced rules (G-09) ---
     if total_violations == 0:
         ci.add_stage("misra-check", "passed", "No MISRA violations")
@@ -660,11 +670,8 @@ def run_misra_check(project_dir: str, ci: CIResult,
     except Exception as gscr_e:
         log.warning("GSCR translation failed (non-blocking): %s", gscr_e)
 
-    # Save raw output for debugging
-    misra_dir = Path(project_dir) / ".yuleosh" / "reports"
-    misra_dir.mkdir(parents=True, exist_ok=True)
-    raw_path = misra_dir / "misra-raw-output.txt"
-    raw_path.write_text(output)
+    # Raw output already written earlier (before the zero-violation early
+    # return) — see the block above the pass/fail determination.
 
     # ── L2 Delta blocking: only block NEW Required violations ────
     new_required_count = 0
