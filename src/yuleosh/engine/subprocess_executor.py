@@ -34,6 +34,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from yuleosh.engine.handler_adapter import HandlerAdapter, StepResult
 from yuleosh.pipeline.session import PipelineSession
@@ -48,13 +49,19 @@ log = logging.getLogger("engine.subprocess_executor")
 
 
 def _resolve_session_dir(project_dir: str,
-                         session_name: str | None) -> Path:
+                         session_name: str | None = None,
+                         run_id: str | None = None) -> Path:
     """解析 session 目录（与 PipelineSession._ensure_session_dir 同路径规则）。
 
     主进程侧写入 artifacts.json 时使用，保证与 worker 侧
     PipelineSession.session_dir 指向同一目录。
+
+    Phase 9 (2026-08-10): 目录按 run_id 命名（与 PipelineSession 一致）。
+    未传 run_id 时回退旧 name 规则（向后兼容）。
     """
     base = Path(os.environ.get("OSH_HOME", project_dir))
+    if run_id:
+        return base / ".osh" / "sessions" / run_id
     name = session_name or f"agent-pipeline-{time.strftime('%Y%m%d-%H%M%S')}"
     return base / ".osh" / "sessions" / name
 
@@ -72,7 +79,8 @@ def _find_step(step_id: str) -> tuple[str, str, Any]:
 
 def _make_worker_session(project_dir: str, step_def: dict,
                          mock_mode: bool = False,
-                         session_name: str | None = None) -> PipelineSession:
+                         session_name: str | None = None,
+                         run_id: str | None = None) -> PipelineSession:
     """在 worker 进程中构造 PipelineSession（与 agent_checkpoint._make_session_factory 同语义）。
 
     worker 无法跨进程传递 llm_client —— mock 模式下 worker 侧直接注入
@@ -83,6 +91,10 @@ def _make_worker_session(project_dir: str, step_def: dict,
     共用同一会话目录（.osh/sessions/<name>），产物交接链（后续步骤经
     session.session_dir 读取前序产物）依赖路径一致性。若为 None，则按
     时间戳生成（单步独立调试场景）。
+
+    Phase 9 (2026-08-10): run_id 优先——worker 与主进程共用同一 run_id
+    目录（.osh/sessions/<run_id>）。未传 run_id 时自动生成（PipelineSession
+    默认行为）。
     """
     spec_path = step_def.get("spec_path") or str(
         Path(project_dir) / "docs/spec.md"
@@ -91,6 +103,7 @@ def _make_worker_session(project_dir: str, step_def: dict,
         name=session_name or f"agent-pipeline-{time.strftime('%Y%m%d-%H%M%S')}",
         spec_path=spec_path,
         llm_client=None,
+        run_id=run_id,
     )
     session.project_dir = os.path.abspath(project_dir)
     session.mock_mode = bool(mock_mode)
@@ -123,6 +136,8 @@ def worker_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--spec-path", default=None, help="spec 路径（可选）")
     parser.add_argument("--session-name", default=None,
                         help="固定 session 名（B2-1：与主进程共用会话目录）")
+    parser.add_argument("--run-id", default=None,
+                        help="固定 run_id（Phase 9：与主进程共用 run_id 目录）")
     args = parser.parse_args(argv)
 
     step_key, step_name, handler = None, None, None
@@ -144,12 +159,13 @@ def worker_main(argv: list[str] | None = None) -> int:
     }
     session = _make_worker_session(
         args.project_dir, step_def, mock_mode=args.mock,
-        session_name=args.session_name,
+        session_name=args.session_name, run_id=args.run_id,
     )
 
     # B2-产物交接：读取主进程写入的 artifacts.json 预填 session.artifacts
     # （subprocess 模式下 session 不跨进程共享，前序产物经此交接）。
-    if args.session_name:
+    # Phase 9: 目录按 run_id 命名（或旧 name 规则兼容）。
+    if args.session_name or args.run_id:
         artifacts_path = session.session_dir / "artifacts.json"
         if artifacts_path.exists():
             try:
@@ -190,12 +206,16 @@ def _run_step_in_subprocess(step_def: dict, project_dir: str,
                             mock_mode: bool, spec_path: str | None,
                             timeout_s: int = 600,
                             session_name: str | None = None,
+                            run_id: str | None = None,
                             artifacts: dict | None = None) -> StepResult:
     """提交单步到子进程并解析结果。
 
     artifacts（B2-产物交接）：前序步骤的产物注册表（step_id → output_path）。
     通过 session 目录下的 artifacts.json 传给 worker（命令行传 dict 太长）；
     worker 读取后预填 session.artifacts，真实 handler 才能读取前序产物。
+
+    Phase 9 (2026-08-10): run_id 优先——主进程与 worker 共用同一 run_id
+    目录（.osh/sessions/<run_id>），与 PipelineSession 目录规则一致。
     """
     cmd = [
         _python_executable(), "-m", "yuleosh.engine.subprocess_executor",
@@ -209,10 +229,12 @@ def _run_step_in_subprocess(step_def: dict, project_dir: str,
         cmd.extend(["--spec-path", spec_path])
     if session_name:
         cmd.extend(["--session-name", session_name])
+    if run_id:
+        cmd.extend(["--run-id", run_id])
 
     # 产物交接：写 artifacts.json 到 session 目录（主进程侧）
     if artifacts:
-        session_dir = _resolve_session_dir(project_dir, session_name)
+        session_dir = _resolve_session_dir(project_dir, session_name, run_id)
         try:
             session_dir.mkdir(parents=True, exist_ok=True)
             (session_dir / "artifacts.json").write_text(
@@ -264,7 +286,8 @@ def _run_step_in_subprocess(step_def: dict, project_dir: str,
 def make_subprocess_runner(project_dir: str, mock_mode: bool = False,
                            spec_path: str | None = None,
                            timeout_s: int = 600,
-                           session_name: str | None = None) -> Callable[[dict, dict], StepResult]:
+                           session_name: str | None = None,
+                           run_id: str | None = None) -> Callable[[dict, dict], StepResult]:
     """构造 CheckpointEngine 可用的 runner 钩子（B2-1 additive）。
 
     签名：``runner(step_def, artifacts)`` —— CheckpointEngine 调用时传入
@@ -273,13 +296,20 @@ def make_subprocess_runner(project_dir: str, mock_mode: bool = False,
 
     session_name（B2-1）：固定会话名，让所有 worker 与主进程共用同一
     session 目录（产物交接链依赖路径一致）。None 时 worker 按时间戳生成。
+
+    Phase 9 (2026-08-10): run_id 优先——主进程与 worker 共用同一 run_id
+    目录（.osh/sessions/<run_id>），与 PipelineSession 目录规则一致。
+    未传 run_id 时自动生成一个共享 run_id（所有 worker 与主进程共用），
+    保证 artifacts.json 交接链路径一致。
     """
     abs_project_dir = os.path.abspath(project_dir)
+    # Phase 9: 共享 run_id —— 主进程 + 所有 worker 用同一目录。
+    shared_run_id = run_id or uuid4().hex[:12]
 
     def _runner(step_def: dict, artifacts: dict | None = None) -> StepResult:
         return _run_step_in_subprocess(
             step_def, abs_project_dir, mock_mode, spec_path, timeout_s,
-            session_name, artifacts,
+            session_name, shared_run_id, artifacts,
         )
 
     return _runner
@@ -299,6 +329,7 @@ def main() -> None:
     worker_p.add_argument("--mock", action="store_true")
     worker_p.add_argument("--spec-path", default=None)
     worker_p.add_argument("--session-name", default=None)
+    worker_p.add_argument("--run-id", default=None)
     args = parser.parse_args()
 
     if args.command == "worker":
@@ -310,6 +341,8 @@ def main() -> None:
             argv.extend(["--spec-path", args.spec_path])
         if args.session_name:
             argv.extend(["--session-name", args.session_name])
+        if args.run_id:
+            argv.extend(["--run-id", args.run_id])
         sys.exit(worker_main(argv))
     parser.print_help()
 
