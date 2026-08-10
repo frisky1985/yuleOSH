@@ -1584,11 +1584,17 @@ class TestBillingRoutes:
         with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=True), \
              mock.patch.object(mod, "UsageMeter") as meter_cls:
-            meter_cls.return_value.get_usage_summary.return_value = {"calls": 5}
+            # Phase 9: UsageMeter 返回完整 summary 结构（双源合流读 usage/limits）
+            meter_cls.return_value.get_usage_summary.return_value = {
+                "tenant": "acme", "plan": "free", "period": "2026-08",
+                "usage": {"ci_runs": 5, "api_calls": 0, "storage_mb": 0},
+                "limits": {"ci_runs": 50, "projects": 1, "users": 1, "storage_mb": 100},
+                "within_limits": True,
+            }
             resp, code = mod.handle_get_usage("GET", "usage", {}, {},
                                               handler=self._handler())
         assert code == 200
-        assert resp["calls"] == 5
+        assert resp["usage"]["ci_runs"] == 5
 
     # -- plan ------------------------------------------------------------
     def test_plan_ok(self):
