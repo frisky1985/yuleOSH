@@ -385,6 +385,47 @@ def step_codegen_deploy(session: PipelineSession) -> str:
             report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
             return str(report_path)
 
+    # Guardrail: API contract — generated headers must preserve the public
+    # function API of the existing project headers.  A codegen that
+    # re-architects the API (e.g. global-singleton vs context-struct) breaks
+    # the established tests/harness; keep the known-good src/ and flag it.
+    def _header_api_functions(h: Path) -> set[str]:
+        text = h.read_text(encoding="utf-8", errors="replace")
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        text = re.sub(r"//[^\n]*", "", text)
+        funcs: set[str] = set()
+        for m in re.finditer(r"\b([a-zA-Z_]\w*)\s*\([^;{}]*\);", text, flags=re.S):
+            name = m.group(1)
+            if name in {"if", "for", "while", "switch", "return",
+                        "sizeof", "defined"}:
+                continue
+            funcs.add(name)
+        return funcs
+
+    existing_api: dict[str, set[str]] = {}
+    generated_api: dict[str, set[str]] = {}
+    for rel in ("src/app/include", "src/hal/include"):
+        for h in sorted((project_dir / rel).glob("*.h")):
+            existing_api[str(h.relative_to(project_dir))] = _header_api_functions(h)
+        for h in sorted((gen_dir / rel).glob("*.h")):
+            generated_api[str(h.relative_to(gen_dir))] = _header_api_functions(h)
+
+    api_mismatch: list[str] = []
+    for rel, funcs in sorted(existing_api.items()):
+        gen_funcs = generated_api.get(rel, set())
+        missing = funcs - gen_funcs
+        if missing:
+            api_mismatch.append(f"{rel}: missing {sorted(missing)}")
+    if api_mismatch:
+        print("  ⏭️  [小明] codegen-deploy: generated API breaks contract — "
+              "skipped (keep known-good src/)")
+        for m in api_mismatch:
+            log.warning("codegen-deploy API mismatch: %s", m)
+        report = {"status": "skipped_api_mismatch", "deployed": [],
+                  "skipped_empty": [], "api_mismatch": api_mismatch}
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        return str(report_path)
+
     src_gen = gen_dir / "src"
     deployed = []
     skipped_empty = []

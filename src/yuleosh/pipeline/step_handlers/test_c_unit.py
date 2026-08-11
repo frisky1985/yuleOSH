@@ -125,6 +125,27 @@ def step_c_unit_test(session: PipelineSession) -> str:
             if not ctest_cfg.exists():
                 continue
             try:
+                # Rebuild before ctest: ctest on a stale build validates
+                # stale binaries (codegen-deploy may have replaced src/).
+                # Incremental cmake build is cheap; only skips when up-to-date.
+                log.info("Rebuilding %s before ctest", build_dir)
+                build_result = subprocess.run(
+                    ["cmake", "--build", str(build_dir), "-j4"],
+                    capture_output=True, text=True,
+                    timeout=300, cwd=build_dir,
+                )
+                if build_result.returncode != 0:
+                    log.warning(
+                        "Build failed in %s (rc=%d): %s",
+                        build_dir, build_result.returncode,
+                        (build_result.stderr or build_result.stdout)[-500:],
+                    )
+                    test_output = (build_result.stderr or build_result.stdout)[-1000:]
+                    result_returncode = build_result.returncode
+                    test_runner = "ctest-build-failed"
+                    passed, failed = 0, 0
+                    break
+
                 log.info("Attempting ctest in %s", build_dir)
                 result = subprocess.run(
                     ["ctest", "--output-on-failure", "-j4"],

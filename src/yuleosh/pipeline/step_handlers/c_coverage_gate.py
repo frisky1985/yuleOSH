@@ -22,6 +22,7 @@ Usage::
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -172,6 +173,37 @@ def coverage_gate_step(session: PipelineSession) -> str:
 # ── Phase helpers ──
 
 
+def _coverage_build_stale(project_dir: Path, coverage_build_dir: Path) -> bool:
+    """True if any src/tests file is newer than the newest coverage object.
+
+    The "existing coverage build" shortcut silently measures stale gcno/gcda
+    after codegen-deploy replaces src/ — mixed old/new coverage data also
+    breaks gcovr's gcda↔gcno merge.  Rebuild fresh whenever sources moved.
+    """
+    newest_obj = 0.0
+    for f in coverage_build_dir.rglob("*.gcno"):
+        try:
+            newest_obj = max(newest_obj, f.stat().st_mtime)
+        except OSError:
+            continue
+    if newest_obj == 0.0:
+        return True
+    for base in ("src", "tests"):
+        root = project_dir / base
+        if not root.exists():
+            continue
+        for src_file in root.rglob("*"):
+            if not src_file.is_file():
+                continue
+            if src_file.suffix in {".c", ".h", ".txt", ".cmake"}:
+                try:
+                    if src_file.stat().st_mtime > newest_obj:
+                        return True
+                except OSError:
+                    continue
+    return False
+
+
 def _phase_build_coverage(project_dir: str, results: dict) -> dict:
     """Phase 1: Build with coverage enabled.
 
@@ -186,15 +218,19 @@ def _phase_build_coverage(project_dir: str, results: dict) -> dict:
         gcda_files = list(coverage_build_dir.rglob("*.gcda")) + \
                      list(coverage_build_dir.rglob("*.gcno"))
         if gcda_files:
-            log.info("Coverage build found: %s (%d gcda/gcno files)",
-                     coverage_build_dir, len(gcda_files))
-            results["c_fail_under"] = _get_fail_under(project_dir)
-            return {
-                "success": True,
-                "build_dir": str(coverage_build_dir),
-                "note": "Existing coverage build found",
-                "gcno_count": len(gcda_files),
-            }
+            if _coverage_build_stale(Path(project_dir), coverage_build_dir):
+                log.info("Coverage build stale (src/tests changed) — rebuilding fresh")
+                shutil.rmtree(coverage_build_dir, ignore_errors=True)
+            else:
+                log.info("Coverage build found: %s (%d gcda/gcno files)",
+                         coverage_build_dir, len(gcda_files))
+                results["c_fail_under"] = _get_fail_under(project_dir)
+                return {
+                    "success": True,
+                    "build_dir": str(coverage_build_dir),
+                    "note": "Existing coverage build found",
+                    "gcno_count": len(gcda_files),
+                }
 
     # Try to detect/use existing build
     if build_dir.exists():
