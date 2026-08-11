@@ -12,7 +12,7 @@ Target modules (Phase 10 baseline):
 
 风格：直测函数/分支，外部命令（subprocess/git）全部 mock，文件 IO 全部落在 tmp_path，
 DB 隔离用 YULEOSH_KB_DB / OSH_HOME env（monkeypatch 自动恢复），KG 用 :memory: store。
-不设 YULEOSH_JWT_SECRET、不用 sys.path.insert。
+不设 YULEOSH_JWT_SECRET、不用 sys-path 注入。
 """
 
 import builtins
