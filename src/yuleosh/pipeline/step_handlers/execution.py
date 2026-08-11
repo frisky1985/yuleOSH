@@ -434,12 +434,66 @@ def step_claude_test(session: PipelineSession) -> str:
         failed = 0
         total = 0
         is_python = True
+        test_runner_name = "pytest"
 
         # Check if go.mod exists for Go project
         has_go = (project_dir / "go.mod").exists()
 
-        if has_go:
+        # Check for C/CMake project (ctest-based)
+        has_cmake = any(
+            (project_dir / d / "CTestTestfile.cmake").exists()
+            for d in ["build", "cmake-build-coverage", "cmake-build-debug", "cmake-build-release"]
+        ) or (project_dir / "CMakeLists.txt").exists()
+
+        if has_cmake:
             is_python = False
+            test_runner_name = "ctest"
+            try:
+                # Find a build dir with CTestTestfile.cmake; if only
+                # CMakeLists.txt exists, configure a fresh coverage build.
+                build_dirs = [
+                    project_dir / d
+                    for d in ["build", "cmake-build-coverage", "cmake-build-debug", "cmake-build-release"]
+                    if (project_dir / d / "CTestTestfile.cmake").exists()
+                ]
+                if not build_dirs:
+                    build_dir = project_dir / "cmake-build-coverage"
+                    subprocess.run(
+                        ["cmake", "-S", str(project_dir), "-B", str(build_dir),
+                         "-DENABLE_COVERAGE=ON", "-DCMAKE_BUILD_TYPE=Debug"],
+                        capture_output=True, text=True, timeout=120, cwd=project_dir,
+                    )
+                    build_dirs = [build_dir]
+                for build_dir in build_dirs:
+                    result = subprocess.run(
+                        ["cmake", "--build", str(build_dir), "-j4"],
+                        capture_output=True, text=True, timeout=300, cwd=project_dir,
+                    )
+                    result = subprocess.run(
+                        ["ctest", "--output-on-failure", "-j4"],
+                        capture_output=True, text=True, timeout=300, cwd=build_dir,
+                    )
+                    test_output = result.stdout + "\n" + result.stderr
+                    m = re.search(r"(\d+)% tests passed,\s*(\d+) tests failed", result.stdout or "")
+                    if m:
+                        failed = int(m.group(2))
+                        total_m = re.search(r"out of\s+(\d+)", result.stdout or "")
+                        passed = (int(total_m.group(1)) - failed) if total_m else 0
+                        total = passed + failed
+                    test_summary = f"ctest: {result.returncode == 0 and 'PASS' or 'FAIL'} (exit {result.returncode})"
+                    break
+            except FileNotFoundError:
+                log.warning("cmake/ctest not installed — tests cannot run")
+                test_summary = "cmake/ctest not installed — tests skipped"
+            except subprocess.TimeoutExpired:
+                log.warning("ctest timed out")
+                test_summary = "ctest timed out"
+            except Exception as e:
+                log.warning(f"ctest error: {e}")
+                test_summary = f"ctest error: {e}"
+        elif has_go:
+            is_python = False
+            test_runner_name = "go test"
             try:
                 result = subprocess.run(
                     ["go", "test", "./...", "-count=1"],
@@ -522,7 +576,7 @@ def step_claude_test(session: PipelineSession) -> str:
                 pass
 
         status_icon = "\u2705" if failed == 0 else "\u274c"
-        runner = "pytest" if is_python else "go test"
+        runner = test_runner_name
 
         out_path = session.session_dir / "self-test-report.md"
         content = f"""# Self-Test Report: {session.name}

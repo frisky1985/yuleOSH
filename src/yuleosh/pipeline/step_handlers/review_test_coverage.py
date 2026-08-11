@@ -88,11 +88,13 @@ def _load_coverage_data(project_dir: Path) -> Optional[dict]:
     for cov_path in cov_paths:
         if cov_path.exists():
             try:
-                # .coverage is SQLite (coverage.py raw), skip here
-                if cov_path.suffix == ".coverage":
+                # .coverage is SQLite (coverage.py raw), skip here.
+                # NOTE: Path(".coverage").suffix == "" (dotfile has no
+                # suffix), so match on the basename, not the suffix.
+                if cov_path.name == ".coverage" or cov_path.suffix in (".sqlite", ".db"):
                     continue
                 return json.loads(cov_path.read_text())
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
                 continue
 
     return None
