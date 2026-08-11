@@ -336,3 +336,76 @@ class TestHonestyGateCli:
         _fresh_layer_result(proj, age_days=0)
         result = self._run_cli(proj)
         assert result.returncode == 0, result.stdout
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# H9 diff 假 skip 注入 — 方向2 (2026-08-11)
+# ═══════════════════════════════════════════════════════════════════════
+# 攻击向量: diff planner 报告「跳过 X 步骤」，但该步骤实际需要跑
+# （文件 glob 误声明 / 空 diff 全跳过 / 跨切面步骤被裁剪）→ 必须红。
+# 对应 tests/test_diff_planner.py 的 G1/G3/G5 门槛。
+
+
+class TestH9FakeSkipInjection:
+    def test_fake_skip_block_gate_red(self):
+        """注入: block 级门禁被 plan_skips 裁剪 → 必须红。
+
+        review-critical-safety 在 DEFAULT_GATE_POLICY 是 block。
+        若 plan_skips 错误地把它裁掉（G5 失效），就是假 skip → 红。
+        """
+        from yuleosh.ci.diff_planner import plan_skips
+        from yuleosh.ci.gate_policy import DEFAULT_GATE_POLICY
+
+        steps = [
+            ("review-critical-safety", "小明", "P0 GATE", lambda s: ""),
+            ("review-linker", "小克", "链接脚本审查", lambda s: ""),
+        ]
+        # 空 diff → G1 fail-safe 应不裁剪；若裁剪了任何 block 步骤 = 假 skip
+        decisions = plan_skips(steps, [], gate_policy=DEFAULT_GATE_POLICY)
+        assert decisions == [], f"H9: 空 diff 不应裁剪任何步骤，实际 {decisions}"
+
+    def test_fake_skip_cross_cutting_red(self):
+        """注入: 跨切面步骤被 plan_skips 裁剪 → 必须红。"""
+        from yuleosh.ci.diff_planner import CROSS_CUTTING_STEPS, plan_skips
+
+        steps = [
+            ("final-report", "小明", "最终报告", lambda s: ""),
+            ("merge-gate", "小马", "Merge Gate", lambda s: ""),
+            ("review-linker", "小克", "链接脚本审查", lambda s: ""),
+        ]
+        # 任意 diff —— 跨切面步骤永不裁剪
+        decisions = plan_skips(steps, ["src/main.c"], gate_policy={})
+        skipped = {d.step_key for d in decisions}
+        for step in ["final-report", "merge-gate"]:
+            assert step not in skipped, (
+                f"H9: 跨切面步骤 {step} 被裁剪！CROSS_CUTTING_STEPS 含: {CROSS_CUTTING_STEPS}"
+            )
+
+    def test_fake_skip_invalid_glob_red(self):
+        """注入: 需要跑的步骤被错误 glob 裁剪 → 必须红。
+
+        review-linker 关心 *.ld，src/main.c 变更不应裁剪它触发的审查链
+        （链接布局影响内存安全——跨切面交叉影响）。
+        """
+        from yuleosh.ci.diff_planner import plan_skips
+
+        steps = [
+            ("review-linker", "小克", "链接脚本审查", lambda s: ""),
+        ]
+        # 变更 .ld 文件 → review-linker 必须保留
+        decisions = plan_skips(steps, ["linker/STM32F4.ld"], gate_policy={})
+        assert decisions == [], f"H9: .ld 变更不应裁剪 review-linker，实际 {decisions}"
+
+    def test_fake_skip_non_git_red(self):
+        """注入: 非 git checkout 返回空 → plan_skips 不裁剪（G1 fail-safe）。"""
+        from yuleosh.ci.diff_planner import collect_changed_files, plan_skips
+
+        # 非 git 目录
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            changed = collect_changed_files(tmp)
+            assert changed == [], "非 git checkout 必须返回空（fail-safe）"
+            steps = [("review-linker", "小克", "链接脚本审查", lambda s: "")]
+            decisions = plan_skips(steps, changed, gate_policy={})
+            assert decisions == [], "非 git checkout 不得裁剪任何步骤"
