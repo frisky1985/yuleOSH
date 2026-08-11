@@ -130,20 +130,22 @@ def verify_c(files: list[Path], cc: Optional[str] = None) -> dict:
                     inc_dirs.append(key)
     # Cross-layer include fix (2026-08-12): app sources include HAL headers
     # (e.g. src/app/src/*.c → src/hal/include/*.h) which sibling-dir
-    # inference never sees.  Add any <root>/src/*/include dirs.
-    root = Path(str(files[0])).resolve()
-    # Walk up to project root (first dir containing src/ or CMakeLists.txt)
-    proj = root
-    for _ in range(6):
-        if (proj / "src").is_dir() or (proj / "CMakeLists.txt").exists():
-            break
-        proj = proj.parent
-    if (proj / "src").is_dir():
-        for inc in sorted((proj / "src").glob("*/include")):
-            key = str(inc)
-            if inc.is_dir() and key not in seen:
-                seen.add(key)
-                inc_dirs.append(key)
+    # inference never sees.  Scan sibling modules under the modules root:
+    # for a source at <root>/<module>/src/<file>.c, add every
+    # <root>/<other-module>/include dir.
+    for f in sources:
+        parent = Path(str(f)).parent
+        modules_root = parent.parent.parent
+        if modules_root.is_dir():
+            for module in sorted(modules_root.iterdir()):
+                inc = module / "include"
+                if inc.is_dir() and any(
+                    p.suffix.lower() in c_exts for p in inc.iterdir()
+                ):
+                    key = str(inc)
+                    if key not in seen:
+                        seen.add(key)
+                        inc_dirs.append(key)
 
     cmd = [cc, "-fsyntax-only", "-std=c11", "-Wall"]
     for d in inc_dirs:

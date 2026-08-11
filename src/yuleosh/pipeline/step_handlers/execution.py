@@ -371,6 +371,20 @@ def step_codegen_deploy(session: PipelineSession) -> str:
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
         return str(report_path)
 
+    # Guardrail: never deploy failed codegen output (LLM produced broken or
+    # incomplete code — verify loop exhausted retries). Deploying it would
+    # overwrite known-good src/ with broken files.
+    report_md = gen_dir / "codegen-report.md"
+    if report_md.exists():
+        content = report_md.read_text(encoding="utf-8", errors="replace")
+        if "Status: ❌ failed" in content or "Status: failed" in content:
+            print("  ⏭️  [小明] codegen-deploy: codegen status=failed — skipped "
+                  "(broken artifacts not deployed)")
+            report = {"status": "skipped_codegen_failed", "deployed": [],
+                      "skipped_empty": []}
+            report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+            return str(report_path)
+
     src_gen = gen_dir / "src"
     deployed = []
     skipped_empty = []
@@ -380,7 +394,9 @@ def step_codegen_deploy(session: PipelineSession) -> str:
         if src_file.stat().st_size == 0:
             skipped_empty.append(str(src_file.relative_to(src_gen)))
             continue
-        rel = src_file.relative_to(src_gen)
+        # relative to gen_dir so the generated tree keeps its src/ prefix
+        # (relative_to(src_gen) would drop it and deploy to <proj>/app/…)
+        rel = src_file.relative_to(gen_dir)
         dst = project_dir / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_file, dst)
