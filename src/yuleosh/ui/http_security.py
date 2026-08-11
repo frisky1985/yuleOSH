@@ -13,10 +13,14 @@ objects so ``mock.patch("yuleosh.ui.server.check_rate_limit")`` and the
 shared ``_rate_limit_buckets`` dict semantics keep working.
 """
 
+import logging
 import re
 import secrets
+import sqlite3
 import time
 from collections import defaultdict
+
+log = logging.getLogger("ui.http_security")
 
 
 # ── T2 (v3.9.0): CSP — single source for every HTML response ────────────
@@ -171,7 +175,14 @@ def check_rate_limit(client_ip: str, max_requests: int = RATE_LIMIT_MAX,
             return True, 0.0
         retry_after = store.window_remaining_seconds(client_ip, int(window))
         return False, round(retry_after, 1)
-    except Exception:  # noqa: BLE001 — degrade gracefully, never 500 the API
+    except (sqlite3.Error, OSError) as e:
+        # 仅存储层故障（SQLite/文件系统）降级内存限流；编程错误向上抛，
+        # 避免降级掩盖真实 bug（如参数/契约变更）。
+        log.warning(
+            "Rate-limit store unavailable (%s: %s); falling back to in-memory "
+            "limiter — multi-worker shared budget is NOT enforced",
+            type(e).__name__, e,
+        )
         return check_rate_limit_memory(client_ip, max_requests, window)
 
 # ── Security response headers (OSHHandler._add_security_headers) ──────────
