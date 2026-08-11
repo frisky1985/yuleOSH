@@ -83,6 +83,14 @@ _CI_CONFIG_SCHEMA = {
         },
     },
     "hardware_test": {"type": "dict"},
+    "gate": {
+        "type": "dict",
+        "keys": {
+            "require_pass": {"type": "list", "items": "str"},
+            "block_on": {"type": "list", "items": "str"},
+            "warn_on": {"type": "list", "items": "str"},
+        },
+    },
     "code_style": {
         "type": "dict",
         "keys": {
@@ -279,10 +287,26 @@ def validate_all(path: str = ".") -> dict:
     base = Path(path).resolve()
 
     ci_config_path = str(base / ".yuleosh" / "ci-config.yaml")
+    # Fallback: `yuleosh init` writes ci-config.yaml at the project ROOT;
+    # accept either location (matches load_ci_config resolution).
+    if not Path(ci_config_path).exists():
+        root_cfg = base / "ci-config.yaml"
+        if root_cfg.exists():
+            ci_config_path = str(root_cfg)
+
     misra_rules_path = str(base / "misra-rules.yaml")
 
     ci_result = validate_ci_config(ci_config_path)
-    misra_result = validate_misra_rules(misra_rules_path)
+    if Path(misra_rules_path).exists():
+        misra_result = validate_misra_rules(misra_rules_path)
+    else:
+        # Optional rules file — MISRA stage falls back to built-in defaults.
+        misra_result = {
+            "valid": True,
+            "errors": ["misra-rules.yaml not found — using built-in defaults"],
+            "path": misra_rules_path,
+            "skipped": True,
+        }
 
     all_valid = ci_result["valid"] and misra_result["valid"]
     all_errors = {

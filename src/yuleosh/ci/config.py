@@ -310,6 +310,16 @@ def load_ci_config(
     path = config_path or DEFAULT_CI_CONFIG_PATH
     full_path = os.path.join(project_dir, path)
 
+    if not os.path.exists(full_path) and not config_path:
+        # Fallback: `yuleosh init` writes ci-config.yaml at the project ROOT,
+        # while the loader historically looked only at .yuleosh/ci-config.yaml.
+        # Accept either location so CI config (MISRA profiles, coverage
+        # thresholds, ...) is actually applied.
+        root_path = os.path.join(project_dir, "ci-config.yaml")
+        if os.path.exists(root_path):
+            log.info("CI config loaded from project root: %s", root_path)
+            full_path = root_path
+
     if not os.path.exists(full_path):
         log.info("CI config not found at %s — using defaults", full_path)
         return CiConfig()
