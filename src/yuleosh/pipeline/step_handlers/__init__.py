@@ -24,6 +24,7 @@ from yuleosh.pipeline.step_handlers.analysis import (
 from yuleosh.pipeline.step_handlers.execution import (
     step_claude_arch,
     step_claude_dev,
+    step_codegen_deploy,
     step_test_planning,
     step_claude_test,
 )
@@ -147,6 +148,10 @@ PIPELINE_STEPS = [
     # ── Left side: SWE.3 Detailed Design & Code ─────
     ("development", "Claude", "开发计划与代码实现",
      _resolve_handler("development", step_claude_dev)),
+    # codegen 产物部署: development(generate-code) 写 artifacts/generated-code/<session>/,
+    # 此步同步 src/ 树 → 后续 build/test/coverage 测的是真实生成代码而非模板空壳
+    ("codegen-deploy", "小明", "代码产物部署",
+     step_codegen_deploy),
     ("devplan-review", "小克", "开发计划审查", step_review_devplan),
 
     # ── Bottom: Code Pre-Review ─────────────────────

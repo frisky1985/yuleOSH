@@ -373,6 +373,38 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
         line_rate = lines_block.get("rate", 0.0) * 100 if isinstance(lines_block, dict) else 0.0
     branch_rate = report.get("branch_rate", 0.0)
 
+    def _file_line_stats(f: dict):
+        """Return (found, hit) for a gcovr file entry (lines as list of
+        {line_number, count}) or a CI/coverage.py entry (lines.found/hit)."""
+        if not isinstance(f, dict):
+            return (0, 0)
+        lines = f.get("lines")
+        if isinstance(lines, list):
+            found = len(lines)
+            hit = sum(1 for ln in lines if isinstance(ln, dict) and ln.get("count", 0) > 0)
+            return (found, hit)
+        if isinstance(lines, dict):
+            return (int(lines.get("found", 0)), int(lines.get("hit", 0)))
+        return (0, 0)
+
+    # gcovr --json emits {"files": [...]} with per-line counts but no aggregate
+    # rate; compute the aggregate when the report lacks line_rate/summary.
+    if line_rate is None or line_rate == 0.0 and "summary" not in report:
+        raw_files = report.get("files", [])
+        if isinstance(raw_files, dict):
+            raw_files = list(raw_files.values()) if raw_files else []
+        total_found = 0
+        total_hit = 0
+        for f in raw_files:
+            found, hit = _file_line_stats(f)
+            total_found += found
+            total_hit += hit
+        if total_found > 0:
+            line_rate = round(100.0 * total_hit / total_found, 2)
+            report["line_rate"] = line_rate   # persist for downstream readers
+        else:
+            line_rate = 0.0
+
     print(f"    C line coverage:   {line_rate:.1f}%")
     print(f"    C branch coverage: {branch_rate:.1f}%")
     print(f"    Threshold (c_fail_under): {c_fail_under}%")
@@ -389,18 +421,17 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
         if isinstance(raw_files, dict):
             raw_files = list(raw_files.values()) if raw_files else []
         files_list = raw_files
-        low_files = sorted(
-            [f for f in files_list if isinstance(f, dict) and f.get("line_rate", 100) < c_fail_under],
-            key=lambda x: (1 - x.get("line_rate", 0) / 100) * x.get("lines", {}).get("found", 0),
-            reverse=True,
-        )[:5]
+        low_files = []
+        for f in files_list:
+            found, hit = _file_line_stats(f)
+            if found > 0:
+                rate = 100.0 * hit / found
+                low_files.append((f.get("file", "?"), rate, found - hit))
+        low_files.sort(key=lambda x: x[2], reverse=True)
         if low_files:
             print(f"    📋 Low-coverage files (top 5 by uncovered lines):")
-            for lf in low_files:
-                lr = lf.get("line_rate", 0)
-                lines_found = lf.get("lines", {}).get("found", 0)
-                uncovered = int(lines_found * (1 - lr / 100))
-                print(f"        • {lf.get('file', '?')}: {lr:.1f}% ({uncovered} lines uncovered)")
+            for name, lr, uncovered in low_files[:5]:
+                print(f"        • {name}: {lr:.1f}% ({uncovered} lines uncovered)")
             print(f"    🔧 Consider adding module_thresholds in ci-config.yaml for low-coverage modules")
         return False
 
