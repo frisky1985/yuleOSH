@@ -233,9 +233,39 @@ class CriticalSafetyScanner:
     # ── 3. 空指针解引用 ─────────────────────────────────
 
     def _scan_null_deref(self, filepath: Path, lines: list[str]):
-        """匹配未检查 malloc/calloc 返回值解引用。"""
+        """匹配未检查 malloc/calloc 返回值解引用 + 指针解引用前无 NULL 检查。
+
+        指针解引用的 NULL 检查按「函数作用域」判定：标准 C 模式是函数开头
+        ``if (ctx == NULL) return;`` 一次检查、函数体任意处解引用。旧的
+        「仅回看 6 行」启发式对这类代码产生大量假阳性（CRIT-NULL-001 误报）。
+        用花括号深度跟踪函数边界，函数内任意位置先出现的 NULL 检查都算数。
+        """
+        # var → (最近一次 NULL 检查行号, 生效作用域深度)
+        # 作用域 0 = 函数级（检查行带 early-exit，如 if (X == NULL) return;）
+        # 作用域 N>0 = 块级（仅覆盖深度 N 及更深的块，块关闭即失效）
+        null_checked: dict[str, tuple[int, int]] = {}
+        func_start_line = 0
+        depth = 0
+
+        def _has_early_exit(line: str) -> bool:
+            return bool(re.search(r'\b(?:return|continue|break|goto)\b', line))
+
         for lineno, line in enumerate(lines, 1):
             stripped = line.strip()
+            opens = stripped.count("{")
+            closes = stripped.count("}")
+            if depth == 0 and opens > 0:
+                func_start_line = lineno
+            depth += opens - closes
+            if depth == 0 and closes > 0:
+                # 函数体结束 → 清空检查状态
+                null_checked.clear()
+                func_start_line = 0
+            elif closes > 0:
+                # 块关闭 → 撤销仅在该块内生效的检查（作用域 > 当前深度）
+                for var in [v for v, (_, sc) in null_checked.items() if sc > depth]:
+                    del null_checked[var]
+
             # malloc 后立即解引用，没有 NULL 检查
             m = re.match(r'(\w+)\s*=\s*(?:pvPortMalloc|malloc|calloc)\s*\((.*?)\)', stripped)
             if m:
@@ -257,6 +287,29 @@ class CriticalSafetyScanner:
                         fix_suggestion=f"分配后添加：if ({var} == NULL) return error;"
                     ))
 
+            # 记录显式 NULL 检查：X == NULL / NULL == X / X != NULL / !X
+            # 带 early-exit（return/continue/break/goto）的检查按函数级生效；
+            # 否则仅覆盖当前块（作用域 = 块内深度）。
+            checked_vars: set[str] = set()
+            for m3 in re.finditer(r'\b(\w+)\s*(?:==|!=)\s*NULL', stripped):
+                checked_vars.add(m3.group(1))
+            for m3 in re.finditer(r'NULL\s*(?:==|!=)\s*(\w+)', stripped):
+                checked_vars.add(m3.group(1))
+            m_n = re.match(r'!(\w+)\b', stripped)
+            if m_n:
+                checked_vars.add(m_n.group(1))
+            if checked_vars:
+                exit_guard = _has_early_exit(stripped)
+                if not exit_guard:
+                    # 检查行之后的 2 行内是否有 early-exit（覆盖 if (X == NULL) { return; }）
+                    for nl in lines[lineno:min(lineno + 2, len(lines))]:
+                        if _has_early_exit(nl.strip()):
+                            exit_guard = True
+                            break
+                scope = 0 if exit_guard else depth
+                for var in checked_vars:
+                    null_checked[var] = (lineno, scope)
+
             # 函数返回指针直接解引用（无 NULL 检查）
             m2 = re.search(r'([&\w.]+)\s*->\s*\w+', stripped)
             if m2:
@@ -264,13 +317,9 @@ class CriticalSafetyScanner:
                 # 剔除点号表达式（obj.field->x 是成员解引用，跳过）
                 if '.' in deref_obj:
                     continue
-                # 往前看该变量最近一次赋值是否 checked
-                checked = False
-                for prev in range(max(0, lineno - 6), lineno):
-                    pl = lines[prev].strip()
-                    if re.search(rf'\b{deref_obj}\s*[!=]=\s*NULL', pl):
-                        checked = True
-                        break
+                checked_line, check_scope = null_checked.get(deref_obj, (0, -1))
+                checked = (check_scope == 0 or check_scope <= depth) \
+                    and checked_line >= func_start_line
                 if not checked and deref_obj != "this" \
                    and not deref_obj.startswith("&"):
                     self.violations.append(CriticalViolation(
