@@ -18,6 +18,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
+
 from yuleosh.api.ratelimit_shared import (
     RateLimitStore,
     check_rate_limit_shared,
@@ -386,17 +388,37 @@ def test_http_security_memory_fallback_preserved():
     assert retry > 0
 
 
-def test_http_security_degrades_to_memory_on_store_error(monkeypatch):
-    """共享 store 异常时降级内存限流，绝不让 API 500。"""
+def test_http_security_degrades_to_memory_on_store_error(monkeypatch, caplog):
+    """存储层故障（SQLite/文件系统）→ 降级内存限流，绝不让 API 500，且留日志。"""
     from yuleosh.ui import http_security as hs
     monkeypatch.setenv("YULEOSH_RATE_DB", "/nonexistent-dir/rl.db")
+    import sqlite3
+
     import yuleosh.api.ratelimit_shared as rls
 
     class BoomStore(rls.RateLimitStore):
         def check(self, *a, **k):
-            raise RuntimeError("sqlite unavailable")
+            raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr(rls, "RateLimitStore", BoomStore)
-    ok, retry = hs.check_rate_limit("10.0.0.4", max_requests=5, window=60)
+    with caplog.at_level("WARNING", logger="ui.http_security"):
+        ok, retry = hs.check_rate_limit("10.0.0.4", max_requests=5, window=60)
     assert ok is True  # 降级到内存后放行
     assert retry == 0.0
+    assert "falling back to in-memory" in caplog.text  # 降级必须留痕，避免静默失效
+
+
+def test_http_security_programming_error_not_swallowed(tmp_path, monkeypatch):
+    """编程错误（非存储故障）必须向上抛——降级不得掩盖真实 bug。"""
+    from yuleosh.ui import http_security as hs
+    # 用可写目录：构造成功（schema 建好），check() 阶段才抛编程错误
+    monkeypatch.setenv("YULEOSH_RATE_DB", str(tmp_path / "rl.db"))
+    import yuleosh.api.ratelimit_shared as rls
+
+    class BrokenStore(rls.RateLimitStore):
+        def check(self, *a, **k):
+            raise TypeError("check() got an unexpected keyword argument")
+
+    monkeypatch.setattr(rls, "RateLimitStore", BrokenStore)
+    with pytest.raises(TypeError):
+        hs.check_rate_limit("10.0.0.5", max_requests=5, window=60)
