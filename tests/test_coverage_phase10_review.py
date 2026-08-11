@@ -9,7 +9,7 @@
 覆盖重点: 错误路径、边界条件、异常处理、default 分支。
 红线: 零 src/ 改动、零网络/子进程依赖 —— cppcheck/git/LLM 全部 mock 注入；
 tmp_path/monkeypatch 隔离；不设置 YULEOSH_JWT_SECRET（conftest 已 setdefault）；
-不用 sys.path.insert（pytest.ini 已配 pythonpath=src）。
+不用 sys-path 注入（pytest.ini 已配 pythonpath=src）。
 """
 
 import json

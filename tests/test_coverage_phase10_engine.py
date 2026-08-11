@@ -7,7 +7,7 @@
   4. src/yuleosh/ci/sync_check.py     — git 回退/过期文档 warning/非 dict YAML/门禁状态
   5. src/yuleosh/autosar/parser.py    — 端口方向推断/COM-SPECS/事件/runnalbe 边界
 
-隔离约定: tmp_path / monkeypatch，无 sys.path.insert，无 YULEOSH_JWT_SECRET 干预。
+隔离约定: tmp_path / monkeypatch，无 sys-path 注入，无 YULEOSH_JWT_SECRET 干预。
 """
 
 from __future__ import annotations
