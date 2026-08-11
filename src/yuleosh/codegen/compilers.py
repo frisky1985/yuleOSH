@@ -84,12 +84,55 @@ def verify_python(files: list[Path], python_cmd: str = "python3") -> dict:
 
 
 def verify_c(files: list[Path], cc: Optional[str] = None) -> dict:
-    """Syntax-check C/C++ files with ``gcc -fsyntax-only`` (or ``cc``)."""
+    """Syntax-check C/C++ files with ``gcc -fsyntax-only`` (or ``cc``).
+
+    E2E fix (2026-08-11): generated multi-file projects were always
+    reported as failed because:
+      1. non-C inputs (CMakeLists.txt / README.md) were passed to gcc as
+         source files — harmless warnings, but noisy;
+      2. `#include "local.h"` from sibling dirs (e.g. src/hal/src/*.c
+         including src/hal/include/*.h) failed with "file not found"
+         because no -I include paths were passed — the generated code
+         itself was fine, the verifier was not.
+
+    Fix: only pass C/C++ sources to the compiler, collect sibling
+    ``include/`` / ``*.h`` directories as -I paths, and if the first
+    pass still fails, retry once with the same -I set (defensive).
+    """
+    c_exts = _C_EXTS | _CXX_EXTS
+    sources = [f for f in files if Path(str(f)).suffix.lower() in c_exts]
+    if not sources:
+        return _result(True, LANGUAGE_C, "gcc -fsyntax-only",
+                       "(no C/C++ sources to verify)", 0)
     cc = cc or shutil.which("gcc") or shutil.which("cc")
     if not cc:
         return _result(False, LANGUAGE_C, "gcc -fsyntax-only",
                        "no C compiler (gcc/cc) found on PATH", -1)
-    cmd = [cc, "-fsyntax-only", "-std=c11", "-Wall", *[str(f) for f in files]]
+
+    # Collect -I dirs: any directory that contains headers referenced by
+    # the sources (project include/ dirs + sibling dirs of sources).
+    inc_dirs: list[str] = []
+    seen: set[str] = set()
+    for f in sources:
+        parent = Path(str(f)).parent
+        candidates = [
+            parent / "include",
+            parent.parent / "include",
+            parent,
+        ]
+        for cand in candidates:
+            if cand.is_dir() and any(
+                p.suffix.lower() in c_exts for p in cand.iterdir()
+            ):
+                key = str(cand)
+                if key not in seen:
+                    seen.add(key)
+                    inc_dirs.append(key)
+
+    cmd = [cc, "-fsyntax-only", "-std=c11", "-Wall"]
+    for d in inc_dirs:
+        cmd += ["-I", d]
+    cmd += [str(f) for f in sources]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         return _result(
