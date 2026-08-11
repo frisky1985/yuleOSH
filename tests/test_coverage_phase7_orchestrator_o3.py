@@ -217,7 +217,8 @@ def test_non_mock_injected_client_skips_key_check(osh_home, tmp_path):
         llm_client=fake,
     )
     assert session.llm_client is fake
-    assert session.status == "created"
+    # E2E 修复 (2026-08-11): 单步无 final-report 正常跑完 → completed
+    assert session.status == "completed"
 
 
 # ---------------------------------------------------------------------------
@@ -373,14 +374,19 @@ def test_pipeline_success_with_final_report(osh_home, tmp_path):
     assert (tmp_path / ".osh" / "sessions" / session.run_id / "session.json").exists()
 
 
-def test_pipeline_without_final_report_status_created(osh_home, tmp_path, capsys):
-    """无 final-report → status 保持 created，走 ❌ 打印（L430-433 else）。"""
+def test_pipeline_without_final_report_status_completed(osh_home, tmp_path, capsys):
+    """无 final-report（如 minimal 白名单档）→ 循环正常跑完即 completed。
+
+    修复前 (2026-08-11): status 只在 final-report 步骤前置位，白名单档
+    永远停在 created → CLI exit(1) 误判失败。修复后: 未失败且未跑
+    final-report 时，循环结束统一置 completed，走 🎉 打印。
+    """
     spec = _make_spec(tmp_path)
     out = tmp_path / "a.md"
     out.write_text("x", encoding="utf-8")
     session = _run(spec, steps=[("spec-check", "小明", "合规检查", _ok_handler(out))])
-    assert session.status == "created"
-    assert "Pipeline: created ❌" in capsys.readouterr().out
+    assert session.status == "completed"
+    assert "Pipeline: completed 🎉" in capsys.readouterr().out
 
 
 def test_completed_with_verdict_errors(osh_home, tmp_path, capsys):
@@ -769,3 +775,47 @@ def test_run_step_generic_error_abort_raises(rwf_session, tmp_path):
         _run_step_with_fallback(
             _boom, rwf_session, "prd", "PRD", str(tmp_path / "spec.md")
         )
+
+
+# ---------------------------------------------------------------------------
+# E2E 回归 (2026-08-11): 白名单档无 final-report 时 status 必须为 completed
+# ---------------------------------------------------------------------------
+
+def test_whitelist_profile_without_final_report_marks_completed(osh_home, tmp_path):
+    """minimal 等白名单档裁剪掉 final-report → 循环正常跑完即 completed。
+
+    修复前: session.status 只在 final-report 步骤前置位，白名单档永远停在
+    "created" → CLI `yuleosh pipeline run` 的 sys.exit(1) 误判失败。
+    修复后: 循环结束后若未跑 final-report 且未失败 → 标记 completed。
+    """
+    spec = _make_spec(tmp_path)
+    out1 = tmp_path / "out1.md"
+    out1.write_text("ok", encoding="utf-8")
+    out2 = tmp_path / "out2.md"
+    out2.write_text("ok", encoding="utf-8")
+    steps = [
+        ("spec-check", "小明", "合规检查", _ok_handler(out1)),
+        ("merge-gate", "小马", "KG Merge Gate", _ok_handler(out2)),
+    ]
+    session = _run(
+        spec,
+        steps=steps,
+        mock_mode=True,
+        profile="minimal",
+    )
+    assert session.status == "completed"
+    assert [s["name"] for s in session.steps] == ["spec-check", "merge-gate"]
+
+
+def test_profile_with_final_report_still_completed(osh_home, tmp_path):
+    """含 final-report 的档（safety）保持原有语义：final-report 步骤前置位。"""
+    spec = _make_spec(tmp_path)
+    out = tmp_path / "out.md"
+    out.write_text("ok", encoding="utf-8")
+    steps = [
+        ("spec-check", "小明", "合规检查", _ok_handler(out)),
+        ("final-report", "小明", "最终报告", _ok_handler(out)),
+    ]
+    session = _run(spec, steps=steps, mock_mode=True, profile="safety")
+    assert session.status == "completed"
+    assert session.steps[-1]["name"] == "final-report"

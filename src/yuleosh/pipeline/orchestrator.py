@@ -428,7 +428,10 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         
         log.info(f"Pipeline starting: {name}, spec={spec_path}, profile={active_profile}")
         
+        _ran_final_report = False
         for step_key, agent, step_name, handler in _steps:
+            if step_key == "final-report":
+                _ran_final_report = True
             step_idx = len(session.steps)
             session.add_step(step_key, agent, step_name)
             session.start_step(step_idx)
@@ -476,6 +479,13 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 # Block dependent steps: no more steps run after failure
                 break
         
+        # E2E 修复 (2026-08-11): minimal 等白名单档不含 final-report —
+        # 循环正常跑完即视为 completed（避免 status 停在 created 导致
+        # CLI exit(1) 误判失败；block 中断/异常已在循环内置 failed）。
+        if session.status != "failed" and not _ran_final_report:
+            session.status = "completed"
+            session.updated_at = datetime.now().isoformat()
+
         if session.status != "failed":
             session._save()
         
