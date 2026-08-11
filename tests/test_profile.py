@@ -22,6 +22,7 @@ from yuleosh.ci.profile import (
     get_available_profiles,
     get_current_profile,
     BUILTIN_PROFILES,
+    ALWAYS_INCLUDE,
 )
 
 # Mock pipeline steps for filtering tests
@@ -215,3 +216,147 @@ class TestPIPELINE_STEPSProfile:
         filtered_keys = [s[0] for s in filtered]
         assert "super-analysis" not in filtered_keys
         assert "prd" not in filtered_keys
+
+
+# ===================================================================
+# 方向1 (2026-08-11): Profile 反转为增量装配
+# ===================================================================
+
+
+class TestProfileInversion:
+    """方向1: 增量装配 — minimal 白名单基线 + 保护集 + 不变量。"""
+
+    MOCK_STEPS = MOCK_STEPS + [
+        ("review-critical-safety", "小明", "关键安全异常阻塞检查 (P0 GATE)", lambda s: "/tmp/cs.md"),
+        ("merge-gate", "小马", "KG Merge Gate", lambda s: "/tmp/mg.md"),
+        ("review-linker", "小克", "链接脚本审查", lambda s: "/tmp/ld.md"),
+        ("review-startup", "小克", "启动代码审查", lambda s: "/tmp/startup.md"),
+        ("integration-test", "小克", "接口集成测试", lambda s: "/tmp/it.md"),
+        ("c-coverage-gate", "小克", "C 覆盖率门禁检查 (L2)", lambda s: "/tmp/ccov.md"),
+    ]
+
+    def test_minimal_profile_exists(self):
+        """B1: minimal profile 存在于内置档。"""
+        assert "minimal" in BUILTIN_PROFILES
+        assert BUILTIN_PROFILES["minimal"]["include_steps"] is not None
+
+    def test_minimal_profile_core_steps(self):
+        """B1: minimal 含核心质量步骤。"""
+        filtered = filter_steps_for_profile(self.MOCK_STEPS, "minimal")
+        keys = [s[0] for s in filtered]
+        assert "spec-check" in keys
+        assert "c-unit-test" in keys
+        assert "integration-test" in keys
+        assert "c-coverage-gate" in keys
+
+    def test_invariant1_safety_equals_all(self):
+        """AC2/不变量1: safety 恒等于全集（含 P0 保护集）。"""
+        filtered = filter_steps_for_profile(self.MOCK_STEPS, "safety")
+        assert set(s[0] for s in filtered) == set(s[0] for s in self.MOCK_STEPS)
+        assert len(filtered) == len(self.MOCK_STEPS)
+
+    def test_invariant2_always_include_preserved_in_minimal(self):
+        """AC3/不变量2: P0 保护集在白名单档也保留（fail-safe 防漏步骤）。"""
+        filtered = filter_steps_for_profile(self.MOCK_STEPS, "minimal")
+        keys = [s[0] for s in filtered]
+        for gate in ALWAYS_INCLUDE:
+            assert gate in keys, f"P0 保护步骤 {gate} 被 minimal 裁剪！"
+
+    def test_invariant2_always_include_preserved_in_ci(self):
+        """不变量2: P0 保护集在黑名单档即使被 exclude 也强制保留。"""
+        # 构造 ci 档 exclude 包含保护集的情景 → 保护集仍应保留
+        filtered = filter_steps_for_profile(self.MOCK_STEPS, "ci")
+        keys = [s[0] for s in filtered]
+        for gate in ALWAYS_INCLUDE:
+            assert gate in keys
+
+    def test_invariant3_ci_diff_equivalent(self):
+        """AC4/不变量3: ci 档反装前后排除步骤差集一致（黑名单语义保持）。"""
+        filtered = filter_steps_for_profile(self.MOCK_STEPS, "ci")
+        keys = [s[0] for s in filtered]
+        # ci 档原本排除的 LLM 步骤
+        for step in ["super-analysis", "prd", "prd-review", "architecture"]:
+            assert step not in keys
+        # 非排除步骤保留
+        for step in ["spec-check", "misra-review", "review-bsp", "c-unit-test"]:
+            assert step in keys
+
+    def test_minimal_is_subset_of_safety(self):
+        """minimal 是 safety 的子集（增量装配语义）。"""
+        minimal = filter_steps_for_profile(self.MOCK_STEPS, "minimal")
+        safety = filter_steps_for_profile(self.MOCK_STEPS, "safety")
+        minimal_keys = set(s[0] for s in minimal)
+        safety_keys = set(s[0] for s in safety)
+        assert minimal_keys <= safety_keys
+        assert len(minimal_keys) < len(safety_keys)
+
+    def test_minimal_excludes_review_linker_by_default(self):
+        """B5 前置: minimal 默认不含嵌入式专项（按需叠加）。"""
+        filtered = filter_steps_for_profile(self.MOCK_STEPS, "minimal")
+        keys = [s[0] for s in filtered]
+        assert "review-linker" not in keys
+
+
+class TestProfileCustomOverrides:
+    """方向1: 自定义 profile include/exclude 叠加（修复死代码 bug）。"""
+
+    @pytest.fixture
+    def custom_project(self, tmp_path):
+        """创建带自定义 profile 的临时项目。"""
+        import yaml
+        yuleosh_dir = tmp_path / ".yuleosh"
+        yuleosh_dir.mkdir(parents=True, exist_ok=True)
+        config = {
+            "misra": {
+                "enabled": True,
+                "active_profile": "minimal",
+                "profiles": {
+                    "safety": {"name": "Safety"},
+                    "minimal": {"name": "Minimal"},
+                    "ci": {"name": "CI"},
+                    "embedded": {
+                        "name": "Embedded",
+                        "include_steps": ["spec-check", "review-linker", "review-startup"],
+                        "exclude_steps": [],
+                    },
+                    "ci_plus_linker": {
+                        "name": "CI+Linker",
+                        "extends": "ci",
+                        "exclude_steps": ["review-rtos"],
+                    },
+                },
+            },
+        }
+        with open(yuleosh_dir / "ci-config.yaml", "w") as f:
+            yaml.dump(config, f)
+        return str(tmp_path)
+
+    def test_custom_include_steps_works(self, custom_project):
+        """B7/AC6: 自定义 include_steps 实际生效（死代码修复）。"""
+        steps = TestProfileInversion.MOCK_STEPS
+        filtered = filter_steps_for_profile(steps, "embedded", custom_project)
+        keys = [s[0] for s in filtered]
+        assert "spec-check" in keys
+        assert "review-linker" in keys
+        assert "review-startup" in keys
+        # 保护集仍然保留
+        for gate in ALWAYS_INCLUDE:
+            assert gate in keys
+
+    def test_custom_exclude_steps_works(self, custom_project):
+        """B7/AC6: 自定义 exclude_steps 实际生效（死代码修复）。"""
+        steps = TestProfileInversion.MOCK_STEPS
+        filtered = filter_steps_for_profile(steps, "ci_plus_linker", custom_project)
+        keys = [s[0] for s in filtered]
+        # ci 档排除 LLM 步骤 + 自定义排除 review-rtos
+        assert "super-analysis" not in keys
+        assert "review-rtos" not in keys
+        # 保护集保留
+        for gate in ALWAYS_INCLUDE:
+            assert gate in keys
+
+    def test_unknown_custom_profile_falls_back_to_safety(self, custom_project):
+        """未知 profile → 回退 safety（全量）。"""
+        steps = TestProfileInversion.MOCK_STEPS
+        filtered = filter_steps_for_profile(steps, "no-such-profile", custom_project)
+        assert len(filtered) == len(steps)

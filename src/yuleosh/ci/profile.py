@@ -29,11 +29,26 @@ log = logging.getLogger("ci.profile")
 # Default step inclusion/exclusion per profile
 # Each profile can specify which steps to include/exclude.
 # None = include all steps (no filtering)
+#
+# 方向1 (2026-08-11): 反转为增量装配
+#   - minimal: 白名单基线（include_steps 显式列出）——新用户首跑最小闭环
+#   - safety : 恒等于 PIPELINE_STEPS 全集（不变量1）
+#   - ci/performance/testing: 保持黑名单模式（不变量3：差集等价，零迁移风险）
+#   - ALWAYS_INCLUDE: P0 保护集 —— 所有档强制包含，防止白名单档新 P0 门禁
+#     静默消失（不变量2 的 fail-safe 兜底）
 BUILTIN_PROFILES = {
     "safety": {
         "description": "Full safety-critical pipeline — all steps enabled",
         "include_steps": None,  # All steps
         "exclude_steps": [],    # None excluded
+    },
+    "minimal": {
+        "description": "Minimal bootstrap — core quality gates only, add steps on demand",
+        "include_steps": [
+            "spec-check", "c-unit-test", "integration-test",
+            "c-coverage-gate", "review-critical-safety", "merge-gate",
+        ],
+        "exclude_steps": [],
     },
     "ci": {
         "description": "CI pipeline — excludes LLM-heavy review steps for speed",
@@ -71,6 +86,13 @@ BUILTIN_PROFILES = {
         ],
     },
 }
+
+# P0 保护集（方向1）: 语义上不可绕过的门禁，任何档（含 minimal 白名单）
+# 都必须保留。新步骤若加入此集，自动进入所有档 —— 防白名单模式漏步骤。
+ALWAYS_INCLUDE = [
+    "review-critical-safety",
+    "merge-gate",
+]
 
 
 def get_available_profiles() -> dict:
@@ -152,12 +174,22 @@ def filter_steps_for_profile(
     Returns a filtered list of (step_key, agent, step_name, handler) tuples.
     Steps excluded by the active profile are removed.
 
+    方向1 (2026-08-11) 增量装配语义:
+      - include_steps 非 None（白名单模式）: 只保留 include 列表 + ALWAYS_INCLUDE
+        保护集（P0 门禁永不裁剪）中的步骤；未显式声明的新步骤默认保留
+        （不变量2 fail-safe: unlisted = run，除非被 exclude 显式剔除）。
+      - include_steps 为 None（黑名单模式）: 保留全部 − exclude_steps
+        （现状行为，差集等价不变量3）。
+      - safety: include_steps=None + exclude_steps=[] → 恒等于全集（不变量1）。
+      - 自定义 profile 支持 extends 继承 + include_steps/exclude_steps 叠加
+        （修复此前 hasattr exclude_steps 死代码 bug）。
+
     Parameters
     ----------
     steps : list[tuple]
         Full PIPELINE_STEPS list.
     profile_name : str
-        Active profile name (e.g. "safety", "ci").
+        Active profile name (e.g. "safety", "ci", "minimal").
     project_dir : str
         Project root, to check ci-config.yaml custom profile overrides.
 
@@ -169,31 +201,42 @@ def filter_steps_for_profile(
     # Get base profile config
     profile_cfg = BUILTIN_PROFILES.get(profile_name, BUILTIN_PROFILES["safety"])
 
-    # Check for custom profile overrides in ci-config.yaml
+    # Custom profile overrides in ci-config.yaml (方向1: extends + include/exclude 叠加)
     try:
         cfg = _get_ci_config(project_dir)
         config_profiles = cfg.misra.profiles or {}
         custom_profile = config_profiles.get(profile_name)
         if custom_profile:
-            # Merge custom exclude steps if defined
-            if hasattr(custom_profile, 'exclude_steps') and custom_profile.exclude_steps:
-                profile_cfg = {**profile_cfg, "exclude_steps": custom_profile.exclude_steps}
+            # extends: 继承另一内置/自定义 profile 的步骤语义
+            ext = getattr(custom_profile, "extends", "") or ""
+            if ext:
+                base = dict(BUILTIN_PROFILES.get(ext, profile_cfg))
+            else:
+                base = dict(BUILTIN_PROFILES.get(profile_name, profile_cfg))
+            inc = list(getattr(custom_profile, "include_steps", []) or [])
+            exc = list(getattr(custom_profile, "exclude_steps", []) or [])
+            if inc:
+                # 白名单模式: 自定义 include 覆盖（+ 保护集）
+                profile_cfg = {**base, "include_steps": inc, "exclude_steps": exc}
+            elif exc:
+                # 黑名单模式: 在 base 上追加排除
+                merged_exc = list(base.get("exclude_steps", [])) + exc
+                profile_cfg = {**base, "exclude_steps": merged_exc}
     except Exception:
         pass  # Fall back to builtin profile config
 
-    exclude = set(profile_cfg.get("exclude_steps", []))
     include = profile_cfg.get("include_steps")
+    exclude = set(profile_cfg.get("exclude_steps", []))
+    # P0 保护集: 任何档都不能被排除
+    always_include = set(ALWAYS_INCLUDE)
 
     if include is not None:
-        # Whitelist mode: only include specified steps
-        include_set = set(include)
-        filtered = [s for s in steps if s[0] in include_set]
-    elif exclude:
-        # Blacklist mode: remove excluded steps
-        filtered = [s for s in steps if s[0] not in exclude]
+        # Whitelist mode: include 列表 + 保护集，减显式 exclude
+        include_set = set(include) | always_include
+        filtered = [s for s in steps if s[0] in include_set and s[0] not in exclude]
     else:
-        # Include all steps
-        filtered = list(steps)
+        # Blacklist mode: 全部 − exclude（但保护集强制保留）
+        filtered = [s for s in steps if s[0] not in exclude or s[0] in always_include]
 
     excluded_count = len(steps) - len(filtered)
     if excluded_count > 0:
