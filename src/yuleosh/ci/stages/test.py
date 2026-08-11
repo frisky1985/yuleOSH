@@ -141,6 +141,17 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
 
     print("  📊 CI: coverage check...")
 
+    # Python-coverage only applies when Python tests exist.  C/C++ projects
+    # are covered by the separate gcov stage (c-coverage / c-coverage-gate);
+    # running `coverage run -m pytest` here on a C-only repo collects no
+    # data and fails with "No data was collected". (fix 2026-08-12:
+    # wiper-control L1 failed on exactly this)
+    python_tests = [t for t in find_test_files(project_dir) if t.endswith(".py")]
+    if not python_tests:
+        ci.add_stage("coverage", "skipped", "no Python tests — C/C++ coverage handled by gcov stage")
+        print("    ⏭️  No Python tests — coverage skipped (C coverage via gcov)")
+        return True
+
     from yuleosh.ci.config import DEFAULT_COVERAGE_THRESHOLD_LINE, DEFAULT_COVERAGE_THRESHOLD_COND
     try:
         cfg = _get_ci_config(project_dir)

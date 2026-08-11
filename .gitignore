@@ -154,3 +154,6 @@ dist/*.whl
 dist/*.tar.gz
 docs/iso26262-tcl-assessment.md
 sketches/
+
+# SQLite state dumps
+phase10

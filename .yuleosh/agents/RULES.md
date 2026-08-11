@@ -1,6 +1,6 @@
 # RULES.md — Agent Behavioral Rules (Zero-Tolerance)
 
-> **Version**: 1.1.0
+> **Version**: 1.2.0
 > **Status**: Active
 > **Format**: OpenSpec (RFC 2119: SHALL/SHOULD/MAY)
 > **优先级**: 本文件所有规则服从第一准则 PRIME-DIRECTIVE.md（工程诚实）。冲突时以第一准则为准；测试真实性与降级透明性的详细落地见 TEST-INTEGRITY.md。
@@ -138,3 +138,30 @@ The loop chain covers, but is not limited to:
 **SHOULD**:
 - Artifact output SHOULD be stored in the session directory or `.yuleosh/reports/`.
 - Long-running state SHOULD be written to files — "mental notes" do not survive session restarts.
+
+---
+
+## 7. Modular Design First (OpenSpec 模块化设计优先)
+
+> **背景**: 2026-08-12 老板钦定。功能需求的实现必须先做 OpenSpec 模块化设计，
+> 模块化是 agent 实现功能的准则之一，不是可选项。落地案例：wiper-control 按
+> OpenSpec SR-003 拆分为 app 层 3 模块（wiper_control / wiper_modes / wiper_config）
+> + HAL 层 3 模块（hal_pwm / hal_gpio / hal_timer），handle 显式上下文 + 窄接口，
+> 构建/单测/coverage 全绿后才进入部署。
+
+### 7.1 模块化设计先行
+
+**SHALL**:
+- 实现功能需求前，agent SHALL 先完成模块化设计（OpenSpec 模块拆分），设计通过评审后才写实现代码。
+- 模块划分 SHALL 按领域职责命名（如 `wiper_modes`、`hal_pwm`），SHALL NOT 使用 `utils`、`helpers`、`common` 等泛化名字——文件名必须能自述其功能。
+- 应用层 SHALL 与平台解耦：平台相关代码 SHALL 收敛到 HAL 层，应用层 SHALL 可独立编译与单测。
+
+**SHOULD**:
+- 每个模块 SHOULD 提供窄接口（最小必要 API），模块间通过显式上下文（handle）传递状态，而非隐式全局量。
+- HAL 层 SHOULD 提供可 stub 的测试替身，使应用层单测无需真实外设。
+
+### 7.2 模块化验收
+
+**SHALL**:
+- 模块化拆分 SHALL 以可构建、可单测、可覆盖为验收底线——拆分后测试全绿（含 coverage gate）才允许合并。
+- 发现生成代码缺陷（如进入 AUTO 状态未立即应用雨量速度）时，agent SHALL 修复并补回归测试，SHALL NOT 绕过或降级。
