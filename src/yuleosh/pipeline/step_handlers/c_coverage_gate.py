@@ -33,6 +33,21 @@ from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 log = logging.getLogger("pipeline.step_handlers.c_coverage_gate")
 
 
+def _git_commit_short(project_dir: str) -> str:
+    """Return the short git commit hash of the project (fallback 'unknown')."""
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+            cwd=project_dir,
+        )
+        if proc.returncode == 0:
+            return proc.stdout.strip() or "unknown"
+    except Exception:
+        pass
+    return "unknown"
+
+
 def coverage_gate_step(session: PipelineSession) -> str:
     """Run C coverage pipeline verification end-to-end.
 
@@ -462,7 +477,7 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
         from yuleosh.ci.stages import run_c_coverage_check
         from yuleosh.ci.result import CIResult
 
-        ci = CIResult()
+        ci = CIResult(layer=2, commit_hash=_git_commit_short(project_dir))
         success = run_c_coverage_check(project_dir, ci)
 
         # Extract line rate from CI result
