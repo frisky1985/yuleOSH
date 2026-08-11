@@ -61,6 +61,9 @@
 
 **In one sentence:** yuleOSH takes a spec or user story and outputs reviewed, tested, CI-instrumented firmware with ASPICE traceability assistance — all in under 2 minutes.
 
+> 📖 **完整使用说明**: [docs/USER-GUIDE.md](docs/USER-GUIDE.md) — 从安装、初始化、
+> 写 spec、配置 LLM、跑全流程 pipeline 到出合规证据包的完整操作指南。
+
 ---
 
 ## ⚡ Quick Start — 3 Commands
