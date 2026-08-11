@@ -111,6 +111,43 @@ def step_c_unit_test(session: PipelineSession) -> str:
         passed = 0
         failed = 0
 
+        # 3a0. Try ctest first — CMake projects define real buildable tests.
+        # The gcc-compile-check fallback below only compiles *test*.c files
+        # without linking the implementation, so it fails on any test that
+        # exercises app code (undefined symbols). ctest builds the real
+        # target graph and runs the registered tests.
+        cmake_build_dirs = (
+            list(project_dir.glob("build")) +
+            list(project_dir.glob("cmake-build-*"))
+        )
+        for build_dir in cmake_build_dirs:
+            ctest_cfg = build_dir / "CTestTestfile.cmake"
+            if not ctest_cfg.exists():
+                continue
+            try:
+                log.info("Attempting ctest in %s", build_dir)
+                result = subprocess.run(
+                    ["ctest", "--output-on-failure", "-j4"],
+                    capture_output=True, text=True,
+                    timeout=300, cwd=build_dir,
+                )
+                test_output = (result.stdout or "") + "\n" + (result.stderr or "")
+                result_returncode = result.returncode
+                test_runner = "ctest"
+                passed, failed = _parse_ctest_counts(result.stdout or "")
+                log.info(
+                    "ctest: returncode=%d, passed=%d, failed=%d",
+                    result.returncode, passed, failed,
+                )
+                break
+            except FileNotFoundError:
+                log.info("ctest not found")
+            except subprocess.TimeoutExpired:
+                test_output = "TIMEOUT: ctest exceeded 300s"
+                test_runner = "ctest-timeout"
+                log.warning("ctest timed out")
+                break
+
         # 3a. Try Unity test runner (tests/unity/)
         unity_dir = project_dir / "tests" / "unity"
         if unity_dir.exists() and (unity_dir / "Makefile").exists():
@@ -171,6 +208,14 @@ def step_c_unit_test(session: PipelineSession) -> str:
                     inc_flags = ["-I", str(unity_dir / "src")]
                 else:
                     inc_flags = []
+
+                # Auto-collect project include dirs (any dir containing .h)
+                # so multi-directory projects compile without manual -I flags.
+                # This mirrors the fix in verify_c: bare `gcc -fsyntax-only`
+                # without -I fails on every multi-dir project.
+                for inc_dir in sorted(_collect_include_dirs(project_dir)):
+                    if f"-I{inc_dir}" not in inc_flags:
+                        inc_flags.append(f"-I{inc_dir}")
 
                 # Use a unique temp path per run (fix: $$ literal vs PID expansion)
                 tmp_runner = os.path.join(
@@ -329,4 +374,48 @@ def _parse_ceedling_counts(output: str) -> tuple[int, int]:
         passed = ok_count
         failed = fail_count
 
+    return passed, failed
+
+
+def _collect_include_dirs(project_dir: Path) -> list[str]:
+    """Collect project include directories (any dir containing a .h file).
+
+    Mirrors verify_c's fix: multi-directory C projects fail a bare gcc
+    compile check without -I flags. Walking the tree and adding every
+    directory that holds headers makes the compile check robust for
+    src/app/include, src/hal/include, tests/, etc.
+    """
+    include_dirs: list[str] = []
+    build_markers = ("build", "cmake-build", "_build", ".git", "node_modules")
+    try:
+        for root, dirs, files in os.walk(project_dir):
+            # Skip build artifacts and VCS dirs
+            dirs[:] = [
+                d for d in dirs
+                if not any(m in d for m in build_markers)
+            ]
+            if any(f.endswith(".h") for f in files):
+                include_dirs.append(str(Path(root)))
+    except OSError:
+        pass
+    return include_dirs
+
+
+def _parse_ctest_counts(output: str) -> tuple[int, int]:
+    """Parse ctest summary output for pass/fail counts.
+
+    ctest prints a final summary like::
+
+        100% tests passed, 0 tests failed out of 1
+    """
+    passed = 0
+    failed = 0
+    if not output:
+        return passed, failed
+    m = re.search(r"(\d+)%\s+tests passed,\s*(\d+)\s+tests failed", output)
+    if m:
+        failed = int(m.group(2))
+        total_m = re.search(r"out of\s+(\d+)", output)
+        if total_m:
+            passed = int(total_m.group(1)) - failed
     return passed, failed

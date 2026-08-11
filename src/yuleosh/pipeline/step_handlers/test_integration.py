@@ -72,17 +72,25 @@ def step_integration_test(session: PipelineSession) -> str:
         test_dir = project_dir / "tests"
         if (test_dir / "conftest.py").exists() or test_dir.exists():
             try:
+                pytest_cmd = [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "tests/",
+                    "-q",
+                    "-m",
+                    "integration",
+                ]
+                # --timeout requires pytest-timeout; probe for it first so we
+                # don't crash with "unrecognized arguments" on bare installs.
+                probe = subprocess.run(
+                    [sys.executable, "-m", "pytest", "--help"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if "--timeout=" in (probe.stdout or "") or "--timeout=" in (probe.stderr or ""):
+                    pytest_cmd.append("--timeout=120")
                 result = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        "tests/",
-                        "-q",
-                        "-m",
-                        "integration",
-                        "--timeout=120",
-                    ],
+                    pytest_cmd,
                     capture_output=True,
                     text=True,
                     timeout=180,
