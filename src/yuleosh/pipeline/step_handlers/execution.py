@@ -13,9 +13,11 @@ Exports:
   step_claude_test      — self-test with real test runner output
 """
 
+import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -333,6 +335,72 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
     except Exception as e:
         log.error(f"Development step failed: {e}")
         raise PipelineStepError(f"Development step failed: {e}")
+
+
+@timed_step
+def step_codegen_deploy(session: PipelineSession) -> str:
+    """Step: 小明 — 代码产物部署 (codegen artifacts → project src/).
+
+    The development/codegen step writes generated files under
+    ``artifacts/generated-code/<session>/``.  This step deploys the generated
+    ``src/`` tree into the project so downstream build/test/coverage steps
+    measure the real generated code instead of template stubs.
+
+    Behaviour:
+      - No generated artifacts → skipped (planning mode), never fails.
+      - Only the ``src/`` tree is deployed; top-level files (CMakeLists.txt
+        etc.) are left untouched so the project's host test/coverage build
+        harness is preserved.
+      - 0-byte files are skipped with a warning (LLM truncated-output anomaly,
+        e.g. a stray empty ``hal_h``).
+    """
+    project_dir = Path(session.project_dir)
+    report_dir = project_dir / ".yuleosh" / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / "codegen-deploy.json"
+
+    try:
+        from yuleosh.codegen.engine import default_output_dir
+        gen_dir = Path(default_output_dir(project_dir, session.name))
+    except Exception:
+        gen_dir = project_dir / "artifacts" / "generated-code" / session.name
+
+    if not gen_dir.exists() or not (gen_dir / "src").exists():
+        print("  ⏭️  [小明] codegen-deploy: no generated src/ artifacts — skipped")
+        report = {"status": "skipped", "deployed": [], "skipped_empty": []}
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        return str(report_path)
+
+    src_gen = gen_dir / "src"
+    deployed = []
+    skipped_empty = []
+    for src_file in sorted(src_gen.rglob("*")):
+        if src_file.is_dir():
+            continue
+        if src_file.stat().st_size == 0:
+            skipped_empty.append(str(src_file.relative_to(src_gen)))
+            continue
+        rel = src_file.relative_to(src_gen)
+        dst = project_dir / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_file, dst)
+        deployed.append(str(rel))
+
+    report = {
+        "status": "deployed" if deployed else "empty",
+        "generated_dir": str(gen_dir),
+        "deployed": deployed,
+        "skipped_empty": skipped_empty,
+    }
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    print(f"  ✅ [小明] codegen-deploy: {len(deployed)} files → src/ "
+          f"(skipped {len(skipped_empty)} empty)")
+    for f in deployed:
+        log.info("  deployed: %s", f)
+    if skipped_empty:
+        log.warning("codegen-deploy: skipped 0-byte files: %s", skipped_empty)
+    return str(report_path)
 
 
 @timed_step
