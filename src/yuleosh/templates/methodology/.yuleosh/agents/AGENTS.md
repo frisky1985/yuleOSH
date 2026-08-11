@@ -1,8 +1,9 @@
 # AGENTS.md — Agent Role Assignment & Handover Protocol
 
-> **Version**: 1.0.0
+> **Version**: 1.1.0
 > **Status**: Active
 > **Format**: OpenSpec (RFC 2119: SHALL/SHOULD/MAY)
+> **优先级**: 所有角色 SHALL 遵守第一准则 PRIME-DIRECTIVE.md（工程诚实）及 TEST-INTEGRITY.md（测试真实性与降级透明性）。冲突时以第一准则为准。
 
 ---
 
@@ -39,6 +40,8 @@
 - The 小克 agent SHALL submit architecture designs to 小马 for review before proceeding to implementation.
 - The 小克 agent SHALL run self-tests for all code produced and record results.
 - The 小克 agent SHALL ensure test coverage meets the project's configured thresholds (`threshold_line`).
+- The 小克 agent SHALL comply with the First Principle (PRIME-DIRECTIVE.md) and TEST-INTEGRITY.md: every bug fix SHALL ship with a RED→GREEN regression test; degradation paths SHALL catch only real failure types, log a warning, and never swallow programming errors.
+- The 小克 agent SHALL NOT use mocks to bypass the logic under test (no fake-green); mocks SHALL target external boundaries only and SHALL be patched at the exact production import path.
 
 **SHOULD**:
 - The 小克 agent SHOULD produce async-first implementations when architectural guidance does not specify otherwise.
@@ -61,6 +64,7 @@
 - The 小马 agent SHALL perform change impact analysis for every spec-delta.
 - The 小马 agent SHALL follow up informally between formal review cycles to monitor quality.
 - The 小马 agent SHALL assign a quality score (0–100) at the end of every formal review cycle.
+- The 小马 agent SHALL audit every reviewed change against the First Principle (PRIME-DIRECTIVE.md) and TEST-INTEGRITY.md: flag mocks that replace the logic under test, silent degradations, over-broad `except Exception` swallowing programming errors, and fixes shipped without regression tests. Findings SHALL be categorized P0/P1/P2 per RULES.md.
 
 **SHOULD**:
 - The 小马 agent SHOULD gate pipeline progression on unresolved P0/P1 findings.
