@@ -95,6 +95,12 @@ class MisraProfile:
     rules: list[str] = field(default_factory=lambda: ["mandatory", "required", "advisory"])
     block_on: list[str] = field(default_factory=lambda: ["mandatory", "required"])
     exclude_paths: list[str] = field(default_factory=list)
+    # 方向1 (2026-08-11): 自定义 profile 的步骤过滤字段 —— 修复
+    # profile.py hasattr(custom_profile, 'exclude_steps') 死代码 bug：
+    # 此前 MisraProfile 无此字段，自定义 profile 的步骤过滤配置静默失效。
+    include_steps: list[str] = field(default_factory=list)
+    exclude_steps: list[str] = field(default_factory=list)
+    extends: str = ""  # 方向1: 继承另一内置 profile（如 "ci"），不填则用同名/默认
     description: str = ""
     rule_overrides: list[MisraRuleOverride] = field(default_factory=list)
     deviations: list[MisraDeviation] = field(default_factory=list)
@@ -456,12 +462,23 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
                 exclude_paths: list[str] = prof_cfg.get("exclude_paths", [])
                 if not isinstance(exclude_paths, list):
                     exclude_paths = []
+                # 方向1 (2026-08-11): 自定义 profile 步骤过滤字段（修复死代码 bug）
+                include_steps: list[str] = prof_cfg.get("include_steps", [])
+                if not isinstance(include_steps, list):
+                    include_steps = []
+                exclude_steps: list[str] = prof_cfg.get("exclude_steps", [])
+                if not isinstance(exclude_steps, list):
+                    exclude_steps = []
+                extends: str = str(prof_cfg.get("extends", ""))
                 description: str = str(prof_cfg.get("description", ""))
                 parsed_profiles[prof_name] = MisraProfile(
                     name=str(prof_cfg.get("name", "")),
                     rules=rules,
                     block_on=block_on,
                     exclude_paths=exclude_paths,
+                    include_steps=include_steps,
+                    exclude_steps=exclude_steps,
+                    extends=extends,
                     description=description,
                     rule_overrides=ovr_list,
                     deviations=dev_list,
