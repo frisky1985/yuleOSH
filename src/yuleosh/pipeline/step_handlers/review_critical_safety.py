@@ -359,14 +359,37 @@ class CriticalSafetyScanner:
     # ── 5. 死循环 ────────────────────────────────────────
 
     def _scan_infinite_loop(self, filepath: Path, lines: list[str]):
-        """匹配 while(1)/for(;;) 内无 break/return/goto exit。"""
+        """匹配 while(1)/for(;;) 内无 break/return/goto exit。
+
+        Embedded C convention: main()'s while(1) superloop (and error-state
+        trap loops) are intentional — never flag those. Only flag
+        unbounded loops inside worker functions where an exit is expected.
+        """
+        # Track whether we're inside main() (brace depth from main's body).
+        in_main = False
+        main_depth = 0
         in_loop = 0
         loop_line = 0
         for lineno, line in enumerate(lines, 1):
             stripped = line.strip()
+            # Detect main() definition
+            m = re.match(r'[\w\s\*]*?main\s*\([^)]*\)\s*(\{)?\s*$', stripped)
+            if m and not in_main:
+                in_main = True
+                main_depth = (1 if m.group(1) else 0)
+                continue
+            if in_main:
+                main_depth += stripped.count("{") - stripped.count("}")
+                if main_depth <= 0:
+                    in_main = False
+                    main_depth = 0
+
             if re.match(r'while\s*\(\s*1\s*\)', stripped) or \
                re.match(r'for\s*\(\s*;\s*;\s*\)', stripped) or \
                re.match(r'for\s*\(\s*;;\s*\)', stripped):
+                if in_main:
+                    # Embedded superloop / error trap inside main(): legal.
+                    continue
                 in_loop = 1
                 loop_line = lineno
                 continue
