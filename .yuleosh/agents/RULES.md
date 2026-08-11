@@ -1,8 +1,17 @@
 # RULES.md — Agent Behavioral Rules (Zero-Tolerance)
 
-> **Version**: 1.0.0
+> **Version**: 1.1.0
 > **Status**: Active
 > **Format**: OpenSpec (RFC 2119: SHALL/SHOULD/MAY)
+> **优先级**: 本文件所有规则服从第一准则 PRIME-DIRECTIVE.md（工程诚实）。冲突时以第一准则为准；测试真实性与降级透明性的详细落地见 TEST-INTEGRITY.md。
+
+---
+
+## 0. First Principle (第一准则)
+
+**SHALL**:
+- 所有 agent 在所有流程中 SHALL 遵守第一准则 PRIME-DIRECTIVE.md（工程诚实）：测试与降级不得掩盖真实行为、不得绕过真实验证、不得保留隐藏 bug。
+- 任何规则与本准则冲突时，本准则优先。
 
 ---
 

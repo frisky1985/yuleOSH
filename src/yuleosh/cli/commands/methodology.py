@@ -7,7 +7,7 @@ L3 目标: 把 yuleOSH 方法论资产（L1 行为约束 + L2 门禁）抽成可
 任何项目（yuleDKCS / yuleASR / 新项目）可一键挂载 + 独立运行门禁。
 
 命令:
-  yuleosh methodology init [dir]     — 生成 .yuleosh/agents/ 四件套 + CONTEXT.md + ci-config 片段
+  yuleosh methodology init [dir]     — 生成 .yuleosh/agents/ 六件套 + CONTEXT.md + ci-config 片段
   yuleosh methodology check [dir]    — 在任意项目运行 methodology gate（复用 methodology_gate.py）
 
 SHALL-A5.5 纪律: 本模块不 import cli.main（避免循环依赖），_osh_home() 延迟解析。
@@ -70,10 +70,10 @@ def cmd_methodology_init(project_dir: str = ".", force: bool = False) -> None:
     agents_dir = root / ".yuleosh" / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) .yuleosh/agents/ 四件套
+    # 1) .yuleosh/agents/ 六件套（四件套 + 第一准则 PRIME-DIRECTIVE + TEST-INTEGRITY）
     created: list[str] = []
     skipped: list[str] = []
-    for fname in ("AGENTS.md", "METHODOLOGY.md", "RULES.md", "HOOKS.md"):
+    for fname in ("AGENTS.md", "METHODOLOGY.md", "RULES.md", "HOOKS.md", "PRIME-DIRECTIVE.md", "TEST-INTEGRITY.md"):
         src = tpl / ".yuleosh" / "agents" / fname
         dst = agents_dir / fname
         if dst.exists() and not force:
