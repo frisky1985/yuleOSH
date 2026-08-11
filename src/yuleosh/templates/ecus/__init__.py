@@ -156,7 +156,8 @@ def init_project(
     """
     tpl_meta = get_template(template_name)
     if tpl_meta is None:
-        available = ", ".join(list_ecu_templates())
+        # list_ecu_templates() 返回 list[dict] — 取 name 字段拼可读提示
+        available = ", ".join(t["name"] for t in list_ecu_templates())
         print(f"❌ Unknown ECU template '{template_name}'. Available: {available}", file=sys.stderr)
         sys.exit(1)
 
