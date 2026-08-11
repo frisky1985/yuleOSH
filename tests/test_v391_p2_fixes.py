@@ -12,7 +12,6 @@
 """
 
 import json
-import os
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 from pathlib import Path
@@ -44,32 +43,33 @@ class TestP21RefreshRateLimit:
         handler.end_headers = mock.MagicMock()
         return handler
 
-    def test_refresh_path_uses_rate_limit(self):
-        """refresh 分支调用 check_rate_limit（有 IP 时）."""
+    def test_refresh_path_uses_rate_limit(self, tmp_path, monkeypatch):
+        """refresh 分支调用 check_rate_limit（有 IP 时）→ SQLite 计数落库."""
+        monkeypatch.setenv("YULEOSH_RATE_DB", str(tmp_path / "rl.db"))
+        from yuleosh.api.ratelimit_shared import RateLimitStore
         from yuleosh.ui import server as _srv
         from yuleosh.ui.routes.auth_routes import handle_api_action
-
-        # 清桶避免与其他测试互相影响
-        _srv._rate_limit_buckets.clear()
 
         handler = self._make_handler(ip="10.0.0.9")
         with mock.patch("yuleosh.ui.auth_extended.handle_refresh",
                         return_value=(
                             {"token": "a", "refresh_token": "r"}, 200)):
             handle_api_action(handler, "refresh")
-        # check_rate_limit 对 10.0.0.9 有记录
-        assert "10.0.0.9" in _srv._rate_limit_buckets
+        # check_rate_limit 对 10.0.0.9 有记录（共享 SQLite）
+        store = RateLimitStore(db_path=str(tmp_path / "rl.db"))
+        remaining = store.get_remaining("10.0.0.9", limit=_srv.RATE_LIMIT_MAX)
+        assert remaining == _srv.RATE_LIMIT_MAX - 1  # 已计入 1 次
 
-    def test_refresh_429_when_over_limit(self):
-        """连续超过 RATE_LIMIT_MAX → 429 且拒绝处理."""
+    def test_refresh_429_when_over_limit(self, tmp_path, monkeypatch):
+        """预填满共享 SQLite 计数 → refresh 真被限流 → 429 且拒绝处理."""
+        monkeypatch.setenv("YULEOSH_RATE_DB", str(tmp_path / "rl.db"))
         from yuleosh.ui import server as _srv
         from yuleosh.ui.routes.auth_routes import handle_api_action
 
-        _srv._rate_limit_buckets.clear()
         ip = "203.0.113.7"
-        # 预填满桶（max_requests 个时间戳）
-        _srv._rate_limit_buckets[ip] = [__import__("time").time()] * _srv.RATE_LIMIT_MAX
-
+        # 真实调用 check_rate_limit 填满共享 SQLite（与生产同路径）
+        for _ in range(_srv.RATE_LIMIT_MAX):
+            _srv.check_rate_limit(ip)
         handler = self._make_handler(ip=ip)
         with mock.patch("yuleosh.ui.auth_extended.handle_refresh") as m:
             handle_api_action(handler, "refresh")
