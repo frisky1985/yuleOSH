@@ -569,12 +569,18 @@ class TestFilterSteps:
         assert len(filtered) == 3
 
     def test_custom_override(self, tmp_path):
+        """方向1: 自定义 exclude_steps 追加到 base（不变量3 差集等价）。
+
+        旧语义「覆盖」会丢掉 ci 档默认排除（super-analysis/code-review），
+        违反不变量3。新语义: 在 ci 档默认排除上追加 unit-tests → 全部排除。
+        """
         from yuleosh.ci.profile import filter_steps_for_profile
         custom = mock.MagicMock(exclude_steps=["unit-tests"])
         cfg = mock.MagicMock(misra=_FakeMisra("ci", {"ci": custom}))
         with mock.patch("yuleosh.ci.profile._get_ci_config", return_value=cfg):
             filtered = filter_steps_for_profile(self.STEPS, "ci", str(tmp_path))
-        assert [s[0] for s in filtered] == ["super-analysis", "code-review"]
+        # ci 档默认排除 super-analysis/code-review + 自定义追加 unit-tests
+        assert [s[0] for s in filtered] == []
 
     def test_config_load_error_falls_back(self, tmp_path):
         from yuleosh.ci.profile import filter_steps_for_profile

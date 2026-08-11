@@ -19,12 +19,7 @@ from pathlib import Path
 
 import pytest
 
-# Ensure repo root on path
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from yuleosh.ci.gate_policy import (  # noqa: E402
+from yuleosh.ci.gate_policy import (
     DEFAULT_GATE_POLICY,
     GATE_BLOCK,
     GATE_INFO,
@@ -167,7 +162,6 @@ class TestCiConfigGatePolicy:
 @pytest.fixture
 def session_fixture(tmp_path):
     """Minimal PipelineSession-like object for verdict propagation tests."""
-    sys.path.insert(0, str(REPO_ROOT))
     from yuleosh.pipeline.session import PipelineSession
 
     spec = tmp_path / "spec.md"
