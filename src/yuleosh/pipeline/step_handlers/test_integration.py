@@ -149,7 +149,13 @@ def step_integration_test(session: PipelineSession) -> str:
         passed, failed = _parse_test_counts(test_output, test_runner)
 
         # 4. Determine status
-        if result_returncode is not None and result_returncode != 0:
+        # pytest exits 5 when NO tests matched (-m integration). For a
+        # C/CMake project whose tests live in ctest (not pytest), this is
+        # expected, not a failure — treat as skipped. Only a real test
+        # failure (tests ran and failed) should block the pipeline.
+        if result_returncode == 5 and test_runner == "pytest-integration":
+            status = "skipped"
+        elif result_returncode is not None and result_returncode != 0:
             status = "failed"
         elif failed > 0:
             status = "failed"
@@ -182,7 +188,7 @@ def step_integration_test(session: PipelineSession) -> str:
             log.error("Cannot write integration test report: %s", e)
             raise PipelineStepError(f"Cannot write integration test report: {e}")
 
-        status_icon = {"passed": "✅", "failed": "❌", "unknown": "⚠️"}
+        status_icon = {"passed": "✅", "failed": "❌", "unknown": "⚠️", "skipped": "⏭️"}
         print(
             f"  {status_icon.get(status, '❓')} [小克] 接口集成测试完成 "
             f"(runner={test_runner}, {passed} passed, {failed} failed, "
