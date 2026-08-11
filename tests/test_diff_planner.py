@@ -19,11 +19,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from yuleosh.ci.diff_planner import (  # noqa: E402
+from yuleosh.ci.diff_planner import (
     CROSS_CUTTING_STEPS,
     SkipDecision,
     collect_changed_files,
@@ -171,7 +167,7 @@ class TestCollectChangedFiles:
 
     def test_git_dir_returns_list(self):
         """git checkout → 返回列表（可能为空）。"""
-        files = collect_changed_files(str(REPO_ROOT))
+        files = collect_changed_files(".")
         assert isinstance(files, list)
 
 
