@@ -1,0 +1,246 @@
+# =============================================================================
+# yuleOSH — Release Pipeline (方案C: 发布流水线)
+# =============================================================================
+# tag v* 触发 → 三平台构建（复用 desktop-build.yml 模式）→ GitHub Release 上传。
+# 产物: macOS .dmg / Linux .AppImage+.deb / Windows NSIS .exe
+# 手动触发: workflow_dispatch（调试用，需手动填 tag 版本号）
+# =============================================================================
+name: yuleOSH Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v3.12.2)'
+        required: true
+        default: 'v3.12.2'
+
+permissions:
+  contents: write   # 创建 GitHub Release 需要
+
+jobs:
+  # ─── 前端构建 (复用) ────────────────────────────
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend (static export)
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Verify frontend build
+        run: |
+          ls -la frontend/out/index.html
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-out
+          path: frontend/out/
+          retention-days: 7
+
+  # ─── macOS 构建 ─────────────────────────────────
+  build-mac:
+    needs: frontend-build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-out
+          path: frontend/out/
+
+      - name: Verify frontend build
+        run: |
+          ls -la frontend/out/index.html
+
+      - name: Install desktop dependencies
+        run: |
+          cd desktop
+          npm ci
+
+      - name: Build macOS .dmg
+        run: |
+          cd desktop
+          npx electron-builder --mac --publish=never
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+
+      - name: Upload macOS build
+        uses: actions/upload-artifact@v7
+        with:
+          name: yuleOSH-mac-dmg
+          path: desktop/release/*.dmg
+          retention-days: 7
+
+  # ─── Linux 构建 ─────────────────────────────────
+  build-linux:
+    needs: frontend-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-xcb1 libxcb-dri3-0 libxdamage1 libxfixes3 \
+            libxrandr2 libxss1 libxtst6 libnss3 libatk-bridge2.0-0 libgtk-3-0 \
+            libgbm1 libasound2
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-out
+          path: frontend/out/
+
+      - name: Verify frontend build
+        run: |
+          ls -la frontend/out/index.html
+
+      - name: Install desktop dependencies
+        run: |
+          cd desktop
+          npm ci
+
+      - name: Build Linux .AppImage + .deb
+        run: |
+          cd desktop
+          npx electron-builder --linux --publish=never
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v7
+        with:
+          name: yuleOSH-linux-appimage
+          path: |
+            desktop/release/*.AppImage
+            desktop/release/*.deb
+          retention-days: 7
+
+  # ─── Windows 构建 ───────────────────────────────
+  build-win:
+    needs: frontend-build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-out
+          path: frontend/out/
+
+      - name: Verify frontend build
+        run: ls frontend/out/index.html
+
+      - name: Install desktop dependencies
+        run: cd desktop && npm ci
+
+      - name: Build Windows .exe
+        run: cd desktop && npx electron-builder --win --publish=never
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v7
+        with:
+          name: yuleOSH-win-installer
+          path: desktop/release/*.exe
+          retention-days: 7
+
+  # ─── GitHub Release 发布 ────────────────────────
+  release:
+    needs: [build-mac, build-linux, build-win]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # 需要完整 tag 历史生成 changelog
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Resolved tag: ${{ steps.tag.outputs.tag }}"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List release artifacts
+        run: |
+          ls -la dist/
+
+      - name: Generate release notes
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "$TAG"^ 2>/dev/null || echo '')"
+          {
+            echo "## What's Changed"
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              git log --oneline "$PREV_TAG".."$TAG" 2>/dev/null | sed 's/^/- /' || echo "- (changelog unavailable)"
+            else
+              echo "- Initial release"
+            fi
+            echo ""
+            echo "## 产物"
+            echo "- macOS: yuleOSH .dmg"
+            echo "- Linux: AppImage + .deb"
+            echo "- Windows: NSIS .exe"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: yuleOSH ${{ steps.tag.outputs.tag }}
+          body_path: release-notes.md
+          files: dist/*
+          draft: false
+          prerelease: false

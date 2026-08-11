@@ -3,8 +3,21 @@ name: "🔍 CodeQL + Semgrep — 深度安全分析"
 on:
   push:
     branches: [ main, develop ]
+    # 方案A: push/PR 只扫 src 相关改动（省 CodeQL 分钟数）；weekly schedule 不受 paths 限制仍全量
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - '.github/workflows/codeql.yml'
+      - '.github/codeql-queries/**'
+      - '.semgrep/**'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - '.github/workflows/codeql.yml'
+      - '.github/codeql-queries/**'
+      - '.semgrep/**'
   schedule:
     - cron: '0 0 * * 0'  # Weekly on Sunday
 
