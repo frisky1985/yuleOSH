@@ -287,36 +287,70 @@ class CriticalSafetyScanner:
     })
 
     def _scan_unbounded_recursion(self, filepath: Path, lines: list[str]):
-        """匹配递归调用但缺少递归深度限制。"""
-        # 收集函数名
-        func_stack = []
-        for lineno, line in enumerate(lines, 1):
-            m = re.match(r'(\w+)\s*\(', line.strip())
-            if m and m.group(1) not in self._C_KEYWORDS:
-                func_stack.append(m.group(1))
-            if len(func_stack) > 20:
-                func_stack.pop(0)
+        """匹配递归调用但缺少递归深度限制。
 
-        # 检测递归：函数内调用自己
+        True recursion is a function calling ITSELF. The old implementation
+        collected every function name in the file into a "stack" and flagged
+        any call to any of those names as recursion — so plain calls like
+        HAL_Motor_SetSpeed() inside WiperControl_MainFunction() were all
+        reported as CRIT-REC-001 (hundreds of false positives). Only a call
+        to the enclosing function's own name is recursion.
+        """
+        # Map each function name to the line range it spans.
+        funcs: list[tuple[str, int, int]] = []  # (name, start, end)
+        cur_name: str | None = None
+        cur_start = 0
+        depth = 0
         for lineno, line in enumerate(lines, 1):
             stripped = line.strip()
-            # 跳过函数定义行（foo(void) { / foo() {）——定义不是递归调用
-            if re.match(r'^\w+\s*\([^)]*\)\s*\{?\s*$', stripped):
+            # Function definition start: [type...] name( params ) { — may be
+            # split across lines ("int factorial(int n)" then "{" next line).
+            # Always continue after matching: the brace (if on this line) is
+            # already counted into depth, so fall-through would double-count
+            # and prematurely end the function at depth 0.
+            if depth == 0 and cur_name is None:
+                m = re.match(r'[\w\s\*]*?(\w+)\s*\([^)]*\)\s*(\{)?\s*$', stripped)
+                if m and m.group(1) not in self._C_KEYWORDS:
+                    cur_name = m.group(1)
+                    cur_start = lineno
+                    depth = (1 if m.group(2) else 0)
+                    continue
+                else:
+                    continue
+            depth += stripped.count("{") - stripped.count("}")
+            if depth <= 0:
+                if cur_name is not None:
+                    funcs.append((cur_name, cur_start, lineno))
+                cur_name = None
+                depth = 0
+
+        # For each function, a call to its own name inside its body is recursion.
+        for fn_name, start, end in funcs:
+            if not fn_name:
                 continue
-            for fn in func_stack[-5:]:
-                if re.search(rf'\b{fn}\s*\(', stripped):
-                    # 检查同一函数内是否有 if(...) return 作为终止条件
+            for lineno in range(start + 1, end):
+                stripped = lines[lineno - 1].strip()
+                # Skip the definition line itself and declarations
+                if re.match(r'^\w+\s*\([^)]*\)\s*;', stripped):
+                    continue
+                if re.search(rf'\b{fn_name}\s*\(', stripped):
+                    # Check for a guard: a terminating if(...) { return ...; }
+                    # somewhere in the function BEFORE this call. The old
+                    # check looked at whether the recursion line itself had a
+                    # return (it always does in "return f(...)" form), so it
+                    # never flagged anything. Guard detection: any if(...)
+                    # line earlier in the function whose block contains return.
                     has_guard = False
-                    for prev in range(max(0, lineno - 15), lineno):
+                    for prev in range(start, lineno):
                         pl = lines[prev].strip()
                         if re.match(r'if\s*\(.*\)', pl) and \
-                           re.search(r'\breturn\b', lines[min(lineno, len(lines)) - 1]):
+                           re.search(r'\breturn\b', '\n'.join(lines[prev:lineno])):
                             has_guard = True
                             break
                     if not has_guard:
                         self.violations.append(CriticalViolation(
                             "CRIT-REC-001", str(filepath), lineno,
-                            f"递归调用 '{fn}()' 缺少终止条件守卫",
+                            f"递归调用 '{fn_name}()' 缺少终止条件守卫",
                             snippet=stripped,
                             fix_suggestion="添加递归深度限制：if (depth > MAX_DEPTH) return;"
                         ))
@@ -454,6 +488,10 @@ class CriticalSafetyScanner:
                 if any(skip in rel for skip in [
                     "node_modules", "third_party", ".git", "__pycache__",
                     "build/", "out/", ".next/", "generated/",
+                    # artifacts/ holds codegen outputs (run-*/ snapshots);
+                    # scanning them double-reports stale code and mixes
+                    # old generations into the gate.
+                    "artifacts/",
                 ]):
                     continue
 
