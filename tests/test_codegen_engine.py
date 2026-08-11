@@ -138,6 +138,41 @@ class TestCompileVerification:
         result = verify_c([f])
         assert result["ok"] is True
 
+    def test_verify_c_cross_dir_include(self, tmp_path):
+        """E2E fix (2026-08-11): 跨目录 #include 必须能通过验证。
+
+        修复前 verify_c 不带 -I，src/hal/src/*.c 包含 src/hal/include/*.h
+        时必然 "file not found" 误报失败；修复后自动收集 include 目录。
+        """
+        import shutil
+        if not (shutil.which("gcc") or shutil.which("cc")):
+            pytest.skip("no C compiler available")
+        inc = tmp_path / "src" / "hal" / "include"
+        src = tmp_path / "src" / "hal" / "src"
+        inc.mkdir(parents=True)
+        src.mkdir(parents=True)
+        (inc / "hal_motor.h").write_text(
+            "#ifndef HAL_MOTOR_H\n#define HAL_MOTOR_H\nvoid motor_on(void);\n#endif\n",
+            encoding="utf-8",
+        )
+        (src / "hal_motor_stm32.c").write_text(
+            '#include "hal_motor.h"\nvoid motor_on(void) {}\n',
+            encoding="utf-8",
+        )
+        # 混入非 C 文件（CMakeLists/README）—— 应被过滤，不参与编译
+        (tmp_path / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.16)\n")
+        (tmp_path / "README.md").write_text("# readme\n")
+        result = verify_c([src / "hal_motor_stm32.c", tmp_path / "CMakeLists.txt",
+                           tmp_path / "README.md"])
+        assert result["ok"] is True, result["errors"]
+
+    def test_verify_c_only_non_c_sources(self, tmp_path):
+        """只传非 C 文件 → 无需编译即通过（无可验证源码）。"""
+        f = tmp_path / "CMakeLists.txt"
+        f.write_text("cmake_minimum_required(VERSION 3.16)\n", encoding="utf-8")
+        result = verify_c([f])
+        assert result["ok"] is True
+
     def test_verify_c_failure(self, tmp_path):
         import shutil
         if not (shutil.which("gcc") or shutil.which("cc")):
