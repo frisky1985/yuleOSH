@@ -384,15 +384,33 @@ def test_pipeline_without_final_report_status_created(osh_home, tmp_path, capsys
 
 
 def test_completed_with_verdict_errors(osh_home, tmp_path, capsys):
-    """final-report 产物带 failed verdict → completed 但有 errors（L436-438）。"""
+    """review-linker 产物带 failed verdict → completed 但有 errors（warn 档）。
+
+    用 review-linker（默认 warn 档）验证「completed 但有 errors」的
+    warn 语义（方向3 门禁矩阵：warn 档失败进 errors 但不断链）。
+    """
+    spec = _make_spec(tmp_path)
+    verdict_file = tmp_path / "review-linker.json"
+    verdict_file.write_text(json.dumps({"status": "failed"}), encoding="utf-8")
+    steps = [
+        ("review-linker", "小克", "链接脚本审查", _ok_handler(verdict_file)),
+        ("final-report", "小明", "最终报告", _ok_handler(tmp_path / "final.md")),
+    ]
+    session = _run(spec, steps=steps)
+    assert session.status == "completed"
+    assert session.errors
+    assert "Completed with step verdict failures" in capsys.readouterr().out
+
+
+def test_completed_final_report_info_verdict_no_errors(osh_home, tmp_path, capsys):
+    """方向3: final-report（info 档）failed verdict → completed 且 errors 为空。"""
     spec = _make_spec(tmp_path)
     verdict_file = tmp_path / "final-report.json"
     verdict_file.write_text(json.dumps({"status": "failed"}), encoding="utf-8")
     steps = [("final-report", "小明", "最终报告", _ok_handler(verdict_file))]
     session = _run(spec, steps=steps)
     assert session.status == "completed"
-    assert session.errors
-    assert "Completed with step verdict failures" in capsys.readouterr().out
+    assert session.errors == []  # info 档失败不进 errors
 
 
 def test_step_pipeline_error_blocks_pipeline(osh_home, tmp_path):
@@ -595,42 +613,46 @@ def test_verdict_no_status(vp_session, tmp_path):
 
 
 def test_verdict_failed(vp_session, tmp_path):
-    """verdict=failed → 步骤标记 failed + errors 记录（L555-565）。"""
+    """verdict=failed → 步骤标记 failed + errors 记录（warn 档默认行为）。
+
+    用 review-linker（默认 warn 档）而非 spec-check（info 档）——
+    方向3 门禁矩阵后 spec-check 失败不再进 errors。
+    """
     p = _write_json(tmp_path, "out.json", {"status": "failed"})
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
     assert vp_session.steps[0]["status"] == "failed"
     assert vp_session.steps[0]["completed_at"] is not None
-    assert vp_session.errors == ["[spec-check] step verdict: FAILED (out.json)"]
+    assert vp_session.errors == ["[review-linker] step verdict: FAILED (out.json)"]
     assert vp_session.updated_at
 
 
 def test_verdict_failed_duplicate_not_appended(vp_session, tmp_path):
-    """重复 failed verdict → errors 不重复追加（L562 False 分支）。"""
+    """重复 failed verdict → errors 不重复追加（warn 档默认行为）。"""
     p = _write_json(tmp_path, "out.json", {"status": "failed"})
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
     assert len(vp_session.errors) == 1
 
 
 def test_verdict_retry(vp_session, tmp_path):
     """verdict=retry → errors 记录 informational（L566-569）。"""
     p = _write_json(tmp_path, "out.json", {"status": "retry"})
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
-    assert vp_session.errors == ["[spec-check] step verdict: RETRY (out.json)"]
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
+    assert vp_session.errors == ["[review-linker] step verdict: RETRY (out.json)"]
     assert vp_session.steps[0]["status"] == "pending"
 
 
 def test_verdict_warning(vp_session, tmp_path):
     """verdict=warning → 同 retry 分支。"""
     p = _write_json(tmp_path, "out.json", {"status": "warning"})
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
-    assert vp_session.errors == ["[spec-check] step verdict: WARNING (out.json)"]
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
+    assert vp_session.errors == ["[review-linker] step verdict: WARNING (out.json)"]
 
 
 def test_verdict_unknown_status_ignored(vp_session, tmp_path):
     """verdict 既非 failed 也非 retry/warn 集合 → 静默忽略（L566 False 分支）。"""
     p = _write_json(tmp_path, "out.json", {"status": "in_progress"})
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
     assert vp_session.errors == []
     assert vp_session.steps[0]["status"] == "pending"
 
@@ -638,16 +660,34 @@ def test_verdict_unknown_status_ignored(vp_session, tmp_path):
 def test_verdict_retry_duplicate_not_appended(vp_session, tmp_path):
     """重复 retry verdict → errors 不重复追加（L568 False 分支）。"""
     p = _write_json(tmp_path, "out.json", {"status": "retry"})
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
-    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
+    _propagate_step_verdict(vp_session, 0, "review-linker", str(p))
     assert len(vp_session.errors) == 1
 
 
 def test_verdict_failed_out_of_range_idx(vp_session, tmp_path):
-    """step_idx 越界 → 跳过步骤状态修改但仍记录错误（L556 False 分支）。"""
+    """step_idx 越界 → 跳过步骤状态修改但仍记录错误（warn 档）。"""
     p = _write_json(tmp_path, "out.json", {"status": "failed"})
-    _propagate_step_verdict(vp_session, 5, "spec-check", str(p))
-    assert vp_session.errors == ["[spec-check] step verdict: FAILED (out.json)"]
+    _propagate_step_verdict(vp_session, 5, "review-linker", str(p))
+    assert vp_session.errors == ["[review-linker] step verdict: FAILED (out.json)"]
+
+
+def test_verdict_failed_info_gate_no_errors(vp_session, tmp_path):
+    """方向3: info 档（spec-check）verdict=failed → 不进 errors，仅 step detail。"""
+    p = _write_json(tmp_path, "out.json", {"status": "failed"})
+    _propagate_step_verdict(vp_session, 0, "spec-check", str(p))
+    assert vp_session.errors == []
+    assert vp_session.steps[0]["status"] == "failed"
+    assert "[spec-check] step verdict: FAILED" in vp_session.steps[0].get("detail", "")
+
+
+def test_verdict_failed_block_gate_interrupts(vp_session, tmp_path):
+    """方向3: block 档（review-critical-safety）verdict=failed → 返回 block + session failed。"""
+    p = _write_json(tmp_path, "out.json", {"status": "failed"})
+    r = _propagate_step_verdict(vp_session, 0, "review-critical-safety", str(p))
+    assert r == "block"
+    assert vp_session.status == "failed"
+    assert vp_session.errors
 
 
 # ---------------------------------------------------------------------------
