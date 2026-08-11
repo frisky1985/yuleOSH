@@ -218,6 +218,9 @@ class CiConfig:
     coverage: CoverageConfig = field(default_factory=CoverageConfig)
     hardware_test: HardwareTestConfig = field(default_factory=HardwareTestConfig)
     misra: MisraConfig = field(default_factory=MisraConfig)
+    # 方向3 (2026-08-11): 门禁强度矩阵 — step_key → block|warn|info
+    # 空 dict = 用 gate_policy.DEFAULT_GATE_POLICY（resolve_gate 兜底）
+    gate_policy: dict[str, str] = field(default_factory=dict)
 
 
 # ------------------------------------------------------------------
@@ -352,6 +355,11 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
             for k, v in ci_block["layer_dependencies"].items():
                 deps[int(k)] = [int(x) for x in v]
             cfg.layer_dependencies = deps
+        # 方向3 (2026-08-11): 门禁强度矩阵 — ci.gate_policy: {step_key: block|warn|info}
+        if "gate_policy" in ci_block and isinstance(ci_block["gate_policy"], dict):
+            cfg.gate_policy = {
+                str(k): str(v) for k, v in ci_block["gate_policy"].items()
+            }
 
     # Coverage block
     cov_block = raw.get("coverage", {})

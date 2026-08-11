@@ -415,7 +415,12 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 # Propagate step-artifact verdicts (e.g. review JSON with
                 # status=failed) into session state so the final summary
                 # reflects real step outcomes instead of always "completed".
-                _propagate_step_verdict(session, step_idx, step_key, output_path)
+                # 方向3 (2026-08-11): block 级门禁 verdict failed →
+                # _propagate_step_verdict 返回 "block"，中断后续步骤。
+                if _propagate_step_verdict(session, step_idx, step_key, output_path) == "block":
+                    print(f"  ⛔ Block gate failed: {step_key} — pipeline interrupted")
+                    print()
+                    break
                 if step_key == "final-report":
                     session._save()
                 log.info(f"Step {step_idx+1} completed: {step_key}")
@@ -567,7 +572,7 @@ def _propagate_step_verdict(
     step_idx: int,
     step_key: str,
     output_path: str,
-) -> None:
+) -> Optional[str]:
     """Propagate a step artifact's ``status`` field into session state.
 
     Review/test steps write their verdict into a JSON artifact (e.g.
@@ -576,27 +581,51 @@ def _propagate_step_verdict(
     ``completed`` and the final ``Errors`` count stays 0 even when
     reviews failed — a misleading "all green" summary.
 
-    Semantics:
-      - artifact status ``failed`` → step marked ``failed`` (non-blocking),
-        a warning is recorded in ``session.errors``.
+    Gate policy (方向3, 2026-08-11): the strength of each step is
+    resolved via ``yuleosh.ci.gate_policy.resolve_gate``:
+      - block: verdict ``failed`` → step marked failed, error recorded,
+        and the pipeline is interrupted (returns ``"block"`` so the
+        caller breaks the step loop).
+      - warn : verdict ``failed`` → step marked failed, warning recorded
+        in ``session.errors``, pipeline continues (legacy behavior).
+      - info : verdict ``failed`` → step stays ``completed`` with the
+        detail recorded only on the step (no ``session.errors`` entry).
+
+    Semantics (legacy, preserved for warn/info):
       - artifact status ``retry``/``warn`` → step marked ``completed`` with
         the note recorded in errors (informational).
-      - otherwise → step stays ``completed``.
 
-    This never raises; verdict propagation must not break the pipeline.
+    This never raises; verdict propagation must not break the pipeline
+    except via the explicit ``"block"`` return.
+
+    Returns
+    -------
+    Optional[str]
+        ``"block"`` if the step's gate policy is ``block`` and the
+        verdict was ``failed`` (caller should interrupt); ``None``
+        otherwise.
     """
     try:
+        # Resolve gate strength (defaults: warn — legacy behavior)
+        gate = "warn"
+        try:
+            from yuleosh.ci.gate_policy import resolve_gate
+
+            gate = resolve_gate(step_key)
+        except Exception:  # pragma: no cover - defensive
+            pass
+
         if not output_path:
-            return
+            return None
         p = Path(str(output_path))
         if not p.exists() or p.suffix.lower() != ".json":
-            return
+            return None
         data = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            return
+            return None
         verdict = str(data.get("status", "")).strip().lower()
         if not verdict:
-            return
+            return None
         if verdict == "failed":
             if step_idx < len(session.steps):
                 session.steps[step_idx]["status"] = "failed"
@@ -604,6 +633,24 @@ def _propagate_step_verdict(
                     datetime.now().isoformat()
                 )
             msg = f"[{step_key}] step verdict: FAILED ({p.name})"
+            if gate == "block":
+                # ⛔ Blocking gate: interrupt pipeline
+                if msg not in session.errors:
+                    session.errors.append(msg)
+                session.status = "failed"
+                session.updated_at = datetime.now().isoformat()
+                log.error(
+                    "Step %s artifact verdict failed under BLOCK gate — pipeline interrupted",
+                    step_key,
+                )
+                return "block"
+            if gate == "info":
+                # info: record on step detail only, no errors entry
+                if step_idx < len(session.steps):
+                    session.steps[step_idx]["detail"] = msg
+                log.info("Step %s verdict failed under INFO gate (recorded only)", step_key)
+                return None
+            # warn (default): record error, continue
             if msg not in session.errors:
                 session.errors.append(msg)
             session.updated_at = datetime.now().isoformat()
@@ -614,6 +661,7 @@ def _propagate_step_verdict(
                 session.errors.append(msg)
     except Exception as e:  # pragma: no cover - defensive
         log.debug("Verdict propagation skipped for %s: %s", output_path, e)
+    return None
 
 
 def _run_step_with_fallback(
