@@ -118,6 +118,9 @@ class PipelineSession:
         # When True, LLM outputs are placeholders and code-quality gates
         # (coverage, critical safety) SHALL skip real scanning.
         self.mock_mode: bool = False
+        # 方向2 (2026-08-11): diff 裁剪决策（OSH_DIFF_SKIP=1 时由 orchestrator 写入）
+        # G2: skip 显式报告 —— 每个决策 {step, reason} 进 session，禁止静默消失。
+        self.diff_skip_decisions: list[dict] = []
         # B1/B2 (2026-08-08): current step context — set by
         # agent_checkpoint._make_session_factory / subprocess worker so
         # handlers can read which step they're running as.  Declared here

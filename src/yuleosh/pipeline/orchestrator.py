@@ -331,9 +331,9 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         print(f"   {label}")
 
     # G-33: Profile validation
+    project_dir = os.environ.get("OSH_HOME", os.path.dirname(os.path.abspath(spec_path)))
     try:
         from yuleosh.ci.profile import validate_active_profile, filter_steps_for_profile, get_current_profile
-        project_dir = os.environ.get("OSH_HOME", os.path.dirname(os.path.abspath(spec_path)))
         active_profile = profile or get_current_profile(project_dir)
         valid, msg = validate_active_profile(project_dir)
         if not valid:
@@ -352,6 +352,43 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
     except Exception as e:
         log.warning("Profile validation skipped: %s", e)
         active_profile = "safety"
+
+    # 方向2 (2026-08-11): diff 智能裁剪（OSH_DIFF_SKIP=1 显式开启）
+    # Evaluator 门槛 G1-G5:
+    #   G1 空 diff fail-safe（不裁剪）
+    #   G2 skip 显式报告（打印 + 写入 session）
+    #   G3 跨切面步骤不可跳过（CROSS_CUTTING_STEPS）
+    #   G5 block 级门禁不可裁剪（gate_policy）
+    diff_skip_decisions = []
+    try:
+        from yuleosh.ci.diff_planner import (
+            collect_changed_files,
+            get_step_file_globs,
+            is_enabled,
+            plan_skips,
+            skip_summary,
+        )
+        from yuleosh.ci.gate_policy import load_gate_policy
+
+        if is_enabled():
+            _changed = collect_changed_files(project_dir)
+            _globs = get_step_file_globs()
+            _policy = load_gate_policy(project_dir)
+            diff_skip_decisions = plan_skips(
+                _steps, _changed, gate_policy=_policy, file_globs=_globs
+            )
+            if diff_skip_decisions:
+                _skip_keys = {d.step_key for d in diff_skip_decisions}
+                print(f"\n⏭️  {skip_summary(diff_skip_decisions)}")
+                print("   (OSH_DIFF_SKIP=1 — skipped steps will NOT run)")
+                _steps = [s for s in _steps if s[0] not in _skip_keys]
+                if not _steps:
+                    print("\n❌ No steps remaining after diff planning!")
+                    sys.exit(1)
+    except ImportError:
+        log.debug("diff_planner not available, skipping diff planning")
+    except Exception as e:
+        log.warning("Diff planning skipped: %s", e)
 
     try:
         if name is None:
@@ -378,6 +415,11 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             session.development_mode = env_dev_mode
             print(f"   📝 development_mode from env: {env_dev_mode}")
         session.profile = active_profile
+        # G2 (方向2): diff 裁剪决策写入 session 报告（显式可见，禁止静默消失）
+        if diff_skip_decisions:
+            session.diff_skip_decisions = [d.to_dict() for d in diff_skip_decisions]
+        else:
+            session.diff_skip_decisions = []
         print(f"\n🚀 Pipeline started: {name}")
         print(f"   Spec: {spec_path}")
         print(f"   Profile: {active_profile}")
