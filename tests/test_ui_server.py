@@ -119,31 +119,52 @@ def make_handler():
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestRateLimit:
-    """check_rate_limit — core rate limiting logic."""
+    """check_rate_limit — core rate limiting logic (W2: shared SQLite).
 
-    def test_rate_limit_allows_normal_requests(self):
-        """GIVEN a clean bucket WHEN check_rate_limit THEN allowed."""
+    W2 (2026-08-11): production ``check_rate_limit`` 委托共享 SQLite
+    （RateLimitStore）。本类测生产入口真实行为，db 经 YULEOSH_RATE_DB
+    env 隔离到 tmp_path，不依赖内存表。
+    """
+
+    def test_rate_limit_allows_normal_requests(self, tmp_path, monkeypatch):
+        """GIVEN a clean db WHEN check_rate_limit THEN allowed."""
+        monkeypatch.setenv("YULEOSH_RATE_DB", str(tmp_path / "rl.db"))
         from yuleosh.ui.server import check_rate_limit
         allowed, retry = check_rate_limit("127.0.0.1", max_requests=10, window=60)
         assert allowed is True
         assert retry == 0.0
 
-    def test_rate_limit_blocks_after_max(self):
+    def test_rate_limit_blocks_after_max(self, tmp_path, monkeypatch):
         """GIVEN max requests reached WHEN check_rate_limit THEN blocked."""
-        from yuleosh.ui.server import check_rate_limit, _rate_limit_buckets
+        monkeypatch.setenv("YULEOSH_RATE_DB", str(tmp_path / "rl.db"))
+        from yuleosh.ui.server import check_rate_limit
         ip = "10.0.0.1"
-        _rate_limit_buckets[ip] = [time.time()] * 10  # max_requests reached
+        for _ in range(10):
+            allowed, _ = check_rate_limit(ip, max_requests=10, window=60)
+            assert allowed is True
         allowed, retry = check_rate_limit(ip, max_requests=10, window=60)
         assert allowed is False
         assert retry > 0
 
-    def test_rate_limit_prunes_old_entries(self):
-        """GIVEN expired entries in bucket WHEN check_rate_limit THEN pruned and allowed."""
-        from yuleosh.ui.server import check_rate_limit, _rate_limit_buckets
+    def test_rate_limit_prunes_old_entries(self, tmp_path, monkeypatch):
+        """GIVEN expired window entries WHEN check_rate_limit THEN slid and allowed."""
+        import sqlite3
+        db = str(tmp_path / "rl.db")
+        monkeypatch.setenv("YULEOSH_RATE_DB", db)
+        from yuleosh.ui.server import check_rate_limit
         ip = "10.0.0.2"
-        old_ts = time.time() - 120  # 2 minutes ago, outside window
-        _rate_limit_buckets[ip] = [old_ts] * 10
-        allowed, retry = check_rate_limit(ip, max_requests=10, window=60)
+        # 填满窗口
+        for _ in range(10):
+            check_rate_limit(ip, max_requests=10, window=60)
+        # 直接改 SQLite：把 window_start 改到 120 秒前 → 窗口已过期
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "UPDATE rate_limit SET window_start=? WHERE key=?",
+            (time.time() - 120, ip),
+        )
+        conn.commit()
+        conn.close()
+        allowed, _ = check_rate_limit(ip, max_requests=10, window=60)
         assert allowed is True
 
 
