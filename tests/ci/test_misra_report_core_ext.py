@@ -143,6 +143,58 @@ class TestCoreAnalysis:
         assert stats["total_violations"] == 0
         assert stats["unique_rules"] == 0
 
+    def test_compute_summary_stats_deviation_uses_file_rel(self):
+        """Deviation 匹配必须优先用 file_rel（相对路径），否则绝对路径匹配不了 src/**。
+
+        回归: _extract_file_path 的 p.resolve() 会把相对路径转成绝对路径，
+        报告层必须用项目相对路径匹配 deviation（门禁层已修，报告层对齐）。
+        """
+        from yuleosh.ci.misra_report.core.analysis import compute_summary_stats
+        violations = [
+            {
+                "rule_id": "misra-c2023-8.7",
+                "severity": "style",
+                "severity_category": "advisory",
+                "file": "/abs/proj/src/app/main.c",
+                "file_rel": "src/app/main.c",
+            },
+            {
+                "rule_id": "misra-c2023-8.7",
+                "severity": "style",
+                "severity_category": "advisory",
+                "file": "/abs/proj/src/app/main.c",
+                "file_rel": "src/app/main.c",
+            },
+            {
+                "rule_id": "misra-c2023-10.4",
+                "severity": "style",
+                "severity_category": "advisory",
+                "file": "/abs/proj/src/app/other.c",
+                "file_rel": "src/app/other.c",
+            },
+        ]
+        devs = [{"rule_id": "Rule-8.7", "file_pattern": "src/**", "status": "approved"}]
+        stats = compute_summary_stats(violations, {}, deviations=devs)
+        assert stats["by_rule_type"]["acknowledged"] == 2, "绝对路径+file_rel 应豁免"
+        assert stats["by_rule_type"]["advisory"] == 1
+        assert stats["acknowledged_violations"] == 2
+
+    def test_compute_summary_stats_deviation_absolute_path_no_match(self):
+        """无 file_rel 时绝对路径不能匹配 src/**（旧行为保持不变，向后兼容）。"""
+        from yuleosh.ci.misra_report.core.analysis import compute_summary_stats
+        violations = [
+            {
+                "rule_id": "misra-c2023-8.7",
+                "severity": "style",
+                "severity_category": "advisory",
+                "file": "/abs/proj/src/app/main.c",
+            },
+        ]
+        devs = [{"rule_id": "Rule-8.7", "file_pattern": "src/**", "status": "approved"}]
+        stats = compute_summary_stats(violations, {}, deviations=devs)
+        assert "acknowledged" not in stats["by_rule_type"]
+        assert stats["by_rule_type"]["advisory"] == 1
+
     def test_compute_summary_stats_no_files(self):
         from yuleosh.ci.misra_report.core.analysis import compute_summary_stats, group_by_rule
         violations = [{"rule_id": "Rule 10.1", "severity": "high"}]

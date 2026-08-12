@@ -140,7 +140,7 @@ def generate_traceability_matrix(
         defn = rule_defs.get(rid, {})
         file_path = v.get("file", "")
 
-        matched, dev_info = _match_deviation(rid, file_path, deviations)
+        matched, dev_info = _match_deviation(rid, v.get("file_rel") or file_path, deviations)
         fix_status = "acknowledged" if matched else "unresolved"
 
         # R3-P0-1: 3-way traceability fields
@@ -203,7 +203,7 @@ def generate_fix_tasks(
         rid = v.get("rule_id", "unknown") or "unknown"
         file_path = v.get("file", "")
         # Skip deviations-acknowledged violations
-        matched, _ = _match_deviation(rid, file_path, deviations)
+        matched, _ = _match_deviation(rid, v.get("file_rel") or file_path, deviations)
         if matched:
             continue
         rule_groups.setdefault(rid, []).append(v)

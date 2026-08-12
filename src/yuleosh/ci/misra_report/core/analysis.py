@@ -135,7 +135,7 @@ def compute_summary_stats(
         # fall back to heuristic for backward compat
         rule_type = v.get("severity_category", v.get("rule_type", _classify_rule_type(v.get("rule_id"))))
         if deviations:
-            matched, _ = _match_deviation(v.get("rule_id"), v.get("file") or "", deviations)
+            matched, _ = _match_deviation(v.get("rule_id"), v.get("file_rel") or v.get("file") or "", deviations)
             if matched:
                 acknowledged += 1
                 by_rule_type["acknowledged"] += 1

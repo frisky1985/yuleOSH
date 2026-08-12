@@ -475,6 +475,14 @@ def run_misra_check(project_dir: str, ci: CIResult,
                 v_file_abs = v_file
             cat_name = file_category_map.get(v_file_abs, "business")
             v["code_category"] = cat_name
+            # Deviation 匹配必须用项目相对路径（fnmatch 的 src/** 匹配不了绝对路径；
+            # _extract_file_path 的 p.resolve() 会把相对路径转成绝对路径）。
+            v["file_rel"] = v_file
+            if os.path.isabs(v_file):
+                try:
+                    v["file_rel"] = os.path.relpath(v_file, project_dir)
+                except ValueError:
+                    v["file_rel"] = v_file
 
         groups = group_by_rule(violations)
         enriched_violations = enrich_with_definitions(violations, rule_defs)
