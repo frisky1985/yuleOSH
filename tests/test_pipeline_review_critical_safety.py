@@ -151,7 +151,9 @@ class TestStepReviewCriticalSafety:
             with patch("yuleosh.pipeline.step_handlers.review_critical_safety.get_build_flags",
                        return_value=[]):
                 result = step_review_critical_safety(session)
-            assert isinstance(result, list) or isinstance(result, dict)
+            # 2026-08-12: 返回文件路径 (原返回 dict 破坏 verdict 传播/缓存)
+            assert isinstance(result, str)
+            assert Path(result).exists()
 
     def test_step_with_violations_raises_error(self):
         with tempfile.TemporaryDirectory() as td:
@@ -207,14 +209,16 @@ class TestStepReviewCriticalSafety:
             session.mock_mode = True
 
             result = step_review_critical_safety(session)
-            assert isinstance(result, dict)
-            assert result.get("skipped") is True
-            assert result["summary"]["total"] == 0
-
-            report_path = Path(session.artifacts_dir) / "critical-safety-report.json"
+            # 2026-08-12: 返回文件路径; skipped 语义在报告文件里
+            assert isinstance(result, str)
+            report_path = Path(result)
             assert report_path.exists()
             data = json.loads(report_path.read_text())
-            assert data["skipped"] is True
+            assert data.get("skipped") is True
+            assert data["summary"]["total"] == 0
+
+            report_path2 = Path(session.artifacts_dir) / "critical-safety-report.json"
+            assert report_path2.exists()
 
     def test_magicmock_default_not_skipped(self):
         """MagicMock sessions (no mock_mode attr) must NOT skip — a

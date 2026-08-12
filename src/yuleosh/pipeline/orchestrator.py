@@ -502,6 +502,44 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
                 continue
 
+            # ── B1 缓存 (2026-08-12): 确定性步骤内容寻址缓存 ──
+            # 输入指纹命中 → 复用产物, 不重编译/重扫描 (省时间);
+            # LLM 步骤永不缓存 (避免固化 LLM 输出); OSH_NO_CACHE=1 禁用。
+            _cache_fp = None
+            try:
+                from yuleosh.pipeline import step_cache as _step_cache
+            except ImportError:  # pragma: no cover - defensive
+                _step_cache = None
+
+            if _step_cache and _step_cache.is_cacheable(step_key) \
+                    and _step_cache.cache_enabled():
+                _cache_fp = _step_cache.compute_fingerprint(session, step_key)
+                if _step_cache.lookup(project_dir, step_key, _cache_fp):
+                    try:
+                        _restored = _step_cache.restore(
+                            project_dir, step_key, _cache_fp, session
+                        )
+                    except OSError as _restore_err:
+                        log.warning("step-cache restore failed (fallback): %s",
+                                    _restore_err)
+                        _cache_fp = None
+                        _restored = None
+                    if _restored:
+                        _fp = _cache_fp or ""  # 命中路径下必非 None (类型收窄)
+                        session.complete_step(step_idx, _restored)
+                        session.set_artifact(step_key, _restored)
+                        session.steps[step_idx]["cached"] = True
+                        session.steps[step_idx]["detail"] = (
+                            f"cached (指纹 {_fp[:10]})"
+                        )
+                        print(f"  ♻️  [{agent}] {step_name} — cached "
+                              f"(指纹 {_fp[:10]}), 复用产物")
+                        _propagate_step_verdict(
+                            session, step_idx, step_key, _restored
+                        )
+                        log.info("Step %s cache hit (%s)", step_key, _fp[:10])
+                        continue
+
             session.start_step(step_idx)
             # 方案 A (2026-08-07): expose the current step key so the
             # unified knowledge injection at _call_llm can match per-step
@@ -522,6 +560,14 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 output_path = _run_step_with_fallback(
                     handler, session, step_key, step_name, spec_path,
                 )
+
+                # B1 缓存: 执行完成后入库 (确定性步骤; 失败/异常不入库)
+                if _cache_fp and _step_cache:
+                    try:
+                        _step_cache.store(project_dir, step_key, _cache_fp, output_path)
+                    except Exception as _store_err:  # pragma: no cover
+                        log.warning("step-cache store failed (non-fatal): %s",
+                                    _store_err)
 
                 session.complete_step(step_idx, str(output_path))
                 session.set_artifact(step_key, str(output_path))

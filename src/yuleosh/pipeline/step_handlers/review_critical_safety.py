@@ -638,7 +638,7 @@ def get_build_flags(enable_warnings: bool = True,
 #  Pipeline Step 入口（强制执行）
 # ============================================================
 
-def step_review_critical_safety(session: PipelineSession) -> dict:
+def step_review_critical_safety(session: PipelineSession) -> str:
     """Pipeline Step: 关键安全异常阻塞检查。
 
     这是 CRITICAL GATE — 发现任何 P0 违例即阻断 pipeline，
@@ -670,7 +670,10 @@ def step_review_critical_safety(session: PipelineSession) -> dict:
         report_path = Path(session.artifacts_dir) / "critical-safety-report.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2))
-        return report
+        log.info(f"  report: {report_path}")
+        # 返回文件路径 (2026-08-12 修复): 原返回 dict 导致 orchestrator
+        # verdict 传播失效 + step-cache store 失败 (output missing)。
+        return str(report_path)
 
     # 1. 静态扫描
     scanner = CriticalSafetyScanner(project_dir)
@@ -730,4 +733,4 @@ def step_review_critical_safety(session: PipelineSession) -> dict:
 
     # 5. ✅ 通过
     log.info("✅ CRITICAL SAFETY GATE PASSED — 零 P0 违例")
-    return report
+    return str(report_path)
