@@ -692,12 +692,13 @@ def run_misra_check(project_dir: str, ci: CIResult,
                         print(f"        - {nv.get('rule_id', '?')} in {nv.get('file', '?')}:{nv.get('line', '?')}")
                     if len(new_required) > 5:
                         print(f"        ... and {len(new_required) - 5} more")
-        except Exception as delta_e:
-            log.debug("L2 delta blocking skipped: %s", delta_e)
+        except (OSError, ValueError, KeyError) as delta_e:
+            log.warning("MISRA L2 delta 计算失败，delta 阻断跳过（分类 fail-safe 仍兜底）: %s", delta_e)
             new_required_count = 0
 
     # ── 三级分类阻断计算 ──
     # 从 violations 中计算分类细目
+    classification_failed = False
     try:
         from yuleosh.ci.misra_report import parse_cppcheck_output as _pco
         _current_violations = _pco(output)
@@ -707,7 +708,11 @@ def run_misra_check(project_dir: str, ci: CIResult,
             _v["code_category"] = file_category_map.get(_vfa, "business")
         business_violations_c = [v for v in _current_violations if v.get("code_category", "") == "business"]
         third_party_violations_c = [v for v in _current_violations if v.get("code_category", "") == "third_party"]
-    except Exception:
+    except (ValueError, KeyError, TypeError) as classif_e:
+        # P2: 分类失败不得静默放行 —— 留 warning 日志 + 置 flag，
+        # 由下方 0d fail-safe 阻断兜底（无法枚举违规时按 business 违规阻断）。
+        log.warning("MISRA 三级分类失败，按 business 违规 fail-safe 阻断: %s", classif_e)
+        classification_failed = True
         _current_violations = []
         business_violations_c = []
         third_party_violations_c = []
@@ -752,6 +757,13 @@ def run_misra_check(project_dir: str, ci: CIResult,
         block_reasons.append(f"{third_party_total} third-party violation(s) (third_party.block_on=True)")
     elif not third_party_block_on and third_party_total > 0:
         print(f"    ℹ️  Third-party violations ({third_party_total}) do not block (third_party.block_on=False)")
+
+    # 0d. 三级分类失败 → fail-safe 阻断（工程诚实：内部失败不得静默放行）
+    # 注意: block_reasons 清空逻辑只清含 "business-code" 或 "fail_on_" 的
+    # reason，本条 reason 不受影响，安全放在 profile 过滤之前。
+    if classification_failed:
+        should_block = True
+        block_reasons.append("MISRA 三级分类失败，fail-safe 阻断（不静默放行）")
 
     # ── Profile-based blocking filter (QG-002) ──
     # Only block on violation tiers that are in the active profile's block_on list
