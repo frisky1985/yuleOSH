@@ -21,6 +21,7 @@ from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _parse_scenarios, _parse_spec
+from yuleosh.pipeline.guardrail import TestResult
 
 log = logging.getLogger("pipeline.step_handlers.test_integration")
 
@@ -179,6 +180,57 @@ def step_integration_test(session: PipelineSession) -> str:
             "failed": failed,
             "status": status,
         }
+
+        # ── 门禁联动回滚 (2026-08-13, 方案 A) ─────────────────────
+        # 只对真实失败 (status=failed) 联动; skipped/unknown 不动。
+        if status == "failed":
+            try:
+                from yuleosh.pipeline.guardrail import (
+                    IntegrationTestRunner,
+                    maybe_rollback_on_gate_failure,
+                )
+                gate_result = TestResult(
+                    runner=test_runner,
+                    status=status,
+                    passed=passed,
+                    failed=failed,
+                    returncode=result_returncode,
+                    output=test_output[:3000],
+                )
+                linkage = maybe_rollback_on_gate_failure(
+                    session, "integration-test", gate_result,
+                    runner=IntegrationTestRunner(),
+                )
+                if linkage.get("action") == "rolled_back":
+                    report["guardrail_linkage"] = {
+                        "action": "rolled_back",
+                        "detail": (
+                            "deploy regression confirmed — src/ rolled back "
+                            "to baseline, gate re-run passed"
+                        ),
+                        "rerun_failed": linkage["rerun"].failed,
+                    }
+                    print("  🔄 [小克] 集成测试失败 → 行为护栏联动回滚: "
+                          "部署回归已确认, src/ 回滚至基线, 门禁复跑通过")
+                elif linkage.get("action") == "gate_failed_independent":
+                    report["guardrail_linkage"] = {
+                        "action": "gate_failed_independent",
+                        "detail": (
+                            "baseline also fails after rollback — failure is "
+                            "independent of deployment; src/ restored to "
+                            "deployed state"
+                        ),
+                        "rerun_failed": linkage["rerun"].failed,
+                    }
+                    print("  ⚠️ [小克] 集成测试失败 → 联动回滚验证: 基线也失败, "
+                          "非部署问题 — src/ 已恢复部署版, 需人工介入")
+                elif linkage.get("action") == "rollback_undo_failed":
+                    report["guardrail_linkage"] = {
+                        "action": "rollback_undo_failed",
+                        "detail": "undo rollback failed — src/ left at baseline!",
+                    }
+            except Exception as e:  # pragma: no cover - defensive
+                log.warning("Guardrail linkage failed (non-fatal): %s", e)
 
         out_path = session.session_dir / "integration-test.json"
         try:

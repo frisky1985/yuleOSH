@@ -42,6 +42,10 @@ NO_DEPLOY_STATUSES = {
     "skipped_codegen_failed",     # codegen 失败, 护栏拒绝部署
     "skipped_api_mismatch",       # 生成 API 破坏既有契约, 护栏拒绝部署
     "empty",                      # 有目录但无文件可部署
+    "deployed_behavior_regression",  # 部署后被行为护栏检测回归 → 已回滚 src/
+                                     # 部署内容已被回滚, 视为无部署 (审查锚定基线)
+    "skipped_src_protected",       # OSH_GUARD_PROTECT_SRC=1 且 src/ 有未提交
+                                   # 改动 → 跳过部署 (保护用户手动代码)
 }
 
 # 部署成功 status (step_codegen_deploy 产出)
