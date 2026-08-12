@@ -152,7 +152,7 @@ class TestAgentPipelineSessionFactory:
 
         engine = create_agent_pipeline(str(tmp_path))
         step_defs = engine._step_defs
-        assert len(step_defs) == 33
+        assert len(step_defs) == 34  # 2026-08-12: 33→34 (与 PIPELINE_STEPS 同步)
         for s in step_defs:
             assert isinstance(s["handler"], HandlerAdapter), s["step_id"]
         # 全部为 session 风格（首参名 session/ctx/context），无 invalid
