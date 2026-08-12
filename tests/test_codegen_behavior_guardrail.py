@@ -158,6 +158,26 @@ class TestBehaviorGuardrail:
         # 回滚: src/app.c 恢复为部署前基线 (sub 正确)
         assert "a - b" in (proj / "src" / "app.c").read_text()
 
+    def test_compile_failure_rolls_back(self, tmp_path):
+        """编译失败 (ctest-build-failed) 也是回归 — 基线通过后部署代码编译失败
+        必须回滚 (e2e 抓到的判定盲区, 2026-08-13)。"""
+        proj = _make_cmake_project(tmp_path)
+        _configure(proj)
+        session = _session(tmp_path, "deploy-compilefail")
+        # 生成的 app.c 编译失败 (调用未声明函数) — 比测试失败更严重
+        _gen_tree(proj, session.name,
+                  "int add(int a, int b) { return a + b; }\n"
+                  "int sub(int a, int b) { return undefined_fn(a); }\n")
+        out = step_codegen_deploy(session)
+        report = json.loads(Path(out).read_text())
+        assert report["status"] == "deployed_behavior_regression"
+        guard = report["behavior_guardrail"]
+        assert guard["verdict"] == "regression_rolled_back"
+        assert guard["rolled_back"] is True
+        assert guard["after"]["runner"] == "ctest-build-failed"
+        # 回滚: src/app.c 恢复基线
+        assert "a - b" in (proj / "src" / "app.c").read_text()
+
     def test_guard_disabled_env(self, tmp_path):
         proj = _make_cmake_project(tmp_path)
         _configure(proj)

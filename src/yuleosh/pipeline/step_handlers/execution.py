@@ -561,16 +561,29 @@ def step_codegen_deploy(session: PipelineSession) -> str:
                   f"(runner={guard_after.runner})")
             base_failed = guard_baseline.failed or 0
             after_failed = guard_after.failed or 0
-            # 回归判定: 部署后失败数 > 基线失败数, 且基线测试真实运行过
-            # (runner != "none" 表示有测试框架; "ctest-build-failed" 也算失败)
+            # 回归判定: 基线测试真实运行过 (runner != "none" 表示有测试框架)
             baseline_ran = guard_baseline.runner not in (None, "none")
-            if baseline_ran and after_failed > base_failed:
+            # 2026-08-13 (e2e 修复): 编译失败也算回归 — after runner 为
+            # ctest-build-failed 时 failed 计数为 0, 旧判定 (after_failed >
+            # base_failed) 漏掉「基线通过 → 部署后编译失败」场景。编译失败
+            # 比测试失败更严重, 必须回滚。
+            after_build_failed = guard_after.runner == "ctest-build-failed"
+            if (baseline_ran and guard_baseline.status == "passed"
+                    and (guard_after.status == "failed" or after_build_failed)):
+                guard_rollback = True
+                log.warning(
+                    "Behavior guardrail REGRESSION: baseline passed → after "
+                    "failed (runner=%s, status=%s) — rolling back src/",
+                    guard_after.runner, guard_after.status,
+                )
+            elif baseline_ran and after_failed > base_failed:
                 guard_rollback = True
                 log.warning(
                     "Behavior guardrail REGRESSION: baseline failed=%d → "
                     "after failed=%d — rolling back src/",
                     base_failed, after_failed,
                 )
+            if guard_rollback:
                 # 恢复部署前的原始 src 内容 (不是生成目录 — 生成目录就是回归版)
                 apply_change_set(project_dir, pre_deploy_backup)
                 print("  🔄 [小明] 行为护栏: 测试回归 → 已回滚 src/ 至基线")
