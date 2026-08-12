@@ -1,4 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project({{PROJECT_NAME}} C)
 
+# Coverage support (ENABLE_COVERAGE=ON → -fprofile-arcs -ftest-coverage)
+if(ENABLE_COVERAGE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -O0 -g")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+  message(STATUS "ENABLE_COVERAGE: instrumentation ON")
+endif()
+
 add_executable({{PROJECT_NAME}} src/main.c)
