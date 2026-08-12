@@ -1,9 +1,11 @@
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
 from yuleosh.pipeline.steps import PipelineStep
+from yuleosh.codegen.prompts import collect_existing_headers
 
 log = logging.getLogger("pipeline.step_classes")
 
@@ -264,6 +266,7 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
         from yuleosh.codegen.prompts import build_codegen_prompt
 
         print("  💻 [Claude] Running generate-code mode (D3)...")
+        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
         spec_path = Path(session.spec_path)
         spec_content = (
             spec_path.read_text() if spec_path.exists() else "(spec file not found)"
@@ -284,6 +287,7 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             super_analysis_content=artifacts.get("super-analysis", ""),
             skills=skills,
             target_language=target_language,
+            existing_headers=collect_existing_headers(project_dir),
         )
 
         engine = CodegenEngine(

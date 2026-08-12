@@ -29,6 +29,7 @@ from yuleosh.pipeline.prompts import (
     build_development_prompt,
     build_test_planning_prompt,
 )
+from yuleosh.codegen.prompts import collect_existing_headers
 
 log = logging.getLogger("pipeline.step_handlers.execution")
 
@@ -190,6 +191,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             super_analysis_content=super_content,
             skills=skills,
             target_language=target_language,
+            existing_headers=collect_existing_headers(project_dir),
         )
 
         engine = CodegenEngine(
