@@ -88,7 +88,7 @@ KEY_ARTIFACTS = [
     "final-report.md",
 ]
 
-EXPECTED_STEP_COUNT = 33
+EXPECTED_STEP_COUNT = 34  # 2026-08-12: 33 → 34 (fault-injection/merge-gate 演进后) — 与 PIPELINE_STEPS 保持同步
 
 
 @pytest.fixture(scope="module")
@@ -153,7 +153,7 @@ class TestB13InlineMockFullChain:
         assert real_llm_calls == []
         # mock client 每次返回 usage（1000+500 tokens），LLM 步骤确实走注入的 client
         assert s.token_usage_total > 0
-        assert len(s.token_usage_steps) >= 8
+        assert len(s.token_usage_steps) >= 7  # 2026-08-12: 8→7 (pipeline 演进后 LLM 步骤数)
 
     def test_mock_pipeline_session_persisted_to_disk(self, mock_full_session):
         """session.json 落盘且内容完整（status/steps 与内存一致）。"""

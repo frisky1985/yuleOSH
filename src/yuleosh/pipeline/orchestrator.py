@@ -12,6 +12,7 @@ Import chain:  orchestrator -> stages -> session
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 import traceback
@@ -268,9 +269,42 @@ def _mock_llm_client() -> Callable:
     return _mock_callback
 
 
+def _find_previous_session(spec_path: str, project_dir: str):
+    """Find the most recent pipeline session for the same spec.
+
+    Used by ``--from-step`` resume: restores prior-step artifacts so a
+    re-run can continue from step N instead of paying for steps 1..N-1
+    again (and re-running their LLM calls).
+
+    Returns ``(updated_at, session_dir, data)`` or None.
+    """
+    base = Path(project_dir) / ".osh" / "sessions"
+    best = None
+    if not base.exists():
+        return None
+    resolved = str(Path(spec_path).resolve())
+    for d in sorted(base.iterdir()):
+        if not d.is_dir():
+            continue
+        sfile = d / "session.json"
+        if not sfile.exists():
+            continue
+        try:
+            data = json.loads(sfile.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if str(data.get("spec_path", "")) != resolved:
+            continue
+        ts = str(data.get("updated_at", ""))
+        if best is None or ts > best[0]:
+            best = (ts, d, data)
+    return best
+
+
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
                 mock: bool = False, profile: Optional[str] = None, org_id: int = 0,
-                user_id: int | None = None, user_email: str | None = None):
+                user_id: int | None = None, user_email: str | None = None,
+                from_step: int = 0):
     """Run the full OSH pipeline for a given spec.
     
     Args:
@@ -420,6 +454,33 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             session.diff_skip_decisions = [d.to_dict() for d in diff_skip_decisions]
         else:
             session.diff_skip_decisions = []
+
+        # ── 断点续跑 (2026-08-12): --from-step N ──
+        # 从最近一次同 spec 的 session 恢复前序 artifacts, 步骤 1..N-1
+        # 标记 skipped (不执行, 不烧 LLM token), 从第 N 步继续。
+        restored_count = 0
+        if from_step and from_step > 1:
+            _prev = _find_previous_session(spec_path, project_dir)
+            if _prev is None:
+                print(f"\n⚠️  未找到同 spec 的上一 session — 从步骤 1 开始")
+                from_step = 1
+            else:
+                _prev_ts, _prev_dir, _prev_data = _prev
+                for _key, _path in (_prev_data.get("artifacts") or {}).items():
+                    _src = Path(str(_path))
+                    if not _src.exists():
+                        continue
+                    _dst = session.session_dir / _src.name
+                    try:
+                        shutil.copy2(_src, _dst)
+                        session.set_artifact(_key, str(_dst))
+                        restored_count += 1
+                    except OSError as _e:
+                        log.warning("Resume: cannot restore artifact %s: %s", _key, _e)
+                if restored_count:
+                    print(f"\n♻️  断点续跑: 从 {_prev_dir.name} 恢复 "
+                          f"{restored_count} 个前序产物, 从步骤 {from_step} 继续")
+        session.from_step = from_step
         print(f"\n🚀 Pipeline started: {name}")
         print(f"   Spec: {spec_path}")
         print(f"   Profile: {active_profile}")
@@ -434,6 +495,13 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 _ran_final_report = True
             step_idx = len(session.steps)
             session.add_step(step_key, agent, step_name)
+
+            # ── 断点续跑: 前序步骤 (idx+1 < from_step) 标记 skipped, 不执行 ──
+            if step_idx + 1 < from_step:
+                session.steps[step_idx]["status"] = "skipped"
+                session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
+                continue
+
             session.start_step(step_idx)
             # 方案 A (2026-08-07): expose the current step key so the
             # unified knowledge injection at _call_llm can match per-step
@@ -490,10 +558,17 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             session._save()
         
         print(f"\n{'='*50}")
-        if session.status == "completed":
-            print(f"Pipeline: {session.status} 🎉")
+        # 三色结果分级 (2026-08-12):
+        #   🟢 GREEN  — completed, 0 errors        → 可放行
+        #   🟡 YELLOW — completed, errors>0        → 有 verdict 失败, 需人工复核
+        #   🔴 RED    — failed (block gate/异常)   → 不可放行
+        if session.status == "completed" and not session.errors:
+            print(f"Pipeline: {session.status} 🎉 (GREEN — all gates passed)")
+        elif session.status == "completed":
+            print(f"Pipeline: {session.status} ⚠️  (YELLOW — completed with "
+                  f"{len(session.errors)} step verdict failure(s))")
         else:
-            print(f"Pipeline: {session.status} ❌")
+            print(f"Pipeline: {session.status} ❌ (RED)")
         print(f"Session: {session.session_dir}")
         print(f"Errors: {len(session.errors)}")
         if session.status == "completed" and session.errors:
@@ -678,13 +753,18 @@ def _propagate_step_verdict(
         verdict = str(data.get("status", "")).strip().lower()
         if not verdict:
             return None
-        if verdict == "failed":
+        # INCOMPLETE (2026-08-12): 验收类步骤 (test-qualification) 无法完成
+        # 判定时 (如无系统级测试文件) 输出 status=incomplete。旧逻辑不认识
+        # 该 verdict → 静默通过 → 假绿。现按 gate 强度同 failed 处置:
+        #   block gate → 中断; warn → 记 errors; info → 仅 step 记录。
+        if verdict in ("failed", "incomplete"):
             if step_idx < len(session.steps):
                 session.steps[step_idx]["status"] = "failed"
                 session.steps[step_idx]["completed_at"] = (
                     datetime.now().isoformat()
                 )
-            msg = f"[{step_key}] step verdict: FAILED ({p.name})"
+            label = "FAILED" if verdict == "failed" else "INCOMPLETE"
+            msg = f"[{step_key}] step verdict: {label} ({p.name})"
             if gate == "block":
                 # ⛔ Blocking gate: interrupt pipeline
                 if msg not in session.errors:

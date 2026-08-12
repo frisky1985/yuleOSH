@@ -446,6 +446,33 @@ def step_test_qualification(session: PipelineSession) -> str:
             for u in coverage["uncovered"]:
                 print(f"  ⚠️  未覆盖场景: {u['scenario']}")
 
+        # ── Fail-fast (2026-08-12): 无系统级测试文件 → 立即判定 INCOMPLETE ──
+        # 旧行为: 继续跑 _run_system_tests (0 executed) 到 Phase 4 才 INCOMPLETE,
+        # 且 verdict 不被 _propagate_step_verdict 识别 → 假绿。现在提前判定,
+        # verdict=incomplete 会被 orchestrator 按 gate 强度处置 (block → 中断)。
+        if not test_files:
+            print("  ⚠️  [小明] 未发现系统级测试文件 — 判定 INCOMPLETE (fail-fast)")
+            log.warning("No system-level test files found — qualification INCOMPLETE")
+            test_results = {
+                "executed": 0, "passed": 0, "failed": 0,
+                "error": "No system-level test files found to execute",
+            }
+            report = _build_qualification_report(
+                spec_path, project_dir, scenarios, coverage, test_results,
+            )
+            report["session"] = session.name
+            print(f"  🔄 [小明] 合格性测试判定: INCOMPLETE")
+            print(f"    {report['verdict_reason']}")
+            out_path = session.session_dir / "qualification-test.json"
+            try:
+                with open(out_path, "w") as f:
+                    json.dump(report, f, indent=2, ensure_ascii=False)
+            except OSError as e:
+                log.error(f"Cannot write qualification test report: {e}")
+                raise PipelineStepError(f"Cannot write qualification test report: {e}")
+            log.info("Qualification testing completed (fail-fast): incomplete")
+            return str(out_path)
+
         # ── Phase 3: Test execution ──
         log.info("Phase 3: Running system-level tests...")
         test_results = _run_system_tests(test_files, project_dir)

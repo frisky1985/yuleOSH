@@ -651,6 +651,13 @@ def step_review_rtos(session: PipelineSession) -> str:
     """
     try:
         print("  ⚙️  [小克] RTOS 配置审查开始...")
+        # ── 审查锚定 (2026-08-12): 本次 run 无代码部署 → honest skip ──
+        from yuleosh.pipeline.deploy_state import maybe_skip_code_review
+        _deploy_skip = maybe_skip_code_review(session, 'review-rtos', reviewer="小克")
+        if _deploy_skip:
+            print(f"  ⏭️  [小克] RTOS 审查跳过 — 本次 run 无代码部署")
+            return _deploy_skip
+
         log.info("Running RTOS config review")
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
