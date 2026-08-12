@@ -29,7 +29,7 @@ from yuleosh.pipeline.prompts import (
     build_development_prompt,
     build_test_planning_prompt,
 )
-from yuleosh.codegen.prompts import collect_existing_headers
+from yuleosh.codegen.prompts import collect_existing_headers, collect_seed_sources
 
 log = logging.getLogger("pipeline.step_handlers.execution")
 
@@ -170,7 +170,11 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
     print("  💻 [Claude] Running generate-code mode (D3)...")
     log.info("Running generate-code mode (D3)")
     try:
-        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+        # 2026-08-12: 优先用 session 创建时解析的 project_dir (OSH_HOME),
+        # 避免在 handler 内重新解析 — 测试/嵌套调用时环境变量可能已变,
+        # 退化为 cwd 会把错误目录当项目根 (seed 复制/API 契约全错)。
+        project_dir = Path(getattr(session, "project_dir", None)
+                           or os.environ.get("OSH_HOME", ".")).resolve()
         spec_path = Path(session.spec_path)
         spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
         architecture_content = artifacts_read(session.artifacts, "architecture") or ""
@@ -183,6 +187,10 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         build_cmd = cfg.get("build_cmd")
         language_hint = cfg.get("language")
 
+        # 方案 C seed 增量 (2026-08-12): 注入现有 src 代码作为基线,
+        # engine 复制 seed 到输出目录, LLM 只增量修改。
+        seed_sources = collect_seed_sources(project_dir)
+
         system_prompt, user_prompt = build_codegen_prompt(
             spec_content=spec_content,
             spec_name=Path(session.spec_path).name,
@@ -192,6 +200,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             skills=skills,
             target_language=target_language,
             existing_headers=collect_existing_headers(project_dir),
+            seed_sources=seed_sources,
         )
 
         engine = CodegenEngine(
@@ -199,6 +208,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             max_retries=int(cfg.get("max_retries", 3)),
             llm_client=getattr(session, "llm_client", None),
             max_tokens=int(cfg.get("max_tokens", 8192)),
+            seed_dir=project_dir if seed_sources else None,
         )
         result = engine.generate(
             session, system_prompt, user_prompt,

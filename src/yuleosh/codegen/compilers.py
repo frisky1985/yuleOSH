@@ -62,8 +62,16 @@ def _result(ok: bool, language: str, command: str, output: str, returncode: int)
 
 
 def verify_python(files: list[Path], python_cmd: str = "python3") -> dict:
-    """Syntax-check Python files with ``python -m py_compile``."""
-    cmd = [python_cmd, "-m", "py_compile", *[str(f) for f in files]]
+    """Syntax-check Python files with ``python -m py_compile``.
+
+    2026-08-12: 只编译 ``.py`` 后缀文件 — 生成目录可能同时含 C 头文件
+    (seed 基线 + LLM 输出混合), 把 .h 丢给 py_compile 会误报失败。
+    """
+    py_files = [f for f in files if Path(str(f)).suffix.lower() in _PY_EXTS]
+    if not py_files:
+        return _result(True, LANGUAGE_PYTHON, f"{python_cmd} -m py_compile",
+                       "(no .py files to verify)", 0)
+    cmd = [python_cmd, "-m", "py_compile", *[str(f) for f in py_files]]
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=120
