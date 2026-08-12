@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,239 @@ __all__ = ["step_c_unit_test"]
 
 
 @timed_step
+def run_c_test_suite(project_dir: str | Path,
+                     timeout_build: int = 300,
+                     timeout_ctest: int = 300,
+                     force_rebuild: bool = False) -> dict:
+    """Run the project's C unit test suite and return a result dict.
+
+    2026-08-13 (行为护栏): 从 step_c_unit_test 提取的可复用核心 —
+    codegen-deploy 用它在部署前后各跑一次, 对比测试结果检测行为回归。
+    返回 dict: runner / returncode / passed / failed / output / status /
+    c_files / c_test_files / c_header_files。
+
+    force_rebuild (2026-08-13): 行为护栏场景传 True — 删除 build 里的
+    .o/.a 强制全量重编。原因: 部署后立即测试时 cmake 增量构建可能因
+    mtime 同秒/APFS 纳秒精度跳过重编 → ctest 跑旧二进制 → 假通过。
+    正常 c-unit-test 步骤保持增量 (False), 不受影响。
+    """
+    project_dir = Path(project_dir)
+
+    # 1. Check for C source files
+    c_files = list(project_dir.rglob("*.c"))
+    c_header_files = list(project_dir.rglob("*.h"))
+    log.info("Found %d .c files and %d .h files", len(c_files), len(c_header_files))
+
+    if not c_files:
+        return {
+            "runner": "none", "returncode": None, "passed": 0, "failed": 0,
+            "output": "", "status": "skipped", "reason": "No C source files found",
+            "c_files": 0, "c_test_files": 0, "c_header_files": 0,
+        }
+
+    # 2. Find C test files
+    c_test_files = (
+        list(project_dir.rglob("*test*.c")) +
+        list(project_dir.rglob("*Test*.c")) +
+        list(project_dir.rglob("*_test.c")) +
+        list(project_dir.rglob("*_tst.c"))
+    )
+    c_test_files = list(set(c_test_files))  # deduplicate
+    log.info("Found %d C test files", len(c_test_files))
+
+    # 3. Try runners in priority order
+    test_output = ""
+    result_returncode = None
+    test_runner = "none"
+    passed = 0
+    failed = 0
+
+    # 3a0. Try ctest first — CMake projects define real buildable tests.
+    cmake_build_dirs = (
+        list(project_dir.glob("build")) +
+        list(project_dir.glob("cmake-build-*"))
+    )
+    for build_dir in cmake_build_dirs:
+        ctest_cfg = build_dir / "CTestTestfile.cmake"
+        if not ctest_cfg.exists():
+            continue
+        try:
+            if force_rebuild:
+                # 强制重建 (2026-08-13): 行为护栏部署后立即跑本函数时,
+                # cmake 增量构建会因 DependInfo.cmake/.d 缓存 + mtime 同秒
+                # 跳过重编 → ctest 跑旧二进制 → 假通过 (实测 60% flaky)。
+                # 删除整个 build 目录并重新 configure — 护栏正确性 > 速度。
+                _btmp = build_dir.with_name(build_dir.name + ".osh-bak")
+                try:
+                    if _btmp.exists():
+                        shutil.rmtree(_btmp)
+                    build_dir.rename(_btmp)
+                    subprocess.run(
+                        ["cmake", "-S", str(project_dir), "-B", str(build_dir)],
+                        capture_output=True, text=True, timeout=timeout_build,
+                    )
+                    shutil.rmtree(_btmp, ignore_errors=True)
+                except OSError as e:
+                    log.warning("force rebuild: cmake reconfigure failed: %s", e)
+            log.info("Rebuilding %s before ctest%s", build_dir,
+                     " (forced)" if force_rebuild else "")
+            build_result = subprocess.run(
+                ["cmake", "--build", str(build_dir), "-j4"],
+                capture_output=True, text=True,
+                timeout=timeout_build, cwd=build_dir,
+            )
+            if build_result.returncode != 0:
+                log.warning(
+                    "Build failed in %s (rc=%d): %s",
+                    build_dir, build_result.returncode,
+                    (build_result.stderr or build_result.stdout)[-500:],
+                )
+                test_output = (build_result.stderr or build_result.stdout)[-1000:]
+                result_returncode = build_result.returncode
+                test_runner = "ctest-build-failed"
+                passed, failed = 0, 0
+                break
+
+            log.info("Attempting ctest in %s", build_dir)
+            result = subprocess.run(
+                ["ctest", "--output-on-failure", "-j4"],
+                capture_output=True, text=True,
+                timeout=timeout_ctest, cwd=build_dir,
+            )
+            test_output = (result.stdout or "") + "\n" + (result.stderr or "")
+            result_returncode = result.returncode
+            test_runner = "ctest"
+            passed, failed = _parse_ctest_counts(result.stdout or "")
+            log.info(
+                "ctest: returncode=%d, passed=%d, failed=%d",
+                result.returncode, passed, failed,
+            )
+            break
+        except FileNotFoundError:
+            log.info("ctest not found")
+        except subprocess.TimeoutExpired:
+            test_output = "TIMEOUT: ctest exceeded %ds" % timeout_ctest
+            test_runner = "ctest-timeout"
+            log.warning("ctest timed out")
+            break
+
+    # 3a. Try Unity test runner (tests/unity/)
+    unity_dir = project_dir / "tests" / "unity"
+    if unity_dir.exists() and (unity_dir / "Makefile").exists():
+        try:
+            log.info("Attempting Unity test runner at %s", unity_dir)
+            result = subprocess.run(
+                ["make", "-C", str(unity_dir)],
+                capture_output=True, text=True, timeout=120,
+            )
+            test_output = (result.stdout or "") + "\n" + (result.stderr or "")
+            result_returncode = result.returncode
+            test_runner = "unity"
+            passed, failed = _parse_unity_counts(test_output)
+            log.info(
+                "Unity tests: returncode=%d, passed=%d, failed=%d",
+                result.returncode, passed, failed,
+            )
+        except FileNotFoundError:
+            log.info("make not found, cannot run Unity tests")
+        except subprocess.TimeoutExpired:
+            test_output = "TIMEOUT: Unity tests exceeded 120s"
+            test_runner = "unity-timeout"
+            log.warning("Unity tests timed out")
+
+    # 3b. Try Ceedling
+    if test_runner == "none" and (project_dir / "project.yml").exists():
+        try:
+            log.info("Attempting Ceedling test runner")
+            result = subprocess.run(
+                ["ceedling", "test:all"],
+                capture_output=True, text=True, timeout=180,
+                cwd=project_dir,
+            )
+            test_output = (result.stdout or "") + "\n" + (result.stderr or "")
+            result_returncode = result.returncode
+            test_runner = "ceedling"
+            passed, failed = _parse_ceedling_counts(test_output)
+            log.info(
+                "Ceedling tests: returncode=%d, passed=%d, failed=%d",
+                result.returncode, passed, failed,
+            )
+        except FileNotFoundError:
+            log.info("ceedling not found")
+        except subprocess.TimeoutExpired:
+            test_output = "TIMEOUT: Ceedling tests exceeded 180s"
+            test_runner = "ceedling-timeout"
+            log.warning("Ceedling tests timed out")
+
+    # 3c. Fallback: gcc compile test of discovered test files
+    if test_runner == "none" and c_test_files:
+        try:
+            log.info("Attempting GCC compile test of %d test file(s)", len(c_test_files))
+            src_files = [str(f) for f in c_test_files]
+            unity_src = unity_dir / "src" / "unity.c"
+            if unity_src.exists():
+                src_files.append(str(unity_src))
+                inc_flags = ["-I", str(unity_dir / "src")]
+            else:
+                inc_flags = []
+
+            for inc_dir in sorted(_collect_include_dirs(project_dir)):
+                if f"-I{inc_dir}" not in inc_flags:
+                    inc_flags.append(f"-I{inc_dir}")
+
+            tmp_runner = os.path.join(
+                tempfile.gettempdir(),
+                f"c_test_runner_{os.getpid()}_{id(project_dir)}"
+            )
+            result = subprocess.run(
+                ["gcc", "-o", tmp_runner]
+                + src_files
+                + inc_flags
+                + ["-lunity", "-lm", "-Wall", "-Wextra"],
+                capture_output=True, text=True, timeout=60,
+            )
+            test_output = (result.stdout or "") + "\n" + (result.stderr or "")
+            result_returncode = result.returncode
+            test_runner = "gcc-compile-check"
+            passed = 0
+            failed = 0 if result.returncode == 0 else len(c_test_files)
+            log.info("GCC compile check: returncode=%d", result.returncode)
+            try:
+                if os.path.exists(tmp_runner):
+                    os.unlink(tmp_runner)
+            except OSError:
+                pass
+        except FileNotFoundError:
+            log.info("gcc not found, cannot compile test")
+        except subprocess.TimeoutExpired:
+            test_output = "TIMEOUT: GCC compile check exceeded 60s"
+            test_runner = "gcc-compile-timeout"
+            log.warning("GCC compile check timed out")
+
+    # 4. Determine status
+    if test_runner == "none":
+        status = "unknown"
+    elif result_returncode is not None and result_returncode != 0:
+        status = "failed"
+    elif failed > 0:
+        status = "failed"
+    else:
+        status = "passed"
+
+    return {
+        "runner": test_runner,
+        "returncode": result_returncode,
+        "output": test_output[:3000],
+        "passed": passed,
+        "failed": failed,
+        "status": status,
+        "c_files": len(c_files),
+        "c_test_files": len(c_test_files),
+        "c_header_files": len(c_header_files),
+    }
+
+
+
 def step_c_unit_test(session: PipelineSession) -> str:
     """Step: 小克 — C 单元测试 (Unity/Ceedling).
 
@@ -38,6 +272,9 @@ def step_c_unit_test(session: PipelineSession) -> str:
       3. Fallback: gcc compile check of *test*.c files
 
     If no C source files are found, the step is skipped (not failed).
+
+    2026-08-13: runner 逻辑提取到 :func:`run_c_test_suite` — codegen-deploy
+    的行为护栏复用同一套测试执行, 保证部署前后对比口径一致。
     """
     try:
         print("  📋 [小克] C 单元测试开始...")
@@ -46,10 +283,6 @@ def step_c_unit_test(session: PipelineSession) -> str:
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
 
         # ── Mock mode: skip real test run ──────────────────────────
-        # In --mock runs the LLM emits placeholder code; compiling every
-        # *test*.c in the project would fail on missing headers and block
-        # the demo/CI smoke. Record a SKIPPED report and pass.
-        # Strict `is True` keeps MagicMock sessions honest.
         if getattr(session, "mock_mode", None) is True:
             report = {
                 "step": "c-unit-test",
@@ -69,226 +302,44 @@ def step_c_unit_test(session: PipelineSession) -> str:
             log.info("C unit test skipped: mock mode")
             return str(out_path)
 
-        # 1. Check for C source files
-        c_files = list(project_dir.rglob("*.c"))
-        c_header_files = list(project_dir.rglob("*.h"))
-        log.info("Found %d .c files and %d .h files", len(c_files), len(c_header_files))
+        result = run_c_test_suite(project_dir)
+        c_files = result["c_files"]
+        c_test_files = result["c_test_files"]
+        test_runner = result["runner"]
+        result_returncode = result["returncode"]
+        test_output = result["output"]
+        passed = result["passed"]
+        failed = result["failed"]
+        status = result["status"]
 
-        if not c_files:
-            # No C files — skip gracefully
+        if test_runner == "none":
             report = {
                 "step": "c-unit-test",
                 "agent": "小克",
                 "session": session.name,
                 "timestamp": __import__("datetime").datetime.now().isoformat(),
                 "status": "skipped",
-                "reason": "No C source files found",
-                "c_files": 0,
-                "c_test_files": 0,
+                "reason": "No C source files found" if c_files == 0
+                         else "No test runner available (ctest/unity/ceedling/gcc)",
+                "c_files": c_files,
+                "c_test_files": len(c_test_files),
                 "test_runner": "none",
             }
             out_path = session.session_dir / "c-unit-test.json"
             with open(out_path, "w") as f:
                 json.dump(report, f, indent=2, ensure_ascii=False)
-            print("  ⏭️  [小克] 跳过 C 单元测试 — 项目无 C 源码")
-            log.info("C unit test skipped: no C source files")
+            print("  ⏭️  [小克] 跳过 C 单元测试 — 无测试框架")
+            log.info("C unit test skipped: no test runner")
             return str(out_path)
 
-        # 2. Find C test files
-        c_test_files = (
-            list(project_dir.rglob("*test*.c")) +
-            list(project_dir.rglob("*Test*.c")) +
-            list(project_dir.rglob("*_test.c")) +
-            list(project_dir.rglob("*_tst.c"))
-        )
-        c_test_files = list(set(c_test_files))  # deduplicate
-        log.info("Found %d C test files", len(c_test_files))
-
-        # Try runners in priority order
-        test_output = ""
-        result_returncode = None
-        test_runner = "none"
-        passed = 0
-        failed = 0
-
-        # 3a0. Try ctest first — CMake projects define real buildable tests.
-        # The gcc-compile-check fallback below only compiles *test*.c files
-        # without linking the implementation, so it fails on any test that
-        # exercises app code (undefined symbols). ctest builds the real
-        # target graph and runs the registered tests.
-        cmake_build_dirs = (
-            list(project_dir.glob("build")) +
-            list(project_dir.glob("cmake-build-*"))
-        )
-        for build_dir in cmake_build_dirs:
-            ctest_cfg = build_dir / "CTestTestfile.cmake"
-            if not ctest_cfg.exists():
-                continue
-            try:
-                # Rebuild before ctest: ctest on a stale build validates
-                # stale binaries (codegen-deploy may have replaced src/).
-                # Incremental cmake build is cheap; only skips when up-to-date.
-                log.info("Rebuilding %s before ctest", build_dir)
-                build_result = subprocess.run(
-                    ["cmake", "--build", str(build_dir), "-j4"],
-                    capture_output=True, text=True,
-                    timeout=300, cwd=build_dir,
-                )
-                if build_result.returncode != 0:
-                    log.warning(
-                        "Build failed in %s (rc=%d): %s",
-                        build_dir, build_result.returncode,
-                        (build_result.stderr or build_result.stdout)[-500:],
-                    )
-                    test_output = (build_result.stderr or build_result.stdout)[-1000:]
-                    result_returncode = build_result.returncode
-                    test_runner = "ctest-build-failed"
-                    passed, failed = 0, 0
-                    break
-
-                log.info("Attempting ctest in %s", build_dir)
-                result = subprocess.run(
-                    ["ctest", "--output-on-failure", "-j4"],
-                    capture_output=True, text=True,
-                    timeout=300, cwd=build_dir,
-                )
-                test_output = (result.stdout or "") + "\n" + (result.stderr or "")
-                result_returncode = result.returncode
-                test_runner = "ctest"
-                passed, failed = _parse_ctest_counts(result.stdout or "")
-                log.info(
-                    "ctest: returncode=%d, passed=%d, failed=%d",
-                    result.returncode, passed, failed,
-                )
-                break
-            except FileNotFoundError:
-                log.info("ctest not found")
-            except subprocess.TimeoutExpired:
-                test_output = "TIMEOUT: ctest exceeded 300s"
-                test_runner = "ctest-timeout"
-                log.warning("ctest timed out")
-                break
-
-        # 3a. Try Unity test runner (tests/unity/)
-        unity_dir = project_dir / "tests" / "unity"
-        if unity_dir.exists() and (unity_dir / "Makefile").exists():
-            try:
-                log.info("Attempting Unity test runner at %s", unity_dir)
-                result = subprocess.run(
-                    ["make", "-C", str(unity_dir)],
-                    capture_output=True, text=True, timeout=120,
-                )
-                test_output = (result.stdout or "") + "\n" + (result.stderr or "")
-                result_returncode = result.returncode
-                test_runner = "unity"
-                passed, failed = _parse_unity_counts(test_output)
-                log.info(
-                    "Unity tests: returncode=%d, passed=%d, failed=%d",
-                    result.returncode, passed, failed,
-                )
-            except FileNotFoundError:
-                log.info("make not found, cannot run Unity tests")
-            except subprocess.TimeoutExpired:
-                test_output = "TIMEOUT: Unity tests exceeded 120s"
-                test_runner = "unity-timeout"
-                log.warning("Unity tests timed out")
-
-        # 3b. Try Ceedling
-        if test_runner == "none" and (project_dir / "project.yml").exists():
-            try:
-                log.info("Attempting Ceedling test runner")
-                result = subprocess.run(
-                    ["ceedling", "test:all"],
-                    capture_output=True, text=True, timeout=180,
-                    cwd=project_dir,
-                )
-                test_output = (result.stdout or "") + "\n" + (result.stderr or "")
-                result_returncode = result.returncode
-                test_runner = "ceedling"
-                passed, failed = _parse_ceedling_counts(test_output)
-                log.info(
-                    "Ceedling tests: returncode=%d, passed=%d, failed=%d",
-                    result.returncode, passed, failed,
-                )
-            except FileNotFoundError:
-                log.info("ceedling not found")
-            except subprocess.TimeoutExpired:
-                test_output = "TIMEOUT: Ceedling tests exceeded 180s"
-                test_runner = "ceedling-timeout"
-                log.warning("Ceedling tests timed out")
-
-        # 3c. Fallback: gcc compile test of discovered test files
-        if test_runner == "none" and c_test_files:
-            try:
-                log.info("Attempting GCC compile test of %d test file(s)", len(c_test_files))
-                src_files = [str(f) for f in c_test_files]
-                # Include unity submodule if available
-                unity_src = unity_dir / "src" / "unity.c"
-                if unity_src.exists():
-                    src_files.append(str(unity_src))
-                    inc_flags = ["-I", str(unity_dir / "src")]
-                else:
-                    inc_flags = []
-
-                # Auto-collect project include dirs (any dir containing .h)
-                # so multi-directory projects compile without manual -I flags.
-                # This mirrors the fix in verify_c: bare `gcc -fsyntax-only`
-                # without -I fails on every multi-dir project.
-                for inc_dir in sorted(_collect_include_dirs(project_dir)):
-                    if f"-I{inc_dir}" not in inc_flags:
-                        inc_flags.append(f"-I{inc_dir}")
-
-                # Use a unique temp path per run (fix: $$ literal vs PID expansion)
-                tmp_runner = os.path.join(
-                    tempfile.gettempdir(),
-                    f"c_test_runner_{os.getpid()}_{id(session)}"
-                )
-                result = subprocess.run(
-                    ["gcc", "-o", tmp_runner]
-                    + src_files
-                    + inc_flags
-                    + ["-lunity", "-lm", "-Wall", "-Wextra"],
-                    capture_output=True, text=True, timeout=60,
-                )
-                test_output = (result.stdout or "") + "\n" + (result.stderr or "")
-                result_returncode = result.returncode
-                test_runner = "gcc-compile-check"
-                passed = 0
-                failed = 0 if result.returncode == 0 else len(c_test_files)
-                log.info(
-                    "GCC compile check: returncode=%d", result.returncode,
-                )
-                # Clean up the temp binary
-                try:
-                    if os.path.exists(tmp_runner):
-                        os.unlink(tmp_runner)
-                except OSError:
-                    pass
-            except FileNotFoundError:
-                log.info("gcc not found, cannot compile test")
-            except subprocess.TimeoutExpired:
-                test_output = "TIMEOUT: GCC compile check exceeded 60s"
-                test_runner = "gcc-compile-timeout"
-                log.warning("GCC compile check timed out")
-
-        # 4. Determine status
-        if test_runner == "none":
-            status = "unknown"
-        elif result_returncode is not None and result_returncode != 0:
-            status = "failed"
-        elif failed > 0:
-            status = "failed"
-        else:
-            status = "passed"
-
-        # 5. Generate report
+        # Generate report
         report = {
             "step": "c-unit-test",
             "agent": "小克",
             "session": session.name,
             "timestamp": __import__("datetime").datetime.now().isoformat(),
-            "c_files": len(c_files),
-            "c_header_files": len(c_header_files),
+            "c_files": c_files,
+            "c_header_files": result["c_header_files"],
             "c_test_files": len(c_test_files),
             "test_runner": test_runner,
             "returncode": result_returncode,
@@ -310,11 +361,11 @@ def step_c_unit_test(session: PipelineSession) -> str:
         print(
             f"  {status_icon.get(status, '❓')} [小克] C 单元测试完成 "
             f"(runner={test_runner}, {passed} passed, {failed} failed, "
-            f"{len(c_files)} C files)"
+            f"{c_files} C files)"
         )
         log.info(
             "C unit test: runner=%s, passed=%d, failed=%d, C files=%d",
-            test_runner, passed, failed, len(c_files),
+            test_runner, passed, failed, c_files,
         )
 
         return str(out_path)
