@@ -140,6 +140,10 @@ class MisraConfig:
 
     enabled: bool = True
     addon: str = DEFAULT_MISRA_ADDON  # 'misra' or 'misra-c-2023' or 'misra-c-2012'
+    # cppcheck --enable 级别。默认 'all'（含 unusedFunction/staticFunction，
+    # 跨 TU 分析；对库项目会误报 API 函数未使用）。库项目可配置
+    # 'warning,style' 关闭 unusedFunction 类检查。
+    enable: str = "all"
     fail_on_required: bool = True  # G-09: Required violations block pipeline by default
     fail_on_violation: bool = False  # G-09: Deprecated — use fail_on_required for Required, fail_on_advisory for Advisory
     fail_on_advisory: bool = False
@@ -399,6 +403,7 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
     if isinstance(misra_block, dict):
         cfg.misra.enabled = bool(misra_block.get("enabled", True))
         cfg.misra.addon = str(misra_block.get("addon", DEFAULT_MISRA_ADDON))
+        cfg.misra.enable = str(misra_block.get("enable", "all"))
         cfg.misra.fail_on_required = bool(misra_block.get("fail_on_required", True))
         cfg.misra.fail_on_violation = bool(misra_block.get("fail_on_violation", False))
         cfg.misra.fail_on_advisory = bool(misra_block.get("fail_on_advisory", False))
