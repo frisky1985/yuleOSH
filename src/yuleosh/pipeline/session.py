@@ -135,6 +135,8 @@ class PipelineSession:
         # pipeline_knowledge_step_key — current step key (set by orchestrator).
         # pipeline_knowledge_config — cached .yuleosh/pipeline-knowledge.yaml.
         self.pipeline_knowledge_step_key: str = ""
+        # 断点续跑 (2026-08-12): --from-step N 时记录起点 (0 = 从头跑)。
+        self.from_step: int = 0
         # Type is yuleosh.pipeline.knowledge_injection.PipelineKnowledgeConfig
         # (avoid import cycle; cached by _call_llm on first use).
         self.pipeline_knowledge_config: object = None

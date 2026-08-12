@@ -377,11 +377,16 @@ def notify_pipeline(name: str, status: str, total_steps: int, completed_steps: i
     Sends to all enabled channels (Feishu, email, webhook).
     """
     errors = errors or []
+    # 三色分级 (2026-08-12): completed+0 errors → green; completed+errors → yellow
     is_success = status == "completed"
+    has_errors = bool(errors)
 
-    if is_success:
+    if is_success and not has_errors:
         title = "✅ yuleOSH Pipeline Completed"
         color = "green"
+    elif is_success:
+        title = "🟡 yuleOSH Pipeline Completed (with verdict failures)"
+        color = "yellow"
     else:
         title = "❌ yuleOSH Pipeline Failed"
         color = "red"

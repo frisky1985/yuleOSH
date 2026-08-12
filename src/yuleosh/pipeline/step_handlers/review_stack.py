@@ -480,6 +480,12 @@ def step_review_stack(session: PipelineSession) -> str:
     a structured report. Blocks when ≥95% utilization detected (DEF-007).
     """
     print("  🔍 [小克] 堆栈使用分析...")
+    # ── 审查锚定 (2026-08-12): 本次 run 无代码部署 → honest skip ──
+    from yuleosh.pipeline.deploy_state import maybe_skip_code_review
+    _deploy_skip = maybe_skip_code_review(session, 'review-stack', reviewer="小克")
+    if _deploy_skip:
+        print(f"  ⏭️  [小克] 堆栈分析跳过 — 本次 run 无代码部署")
+        return _deploy_skip
 
     spec_path = Path(session.spec_path)
     project_dir = spec_path.parent

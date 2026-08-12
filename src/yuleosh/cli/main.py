@@ -192,6 +192,8 @@ def _build_parser() -> argparse.ArgumentParser:
     psub = p_pipe.add_subparsers(dest="pipeline_sub")
     p_pipe_run = psub.add_parser("run", help="Run the full Agent pipeline")
     p_pipe_run.add_argument("--mock", action="store_true", help="Run in mock mode (no real LLM)")
+    p_pipe_run.add_argument("--from-step", type=int, default=0,
+                            help="Resume from step N (restores prior artifacts from last run)")
     p_pipe_run.add_argument("spec", help="Specification file path")
     p_pipe_status = psub.add_parser("status", help="Show pipeline status")
     p_pipe_status.add_argument("name", nargs="?", help="Pipeline session name")
@@ -585,7 +587,7 @@ def main():
 
     elif args.command == "pipeline":
         if args.pipeline_sub == "run":
-            cmd_pipeline_run(args.spec, mock=args.mock)
+            cmd_pipeline_run(args.spec, mock=args.mock, from_step=getattr(args, "from_step", 0))
         elif args.pipeline_sub == "status":
             cmd_pipeline_status(args.name)
         else:

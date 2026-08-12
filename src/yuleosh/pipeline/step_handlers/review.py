@@ -46,6 +46,13 @@ def step_hermes_review(session: PipelineSession) -> str:
                 "mock mode — no real code to review",
             )
 
+        # ── 审查锚定 (2026-08-12): 本次 run 无代码部署 → honest skip ──
+        from yuleosh.pipeline.deploy_state import maybe_skip_code_review
+        _deploy_skip = maybe_skip_code_review(session, 'code-review', reviewer="小克")
+        if _deploy_skip:
+            print(f"  ⏭️  [小克] 集成代码审查跳过 — 本次 run 无代码部署")
+            return _deploy_skip
+
         log.info("Running AI-powered code review")
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
@@ -63,17 +70,37 @@ def step_hermes_review(session: PipelineSession) -> str:
                     artifact_contents[key] = ap.read_text()
 
         # --- Scan actual source files ---
-        source_files = []
+        # 审查锚定 + diff 聚焦 (2026-08-12): 有部署时只喂本次部署的变更文件
+        # (deployed_files 来自 codegen-deploy.json), 省 token 且审查对象是
+        # 「本次 run 引入的代码」而非整个 src/ 基线。兼容 .c/.h 嵌入式项目
+        # (旧实现只扫 .py → C 项目 LLM 审查输入恒空)。
+        from yuleosh.pipeline.deploy_state import deployed_files as _deployed_files
+        _deployed = set(_deployed_files(project_dir))
+        _candidates: list[Path] = []
         src_dir = project_dir / "src"
         if src_dir.exists():
             for root, dirs, files in os.walk(src_dir):
                 dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
                 for f in sorted(files):
-                    if f.endswith(".py"):
-                        fpath = Path(root) / f
-                        rel = fpath.relative_to(project_dir)
-                        content = fpath.read_text() if fpath.exists() and fpath.stat().st_size < 20000 else ""
-                        source_files.append({"path": str(rel), "lines": len(content.splitlines()), "content": content[:3000]})
+                    if f.endswith((".py", ".c", ".h")):
+                        _candidates.append(Path(root) / f)
+        if _deployed:
+            _selected = [
+                p for p in _candidates
+                if str(p.relative_to(project_dir)) in _deployed
+            ]
+            if not _selected:
+                # 部署文件不在 src/ 下 → 回退全量（避免审查输入空）
+                log.info("code-review: deployed files not under src/ — "
+                         "falling back to full src scan")
+                _selected = _candidates
+        else:
+            _selected = _candidates
+        source_files = []
+        for fpath in _selected:
+            rel = str(fpath.relative_to(project_dir))
+            content = fpath.read_text() if fpath.exists() and fpath.stat().st_size < 20000 else ""
+            source_files.append({"path": rel, "lines": len(content.splitlines()), "content": content[:3000]})
 
         # --- Build LLM prompt ---
         system_prompt, user_prompt = build_code_review_prompt(

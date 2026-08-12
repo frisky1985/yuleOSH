@@ -1173,6 +1173,13 @@ def step_review_bsp(session: PipelineSession) -> str:
     """
     try:
         print("  🧩 [小克] BSP 板级支持包验证开始...")
+        # ── 审查锚定 (2026-08-12): 本次 run 无代码部署 → honest skip ──
+        from yuleosh.pipeline.deploy_state import maybe_skip_code_review
+        _deploy_skip = maybe_skip_code_review(session, 'review-bsp', reviewer="小克")
+        if _deploy_skip:
+            print(f"  ⏭️  [小克] BSP 验证跳过 — 本次 run 无代码部署")
+            return _deploy_skip
+
         log.info("Running BSP validation")
 
         project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()

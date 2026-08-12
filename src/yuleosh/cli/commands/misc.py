@@ -541,10 +541,10 @@ def cmd_spec_diff(old: str, new: str):
         sys.exit(1)
 
 
-def cmd_pipeline_run(spec_path: str, mock: bool = False):
+def cmd_pipeline_run(spec_path: str, mock: bool = False, from_step: int = 0):
     from yuleosh.pipeline.run import run_pipeline
 
-    session = run_pipeline(spec_path, mock=mock)
+    session = run_pipeline(spec_path, mock=mock, from_step=from_step)
     sys.exit(0 if session.status == "completed" else 1)
 
 
