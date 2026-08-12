@@ -8,6 +8,7 @@
   B5 (2️⃣): 无部署 / 无备份 / 非行为门禁 → 不联动 (返回 {})
   B6 (4️⃣): OSH_GUARD_PROTECT_SRC=1 且 src 有 git 未提交改动 → 跳过部署
   B7 (4️⃣): not_verified_reason 显式化
+  B8 (3️⃣): PytestRunner / GoRunner 真实执行 + 结果解析
 """
 
 import json
@@ -21,7 +22,10 @@ import pytest
 
 from yuleosh.pipeline.deploy_state import has_deployed_code
 from yuleosh.pipeline.guardrail import (
+    CCTestRunner,
     ChangeSet,
+    GoRunner,
+    PytestRunner,
     TestResult,
     backup_dir,
     find_latest_change_set,
@@ -407,3 +411,62 @@ class TestNotVerifiedExplicit:
         guard = report["behavior_guardrail"]
         assert guard["verdict"] == "not_verified"
         assert "guard disabled" in (guard["not_verified_reason"] or "")
+
+
+class TestPyGoRunners:
+    """B8: PytestRunner / GoRunner (3️⃣)。"""
+
+    def _py_project(self, tmp_path, test_body: str) -> Path:
+        proj = tmp_path
+        (proj / "tests").mkdir(parents=True)
+        (proj / "tests" / "test_demo.py").write_text(test_body, encoding="utf-8")
+        return proj
+
+    def test_pytest_runner_passes(self, tmp_path):
+        proj = self._py_project(tmp_path,
+            "def test_ok():\n    assert 1 + 1 == 2\n"
+            "def test_ok2():\n    assert 2 * 2 == 4\n")
+        result = PytestRunner().run(proj)
+        assert result.status == "passed"
+        assert result.passed == 2
+        assert result.failed == 0
+
+    def test_pytest_runner_fails(self, tmp_path):
+        proj = self._py_project(tmp_path,
+            "def test_ok():\n    assert 1 + 1 == 2\n"
+            "def test_bad():\n    assert 1 + 1 == 3\n")
+        result = PytestRunner().run(proj)
+        assert result.status == "failed"
+        assert result.passed == 1
+        assert result.failed == 1
+
+    def test_pytest_runner_no_tests_dir(self, tmp_path):
+        result = PytestRunner().run(tmp_path)  # 无 tests/ 目录
+        # pytest 会报 error (no tests) — 如实 failed 或 unknown
+        assert result.status in ("failed", "unknown")
+
+    def test_go_runner_skips_without_gomod(self, tmp_path):
+        result = GoRunner().run(tmp_path)
+        assert result.status == "skipped"
+        assert "No go.mod" in result.output
+
+    @pytest.mark.skipif(shutil.which("go") is None, reason="go not installed")
+    def test_go_runner_passes(self, tmp_path):
+        proj = tmp_path
+        (proj / "go.mod").write_text("module demo\n\ngo 1.21\n", encoding="utf-8")
+        (proj / "demo_test.go").write_text(
+            "package demo\n\nimport \"testing\"\n\n"
+            "func TestOk(t *testing.T) { if 1+1 != 2 { t.Fail() } }\n",
+            encoding="utf-8",
+        )
+        result = GoRunner().run(proj)
+        assert result.status == "passed"
+        assert result.failed == 0
+
+    def test_cctest_runner_protocol_compliance(self, tmp_path):
+        """TestRunner 协议: CCTestRunner/PytestRunner/GoRunner 都有 name + run。"""
+        for runner in (CCTestRunner(), PytestRunner(), GoRunner()):
+            assert runner.name
+            r = runner.run(tmp_path)
+            assert isinstance(r, TestResult)
+            assert r.status in ("passed", "failed", "skipped", "unknown")

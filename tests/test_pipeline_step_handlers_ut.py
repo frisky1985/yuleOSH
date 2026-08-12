@@ -32,6 +32,7 @@ def mock_session(tmp_path):
         name="test-c-unit",
         spec_path=str(spec_file),
     )
+    session.project_dir = tmp_path
     session.session_dir = tmp_path / ".osh" / "sessions" / "test-c-unit"
     session.session_dir.mkdir(parents=True, exist_ok=True)
     return session
@@ -229,7 +230,7 @@ class TestStepCUnitTest:
         report = json.loads(Path(result).read_text())
 
         assert report["test_runner"] == "none"
-        assert report["status"] == "unknown"
+        assert report["status"] == "skipped"  # 无测试框架 = 跳过 (不阻塞)
 
     # ── Unity timeout ──────────────────────────────────────────────────────
 
@@ -265,9 +266,15 @@ class TestStepCUnitTest:
         (src / "code.c").write_text("")
         (src / "header.h").write_text("")
         (src / "config.h").write_text("")
+        # 需要一个 test 文件才能触发 gcc-compile-check fallback
+        (src / "test_code.c").write_text("")
 
-        # Make all subprocess calls fail
-        mock_subproc.side_effect = FileNotFoundError()
+        # gcc compile check 成功 → 完整 report (含 c_header_files)
+        mock_subproc.return_value = MagicMock(
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
 
         result = step_c_unit_test(mock_session)
         report = json.loads(Path(result).read_text())
@@ -293,13 +300,12 @@ class TestStepCUnitTest:
 
     # ── Exception wrapping ─────────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
-    def test_exception_wrapping(self, mock_environ, mock_session):
-        """GIVEN an unexpected exception occurs during setup
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.run_c_test_suite",
+           side_effect=RuntimeError("Unexpected failure"))
+    def test_exception_wrapping(self, mock_runner, mock_session):
+        """GIVEN an unexpected exception occurs during test execution
            WHEN step_c_unit_test runs
            THEN it is wrapped in PipelineStepError."""
-        mock_environ.get.side_effect = RuntimeError("Unexpected failure")
-
         with pytest.raises(PipelineStepError, match="C unit test step failed"):
             step_c_unit_test(mock_session)
 
