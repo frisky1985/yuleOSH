@@ -160,6 +160,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
     violations_per_kloc = misra_cfg.violations_per_kloc if misra_cfg else 2.0
     addon = misra_cfg.addon if misra_cfg else "misra"
     cppcheck_std = misra_cfg.cppcheck_std if misra_cfg else "c11"
+    enable = getattr(misra_cfg, "enable", "all") if misra_cfg else "all"
     suppress_rules = misra_cfg.suppress_rules if misra_cfg else []
     rule_overrides = misra_cfg.rule_overrides if misra_cfg else []
     deviations = misra_cfg.deviations if misra_cfg else []
@@ -399,7 +400,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
         "--addon=" + addon_arg,
         "--language=c",
         "--std=" + cppcheck_std,
-        "--enable=all",
+        "--enable=" + enable,
         "--suppress=missingIncludeSystem",
         "--suppress=missingInclude",
         "--suppress=normalCheckLevelMaxBranches",
@@ -708,6 +709,38 @@ def run_misra_check(project_dir: str, ci: CIResult,
             _v["code_category"] = file_category_map.get(_vfa, "business")
         business_violations_c = [v for v in _current_violations if v.get("code_category", "") == "business"]
         third_party_violations_c = [v for v in _current_violations if v.get("code_category", "") == "third_party"]
+
+        # Approved deviations exempt matching violations from gate counts.
+        # (报告层 compute_summary_stats 已扣减，但 fail_threshold / violations_per_kloc
+        #  门禁判定必须与报告语义一致，否则 approved deviation 无法通过门禁。)
+        if deviations:
+            try:
+                from yuleosh.ci.misra_report.deviation import _match_deviation as _match_dev
+                _approved_devs = [d for d in deviations
+                                  if getattr(d, "status", None) in (None, "", "approved", "pending") or
+                                  (isinstance(d, dict) and d.get("status") in (None, "", "approved", "pending"))]
+                _filtered = []
+                for _v in business_violations_c:
+                    _vfile = _v.get("file", "")
+                    # fnmatch 不递归匹配 '/'：必须用相对项目路径匹配 file_pattern
+                    _vfile_rel = _vfile
+                    if os.path.isabs(_vfile):
+                        try:
+                            _vfile_rel = os.path.relpath(_vfile, project_dir)
+                        except ValueError:
+                            _vfile_rel = _vfile
+                    _vrule = _v.get("rule_id")
+                    _matched = False
+                    if _vrule:
+                        _matched, _ = _match_dev(str(_vrule), _vfile_rel, _approved_devs)
+                    if not _matched:
+                        _filtered.append(_v)
+                if len(_filtered) != len(business_violations_c):
+                    log.info("MISRA deviations exempted %d violation(s) from gate counts",
+                             len(business_violations_c) - len(_filtered))
+                business_violations_c = _filtered
+            except Exception as _dev_e:
+                log.warning("MISRA deviation gate exemption failed (continuing without): %s", _dev_e)
     except (ValueError, KeyError, TypeError) as classif_e:
         # P2: 分类失败不得静默放行 —— 留 warning 日志 + 置 flag，
         # 由下方 0d fail-safe 阻断兜底（无法枚举违规时按 business 违规阻断）。

@@ -170,6 +170,7 @@ class _MisraRunCtx:
         self.misra_fail_fast = misra_fail_fast
         self.stack = ExitStack()
         self.mocks = {}
+        self.recorded_cmds: list[list[str]] = []
 
     def __enter__(self):
         s = self.stack
@@ -177,6 +178,7 @@ class _MisraRunCtx:
             "yuleosh.ci.stages.review_misra._get_ci_config", return_value=self.cfg))
 
         def _run(cmd, *args, **kwargs):
+            self.recorded_cmds.append(list(cmd))
             if cmd and cmd[0] == "git":
                 if self.git_exc is not None:
                     raise self.git_exc
@@ -1429,3 +1431,136 @@ class TestRunDocsyncGate:
                            side_effect=OSError("readonly")):
             assert run_docsync_gate(str(tmp_path), ci) is True
         assert ci.stages[-1]["status"] == "passed"
+
+
+# ===========================================================================
+# review_misra.py — misra.enable 配置（cppcheck --enable 级别）
+# ===========================================================================
+
+
+class TestMisraEnableConfig:
+    """misra.enable 配置: 默认 all（向后兼容），YAML 可配置，cmd 正确传递。"""
+
+    def test_misra_config_enable_default(self):
+        """MisraConfig.enable 默认 'all'（向后兼容）。"""
+        from yuleosh.ci.config import MisraConfig
+        cfg = MisraConfig()
+        assert cfg.enable == "all"
+
+    def test_parse_enable_from_yaml(self):
+        """YAML misra.enable → cfg.misra.enable。"""
+        from yuleosh.ci.config import _parse_ci_config
+        cfg = _parse_ci_config({"misra": {"enable": "warning,style"}})
+        assert cfg.misra.enable == "warning,style"
+
+    def test_parse_enable_default_when_missing(self):
+        """YAML 未提供 enable → 'all'。"""
+        from yuleosh.ci.config import _parse_ci_config
+        cfg = _parse_ci_config({"misra": {"enabled": True}})
+        assert cfg.misra.enable == "all"
+
+    def test_run_misra_check_passes_enable_to_cppcheck(self, tmp_path):
+        """cfg.misra.enable='warning,style' → cppcheck cmd 带 --enable=warning,style。"""
+        proj, cfile = _make_project(tmp_path)
+        cfg = CiConfig()
+        cfg.misra = MisraConfig(enable="warning,style")
+        ci = CIResult(2, "abc")
+        with _MisraRunCtx(cfg=cfg) as ctx:
+            result = run_misra_check(str(proj), ci, mode="full",
+                                     target_files=[cfile])
+        assert result is True
+        cppcheck_cmds = [c for c in ctx.recorded_cmds
+                         if c and c[0] == "cppcheck"]
+        assert cppcheck_cmds
+        assert any(a == "--enable=warning,style" for a in cppcheck_cmds[0])
+
+    def test_run_misra_check_default_enable_all(self, tmp_path):
+        """默认配置 → cppcheck cmd 仍带 --enable=all（向后兼容）。"""
+        proj, cfile = _make_project(tmp_path)
+        cfg = CiConfig()  # MisraConfig() 默认 enable='all'
+        ci = CIResult(2, "abc")
+        with _MisraRunCtx(cfg=cfg) as ctx:
+            result = run_misra_check(str(proj), ci, mode="full",
+                                     target_files=[cfile])
+        assert result is True
+        cppcheck_cmds = [c for c in ctx.recorded_cmds
+                         if c and c[0] == "cppcheck"]
+        assert cppcheck_cmds
+        assert any(a == "--enable=all" for a in cppcheck_cmds[0])
+
+
+# ===========================================================================
+# review_misra.py — approved deviations 门禁豁免
+# ===========================================================================
+
+
+def _advisory_violation(rule_id: str | None = "misra-c2023-10.1", file="src/main.c", line=5):
+    return _violation(rule_id=rule_id, file=file, line=line,
+                      severity="advisory", severity_category="advisory")
+
+
+class TestMisraDeviationGateExemption:
+    """approved deviations 必须在门禁层豁免（与报告层语义一致）。"""
+
+    def test_approved_deviation_exempts_threshold(self, tmp_path):
+        """15 advisory（10 条 Rule-8.7 豁免 + 5 条 Rule-10.1）→ 门禁按 5 判定通过。"""
+        proj, cfile = _make_project(tmp_path)
+        cfg = CiConfig()
+        cfg.misra = MisraConfig(
+            fail_threshold=10,
+            violations_per_kloc=2.0,
+            deviations=[
+                MisraDeviation(rule_id="Rule-8.7", file_pattern="src/**", status="approved",
+                               reason="lib api", approved_by="test",
+                               expires="2099-12-31"),
+            ],
+        )
+        viols = [_advisory_violation(rule_id="misra-c2023-8.7") for _ in range(10)]
+        viols += [_advisory_violation(rule_id="misra-c2023-10.1") for _ in range(5)]
+        ci = CIResult(2, "abc")
+        with _MisraRunCtx(cfg=cfg, violations=viols,
+                          summary=_default_summary(total=15, advisory=15)):
+            result = run_misra_check(str(proj), ci, mode="full",
+                                     target_files=[cfile])
+        # 报告层 15，门禁层豁免后 5 < 10 → 不阻断
+        assert result is True
+        assert ci.stages[-1]["status"] == "warning"
+
+    def test_without_deviation_blocks_at_threshold(self, tmp_path):
+        """对照组: 同样 15 条但无 deviation → 15 >= 10 → 阻断。"""
+        proj, cfile = _make_project(tmp_path)
+        cfg = CiConfig()
+        cfg.misra = MisraConfig(fail_threshold=10, violations_per_kloc=2.0)
+        viols = [_advisory_violation(rule_id="misra-c2023-8.7") for _ in range(10)]
+        viols += [_advisory_violation(rule_id="misra-c2023-10.1") for _ in range(5)]
+        ci = CIResult(2, "abc")
+        with _MisraRunCtx(cfg=cfg, violations=viols,
+                          summary=_default_summary(total=15, advisory=15)):
+            result = run_misra_check(str(proj), ci, mode="full",
+                                     target_files=[cfile])
+        assert result is False
+        assert "threshold" in ci.stages[-1]["detail"]
+
+    def test_rule_id_none_not_exempted_by_deviation(self, tmp_path):
+        """rule_id=None（cppcheck 原生警告如 unusedFunction）不被 MISRA deviation 豁免。"""
+        proj, cfile = _make_project(tmp_path)
+        cfg = CiConfig()
+        cfg.misra = MisraConfig(
+            fail_threshold=10,
+            deviations=[
+                MisraDeviation(rule_id="Rule-8.7", file_pattern="src/**", status="approved",
+                               reason="lib api", approved_by="test",
+                               expires="2099-12-31"),
+            ],
+        )
+        # 12 条 rule_id=None 原生警告（unusedFunction 场景）
+        viols = [_advisory_violation(rule_id=None) for _ in range(12)]
+        ci = CIResult(2, "abc")
+        with _MisraRunCtx(cfg=cfg, violations=viols,
+                          summary=_default_summary(total=12, advisory=12)):
+            result = run_misra_check(str(proj), ci, mode="full",
+                                     target_files=[cfile])
+        # deviation 豁免不适用 → 12 >= 10 → 阻断（必须由 enable 配置关闭，
+        # 而不是靠 MISRA deviation 豁免——语义边界）
+        assert result is False
+        assert "threshold" in ci.stages[-1]["detail"]
