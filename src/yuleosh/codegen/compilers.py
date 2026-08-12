@@ -83,7 +83,11 @@ def verify_python(files: list[Path], python_cmd: str = "python3") -> dict:
                        "py_compile timed out (120s)", -1)
 
 
-def verify_c(files: list[Path], cc: Optional[str] = None) -> dict:
+def verify_c(
+    files: list[Path],
+    cc: Optional[str] = None,
+    project_root: Optional[Path] = None,
+) -> dict:
     """Syntax-check C/C++ files with ``gcc -fsyntax-only`` (or ``cc``).
 
     E2E fix (2026-08-11): generated multi-file projects were always
@@ -98,6 +102,12 @@ def verify_c(files: list[Path], cc: Optional[str] = None) -> dict:
     Fix: only pass C/C++ sources to the compiler, collect sibling
     ``include/`` / ``*.h`` directories as -I paths, and if the first
     pass still fails, retry once with the same -I set (defensive).
+
+    project_root (2026-08-12): generated app code depends on the host
+    project's HAL headers (e.g. ``#include "hal_motor.h"`` lives in
+    ``<project>/src/hal/include/``, which the gen dir never contains).
+    When provided, also scan ``<project_root>/src/**/include`` so the
+    generated code compiles against the real project API surface.
     """
     c_exts = _C_EXTS | _CXX_EXTS
     sources = [f for f in files if Path(str(f)).suffix.lower() in c_exts]
@@ -128,7 +138,7 @@ def verify_c(files: list[Path], cc: Optional[str] = None) -> dict:
                 if key not in seen:
                     seen.add(key)
                     inc_dirs.append(key)
-    # Cross-layer include fix (2026-08-12): app sources include HAL headers
+    # Cross-layer include fix (2026-08-11): app sources include HAL headers
     # (e.g. src/app/src/*.c → src/hal/include/*.h) which sibling-dir
     # inference never sees.  Scan sibling modules under the modules root:
     # for a source at <root>/<module>/src/<file>.c, add every
@@ -139,6 +149,21 @@ def verify_c(files: list[Path], cc: Optional[str] = None) -> dict:
         if modules_root.is_dir():
             for module in sorted(modules_root.iterdir()):
                 inc = module / "include"
+                if inc.is_dir() and any(
+                    p.suffix.lower() in c_exts for p in inc.iterdir()
+                ):
+                    key = str(inc)
+                    if key not in seen:
+                        seen.add(key)
+                        inc_dirs.append(key)
+    # Host project include scan (2026-08-12): generated code may depend on
+    # the real project's HAL/API headers (e.g. `#include "hal_motor.h"` in
+    # <project>/src/hal/include/).  The gen dir never contains those —
+    # without this, generated app code always fails verification.
+    if project_root is not None:
+        proot = Path(project_root)
+        if (proot / "src").is_dir():
+            for inc in sorted((proot / "src").rglob("include")):
                 if inc.is_dir() and any(
                     p.suffix.lower() in c_exts for p in inc.iterdir()
                 ):
@@ -191,6 +216,7 @@ def compile_verify(
     build_cmd: Optional[list[str]] = None,
     python_cmd: str = "python3",
     cc: Optional[str] = None,
+    project_root: Optional[Path] = None,
 ) -> dict:
     """Verify generated files compile.
 
@@ -210,7 +236,7 @@ def compile_verify(
     if language == LANGUAGE_PYTHON:
         return verify_python(files, python_cmd=python_cmd)
     if language == LANGUAGE_C:
-        return verify_c(files, cc=cc)
+        return verify_c(files, cc=cc, project_root=project_root)
     return _result(False, LANGUAGE_UNKNOWN, "(none)",
                    "cannot verify: unknown language for files "
                    f"{[str(f) for f in files]}", -1)

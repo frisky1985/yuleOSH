@@ -246,7 +246,18 @@ class CodegenEngine:
             written = self.write_files(files, out_dir)
             result.files = [str(p) for p in written]
 
-            verify = self.verifier(written, language=language_hint, build_cmd=build_cmd)
+            # 2026-08-12: 默认 verifier 透传项目根 → 生成的 app 代码可
+            # 编译验证宿主项目 HAL API (src/hal/include 等)。自定义
+            # verifier 不接收 project_root, 保持旧调用。
+            if self.verifier is compilers.compile_verify:
+                verify = self.verifier(
+                    written, language=language_hint, build_cmd=build_cmd,
+                    project_root=getattr(session, "project_dir", None),
+                )
+            else:
+                verify = self.verifier(
+                    written, language=language_hint, build_cmd=build_cmd,
+                )
             result.verify = verify
             if verify.get("ok"):
                 result.status = "verified"
