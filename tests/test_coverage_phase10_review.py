@@ -581,23 +581,77 @@ class TestRunMisraL2Delta:
         assert result is True
         assert ci.stages[-1]["status"] == "warning"
 
-    def test_l2_delta_exception_skips_blocking(self, tmp_path):
-        """L2 baseline 重解析抛异常 → 跳过 delta 阻断，继续普通判断。"""
+    def test_classification_failure_failsafe_blocks(self, tmp_path):
+        """三级分类解析失败（ValueError）→ fail-safe 阻断，不再静默清空违规放行。
+
+        回归语义: 分类失败意味着无法枚举 business/third_party 违规，此时有违规
+        却放行 = 门禁失效。工程诚实 → 按 business 违规 fail-safe 阻断，
+        而不是降级清空列表后放行（TASK_STATUS P2 存量风险修复）。
+        """
         proj, cfile = _make_project(tmp_path)
         self._write_trend(proj, [json.dumps({"is_delta": False})])
         viols = [_violation()]
         ci = CIResult(2, "abc")
         with _MisraRunCtx(violations=viols,
-                          summary=_default_summary(total=1, required=1)):
-            # 第 1 次解析正常；第 2 次（L2 重解析）与第 3 次（分类统计）抛异常
-            with mock.patch("yuleosh.ci.misra_report.parse_cppcheck_output",
-                            side_effect=[viols, ValueError("corrupt"),
-                                         ValueError("corrupt")]):
-                result = run_misra_check(str(proj), ci, mode="full",
-                                         target_files=[cfile])
-        # L2 阻断被跳过，分类统计也降级 → 最终不阻断（passed）
-        assert result is True
+                          summary=_default_summary(total=1, required=1)), \
+             mock.patch("yuleosh.ci.misra_report.parse_cppcheck_output",
+                        side_effect=[viols, ValueError("corrupt"),
+                                     ValueError("corrupt")]):
+            # 第 1 次解析正常；第 2 次（L2 delta 重解析，baseline 无
+            # violations 键实际不触发）；第 3 次（分类统计）抛 ValueError
+            result = run_misra_check(str(proj), ci, mode="full",
+                                     target_files=[cfile])
+        # 分类失败 → fail-safe 阻断（不得静默放行）
+        assert result is False
+        assert "fail-safe" in ci.stages[-1]["detail"]
+        # L2 delta 未参与（baseline 无 violations 键）→ 无 L2-P0 reason
         assert "L2-P0" not in ci.stages[-1]["detail"]
+
+    def test_classification_programming_error_propagates(self, tmp_path):
+        """三级分类抛编程错误（AttributeError）→ 向上抛出，不被 except 吞掉。
+
+        工程诚实: 编程错误是内部缺陷，必须暴露（调用方可见）而非静默降级；
+        except 只捕获真实故障（ValueError/KeyError/TypeError）。
+        """
+        proj, cfile = _make_project(tmp_path)
+        self._write_trend(proj, [json.dumps({"is_delta": False})])
+        viols = [_violation()]
+        ci = CIResult(2, "abc")
+        with _MisraRunCtx(violations=viols,
+                          summary=_default_summary(total=1, required=1)), \
+             mock.patch("yuleosh.ci.misra_report.parse_cppcheck_output",
+                        side_effect=[viols, AttributeError("boom")]), \
+             pytest.raises(AttributeError):
+            # 第 1 次解析正常；第 2 次（分类统计）抛编程错误
+            run_misra_check(str(proj), ci, mode="full",
+                            target_files=[cfile])
+
+    def test_l2_delta_parse_failure_skips_delta_but_normal_blocking(self, tmp_path):
+        """L2 delta 重解析失败（ValueError）→ 仅跳过 delta 阻断，业务违规仍阻断。
+
+        回归语义: delta 计算失败只影响 L2-P0（new Required 计数），
+        不影响三级分类与 business.block_on 的 fail-safe 兜底；
+        真实故障（baseline 解析失败）降级须留 warning 日志。
+        """
+        proj, cfile = _make_project(tmp_path)
+        self._write_trend(proj, [json.dumps({
+            "is_delta": False, "total_violations": 3,
+            "violations": [{"rule_id": "Rule-10.1", "file": "src/main.c",
+                            "line": 5, "severity_category": "required"}],
+        })])
+        viols = [_violation()]
+        ci = CIResult(2, "abc")
+        with _MisraRunCtx(violations=viols,
+                          summary=_default_summary(total=1, required=1)), \
+             mock.patch("yuleosh.ci.misra_report.parse_cppcheck_output",
+                        side_effect=[viols, ValueError("corrupt"), viols]):
+            # 第 1 次解析正常；第 2 次（L2 delta 重解析）抛 ValueError；
+            # 第 3 次（分类统计）正常 → business required 违规仍阻断
+            result = run_misra_check(str(proj), ci, mode="full",
+                                     target_files=[cfile])
+        # delta 阻断被跳过 → 无 L2-P0；business 阻断不受影响 → 仍 False
+        assert "L2-P0" not in ci.stages[-1]["detail"]
+        assert result is False
 
 
 # ===========================================================================
