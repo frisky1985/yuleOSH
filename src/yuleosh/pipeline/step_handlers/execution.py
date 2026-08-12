@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm, _parse_spec
@@ -441,6 +442,40 @@ def step_codegen_deploy(session: PipelineSession) -> str:
     src_gen = gen_dir / "src"
     deployed = []
     skipped_empty = []
+
+    # ── 行为护栏 (2026-08-13) ──────────────────────────────────────
+    # 编译+API 双护栏捕获不了"逻辑正确但行为回归"的代码 (LLM 删除既有
+    # 状态机/reset/FAULT 处理 → 编译通过但测试失败)。行为护栏在部署前
+    # 跑一次基线测试、部署后跑一次验证测试, 对比失败数: 增加即回归 →
+    # 自动回滚 src/ 并标记, 让 pipeline 用 known-good 基线继续。
+    from yuleosh.pipeline.step_handlers.test_c_unit import run_c_test_suite
+    guard_enabled = os.environ.get("OSH_BEHAVIOR_GUARD", "1") != "0"
+    guard_baseline = None
+    guard_after = None
+    guard_rollback = False
+    # 部署前 src 备份 (回滚用) — 记录将被覆盖文件的原始内容
+    pre_deploy_backup: dict[str, Optional[bytes]] = {}
+    if guard_enabled:
+        deployed_candidates = [
+            p for p in sorted(src_gen.rglob("*"))
+            if p.is_file() and p.stat().st_size > 0
+        ]
+    else:
+        deployed_candidates = []
+    if deployed_candidates:
+        try:
+            log.info("Behavior guardrail: running baseline tests before deploy")
+            guard_baseline = run_c_test_suite(project_dir, force_rebuild=True)
+            print(f"  🛡️ [小明] 行为护栏: 基线测试 "
+                  f"{guard_baseline.get('passed', 0)} passed / "
+                  f"{guard_baseline.get('failed', 0)} failed "
+                  f"(runner={guard_baseline.get('runner')})")
+        except Exception as e:
+            log.warning("Behavior guardrail baseline test failed: %s", e)
+            guard_baseline = None
+    else:
+        guard_baseline = None
+
     for src_file in sorted(src_gen.rglob("*")):
         if src_file.is_dir():
             continue
@@ -451,16 +486,83 @@ def step_codegen_deploy(session: PipelineSession) -> str:
         # (relative_to(src_gen) would drop it and deploy to <proj>/app/…)
         rel = src_file.relative_to(gen_dir)
         dst = project_dir / rel
+        # 备份部署前的原始内容 (回滚恢复用; 新文件记为 None → 回滚时删除)
+        if dst.exists():
+            try:
+                pre_deploy_backup[str(rel)] = dst.read_bytes()
+            except OSError:
+                pre_deploy_backup[str(rel)] = None
+        else:
+            pre_deploy_backup[str(rel)] = None
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_file, dst)
+        # 用 copy 而非 copy2: copy2 保留源 mtime → 若 gen 文件比 build 里的
+        # object 旧, cmake 增量构建跳过重编 → ctest 测旧二进制 → 行为护栏
+        # 假通过。copy 更新 mtime 为当前时间, 强制下游构建检测到变化。
+        shutil.copy(src_file, dst)
         deployed.append(str(rel))
+
+    # 部署后验证测试 — 行为回归则回滚
+    if guard_enabled and guard_baseline is not None and deployed:
+        try:
+            log.info("Behavior guardrail: running verification tests after deploy")
+            guard_after = run_c_test_suite(project_dir, force_rebuild=True)
+            print(f"  🛡️ [小明] 行为护栏: 部署后测试 "
+                  f"{guard_after.get('passed', 0)} passed / "
+                  f"{guard_after.get('failed', 0)} failed "
+                  f"(runner={guard_after.get('runner')})")
+            base_failed = guard_baseline.get("failed", 0) or 0
+            after_failed = guard_after.get("failed", 0) or 0
+            # 回归判定: 部署后失败数 > 基线失败数, 且基线测试真实运行过
+            # (runner != "none" 表示有测试框架; "ctest-build-failed" 也算失败)
+            baseline_ran = guard_baseline.get("runner") not in (None, "none")
+            if baseline_ran and after_failed > base_failed:
+                guard_rollback = True
+                log.warning(
+                    "Behavior guardrail REGRESSION: baseline failed=%d → "
+                    "after failed=%d — rolling back src/",
+                    base_failed, after_failed,
+                )
+                # 恢复部署前的原始 src 内容 (不是生成目录 — 生成目录就是回归版)
+                for rel, orig in pre_deploy_backup.items():
+                    dst = project_dir / rel
+                    if orig is None:
+                        # 部署前不存在 → 回滚 = 删除该文件
+                        try:
+                            dst.unlink()
+                        except OSError:
+                            pass
+                    else:
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        dst.write_bytes(orig)
+                print("  🔄 [小明] 行为护栏: 测试回归 → 已回滚 src/ 至基线")
+        except Exception as e:
+            log.warning("Behavior guardrail verification test failed: %s", e)
+            guard_after = None
 
     report = {
         "status": "deployed" if deployed else "empty",
         "generated_dir": str(gen_dir),
         "deployed": deployed,
         "skipped_empty": skipped_empty,
+        # 行为护栏结果 (2026-08-13)
+        "behavior_guardrail": {
+            "enabled": bool(guard_enabled),
+            "baseline": guard_baseline and {
+                k: guard_baseline.get(k) for k in
+                ("runner", "passed", "failed", "status")
+            },
+            "after": guard_after and {
+                k: guard_after.get(k) for k in
+                ("runner", "passed", "failed", "status")
+            },
+            "rolled_back": guard_rollback,
+            "verdict": ("regression_rolled_back" if guard_rollback
+                        else "passed" if (guard_enabled and guard_after)
+                        else "not_verified"),
+        },
     }
+    if guard_rollback:
+        report["status"] = "deployed_behavior_regression"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     print(f"  ✅ [小明] codegen-deploy: {len(deployed)} files → src/ "
