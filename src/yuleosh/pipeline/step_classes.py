@@ -263,10 +263,13 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
     def _run_codegen(self, session) -> str:
         """D3 loop: prompt → LLM → write files → verify → auto-fix → report."""
         from yuleosh.codegen.engine import CodegenEngine, build_codegen_report
-        from yuleosh.codegen.prompts import build_codegen_prompt
+        from yuleosh.codegen.prompts import build_codegen_prompt, collect_existing_headers, collect_seed_sources
 
         print("  💻 [Claude] Running generate-code mode (D3)...")
-        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+        # 2026-08-12: 优先用 session.project_dir (创建时解析), 避免环境
+        # 变量变化导致退化为 cwd — seed 复制/API 契约会指向错误目录。
+        project_dir = Path(getattr(session, "project_dir", None)
+                           or os.environ.get("OSH_HOME", ".")).resolve()
         spec_path = Path(session.spec_path)
         spec_content = (
             spec_path.read_text() if spec_path.exists() else "(spec file not found)"
@@ -279,6 +282,10 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
         build_cmd = cfg.get("build_cmd")
         language_hint = cfg.get("language")
 
+        # 方案 C seed 增量 (2026-08-12): 注入现有 src 代码作为基线,
+        # engine 复制 seed 到输出目录, LLM 只增量修改。
+        seed_sources = collect_seed_sources(project_dir)
+
         system_prompt, user_prompt = build_codegen_prompt(
             spec_content=spec_content,
             spec_name=Path(session.spec_path).name,
@@ -288,6 +295,7 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             skills=skills,
             target_language=target_language,
             existing_headers=collect_existing_headers(project_dir),
+            seed_sources=seed_sources,
         )
 
         engine = CodegenEngine(
@@ -295,6 +303,7 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             max_retries=int(cfg.get("max_retries", self.max_retries)),
             llm_client=getattr(session, "llm_client", None),
             max_tokens=self.max_tokens,
+            seed_dir=project_dir if seed_sources else None,
         )
         result = engine.generate(
             session, system_prompt, user_prompt,

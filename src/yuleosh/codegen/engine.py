@@ -200,12 +200,16 @@ class CodegenEngine:
         llm_client: Optional[Callable] = None,
         verifier: Optional[Callable] = None,
         max_tokens: int = 4096,
+        seed_dir: Optional[str | Path] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
         self.llm_client = llm_client
         self.verifier = verifier or compilers.compile_verify
         self.max_tokens = max_tokens
+        # 方案 C seed 增量 (2026-08-12): 项目现有代码基线目录。
+        # 提供时 engine 把 src/** 复制到输出目录, LLM 只增量修改。
+        self.seed_dir = Path(seed_dir) if seed_dir else None
 
     # ---- Main entry ---------------------------------------------------
 
@@ -222,6 +226,14 @@ class CodegenEngine:
         Returns a :class:`CodegenResult` (never raises on compile failure —
         the failure is recorded in the result/report).  LLM transport errors
         still raise :class:`PipelineStepError`.
+
+        方案 C seed 增量 (2026-08-12):
+        - 提供 seed_dir 时先把项目 src 基线复制到输出目录, LLM 只输出
+          新增/修改文件, 未修改文件保留 seed 副本 → 不再从零全量重写。
+        - verify 验证**整个输出目录** (seed + 本轮修改), 而非只验证本轮
+          LLM 输出的文件 — 跨文件引用 (app→hal) 才能被捕获。
+        - best-state 回滚: 每轮 verify 失败时比较错误数, 只更新到更优的
+          版本; 越修越坏的轮次回滚到历史最佳 → 杜绝"全量重发越改越坏"。
         """
         result = CodegenResult(max_retries=self.max_retries)
         out_dir = self.output_dir or default_output_dir(
@@ -230,7 +242,14 @@ class CodegenEngine:
         out_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(out_dir)
 
+        # seed 基线复制 (方案 C)
+        if self.seed_dir is not None:
+            copied = self._sync_seed(self.seed_dir, out_dir)
+            log.info("Codegen seed sync: %d baseline files copied", len(copied))
+
         repair_context = ""
+        best_state: dict[str, str] = {}   # rel_path -> content (错误数最少版本)
+        best_error_count: Optional[int] = None
         for round_idx in range(self.max_retries + 1):
             result.rounds = round_idx + 1
             llm_output = self._call_llm(session, system_prompt, user_prompt, repair_context)
@@ -246,17 +265,19 @@ class CodegenEngine:
             written = self.write_files(files, out_dir)
             result.files = [str(p) for p in written]
 
+            # verify 整个输出目录 (seed 副本 + 本轮修改) — 跨文件引用可被捕获
+            verify_files = self._collect_code_files(out_dir)
             # 2026-08-12: 默认 verifier 透传项目根 → 生成的 app 代码可
             # 编译验证宿主项目 HAL API (src/hal/include 等)。自定义
             # verifier 不接收 project_root, 保持旧调用。
             if self.verifier is compilers.compile_verify:
                 verify = self.verifier(
-                    written, language=language_hint, build_cmd=build_cmd,
+                    verify_files, language=language_hint, build_cmd=build_cmd,
                     project_root=getattr(session, "project_dir", None),
                 )
             else:
                 verify = self.verifier(
-                    written, language=language_hint, build_cmd=build_cmd,
+                    verify_files, language=language_hint, build_cmd=build_cmd,
                 )
             result.verify = verify
             if verify.get("ok"):
@@ -270,8 +291,28 @@ class CodegenEngine:
                 "Codegen round %d failed verification: %s",
                 round_idx + 1, result.last_errors[:300],
             )
+
+            # best-state 回滚 (方案 C): 错误数更少才更新快照; 否则回滚到
+            # 历史最佳, 下一轮基于最佳版本修复而非"越修越坏"的当前版本。
+            err_count = self._error_count(errors)
+            if best_error_count is None or err_count < best_error_count:
+                best_error_count = err_count
+                best_state = self._snapshot_files(out_dir)
+                log.info(
+                    "Codegen round %d: new best state (%d errors)",
+                    round_idx + 1, err_count,
+                )
+            else:
+                self._restore_files(out_dir, best_state)
+                log.info(
+                    "Codegen round %d: worse (%d >= %d) — rolled back to best state",
+                    round_idx + 1, err_count, best_error_count,
+                )
+
             if round_idx < self.max_retries:
-                repair_context = self._format_repair_context(result.last_errors, files)
+                repair_context = self._format_repair_context(
+                    result.last_errors, files, best_state,
+                )
 
         result.finished_at = datetime.now().isoformat()
         if result.status == "pending":
@@ -318,17 +359,99 @@ class CodegenEngine:
             log.debug("Wrote generated file %s (%d bytes)", target, len(f.content))
         return written
 
+    # ---- Seed 增量 (方案 C, 2026-08-12) --------------------------------
+
+    def _sync_seed(self, seed_dir: Path, out_dir: Path) -> list[Path]:
+        """Copy the project's existing src code into the output dir.
+
+        Only ``.c`` / ``.h`` files under ``<seed_dir>/src`` are copied
+        (excluding build/cache dirs).  The output dir becomes the working
+        tree the LLM incrementally modifies — unmodified files keep their
+        baseline content.
+        """
+        from yuleosh.codegen.prompts import SEED_EXCLUDE_DIRS
+
+        src_dir = seed_dir / "src"
+        if not src_dir.is_dir():
+            return []
+        copied: list[Path] = []
+        for p in sorted(src_dir.rglob("*")):
+            if p.suffix.lower() not in (".c", ".h"):
+                continue
+            if any(part in SEED_EXCLUDE_DIRS for part in p.relative_to(src_dir).parts):
+                continue
+            rel = p.relative_to(seed_dir)
+            target = (out_dir / rel).resolve()
+            if not str(target).startswith(str(out_dir.resolve())):
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(p.read_text(encoding="utf-8", errors="replace"),
+                              encoding="utf-8")
+            copied.append(target)
+        return copied
+
+    def _collect_code_files(self, out_dir: Path) -> list[Path]:
+        """All ``.c`` / ``.h`` / ``.py`` files under the output dir."""
+        exts = {".c", ".h", ".py"}
+        return [p for p in sorted(out_dir.rglob("*"))
+                if p.is_file() and p.suffix.lower() in exts]
+
     @staticmethod
-    def _format_repair_context(errors: str, files: list[GeneratedFile]) -> str:
-        """Build the compiler-feedback block appended to the next prompt."""
+    def _error_count(errors: str) -> int:
+        """Count compiler error lines (``error:`` / ``Error``) in output."""
+        if not errors:
+            return 0
+        return len(re.findall(r"(?m)^.*\berror\b.*$", errors))
+
+    def _snapshot_files(self, out_dir: Path) -> dict[str, str]:
+        """Snapshot the current output dir (rel_path -> content)."""
+        snap: dict[str, str] = {}
+        for p in self._collect_code_files(out_dir):
+            try:
+                snap[str(p.relative_to(out_dir))] = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+        return snap
+
+    def _restore_files(self, out_dir: Path, snapshot: dict[str, str]) -> None:
+        """Restore the output dir from a snapshot (rollback to best state)."""
+        for rel, content in snapshot.items():
+            target = (out_dir / rel).resolve()
+            if not str(target).startswith(str(out_dir.resolve())):
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+        log.info("Restored %d files to best state", len(snapshot))
+
+    @staticmethod
+    def _format_repair_context(
+        errors: str,
+        files: list[GeneratedFile],
+        best_state: Optional[dict[str, str]] = None,
+    ) -> str:
+        """Build the compiler-feedback block appended to the next prompt.
+
+        best_state (方案 C): 当前磁盘上错误数最少的版本的文件清单。
+        提示模型只输出需要修复的文件 — 未修改文件保留磁盘现状,
+        避免全量重发引入新错误。
+        """
         listing = "\n".join(f"  - {f.path}" for f in files) or "  - (none)"
+        disk_hint = ""
+        if best_state:
+            disk_listing = "\n".join(f"  - {rel}" for rel in sorted(best_state))
+            disk_hint = (
+                "\n\n当前磁盘上已有这些文件 (未修改的基线/上一轮最佳版本):\n"
+                f"{disk_listing}\n"
+                "**只重新输出你修改的文件** — 未修改的不要重发, 磁盘会保留。"
+            )
         return (
-            "\n\n## 🔧 编译验证失败 — 请修复后重新输出全部文件\n"
-            f"上一轮生成的文件:\n{listing}\n\n"
+            "\n\n## 🔧 编译验证失败 — 请修复后重新输出文件\n"
+            f"上一轮生成/修改的文件:\n{listing}\n\n"
             "编译错误输出:\n```\n"
             f"{errors[:4000]}\n```\n\n"
-            "要求: 修复所有编译错误，重新以相同格式输出 **全部** 文件 "
-            "(不要省略未出错的文件)。"
+            "要求: 修复所有编译错误，重新输出**本次修复涉及的文件** "
+            "(不要输出与修复无关的文件)。"
+            f"{disk_hint}"
         )
 
     # ---- Report --------------------------------------------------------
