@@ -52,9 +52,10 @@ class TestPipelineStepsStructure:
 
     def test_pipeline_steps_has_10_entries(self):
         """v3.4.0: PIPELINE_STEPS has grown from 10 to 33 steps (multi-reviewer
-        workflow, BSP/build/power/stack/MMIO reviews, fault-injection, merge-gate)."""
+        workflow, BSP/build/power/stack/MMIO reviews, fault-injection, merge-gate);
+        v3.5.0: +codegen-deploy → 34."""
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
-        assert len(PIPELINE_STEPS) == 33
+        assert len(PIPELINE_STEPS) == 34
 
     def test_each_entry_has_4_elements(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
@@ -71,7 +72,8 @@ class TestPipelineStepsStructure:
         keys = [e[0] for e in PIPELINE_STEPS]
         expected = [
             "spec-check", "super-analysis", "prd", "prd-review",
-            "architecture", "arch-review", "development", "devplan-review",
+            "architecture", "arch-review", "development", "codegen-deploy",
+            "devplan-review",
             "internal-code-review", "test-planning", "self-test", "self-test-review",
             "c-unit-test", "code-review", "integration-test", "misra-review",
             "coverage-review", "qemu-run", "c-coverage-gate",
@@ -178,4 +180,4 @@ class TestModuleReExports:
             PIPELINE_STEPS,
         )
         assert callable(step_spec_check)
-        assert len(PIPELINE_STEPS) == 33
+        assert len(PIPELINE_STEPS) == 34
