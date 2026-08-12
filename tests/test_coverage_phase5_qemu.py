@@ -433,6 +433,9 @@ class TestPhaseBuildCoverage:
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         cov_dir = tmp_path / "cmake-build-coverage"
         (cov_dir / "CMakeFiles").mkdir(parents=True)
+        # 需要 gcno 才能让 _coverage_build_stale 判定非 stale —
+        # 只有 gcda 时 newest_obj==0 → 误判 stale → 删掉重建 → 真跑 cmake 失败
+        (cov_dir / "CMakeFiles" / "a.gcno").write_bytes(b"x")
         (cov_dir / "CMakeFiles" / "a.gcda").write_bytes(b"x")
         results = {}
         with mock.patch.object(ccg, "_get_fail_under", return_value=75):

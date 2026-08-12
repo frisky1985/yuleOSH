@@ -656,6 +656,13 @@ class TestRunUnitTests:
 # ==================================================================
 
 class TestRunCoverage:
+    @staticmethod
+    def _with_py_tests(tmp_proj):
+        """2026-08-13: 有 Python 测试文件 coverage 才会真正执行 —
+        2026-08-12 起无 Python 测试的项目提前跳过, 空目录 fixture 会假失败。"""
+        Path(tmp_proj, "tests").mkdir(exist_ok=True)
+        Path(tmp_proj, "tests", "test_demo.py").write_text("def test_ok(): pass\n")
+
     def test_skipped_commit_hook(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
         with mock.patch.dict(os.environ, {"HOOK_TYPE": "commit"}):
@@ -680,6 +687,7 @@ class TestRunCoverage:
     def test_below_line_threshold(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
         from yuleosh.ci.config import CiConfig, CoverageConfig
+        self._with_py_tests(tmp_proj)
         cfg = CiConfig()
         cfg.coverage = CoverageConfig(threshold_line=85.0, threshold_condition=80.0)
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
@@ -694,6 +702,7 @@ class TestRunCoverage:
     def test_below_cond_threshold(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
         from yuleosh.ci.config import CiConfig, CoverageConfig
+        self._with_py_tests(tmp_proj)
         cfg = CiConfig()
         cfg.coverage = CoverageConfig(threshold_line=50.0, threshold_condition=50.0)
         Path(tmp_proj, "coverage.json").write_text(json.dumps({
@@ -707,6 +716,7 @@ class TestRunCoverage:
 
     def test_run_fails(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
+        self._with_py_tests(tmp_proj)
         with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(False, "tool error")):
             ci = CIResult(1, "abc")
@@ -714,6 +724,7 @@ class TestRunCoverage:
 
     def test_json_decode_error(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
+        self._with_py_tests(tmp_proj)
         Path(tmp_proj, "coverage.json").write_text("bad{json")
         with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         return_value=(True, "")):
@@ -1556,6 +1567,9 @@ class TestEdgeCasesBranch:
     def test_coverage_json_fail(self, tmp_proj):
         """Cover coverage json export failure via invalid JSON."""
         from yuleosh.ci.run import run_coverage_check, CIResult
+        # 2026-08-13: 有 Python 测试文件 coverage 才会真正执行
+        Path(tmp_proj, "tests").mkdir(exist_ok=True)
+        Path(tmp_proj, "tests", "test_demo.py").write_text("def test_ok(): pass\n")
         # Write invalid JSON to make _load_coverage_json fail
         Path(tmp_proj, "coverage.json").write_text("not valid json at all")
         with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
@@ -1566,6 +1580,8 @@ class TestEdgeCasesBranch:
     def test_coverage_run_timeout(self, tmp_proj):
         """Cover coverage TimeoutExpired handler."""
         from yuleosh.ci.run import run_coverage_check, CIResult
+        Path(tmp_proj, "tests").mkdir(exist_ok=True)
+        Path(tmp_proj, "tests", "test_demo.py").write_text("def test_ok(): pass\n")
         with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         side_effect=TimeoutExpired("coverage", 120)):
             ci = CIResult(1, "abc")

@@ -228,6 +228,11 @@ class TestRunCoverageCheck:
         from yuleosh.ci.stages import run_coverage_check
         from yuleosh.ci.result import CIResult
 
+        # 2026-08-13: 有 Python 测试文件 coverage 才会真正执行
+        # (2026-08-12 起无 Python 测试的项目提前跳过 → 空目录 fixture 假失败)
+        (tmp_path / "tests").mkdir(exist_ok=True)
+        (tmp_path / "tests" / "test_demo.py").write_text("def test_ok(): pass\n")
+
         ci = CIResult(layer=1, commit_hash="abc123")
 
         with mock.patch.multiple(
