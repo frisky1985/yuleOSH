@@ -362,9 +362,7 @@ class IntegrationTestRunner:
         # pytest exit 5 = 无匹配测试 (not a failure)
         if result_returncode == 5 and test_runner == "pytest-integration":
             status = "skipped"
-        elif result_returncode is not None and result_returncode != 0:
-            status = "failed"
-        elif failed > 0:
+        elif result_returncode is not None and result_returncode != 0 or failed > 0:
             status = "failed"
         else:
             status = "passed"
@@ -376,6 +374,98 @@ class IntegrationTestRunner:
             failed=failed,
             returncode=result_returncode,
             output=test_output[:3000],
+        )
+
+
+class PytestRunner:
+    """Python 项目测试 runner — pytest tests/。
+
+    行为护栏/门禁联动的 Python 后端。force_rebuild 对 Python 无意义
+    (无编译步骤), 保留参数以符合 TestRunner 协议。
+    """
+
+    name = "pytest"
+
+    def __init__(self, timeout: int = 180, extra_args: list[str] | None = None):
+        self.timeout = timeout
+        self.extra_args = extra_args or []
+
+    def run(self, project_dir: str | Path, force_rebuild: bool = False) -> TestResult:
+        import subprocess
+        import sys
+
+        project_dir = Path(project_dir)
+        pytest_cmd = [
+            sys.executable, "-m", "pytest", "tests/", "-q",
+        ] + self.extra_args
+        try:
+            result = subprocess.run(
+                pytest_cmd, capture_output=True, text=True,
+                timeout=self.timeout, cwd=project_dir, check=False,
+            )
+        except FileNotFoundError:
+            return TestResult(runner="pytest", status="unknown",
+                              output="pytest not found")
+        except subprocess.TimeoutExpired:
+            return TestResult(runner="pytest-timeout", status="failed",
+                              output=f"TIMEOUT: pytest exceeded {self.timeout}s")
+
+        output = (result.stdout or "") + "\n" + (result.stderr or "")
+        passed, failed = _parse_test_counts_impl(output, "pytest")
+        if result.returncode != 0 or failed > 0:
+            # 无 summary 行但 rc!=0 (collect error 等) — 如实报 failed
+            status = "failed"
+        else:
+            status = "passed"
+        return TestResult(
+            runner="pytest", status=status,
+            passed=passed, failed=failed,
+            returncode=result.returncode, output=output[:3000],
+        )
+
+
+class GoRunner:
+    """Go 项目测试 runner — go test ./...。
+
+    行为护栏/门禁联动的 Go 后端。
+    """
+
+    name = "go-test"
+
+    def __init__(self, timeout: int = 300, tags: str | None = None):
+        self.timeout = timeout
+        self.tags = tags
+
+    def run(self, project_dir: str | Path, force_rebuild: bool = False) -> TestResult:
+        import subprocess
+
+        project_dir = Path(project_dir)
+        if not (project_dir / "go.mod").exists():
+            return TestResult(runner="go", status="skipped",
+                              output="No go.mod found")
+        cmd = ["go", "test", "./..."]
+        if self.tags:
+            cmd.append(f"-tags={self.tags}")
+        cmd.append("-count=1")
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                timeout=self.timeout, cwd=project_dir, check=False,
+            )
+        except FileNotFoundError:
+            return TestResult(runner="go", status="unknown",
+                              output="go not found")
+        except subprocess.TimeoutExpired:
+            return TestResult(runner="go-timeout", status="failed",
+                              output=f"TIMEOUT: go test exceeded {self.timeout}s")
+
+        output = (result.stdout or "") + "\n" + (result.stderr or "")
+        passed, failed = _parse_test_counts_impl(output, "go")
+        status = "failed" if (failed > 0 or result.returncode != 0) else "passed"
+        return TestResult(
+            runner="go", status=status,
+            passed=passed, failed=failed,
+            returncode=result.returncode, output=output[:3000],
         )
 
 

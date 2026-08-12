@@ -41,7 +41,11 @@ def step_integration_test(session: PipelineSession) -> str:
         print("  📋 [小克] 接口集成测试开始...")
         log.info("Running integration test step")
 
-        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+        # 2026-08-13 (e2e 修复): 用 session 解析的 project_dir, 不用环境变量 —
+        # 与 codegen/test_c_unit 分支同源: 嵌套/测试调用时环境变量可能已变,
+        # 退化到错误目录 → 门禁假失败。
+        project_dir = Path(getattr(session, "project_dir", None)
+                           or os.environ.get("OSH_HOME", ".")).resolve()
 
         # ── Mock mode: skip real review ──────────────────────────
         # In --mock runs the LLM emits placeholder code; scanning the real

@@ -281,7 +281,12 @@ def step_c_unit_test(session: PipelineSession) -> str:
         print("  📋 [小克] C 单元测试开始...")
         log.info("Running C unit test step")
 
-        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+        # 2026-08-13 (e2e 修复): 用 session 解析的 project_dir, 不用环境变量 —
+        # 与 codegen 分支同源 (2026-08-12): 嵌套/测试调用时环境变量可能已变,
+        # 退化到错误目录 → 找不到 build → fallback gcc-compile-check →
+        # 门禁假失败 (e2e 真实项目抓到)。
+        project_dir = Path(getattr(session, "project_dir", None)
+                           or os.environ.get("OSH_HOME", ".")).resolve()
 
         # ── Mock mode: skip real test run ──────────────────────────
         if getattr(session, "mock_mode", None) is True:
@@ -323,17 +328,23 @@ def step_c_unit_test(session: PipelineSession) -> str:
                 "reason": "No C source files found" if c_files == 0
                          else "No test runner available (ctest/unity/ceedling/gcc)",
                 "c_files": c_files,
-                "c_test_files": len(c_test_files),
+                "c_test_files": c_test_files,
                 "test_runner": "none",
             }
             out_path = session.session_dir / "c-unit-test.json"
-            with open(out_path, "w") as f:
-                json.dump(report, f, indent=2, ensure_ascii=False)
+            try:
+                with open(out_path, "w") as f:
+                    json.dump(report, f, indent=2, ensure_ascii=False)
+            except OSError as e:
+                log.error("Cannot write C unit test report: %s", e)
+                raise PipelineStepError(f"Cannot write C unit test report: {e}")
             print("  ⏭️  [小克] 跳过 C 单元测试 — 无测试框架")
             log.info("C unit test skipped: no test runner")
             return str(out_path)
 
         # Generate report
+        # 注: run_c_test_suite 返回的 c_test_files 已是 int (内部 len),
+        # 不能再用 len() 包装 (e2e 真实项目抓到的 TypeError, 2026-08-13)
         report = {
             "step": "c-unit-test",
             "agent": "小克",
@@ -341,7 +352,7 @@ def step_c_unit_test(session: PipelineSession) -> str:
             "timestamp": __import__("datetime").datetime.now().isoformat(),
             "c_files": c_files,
             "c_header_files": result["c_header_files"],
-            "c_test_files": len(c_test_files),
+            "c_test_files": result["c_test_files"],
             "test_runner": test_runner,
             "returncode": result_returncode,
             "output": test_output[:3000],
