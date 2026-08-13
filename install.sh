@@ -22,6 +22,10 @@ YULEOSH_VERSION="${YULEOSH_VERSION:-latest}"
 INSTALL_DIR="${YULEOSH_DIR:-$HOME/.yuleosh}"
 GITHUB="https://github.com/frisky1985/yuleOSH"
 START_TIME=$(date +%s)
+# Python 版本约束（与 pyproject.toml requires-python 一致）
+REQUIRED_PYTHON="3.12"
+PY_MAJOR=3
+PY_MINOR=12
 
 # ---- Color helpers ---------------------------------------------------------
 RED='\033[0;31m'
@@ -74,27 +78,43 @@ version_ge() {
 preflight() {
     local issues=0
 
-    # Required: python3
-    if ! command -v python3 &>/dev/null; then
+    # Required: python3.12 (exact minor, matches pyproject requires-python)
+    if command -v python3.12 &>/dev/null; then
+        PY_BIN="$(command -v python3.12)"
+        ok "Python $(python3.12 --version 2>&1 | grep -oE '3\.12\.[0-9]+')"
+    elif command -v python3 &>/dev/null; then
+        local pyver
+        pyver=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        local pymajor pyminor
+        pymajor="${pyver%%.*}"
+        pyminor="${pyver#*.}"
+        pyminor="${pyminor%%.*}"
+        if [ "$pymajor" = "$PY_MAJOR" ] && [ "$pyminor" = "$PY_MINOR" ]; then
+            PY_BIN="$(command -v python3)"
+            ok "Python $pyver"
+        else
+            fail "Python $pyver found, but Python ${REQUIRED_PYTHON} is required (yuleOSH pins to 3.12 for CI reproducibility)."
+            case "$OS" in
+                linux)
+                    info "Install: apt install python3.12 (Debian/Ubuntu) / dnf install python3.12 (RHEL/Fedora)"
+                    ;;
+                macos)
+                    info "Install: brew install python@3.12"
+                    ;;
+            esac
+            issues=$((issues + 1))
+        fi
+    else
         fail "python3 is required but not found."
         case "$OS" in
             linux)
-                info "Install: apt install python3 (Debian/Ubuntu) / yum install python3 (RHEL)"
+                info "Install: apt install python3.12 (Debian/Ubuntu) / yum install python3.12 (RHEL)"
                 ;;
             macos)
-                info "Install: brew install python3"
+                info "Install: brew install python@3.12"
                 ;;
         esac
         issues=$((issues + 1))
-    else
-        local pyver
-        pyver=$(python3 --version 2>&1 | grep -oP '\d+\.\d+')
-        if ! version_ge "$pyver" "$MIN_PYTHON"; then
-            fail "Python $pyver found, but $MIN_PYTHON+ required."
-            issues=$((issues + 1))
-        else
-            ok "Python $pyver"
-        fi
     fi
 
     # Required: git or curl
@@ -137,39 +157,81 @@ preflight() {
 }
 
 # ---- Dependency installation -----------------------------------------------
+# 在 INSTALL_DIR/.venv 创建隔离虚拟环境（Python 3.12），
+# 一次性装好运行时 + dev(测试) 依赖，避免污染系统 Python。
+VENV_DIR="${INSTALL_DIR}/.venv"
+
+ensure_venv() {
+    if [ "${YULEOSH_SKIP_DEPS:-0}" = "1" ]; then
+        info "Skipping venv creation (YULEOSH_SKIP_DEPS=1)"
+        return 0
+    fi
+
+    if [ -x "${VENV_DIR}/bin/python" ]; then
+        local vver
+        vver=$("${VENV_DIR}/bin/python" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        info "Reusing existing venv (Python $vver)"
+        return 0
+    fi
+
+    info "Creating virtual environment at ${VENV_DIR} (Python ${REQUIRED_PYTHON})..."
+    mkdir -p "$(dirname "${VENV_DIR}")"
+    "${PY_BIN}" -m venv "${VENV_DIR}" || {
+        fail "Failed to create venv with ${PY_BIN}"
+        info "Try: ${PY_BIN} -m ensurepip --upgrade"
+        return 1
+    }
+    ok "Virtual environment created"
+}
+
 install_deps() {
     if [ "${YULEOSH_SKIP_DEPS:-0}" = "1" ]; then
         info "Skipping dependency install (YULEOSH_SKIP_DEPS=1)"
         return 0
     fi
 
-    info "Checking Python dependencies..."
-    local missing=0
-
-    # Check pip availability
-    if ! python3 -m pip --version &>/dev/null; then
-        warn "pip not available — will install packages via newer pipx or fallback"
+    if ! ensure_venv; then
+        return 1
     fi
 
-    # Install core dependencies
-    for pkg in pytest coverage; do
-        if ! python3 -c "import $pkg" 2>/dev/null; then
-            info "Installing $pkg..."
-            python3 -m pip install --quiet --no-cache-dir "$pkg" 2>/dev/null || {
-                warn "Failed to install $pkg (non-fatal)"
-            }
-        fi
-    done
+    local VENV_PY="${VENV_DIR}/bin/python"
+    local VENV_PIP="${VENV_DIR}/bin/pip"
 
-    # Verify yuleOSH can be installed
+    # Upgrade pip inside venv (macOS/系统 Python 常带旧 pip)
+    "${VENV_PY}" -m pip install --quiet --upgrade pip setuptools wheel 2>/dev/null || {
+        warn "pip upgrade failed (non-fatal)"
+    }
+
+    info "Installing yuleOSH package (editable, with dev/test deps)..."
     if [ -f "${INSTALL_DIR}/pyproject.toml" ]; then
-        info "Installing yuleOSH package..."
-        (cd "$INSTALL_DIR" && python3 -m pip install --quiet --no-cache-dir -e . 2>/dev/null) || {
-            warn "Package install skipped (non-fatal for CLI usage)"
+        (cd "${INSTALL_DIR}" && "${VENV_PY}" -m pip install --quiet --no-cache-dir -e ".[dev]" 2>/dev/null) || {
+            # 回退：至少装运行时依赖
+            warn "Editable install with [dev] failed — retrying runtime-only"
+            (cd "${INSTALL_DIR}" && "${VENV_PY}" -m pip install --quiet --no-cache-dir -e . 2>/dev/null) || {
+                warn "Package install skipped (non-fatal for CLI usage)"
+            }
         }
+    else
+        warn "No pyproject.toml found — skipping package install"
     fi
 
-    ok "Dependencies checked"
+    # 验证
+    if "${VENV_PY}" -c "import yuleosh" 2>/dev/null; then
+        ok "yuleosh importable in venv"
+    else
+        warn "yuleosh not importable in venv yet (may need network for deps)"
+    fi
+
+    ok "Dependencies installed into ${VENV_DIR}"
+}
+
+# 返回 venv 内的 python 可执行路径（供后续命令/包装使用）
+venv_python() {
+    if [ -x "${VENV_DIR}/bin/python" ]; then
+        echo "${VENV_DIR}/bin/python"
+    else
+        echo "${PY_BIN}"
+    fi
 }
 
 # ---- Main installation -----------------------------------------------------
@@ -227,17 +289,24 @@ main() {
     # ---- Symlink -----------------------------------------------------------
     echo ""
     echo "  ${CYAN}🔗 Setting up symlink...${NC}"
+    # 优先指向 venv 内命令；无 venv 时回退源目录 bin
+    local CMD_SRC="${INSTALL_DIR}/bin/yuleosh-server"
+    if [ -x "${VENV_DIR}/bin/yuleosh-server" ]; then
+        CMD_SRC="${VENV_DIR}/bin/yuleosh-server"
+    elif [ -x "${VENV_DIR}/bin/yuleosh" ]; then
+        CMD_SRC="${VENV_DIR}/bin/yuleosh"
+    fi
     if [ -w /usr/local/bin ]; then
-        ln -sf "${INSTALL_DIR}/bin/yuleosh-server" /usr/local/bin/yuleosh 2>/dev/null && \
-            ok "Symlink: /usr/local/bin/yuleosh" || \
+        ln -sf "${CMD_SRC}" /usr/local/bin/yuleosh 2>/dev/null && \
+            ok "Symlink: /usr/local/bin/yuleosh → ${CMD_SRC}" || \
             warn "Could not create symlink in /usr/local/bin"
     elif sudo -n true 2>/dev/null; then
-        sudo ln -sf "${INSTALL_DIR}/bin/yuleosh-server" /usr/local/bin/yuleosh 2>/dev/null && \
-            ok "Symlink: /usr/local/bin/yuleosh (via sudo)" || \
+        sudo ln -sf "${CMD_SRC}" /usr/local/bin/yuleosh 2>/dev/null && \
+            ok "Symlink: /usr/local/bin/yuleosh → ${CMD_SRC} (via sudo)" || \
             warn "Could not create symlink in /usr/local/bin"
     else
         warn "Cannot write to /usr/local/bin"
-        info "Add to PATH: export PATH=\$PATH:${INSTALL_DIR}/bin"
+        info "Add to PATH: export PATH=\$PATH:${INSTALL_DIR}/.venv/bin"
     fi
 
     # ---- Create required dirs ----------------------------------------------
@@ -255,14 +324,18 @@ main() {
     echo "  ${GREEN}══════════════════════════════════════${NC}"
     echo ""
     echo "  📍 Location: ${INSTALL_DIR}"
+    echo "  🐍 Python:   ${VENV_DIR}/bin/python ($( "${VENV_DIR}/bin/python" --version 2>/dev/null || echo 'venv pending' ))"
     echo "  🚀 Start:    yuleosh"
     echo "  📚 Docs:     ${INSTALL_DIR}/docs/"
     echo "  🌐 GitHub:   ${GITHUB}"
     echo ""
     echo "  Quick start:"
     echo "    cd ${INSTALL_DIR}"
-    echo '    yuleosh -h'
-    echo "    # or: python3 ${INSTALL_DIR}/src/ui/server.py"
+    echo "    source .venv/bin/activate        # 进入虚拟环境"
+    echo "    yuleosh -h                       # CLI"
+    echo "    python -m yuleosh.ui.server      # Dashboard: http://localhost:8080"
+    echo "    # 跑测试（macOS 建议先提升 fd 限制，见 docs）:"
+    echo "    ulimit -n 4096 && python -m pytest tests/ -q"
     echo ""
 }
 
