@@ -76,9 +76,29 @@ if [ "$USE_DOCKER" = true ]; then
   (cd "$PROJECT_DIR" && docker compose build 2>&1) | sed 's/^/  /'
   echo -e "  ${GREEN}✅ Docker 镜像构建完成${NC}"
 else
-  echo "  安装 Python 依赖..."
-  (cd "$PROJECT_DIR" && pip install -e . 2>&1) | tail -3 | sed 's/^/  /'
-  echo -e "  ${GREEN}✅ Python 依赖安装完成${NC}"
+  # 优先使用 Python 3.12（yuleOSH 固定 3.12，见 pyproject requires-python）
+  PY_BIN=""
+  if command -v python3.12 &>/dev/null; then
+    PY_BIN="$(command -v python3.12)"
+  elif command -v python3 &>/dev/null && python3 --version 2>&1 | grep -q "3\.12"; then
+    PY_BIN="$(command -v python3)"
+  else
+    echo -e "  ${RED}❌ 需要 Python 3.12 (yuleOSH 固定版本)${NC}"
+    echo "  安装: brew install python@3.12 或 apt install python3.12"
+    exit 1
+  fi
+
+  # 创建/复用隔离 venv，一次性装好运行时 + dev 依赖
+  VENV_DIR="$PROJECT_DIR/.venv"
+  if [ ! -x "$VENV_DIR/bin/python" ]; then
+    echo "  创建虚拟环境 (.venv, Python 3.12)..."
+    "$PY_BIN" -m venv "$VENV_DIR" || { echo -e "  ${RED}❌ venv 创建失败${NC}"; exit 1; }
+  fi
+
+  echo "  安装 Python 依赖（editable + dev）..."
+  (cd "$PROJECT_DIR" && "$VENV_DIR/bin/python" -m pip install --quiet --upgrade pip 2>&1 | tail -1)
+  (cd "$PROJECT_DIR" && "$VENV_DIR/bin/python" -m pip install --quiet -e ".[dev]" 2>&1) | tail -3 | sed 's/^/  /'
+  echo -e "  ${GREEN}✅ Python 依赖安装完成 (venv: .venv)${NC}"
 fi
 
 # ── Step 4: 启动 ──────────────────────────────────────────────────
@@ -91,8 +111,8 @@ if [ "$USE_DOCKER" = true ]; then
   STOP_CMD="docker compose down"
 else
   echo "  启动中..."
-  # Start in background
-  (cd "$PROJECT_DIR" && YULEOSH_AUTH_DISABLED=1 python3 -m yuleosh.ui.server &
+  # Start in background (用 venv python)
+  (cd "$PROJECT_DIR" && YULEOSH_AUTH_DISABLED=1 "$VENV_DIR/bin/python" -m yuleosh.ui.server &
     SERVER_PID=$!
     echo $SERVER_PID > /tmp/yuleosh.pid
   )

@@ -328,9 +328,19 @@ curl -fsSL https://raw.githubusercontent.com/frisky1985/yuleOSH/main/install.sh 
 ```bash
 git clone https://github.com/frisky1985/yuleOSH.git
 cd yuleOSH
-pip install -e .
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 yuleosh init .
 yuleosh help
+```
+
+### Run Tests
+
+```bash
+# macOS 默认 fd 限制 256，全量测试 + coverage 会耗尽文件描述符导致
+# coverage 收尾报 "unable to open database file"。先提高限制再跑：
+ulimit -n 4096
+pytest tests/ --cov=src/yuleosh
 ```
 
 ---
