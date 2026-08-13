@@ -266,6 +266,22 @@ class TestCoverageHelpers:
             assert isinstance(ok, bool)
             assert isinstance(reason, str)
 
+    def test_run_coverage_c_only_src_skips(self):
+        """GIVEN src/ has only C files (no .py) WHEN _run_coverage_and_export THEN early skip.
+
+        C-only repos: `coverage run --source=src` collects nothing and `coverage json`
+        fails with "No data to report". C/C++ coverage is handled by the gcov stage.
+        (fix 2026-08-12: window-anti-pinch L1 failed on exactly this)
+        """
+        with tempfile.TemporaryDirectory() as td:
+            src_dir = Path(td) / "src"
+            src_dir.mkdir(exist_ok=True)
+            (src_dir / "main.c").write_text("int main(void){return 0;}\n")
+
+            ok, reason = _run_coverage_and_export(td)
+            assert ok is False
+            assert "no Python source" in reason
+
 
 class TestCrossCompile:
     """GIVEN cross compile config WHEN resolving THEN correct targets."""

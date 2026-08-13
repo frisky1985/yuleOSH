@@ -232,6 +232,8 @@ class TestRunCoverageCheck:
         # (2026-08-12 起无 Python 测试的项目提前跳过 → 空目录 fixture 假失败)
         (tmp_path / "tests").mkdir(exist_ok=True)
         (tmp_path / "tests" / "test_demo.py").write_text("def test_ok(): pass\n")
+        (tmp_path / "src").mkdir(exist_ok=True)
+        (tmp_path / "src" / "app.py").write_text("def f(): return 1\n")
 
         ci = CIResult(layer=1, commit_hash="abc123")
 
@@ -242,6 +244,37 @@ class TestRunCoverageCheck:
         ):
             result = run_coverage_check(str(tmp_path), ci)
             assert result is False
+
+    def test_skip_when_no_python_source_under_src(self, tmp_path):
+        """GIVEN C-only repo with Python tests but no Python src WHEN run_coverage_check THEN skip.
+
+        C/C++ coverage is handled by the gcov stage; `coverage run --source=src`
+        on a src/ tree with no .py files collects nothing and `coverage json`
+        fails with "No data to report". (fix 2026-08-12: window-anti-pinch L1)
+        """
+        from yuleosh.ci.result import CIResult
+        from yuleosh.ci.stages import run_coverage_check
+
+        # tests/ 有 Python 测试（qualification 类，shell 到 C 二进制）
+        (tmp_path / "tests").mkdir(exist_ok=True)
+        (tmp_path / "tests" / "test_qualification.py").write_text("def test_ok(): pass\n")
+        # src/ 只有 C 源文件，无 .py
+        (tmp_path / "src").mkdir(exist_ok=True)
+        (tmp_path / "src" / "main.c").write_text("int main(void){return 0;}\n")
+
+        ci = CIResult(layer=1, commit_hash="abc123")
+
+        with mock.patch("yuleosh.ci.stages._should_skip_coverage", return_value=False), \
+                mock.patch("yuleosh.ci.stages._run_coverage_and_export",
+                           return_value=(False, "coverage error")) as m_export:
+            result = run_coverage_check(str(tmp_path), ci)
+            assert result is True  # skip 而非失败
+            stage = ci.stages[-1]
+            assert stage["name"] == "coverage"
+            assert stage["status"] == "skipped"
+            assert "no Python source" in stage["detail"]
+            # 绝不能真跑 coverage（会 "No data to report" 假失败）
+            m_export.assert_not_called()
 
 
 # ===================================================================

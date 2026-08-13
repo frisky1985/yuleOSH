@@ -147,9 +147,23 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
     # data and fails with "No data was collected". (fix 2026-08-12:
     # wiper-control L1 failed on exactly this)
     python_tests = [t for t in find_test_files(project_dir) if t.endswith(".py")]
-    if not python_tests:
-        ci.add_stage("coverage", "skipped", "no Python tests — C/C++ coverage handled by gcov stage")
-        print("    ⏭️  No Python tests — coverage skipped (C coverage via gcov)")
+    # C-only repos: even with Python *test* files (e.g. system-level qualification
+    # tests that shell out to a C binary), src/ may contain no Python modules —
+    # `coverage run --source=src` then collects nothing and `coverage json` fails
+    # with "No data to report".  C/C++ coverage is handled by the gcov stage, so
+    # skip Python coverage when there is no Python source to measure.
+    # (fix 2026-08-12: window-anti-pinch L1 failed on exactly this)
+    py_src_in_src = []
+    _src_dir = os.path.join(project_dir, "src")
+    if os.path.isdir(_src_dir):
+        for _root, _dirs, _files in os.walk(_src_dir):
+            _dirs[:] = [d for d in _dirs if not d.startswith(".") and d != "__pycache__"]
+            py_src_in_src.extend(os.path.join(_root, _f) for _f in _files if _f.endswith(".py"))
+    if not python_tests or not py_src_in_src:
+        reason = ("no Python tests" if not python_tests
+                  else "no Python source under src/ — C/C++ coverage handled by gcov stage")
+        ci.add_stage("coverage", "skipped", reason)
+        print(f"    ⏭️  {reason}")
         return True
 
     from yuleosh.ci.config import DEFAULT_COVERAGE_THRESHOLD_LINE, DEFAULT_COVERAGE_THRESHOLD_COND
