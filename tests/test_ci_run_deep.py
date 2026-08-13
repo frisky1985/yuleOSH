@@ -658,10 +658,13 @@ class TestRunUnitTests:
 class TestRunCoverage:
     @staticmethod
     def _with_py_tests(tmp_proj):
-        """2026-08-13: 有 Python 测试文件 coverage 才会真正执行 —
-        2026-08-12 起无 Python 测试的项目提前跳过, 空目录 fixture 会假失败。"""
+        """2026-08-13: 有 Python 测试文件 + src/ 有 Python 源 coverage 才会真正执行 —
+        2026-08-12 起无 Python 测试的项目提前跳过, 空目录 fixture 会假失败;
+        2026-08-13 起 src/ 无 .py 的 C-only 项目也提前跳过, fixture 须带 src/app.py。"""
         Path(tmp_proj, "tests").mkdir(exist_ok=True)
         Path(tmp_proj, "tests", "test_demo.py").write_text("def test_ok(): pass\n")
+        Path(tmp_proj, "src").mkdir(exist_ok=True)
+        Path(tmp_proj, "src", "app.py").write_text("def f(): return 1\n")
 
     def test_skipped_commit_hook(self, tmp_proj):
         from yuleosh.ci.run import run_coverage_check, CIResult
@@ -1567,9 +1570,11 @@ class TestEdgeCasesBranch:
     def test_coverage_json_fail(self, tmp_proj):
         """Cover coverage json export failure via invalid JSON."""
         from yuleosh.ci.run import run_coverage_check, CIResult
-        # 2026-08-13: 有 Python 测试文件 coverage 才会真正执行
+        # 2026-08-13: 有 Python 测试文件 + src/ 有 Python 源 coverage 才会真正执行
         Path(tmp_proj, "tests").mkdir(exist_ok=True)
         Path(tmp_proj, "tests", "test_demo.py").write_text("def test_ok(): pass\n")
+        Path(tmp_proj, "src").mkdir(exist_ok=True)
+        Path(tmp_proj, "src", "app.py").write_text("def f(): return 1\n")
         # Write invalid JSON to make _load_coverage_json fail
         Path(tmp_proj, "coverage.json").write_text("not valid json at all")
         with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
@@ -1582,6 +1587,8 @@ class TestEdgeCasesBranch:
         from yuleosh.ci.run import run_coverage_check, CIResult
         Path(tmp_proj, "tests").mkdir(exist_ok=True)
         Path(tmp_proj, "tests", "test_demo.py").write_text("def test_ok(): pass\n")
+        Path(tmp_proj, "src").mkdir(exist_ok=True)
+        Path(tmp_proj, "src", "app.py").write_text("def f(): return 1\n")
         with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                         side_effect=TimeoutExpired("coverage", 120)):
             ci = CIResult(1, "abc")
