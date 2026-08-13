@@ -76,14 +76,23 @@ if [ "$USE_DOCKER" = true ]; then
   (cd "$PROJECT_DIR" && docker compose build 2>&1) | sed 's/^/  /'
   echo -e "  ${GREEN}✅ Docker 镜像构建完成${NC}"
 else
-  # 优先使用 Python 3.12（yuleOSH 固定 3.12，见 pyproject requires-python）
+  # 优先使用 Python 3.12，其次 3.13（见 pyproject requires-python）
   PY_BIN=""
+  PY_LABEL="3.12"
   if command -v python3.12 &>/dev/null; then
     PY_BIN="$(command -v python3.12)"
+  elif command -v python3.13 &>/dev/null; then
+    PY_BIN="$(command -v python3.13)"
+    PY_LABEL="3.13"
+    echo -e "  ${YELLOW}⚠️  Python 3.13 — 3.12 preferred, 3.13 supported${NC}"
   elif command -v python3 &>/dev/null && python3 --version 2>&1 | grep -q "3\.12"; then
     PY_BIN="$(command -v python3)"
+  elif command -v python3 &>/dev/null && python3 --version 2>&1 | grep -q "3\.13"; then
+    PY_BIN="$(command -v python3)"
+    PY_LABEL="3.13"
+    echo -e "  ${YELLOW}⚠️  Python 3.13 — 3.12 preferred, 3.13 supported${NC}"
   else
-    echo -e "  ${RED}❌ 需要 Python 3.12 (yuleOSH 固定版本)${NC}"
+    echo -e "  ${RED}❌ 需要 Python 3.12 (首选) 或 3.13${NC}"
     echo "  安装: brew install python@3.12 或 apt install python3.12"
     exit 1
   fi
@@ -91,7 +100,7 @@ else
   # 创建/复用隔离 venv，一次性装好运行时 + dev 依赖
   VENV_DIR="$PROJECT_DIR/.venv"
   if [ ! -x "$VENV_DIR/bin/python" ]; then
-    echo "  创建虚拟环境 (.venv, Python 3.12)..."
+    echo "  创建虚拟环境 (.venv, Python ${PY_LABEL})..."
     "$PY_BIN" -m venv "$VENV_DIR" || { echo -e "  ${RED}❌ venv 创建失败${NC}"; exit 1; }
   fi
 

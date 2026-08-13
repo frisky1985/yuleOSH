@@ -328,6 +328,7 @@ curl -fsSL https://raw.githubusercontent.com/frisky1985/yuleOSH/main/install.sh 
 ```bash
 git clone https://github.com/frisky1985/yuleOSH.git
 cd yuleOSH
+# Python 3.12 首选；未装 3.12 时 3.13 亦可（两者均验证通过）
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 yuleosh init .
