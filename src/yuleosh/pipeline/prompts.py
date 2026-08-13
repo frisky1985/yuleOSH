@@ -127,6 +127,16 @@ def build_prd_prompt(
         "5. **Non-Functional Requirements** — performance, security, compliance\n"
         "6. **Acceptance Criteria** — how we know each requirement is done\n"
         "7. **Out of Scope** — explicitly what this release does NOT cover\n\n"
+        "CRITICAL — complete coverage:\n"
+        "- The spec is organised into numbered requirement sections (e.g. `### SR-001`, "
+        "`### SW-004`). You MUST create one Functional Requirements subsection for EVERY "
+        "such section in the spec — none may be omitted, even if short.\n"
+        "- In each subsection heading, keep the spec section ID in parentheses, e.g. "
+        "`### 4.3 模块化架构 (SR-003)`. This ID is used for automated traceability.\n"
+        "- Express every requirement as a table row with an ID (`FR-NNN`), a description, "
+        "a priority (P0/P1/P2), and an implementation note.\n"
+        "- If you are running low on output budget, prefer terse table rows for remaining "
+        "sections over omitting them — every spec section must appear.\n\n"
         "Be thorough and reference specific requirement names and scenario details."
     )
 
