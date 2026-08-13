@@ -1,3 +1,58 @@
+# yuleOSH v3.14.0 — CI 控制面三方向 + codegen 行为护栏 + MISRA 治理 + dogfood 修复发布
+
+> **发布日期**: 2026-08-13
+> **版本**: v3.14.0
+> **上一个发布 tag**: v3.13.2 (2026-08-11)
+> **版本跨度**: v3.13.2 → v3.14.0
+
+---
+
+## 🎯 本版核心
+
+从 v3.13.2 到 v3.14.0 共 **39 个 commit**（11 feat / 24 fix / 4 docs+rules / 108 files / +8635 行），主线：**CI 控制面三方向（Profile 增量装配 / diff 智能裁剪 / 门禁强度矩阵）+ codegen 行为护栏体系化 + MISRA 治理闭环 + 三轮 dogfood 修复**。
+
+---
+
+## 🚀 v3.14.0 — CI 控制面 + 护栏 + 治理
+
+### CI 控制面三方向（2026-08-11）
+- **方向1 Profile 反转为增量装配**（68805842）：minimal 白名单基线（6 步）+ P0 保护集（ALWAYS_INCLUDE=review-critical-safety/merge-gate 恒保留）+ 自定义 profile `extends` 叠加；三不变量（safety=全集 / P0 保护 / 黑名单差集等价）
+- **方向2 diff 智能裁剪**（8eea32fe）：`OSH_DIFF_SKIP=1` 按文件 glob 只裁嵌入式审查步骤，P0 保护集永不裁剪，决策写入 `session.diff_skip_decisions`（G2 显式报告）
+- **方向3 门禁强度矩阵**（41f8ab62）：block/warn/info 三档，P0 GATE 从软变硬；`resolve_gate` 统一入口 + `load_gate_policy`
+- **方案A 路径分流**（1140167f）：CI detect job 按路径分流 + codeql paths 过滤
+- **E2E 修复**（26af62eb）：白名单档无 final-report 时 status 停在 created → CLI exit(1) 误判失败；循环后终态转移修复
+
+### codegen 行为护栏体系化（2026-08-12，dogfood 第三轮 window-anti-pinch 沉淀）
+- **codegen-deploy 步骤**（4e0c7d52 + bfb72b40 + 015158d3）：生成代码部署进 src/ + 部署路径修正 + 坏 codegen 跳过
+- **deploy-anchor review + INCOMPLETE gate + resume**（f0f7d92a）：部署锚点审查 + 不完整产物阻断 + 续跑
+- **API 契约护栏**（9ac137fd + 95d5bc10）：生成代码必须实现项目头文件接口；verify_c 支持 project_root 跨目录 include
+- **seed 增量开发**（64da63fe + b56daf9e）：LLM 基于现有 src 修改而非全量重写；不修改与功能无关的既有实现
+- **部署前后跑测试 + 回归自动回滚**（4a9e888c + 4dab0cd1）：行为护栏体系化 — 备份落盘 + 门禁联动回滚 + TestRunner 抽象（PytestRunner/GoRunner）+ e2e 编译失败判定盲区修复
+- **确定性步骤缓存**（e3a8e320）：B1 内容寻址缓存 — 重跑秒级复用
+
+### MISRA 治理闭环（2026-08-12/13）
+- **三级分类 fail-safe**（b3e50838）：review_misra 分类失败不再静默放行 — except 收窄 + classification_failed 阻断
+- **deviation 门禁豁免**（711208e4 + 4d4085c3）：misra.enable 配置（库项目 unusedFunction 误报）+ 报告层 file_rel 相对路径匹配
+- **模板 ENABLE_COVERAGE**（b4cb5045）：10 个嵌入式模板 CMakeLists 统一补支持 + 真实 cmake 验证测试
+
+### 三轮 dogfood 修复（雨刮控制器 + 车窗防夹，2026-08-11/12/13）
+- verify_c 跨目录 include 误报（37f5c050）/ CIResult 构造崩溃 + list_ecu_templates join（87e01204）/ coverage gate 解析器读错字段（4e0c7d52）/ 集成测试 C 项目误判（36243e66）/ NULL-deref 扫描器 3 连修（fef866c2 + 1159fa48 + b0d3e1d3）/ C-only 仓库 coverage 假失败（8f282ded + c4f2565c + dfd02088）
+- **工程诚实第一准则落盘**（2f331711 + 23f57ea4）：测试/降级不得掩盖真实行为；限流降级收窄异常 + 留痕
+- **USER-GUIDE.md**（4bc1783d）：全流程开发使用说明 + README 入口
+
+---
+
+## 📊 质量状态
+
+| 指标 | 值 |
+|:-----|:---|
+| 全量测试 (v3.14.0) | **12535 passed / 0 failed / 127 skipped / 1 deselected** |
+| 覆盖率 | **90.87%**（行 46469/50104 + 分支 14466/16950 加权） |
+| ruff | 新增行清零 |
+| 平台验证 | window-anti-pinch 完整 pipeline + wiper-control E2E 全链路 |
+
+---
+
 # yuleOSH v3.13.0 — 多 Agent 隔离 + 统一 LLM 入口 + 覆盖率 85% 里程碑发布
 
 > **发布日期**: 2026-08-09
