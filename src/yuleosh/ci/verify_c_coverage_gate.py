@@ -500,6 +500,45 @@ def verify_c_coverage_gate(project_path: str) -> dict:
     gate_passed = line_rate_pct >= c_fail_under
     result["gate_passed"] = gate_passed
 
+    # Step 6b: Optional branch gate (c_fail_under_branch)
+    # Honesty guard: if a branch gate is configured but gcovr produced no
+    # branch data (branch_rate is None / found==0), treat as FAIL — never
+    # a vacuous pass.
+    c_fail_under_branch = None
+    try:
+        from yuleosh.ci.config import _get_ci_config
+        cfg = _get_ci_config(str(project_dir))
+        c_fail_under_branch = getattr(cfg.coverage, "c_fail_under_branch", None)
+    except Exception:  # noqa: BLE001 — 读不到配置视为 branch gate 关闭（fail-open）
+        c_fail_under_branch = None
+    result["c_fail_under_branch"] = c_fail_under_branch
+
+    branch_gate_passed = True
+    branch_data_missing = result.get("branch_rate") is None or result["branch_rate"] == 0.0
+    if c_fail_under_branch is not None:
+        branch_gate_passed = (
+            (not branch_data_missing)
+            and result["branch_rate"] >= c_fail_under_branch
+        )
+        gate_passed = gate_passed and branch_gate_passed
+        result["branch_gate_passed"] = branch_gate_passed
+        if branch_data_missing:
+            log.warning(
+                "Branch gate FAILED: no branch data (branch_rate=0); "
+                "compile with branch instrumentation (--coverage) to enable branch coverage",
+            )
+        elif not branch_gate_passed:
+            log.warning(
+                "Branch gate FAILED: branch=%.1f%% < c_fail_under_branch=%.1f%%",
+                result["branch_rate"], c_fail_under_branch,
+            )
+        else:
+            log.info(
+                "Branch gate PASSED: branch=%.1f%% >= c_fail_under_branch=%.1f%%",
+                result["branch_rate"], c_fail_under_branch,
+            )
+    result["branch_gate_passed"] = branch_gate_passed
+
     log.info(
         "C coverage gate verification: line=%.1f%%, c_fail_under=%d%% → %s",
         line_rate_pct, c_fail_under,

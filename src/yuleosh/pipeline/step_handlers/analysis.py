@@ -11,7 +11,10 @@ Exports:
   step_internal_review — AI-powered internal review of artifacts
 """
 
+import json
 import logging
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
@@ -25,6 +28,56 @@ from yuleosh.pipeline.prompts import (
 log = logging.getLogger("pipeline.step_handlers.analysis")
 
 __all__ = ["step_super_analysis", "step_hermes_prd", "step_internal_review"]
+
+
+# ------------------------------------------------------------------
+# PRD section coverage guard (2026-08-13)
+# ------------------------------------------------------------------
+
+# Spec section IDs that the PRD must cover: `### SR-001`, `### SW-004`
+_SPEC_SECTION_ID_RE = re.compile(r"^#{2,4}\s+([A-Z]{2}-\d+)\b", re.IGNORECASE)
+# PRD section heading carrying a spec ID: `### 4.1 硬件抽象层 (SR-001)`
+_PRD_COVERED_SECTION_RE = re.compile(r"\(?([A-Z]{2}-\d+)\)?", re.IGNORECASE)
+
+
+def _check_prd_section_coverage(spec_content: str, prd_content: str) -> list[str]:
+    """Return spec section IDs (SR-XXX/SW-XXX) missing from the PRD.
+
+    A section is *covered* when the PRD carries the same section ID anywhere
+    (heading or body). Spec sections are gathered from `### SR-XXX:` headings;
+    scenario headings (`### Scenario:`) are not requirement sections.
+    """
+    if not spec_content or not prd_content:
+        return []
+    spec_sections: list[str] = []
+    for line in spec_content.splitlines():
+        m = _SPEC_SECTION_ID_RE.match(line.strip())
+        if m:
+            sid = m.group(1).upper()
+            if sid not in spec_sections:
+                spec_sections.append(sid)
+    if not spec_sections:
+        return []
+
+    prd_upper = prd_content.upper()
+    missing = [sid for sid in spec_sections if sid not in prd_upper]
+    return missing
+
+
+def _prd_retry_prompt(original_user_prompt: str, missing_sections: list[str]) -> str:
+    """Build a retry prompt feeding the missing section list back to the LLM."""
+    return (
+        original_user_prompt
+        + "\n\n"
+        + "## ⚠️ Coverage feedback from automated review\n"
+        + "Your previous PRD did NOT cover the following spec section(s): "
+        + ", ".join(missing_sections)
+        + ".\n"
+        + "Please revise the PRD so that EVERY one of these sections has a "
+        + "corresponding Functional Requirements subsection with a heading that "
+        + "keeps the section ID in parentheses (e.g. `### 4.x 名称 (SR-001)`), "
+        + "each expressed as table rows (FR-NNN). Do not omit any section.\n"
+    )
 
 
 @timed_step
@@ -101,6 +154,13 @@ def step_hermes_prd(session: PipelineSession) -> str:
 
     Reads the spec file, parses requirements and scenarios,
     then uses the LLM to produce a real Product Requirements Document.
+
+    Quality guard (2026-08-13): after each LLM generation the PRD is checked
+    for spec-section coverage (SR-XXX / SW-XXX alignment). Missing sections
+    trigger a bounded retry (max 2) with the missing list fed back to the LLM.
+    If the retries are exhausted, the PRD is still written (best effort) and
+    the missing sections are recorded in a sidecar report — the step does NOT
+    fabricate template content or silently pass.
     """
     try:
         print("  🔮 [Hermes] Running AI-powered PRD generation...")
@@ -129,16 +189,33 @@ def step_hermes_prd(session: PipelineSession) -> str:
             super_analysis_content=super_content,
         )
 
-        try:
-            result = _call_llm(session, system_prompt, user_prompt)
-        except Exception as e:
-            log.error(f"LLM call failed during PRD generation: {e}")
-            raise PipelineStepError(
-                f"PRD generation LLM call failed: {e}\n"
-                f"Spec: {session.spec_path}"
-            )
+        max_retries = 2
+        result: dict | None = None
+        missing_sections: list[str] = []
+        for attempt in range(max_retries + 1):
+            try:
+                result = _call_llm(session, system_prompt, user_prompt)
+            except Exception as e:
+                log.error(f"LLM call failed during PRD generation: {e}")
+                raise PipelineStepError(
+                    f"PRD generation LLM call failed: {e}\n"
+                    f"Spec: {session.spec_path}"
+                )
 
-        analysis = result["content"]
+            analysis = result["content"]
+            # ── Section coverage check (best effort, only after first pass) ──
+            missing_sections = _check_prd_section_coverage(spec_content, analysis)
+            if not missing_sections:
+                break
+            if attempt < max_retries:
+                log.warning(
+                    "PRD missing %d spec section(s): %s — retry %d/%d",
+                    len(missing_sections), ", ".join(missing_sections),
+                    attempt + 1, max_retries,
+                )
+                user_prompt = _prd_retry_prompt(user_prompt, missing_sections)
+
+        assert result is not None, "PRD LLM call did not return a result"
         usage = result.get("usage", {})
         log.info(
             "LLM returned %d tokens (prompt=%s, completion=%s)",
@@ -164,7 +241,28 @@ def step_hermes_prd(session: PipelineSession) -> str:
         except OSError as e:
             log.error(f"Cannot write PRD: {e}")
             raise PipelineStepError(f"Cannot write PRD: {e}")
-        print(f"  ✅ [Hermes] AI-powered PRD generated at {out_path}")
+
+        # ── Sidecar coverage report (never silently pass) ──
+        if missing_sections:
+            cov_report = {
+                "session": session.name,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "status": "partial",
+                "missing_spec_sections": missing_sections,
+                "message": (
+                    f"PRD written but missing {len(missing_sections)} spec section(s). "
+                    "Review and extend the PRD before release."
+                ),
+            }
+            try:
+                cov_path = session.session_dir / "prd-coverage-gap.json"
+                cov_path.write_text(json.dumps(cov_report, indent=2, ensure_ascii=False))
+                log.warning("PRD coverage gap report written to %s", cov_path)
+            except OSError as e:
+                log.warning("Cannot write PRD coverage gap report: %s", e)
+
+        print(f"  ✅ [Hermes] AI-powered PRD generated at {out_path}"
+              + (f" (⚠️ missing {len(missing_sections)} section(s): {', '.join(missing_sections)})" if missing_sections else ""))
         log.info(f"AI-powered PRD saved to {out_path}")
         return str(out_path)
     except PipelineStepError:

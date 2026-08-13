@@ -160,11 +160,57 @@ def check_misra_consistency(project_dir: str) -> tuple[str, list[str]]:
     return "passed", ["misra-report consistent"]
 
 
+def check_coverage_branch_data(project_dir: str) -> tuple[str, list[str]]:
+    """H9: branch gate 配置了但无 branch 数据 → 红（防 0.0>=0.0 假绿旁路）。
+
+    当 ci-config 设置了 c_fail_under_branch（branch gate 开启）而 coverage
+    报告 totals.branches.found == 0（编译未开 branch 插桩）时，门禁必须红
+    而不是 0.0 >= 0.0 真空通过。
+    """
+    # 1. 读取 ci-config 判断 branch gate 是否开启
+    try:
+        from yuleosh.ci.config import _get_ci_config
+        cfg = _get_ci_config(str(project_dir))
+        branch_gate = getattr(cfg.coverage, "c_fail_under_branch", None)
+    except Exception:  # noqa: BLE001 — 读不到配置视为 branch gate 关闭（fail-open）
+        branch_gate = None
+    if branch_gate is None:
+        return "skipped", ["no c_fail_under_branch configured — branch gate off"]
+
+    # 2. 读取 coverage 报告
+    report_path = Path(project_dir) / ".yuleosh" / "reports" / "c-coverage.json"
+    if not report_path.exists():
+        return "skipped", ["no c-coverage.json — skip"]
+
+    try:
+        data = json.loads(report_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        return "failed", [f"c-coverage.json unreadable: {e}"]
+
+    totals = data.get("totals") or {}
+    branches = totals.get("branches") or {}
+    found = branches.get("found", 0)
+    branch_rate = data.get("branch_rate", 0.0)
+
+    if found == 0:
+        return "failed", [
+            (
+                f"branch gate configured ({branch_gate}) but no branch data "
+                f"(found=0, branch_rate={branch_rate}); compile with "
+                f"--coverage/--branch-probabilities to enable branch coverage"
+            ),
+        ]
+    if branch_rate < branch_gate:
+        return "failed", [f"branch_rate={branch_rate} < c_fail_under_branch={branch_gate}"]
+    return "passed", [f"branch data present (found={found}), rate={branch_rate} >= {branch_gate}"]
+
+
 ALL_CHECKS = {
     "empty-evidence": check_empty_evidence,
     "missing-artifacts": check_missing_artifacts,
     "freshness": check_result_freshness,
     "misra-consistency": check_misra_consistency,
+    "coverage-branch-data": check_coverage_branch_data,
 }
 
 

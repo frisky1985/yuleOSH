@@ -154,6 +154,44 @@ class TestGenerateBranchCoverageReport:
 
     @mock.patch("yuleosh.ci.coverage_pipeline.parse_lcov_output")
     @mock.patch("yuleosh.ci.coverage_pipeline.run_gcov_coverage")
+    def test_branch_gate_missing_data_fails(self, mock_gcov, mock_parse, mock_gcov_success, mock_lcov_parsed, tmp_path) -> None:
+        """WHEN branch gate is set but no branch data (found=0) THEN gate FAILS
+        — 0.0 >= 0.0 must not pass vacuously."""
+        mock_gcov.return_value = mock_gcov_success
+        parsed = dict(mock_lcov_parsed)
+        parsed["branch_rate"] = 0.0
+        parsed["totals"] = dict(mock_lcov_parsed["totals"])
+        parsed["totals"]["branches"] = {"found": 0, "hit": 0}
+        mock_parse.return_value = parsed
+
+        report = generate_branch_coverage_report(
+            build_dir=str(tmp_path),
+            fail_under_branch=0.0,  # even a 0.0 threshold must not pass
+        )
+
+        assert report["all_gates_passed"] is False
+        branch_gate = next(g for g in report["gates"] if g["metric"] == "branch_rate")
+        assert branch_gate["passed"] is False
+        assert branch_gate["branch_data_missing"] is True
+
+    @mock.patch("yuleosh.ci.coverage_pipeline.parse_lcov_output")
+    @mock.patch("yuleosh.ci.coverage_pipeline.run_gcov_coverage")
+    def test_branch_gate_with_data_passes(self, mock_gcov, mock_parse, mock_gcov_success, mock_lcov_parsed, tmp_path) -> None:
+        """WHEN branch data exists and rate >= threshold THEN gate passes."""
+        mock_gcov.return_value = mock_gcov_success
+        mock_parse.return_value = mock_lcov_parsed  # found=80, rate=72%
+
+        report = generate_branch_coverage_report(
+            build_dir=str(tmp_path),
+            fail_under_branch=50.0,
+        )
+
+        assert report["all_gates_passed"] is True
+        branch_gate = next(g for g in report["gates"] if g["metric"] == "branch_rate")
+        assert branch_gate["passed"] is True
+
+    @mock.patch("yuleosh.ci.coverage_pipeline.parse_lcov_output")
+    @mock.patch("yuleosh.ci.coverage_pipeline.run_gcov_coverage")
     def test_no_gate_configured(self, mock_gcov, mock_parse, mock_gcov_success, mock_lcov_parsed, tmp_path) -> None:
         """WHEN no fail_under thresholds are set THEN gates list is empty and all_gates_passed is True."""
         mock_gcov.return_value = mock_gcov_success

@@ -116,16 +116,29 @@ def generate_branch_coverage_report(
                  "PASS" if line_ok else "FAIL", line_rate, fail_under)
 
     if fail_under_branch is not None:
-        branch_ok = branch_rate >= fail_under_branch
+        # Honesty guard: when branch data is absent (found==0), a threshold
+        # of 0.0 would otherwise pass vacuously (0.0 >= 0.0). Treat missing
+        # branch data as a FAIL whenever a branch gate is configured.
+        branch_found = parsed["totals"]["branches"]["found"]
+        branch_data_missing = branch_found == 0
+        branch_ok = (branch_rate >= fail_under_branch) and not branch_data_missing
         all_gates_passed = all_gates_passed and branch_ok
         gates.append({
             "metric": "branch_rate",
             "value": branch_rate,
             "threshold": fail_under_branch,
             "passed": branch_ok,
+            "branch_data_missing": branch_data_missing,
+            "branches_found": branch_found,
         })
-        log.info("  Branch gate: %s (%.1f%% >= %.1f%%)",
-                 "PASS" if branch_ok else "FAIL", branch_rate, fail_under_branch)
+        if branch_data_missing:
+            log.warning(
+                "  Branch gate: FAIL (no branch data found=0; "
+                "compile with --branch-probabilities to enable branch coverage)",
+            )
+        else:
+            log.info("  Branch gate: %s (%.1f%% >= %.1f%%)",
+                     "PASS" if branch_ok else "FAIL", branch_rate, fail_under_branch)
 
     # Step 3b: Module-level threshold checks
     module_gates = []

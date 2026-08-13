@@ -53,12 +53,29 @@ def run_gcov_coverage(build_dir: str = ".", src_dir: str = "src") -> dict:
     # Step 1: lcov capture
     try:
         log.info("Running lcov capture in %s ...", build_dir)
-        subprocess.run(
-            ["lcov", "--capture", "--directory", ".",
-             "--output-file", lcov_file],
+        # Enable branch coverage data in the .info output; without this,
+        # BRF:/BRH: lines are omitted and branch_rate is always 0.0.
+        # lcov >= 2.x renamed the rc key: `lcov_branch_coverage` (deprecated)
+        # → `branch_coverage`. Try the new name first, fall back to old.
+        cmd = ["lcov", "--capture", "--directory", ".",
+               "--rc", "branch_coverage=1",
+               "--output-file", lcov_file]
+        proc = subprocess.run(
+            cmd,
             capture_output=True, text=True, timeout=120,
-            cwd=build_dir,
+            cwd=build_dir, check=False,
         )
+        if "deprecated" in (proc.stderr or "") or "unknown option" in (proc.stderr or "").lower():
+            log.info("lcov branch_coverage rc not supported — retrying with lcov_branch_coverage")
+            proc = subprocess.run(
+                ["lcov", "--capture", "--directory", ".",
+                 "--rc", "lcov_branch_coverage=1",
+                 "--output-file", lcov_file],
+                capture_output=True, text=True, timeout=120,
+                cwd=build_dir, check=False,
+            )
+        if proc.returncode != 0:
+            log.warning("lcov capture exited %d: %s", proc.returncode, (proc.stderr or "")[-500:])
     except FileNotFoundError:
         result["error"] = "lcov not installed"
         log.error(result["error"])
@@ -85,6 +102,7 @@ def run_gcov_coverage(build_dir: str = ".", src_dir: str = "src") -> dict:
             ["lcov", "--remove", lcov_file,
              "/usr/*", "/opt/*", "*/test/*", "*/tests/*",
              "*/build/*",
+             "--rc", "branch_coverage=1",
              "--output-file", filtered_file],
             capture_output=True, text=True, timeout=60,
             cwd=build_dir,
@@ -310,11 +328,24 @@ def generate_c_coverage_report(
             )
 
     if fail_under_branch is not None:
-        if branch_rate < fail_under_branch:
-            log.warning(
-                "BRANCH COVERAGE GATE FAILED: branch_rate=%.1f%% < fail_under_branch=%.1f%%",
-                branch_rate, fail_under_branch,
-            )
+        # Honesty guard: found==0 means branch data was never collected
+        # (compile missing --branch-probabilities). A 0.0 >= 0.0 comparison
+        # would pass vacuously; treat missing branch data as FAIL whenever
+        # a branch gate is configured.
+        branch_found = parsed["totals"]["branches"]["found"]
+        branch_data_missing = branch_found == 0
+        branch_ok = (branch_rate >= fail_under_branch) and not branch_data_missing
+        if not branch_ok:
+            if branch_data_missing:
+                log.warning(
+                    "BRANCH COVERAGE GATE FAILED: no branch data (found=0); "
+                    "compile with --branch-probabilities to enable branch coverage",
+                )
+            else:
+                log.warning(
+                    "BRANCH COVERAGE GATE FAILED: branch_rate=%.1f%% < fail_under_branch=%.1f%%",
+                    branch_rate, fail_under_branch,
+                )
         else:
             log.info(
                 "BRANCH COVERAGE GATE PASSED: branch_rate=%.1f%% >= fail_under_branch=%.1f%%",
@@ -333,13 +364,17 @@ def generate_c_coverage_report(
             "passed": line_ok,
         })
     if fail_under_branch is not None:
-        branch_ok = branch_rate >= fail_under_branch
+        branch_found = parsed["totals"]["branches"]["found"]
+        branch_data_missing = branch_found == 0
+        branch_ok = (branch_rate >= fail_under_branch) and not branch_data_missing
         gate_passed = gate_passed and branch_ok
         gate_details.append({
             "metric": "branch_rate",
             "value": branch_rate,
             "threshold": fail_under_branch,
             "passed": branch_ok,
+            "branch_data_missing": branch_data_missing,
+            "branches_found": branch_found,
         })
 
     output = {

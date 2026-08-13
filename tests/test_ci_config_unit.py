@@ -82,6 +82,15 @@ class TestCoverageConfig:
         cfg = CoverageConfig()
         assert cfg.c_fail_under == 70
 
+    def test_c_fail_under_branch_default_none(self):
+        """branch gate 默认关闭（None）— 向后兼容。"""
+        cfg = CoverageConfig()
+        assert cfg.c_fail_under_branch is None
+
+    def test_c_fail_under_branch_settable(self):
+        cfg = CoverageConfig(c_fail_under_branch=45.0)
+        assert cfg.c_fail_under_branch == 45.0
+
 
 class TestHardwareTestConfig:
     def test_defaults(self):
