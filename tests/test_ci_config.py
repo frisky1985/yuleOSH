@@ -60,6 +60,7 @@ def with_default_config(tmp_project):
             "threshold_line": 85.0,
             "threshold_condition": 80.0,
             "strict": True,
+            "c_fail_under_branch": 45.0,
             "module_thresholds": {"src/cross/": 85.0, "src/ci/": 75.0},
         },
         "hardware_test": {
@@ -151,6 +152,7 @@ class TestLoadCIConfigParsed:
         assert cfg.coverage.threshold_line == 85.0
         assert cfg.coverage.threshold_condition == 80.0
         assert cfg.coverage.strict is True
+        assert cfg.coverage.c_fail_under_branch == 45.0
         assert "src/cross/" in cfg.coverage.module_thresholds
         assert cfg.coverage.module_thresholds["src/cross/"] == 85.0
 

@@ -15,14 +15,15 @@ import json
 import pathlib
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from yuleosh.ci.honesty_gate import (  # noqa: E402
+from yuleosh.ci.honesty_gate import (
+    check_coverage_branch_data,
     check_empty_evidence,
-    check_missing_artifacts,
     check_misra_consistency,
+    check_missing_artifacts,
     check_result_freshness,
     run_honesty_gate,
 )
@@ -52,7 +53,7 @@ def _mkproj(tmp_path: pathlib.Path, with_misra_report: bool = True,
 
 def _fresh_layer_result(proj: pathlib.Path, age_days: int = 0) -> pathlib.Path:
     """Write a layer1 result file with completed_at *age_days* in the past."""
-    ts = (datetime.now(timezone.utc) - timedelta(days=age_days)).isoformat()
+    ts = (datetime.now(UTC) - timedelta(days=age_days)).isoformat()
     f = proj / ".osh" / "ci" / "layer1-test.json"
     f.write_text(json.dumps({"layer": 1, "status": "passed", "completed_at": ts}))
     return f
@@ -161,7 +162,7 @@ class TestH4StaleTimestamp:
     def test_started_at_also_checked(self, tmp_path):
         """started_at 过期同样红（不只 completed_at）。"""
         proj = _mkproj(tmp_path)
-        ts = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        ts = (datetime.now(UTC) - timedelta(days=90)).isoformat()
         (proj / ".osh" / "ci" / "layer1-old.json").write_text(
             json.dumps({"layer": 1, "status": "passed", "started_at": ts})
         )
@@ -260,6 +261,85 @@ class TestH8NumberInconsistency:
         """无 misra-report.json → skip。"""
         status, msgs = check_misra_consistency(str(tmp_path))
         assert status == "skipped", msgs
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# H9 branch gate 数据缺失 — 配了 branch 阈值但无 branch 数据 → 红
+# （防 0.0 >= 0.0 真空通过的假绿旁路）
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _mkproj_with_branch_gate(tmp_path, branch_gate: float = 50.0):
+    proj = _mkproj(tmp_path)
+    # 写 ci-config.yaml 开启 branch gate
+    ci_dir = proj / ".yuleosh"
+    ci_dir.mkdir(parents=True, exist_ok=True)
+    (ci_dir / "ci-config.yaml").write_text(
+        "project:\n"
+        "  language: c\n"
+        "coverage:\n"
+        "  c_fail_under: 70\n"
+        f"  c_fail_under_branch: {branch_gate}\n"
+    )
+    from yuleosh.ci.config import _clear_ci_config_cache
+    _clear_ci_config_cache()
+    return proj
+
+
+def _write_coverage_report(proj, found: int = 0, hit: int = 0, branch_rate: float = 0.0):
+    (proj / ".yuleosh" / "reports" / "c-coverage.json").write_text(json.dumps({
+        "success": True,
+        "totals": {"lines": {"found": 100, "hit": 80}, "branches": {"found": found, "hit": hit}},
+        "line_rate": 80.0,
+        "branch_rate": branch_rate,
+    }))
+
+
+class TestH9BranchDataMissing:
+    def test_branch_gate_without_data_red(self, tmp_path):
+        """配了 branch 阈值但 found=0 → 必须红（0.0>=0.0 不得真空通过）。"""
+        proj = _mkproj_with_branch_gate(tmp_path, branch_gate=0.0)
+        _write_coverage_report(proj, found=0, hit=0, branch_rate=0.0)
+        status, msgs = check_coverage_branch_data(str(proj))
+        assert status == "failed", f"found=0 + gate=0 必须红，实际 {status}: {msgs}"
+
+    def test_branch_gate_below_threshold_red(self, tmp_path):
+        """branch_rate < 阈值 → 红。"""
+        proj = _mkproj_with_branch_gate(tmp_path, branch_gate=50.0)
+        _write_coverage_report(proj, found=20, hit=5, branch_rate=25.0)
+        status, msgs = check_coverage_branch_data(str(proj))
+        assert status == "failed", msgs
+
+    def test_branch_gate_above_threshold_green(self, tmp_path):
+        """branch_rate >= 阈值且数据存在 → 绿。"""
+        proj = _mkproj_with_branch_gate(tmp_path, branch_gate=50.0)
+        _write_coverage_report(proj, found=20, hit=15, branch_rate=75.0)
+        status, msgs = check_coverage_branch_data(str(proj))
+        assert status == "passed", msgs
+
+    def test_no_branch_gate_skips(self, tmp_path):
+        """未配置 c_fail_under_branch → skip（不影响旧项目）。"""
+        proj = _mkproj(tmp_path)
+        _write_coverage_report(proj, found=0, hit=0, branch_rate=0.0)
+        status, msgs = check_coverage_branch_data(str(proj))
+        assert status == "skipped", msgs
+
+    def test_no_coverage_report_skips(self, tmp_path):
+        """无 c-coverage.json → skip。"""
+        proj = _mkproj_with_branch_gate(tmp_path)
+        status, msgs = check_coverage_branch_data(str(proj))
+        assert status == "skipped", msgs
+
+    def test_clean_project_all_green_with_branch_gate(self, tmp_path):
+        """干净项目 + branch gate 配置 + 有 branch 数据 → 套件全绿。"""
+        proj = _mkproj_with_branch_gate(tmp_path, branch_gate=50.0)
+        _write_coverage_report(proj, found=20, hit=15, branch_rate=75.0)
+        _fresh_layer_result(proj, age_days=0)
+        (proj / ".osh" / "evidence" / "review.json").write_text(
+            json.dumps({"type": "review", "status": "passed",
+                        "title": "t", "details": "d", "verdict": "approved"})
+        )
+        assert run_honesty_gate(str(proj)) is True
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -398,10 +478,10 @@ class TestH9FakeSkipInjection:
 
     def test_fake_skip_non_git_red(self):
         """注入: 非 git checkout 返回空 → plan_skips 不裁剪（G1 fail-safe）。"""
-        from yuleosh.ci.diff_planner import collect_changed_files, plan_skips
-
         # 非 git 目录
         import tempfile
+
+        from yuleosh.ci.diff_planner import collect_changed_files, plan_skips
 
         with tempfile.TemporaryDirectory() as tmp:
             changed = collect_changed_files(tmp)
