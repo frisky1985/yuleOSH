@@ -231,6 +231,19 @@ def _run_coverage_and_export(project_dir: str) -> tuple[bool, str]:
 
     Returns (success, error_detail).
     """
+    # C-only repos: src/ has no Python modules, so `coverage run --source=src`
+    # collects nothing and `coverage json` fails with "No data to report".
+    # C/C++ coverage is handled by the separate gcov stage (c-coverage);
+    # skip Python coverage entirely when there is nothing to measure.
+    # (fix 2026-08-12: window-anti-pinch L1 failed on exactly this)
+    src_dir = os.path.join(project_dir, "src")
+    if os.path.isdir(src_dir):
+        py_src = []
+        for root, dirs, files in os.walk(src_dir):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+            py_src.extend(os.path.join(root, f) for f in files if f.endswith(".py"))
+        if not py_src:
+            return False, "no Python source under src/ — C/C++ coverage handled by gcov stage"
     cov_env = {**os.environ, "COVERAGE_RUN": "1"}
     result = subprocess.run(
         [sys.executable, "-m", "coverage", "run", "--branch", "--source=src",
