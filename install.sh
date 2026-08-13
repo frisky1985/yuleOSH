@@ -23,9 +23,11 @@ INSTALL_DIR="${YULEOSH_DIR:-$HOME/.yuleosh}"
 GITHUB="https://github.com/frisky1985/yuleOSH"
 START_TIME=$(date +%s)
 # Python 版本约束（与 pyproject.toml requires-python 一致）
-REQUIRED_PYTHON="3.12"
+# 优先 3.12；3.13 亦受支持（实验验证全量测试通过）
+REQUIRED_PYTHON="3.12 (preferred) or 3.13"
 PY_MAJOR=3
-PY_MINOR=12
+PREFERRED_PY_MINOR=12
+ALT_PY_MINOR=13
 
 # ---- Color helpers ---------------------------------------------------------
 RED='\033[0;31m'
@@ -74,46 +76,73 @@ version_ge() {
     printf '%s\n' "$2" "$1" | sort -V -C
 }
 
+# ---- Python detection ------------------------------------------------------
+# 优先 Python 3.12，其次 3.13；其他版本拒绝。
+# 顺序: python3.12 精确命令 > python3.13 精确命令 > 通用 python3 版本解析
+print_python_install_hint() {
+    case "$OS" in
+        linux)
+            info "Install: apt install python3.12 (Debian/Ubuntu) / dnf install python3.12 (RHEL/Fedora)"
+            ;;
+        macos)
+            info "Install: brew install python@3.12  (3.13: brew install python@3.13)"
+            ;;
+    esac
+}
+
+detect_python() {
+    local pyver pymajor pyminor
+
+    # 1) 精确命令 python3.12 —— 首选
+    if command -v python3.12 &>/dev/null; then
+        PY_BIN="$(command -v python3.12)"
+        PY_VER=$("${PY_BIN}" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        ok "Python ${PY_VER:-3.12.x} (preferred)"
+        return 0
+    fi
+
+    # 2) 精确命令 python3.13 —— 备选
+    if command -v python3.13 &>/dev/null; then
+        PY_BIN="$(command -v python3.13)"
+        PY_VER=$("${PY_BIN}" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        warn "Python ${PY_VER:-3.13.x} — 3.12 preferred, 3.13 supported"
+        return 0
+    fi
+
+    # 3) 通用 python3，按版本解析
+    if command -v python3 &>/dev/null; then
+        pyver=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        pymajor="${pyver%%.*}"
+        pyminor="${pyver#*.}"
+        pyminor="${pyminor%%.*}"
+        if [ "$pymajor" = "$PY_MAJOR" ] && [ "$pyminor" = "$PREFERRED_PY_MINOR" ]; then
+            PY_BIN="$(command -v python3)"
+            PY_VER=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            ok "Python ${PY_VER:-$pyver} (preferred)"
+            return 0
+        fi
+        if [ "$pymajor" = "$PY_MAJOR" ] && [ "$pyminor" = "$ALT_PY_MINOR" ]; then
+            PY_BIN="$(command -v python3)"
+            PY_VER=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            warn "Python ${PY_VER:-$pyver} — 3.12 preferred, 3.13 supported"
+            return 0
+        fi
+        fail "Python $pyver found, but ${REQUIRED_PYTHON} is required."
+        print_python_install_hint
+        return 1
+    fi
+
+    fail "python3 is required but not found."
+    print_python_install_hint
+    return 1
+}
+
 # ---- Pre-flight checks -----------------------------------------------------
 preflight() {
     local issues=0
 
-    # Required: python3.12 (exact minor, matches pyproject requires-python)
-    if command -v python3.12 &>/dev/null; then
-        PY_BIN="$(command -v python3.12)"
-        ok "Python $(python3.12 --version 2>&1 | grep -oE '3\.12\.[0-9]+')"
-    elif command -v python3 &>/dev/null; then
-        local pyver
-        pyver=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-        local pymajor pyminor
-        pymajor="${pyver%%.*}"
-        pyminor="${pyver#*.}"
-        pyminor="${pyminor%%.*}"
-        if [ "$pymajor" = "$PY_MAJOR" ] && [ "$pyminor" = "$PY_MINOR" ]; then
-            PY_BIN="$(command -v python3)"
-            ok "Python $pyver"
-        else
-            fail "Python $pyver found, but Python ${REQUIRED_PYTHON} is required (yuleOSH pins to 3.12 for CI reproducibility)."
-            case "$OS" in
-                linux)
-                    info "Install: apt install python3.12 (Debian/Ubuntu) / dnf install python3.12 (RHEL/Fedora)"
-                    ;;
-                macos)
-                    info "Install: brew install python@3.12"
-                    ;;
-            esac
-            issues=$((issues + 1))
-        fi
-    else
-        fail "python3 is required but not found."
-        case "$OS" in
-            linux)
-                info "Install: apt install python3.12 (Debian/Ubuntu) / yum install python3.12 (RHEL)"
-                ;;
-            macos)
-                info "Install: brew install python@3.12"
-                ;;
-        esac
+    # Required: Python 3.12 (preferred) or 3.13
+    if ! detect_python; then
         issues=$((issues + 1))
     fi
 
@@ -157,7 +186,7 @@ preflight() {
 }
 
 # ---- Dependency installation -----------------------------------------------
-# 在 INSTALL_DIR/.venv 创建隔离虚拟环境（Python 3.12），
+# 在 INSTALL_DIR/.venv 创建隔离虚拟环境（Python 3.12 优先 / 3.13 亦可），
 # 一次性装好运行时 + dev(测试) 依赖，避免污染系统 Python。
 VENV_DIR="${INSTALL_DIR}/.venv"
 
@@ -174,7 +203,7 @@ ensure_venv() {
         return 0
     fi
 
-    info "Creating virtual environment at ${VENV_DIR} (Python ${REQUIRED_PYTHON})..."
+    info "Creating virtual environment at ${VENV_DIR} (Python ${PY_VER:-${REQUIRED_PYTHON}})... "
     mkdir -p "$(dirname "${VENV_DIR}")"
     "${PY_BIN}" -m venv "${VENV_DIR}" || {
         fail "Failed to create venv with ${PY_BIN}"
