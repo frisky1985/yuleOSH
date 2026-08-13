@@ -274,6 +274,107 @@ class TestModuleThresholds:
         assert any("Module thresholds" in str(s.get("detail", "")) for s in ci.stages)
 
 
+class TestBranchGateBlock:
+    """验证 c_fail_under_branch 为 block 语义（2026-08-13 升级）。
+
+    配置了 branch gate 时：
+      - branch 数据存在且达标 → passed
+      - branch 数据存在但低于阈值 → failed（block）
+      - branch 数据缺失（found=0）→ failed（honesty guard，绝不真空通过）
+    """
+
+    @staticmethod
+    def _write_report(tmp_path, **overrides):
+        report_dir = Path(str(tmp_path)) / ".yuleosh" / "reports"
+        report_dir.mkdir(parents=True)
+        report = {
+            "line_rate": 80.0,
+            "branch_rate": 64.8,
+            "totals": {"branches": {"found": 216, "hit": 140}},
+            "files": [],
+        }
+        report.update(overrides)
+        (report_dir / "c-coverage.json").write_text(json.dumps(report))
+
+    @mock.patch("yuleosh.ci.config._get_ci_config")
+    def test_branch_gate_passes_when_above(self, mock_get_config, tmp_path):
+        from yuleosh.ci.result import CIResult
+        from yuleosh.ci.stages import run_c_coverage_check
+
+        mock_cfg = mock.MagicMock()
+        mock_cfg.coverage.c_fail_under = 70
+        mock_cfg.coverage.module_thresholds = {}
+        # 真实数值 → branch gate 生效
+        mock_cfg.coverage.c_fail_under_branch = 60.0
+        mock_get_config.return_value = mock_cfg
+
+        self._write_report(tmp_path)
+        ci = CIResult(1, "test-commit")
+        result = run_c_coverage_check(str(tmp_path), ci)
+
+        assert result is True, "Should pass when branch rate above threshold"
+        assert any("branch_rate=64.8%" in str(s.get("detail", "")) for s in ci.stages)
+
+    @mock.patch("yuleosh.ci.config._get_ci_config")
+    def test_branch_gate_blocks_when_below(self, mock_get_config, tmp_path):
+        from yuleosh.ci.result import CIResult
+        from yuleosh.ci.stages import run_c_coverage_check
+
+        mock_cfg = mock.MagicMock()
+        mock_cfg.coverage.c_fail_under = 70
+        mock_cfg.coverage.module_thresholds = {}
+        mock_cfg.coverage.c_fail_under_branch = 80.0
+        mock_get_config.return_value = mock_cfg
+
+        self._write_report(tmp_path, branch_rate=64.8)
+        ci = CIResult(1, "test-commit")
+        result = run_c_coverage_check(str(tmp_path), ci)
+
+        assert result is False, "Should block when branch rate below threshold"
+        assert any("Branch coverage 64.8% < c_fail_under_branch 80.0%" in str(s.get("detail", ""))
+                   for s in ci.stages)
+
+    @mock.patch("yuleosh.ci.config._get_ci_config")
+    def test_branch_gate_blocks_when_data_missing(self, mock_get_config, tmp_path):
+        """Honesty guard: 配置了 branch gate 但无 branch 数据 → 必红（绝不真空通过）。"""
+        from yuleosh.ci.result import CIResult
+        from yuleosh.ci.stages import run_c_coverage_check
+
+        mock_cfg = mock.MagicMock()
+        mock_cfg.coverage.c_fail_under = 70
+        mock_cfg.coverage.module_thresholds = {}
+        mock_cfg.coverage.c_fail_under_branch = 60.0
+        mock_get_config.return_value = mock_cfg
+
+        self._write_report(tmp_path, branch_rate=0.0,
+                           totals={"branches": {"found": 0, "hit": 0}})
+        ci = CIResult(1, "test-commit")
+        result = run_c_coverage_check(str(tmp_path), ci)
+
+        assert result is False, "Should block when branch data missing"
+        assert any("no branch data" in str(s.get("detail", "")) for s in ci.stages)
+
+    @mock.patch("yuleosh.ci.config._get_ci_config")
+    def test_branch_gate_ignored_when_not_configured(self, mock_get_config, tmp_path):
+        """未配置 c_fail_under_branch（None）→ 走原 line-only 路径，不误伤。"""
+        from yuleosh.ci.result import CIResult
+        from yuleosh.ci.stages import run_c_coverage_check
+
+        mock_cfg = mock.MagicMock()
+        mock_cfg.coverage.c_fail_under = 70
+        mock_cfg.coverage.module_thresholds = {}
+        # MagicMock 属性访问返回 MagicMock，但类型守卫应视为未配置
+        mock_get_config.return_value = mock_cfg
+
+        self._write_report(tmp_path)
+        ci = CIResult(1, "test-commit")
+        result = run_c_coverage_check(str(tmp_path), ci)
+
+        assert result is True, "No branch gate configured → line gate only"
+        assert any(s.get("name") == "c-coverage-gate" and s.get("status") == "passed"
+                   for s in ci.stages)
+
+
 # ===================================================================
 # Fix 7: ci-config.yaml deviation 清理
 # ===================================================================

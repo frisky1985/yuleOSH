@@ -449,6 +449,51 @@ def run_c_coverage_check(project_dir: str, ci: CIResult) -> bool:
             print(f"    🔧 Consider adding module_thresholds in ci-config.yaml for low-coverage modules")
         return False
 
+    # ── Branch gate (c_fail_under_branch) — block semantics ──
+    # Honesty guard: when a branch gate is configured but the report carries
+    # no branch data (found==0 / branch_rate==0), treat as FAIL — never a
+    # vacuous 0.0 >= threshold pass. (2026-08-13: upgraded from record-only to
+    # block; verified on window-anti-pinch with branch_rate=64.8%.)
+    try:
+        from yuleosh.ci.config import _get_ci_config as _get_cfg_branch
+        _branch_cfg = _get_cfg_branch(project_dir)
+        _bg = _branch_cfg.coverage.c_fail_under_branch if _branch_cfg else None
+        # 类型守卫: MagicMock/None 等非数值视为未配置（数值才是真实配置）
+        branch_gate = _bg if isinstance(_bg, (int, float)) else None
+    except Exception:  # noqa: BLE001 — 配置读取失败视为 branch gate 关闭（fail-open）
+        branch_gate = None
+    if branch_gate is not None:
+        branch_found = 0
+        _totals = report.get("totals") or {}
+        _branches = _totals.get("branches") or {}
+        if isinstance(_branches, dict):
+            branch_found = int(_branches.get("found", 0) or 0)
+        # batch format: summary.branches.found
+        if branch_found == 0 and isinstance(report.get("summary"), dict):
+            _sb = report["summary"].get("branches") or {}
+            if isinstance(_sb, dict):
+                branch_found = int(_sb.get("found", 0) or 0)
+        # branch_rate may be percent (CI format) or fraction 0-1 (batch format)
+        _raw_branch = report.get("branch_rate", 0.0) or 0.0
+        branch_rate_pct = _raw_branch * 100.0 if 0.0 < _raw_branch <= 1.0 else float(_raw_branch)
+        branch_data_missing = branch_found == 0 or branch_rate_pct == 0.0
+        branch_ok = (not branch_data_missing) and branch_rate_pct >= branch_gate
+        if not branch_ok:
+            if branch_data_missing:
+                detail = (
+                    f"Branch gate configured ({branch_gate}%) but no branch data "
+                    f"(found={branch_found}, branch_rate={branch_rate_pct:.1f}%); "
+                    f"compile with --coverage/--branch-probabilities"
+                )
+            else:
+                detail = f"Branch coverage {branch_rate_pct:.1f}% < c_fail_under_branch {branch_gate}%"
+            ci.add_stage("c-coverage-gate", "failed", detail)
+            print(f"    ❌ {detail}")
+            return False
+        ci.add_stage("c-coverage-gate", "passed",
+                     f"line_rate={line_rate:.1f}% >= {c_fail_under}%; "
+                     f"branch_rate={branch_rate_pct:.1f}% >= {branch_gate}%")
+
     # ── Module-level threshold checks (SWR-003.2) ──
     try:
         module_thresholds = cfg.coverage.module_thresholds if cfg else {}

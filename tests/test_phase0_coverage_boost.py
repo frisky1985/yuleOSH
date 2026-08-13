@@ -692,9 +692,23 @@ class TestAdditionalCoverage:
         from yuleosh.store_pg import PostgresStore
         assert PostgresStore is not None
 
-    def test_ui_auth_import(self):
-        from yuleosh.ui.auth import AUTH_ENABLED, API_KEY, is_authenticated
-        assert AUTH_ENABLED is False  # No env key in test
+    def test_ui_auth_import(self, monkeypatch):
+        import importlib
+        import yuleosh.ui.auth as auth_mod
+        # SEC-C3 fail-closed (v3.6.1): 无 YULEOSH_AUTH_DISABLED 时鉴权默认开启。
+        # 显式清除环境变量避免全量/单测顺序依赖（历史断言过时，见 7066109e）。
+        monkeypatch.delenv("YULEOSH_AUTH_DISABLED", raising=False)
+        monkeypatch.delenv("YULEOSH_API_KEY", raising=False)
+        importlib.reload(auth_mod)
+        assert auth_mod.AUTH_ENABLED is True  # fail-closed: 默认开启
+        # 显式禁用开关仍生效
+        monkeypatch.setenv("YULEOSH_AUTH_DISABLED", "1")
+        importlib.reload(auth_mod)
+        assert auth_mod.AUTH_ENABLED is False
+        # 恢复默认状态，避免影响后续测试
+        monkeypatch.delenv("YULEOSH_AUTH_DISABLED", raising=False)
+        importlib.reload(auth_mod)
+        assert callable(auth_mod.is_authenticated)
 
     def test_api_router_import(self):
         from yuleosh.api.router import ROUTES, dispatch
