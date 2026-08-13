@@ -207,10 +207,13 @@ def test_coverage_nested_skips():
 
 def test_coverage_no_tool(tmp_path):
     """Coverage tool not installed → returns False (blocking)."""
-    # 2026-08-13: 有 Python 测试文件 coverage 才会真正执行
-    # (2026-08-12 起无 Python 测试的项目提前跳过 → 空目录 fixture 假失败)
+    # 2026-08-13: 有 Python 测试文件 + src/ 有 Python 源 coverage 才会真正执行
+    # (2026-08-12 起无 Python 测试的项目提前跳过 → 空目录 fixture 假失败;
+    #  2026-08-13 起 src/ 无 .py 的 C-only 项目也提前跳过 → fixture 须带 src/app.py)
     (tmp_path / "tests").mkdir(exist_ok=True)
     (tmp_path / "tests" / "test_demo.py").write_text("def test_ok(): pass\n")
+    (tmp_path / "src").mkdir(exist_ok=True)
+    (tmp_path / "src" / "app.py").write_text("def f(): return 1\n")
     ci = CIResult(1, "test")
     with mock.patch("yuleosh.ci.stages.test._run_coverage_and_export",
                     return_value=(False, "coverage tool not found")):
