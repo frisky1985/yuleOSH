@@ -67,6 +67,7 @@ jobs:
         python-version: ['3.12']
 
     steps:
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-python-env
       with:
         python-version: ${{ matrix.python-version }}
@@ -126,6 +127,7 @@ jobs:
     if: needs.detect.outputs.src == 'true' || needs.detect.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-python-env
 
     - name: Install quality tooling
@@ -173,6 +175,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-python-env
 
     - name: Install strict tooling
@@ -213,6 +216,7 @@ jobs:
     if: needs.detect.outputs.src == 'true' || needs.detect.outputs.frontend == 'true' || needs.detect.outputs.desktop == 'true' || needs.detect.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-python-env
       with:
         extra-pip: 'pip-audit'
@@ -269,6 +273,7 @@ jobs:
     if: (needs.detect.outputs.src == 'true' || needs.detect.outputs.workflow == 'true') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v7
     - uses: ./.github/actions/setup-python-env
 
     - name: RTM Gate Check (ASPICE SWE.4)
