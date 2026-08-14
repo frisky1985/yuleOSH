@@ -49,11 +49,13 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: $TAG"
 
-      - name: Download all build artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+          # 只下载桌面安装包，排除 frontend-out（前端静态产物不属于 Release 资产）
+          pattern: yuleOSH-*
 
       - name: List release artifacts
         run: |
