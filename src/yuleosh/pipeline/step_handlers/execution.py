@@ -163,6 +163,23 @@ def step_claude_dev(session: PipelineSession) -> str:
     return _step_claude_dev_planning(session)
 
 
+def _detect_project_language(project_dir: Path) -> Optional[str]:
+    """Heuristic project language detection for codegen language_hint.
+
+    Returns ``c`` for CMake/C projects (CMakeLists.txt present or .c/.h
+    sources dominate), ``python`` for Python projects, else None.
+
+    2026-08-14 headlamp dogfood: language_hint 未设置时 LLM 自由发挥 →
+    生成 Python 到 C 项目假绿。此探测给 codegen 明确语言约束。
+    """
+    root = Path(project_dir)
+    if (root / "CMakeLists.txt").exists() or (root / "Makefile").exists():
+        return "c"
+    if (root / "pyproject.toml").exists() or (root / "setup.py").exists():
+        return "python"
+    return None
+
+
 def _step_claude_dev_codegen(session: PipelineSession) -> str:
     """D3 codegen branch: spec/arch/PRD → code → verify → auto-fix."""
     from yuleosh.codegen.engine import CodegenEngine, build_codegen_report
@@ -187,10 +204,19 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         target_language = cfg.get("target_language")
         build_cmd = cfg.get("build_cmd")
         language_hint = cfg.get("language")
+        if not language_hint:
+            language_hint = _detect_project_language(project_dir)
 
         # 方案 C seed 增量 (2026-08-12): 注入现有 src 代码作为基线,
         # engine 复制 seed 到输出目录, LLM 只增量修改。
         seed_sources = collect_seed_sources(project_dir)
+
+        # CONTEXT.md 注入 (2026-08-14, headlamp dogfood): 领域术语 + 语言约束
+        # 必须传给 codegen — 否则 LLM 不知项目语言, 生成错误语言代码假绿。
+        context_content = ""
+        context_path = project_dir / "CONTEXT.md"
+        if context_path.exists():
+            context_content = context_path.read_text(encoding="utf-8", errors="replace")
 
         system_prompt, user_prompt = build_codegen_prompt(
             spec_content=spec_content,
@@ -202,6 +228,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             target_language=target_language,
             existing_headers=collect_existing_headers(project_dir),
             seed_sources=seed_sources,
+            context_content=context_content,
         )
 
         engine = CodegenEngine(

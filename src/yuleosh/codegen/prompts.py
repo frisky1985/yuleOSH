@@ -98,6 +98,7 @@ def build_codegen_prompt(
     target_language: Optional[str] = None,
     existing_headers: str = "",
     seed_sources: str = "",
+    context_content: str = "",
 ) -> tuple[str, str]:
     """Build ``(system_prompt, user_prompt)`` for code generation.
 
@@ -113,6 +114,10 @@ def build_codegen_prompt(
     seed_sources (2026-08-12, 方案 C seed 增量): 项目现有 src 代码
     (.c/.h) 作为基线。模型基于这些代码做增量修改 — 只输出它新增或
     修改的文件, 未修改的文件不要重发 (engine 端保留 seed 副本)。
+
+    context_content (2026-08-14, headlamp dogfood): CONTEXT.md 领域术语 +
+    语言约束 (如 "C99 嵌入式固件, 禁止生成 Python")。此前未注入导致
+    LLM 不知项目语言 → 语言漂移假绿。
     """
     if skills is None:
         skills = DEFAULT_CODEGEN_SKILLS
@@ -145,6 +150,13 @@ def build_codegen_prompt(
     context_parts = [
         f"# Specification: {spec_name}\n```markdown\n{spec_content[:8000]}\n```"
     ]
+    # Project context (2026-08-14, headlamp dogfood): CONTEXT.md 领域术语 +
+    # 语言约束放最前 — LLM 必须先知道项目语言/约束再写代码。
+    if context_content:
+        context_parts.insert(
+            1,
+            f"# Project Context (必须遵守)\n```markdown\n{context_content[:4000]}\n```",
+        )
     if architecture_content:
         context_parts.append(
             f"# Architecture\n```markdown\n{architecture_content[:5000]}\n```"

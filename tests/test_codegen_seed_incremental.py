@@ -125,6 +125,23 @@ class TestPromptSeedInjection:
         sys_p, _ = build_codegen_prompt("SPEC", "s.md", seed_sources="seed")
         assert "Incrementally modify" in sys_p
 
+    def test_context_content_injected(self):
+        """CONTEXT.md 领域术语/语言约束注入 codegen prompt。
+
+        Regression: 2026-08-14 headlamp dogfood — CONTEXT.md 未注入 → LLM
+        不知道项目是 C 嵌入式 → 生成 Python 假绿。
+        """
+        _, user_p = build_codegen_prompt(
+            "SPEC", "s.md",
+            context_content="本项目是 C99 嵌入式固件。禁止生成 Python。",
+        )
+        assert "C99" in user_p
+        assert "禁止生成 Python" in user_p
+
+    def test_context_content_absent_by_default(self):
+        _, user_p = build_codegen_prompt("SPEC", "s.md")
+        assert "# Project Context" not in user_p
+
 
 class TestEngineSeedSync:
     def test_seed_copied_to_output_dir(self, tmp_path):

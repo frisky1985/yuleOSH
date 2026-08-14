@@ -111,6 +111,17 @@ class TestLanguageDetection:
     def test_detect_unknown(self):
         assert detect_language(["a.md", "b.txt"]) == "unknown"
 
+    def test_detect_c_project_with_stray_py(self):
+        """C 项目 (CMakeLists + .c 主导) 里混入生成器 .py 时不得误判 python。
+
+        Regression: 2026-08-14 headlamp dogfood — LLM 生成 Python 文件到 C 项目,
+        detect_language 见 .py 就返回 python → py_compile 验证通过 → 假绿部署。
+        """
+        assert detect_language(["a.c", "b.h", "tools/gen.py"]) == "c"
+
+    def test_detect_pure_python_still_python(self):
+        assert detect_language(["a.py", "b.py"]) == "python"
+
 
 class TestCompileVerification:
     def test_verify_python_ok(self, tmp_path):
