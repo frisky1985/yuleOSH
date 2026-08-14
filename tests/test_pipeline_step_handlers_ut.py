@@ -282,6 +282,42 @@ class TestStepCUnitTest:
         assert report["c_files"] >= 1
         assert report["c_header_files"] >= 2
 
+    # ── Artifacts / generated-code 排除 (headlamp dogfood #3) ───────────────
+
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
+    def test_artifacts_dir_excluded_from_source_discovery(
+            self, mock_environ, mock_subproc, mock_session, tmp_path):
+        """GIVEN stale generated-code artifacts under artifacts/
+           WHEN step_c_unit_test runs
+           THEN artifacts are excluded from c_files/c_test_files discovery —
+           unity.h 测试产物不再污染 gcc-compile-check (headlamp dogfood #3)."""
+        mock_environ.get.return_value = str(tmp_path)
+        src = tmp_path / "src"
+        src.mkdir(parents=True, exist_ok=True)
+        (src / "main.c").write_text("int main() { return 0; }")
+
+        # 旧生成产物: artifacts/generated-code/run-*/ 下 unity 测试
+        art = tmp_path / "artifacts" / "generated-code" / "run-20260814-124514"
+        (art / "src").mkdir(parents=True, exist_ok=True)
+        (art / "src" / "headlamp.c").write_text("")
+        (art / "tests").mkdir(parents=True, exist_ok=True)
+        (art / "tests" / "test_headlamp.c").write_text('#include "unity.h"')
+
+        # gcc compile check 成功 (只有 src/main.c, 无 test 文件 → fallback 不触发)
+        mock_subproc.return_value = MagicMock(
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+        result = step_c_unit_test(mock_session)
+        report = json.loads(Path(result).read_text())
+
+        assert report["c_files"] == 1, "artifacts 旧产物不应计入 c_files"
+        assert report["c_test_files"] == 0, "artifacts 旧产物不应计入 c_test_files"
+        # 无 test 文件 → 不触发 gcc fallback; report 不含 c_header_files key
+
     # ── Write report error ─────────────────────────────────────────────────
 
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
