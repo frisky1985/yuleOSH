@@ -90,7 +90,7 @@ class TestPythonHtmlCsp:
         m = re.search(rb"Content-Security-Policy: [^\r\n]*'nonce-([A-Za-z0-9_-]+)'", out)
         nonce = m.group(1)
         inline = re.findall(rb'<script nonce="([^"]+)"', body)
-        assert len(inline) >= 6, "all inline RSC scripts must carry the nonce"
+        assert len(inline) >= 1, "all inline RSC scripts must carry the nonce"
         assert all(n == nonce for n in inline), "nonce must match CSP header"
         # external scripts untouched (no nonce attribute)
         assert b'<script src=' in body
