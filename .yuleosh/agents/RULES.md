@@ -1,6 +1,6 @@
 # RULES.md — Agent Behavioral Rules (Zero-Tolerance)
 
-> **Version**: 1.2.0
+> **Version**: 1.3.0
 > **Status**: Active
 > **Format**: OpenSpec (RFC 2119: SHALL/SHOULD/MAY)
 > **优先级**: 本文件所有规则服从第一准则 PRIME-DIRECTIVE.md（工程诚实）。冲突时以第一准则为准；测试真实性与降级透明性的详细落地见 TEST-INTEGRITY.md。
@@ -165,3 +165,44 @@ The loop chain covers, but is not limited to:
 **SHALL**:
 - 模块化拆分 SHALL 以可构建、可单测、可覆盖为验收底线——拆分后测试全绿（含 coverage gate）才允许合并。
 - 发现生成代码缺陷（如进入 AUTO 状态未立即应用雨量速度）时，agent SHALL 修复并补回归测试，SHALL NOT 绕过或降级。
+
+---
+
+## 8. Pipeline 结果判读 — completed ≠ GREEN (三色分级)
+
+> **背景**: 2026-08-14 老板钦定。yuleOSH pipeline 结束时的三色分级是
+> 判读 run 结果的第一道闸:🟢 GREEN(completed + errors=0)、🟡 YELLOW
+> (completed + errors>0)、🔴 RED(failed)。落地案例:headlamp-control
+> session 5ff61492f6bf 报 `completed` 但 errors=1 —
+> `[test-qualification] step verdict: INCOMPLETE`(场景=5, 覆盖=0/5,
+> 通过=0/0),根因是 C 系统级测试从未执行(defect #8),修复
+> (ea712d4b/81a18451)后 run 7 才真正 34/34 GREEN。
+
+### 8.1 completed ≠ GREEN
+
+**SHALL**:
+- agent SHALL NOT 将 `completed` 状态视为通过——只有 `completed` 且
+  `session.errors` 为空(Errors: 0)才是 GREEN 可放行。
+- 看到 `⚠️ Completed with step verdict failures — review session.errors
+  before treating this run as passing.` 时,agent SHALL 先读
+  `session.json` 的 `errors[]`,再读对应 `<step>.json` 的 `verdict` +
+  `summary`,定位失败步骤后才允许继续。
+- 最终汇报 SHALL 引用 `Errors: N` 数值,而非只引用 `completed` 字样。
+
+### 8.2 verdict 语义 — INCOMPLETE 是"门没跑"
+
+**SHALL**:
+- agent SHALL 区分 verdict 语义:`INCOMPLETE` = 工具未执行测试(门形同虚设,
+  比 FAILED 更危险),`FAILED` = 跑了但挂了,`RETRY`/`WARNING` = LLM 评审
+  类软结论。
+- 合格性测试 summary 出现 `覆盖=0/N, 通过=0/0` 而场景数正常时,agent
+  SHALL 判定为测试执行/二进制查找问题(如 `_find_c_test_binary` 未找到
+  已编译产物),SHALL NOT 当作测试失败去改代码。
+- 工具执行缺失(INCOMPLETE)导致的 verdict 失败,agent SHALL 修复执行链路
+  并补回归测试,SHALL NOT 通过降级/跳过掩盖。
+
+### 8.3 残留会话清理
+
+**SHALL**:
+- 无 `session.json` 的 session 目录(有 `<step>.json` 但无 session.json)
+  是中断/残留 run,SHALL NOT 被当作 YELLOW 证据引用;清理时直接删除或忽略。
