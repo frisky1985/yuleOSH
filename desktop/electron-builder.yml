@@ -45,6 +45,9 @@ mac:
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: assets/entitlements.mac.plist
+  # 无签名证书(CSC_LINK 未配置)时跳过签名; release 发布时 workflow 传
+  # MAC_CSC_LINK 并置 identity 为证书名即可恢复签名
+  identity: null
 
 # ─── macOS DMG ─────────────────────────────────────
 dmg:
