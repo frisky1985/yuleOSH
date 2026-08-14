@@ -286,8 +286,16 @@ yuleOSH/
 │   ├── preview/       Pre-pipeline analysis & scoring
 │   └── store.py       Multi-tenant SQLite/PostgreSQL backend
 ├── frontend/          Next.js SaaS dashboard
+├── desktop/           Electron desktop app
+├── vscode-extension/  VS Code extension
+├── projects/          Demo/sandbox projects (demo-project, my-project, test-proj, test-dogfood)
 ├── tests/             12589+ tests (392 files, all passing)
-├── docs/              Specifications, guides, reports
+├── docs/              Documentation by domain
+│   ├── architecture/  System architecture, specs
+│   ├── compliance/    MISRA/ISO26262/cybersecurity evidence
+│   ├── guides/        User guides, strategy docs
+│   ├── planning/      Sprint plans, progress reports, checkpoints
+│   └── product/       MVP/positioning/pricing, business reports
 ├── deploy/            Production deployment configs
 ├── Dockerfile         Multi-stage production Dockerfile
 ├── docker-compose.yml Production Docker Compose
@@ -531,8 +539,16 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 yuleOSH/
 ├── src/yuleosh/    核心源码模块（spec/pipeline/ci/codegen/skills/kg/loop_engine/api/cli…）
 ├── frontend/       Next.js SaaS 管理面板
+├── desktop/        Electron 桌面端
+├── vscode-extension/  VS Code 扩展
+├── projects/       演示/沙盒项目（demo-project、my-project、test-proj、test-dogfood）
 ├── tests/          12589+ 测试（392 文件，全部通过）
-├── docs/           需求文档、指南、报告
+├── docs/           按领域分类文档
+│   ├── architecture/  系统架构、规格
+│   ├── compliance/    MISRA/ISO26262/网络安全证据
+│   ├── guides/        用户指南、策略
+│   ├── planning/      Sprint 计划、进度报告、检查点
+│   └── product/       MVP/定位/定价、业务报告
 ├── deploy/         生产部署配置
 ├── Dockerfile      多阶段 Docker 构建
 ├── docker-compose.yml  生产 Docker Compose

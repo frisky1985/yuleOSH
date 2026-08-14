@@ -11,7 +11,7 @@ import urllib.parse
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler
 
-from yuleosh.ui.routes.helpers import (
+from yuleosh.ui.routes.http_response import (
     _compute_etag,
     _format_http_datetime,
     _parse_http_datetime,
@@ -71,7 +71,7 @@ def serve_page(handler: BaseHTTPRequestHandler, name: str, context: dict):
 
 def serve_file(handler: BaseHTTPRequestHandler, filepath: Path, mime: str):
     """Serve a static file with caching and security headers."""
-    from yuleosh.ui.routes.helpers import _compute_etag, _format_http_datetime, _parse_http_datetime, _send_security_headers
+    from yuleosh.ui.routes.http_response import _compute_etag, _format_http_datetime, _parse_http_datetime, _send_security_headers
 
     if filepath.exists():
         data = filepath.read_bytes()

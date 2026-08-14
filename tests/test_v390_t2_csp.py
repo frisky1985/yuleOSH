@@ -184,7 +184,7 @@ class TestGhPagesBoundary:
     """T-T2-12-neg — GitHub Pages 静态托管 CSP 边界说明."""
 
     def test_docs_note_ghpages_boundary(self):
-        docs = (REPO / "docs" / "cybersecurity-baseline.md").read_text(
+        docs = (REPO / "docs" / "compliance" / "cybersecurity-baseline.md").read_text(
             encoding="utf-8")
         assert "GitHub Pages" in docs, \
             "文档必须注明 GitHub Pages 无自定义响应头的 CSP 覆盖边界"

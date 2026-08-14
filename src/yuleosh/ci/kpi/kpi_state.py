@@ -3,15 +3,10 @@
 # SPDX-License-Identifier: Elastic-2.0
 
 """
-CI KPI — Utils.
+CI KPI — state helpers.
 
 Part of the kpi/ package split from kpi.py (Phase 2.2).
 """
-
-#!/usr/bin/env python3
-# Copyright (c) 2025 frisky1985
-# SPDX-License-Identifier: Elastic-2.0
-
 
 from __future__ import annotations
 

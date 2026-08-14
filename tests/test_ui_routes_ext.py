@@ -182,31 +182,31 @@ class TestHelpers:
     """Cover route helpers."""
 
     def test_compute_etag(self):
-        from yuleosh.ui.routes.helpers import _compute_etag
+        from yuleosh.ui.routes.http_response import _compute_etag
         etag = _compute_etag(b"hello world")
         assert etag.startswith('W/"') or etag.startswith('"')
 
     def test_send_security_headers(self):
-        from yuleosh.ui.routes.helpers import _send_security_headers
+        from yuleosh.ui.routes.http_response import _send_security_headers
         handler = _make_mock_handler()
         _send_security_headers(handler)
         assert handler.send_header.call_count > 0
 
     def test_format_http_datetime(self):
-        from yuleosh.ui.routes.helpers import _format_http_datetime
+        from yuleosh.ui.routes.http_response import _format_http_datetime
         result = _format_http_datetime(1000000)
         assert isinstance(result, str)
 
     def test_parse_http_datetime(self):
-        from yuleosh.ui.routes.helpers import _parse_http_datetime
-        from yuleosh.ui.routes.helpers import _format_http_datetime
+        from yuleosh.ui.routes.http_response import _parse_http_datetime
+        from yuleosh.ui.routes.http_response import _format_http_datetime
         now = 1000000
         formatted = _format_http_datetime(now)
         parsed = _parse_http_datetime(formatted)
         assert abs(parsed - now) < 2
 
     def test_parse_http_datetime_invalid(self):
-        from yuleosh.ui.routes.helpers import _parse_http_datetime
+        from yuleosh.ui.routes.http_response import _parse_http_datetime
         result = _parse_http_datetime("bad date")
         assert result == 0.0
 
@@ -247,7 +247,7 @@ class TestPageRoutes:
 
     def test_serve_file_304(self, tmp_path):
         from yuleosh.ui.routes.page_routes import serve_file
-        from yuleosh.ui.routes.helpers import _compute_etag
+        from yuleosh.ui.routes.http_response import _compute_etag
         test_file = tmp_path / "test.txt"
         test_file.write_text("hello")
         data = b"hello"

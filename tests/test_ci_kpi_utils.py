@@ -4,7 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from yuleosh.ci.kpi.utils import (
+from yuleosh.ci.kpi.kpi_state import (
     _ensure_dir, _load_latest_misra_entry, _load_latest_coverage_entry,
     _parse_ts, _load_baseline, DEFAULT_THRESHOLDS,
 )

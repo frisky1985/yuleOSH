@@ -251,7 +251,7 @@ def require_role(required_resource: str, required_action: str = "view"):
             user_info = get_session_user(token) if token else None
 
             if not check_role(user_info, required_resource, required_action):
-                from yuleosh.ui.routes.helpers import _add_cors_header, _send_security_headers
+                from yuleosh.ui.routes.http_response import _add_cors_header, _send_security_headers
 
                 handler.send_response(403)
                 handler.send_header("Content-Type", "application/json; charset=utf-8")

@@ -24,7 +24,7 @@ from typing import Any, Optional
 
 log = logging.getLogger("ci.kpi")
 
-from yuleosh.ci.kpi.utils import _load_latest_misra_entry, _load_latest_coverage_entry, _load_baseline, _ensure_dir
+from yuleosh.ci.kpi.kpi_state import _load_latest_misra_entry, _load_latest_coverage_entry, _load_baseline, _ensure_dir
 from yuleosh.ci.kpi.trend import _get_misra_trend_avg, _get_coverage_trend_avg
 from yuleosh.ci.kpi.stability import get_process_stability_summary
 from yuleosh.ci.kpi.defects import get_defect_escape_summary

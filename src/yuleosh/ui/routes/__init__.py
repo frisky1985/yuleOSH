@@ -5,7 +5,7 @@ Provides modular route handler functions extracted from the monolithic
 server.py to keep individual modules focused and testable.
 """
 
-from yuleosh.ui.routes.helpers import (
+from yuleosh.ui.routes.http_response import (
     _compute_etag,
     _format_http_datetime,
     _parse_http_datetime,

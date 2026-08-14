@@ -48,6 +48,26 @@ tests/unity/*.info
 
 # Runtime data (persistent DB, session state)
 .yuleosh/
+.osh/
+
+# Debug/diagnostic SQLite dumps (root-level scratch DBs)
+/check
+/debug
+/diag
+/dbg3
+/debug2
+/diag2
+/e2e
+/e2e2
+/e2e3
+/final
+/real
+/phase10
+/incr_test
+/test
+/test_cs
+/stress_*
+/.cov.*
 !.yuleosh/ci-config.yaml
 !.yuleosh/agents/
 !.yuleosh/agents/*.md
