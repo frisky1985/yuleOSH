@@ -229,6 +229,11 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
     ``<build>/<rel_dir>/<stem>`` — e.g. ``tests/system/test_x.c`` →
     ``cmake-build-coverage/tests/system/test_x``.  Search all candidate
     build dirs and return the first executable found.
+
+    2026-08-14 (headlamp dogfood #8b): CMake target 名可能与源文件 stem
+    不同 (``add_executable(headlamp_qualification system/test_x.c)`` →
+    二进制 ``build/tests/headlamp_qualification``) — 兜底扫描
+    ``<build>/tests/`` 下的可执行文件, 匹配包含源 stem 或 test 关键字的。
     """
     stem = test_file.stem
     rel_dir = test_file.parent.relative_to(project_dir) if test_file.parent != project_dir else Path(".")
@@ -240,6 +245,16 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
         # 某些 CMake 配置把可执行文件放在 build/tests/ 下
         candidates.append(build_dir / "tests" / stem)
         candidates.append(build_dir / stem)
+    # 兜底: build/tests/ 下可执行文件, 名称包含源 stem 或 "qualification"
+    for build_dir in sorted(project_dir.glob("build")) + sorted(project_dir.glob("cmake-build-*")):
+        tests_dir = build_dir / "tests"
+        if not tests_dir.is_dir():
+            continue
+        for cand in sorted(tests_dir.iterdir()):
+            if not cand.is_file() or not os.access(cand, os.X_OK):
+                continue
+            if stem in cand.name or "qualification" in cand.name or "system" in cand.name:
+                candidates.append(cand)
     for cand in candidates:
         if cand.is_file() and os.access(cand, os.X_OK):
             return cand
