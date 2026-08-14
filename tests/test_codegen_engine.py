@@ -340,6 +340,86 @@ class TestEngineLoop:
             engine.generate(session, "sys", "user")
 
 
+class TestTruncationDetection:
+    """headlamp dogfood #4: LLM 输出截断 (大项目超 max_tokens)."""
+
+    def test_detect_truncated_c_file_brace_imbalance(self):
+        """GIVEN a .c file with unbalanced braces (truncated mid-function)
+           WHEN _detect_truncated_files runs
+           THEN the file is flagged."""
+        files = [
+            GeneratedFile(path="src/app.c", content="void f(void) {\n    int x;\n"),
+            GeneratedFile(path="src/ok.c", content="void f(void) {\n    int x;\n}\n"),
+            GeneratedFile(path="src/util.py", content="def f():\n    pass\n"),
+        ]
+        truncated = CodegenEngine._detect_truncated_files(files)
+        assert truncated == ["src/app.c"]
+
+    def test_detect_truncated_last_line_no_newline(self):
+        """GIVEN a .c file ending mid-expression without trailing newline
+           WHEN _detect_truncated_files runs
+           THEN the file is flagged (content cut off)."""
+        files = [
+            GeneratedFile(path="src/app.c",
+                          content="void f(void) {\n    if (resp_len"),
+        ]
+        truncated = CodegenEngine._detect_truncated_files(files)
+        assert truncated == ["src/app.c"]
+
+    def test_complete_c_file_not_flagged(self):
+        """GIVEN a complete .c file ending with closing brace
+           WHEN _detect_truncated_files runs
+           THEN no truncation is reported."""
+        files = [
+            GeneratedFile(path="src/app.c",
+                          content="void f(void) {\n    int x;\n}\n"),
+        ]
+        truncated = CodegenEngine._detect_truncated_files(files)
+        assert truncated == []
+
+    def test_repair_context_includes_truncation_warning(self):
+        """GIVEN truncated files detected
+           WHEN _format_repair_context builds the repair prompt
+           THEN the prompt warns about truncation and tells the model
+           to only resend those files."""
+        files = [GeneratedFile(path="src/app.c", content="void f() {\n")]
+        ctx = CodegenEngine._format_repair_context(
+            "error: expected '}'", files,
+            truncated_files=["src/app.c"],
+        )
+        assert "输出截断警告" in ctx
+        assert "src/app.c" in ctx
+        assert "一次只输出这些文件" in ctx
+
+    def test_generate_loop_detects_truncation_and_repairs(self, tmp_path):
+        """GIVEN first C output is truncated and second is complete
+           WHEN generate runs
+           THEN truncation is detected, repair context warns, and the
+           repaired (complete) file passes verification."""
+        calls = {"n": 0}
+        prompts = []
+
+        def truncating_llm(system, user, **kw):
+            calls["n"] += 1
+            prompts.append(user)
+            if calls["n"] == 1:
+                # 截断: 花括号不平衡 (模拟 max_tokens 截断)
+                return {"content": _marker_output(
+                    "src/app.c", "c",
+                    "void f(void) {\n    int x;\n")}
+            return {"content": _marker_output(
+                "src/app.c", "c",
+                "void f(void) {\n    int x;\n}\n")}
+
+        session = _session(tmp_path)
+        engine = CodegenEngine(llm_client=truncating_llm, max_retries=3)
+        result = engine.generate(session, "sys", "user")
+        assert result.status == "verified"
+        assert result.rounds == 2
+        # repair prompt 必须包含截断警告
+        assert "输出截断警告" in prompts[1]
+
+
 class TestEngineReport:
     def test_report_contains_files_and_verification(self, tmp_path):
         session = _session(tmp_path)
