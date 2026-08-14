@@ -280,10 +280,19 @@ class CriticalSafetyScanner:
                 func_start_line = lineno
                 # 2026-08-14 (dogfood #7): 识别 static 内部函数 → 其参数
                 # 指针豁免 NULL 检查 (调用者保证, 公共 API 已防御)。
+                # 注意: '{' 单独一行 (签名行已在上行记录参数) 时不能清空
+                # static_func_params — 仅当本行本身是函数签名才重新解析。
                 if re.match(r"^\s*static\b", stripped):
                     static_func_params = _extract_func_params(stripped)
-                else:
+                elif not static_func_params and "(" not in stripped:
                     static_func_params = set()
+            elif depth == 0 and opens == 0 and "(" in stripped \
+                    and re.match(r"^\s*static\b", stripped):
+                # 签名行与 '{' 分行 (嵌入式常见风格):
+                #   static void setLampOn(Type* state, int id)
+                #   {
+                # 在 '{' 出现前先记录 static 参数集合。
+                static_func_params = _extract_func_params(stripped)
             depth += opens - closes
             if depth == 0 and closes > 0:
                 # 函数体结束 → 清空检查状态
