@@ -41,12 +41,19 @@ def detect_language(files: list[str | Path]) -> str:
 
     Returns ``python``, ``c``, or ``unknown``.  C++ files map to ``c`` for
     the syntax check (g++ preferred when present, see :func:`compile_verify`).
+
+    Priority (2026-08-14 headlamp dogfood fix): when a project contains BOTH
+    C/C++ sources and a few stray ``.py`` files (e.g. generator/tool scripts),
+    the project language is ``c`` — the presence of a Python file must NOT
+    override a C/C++ codebase, otherwise generated C code gets verified with
+    ``py_compile`` (false-green deploy). Pure Python projects (no C/C++)
+    still resolve to ``python``.
     """
     exts = {Path(str(f)).suffix.lower() for f in files}
-    if exts & _PY_EXTS:
-        return LANGUAGE_PYTHON
     if exts & (_C_EXTS | _CXX_EXTS):
         return LANGUAGE_C
+    if exts & _PY_EXTS:
+        return LANGUAGE_PYTHON
     return LANGUAGE_UNKNOWN
 
 
