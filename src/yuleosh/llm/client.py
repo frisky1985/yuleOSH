@@ -367,11 +367,14 @@ class LLMClient:
         # mock provider 是免费测试兜底：无真实定价数据（PRICING_TABLE 不含
         # 测试模型名），预算检查对它没有意义且会导致 skip primary 后链上
         # 无可用 provider。跳过 pre-check，让 call_with_fallback 正常走 mock。
-        budget_check = TokenBudgetChecker.check(
-            prompt, resolved_config, system_prompt
-        )
         budget_skip_primary: str | None = None
-        if not budget_check.passed:
+        if resolved_config.provider == "mock":
+            budget_check = None
+        else:
+            budget_check = TokenBudgetChecker.check(
+                prompt, resolved_config, system_prompt
+            )
+        if budget_check is not None and not budget_check.passed:
             if fallback_enabled(resolved_config):
                 # 预算超限 → warning + 降级（provider_fallback 跳过主 provider，
                 # 降级到链上可用 provider；mock 免费兜底）。不直接报错。
