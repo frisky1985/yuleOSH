@@ -1,0 +1,51 @@
+# =============================================================================
+# yuleOSH — composite action: Python 环境 + 项目依赖安装
+# =============================================================================
+# 抽出 ci.yml / honesty-gate.yml / codeql.yml 重复的:
+#   checkout → setup-python → pip install -e ".[dev]" → cppcheck
+# 用法:
+#   - uses: ./.github/actions/setup-python-env
+#     with:
+#       python-version: '3.12'      # 默认 3.12
+#       install-cppcheck: 'true'    # 默认 true
+#       extra-pip: 'pip-audit'      # 可选附加 pip 包
+# =============================================================================
+
+name: 'Setup Python environment'
+description: 'Checkout, setup Python, install yuleOSH dev deps (+ optional extras)'
+
+inputs:
+  python-version:
+    description: 'Python version to set up'
+    required: false
+    default: '3.12'
+  install-cppcheck:
+    description: 'Install cppcheck via apt (Linux only)'
+    required: false
+    default: 'true'
+  extra-pip:
+    description: 'Extra pip packages to install (space separated)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/checkout@v7
+
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+        if [ "${{ inputs.install-cppcheck }}" = "true" ] && command -v apt-get >/dev/null 2>&1; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
+        fi
+        if [ -n "${{ inputs.extra-pip }}" ]; then
+          pip install ${{ inputs.extra-pip }}
+        fi

@@ -41,46 +41,20 @@ jobs:
             - 'project-docs/**'
           workflow:
             - '.github/workflows/**'
+            - '.github/actions/**'
 
   frontend-build:
     # v3.12.x CI 真跑修复 (2026-08-07): tests 依赖 frontend/out/ 静态产物
     # （test_server_integration / test_v390_t2_csp），但 out/ 被 .gitignore
     # 排除不入库 → CI checkout 无此目录 → 4 个测试 500 失败。
-    # 复用 desktop-build.yml 的 frontend-build 模式：独立 job 构建一次，
+    # 复用 frontend-build 复合 action：独立 job 构建一次，
     # test matrix 下载 artifact，避免 4 个 Python 版本各自 npm build。
     needs: detect
     if: needs.detect.outputs.src == 'true' || needs.detect.outputs.frontend == 'true' || needs.detect.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
-
-    - name: Install frontend dependencies
-      run: |
-        cd frontend
-        npm ci
-
-    - name: Build frontend (static export)
-      run: |
-        cd frontend
-        npm run build
-
-    - name: Verify frontend build
-      run: |
-        ls -la frontend/out/index.html
-
-    - name: Upload frontend build artifact
-      uses: actions/upload-artifact@v7
-      with:
-        name: frontend-out
-        path: frontend/out/
-        if-no-files-found: error
+    - uses: ./.github/actions/frontend-build
 
   test:
     needs: [detect, frontend-build]
@@ -93,18 +67,9 @@ jobs:
         python-version: ['3.12']
 
     steps:
-    - uses: actions/checkout@v7
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+    - uses: ./.github/actions/setup-python-env
       with:
         python-version: ${{ matrix.python-version }}
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
 
     - name: Download frontend build
       # v3.12.x CI 真跑修复: 静态文件测试需要 frontend/out/（不入库）
@@ -161,24 +126,14 @@ jobs:
     if: needs.detect.outputs.src == 'true' || needs.detect.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-python-env
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
+    - name: Install quality tooling
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck 2>/dev/null || true
         pip install ruff bandit mypy coverage
         # v3.10.0 Track1: workflow 语法门禁（防 ci.yml YAML 解析错误再犯）
         curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash
         pip install yamllint
-        # v3.10.0 Track1: Layer 2 静态分析依赖（test_layer2_cppcheck 断言 cppcheck 已装）
-        sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck
 
     - name: Workflow Lint (actionlint + yamllint)
       run: |
@@ -218,17 +173,10 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-    - uses: actions/checkout@v7
+    - uses: ./.github/actions/setup-python-env
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
+    - name: Install strict tooling
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
         pip install ruff bandit mypy
 
     - name: Strict ruff (no fallback, report only)
@@ -265,17 +213,9 @@ jobs:
     if: needs.detect.outputs.src == 'true' || needs.detect.outputs.frontend == 'true' || needs.detect.outputs.desktop == 'true' || needs.detect.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
-
-    - name: Set up Python
-      uses: actions/setup-python@v6
+    - uses: ./.github/actions/setup-python-env
       with:
-        python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]" pip-audit
+        extra-pip: 'pip-audit'
 
     - name: Python CVE scan (pip-audit)
       run: |
@@ -329,15 +269,8 @@ jobs:
     if: (needs.detect.outputs.src == 'true' || needs.detect.outputs.workflow == 'true') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+    - uses: ./.github/actions/setup-python-env
+
     - name: RTM Gate Check (ASPICE SWE.4)
       run: |
         bash docs/guides/ci-rtm-check.sh 80 project-docs/spec.md tests/

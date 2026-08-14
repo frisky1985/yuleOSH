@@ -1,12 +1,27 @@
-name: yuleOSH Desktop Build
+# =============================================================================
+# yuleOSH — Reusable workflow: Desktop 三平台构建 (macOS/Linux/Windows)
+# =============================================================================
+# 既是独立 workflow (push/PR 桌面变更触发), 也可被 release.yml 通过
+# workflow_call 复用 (on: workflow_call)。
+# 由 frontend-build 复合 action 构建前端 → 三平台 electron-builder 打包。
+# =============================================================================
+name: yuleOSH Desktop Packages
 
 on:
+  workflow_call:
+    inputs:
+      artifact-retention-days:
+        description: 'Retention days for build artifacts'
+        required: false
+        type: number
+        default: 7
   push:
     branches: [main, develop]
     paths:
       - 'desktop/**'
       - 'frontend/**'
-      - '.github/workflows/desktop-build.yml'
+      - '.github/workflows/desktop-packages.yml'
+      - '.github/actions/frontend-build/**'
   pull_request:
     branches: [main]
     paths:
@@ -20,42 +35,20 @@ on:
         default: 'all'
 
 jobs:
-  # ─── 前端构建 (复用) ────────────────────────────
+  # ─── 前端构建 (复用 composite action) ─────────────
   frontend-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: ./.github/actions/frontend-build
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm ci
-
-      - name: Build frontend (static export)
-        run: |
-          cd frontend
-          npm run build
-
-      - name: Upload frontend build artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: frontend-out
-          path: frontend/out/
-          retention-days: 1
+          artifact-retention-days: ${{ inputs.artifact-retention-days || 7 }}
 
   # ─── macOS 构建 ─────────────────────────────────
   build-mac:
     needs: frontend-build
     runs-on: macos-latest
-    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'mac' || github.event.inputs.platform == 'all')
-        || github.event_name != 'workflow_dispatch'
+    if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'mac' || github.event.inputs.platform == 'all') || github.event_name != 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v7
@@ -95,14 +88,13 @@ jobs:
         with:
           name: yuleOSH-mac-dmg
           path: desktop/release/*.dmg
-          retention-days: 30
+          retention-days: ${{ inputs.artifact-retention-days || 7 }}
 
   # ─── Linux 构建 ─────────────────────────────────
   build-linux:
     needs: frontend-build
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'linux' || github.event.inputs.platform == 'all')
-        || github.event_name != 'workflow_dispatch'
+    if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'linux' || github.event.inputs.platform == 'all') || github.event_name != 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v7
@@ -136,7 +128,7 @@ jobs:
           cd desktop
           npm ci
 
-      - name: Build Linux .AppImage
+      - name: Build Linux .AppImage + .deb
         run: |
           cd desktop
           npx electron-builder --linux --publish=never
@@ -145,14 +137,16 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: yuleOSH-linux-appimage
-          path: desktop/release/*.AppImage
-          retention-days: 30
+          path: |
+            desktop/release/*.AppImage
+            desktop/release/*.deb
+          retention-days: ${{ inputs.artifact-retention-days || 7 }}
 
   # ─── Windows 构建 ───────────────────────────────
   build-win:
     needs: frontend-build
     runs-on: windows-latest
-    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'win' || github.event.inputs.platform == 'all')
+    if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'win' || github.event.inputs.platform == 'all')
 
     steps:
       - uses: actions/checkout@v7
@@ -184,24 +178,4 @@ jobs:
         with:
           name: yuleOSH-win-installer
           path: desktop/release/*.exe
-          retention-days: 30
-
-  # ─── 构建产物报告 ───────────────────────────────
-  report:
-    needs: [build-mac, build-linux, build-win]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Check build artifacts
-        run: |
-          echo "## yuleOSH Desktop Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Platform | Target | Arch | Notes |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| macOS | .dmg | x64 + arm64 | ✅ (CI auto on PR/push) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Linux | .AppImage + .deb | x64 + arm64 (AppImage) | ✅ (CI auto on PR/push) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Windows | NSIS .exe | x64 | ✅ (manual workflow_dispatch) |"}]}
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Build Details" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Branch: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          retention-days: ${{ inputs.artifact-retention-days || 7 }}
