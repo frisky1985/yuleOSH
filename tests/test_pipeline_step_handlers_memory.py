@@ -328,6 +328,28 @@ class TestCheckStaticRecursion:
         infos = [f for f in findings if f["severity"] == "info"]
         assert len(infos) >= 1
 
+    def test_static_function_declaration_not_false_positive(self, tmp_path):
+        """GIVEN static void test_x(void) declarations (headlamp dogfood #6)
+           WHEN _check_static_recursion runs
+           THEN the declaration line itself is NOT flagged as recursion —
+           the bug was: 'static void test_x(void)' contains both 'static'
+           and 'test_x(' → false 'recursive function uses static locals'."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.c").write_text(
+            'static void test_a(void) {\n'
+            '    int x = 1;\n'
+            '}\n'
+            '\n'
+            'static void test_b(void) {\n'
+            '    int y = 2;\n'
+            '}\n'
+        )
+        files = [src / "main.c"]
+        findings = _check_static_recursion(files, tmp_path)
+        majors = [f for f in findings if f["severity"] == "major"]
+        assert len(majors) == 0
+
 
 class TestCheckCircularBuffers:
     """Tests for _check_circular_buffers — ring buffer safety."""

@@ -564,6 +564,11 @@ class CriticalSafetyScanner:
                     # scanning them double-reports stale code and mixes
                     # old generations into the gate.
                     "artifacts/",
+                    # .yuleosh/guardrail/backup-*/ holds pre/post deploy
+                    # snapshots; scanning them reports stale backup code
+                    # as violations (headlamp dogfood #6).
+                    ".yuleosh/",
+                    ".osh/",
                 ]):
                     continue
 

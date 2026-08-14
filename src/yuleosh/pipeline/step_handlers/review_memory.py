@@ -414,7 +414,12 @@ def _check_static_recursion(source_files: list[Path], project_dir: Path) -> list
                     has_static_local = True
 
                 # Detect self-call
-                if re.search(rf"\b{re.escape(func_name)}\s*\(", stripped):
+                # 2026-08-14 (headlamp dogfood #6): 声明行本身 (如
+                # "static void test_x(void)") 同时含 "static" 和 "test_x("
+                # → 被误判为"递归函数用 static local"。排除声明行 (i==func_start)
+                # 后的真实自调用才算递归。
+                if (i != func_start
+                        and re.search(rf"\b{re.escape(func_name)}\s*\(", stripped)):
                     if has_static_local:
                         recursion_candidates.append(
                             (rel_path, func_start + 1, func_name)
