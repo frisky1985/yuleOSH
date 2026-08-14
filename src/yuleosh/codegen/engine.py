@@ -391,10 +391,19 @@ class CodegenEngine:
         return copied
 
     def _collect_code_files(self, out_dir: Path) -> list[Path]:
-        """All ``.c`` / ``.h`` / ``.py`` files under the output dir."""
+        """All ``.c`` / ``.h`` / ``.py`` files under the output dir.
+
+        Excludes ``tests/`` (2026-08-14 headlamp dogfood): LLM 生成的测试
+        引用 Unity 等测试框架头 (``#include "unity.h"``), verify_c 的 -I
+        收集不含框架头 → 3 个 fatal error → codegen 假失败。测试由
+        c-unit-test 步骤用项目真实构建 (ctest) 验证, 不属于 codegen
+        verify 范围。
+        """
         exts = {".c", ".h", ".py"}
         return [p for p in sorted(out_dir.rglob("*"))
-                if p.is_file() and p.suffix.lower() in exts]
+                if p.is_file()
+                and p.suffix.lower() in exts
+                and "tests" not in p.relative_to(out_dir).parts]
 
     @staticmethod
     def _error_count(errors: str) -> int:
