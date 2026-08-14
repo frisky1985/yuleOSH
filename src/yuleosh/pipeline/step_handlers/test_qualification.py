@@ -222,6 +222,30 @@ def _check_scenario_coverage(
 # ── Test execution ────────────────────────────────────────────────────────
 
 
+def _find_c_test_binary(test_file: Path, project_dir: Path):
+    """Find the compiled binary for a C test source file.
+
+    CMake build dirs (build/, cmake-build-*) place test executables under
+    ``<build>/<rel_dir>/<stem>`` — e.g. ``tests/system/test_x.c`` →
+    ``cmake-build-coverage/tests/system/test_x``.  Search all candidate
+    build dirs and return the first executable found.
+    """
+    stem = test_file.stem
+    rel_dir = test_file.parent.relative_to(project_dir) if test_file.parent != project_dir else Path(".")
+    candidates: list[Path] = []
+    for build_dir in sorted(project_dir.glob("build")) + sorted(project_dir.glob("cmake-build-*")):
+        if not build_dir.is_dir():
+            continue
+        candidates.append(build_dir / rel_dir / stem)
+        # 某些 CMake 配置把可执行文件放在 build/tests/ 下
+        candidates.append(build_dir / "tests" / stem)
+        candidates.append(build_dir / stem)
+    for cand in candidates:
+        if cand.is_file() and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
 def _run_system_tests(
     test_files: list[Path],
     project_dir: Path,
@@ -308,12 +332,57 @@ def _run_system_tests(
                     log.error(f"Cannot run {tf.name}: {e2}")
 
         elif tf.suffix in (".c", ".cpp"):
-            # C/C++ test files need to be compiled first — note for user
-            results["details"].append({
-                "file": str(tf),
-                "succeeded": False,
-                "message": "C/C++ test file requires compilation before execution — skipped",
-            })
+            # C/C++ test files need to be compiled first — the pipeline's
+            # ctest/build steps compile them (CMake add_executable). Look for
+            # the built binary in common build dirs and execute it.
+            # 2026-08-14 (headlamp dogfood #8): 之前只记录 "requires
+            # compilation — skipped" → C 项目永远 INCOMPLETE。现在从
+            # build 目录查找已编译产物并执行。
+            binary = _find_c_test_binary(tf, project_dir)
+            if binary is None:
+                results["details"].append({
+                    "file": str(tf),
+                    "succeeded": False,
+                    "message": "C/C++ test file found but no built binary "
+                               "in build/ cmake-build-*/ — run cmake build first",
+                })
+                continue
+            try:
+                log.info(f"  Running system test binary: {binary}")
+                proc = subprocess.run(
+                    [str(binary)],
+                    cwd=project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_s,
+                )
+                succeeded = proc.returncode == 0
+                results["executed"] += 1
+                if succeeded:
+                    results["passed"] += 1
+                else:
+                    results["failed"] += 1
+                    results["errors"].append({
+                        "file": str(tf),
+                        "exit_code": proc.returncode,
+                        "stdout_tail": proc.stdout[-500:] if proc.stdout else "",
+                        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+                    })
+                results["details"].append({
+                    "file": str(tf),
+                    "binary": str(binary),
+                    "succeeded": succeeded,
+                    "returncode": proc.returncode,
+                })
+            except subprocess.TimeoutExpired:
+                results["executed"] += 1
+                results["failed"] += 1
+                results["errors"].append({
+                    "file": str(tf),
+                    "exit_code": -1,
+                    "stdout_tail": "(timeout)",
+                    "stderr_tail": f"Test exceeded {timeout_s}s timeout",
+                })
 
     return results
 

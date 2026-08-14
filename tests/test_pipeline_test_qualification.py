@@ -155,6 +155,47 @@ class TestRunSystemTests:
                 assert results["executed"] >= 1
                 assert results["failed"] >= 1
 
+    def test_c_test_binary_executed(self):
+        """GIVEN a C test source with a built binary in cmake-build-*
+           WHEN _run_system_tests runs
+           THEN the binary is executed (headlamp dogfood #8) — not just
+           recorded as 'requires compilation — skipped'."""
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            # 源码 + 构建产物
+            src = td / "tests" / "system" / "test_qualification_x.c"
+            src.parent.mkdir(parents=True)
+            src.write_text("int main(void){return 0;}")
+            binary = td / "cmake-build-coverage" / "tests" / "system" / "test_qualification_x"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("#!/bin/sh\necho ok\n")
+            binary.chmod(0o755)
+
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value.returncode = 0
+                mock_run.return_value.stdout = "ok"
+                mock_run.return_value.stderr = ""
+                results = _run_system_tests([src], td)
+                assert results["executed"] >= 1
+                assert results["passed"] >= 1
+                # 执行的是二进制路径而非 gcc 编译
+                assert "binary" in results["details"][0]
+                assert str(binary) in str(results["details"][0]["binary"])
+
+    def test_c_test_binary_missing_not_executed(self):
+        """GIVEN a C test source with NO built binary
+           WHEN _run_system_tests runs
+           THEN it records a 'no built binary' detail instead of executing."""
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            src = td / "tests" / "system" / "test_qualification_y.c"
+            src.parent.mkdir(parents=True)
+            src.write_text("int main(void){return 0;}")
+            results = _run_system_tests([src], td)
+            assert results["executed"] == 0
+            assert len(results["details"]) >= 1
+            assert "no built binary" in results["details"][0]["message"]
+
 
 class TestBuildQualificationReport:
     def test_no_scenarios(self):
