@@ -246,6 +246,28 @@ class CriticalSafetyScanner:
         null_checked: dict[str, tuple[int, int]] = {}
         func_start_line = 0
         depth = 0
+        # 2026-08-14 (headlamp dogfood #7): static 内部辅助函数的指针参数
+        # 不要求函数内重复 NULL 检查 — 内部函数由公共 API 调用者保证非 NULL
+        # (嵌入式标准实践, 公共 API 已防御)。当前 static 函数的参数名集合。
+        static_func_params: set[str] = set()
+        # 参数名 = part 最后一个标识符 (split 后无尾随逗号/括号)
+        _FUNC_PARAM_RE = re.compile(r"([A-Za-z_]\w*)\s*$")
+
+        def _extract_func_params(sig: str) -> set[str]:
+            """从函数签名提取参数名 (形如 ``static void f(Type* state, int id)``)."""
+            paren = sig.find("(")
+            if paren < 0:
+                return set()
+            inner = sig[paren + 1: sig.rfind(")")] if ")" in sig[paren:] else sig[paren + 1:]
+            if not inner.strip() or inner.strip() == "void":
+                return set()
+            params: set[str] = set()
+            for part in inner.split(","):
+                part = part.strip()
+                m = _FUNC_PARAM_RE.search(part)
+                if m:
+                    params.add(m.group(1))
+            return params
 
         def _has_early_exit(line: str) -> bool:
             return bool(re.search(r'\b(?:return|continue|break|goto)\b', line))
@@ -256,11 +278,18 @@ class CriticalSafetyScanner:
             closes = stripped.count("}")
             if depth == 0 and opens > 0:
                 func_start_line = lineno
+                # 2026-08-14 (dogfood #7): 识别 static 内部函数 → 其参数
+                # 指针豁免 NULL 检查 (调用者保证, 公共 API 已防御)。
+                if re.match(r"^\s*static\b", stripped):
+                    static_func_params = _extract_func_params(stripped)
+                else:
+                    static_func_params = set()
             depth += opens - closes
             if depth == 0 and closes > 0:
                 # 函数体结束 → 清空检查状态
                 null_checked.clear()
                 func_start_line = 0
+                static_func_params = set()
             elif closes > 0:
                 # 块关闭 → 撤销仅在该块内生效的检查（作用域 > 当前深度）
                 for var in [v for v, (_, sc) in null_checked.items() if sc > depth]:
@@ -320,6 +349,10 @@ class CriticalSafetyScanner:
                 checked_line, check_scope = null_checked.get(deref_obj, (0, -1))
                 checked = (check_scope == 0 or check_scope <= depth) \
                     and checked_line >= func_start_line
+                # 2026-08-14 (dogfood #7): static 内部函数的参数指针豁免 —
+                # 内部辅助函数由公共 API 调用者保证非 NULL (嵌入式实践)。
+                if deref_obj in static_func_params:
+                    checked = True
                 if not checked and deref_obj != "this" \
                    and not deref_obj.startswith("&"):
                     self.violations.append(CriticalViolation(

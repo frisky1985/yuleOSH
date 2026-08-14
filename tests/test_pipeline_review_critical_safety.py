@@ -97,6 +97,43 @@ class TestScanNullDeref:
         # But the scan might not see it if the check is on the next line
         pass
 
+    def test_static_helper_param_not_flagged(self):
+        """GIVEN a static internal helper deref'ing its pointer param
+           WHEN _scan_null_deref runs
+           THEN no CRIT-NULL-001 is emitted — static helpers are called
+           by public APIs that already guarantee non-NULL (dogfood #7)."""
+        scanner = CriticalSafetyScanner(Path("/tmp"))
+        f = Path("/tmp/test.c")
+        lines = [
+            "static void setLampOn(HeadlampControlState* state, LampId id) {",
+            "    state->lamps[id].on = true;",
+            "}",
+            "",
+            "void PublicApi(HeadlampControlState* state) {",
+            "    if (state == NULL) return;",
+            "    setLampOn(state, 0);",
+            "}",
+        ]
+        scanner._scan_null_deref(f, lines)
+        nulls = [v for v in scanner.violations if "state" in v.message]
+        assert len(nulls) == 0, f"static helper param should be exempt: {nulls}"
+
+    def test_non_static_missing_null_check_still_flagged(self):
+        """GIVEN a public (non-static) function deref'ing its param without
+           a NULL check
+           WHEN _scan_null_deref runs
+           THEN CRIT-NULL-001 IS emitted (public API must defend)."""
+        scanner = CriticalSafetyScanner(Path("/tmp"))
+        f = Path("/tmp/test.c")
+        lines = [
+            "void PublicApi(HeadlampControlState* state) {",
+            "    state->lamps[0].on = true;",
+            "}",
+        ]
+        scanner._scan_null_deref(f, lines)
+        nulls = [v for v in scanner.violations if "state" in v.message]
+        assert len(nulls) >= 1
+
 
 class TestScanStackOverflow:
     def test_large_local_array_detected(self):
