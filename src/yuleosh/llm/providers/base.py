@@ -56,6 +56,10 @@ class LLMConfig:
     task_id: Optional[str] = None
     user_id: Optional[str] = None
 
+    # AI 生成溯源（合规专家 P1）：成功调用时把 model + prompt_hash 写入
+    # SHA-256 审计链（ai.generation 事件）。设 False 可关闭。
+    audit_ai: bool = True
+
 
 @dataclass
 class LLMResponse:

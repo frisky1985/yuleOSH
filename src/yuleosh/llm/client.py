@@ -364,6 +364,9 @@ class LLMClient:
         resolved_config = resolve_config(prompt, system_prompt, task_type, config)
 
         # 2. Token budget pre-check
+        # mock provider 是免费测试兜底：无真实定价数据（PRICING_TABLE 不含
+        # 测试模型名），预算检查对它没有意义且会导致 skip primary 后链上
+        # 无可用 provider。跳过 pre-check，让 call_with_fallback 正常走 mock。
         budget_check = TokenBudgetChecker.check(
             prompt, resolved_config, system_prompt
         )
@@ -476,6 +479,37 @@ class LLMClient:
             )
         except Exception as e:
             log.warning("Failed to log LLM call: %s", e)
+
+        # 6.5 AI 生成溯源 → 审计链（合规专家 P1: AI 输出是「草稿」不是「证据」）。
+        # 成功生成时把 model 版本 + prompt 的 SHA-256 写入 ai.generation 审计事件，
+        # 使产物的输入可复现、可审计；人工评审通过 AuditLog.sign_ai_generation()
+        # 追加签署事件后才升级为证据。审计写入失败只 warning，绝不阻塞主流程。
+        # 数据根目录可用 YULEOSH_AUDIT_ROOT env 覆盖（默认同 AuditLog 默认值）。
+        if resolved_config.audit_ai and not response.error:
+            try:
+                from yuleosh.audit.model import AuditLog
+
+                audit_root = os.environ.get("YULEOSH_AUDIT_ROOT")
+                audit_log = AuditLog(data_root=audit_root)
+                task_type = resolved_config.task_type or "unknown"
+                task_id = resolved_config.task_id or ""
+                target = (
+                    f"artifact:{task_id}" if task_id
+                    else f"llm:{task_type}"
+                )
+                audit_log.record_ai_generation(
+                    actor=resolved_config.user_id or "system",
+                    target=target,
+                    model=response.model,
+                    prompt=prompt,
+                    tenant="",
+                    detail={
+                        "task_type": task_type,
+                        "provider": response.provider or resolved_config.provider,
+                    },
+                )
+            except Exception as e:  # noqa: BLE001 — audit must never block the LLM call
+                log.warning("Failed to record AI generation audit event: %s", e)
 
         return response
 

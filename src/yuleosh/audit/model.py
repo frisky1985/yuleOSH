@@ -16,6 +16,13 @@ Security & auditability:
   recorded event breaks the chain and is detected by ``AuditLog.verify()``.
   The chain is anchored per daily file (first event has prev_hash="").
 
+AI generation provenance (合规专家 P1):
+  AI 输出是「草稿」不是「证据」。``ai.generation`` 事件携带 model 版本 +
+  prompt 的 SHA-256（``prompt_hash``）把生成输入钉进审计链；人工评审通过
+  ``AuditLog.sign_ai_generation()`` 追加 ``ai.generation.sign`` 签署事件
+  （``reviewed_by`` / ``reviewed_at``），草稿才升级为可采信的证据。
+  这些字段全部可选——旧格式事件（无 AI 字段）的 hash 链验证不受影响。
+
 Storage:
   data/audit/YYYY-MM-DD.jsonl  — One file per day, append-only
   data/{tenant}/audit/YYYY-MM-DD.jsonl — Tenant-scoped audit logs
@@ -79,6 +86,10 @@ EVENT_EVIDENCE_UPLOAD = "evidence.upload"
 EVENT_EVIDENCE_DELETE = "evidence.delete"
 EVENT_EVIDENCE_EXPORT = "evidence.export"
 
+# AI generation provenance events (合规专家 P1: AI 输出是「草稿」不是「证据」)
+EVENT_AI_GENERATION = "ai.generation"        # AI 产物（草稿）入链：model + prompt_hash
+EVENT_AI_SIGN = "ai.generation.sign"         # 人工评审签署：草稿 → 证据
+
 
 # ── Event dataclass ─────────────────────────────────────────────────────────
 
@@ -99,15 +110,29 @@ def compute_event_hash(event_dict: dict, prev_hash: str = "") -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
+def compute_prompt_hash(prompt: str) -> str:
+    """SHA-256 of the exact prompt text sent to the model.
+
+    Used to pin the AI generation input so the draft's provenance can be
+    reproduced / audited later. Deterministic: same prompt → same hash.
+    """
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+
 class AuditEvent:
     """An immutable audit event record."""
 
     __slots__ = ("actor", "action", "target", "timestamp", "tenant", "detail",
+                 "model", "prompt_hash", "reviewed_by", "reviewed_at",
                  "hash", "prev_hash")
 
     def __init__(self, actor: str, action: str, target: str = "",
                  timestamp: str = "", tenant: str = "",
                  detail: Optional[dict] = None,
+                 model: Optional[str] = None,
+                 prompt_hash: Optional[str] = None,
+                 reviewed_by: Optional[str] = None,
+                 reviewed_at: Optional[str] = None,
                  event_hash: str = "", prev_hash: str = ""):
         self.actor = actor          # "user:42" or "system" or "user:admin@example.com"
         self.action = action        # "project.create"
@@ -115,11 +140,16 @@ class AuditEvent:
         self.timestamp = timestamp or datetime.now().isoformat()
         self.tenant = tenant        # tenant slug or ""
         self.detail = detail or {}
+        # AI 溯源字段（可选，向后兼容：旧事件无这些字段）
+        self.model = model          # 模型名，如 "deepseek-v4"
+        self.prompt_hash = prompt_hash  # prompt 的 sha256（AI 生成溯源）
+        self.reviewed_by = reviewed_by  # 人工评审人（空 = 尚未签署）
+        self.reviewed_at = reviewed_at  # 人工评审时间（ISO）
         self.hash = event_hash      # SHA-256 of this event + prev_hash ("" = legacy)
         self.prev_hash = prev_hash  # SHA-256 of the previous event ("" = chain anchor)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "actor": self.actor,
             "action": self.action,
             "target": self.target,
@@ -129,6 +159,17 @@ class AuditEvent:
             "hash": self.hash,
             "prev_hash": self.prev_hash,
         }
+        # Only serialize non-empty AI provenance fields so legacy events
+        # round-trip byte-identically (old format stays hash-compatible).
+        if self.model is not None:
+            d["model"] = self.model
+        if self.prompt_hash is not None:
+            d["prompt_hash"] = self.prompt_hash
+        if self.reviewed_by is not None:
+            d["reviewed_by"] = self.reviewed_by
+        if self.reviewed_at is not None:
+            d["reviewed_at"] = self.reviewed_at
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "AuditEvent":
@@ -139,6 +180,10 @@ class AuditEvent:
             timestamp=data.get("timestamp", ""),
             tenant=data.get("tenant", ""),
             detail=data.get("detail", {}),
+            model=data.get("model"),
+            prompt_hash=data.get("prompt_hash"),
+            reviewed_by=data.get("reviewed_by"),
+            reviewed_at=data.get("reviewed_at"),
             event_hash=data.get("hash", ""),
             prev_hash=data.get("prev_hash", ""),
         )
@@ -182,13 +227,22 @@ class AuditLog:
 
     def record(self, actor: str, action: str, target: str = "",
                timestamp: str = "", tenant: str = "",
-               detail: Optional[dict] = None) -> AuditEvent:
+               detail: Optional[dict] = None,
+               model: Optional[str] = None,
+               prompt_hash: Optional[str] = None,
+               reviewed_by: Optional[str] = None,
+               reviewed_at: Optional[str] = None) -> AuditEvent:
         """Record an audit event. Returns the AuditEvent.
 
         Thread-safe: writes are append-only. Creates parent directories
         automatically. Each event is linked into a SHA-256 hash chain:
         the new event's ``hash`` covers its payload plus the previous
         event's hash, so any tampering is detectable via ``verify()``.
+
+        Optional AI provenance fields (``model`` / ``prompt_hash`` /
+        ``reviewed_by`` / ``reviewed_at``) are included in the hashed
+        payload only when provided — events recorded without them keep
+        the exact legacy format, so old stored events remain verifiable.
         """
         event_dict = {
             "actor": actor,
@@ -198,6 +252,14 @@ class AuditLog:
             "tenant": tenant,
             "detail": detail or {},
         }
+        if model is not None:
+            event_dict["model"] = model
+        if prompt_hash is not None:
+            event_dict["prompt_hash"] = prompt_hash
+        if reviewed_by is not None:
+            event_dict["reviewed_by"] = reviewed_by
+        if reviewed_at is not None:
+            event_dict["reviewed_at"] = reviewed_at
 
         # Chain anchor: hash of the last event already on disk (or "" for a
         # fresh file). Legacy rows written before the hash-chain feature have
@@ -225,6 +287,98 @@ class AuditLog:
                 f.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
 
         return event
+
+    # ------------------------------------------------------------------
+    # AI 生成溯源（合规专家 P1：AI 输出是「草稿」不是「证据」）
+    # ------------------------------------------------------------------
+
+    def record_ai_generation(
+        self,
+        actor: str,
+        target: str = "",
+        model: str = "",
+        prompt: str = "",
+        prompt_hash: str = "",
+        tenant: str = "",
+        reviewed_by: str = "",
+        reviewed_at: str = "",
+        detail: Optional[dict] = None,
+    ) -> AuditEvent:
+        """Record an AI-generated artifact (draft) into the SHA-256 audit chain.
+
+        Pins the model version and the SHA-256 hash of the exact prompt so
+        the input that produced the draft can be reproduced later. AI output
+        is a *draft*, not evidence — ``reviewed_by`` / ``reviewed_at`` are
+        optional sign-off fields that may be filled at record time; for a
+        separate post-hoc human sign-off use :meth:`sign_ai_generation`.
+
+        Args:
+            actor: Who triggered the generation ("user:42" / "system").
+            target: The generated artifact reference (e.g. "artifact:uart.c").
+            model: Model name actually used (e.g. "deepseek-v4").
+            prompt: The exact prompt text — hashed automatically unless
+                ``prompt_hash`` is given explicitly.
+            prompt_hash: Pre-computed sha256 of the prompt (optional).
+            tenant: Tenant slug or "".
+            reviewed_by: Human reviewer id (optional, empty = not signed).
+            reviewed_at: Human review timestamp ISO (optional).
+            detail: Extra structured context (task_type, etc.).
+
+        Returns:
+            The recorded AuditEvent (action ``ai.generation``).
+        """
+        if not prompt_hash and prompt:
+            prompt_hash = compute_prompt_hash(prompt)
+        return self.record(
+            actor=actor,
+            action=EVENT_AI_GENERATION,
+            target=target,
+            tenant=tenant,
+            detail=detail,
+            model=model or None,
+            prompt_hash=prompt_hash or None,
+            reviewed_by=reviewed_by or None,
+            reviewed_at=reviewed_at or None,
+        )
+
+    def sign_ai_generation(
+        self,
+        reviewer: str,
+        target: str = "",
+        prompt_hash: Optional[str] = None,
+        tenant: str = "",
+        note: str = "",
+        actor: str = "",
+    ) -> AuditEvent:
+        """Append a human review sign-off for a previously recorded AI draft.
+
+        The sign-off is itself an immutable, hash-chained audit event
+        (action ``ai.generation.sign``) that references the draft's
+        ``prompt_hash`` — turning the AI draft into human-reviewed evidence.
+        The event is linked to the previous event's hash, so the review
+        record cannot be altered without breaking the chain.
+
+        Args:
+            reviewer: Human reviewer id (e.g. "user:42").
+            target: The generated artifact reference being signed.
+            prompt_hash: sha256 of the prompt of the draft being signed.
+            tenant: Tenant slug or "".
+            note: Optional review note.
+            actor: Event actor; defaults to the reviewer.
+
+        Returns:
+            The recorded AuditEvent (action ``ai.generation.sign``).
+        """
+        return self.record(
+            actor=actor or reviewer,
+            action=EVENT_AI_SIGN,
+            target=target,
+            tenant=tenant,
+            detail={"reviewed_by": reviewer} | ({"note": note} if note else {}),
+            prompt_hash=prompt_hash or None,
+            reviewed_by=reviewer,
+            reviewed_at=datetime.now().isoformat(),
+        )
 
     def _last_hash(self, tenant: str = "") -> str:
         """Return the hash of the last event written (chain anchor).

@@ -22,9 +22,9 @@ DB_NAME="${POSTGRES_DB:-yuleosh}"
 DB_USER="${POSTGRES_USER:-yuleosh}"
 DB_PASS="${POSTGRES_PASSWORD:-yuleosh}"
 
-# Admin seed credentials (change after first login!)
+# Admin seed credentials (required, change per deployment)
 ADMIN_EMAIL="${YULEOSH_ADMIN_EMAIL:-admin@yuleosh.io}"
-ADMIN_PASSWORD="${YULEOSH_ADMIN_PASSWORD:-admin123}"
+ADMIN_PASSWORD="${YULEOSH_ADMIN_PASSWORD:?YULEOSH_ADMIN_PASSWORD is required}"
 ORG_NAME="${YULEOSH_ORG_NAME:-yuleOSH Inc.}"
 
 # ──────────────────────────────────────────────
