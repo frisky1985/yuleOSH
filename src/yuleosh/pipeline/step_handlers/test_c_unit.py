@@ -49,9 +49,31 @@ def run_c_test_suite(project_dir: str | Path,
     """
     project_dir = Path(project_dir)
 
+    # 2026-08-14 (headlamp dogfood #3): rglob 全目录扫描会把
+    # artifacts/generated-code/ 旧产物 (含 unity.h 测试) 当项目源码 →
+    # gcc-compile-check 假失败。排除非源码目录: 生成产物/构建目录/元数据。
+    _EXCLUDED_DIRS = {
+        ".git", ".osh", ".yuleosh", ".pytest_cache", "__pycache__",
+        "artifacts", "build", "cmake-build", "cmake-build-debug",
+        "cmake-build-release", "cmake-build-coverage", "node_modules",
+        "third_party", "third-party", "vendor", "external",
+    }
+
+    def _iter_sources(pattern: str) -> list:
+        out = []
+        for p in project_dir.rglob(pattern):
+            try:
+                rel = p.relative_to(project_dir)
+            except ValueError:
+                continue
+            if any(part in _EXCLUDED_DIRS for part in rel.parts):
+                continue
+            out.append(p)
+        return out
+
     # 1. Check for C source files
-    c_files = list(project_dir.rglob("*.c"))
-    c_header_files = list(project_dir.rglob("*.h"))
+    c_files = _iter_sources("*.c")
+    c_header_files = _iter_sources("*.h")
     log.info("Found %d .c files and %d .h files", len(c_files), len(c_header_files))
 
     if not c_files:
@@ -63,10 +85,10 @@ def run_c_test_suite(project_dir: str | Path,
 
     # 2. Find C test files
     c_test_files = (
-        list(project_dir.rglob("*test*.c")) +
-        list(project_dir.rglob("*Test*.c")) +
-        list(project_dir.rglob("*_test.c")) +
-        list(project_dir.rglob("*_tst.c"))
+        _iter_sources("*test*.c") +
+        _iter_sources("*Test*.c") +
+        _iter_sources("*_test.c") +
+        _iter_sources("*_tst.c")
     )
     c_test_files = list(set(c_test_files))  # deduplicate
     log.info("Found %d C test files", len(c_test_files))
