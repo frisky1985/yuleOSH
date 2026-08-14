@@ -132,7 +132,7 @@ class TestSubprocessRunner:
         state = engine.status()
         assert state is not None
         assert state["status"] == "completed"
-        assert len(state["steps"]) == 34  # 2026-08-12: 33→34 (与 PIPELINE_STEPS 同步)
+        assert len(state["steps"]) == 36  # 2026-08-14: 34→36 (codex-verify/claude-review 外部 agent 步骤)
         assert all(s["status"] == "passed" for s in state["steps"])
 
 

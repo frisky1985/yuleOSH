@@ -55,7 +55,7 @@ class TestPipelineStepsStructure:
         workflow, BSP/build/power/stack/MMIO reviews, fault-injection, merge-gate);
         v3.5.0: +codegen-deploy → 34."""
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
-        assert len(PIPELINE_STEPS) == 34
+        assert len(PIPELINE_STEPS) == 36
 
     def test_each_entry_has_4_elements(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
@@ -74,7 +74,8 @@ class TestPipelineStepsStructure:
             "spec-check", "super-analysis", "prd", "prd-review",
             "architecture", "arch-review", "development", "codegen-deploy",
             "devplan-review",
-            "internal-code-review", "test-planning", "self-test", "self-test-review",
+            "internal-code-review", "test-planning", "claude-review",
+            "self-test", "codex-verify", "self-test-review",
             "c-unit-test", "code-review", "integration-test", "misra-review",
             "coverage-review", "qemu-run", "c-coverage-gate",
             "review-linker", "review-startup", "review-rtos", "review-memory",
@@ -87,7 +88,7 @@ class TestPipelineStepsStructure:
     def test_agents(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         agents = {e[1] for e in PIPELINE_STEPS}
-        assert agents == {"小明", "Claude", "Hermes", "小克", "小马", "QEMU"}
+        assert agents == {"小明", "Claude", "Hermes", "小克", "小马", "QEMU", "Codex"}
 
     def test_internal_review_is_unresolved_fn(self):
         """step_internal_review and step_claude_test are plain functions."""
@@ -180,4 +181,4 @@ class TestModuleReExports:
             PIPELINE_STEPS,
         )
         assert callable(step_spec_check)
-        assert len(PIPELINE_STEPS) == 34
+        assert len(PIPELINE_STEPS) == 36

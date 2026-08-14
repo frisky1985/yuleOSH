@@ -31,6 +31,7 @@ AGENT_ROLES: dict[str, str] = {
     "小马": "qa",
     "Hermes": "requirements",
     "Claude": "architect",
+    "Codex": "verifier",
     "QEMU": "tool",
 }
 
@@ -46,6 +47,7 @@ _AGENT_ALIASES: dict[str, str] = {
     "xiaoma": "小马",
     "hermes": "Hermes",
     "claude": "Claude",
+    "codex": "Codex",
     "qemu": "QEMU",
 }
 
