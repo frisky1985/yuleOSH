@@ -88,7 +88,7 @@ KEY_ARTIFACTS = [
     "final-report.md",
 ]
 
-EXPECTED_STEP_COUNT = 34  # 2026-08-12: 33 → 34 (fault-injection/merge-gate 演进后) — 与 PIPELINE_STEPS 保持同步
+EXPECTED_STEP_COUNT = 36  # 2026-08-14: 34 → 36 (codex-verify/claude-review 外部 agent 步骤) — 与 PIPELINE_STEPS 保持同步
 
 
 @pytest.fixture(scope="module")

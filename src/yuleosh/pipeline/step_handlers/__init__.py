@@ -28,6 +28,10 @@ from yuleosh.pipeline.step_handlers.execution import (
     step_test_planning,
     step_claude_test,
 )
+from yuleosh.pipeline.step_handlers.external_agents import (
+    step_codex_verify,
+    step_claude_review,
+)
 from yuleosh.pipeline.step_handlers.review import (
     step_hermes_review,
     step_final_report,
@@ -82,6 +86,8 @@ __all__ = [
     "step_claude_dev",
     "step_test_planning",
     "step_claude_test",
+    "step_codex_verify",
+    "step_claude_review",
     "step_review_arch",
     "step_review_code",
     "step_review_selftest",
@@ -159,8 +165,14 @@ PIPELINE_STEPS = [
     ("test-planning", "Claude", "测试规划",
      _resolve_handler("test-planning", step_test_planning)),
 
+    # ── 外部 Agent 协作闭环 ────────────────────────
+    # claude-review: 方案评审/头脑风暴（外部 claude CLI，未一致即阻断）
+    ("claude-review", "Claude", "Claude 方案评审 (外部 agent)", step_claude_review),
+
     # ── Right side: SWE.4 Unit Testing ──────────────
     ("self-test", "Claude", "自测验证", step_claude_test),
+    # codex-verify: 外部 Codex CLI 对产出做真实测试验证，缺陷即阻断
+    ("codex-verify", "Codex", "Codex 测试验证 (外部 agent)", step_codex_verify),
     ("self-test-review", "小克", "自测结果审查", step_review_selftest),
     ("c-unit-test", "小克", "C 单元测试 (Unity)", step_c_unit_test),
 

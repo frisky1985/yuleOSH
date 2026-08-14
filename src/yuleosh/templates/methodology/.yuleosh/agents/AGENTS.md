@@ -1,6 +1,6 @@
 # AGENTS.md — Agent Role Assignment & Handover Protocol
 
-> **Version**: 1.1.0
+> **Version**: 1.2.0
 > **Status**: Active
 > **Format**: OpenSpec (RFC 2119: SHALL/SHOULD/MAY)
 > **优先级**: 所有角色 SHALL 遵守第一准则 PRIME-DIRECTIVE.md（工程诚实）及 TEST-INTEGRITY.md（测试真实性与降级透明性）。冲突时以第一准则为准。
@@ -72,6 +72,77 @@
 
 **MAY**:
 - The 小马 agent MAY defer P2-level findings to a future Sprint if no P0/P1 issues remain open.
+
+---
+
+### 1.4 Codex 🤖 — External Test Verifier
+
+**Description**: External CLI agent (OpenAI Codex) responsible for real test verification of pipeline outputs. Runs actual tests in the project workspace and reports structured defect lists. The `codex-verify` pipeline step invokes it via `codex exec --full-auto` with a strict JSON contract.
+
+**SHALL**:
+- The Codex agent SHALL run real tests (pytest / go test / ctest / other) and report actual results — never fabricate evidence or fake a pass.
+- The Codex agent SHALL output ONLY a strict JSON object: `{passed, summary, defects[], test_results}`; any non-JSON or missing `passed` field is treated as failure (honest fail, not skip).
+- The Codex agent SHALL list every discovered defect with severity / file / line / message / evidence.
+- The Codex agent SHALL treat "no tests ran" (exit 5 / 0 collected) as NOT passed — an empty run is not a green run.
+- When verification fails, the `codex-verify` step SHALL raise PipelineStepError to block the pipeline; the defect report SHALL be persisted to `session.session_dir/codex-verify.json` for the main agent to read, fix, and re-run.
+
+**SHOULD**:
+- The Codex agent SHOULD prefer running the project's primary test runner and reading its real output over static inspection.
+
+**MAY**:
+- The Codex agent MAY inspect spec/artifact context to verify requirement-to-test consistency.
+
+---
+
+### 1.5 Claude 💡 — External Proposal Reviewer
+
+**Description**: External CLI agent (Claude Code) responsible for reviewing proposals/plans and brainstorming before implementation proceeds. The `claude-review` pipeline step invokes it via `claude -p` with a strict JSON contract.
+
+**SHALL**:
+- The Claude agent SHALL review the proposal against the spec (requirements coverage, over-engineering, extensibility, compatibility) with independent judgment — it SHALL NOT be sycophantic or "please" the requester.
+- The Claude agent SHALL output ONLY a strict JSON object: `{verdict: agree|disagree, summary, blockers[], suggestions[], brainstorm}`; missing or invalid verdict SHALL be treated as disagree (fail-closed).
+- The Claude agent SHALL list blockers (critical/major/minor) with rationale before the proposal may advance.
+- When verdict is `disagree`, the `claude-review` step SHALL raise PipelineStepError to block the pipeline; the review report SHALL be persisted to `session.session_dir/claude-review.json` for revision and re-review.
+
+**SHOULD**:
+- The Claude agent SHOULD surface risks, trade-offs, and alternative directions in the brainstorm field.
+
+---
+
+## 1a. External Agent Collaboration Loop (外部 Agent 协同闭环)
+
+> **背景**: 2026-08-14 老板钦定。yuleOSH 流水线引入两个外部 CLI agent
+> (Codex / Claude)，与主 agent (Hermes/用户) 形成「生成 → 验证 → 修复」
+> 与「方案 → 评审 → 一致」两条自动闭环。
+
+### 1a.1 验证闭环 (Codex)
+
+**SHALL**:
+- `codex-verify` 步骤 SHALL 紧跟 `self-test` 之后运行，对真实产出做独立验证。
+- 验证发现缺陷时 SHALL 阻断 pipeline（PipelineStepError），并把结构化缺陷
+  清单落盘 `codex-verify.json`。
+- 主 agent (Hermes/用户) SHALL 读取缺陷报告 → 修复 → 重跑 pipeline 从失败
+  步骤继续，直到 `passed=true`（验证闭环）。
+- Codex 不可用（CLI 缺失）或 mock 模式 SHALL 写 SKIPPED 报告并跳过 —
+  SHALL NOT 把跳过当作验证通过。
+
+### 1a.2 评审闭环 (Claude)
+
+**SHALL**:
+- `claude-review` 步骤 SHALL 在方案/建议产出后运行（当前位于
+  `test-planning` 之后），对方向一致性做独立评审。
+- verdict=disagree 时 SHALL 阻断 pipeline，blockers 落盘
+  `claude-review.json`；方案修订后重跑，直到 agree（评审闭环）。
+- 未达成一致 SHALL NOT 推进下一步开发。
+
+### 1a.3 闭环纪律
+
+**SHALL**:
+- 外部 agent 的输出 SHALL 视为**不可信输入**：结构化解析失败即失败，
+  绝不把乱输出当通过。
+- 外部 agent 步骤 SHALL 有超时保护（codex 600s / claude 300s 可配），
+  超时即 PipelineStepError，不挂死 pipeline。
+- 所有外部 agent 步骤 SHALL 遵守第一准则：报告必须反映真实执行结果。
 
 ---
 

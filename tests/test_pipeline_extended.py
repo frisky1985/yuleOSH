@@ -551,7 +551,7 @@ class TestStepHandlersInit:
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         # v3.4.0: registry grew 10 → 33 with multi-reviewer workflow steps;
         # v3.5.0: +codegen-deploy (代码产物部署) → 34
-        assert len(PIPELINE_STEPS) == 34
+        assert len(PIPELINE_STEPS) == 36
         assert PIPELINE_STEPS[0][0] == "spec-check"
         assert PIPELINE_STEPS[-1][0] == "final-report"
 

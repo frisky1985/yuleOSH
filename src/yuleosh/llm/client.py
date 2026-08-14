@@ -162,6 +162,12 @@ AGENT_MODEL_ROUTES: dict[str, dict[str, str]] = {
         "task_type": "architecture_design",
         "risk_level": "L4",
     },
+    "Codex": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "review_blocking",
+        "risk_level": "L4",
+    },
     "QEMU": {
         "model": "deepseek-v4",
         "provider": "deepseek",
