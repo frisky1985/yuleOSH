@@ -94,6 +94,3 @@ win:
 # ─── 压缩 ────────────────────────────────────────────
 compression: normal
 removePackageScripts: true
-
-# ─── 协议 ────────────────────────────────────────────
-license: LICENSE.txt
