@@ -1,3 +1,57 @@
+# yuleOSH v3.15.0 — Codex 验证 + Claude 评审 双外部 Agent 协作闭环发布
+
+> **发布日期**: 2026-08-14
+> **版本**: v3.15.0
+> **上一个发布 tag**: v3.14.0 (2026-08-13)
+> **版本跨度**: v3.14.0 → v3.15.0
+
+---
+
+## 🎯 本版核心
+
+从 v3.14.0 到 v3.15.0 共 **36 个 commit**（8 feat / 17 fix / 7 docs+deps / 等），主线：**Codex/Claude 双外部 Agent 协作闭环 + Desktop 三平台构建打通 + headlamp/wiper dogfood 修复批**。
+
+---
+
+## ✨ 新功能
+
+### Codex 验证 + Claude 评审 双外部 Agent 协作闭环（老板钦定）
+- **`codex-verify` 步骤**（agent 角色 `Codex`=verifier）：调用真实 `codex exec --full-auto` 对产出跑测试验证，严格 JSON 契约 `{passed, summary, defects[], test_results}`；发现缺陷即抛 PipelineStepError 阻断 + 报告落盘 `codex-verify.json`，主 agent 读报告修复后重跑 → **「生成 → 验证 → 修复」自动闭环**
+- **`claude-review` 步骤**（agent 角色 `Claude`=architect）：调用 `claude -p` 对方案/建议评审与头脑风暴，严格 JSON 契约 `{verdict, blockers[], suggestions[], brainstorm}`；verdict=disagree 即阻断 + 报告落盘 `claude-review.json`，方案修订后再评 → **「方案 → 评审 → 一致」自动闭环**
+- 角色注册：`agent_registry` + `Codex`=verifier 角色/别名；`AGENT_MODEL_ROUTES` + `TASK_BUDGETS` 补 Codex 路由（review_blocking / L4 / 0.50）
+- 流水线接线：PIPELINE_STEPS 34→36（`claude-review` 跟 test-planning，`codex-verify` 跟 self-test）
+- 协同规则：AGENTS.md v1.2.0（Codex/Claude 角色 + §1a 外部 Agent 协同闭环）、RULES.md v1.4.0（§9 外部 Agent 协同规则：fail-closed / 超时 / 禁假绿），项目根与模板同步
+- 工程诚实保障：CLI 缺失/mock → SKIPPED 报告不冒充通过；非 JSON 输出诚实失败；超时保护（codex 600s / claude 300s 可配 `YULEOSH_CODEX_TIMEOUT` / `YULEOSH_CLAUDE_TIMEOUT`）
+
+### Desktop 三平台构建打通（CI）
+- **build-win 修复**（86f5edfa）：重构 desktop-build.yml → desktop-packages.yml 时 build-win 的 if 条件漏掉 `|| github.event_name != 'workflow_dispatch'` → push/PR 时 Windows 构建永远跳过；补回后三平台 push 全绿
+- mac 无证书签名降级 + linux deb homepage 缺失修复（92627db4 / 6db907f0）
+- CI 重构：抽出公共 actions + reusable workflow，消除三平台/前端/Python 环境冗余（20688fdc / eb1ccb55）
+
+### headlamp-control / wiper dogfood 修复批（08-14）
+- **LLM 输出截断检测 + max_tokens 提高**（d67ac66c）：大项目不再"永远修不好"
+- **C 系统级测试二进制查找兜底**（81a18451 + ea712d4b）：CMake target 名与源 stem 不同时也能找到；从 build 目录执行 → 不再永远 INCOMPLETE
+- **critical-safety 扫描器 3 修**（c363c70e + a1661c96）：static 内部函数参数指针豁免 NULL 检查 + 签名行与 `{` 分行时 static 参数豁免
+- **codegen verify_c 排除 tests/**（b1444a31 + a89b58fa）：LLM 生成的 Unity 测试不再导致 codegen 假失败；CONTEXT.md 注入 + 语言探测修复 C 项目被生成 Python 假绿
+- c-coverage-gate cmake configure 失败显式报错（b9ec04d8）+ c-unit-test rglob 排除 artifacts/build（43c52a5f）
+- **AI 生成溯源审计链**（ddf89eb8）：LLMClient 成功调用写 `ai.generation` 事件 + prompt SHA-256 入 hash 链 + 人工签署
+- **mock budget 假绿修复**（0f80aad0）：mock provider 跳过 budget pre-check
+- branch coverage gate 全链路 + PRD section 覆盖重试（e10aa9ba / 2d455f5e）
+- RULES.md v1.3.0 §8 Pipeline 结果判读 — completed ≠ GREEN（66064731）
+
+---
+
+## 📊 质量状态
+
+| 指标 | 值 |
+|:-----|:---|
+| 全量测试 (v3.15.0) | **12654 passed / 0 failed / 127 skipped** |
+| ruff | 新增行清零（新文件 0 错误，存量 46 个不变） |
+| 平台验证 | Codex CLI 真实调用输出可解析 JSON（空项目诚实报 pytest exit 5，无假绿 ✅） |
+| 定向测试 | external_agents + llm_routing + pipeline 相关 114 passed |
+
+---
+
 # yuleOSH v3.14.0 — CI 控制面三方向 + codegen 行为护栏 + MISRA 治理 + dogfood 修复发布
 
 > **发布日期**: 2026-08-13
