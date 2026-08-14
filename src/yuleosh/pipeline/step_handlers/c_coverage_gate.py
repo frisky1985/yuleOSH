@@ -254,8 +254,20 @@ def _phase_build_coverage(project_dir: str, results: dict) -> dict:
             "-DENABLE_COVERAGE=ON",
             "-DCMAKE_BUILD_TYPE=Debug",
         ]
-        subprocess.run(cmake_cmd, capture_output=True, text=True,
-                       timeout=120, cwd=project_dir, check=False)
+        cmake_result = subprocess.run(cmake_cmd, capture_output=True, text=True,
+                                      timeout=120, cwd=project_dir, check=False)
+
+        # 2026-08-14 (headlamp dogfood #3): cmake configure 失败 (如 CMakeLists
+        # 引用缺失源文件) 时必须显式失败并带出 configure 错误 — 之前裸 build
+        # 报 "Makefile: No such file" 掩盖了真正根因。
+        if cmake_result.returncode != 0:
+            return {
+                "success": False,
+                "build_dir": cd,
+                "error": "CMake configure failed",
+                "stdout": cmake_result.stdout[-1000:],
+                "stderr": cmake_result.stderr[-1000:],
+            }
 
         # Build
         build_cmd = ["cmake", "--build", cd, "-j4"]
