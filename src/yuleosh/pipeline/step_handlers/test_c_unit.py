@@ -226,8 +226,14 @@ def run_c_test_suite(project_dir: str | Path,
             if unity_src.exists():
                 src_files.append(str(unity_src))
                 inc_flags = ["-I", str(unity_dir / "src")]
+                link_flags = ["-lunity"]
             else:
+                # 2026-08-14 (headlamp dogfood #5): 项目不用 Unity 框架时
+                # 不能加 -lunity — 纯 main/自研 runner 测试会链接失败
+                # (ld: library 'unity' not found)。无 Unity → 只编译链接
+                # 测试文件本身。
                 inc_flags = []
+                link_flags = []
 
             for inc_dir in sorted(_collect_include_dirs(project_dir)):
                 if f"-I{inc_dir}" not in inc_flags:
@@ -241,7 +247,8 @@ def run_c_test_suite(project_dir: str | Path,
                 ["gcc", "-o", tmp_runner]
                 + src_files
                 + inc_flags
-                + ["-lunity", "-lm", "-Wall", "-Wextra"],
+                + link_flags
+                + ["-lm", "-Wall", "-Wextra"],
                 capture_output=True, text=True, timeout=60,
             )
             test_output = (result.stdout or "") + "\n" + (result.stderr or "")
