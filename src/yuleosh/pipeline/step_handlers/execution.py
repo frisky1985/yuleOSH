@@ -235,7 +235,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             output_dir=cfg.get("output_dir"),
             max_retries=int(cfg.get("max_retries", 3)),
             llm_client=getattr(session, "llm_client", None),
-            max_tokens=int(cfg.get("max_tokens", 8192)),
+            max_tokens=int(cfg.get("max_tokens", 16000)),
             seed_dir=project_dir if seed_sources else None,
         )
         result = engine.generate(

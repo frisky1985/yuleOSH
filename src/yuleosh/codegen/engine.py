@@ -292,6 +292,17 @@ class CodegenEngine:
                 round_idx + 1, result.last_errors[:300],
             )
 
+            # 2026-08-14 (headlamp dogfood #4): LLM 输出截断检测 — 大项目
+            # 一次输出超 max_tokens → 文件被截断, 编译错误永远存在。检测到
+            # 截断文件时, repair 提示要求**只重发这些完整文件**, 避免再次
+            # 全量输出 → 再次截断 (无效 repair 循环)。
+            truncated = self._detect_truncated_files(files)
+            if truncated:
+                log.warning(
+                    "Codegen round %d: truncated files detected: %s",
+                    round_idx + 1, truncated,
+                )
+
             # best-state 回滚 (方案 C): 错误数更少才更新快照; 否则回滚到
             # 历史最佳, 下一轮基于最佳版本修复而非"越修越坏"的当前版本。
             err_count = self._error_count(errors)
@@ -312,6 +323,7 @@ class CodegenEngine:
             if round_idx < self.max_retries:
                 repair_context = self._format_repair_context(
                     result.last_errors, files, best_state,
+                    truncated_files=truncated,
                 )
 
         result.finished_at = datetime.now().isoformat()
@@ -412,6 +424,38 @@ class CodegenEngine:
             return 0
         return len(re.findall(r"(?m)^.*\berror\b.*$", errors))
 
+    @staticmethod
+    def _detect_truncated_files(files: list[GeneratedFile]) -> list[str]:
+        """Detect files whose content looks truncated (LLM output cut off).
+
+        2026-08-14 (headlamp dogfood #4): 大项目 (12+ C 文件) 一次输出超过
+        max_tokens → 最后一个文件被截断 (如 ``if (resp_len`` 无闭合)。
+        Repair 轮同样超限 → 永远修不好。检测特征:
+
+        - ``.c`` / ``.h`` 顶层花括号不平衡 (``{`` != ``}``) — C 编译的
+          "expected '}'" / "unexpected EOF" 根源。
+        - 以不完整的行结束 (末行不是合法结尾, 且无尾随换行) — 保守特征。
+
+        返回相对路径列表 (仅 C 系语言)。
+        """
+        truncated: list[str] = []
+        for f in files:
+            suffix = Path(f.path).suffix.lower()
+            if suffix not in (".c", ".h", ".cpp", ".hpp"):
+                continue
+            content = f.content
+            opens = content.count("{")
+            closes = content.count("}")
+            if opens > closes:
+                truncated.append(f.path)
+                continue
+            # 末行截断启发: 无尾随换行 + 末行包含未闭合的括号/分号
+            if not content.endswith("\n"):
+                last_line = content.rsplit("\n", 1)[-1].strip()
+                if last_line and not last_line.endswith(("}", ")", ";", "#endif", ",", "\"", "'", "*/")):
+                    truncated.append(f.path)
+        return sorted(set(truncated))
+
     def _snapshot_files(self, out_dir: Path) -> dict[str, str]:
         """Snapshot the current output dir (rel_path -> content)."""
         snap: dict[str, str] = {}
@@ -437,12 +481,17 @@ class CodegenEngine:
         errors: str,
         files: list[GeneratedFile],
         best_state: Optional[dict[str, str]] = None,
+        truncated_files: Optional[list[str]] = None,
     ) -> str:
         """Build the compiler-feedback block appended to the next prompt.
 
         best_state (方案 C): 当前磁盘上错误数最少的版本的文件清单。
         提示模型只输出需要修复的文件 — 未修改文件保留磁盘现状,
         避免全量重发引入新错误。
+
+        truncated_files (2026-08-14, headlamp dogfood #4): LLM 输出被
+        max_tokens 截断的文件列表。这些文件必须**完整重发** (当前磁盘
+        副本不完整), 但**只重发这些文件** — 避免全量输出再次截断。
         """
         listing = "\n".join(f"  - {f.path}" for f in files) or "  - (none)"
         disk_hint = ""
@@ -453,6 +502,16 @@ class CodegenEngine:
                 f"{disk_listing}\n"
                 "**只重新输出你修改的文件** — 未修改的不要重发, 磁盘会保留。"
             )
+        trunc_hint = ""
+        if truncated_files:
+            trunc_listing = "\n".join(f"  - {p}" for p in truncated_files)
+            trunc_hint = (
+                "\n\n## ✂️ 输出截断警告 — 以下文件被截断 (内容不完整):\n"
+                f"{trunc_listing}\n"
+                "这些文件必须**完整重新输出** (当前内容缺失/不完整)。\n"
+                "**注意**: 一次只输出这些文件, 不要附带其它未修改文件 — "
+                "否则会再次超过输出长度限制。"
+            )
         return (
             "\n\n## 🔧 编译验证失败 — 请修复后重新输出文件\n"
             f"上一轮生成/修改的文件:\n{listing}\n\n"
@@ -461,6 +520,7 @@ class CodegenEngine:
             "要求: 修复所有编译错误，重新输出**本次修复涉及的文件** "
             "(不要输出与修复无关的文件)。"
             f"{disk_hint}"
+            f"{trunc_hint}"
         )
 
     # ---- Report --------------------------------------------------------
