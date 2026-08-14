@@ -182,6 +182,32 @@ class TestRunSystemTests:
                 assert "binary" in results["details"][0]
                 assert str(binary) in str(results["details"][0]["binary"])
 
+    def test_c_test_binary_target_name_differs_from_stem(self):
+        """GIVEN a C test source whose CMake target name differs from the
+           source stem (add_executable(headlamp_qualification system/test_x.c))
+           WHEN _run_system_tests runs
+           THEN the built binary is found via the tests/ fallback scan
+           (headlamp dogfood #8b)."""
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            src = td / "tests" / "system" / "test_qualification_x.c"
+            src.parent.mkdir(parents=True)
+            src.write_text("int main(void){return 0;}")
+            # target 名 headlamp_qualification, 二进制在 build/tests/ 下
+            binary = td / "cmake-build-coverage" / "tests" / "headlamp_qualification"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("#!/bin/sh\necho ok\n")
+            binary.chmod(0o755)
+
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value.returncode = 0
+                mock_run.return_value.stdout = "ok"
+                mock_run.return_value.stderr = ""
+                results = _run_system_tests([src], td)
+                assert results["executed"] >= 1
+                assert results["passed"] >= 1
+                assert str(binary) in str(results["details"][0]["binary"])
+
     def test_c_test_binary_missing_not_executed(self):
         """GIVEN a C test source with NO built binary
            WHEN _run_system_tests runs
