@@ -11,7 +11,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler
 from typing import Optional
 
-from yuleosh.ui.routes.helpers import _send_security_headers, _add_cors_header
+from yuleosh.ui.routes.http_response import _send_security_headers, _add_cors_header
 
 
 def handle_auth_check(handler: BaseHTTPRequestHandler) -> bool:

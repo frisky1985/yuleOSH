@@ -340,7 +340,7 @@ jobs:
         pip install -e ".[dev]"
     - name: RTM Gate Check (ASPICE SWE.4)
       run: |
-        bash docs/ci-rtm-check.sh 80 project-docs/spec.md tests/
+        bash docs/guides/ci-rtm-check.sh 80 project-docs/spec.md tests/
 
     - name: Generate evidence pack
       run: |

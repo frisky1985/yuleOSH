@@ -18,7 +18,7 @@ Internal modules:
 
 import logging
 
-from yuleosh.pipeline.stages.utils import timed_step
+from yuleosh.pipeline.stages.step_timing import timed_step
 from yuleosh.pipeline.stages.llm import _call_llm, _check_llm_key, _build_effective_system_prompt
 from yuleosh.pipeline.stages.spec import (
     _get_spec_mtime,

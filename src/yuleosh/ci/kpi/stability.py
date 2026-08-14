@@ -24,7 +24,7 @@ from typing import Any, Optional
 
 log = logging.getLogger("ci.kpi")
 
-from yuleosh.ci.kpi.utils import _parse_ts
+from yuleosh.ci.kpi.kpi_state import _parse_ts
 
 
 BASELINE_FILE = Path(".yuleosh") / "kpi-baseline.json"

@@ -1,1 +1,0 @@
-cd ~/.openclaw/workspace/tasks/yuleOSH && cat .task-to-claude.md

@@ -502,7 +502,7 @@ class TestServePage:
 
     def test_page_304_not_modified(self):
         from yuleosh.ui.routes import page_routes
-        from yuleosh.ui.routes.helpers import _compute_etag
+        from yuleosh.ui.routes.http_response import _compute_etag
         page_file = self._pages_dir() / "onboarding.html"
         etag = _compute_etag(page_file.read_bytes())
         handler = self._handler(headers={"If-None-Match": etag})
@@ -511,7 +511,7 @@ class TestServePage:
 
     def test_page_ims_304(self):
         from yuleosh.ui.routes import page_routes
-        from yuleosh.ui.routes.helpers import _format_http_datetime
+        from yuleosh.ui.routes.http_response import _format_http_datetime
         page_file = self._pages_dir() / "onboarding.html"
         # If-Modified-Since 与 mtime 相差 < 2s → 304
         ims = _format_http_datetime(page_file.stat().st_mtime)

@@ -22,7 +22,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from yuleosh.pipeline.stages.utils import timed_step
+from yuleosh.pipeline.stages.step_timing import timed_step
 
 log = logging.getLogger("pipeline.stages.spec")
 

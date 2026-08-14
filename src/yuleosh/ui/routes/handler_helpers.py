@@ -20,7 +20,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-from yuleosh.ui.routes.helpers import (
+from yuleosh.ui.routes.http_response import (
     _add_cors_header,
     _compute_etag,
     _format_http_datetime,

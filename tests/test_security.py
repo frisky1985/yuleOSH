@@ -288,7 +288,7 @@ class TestCybersecurityBaseline:
 
     def test_cr_document_exists(self):
         """CR-BASE-01: Cybersecurity baseline document SHALL exist."""
-        path = Path(__file__).resolve().parent.parent / "docs" / "cybersecurity-baseline.md"
+        path = Path(__file__).resolve().parent.parent / "docs" / "compliance" / "cybersecurity-baseline.md"
         assert path.exists(), "CR baseline document missing"
         content = path.read_text()
         assert "ISA/IEC 62443" in content
@@ -304,7 +304,7 @@ class TestCybersecurityBaseline:
 
     def test_cr_acceptance_matrix(self):
         """CR-BASE-03: CR requirements SHALL be in acceptance matrix."""
-        matrix_path = Path(__file__).resolve().parent.parent / "docs" / "acceptance-matrix.md"
+        matrix_path = Path(__file__).resolve().parent.parent / "docs" / "planning" / "acceptance-matrix.md"
         assert matrix_path.exists()
         content = matrix_path.read_text()
         assert "CR-" in content or "Cybersecurity" in content

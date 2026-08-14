@@ -163,7 +163,7 @@ class MisraConfig:
     include_paths: list[str] = field(default_factory=list)  # extra -I dirs beyond auto-detect
     code_categories: dict = field(default_factory=lambda: {
         "template": {
-            "paths": ["src/yuleosh/templates/**", "test-dogfood/**"],
+            "paths": ["src/yuleosh/templates/**", "projects/test-dogfood/**"],
             "action": "exclude",
             "block_on": False,
         },

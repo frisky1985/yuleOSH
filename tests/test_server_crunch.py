@@ -7,12 +7,12 @@ from unittest.mock import patch, MagicMock, ANY
 
 class TestServerCrunch:
     def test_server_format_http(self):
-        from yuleosh.ui.routes.helpers import _format_http_datetime, _parse_http_datetime
+        from yuleosh.ui.routes.http_response import _format_http_datetime, _parse_http_datetime
         dt = _format_http_datetime(0)
         assert "GMT" in dt or "1970" in dt
 
     def test_server_parse_valid(self):
-        from yuleosh.ui.routes.helpers import _parse_http_datetime
+        from yuleosh.ui.routes.http_response import _parse_http_datetime
         result = _parse_http_datetime("Mon, 01 Jan 2024 00:00:00 GMT")
         assert isinstance(result, float)
 

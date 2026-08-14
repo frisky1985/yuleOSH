@@ -173,12 +173,13 @@ class TestRunSystemTests:
         assert result["executed"] == 0
 
     def test_skips_c_files(self, tmp_path):
-        """GIVEN C test files WHEN running system tests THEN marks as skipped."""
+        """GIVEN C test files WHEN running system tests THEN reports no built binary (defect #8)."""
         from yuleosh.pipeline.step_handlers.test_qualification import _run_system_tests
         c_file = tmp_path / "test.c"
         c_file.write_text("int main(){}")
         result = _run_system_tests([c_file], tmp_path)
-        assert any("requires compilation" in str(d.get("message", ""))
+        assert result["executed"] == 0
+        assert any("no built binary" in str(d.get("message", ""))
                    for d in result["details"])
 
     def test_python_success(self, tmp_path):

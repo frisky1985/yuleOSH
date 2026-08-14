@@ -548,7 +548,7 @@ class TestCodeCategorization:
 
     DEFAULT_CATEGORIES = {
         "template": {
-            "paths": ["src/yuleosh/templates/**", "test-dogfood/**"],
+            "paths": ["src/yuleosh/templates/**", "projects/test-dogfood/**"],
             "action": "exclude",
             "block_on": False,
         },

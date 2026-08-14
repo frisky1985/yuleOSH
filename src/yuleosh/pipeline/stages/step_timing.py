@@ -12,7 +12,7 @@ import functools
 import logging
 import time
 
-log = logging.getLogger("pipeline.stages.utils")
+log = logging.getLogger("pipeline.stages.step_timing")
 
 
 def timed_step(handler):
