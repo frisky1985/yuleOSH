@@ -187,6 +187,37 @@ class TestStepCUnitTest:
         assert report["test_runner"] == "gcc-compile-check"
         assert report["status"] == "passed"
 
+    # ── GCC fallback without Unity — no -lunity flag (dogfood #5) ─────────
+
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
+    def test_gcc_fallback_without_unity_skips_lunity(
+            self, mock_environ, mock_subproc, mock_session, tmp_path):
+        """GIVEN no Unity framework in the project
+           WHEN the GCC fallback compiles test files
+           THEN -lunity is NOT passed (would fail: ld: library 'unity'
+           not found) — headlamp dogfood #5."""
+        mock_environ.get.return_value = str(tmp_path)
+        _setup_c_project(tmp_path, with_test_files=True)
+        # No unity dir → link_flags must not include -lunity
+
+        mock_subproc.return_value = MagicMock(
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+        result = step_c_unit_test(mock_session)
+        report = json.loads(Path(result).read_text())
+
+        assert report["test_runner"] == "gcc-compile-check"
+        assert report["status"] == "passed"
+        # 断言 gcc 调用参数里没有 -lunity
+        call_args = mock_subproc.call_args
+        assert call_args is not None
+        flat = " ".join(str(a) for a in call_args.args[0] if isinstance(a, str))
+        assert "-lunity" not in flat
+
     # ── GCC fallback — fail ─────────────────────────────────────────────────
 
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
