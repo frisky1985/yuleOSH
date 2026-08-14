@@ -222,7 +222,7 @@ jobs:
         bash scripts/cve-scan.sh --python
 
     - name: Setup Node.js for npm audit
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: '20'
 
