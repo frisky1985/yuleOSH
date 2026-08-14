@@ -11,9 +11,9 @@
     </a>
     <img src="https://img.shields.io/badge/version-3.14.0-blue?style=flat-square" alt="Version">
     <img src="https://img.shields.io/badge/license-Elastic%202.0-green?style=flat-square" alt="License">
-    <img src="https://img.shields.io/badge/python-%E2%89%A53.10-ff69b4?style=flat-square" alt="Python">
-    <img src="https://img.shields.io/badge/tests-10000%2B%20passing-brightgreen?style=flat-square" alt="Tests">
-    <img src="https://img.shields.io/badge/coverage-85%25-success?style=flat-square" alt="Coverage">
+    <img src="https://img.shields.io/badge/python-3.12-ff69b4?style=flat-square" alt="Python">
+    <img src="https://img.shields.io/badge/tests-12589%2B%20passing-brightgreen?style=flat-square" alt="Tests">
+    <img src="https://img.shields.io/badge/coverage-90.87%25-success?style=flat-square" alt="Coverage">
     <img src="https://img.shields.io/badge/ASPICE%20SWE.1-6-traceable-success?style=flat-square" alt="ASPICE">
   </p>
 
@@ -286,7 +286,7 @@ yuleOSH/
 │   ├── preview/       Pre-pipeline analysis & scoring
 │   └── store.py       Multi-tenant SQLite/PostgreSQL backend
 ├── frontend/          Next.js SaaS dashboard
-├── tests/             10000+ tests (392 files, all passing)
+├── tests/             12589+ tests (392 files, all passing)
 ├── docs/              Specifications, guides, reports
 ├── deploy/            Production deployment configs
 ├── Dockerfile         Multi-stage production Dockerfile
@@ -531,7 +531,7 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 yuleOSH/
 ├── src/yuleosh/    核心源码模块（spec/pipeline/ci/codegen/skills/kg/loop_engine/api/cli…）
 ├── frontend/       Next.js SaaS 管理面板
-├── tests/          10000+ 测试（392 文件，全部通过）
+├── tests/          12589+ 测试（392 文件，全部通过）
 ├── docs/           需求文档、指南、报告
 ├── deploy/         生产部署配置
 ├── Dockerfile      多阶段 Docker 构建

@@ -20,4 +20,8 @@ Usage:
 from yuleosh.audit.model import (
     AuditLog,
     AuditEvent,
+    EVENT_AI_GENERATION,
+    EVENT_AI_SIGN,
+    compute_event_hash,
+    compute_prompt_hash,
 )
