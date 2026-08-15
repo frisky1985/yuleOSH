@@ -42,6 +42,14 @@ _LAZY_HANDLERS = {
     "preview": ("yuleosh.api.preview", "handle_preview"),
     "subscription": ("yuleosh.api.subscription", "handle_subscription"),
     "dashboard": ("yuleosh.api.dashboard", "handle_dashboard"),
+    # Dashboard v2 modules (2026-08-16, D1-D7)
+    "dashboard-v2": ("yuleosh.api.dashboard_v2", "handle_dashboard_v2"),
+    "artifacts": ("yuleosh.api.artifacts", "handle_artifacts"),
+    "tests": ("yuleosh.api.tests", "handle_tests"),
+    "device-ui": ("yuleosh.api.device_ui", "handle_device_ui"),
+    "logs": ("yuleosh.api.logs", "handle_logs"),
+    "members": ("yuleosh.api.members", "handle_members"),
+    "requirements": ("yuleosh.api.requirements", "handle_requirements"),
 }
 
 logger = logging.getLogger("yuleosh.api.router")
