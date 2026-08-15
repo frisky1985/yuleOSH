@@ -103,7 +103,7 @@ def run_c_test_suite(project_dir: str | Path,
     # 3a0. Try ctest first — CMake projects define real buildable tests.
     cmake_build_dirs = (
         list(project_dir.glob("build")) +
-        list(project_dir.glob("cmake-build-*"))
+        list(project_dir.glob("cmake-build*"))
     )
     for build_dir in cmake_build_dirs:
         ctest_cfg = build_dir / "CTestTestfile.cmake"
@@ -147,8 +147,11 @@ def run_c_test_suite(project_dir: str | Path,
                 break
 
             log.info("Attempting ctest in %s", build_dir)
+            # -LE integration: unit step runs unit tests only; integration
+            # tests (LABELS "integration") belong to the integration-test
+            # step (2026-08-15, three-layer test separation).
             result = subprocess.run(
-                ["ctest", "--output-on-failure", "-j4"],
+                ["ctest", "--output-on-failure", "-j4", "-LE", "integration"],
                 capture_output=True, text=True,
                 timeout=timeout_ctest, cwd=build_dir,
             )
