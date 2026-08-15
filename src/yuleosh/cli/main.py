@@ -336,6 +336,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kg_stats.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_kg_stats.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # P3: device management — HIL device pool
+    from yuleosh.device.cli import build_device_parser
+    build_device_parser(sub)
+
     # P2: kg report — RTM + Metrics
     p_kg_report = kgsub.add_parser("report", help="Generate reports from KG (P2)")
     rsub = p_kg_report.add_subparsers(dest="report_sub")
@@ -906,6 +910,10 @@ def main():
     elif args.command == "onboard":
         from yuleosh.cli.onboard import handle_onboard_command
         handle_onboard_command(args)
+
+    elif args.command == "device":
+        from yuleosh.device.cli import handle_device_command
+        handle_device_command(args)
 
     elif args.command == "loop":
         from yuleosh.loop_engine.cli import handle_loop_command
