@@ -29,6 +29,14 @@ import {
   X,
   BookMarked,
   Hash,
+  ShieldCheck,
+  Activity,
+  GitBranch,
+  Cpu,
+  FlaskConical,
+  ScrollText,
+  Users,
+  ListChecks,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -85,6 +93,36 @@ import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Tab = "overview" | "gap-analysis" | "knowledge-base" | "misra-trends";
+
+// ─── Dashboard v2 (五维合规总览) types ─────────────────────────────────────
+
+interface ComplianceDimension {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  status: "good" | "warning" | "critical";
+  note?: string | null;
+}
+
+interface DashboardV2Overview {
+  compliance_score: number;
+  dimensions: ComplianceDimension[];
+  coverage: number;
+  test_pass_rate: number;
+  misra_violations: number;
+  active_pipelines: number;
+  projects_count: number;
+  devices_summary: Record<string, number>;
+  generated_at: string;
+  note: string | null;
+}
+
+interface DashboardV2OverviewResponse {
+  ok: boolean;
+  data: DashboardV2Overview;
+  error?: string;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -191,6 +229,16 @@ function gapStatusColor(s: string): string {
   }
 }
 
+function complianceScoreColor(score: number): string {
+  if (score >= 80) return "#10b981";
+  if (score >= 60) return "#faad14";
+  return "#ff4d4f";
+}
+
+function clampScore(score: number): number {
+  return Math.max(0, Math.min(100, score));
+}
+
 // ─── Mini Coverage Bar ───────────────────────────────────────────────────────
 
 
@@ -215,6 +263,10 @@ export default function DashboardPage() {
   // Coverage
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(true);
+
+  // Dashboard v2 compliance overview (五维合规总览)
+  const [v2Overview, setV2Overview] = useState<DashboardV2Overview | null>(null);
+  const [v2OverviewLoading, setV2OverviewLoading] = useState(false);
 
   // Gap analysis
   const [gapData, setGapData] = useState<GapAnalysisResponse | null>(null);
@@ -279,6 +331,28 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Dashboard v2 五维合规总览 — cookie 认证自动携带，直接 fetch 即可。
+  // 信封 {ok, data}，业务数据在 resp.data；note 非空 = 无真实数据。
+  const loadV2Overview = useCallback(async () => {
+    setV2OverviewLoading(true);
+    try {
+      const resp = await fetch("/api/v1/dashboard-v2/overview", {
+        credentials: "same-origin",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const body: DashboardV2OverviewResponse = await resp.json();
+      if (!body || body.ok === false) {
+        throw new Error(body?.error || "加载合规总览失败");
+      }
+      setV2Overview(body.data ?? null);
+    } catch (err: any) {
+      console.warn("Failed to load dashboard-v2 overview:", err);
+      setV2Overview(null);
+    } finally {
+      setV2OverviewLoading(false);
+    }
+  }, []);
+
   const loadGapAnalysis = useCallback(
     async (projectId: string, page: number, severity: string) => {
       setGapLoading(true);
@@ -339,6 +413,7 @@ export default function DashboardPage() {
     if (activeTab === "overview") {
       loadSWE(selectedProject);
       loadCoverage(selectedProject);
+      loadV2Overview();
     } else {
       setGapPage(1);
       setGapSeverity("");
@@ -544,6 +619,51 @@ export default function DashboardPage() {
                 <TrendingUp className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
                 MISRA 趋势
               </button>
+
+              {/* Module links (sub-pages) */}
+              <div className="w-px h-4 bg-[#1e293b] mx-1" />
+              <Link
+                href="/dashboard/pipeline"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+              >
+                <GitBranch className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+                流水线
+              </Link>
+              <Link
+                href="/dashboard/devices"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+              >
+                <Cpu className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+                设备
+              </Link>
+              <Link
+                href="/dashboard/tests"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+              >
+                <FlaskConical className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+                测试
+              </Link>
+              <Link
+                href="/dashboard/logs"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+              >
+                <ScrollText className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+                日志
+              </Link>
+              <Link
+                href="/dashboard/roles"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+              >
+                <Users className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+                角色
+              </Link>
+              <Link
+                href="/dashboard/requirements"
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+              >
+                <ListChecks className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+                需求
+              </Link>
             </div>
 
             {/* User menu */}
@@ -717,6 +837,171 @@ export default function DashboardPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Dashboard v2: 五维合规总览卡 */}
+            <Card className="border-[#1e293b] bg-[#111827] mb-6">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-[#722ed1]" />
+                    合规总览（五维加权）
+                  </CardTitle>
+                  {v2OverviewLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-[#64748b]" />
+                  ) : v2Overview?.generated_at ? (
+                    <span className="text-[10px] text-[#64748b]">
+                      更新于 {formatDate(v2Overview.generated_at)}
+                    </span>
+                  ) : null}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {v2OverviewLoading && !v2Overview ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="w-5 h-5 text-[#722ed1] animate-spin" />
+                    <span className="ml-2 text-xs text-[#94a3b8]">加载合规总览...</span>
+                  </div>
+                ) : !v2Overview ||
+                  v2Overview.compliance_score == null ||
+                  (v2Overview.note && v2Overview.note.length > 0) ? (
+                  <div className="py-8 text-center">
+                    <Info className="w-6 h-6 text-[#64748b] mx-auto mb-2" />
+                    <p className="text-sm text-[#94a3b8]">暂无数据</p>
+                    {v2Overview?.note && (
+                      <p className="text-xs text-[#64748b] mt-1 max-w-xl mx-auto">
+                        {v2Overview.note}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* 大号合规总分圆环 + 五维横向条 */}
+                    <div className="grid lg:grid-cols-3 gap-6 items-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="relative w-28 h-28">
+                          <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="42"
+                              fill="none"
+                              stroke="#1e293b"
+                              strokeWidth="8"
+                            />
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="42"
+                              fill="none"
+                              stroke={complianceScoreColor(v2Overview.compliance_score)}
+                              strokeWidth="8"
+                              strokeLinecap="round"
+                              strokeDasharray={`${
+                                (clampScore(v2Overview.compliance_score) / 100) *
+                                2 *
+                                Math.PI *
+                                42
+                              } ${2 * Math.PI * 42}`}
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span
+                              className="text-3xl font-black"
+                              style={{
+                                color: complianceScoreColor(v2Overview.compliance_score),
+                              }}
+                            >
+                              {Math.round(v2Overview.compliance_score)}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-xs text-[#64748b]">合规总分</span>
+                      </div>
+
+                      <div className="lg:col-span-2 space-y-3">
+                        {v2Overview.dimensions.map((d) => (
+                          <div key={d.key}>
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="text-[#94a3b8] flex items-center gap-1.5">
+                                {d.label}
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#722ed1]/10 text-[#722ed1] border border-[#722ed1]/20">
+                                  权重 {Math.round(d.weight * 100)}%
+                                </span>
+                              </span>
+                              <span
+                                className="font-bold"
+                                style={{ color: complianceScoreColor(d.score) }}
+                              >
+                                {d.score}
+                              </span>
+                            </div>
+                            <div className="h-2 rounded-full bg-[#1e293b] overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-700"
+                                style={{
+                                  width: `${clampScore(d.score)}%`,
+                                  backgroundColor: complianceScoreColor(d.score),
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 一行 4 个小指标卡 */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+                      <div className="rounded-xl border border-[#1e293b] bg-[#0a0e17] p-3">
+                        <div className="text-[10px] text-[#64748b] flex items-center gap-1">
+                          <BarChart3 className="w-3 h-3" /> 代码覆盖率
+                        </div>
+                        <div
+                          className="text-xl font-black mt-1"
+                          style={{ color: complianceScoreColor(v2Overview.coverage) }}
+                        >
+                          {v2Overview.coverage}%
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[#1e293b] bg-[#0a0e17] p-3">
+                        <div className="text-[10px] text-[#64748b] flex items-center gap-1">
+                          <Target className="w-3 h-3" /> 测试通过率
+                        </div>
+                        <div
+                          className="text-xl font-black mt-1"
+                          style={{ color: complianceScoreColor(v2Overview.test_pass_rate) }}
+                        >
+                          {v2Overview.test_pass_rate}%
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[#1e293b] bg-[#0a0e17] p-3">
+                        <div className="text-[10px] text-[#64748b] flex items-center gap-1">
+                          <Hash className="w-3 h-3" /> MISRA 违规
+                        </div>
+                        <div
+                          className="text-xl font-black mt-1"
+                          style={{
+                            color:
+                              v2Overview.misra_violations === 0
+                                ? "#10b981"
+                                : "#ff4d4f",
+                          }}
+                        >
+                          {v2Overview.misra_violations}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[#1e293b] bg-[#0a0e17] p-3">
+                        <div className="text-[10px] text-[#64748b] flex items-center gap-1">
+                          <Activity className="w-3 h-3" /> 活跃流水线
+                        </div>
+                        <div className="text-xl font-black mt-1 text-[#1677ff]">
+                          {v2Overview.active_pipelines}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Compliance Progress + Coverage side by side */}
             <div className="grid lg:grid-cols-3 gap-5 mb-6">
