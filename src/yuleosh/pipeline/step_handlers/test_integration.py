@@ -116,6 +116,56 @@ def step_integration_test(session: PipelineSession) -> str:
                 test_runner = "pytest-integration-timeout"
                 log.warning("pytest integration tests timed out")
 
+        # Fallback: try C/CMake integration tests via ctest -L integration
+        # (2026-08-15). C projects declare integration tests as ctest
+        # entries with LABELS "integration"; `ctest -L integration` runs
+        # exactly those. This only engages when pytest found nothing
+        # (rc==5 / not found) so Python projects keep pytest semantics.
+        if (test_runner in ("none", "pytest-integration")
+                and result_returncode in (None, 5)):
+            cmake_build_dirs = (
+                list(project_dir.glob("build")) +
+                list(project_dir.glob("cmake-build*"))
+            )
+            for build_dir in cmake_build_dirs:
+                ctest_cfg = build_dir / "CTestTestfile.cmake"
+                if not ctest_cfg.exists():
+                    continue
+                try:
+                    log.info("Rebuilding %s before ctest -L integration", build_dir)
+                    build_result = subprocess.run(
+                        ["cmake", "--build", str(build_dir), "-j4"],
+                        capture_output=True, text=True,
+                        timeout=180, cwd=build_dir,
+                    )
+                    if build_result.returncode != 0:
+                        test_output = (build_result.stderr or build_result.stdout)[-1000:]
+                        result_returncode = build_result.returncode
+                        test_runner = "ctest-integration-build-failed"
+                        passed, failed = 0, 0
+                        break
+                    result = subprocess.run(
+                        ["ctest", "-L", "integration", "--output-on-failure"],
+                        capture_output=True, text=True,
+                        timeout=180, cwd=build_dir,
+                    )
+                    test_output = (result.stdout or "") + "\n" + (result.stderr or "")
+                    result_returncode = result.returncode
+                    test_runner = "ctest-integration"
+                    passed, failed = _parse_test_counts(test_output, "ctest-integration")
+                    log.info(
+                        "ctest -L integration: returncode=%d, passed=%d, failed=%d",
+                        result.returncode, passed, failed,
+                    )
+                    break
+                except FileNotFoundError:
+                    log.info("ctest not found")
+                except subprocess.TimeoutExpired:
+                    test_output = "TIMEOUT: ctest -L integration exceeded 180s"
+                    test_runner = "ctest-integration-timeout"
+                    log.warning("ctest -L integration timed out")
+                    break
+
         # Fallback: try Go integration tests
         if test_runner == "none":
             go_mod = project_dir / "go.mod"
@@ -158,7 +208,11 @@ def step_integration_test(session: PipelineSession) -> str:
         # C/CMake project whose tests live in ctest (not pytest), this is
         # expected, not a failure — treat as skipped. Only a real test
         # failure (tests ran and failed) should block the pipeline.
+        # ctest -L integration exits 8 when no test matches the label —
+        # same semantics: C project without integration tests = skipped.
         if result_returncode == 5 and test_runner == "pytest-integration":
+            status = "skipped"
+        elif result_returncode == 8 and test_runner == "ctest-integration":
             status = "skipped"
         elif result_returncode is not None and result_returncode != 0:
             status = "failed"
@@ -291,6 +345,16 @@ def _parse_test_counts(output: str, runner: str) -> tuple[int, int]:
         m = re.search(r"(\d+)\s+failed", output)
         if m:
             failed = int(m.group(1))
+
+    elif runner.startswith("ctest"):
+        # ctest summary: "100% tests passed, 0 tests failed out of 1"
+        import re
+        m = re.search(r"(\d+)%\s+tests passed,\s*(\d+)\s+tests failed", output)
+        if m:
+            failed = int(m.group(2))
+            total_m = re.search(r"out of\s+(\d+)", output)
+            if total_m:
+                passed = int(total_m.group(1)) - failed
 
     elif runner.startswith("go"):
         # go test output: "ok  package  0.123s"  or  "FAIL  package  0.456s"

@@ -516,3 +516,101 @@ class TestStepIntegrationTest:
                         report = json.load(f)
                     assert report["test_runner"] == "go-integration"
                     assert report["passed"] == 1
+
+    def test_ctest_runner_success(self, mock_session, spec_file, tmp_path):
+        """C/CMake project with LABELS integration tests → ctest -L integration passes."""
+        mock_session.spec_path = str(spec_file)
+        proj_dir = tmp_path / "cproj"
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        (proj_dir / "tests").mkdir(exist_ok=True)
+        build_dir = proj_dir / "cmake-build"
+        build_dir.mkdir(exist_ok=True)
+        (build_dir / "CTestTestfile.cmake").write_text("add_test(NAME x COMMAND true)\n")
+        mock_session.project_dir = proj_dir
+        mock_session.session_dir = tmp_path / "session3"
+        mock_session.session_dir.mkdir(exist_ok=True)
+
+        with patch("yuleosh.pipeline.step_handlers.test_integration._parse_scenarios") as mock_parse:
+            mock_parse.return_value = []
+            with patch("yuleosh.pipeline.step_handlers.test_integration._parse_spec") as mock_spec:
+                mock_spec.return_value = {}
+                with patch("yuleosh.pipeline.step_handlers.test_integration.subprocess.run") as mock_run:
+                    # 1: pytest --help probe; 2: pytest -m integration (no match, rc 5);
+                    # 3: cmake --build; 4: ctest -L integration (1 passed)
+                    mock_run.side_effect = [
+                        MagicMock(stdout="", stderr="", returncode=0),
+                        MagicMock(stdout="no tests ran", stderr="", returncode=5),
+                        MagicMock(stdout="", stderr="", returncode=0),
+                        MagicMock(
+                            stdout="100% tests passed, 0 tests failed out of 1\n",
+                            stderr="", returncode=0,
+                        ),
+                    ]
+                    result = step_integration_test(mock_session)
+                    with open(result) as f:
+                        report = json.load(f)
+                    assert report["test_runner"] == "ctest-integration"
+                    assert report["status"] == "passed"
+                    assert report["passed"] == 1
+                    assert report["failed"] == 0
+
+    def test_ctest_runner_no_integration_label_skipped(self, mock_session, spec_file, tmp_path):
+        """C project without integration label → ctest rc 8 → skipped (not failed)."""
+        mock_session.spec_path = str(spec_file)
+        proj_dir = tmp_path / "cproj2"
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        (proj_dir / "tests").mkdir(exist_ok=True)
+        build_dir = proj_dir / "cmake-build"
+        build_dir.mkdir(exist_ok=True)
+        (build_dir / "CTestTestfile.cmake").write_text("add_test(NAME x COMMAND true)\n")
+        mock_session.project_dir = proj_dir
+        mock_session.session_dir = tmp_path / "session4"
+        mock_session.session_dir.mkdir(exist_ok=True)
+
+        with patch("yuleosh.pipeline.step_handlers.test_integration._parse_scenarios") as mock_parse:
+            mock_parse.return_value = []
+            with patch("yuleosh.pipeline.step_handlers.test_integration._parse_spec") as mock_spec:
+                mock_spec.return_value = {}
+                with patch("yuleosh.pipeline.step_handlers.test_integration.subprocess.run") as mock_run:
+                    mock_run.side_effect = [
+                        MagicMock(stdout="", stderr="", returncode=0),
+                        MagicMock(stdout="no tests ran", stderr="", returncode=5),
+                        MagicMock(stdout="", stderr="", returncode=0),
+                        MagicMock(stdout="No tests were found!!!", stderr="", returncode=8),
+                    ]
+                    result = step_integration_test(mock_session)
+                    with open(result) as f:
+                        report = json.load(f)
+                    assert report["test_runner"] == "ctest-integration"
+                    assert report["status"] == "skipped"
+                    assert report["passed"] == 0
+
+    def test_c_unit_ctest_excludes_integration_label(self, mock_session, tmp_path):
+        """c-unit-test ctest run must exclude integration tests (-LE integration)."""
+        proj_dir = tmp_path / "cunit"
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        (proj_dir / "main.c").write_text("int main() { return 0; }\n")
+        build_dir = proj_dir / "cmake-build"
+        build_dir.mkdir(exist_ok=True)
+        (build_dir / "CTestTestfile.cmake").write_text("add_test(NAME u COMMAND true)\n")
+        mock_session.project_dir = proj_dir
+
+        with patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                MagicMock(stdout="", stderr="", returncode=0),   # cmake --build
+                MagicMock(
+                    stdout="100% tests passed, 0 tests failed out of 2\n",
+                    stderr="", returncode=0,                     # ctest
+                ),
+            ]
+            result = step_c_unit_test(mock_session)
+            with open(result) as f:
+                report = json.load(f)
+            assert report["test_runner"] == "ctest"
+            # The ctest invocation must carry -LE integration so unit tests
+            # don't swallow integration tests (three-layer separation).
+            ctest_calls = [c for c in mock_run.call_args_list
+                           if "ctest" in c.args[0][0]]
+            assert ctest_calls, "expected a ctest invocation"
+            assert "-LE" in ctest_calls[0].args[0]
+            assert "integration" in ctest_calls[0].args[0]
