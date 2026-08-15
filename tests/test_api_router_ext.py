@@ -29,6 +29,9 @@ class TestRouter:
             "webhooks", "audit", "auth", "demo", "subscription",
             "preview", "dashboard", "kb",
             "tenant", "tenants", "billing", "projects",
+            # Dashboard v2 modules (2026-08-16, D1-D7)
+            "dashboard-v2", "artifacts", "tests", "device-ui",
+            "logs", "members", "requirements",
         }
         all_resources = set(ROUTES.keys()) | set(_LAZY_HANDLERS.keys())
         assert all_resources == expected
