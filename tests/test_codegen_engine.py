@@ -339,6 +339,41 @@ class TestEngineLoop:
         with pytest.raises(Exception):
             engine.generate(session, "sys", "user")
 
+    def test_call_llm_passes_long_timeout(self, tmp_path):
+        """Codegen prompts (spec+PRD+arch+seed) exceed the 60s chat_completion
+        default; the engine must pass an explicit timeout (120s default,
+        YULEOSH_CODEGEN_LLM_TIMEOUT override) to the LLM client."""
+        seen = {}
+
+        def spy(system, user, **kw):
+            seen["timeout"] = kw.get("timeout")
+            seen["max_tokens"] = kw.get("max_tokens")
+            return {"content": _marker_output("src/ok.py", "python", "x = 1\n")}
+
+        session = _session(tmp_path)
+        engine = CodegenEngine(llm_client=spy, max_retries=0, max_tokens=8192)
+        engine.generate(session, "sys", "user")
+
+        assert seen["timeout"] == 120, (
+            "codegen must not rely on the 60s chat_completion default "
+            "(real runs time out on long outputs)"
+        )
+        assert seen["max_tokens"] == 8192
+
+    def test_call_llm_timeout_env_override(self, tmp_path, monkeypatch):
+        seen = {}
+
+        def spy(system, user, **kw):
+            seen["timeout"] = kw.get("timeout")
+            return {"content": _marker_output("src/ok.py", "python", "x = 1\n")}
+
+        monkeypatch.setenv("YULEOSH_CODEGEN_LLM_TIMEOUT", "300")
+        session = _session(tmp_path)
+        engine = CodegenEngine(llm_client=spy, max_retries=0)
+        engine.generate(session, "sys", "user")
+
+        assert seen["timeout"] == 300
+
 
 class TestTruncationDetection:
     """headlamp dogfood #4: LLM 输出截断 (大项目超 max_tokens)."""

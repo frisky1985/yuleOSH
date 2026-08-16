@@ -386,8 +386,15 @@ class CodegenEngine:
 
             client = chat_completion
         prompt = user_prompt + repair_context
+        # Codegen prompts carry the full spec + PRD + architecture + seed
+        # sources and generate up to max_tokens (default 16000) — DeepSeek
+        # regularly exceeds the 60s chat_completion default on long outputs.
+        # 120s baseline, overridable via YULEOSH_CODEGEN_LLM_TIMEOUT.
+        timeout_s = int(os.environ.get("YULEOSH_CODEGEN_LLM_TIMEOUT", "120"))
         try:
-            response = client(system_prompt, prompt, max_tokens=self.max_tokens)
+            response = client(
+                system_prompt, prompt, max_tokens=self.max_tokens, timeout=timeout_s
+            )
         except Exception as e:  # LLM transport failure is fatal
             raise PipelineStepError(f"Codegen LLM call failed: {e}") from e
         if isinstance(response, dict):
