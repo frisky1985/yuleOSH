@@ -1,6 +1,7 @@
 """Tests for ci/gcov_coverage.py — C/C++ coverage via gcov/lcov."""
 import tempfile
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -210,3 +211,35 @@ class TestGenerateCCoverageReport:
                     path = generate_c_coverage_report(build_dir=str(td), fail_under=80.0)
                     report = json.loads(Path(path).read_text())
                     assert report["gate_passed"] is True
+
+    def test_file_rel_relative_path_when_absolute(self):
+        """2026-08-16 可移植性修复：lcov 绝对路径必须同时输出相对 file_rel，
+        报告跨机器/评审时路径可用（旧版只有绝对路径，换机器全断）。"""
+        with tempfile.TemporaryDirectory() as td:
+            yuleosh_dir = Path(td) / ".yuleosh"
+            yuleosh_dir.mkdir()
+            lcov_path = Path(td) / "coverage.info"
+            lcov_path.write_text("")
+            abs_src = str((Path(td) / "src" / "app.c").resolve())
+            with patch("yuleosh.ci.gcov_coverage.run_gcov_coverage",
+                       return_value={"success": True, "lcov_file": str(lcov_path),
+                                      "html_dir": ""}):
+                with patch("yuleosh.ci.gcov_coverage.parse_lcov_output",
+                           return_value={
+                               "line_rate": 0.9,
+                               "branch_rate": 0.7,
+                               "totals": {"lines": {"found": 10, "hit": 9},
+                                          "functions": {"found": 2, "hit": 2},
+                                          "branches": {"found": 4, "hit": 3}},
+                               "files": [{"file": abs_src, "line_rate": 0.9,
+                                          "branch_rate": 0.7,
+                                          "lines": {"found": 10, "hit": 9},
+                                          "functions": {"found": 2, "hit": 2}}],
+                           }):
+                    path = generate_c_coverage_report(build_dir=str(td))
+            report = json.loads(Path(path).read_text())
+            assert len(report["files"]) == 1
+            f_entry = report["files"][0]
+            assert f_entry["file"] == abs_src          # 绝对路径保留兼容
+            assert f_entry["file_rel"] == os.path.join("src", "app.c")  # 相对路径可移植
+            assert os.path.isabs(f_entry["file_rel"]) is False

@@ -389,7 +389,16 @@ def generate_c_coverage_report(
         "gate_details": gate_details if gate_details else None,
         "files": [
             {
+                # 2026-08-16 可移植性修复：file 改为相对 project_dir 路径，
+                # 旧版直接写 lcov 绝对路径（/Users/...）→ 报告跨机器/评审
+                # 时路径全断。file_rel 保留相对路径，file 保持绝对路径兼容
+                # 存量消费者（module_thresholds / run_c_coverage_check 里
+                # os.path.relpath 有 isabs 分支，二者都可用）。
                 "file": f["file"],
+                "file_rel": (
+                    os.path.relpath(f["file"], project_dir)
+                    if os.path.isabs(f["file"]) else f["file"]
+                ),
                 "line_rate": round(f.get("line_rate", 0) * 100, 2),
                 "branch_rate": round(f.get("branch_rate", 0) * 100, 2),
                 "lines": f["lines"],
