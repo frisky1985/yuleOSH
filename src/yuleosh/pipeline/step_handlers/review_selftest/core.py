@@ -38,6 +38,7 @@ _find_test_source_files = find_test_source_files
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm, _parse_spec, _try_parse_hermes_json
+from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
 
 log = logging.getLogger("pipeline.step_handlers.review_selftest")
 
@@ -690,7 +691,7 @@ def _build_selftest_review_prompt(
     user_prompt = (
         f"## Spec: {spec_name}\n\n"
         f"### Specification (excerpt)\n"
-        f"```\n{spec_content[:5000]}\n```\n\n"
+        f"```\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
         f"### SHALL/SHOULD/MAY Statements ({len(shall_statements)} total)\n"
         f"{shall_str}\n\n"
         f"### Self-Test Report\n"

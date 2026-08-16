@@ -35,6 +35,7 @@ from pathlib import Path
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step
 from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
+from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
 
 log = logging.getLogger("pipeline.step_handlers.external_agents")
 
@@ -126,7 +127,7 @@ def _build_codex_prompt(spec_content: str, artifacts_block: str,
 
 项目目录: {project_dir}
 规格 (docs/spec.md 摘要):
-{spec_content[:6000]}
+{spec_content[:SPEC_INJECT_LIMIT]}
 
 当前产物:
 {artifacts_block[:8000]}
@@ -159,7 +160,7 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
 
 项目目录: {project_dir}
 规格 (docs/spec.md 摘要):
-{spec_content[:6000]}
+{spec_content[:SPEC_INJECT_LIMIT]}
 
 待评审方案/建议:
 {artifacts_block[:8000]}
