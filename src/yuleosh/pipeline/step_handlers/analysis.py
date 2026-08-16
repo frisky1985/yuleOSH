@@ -158,7 +158,8 @@ def step_super_analysis(session: PipelineSession) -> str:
         )
 
         try:
-            result = _call_llm(session, system_prompt, user_prompt)
+            result = _call_llm(session, system_prompt, user_prompt,
+                               max_tokens=16000)
         except Exception as e:
             log.error(f"LLM call failed during S.U.P.E.R analysis: {e}")
             raise PipelineStepError(
@@ -263,7 +264,10 @@ def step_hermes_prd(session: PipelineSession) -> str:
         truncations: list[str] = []
         for attempt in range(max_retries + 1):
             try:
-                result = _call_llm(session, system_prompt, user_prompt)
+                # max_tokens=16000: PRD 是长文档 (51 SHALL + FR 表 + AC 表),
+                # 4096 默认会截断 (2026-08-16 实证: 尾部断在 NFR-002)。
+                result = _call_llm(session, system_prompt, user_prompt,
+                                   max_tokens=16000)
             except Exception as e:
                 log.error(f"LLM call failed during PRD generation: {e}")
                 raise PipelineStepError(
