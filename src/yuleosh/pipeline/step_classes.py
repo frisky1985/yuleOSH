@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -8,6 +10,123 @@ from yuleosh.pipeline.steps import PipelineStep
 from yuleosh.codegen.prompts import collect_existing_headers
 
 log = logging.getLogger("pipeline.step_classes")
+
+# ---------------------------------------------------------------------------
+# codegen 追加防护 (2026-08-16, 老板拍板 A+C):
+#   seed_contract — 现有 src/ 公共函数契约 (engine 检查生成代码不删除)
+#   behavior_verify — 编译通过后跑真实测试 (engine repair 轮反馈给 LLM)
+# ---------------------------------------------------------------------------
+
+
+def _collect_seed_contract(project_dir: str | Path) -> dict[str, set[str]]:
+    """Collect public function names from existing src/ headers.
+
+    Returns {rel_path_of_c_impl: {func_name, ...}} where funcs come from
+    the matching header declarations (non-static public API). The engine
+    checks generated .c still implements every declared public function.
+    """
+    proot = Path(project_dir)
+    src_dir = proot / "src"
+    if not src_dir.is_dir():
+        return {}
+
+    # header decl → func name (comment-stripped)
+    def _header_funcs(h: Path) -> set[str]:
+        text = h.read_text(encoding="utf-8", errors="replace")
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        text = re.sub(r"//[^\n]*", "", text)
+        funcs: set[str] = set()
+        for m in re.finditer(r"\b([a-zA-Z_]\w*)\s*\([^;{}]*\);", text, flags=re.S):
+            name = m.group(1)
+            if name in {"if", "for", "while", "switch", "return",
+                        "sizeof", "defined"}:
+                continue
+            funcs.add(name)
+        return funcs
+
+    contract: dict[str, set[str]] = {}
+    # src/**/include/*.h → 对应 src/**/src/*.c (同 stem)
+    for h in sorted(src_dir.rglob("*.h")):
+        funcs = _header_funcs(h)
+        if not funcs:
+            continue
+        stem = h.stem  # e.g. window_control
+        for c in sorted(src_dir.rglob(f"{stem}.c")):
+            rel = str(c.relative_to(proot))
+            contract.setdefault(rel, set()).update(funcs)
+    return contract
+
+
+def _make_behavior_verify(project_dir: str | Path):
+    """Build a behavior-verify callback for CodegenEngine.
+
+    The callback temporarily deploys generated src/ into the project
+    (backed up), runs the real C test suite via CCTestRunner, restores the
+    original src/, and returns a failure-text (or "" on pass).
+
+    Safe: restores original src/ even when the test run raises. The deploy
+    step later runs its own baseline→verify→rollback behavior guardrail —
+    this hook only *pre-empts* obvious regressions inside the codegen loop.
+    """
+    proot = Path(project_dir)
+
+    def _verify(out_dir: Path) -> str:
+        from yuleosh.pipeline.guardrail import CCTestRunner
+
+        gen_src = out_dir / "src"
+        if not gen_src.is_dir():
+            return ""
+        # 备份现有 src 中被覆盖文件
+        backup: dict[str, bytes | None] = {}
+        try:
+            for p in sorted(gen_src.rglob("*")):
+                if p.is_dir():
+                    continue
+                rel = p.relative_to(out_dir)  # keep "src/..." prefix
+                dst = proot / rel
+                if dst.exists():
+                    try:
+                        backup[str(rel)] = dst.read_bytes()
+                    except OSError:
+                        backup[str(rel)] = None
+                else:
+                    backup[str(rel)] = None
+            # 部署生成代码
+            for p in sorted(gen_src.rglob("*")):
+                if p.is_dir():
+                    continue
+                rel = p.relative_to(out_dir)
+                dst = proot / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(p, dst)
+            # 跑真实测试
+            runner = CCTestRunner()
+            result = runner.run(proot, force_rebuild=True)
+            # 仅真实失败才拦截; skipped (无 C 测试) 视为通过 — 否则
+            # Python 项目/无测试项目每次 codegen 都被假失败卡死。
+            if result.status != "failed":
+                return ""
+            return (
+                "## ⚠️ 行为测试失败 (codegen 阶段预检, 2026-08-16)\n"
+                f"runner={result.runner} passed={result.passed} "
+                f"failed={result.failed} status={result.status}\n"
+                f"{getattr(result, 'detail', '') or getattr(result, 'output', '') or ''}"
+                "\n请修复生成代码的行为逻辑后重新输出涉及的文件。\n"
+            )
+        except Exception as e:  # pragma: no cover - defensive
+            log.warning("behavior_verify exception (non-fatal): %s", e)
+            return ""
+        finally:
+            # 恢复原始 src/ (即使测试异常)
+            from yuleosh.pipeline.guardrail import apply_change_set
+
+            try:
+                apply_change_set(proot, backup)
+            except Exception as e:  # pragma: no cover - defensive
+                log.warning("behavior_verify restore failed: %s", e)
+
+    return _verify
+
 
 class SuperAnalysisStep(PipelineStep):
     """
@@ -304,6 +423,8 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             llm_client=getattr(session, "llm_client", None),
             max_tokens=self.max_tokens,
             seed_dir=project_dir if seed_sources else None,
+            seed_contract=_collect_seed_contract(project_dir),
+            behavior_verify=_make_behavior_verify(project_dir),
         )
         result = engine.generate(
             session, system_prompt, user_prompt,
