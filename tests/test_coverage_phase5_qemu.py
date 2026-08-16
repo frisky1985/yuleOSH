@@ -428,7 +428,55 @@ class TestCoverageGateStep:
 # c_coverage_gate — 四个 phase helpers
 # =====================================================================
 
-class TestPhaseBuildCoverage:
+class TestPhaseCheckGateFallback:
+    """_phase_check_gate fallback 分支（yuleosh_ci_c_coverage_check）。
+
+    2026-08-16 发现记录 bug：fallback 用 stage.get("key") 匹配，但
+    CIResult.add_stage 写入的字段是 "name" → 永远匹配不到 → line_rate
+    恒 0.0（gate 判定对，记录错，污染证据/趋势数据）。
+    """
+
+    def _run_check(self, tmp_path, stage_detail, report_data=None):
+        from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        from yuleosh.ci.result import CIResult
+        # 无 tools/check_coverage_gate.py → 走 fallback 分支
+        results = {}
+
+        def fake_run_c_coverage_check(project_dir, ci):
+            ci.add_stage("c-coverage-gate", "passed", stage_detail)
+            return True
+
+        with mock.patch("yuleosh.ci.stages.run_c_coverage_check",
+                        side_effect=fake_run_c_coverage_check):
+            return ccg._phase_check_gate(str(tmp_path), results)
+
+    def test_fallback_extracts_real_line_rate(self, tmp_path):
+        """stage detail 用 name 字段记录时，必须解析出真实 line_rate。"""
+        out = self._run_check(
+            tmp_path,
+            "line_rate=80.1% >= 70%; branch_rate=64.8% >= 60%",
+        )
+        assert out["success"] is True
+        assert out["line_rate"] == 80.1
+        assert out["branch_rate"] == 64.8
+        assert out["method"] == "yuleosh_ci_c_coverage_check"
+
+    def test_fallback_records_warning_when_detail_unparsable(self, tmp_path):
+        """detail 无 line_rate 文本时不得默认 0.0 —— 应回读 c-coverage.json。"""
+        from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        # 造一个真实 report 供回读
+        report_dir = tmp_path / ".yuleosh" / "reports"
+        report_dir.mkdir(parents=True)
+        (report_dir / "c-coverage.json").write_text(
+            json.dumps({"line_rate": 80.12, "branch_rate": 64.81, "files": []})
+        )
+        out = self._run_check(tmp_path, "passed: coverage OK")
+        assert out["success"] is True
+        assert out["line_rate"] == 80.12
+        assert out["branch_rate"] == 64.81
+
+
+
     def test_existing_coverage_build(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         cov_dir = tmp_path / "cmake-build-coverage"
