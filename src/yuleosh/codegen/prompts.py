@@ -156,19 +156,23 @@ def build_codegen_prompt(
     if context_content:
         context_parts.insert(
             1,
-            f"# Project Context (必须遵守)\n```markdown\n{context_content[:4000]}\n```",
+            f"# Project Context (必须遵守)\n```markdown\n{context_content[:8000]}\n```",
         )
     if architecture_content:
         context_parts.append(
-            f"# Architecture\n```markdown\n{architecture_content[:5000]}\n```"
+            f"# Architecture\n```markdown\n{architecture_content[:12000]}\n```"
         )
     if prd_content:
+        # 2026-08-16: was [:4000] — codegen LLM saw only the PRD head (FR-001..),
+        # missing the tail contracts (FR-044 |delta|, G-01..G-12 guardrail map,
+        # SW-005..008 FRs) → generated signed-delta / raw-memcpy code every round.
+        # PRD is the behavioral contract for codegen; inject it in full.
         context_parts.append(
-            f"# PRD\n```markdown\n{prd_content[:4000]}\n```"
+            f"# PRD\n```markdown\n{prd_content[:SPEC_INJECT_LIMIT]}\n```"
         )
     if super_analysis_content:
         context_parts.append(
-            f"# S.U.P.E.R Analysis\n```markdown\n{super_analysis_content[:3000]}\n```"
+            f"# S.U.P.E.R Analysis\n```markdown\n{super_analysis_content[:6000]}\n```"
         )
     # 既有 API 契约 (2026-08-12): 必须实现, 不得改名/改签名
     if existing_headers:
