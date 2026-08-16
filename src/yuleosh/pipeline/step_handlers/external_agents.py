@@ -377,8 +377,14 @@ def step_claude_review(session: PipelineSession) -> str:
 
     log.info("Running claude -p (timeout=%ss)", CLAUDE_TIMEOUT)
     try:
+        # --dangerously-skip-permissions (2026-08-16 r20 根因): claude 在项目
+        # 目录会执行 Bash 工具读 src/ 验证评审, 非交互模式 (-p) 下权限提示
+        # 无人确认 → 挂起 120s 后 exit 1 空 stderr。与 codex-verify 的
+        # --full-auto 对等 (评审 agent 只读项目, 风险可控)。手动复现证实:
+        # 无该 flag → disagree/失败; 有 → agree 且稳定。
         result = _run_cli(
-            [claude_bin, "-p", prompt, "--max-turns", str(CLAUDE_MAX_TURNS)],
+            [claude_bin, "-p", prompt, "--max-turns", str(CLAUDE_MAX_TURNS),
+             "--dangerously-skip-permissions"],
             timeout=CLAUDE_TIMEOUT, cwd=project_dir, extra_env=extra_env,
         )
     except subprocess.TimeoutExpired:
