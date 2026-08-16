@@ -15,7 +15,6 @@ window-anti-pinch (C 项目) 的 acceptance-matrix 全 ❌: _collect_test_covera
   同时扫 test_*.c / test_*.cpp
 """
 
-import os
 from pathlib import Path
 
 from yuleosh.evidence.analysis import (
