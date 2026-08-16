@@ -92,6 +92,25 @@ class TestExcludePaths:
         result = _exclude_paths([], ["**"], "/project")
         assert result == []
 
+    def test_exclude_top_level_tests_with_doublestar_prefix(self):
+        """2026-08-16 回归：`**/tests/**` 必须同时匹配顶层 `tests/x.c`。
+
+        _glob_to_regex('**/tests/**') → ^.*/tests/.*$ 要求路径含前导 /，
+        而相对路径 tests/x.c 无前导斜杠 → 匹配失败（window-anti-pinch
+        L1 MISRA 把 tests/ 扫进去爆 233 required 违规的根因）。
+        """
+        from yuleosh.ci.stages import _exclude_paths
+        files = ["tests/test_window_control.c", "src/app.c",
+                 "src/foo/tests/bar.c"]
+        result = _exclude_paths(files, ["**/tests/**"], "/project")
+        assert result == ["src/app.c"], f"got {result}"
+
+    def test_doublestar_prefix_matches_nested_tests(self):
+        from yuleosh.ci.stages import _exclude_paths
+        files = ["src/foo/tests/deep.c", "src/app.c"]
+        result = _exclude_paths(files, ["**/tests/**"], "/project")
+        assert result == ["src/app.c"]
+
 
 class TestDetectIncludePaths:
     """_detect_include_paths: find common C include directories."""
