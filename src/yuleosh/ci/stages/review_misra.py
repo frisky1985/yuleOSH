@@ -236,21 +236,18 @@ def run_misra_check(project_dir: str, ci: CIResult,
                            os.path.join(project_dir, f) if not os.path.isabs(f) else f)]
             is_delta = True
         else:
+            # 2026-08-16 盲区修复：改用 _collect_delta_files（回看最近 N 提交
+            # + working tree + untracked），与 L1 delta 模式同源；旧逻辑
+            # HEAD~1 只含 docs 时误退化成 full scan。
             try:
-                git_result = subprocess.run(
-                    ["git", "diff", "--name-only", "HEAD~1"],
-                    capture_output=True, text=True, timeout=10,
-                    cwd=project_dir,
-                )
-                if git_result.returncode == 0:
-                    changed_files = [f.strip() for f in git_result.stdout.splitlines() if f.strip()]
-                    c_files = [
-                        os.path.join(project_dir, f) if not os.path.isabs(f) else f
-                        for f in changed_files
-                        if f.endswith((".c", ".cpp"))
-                    ]
-                    if c_files:
-                        is_delta = True
+                changed = _collect_delta_files(project_dir)
+                c_files = [
+                    os.path.join(project_dir, f) if not os.path.isabs(f) else f
+                    for f in changed
+                    if f.endswith((".c", ".cpp"))
+                ]
+                if c_files:
+                    is_delta = True
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 
