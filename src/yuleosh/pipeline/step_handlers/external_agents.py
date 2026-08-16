@@ -52,7 +52,9 @@ __all__ = ["step_claude_review", "step_codex_verify"]
 # arch 15K + test-plan 16K ≈ 100K chars) 让 codex exec 读代码验证耗时
 # >600s (r19 实证: 死于 step 14 codex-verify, 启动 11 分钟后无输出 = 600s
 # 超时被杀). 900s 与 CLAUDE_TIMEOUT 对齐, 覆盖大 prompt 验证, 仍防挂死。
-CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "900"))
+# codex-verify: 全自动验证 (读代码+独立复现+跑测试)。r19 实测 256s;
+# r20j 835s 仍超时 (DeepSeek 响应慢 + 任务重) → 900s 不够, 提到 1800s。
+CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "1800"))
 # claude-review 默认 300s 不够 (2026-08-16 实证: run c88797033141 超时,
 # claude 读代码评审 14KB+ prompt 需 3-5 分钟) → 提到 600s。
 # 2026-08-17: 600s → 900s. 完整 prompt (spec 22K + contracts 6K + PRD 26K +
