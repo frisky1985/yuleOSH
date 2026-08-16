@@ -19,6 +19,7 @@ from pathlib import Path
 import yuleosh
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+from yuleosh.spec_contracts import contracts_check
 
 log = logging.getLogger("pipeline.step_handlers.spec")
 
@@ -78,6 +79,43 @@ def step_spec_check(session: PipelineSession) -> str:
 
         print(f"  ✅ [小明] Spec validated: {data['coverage']['score']}% coverage")
         log.info(f"Spec validated: {data['coverage']['score']}% coverage")
+
+        # ── 契约完整性机器校验 (方案 A, 2026-08-16) ──────────────────
+        # 长 spec 固定截断会让下游 LLM 看不到尾部契约 (codegen/claude-review
+        # 连续 3 轮 RED 根因)。这里是确定性检查: 抽取 spec 中的接口契约/
+        # 行为护栏/参数边界/NVM 布局为 contracts.json, 完整性不满足直接 RED,
+        # 防回归从 LLM 人审迁移到机器检查。
+        try:
+            check = contracts_check(session.spec_path)
+        except Exception as e:  # pragma: no cover - defensive
+            log.error(f"Contract extraction failed: {e}")
+            check = {"validation": {"passed": False, "missing": [f"contract extraction error: {e}"], "details": {}}}
+
+        contracts_path = session.session_dir / "contracts.json"
+        try:
+            contracts_path.write_text(
+                json.dumps(check, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as e:  # pragma: no cover - defensive
+            log.warning(f"contracts.json write failed (non-fatal): {e}")
+
+        v = check["validation"]
+        if not v["passed"]:
+            missing = "; ".join(v["missing"])
+            log.error(f"Contract integrity check FAILED: {missing}")
+            raise PipelineStepError(
+                f"Contract integrity check FAILED — spec 契约抽取不完整, "
+                f"下游 LLM (codegen/评审) 将看不到关键契约: {missing}"
+            )
+        iface = v["details"].get("interfaces", {})
+        gr = v["details"].get("guardrails", {})
+        pm = v["details"].get("params", {})
+        print(
+            f"  🛡️ [小明] Contract integrity: {len(iface.get('headers', []))} headers / "
+            f"{len(gr.get('ids', []))} guardrails / {len(pm.get('names', []))} params PASS"
+        )
+
         return str(out_path)
     except subprocess.TimeoutExpired:
         log.error("Spec validation timed out")

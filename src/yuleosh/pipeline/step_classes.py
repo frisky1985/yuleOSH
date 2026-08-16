@@ -405,6 +405,18 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
         # engine 复制 seed 到输出目录, LLM 只增量修改。
         seed_sources = collect_seed_sources(project_dir)
 
+        # 机器抽取契约 (方案 A, 2026-08-16): spec-check 抽取的 contracts.json
+        contracts_json = ""
+        contracts_path = Path(session.session_dir) / "contracts.json"
+        if contracts_path.exists():
+            try:
+                contracts_data = json.loads(contracts_path.read_text(encoding="utf-8"))
+                contracts_json = json.dumps(
+                    contracts_data.get("contracts", {}), ensure_ascii=False, indent=1
+                )
+            except (OSError, json.JSONDecodeError) as e:
+                log.warning(f"contracts.json read failed (non-fatal): {e}")
+
         system_prompt, user_prompt = build_codegen_prompt(
             spec_content=spec_content,
             spec_name=Path(session.spec_path).name,
@@ -415,6 +427,7 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             target_language=target_language,
             existing_headers=collect_existing_headers(project_dir),
             seed_sources=seed_sources,
+            contracts_json=contracts_json,
         )
 
         engine = CodegenEngine(
