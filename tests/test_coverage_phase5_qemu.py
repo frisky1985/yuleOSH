@@ -770,7 +770,9 @@ class TestPhaseCheckGate:
                         return_value=True), \
              mock.patch("yuleosh.ci.result.CIResult") as mci:
             inst = mci.return_value
-            inst.stages = [{"key": "c-coverage-gate",
+            # 2026-08-16 契约迁移：CIResult.add_stage 写 "name" 字段，
+            # 旧测试 mock 用 "key" 永远匹配不到（正是被修复的记录 bug）。
+            inst.stages = [{"name": "c-coverage-gate",
                             "detail": "line_rate=92.1 branch_rate=80.0"}]
             r = ccg._phase_check_gate(str(tmp_path), results)
         assert r["success"] is True
