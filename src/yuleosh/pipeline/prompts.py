@@ -60,14 +60,30 @@ def _inject_spec(spec_content: str) -> str:
     If a spec ever exceeds SPEC_INJECT_LIMIT, surface it loudly in the prompt
     instead of dropping the tail invisibly — reviewers can then flag it.
     """
-    if len(spec_content) <= SPEC_INJECT_LIMIT:
-        return spec_content
-    truncated = spec_content[:SPEC_INJECT_LIMIT]
+    out = _inject_limited(spec_content, SPEC_INJECT_LIMIT, "spec")
+    # 保持 SPEC_TRUNCATED 标记兼容 (测试/下游检测依赖该字样)
+    if len(spec_content) > SPEC_INJECT_LIMIT:
+        out = out.replace("TRUNCATED", "SPEC_TRUNCATED", 1)
+    return out
+
+
+def _inject_limited(content: str, limit: int, what: str) -> str:
+    """Inject ``content`` capped at ``limit`` chars with an explicit marker.
+
+    方案 B 推广 (2026-08-17): 评审/生成步骤的 artifact 输入（architecture、
+    dev_plan、PRD 等）同样禁止静默截断。超过 limit 时注入头部 + 显式
+    TRUNCATED 标记, LLM 看到后能自行判断"评审对象不完整"而不是把缺失
+    当作设计缺陷（r19 实证: arch-review 误报"需补全 ADR-005+", 实际文档
+    有, 只是被 [:8000] 砍掉）。
+    """
+    if len(content) <= limit:
+        return content
+    truncated = content[:limit]
     marker = (
-        "\n\n<!-- ⚠️ SPEC_TRUNCATED: spec exceeds SPEC_INJECT_LIMIT "
-        f"({len(spec_content)} > {SPEC_INJECT_LIMIT} chars). "
-        "Tail contract sections may be missing. Raise SPEC_INJECT_LIMIT "
-        "in pipeline/prompts.py and re-run. -->\n"
+        "\n\n<!-- ⚠️ TRUNCATED: content exceeds limit "
+        f"({len(content)} > {limit} chars). "
+        f"Tail sections of {what} may be missing. "
+        "Raise the injection limit in the step handler and re-run. -->\n"
     )
     return truncated + marker
 

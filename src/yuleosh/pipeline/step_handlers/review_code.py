@@ -19,7 +19,7 @@ from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm, _try_parse_hermes_json
-from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
+from yuleosh.pipeline.prompts import _inject_spec, _inject_limited, SPEC_INJECT_LIMIT
 log = logging.getLogger("pipeline.step_handlers.review_code")
 
 __all__ = ["step_review_code"]
@@ -101,7 +101,7 @@ def step_review_code(session: PipelineSession) -> str:
         )
 
         try:
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
         except Exception as e:
             log.error(f"LLM call failed during code review: {e}")
             raise PipelineStepError(
@@ -211,9 +211,9 @@ def _build_code_review_prompt(
         f"### Specification\n"
         f"```\n{_inject_spec(spec_content)}\n```\n\n"
         f"### Architecture Design\n"
-        f"```\n{architecture_content[:4000]}\n```\n\n"
+        f"```\n{_inject_limited(architecture_content, SPEC_INJECT_LIMIT, 'architecture')}\n```\n\n"
         f"### Development Plan\n"
-        f"```\n{dev_plan_content[:3000]}\n```\n\n"
+        f"```\n{_inject_limited(dev_plan_content, SPEC_INJECT_LIMIT, 'development-plan')}\n```\n\n"
         f"### Source Files ({len(source_files)} total)\n"
         f"{src_str}\n\n"
         f"### Key File Contents\n"

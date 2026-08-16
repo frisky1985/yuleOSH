@@ -25,7 +25,7 @@ from pathlib import Path
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm
 from yuleosh.review.run import review_architecture as _run_arch_review
-from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
+from yuleosh.pipeline.prompts import _inject_spec, _inject_limited, SPEC_INJECT_LIMIT
 
 log = logging.getLogger("pipeline.step_handlers.review_arch")
 
@@ -88,7 +88,7 @@ def step_review_arch(session: PipelineSession) -> str:
                     spec_name=spec_path.name,
                     architecture_content=architecture_content,
                 )
-                llm_result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+                llm_result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
                 llm_review = llm_result["content"]
                 usage = llm_result.get("usage", {})
                 session.token_usage_total += usage.get("total_tokens", 0)
@@ -190,7 +190,7 @@ def _build_arch_review_prompt(
         f"### Specification Content\n"
         f"```\n{_inject_spec(spec_content)}\n```\n\n"
         f"### Architecture Design\n"
-        f"```\n{architecture_content[:8000]}\n```\n\n"
+        f"```\n{_inject_limited(architecture_content, SPEC_INJECT_LIMIT, 'architecture')}\n```\n\n"
         f"Review the architecture against the specification above.\n"
         f"Identify any gaps, risks, or inconsistencies."
     )

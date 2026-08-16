@@ -48,7 +48,11 @@ log = logging.getLogger("pipeline.step_handlers.external_agents")
 __all__ = ["step_claude_review", "step_codex_verify"]
 
 # 外部 CLI 单次调用超时（秒）——codex 跑测试可能较慢。
-CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "600"))
+# 2026-08-17: 600s → 900s. 完整 prompt (spec 22K + contracts 6K + PRD 26K +
+# arch 15K + test-plan 16K ≈ 100K chars) 让 codex exec 读代码验证耗时
+# >600s (r19 实证: 死于 step 14 codex-verify, 启动 11 分钟后无输出 = 600s
+# 超时被杀). 900s 与 CLAUDE_TIMEOUT 对齐, 覆盖大 prompt 验证, 仍防挂死。
+CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "900"))
 # claude-review 默认 300s 不够 (2026-08-16 实证: run c88797033141 超时,
 # claude 读代码评审 14KB+ prompt 需 3-5 分钟) → 提到 600s。
 # 2026-08-17: 600s → 900s. 完整 prompt (spec 22K + contracts 6K + PRD 26K +

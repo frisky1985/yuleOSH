@@ -113,7 +113,7 @@ def step_hermes_review(session: PipelineSession) -> str:
         )
 
         try:
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
         except Exception as e:
             log.error(f"LLM call failed during code review: {e}")
             raise PipelineStepError(
@@ -196,7 +196,7 @@ def step_final_report(session: PipelineSession) -> str:
         )
 
         try:
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
             llm_report = result["content"]
             usage = result.get("usage", {})
             log.info(

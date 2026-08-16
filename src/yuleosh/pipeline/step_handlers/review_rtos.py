@@ -681,7 +681,7 @@ def step_review_rtos(session: PipelineSession) -> str:
             if rtos_contents:
                 try:
                     system_prompt, user_prompt = _build_rtos_review_prompt(rtos_contents)
-                    llm_result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+                    llm_result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
                     llm_review = llm_result["content"]
                     usage = llm_result.get("usage", {})
                     session.token_usage_total += usage.get("total_tokens", 0)
