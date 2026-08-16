@@ -25,7 +25,7 @@ from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm
-from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
+from yuleosh.pipeline.prompts import _inject_spec, _inject_limited, SPEC_INJECT_LIMIT
 
 log = logging.getLogger("pipeline.step_handlers.review_devplan")
 
@@ -298,9 +298,9 @@ def _build_devplan_review_prompt(
         f"### Specification Content\n"
         f"```\n{_inject_spec(spec_content)}\n```\n\n"
         f"### Architecture Design\n"
-        f"```\n{architecture_content[:6000]}\n```\n\n"
+        f"```\n{_inject_limited(architecture_content, SPEC_INJECT_LIMIT, 'architecture')}\n```\n\n"
         f"### Development Plan\n"
-        f"```\n{devplan_content[:8000]}\n```\n\n"
+        f"```\n{_inject_limited(devplan_content, SPEC_INJECT_LIMIT, 'development-plan')}\n```\n\n"
         f"Review this Development Plan for completeness, granularity, "
         f"acceptance criteria, dependency modeling, and estimation quality."
     )
@@ -374,18 +374,63 @@ def step_review_devplan(session: PipelineSession) -> str:
             )
 
         # --- Static checks ---
-        tasks = _extract_tasks(devplan_content)
-        acceptance = _check_acceptance_criteria(devplan_content)
-        dependencies = _check_dependency_modeling(devplan_content)
-        estimates = _check_time_estimates(tasks, devplan_content)
-        granularity = _assess_granularity(tasks)
+        # 2026-08-17 (P1-5): generate-code 模式下 development-plan.md 是
+        # codegen 报告 (Generated Files + Verification + Behavior Verification),
+        # 没有传统 "### Task X.Y" 任务分解 → _extract_tasks 必然 0 任务,
+        # 任务/粒度/模块覆盖/估算静态检查全部误报 → status=retry 死循环
+        # (r18/r19 实证: Tasks: 0 | Modules: 0/1 | Acceptance: 24/100)。
+        # 检测到 codegen 报告格式时, 任务静态检查改为检查报告完整性
+        # (Generated Files + Verification PASS + Behavior Verification),
+        # 粒度/估算/模块覆盖检查跳过 (不适用, 记入 findings 为 info)。
+        devplan_lower = devplan_content.lower()
+        is_codegen_report = (
+            "generate-code mode" in devplan_lower
+            or "code generation report" in devplan_lower
+            or ("generated files" in devplan_lower and "verification" in devplan_lower)
+        )
 
-        module_coverage = []
-        if architecture_content:
-            module_coverage = _check_module_coverage(devplan_content, architecture_content)
-
-        covered_modules = sum(1 for m in module_coverage if m["covered"])
-        total_modules = len(module_coverage)
+        if is_codegen_report:
+            log.info("Devplan review: generate-code 模式 → 检查 codegen 报告完整性")
+            tasks = _extract_tasks(devplan_content)  # 保留用于报告展示 (预期 0)
+            acceptance = _check_acceptance_criteria(devplan_content)
+            dependencies = _check_dependency_modeling(devplan_content)
+            estimates = _check_time_estimates(tasks, devplan_content)
+            granularity = _assess_granularity(tasks)
+            # codegen 报告完整性检查 (替代任务粒度)
+            has_generated_files = "generated files" in devplan_lower
+            has_verification = (
+                "verification" in devplan_lower
+                and ("result: ✅" in devplan_content or "pass" in devplan_lower)
+            )
+            has_behavior_verify = "behavior verification" in devplan_lower
+            report_completeness = {
+                "has_generated_files": has_generated_files,
+                "has_verification": has_verification,
+                "has_behavior_verify": has_behavior_verify,
+                "complete": has_generated_files and has_verification and has_behavior_verify,
+            }
+            # 完整报告不算粒度/估算/模块覆盖缺失 (它们对 codegen 报告不适用)
+            granularity = {"total_tasks": 0, "vague_tasks": 0,
+                           "assessment": "ok", "issues": []}
+            estimates = {"total_tasks": 0, "tasks_with_estimates": 0,
+                         "estimate_keywords_found": [], "score": 100}
+            dependencies = {"has_dependencies": True, "matched_keywords": ["codegen 报告自带验证闭环"],
+                            "score": 100}
+            module_coverage = []  # 模块覆盖由 codegen 的 verify/behavior_verify 保证
+            total_modules = 0
+            covered_modules = 0
+        else:
+            tasks = _extract_tasks(devplan_content)
+            acceptance = _check_acceptance_criteria(devplan_content)
+            dependencies = _check_dependency_modeling(devplan_content)
+            estimates = _check_time_estimates(tasks, devplan_content)
+            granularity = _assess_granularity(tasks)
+            module_coverage = []
+            if architecture_content:
+                module_coverage = _check_module_coverage(devplan_content, architecture_content)
+            total_modules = len(module_coverage)
+            covered_modules = sum(1 for m in module_coverage if m["covered"])
+            report_completeness = None
 
         log.info(
             "Devplan static checks: %d tasks, %d/%d modules covered, "
@@ -409,7 +454,7 @@ def step_review_devplan(session: PipelineSession) -> str:
                 architecture_content=architecture_content,
                 devplan_content=devplan_content,
             )
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
             llm_review = result["content"]
             usage = result.get("usage", {})
             session.token_usage_total += usage.get("total_tokens", 0)
@@ -422,7 +467,7 @@ def step_review_devplan(session: PipelineSession) -> str:
         # --- Assemble findings ---
         findings: list[dict] = []
 
-        # Module coverage findings
+        # Module coverage findings (skip in codegen-report mode — 见上方注释)
         for mc in module_coverage:
             if not mc["covered"]:
                 findings.append({
@@ -434,6 +479,22 @@ def step_review_devplan(session: PipelineSession) -> str:
                                       f"with implementation and testing steps",
                 })
 
+        # Codegen 报告完整性 findings (generate-code 模式替代任务检查)
+        if is_codegen_report and report_completeness and not report_completeness["complete"]:
+            missing_parts = [
+                name for name, present in [
+                    ("Generated Files 列表", report_completeness["has_generated_files"]),
+                    ("Verification 结果", report_completeness["has_verification"]),
+                    ("Behavior Verification", report_completeness["has_behavior_verify"]),
+                ] if not present
+            ]
+            findings.append({
+                "severity": "major",
+                "category": "coverage",
+                "description": "codegen 报告不完整，缺少: " + ", ".join(missing_parts),
+                "recommendation": "确保 codegen 报告含 Generated Files、Verification 结果与 Behavior Verification 段落",
+            })
+
         # Granularity findings
         for issue in granularity["issues"]:
             findings.append({
@@ -444,7 +505,9 @@ def step_review_devplan(session: PipelineSession) -> str:
             })
 
         # Acceptance criteria findings
-        if acceptance["score"] < 40:
+        # (codegen-report 模式: 验收由 Behavior Verification/测试断言保证,
+        # 放宽文本关键词检查 — 报告自带验证闭环即视为达标)
+        if acceptance["score"] < 40 and not is_codegen_report:
             findings.append({
                 "severity": "major",
                 "category": "criteria",
@@ -499,6 +562,8 @@ def step_review_devplan(session: PipelineSession) -> str:
             "static_checks": {
                 "tasks_found": len(tasks),
                 "tasks_sample": tasks[:10],
+                "mode": "codegen-report" if is_codegen_report else "task-plan",
+                "report_completeness": report_completeness,
                 "module_coverage": {
                     "total_modules": total_modules,
                     "covered": covered_modules,

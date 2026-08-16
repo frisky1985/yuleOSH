@@ -115,14 +115,24 @@ def _detect_prd_truncation(prd_content: str, scenario_count: int) -> list[str]:
     lines = [ln.rstrip() for ln in prd_content.splitlines() if ln.strip()]
     if lines:
         last = lines[-1]
-        if last.rstrip().endswith("|"):
+        # 真实截断特征 1: 最后一行以 `|` 开头但不以 `|` 结尾
+        # (表格行被切断, 如 "| FR-002 | desc | P1")。正常完整表格行
+        # ("| a | b |") 以 `|` 结尾; 正常结束语行不以 `|` 开头。
+        if last.lstrip().startswith("|") and not last.rstrip().endswith("|"):
             signals.append(
-                "文档以未闭合的表格行结尾（最后一行以 `|` 结束）— 输出被截断"
+                "文档以未闭合表格行结尾（最后一行以 `|` 开头但未闭合）— 输出被截断"
             )
-        # 尾部 3 行内出现明显截断特征 (孤立 `|` / 半个标题)
-        tail = "\n".join(lines[-3:])
-        if re.search(r"\|[ \t]*$", tail, re.M):
-            signals.append("末尾存在未闭合表格结构 — 输出不完整")
+        # 真实截断特征 2: 最后一行是孤立半行表格 (如 "| AC-003 |" 无内容)
+        last_clean = last.strip()
+        if re.fullmatch(r"\|[^\|]*\|", last_clean) and last_clean.count("|") <= 2:
+            signals.append(
+                "最后一行是孤立的表格半行（仅有 0~1 个单元格）— 输出可能被截断"
+            )
+        # 2026-08-17 修复注记: 旧实现用 re.search(r"\|[ \t]*$", tail, re.M)
+        # 匹配尾部 3 行内**任何**以 `|` 结尾的行 — traceability 矩阵的
+        # 正常表格行就是以 `|` 结尾 → 完整 PRD 被误报截断 (r19 实证:
+        # PRD 完整含结束语却报 "末尾存在未闭合表格结构")。新实现只查
+        # 最后一行本身, 不再扫尾部 3 行。
 
     ac_count = len(re.findall(r"\bAC-\d+\b", prd_content))
     if scenario_count > 0 and ac_count < scenario_count:
@@ -409,7 +419,7 @@ def step_internal_review(session: PipelineSession) -> str:
         )
 
         try:
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
             analysis = result["content"]
             usage = result.get("usage", {})
             log.info(

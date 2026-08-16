@@ -114,6 +114,25 @@ class TestDetectPrdTruncation:
         signals = _detect_prd_truncation(prd, 4)
         assert any("未闭合表格" in s for s in signals)
 
+    def test_complete_table_rows_not_false_positive(self):
+        # 2026-08-17 回归 (r19 实证): traceability 矩阵的正常表格行以 `|`
+        # 结尾, 旧实现 re.search(r"\|[ \t]*$", tail) 把完整 PRD 误报截断。
+        prd = (
+            "# PRD\n"
+            "| SW-008 | FR-067 ~ FR-073 | — | AC-006-1 ~ AC-006-5 | G-01, G-02 |\n"
+            "| SW-007 | FR-062 ~ FR-066 | US-004, US-007 | AC-004-1 ~ AC-004-5 | G-10, G-13 |\n\n"
+            "---\n\n"
+            "*本文档由 Hermes (PM) 基于 spec.md v1.1.7 生成*"
+        )
+        signals = _detect_prd_truncation(prd, 4)
+        assert not any("表格" in s for s in signals), f"误报: {signals}"
+
+    def test_complete_table_rows_ending_no_epilogue(self):
+        # 表格行直接结尾 (无结束语) 也不该报"未闭合表格"
+        prd = "# PRD\n| FR-001 | desc | P0 |\n| FR-002 | desc | P1 |"
+        signals = _detect_prd_truncation(prd, 4)
+        assert not any("表格" in s for s in signals), f"误报: {signals}"
+
     def test_ac_count_below_scenarios(self):
         prd = "# PRD\nAC-001 a\n## 7 Out of Scope\n- nothing\n"
         signals = _detect_prd_truncation(prd, 4)

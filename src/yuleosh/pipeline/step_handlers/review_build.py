@@ -798,7 +798,7 @@ def step_review_build(session: PipelineSession) -> str:
         binaries = _find_binary_files(project_dir)
         try:
             system_prompt, user_prompt = _build_build_review_prompt(map_file, binaries)
-            llm_result = _call_llm(session, system_prompt, user_prompt, max_tokens=2048)
+            llm_result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
             llm_review = llm_result["content"]
             usage = llm_result.get("usage", {})
             session.token_usage_total += usage.get("total_tokens", 0)
