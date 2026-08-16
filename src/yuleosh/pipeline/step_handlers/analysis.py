@@ -73,11 +73,67 @@ def _prd_retry_prompt(original_user_prompt: str, missing_sections: list[str]) ->
         + "Your previous PRD did NOT cover the following spec section(s): "
         + ", ".join(missing_sections)
         + ".\n"
-        + "Please revise the PRD so that EVERY one of these sections has a "
-        + "corresponding Functional Requirements subsection with a heading that "
-        + "keeps the section ID in parentheses (e.g. `### 4.x 名称 (SR-001)`), "
-        + "each expressed as table rows (FR-NNN). Do not omit any section.\n"
+        + "Please regenerate the COMPLETE PRD ensuring every spec section appears. "
+        + "Do not truncate the output — emit the full document.\n"
     )
+
+
+def _prd_truncation_retry_prompt(original_user_prompt: str,
+                                 truncations: list[str]) -> str:
+    """Build a retry prompt feeding truncation signals back to the LLM."""
+    return (
+        original_user_prompt
+        + "\n\n"
+        + "## ✂️ 输出截断警告 (2026-08-16)\n"
+        + "你上一版 PRD 被检测到输出截断/不完整，信号如下：\n"
+        + "\n".join(f"- {t}" for t in truncations)
+        + "\n\n"
+        + "请重新输出**完整**的 PRD。若内容过长，优先保留全部 FR 表格行与 "
+        + "Acceptance Criteria（可压缩 prose/overview 部分），但不得省略任何 "
+        + "spec section、不得让 AC 章节残缺。不要以省略号/未完表格结尾。\n"
+    )
+
+
+def _detect_prd_truncation(prd_content: str, scenario_count: int) -> list[str]:
+    """Detect PRD truncation/incompleteness signals (2026-08-16).
+
+    PRD 生成无截断检测曾导致 AC-003 空 stub + 防夹/霍尔丢失验收场景整体缺失
+    (claude-review blocker 1)。三重启发式:
+
+    1. 尾部未闭合: 最后一个非空行以 `|` 结尾 (表格行被切断)
+    2. AC 数 < 场景数: PRD 的 AC-NNN 数应 >= spec 场景数
+       (spec 每个验收场景都应有对应 AC)
+    3. 缺收尾章节: PRD 未包含 Out of Scope (prompt 强制要求第 7 节)
+
+    返回截断信号列表; 无信号返回 []。
+    """
+    signals: list[str] = []
+    if not prd_content or not prd_content.strip():
+        return ["PRD 输出为空"]
+
+    lines = [ln.rstrip() for ln in prd_content.splitlines() if ln.strip()]
+    if lines:
+        last = lines[-1]
+        if last.rstrip().endswith("|"):
+            signals.append(
+                "文档以未闭合的表格行结尾（最后一行以 `|` 结束）— 输出被截断"
+            )
+        # 尾部 3 行内出现明显截断特征 (孤立 `|` / 半个标题)
+        tail = "\n".join(lines[-3:])
+        if re.search(r"\|[ \t]*$", tail, re.M):
+            signals.append("末尾存在未闭合表格结构 — 输出不完整")
+
+    ac_count = len(re.findall(r"\bAC-\d+\b", prd_content))
+    if scenario_count > 0 and ac_count < scenario_count:
+        signals.append(
+            f"Acceptance Criteria 数量 ({ac_count}) 少于 spec 验收场景数 "
+            f"({scenario_count}) — AC 章节可能被截断/缺失"
+        )
+
+    if "Out of Scope" not in prd_content and "out of scope" not in prd_content.lower():
+        signals.append("缺少 'Out of Scope' 章节（prompt 要求第 7 节）— 文档可能未完成")
+
+    return signals
 
 
 @timed_step
@@ -181,17 +237,30 @@ def step_hermes_prd(session: PipelineSession) -> str:
             if super_path.exists():
                 super_content = super_path.read_text()
 
+        # 既有 API 契约 (2026-08-16): PRD 的接口描述必须对齐现有头文件,
+        # 否则 codegen 会按 PRD 生成不兼容接口 (评审 blocker 2: FR-004 接口名漂移)。
+        existing_headers = ""
+        try:
+            from yuleosh.codegen.prompts import collect_existing_headers
+            existing_headers = collect_existing_headers(
+                Path(session.project_dir), max_files=12,
+            )
+        except Exception as e:  # pragma: no cover - defensive
+            log.warning("collect_existing_headers failed (non-fatal): %s", e)
+
         system_prompt, user_prompt = build_prd_prompt(
             spec_content=spec_content,
             spec_name=Path(session.spec_path).name,
             requirements=requirements,
             scenarios=scenarios,
             super_analysis_content=super_content,
+            existing_headers=existing_headers,
         )
 
         max_retries = 2
         result: dict | None = None
         missing_sections: list[str] = []
+        truncations: list[str] = []
         for attempt in range(max_retries + 1):
             try:
                 result = _call_llm(session, system_prompt, user_prompt)
@@ -205,15 +274,22 @@ def step_hermes_prd(session: PipelineSession) -> str:
             analysis = result["content"]
             # ── Section coverage check (best effort, only after first pass) ──
             missing_sections = _check_prd_section_coverage(spec_content, analysis)
-            if not missing_sections:
+            # ── Truncation check (2026-08-16): AC 截断/尾部未闭合 → 重试 ──
+            truncations = _detect_prd_truncation(analysis, len(scenarios))
+            if not missing_sections and not truncations:
                 break
             if attempt < max_retries:
                 log.warning(
-                    "PRD missing %d spec section(s): %s — retry %d/%d",
-                    len(missing_sections), ", ".join(missing_sections),
+                    "PRD incomplete: %d missing section(s) + %d truncation "
+                    "signal(s) — retry %d/%d",
+                    len(missing_sections), len(truncations),
                     attempt + 1, max_retries,
                 )
                 user_prompt = _prd_retry_prompt(user_prompt, missing_sections)
+                if truncations:
+                    user_prompt = _prd_truncation_retry_prompt(
+                        user_prompt, truncations,
+                    )
 
         assert result is not None, "PRD LLM call did not return a result"
         usage = result.get("usage", {})
@@ -243,15 +319,17 @@ def step_hermes_prd(session: PipelineSession) -> str:
             raise PipelineStepError(f"Cannot write PRD: {e}")
 
         # ── Sidecar coverage report (never silently pass) ──
-        if missing_sections:
+        if missing_sections or truncations:
             cov_report = {
                 "session": session.name,
                 "timestamp": datetime.now(UTC).isoformat(),
                 "status": "partial",
                 "missing_spec_sections": missing_sections,
+                "truncation_signals": truncations,
                 "message": (
-                    f"PRD written but missing {len(missing_sections)} spec section(s). "
-                    "Review and extend the PRD before release."
+                    f"PRD written but incomplete: {len(missing_sections)} "
+                    f"missing section(s) + {len(truncations)} truncation "
+                    "signal(s). Review and extend the PRD before release."
                 ),
             }
             try:
@@ -262,7 +340,8 @@ def step_hermes_prd(session: PipelineSession) -> str:
                 log.warning("Cannot write PRD coverage gap report: %s", e)
 
         print(f"  ✅ [Hermes] AI-powered PRD generated at {out_path}"
-              + (f" (⚠️ missing {len(missing_sections)} section(s): {', '.join(missing_sections)})" if missing_sections else ""))
+              + (f" (⚠️ missing {len(missing_sections)} section(s): {', '.join(missing_sections)})" if missing_sections else "")
+              + (f" (⚠️ {len(truncations)} truncation signal(s))" if truncations else ""))
         log.info(f"AI-powered PRD saved to {out_path}")
         return str(out_path)
     except PipelineStepError:

@@ -110,6 +110,7 @@ def build_prd_prompt(
     requirements: list[dict],
     scenarios: list[str],
     super_analysis_content: str = "",
+    existing_headers: str = "",
 ) -> tuple[str, str]:
     """Build a Product Requirements Document (PRD) generation prompt."""
     total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
@@ -137,6 +138,17 @@ def build_prd_prompt(
         "a priority (P0/P1/P2), and an implementation note.\n"
         "- If you are running low on output budget, prefer terse table rows for remaining "
         "sections over omitting them — every spec section must appear.\n\n"
+        "CRITICAL — priority discipline (2026-08-16):\n"
+        "- Every spec SHALL statement is a hard contractual requirement: it MUST map to a "
+        "P0 or P1 requirement. NEVER mark a SHALL-derived requirement P2 (P2 = "
+        "non-contractual nice-to-have). If you believe a SHALL is genuinely optional, "
+        "keep it P1 and note the conflict in the implementation note — do not silently "
+        "downgrade.\n"
+        "- Acceptance Criteria MUST be concrete and testable: reference the spec "
+        "Scenario (e.g. `Scenario: 防夹检测与反转`) and give measurable thresholds "
+        "where the spec defines them (e.g. 50 ms pinch response, 100 mm reversal "
+        "distance, 1 s cool-down, 300 ms Hall-loss). NEVER leave an AC as an empty "
+        "stub or a bare restatement of the requirement.\n\n"
         "Be thorough and reference specific requirement names and scenario details."
     )
 
@@ -148,6 +160,17 @@ def build_prd_prompt(
         f"- Total SHALL/SHOULD statements: {total_shall}\n"
         f"- Scenarios found: {len(scenarios)}\n\n"
     )
+    if existing_headers:
+        user_prompt += (
+            "# 既有 API 契约 (必须对齐, 2026-08-16)\n"
+            "以下是项目**现有代码**的头文件。PRD 中任何涉及函数接口的 FR/描述，"
+            "**必须使用这些头文件里的真实函数名/类型/宏**，不得自造近义名。"
+            "（例如现有 `hal_hall_get_count()` 不得写成 `hal_hall_get_pulse_count()`）"
+            "头文件本身是既有实现与测试桩的契约；PRD 的接口描述必须与之一致，"
+            "否则 codegen 会按 PRD 生成不兼容代码并破坏既有测试。\n\n"
+            + existing_headers
+            + "\n\n"
+        )
     if super_analysis_content:
         user_prompt += (
             f"## S.U.P.E.R. Analysis (from prior step)\n"

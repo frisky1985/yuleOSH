@@ -18,6 +18,7 @@ Provides:
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -89,7 +90,13 @@ def _parse_spec(spec_path: str) -> dict:
 
 
 def _parse_requirements(spec_path: str) -> list[dict]:
-    """Read requirements from a spec file. Each requirement is a dict with name and shall_statements."""
+    """Read requirements from a spec file. Each requirement is a dict with name and shall_statements.
+
+    Supports requirement headers of the form:
+      - `### Req-001:` (legacy)
+      - `### SR-001: 硬件抽象` / `### SW-004: 防夹检测` (OpenSpec-style, 2026-08-16)
+    SHALL/SHOULD bullet statements under each header are collected.
+    """
     requirements = []
     try:
         path = Path(spec_path)
@@ -101,21 +108,25 @@ def _parse_requirements(spec_path: str) -> list[dict]:
         current_name = None
         current_shalls = []
         in_requirement = False
+        # OpenSpec 风格: `### SR-001:` / `### SW-004:` / legacy `### Req-001`
+        req_header_re = re.compile(
+            r"^#{2,4}\s+([A-Za-z]{2,4}-\d+)\b",
+        )
         for line in lines:
             stripped = line.strip()
-            # Detect requirement header: ### Req-XXX:
-            if stripped.startswith("### ") and "Req-" in stripped:
+            m = req_header_re.match(stripped)
+            if m:
                 if current_name:
                     requirements.append({
                         "name": current_name,
                         "shall_statements": current_shalls
                     })
-                current_name = stripped.replace("### ", "")
+                current_name = m.group(1)
                 current_shalls = []
                 in_requirement = True
             elif in_requirement and stripped.startswith("-") and ("SHALL" in stripped or "SHOULD" in stripped):
                 current_shalls.append(stripped)
-            elif in_requirement and stripped.startswith("### ") and "Req-" not in stripped:
+            elif in_requirement and stripped.startswith("### "):
                 # End of requirement, next section (Scenario or other)
                 in_requirement = False
         if current_name:
@@ -129,7 +140,12 @@ def _parse_requirements(spec_path: str) -> list[dict]:
 
 
 def _parse_scenarios(spec_path: str) -> list[str]:
-    """Read GIVEN/WHEN/THEN scenarios from a spec file."""
+    """Read GIVEN/WHEN/THEN scenarios from a spec file.
+
+    Recognizes both:
+      - `### Scenario: 手动下降` (OpenSpec-style, body carries GIVEN/WHEN/THEN)
+      - `### GIVEN ...` / `### WHEN ...` / `### THEN ...` (legacy heading style)
+    """
     scenarios = []
     try:
         path = Path(spec_path)
@@ -139,8 +155,14 @@ def _parse_scenarios(spec_path: str) -> list[str]:
         content = path.read_text()
         for line in content.split("\n"):
             stripped = line.strip()
-            if stripped.startswith("### ") and ("GIVEN" in stripped or "WHEN" in stripped or "THEN" in stripped):
-                scenarios.append(stripped.replace("### ", ""))
+            if stripped.startswith("### "):
+                # OpenSpec 风格: `### Scenario: 手动下降` — 记场景名
+                if "Scenario" in stripped or "场景" in stripped:
+                    scenarios.append(stripped.replace("### ", ""))
+                elif ("GIVEN" in stripped or "WHEN" in stripped
+                        or "THEN" in stripped):
+                    # legacy 风格: 单行场景 (`### GIVEN ...`)
+                    scenarios.append(stripped.replace("### ", ""))
     except Exception as e:
         log.warning(f"Failed to parse scenarios from {spec_path}: {e}")
     return scenarios
