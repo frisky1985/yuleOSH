@@ -13,6 +13,7 @@ Exports:
 
 import json
 import logging
+import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -262,12 +263,16 @@ def step_hermes_prd(session: PipelineSession) -> str:
         result: dict | None = None
         missing_sections: list[str] = []
         truncations: list[str] = []
+        # PRD prompt 含 spec + 既有头文件 + S.U.P.E.R — DeepSeek 长输出
+        # 经常超过 chat_completion 60s 默认 (2026-08-16 实证: r14 PRD
+        # LLM call timed out)。与 codegen 共用 YULEOSH_CODEGEN_LLM_TIMEOUT。
+        timeout_s = int(os.environ.get("YULEOSH_CODEGEN_LLM_TIMEOUT", "120"))
         for attempt in range(max_retries + 1):
             try:
                 # max_tokens=16000: PRD 是长文档 (51 SHALL + FR 表 + AC 表),
                 # 4096 默认会截断 (2026-08-16 实证: 尾部断在 NFR-002)。
                 result = _call_llm(session, system_prompt, user_prompt,
-                                   max_tokens=16000)
+                                   max_tokens=16000, timeout=timeout_s)
             except Exception as e:
                 log.error(f"LLM call failed during PRD generation: {e}")
                 raise PipelineStepError(
