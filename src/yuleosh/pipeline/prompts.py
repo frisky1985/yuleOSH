@@ -51,6 +51,27 @@ PROMPT_VERSIONS: dict[str, str] = {
 SPEC_INJECT_LIMIT = 30000
 
 
+def _inject_spec(spec_content: str) -> str:
+    """Inject spec content with an explicit truncation warning (方案 B, 2026-08-17).
+
+    Silent truncation is a class of bugs (run-20260816-172910/174313): the
+    tail contract sections (§1.5 interface / §2.5 guardrails / §3 acceptance)
+    got silently stripped from prompts, causing claude-review/codegen failures.
+    If a spec ever exceeds SPEC_INJECT_LIMIT, surface it loudly in the prompt
+    instead of dropping the tail invisibly — reviewers can then flag it.
+    """
+    if len(spec_content) <= SPEC_INJECT_LIMIT:
+        return spec_content
+    truncated = spec_content[:SPEC_INJECT_LIMIT]
+    marker = (
+        "\n\n<!-- ⚠️ SPEC_TRUNCATED: spec exceeds SPEC_INJECT_LIMIT "
+        f"({len(spec_content)} > {SPEC_INJECT_LIMIT} chars). "
+        "Tail contract sections may be missing. Raise SPEC_INJECT_LIMIT "
+        "in pipeline/prompts.py and re-run. -->\n"
+    )
+    return truncated + marker
+
+
 def get_prompt_versions() -> dict[str, str]:
     """Return a copy of the current prompt version map."""
     return dict(PROMPT_VERSIONS)
@@ -97,7 +118,7 @@ def build_super_analysis_prompt(
 
     user_prompt = (
         f"# Specification: {spec_name}\n\n"
-        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
+        f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"## Parsed Metadata\n"
         f"- Requirements found: {len(requirements)}\n"
         f"- Total SHALL statements: {total_shall}\n"
@@ -163,7 +184,7 @@ def build_prd_prompt(
 
     user_prompt = (
         f"# Specification: {spec_name}\n\n"
-        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
+        f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"## Parsed Metadata\n"
         f"- Requirements found: {len(requirements)}\n"
         f"- Total SHALL/SHOULD statements: {total_shall}\n"
@@ -229,7 +250,7 @@ def build_architecture_prompt(
         f"## Source Tree ({len(directories)} dirs, {len(source_files)} files)\n"
         f"```\n{source_tree_str}\n```\n\n"
         f"## Specification ({spec_name})\n"
-        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
+        f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"## Key Source File Snippets\n"
         + "\n".join(key_file_snippets[:10])
         + "\n\nWrite a comprehensive architecture document."
@@ -272,7 +293,7 @@ def build_development_prompt(
     )
 
     context_parts = [
-        f"# Specification: {spec_name}\n```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```"
+        f"# Specification: {spec_name}\n```markdown\n{_inject_spec(spec_content)}\n```"
     ]
     if architecture_content:
         context_parts.append(
@@ -359,7 +380,7 @@ def build_test_planning_prompt(
 
     user_prompt_parts = [
         f"# Specification: Project Specification\n\n"
-        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n",
+        f"```markdown\n{_inject_spec(spec_content)}\n```\n\n",
         f"## Requirements Summary ({len(requirements)} requirements, {total_shall} SHALL statements)\n",
         "\n".join(req_summary_lines) + "\n\n",
     ]
@@ -452,7 +473,7 @@ def build_code_review_prompt(
 
     user_prompt = (
         f"# Specification: {spec_name}\n"
-        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
+        f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"# Pipeline Artifacts\n"
         + "\n".join(artifact_sections)
         + "\n\n# Source Code\n"
@@ -587,7 +608,7 @@ def build_internal_review_prompt(
     user_prompt = (
         f"# Internal Review: {session_name}\n\n"
         f"## Specification ({spec_name})\n"
-        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
+        f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"## Generated Artifacts\n" + "\n".join(artifacts_list) + "\n\n"
         f"Write an internal review report. For each artifact, give a verdict (PASS/FAIL/WARN) "
         f"and provide specific feedback. Include an overall assessment at the top."
