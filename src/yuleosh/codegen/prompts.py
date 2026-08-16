@@ -100,6 +100,7 @@ def build_codegen_prompt(
     existing_headers: str = "",
     seed_sources: str = "",
     context_content: str = "",
+    contracts_json: str = "",
 ) -> tuple[str, str]:
     """Build ``(system_prompt, user_prompt)`` for code generation.
 
@@ -151,6 +152,17 @@ def build_codegen_prompt(
     context_parts = [
         f"# Specification: {spec_name}\n```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```"
     ]
+    # 机器抽取契约 (方案 A, 2026-08-16): spec 的接口签名/行为护栏/参数边界/
+    # NVM 布局以 JSON 形式注入 — 这些是 codegen 必须遵守的硬契约, 不依赖
+    # PRD 转述 (PRD 可能被 LLM 改写/截断), spec 正文再长也不影响契约完整性。
+    if contracts_json:
+        context_parts.insert(
+            1,
+            "# 机器抽取契约 (MUST OBEY — 接口签名/护栏/边界/NVM 布局)\n"
+            "以下是 spec 的确定性契约抽取 (spec_contracts 生成)。你生成的代码 "
+            "**必须**遵守其中的接口签名、行为护栏、参数边界与数据布局:\n"
+            f"```json\n{contracts_json[:SPEC_INJECT_LIMIT]}\n```",
+        )
     # Project context (2026-08-14, headlamp dogfood): CONTEXT.md 领域术语 +
     # 语言约束放最前 — LLM 必须先知道项目语言/约束再写代码。
     if context_content:

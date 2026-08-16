@@ -222,6 +222,19 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         if context_path.exists():
             context_content = context_path.read_text(encoding="utf-8", errors="replace")
 
+        # 机器抽取契约 (方案 A, 2026-08-16): spec-check 步骤抽取的 contracts.json
+        # (接口签名/护栏/参数边界/NVM 布局) — codegen 的硬契约, 不依赖 PRD 转述。
+        contracts_json = ""
+        contracts_path = Path(session.session_dir) / "contracts.json"
+        if contracts_path.exists():
+            try:
+                contracts_data = json.loads(contracts_path.read_text(encoding="utf-8"))
+                contracts_json = json.dumps(
+                    contracts_data.get("contracts", {}), ensure_ascii=False, indent=1
+                )
+            except (OSError, json.JSONDecodeError) as e:
+                log.warning(f"contracts.json read failed (non-fatal): {e}")
+
         system_prompt, user_prompt = build_codegen_prompt(
             spec_content=spec_content,
             spec_name=Path(session.spec_path).name,
@@ -233,6 +246,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             existing_headers=collect_existing_headers(project_dir),
             seed_sources=seed_sources,
             context_content=context_content,
+            contracts_json=contracts_json,
         )
 
         engine = CodegenEngine(
