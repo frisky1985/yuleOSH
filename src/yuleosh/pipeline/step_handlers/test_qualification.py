@@ -237,8 +237,14 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
     """
     stem = test_file.stem
     rel_dir = test_file.parent.relative_to(project_dir) if test_file.parent != project_dir else Path(".")
+    # 2026-08-16 复发防护：旧实现固定优先 build/ → build/ 残留旧二进制时
+    # 误选（8/13 window-anti-pinch 19/109 FAILED 根因）。改为收集所有候选
+    # 后按 mtime 选最新，杜绝"删 build/ 治标、cmake 重建后又复发"。
+    # glob 用 cmake-build*（匹配 cmake-build 与 cmake-build-coverage）——
+    # cmake-build-* 漏掉无后缀的 cmake-build/（window-anti-pinch 实际目录）。
+    build_dirs = sorted(project_dir.glob("build")) + sorted(project_dir.glob("cmake-build*"))
     candidates: list[Path] = []
-    for build_dir in sorted(project_dir.glob("build")) + sorted(project_dir.glob("cmake-build-*")):
+    for build_dir in build_dirs:
         if not build_dir.is_dir():
             continue
         candidates.append(build_dir / rel_dir / stem)
@@ -246,7 +252,7 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
         candidates.append(build_dir / "tests" / stem)
         candidates.append(build_dir / stem)
     # 兜底: build/tests/ 下可执行文件, 名称包含源 stem 或 "qualification"
-    for build_dir in sorted(project_dir.glob("build")) + sorted(project_dir.glob("cmake-build-*")):
+    for build_dir in build_dirs:
         tests_dir = build_dir / "tests"
         if not tests_dir.is_dir():
             continue
@@ -255,10 +261,14 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
                 continue
             if stem in cand.name or "qualification" in cand.name or "system" in cand.name:
                 candidates.append(cand)
-    for cand in candidates:
-        if cand.is_file() and os.access(cand, os.X_OK):
-            return cand
-    return None
+    # 去重 + 只保留存在且可执行的候选，按 mtime 选最新
+    executable_candidates = [
+        cand for cand in dict.fromkeys(candidates)
+        if cand.is_file() and os.access(cand, os.X_OK)
+    ]
+    if not executable_candidates:
+        return None
+    return max(executable_candidates, key=lambda p: p.stat().st_mtime)
 
 
 def _run_system_tests(
