@@ -132,7 +132,13 @@ class EvidenceCollector(DataCollectionMixin, ReportBuilderMixin):
 
         coverage: dict[str, list[str]] = {}
         failed_parse: list[str] = []
-        for test_file in sorted(tests_dir.glob("test_*.py")):
+        test_files = sorted(
+            list(tests_dir.glob("test_*.py"))
+            + list(tests_dir.glob("test_*.c"))
+            + list(tests_dir.glob("test_*.cpp"))
+            + list(tests_dir.glob("test_*.cc"))
+        )
+        for test_file in test_files:
             try:
                 keywords = self._parse_covers_from_file(str(test_file))
                 if keywords:
@@ -167,7 +173,13 @@ class EvidenceCollector(DataCollectionMixin, ReportBuilderMixin):
         if not self.scenario_refs:
             tests_dir = Path(self.project_dir) / "tests"
             if tests_dir.is_dir():
-                for test_file in sorted(tests_dir.glob("test_*.py")):
+                test_files = sorted(
+                    list(tests_dir.glob("test_*.py"))
+                    + list(tests_dir.glob("test_*.c"))
+                    + list(tests_dir.glob("test_*.cpp"))
+                    + list(tests_dir.glob("test_*.cc"))
+                )
+                for test_file in test_files:
                     self.scenario_refs[test_file.name] = \
                         self._collect_scenario_refs_from_file(str(test_file))
 
