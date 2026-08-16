@@ -51,7 +51,11 @@ __all__ = ["step_claude_review", "step_codex_verify"]
 CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "600"))
 # claude-review 默认 300s 不够 (2026-08-16 实证: run c88797033141 超时,
 # claude 读代码评审 14KB+ prompt 需 3-5 分钟) → 提到 600s。
-CLAUDE_TIMEOUT = int(os.environ.get("YULEOSH_CLAUDE_TIMEOUT", "600"))
+# 2026-08-17: 600s → 900s. 完整 prompt (spec 22K + contracts 6K + PRD 26K +
+# arch 15K + test-plan 16K ≈ 100K chars) 让 claude 评审耗时 ~6m20s (实测
+# run-20260816-181130), 600s 超时误杀 (r18 claude exited 1). 900s 覆盖大
+# prompt 评审, 仍防挂死。
+CLAUDE_TIMEOUT = int(os.environ.get("YULEOSH_CLAUDE_TIMEOUT", "900"))
 # claude-review: --max-turns 硬编码 3 对 8K+ 评审 prompt 不够 (claude CLI
 # 2.1.220 报 "Reached max turns (3)" exit 1, 2026-08-16 实证)。实测 10 轮
 # 仍不够 (25s 耗尽, claude 读代码验证烧轮次), 20 轮成功 (2m14s)。

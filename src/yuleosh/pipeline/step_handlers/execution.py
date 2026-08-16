@@ -110,7 +110,10 @@ def step_claude_arch(session: PipelineSession) -> str:
         )
 
         try:
-            result = _call_llm(session, system_prompt, user_prompt)
+            # max_tokens=6144 (2026-08-17): 架构文档随 spec 增长而变长,
+            # 默认 4096 会截断输出 (r18 architecture.md §5.1 表截断被
+            # claude-review 指出). 对齐 TASK_BUDGETS architecture_design.
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
         except Exception as e:
             log.error(f"LLM call failed during architecture analysis: {e}")
             raise PipelineStepError(
@@ -725,7 +728,9 @@ def step_test_planning(session: PipelineSession) -> str:
 
         # --- Call LLM ---
         try:
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
+            # max_tokens=6144 (2026-08-17): 测试计划随 spec 增长而变长,
+            # 4096 会截断 (r18 test-plan 16K 被截断). 对齐 TASK_BUDGETS.
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
         except Exception as e:
             log.error(f"LLM call failed during test planning: {e}")
             raise PipelineStepError(

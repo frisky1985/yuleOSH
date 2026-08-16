@@ -361,7 +361,8 @@ class CodegenEngine:
                     try:
                         behavior_errors = self.behavior_verify(out_dir)
                         result.behavior_verify_result = (
-                            "PASS (真实测试套件: 生成代码部署→测试→回滚, 0 失败)"
+                            "PASS (临时部署验证: 生成代码暂替 src/ 跑真实测试套件, "
+                            "验证后恢复原代码, 0 失败)"
                             if not behavior_errors
                             else f"FAIL ({behavior_errors[:500]})"
                         )
