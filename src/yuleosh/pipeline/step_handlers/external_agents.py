@@ -61,10 +61,13 @@ CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "900"))
 # prompt 评审, 仍防挂死。
 CLAUDE_TIMEOUT = int(os.environ.get("YULEOSH_CLAUDE_TIMEOUT", "900"))
 # claude-review: --max-turns 硬编码 3 对 8K+ 评审 prompt 不够 (claude CLI
-# 2.1.220 报 "Reached max turns (3)" exit 1, 2026-08-16 实证)。实测 10 轮
-# 仍不够 (25s 耗尽, claude 读代码验证烧轮次), 20 轮成功 (2m14s)。
+# claude-review: --max-turns 硬编码 3 对 8K+ 评审 prompt 不够 (claude CLI...
+# 仍不够 (25s 耗尽, claude 读代码验证烧轮次), 20 轮成功 (2m14s)。...
 # 可用 YULEOSH_CLAUDE_MAX_TURNS 覆盖。
-CLAUDE_MAX_TURNS = int(os.environ.get("YULEOSH_CLAUDE_MAX_TURNS", "20"))
+# 2026-08-17 r20f: prompt 84.7K chars (全量 artifacts 注入) 下 20 turns 仍
+# 不够 — claude 读项目文件 (Bash 工具) 烧轮次 → 'Reached max turns (20)'
+# exit 1 (消息在 stdout, pipeline 只显示 stderr → 空 stderr 假象)。默认 40。
+CLAUDE_MAX_TURNS = int(os.environ.get("YULEOSH_CLAUDE_MAX_TURNS", "40"))
 
 
 # ── 公共辅助 ──────────────────────────────────────────────────────────
@@ -398,8 +401,12 @@ def step_claude_review(session: PipelineSession) -> str:
     stderr = result.stderr or ""
     if result.returncode != 0:
         log.error("claude exited %d: %s", result.returncode, stderr[-2000:])
+        # 2026-08-17 r20f: 'Reached max turns' 等真实错误在 stdout, stderr 空
+        # → 错误消息必须含 stdout 摘要, 否则诊断只见 "claude CLI exited 1: "
+        _stdout_tail = stdout[-1500:].strip() or "(no stdout)"
         raise PipelineStepError(
-            f"[{step_key}] claude CLI exited {result.returncode}: {stderr[-2000:]}"
+            f"[{step_key}] claude CLI exited {result.returncode}: "
+            f"{stderr[-2000:]} | stdout: {_stdout_tail}"
         )
 
     parsed = _parse_json_output(stdout)
