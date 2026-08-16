@@ -464,10 +464,18 @@ class CodegenEngine:
 
     @staticmethod
     def _error_count(errors: str) -> int:
-        """Count compiler error lines (``error:`` / ``Error``) in output."""
+        """Count compiler error lines (``error:`` / ``Error``) in output.
+
+        2026-08-16: behavior-failure output (``FAIL ...`` from ctest) is also
+        counted — a behavior regression with 0 compile errors must NOT become
+        a "new best state" (which would let the LLM keep building on its own
+        broken edits instead of rolling back to the seed baseline).
+        """
         if not errors:
             return 0
-        return len(re.findall(r"(?m)^.*\berror\b.*$", errors))
+        errs = re.findall(r"(?m)^.*\berror\b.*$", errors)
+        fails = re.findall(r"(?m)^.*\bFAIL\b.*$", errors)
+        return len(errs) + len(fails)
 
     @staticmethod
     def _detect_truncated_files(files: list[GeneratedFile]) -> list[str]:
@@ -590,6 +598,21 @@ class CodegenEngine:
                 "**注意**: 一次只输出这些文件, 不要附带其它未修改文件 — "
                 "否则会再次超过输出长度限制。"
             )
+        # 2026-08-16: behavior-failure repair hint. 编译通过但行为测试失败
+        # 时, 错误来自 ctest/行为预检 (FAIL 行) 而非编译器 — LLM 只看到
+        # "编译错误" 提示会把好代码越改越坏。必须明确: 失败是**它自己引入
+        # 的回归**, seed 基线 (磁盘当前版本) 是正确的, 只做最小修改恢复。
+        behavior_hint = ""
+        if ("FAIL" in errors) or ("行为" in errors):
+            behavior_hint = (
+                "\n\n## ⚠️ 行为测试失败 (不是编译错误!) — 你引入了回归\n"
+                "编译通过了, 但真实测试套件跑出 FAIL。这些失败几乎都是你"
+                "上一轮修改**删掉/改坏了既有正确实现**造成的。\n"
+                "要求: **恢复基线实现** — 磁盘上当前版本就是正确的种子代码"
+                "(未修改文件保留原样)。请对照 FAIL 行定位被你改坏的函数, "
+                "把实现恢复为基线语义 (可做最小修复, 不要整体重写、不要删"
+                "既有 guard/启动序列/状态更新)。"
+            )
         return (
             "\n\n## 🔧 编译验证失败 — 请修复后重新输出文件\n"
             f"上一轮生成/修改的文件:\n{listing}\n\n"
@@ -597,6 +620,7 @@ class CodegenEngine:
             f"{errors[:4000]}\n```\n\n"
             "要求: 修复所有编译错误，重新输出**本次修复涉及的文件** "
             "(不要输出与修复无关的文件)。"
+            f"{behavior_hint}"
             f"{disk_hint}"
             f"{trunc_hint}"
         )
