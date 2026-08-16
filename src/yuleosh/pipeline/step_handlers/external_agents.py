@@ -35,7 +35,7 @@ from pathlib import Path
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step
 from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
-from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
+from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
 
 # Combined cap for all pipeline artifacts rendered into codex/claude prompts.
 # 2026-08-16: PRD alone is 26K+; per-artifact cap is SPEC_INJECT_LIMIT and the
@@ -141,7 +141,7 @@ def _build_codex_prompt(spec_content: str, artifacts_block: str,
 
 项目目录: {project_dir}
 规格 (docs/spec.md 摘要):
-{spec_content[:SPEC_INJECT_LIMIT]}
+{_inject_spec(spec_content)}
 
 当前产物:
 {artifacts_block[:ARTIFACT_INJECT_LIMIT]}
@@ -174,7 +174,7 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
 
 项目目录: {project_dir}
 规格 (docs/spec.md 摘要):
-{spec_content[:SPEC_INJECT_LIMIT]}
+{_inject_spec(spec_content)}
 
 待评审方案/建议:
 {artifacts_block[:ARTIFACT_INJECT_LIMIT]}

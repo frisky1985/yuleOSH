@@ -25,7 +25,7 @@ from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm
-from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
+from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
 
 log = logging.getLogger("pipeline.step_handlers.review_devplan")
 
@@ -296,7 +296,7 @@ def _build_devplan_review_prompt(
     user_prompt = (
         f"## Spec: {spec_name}\n\n"
         f"### Specification Content\n"
-        f"```\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
+        f"```\n{_inject_spec(spec_content)}\n```\n\n"
         f"### Architecture Design\n"
         f"```\n{architecture_content[:6000]}\n```\n\n"
         f"### Development Plan\n"

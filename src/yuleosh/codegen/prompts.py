@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from yuleosh.skills.prompt import render_skills
-from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
+from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
 
 # Skills applied by default when none are requested explicitly.
 DEFAULT_CODEGEN_SKILLS = ["autosar-coding"]
@@ -150,7 +150,7 @@ def build_codegen_prompt(
     )
 
     context_parts = [
-        f"# Specification: {spec_name}\n```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```"
+        f"# Specification: {spec_name}\n```markdown\n{_inject_spec(spec_content)}\n```"
     ]
     # 机器抽取契约 (方案 A, 2026-08-16): spec 的接口签名/行为护栏/参数边界/
     # NVM 布局以 JSON 形式注入 — 这些是 codegen 必须遵守的硬契约, 不依赖

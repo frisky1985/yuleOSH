@@ -82,6 +82,21 @@ class TestPromptBuilders:
             "spec tail contract must survive injection (SPEC_INJECT_LIMIT regression)"
         )
 
+    def test_spec_overflow_adds_truncation_warning(self):
+        """方案 B (2026-08-17): spec 超过 SPEC_INJECT_LIMIT 时 prompt 必须
+        显式标记 SPEC_TRUNCATED — 绝不静默截断 (静默截断曾导致 claude-review
+        连续 3 轮误报缺失契约)."""
+        from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
+
+        big = "x" * (SPEC_INJECT_LIMIT + 1000)
+        out = _inject_spec(big)
+        assert len(out) <= SPEC_INJECT_LIMIT + 500
+        assert "SPEC_TRUNCATED" in out
+        assert str(len(big)) in out  # 显示实际长度
+
+        small = "small spec"
+        assert _inject_spec(small) == small  # 未超限不截断、无 marker
+
     def test_build_architecture_prompt(self):
         system, user = build_architecture_prompt(
             spec_content="# Arch Spec",
