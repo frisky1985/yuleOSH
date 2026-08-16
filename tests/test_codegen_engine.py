@@ -588,7 +588,8 @@ class TestEngineReport:
                                        "command": "gcc -fsyntax-only", "output": "",
                                        "errors": "", "returncode": 0},
                                behavior_verify_result=(
-                                   "PASS (真实测试套件: 生成代码部署→测试→回滚, 0 失败)"
+                                   "PASS (临时部署验证: 生成代码暂替 src/ 跑真实测试套件, "
+                                   "验证后恢复原代码, 0 失败)"
                                ))
         report = build_codegen_report(result, session)
         assert "Behavior Verification" in report
