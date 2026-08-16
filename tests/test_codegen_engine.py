@@ -375,6 +375,99 @@ class TestEngineLoop:
         assert seen["timeout"] == 300
 
 
+class TestBehaviorRegressionRepair:
+    """2026-08-16 window-anti-pinch run 11: codegen 4 连败根因。
+
+    LLM 编译通过但行为回归 (删掉 RESET 清 cooldown / set_all clamp) 时,
+    repair 提示仍说"修复编译错误" → LLM 在坏代码上继续改 → 越修越坏。
+    必须: 1) behavior FAIL 也计错误数 (best-state 回滚生效);
+    2) repair 提示明确"恢复基线实现, 不要重写"。
+    """
+
+    def test_error_count_counts_behavior_fail(self):
+        errors = (
+            "Test project ...\n"
+            "1/2 Test #1: window_control_tests ***Failed\n"
+            "FAIL test.c:200: state == IDLE\n"
+            "FAIL test.c:201: !motor\n"
+        )
+        assert CodegenEngine._error_count(errors) == 2
+
+    def test_error_count_counts_compile_errors(self):
+        errors = "src/x.c:12:5: error: undeclared identifier 'foo'\n"
+        assert CodegenEngine._error_count(errors) == 1
+
+    def test_error_count_empty(self):
+        assert CodegenEngine._error_count("") == 0
+        assert CodegenEngine._error_count("(no output)\n") == 0
+
+    def test_repair_context_behavior_fail_hints_restore(self):
+        ctx = CodegenEngine._format_repair_context(
+            errors="FAIL test.c:1: state == IDLE\nrunner=ctest passed=1 failed=1",
+            files=[GeneratedFile(path="src/app.c", content="x")],
+        )
+        assert "行为测试失败" in ctx
+        assert "恢复基线实现" in ctx
+        assert "不要整体重写" in ctx
+
+    def test_repair_context_compile_fail_no_behavior_hint(self):
+        ctx = CodegenEngine._format_repair_context(
+            errors="src/x.c:1:1: error: syntax error",
+            files=[GeneratedFile(path="src/app.c", content="x")],
+        )
+        assert "行为测试失败" not in ctx
+        assert "编译错误" in ctx
+
+    def test_generate_behavior_regression_rolls_back_to_best(self, tmp_path):
+        """Round 1 breaks behavior (no compile error); round 2 must receive a
+        repair prompt pointing at the seed baseline, and best-state rollback
+        must keep the baseline (0 FAIL) rather than the broken round-1 edit."""
+        calls = []
+
+        def llm(system, user, **kw):
+            calls.append(user)
+            if len(calls) == 1:
+                # Round 1: compile-valid file that breaks behavior (removes
+                # the guard that tests assert on).
+                return {"content": _marker_output(
+                    "src/ok.py", "python", "def f():\n    return 0\n")}
+            # Round 2: model follows the restore hint and re-emits baseline.
+            return {"content": _marker_output(
+                "src/ok.py", "python", "def f():\n    return 1\n")}
+
+        session = _session(tmp_path)
+        out_dir = Path(session.session_dir) / "generated"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # Seed baseline on disk: correct implementation.
+        (out_dir / "src").mkdir(parents=True, exist_ok=True)
+        (out_dir / "src" / "ok.py").write_text("def f():\n    return 1\n")
+
+        def behavior_verify(out_dir_arg):
+            # Round 1 disk has the broken version → FAIL; round 2 restored.
+            content = (Path(out_dir_arg) / "src" / "ok.py").read_text()
+            if "return 1" in content:
+                return ""
+            return "FAIL ok.py:2: f() == 1\nrunner=ctest passed=0 failed=1"
+
+        engine = CodegenEngine(
+            llm_client=llm,
+            max_retries=2,
+            seed_dir=session.project_dir,
+            behavior_verify=behavior_verify,
+        )
+        # seed_dir points at the repo; point it at our temp tree instead.
+        engine.seed_dir = out_dir
+        result = engine.generate(session, "sys", "user")
+
+        assert result.status == "verified"
+        # Round-2 prompt must carry the behavior-regression restore hint.
+        assert "行为测试失败" in calls[1]
+        assert "恢复基线实现" in calls[1]
+        # Final disk state = restored baseline.
+        final = (out_dir / "src" / "ok.py").read_text()
+        assert "return 1" in final
+
+
 class TestTruncationDetection:
     """headlamp dogfood #4: LLM 输出截断 (大项目超 max_tokens)."""
 
