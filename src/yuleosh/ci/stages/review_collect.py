@@ -186,7 +186,10 @@ def _matches_glob(rel: str, pattern: str) -> bool:
         return True
     if not pattern.startswith("**/"):
         return bool(_glob_to_regex("**/" + pattern).match(rel))
-    return False
+    # pattern 以 **/ 开头：`**/tests/**` 需同时匹配顶层 `tests/x.c`
+    # （_glob_to_regex 生成的 ^.*/tests/.*$ 要求路径含前导 /，相对路径
+    # 无前导斜杠 → 顶层匹配失败，2026-08-16 window-anti-pinch 实测）。
+    return bool(_glob_to_regex(pattern[len("**/"):]).match(rel))
 
 def _exclude_paths(files: list[str], exclude_patterns: list[str], project_dir: str) -> list[str]:
     """Filter out files matching any of the exclude patterns (glob-style).
