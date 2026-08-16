@@ -78,11 +78,15 @@ def step_review_code(session: PipelineSession) -> str:
                         fpath = Path(root) / f
                         rel = fpath.relative_to(project_dir)
                         try:
-                            content = fpath.read_text() if fpath.stat().st_size < 15000 else ""
+                            # 2026-08-16 r20: 3000 字符/文件 + 5000 总截断导致评审
+                            # LLM 看不到任何 .c 实现 (全被 header 挤掉) → 26 findings
+                            # 全是基于残缺信息的幻觉。提高单文件上限, 注入阶段再按
+                            # .c 优先 + 每文件预算分配 (见 _build_code_review_prompt)。
+                            content = fpath.read_text() if fpath.stat().st_size < 40000 else ""
                             source_files_summary.append({
                                 "path": str(rel),
                                 "lines": len(content.splitlines()),
-                                "content": content[:3000],
+                                "content": content[:8000],
                             })
                         except Exception:
                             source_files_summary.append({
@@ -199,11 +203,35 @@ def _build_code_review_prompt(
         src_lines.append(f"- {sf['path']}  ({sf['lines']} lines)")
     src_str = "\n".join(src_lines)
 
-    # Include content of key files for deep analysis
+    # Include content of key files for deep analysis.
+    # 2026-08-16 r20: 原实现 source_files[:10] + snippets_str[:5000] 总截断 —
+    # header 按字母序排在 .c 前面, 评审 LLM 只看到 main.c + 3 个 .h 的开头,
+    # 所有实现文件 (window_control.c 等) 零注入 → 26 findings 全是"疑似缺失"
+    # 的脑补 (它根本没看到实现)。修复: .c 实现优先 + 每文件预算 + 总预算提高,
+    # 保证关键实现文件至少各有一段完整内容可评。
+    # 每文件预算: .c 实现给足 (覆盖 G-15 等中后部契约实现, window_control.c
+    # 168-190 行), .h 声明只给轮廓。
+    TOTAL_BUDGET = 24000
     key_snippets = []
-    for sf in source_files[:10]:
-        if sf["content"] and sf["content"] != "(cannot read)":
-            key_snippets.append(f"### {sf['path']}\n```\n{sf['content']}\n```")
+    used = 0
+    # .c 实现优先 (0), .h 次之 (1), 同类型按路径稳定排序
+    ordered = sorted(
+        source_files[:30],
+        key=lambda sf: (0 if str(sf["path"]).endswith(".c") else 1, str(sf["path"])),
+    )
+    for sf in ordered:
+        if used >= TOTAL_BUDGET:
+            break
+        if not sf["content"] or sf["content"] == "(cannot read)":
+            continue
+        # .c 实现给足预算 (覆盖中后部契约实现), .h 只给轮廓
+        per_file = 8000 if str(sf["path"]).endswith(".c") else 2000
+        content = sf["content"][:per_file]
+        piece = f"### {sf['path']}\n```\n{content}\n```"
+        if used + len(piece) > TOTAL_BUDGET:
+            piece = piece[: TOTAL_BUDGET - used]
+        key_snippets.append(piece)
+        used += len(piece)
     snippets_str = "\n\n".join(key_snippets)
 
     user_prompt = (
@@ -217,7 +245,7 @@ def _build_code_review_prompt(
         f"### Source Files ({len(source_files)} total)\n"
         f"{src_str}\n\n"
         f"### Key File Contents\n"
-        f"{snippets_str[:5000]}\n\n"
+        f"{snippets_str}\n\n"
         f"Review the implementation. Identify:\n"
         f"- Code that deviates from architecture\n"
         f"- Unhandled errors, missing validation\n"
