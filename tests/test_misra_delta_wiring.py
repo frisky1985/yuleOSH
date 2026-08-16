@@ -89,6 +89,37 @@ class TestCollectDeltaFiles:
         """非 git 目录：三源都失败 → 空集（调用方回退 full）。"""
         assert _collect_delta_files(str(tmp_path)) == []
 
+    def test_docs_only_latest_commit_does_not_hide_c_change(self, git_repo):
+        """2026-08-16 盲区修复：先提交 C 变更、再单独提交 docs 时，
+        HEAD~1 只含 docs → 旧实现空扫。必须回看最近 N 个提交找到 C 变更。"""
+        src = git_repo / "src"
+        src.mkdir()
+        (src / "a.c").write_text("int a;\n")
+        _commit_all(git_repo, "initial")
+        # 提交 1：C 变更
+        (src / "a.c").write_text("int a;\nint a2;\n")
+        _commit_all(git_repo, "feat: change a.c")
+        # 提交 2：仅 docs（把 C 变更挤出 HEAD~1 窗口）
+        (git_repo / "README.md").write_text("# doc\n")
+        _commit_all(git_repo, "docs: readme")
+
+        changed = _collect_delta_files(str(git_repo))
+        assert "src/a.c" in changed, (
+            f"C change hidden by docs-only HEAD~1; delta={changed}"
+        )
+
+    def test_shallow_history_falls_back_gracefully(self, git_repo):
+        """提交数不足 N 时（如只有 1 个提交），HEAD~N 失败不得影响
+        working tree 源——未提交变更仍须被收集。"""
+        src = git_repo / "src"
+        src.mkdir()
+        (src / "only.c").write_text("int only;\n")
+        _commit_all(git_repo, "initial")
+        # 只有 1 个提交 → HEAD~1 不存在；working tree 有未提交 C 变更
+        (src / "only.c").write_text("int only;\nint only2;\n")
+        changed = _collect_delta_files(str(git_repo))
+        assert "src/only.c" in changed
+
 
 class TestExpandHeaderDependents:
     def _setup(self, git_repo):

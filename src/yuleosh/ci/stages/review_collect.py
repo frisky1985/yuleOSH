@@ -47,7 +47,7 @@ def _find_c_sources(project_dir: str, scan_dirs: list[str]) -> list[str]:
                         c_files.append(os.path.join(root, f))
     return c_files
 
-def _collect_delta_files(project_dir: str) -> list[str]:
+def _collect_delta_files(project_dir: str, depth: int = 3) -> list[str]:
     """Collect changed C/C++ files from three sources (union, no dedup loss).
 
     Sources (per brainstorm-yuleosh-efficiency-20260808 §1.3):
@@ -55,12 +55,33 @@ def _collect_delta_files(project_dir: str) -> list[str]:
       2. ``git diff --name-only``          — working tree (staged + unstaged)
       3. ``git ls-files --others --exclude-standard`` — untracked new files
 
+    2026-08-16 盲区修复：committed 源从固定 ``HEAD~1`` 改为回看最近
+    ``depth`` 个提交（从 HEAD~1 递减尝试，HEAD~N 不存在的浅仓库自动
+    落到 HEAD~1）。根因：先提交 C 变更、再单独提交 docs 时，HEAD~1
+    只含 docs → L1 MISRA delta 空扫（window-anti-pinch 8/16 实测）。
+
     Returns project-relative paths filtered to ``*.c/*.cpp/*.h`` (headers are
     expanded into dependents by :func:`_expand_header_dependents`).
     """
     changed: set[str] = set()
+    # 1. committed changes — walk back up to `depth` commits so a
+    #    docs-only HEAD~1 can't hide a recent C change from L1 delta.
+    for n in range(min(depth, 16), 0, -1):
+        cmd = ["git", "diff", "--name-only", f"HEAD~{n}"]
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=15, cwd=project_dir,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode != 0:
+            continue
+        for line in result.stdout.splitlines():
+            f = line.strip()
+            if f and f.endswith((".c", ".cpp", ".h")):
+                changed.add(f)
+        break  # 首个成功的 git diff 即覆盖 [HEAD~n, HEAD] 全部变更
     commands = [
-        ["git", "diff", "--name-only", "HEAD~1"],
         ["git", "diff", "--name-only"],
         ["git", "ls-files", "--others", "--exclude-standard"],
     ]
