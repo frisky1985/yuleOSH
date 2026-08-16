@@ -56,6 +56,17 @@ class GeneratedFile:
 
 
 @dataclass
+class RoundFailure:
+    """One failed codegen round — feeds the brainstorm analysis (2026-08-16)."""
+
+    round_idx: int
+    error_signature: str      # 归一化错误签名 (去行号/数字)
+    err_count: int            # 该轮错误数 (error: + FAIL:)
+    is_behavior: bool         # 是否行为失败 (ctest FAIL) — 区别于纯编译错误
+    files: list[str]          # 本轮 LLM 输出的文件
+
+
+@dataclass
 class CodegenResult:
     """Outcome of a codegen run (also serialized into the report)."""
 
@@ -69,6 +80,10 @@ class CodegenResult:
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
     finished_at: str = ""
     report_path: str = ""
+    # 2026-08-16 (框住 LLM): repair 轮白名单过滤丢弃的文件
+    dropped_files: list[str] = field(default_factory=list)
+    # 2026-08-16 (3 次失败头脑风暴): 触发时的失败模式分析
+    brainstorm: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -82,6 +97,8 @@ class CodegenResult:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "report_path": self.report_path,
+            "dropped_files": list(self.dropped_files),
+            "brainstorm": self.brainstorm,
         }
 
 
@@ -203,6 +220,7 @@ class CodegenEngine:
         seed_dir: Optional[str | Path] = None,
         seed_contract: Optional[dict[str, set[str]]] = None,
         behavior_verify: Optional[Callable] = None,
+        brainstorm_after_failures: int = 3,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
@@ -219,6 +237,13 @@ class CodegenEngine:
         # 编译通过后额外跑真实行为测试, 失败反馈给 LLM 修复 — 防止
         # "编译通过但删了 PINCH_REVERSAL 启动序列" 类逻辑回归流到 deploy。
         self.behavior_verify = behavior_verify
+        # 3 次失败 → 头脑风暴 (2026-08-16, 老板指令): 连续失败达到阈值时
+        # 引擎做失败模式分析 + 强制恢复 seed 基线, 下一轮用脑暴指令。
+        self.brainstorm_after_failures = max(1, int(brainstorm_after_failures))
+        # seed 基线内存快照 (rel_path -> content), _sync_seed 后立即抓取,
+        # 供头脑风暴强制恢复 — 不依赖 seed_dir 磁盘 (测试里 seed_dir 可能
+        # 指向 out_dir, 磁盘已被 LLM 污染)。
+        self._seed_baseline: dict[str, str] = {}
 
     # ---- Main entry ---------------------------------------------------
 
@@ -255,10 +280,19 @@ class CodegenEngine:
         if self.seed_dir is not None:
             copied = self._sync_seed(self.seed_dir, out_dir)
             log.info("Codegen seed sync: %d baseline files copied", len(copied))
+            # 2026-08-16: 复制后立即内存快照 — 头脑风暴强制恢复用
+            self._seed_baseline = self._snapshot_files(out_dir)
 
         repair_context = ""
         best_state: dict[str, str] = {}   # rel_path -> content (错误数最少版本)
         best_error_count: Optional[int] = None
+        # 2026-08-16 (框住 LLM): repair 轮白名单 = 上一轮错误涉及文件 +
+        # seed_contract 文件 + (行为失败时)上轮 LLM 输出文件。LLM 输出
+        # 白名单外文件 → 引擎丢弃, 不写盘。
+        allowlist: Optional[set[str]] = None
+        # 2026-08-16 (3 次失败头脑风暴): 失败历史 + 触发标记
+        failure_history: list[RoundFailure] = []
+        brainstorm_done = False
         for round_idx in range(self.max_retries + 1):
             result.rounds = round_idx + 1
             llm_output = self._call_llm(session, system_prompt, user_prompt, repair_context)
@@ -270,6 +304,26 @@ class CodegenEngine:
                     "(expected '### FILE: <path>' markers or JSON payload)"
                 )
                 break
+
+            # ── 框住 LLM: repair 轮白名单硬过滤 (2026-08-16) ─────────
+            if allowlist is not None:
+                kept, dropped = self._filter_out_of_scope(files, allowlist)
+                if dropped:
+                    result.dropped_files.extend(dropped)
+                    log.warning(
+                        "Codegen round %d: dropped out-of-scope files %s "
+                        "(allowlist: %s)",
+                        round_idx + 1, sorted(dropped), sorted(allowlist),
+                    )
+                files = kept
+                if not files:
+                    result.status = "failed"
+                    result.last_errors = (
+                        "LLM only emitted files outside the allowed repair "
+                        f"scope ({sorted(allowlist)}); all dropped. "
+                        "Stop touching unrelated files."
+                    )
+                    break
 
             written = self.write_files(files, out_dir)
             result.files = [str(p) for p in written]
@@ -358,10 +412,44 @@ class CodegenEngine:
                     round_idx + 1, err_count, best_error_count,
                 )
 
+            # ── 3 次失败 → 头脑风暴 (2026-08-16, 老板指令) ────────────
+            # 记录失败模式 (错误签名 / 趋势 / 是否行为失败), 连续失败达到
+            # 阈值时: 引擎做失败模式分析 + 强制恢复 seed 基线, 下一轮用
+            # 脑暴指令 (恢复基线语义 vs 最小修改 vs 停止恶化), 不再盲目重试。
+            failure_history.append(RoundFailure(
+                round_idx=round_idx,
+                error_signature=self._error_signature(errors),
+                err_count=err_count,
+                is_behavior=("FAIL" in errors or "行为" in errors),
+                files=[f.path for f in files],
+            ))
+            if not brainstorm_done and len(failure_history) >= self.brainstorm_after_failures:
+                brainstorm_done = True
+                analysis = self._brainstorm(failure_history)
+                result.brainstorm = analysis
+                # 引擎强制恢复 seed 基线 (LLM 新增文件保留) — 不靠 LLM 自觉
+                restored = self._restore_seed_baseline(out_dir)
+                log.warning(
+                    "Codegen round %d: BRAINSTORM triggered (strategy=%s, "
+                    "reason=%s) — restored %d files to seed baseline",
+                    round_idx + 1, analysis.get("strategy"),
+                    analysis.get("reason"), restored,
+                )
+
             if round_idx < self.max_retries:
-                repair_context = self._format_repair_context(
-                    result.last_errors, files, best_state,
-                    truncated_files=truncated,
+                # 下一轮的允许修改范围: 错误涉及文件 + seed_contract 文件;
+                # 行为失败 (错误文本只有测试文件) 时加上本轮 LLM 输出文件。
+                if brainstorm_done:
+                    repair_context = self._format_brainstorm_context(
+                        result.brainstorm, result.last_errors, files, best_state,
+                    )
+                else:
+                    repair_context = self._format_repair_context(
+                        result.last_errors, files, best_state,
+                        truncated_files=truncated,
+                    )
+                allowlist = self._build_allowlist(
+                    result.last_errors, files, self.seed_contract,
                 )
 
         result.finished_at = datetime.now().isoformat()
@@ -477,6 +565,206 @@ class CodegenEngine:
         fails = re.findall(r"(?m)^.*\bFAIL\b.*$", errors)
         return len(errs) + len(fails)
 
+    # ---- 框住 LLM + 头脑风暴 (2026-08-16) ---------------------------
+
+    @staticmethod
+    def _error_signature(errors: str) -> str:
+        """归一化错误签名: 去行号/列号/数字差异, 保留错误类型与消息。
+
+        用于判断"同一错误反复出现" — window-anti-pinch 实证 LLM 会
+        连续 3+ 轮修同一个错误 (行号每次都变)。签名相同 → 自由修改
+        无效 → 触发头脑风暴的 restore_baseline 策略。
+        """
+        if not errors:
+            return ""
+        sig_lines = []
+        for line in errors.splitlines():
+            # 去 gcc/ctest 行号列号 (file:LINE:COL:), 去临时路径前缀
+            line = re.sub(r":\d+(:\d+)?", "", line)
+            line = re.sub(r"(/[\w.\-]+)+/", "", line)
+            line = re.sub(r"\d+", "#", line)
+            line = re.sub(r"\s+", " ", line).strip()
+            if not line:
+                continue
+            if line.startswith(("Test ", "Start testing", "End testing")):
+                continue
+            sig_lines.append(line[:120])
+        return "\n".join(sig_lines[:30])
+
+    @staticmethod
+    def _extract_error_files(errors: str) -> set[str]:
+        """从错误文本提取涉及的文件路径 (编译错误行 / FAIL 行 / include 链)。
+
+        白名单的基础: LLM 只允许修改错误真正涉及的代码文件。
+        """
+        if not errors:
+            return set()
+        files: set[str] = set()
+        # file:LINE:COL: error / file:LINE: FAIL / In file included from file:
+        for m in re.finditer(
+            r"(?m)(?<![\w./-])([\w./\-]+\.(?:c|h|cpp|hpp|py))(?::\d+)?",
+            errors,
+        ):
+            files.add(m.group(1))
+        # 行为失败文本可能只有测试名: "FAIL test.c:20: state == IDLE"
+        # — 测试文件不算允许修改的 src, 但保留路径以供判断。
+        return files
+
+    @staticmethod
+    def _norm_path(p: str) -> str:
+        """路径归一化: 绝对路径 → 项目相对路径, 供白名单比较。
+
+        Python 编译错误给绝对路径 (``/tmp/.../src/ok.py``), LLM 输出
+        相对路径 (``src/ok.py``) — 精确字符串比较会误伤。统一取
+        ``src/`` / ``tests/`` / ``include/`` 之后的相对部分。
+        """
+        for marker in ("src/", "tests/", "include/"):
+            idx = p.find(marker)
+            if idx >= 0:
+                return p[idx:]
+        return Path(p).name
+
+    @staticmethod
+    def _build_allowlist(
+        errors: str,
+        round_files: list[GeneratedFile],
+        seed_contract: Optional[dict[str, set[str]]] = None,
+    ) -> set[str]:
+        """计算下一轮允许 LLM 修改的文件集合 (框住 LLM 的核心)。
+
+        白名单 = 错误涉及文件 + seed_contract 文件 (既有公共函数,
+        删除即回归 — 允许 LLM 恢复它们) + 行为失败时本轮输出文件
+        (ctest FAIL 文本往往不含 src 路径, 错误来自 LLM 本轮改动的文件)。
+
+        白名单外的文件即使 LLM 输出了也会被引擎丢弃 — 不靠 prompt 自觉。
+        """
+        allow = {CodegenEngine._norm_path(p)
+                 for p in CodegenEngine._extract_error_files(errors)}
+        if seed_contract:
+            allow |= {CodegenEngine._norm_path(p) for p in seed_contract}
+        is_behavior = "FAIL" in errors or "行为" in errors
+        if is_behavior:
+            allow |= {f.path for f in round_files}
+        # 过滤掉测试文件路径 (行为失败文本提取的 test.c 之类)
+        return {p for p in allow if not any(
+            part == "tests" or part.endswith("_test") or part.startswith("test")
+            for part in Path(p).parts)}
+
+    def _filter_out_of_scope(
+        self, files: list[GeneratedFile], allowlist: set[str],
+    ) -> tuple[list[GeneratedFile], list[str]]:
+        """把白名单外的生成文件剔除 — 硬过滤, 不写盘。"""
+        kept: list[GeneratedFile] = []
+        dropped: list[str] = []
+        for f in files:
+            if self._norm_path(f.path) in allowlist:
+                kept.append(f)
+            else:
+                dropped.append(f.path)
+        return kept, dropped
+
+    @staticmethod
+    def _brainstorm(failures: list[RoundFailure]) -> dict:
+        """失败模式分析 — 3 次失败后决定下一轮策略 (确定性, 不调 LLM)。
+
+        策略:
+        - restore_baseline: 同一行为错误反复 (FAIL 占多数) → 恢复基线语义
+        - minimal_fix: 同一编译错误反复 → 只允许最小修改, 禁止重写
+        - stop_worsening: 错误数持续上升 → 回退 seed, 停止自由发挥
+        - narrow_scope: 错误漂移/混合 → 收窄到错误文件
+        """
+        sigs = [f.error_signature for f in failures]
+        counts = [f.err_count for f in failures]
+        behavior_n = sum(1 for f in failures if f.is_behavior)
+        same_error = len(set(sigs)) == 1 and bool(sigs[0])
+        worsening = len(counts) >= 2 and counts[-1] > counts[0]
+        if same_error and behavior_n >= max(1, len(failures) // 2):
+            strategy = "restore_baseline"
+            reason = "同一行为错误反复出现 (FAIL 占多数) — 自由修改无效, 恢复基线语义"
+        elif same_error:
+            strategy = "minimal_fix"
+            reason = "同一编译错误反复出现 — 禁止重写文件, 只做最小修复"
+        elif worsening:
+            strategy = "stop_worsening"
+            reason = "错误数持续上升 — 修改在制造新问题, 回退 seed 基线"
+        else:
+            strategy = "narrow_scope"
+            reason = "错误漂移/混合 — 收窄修改范围到错误涉及文件"
+        return {
+            "rounds": len(failures),
+            "same_error": same_error,
+            "worsening": worsening,
+            "behavior_count": behavior_n,
+            "strategy": strategy,
+            "reason": reason,
+        }
+
+    def _restore_seed_baseline(self, out_dir: Path) -> int:
+        """头脑风暴触发时引擎强制恢复 seed 基线 (内存快照)。
+
+        只恢复快照中存在的文件 (seed 原有的); LLM 本轮新增的文件保留
+        (它们是新功能, 不一定是坏的)。返回恢复的文件数。
+        """
+        if not self._seed_baseline:
+            return 0
+        restored = 0
+        for rel, content in self._seed_baseline.items():
+            target = (out_dir / rel).resolve()
+            if not str(target).startswith(str(out_dir.resolve())):
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            restored += 1
+        log.info("Restored %d files to seed baseline (brainstorm)", restored)
+        return restored
+
+    @staticmethod
+    def _format_brainstorm_context(
+        analysis: dict,
+        errors: str,
+        files: list[GeneratedFile],
+        best_state: dict[str, str] | None = None,
+    ) -> str:
+        """3 次失败后的头脑风暴指令 — 替换普通 repair context。
+
+        明确告诉 LLM: 你已连续失败 N 轮, 引擎分析了失败模式, 已强制
+        恢复 seed 基线; 现在按指定策略做**最小修改**, 禁止自由发挥。
+        """
+        rounds = analysis.get("rounds", 0)
+        strategy = analysis.get("strategy", "narrow_scope")
+        reason = analysis.get("reason", "")
+        strategy_hint = {
+            "restore_baseline": (
+                "你的修改反复引入同一行为回归。磁盘上的 seed 基线就是正确实现。\n"
+                "要求: **恢复基线语义** — 不要重写、不要删 guard/启动序列/"
+                "状态更新。对照 FAIL 行找到被你改坏的函数, 把实现恢复为 "
+                "seed 原样, 只做必要的最小修复。"
+            ),
+            "minimal_fix": (
+                "你已连续多轮无法修复同一编译错误。停止整体重写文件。\n"
+                "要求: 逐条对照编译错误, **只修复报错的那几行**, 其余代码 "
+                "保持磁盘现状 (引擎已恢复 seed 基线)。一次只输出 1-2 个文件。"
+            ),
+            "stop_worsening": (
+                "你的修改让错误数持续增加。引擎已把文件恢复为 seed 基线。\n"
+                "要求: **不要添加新逻辑**。如果无法确定修复方案, 直接重新 "
+                "输出 seed 基线文件内容 (磁盘现状), 不要尝试新写法。"
+            ),
+            "narrow_scope": (
+                "错误模式不稳定。引擎已恢复 seed 基线。\n"
+                "要求: 只修改错误输出中明确提到的文件, 做最小改动。"
+            ),
+        }.get(strategy, "")
+        listing = "\n".join(f"  - {f.path}" for f in files) or "  - (none)"
+        return (
+            f"\n\n## 🧠 头脑风暴 — 已连续 {rounds} 轮失败, 策略已切换\n"
+            f"引擎分析了失败模式: {reason}\n\n"
+            f"{strategy_hint}\n\n"
+            f"上一轮输出文件:\n{listing}\n\n"
+            "错误输出:\n```\n"
+            f"{errors[:4000]}\n```\n\n"
+            "**只允许修改与错误直接相关的文件。** 引擎会丢弃白名单外的文件。"
+        )
     @staticmethod
     def _detect_truncated_files(files: list[GeneratedFile]) -> list[str]:
         """Detect files whose content looks truncated (LLM output cut off).
@@ -686,5 +974,27 @@ def build_codegen_report(result: CodegenResult, session: PipelineSession) -> str
         ]
     else:
         lines.append(f"- Attempts: {result.rounds} — compiled clean.")
+    if result.dropped_files:
+        lines += [
+            "",
+            "## Out-of-Scope Files Dropped (白名单过滤)",
+            "",
+            "以下文件被引擎丢弃 (不属于错误涉及的修复范围):",
+            "",
+        ]
+        lines += [f"- `{f}`" for f in sorted(result.dropped_files)]
+    if result.brainstorm:
+        b = result.brainstorm
+        lines += [
+            "",
+            "## 🧠 头脑风暴触发 (3 次失败)",
+            "",
+            f"- Rounds failed: {b.get('rounds')}",
+            f"- Same error repeated: {b.get('same_error')}",
+            f"- Worsening: {b.get('worsening')}",
+            f"- Behavior failures: {b.get('behavior_count')}",
+            f"- Strategy: {b.get('strategy')}",
+            f"- Reason: {b.get('reason')}",
+        ]
     lines.append("")
     return "\n".join(lines)
