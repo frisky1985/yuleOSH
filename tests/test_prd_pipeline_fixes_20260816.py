@@ -84,8 +84,10 @@ class TestParseRequirementsOpenSpec:
         reqs = _parse_requirements(str(spec))
         scens = _parse_scenarios(str(spec))
         total_shall = sum(len(r["shall_statements"]) for r in reqs)
-        assert len(reqs) == 11, f"got {len(reqs)}"
-        assert total_shall == 51, f"got {total_shall}"
+        # 快照断言脆弱: spec 每次契约化 (v1.1.x) 都涨 SHALL 数
+        # (51 → 72, 2026-08-16 v1.1.5 NVM 契约)。只验证下限 + 结构。
+        assert len(reqs) >= 11, f"got {len(reqs)}"
+        assert total_shall >= 51, f"got {total_shall}"
         assert len(scens) == 4, f"got {len(scens)}"
 
 
