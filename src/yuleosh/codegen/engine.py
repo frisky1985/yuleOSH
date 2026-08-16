@@ -201,6 +201,8 @@ class CodegenEngine:
         verifier: Optional[Callable] = None,
         max_tokens: int = 4096,
         seed_dir: Optional[str | Path] = None,
+        seed_contract: Optional[dict[str, set[str]]] = None,
+        behavior_verify: Optional[Callable] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
@@ -210,6 +212,13 @@ class CodegenEngine:
         # 方案 C seed 增量 (2026-08-12): 项目现有代码基线目录。
         # 提供时 engine 把 src/** 复制到输出目录, LLM 只增量修改。
         self.seed_dir = Path(seed_dir) if seed_dir else None
+        # seed 契约 (2026-08-16, C): rel_path -> 现有公共函数名集合。
+        # 生成代码删除既有公共函数 → 判定回归, 进入 repair 轮。
+        self.seed_contract = seed_contract
+        # 行为验证钩子 (2026-08-16, A): callable(out_dir) -> 错误文本 or ""。
+        # 编译通过后额外跑真实行为测试, 失败反馈给 LLM 修复 — 防止
+        # "编译通过但删了 PINCH_REVERSAL 启动序列" 类逻辑回归流到 deploy。
+        self.behavior_verify = behavior_verify
 
     # ---- Main entry ---------------------------------------------------
 
@@ -281,11 +290,40 @@ class CodegenEngine:
                 )
             result.verify = verify
             if verify.get("ok"):
-                result.status = "verified"
-                result.last_errors = ""
-                break
+                # ── 编译通过后的追加验证 (2026-08-16) ──────────────────
+                # 编译通过 ≠ 行为正确: LLM 会删掉"它觉得多余"的修复块
+                # (PINCH_REVERSAL 启动序列 3 次被删, 行为护栏在 deploy 才
+                # 拦截)。编译后追加两道检查, 失败也进 repair 轮:
+                #   C) seed 契约: 生成代码不得删除既有公共函数
+                #   A) 行为验证: 真实测试套件跑一遍生成代码
+                extra_errors = self._check_seed_contract(out_dir)
+                if self.behavior_verify is not None:
+                    try:
+                        behavior_errors = self.behavior_verify(out_dir)
+                        if behavior_errors:
+                            extra_errors = (
+                                (extra_errors + "\n" if extra_errors else "")
+                                + behavior_errors
+                            )
+                    except Exception as e:  # pragma: no cover - defensive
+                        log.warning("Codegen behavior verify failed: %s", e)
+                if extra_errors:
+                    errors = extra_errors
+                    result.last_errors = errors
+                    log.warning(
+                        "Codegen round %d: compile ok but contract/behavior "
+                        "FAILED — repair round",
+                        round_idx + 1,
+                    )
+                    # 落入下方 repair 逻辑 (truncated/best-state/repair_context)
+                else:
+                    result.status = "verified"
+                    result.last_errors = ""
+                    break
 
             errors = (verify.get("errors") or "").strip()
+            if not errors and result.last_errors:
+                errors = result.last_errors
             result.last_errors = errors or f"verification failed ({verify.get('command')})"
             log.warning(
                 "Codegen round %d failed verification: %s",
@@ -455,6 +493,39 @@ class CodegenEngine:
                 if last_line and not last_line.endswith(("}", ")", ";", "#endif", ",", "\"", "'", "*/")):
                     truncated.append(f.path)
         return sorted(set(truncated))
+
+    def _check_seed_contract(self, out_dir: Path) -> str:
+        """Check generated code preserves existing public functions (C, 2026-08-16).
+
+        seed_contract: {rel_path: {func_name, ...}} — 现有 src/ 的公共函数
+        (非 static, 从头文件声明收集)。生成代码删除既有公共函数 → 判定
+        回归 (LLM 全量重写时常整块删除修复逻辑, 编译却通过)。
+
+        Returns error text ("" when ok).
+        """
+        if not self.seed_contract:
+            return ""
+        missing_blocks: list[str] = []
+        for rel, funcs in sorted(self.seed_contract.items()):
+            gen_file = out_dir / rel
+            if not gen_file.exists():
+                # 整个文件被删 — 由 deploy API 契约闸兜底, 这里只记缺失
+                missing_blocks.append(f"  - {rel}: 整个文件缺失")
+                continue
+            content = gen_file.read_text(encoding="utf-8", errors="replace")
+            missing = [f for f in sorted(funcs) if f not in content]
+            if missing:
+                missing_blocks.append(
+                    f"  - {rel}: 缺失公共函数 {', '.join(missing)}"
+                )
+        if not missing_blocks:
+            return ""
+        return (
+            "## ⚠️ seed 契约破坏 — 生成代码删除了既有公共函数 (2026-08-16)\n"
+            "以下函数在现有 src/ 中声明并被测试/harness 依赖, 生成代码不得删除:\n"
+            + "\n".join(missing_blocks)
+            + "\n请恢复这些函数的完整实现 (可修改内部逻辑, 但签名必须保留)。\n"
+        )
 
     def _snapshot_files(self, out_dir: Path) -> dict[str, str]:
         """Snapshot the current output dir (rel_path -> content)."""
