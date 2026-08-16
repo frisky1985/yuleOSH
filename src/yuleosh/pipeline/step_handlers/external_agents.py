@@ -43,6 +43,11 @@ __all__ = ["step_claude_review", "step_codex_verify"]
 # 外部 CLI 单次调用超时（秒）——codex 跑测试可能较慢。
 CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "600"))
 CLAUDE_TIMEOUT = int(os.environ.get("YULEOSH_CLAUDE_TIMEOUT", "300"))
+# claude-review: --max-turns 硬编码 3 对 8K+ 评审 prompt 不够 (claude CLI
+# 2.1.220 报 "Reached max turns (3)" exit 1, 2026-08-16 实证)。实测 10 轮
+# 仍不够 (25s 耗尽, claude 读代码验证烧轮次), 20 轮成功 (2m14s)。
+# 可用 YULEOSH_CLAUDE_MAX_TURNS 覆盖。
+CLAUDE_MAX_TURNS = int(os.environ.get("YULEOSH_CLAUDE_MAX_TURNS", "20"))
 
 
 # ── 公共辅助 ──────────────────────────────────────────────────────────
@@ -348,7 +353,7 @@ def step_claude_review(session: PipelineSession) -> str:
     log.info("Running claude -p (timeout=%ss)", CLAUDE_TIMEOUT)
     try:
         result = _run_cli(
-            [claude_bin, "-p", prompt, "--max-turns", "3"],
+            [claude_bin, "-p", prompt, "--max-turns", str(CLAUDE_MAX_TURNS)],
             timeout=CLAUDE_TIMEOUT, cwd=project_dir, extra_env=extra_env,
         )
     except subprocess.TimeoutExpired:
