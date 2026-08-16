@@ -84,6 +84,11 @@ class CodegenResult:
     dropped_files: list[str] = field(default_factory=list)
     # 2026-08-16 (3 次失败头脑风暴): 触发时的失败模式分析
     brainstorm: dict = field(default_factory=dict)
+    # 2026-08-17 (claude-review run-175442 blocker 1): 编译后行为验证
+    # (behavior_verify: 部署生成代码 → 跑真实测试套件 → 回滚) 的结果。
+    # 报告必须记录它 — 否则 dev 报告只写 -fsyntax-only, 评审误判
+    # "护栏测试从未执行", 且真回归 (FAULT/STOP 门控、阈值公式) 被掩盖。
+    behavior_verify_result: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -99,6 +104,7 @@ class CodegenResult:
             "report_path": self.report_path,
             "dropped_files": list(self.dropped_files),
             "brainstorm": self.brainstorm,
+            "behavior_verify_result": self.behavior_verify_result,
         }
 
 
@@ -354,6 +360,11 @@ class CodegenEngine:
                 if self.behavior_verify is not None:
                     try:
                         behavior_errors = self.behavior_verify(out_dir)
+                        result.behavior_verify_result = (
+                            "PASS (真实测试套件: 生成代码部署→测试→回滚, 0 失败)"
+                            if not behavior_errors
+                            else f"FAIL ({behavior_errors[:500]})"
+                        )
                         if behavior_errors:
                             extra_errors = (
                                 (extra_errors + "\n" if extra_errors else "")
@@ -361,6 +372,9 @@ class CodegenEngine:
                             )
                     except Exception as e:  # pragma: no cover - defensive
                         log.warning("Codegen behavior verify failed: %s", e)
+                        result.behavior_verify_result = f"ERROR ({e})"
+                else:
+                    result.behavior_verify_result = "SKIPPED (no behavior_verify configured)"
                 if extra_errors:
                     errors = extra_errors
                     result.last_errors = errors
@@ -964,6 +978,16 @@ def build_codegen_report(result: CodegenResult, session: PipelineSession) -> str
         ]
     else:
         lines.append("_(verification not run)_")
+
+    # 行为验证结果 (2026-08-17, claude-review blocker 1): 编译通过后
+    # behavior_verify 把生成代码部署到项目 → 跑真实测试套件 → 回滚。
+    # 报告必须呈现它 — 否则评审只看到 -fsyntax-only 误判"护栏从未执行"。
+    lines += ["", "## Behavior Verification (真实测试套件)", ""]
+    if result.behavior_verify_result:
+        lines.append(f"- Result: {result.behavior_verify_result}")
+    else:
+        lines.append("_(behavior verification not run)_")
+
     lines += ["", "## Repair Rounds", ""]
     if result.last_errors:
         lines += [
