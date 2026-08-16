@@ -70,7 +70,12 @@ class TestParseRequirementsOpenSpec:
         assert "防夹检测与反转" in scens[0]
 
     def test_real_window_anti_pinch_spec(self):
-        """Regression: real spec must parse to 11 reqs / 45 SHALL / 4 scenarios."""
+        """Regression: real spec must parse to 11 reqs / 51 SHALL / 4 scenarios.
+
+        SHALL 数从 45 → 51 (2026-08-16 spec v1.1.0 契约化新增约束语句:
+        防夹判定语义/反转模式/坐标系/配置单位/AC 阈值, 部分以 **...SHALL...**
+        粗体行表述也被计入 SHALL 语句)。
+        """
         spec = Path(
             "/Users/stefan/workspace/window-anti-pinch/window-anti-pinch/spec.md"
         )
@@ -80,7 +85,7 @@ class TestParseRequirementsOpenSpec:
         scens = _parse_scenarios(str(spec))
         total_shall = sum(len(r["shall_statements"]) for r in reqs)
         assert len(reqs) == 11, f"got {len(reqs)}"
-        assert total_shall == 45, f"got {total_shall}"
+        assert total_shall == 51, f"got {total_shall}"
         assert len(scens) == 4, f"got {len(scens)}"
 
 
