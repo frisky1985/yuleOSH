@@ -37,6 +37,12 @@ from yuleosh.pipeline.stages import timed_step
 from yuleosh.pipeline.step_handlers.mock_skip import is_mock, write_mock_skip
 from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
 
+# Combined cap for all pipeline artifacts rendered into codex/claude prompts.
+# 2026-08-16: PRD alone is 26K+; per-artifact cap is SPEC_INJECT_LIMIT and the
+# concatenated set (prd+arch+dev+test-plan ≈ 60K) must stay visible to external
+# reviewers — the tail contract sections are exactly what claude-review flags.
+ARTIFACT_INJECT_LIMIT = 60000
+
 log = logging.getLogger("pipeline.step_handlers.external_agents")
 
 __all__ = ["step_claude_review", "step_codex_verify"]
@@ -103,7 +109,11 @@ def _collect_spec_and_artifacts(session: PipelineSession) -> tuple[str, dict[str
         ap = Path(p)
         if ap.exists():
             try:
-                artifacts[key] = ap.read_text(encoding="utf-8", errors="ignore")[:8000]
+                # 2026-08-16: was [:8000] — truncated PRD at 8K chars, cutting
+                # every contract section past FR-041 (SW-005..008, §8 interface
+                # contract, guardrail map) → claude-review "FR 段止于 SW-004"
+                # blocker (run-20260816-174313). PRD itself is 26K+; keep enough.
+                artifacts[key] = ap.read_text(encoding="utf-8", errors="ignore")[:SPEC_INJECT_LIMIT]
             except OSError:
                 artifacts[key] = "(read error)"
     return spec_content, artifacts
@@ -116,7 +126,11 @@ def _format_artifacts_for_prompt(artifacts: dict[str, str]) -> str:
     blocks = []
     for key, content in artifacts.items():
         blocks.append(f"### {key}\n```\n{content}\n```")
-    return "\n\n".join(blocks)
+    joined = "\n\n".join(blocks)
+    # Combined cap: all artifacts concatenated can exceed the per-file limit;
+    # keep the full set (PRD 26K + arch 17K + test-plan 16K ≈ 60K) so reviewers
+    # see the tail contracts instead of only the first artifact.
+    return joined[:ARTIFACT_INJECT_LIMIT]
 
 
 def _build_codex_prompt(spec_content: str, artifacts_block: str,
@@ -130,7 +144,7 @@ def _build_codex_prompt(spec_content: str, artifacts_block: str,
 {spec_content[:SPEC_INJECT_LIMIT]}
 
 当前产物:
-{artifacts_block[:8000]}
+{artifacts_block[:ARTIFACT_INJECT_LIMIT]}
 
 验证要求（工程诚实，禁止假绿）:
 1. 运行项目的测试（pytest / go test / ctest / 其他），确认真实测试结果。
@@ -163,7 +177,7 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
 {spec_content[:SPEC_INJECT_LIMIT]}
 
 待评审方案/建议:
-{artifacts_block[:8000]}
+{artifacts_block[:ARTIFACT_INJECT_LIMIT]}
 
 评审要求:
 1. 对照 spec 检查方案是否满足需求、有无遗漏或过度设计。
