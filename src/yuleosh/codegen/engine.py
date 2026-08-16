@@ -633,18 +633,20 @@ class CodegenEngine:
         """计算下一轮允许 LLM 修改的文件集合 (框住 LLM 的核心)。
 
         白名单 = 错误涉及文件 + seed_contract 文件 (既有公共函数,
-        删除即回归 — 允许 LLM 恢复它们) + 行为失败时本轮输出文件
-        (ctest FAIL 文本往往不含 src 路径, 错误来自 LLM 本轮改动的文件)。
+        删除即回归 — 允许 LLM 恢复它们) + 本轮 LLM 输出文件 (它自己
+        生成/修改过的文件, 修复编译错误时可能需连带修改配套文件 —
+        如新 .c 依赖的头文件声明; 行为失败时 ctest FAIL 文本往往不
+        含 src 路径, 错误来源正是本轮改动的文件)。
 
         白名单外的文件即使 LLM 输出了也会被引擎丢弃 — 不靠 prompt 自觉。
+        新文件在第一轮 (无 allowlist) 可自由生成; 之后 LLM 想改某个
+        文件必须先出现在错误指向或它自己的历史输出里。
         """
         allow = {CodegenEngine._norm_path(p)
                  for p in CodegenEngine._extract_error_files(errors)}
         if seed_contract:
             allow |= {CodegenEngine._norm_path(p) for p in seed_contract}
-        is_behavior = "FAIL" in errors or "行为" in errors
-        if is_behavior:
-            allow |= {f.path for f in round_files}
+        allow |= {f.path for f in round_files}
         # 过滤掉测试文件路径 (行为失败文本提取的 test.c 之类)
         return {p for p in allow if not any(
             part == "tests" or part.endswith("_test") or part.startswith("test")

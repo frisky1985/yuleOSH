@@ -66,7 +66,16 @@ class TestScopeFilter:
         )
         assert "src/app.c" in allow          # 错误文件
         assert "src/hal.c" in allow          # seed_contract 文件
-        assert "src/other.c" not in allow    # 无关文件不在白名单
+        assert "src/other.c" in allow        # 本轮 LLM 输出文件 (修复可连带)
+
+    def test_build_allowlist_excludes_unrelated_files(self):
+        # 白名单外的文件 = 既不在错误里、也不在 seed_contract、也非本轮输出
+        allow = CodegenEngine._build_allowlist(
+            "src/app.c:3: error: syntax error",
+            round_files=[GeneratedFile(path="src/app.c", content="x")],
+            seed_contract=None,
+        )
+        assert "src/unrelated.c" not in allow
 
     def test_build_allowlist_behavior_fail_adds_round_files(self):
         # 行为失败时错误文本只有测试文件, 允许修改上轮输出过的文件
