@@ -529,12 +529,16 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
         success = run_c_coverage_check(project_dir, ci)
 
         # Extract line rate from CI result
+        # 2026-08-16 记录 bug 修复：CIResult.add_stage 写入的字段是 "name"，
+        # 旧代码用 stage.get("key") 永远匹配不到 → line_rate 恒 0.0（判定对、
+        # 记录错，污染证据/趋势）。另加 c-coverage.json 回读兜底，禁止
+        # 解析失败时默认 0.0 静默写入。
         stages = getattr(ci, "stages", [])
         line_rate = 0.0
         branch_rate = 0.0
         c_fail_under = 70
         for stage in stages:
-            if stage.get("key") == "c-coverage-gate":
+            if stage.get("name") == "c-coverage-gate":
                 detail = stage.get("detail", "")
                 import re
                 m = re.search(r'line_rate=([\d.]+)', detail)
@@ -543,6 +547,28 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
                     branch_m = re.search(r'branch_rate=([\d.]+)', detail)
                     if branch_m:
                         branch_rate = float(branch_m.group(1))
+                break
+
+        if line_rate == 0.0 and branch_rate == 0.0:
+            # 回读真实报告（禁止默认 0.0 污染证据）
+            report_path = Path(project_dir) / ".yuleosh" / "reports" / "c-coverage.json"
+            try:
+                if report_path.exists():
+                    with open(report_path, encoding="utf-8") as f:
+                        report_data = json.load(f)
+                    rl = report_data.get("line_rate")
+                    if isinstance(rl, (int, float)) and rl > 0:
+                        line_rate = round(float(rl), 2)
+                    br = report_data.get("branch_rate")
+                    if isinstance(br, (int, float)) and br > 0:
+                        branch_rate = round(float(br), 2)
+                    log.warning(
+                        "c-coverage-gate record: stage detail unparsable, "
+                        "fell back to report values line_rate=%s branch_rate=%s",
+                        line_rate, branch_rate,
+                    )
+            except (OSError, json.JSONDecodeError) as e:
+                log.warning("c-coverage-gate record fallback failed: %s", e)
 
         results["line_rate"] = line_rate
         results["branch_rate"] = branch_rate
