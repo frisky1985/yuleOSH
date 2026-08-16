@@ -1,6 +1,7 @@
 """Tests for pipeline/step_handlers/test_qualification.py."""
 import tempfile
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -221,6 +222,61 @@ class TestRunSystemTests:
             assert results["executed"] == 0
             assert len(results["details"]) >= 1
             assert "no built binary" in results["details"][0]["message"]
+
+    def test_find_binary_prefers_newest_not_build_dir(self):
+        """GIVEN build/ 下有旧二进制 + cmake-build-coverage 下有新二进制
+           WHEN _find_c_test_binary runs
+           THEN 必须选最新的（mtime），而不是固定优先 build/（8/13
+           window-anti-pinch qualification 误选旧 build/ 二进制的复发防护）。"""
+        from yuleosh.pipeline.step_handlers.test_qualification import _find_c_test_binary
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            src = td / "tests" / "system" / "test_qualification_z.c"
+            src.parent.mkdir(parents=True)
+            src.write_text("int main(void){return 0;}")
+            # 旧二进制：build/ 下
+            old_bin = td / "build" / "tests" / "system" / "test_qualification_z"
+            old_bin.parent.mkdir(parents=True)
+            old_bin.write_text("#!/bin/sh\necho old\n")
+            old_bin.chmod(0o755)
+            old_ts = 1_000_000_000  # 固定的远古时间戳
+            os.utime(old_bin, (old_ts, old_ts))
+            # 新二进制：cmake-build-coverage/ 下
+            new_bin = td / "cmake-build-coverage" / "tests" / "system" / "test_qualification_z"
+            new_bin.parent.mkdir(parents=True)
+            new_bin.write_text("#!/bin/sh\necho new\n")
+            new_bin.chmod(0o755)
+            new_ts = 1_800_000_000
+            os.utime(new_bin, (new_ts, new_ts))
+
+            found = _find_c_test_binary(src, td)
+            assert found is not None
+            assert found == new_bin, f"expected newest cmake-build binary, got {found}"
+
+    def test_find_binary_fallback_scan_also_prefers_newest(self):
+        """兜底扫描（target 名 ≠ stem）同样按 mtime 选最新。"""
+        from yuleosh.pipeline.step_handlers.test_qualification import _find_c_test_binary
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            src = td / "tests" / "system" / "test_qualification_w.c"
+            src.parent.mkdir(parents=True)
+            src.write_text("int main(void){return 0;}")
+            # 旧 target 二进制在 build/tests/ 下
+            old_bin = td / "build" / "tests" / "old_qualification"
+            old_bin.parent.mkdir(parents=True)
+            old_bin.write_text("#!/bin/sh\necho old\n")
+            old_bin.chmod(0o755)
+            os.utime(old_bin, (1_000_000_000, 1_000_000_000))
+            # 新 target 二进制在 cmake-build/tests/ 下（含 qualification 关键字）
+            new_bin = td / "cmake-build" / "tests" / "new_qualification"
+            new_bin.parent.mkdir(parents=True)
+            new_bin.write_text("#!/bin/sh\necho new\n")
+            new_bin.chmod(0o755)
+            os.utime(new_bin, (1_800_000_000, 1_800_000_000))
+
+            found = _find_c_test_binary(src, td)
+            assert found is not None
+            assert found == new_bin, f"expected newest fallback binary, got {found}"
 
 
 class TestBuildQualificationReport:
