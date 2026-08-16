@@ -594,3 +594,17 @@ class TestEnginePrompt:
     def test_codegen_prompt_target_language_hint(self):
         _, user_p = build_codegen_prompt("S", "s.md", target_language="C")
         assert "目标语言" in user_p and "C" in user_p
+
+    def test_codegen_prompt_keeps_prd_tail_contracts(self):
+        """Regression (2026-08-16, run-20260816-174313): codegen prompt
+        truncated PRD at 4000 chars — the behavioral contract tail (FR-044
+        |delta|, G-01..G-12 guardrail map, SW-005..008 FRs) was invisible to
+        the codegen LLM, so it regenerated signed-delta/raw-memcpy code every
+        round. The full PRD must reach the codegen prompt."""
+        prd = "# PRD\n" + ("FR row\n" * 600) + "\n## 护栏映射\nG-12 window_control_reset(NULL) 安全 tail_marker\n"
+        assert len(prd) > 4000
+        _, user_p = build_codegen_prompt("SPEC", "spec.md", prd_content=prd)
+        assert "tail_marker" in user_p, (
+            "PRD tail contract must survive codegen prompt injection "
+            "(PRD truncation regression)"
+        )
