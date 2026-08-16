@@ -184,6 +184,10 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
     """D3 codegen branch: spec/arch/PRD → code → verify → auto-fix."""
     from yuleosh.codegen.engine import CodegenEngine, build_codegen_report
     from yuleosh.codegen.prompts import build_codegen_prompt
+    from yuleosh.pipeline.step_classes import (
+        _collect_seed_contract,
+        _make_behavior_verify,
+    )
 
     print("  💻 [Claude] Running generate-code mode (D3)...")
     log.info("Running generate-code mode (D3)")
@@ -237,6 +241,8 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             llm_client=getattr(session, "llm_client", None),
             max_tokens=int(cfg.get("max_tokens", 16000)),
             seed_dir=project_dir if seed_sources else None,
+            seed_contract=_collect_seed_contract(project_dir),
+            behavior_verify=_make_behavior_verify(project_dir),
         )
         result = engine.generate(
             session, system_prompt, user_prompt,
