@@ -578,6 +578,22 @@ class TestEngineReport:
         assert "SyntaxError: x" in report
         assert "Repair Rounds" in report
 
+    def test_report_records_behavior_verify_result(self, tmp_path):
+        """Regression (2026-08-17, claude-review run-175442 blocker 1):
+        dev 报告必须呈现 behavior_verify 结果 — 否则评审只看 -fsyntax-only
+        误判"护栏测试从未执行", 真回归被掩盖."""
+        session = _session(tmp_path)
+        result = CodegenResult(status="verified", rounds=2, max_retries=3,
+                               verify={"ok": True, "language": "c",
+                                       "command": "gcc -fsyntax-only", "output": "",
+                                       "errors": "", "returncode": 0},
+                               behavior_verify_result=(
+                                   "PASS (真实测试套件: 生成代码部署→测试→回滚, 0 失败)"
+                               ))
+        report = build_codegen_report(result, session)
+        assert "Behavior Verification" in report
+        assert "PASS" in report
+
 
 class TestEnginePrompt:
     def test_codegen_prompt_embeds_spec_and_skills(self):
