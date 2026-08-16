@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from yuleosh.skills.prompt import render_skills
+from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
 
 # Skills applied by default when none are requested explicitly.
 DEFAULT_CODEGEN_SKILLS = ["autosar-coding"]
@@ -148,7 +149,7 @@ def build_codegen_prompt(
     )
 
     context_parts = [
-        f"# Specification: {spec_name}\n```markdown\n{spec_content[:8000]}\n```"
+        f"# Specification: {spec_name}\n```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```"
     ]
     # Project context (2026-08-14, headlamp dogfood): CONTEXT.md 领域术语 +
     # 语言约束放最前 — LLM 必须先知道项目语言/约束再写代码。

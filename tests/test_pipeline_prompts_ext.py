@@ -20,10 +20,14 @@ class TestPromptVersions:
     def test_get_prompt_versions(self):
         versions = get_prompt_versions()
         assert "super-analysis" in versions
-        assert all(versions[k] == "1.0.0" for k in versions)
+        # super-analysis / prd bumped to 1.1.0 (2026-08-16, SPEC_INJECT_LIMIT)
+        assert versions["super-analysis"] == "1.1.0"
+        assert versions["prd"] == "1.1.0"
+        assert all(versions[k] == "1.0.0" for k in versions if k not in ("super-analysis", "prd"))
 
     def test_get_prompt_version(self):
-        assert get_prompt_version("super-analysis") == "1.0.0"
+        assert get_prompt_version("super-analysis") == "1.1.0"
+        assert get_prompt_version("prd") == "1.1.0"
         assert get_prompt_version("unknown") == "0.0.0"
 
 
@@ -59,6 +63,24 @@ class TestPromptBuilders:
             scenarios=[],
         )
         assert "S.U.P.E.R." not in user
+
+    def test_build_prd_prompt_keeps_spec_tail_contracts(self):
+        """Regression (2026-08-16, run-20260816-172910): spec truncation at 12000
+        chars silently stripped the tail contract sections (§1.5 interface
+        contract / §2.5 guardrail map / §3 acceptance) from the PRD prompt,
+        causing claude-review blockers. SPEC_INJECT_LIMIT must keep the tail."""
+        # Spec longer than the old 12000-char cap, with a marker at the very end
+        spec = "# Test Spec\n" + ("SHALL contract\n" * 900) + "\n## 1.5 Interface Contract\nwindow_control_reset_tail_marker\n"
+        assert len(spec) > 12000
+        system, user = build_prd_prompt(
+            spec_content=spec,
+            spec_name="prd.md",
+            requirements=[{"shall_statements": ["SHALL contract"]}],
+            scenarios=["S1"],
+        )
+        assert "window_control_reset_tail_marker" in user, (
+            "spec tail contract must survive injection (SPEC_INJECT_LIMIT regression)"
+        )
 
     def test_build_architecture_prompt(self):
         system, user = build_architecture_prompt(

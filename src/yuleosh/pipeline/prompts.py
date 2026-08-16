@@ -31,8 +31,8 @@ from typing import Optional
 # bump its version and record the change in docs/spec-delta.md.
 
 PROMPT_VERSIONS: dict[str, str] = {
-    "super-analysis":     "1.0.0",
-    "prd":                "1.0.0",
+    "super-analysis":     "1.1.0",
+    "prd":                "1.1.0",
     "internal-review":    "1.0.0",
     "architecture":       "1.0.0",
     "development":        "1.0.0",
@@ -40,6 +40,15 @@ PROMPT_VERSIONS: dict[str, str] = {
     "code-review":        "1.0.0",
     "final-report":       "1.0.0",
 }
+
+# Spec injection limit (chars). 2026-08-16: raised from hard-coded 12000/8000/
+# 6000/5000/4000 — specs grow past 20K chars (window-anti-pinch spec.md is
+# 21K+), and the contract sections (§1.5 interface contract, §2.5 behavioral
+# guardrail map, §3 acceptance scenarios) live at the END of the spec. Truncating
+# the tail silently stripped those contracts from PRD/architecture/test-planning
+# prompts → claude-review blockers (run-20260816-172910). Keep this large enough
+# for real specs; if a spec exceeds it, prefer raising the limit over silent loss.
+SPEC_INJECT_LIMIT = 30000
 
 
 def get_prompt_versions() -> dict[str, str]:
@@ -88,7 +97,7 @@ def build_super_analysis_prompt(
 
     user_prompt = (
         f"# Specification: {spec_name}\n\n"
-        f"```markdown\n{spec_content[:12000]}\n```\n\n"
+        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
         f"## Parsed Metadata\n"
         f"- Requirements found: {len(requirements)}\n"
         f"- Total SHALL statements: {total_shall}\n"
@@ -154,7 +163,7 @@ def build_prd_prompt(
 
     user_prompt = (
         f"# Specification: {spec_name}\n\n"
-        f"```markdown\n{spec_content[:12000]}\n```\n\n"
+        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
         f"## Parsed Metadata\n"
         f"- Requirements found: {len(requirements)}\n"
         f"- Total SHALL/SHOULD statements: {total_shall}\n"
@@ -220,7 +229,7 @@ def build_architecture_prompt(
         f"## Source Tree ({len(directories)} dirs, {len(source_files)} files)\n"
         f"```\n{source_tree_str}\n```\n\n"
         f"## Specification ({spec_name})\n"
-        f"```markdown\n{spec_content[:8000]}\n```\n\n"
+        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
         f"## Key Source File Snippets\n"
         + "\n".join(key_file_snippets[:10])
         + "\n\nWrite a comprehensive architecture document."
@@ -263,7 +272,7 @@ def build_development_prompt(
     )
 
     context_parts = [
-        f"# Specification: {spec_name}\n```markdown\n{spec_content[:6000]}\n```"
+        f"# Specification: {spec_name}\n```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```"
     ]
     if architecture_content:
         context_parts.append(
@@ -350,7 +359,7 @@ def build_test_planning_prompt(
 
     user_prompt_parts = [
         f"# Specification: Project Specification\n\n"
-        f"```markdown\n{spec_content[:8000]}\n```\n\n",
+        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n",
         f"## Requirements Summary ({len(requirements)} requirements, {total_shall} SHALL statements)\n",
         "\n".join(req_summary_lines) + "\n\n",
     ]
@@ -443,7 +452,7 @@ def build_code_review_prompt(
 
     user_prompt = (
         f"# Specification: {spec_name}\n"
-        f"```markdown\n{spec_content[:5000]}\n```\n\n"
+        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
         f"# Pipeline Artifacts\n"
         + "\n".join(artifact_sections)
         + "\n\n# Source Code\n"
@@ -578,7 +587,7 @@ def build_internal_review_prompt(
     user_prompt = (
         f"# Internal Review: {session_name}\n\n"
         f"## Specification ({spec_name})\n"
-        f"```markdown\n{spec_content[:4000]}\n```\n\n"
+        f"```markdown\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
         f"## Generated Artifacts\n" + "\n".join(artifacts_list) + "\n\n"
         f"Write an internal review report. For each artifact, give a verdict (PASS/FAIL/WARN) "
         f"and provide specific feedback. Include an overall assessment at the top."

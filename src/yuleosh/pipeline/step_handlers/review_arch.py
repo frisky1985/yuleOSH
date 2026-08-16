@@ -25,6 +25,7 @@ from pathlib import Path
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm
 from yuleosh.review.run import review_architecture as _run_arch_review
+from yuleosh.pipeline.prompts import SPEC_INJECT_LIMIT
 
 log = logging.getLogger("pipeline.step_handlers.review_arch")
 
@@ -187,7 +188,7 @@ def _build_arch_review_prompt(
     user_prompt = (
         f"## Spec: {spec_name}\n\n"
         f"### Specification Content\n"
-        f"```\n{spec_content[:8000]}\n```\n\n"
+        f"```\n{spec_content[:SPEC_INJECT_LIMIT]}\n```\n\n"
         f"### Architecture Design\n"
         f"```\n{architecture_content[:8000]}\n```\n\n"
         f"Review the architecture against the specification above.\n"
