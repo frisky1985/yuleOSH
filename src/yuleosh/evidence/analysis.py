@@ -125,6 +125,59 @@ def infer_covers_from_function_names(tree: ast.AST, stop_words: set[str] | None 
     return list(inferred)
 
 
+def parse_c_comment_covers(content: str) -> list[str]:
+    """Parse C-style Covers markers: ``// Covers:`` 行注释与 ``/* ... */`` 块注释.
+
+    C 测试文件没有 Python docstring / AST — codex-verify 2026-08-16 缺陷 4
+    根因: 嵌入式 (C) 项目的测试文件被 evidence 收集完全忽略 → 验收矩阵
+    假红 (req_to_tests 全空), 与真实 ctest 全绿矛盾。
+    """
+    keywords: list[str] = []
+    # 1) 行注释: // Covers: ... (含 /* 前导)
+    for line in content.split("\n"):
+        m = re.search(r"//\s*Covers:\s*(.+)$", line, re.IGNORECASE)
+        if m:
+            raw = _strip_scenario_ref(m.group(1))
+            keywords.extend(k.strip() for k in raw.split(",") if k.strip())
+    # 2) 块注释: /* ... Covers: ... */ — Covers 行可出现在块内任意行,
+    #    行首可能带 ` * ` 前缀 (多行块注释的惯例)
+    for m in re.finditer(
+        r"^\s*(?:\*\s*)?Covers:\s*(.+)$", content, re.IGNORECASE | re.MULTILINE
+    ):
+        raw = m.group(1).rstrip("*/").strip()
+        raw = _strip_scenario_ref(raw)
+        keywords.extend(k.strip() for k in raw.split(",") if k.strip())
+    return keywords
+
+
+def infer_covers_from_c_function_names(content: str, stop_words: set[str] | None = None) -> list[str]:
+    """Infer Covers keywords from C test function names.
+
+    匹配 ``static void test_xxx(...)`` 与 ``void test_xxx(...)`` 定义;
+    函数名拆词同 Python 版本 (test_config_validate -> config, validate)。
+    """
+    if stop_words is None:
+        stop_words = {"test", "the", "and", "for", "with", "each", "from",
+                      "that", "this", "all", "support", "system", "shall",
+                      "should", "basic", "dummy", "can", "be", "is", "a",
+                      "an", "in", "to", "of", "it", "as", "at", "by", "on",
+                      "void", "static", "int", "bool", "uint16", "uint32"}
+    inferred: set[str] = set()
+    for m in re.finditer(
+        r"(?:static\s+)?(?:void|int|bool|uint\d+_t)\s+(test_[A-Za-z0-9_]+)\s*\(",
+        content,
+    ):
+        fn_name = m.group(1)
+        rest = fn_name[len("test_"):]
+        parts = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{2,}", rest)
+        for part in parts:
+            for word in re.split(r"_+|(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", part):
+                w = word.lower().strip("_")
+                if w and len(w) > 2 and w not in stop_words:
+                    inferred.add(w)
+    return list(inferred)
+
+
 def parse_covers_from_file(test_path: str, stop_words: set[str] | None = None) -> list[str]:
     """Multi-layer Covers marker parser.
 
@@ -142,6 +195,13 @@ def parse_covers_from_file(test_path: str, stop_words: set[str] | None = None) -
         with open(test_path, encoding="utf-8") as f:
             content = f.read()
     except (OSError, UnicodeDecodeError):
+        return keywords
+
+    # C / C++ 测试文件: 没有 Python AST — 用 C 注释解析 + 函数名推断
+    # (2026-08-16, codex-verify 缺陷 4: 嵌入式项目验收矩阵假红)
+    if test_path.endswith((".c", ".h", ".cpp", ".hpp", ".cc")):
+        keywords.extend(parse_c_comment_covers(content))
+        keywords.extend(infer_covers_from_c_function_names(content, stop_words))
         return keywords
 
     try:

@@ -388,7 +388,11 @@ class TestPipelineStagesSpec:
     # ---- _parse_requirements ----
 
     def test_parse_requirements_success(self, tmp_path):
-        """解析 ### Req-* 头 + SHALL/SHOULD 条目，遇非 Req 的 ### 节结束当前需求。"""
+        """解析 ### Req-* / OpenSpec SR-* 头 + SHALL/SHOULD 条目，遇非 Req 的 ### 节结束当前需求。
+
+        2026-08-16 (a966991d): OpenSpec 风格头只取编号 (``SR-001``) 作为
+        稳定契约 — 标题是展示文本, 编号才是下游引用/追溯的标识。
+        """
         f = tmp_path / "spec.md"
         f.write_text(
             "### Req-001: First requirement\n"
@@ -397,15 +401,15 @@ class TestPipelineStagesSpec:
             "- unrelated bullet\n"
             "### Scenario: Normal\n"
             "- GIVEN something\n"
-            "### Req-002: Second requirement\n"
+            "### SR-002: Second requirement\n"
             "- The system SHALL do Z.\n",
             encoding="utf-8",
         )
         result = stages_spec_mod._parse_requirements(str(f))
         assert len(result) == 2
-        assert result[0]["name"] == "Req-001: First requirement"
+        assert result[0]["name"] == "Req-001"
         assert result[0]["shall_statements"] == ["- The system SHALL do X.", "- The system SHOULD do Y."]
-        assert result[1]["name"] == "Req-002: Second requirement"
+        assert result[1]["name"] == "SR-002"
         assert result[1]["shall_statements"] == ["- The system SHALL do Z."]
 
     def test_parse_requirements_missing_file(self, tmp_path):
