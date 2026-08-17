@@ -274,6 +274,7 @@ class CodegenEngine:
         user_prompt: str,
         language_hint: Optional[str] = None,
         build_cmd: Optional[list[str]] = None,
+        cflags: Optional[list[str]] = None,
     ) -> CodegenResult:
         """Run the full generate → verify → fix loop.
 
@@ -357,10 +358,12 @@ class CodegenEngine:
                 verify = self.verifier(
                     verify_files, language=language_hint, build_cmd=build_cmd,
                     project_root=getattr(session, "project_dir", None),
+                    cflags=cflags,
                 )
             else:
                 verify = self.verifier(
                     verify_files, language=language_hint, build_cmd=build_cmd,
+                    cflags=cflags,
                 )
             result.verify = verify
             if verify.get("ok"):

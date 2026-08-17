@@ -271,8 +271,15 @@ def build_architecture_prompt(
     tech_stack: list[str],
     source_tree_str: str,
     key_file_snippets: list[str],
+    repo_facts: str = "",
 ) -> tuple[str, str]:
-    """Build an architecture design prompt."""
+    """Build an architecture design prompt.
+
+    repo_facts (2026-08-18, r21f minor): machine-collected repo facts
+    (test framework etc.) so the architecture doc doesn't hallucinate
+    the test infrastructure (r21f: arch doc said Unity, repo uses custom
+    CHECK harness).
+    """
     tech_stack_str = ", ".join(sorted(tech_stack)) if tech_stack else "Python"
 
     system_prompt = (
@@ -285,7 +292,10 @@ def build_architecture_prompt(
         "4. **Architecture Decision Records (ADRs)** — at least 3 meaningful ADRs "
         "with context, decision, consequences format\n"
         "5. **Key Design Considerations** — constraints, trade-offs, patterns used\n"
-        "Be specific and reference actual file paths and code elements."
+        "Be specific and reference actual file paths and code elements.\n\n"
+        "IMPORTANT — test infrastructure descriptions MUST match the Repository "
+        "Facts below (test framework is machine-detected); do NOT invent a "
+        "framework (e.g. Unity) the repo does not use."
     )
 
     user_prompt = (
@@ -293,6 +303,13 @@ def build_architecture_prompt(
         f"## Tech Stack\n{tech_stack_str}\n\n"
         f"## Source Tree ({len(directories)} dirs, {len(source_files)} files)\n"
         f"```\n{source_tree_str}\n```\n\n"
+    )
+    if repo_facts:
+        user_prompt += (
+            f"## Repository Facts (machine-collected — 测试基建描述必须以此为准)\n"
+            f"```\n{repo_facts}\n```\n\n"
+        )
+    user_prompt += (
         f"## Specification ({spec_name})\n"
         f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"## Key Source File Snippets\n"

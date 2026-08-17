@@ -17,6 +17,7 @@ errors back into the LLM retry loop.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -102,6 +103,7 @@ def verify_c(
     files: list[Path],
     cc: Optional[str] = None,
     project_root: Optional[Path] = None,
+    cflags: Optional[list[str]] = None,
 ) -> dict:
     """Syntax-check C/C++ files with ``gcc -fsyntax-only`` (or ``cc``).
 
@@ -123,6 +125,13 @@ def verify_c(
     ``<project>/src/hal/include/``, which the gen dir never contains).
     When provided, also scan ``<project_root>/src/**/include`` so the
     generated code compiles against the real project API surface.
+
+    cflags (2026-08-18, r21f): the project's real warning flags
+    (e.g. ``["-Wall", "-Wextra", "-Werror"]`` from CMakeLists). Default
+    ``None`` keeps the legacy ``["-Wall"]`` — bare ``-Wall`` misses
+    ``-Wextra``-only warnings (unused parameter), so a generated file
+    can pass this verifier yet fail the project's real ``-Werror`` build
+    (r21f: window_modes.c unused-parameter, 4 repair rounds blinded).
     """
     c_exts = _C_EXTS | _CXX_EXTS
     sources = [f for f in files if Path(str(f)).suffix.lower() in c_exts]
@@ -187,7 +196,8 @@ def verify_c(
                         seen.add(key)
                         inc_dirs.append(key)
 
-    cmd = [cc, "-fsyntax-only", "-std=c11", "-Wall"]
+    cmd = [cc, "-fsyntax-only", "-std=c11"]
+    cmd += list(cflags if cflags is not None else ["-Wall"])
     for d in inc_dirs:
         cmd += ["-I", d]
     cmd += [str(f) for f in sources]
@@ -203,6 +213,42 @@ def verify_c(
     except subprocess.TimeoutExpired:
         return _result(False, LANGUAGE_C, " ".join(cmd),
                        "gcc -fsyntax-only timed out (120s)", -1)
+
+
+def discover_project_cflags(project_root: str | Path) -> list[str]:
+    """从项目 CMakeLists.txt 提取警告 flags (-W*)。
+
+    2026-08-18 r21f 复盘: verify_c 裸 -Wall 漏掉 -Wextra 独有警告
+    (unused parameter), 生成代码通过语法预检却在项目真实 -Werror 构建
+    失败 (window_modes.c 未用参数, 4 轮 repair 全盲)。项目在 CMakeLists
+    声明 -Wall -Wextra -Werror 时, codegen 预检必须用同一套警告纪律。
+
+    只提取 -W* flags — ARM 交叉编译 flags (-mcpu/-mthumb/-nostdlib 等)
+    不适用于宿主 gcc 语法检查, 不提取。显式配置 (config.yaml codegen.cflags)
+    优先级高于自动发现。
+    """
+    root = Path(project_root)
+    cmake = root / "CMakeLists.txt"
+    if not cmake.exists():
+        return []
+    flags: list[str] = []
+    seen: set[str] = set()
+    try:
+        text = cmake.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    for line in text.splitlines():
+        # 只扫设置编译 flags/options 的行, 跳过目标定义/链接行
+        if "CMAKE_C_FLAGS" not in line and "add_compile_options" not in line:
+            continue
+        for m in re.finditer(r"-W[A-Za-z][A-Za-z0-9-]*", line):
+            flag = m.group(0)
+            if flag.startswith("-Wl"):  # 链接 flags (-Wl,...) 排除
+                continue
+            if flag not in seen:
+                seen.add(flag)
+                flags.append(flag)
+    return flags
 
 
 def run_build_command(build_cmd: list[str]) -> dict:
@@ -232,11 +278,17 @@ def compile_verify(
     python_cmd: str = "python3",
     cc: Optional[str] = None,
     project_root: Optional[Path] = None,
+    cflags: Optional[list[str]] = None,
 ) -> dict:
     """Verify generated files compile.
 
     Priority: explicit ``build_cmd`` → language-specific verifier (detected
     from files when ``language`` is None) → unknown result.
+
+    ``cflags`` (2026-08-18, r21f): project real warning flags passed to
+    the C verifier so generated code is checked under the same warning
+    regime as the real build (-Wextra/-Werror), not the legacy bare
+    ``-Wall``.
 
     Returns a dict with keys: ok / language / command / output / errors /
     returncode.
@@ -251,7 +303,7 @@ def compile_verify(
     if language == LANGUAGE_PYTHON:
         return verify_python(files, python_cmd=python_cmd)
     if language == LANGUAGE_C:
-        return verify_c(files, cc=cc, project_root=project_root)
+        return verify_c(files, cc=cc, project_root=project_root, cflags=cflags)
     return _result(False, LANGUAGE_UNKNOWN, "(none)",
                    "cannot verify: unknown language for files "
                    f"{[str(f) for f in files]}", -1)

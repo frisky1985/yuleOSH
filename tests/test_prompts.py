@@ -352,6 +352,40 @@ class TestBuildArchitecturePrompt:
         )
         assert "Python" in user  # Default fallback
 
+    def test_includes_repo_facts_when_provided(self, sample_spec_content, sample_source_files):
+        """2026-08-18 r21f minor: 架构文档测试基建描述必须与仓库事实一致。"""
+        from yuleosh.pipeline.prompts import build_architecture_prompt
+
+        system, user = build_architecture_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            session_name="demo",
+            directories=["src/app"],
+            source_files=["src/app/main.c"],
+            tech_stack=["C"],
+            source_tree_str="src/app/main.c",
+            key_file_snippets=[],
+            repo_facts="# Repository Facts\n- Test framework: custom-Check",
+        )
+        assert "Repository Facts" in user
+        assert "custom-Check" in user
+        assert "test infrastructure descriptions MUST match" in system
+
+    def test_omits_repo_facts_when_empty(self, sample_spec_content, sample_source_files):
+        from yuleosh.pipeline.prompts import build_architecture_prompt
+
+        _, user = build_architecture_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            session_name="demo",
+            directories=["src"],
+            source_files=["src/main.c"],
+            tech_stack=["C"],
+            source_tree_str="src/main.c",
+            key_file_snippets=[],
+        )
+        assert "Repository Facts" not in user
+
 
 # ===================================================================
 # Development prompt

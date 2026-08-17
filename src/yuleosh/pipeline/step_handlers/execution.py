@@ -104,6 +104,15 @@ def step_claude_arch(session: PipelineSession) -> str:
         tech_stack_str = ", ".join(sorted(tech_stack)) if tech_stack else "Python"
         tree_str = "\n".join(src_tree_lines[:80])
 
+        # 2026-08-18 r21f minor: 架构文档曾把自定义 CHECK harness 误述为
+        # Unity (与 test-planning 文档互斥) — 注入仓库事实快照统一口径。
+        repo_facts_str = ""
+        try:
+            from yuleosh.pipeline.repo_facts import collect_repo_facts, format_repo_facts
+            repo_facts_str = format_repo_facts(collect_repo_facts(project_dir))
+        except Exception as e:  # pragma: no cover - defensive
+            log.warning("repo_facts collect failed (non-fatal): %s", e)
+
         system_prompt, user_prompt = build_architecture_prompt(
             spec_content=spec_content,
             spec_name=spec_path.name,
@@ -113,6 +122,7 @@ def step_claude_arch(session: PipelineSession) -> str:
             tech_stack=sorted(tech_stack),
             source_tree_str=tree_str,
             key_file_snippets=key_file_snippets,
+            repo_facts=repo_facts_str,
         )
 
         try:
@@ -236,6 +246,18 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         target_language = cfg.get("target_language")
         build_cmd = cfg.get("build_cmd")
         language_hint = cfg.get("language")
+        # 2026-08-18 r21f 复盘: verify_c 裸 -Wall 漏掉 -Wextra 独有警告
+        # (unused parameter) → 生成代码通过语法预检却在项目真实 -Werror
+        # 构建失败, 4 轮 repair 全盲。codegen 预检必须用项目真实警告纪律:
+        # config.yaml codegen.cflags 显式配置 > CMakeLists 自动发现 (-W*)。
+        cflags = cfg.get("cflags")
+        if not cflags:
+            try:
+                from yuleosh.codegen.compilers import discover_project_cflags
+                cflags = discover_project_cflags(project_dir)
+            except Exception as e:  # pragma: no cover - defensive
+                log.warning("cflags discover failed (non-fatal): %s", e)
+                cflags = None
         if not language_hint:
             language_hint = _detect_project_language(project_dir)
 
@@ -291,6 +313,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         result = engine.generate(
             session, system_prompt, user_prompt,
             language_hint=language_hint, build_cmd=build_cmd,
+            cflags=cflags,
         )
 
         note = (
