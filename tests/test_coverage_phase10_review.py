@@ -871,10 +871,18 @@ class TestCriticalSafetyScannerEdges:
         s._scan_division_by_zero(Path("a.c"), ["int r = x / obj.field;"])
         assert s.violations == []
 
-    def test_div_zero_comment_guarded(self):
+    def test_div_zero_comment_only_not_flagged(self):
+        """纯注释里的除法不报（44b889d0 精确剥离注释后）。"""
+        s = self._scanner()
+        s._scan_division_by_zero(Path("a.c"), ["/* int r = x / 0; */"])
+        assert s.violations == []
+
+    def test_div_zero_real_division_with_comment_still_flagged(self):
+        """真实除零 + 同行注释 → 仍报（修复前 '/*' not in stripped 守卫整行
+        跳过，漏报真实除零——44b889d0 剥离注释后正确检出）。"""
         s = self._scanner()
         s._scan_division_by_zero(Path("a.c"), ["int r = x / 0; /* intentional */"])
-        assert s.violations == []
+        assert any(v.rule_id == "CRIT-DIV-001" for v in s.violations)
 
     def test_buffer_small_memcpy_no_violation(self):
         s = self._scanner()
@@ -1238,6 +1246,8 @@ class TestAssessGranularity:
 
 class TestBuildDevplanPrompt:
     def test_returns_two_prompts(self):
+        """63ab201b (truncation audit) 后注入语义：输入 < SPEC_INJECT_LIMIT
+        时全量注入 + 模板开销，prompt 必然大于输入总和；内容完整不截断。"""
         spec = "# Spec " + "x" * 6100
         arch = "## Arch " + "y" * 6100
         devplan = "## Plan " + "z" * 8100
@@ -1245,7 +1255,10 @@ class TestBuildDevplanPrompt:
             spec, "spec.md", arch, devplan)
         assert "PASS/FAIL/RETRY" in system_prompt
         assert "spec.md" in user_prompt
-        assert len(user_prompt) < len(spec) + len(arch) + len(devplan)
+        # 全量注入：devplan 尾部仍在（旧断言 len<输入总和 是 8/17 前硬编码
+        # 截断行为，SPEC_INJECT_LIMIT=30000 下已不成立）
+        assert devplan[-20:] in user_prompt
+        assert len(user_prompt) > len(spec) + len(arch) + len(devplan)
 
 
 # ===========================================================================
