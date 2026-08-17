@@ -246,3 +246,26 @@ The loop chain covers, but is not limited to:
 **MAY**:
 - 外部 agent 步骤 MAY 通过环境变量调整超时
   (`YULEOSH_CODEX_TIMEOUT` / `YULEOSH_CLAUDE_TIMEOUT`)。
+
+## 10. 证据新鲜度 — 审查步骤 SHALL 校验输入报告的新鲜度
+
+**背景 (2026-08-17 window-anti-pinch r20p)**: pipeline 的 misra-review 步骤读
+`.yuleosh/reports/misra-report.json`（CI Layer 1 生成）。代码更新
+(2b431b9 回绕修复) 后未重跑 CI → 报告停留在旧代码的违规数 (0 违规) →
+假绿放行 24 条真实违规 (CI 全量扫描 66 条 vs pipeline 内部评审 0 条)。
+同日平台修复: `review_misra_ci._check_report_staleness` (commit 3f03aee9)。
+
+**SHALL**:
+- 审查/评审步骤读项目级报告 (misra-report.json / 覆盖率 / 静态扫描产物) 时,
+  SHALL 校验报告 mtime 不早于最新代码变更 (git HEAD commit time 或 src/ 最新
+  .c/.h 文件 mtime)。
+- 报告陈旧 → SHALL 降级为 warning/failed (pipeline YELLOW/RED), 永不 passed;
+  输出 SHALL 带 stale 原因字段 + 推荐重新生成报告的命令。
+- 报告显示 required 违规 → 即使报告陈旧也 SHALL failed (违规比陈旧更严重)。
+
+**SHALL NOT**:
+- SHALL NOT 把基于陈旧报告"0 违规"的审查结论当作通过证据。
+- SHALL NOT 用"报告路径存在"代替"报告基于当前代码"。
+
+**MAY**:
+- 无法判断新鲜度 (无 git 且无 src/) → MAY 跳过校验 (避免误报)。
