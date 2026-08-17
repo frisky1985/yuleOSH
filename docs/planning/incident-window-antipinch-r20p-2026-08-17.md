@@ -256,3 +256,41 @@ spec 契约覆盖完整且 fidelity 高（17 行为护栏全引用、14 参数�
 LLM 在生成时看不到它，只能靠 repair 轮"打地鼠"。**链接级约束必须进 spec 契约**
 （LLM 可见层），机器护栏只作背兜。教训 7 的推论：约束要下沉到 LLM 的第一
 次生成，而不是等验证失败再修。
+
+## r21h 复验（2026-08-18 06:25，run-20260818-062535）
+
+**结论**：cflags oracle 生效（验证命令含 -Wall -Wextra -Werror 且第 1 轮就 FAIL），
+但 **codegen repair 回路仍无法收敛**，5 blockers：
+
+| 严重度 | 问题 | 本质 |
+|--------|------|------|
+| critical | 生成 window_control.c 从不调用 window_modes_check_pinch() — 防夹检测整体失效 | LLM 全量重写删核心路径 |
+| critical | PINCH_REVERSAL 缺 G-04 四步启动序列 + 反转后不设 cooldownUntilMs | LLM 全量重写删核心路径 |
+| major | window_modes_check_pinch 缺防夹区门控 (window_position_in_pinch_zone) | LLM 全量重写删核心路径 |
+| major | **G-17 未用参数复发**：window_modes.c lastCheckTimeMs 无 (void) 抑制，-Werror 4 轮未修复（cflags 抓到了但 LLM 修不好） | compile-error repair 无 seed 模板 |
+| major | **ASIL_B 跨工件不一致**：架构/测试计划写 ASIL_B（正确，yuleosh.yaml 声明），PRD 却写"不自行声明"（r21g 同代码 PRD 写对了 — LLM 随机性） | ASIL 纪律段措辞歧义 |
+
+**统一根因 #14（平台）**：
+1. **compile-error repair 路径不给 seed 模板** — 只贴编译器输出，LLM 4 轮
+   整体重写都丢 (void) 抑制/防夹调用/反转序列。r21g 的 seed 粘贴只加了
+   forbidden 特征路径，compile/structural 路径没有
+2. **ASIL 纪律段 configured 分支有歧义** — "If the spec does not state an
+   ASIL level, describe safety-criticality in functional terms" 让 LLM 在
+   spec 未提 ASIL 时忽略配置声明的 ASIL_B（r21h PRD 声称"不声明"）
+
+**修复（第 14 个平台修复）**：
+1. **`_format_seed_hints()` 通用化**：compile-error repair + brainstorm 两条
+   路径都把错误涉及文件的 seed 基线实现（≤6000 字符）贴进修复消息，标注
+   "SHALL 以此为基础做最小修改，禁止整体重写"——(void) 抑制、防夹调用、
+   反转序列、防夹区门控都有具体模板可抄
+2. **ASIL 纪律段修订**：configured 分支明确 "ASIL level IS DECLARED by the
+   platform config — PRD SHALL state this exact level; Do NOT claim the
+   project has no ASIL level just because spec.md omits the word"
+3. 附带：+2 新回归（repair/brainstorm seed 粘贴），r21g 修复延续
+
+**验证**：+3 新回归；全量 **12986 passed / 0 failed**。
+
+**教训 9**：repair 回路给 LLM 的反馈必须**含正确实现模板**（seed 基线），
+不能只给错误本身——"参考 seed 基线"是空话，贴出 seed 代码才是可行动的指令。
+教训 8 的推论：LLM 修复链路（生成→验证→修复→再验证）每一环都要给足上下文，
+否则 LLM 只能猜。
