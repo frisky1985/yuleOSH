@@ -188,3 +188,40 @@ skipped_api_mismatch/deployed_behavior_regression）+ store 失败不入库 + lo
 的「读仓库」能力前置为共享事实快照，让所有文档步骤建立在真实数据上。
 纪律段（ASIL 等）在「无配置」时必须注入**禁止动作**，而不是静默跳过——
 空配置是 LLM 自由发挥的温床。
+
+## r21f 复验（2026-08-18 05:44，run-20260818-054404）
+
+**结论**：repo_facts 修复**验证生效**——claude-review 明确"PRD/架构/测试计划
+整体忠实于 spec 契约"（r21e 的 4 个文档幻觉 blocker 全部消失）。但 step 12
+仍 RED，**3 blockers 全部指向 codegen 编译纪律**，行为护栏正确拦截（codegen
+failed → deploy 跳过 → src/ 零污染）。
+
+| 严重度 | 问题 | 本质 |
+|--------|------|------|
+| critical | codegen 产物 window_modes.c 缺 `(void)lastCheckTimeMs;` 抑制，`-Wall -Wextra -Werror` 下编译失败（真实 src:174 有抑制，生成文件丢失） | 生成代码退化 |
+| major | repair 回路验证 oracle 太弱：`verify_c` 裸 `gcc -fsyntax-only -Wall`，未用参数警告（-Wextra 独有）被误判 PASS，4 轮 repair 全盲 | 平台 bug |
+| minor | architecture 文档测试框架写 Unity，仓库实际 custom-Check（test-planning 写对了，两文档互斥） | 文档步骤漏 repo_facts |
+
+**统一根因 #12（平台）**：codegen 编译预检不带项目真实警告纪律（裸 -Wall），
+未用参数这类 -Wextra 独有警告被放行；行为验证（真实构建）才报错，但 LLM
+拿到的第一反馈是 ctest-build-failed，修复指令不精准。claude-review 判语：
+"这是『最小级』失败——一个 (void) 转换拖垮整个 run，说明 repair 回路缺
+编译级 oracle 是流程缺陷而非模型能力问题"。
+
+**修复（第 12 个平台修复，bf31d69）**：
+1. `verify_c`/`compile_verify` 新增 `cflags` 参数——项目真实警告纪律
+   （-Wall -Wextra -Werror）下预检，未用参数第 1 轮就暴露给 LLM（错误信息
+   带文件行号，可行动）
+2. `discover_project_cflags()`——从 CMakeLists 自动发现 -W* flags（只提取
+   -W*，排除 -mcpu/-mthumb 等 ARM 交叉 flags）；config.yaml `codegen.cflags`
+   显式配置优先
+3. `build_architecture_prompt` 注入 repo_facts——测试基建描述统一口径
+   （r21f minor）
+4. window spec v1.1.13 新增 **G-17** 护栏："生成的应用源码 SHALL 在项目
+   -Wall -Wextra -Werror 下编译零警告，未用参数必须 (void) 抑制"
+
+**验证**：12 新回归（cflags 10 + arch 2）；全量 **12984 passed / 0 failed**。
+
+**教训 7**：验证的报错信息必须用项目真实编译纪律——bare syntax check 是
+「能编译」，项目构建纪律是「合格」。oracle 弱于生产约束 = repair 回路全盲，
+最小级缺陷也会拖垮整个 run。修复回路每一层的检查必须 >= 生产验收标准。
