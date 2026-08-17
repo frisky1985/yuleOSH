@@ -130,3 +130,25 @@ skipped_api_mismatch/deployed_behavior_regression）+ store 失败不入库 + lo
 
 **教训 4**：确定性步骤的缓存命中必须校验产物 verdict——失败结果缓存化等于
 把 RED 固化成永久假象，比不缓存更危险。缓存是优化，不能改变执行语义。
+
+## r21d 复验（2026-08-18 00:57，run-20260818-005505）
+
+**结论**：step 12 claude-review RED（verdict=disagree）。这次 codegen-deploy
+真重跑了（skipped，planning 模式无生成物），但 development 步骤**误判项目
+现状**——把 42 个测试函数/1227 行的成熟测试体系说成『仅 1 文件 108 行、
+16 条护栏未验证』，计划基于错误前提（如『覆盖率未知可能低于 90%』，实际
+92.85%）。
+
+**根因 #10（平台）**：`_step_claude_dev_planning` 的项目指标统计只收
+`.py/.sh/.html` 源文件和 `.py` 测试文件——**C 项目全部漏计** → LLM 收到
+『0 测试文件』的错误基线写计划。r21b 教训 3（扩展名白名单）的第二个变体。
+
+**修复（4871a9e）**：统计扩展到 .c/.h/.cpp/.hpp（src + tests）；额外注入
+`Test functions: N`（正则数 test_ 函数）与最新覆盖率报告摘要
+（.yuleosh/reports/c-coverage.json line/branch/function rate），让开发计划
+建立在仓库真实数据上。3 回归测试，114 passed。
+
+**教训 5**：planning 步骤的『仓库现状』统计是全项目的共同输入——任何语言
+白名单遗漏都会让 LLM 基于幻觉写计划。claude-review 靠读仓库抓错是最后一道
+防线，但前面应该直接把真实数据喂给 LLM（测试函数数/覆盖率/CI 状态），
+而不是让它猜。
