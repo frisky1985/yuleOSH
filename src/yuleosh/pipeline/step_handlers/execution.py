@@ -412,6 +412,14 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
         super_content = artifacts_read(session.artifacts, "super-analysis")
 
         # --- Build LLM prompt ---
+        # 2026-08-18 r21e 复盘: 注入仓库事实快照 (测试文件列表/框架/ASIL),
+        # 防止 development 计划引用不存在的测试文件 / 把已完成工作列缺口。
+        repo_facts_str = ""
+        try:
+            from yuleosh.pipeline.repo_facts import collect_repo_facts, format_repo_facts
+            repo_facts_str = format_repo_facts(collect_repo_facts(project_dir))
+        except Exception as e:  # pragma: no cover - defensive
+            log.warning("repo_facts collect failed (non-fatal): %s", e)
         system_prompt, user_prompt = build_development_prompt(
             spec_content=spec_content,
             spec_name=Path(session.spec_path).name,
@@ -424,6 +432,7 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
             test_file_count=len(test_files),
             test_func_count=test_func_count,
             coverage_summary=coverage_summary,
+            repo_facts=repo_facts_str,
             git_commits=git_commits,
             git_log=git_log,
         )
@@ -792,12 +801,22 @@ def step_test_planning(session: PipelineSession) -> str:
         architecture_content = artifacts_read(session.artifacts, "architecture")
         dev_plan_content = artifacts_read(session.artifacts, "development")
 
+        # 2026-08-18 r21e 复盘: 注入仓库事实快照 (测试文件/框架/覆盖率),
+        # 防止 test-planning 把自定义 CHECK harness 误述为 Unity。
+        repo_facts_str = ""
+        try:
+            from yuleosh.pipeline.repo_facts import collect_repo_facts, format_repo_facts
+            repo_facts_str = format_repo_facts(collect_repo_facts(session.project_dir))
+        except Exception as e:  # pragma: no cover - defensive
+            log.warning("repo_facts collect failed (non-fatal): %s", e)
+
         # --- Build prompt ---
         system_prompt, user_prompt = build_test_planning_prompt(
             spec_content=spec_content,
             requirements=requirements,
             architecture_content=architecture_content,
             development_plan_content=dev_plan_content,
+            repo_facts=repo_facts_str,
         )
 
         # --- Call LLM ---

@@ -210,8 +210,12 @@ class TestBuildPrdPrompt:
         assert "ASIL_B" in system
         assert "Do NOT invent or self-declare an ASIL class" in system
 
-    def test_no_asil_constraint_when_unconfigured(self, sample_spec_content, sample_requirements, sample_scenarios):
-        """未配置 ASIL → 不注入 ASIL 纪律段 (保持旧行为)."""
+    def test_no_asil_still_injects_discipline(self, sample_spec_content, sample_requirements, sample_scenarios):
+        """2026-08-18 r21e: 未配置 ASIL → 纪律段仍必须注入 (禁止自封)。
+
+        r21e PRD 自造 'ASIL_B (平台配置)' 的根因正是 project_asil='' 时
+        整段不注入 → LLM 自由发挥。无 ASIL 时 prompt 必须明确禁止自封。
+        """
         from yuleosh.pipeline.prompts import build_prd_prompt
 
         system, _ = build_prd_prompt(
@@ -220,7 +224,10 @@ class TestBuildPrdPrompt:
             requirements=sample_requirements,
             scenarios=sample_scenarios,
         )
-        assert "ASIL discipline" not in system
+        assert "ASIL discipline" in system
+        assert "does NOT declare an ASIL level" in system
+        assert "Do NOT invent or self-declare an ASIL class" in system
+        assert "ASIL level TBD by HARA" in system
 
     def test_includes_super_analysis_when_provided(self, sample_spec_content, sample_requirements, sample_scenarios):
         from yuleosh.pipeline.prompts import build_prd_prompt
@@ -500,6 +507,29 @@ class TestBuildTestPlanningPrompt:
         )
         assert "Architecture Analysis" in user
         assert "Development Plan" in user
+
+    def test_includes_repo_facts_when_provided(self, sample_spec_content, sample_requirements):
+        """2026-08-18 r21e: repo_facts 注入 — 测试基建描述必须以机器收集事实为准。"""
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
+
+        _, user = build_test_planning_prompt(
+            spec_content=sample_spec_content,
+            requirements=sample_requirements,
+            repo_facts="# Repository Facts\n- Test files (2): test_window_control.c",
+        )
+        assert "Repository Facts" in user
+        assert "machine-collected" in user
+        assert "test_window_control.c" in user
+
+    def test_omits_repo_facts_when_empty(self, sample_spec_content, sample_requirements):
+        from yuleosh.pipeline.prompts import build_test_planning_prompt
+
+        _, user = build_test_planning_prompt(
+            spec_content=sample_spec_content,
+            requirements=sample_requirements,
+            repo_facts="",
+        )
+        assert "Repository Facts" not in user
 
     def test_handles_empty_requirements(self, sample_spec_content):
         from yuleosh.pipeline.prompts import build_test_planning_prompt

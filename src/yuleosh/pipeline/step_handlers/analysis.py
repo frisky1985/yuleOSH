@@ -263,20 +263,12 @@ def step_hermes_prd(session: PipelineSession) -> str:
         # 项目 ASIL 来源 (2026-08-17 r21b, claude-review minor): PRD 曾自封
         # "ASIL-B/C class" 而 spec 未分级 — ASIL 应源于 HARA (yuleosh.yaml
         # 的 asil 字段或 spec 明确分级), 禁止 PRD 自封安全等级误导集成方。
+        # 2026-08-18 r21e: 来源扩展到项目文档 (project-context.md/README.md
+        # 的 ASIL 行), 且无 ASIL 时 build_prd_prompt 也会注入禁止自封纪律段。
         project_asil = ""
         try:
-            import yaml as _yaml
-            _cfg_candidates = [
-                Path(session.project_dir) / "yuleosh.yaml",
-                Path(session.project_dir) / ".yuleosh.yaml",
-            ]
-            for _cf in _cfg_candidates:
-                if _cf.exists():
-                    _raw = _yaml.safe_load(_cf.read_text(encoding="utf-8")) or {}
-                    _asil = _raw.get("asil")
-                    if _asil:
-                        project_asil = str(_asil)
-                        break
+            from yuleosh.pipeline.repo_facts import get_project_asil
+            project_asil = get_project_asil(session.project_dir)
         except Exception as e:  # pragma: no cover - defensive
             log.warning("project asil load failed (non-fatal): %s", e)
 

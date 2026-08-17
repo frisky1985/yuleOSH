@@ -208,6 +208,20 @@ def build_prd_prompt(
             "- If you cite an ASIL level, it MUST come from the project config above or the "
             "spec — never from general automotive assumptions.\n\n"
         )
+    else:
+        # 2026-08-18 r21e: 无 ASIL 时纪律段也必须注入 (r21e PRD 自造
+        # 'ASIL_B (平台配置)' 的根因正是 project_asil='' 时整段不注入 → LLM 自由发挥)。
+        system_prompt += (
+            "CRITICAL — ASIL discipline (2026-08-17, r21b; 2026-08-18 r21e):\n"
+            "- The project does NOT declare an ASIL level (no yuleosh.yaml asil "
+            "field, no ASIL line in project-context.md / README.md, and the spec "
+            "does not grade it).\n"
+            "- Do NOT invent or self-declare an ASIL class anywhere in the PRD "
+            "(e.g. do not write \"ASIL_B (平台配置)\" or \"ASIL-B/C class\").\n"
+            "- Describe safety-criticality in functional terms without assigning "
+            "an ISO 26262 class. If a class is genuinely needed downstream, mark "
+            "it as \"ASIL level TBD by HARA\" — never invent one.\n\n"
+        )
     system_prompt += (
         "Be thorough and reference specific requirement names and scenario details."
     )
@@ -304,6 +318,7 @@ def build_development_prompt(
     test_file_count: int = 0,
     test_func_count: int = 0,
     coverage_summary: str = "",
+    repo_facts: str = "",
     git_commits: int = 0,
     git_log: str = "",
 ) -> tuple[str, str]:
@@ -350,6 +365,9 @@ def build_development_prompt(
         f"```\n{git_log}\n```"
     )
 
+    if repo_facts:
+        context_parts.append(f"# Repository Facts\n```\n{repo_facts}\n```")
+
     user_prompt = "\n\n---\n\n".join(context_parts)
     user_prompt += "\n\n---\n\nNow produce the development plan, task breakdown, and tech debt identification as Markdown."
     return system_prompt, user_prompt
@@ -364,6 +382,7 @@ def build_test_planning_prompt(
     requirements: list[dict],
     architecture_content: Optional[str] = None,
     development_plan_content: Optional[str] = None,
+    repo_facts: str = "",
 ) -> tuple[str, str]:
     """Build a test-planning prompt that generates a comprehensive test plan.
 
@@ -371,6 +390,12 @@ def build_test_planning_prompt(
     - Test strategy (unit / integration / E2E allocation)
     - Test case → requirement traceability table
     - Coverage targets
+
+    Args:
+        repo_facts: machine-collected repository fact snapshot (test files /
+            framework / coverage / ASIL) injected so the plan is grounded in
+            the real repo (2026-08-18 r21e: plan hallucinated Unity harness
+            and non-existent test files).
 
     Returns:
         Tuple of (system_prompt, user_prompt).
@@ -427,6 +452,12 @@ def build_test_planning_prompt(
     if development_plan_content:
         user_prompt_parts.append(
             f"## Development Plan\n```markdown\n{development_plan_content[:4000]}\n```\n\n"
+        )
+
+    if repo_facts:
+        user_prompt_parts.append(
+            f"## Repository Facts (machine-collected — 测试基建描述必须以此为准)\n"
+            f"```\n{repo_facts}\n```\n\n"
         )
 
     user_prompt_parts.append(
