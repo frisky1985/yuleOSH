@@ -178,9 +178,48 @@ def _build_codex_prompt(spec_content: str, artifacts_block: str,
 """
 
 
+def _deploy_status_note(project_dir: str) -> str:
+    """读取 codegen 部署状态 — claude-review 需要知道"当前 src 是否是
+    已验收基线"而非只看 codegen 坏产物 (2026-08-18, r21k 根因:
+    codegen 4 轮全败 → deploy skipped → 现有 src 未变, 评审却拒绝
+    "无可用产物")。工程诚实: 只陈述事实, 不替评审做结论。"""
+    import json as _json
+
+    note_lines = []
+    deploy_path = Path(project_dir) / ".yuleosh" / "reports" / "codegen-deploy.json"
+    if deploy_path.exists():
+        try:
+            data = _json.loads(deploy_path.read_text(encoding="utf-8"))
+            status = data.get("status", "unknown")
+            note_lines.append(f"- codegen-deploy 状态: {status}")
+            if status in ("skipped_codegen_failed", "skipped_api_mismatch"):
+                note_lines.append(
+                    "- 含义: 本轮 codegen 产物未部署, **现有 src/ 未被覆盖**"
+                    " — 它就是当前可验收的产品状态。"
+                )
+                note_lines.append(
+                    "- 评审时应以**现有 src/ 实际内容**为代码事实 (可自行"
+                    " 编译/测试验证), 不要以 artifacts/generated-code/ 下的"
+                    " 失败产物为准。"
+                )
+                note_lines.append(
+                    "- 若 spec 相对现有 src/ 有**新增需求未实现**, 仍应 block;"
+                    " 若现有实现已满足 spec 契约, 不应因 codegen 失败而拒绝"
+                    " 整个方案。"
+                )
+            elif status == "deployed":
+                note_lines.append("- 含义: 本轮 codegen 产物已部署到 src/ (行为护栏已验证)。")
+        except Exception:
+            note_lines.append("- codegen-deploy.json 读取失败 (忽略)。")
+    else:
+        note_lines.append("- 无 codegen-deploy.json — codegen 未运行或未产生部署报告。")
+    return "\n".join(note_lines)
+
+
 def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
                                 project_dir: str) -> str:
     """Build the Claude review prompt (Chinese, structured JSON output)."""
+    deploy_note = _deploy_status_note(project_dir)
     return f"""你在 yuleOSH 流水线中担任方案评审 agent（角色 architect）。
 对当前建议/方案进行评审与头脑风暴，给出独立结论。不要取悦任何人，
 以证据和工程判断为准。
@@ -191,6 +230,9 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
 
 待评审方案/建议:
 {artifacts_block[:ARTIFACT_INJECT_LIMIT]}
+
+代码部署状态:
+{deploy_note}
 
 评审要求:
 1. 对照 spec 检查方案是否满足需求、有无遗漏或过度设计。
