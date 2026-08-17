@@ -109,5 +109,7 @@ class TestCollectSeedContract:
         c = _collect_seed_contract(proj)
         assert "src/app/src/window_control.c" in c
         assert "window_control_process" in c["src/app/src/window_control.c"]
-        # 全部 7 个实现文件都有契约
-        assert len(c) == 7
+        # 全部实现文件都有契约。8/16 hal_nvm.h 加入 (SW-006 NVM) 后为 8 个
+        # (window_config/control/modes/position + hal_hall/motor/nvm/timer)；
+        # 2026-08-17 全量回归暴露旧断言 7 未同步。
+        assert len(c) == 8
