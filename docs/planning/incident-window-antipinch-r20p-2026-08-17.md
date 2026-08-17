@@ -110,3 +110,23 @@ LLM repair 无从下手。**禁止特征把反模式变成显式指令**（"这�
 3. 推送 11 commits + 更新 TASK_STATUS（CI Layer1 按当前 misra 实际修正）
 4. 重跑 pipeline（从 step 14 起，带上已提交的扫描器修复），预期 P0 门禁 /
    code-review / integration 三关转绿
+
+## r21c 复验（2026-08-17 22:12，run-20260817-215217）
+
+**结论**：前 13 步全绿（claude-review passed/agree ✅，r21b 在此 failed），
+step 14 codex-verify RED（2 defect：window_position.h 缺 WindowPositionState
+枚举 + codegen 部署失败）。**但 codegen 失败是缓存假象**——codegen-deploy
+步骤在 21:55:20 与 development 同秒完成，直接命中 r21b 的失败缓存。
+
+**根因 #9（平台）**：step_cache `store()` 只查文件存在、不查产物 status →
+r21b 失败结果（`skipped_codegen_failed`）被当成功入库；r21c 指纹相同
+（spec/src 未变）→ `lookup()` 命中失败缓存 → **codegen 从未重跑**，把上一次
+RED 固化进后续 run。
+
+**修复（e55bf157）**：`FAILED_STATUSES` 集合（failed/error/skipped_codegen_failed/
+skipped_api_mismatch/deployed_behavior_regression）+ store 失败不入库 + lookup
+失败缓存判 miss（历史脏缓存也失效）。4 回归测试，17 passed。
+注意：合法 `skipped`/`empty`（planning 模式/保护用户代码）仍可缓存。
+
+**教训 4**：确定性步骤的缓存命中必须校验产物 verdict——失败结果缓存化等于
+把 RED 固化成永久假象，比不缓存更危险。缓存是优化，不能改变执行语义。
