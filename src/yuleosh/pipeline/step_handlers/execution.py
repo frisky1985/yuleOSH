@@ -65,7 +65,9 @@ def step_claude_arch(session: PipelineSession) -> str:
                 indent = "  " * (len(Path(rel_dir).parts) - 1) if len(Path(rel_dir).parts) > 1 else ""
                 src_tree_lines.append(f"{indent}{Path(rel_dir).name}/")
                 for f in sorted(files):
-                    if f.endswith((".py", ".sh", ".html", ".js", ".css", ".ts", ".go", ".rs", ".json", ".toml", ".yaml", ".yml", ".md")):
+                    if f.endswith((".py", ".sh", ".html", ".js", ".css", ".ts",
+                                   ".go", ".rs", ".json", ".toml", ".yaml",
+                                   ".yml", ".md", ".c", ".h", ".cpp", ".hpp")):
                         source_files.append(str(Path(rel_dir) / f))
                         src_tree_lines.append(f"{indent}  {f}")
                         ext = Path(f).suffix
@@ -79,6 +81,10 @@ def step_claude_arch(session: PipelineSession) -> str:
                             tech_stack.add("Web (HTML/JS/CSS)")
                         elif ext == ".sh":
                             tech_stack.add("Shell")
+                        elif ext in (".c", ".h"):
+                            tech_stack.add("C")
+                        elif ext in (".cpp", ".hpp"):
+                            tech_stack.add("C++")
 
         # Read spec
         spec_path = Path(session.spec_path)
