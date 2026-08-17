@@ -553,6 +553,7 @@ class TestBehaviorRegressionRepair:
         engine = CodegenEngine(
             llm_client=llm,
             max_retries=2,
+            output_dir=out_dir,
             seed_dir=session.project_dir,
             forbidden_features={
                 "src/pos.py": ["(int64_t)"],
@@ -568,6 +569,48 @@ class TestBehaviorRegressionRepair:
         # 最终磁盘 = 移除 int64 后的实现
         final = (out_dir / "src" / "pos.py").read_text()
         assert "(int64_t)" not in final
+
+    def test_forbidden_feature_message_includes_seed_baseline(self, tmp_path):
+        """2026-08-18 r21g: repair 消息必须贴 seed 基线实现 — '参考 seed 基线'
+        无具体代码时 LLM 无从下手 (r21g 4 轮 repair 全重写回 int64)。"""
+        calls = []
+
+        def llm(system, user, **kw):
+            calls.append(user)
+            return {"content": _marker_output(
+                "src/pos.py", "python",
+                "def get_mm(pos, mm_per_pulse):\n"
+                "    return (int64_t)(pos * mm_per_pulse) // 1000\n")}
+
+        session = _session(tmp_path)
+        out_dir = Path(session.session_dir) / "generated"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "src").mkdir(parents=True, exist_ok=True)
+        # seed 基线是 32 位实现 (禁止特征的正确形态)
+        (out_dir / "src" / "pos.py").write_text(
+            "def get_mm(pos, mm_per_pulse):\n"
+            "    return (pos * mm_per_pulse) // 1000\n")
+
+        engine = CodegenEngine(
+            llm_client=llm,
+            max_retries=1,
+            output_dir=out_dir,
+            seed_dir=session.project_dir,
+            forbidden_features={
+                "src/pos.py": ["(int64_t)"],
+            },
+        )
+        engine.seed_dir = out_dir
+        result = engine.generate(session, "sys", "user")
+
+        assert result.status == "failed"
+        # 第二轮 (repair) 消息包含 seed 基线代码块, 且标注不可重写回反模式
+        assert "seed 基线实现" in calls[1]
+        assert "src/pos.py" in calls[1]
+        assert "禁止重写回反模式" in calls[1]
+        # seed 基线里的正确实现 (无 int64) 出现在消息中, 且该实现本身无 int64
+        seed_block = calls[1].split("seed 基线实现")[1]
+        assert "(pos * mm_per_pulse) // 1000" in seed_block
 
 
 class TestTruncationDetection:

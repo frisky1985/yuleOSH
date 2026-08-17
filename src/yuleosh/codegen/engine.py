@@ -959,13 +959,33 @@ class CodegenEngine:
                     )
         if not bad_blocks:
             return prior_errors
+        # 2026-08-18 r21g 复盘: "参考 seed 基线实现" 无具体代码时 LLM 无从
+        # 下手 — r21g 4 轮 repair 全部重写回 (int64_t)。有 seed 快照时把
+        # 违规文件的基线版本贴进 repair 消息, 让修复有具体模板可抄。
+        seed_hints: list[str] = []
+        for pattern in sorted(self.forbidden_features):
+            for f in sorted(out_dir.glob(pattern)):
+                if not f.is_file():
+                    continue
+                rel = str(f.relative_to(out_dir))
+                seed_content = self._seed_baseline.get(rel)
+                if seed_content:
+                    truncated = len(seed_content) > 6000
+                    seed_hints.append(
+                        f"\n### {rel} — seed 基线实现 (SHALL 以此为基础做"
+                        f"最小修改, 禁止重写回反模式):\n```c\n"
+                        f"{seed_content[:6000]}"
+                        f"{'... (truncated)' if truncated else ''}\n```\n"
+                    )
         new_errors = (
             "## ⚠️ 禁止特征出现 — 生成代码引入了链接级/语义级反模式 "
             "(2026-08-17)\n"
             "以下文件包含项目配置的禁止子串 (如 ARM freestanding 的 int64 "
             "除法会导致 __aeabi_ldivmod 链接失败)。SHALL 移除:\n"
             + "\n".join(bad_blocks)
-            + "\n请改用 32 位运算或乘后比较 (参考 seed 基线实现)。\n"
+            + "\n请改用 32 位运算或乘后比较。\n"
+            + (("\n".join(seed_hints)) if seed_hints
+               else "\n(无 seed 基线快照 — 请以项目 src/ 对应文件为参考)\n")
         )
         return (prior_errors + "\n" + new_errors).strip() if prior_errors else new_errors
 
