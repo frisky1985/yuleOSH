@@ -224,31 +224,81 @@ def _run_cli(cmd: list[str], timeout: int, cwd: str | None,
 
 
 def _parse_json_output(stdout: str) -> dict | None:
-    """Extract the first JSON object from CLI stdout (tolerates noise)."""
-    # Try direct parse first
-    try:
-        parsed = json.loads(stdout.strip())
-        if isinstance(parsed, dict):
-            return parsed
-    except json.JSONDecodeError:
-        pass
-    # Fallback: find first { ... } balanced block
-    start = stdout.find("{")
-    if start == -1:
+    """Extract the first JSON object from CLI stdout (tolerates noise).
+
+    增强 (2026-08-18, r21k): claude -p 输出常带 ```json markdown 围栏,
+    且 JSON 字符串内可能嵌花括号/换行导致 naive 平衡块截断。防御链:
+    1) 直接 parse; 2) 剥离围栏后 parse; 3) 逐候选平衡块 parse (跳过
+    字符串内部, 首个失败继续找下一个); 4) 容错清理后重试。
+    """
+    import re as _re
+
+    def _try(text: str) -> dict | None:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+        # 容错: 去掉非法控制字符后重试 (LLM 有时在字符串里放裸 \x0c 等)
+        try:
+            cleaned = "".join(
+                ch if (ch >= " " or ch in "\n\r\t") else " "
+                for ch in text
+            )
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
         return None
-    depth = 0
-    for i in range(start, len(stdout)):
-        if stdout[i] == "{":
-            depth += 1
-        elif stdout[i] == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    parsed = json.loads(stdout[start:i + 1])
-                    if isinstance(parsed, dict):
-                        return parsed
-                except json.JSONDecodeError:
-                    return None
+
+    # 1) 直接 parse
+    r = _try(stdout.strip())
+    if r is not None:
+        return r
+    # 2) 剥离 markdown 代码围栏 (```json ... ```)
+    stripped = stdout.strip()
+    if stripped.startswith("```"):
+        stripped = _re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", stripped)
+        stripped = _re.sub(r"\s*```\s*$", "", stripped)
+        r = _try(stripped)
+        if r is not None:
+            return r
+    # 3) 找 { ... } 平衡块 — 跳过字符串内部 (引号转义感知), 首个失败
+    #    继续找下一个候选 (r21k: 字符串内花括号会截错, 不能放弃后续)。
+    start = 0
+    while True:
+        start = stdout.find("{", start)
+        if start == -1:
+            return None
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(stdout)):
+            ch = stdout[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    r = _try(stdout[start:i + 1])
+                    if r is not None:
+                        return r
+                    # 这个候选无效 — 从它之后继续找下一个 { (嵌套对象
+                    # 的起始也可能被 find 命中, 但 _try 会过滤)
+                    break
+        start = start + 1
     return None
 
 
