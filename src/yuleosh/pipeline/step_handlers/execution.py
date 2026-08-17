@@ -212,15 +212,18 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         # (防夹检测调用/反转序列) 未被 LLM 全量重写删除。session.config 未
         # 注入时回退读项目配置文件, 保证独立运行时也生效。
         structural_features = cfg.get("structural_features") or {}
-        if not structural_features:
+        forbidden_features = cfg.get("forbidden_features") or {}
+        if not structural_features or not forbidden_features:
             try:
                 _proj_cfg = project_dir / "pipeline" / "config.yaml"
                 if _proj_cfg.exists():
                     import yaml as _yaml
                     _raw = _yaml.safe_load(_proj_cfg.read_text(encoding="utf-8")) or {}
-                    structural_features = (
-                        (_raw.get("codegen") or {}).get("structural_features") or {}
-                    )
+                    _cg = _raw.get("codegen") or {}
+                    if not structural_features:
+                        structural_features = _cg.get("structural_features") or {}
+                    if not forbidden_features:
+                        forbidden_features = _cg.get("forbidden_features") or {}
             except Exception as e:
                 log.warning("structural_features load failed (non-fatal): %s", e)
         skills = cfg.get("skills") or ["autosar-coding"]
@@ -277,6 +280,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             seed_contract=_collect_seed_contract(project_dir),
             behavior_verify=_make_behavior_verify(project_dir),
             structural_features=structural_features,
+            forbidden_features=forbidden_features,
         )
         result = engine.generate(
             session, system_prompt, user_prompt,

@@ -521,6 +521,54 @@ class TestBehaviorRegressionRepair:
         assert "window_modes_check_pinch" in final
         assert "WINDOW_CONTROL_PINCH_REVERSAL" in final
 
+    def test_generate_forbidden_feature_blocks_repair(self, tmp_path):
+        """r21b: LLM 生成 int64 除法 (ARM __aeabi_ldivmod 链接失败), 行为验证
+        报链接错误但不指代码行 → 禁止特征在链接前直接点名子串, LLM 收到明确
+        修复指令后移除。"""
+        calls = []
+
+        def llm(system, user, **kw):
+            calls.append(user)
+            if len(calls) == 1:
+                # Round 1: 编译有效但用 int64 除法 (ARM 会链接失败)
+                return {"content": _marker_output(
+                    "src/pos.py", "python",
+                    "def get_mm(pos, mm_per_pulse):\n"
+                    "    return (int64_t)(pos * mm_per_pulse) // 1000\n")}
+            # Round 2: LLM 按禁止特征指令移除 int64
+            return {"content": _marker_output(
+                "src/pos.py", "python",
+                "def get_mm(pos, mm_per_pulse):\n"
+                "    return (pos * mm_per_pulse) // 1000\n")}
+
+        session = _session(tmp_path)
+        out_dir = Path(session.session_dir) / "generated"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "src").mkdir(parents=True, exist_ok=True)
+        # seed 基线是 32 位实现
+        (out_dir / "src" / "pos.py").write_text(
+            "def get_mm(pos, mm_per_pulse):\n"
+            "    return (pos * mm_per_pulse) // 1000\n")
+
+        engine = CodegenEngine(
+            llm_client=llm,
+            max_retries=2,
+            seed_dir=session.project_dir,
+            forbidden_features={
+                "src/pos.py": ["(int64_t)"],
+            },
+        )
+        engine.seed_dir = out_dir
+        result = engine.generate(session, "sys", "user")
+
+        assert result.status == "verified"
+        # Round-2 prompt 必须带禁止特征移除指令
+        assert "禁止特征出现" in calls[1]
+        assert "(int64_t)" in calls[1]
+        # 最终磁盘 = 移除 int64 后的实现
+        final = (out_dir / "src" / "pos.py").read_text()
+        assert "(int64_t)" not in final
+
 
 class TestTruncationDetection:
     """headlamp dogfood #4: LLM 输出截断 (大项目超 max_tokens)."""

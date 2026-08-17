@@ -228,6 +228,7 @@ class CodegenEngine:
         behavior_verify: Optional[Callable] = None,
         brainstorm_after_failures: int = 3,
         structural_features: Optional[dict[str, list[str]]] = None,
+        forbidden_features: Optional[dict[str, list[str]]] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
@@ -253,6 +254,12 @@ class CodegenEngine:
         # 反转序列) 是静默回归, 行为验证可能因环境 (ARM 链接) 根本没跑到;
         # 特征级检查在链接之前拦截, 给 LLM 明确修复指令。
         self.structural_features = structural_features or {}
+        # 禁止特征 (2026-08-17, r21b): {rel_path_glob: [禁止出现的子串]} —
+        # 链接级/语义级反模式。行为验证能报链接错误 (如 ARM __aeabi_ldivmod
+        # 因 int64 除法), 但 4 轮 repair 里 LLM 不理解为啥要改 (报错信息是
+        # 链接器输出, 不指代码行)。禁止特征在链接前直接说"这里不能出现
+        # (int64_t)", 修复指令明确可执行。
+        self.forbidden_features = forbidden_features or {}
         # seed 基线内存快照 (rel_path -> content), _sync_seed 后立即抓取,
         # 供头脑风暴强制恢复 — 不依赖 seed_dir 磁盘 (测试里 seed_dir 可能
         # 指向 out_dir, 磁盘已被 LLM 污染)。
@@ -368,6 +375,12 @@ class CodegenEngine:
                 # 编译通过但核心功能路径被删 (防夹检测/反转序列) — 行为验证
                 # 可能因环境 (ARM 链接) 无法执行, 特征级检查在链接前拦截。
                 extra_errors = self._check_structural_features(
+                    out_dir, extra_errors
+                )
+                # ── 禁止特征 (2026-08-17, r21b) ─────────────────────
+                # 链接级反模式 (int64 除法 → ARM __aeabi_ldivmod): 行为验证
+                # 报错但不指代码行, LLM 4 轮修不好; 这里直接点名禁止子串。
+                extra_errors = self._check_forbidden_features(
                     out_dir, extra_errors
                 )
                 if self.behavior_verify is not None:
@@ -905,6 +918,51 @@ class CodegenEngine:
             "状态入口/启动序列等)。即使能链接, 功能也静默丢失 — SHALL 恢复:\n"
             + "\n".join(missing_blocks)
             + "\n请恢复这些特征对应的完整功能路径 (可从 seed 基线参考实现)。\n"
+        )
+        return (prior_errors + "\n" + new_errors).strip() if prior_errors else new_errors
+
+    def _check_forbidden_features(self, out_dir: Path, prior_errors: str = "") -> str:
+        """Check generated code does NOT contain forbidden anti-patterns.
+
+        forbidden_features: {rel_path_glob: [禁止出现的子串]} — 链接级/语义级
+        反模式 (如 ARM freestanding 的 int64 除法 `(int64_t)` → __aeabi_ldivmod
+        未定义)。行为验证能报链接错误, 但错误信息是链接器输出不指代码行,
+        4 轮 repair 里 LLM 不理解为啥要改; 这里在链接前直接点名禁止子串,
+        修复指令明确可执行。
+
+        Returns error text (prior_errors + 新发现的禁止特征), "" when ok.
+        """
+        if not self.forbidden_features:
+            return prior_errors
+        bad_blocks: list[str] = []
+        for pattern, forbidden in sorted(self.forbidden_features.items()):
+            if not forbidden:
+                continue
+            matched = list(out_dir.glob(pattern))
+            if not matched:
+                continue
+            for f in matched:
+                if not f.is_file():
+                    continue
+                try:
+                    content = f.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                found = [feat for feat in forbidden if feat in content]
+                if found:
+                    bad_blocks.append(
+                        f"  - {f.relative_to(out_dir)}: 禁止出现 "
+                        f"{', '.join(found)}"
+                    )
+        if not bad_blocks:
+            return prior_errors
+        new_errors = (
+            "## ⚠️ 禁止特征出现 — 生成代码引入了链接级/语义级反模式 "
+            "(2026-08-17)\n"
+            "以下文件包含项目配置的禁止子串 (如 ARM freestanding 的 int64 "
+            "除法会导致 __aeabi_ldivmod 链接失败)。SHALL 移除:\n"
+            + "\n".join(bad_blocks)
+            + "\n请改用 32 位运算或乘后比较 (参考 seed 基线实现)。\n"
         )
         return (prior_errors + "\n" + new_errors).strip() if prior_errors else new_errors
 
