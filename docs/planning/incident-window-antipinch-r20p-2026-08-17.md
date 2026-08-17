@@ -20,13 +20,14 @@ MISRA 全量扫描 24 条业务代码违规（CI L1 拦下正确，pipeline 内�
 | 3 | 陈旧构建目录 | 环境/流程 | cmake-build-coverage 混入 ARM objcopy/linker 产物 → c-unit-test / integration-test 对损坏构建跑 → 假失败 |
 | 4 | misra-review 读陈旧报告 | 平台 bug | misra-review 读 `.yuleosh/reports/misra-report.json`（CI 生成）。代码更新后未重跑 CI → 报告仍 0 违规 → 假绿放行 24 条真实违规（CI 全量 66 条 vs 内部评审 0 条） |
 
-## 平台修复（3 commit，全部 RED→GREEN 回归）
+## 平台修复（4 commit，全部 RED→GREEN 回归）
 
 | commit | 修复 | 验证 |
 |--------|------|------|
 | 44b889d0 | `review_critical_safety.py`：除零扫描器剥离注释+字符串字面量，维护跨行块注释状态 | 25 passed |
 | ed1f9862 | `guardrail.py`：回滚前检查 src 未提交改动（git 仓库）→ 拒绝回滚 → RED 人工介入 | 28 passed |
 | 3f03aee9 | `review_misra_ci.py`：`_check_report_staleness` 报告新鲜度校验，陈旧→warning 永不 passed | 37 passed（4 新回归） |
+| 7e70da2 | `test_c_unit.py`：CMakeLists 变更后 build 目录自动 reconfigure — 陈旧构建假失败机制化 | 55 passed（+1 新回归 test_stale_cmakelists_triggers_reconfigure） |
 
 规则沉淀：RULES.md §10「证据新鲜度」已追加（模板 + 仓库副本同步）。
 
@@ -36,7 +37,9 @@ MISRA 全量扫描 24 条业务代码违规（CI L1 拦下正确，pipeline 内�
 2. **guardrail**：src/ 有未提交改动（人工/主 agent 修复）时绝不回滚，宁可 RED 让人看。
 3. **misra-review**：报告比最新代码旧 → warning + `stale_report` 字段 + 推荐重跑
    `yuleosh ci run 1`；required 违规优先仍 failed。
-4. **验收纪律**（流程层）：验收时先比 session 时间戳 vs 最新 commit 时间，session
+4. **c-unit-test**：CMakeLists.txt 比 build 目录 CMakeCache.txt 新 → 步骤内自动
+   reconfigure（不删目录，保留增量产物）— 陈旧构建不再导致 ctest 假失败。
+5. **验收纪律**（流程层）：验收时先比 session 时间戳 vs 最新 commit 时间，session
    早于提交 = 证据过期，需重跑 pipeline。
 
 ## 遗留项（真实，按优先级）
