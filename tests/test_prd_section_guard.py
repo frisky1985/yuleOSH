@@ -37,6 +37,8 @@ PRD_COVERS_ALL = (
     "| FR-001 | 提供 HAL 抽象层 | P0 |\n"
     "### 4.7 防夹检测 (SW-004)\n"
     "| FR-020 | 检测防夹 | P0 |\n"
+    "## Out of Scope\n"
+    "多窗口协调、诊断刷写不属于本模块范围。\n"
 )
 
 PRD_MISSING_ONE = (
