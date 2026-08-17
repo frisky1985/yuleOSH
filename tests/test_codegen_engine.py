@@ -789,6 +789,112 @@ class TestEngineReport:
         assert "PASS" in report
 
 
+class TestFinalVerify:
+    """终验机制 (2026-08-18, r21j blocker 2/3): report 必须对应最终磁盘产物。
+
+    循环内 verify 记录的是最后一次 verify 时刻的状态; best-state 回滚 /
+    brainstorm seed 恢复可能覆盖磁盘 → report 失步。_final_verify 对最终
+    产物重跑完整验证链, report 以此为准。
+    """
+
+    def _engine(self, behavior_verify=None, **kw):
+        def llm(system, user, **kw2):
+            return {"content": _marker_output()}
+
+        return CodegenEngine(
+            llm_client=llm, max_retries=1, behavior_verify=behavior_verify, **kw
+        )
+
+    def _session_outdir(self, tmp_path):
+        session = _session(tmp_path)
+        out_dir = Path(session.session_dir) / "generated"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "src").mkdir(parents=True, exist_ok=True)
+        return session, out_dir
+
+    def test_compile_fail_sets_failed_and_skips_behavior(self, tmp_path):
+        """终验编译失败 → status=failed, last_errors 指向最终产物, behavior SKIPPED。"""
+        session, out_dir = self._session_outdir(tmp_path)
+        (out_dir / "src" / "bad.py").write_text("def broken(:\n")
+        engine = self._engine()
+        result = CodegenResult(max_retries=1, output_dir=str(out_dir))
+        engine._final_verify(result, session, out_dir, "python", None, None)
+        assert result.status == "failed"
+        assert "SyntaxError" in result.last_errors or "error" in result.last_errors.lower()
+        assert "SKIPPED" in result.behavior_verify_result
+
+    def test_behavior_fail_keeps_full_text(self, tmp_path):
+        """终验行为失败 → behavior_verify_result 保留全量失败清单 (不截断 500)。"""
+        session, out_dir = self._session_outdir(tmp_path)
+        (out_dir / "src" / "ok.py").write_text("def f():\n    return 1\n")
+
+        long_fail = "FAIL ok.py:1: cond A\n" + ("FAIL ok.py:%d: cond\n" * 55)
+
+        def behavior_verify(out_dir_arg):
+            return long_fail
+
+        engine = self._engine(behavior_verify=behavior_verify)
+        result = CodegenResult(max_retries=1, output_dir=str(out_dir))
+        engine._final_verify(result, session, out_dir, "python", None, None)
+        assert result.status == "failed"
+        assert result.behavior_verify_result == f"FAIL ({long_fail})"
+        # last_errors 必须包含完整 55 条, 不是截断的前 2 条
+        assert result.last_errors.count("FAIL ok.py:") == 56
+        assert "cond A" in result.last_errors
+
+    def test_all_pass_promotes_to_verified(self, tmp_path):
+        """终验全过 (编译 + 契约 + 行为) → 惊喜晋级 verified。"""
+        session, out_dir = self._session_outdir(tmp_path)
+        (out_dir / "src" / "ok.py").write_text("def f():\n    return 1\n")
+
+        def behavior_verify(out_dir_arg):
+            return ""
+
+        engine = self._engine(behavior_verify=behavior_verify)
+        result = CodegenResult(max_retries=1, output_dir=str(out_dir))
+        engine._final_verify(result, session, out_dir, "python", None, None)
+        assert result.status == "verified"
+        assert result.last_errors == ""
+        assert "PASS" in result.behavior_verify_result
+
+    def test_integration_failed_run_report_matches_final_disk(self, tmp_path):
+        """集成: 循环耗尽失败 → report 的 Verification 标注终验且对应最终产物。"""
+        calls = {"n": 0}
+
+        def llm(system, user, **kw):
+            calls["n"] += 1
+            # 每轮都输出编译通过但行为失败的代码
+            return {"content": _marker_output(
+                "src/ok.py", "python", "def f():\n    return 0\n")}
+
+        def behavior_verify(out_dir_arg):
+            content = (Path(out_dir_arg) / "src" / "ok.py").read_text()
+            if "return 1" in content:
+                return ""
+            return "FAIL ok.py:2: f() == 1\nrunner=ctest passed=0 failed=1"
+
+        session = _session(tmp_path)
+        out_dir = Path(session.session_dir) / "generated"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "src").mkdir(parents=True, exist_ok=True)
+        # seed 基线 = 正确实现 (行为通过)
+        (out_dir / "src" / "ok.py").write_text("def f():\n    return 1\n")
+
+        engine = CodegenEngine(
+            llm_client=llm, max_retries=2,
+            seed_dir=session.project_dir,
+            behavior_verify=behavior_verify,
+        )
+        engine.seed_dir = out_dir
+        result = engine.generate(session, "sys", "user")
+        # 循环内所有轮都行为失败 → failed; 终验对最终磁盘产物跑行为也失败
+        assert result.status == "failed"
+        # report 必须可复现: Verification 段标注最终产物终验
+        report = build_codegen_report(result, session)
+        assert "最终产物终验" in report
+        assert "FAIL" in report
+
+
 class TestEnginePrompt:
     def test_codegen_prompt_embeds_spec_and_skills(self):
         sys_p, user_p = build_codegen_prompt("SPEC BODY", "spec.md",

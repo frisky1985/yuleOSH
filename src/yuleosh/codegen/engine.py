@@ -393,7 +393,7 @@ class CodegenEngine:
                             "PASS (临时部署验证: 生成代码暂替 src/ 跑真实测试套件, "
                             "验证后恢复原代码, 0 失败)"
                             if not behavior_errors
-                            else f"FAIL ({behavior_errors[:500]})"
+                            else f"FAIL ({behavior_errors})"
                         )
                         if behavior_errors:
                             extra_errors = (
@@ -501,6 +501,19 @@ class CodegenEngine:
         result.finished_at = datetime.now().isoformat()
         if result.status == "pending":
             result.status = "failed"
+
+        # ── 最终产物终验 (2026-08-18, r21j blocker 2/3 根因) ──────────
+        # 循环内 result.verify / behavior_verify_result 记录的是最后一次
+        # verify 时刻的状态; 之后 best-state 回滚 / brainstorm seed 恢复
+        # 可能覆盖磁盘产物 → report 与最终产物失步 (评审用磁盘实测对不上
+        # report 的 PASS/FAIL)。终验对**最终磁盘产物**重新执行完整验证链,
+        # report 以此为准; 全过则惊喜晋级 verified (部署照常), 否则如实
+        # 报告失败 (含全量失败文本, 不截断到 2 条)。
+        # 例外: result.files 为空 (no-files / 首轮即无有效输出) 时跳过 —
+        # 磁盘产物只是 seed 自身, LLM 没有产出, 不得借终验假晋级。
+        if result.status != "verified" and result.files:
+            self._final_verify(result, session, out_dir, language_hint,
+                               build_cmd, cflags)
 
         result.report_path = str(self._write_report(result, session))
         return result
@@ -996,6 +1009,98 @@ class CodegenEngine:
         )
         return (prior_errors + "\n" + new_errors).strip() if prior_errors else new_errors
 
+    def _final_verify(
+        self,
+        result: CodegenResult,
+        session: PipelineSession,
+        out_dir: Path,
+        language_hint: Optional[str],
+        build_cmd: Optional[list[str]],
+        cflags: Optional[list[str]],
+    ) -> None:
+        """对最终磁盘产物重新执行完整验证链 (2026-08-18, r21j blocker 2/3)。
+
+        循环结束时磁盘产物可能已被 best-state 回滚 / brainstorm seed 恢复
+        覆盖 — 循环内记录的 verify 结果对应的是最后一次 verify 时刻的
+        产物, 与最终磁盘状态失步。终验保证 report 描述的就是评审/部署
+        会看到的精确产物:
+
+        1. compile verify (同一 verifier + cflags, -Werror 编译门)
+        2. compile ok → seed 契约 + 结构性 smoke + 禁止特征检查
+        3. compile + 契约 ok → behavior verify (真实测试套件临时部署)
+        4. 全过 → status 惊喜晋级 verified; 任一失败 → status=failed 且
+           last_errors 为最终产物全量失败文本 (不截断)。
+
+        注意: 终验的行为验证会再次临时部署/回滚 src/, 与循环内行为验证
+        互不影响 (每次都是独立备份/恢复)。
+        """
+        verify_files = self._collect_code_files(out_dir)
+        if self.verifier is compilers.compile_verify:
+            verify = self.verifier(
+                verify_files, language=language_hint, build_cmd=build_cmd,
+                project_root=getattr(session, "project_dir", None),
+                cflags=cflags,
+            )
+        else:
+            verify = self.verifier(
+                verify_files, language=language_hint, build_cmd=build_cmd,
+                cflags=cflags,
+            )
+        result.verify = verify
+        if not verify.get("ok"):
+            result.status = "failed"
+            result.last_errors = (
+                (verify.get("errors")
+                 or f"final verification failed ({verify.get('command')})")
+            )
+            result.behavior_verify_result = (
+                "SKIPPED (final product fails -Werror compile — behavior run "
+                "would be invalid)"
+            )
+            return
+
+        # 编译通过 → 契约链检查
+        extra = self._check_seed_contract(out_dir)
+        extra = self._check_structural_features(out_dir, extra)
+        extra = self._check_forbidden_features(out_dir, extra)
+        if extra:
+            result.status = "failed"
+            result.last_errors = extra
+            result.behavior_verify_result = (
+                "SKIPPED (final product fails contract checks — behavior run "
+                "would be invalid)"
+            )
+            return
+
+        # 编译 + 契约全过 → 行为验证 (真实测试套件)
+        if self.behavior_verify is not None:
+            try:
+                behavior_errors = self.behavior_verify(out_dir)
+                result.behavior_verify_result = (
+                    "PASS (临时部署验证: 生成代码暂替 src/ 跑真实测试套件, "
+                    "验证后恢复原代码, 0 失败)"
+                    if not behavior_errors
+                    else f"FAIL ({behavior_errors})"
+                )
+                if behavior_errors:
+                    result.status = "failed"
+                    result.last_errors = behavior_errors
+            except Exception as e:  # pragma: no cover - defensive
+                log.warning("Codegen final behavior verify failed: %s", e)
+                result.behavior_verify_result = f"ERROR ({e})"
+        else:
+            result.behavior_verify_result = (
+                "SKIPPED (no behavior_verify configured)"
+            )
+
+        if result.status != "failed":
+            result.status = "verified"
+            result.last_errors = ""
+            log.info(
+                "Codegen FINAL VERIFY: final product passed all checks — "
+                "promoted to verified"
+            )
+
     def _snapshot_files(self, out_dir: Path) -> dict[str, str]:
         snap: dict[str, str] = {}
         for p in self._collect_code_files(out_dir):
@@ -1153,8 +1258,14 @@ def build_codegen_report(result: CodegenResult, session: PipelineSession) -> str
     verify = result.verify or {}
     if verify:
         ok = "✅ PASS" if verify.get("ok") else "❌ FAIL"
+        # 2026-08-18 (r21j): status != verified 时 verify 是终验对最终
+        # 磁盘产物的结果; verified 时是循环内通过轮的结果 (产物未再变)。
+        final_note = (
+            "" if result.status == "verified"
+            else " *(最终产物终验 — 对应磁盘上实际产物, 非中间迭代)*"
+        )
         lines += [
-            f"- Result: {ok}",
+            f"- Result: {ok}{final_note}",
             f"- Language: {verify.get('language', 'unknown')}",
             f"- Command: `{verify.get('command', '')}`",
             f"- Return code: {verify.get('returncode', '?')}",
@@ -1179,10 +1290,10 @@ def build_codegen_report(result: CodegenResult, session: PipelineSession) -> str
     if result.last_errors:
         lines += [
             f"- Attempts: {result.rounds}",
-            f"- Last errors:",
+            f"- Last errors ({len(result.last_errors)} chars, 全量失败清单):",
             "",
             "```",
-            result.last_errors[:2000],
+            result.last_errors[:8000],
             "```",
         ]
     else:
