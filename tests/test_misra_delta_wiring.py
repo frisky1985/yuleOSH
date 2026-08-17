@@ -170,6 +170,28 @@ class TestExpandHeaderDependents:
         expanded = _expand_header_dependents(str(git_repo), changed)
         assert "src/lonely.h" in expanded
 
+    def test_artifacts_dir_excluded_from_header_expansion(self, git_repo):
+        """2026-08-17 (window-anti-pinch): artifacts/ 历史 codegen 快照不得
+        被 header 依赖扩展收进扫描集（否则 MISRA 1164 条假阳性）。
+
+        修复前 _expand_header_dependents os.walk 不排除 artifacts/ →
+        artifacts/generated-code/run-*/ 下 include 同一头文件的快照全进扫描集。
+        """
+        src = git_repo / "src"
+        src.mkdir()
+        (src / "impl.c").write_text('#include "config.h"\nint x;\n')
+        (src / "config.h").write_text("#define CFG 1\n")
+        # artifacts/ 下历史快照也 include 同一头文件（pipeline codegen 产物）
+        artifacts = git_repo / "artifacts" / "generated-code" / "run-20260817-000000"
+        artifacts.mkdir(parents=True)
+        (artifacts / "impl.c").write_text('#include "config.h"\nint stale_x;\n')
+        _commit_all(git_repo, "initial")
+        (src / "config.h").write_text("#define CFG 2\n")
+        changed = _collect_delta_files(str(git_repo))
+        expanded = _expand_header_dependents(str(git_repo), changed)
+        assert "src/impl.c" in expanded
+        assert "artifacts/generated-code/run-20260817-000000/impl.c" not in expanded
+
 
 # ===================================================================
 # 接线验证：L1 delta / L2 full（layer_executor）

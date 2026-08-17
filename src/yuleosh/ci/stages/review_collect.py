@@ -126,9 +126,14 @@ def _expand_header_dependents(project_dir: str, changed_files: list[str]) -> lis
     include_re = re.compile(r'^\s*#\s*include\s*[<"]([^">]+)[>"]')
     for root, dirs, files in os.walk(project_dir):
         # Skip VCS / build / dependency dirs — same policy as _find_c_sources
+        # 2026-08-17 (window-anti-pinch): artifacts/ 存放 pipeline codegen 历史
+        # 快照（几十个 run），header 依赖扩展把它们全收进 MISRA 扫描集 → 1164
+        # 条假阳性（真实 72 条）。artifacts/ + .yuleosh/ 必须排除。
         dirs[:] = [d for d in dirs
-                   if not d.startswith(".") and d != "__pycache__"
-                   and d not in ("node_modules", "build", "dist", "third_party")]
+                   if not d.startswith(".")
+                   and d != "__pycache__"
+                   and d not in ("node_modules", "build", "dist",
+                                 "third_party", "artifacts", ".yuleosh")]
         for name in files:
             if not name.endswith((".c", ".cpp")):
                 continue
