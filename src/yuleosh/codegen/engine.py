@@ -227,6 +227,7 @@ class CodegenEngine:
         seed_contract: Optional[dict[str, set[str]]] = None,
         behavior_verify: Optional[Callable] = None,
         brainstorm_after_failures: int = 3,
+        structural_features: Optional[dict[str, list[str]]] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
@@ -246,6 +247,12 @@ class CodegenEngine:
         # 3 次失败 → 头脑风暴 (2026-08-16, 老板指令): 连续失败达到阈值时
         # 引擎做失败模式分析 + 强制恢复 seed 基线, 下一轮用脑暴指令。
         self.brainstorm_after_failures = max(1, int(brainstorm_after_failures))
+        # 结构性 smoke 特征 (2026-08-17, window-anti-pinch r21): 项目配置的
+        # {rel_path_glob: [必须保留的特征子串]} — 编译通过后、行为验证前
+        # 检查。LLM 全量重写时"编译能过但删了核心功能路径" (防夹检测/
+        # 反转序列) 是静默回归, 行为验证可能因环境 (ARM 链接) 根本没跑到;
+        # 特征级检查在链接之前拦截, 给 LLM 明确修复指令。
+        self.structural_features = structural_features or {}
         # seed 基线内存快照 (rel_path -> content), _sync_seed 后立即抓取,
         # 供头脑风暴强制恢复 — 不依赖 seed_dir 磁盘 (测试里 seed_dir 可能
         # 指向 out_dir, 磁盘已被 LLM 污染)。
@@ -357,6 +364,12 @@ class CodegenEngine:
                 #   C) seed 契约: 生成代码不得删除既有公共函数
                 #   A) 行为验证: 真实测试套件跑一遍生成代码
                 extra_errors = self._check_seed_contract(out_dir)
+                # ── 结构性 smoke 特征 (2026-08-17) ──────────────────
+                # 编译通过但核心功能路径被删 (防夹检测/反转序列) — 行为验证
+                # 可能因环境 (ARM 链接) 无法执行, 特征级检查在链接前拦截。
+                extra_errors = self._check_structural_features(
+                    out_dir, extra_errors
+                )
                 if self.behavior_verify is not None:
                     try:
                         behavior_errors = self.behavior_verify(out_dir)
@@ -847,8 +860,55 @@ class CodegenEngine:
             + "\n请恢复这些函数的完整实现 (可修改内部逻辑, 但签名必须保留)。\n"
         )
 
+    def _check_structural_features(self, out_dir: Path, prior_errors: str = "") -> str:
+        """Check generated code preserves project-configured structural features.
+
+        structural_features: {rel_path_glob: [feature_substring, ...]} — 项目
+        配置的关键功能路径特征 (如 `window_modes_check_pinch` 调用、反转状态
+        入口、G-04 四步序列)。LLM 全量重写时编译通过但删除核心路径是静默
+        回归; 行为验证可能因环境 (ARM 链接/缺板卡) 无法执行, 此检查在
+        链接之前用纯文本特征拦截, 给 LLM 明确修复指令。
+
+        Returns error text (prior_errors + 新发现的缺失特征), "" when ok.
+        """
+        if not self.structural_features:
+            return prior_errors
+        missing_blocks: list[str] = []
+        for pattern, features in sorted(self.structural_features.items()):
+            if not features:
+                continue
+            matched = list(out_dir.glob(pattern))
+            if not matched:
+                missing_blocks.append(
+                    f"  - {pattern}: 无匹配文件 (生成代码可能删除了整个文件)"
+                )
+                continue
+            for f in matched:
+                if not f.is_file():
+                    continue
+                try:
+                    content = f.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                missing = [feat for feat in features if feat not in content]
+                if missing:
+                    missing_blocks.append(
+                        f"  - {f.relative_to(out_dir)}: 缺失结构特征 "
+                        f"{', '.join(missing)}"
+                    )
+        if not missing_blocks:
+            return prior_errors
+        new_errors = (
+            "## ⚠️ 结构性 smoke 特征缺失 — 生成代码删除了关键功能路径 "
+            "(2026-08-17)\n"
+            "编译通过但以下文件缺少项目配置的核心功能特征 (防夹检测调用/反转"
+            "状态入口/启动序列等)。即使能链接, 功能也静默丢失 — SHALL 恢复:\n"
+            + "\n".join(missing_blocks)
+            + "\n请恢复这些特征对应的完整功能路径 (可从 seed 基线参考实现)。\n"
+        )
+        return (prior_errors + "\n" + new_errors).strip() if prior_errors else new_errors
+
     def _snapshot_files(self, out_dir: Path) -> dict[str, str]:
-        """Snapshot the current output dir (rel_path -> content)."""
         snap: dict[str, str] = {}
         for p in self._collect_code_files(out_dir):
             try:

@@ -467,6 +467,60 @@ class TestBehaviorRegressionRepair:
         final = (out_dir / "src" / "ok.py").read_text()
         assert "return 1" in final
 
+    def test_generate_structural_feature_missing_triggers_repair(self, tmp_path):
+        """r21 (window-anti-pinch): LLM 全量重写删掉核心功能路径 (防夹检测
+        调用/反转状态入口), 编译通过但行为验证可能因 ARM 链接环境无法执行
+        → 结构性 smoke 特征必须在编译后、链接前拦截, 给 LLM 明确修复指令。"""
+        calls = []
+
+        def llm(system, user, **kw):
+            calls.append(user)
+            if len(calls) == 1:
+                # Round 1: 编译有效但删了 window_modes_check_pinch 调用
+                return {"content": _marker_output(
+                    "src/win.py", "python",
+                    "def window_control_process():\n"
+                    "    return 0\n")}
+            # Round 2: LLM 按修复指令恢复特征
+            return {"content": _marker_output(
+                "src/win.py", "python",
+                "def window_control_process():\n"
+                "    window_modes_check_pinch(0, 0, 0)\n"
+                "    return WINDOW_CONTROL_PINCH_REVERSAL\n")}
+
+        session = _session(tmp_path)
+        out_dir = Path(session.session_dir) / "generated"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "src").mkdir(parents=True, exist_ok=True)
+        # seed 基线含核心特征
+        (out_dir / "src" / "win.py").write_text(
+            "def window_control_process():\n"
+            "    window_modes_check_pinch(0, 0, 0)\n"
+            "    return WINDOW_CONTROL_PINCH_REVERSAL\n")
+
+        engine = CodegenEngine(
+            llm_client=llm,
+            max_retries=2,
+            seed_dir=session.project_dir,
+            structural_features={
+                "src/win.py": [
+                    "window_modes_check_pinch",
+                    "WINDOW_CONTROL_PINCH_REVERSAL",
+                ],
+            },
+        )
+        engine.seed_dir = out_dir
+        result = engine.generate(session, "sys", "user")
+
+        assert result.status == "verified"
+        # Round-2 prompt 必须带结构性 smoke 缺失修复指令
+        assert "结构性 smoke 特征缺失" in calls[1]
+        assert "window_modes_check_pinch" in calls[1]
+        # 最终磁盘 = 恢复特征后的实现
+        final = (out_dir / "src" / "win.py").read_text()
+        assert "window_modes_check_pinch" in final
+        assert "WINDOW_CONTROL_PINCH_REVERSAL" in final
+
 
 class TestTruncationDetection:
     """headlamp dogfood #4: LLM 输出截断 (大项目超 max_tokens)."""

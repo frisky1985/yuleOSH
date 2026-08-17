@@ -207,6 +207,22 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
         super_content = artifacts_read(session.artifacts, "super-analysis") or ""
 
         cfg = session.config.get("codegen", {}) if getattr(session, "config", None) else {}
+        # 结构性 smoke 特征 (2026-08-17, r21): 从项目 pipeline/config.yaml
+        # codegen.structural_features 读入 — 编译通过后检查关键功能路径
+        # (防夹检测调用/反转序列) 未被 LLM 全量重写删除。session.config 未
+        # 注入时回退读项目配置文件, 保证独立运行时也生效。
+        structural_features = cfg.get("structural_features") or {}
+        if not structural_features:
+            try:
+                _proj_cfg = project_dir / "pipeline" / "config.yaml"
+                if _proj_cfg.exists():
+                    import yaml as _yaml
+                    _raw = _yaml.safe_load(_proj_cfg.read_text(encoding="utf-8")) or {}
+                    structural_features = (
+                        (_raw.get("codegen") or {}).get("structural_features") or {}
+                    )
+            except Exception as e:
+                log.warning("structural_features load failed (non-fatal): %s", e)
         skills = cfg.get("skills") or ["autosar-coding"]
         target_language = cfg.get("target_language")
         build_cmd = cfg.get("build_cmd")
@@ -260,6 +276,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             seed_dir=project_dir if seed_sources else None,
             seed_contract=_collect_seed_contract(project_dir),
             behavior_verify=_make_behavior_verify(project_dir),
+            structural_features=structural_features,
         )
         result = engine.generate(
             session, system_prompt, user_prompt,
