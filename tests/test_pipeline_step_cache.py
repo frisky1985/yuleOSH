@@ -153,6 +153,56 @@ class TestStoreLookupRestore:
         store(tmp_path, "review-memory", fp, tmp_path / "nope.json")
         assert lookup(tmp_path, "review-memory", fp) is None
 
+    def test_failed_output_not_stored(self, tmp_path):
+        """失败产物 (status 属 FAILED_STATUSES) 不得入缓存 — r21c 复盘。
+
+        回归: codegen-deploy skipped_codegen_failed 曾被 store 入库,
+        r21c 指纹命中复用失败结果, codegen 从未重跑 (codex-verify RED)。
+        """
+        from yuleosh.pipeline.step_cache import (
+            compute_fingerprint, lookup, store,
+        )
+        s = self._session(tmp_path)
+        out = s.session_dir / "codegen-deploy.json"
+        out.write_text(json.dumps({
+            "status": "skipped_codegen_failed", "deployed": [],
+        }))
+        fp = compute_fingerprint(s, "codegen-deploy")
+        store(tmp_path, "codegen-deploy", fp, out)
+        assert lookup(tmp_path, "codegen-deploy", fp) is None
+
+    def test_failed_cache_considered_miss(self, tmp_path):
+        """历史脏缓存: 已入库的失败产物必须被 lookup 判为 miss — r21c 复盘。
+
+        即使旧版本代码已把失败结果 store 进缓存, 新 lookup 也不能复用。
+        """
+        from yuleosh.pipeline.step_cache import (
+            _cache_root, compute_fingerprint, lookup,
+        )
+        s = self._session(tmp_path)
+        fp = compute_fingerprint(s, "codegen-deploy")
+        # 手工构造失败缓存 (模拟旧版本已入库的脏数据)
+        d = _cache_root(tmp_path) / "codegen-deploy" / fp / "output"
+        d.mkdir(parents=True)
+        (d / "codegen-deploy.json").write_text(json.dumps({
+            "status": "skipped_codegen_failed", "deployed": [],
+        }))
+        assert lookup(tmp_path, "codegen-deploy", fp) is None
+
+    def test_skipped_output_still_cacheable(self, tmp_path):
+        """合法跳过 (skipped/empty) 仍可缓存 — 输入未变时复用跳过结论正确。"""
+        from yuleosh.pipeline.step_cache import (
+            compute_fingerprint, lookup, store,
+        )
+        s = self._session(tmp_path)
+        out = s.session_dir / "codegen-deploy.json"
+        out.write_text(json.dumps({
+            "status": "skipped", "deployed": [], "skipped_empty": ["src"],
+        }))
+        fp = compute_fingerprint(s, "codegen-deploy")
+        store(tmp_path, "codegen-deploy", fp, out)
+        assert lookup(tmp_path, "codegen-deploy", fp) is not None
+
 
 class TestOrchestratorIntegration:
     def test_cache_hit_marks_step_cached(self, tmp_path, monkeypatch):

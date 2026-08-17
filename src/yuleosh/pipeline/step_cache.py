@@ -66,6 +66,18 @@ CACHEABLE_STEPS = frozenset({
     "test-qualification",
 })
 
+# 失败产物 status 集合 (2026-08-17 r21c 复盘): 这些状态的输出不得入缓存,
+# 缓存命中时也视为 miss — 否则失败结果被后续 run 复用, 步骤永远不重跑。
+# 不含 "skipped"/"skipped_src_protected"/"empty" — 那些是合法跳过 (planning
+# 模式/保护用户代码/无生成物), 输入未变时复用跳过结论是正确的。
+FAILED_STATUSES = frozenset({
+    "failed",
+    "error",
+    "skipped_codegen_failed",       # codegen 失败, 护栏拒绝部署
+    "skipped_api_mismatch",         # 生成 API 破坏既有契约
+    "deployed_behavior_regression", # 部署后行为护栏检测回归 → 已回滚
+})
+
 # LLM 主调用步骤: 永不缓存 (B2 opt-in 接口预留)。
 LLM_STEPS = frozenset({
     "super-analysis",
@@ -206,12 +218,42 @@ def _cache_root(project_dir: str | Path) -> Path:
     return Path(project_dir) / ".osh" / "cache" / "steps"
 
 
+def _output_is_failed(path: Path) -> bool:
+    """JSON 产物 status 是否属失败集合 (2026-08-17 r21c 复盘)。
+
+    只对 JSON 产物做检查 (步骤输出多为 json/md/txt); 非 JSON 或无
+    status 字段视为非失败 (保持原行为)。
+    """
+    try:
+        if path.suffix.lower() != ".json":
+            return False
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return str(data.get("status", "")) in FAILED_STATUSES
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        pass
+    return False
+
+
+def _cache_dir_outputs(d: Path) -> list[Path]:
+    """缓存目录下 output/ 里的产物文件列表。"""
+    out_dir = d / "output"
+    if not out_dir.exists():
+        return []
+    return [p for p in out_dir.iterdir() if p.is_file()]
+
+
 def lookup(project_dir: str | Path, step_key: str, fingerprint: str) -> Optional[Path]:
-    """命中返回缓存目录, 未命中 None。"""
+    """命中返回缓存目录, 未命中 None。
+
+    2026-08-17 r21c 复盘: 失败产物 (status 属 FAILED_STATUSES) 视为
+    miss — 失败缓存被复用会让步骤永远不重跑, 把上一次的 RED 固化进
+    后续 run (codegen-deploy skipped_codegen_failed 曾被 r21c 复用)。
+    """
     d = _cache_root(project_dir) / step_key / fingerprint
     if d.exists() and (d / "output").exists():
-        out_files = list((d / "output").iterdir())
-        if out_files:
+        out_files = _cache_dir_outputs(d)
+        if out_files and not any(_output_is_failed(p) for p in out_files):
             return d
     return None
 
@@ -222,11 +264,22 @@ def store(
     fingerprint: str,
     output_path: str | Path,
 ) -> Path:
-    """把步骤输出复制进缓存 (保留原文件名), 返回缓存目录。"""
+    """把步骤输出复制进缓存 (保留原文件名), 返回缓存目录。
+
+    2026-08-17 r21c 复盘: 失败产物不入库 — 否则后续 run 指纹命中会
+    复用上一次的 RED (codegen-deploy skipped_codegen_failed 曾被 r21c
+    缓存命中, codegen 从未重跑, codex-verify 复现同一缺陷)。
+    """
     d = _cache_root(project_dir) / step_key / fingerprint
     out = Path(output_path)
     if not out.exists():
         log.warning("step-cache store skipped: output missing %s", out)
+        return d
+    if _output_is_failed(out):
+        log.warning(
+            "step-cache store skipped: failed output %s (status in %s)",
+            out, sorted(FAILED_STATUSES),
+        )
         return d
     out_dir = d / "output"
     out_dir.mkdir(parents=True, exist_ok=True)
