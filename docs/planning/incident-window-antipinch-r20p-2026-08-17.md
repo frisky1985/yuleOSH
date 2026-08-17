@@ -225,3 +225,34 @@ failed → deploy 跳过 → src/ 零污染）。
 **教训 7**：验证的报错信息必须用项目真实编译纪律——bare syntax check 是
 「能编译」，项目构建纪律是「合格」。oracle 弱于生产约束 = repair 回路全盲，
 最小级缺陷也会拖垮整个 run。修复回路每一层的检查必须 >= 生产验收标准。
+
+## r21g 复验（2026-08-18 06:05，run-20260818-060507）
+
+**结论**：repo_facts + cflags 修复**双生效**——claude-review 明确"PRD/架构对
+spec 契约覆盖完整且 fidelity 高（17 行为护栏全引用、14 参数表逐值一致、接口
+逐函数核对无近义名）"。但 step 12 仍 RED，**critical 指向 codegen 的
+`(int64_t)` 禁特征**，行为护栏正确拦截（deploy 跳过 → src/ 零污染）。
+
+| 严重度 | 问题 | 本质 |
+|--------|------|------|
+| critical | codegen window_position.c 的 mm 换算被"防溢出改进"为 `(int64_t)` → ARM `__aeabi_ldivmod` 链接失败（seed 是纯 32 位 `(pos * (int32_t)mmPerPulse) / 1000`） | 生成代码退化 |
+| critical | **4 轮 repair 全部重写回 int64**——"参考 seed 基线实现"只有文字没有模板，LLM 无从下手 | 平台 bug |
+| major | **PRD 缺 32 位算术契约**——spec 全文 0 处 32 位算术约束，禁特征只在 pipeline/config.yaml（机器层），LLM 生成时看不见 | 契约缺口 |
+
+**修复（第 13 个平台修复，73191c6 + spec v1.1.14）**：
+1. **spec SW-004 32 位算术契约**（v1.1.14）：position→mm 换算与防夹阈值比较
+   SHALL 仅用 32 位整数——ARM freestanding 无 64 位除法。LLM 生成时就能看见，
+   不从源头写 int64
+2. **forbidden 特征 repair 消息贴 seed 基线实现**（73191c6）：命中禁特征时把
+   违规文件的 seed 版本（≤6000 字符）贴进修复消息，标注"SHALL 以此为基础做
+   最小修改，禁止重写回反模式"——修复有具体模板可抄
+3. 附带修复测试潜在 bug：`test_generate_forbidden_feature_blocks_repair` 未传
+   output_dir，generate() 写默认目录，断言读的是从未被触碰的 seed 文件
+   （trivially pass）——现在真实验证 round-2 输出
+
+**验证**：+1 新回归；全量 **12985 passed / 0 failed**。
+
+**教训 8**：机器层护栏（config.yaml forbidden_features）拦得住但不治本——
+LLM 在生成时看不到它，只能靠 repair 轮"打地鼠"。**链接级约束必须进 spec 契约**
+（LLM 可见层），机器护栏只作背兜。教训 7 的推论：约束要下沉到 LLM 的第一
+次生成，而不是等验证失败再修。
