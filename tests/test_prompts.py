@@ -194,6 +194,34 @@ class TestBuildPrdPrompt:
         assert "Acceptance Criteria" in system
         assert "Out of Scope" in system
 
+    def test_project_asil_injected_when_configured(self, sample_spec_content, sample_requirements, sample_scenarios):
+        """r21b (claude-review minor): PRD 自封 ASIL-B/C 而 spec 未分级 —
+        project_asil 注入后 prompt 必须携带 ASIL 纪律约束。"""
+        from yuleosh.pipeline.prompts import build_prd_prompt
+
+        system, _ = build_prd_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            requirements=sample_requirements,
+            scenarios=sample_scenarios,
+            project_asil="ASIL_B",
+        )
+        assert "ASIL discipline" in system
+        assert "ASIL_B" in system
+        assert "Do NOT invent or self-declare an ASIL class" in system
+
+    def test_no_asil_constraint_when_unconfigured(self, sample_spec_content, sample_requirements, sample_scenarios):
+        """未配置 ASIL → 不注入 ASIL 纪律段 (保持旧行为)."""
+        from yuleosh.pipeline.prompts import build_prd_prompt
+
+        system, _ = build_prd_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            requirements=sample_requirements,
+            scenarios=sample_scenarios,
+        )
+        assert "ASIL discipline" not in system
+
     def test_includes_super_analysis_when_provided(self, sample_spec_content, sample_requirements, sample_scenarios):
         from yuleosh.pipeline.prompts import build_prd_prompt
 

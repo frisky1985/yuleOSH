@@ -157,6 +157,7 @@ def build_prd_prompt(
     scenarios: list[str],
     super_analysis_content: str = "",
     existing_headers: str = "",
+    project_asil: str = "",
 ) -> tuple[str, str]:
     """Build a Product Requirements Document (PRD) generation prompt."""
     total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
@@ -195,6 +196,19 @@ def build_prd_prompt(
         "where the spec defines them (e.g. 50 ms pinch response, 100 mm reversal "
         "distance, 1 s cool-down, 300 ms Hall-loss). NEVER leave an AC as an empty "
         "stub or a bare restatement of the requirement.\n\n"
+    )
+    if project_asil:
+        system_prompt += (
+            "CRITICAL — ASIL discipline (2026-08-17, r21b):\n"
+            f"- The project's ASIL level is defined by the platform config: **{project_asil}**.\n"
+            "- Do NOT invent or self-declare an ASIL class in the PRD (e.g. do not write "
+            "\"ASIL-B/C class\" when the project config/spec only says ASIL_B). If the spec "
+            "does not state an ASIL level, describe safety-criticality in functional terms "
+            "without assigning an ISO 26262 class.\n"
+            "- If you cite an ASIL level, it MUST come from the project config above or the "
+            "spec — never from general automotive assumptions.\n\n"
+        )
+    system_prompt += (
         "Be thorough and reference specific requirement names and scenario details."
     )
 
