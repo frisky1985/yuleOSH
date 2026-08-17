@@ -152,3 +152,39 @@ skipped_api_mismatch/deployed_behavior_regression）+ store 失败不入库 + lo
 白名单遗漏都会让 LLM 基于幻觉写计划。claude-review 靠读仓库抓错是最后一道
 防线，但前面应该直接把真实数据喂给 LLM（测试函数数/覆盖率/CI 状态），
 而不是让它猜。
+
+## r21e 复验（2026-08-18 01:03，run-20260818-010339）
+
+**结论**：前 11 步全绿（r21d 修复 4871a9e 已生效——development 计划基于
+「17 源文件/63 测试函数」真实数据），但 **step 12 claude-review RED，4 blockers**：
+
+| 严重度 | 问题 | 本质 |
+|--------|------|------|
+| critical | 开发计划把**已实现**的 nvm_persisted 列为 6h P0 缺口 | 不读仓库状态 |
+| major | 计划引用**不存在的测试文件**（test_window_config.c 等，实际并入 test_window_control.c） | 不读仓库状态 |
+| major | PRD 自造 **ASIL_B**——spec.md 全文 0 处 ASIL | ASIL 纪律段未触发 |
+| major | 测试计划把自定义 CHECK harness 误述为 **Unity v2.5+** | 不读测试基建 |
+
+**统一根因 #11（平台）**：development/test-planning/PRD 三个 LLM 文档步骤
+只喂 spec + 前序文档，**不注入真实仓库状态**——claude-review 是唯一真正读
+仓库的 agent，所以它总能抓到幻觉。r21d 教训 5 的正确推论：不能只修指标
+统计，要把「仓库事实快照」作为文档步骤的公共输入。
+
+**修复（repo_facts，第 11 个平台修复）**：新建 `src/yuleosh/pipeline/repo_facts.py`
+——机器收集仓库事实快照（测试文件列表/测试函数数/测试框架探测/覆盖率/ASIL
+来源），注入三个文档步骤：
+1. **development**：注入 repo_facts 到 prompt（已接入）
+2. **test-planning**：`build_test_planning_prompt` 新增 `repo_facts` 参数 +
+   注入段（「测试基建描述必须以此为准」）——修复 Unity 误述根因
+3. **PRD**：ASIL 来源扩展到 project-context.md/README.md（`get_project_asil`），
+   且 **无 ASIL 时纪律段也强制注入**（禁止自封 + 「ASIL level TBD by HARA」）——
+   修复 ASIL_B 自造根因（r21b 0640d19 只修了「有 ASIL 时注入」，project_asil=''
+   时整段不注入，LLM 自由发挥）
+
+**验证**：新模块 13 单测 + prompts 3 新回归；定向 59 + 周边 115 passed；
+全量 **12972 passed / 0 failed**。
+
+**教训 6**：LLM 文档步骤的共同缺陷模式是「凭 prompt 猜仓库」——把 claude-review
+的「读仓库」能力前置为共享事实快照，让所有文档步骤建立在真实数据上。
+纪律段（ASIL 等）在「无配置」时必须注入**禁止动作**，而不是静默跳过——
+空配置是 LLM 自由发挥的温床。
