@@ -128,7 +128,9 @@ class TestParseSpec:
 """)
         result = _parse_spec(str(f))
         assert len(result["requirements"]) == 2
-        assert result["requirements"][0]["name"] == "Req-001: Login"
+        # a966991d 后 _parse_requirements 只取编号不带标题（稳定契约设计，
+        # 标题是展示文本）；同步断言，不回退解析器
+        assert result["requirements"][0]["name"] == "Req-001"
         assert len(result["requirements"][0]["shall_statements"]) == 2
 
     def test_parse_requirements_empty_file(self, tmp_path):
