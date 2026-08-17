@@ -48,13 +48,26 @@ class TestStepHandlerSpec:
         return out, m
 
     def test_success_writes_stdout_and_returns_path(self, tmp_path):
-        """returncode=0 + 合法 JSON + error_count=0 → 写 spec-check.json 并返回路径。"""
+        """returncode=0 + 合法 JSON + error_count=0 → 写 spec-check.json 并返回路径。
+
+        契约完整性检查 (contracts_check, 2026-08-16 方案 A) 是独立模块
+        (test_spec_contracts.py 覆盖)；此处 mock 其通过结果，只验证
+        step_spec_check 的 stdout 写入/返回路径/subprocess 契约。
+        """
         payload = json.dumps({"error_count": 0, "issues": [], "coverage": {"score": 92.5}})
         result = mock.Mock(returncode=0, stdout=payload, stderr="")
-        out, m = self._run(result, tmp_path)
+        session = self._make_session(tmp_path)
+        cc_passed = {
+            "validation": {"passed": True, "missing": [], "details": {}},
+            "contracts": {},
+        }
+        with mock.patch.object(step_spec_mod.subprocess, "run", return_value=result) as m, \
+             mock.patch.object(step_spec_mod, "contracts_check", return_value=cc_passed) as m_cc:
+            out = step_spec_mod.step_spec_check(session)
 
         assert out == str(tmp_path / "spec-check.json")
         assert (tmp_path / "spec-check.json").read_text() == payload
+        m_cc.assert_called_once()
         # subprocess 调用契约：python -m yuleosh.spec.validate <path> --json + env 注入
         args, kwargs = m.call_args
         assert args[0][:3] == [sys.executable, "-m", "yuleosh.spec.validate"]
