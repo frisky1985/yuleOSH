@@ -1,6 +1,8 @@
 """Tests for pipeline/step_handlers/review_misra_ci.py."""
+import os
 import tempfile
 import json
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +10,7 @@ from yuleosh.pipeline.step_handlers.review_misra_ci import (
     _read_misra_report, _read_misra_trend, _compute_trend,
     _classify_violations, _generate_fix_recommendations,
     _check_for_regression_violations, step_review_misra_ci,
+    _check_report_staleness,
     _PRIORITY_MAP, _DEFAULT_REPORT_DIR,
 )
 
@@ -335,3 +338,91 @@ class TestStepReviewMisraCiWithReport:
                 assert review["summary"]["total_violations"] == 42
                 assert len(review["violations_by_priority"]["p1_required"]) == 1
                 assert len(review["violations_by_priority"]["p2_advisory"]) == 1
+
+
+class TestCheckReportStaleness:
+    """2026-08-17 (window-anti-pinch r20p): misra-review 读陈旧报告假绿根因。
+
+    pipeline 的 misra-review 步骤读 .yuleosh/reports/misra-report.json（CI 生成）。
+    若代码已更新（r20n 回绕修复 2b431b9）但报告未重新生成 → 报告 0 违规 = 假绿放行。
+    回归测试：陈旧报告必须降级为 warning，绝不 passed。
+    """
+
+    def _write_report(self, tmp_path: Path, total_violations: int = 0) -> Path:
+        report_dir = tmp_path / _DEFAULT_REPORT_DIR
+        report_dir.mkdir(parents=True, exist_ok=True)
+        data = {
+            "summary": {"total_violations": total_violations},
+            "groups": {},
+        }
+        report = report_dir / "misra-report.json"
+        report.write_text(json.dumps(data))
+        return report
+
+    def _run_step(self, tmp_path: Path) -> dict:
+        session = MagicMock()
+        session.name = "test-session"
+        session_dir = tmp_path / ".yuleosh" / "sessions" / "test-session"
+        session_dir.mkdir(parents=True, exist_ok=True)
+        session.session_dir = session_dir
+        with patch.dict("os.environ", {"OSH_HOME": str(tmp_path)}, clear=True):
+            step_review_misra_ci(session)
+        return json.loads((session_dir / "misra-review.json").read_text())
+
+    def test_stale_when_report_older_than_src(self, tmp_path):
+        """报告 0 违规 + src/ 代码更新（比报告新）→ status=warning + stale 标记。"""
+        report = self._write_report(tmp_path)
+        old = time.time() - 3600
+        os.utime(report, (old, old))
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.c").write_text("int main(void){return 0;}")  # mtime=now
+
+        review = self._run_step(tmp_path)
+        assert review["status"] == "warning", review["status"]
+        assert review.get("stale_report"), "陈旧报告必须带 stale_report 证据"
+
+    def test_fresh_report_stays_passed(self, tmp_path):
+        """报告 0 违规且 src/ 比报告旧 → status=passed（正常路径不受影响）。"""
+        report = self._write_report(tmp_path)  # mtime=now
+        src = tmp_path / "src"
+        src.mkdir()
+        f = src / "main.c"
+        f.write_text("int main(void){return 0;}")
+        os.utime(f, (time.time() - 7200, time.time() - 7200))
+
+        review = self._run_step(tmp_path)
+        assert review["status"] == "passed", review["status"]
+        assert "stale_report" not in review
+
+    def test_stale_report_with_required_violations_stays_failed(self, tmp_path):
+        """陈旧报告 + required 违规 → 仍 failed（不因陈旧掩盖真实违规）。"""
+        report = self._write_report(tmp_path, total_violations=5)
+        old = time.time() - 3600
+        os.utime(report, (old, old))
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.c").write_text("int main(void){return 0;}")
+
+        # 直接改 groups 造 required 违规
+        data = {
+            "summary": {"total_violations": 5},
+            "groups": {
+                "R1.1": {
+                    "severity_category": "Required",
+                    "count": 5,
+                    "title": "Test rule",
+                    "files": ["main.c"],
+                }
+            },
+        }
+        (tmp_path / _DEFAULT_REPORT_DIR / "misra-report.json").write_text(json.dumps(data))
+        os.utime(tmp_path / _DEFAULT_REPORT_DIR / "misra-report.json", (old, old))
+
+        review = self._run_step(tmp_path)
+        assert review["status"] == "failed", review["status"]
+
+    def test_no_src_no_git_cannot_judge(self, tmp_path):
+        """无 src/ 且非 git 仓库 → 无法判断新鲜度 → 不误报（None）。"""
+        report = self._write_report(tmp_path)
+        assert _check_report_staleness(tmp_path, report) is None

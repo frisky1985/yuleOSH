@@ -18,6 +18,8 @@ Exports:
 import json
 import logging
 import os
+import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -27,7 +29,7 @@ from yuleosh.pipeline.stages import timed_step
 
 log = logging.getLogger("pipeline.step_handlers.review_misra_ci")
 
-__all__ = ["step_review_misra_ci"]
+__all__ = ["step_review_misra_ci", "_check_report_staleness", "_latest_src_change_time"]
 
 # ------------------------------------------------------------------
 # Constants
@@ -64,6 +66,68 @@ def _read_misra_report(project_dir: Path) -> Optional[dict]:
     except (json.JSONDecodeError, OSError) as e:
         log.warning("Failed to read MISRA report: %s", e)
         return None
+
+
+def _latest_src_change_time(project_dir: Path) -> Optional[float]:
+    """项目最新代码变更时间戳（epoch 秒）。
+
+    判定顺序：
+      1. git 仓库 → 最新提交时间（`git log -1 --format=%ct`）——报告必须晚于
+         最近一次提交，否则必然陈旧；
+      2. 非 git 仓库 → src/ 下最新 .c/.h 文件 mtime；
+      3. 两者都拿不到 → None（无法判断，调用方不误报）。
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(project_dir), "log", "-1", "--format=%ct"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return float(r.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    src = project_dir / "src"
+    newest: Optional[float] = None
+    if src.exists():
+        try:
+            for p in src.rglob("*"):
+                if p.is_file() and p.suffix in (".c", ".h"):
+                    mtime = p.stat().st_mtime
+                    if newest is None or mtime > newest:
+                        newest = mtime
+        except OSError:
+            pass
+    return newest
+
+
+def _check_report_staleness(project_dir: Path, report_path: Path) -> Optional[str]:
+    """MISRA 报告新鲜度校验。
+
+    2026-08-17 (window-anti-pinch r20p): pipeline 的 misra-review 步骤读
+    .yuleosh/reports/misra-report.json（CI Layer 1 生成）。代码更新后若未
+    重新跑 CI，报告停留在旧代码的违规数（r20n 回绕修复后报告仍 0 违规 =
+    假绿放行 24 条真实违规）。本函数比较报告 mtime 与最新代码变更时间：
+       - 报告比代码新 → None（新鲜）；
+       - 报告比代码旧 → 返回陈旧原因字符串；
+       - 无法判断（无 src 且非 git）→ None（不误报）。
+    """
+    if not report_path.exists():
+        return None
+    try:
+        report_mtime = report_path.stat().st_mtime
+    except OSError:
+        return None
+    latest_src = _latest_src_change_time(project_dir)
+    if latest_src is None:
+        return None
+    if report_mtime < latest_src - 1.0:  # 1s 容差（mtime 粒度）
+        return (
+            f"MISRA 报告生成于 {datetime.fromtimestamp(report_mtime).isoformat()}，"
+            f"早于最新代码变更 {datetime.fromtimestamp(latest_src).isoformat()} —— "
+            f"报告基于旧代码，需运行 CI Layer 1 (yuleosh ci run 1) 重新生成"
+        )
+    return None
 
 
 def _read_misra_trend(project_dir: Path, max_entries: int = 20) -> list[dict]:
@@ -331,6 +395,15 @@ def step_review_misra_ci(session: PipelineSession) -> str:
         total_violations = summary.get("total_violations", 0)
         groups = report.get("groups", {})
 
+        # --- 1.5 Report freshness check (2026-08-17 r20p) ---
+        # 报告比最新代码变更旧 → 结论不可信（假绿根因：r20n 修复后报告仍 0 违规）。
+        # fail-safe：陈旧报告绝不 passed，降级为 warning 让 pipeline YELLOW。
+        staleness = _check_report_staleness(
+            project_dir, project_dir / _DEFAULT_REPORT_DIR / "misra-report.json"
+        )
+        if staleness:
+            log.warning("MISRA report STALE: %s", staleness)
+
         # --- 2. Read trend data ---
         trend_entries = _read_misra_trend(project_dir, max_entries=20)
         previous_trend = trend_entries[1] if len(trend_entries) >= 2 else None
@@ -360,10 +433,14 @@ def step_review_misra_ci(session: PipelineSession) -> str:
         )
 
         # --- 7. Determine overall status ---
-        if total_violations == 0:
-            status = "passed"
-        elif any(c["severity"] == "required" and c["count"] > 0 for c in classified):
+        if any(c["severity"] == "required" and c["count"] > 0 for c in classified):
+            # 报告显示 required 违规 → 无论如何 failed（违规比报告陈旧更严重）
             status = "failed"
+        elif staleness:
+            # 陈旧报告 → 审查结论不可信，永不 passed（fail-safe，工程诚实）
+            status = "warning"
+        elif total_violations == 0:
+            status = "passed"
         elif trend["direction"] == "up":
             status = "warning"
         else:
@@ -408,6 +485,12 @@ def step_review_misra_ci(session: PipelineSession) -> str:
             ],
             "recommendations": recommendations,
         }
+        if staleness:
+            review["stale_report"] = staleness
+            review["recommendations"] = [
+                "运行 CI Layer 1 (yuleosh ci run 1) 重新生成 MISRA 报告",
+                *recommendations,
+            ]
 
         # --- Write output ---
         out_path = session.session_dir / "misra-review.json"
