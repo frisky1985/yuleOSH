@@ -343,8 +343,26 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
 
         src_lines = 0
         test_lines = 0
-        src_files = list(project_dir.glob("src/**/*.py")) + list(project_dir.glob("src/**/*.sh")) + list(project_dir.glob("src/**/*.html"))
-        test_files = list(project_dir.glob("tests/**/*.py"))
+        # 2026-08-18 r21d 复盘: 仅统计 .py/.sh/.html 导致 C 项目 (src/**/*.c)
+        # 全部漏计 → 开发计划基于『0 测试文件』错误现状 (claude-review 拦下:
+        # 声称仅 1 文件 108 行, 实际 tests/ 42 个测试函数 1227 行)。扩展名
+        # 白名单必须覆盖 C 项目 (r21b 教训 3 在 planning 步骤的第二个变体)。
+        src_files = (
+            list(project_dir.glob("src/**/*.c"))
+            + list(project_dir.glob("src/**/*.h"))
+            + list(project_dir.glob("src/**/*.cpp"))
+            + list(project_dir.glob("src/**/*.hpp"))
+            + list(project_dir.glob("src/**/*.py"))
+            + list(project_dir.glob("src/**/*.sh"))
+            + list(project_dir.glob("src/**/*.html"))
+        )
+        test_files = (
+            list(project_dir.glob("tests/**/*.c"))
+            + list(project_dir.glob("tests/**/*.h"))
+            + list(project_dir.glob("tests/**/*.cpp"))
+            + list(project_dir.glob("tests/**/*.hpp"))
+            + list(project_dir.glob("tests/**/*.py"))
+        )
 
         for f in src_files:
             try:
@@ -356,6 +374,33 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
                 test_lines += len(f.read_text().splitlines())
             except Exception:
                 pass
+
+        # 2026-08-18 r21d 复盘: 行数统计太弱 — LLM 会把『42 个测试函数』
+        # 误判为『1 文件 108 行』。额外注入真实测试函数数与覆盖率报告,
+        # 让 development 计划建立在仓库真实数据上。
+        test_func_count = 0
+        for f in test_files:
+            if f.suffix in (".c", ".h", ".cpp", ".hpp"):
+                try:
+                    text = f.read_text(encoding="utf-8", errors="replace")
+                    test_func_count += len(
+                        re.findall(r"^\s*(?:static\s+)?(?:void|int)\s+test_\w+\s*\(", text, flags=re.M)
+                    )
+                except Exception:
+                    pass
+        coverage_summary = ""
+        cov_report = project_dir / ".yuleosh" / "reports" / "c-coverage.json"
+        if cov_report.exists():
+            try:
+                cov = json.loads(cov_report.read_text(encoding="utf-8"))
+                totals = cov.get("totals", {}) or {}
+                coverage_summary = (
+                    f"line_rate={totals.get('line_rate', '?')} "
+                    f"branch_rate={totals.get('branch_rate', '?')} "
+                    f"functions={totals.get('functions', '?')}"
+                )
+            except Exception:
+                coverage_summary = "(coverage report unparseable)"
 
         # --- Read spec content ---
         spec_path = Path(session.spec_path)
@@ -377,6 +422,8 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
             src_file_count=len(src_files),
             test_lines=test_lines,
             test_file_count=len(test_files),
+            test_func_count=test_func_count,
+            coverage_summary=coverage_summary,
             git_commits=git_commits,
             git_log=git_log,
         )

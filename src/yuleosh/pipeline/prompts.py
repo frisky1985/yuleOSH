@@ -302,6 +302,8 @@ def build_development_prompt(
     src_file_count: int = 0,
     test_lines: int = 0,
     test_file_count: int = 0,
+    test_func_count: int = 0,
+    coverage_summary: str = "",
     git_commits: int = 0,
     git_log: str = "",
 ) -> tuple[str, str]:
@@ -341,7 +343,9 @@ def build_development_prompt(
         f"# Project Metrics\n"
         f"- Source lines: {src_lines} across {src_file_count} files\n"
         f"- Test lines: {test_lines} across {test_file_count} files\n"
+        f"- Test functions: {test_func_count}\n"
         f"- Test-to-source ratio: {test_ratio}\n"
+        f"- Coverage (latest report): {coverage_summary or 'no report'}\n"
         f"- Recent git commits: {git_commits}\n"
         f"```\n{git_log}\n```"
     )

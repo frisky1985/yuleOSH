@@ -420,6 +420,35 @@ class TestBuildDevelopmentPrompt:
         assert "40.0%" in user  # test-to-source ratio
         assert "42" in user  # git commits
 
+    def test_includes_test_func_count_and_coverage(self, sample_spec_content):
+        """r21d 复盘: 行数统计会误导 LLM (把 42 个测试函数说成 1 文件 108 行) —
+        必须注入真实测试函数数与覆盖率报告。"""
+        from yuleosh.pipeline.prompts import build_development_prompt
+
+        _, user = build_development_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            src_lines=1000,
+            test_lines=500,
+            test_file_count=3,
+            test_func_count=42,
+            coverage_summary="line_rate=0.9285 branch_rate=0.8107 functions=54/54",
+        )
+        assert "Test functions: 42" in user
+        assert "Coverage (latest report): line_rate=0.9285" in user
+
+    def test_coverage_empty_no_report(self, sample_spec_content):
+        from yuleosh.pipeline.prompts import build_development_prompt
+
+        _, user = build_development_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            test_func_count=0,
+            coverage_summary="",
+        )
+        assert "Test functions: 0" in user
+        assert "no report" in user
+
 
 # ===================================================================
 # Test Planning prompt

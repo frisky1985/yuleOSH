@@ -246,7 +246,6 @@ class TestClaudeDevArtifactsMissing:
     """GIVEN artifact keys exist but files are missing
     WHEN artifacts_read is called
     THEN None is returned (graceful handling)."""
-
     def test_artifacts_missing(self, tmp_path, monkeypatch):
         from yuleosh.pipeline.step_handlers.execution import step_claude_dev
         from yuleosh.pipeline.session import PipelineSession
@@ -288,6 +287,60 @@ class TestClaudeDevGenericError:
             with pytest.raises(PipelineStepError) as exc:
                 step_claude_dev(session)
             assert "failed" in str(exc.value).lower()
+
+
+class TestClaudeDevCProjectMetrics:
+    """GIVEN a C project (src/*.c, tests/*.c) — r21d 复盘回归
+
+    THEN development prompt 必须注入真实 C 文件统计 (源码行数/测试函数数),
+    而不是把 C 项目误判为『0 测试文件』(旧版只统计 .py/.sh/.html)。"""
+
+    def test_c_project_tests_counted(self, tmp_path, monkeypatch):
+        from yuleosh.pipeline.step_handlers.execution import step_claude_dev
+        from yuleosh.pipeline.session import PipelineSession
+
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        # C 项目结构
+        src = tmp_path / "src" / "app" / "src"
+        src.mkdir(parents=True)
+        (src / "window_control.c").write_text(
+            "int window_modes_check_pinch(void) { return 1; }\n" * 20
+        )
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_window_control.c").write_text(
+            "static void test_pinch_detection_latency(void) {}\n"
+            "static void test_api_reset_preserves_calibration(void) {}\n"
+        )
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text("# Spec")
+        session = PipelineSession("dev-c-metrics", str(spec_file), llm_client=_mock_llm())
+
+        captured = {}
+
+        def _capture_prompt(system_prompt, user_prompt, **kwargs):
+            captured["user"] = user_prompt
+            return {
+                "content": "## Plan\n\nok",
+                "model": "mock-model",
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+
+        session.llm_client = _capture_prompt
+        with mock.patch(
+            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            side_effect=FileNotFoundError("git not found"),
+        ):
+            result = step_claude_dev(session)
+        assert Path(result).exists()
+        user = captured.get("user", "")
+        # C 源码被统计 (1 行内容 * 20 次 = 20 行)
+        assert "Source lines: 20" in user
+        # C 测试文件被统计 (2 个测试函数)
+        assert "Test functions: 2" in user
+        assert "Test lines: 2" in user
+        assert "Test file count" not in user  # 字段名是 Test lines across N files
 
 
 class TestClaudeDevGitLogNonzeroReturncode:
