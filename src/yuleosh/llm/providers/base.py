@@ -145,7 +145,7 @@ PRICING_TABLE: Dict[str, Dict[str, float]] = {
 
 TASK_BUDGETS: Dict[str, Dict[str, float]] = {
     "code_generation": {"max_cost_usd": 0.50, "max_tokens_out": 4096},
-    "test_generation": {"max_cost_usd": 0.30, "max_tokens_out": 2048},
+    "test_generation": {"max_cost_usd": 0.30, "max_tokens_out": 8192},
     "architecture_design": {"max_cost_usd": 0.80, "max_tokens_out": 6144},
     "misra_review": {"max_cost_usd": 0.40, "max_tokens_out": 3072},
     "simple_summary": {"max_cost_usd": 0.10, "max_tokens_out": 1024},

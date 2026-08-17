@@ -755,9 +755,11 @@ def step_test_planning(session: PipelineSession) -> str:
 
         # --- Call LLM ---
         try:
-            # max_tokens=6144 (2026-08-17): 测试计划随 spec 增长而变长,
-            # 4096 会截断 (r18 test-plan 16K 被截断). 对齐 TASK_BUDGETS.
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
+            # max_tokens=8192 (2026-08-17 r21b): 6144 仍截断 — r21b test-plan
+            # completion 恰好 6144 (上限), SW-006 位置坐标系条目被切断,
+            # claude-review 报"测试计划中途截断"。spec 增长 (16 guardrails +
+            # 多 SW 追溯矩阵) 需要更大输出预算。对齐 TASK_BUDGETS.
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=8192)
         except Exception as e:
             log.error(f"LLM call failed during test planning: {e}")
             raise PipelineStepError(
