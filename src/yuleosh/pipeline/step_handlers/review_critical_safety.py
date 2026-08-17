@@ -35,6 +35,27 @@ from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 
 log = logging.getLogger("pipeline.step_handlers.review_critical_safety")
 
+
+def _strip_comment_and_strings(line: str) -> str:
+    """剥离 C 行内注释与字符串/字符字面量, 返回仅含代码的部分。
+
+    2026-08-17 (window-anti-pinch r20p): 除零扫描器此前对整行做正则,
+    注释里的 '/' (如 "min=4/max=200"、"memcpy/memset") 被误判为除法
+    → CRIT-DIV-001 假阳性。本函数只处理单行: 去掉 /* */ 块注释尾部
+    与 // 行注释, 并把 "..." / '...' 字面量内容替换为空格。
+
+    不做跨行块注释状态跟踪 (扫描器按行迭代, 跨行注释行不含除法
+    运算符的误报场景极少; 保持简单)。
+    """
+    # 行内 /* ... */ (到行尾)
+    s = re.sub(r"/\*.*?\*/", " ", line)
+    # 行注释 // (注意避免 URL 中的 //, 但扫描目标是 C 源码, 可接受)
+    s = re.sub(r"//.*$", " ", s)
+    # 字符串/字符字面量
+    s = re.sub(r'"(?:\\.|[^"\\])*"', ' "str" ', s)
+    s = re.sub(r"'(?:\\.|[^'\\])*'", " 'c' ", s)
+    return s
+
 __all__ = ["step_review_critical_safety", "CRITICAL_RULES"]
 
 
@@ -161,12 +182,34 @@ class CriticalSafetyScanner:
     # ── 1. 除零 ──────────────────────────────────────────
 
     def _scan_division_by_zero(self, filepath: Path, lines: list[str]):
-        """匹配除零/取模零模式。"""
-        content = "\n".join(lines)
+        """匹配除零/取模零模式。
+
+        2026-08-17 (window-anti-pinch r20p): 之前直接对整行做正则,
+        注释里的 '/' (如 "min=4/max=200"、"memcpy/memset") 被误判为
+        除法 → CRIT-DIV-001 假阳性阻断 pipeline。修复:
+          - 维护跨行 /* */ 块注释状态 (行内 `/*` 进入、`*/` 退出);
+          - 非注释部分用 _strip_comment_and_strings 剥离行内注释与
+            字符串字面量后再匹配真实除法。
+        """
+        in_block = False
         for lineno, line in enumerate(lines, 1):
-            stripped = line.strip()
+            # 跨行块注释: 完整落在注释内的行直接跳过
+            if in_block:
+                if "*/" in line:
+                    in_block = False
+                # 注释中间行可能有 '/*' 与 '*/' 同现等边缘情况, 保守跳过
+                continue
+            if "/*" in line and "*/" not in line:
+                # 本行进入块注释: 只分析 /* 之前的代码部分
+                code = _strip_comment_and_strings(line.split("/*", 1)[0])
+                in_block = True
+            else:
+                code = _strip_comment_and_strings(line)
+            if not code:
+                continue
+            stripped = code.strip()
             # 常量除数/取模数为 0
-            if re.search(r'[/%]\s*0\b', stripped) and '/*' not in stripped:
+            if re.search(r'[/%]\s*0\b', stripped):
                 self.violations.append(CriticalViolation(
                     "CRIT-DIV-001", str(filepath), lineno,
                     "检测到除零（常量 0 做除数）",
@@ -181,7 +224,7 @@ class CriticalSafetyScanner:
                     # 往前搜索该变量是否被检查过 non-zero
                     checked = False
                     for prev in range(max(0, lineno - 8), lineno):
-                        pl = lines[prev].strip()
+                        pl = _strip_comment_and_strings(lines[prev]).strip()
                         if re.search(rf'\b{vname}\b.*!=.*0', pl) or \
                            re.search(rf'\b{vname}\b.*>.*0', pl):
                             checked = True
