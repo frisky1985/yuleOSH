@@ -10,8 +10,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
 from yuleosh.codegen.engine import CodegenEngine  # noqa: E402
 from yuleosh.pipeline.step_classes import (  # noqa: E402
     _collect_seed_contract,

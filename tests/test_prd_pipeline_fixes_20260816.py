@@ -12,8 +12,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
 from yuleosh.pipeline.prompts import build_prd_prompt  # noqa: E402
 from yuleosh.pipeline.stages.spec import (  # noqa: E402
     _parse_requirements,
