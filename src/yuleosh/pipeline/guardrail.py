@@ -590,6 +590,29 @@ def maybe_rollback_on_gate_failure(
         )
         return {}
 
+    # ── 2026-08-17 (window-anti-pinch r20p): 回滚前保护人工修复 ──
+    # 兜底备份 (find_latest_change_set) 可能来自很久以前的 run, 其 orig
+    # 快照比当前 git HEAD 旧。此时若直接 apply_change_set, 会把旧代码
+    # 原子写回 src, 覆盖主 agent/人工已提交的修复 (实测: 2b431b9 的
+    # Hall 回绕 + 冷却回绕修复被 23:16 的旧备份碾掉, ctest 从全绿变红)。
+    # 保护规则 (仅 git 仓库): src/ 存在未提交改动 → 拒绝回滚, 放弃
+    # 隔离验证, 返回 gate_failed_independent (RED 人工介入)。
+    # 无 git 仓库 → 保持原行为 (测试/临时项目, 无版本历史可被覆盖)。
+    changed = src_has_uncommitted_changes(project_dir)
+    if changed:
+        log.warning(
+            "Gate [%s] rollback skipped: src/ has %d uncommitted change(s) "
+            "(e.g. %s) — refusing to overwrite newer work with stale backup %s. "
+            "Treating as independent failure (RED, human review).",
+            step_key, len(changed), changed[0], backup_run_id,
+        )
+        return {
+            "action": "gate_failed_independent",
+            "rerun": gate_result,
+            "run_id": backup_run_id,
+            "rollback_skipped_src_dirty": changed[:10],
+        }
+
     deployed_after = load_deployed_after(project_dir, backup_run_id)
 
     if runner is None:
