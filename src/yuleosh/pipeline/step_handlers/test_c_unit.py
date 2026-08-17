@@ -110,6 +110,28 @@ def run_c_test_suite(project_dir: str | Path,
         if not ctest_cfg.exists():
             continue
         try:
+            # ── 2026-08-17 (window-anti-pinch r20p): CMakeLists 变更后
+            # build 目录未重新 configure → 增量构建沿用旧配置, ctest 跑
+            # 旧/损坏产物 → 假失败 (实测: cmake-build-coverage 混入 ARM
+            # objcopy/linker 产物, host ctest 全红)。机制: 正常步骤也校验
+            # CMakeCache 新鲜度 — CMakeLists.txt 比 CMakeCache.txt 新 →
+            # 自动重新 configure (不删目录, 保留增量产物)。
+            cmake_lists = project_dir / "CMakeLists.txt"
+            cache_file = build_dir / "CMakeCache.txt"
+            if cmake_lists.exists() and cache_file.exists():
+                try:
+                    if cmake_lists.stat().st_mtime > cache_file.stat().st_mtime:
+                        log.warning(
+                            "Build dir %s stale: CMakeLists.txt newer than "
+                            "CMakeCache.txt — reconfiguring before ctest",
+                            build_dir,
+                        )
+                        subprocess.run(
+                            ["cmake", "-S", str(project_dir), "-B", str(build_dir)],
+                            capture_output=True, text=True, timeout=timeout_build,
+                        )
+                except OSError as e:
+                    log.warning("cmake freshness check failed: %s", e)
             if force_rebuild:
                 # 强制重建 (2026-08-13): 行为护栏部署后立即跑本函数时,
                 # cmake 增量构建会因 DependInfo.cmake/.d 缓存 + mtime 同秒

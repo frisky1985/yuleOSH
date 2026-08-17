@@ -119,6 +119,44 @@ class TestRunCTestSuite:
         assert result["failed"] == 0
         assert result["passed"] == 1  # 1 test registered
 
+    def test_stale_cmakelists_triggers_reconfigure(self, tmp_path, monkeypatch):
+        """CMakeLists.txt 比 CMakeCache.txt 新 → 自动重新 configure。
+
+        2026-08-17 (window-anti-pinch r20p): cmake-build-coverage 混入 ARM
+        objcopy/linker 产物正是 CMakeLists 变更后未 reconfigure 导致 —
+        增量构建沿用旧配置, ctest 跑旧/损坏产物假失败。正常 c-unit-test
+        步骤也必须检测该场景, 不能只依赖 force_rebuild 手动删目录。
+        """
+        proj = _make_cmake_project(tmp_path)
+        _configure(proj)
+
+        # 模拟 CMakeLists 变更: 更新其 mtime 到未来
+        cmake_lists = proj / "CMakeLists.txt"
+        future = 2_000_000_000  # 远大于当前 epoch
+        os.utime(cmake_lists, (future, future))
+
+        # 记录 configure 调用 (cmake -S ... -B ...)
+        real_run = subprocess.run
+        configure_calls = []
+
+        def spy(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if isinstance(cmd, list) and len(cmd) >= 3 \
+                    and cmd[0] == "cmake" and cmd[1] == "-S":
+                configure_calls.append(cmd)
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", spy)
+
+        result = run_c_test_suite(proj)
+
+        assert result["runner"] == "ctest"
+        assert result["status"] == "passed"
+        assert result["failed"] == 0
+        # CMakeLists 过期 → 步骤内自动重新 configure (不删目录, 保留增量)
+        assert len(configure_calls) == 1
+        assert configure_calls[0][1] == "-S"
+
 
 class TestBehaviorGuardrail:
     def test_no_regression_keeps_deployment(self, tmp_path):
