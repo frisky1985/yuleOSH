@@ -196,7 +196,9 @@ class TestBuildPrdPrompt:
 
     def test_project_asil_injected_when_configured(self, sample_spec_content, sample_requirements, sample_scenarios):
         """r21b (claude-review minor): PRD 自封 ASIL-B/C 而 spec 未分级 —
-        project_asil 注入后 prompt 必须携带 ASIL 纪律约束。"""
+        project_asil 注入后 prompt 必须携带 ASIL 纪律约束。
+        2026-08-18 r21h: 配置声明时必须强制使用该等级, 不得因 spec 未提
+        ASIL 就声称"不声明" (r21h PRD 与架构/测试计划跨工件不一致)。"""
         from yuleosh.pipeline.prompts import build_prd_prompt
 
         system, _ = build_prd_prompt(
@@ -208,7 +210,9 @@ class TestBuildPrdPrompt:
         )
         assert "ASIL discipline" in system
         assert "ASIL_B" in system
-        assert "Do NOT invent or self-declare an ASIL class" in system
+        assert "IS DECLARED by the platform config" in system
+        assert "Do NOT invent a DIFFERENT ASIL class" in system
+        assert "Do NOT claim the project has no ASIL level" in system
 
     def test_no_asil_still_injects_discipline(self, sample_spec_content, sample_requirements, sample_scenarios):
         """2026-08-18 r21e: 未配置 ASIL → 纪律段仍必须注入 (禁止自封)。

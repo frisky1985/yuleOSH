@@ -486,11 +486,13 @@ class CodegenEngine:
                 if brainstorm_done:
                     repair_context = self._format_brainstorm_context(
                         result.brainstorm, result.last_errors, files, best_state,
+                        seed_baseline=self._seed_baseline,
                     )
                 else:
                     repair_context = self._format_repair_context(
                         result.last_errors, files, best_state,
                         truncated_files=truncated,
+                        seed_baseline=self._seed_baseline,
                     )
                 allowlist = self._build_allowlist(
                     result.last_errors, files, self.seed_contract,
@@ -770,11 +772,15 @@ class CodegenEngine:
         errors: str,
         files: list[GeneratedFile],
         best_state: dict[str, str] | None = None,
+        seed_baseline: Optional[dict[str, str]] = None,
     ) -> str:
         """3 次失败后的头脑风暴指令 — 替换普通 repair context。
 
         明确告诉 LLM: 你已连续失败 N 轮, 引擎分析了失败模式, 已强制
         恢复 seed 基线; 现在按指定策略做**最小修改**, 禁止自由发挥。
+        2026-08-18 r21h: 追加 seed 基线代码块 — 策略提示说"恢复 seed 原样"
+        但无具体代码时 LLM 仍会整体重写 (r21h window_modes.c (void) 抑制
+        4 轮丢失), 必须贴出基线实现。
         """
         rounds = analysis.get("rounds", 0)
         strategy = analysis.get("strategy", "narrow_scope")
@@ -810,6 +816,7 @@ class CodegenEngine:
             "错误输出:\n```\n"
             f"{errors[:4000]}\n```\n\n"
             "**只允许修改与错误直接相关的文件。** 引擎会丢弃白名单外的文件。"
+            f"{CodegenEngine._format_seed_hints(seed_baseline, files)}"
         )
     @staticmethod
     def _detect_truncated_files(files: list[GeneratedFile]) -> list[str]:
@@ -1009,11 +1016,48 @@ class CodegenEngine:
         log.info("Restored %d files to best state", len(snapshot))
 
     @staticmethod
+    def _format_seed_hints(
+        seed_baseline: Optional[dict[str, str]],
+        files: list[GeneratedFile],
+        limit: int = 6000,
+    ) -> str:
+        """构建 repair 消息里的 seed 基线代码块 (2026-08-18 r21h)。
+
+        r21h 复盘: compile-error repair 路径只给编译器输出, 不贴 seed 实现 —
+        LLM 4 轮重写 window_modes.c 都丢了 (void)lastCheckTimeMs 抑制
+        (G-17 -Werror 编译失败)。错误涉及文件的 seed 基线版本是修复模板,
+        必须贴出来让 LLM 有具体代码可抄, 而不是空喊"参考 seed 基线"。
+        """
+        if not seed_baseline:
+            return ""
+        hints: list[str] = []
+        for f in files:
+            content = seed_baseline.get(f.path)
+            if not content:
+                continue
+            truncated = len(content) > limit
+            hints.append(
+                f"\n### {f.path} — seed 基线实现 (SHALL 以此为基础做最小修改, "
+                f"禁止整体重写):\n```c\n{content[:limit]}"
+                f"{'... (truncated)' if truncated else ''}\n```\n"
+            )
+        if not hints:
+            return ""
+        return (
+            "\n\n## 📄 seed 基线实现 (机器提供, 2026-08-18 r21h)\n"
+            "以下是你上一轮修改文件的**原始基线版本** — 编译失败/功能丢失的"
+            "修复应以它为准, 保留其正确模式 (如 (void) 抑制未用参数、guard "
+            "条件、启动序列、防夹区门控):\n"
+            + "\n".join(hints)
+        )
+
+    @staticmethod
     def _format_repair_context(
         errors: str,
         files: list[GeneratedFile],
         best_state: Optional[dict[str, str]] = None,
         truncated_files: Optional[list[str]] = None,
+        seed_baseline: Optional[dict[str, str]] = None,
     ) -> str:
         """Build the compiler-feedback block appended to the next prompt.
 
@@ -1068,6 +1112,7 @@ class CodegenEngine:
             "(不要输出与修复无关的文件)。"
             f"{behavior_hint}"
             f"{disk_hint}"
+            f"{CodegenEngine._format_seed_hints(seed_baseline, files)}"
             f"{trunc_hint}"
         )
 

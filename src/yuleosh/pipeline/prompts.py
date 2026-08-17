@@ -199,14 +199,15 @@ def build_prd_prompt(
     )
     if project_asil:
         system_prompt += (
-            "CRITICAL — ASIL discipline (2026-08-17, r21b):\n"
-            f"- The project's ASIL level is defined by the platform config: **{project_asil}**.\n"
-            "- Do NOT invent or self-declare an ASIL class in the PRD (e.g. do not write "
-            "\"ASIL-B/C class\" when the project config/spec only says ASIL_B). If the spec "
-            "does not state an ASIL level, describe safety-criticality in functional terms "
-            "without assigning an ISO 26262 class.\n"
-            "- If you cite an ASIL level, it MUST come from the project config above or the "
-            "spec — never from general automotive assumptions.\n\n"
+            "CRITICAL — ASIL discipline (2026-08-17, r21b; 2026-08-18 r21h 修订):\n"
+            f"- The project's ASIL level IS DECLARED by the platform config: **{project_asil}**. "
+            "The PRD SHALL state this exact level whenever a safety level is referenced.\n"
+            "- Do NOT invent a DIFFERENT ASIL class (e.g. do not write \"ASIL-B/C class\" or "
+            "\"ASIL_D\" when the config says ASIL_B).\n"
+            "- Do NOT claim the project has no ASIL level just because spec.md omits the "
+            "word — the platform config is the authority (r21h: PRD wrongly wrote "
+            "\"不自行声明 ASIL 等级\" while config declares ASIL_B, causing cross-artifact "
+            "inconsistency with architecture/test-plan).\n\n"
         )
     else:
         # 2026-08-18 r21e: 无 ASIL 时纪律段也必须注入 (r21e PRD 自造

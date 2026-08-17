@@ -612,6 +612,54 @@ class TestBehaviorRegressionRepair:
         seed_block = calls[1].split("seed 基线实现")[1]
         assert "(pos * mm_per_pulse) // 1000" in seed_block
 
+    def test_compile_error_repair_includes_seed_baseline(self):
+        """2026-08-18 r21h: compile-error repair 路径也必须贴 seed 基线 —
+        r21h window_modes.c (void) 抑制 4 轮丢失 (G-17 -Werror), 只给编译器
+        输出不贴基线实现时 LLM 无从下手。"""
+        from yuleosh.codegen.engine import CodegenEngine, GeneratedFile
+
+        errors = (
+            "window_modes.c:122:57: error: unused parameter 'lastCheckTimeMs' "
+            "[-Werror,-Wunused-parameter]"
+        )
+        files = [GeneratedFile(path="src/app/src/window_modes.c", content="")]
+        seed_baseline = {
+            "src/app/src/window_modes.c": (
+                "int check_pinch(uint32_t positionPulses, uint32_t timeMs, "
+                "uint32_t lastCheckTimeMs)\n{\n"
+                "    (void)lastCheckTimeMs;\n"
+                "    return positionPulses > 100 ? 1 : 0;\n}\n"
+            ),
+        }
+        ctx = CodegenEngine._format_repair_context(
+            errors, files, seed_baseline=seed_baseline,
+        )
+        assert "seed 基线实现" in ctx
+        assert "src/app/src/window_modes.c" in ctx
+        assert "(void)lastCheckTimeMs" in ctx
+        assert "禁止整体重写" in ctx
+
+    def test_brainstorm_context_includes_seed_baseline(self):
+        """2026-08-18 r21h: brainstorm 策略路径同样贴 seed 基线。"""
+        from yuleosh.codegen.engine import CodegenEngine, GeneratedFile
+
+        files = [GeneratedFile(path="src/app/src/window_control.c", content="")]
+        seed_baseline = {
+            "src/app/src/window_control.c": (
+                "void window_control_process(...) {\n"
+                "    if (window_modes_check_pinch(...)) { ... }\n}\n"
+            ),
+        }
+        ctx = CodegenEngine._format_brainstorm_context(
+            {"rounds": 3, "strategy": "minimal_fix", "reason": "test"},
+            "compile error",
+            files,
+            seed_baseline=seed_baseline,
+        )
+        assert "seed 基线实现" in ctx
+        assert "window_modes_check_pinch" in ctx
+        assert "禁止整体重写" in ctx
+
 
 class TestTruncationDetection:
     """headlamp dogfood #4: LLM 输出截断 (大项目超 max_tokens)."""
