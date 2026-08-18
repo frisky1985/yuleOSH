@@ -524,6 +524,18 @@ def step_claude_review(session: PipelineSession) -> str:
     suggestions = parsed.get("suggestions") or []
     brainstorm = str(parsed.get("brainstorm", ""))
     summary = str(parsed.get("summary", ""))
+    # 2026-08-18 r21o: 偶发空壳输出 — JSON 解析成功但 verdict=disagree 且
+    # summary/blockers/suggestions/brainstorm 全空。这不是真实评审 (模型
+    # 输出被截断成空壳), 误当 disagree 会阻塞 pipeline 且无任何可修信息。
+    # 视为无效输出, 报错指明需重跑; 错误消息含 stdout 头便于诊断。
+    if verdict == "disagree" and not summary and not blockers \
+            and not suggestions and not brainstorm:
+        raise PipelineStepError(
+            f"[{step_key}] claude returned an EMPTY review shell "
+            f"(verdict=disagree, all fields blank) — output truncated, "
+            f"treat as invalid not a real review. stdout head: "
+            f"{stdout[:300]!r}"
+        )
     agreed = verdict == "agree"
 
     report = {
@@ -540,6 +552,13 @@ def step_claude_review(session: PipelineSession) -> str:
         "exit_code": result.returncode,
     }
     report_path = _write_report(session, step_key, report)
+    # 2026-08-18 r21o: raw stdout 落盘 — 解析失败/空壳时诊断盲区,
+    # 平台只能看到解析后的 JSON 无法看到 claude 原始输出。
+    try:
+        raw_path = Path(session.session_dir) / f"{step_key}.raw.txt"
+        raw_path.write_text(stdout, encoding="utf-8", errors="replace")
+    except OSError:
+        pass
     log.info("claude-review report written: %s (verdict=%s, blockers=%d)",
              report_path, verdict, len(blockers))
 
