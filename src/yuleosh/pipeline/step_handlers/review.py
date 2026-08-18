@@ -103,6 +103,14 @@ def step_hermes_review(session: PipelineSession) -> str:
             source_files.append({"path": rel, "lines": len(content.splitlines()), "content": content[:3000]})
 
         # --- Build LLM prompt ---
+        # SWC 软件编程规范语义规则注入（有 swc-c-rules.yaml 才注入, 无则保持原行为）
+        style_rules = ""
+        try:
+            from yuleosh.ci.stages.code_style import format_style_rules_for_review
+            style_rules = format_style_rules_for_review(Path(project_dir) / "swc-c-rules.yaml")
+        except Exception:  # noqa: BLE001 — 注入失败不阻断 review
+            style_rules = ""
+
         system_prompt, user_prompt = build_code_review_prompt(
             spec_content=spec_content,
             spec_name=Path(session.spec_path).name,
@@ -110,6 +118,7 @@ def step_hermes_review(session: PipelineSession) -> str:
             artifact_contents=artifact_contents,
             source_files=source_files,
             timestamp=datetime.now().isoformat(),
+            style_rules=style_rules,
         )
 
         try:

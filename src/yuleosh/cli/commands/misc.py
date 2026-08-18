@@ -793,6 +793,38 @@ def _cmd_coverage_c(build_dir: str = ".", src_dir: str = "src"):
         sys.exit(1)
 
 
+def cmd_audit_code_style(project_dir: str, save: bool = True, block: bool = False, json_out: bool = False):
+    """Run SWC 软件编程规范 code-style scan (``yuleosh audit code-style``)."""
+    from yuleosh.ci.stages.code_style import scan_project, write_report, _load_rules
+
+    # 项目根有规则文件才扫描
+    rules_path = Path(project_dir) / "swc-c-rules.yaml"
+    if not rules_path.exists():
+        print("⚠️  项目根缺少 swc-c-rules.yaml — 无规则可检查")
+        print("💡 复制平台默认规则: cp <yuleosh-repo>/swc-c-rules.yaml ./swc-c-rules.yaml")
+        sys.exit(0 if not block else 0)
+
+    rules = _load_rules(rules_path)
+    result = scan_project(project_dir, rules)
+    write_report(project_dir, result, save=save)
+
+    if json_out:
+        import json
+        report = write_report(project_dir, result, save=False)
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        print(f"SWC code-style scan: {result.files_scanned} files, {len(result.violations)} violations")
+        for v in result.violations[:30]:
+            print(f"  [{v.rule_id}] {v.file}:{v.line} {v.message}")
+        if len(result.violations) > 30:
+            print(f"  ... and {len(result.violations) - 30} more")
+        if save:
+            print(f"  📄 Report: .yuleosh/reports/code-style-report.json")
+
+    if block and result.violations:
+        sys.exit(1)
+
+
 def cmd_audit_sync_check(project_dir: str, base_ref: str = "HEAD", save: bool = True):
     """Run doc sync gate check (``yuleosh audit sync-check``)."""
     from yuleosh.ci.sync_check import run_sync_check, save_sync_evidence, print_sync_result

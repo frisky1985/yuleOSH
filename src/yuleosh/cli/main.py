@@ -112,6 +112,7 @@ from yuleosh.cli.commands.misc import (  # noqa: E402
     cmd_audit_sync_check,
     _cmd_coverage_gate,
     _cmd_coverage_trend,
+    cmd_audit_code_style,
     cmd_audit_evidence,
     cmd_audit_verify,
     cmd_kpi_status,
@@ -446,6 +447,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_audit_sync.add_argument("--save", action="store_true", default=True,
                                help="Save evidence to .yuleosh/reports/docsync-evidence.json")
 
+    p_audit_style = asub.add_parser("code-style", help="SWC 软件编程规范 code-style scan (C)")
+    p_audit_style.add_argument("--project-dir", default=OSH_HOME,
+                                help="Project root directory")
+    p_audit_style.add_argument("--save", action="store_true", default=True,
+                                help="Save report to .yuleosh/reports/code-style-report.json")
+    p_audit_style.add_argument("--block", action="store_true",
+                                help="Exit non-zero when violations found (for pre-commit hook)")
+    p_audit_style.add_argument("--json", action="store_true",
+                                help="Output JSON")
+
     p_audit_verify = asub.add_parser(
         "verify", help="Verify audit log hash-chain integrity (tamper detection)")
     p_audit_verify.add_argument("--tenant", default="",
@@ -732,9 +743,16 @@ def main():
             cmd_audit_evidence(output_dir=args.output_dir, create_zip=getattr(args, "zip", True))
         elif args.audit_sub == "sync-check":
             cmd_audit_sync_check(
-                project_dir=getattr(args, "project_dir", OSH_HOME),
-                base_ref=getattr(args, "base_ref", "HEAD"),
+                project_dir=args.project_dir,
+                base_ref=args.base_ref,
                 save=getattr(args, "save", True),
+            )
+        elif args.audit_sub == "code-style":
+            cmd_audit_code_style(
+                project_dir=args.project_dir,
+                save=getattr(args, "save", True),
+                block=getattr(args, "block", False),
+                json_out=getattr(args, "json", False),
             )
         elif args.audit_sub == "verify":
             cmd_audit_verify(

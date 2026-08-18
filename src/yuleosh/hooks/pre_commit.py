@@ -1,7 +1,7 @@
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
-"""Pre-commit hook — run MISRA cppcheck on staged .c/.h files.
+"""Pre-commit hook — run MISRA cppcheck + SWC code-style on staged .c/.h files.
 
 Behaviour:
 1. Detect whether CWD is inside a yuleOSH project (looks for .yuleosh/ or yuleosh.yaml).
@@ -10,6 +10,7 @@ Behaviour:
 4. Compare violations against the previous commit's snapshot.
 5. Warn about NEW violations (but do NOT block the commit).
 6. Automatically persist a snapshot to .yuleosh/ci/last-misra-snapshot.json.
+7. Run SWC code-style scan on staged files (snapshot-compare NEW violations, non-blocking).
 """
 
 import json
@@ -301,8 +302,67 @@ def run_pre_commit(cwd: Optional[str] = None) -> int:
     except Exception as exc:  # noqa: BLE001 — hook 永不阻塞 pre-commit
         log.warning("Knowledge indexer hook failed (non-fatal): %s", exc)
 
+    # 8. SWC code-style 扫描 (2026-08-18): staged 文件快照对比, 非阻断。
+    _run_code_style_hook(project_root, abs_staged)
+
     # Always return 0 — do NOT block the commit
     return 0
+
+
+CODE_STYLE_SNAPSHOT_RELPATH = ".yuleosh/ci/last-code-style-snapshot.json"
+
+
+def _run_code_style_hook(project_root: Path, abs_files: list[str]) -> None:
+    """Run SWC code-style on staged files; warn on NEW violations only.
+
+    Non-blocking by design — style violations must never block a commit
+    (boss rule: don't break the pipeline / commit flow).
+    """
+    if not abs_files:
+        return
+    try:
+        from yuleosh.ci.stages.code_style import _load_rules, scan_file
+
+        rules = _load_rules(project_root / "swc-c-rules.yaml")
+        if not rules:
+            return  # 规则文件未配置 → hook 跳过
+
+        violations = []
+        for f in abs_files:
+            res = scan_file(Path(f), rules, project_root=project_root)
+            violations.extend(res.violations)
+
+        if not violations:
+            return
+
+        # 快照对比: 只提示"新增"违规
+        snap_path = project_root / CODE_STYLE_SNAPSHOT_RELPATH
+        last: list[dict] = []
+        if snap_path.exists():
+            try:
+                last = json.loads(snap_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        last_set = {(v.get("rule_id", ""), v.get("file", ""), v.get("line", 0))
+                    for v in last}
+        current = [v.to_dict() for v in violations]
+        new_v = [v for v in current
+                 if (v.get("rule_id", ""), v.get("file", ""), v.get("line", 0)) not in last_set]
+
+        snap_path.parent.mkdir(parents=True, exist_ok=True)
+        snap_path.write_text(json.dumps(current, indent=2, ensure_ascii=False))
+
+        if new_v:
+            from collections import Counter
+            by_rule = Counter(v["rule_id"] for v in new_v)
+            print(f"\n🎨 SWC code-style: {len(new_v)} NEW violation(s) in staged files:")
+            for rid, n in by_rule.most_common(8):
+                print(f"  - SWC-C-{rid}: {n}")
+            print("ℹ️  Pre-commit hook does NOT block commits. Run `yuleosh audit code-style` for full scan.")
+        else:
+            print("✅ SWC code-style: no new violations in staged files.")
+    except Exception as exc:  # noqa: BLE001 — hook 永不阻塞 pre-commit
+        log.warning("SWC code-style hook failed (non-fatal): %s", exc)
 
 
 if __name__ == "__main__":

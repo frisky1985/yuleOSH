@@ -31,6 +31,7 @@ from yuleosh.ci.stages import (
     run_spec_validation, run_architecture_review,
     run_requirements_trace, run_docsync_gate,
     run_methodology_gate,
+    run_code_style,
 )
 from yuleosh.ci.stage_utils import (
     _detect_hil_target, _run_hil_mock_tests, _run_hil_real_tests,
@@ -304,6 +305,7 @@ def _run_layer1_impl(project_dir: str, ci: CIResult, timeout: int) -> bool:
         ("docsync-gate", run_docsync_gate),
         ("clang-tidy", run_clang_tidy),
         ("misra-check", lambda pd, ci: run_misra_check(pd, ci, mode="delta")),
+        ("code-style", run_code_style),
         ("unit-tests", run_unit_tests),
         ("coverage", run_coverage_check),
         ("coverage-regression", run_coverage_regression),

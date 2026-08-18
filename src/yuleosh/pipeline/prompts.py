@@ -500,6 +500,7 @@ def build_code_review_prompt(
     artifact_contents: dict[str, str],
     source_files: list[dict],
     timestamp: str = "",
+    style_rules: str = "",
 ) -> tuple[str, str]:
     """Build a code review prompt for Hermes.
 
@@ -510,6 +511,8 @@ def build_code_review_prompt(
         artifact_contents: Dict of artifact_key → content for prior pipeline outputs.
         source_files: List of dicts with 'path', 'lines', 'content' keys.
         timestamp: ISO timestamp for the review.
+        style_rules: Optional SWC 软件编程规范 style rules text injected into the
+            review prompt. Empty string (default) = no injection (backward compatible).
 
     Returns (system_prompt, user_prompt) tuple.
     """
@@ -562,7 +565,8 @@ def build_code_review_prompt(
         + "\n\n# Source Code\n"
         + "\n".join(source_sections)
         + "\n\n---\n\n"
-        f"Review session: {session_name}\n"
+        + (f"# SWC 软件编程规范 Style Rules\n{style_rules}\n\n---\n\n" if style_rules else "")
+        + f"Review session: {session_name}\n"
         f"Timestamp: {timestamp}\n\n"
         "Produce the JSON review. Check:\n"
         "- Does the code satisfy all spec SHALL/SHOULD statements?\n"

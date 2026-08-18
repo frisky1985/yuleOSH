@@ -73,6 +73,10 @@ from yuleosh.ci.stages.review import (
     run_docsync_gate,
 )
 
+from yuleosh.ci.stages.code_style import (
+    run_code_style,
+)
+
 from yuleosh.ci.stages.traceability import (
     run_requirements_trace,
 )
