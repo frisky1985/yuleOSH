@@ -344,3 +344,36 @@ The loop chain covers, but is not limited to:
 - 跨模块/多步骤/多 session 的需求,SHALL 完整执行 §11.1-§11.5。
 - 单原子需求 (预计单 session 内完成、无跨模块影响) MAY 简化:
   仍 SHALL 有验收标准,但 MAY 跳过架构落盘与独立评审,直接评审→开发→测试→验收。
+
+---
+
+## 12. OpenSpec 规范管理 (2026-08-18 老板钦定)
+
+> **背景**: 项目规范 SHALL 按 OpenSpec 结构化管理——`.osh/specs/<capability>/spec.md`
+> 每 capability 一个目录、独立演进、独立验收。单文件 spec.md 堆砌 (35K+)
+> 无法支撑 capability 边界/版本演进/机器校验,平台已支持目录聚合校验。
+
+### 12.1 规范组织
+
+**SHALL**:
+- 项目规范 SHALL 组织为 `.osh/specs/<capability>/spec.md`,capability 目录名
+  = 领域职责 (如 `window-control`),SHALL NOT 用泛化名。
+- 每个 capability 的 req ID SHALL 全局唯一 (跨 capability 不得重复,
+  聚合校验会拦截重复)。
+- 格式 SHALL 遵循 OpenSpec: `### <REQ-ID>: <Name>` + SHALL/SHOULD/MAY 列表 +
+  (可选) GIVEN/WHEN/THEN 场景;接口契约用 `### <header>.h` + ```c 代码块。
+- 单文件 `spec.md` SHALL NOT 作为新规范的主要载体 (向后兼容可读,不新建)。
+
+### 12.2 校验与平台接入
+
+**SHALL**:
+- 校验 SHALL 用目录聚合模式: `yuleosh spec validate .osh/specs/ --json`
+  (聚合所有 capability) + `python -m yuleosh.spec_contracts .osh/specs/ --json`
+  (契约完整性机器校验)。
+- pipeline spec-check SHALL 在 `.osh/specs/` 存在时优先目录模式;
+  找不到时回退单文件并留 warning。
+- 新增 capability 时 SHALL 通过评审 (对照总体架构与 §11 原子化) 后落盘。
+
+**MAY**:
+- 既有单文件 spec 项目 MAY 迁移到 OpenSpec 结构 (拆 capability),
+  迁移后平台自动识别目录模式。

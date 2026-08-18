@@ -76,6 +76,9 @@ def test_init_creates_skeleton(tmp_path):
     assert (tmp_path / ".yuleosh" / "agents" / "AGENTS.md").exists()
     assert (tmp_path / "CONTEXT.md").exists()
     assert (tmp_path / ".yuleosh" / "ci-config.yaml").exists()
+    # OpenSpec 规范骨架
+    assert (tmp_path / ".osh" / "specs" / "README.md").exists()
+    assert (tmp_path / ".osh" / "specs" / "example" / "spec.md").exists()
 
 
 def test_init_renders_project_name(tmp_path):

@@ -269,3 +269,110 @@ The loop chain covers, but is not limited to:
 
 **MAY**:
 - 无法判断新鲜度 (无 git 且无 src/) → MAY 跳过校验 (避免误报)。
+
+---
+
+## 11. 需求原子化 — 总体架构先行 + 原子需求拆解 (2026-08-18 老板钦定)
+
+> **背景**: 防需求截断。需求从入口到验收必须经历固定链条:
+> 需求总体架构 → 原子需求拆解 → 原子化评审/开发/测试 → 原子化验收。
+> 本规则要求**从一开始 (写需求/分析需求时) 就这么做**,不是事后补救。
+
+### 11.1 需求总体架构 (写需求/分析需求时的第一动作)
+
+**SHALL**:
+- 收到需求 (无论一句话指令还是详细描述) 后,agent SHALL 先写出**需求总体架构**
+  (需求全景图): 目标、边界、核心模块划分、模块间依赖、验收标准总览。
+- 总体架构 SHALL 落盘 (docs/planning/ 或 spec 目录),作为后续拆解的唯一依据;
+  架构未落盘前 SHALL NOT 进入拆解或开发。
+
+### 11.2 原子需求拆解
+
+**SHALL**:
+- 需求 SHALL 拆解成**原子需求** (不可再分的最小可验收单元),每个原子需求
+  独立可评审、可开发、可测试、可验收。
+- **原子粒度基准**: 一个原子需求 SHALL 能在单次开发 session (或一轮迭代)
+  内完成——开发 + 自测可一次交付。若估算超出单 session,SHALL 继续拆解,
+  直到每个原子都在该基准内 (防"伪原子": 看着小实则大)。
+- 每个原子需求 SHALL 有唯一标识 (如 `A-01`/`B-02` 编号) + 明确验收标准
+  (SHALL 语句或 GIVEN/WHEN/THEN),禁止"模糊大需求"直接进入开发。
+- 拆解结果 SHALL 在总体架构评审通过后进行,拆解顺序 SHALL 遵循依赖关系
+  (被依赖的原子需求先行)。
+- 无依赖关系的原子需求 MAY 并行推进 (多 agent/多 session),但验收 SHALL
+  逐个执行,SHALL NOT 并行合批验收。
+
+### 11.3 原子化评审 → 开发 → 测试
+
+**SHALL**:
+- 每个原子需求 SHALL 按固定顺序推进: 评审 → 开发 → 测试,
+  SHALL NOT 跨原子需求混合推进 (评审未过不开发,开发未完成不测试)。
+- 原子需求评审 SHALL 对照总体架构与验收标准 (小马/spec 契约先行),
+  评审记录 SHALL 落盘。
+- 实现型原子需求在开发前 SHALL 对照 §7 模块化设计 (模块划分/命名/接口),
+  设计不满足 §7 的原子 SHALL 退回重设计,SHALL NOT 直接写实现。
+- 测试 SHALL 对应原子需求的验收标准,测试全绿 (含 coverage gate)
+  才允许该原子需求验收。
+
+### 11.4 原子化验收
+
+**SHALL**:
+- 验收 SHALL 按原子需求逐项执行 (不采信自报,亲自复现),
+  验收通过才允许合并/放行该原子需求。
+- 验收结果 SHALL 落盘: 写回项目排期表对应行 (Bitable 每包一行) +
+  该原子需求标识,作为可追溯的验收证据;验收不通过时 SHALL 记录失败原因。
+- 需求被截断 (迭代上限/中断) 时: 已验收的原子需求 SHALL 作为 checkpoint
+  保存 (commit+push),未完成的原子需求 SHALL 明确标注"需接力",
+  SHALL NOT 静默结束。
+- **接力恢复点**: 接力方 (主 agent) 收到"需接力"后,SHALL 从**第一个
+  未验收的原子需求**继续,SHALL NOT 重做已验收原子 (可复跑测试验证但不改)。
+
+### 11.5 需求变更管理
+
+**SHALL**:
+- 需求在拆解/开发过程中发生变化 (追加、修改、删除) 时,agent SHALL 先
+  更新**需求总体架构**,再重新拆解受影响的原子需求,SHALL NOT 在原子开发
+  中途"顺手"塞入新需求。
+- 变更 SHALL 走与初始需求相同的链条: 架构更新 → 受影响原子重拆 →
+  重新评审 → 开发 → 测试 → 验收;未走完链条的变更 SHALL NOT 视为完成。
+- 变更影响已验收原子时,SHALL 标注原原子"变更重做"并保留原验收记录,
+  SHALL NOT 覆盖历史验收证据。
+
+### 11.6 适用范围
+
+**SHALL**:
+- 跨模块/多步骤/多 session 的需求,SHALL 完整执行 §11.1-§11.5。
+- 单原子需求 (预计单 session 内完成、无跨模块影响) MAY 简化:
+  仍 SHALL 有验收标准,但 MAY 跳过架构落盘与独立评审,直接评审→开发→测试→验收。
+
+---
+
+## 12. OpenSpec 规范管理 (2026-08-18 老板钦定)
+
+> **背景**: 项目规范 SHALL 按 OpenSpec 结构化管理——`.osh/specs/<capability>/spec.md`
+> 每 capability 一个目录、独立演进、独立验收。单文件 spec.md 堆砌 (35K+)
+> 无法支撑 capability 边界/版本演进/机器校验,平台已支持目录聚合校验。
+
+### 12.1 规范组织
+
+**SHALL**:
+- 项目规范 SHALL 组织为 `.osh/specs/<capability>/spec.md`,capability 目录名
+  = 领域职责 (如 `window-control`),SHALL NOT 用泛化名。
+- 每个 capability 的 req ID SHALL 全局唯一 (跨 capability 不得重复,
+  聚合校验会拦截重复)。
+- 格式 SHALL 遵循 OpenSpec: `### <REQ-ID>: <Name>` + SHALL/SHOULD/MAY 列表 +
+  (可选) GIVEN/WHEN/THEN 场景;接口契约用 `### <header>.h` + ```c 代码块。
+- 单文件 `spec.md` SHALL NOT 作为新规范的主要载体 (向后兼容可读,不新建)。
+
+### 12.2 校验与平台接入
+
+**SHALL**:
+- 校验 SHALL 用目录聚合模式: `yuleosh spec validate .osh/specs/ --json`
+  (聚合所有 capability) + `python -m yuleosh.spec_contracts .osh/specs/ --json`
+  (契约完整性机器校验)。
+- pipeline spec-check SHALL 在 `.osh/specs/` 存在时优先目录模式;
+  找不到时回退单文件并留 warning。
+- 新增 capability 时 SHALL 通过评审 (对照总体架构与 §11 原子化) 后落盘。
+
+**MAY**:
+- 既有单文件 spec 项目 MAY 迁移到 OpenSpec 结构 (拆 capability),
+  迁移后平台自动识别目录模式。

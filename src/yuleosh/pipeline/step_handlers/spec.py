@@ -19,7 +19,7 @@ from pathlib import Path
 import yuleosh
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
-from yuleosh.spec_contracts import contracts_check
+from yuleosh.spec_contracts import contracts_check, contracts_check_dir
 
 log = logging.getLogger("pipeline.step_handlers.spec")
 
@@ -46,9 +46,11 @@ def step_spec_check(session: PipelineSession) -> str:
     """Step 0: 小明 — OpenSpec 合规检查"""
     try:
         print("  🔍 [小明] Validating OpenSpec...")
-        log.info(f"Validating spec: {session.spec_path}")
+        spec_target = session.spec_path
+        spec_dir_mode = Path(spec_target).is_dir()
+        log.info(f"Validating spec: {spec_target} (directory_mode={spec_dir_mode})")
         result = subprocess.run(
-            [sys.executable, "-m", "yuleosh.spec.validate", session.spec_path, "--json"],
+            [sys.executable, "-m", "yuleosh.spec.validate", spec_target, "--json"],
             capture_output=True, text=True, timeout=60,
             env=_spec_validator_env(),
         )
@@ -84,9 +86,12 @@ def step_spec_check(session: PipelineSession) -> str:
         # 长 spec 固定截断会让下游 LLM 看不到尾部契约 (codegen/claude-review
         # 连续 3 轮 RED 根因)。这里是确定性检查: 抽取 spec 中的接口契约/
         # 行为护栏/参数边界/NVM 布局为 contracts.json, 完整性不满足直接 RED,
-        # 防回归从 LLM 人审迁移到机器检查。
+        # 防回归从 LLM 人审迁移到机器检查。目录模式 (OpenSpec) 聚合校验。
         try:
-            check = contracts_check(session.spec_path)
+            if spec_dir_mode:
+                check = contracts_check_dir(spec_target)
+            else:
+                check = contracts_check(session.spec_path)
         except Exception as e:  # pragma: no cover - defensive
             log.error(f"Contract extraction failed: {e}")
             check = {"validation": {"passed": False, "missing": [f"contract extraction error: {e}"], "details": {}}}
@@ -99,6 +104,20 @@ def step_spec_check(session: PipelineSession) -> str:
             )
         except OSError as e:  # pragma: no cover - defensive
             log.warning(f"contracts.json write failed (non-fatal): {e}")
+
+        # 目录模式: 记录聚合的 spec 文件清单供下游 (codegen/评审) 定位
+        if spec_dir_mode:
+            try:
+                agg_files = check.get("contracts", {}).get("files", [])
+                if agg_files:
+                    idx = session.session_dir / "spec-files.json"
+                    idx.write_text(
+                        json.dumps(agg_files, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    session.set_artifact("spec_files", str(idx))
+            except Exception:  # pragma: no cover - defensive
+                pass
 
         v = check["validation"]
         if not v["passed"]:

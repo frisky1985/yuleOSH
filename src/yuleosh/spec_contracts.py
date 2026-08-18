@@ -310,6 +310,78 @@ def contracts_check(spec_path: str, required: dict | None = None) -> dict:
     }
 
 
+def extract_contracts_dir(spec_dir: str) -> dict:
+    """Extract contracts from an OpenSpec directory (all capability specs).
+
+    Aggregates ``<dir>/*/spec.md`` (OpenSpec capability layout) or flat
+    ``*.md`` fallback, merging interfaces/guardrails/params/requirements
+    across files. Returns the same shape as :func:`extract_contracts` with
+    ``files`` listing the aggregated sources.
+
+    Never raises on malformed specs — extraction is best-effort.
+    """
+    from yuleosh.spec.validate import find_spec_files
+
+    files = find_spec_files(spec_dir)
+    if not files:
+        return {
+            "error": f"no spec files found under directory: {spec_dir}",
+            "files": [],
+        }
+
+    merged: dict = {
+        "spec_size": 0,
+        "interfaces": [],
+        "guardrails": [],
+        "params": [],
+        "nvm_layout": {},
+        "requirements": [],
+        "files": files,
+    }
+
+    seen_guardrails: set[str] = set()
+    seen_params: set[str] = set()
+    seen_reqs: set[str] = set()
+
+    for f in files:
+        contracts = extract_contracts(f)
+        if "error" in contracts:
+            continue
+        merged["spec_size"] += contracts.get("spec_size", 0)
+        merged["interfaces"].extend(contracts.get("interfaces", []))
+        for g in contracts.get("guardrails", []):
+            gid = g.get("id") or str(g)
+            if gid not in seen_guardrails:
+                seen_guardrails.add(gid)
+                merged["guardrails"].append(g)
+        for p in contracts.get("params", []):
+            pname = p.get("name") or str(p)
+            if pname not in seen_params:
+                seen_params.add(pname)
+                merged["params"].append(p)
+        for r in contracts.get("requirements", []):
+            if r not in seen_reqs:
+                seen_reqs.add(r)
+                merged["requirements"].append(r)
+
+        nvm = contracts.get("nvm_layout") or {}
+        if nvm and not merged["nvm_layout"]:
+            merged["nvm_layout"] = nvm
+
+    return merged
+
+
+def contracts_check_dir(spec_dir: str, required: dict | None = None) -> dict:
+    """One-shot directory extraction + validation for spec-check step output."""
+    contracts = extract_contracts_dir(spec_dir)
+    validation = validate_contracts(contracts, required=required)
+    return {
+        "contracts": contracts,
+        "validation": validation,
+        "mode": "directory",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI: python -m yuleosh.spec_contracts <spec.md> [--json]"""
     import argparse
@@ -329,7 +401,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"invalid --required JSON: {args.required}", file=sys.stderr)
             return 2
 
-    result = contracts_check(args.spec_path, required=required)
+    if Path(args.spec_path).is_dir():
+        result = contracts_check_dir(args.spec_path, required=required)
+    else:
+        result = contracts_check(args.spec_path, required=required)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0

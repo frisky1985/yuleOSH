@@ -104,6 +104,27 @@ def cmd_methodology_init(project_dir: str = ".", force: bool = False) -> None:
             cfg_dst.write_text(_render(cfg_src.read_text(encoding="utf-8"), project_name), encoding="utf-8")
             created.append(".yuleosh/ci-config.yaml")
 
+    # 4) OpenSpec 规范骨架（.osh/specs/README + 示例 capability，幂等）
+    specs_tpl = tpl / ".osh" / "specs"
+    if specs_tpl.exists():
+        specs_dst = root / ".osh" / "specs"
+        specs_dst.mkdir(parents=True, exist_ok=True)
+        readme_dst = specs_dst / "README.md"
+        if readme_dst.exists() and not force:
+            skipped.append(".osh/specs/README.md")
+        else:
+            readme_dst.write_text((specs_tpl / "README.md").read_text(encoding="utf-8"), encoding="utf-8")
+            created.append(".osh/specs/README.md")
+        ex_src = specs_tpl / "example" / "spec.md"
+        ex_dst = specs_dst / "example" / "spec.md"
+        if ex_src.exists():
+            if ex_dst.exists() and not force:
+                skipped.append(".osh/specs/example/spec.md")
+            else:
+                ex_dst.parent.mkdir(parents=True, exist_ok=True)
+                ex_dst.write_text(_render(ex_src.read_text(encoding="utf-8"), project_name), encoding="utf-8")
+                created.append(".osh/specs/example/spec.md")
+
     print(f"✅ 方法论宿主包已挂载到 {root}")
     for c in created:
         print(f"   ✍️  创建: {c}")

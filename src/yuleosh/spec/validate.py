@@ -696,6 +696,143 @@ def _compute_impact_analysis(
 # ── Coverage ──────────────────────────────────────────────────────────────────
 
 
+# ── Directory aggregation (OpenSpec: .osh/specs/<capability>/spec.md) ────────
+
+
+def find_spec_files(spec_dir: str) -> list[str]:
+    """Find OpenSpec spec files under a directory.
+
+    Accepts a directory path (e.g. ``.osh/specs`` or a project root). Returns
+    all ``spec.md`` files matching the OpenSpec layout
+    ``<dir>/*/spec.md`` (one directory per capability), sorted by path for
+    deterministic aggregation. Falls back to any ``*.md`` files directly
+    inside ``<dir>`` when no capability subdirectories exist.
+
+    Args:
+        spec_dir: Directory to scan.
+
+    Returns:
+        Sorted list of spec file paths (absolute).
+    """
+    root = Path(spec_dir).resolve()
+    if not root.is_dir():
+        return []
+
+    # Preferred: OpenSpec capability layout — <dir>/<capability>/spec.md
+    caps = sorted(root.glob("*/spec.md"))
+    if caps:
+        return [str(p) for p in caps]
+
+    # Fallback: flat markdown files directly in the directory
+    flat = sorted(root.glob("*.md"))
+    return [str(p) for p in flat]
+
+
+def aggregate_docs(spec_paths: list[str]) -> SpecDocument:
+    """Parse multiple spec files into a single aggregated SpecDocument.
+
+    Each input file is parsed with ``parse_spec``; requirements and scenarios
+    are merged in file order. Duplicate requirement IDs across files raise a
+    ``ValueError`` (OpenSpec capabilities must own disjoint requirement IDs).
+
+    Args:
+        spec_paths: List of spec file paths.
+
+    Returns:
+        Aggregated :class:`SpecDocument`.
+    """
+    if not spec_paths:
+        raise ValueError("No spec files found")
+
+    docs = [parse_spec(p) for p in spec_paths]
+    first = docs[0]
+
+    # Merge into the first document to keep a single object identity
+    seen: set[str] = set()
+    for d in docs:
+        for r in d.requirements:
+            rid = r.req_id or r.name
+            if rid in seen:
+                raise ValueError(
+                    f"Duplicate requirement ID '{rid}' across spec files — "
+                    f"OpenSpec capabilities must own disjoint requirement IDs"
+                )
+            seen.add(rid)
+            first.requirements.append(r) if d is not first else None
+    for d in docs[1:]:
+        first.scenarios.extend(d.scenarios)
+
+    # Track source files for reporting
+    first.path = ", ".join(spec_paths)
+    return first
+
+
+def validate_spec_dir(spec_dir: str) -> dict:
+    """Validate all OpenSpec spec files under a directory.
+
+    Aggregates ``.osh/specs/*/spec.md`` (or flat ``*.md`` fallback), then runs
+    the same validation as :func:`validate_spec` on the merged document.
+
+    Returns:
+        dict with ``file``, ``requirements``, ``scenarios``, ``total_shall``,
+        ``issues``, ``issue_count``, ``error_count``, ``coverage``, and
+        ``files`` (list of aggregated source files).
+    """
+    files = find_spec_files(spec_dir)
+    if not files:
+        return {
+            "file": spec_dir,
+            "requirements": 0,
+            "scenarios": 0,
+            "total_shall": 0,
+            "issues": [{
+                "severity": "ERROR",
+                "type": "no-spec-files",
+                "item": spec_dir,
+                "message": "No spec.md files found under directory",
+            }],
+            "issue_count": 1,
+            "error_count": 1,
+            "coverage": {"score": 0, "details": "No requirements found"},
+            "files": [],
+        }
+
+    try:
+        doc = aggregate_docs(files)
+    except ValueError as e:
+        return {
+            "file": spec_dir,
+            "requirements": 0,
+            "scenarios": 0,
+            "total_shall": 0,
+            "issues": [{
+                "severity": "ERROR",
+                "type": "duplicate-req-id",
+                "item": spec_dir,
+                "message": str(e),
+            }],
+            "issue_count": 1,
+            "error_count": 1,
+            "coverage": {"score": 0, "details": str(e)},
+            "files": files,
+        }
+
+    issues = validate_spec(doc)
+    coverage = _compute_coverage(doc)
+
+    return {
+        "file": spec_dir,
+        "requirements": len(doc.requirements),
+        "scenarios": len(doc.scenarios),
+        "total_shall": sum(len(r.shall) for r in doc.requirements),
+        "issues": issues,
+        "issue_count": len(issues),
+        "error_count": sum(1 for i in issues if i["severity"] == "ERROR"),
+        "coverage": coverage,
+        "files": files,
+    }
+
+
 def _compute_coverage(doc: SpecDocument) -> dict:
     """Compute spec coverage score."""
     total = len(doc.requirements)
@@ -730,12 +867,25 @@ def _compute_coverage(doc: SpecDocument) -> dict:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 validate.py <file> [--json]", file=sys.stderr)
+        print("Usage: python3 validate.py <file|directory> [--json]", file=sys.stderr)
         sys.exit(1)
 
-    filepath = sys.argv[1]
+    target = sys.argv[1]
     to_json = "--json" in sys.argv
 
+    # Directory → aggregate validation (OpenSpec .osh/specs/*/spec.md)
+    if Path(target).is_dir():
+        result = validate_spec_dir(target)
+        result["mode"] = "directory"
+        if to_json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            _print_human(result)
+        if result["error_count"] > 0:
+            sys.exit(1)
+        return
+
+    filepath = target
     try:
         doc = parse_spec(filepath)
     except Exception as e:
@@ -754,6 +904,7 @@ def main():
         "issue_count": len(issues),
         "error_count": sum(1 for i in issues if i["severity"] == "ERROR"),
         "coverage": coverage,
+        "mode": "file",
     }
 
     if to_json:
@@ -767,6 +918,10 @@ def main():
 
 def _print_human(result: dict):
     print(f"\n📋 OpenSpec Validation: {result['file']}")
+    if result.get("mode") == "directory" and result.get("files"):
+        print(f"   📂 Aggregated files ({len(result['files'])}):")
+        for f in result["files"]:
+            print(f"      - {f}")
     print(f"{'='*50}")
     print(f"  Requirements: {result['requirements']}")
     print(f"  Scenarios:    {result['scenarios']}")
