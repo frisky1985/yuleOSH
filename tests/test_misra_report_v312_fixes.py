@@ -204,7 +204,13 @@ class TestSaveReportNoStaleData:
             assert len(fresh["violations_raw"]) == 1
 
     def test_rerun_overwrites_stale_markdown(self):
-        """markdown 报告全量重写，不含旧内容。"""
+        """markdown 报告全量重写，不含旧内容。
+
+        注意：不能用 ``"999" not in md_content`` 断言——generated_at 时间戳
+        的微秒可能随机包含 999（flaky）。稳定断言是 stale 内容不残留 +
+        diff 段不出现（stale 文件名 misra-report.json 不匹配
+        misra-report-*.json glob，不会进入 previous_total）。
+        """
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
             self._write_stale_report(out)
@@ -218,7 +224,8 @@ class TestSaveReportNoStaleData:
             )
             md_content = md_path.read_text()
             assert "OLD STALE CONTENT" not in md_content
-            assert "999" not in md_content
+            assert "**Total Violations**: 1" in md_content
+            assert "Previous Total" not in md_content
 
     def test_stale_groups_not_merged_into_fresh(self):
         """旧报告 groups（Rule 99.9）不得出现在新报告。"""

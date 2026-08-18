@@ -292,7 +292,12 @@ class TestMisraParsing:
     """Tests for misra_report/core.py — key parsing functions."""
 
     def test_parse_cppcheck_output_basic(self):
-        """GIVEN cppcheck MISRA output WHEN parsed THEN returns violations."""
+        """GIVEN cppcheck MISRA output WHEN parsed THEN returns violations.
+
+        cppcheck outputs C:2012 IDs. Rule 10.1 is 'modified' in C:2023 so
+        the r21q honesty rule preserves its C:2012 identity (re-labeling
+        would mislabel a different C:2023 requirement).
+        """
         from yuleosh.ci.misra_report.core import parse_cppcheck_output
 
         cppcheck_out = (
@@ -302,7 +307,7 @@ class TestMisraParsing:
         assert len(violations) >= 1
         v = violations[0]
         assert v["file"] == "src/main.c"
-        assert v["rule_id"] == "misra-c2023-10.1"
+        assert v["rule_id"] == "misra-c2012-10.1"
 
     def test_parse_cppcheck_output_no_violations(self):
         """GIVEN empty cppcheck output WHEN parsed THEN returns empty list."""

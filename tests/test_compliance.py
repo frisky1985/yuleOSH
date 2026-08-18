@@ -303,7 +303,14 @@ def test_misra_report_parse_cppcheck_output():
     assert violations[0]["severity"] == "style"
 
 def test_misra_report_group_by_rule():
-    """Test grouping violations by rule ID."""
+    """Test grouping violations by rule ID.
+
+    Input uses cppcheck's native C:2012 IDs. The r21q honesty rule
+    normalizes them per the backward-compat mapping:
+      * modified rules (e.g. 10.1) keep their C:2012 identity
+        (re-labeling would mislabel a different C:2023 requirement);
+      * unchanged rules (e.g. 17.7) are safely re-labeled to C:2023.
+    """
     _mr = _load_misra_report()
 
     sample = (
@@ -314,9 +321,11 @@ def test_misra_report_group_by_rule():
     violations = _mr.parse_cppcheck_output(sample)
     groups = _mr.group_by_rule(violations)
 
-    assert "misra-c2023-10.1" in groups
+    # 10.1 is 'modified' in C:2023 → honest C:2012 identity preserved
+    assert "misra-c2012-10.1" in groups
+    assert len(groups["misra-c2012-10.1"]) == 2
+    # 17.7 is 'unchanged' in C:2023 → safely re-labeled
     assert "misra-c2023-17.7" in groups
-    assert len(groups["misra-c2023-10.1"]) == 2
     assert len(groups["misra-c2023-17.7"]) == 1
 
 def test_misra_report_summary_stats():
