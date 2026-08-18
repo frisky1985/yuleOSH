@@ -1,6 +1,6 @@
 # RULES.md — Agent Behavioral Rules (Zero-Tolerance)
 
-> **Version**: 1.4.0
+> **Version**: 1.5.0
 > **Status**: Active
 > **Format**: OpenSpec (RFC 2119: SHALL/SHOULD/MAY)
 > **优先级**: 本文件所有规则服从第一准则 PRIME-DIRECTIVE.md（工程诚实）。冲突时以第一准则为准；测试真实性与降级透明性的详细落地见 TEST-INTEGRITY.md。
@@ -376,3 +376,53 @@ The loop chain covers, but is not limited to:
 **MAY**:
 - 既有单文件 spec 项目 MAY 迁移到 OpenSpec 结构 (拆 capability),
   迁移后平台自动识别目录模式。
+
+---
+
+## 13. Change Proposal 生命周期与证据链 (2026-08-18)
+
+> **背景**: spec 演进 (新增/修改/删除需求) 通过 Change Proposal (CP) 管理。
+> CP 的终点是 archive (并入 spec 基线)。**归档即声明"该改动已被实现并验证"**
+> ——因此归档必须有 pipeline 背书,禁止"approve 了但代码从未被 pipeline
+> 生成/构建过"的假闭环。落地: `yuleosh spec cp` 命令族 (commit 6943509b)。
+
+### 13.1 CP 状态机与证据要求
+
+**SHALL**:
+- CP 状态流转 SHALL 为: `proposed → approved → implemented → archived`。
+- CP 实现 SHALL 通过 pipeline 背书: 跑 pipeline (代码生成/构建/验证),
+  成功后用 `yuleosh spec cp implement <id> --pipeline-run <run_id>`
+  写入证据,frontmatter 记 `implemented_by: <run_id>`。
+- **归档 fail-closed**: `implemented` 但无 `implemented_by` 证据的 CP,
+  SHALL 被 `archive` 拒绝 (报错提示补证或跑 auto),SHALL NOT 放行。
+- 补证路径: 手工实现 (状态已是 implemented 但无证据) 的 CP MAY 补证,
+  SHALL NOT 覆盖已有证据 (`mark_implemented` 幂等: 有证据则拒绝改写)。
+- 证据 SHALL 是 pipeline run id (指向真实 session),SHALL NOT 用
+  任意字符串/人为标注冒充证据。
+
+**SHALL NOT**:
+- SHALL NOT 在无 pipeline 背书时把 CP 归档视为"已实现并验证"。
+- SHALL NOT 覆盖已有实现证据 (历史证据是验收追溯的一部分)。
+
+### 13.2 auto 自动补跑 (归档前救回)
+
+**SHALL**:
+- `yuleosh spec cp auto [--mock]` SHALL 扫描 approved 未 implement 的 CP,
+  逐个跑 pipeline (复用 `run_pipeline`,非侵入),**成功才**写证据,
+  失败 SHALL 不写证据、SHALL 如实报告失败 CP。
+- approve 时未触发 pipeline 的 CP,归档前 SHALL 跑 auto 补证据
+  (或手动 implement --pipeline-run)。
+- `--mock` 模式用于结构验证 (不烧 token),结果不构成真实验证证据。
+
+**MAY**:
+- auto MAY 串行处理多个 CP;每个 CP 独立跑 pipeline,互不污染。
+
+### 13.3 与 §11/§12 的关系
+
+**SHALL**:
+- 新增 capability / 大改动 SHALL 走 §11 原子化 (架构→拆解→评审→开发→测试)
+  再提 CP;CP 只记录"这个改动发生了",实现质量仍由 §11 链条保证。
+- CP 落盘位置 SHALL 在 `.osh/changes/<capability>/` (spec 同目录族),
+  与 OpenSpec 规范 (§12) 同一套目录聚合校验。
+- `yuleosh spec cp validate <id>` SHALL 是机器校验 (frontmatter/结构/状态
+  合法性),评审 (review) 是 LLM 人工判读,两者 SHALL 都通过才 approve。
