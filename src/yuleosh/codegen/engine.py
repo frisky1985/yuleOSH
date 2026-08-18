@@ -971,11 +971,17 @@ class CodegenEngine:
                     content = f.read_text(encoding="utf-8", errors="replace")
                 except OSError:
                     continue
-                found = [feat for feat in forbidden if feat in content]
+                # 2026-08-18 r21o (claude-review): 裸子串匹配会把注释里的
+                # 禁止词也命中 — codegen 把 spec/PRD 的禁止措辞复述进注释
+                # (如 window_position.c:255 "禁止改用 (int64_t)") 属正常行为,
+                # 却导致行为验证被 SKIP → 掩盖生成产物真实语义漂移。
+                # 只匹配代码部分 (剥离 /* */ 与 // 注释后再查)。
+                code_only = _strip_c_comments(content)
+                found = [feat for feat in forbidden if feat in code_only]
                 if found:
                     bad_blocks.append(
                         f"  - {f.relative_to(out_dir)}: 禁止出现 "
-                        f"{', '.join(found)}"
+                        f"{', '.join(found)} (注释内出现不计)"
                     )
         if not bad_blocks:
             return prior_errors
@@ -1230,6 +1236,73 @@ class CodegenEngine:
         path = out_dir / "codegen-report.md"
         path.write_text(report, encoding="utf-8")
         return path
+
+
+def _strip_c_comments(src: str) -> str:
+    """Strip C/C++ comments (/* */ and //) from source, preserving strings.
+
+    2026-08-18 r21o (claude-review): forbidden_features 反模式检查必须只看
+    代码不看注释 — codegen 常把 spec/PRD 的禁止措辞复述进注释 (如
+    "禁止改用 (int64_t)"), 注释不是反模式本身。朴素 re.sub 会误删
+    "http://" 之类字符串, 这里用状态机: 字符串字面量内不剥, 注释剥掉。
+    """
+    out: list[str] = []
+    i = 0
+    n = len(src)
+    state = "code"  # code | line_comment | block_comment | string | char
+    while i < n:
+        c = src[i]
+        if state == "code":
+            if c == "/" and i + 1 < n and src[i + 1] == "/":
+                state = "line_comment"
+                i += 2
+                continue
+            if c == "/" and i + 1 < n and src[i + 1] == "*":
+                state = "block_comment"
+                i += 2
+                continue
+            if c == '"':
+                state = "string"
+                out.append(c)
+                i += 1
+                continue
+            if c == "'":
+                state = "char"
+                out.append(c)
+                i += 1
+                continue
+            out.append(c)
+            i += 1
+        elif state == "line_comment":
+            if c == "\n":
+                state = "code"
+                out.append("\n")
+            i += 1
+        elif state == "block_comment":
+            if c == "*" and i + 1 < n and src[i + 1] == "/":
+                state = "code"
+                i += 2
+                continue
+            i += 1
+        elif state == "string":
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(src[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                state = "code"
+            i += 1
+        elif state == "char":
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(src[i + 1])
+                i += 2
+                continue
+            if c == "'":
+                state = "code"
+            i += 1
+    return "".join(out)
 
 
 def build_codegen_report(result: CodegenResult, session: PipelineSession) -> str:
