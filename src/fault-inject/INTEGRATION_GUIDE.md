@@ -15,8 +15,8 @@
  *    ├── README.md     — Module documentation
  *    └── doc.go        — Go-style module doc with ASPICE annotations
  *
- * The reference implementations at ref/fault-inject/ are retained for
- * traceability but all new development should use src/fault-inject/.
+ * The former reference implementations at ref/fault-inject/ have been merged
+ * into src/fault-inject/ and removed. Use src/fault-inject/ for all development.
  *
  * This guide shows how to wire the TaskFaultInject module into the existing
  * A66-T SBM codebase. All changes are guarded by A66T_TASK_FAULT_INJECT_ENABLE

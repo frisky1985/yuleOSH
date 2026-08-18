@@ -177,3 +177,8 @@ sketches/
 
 # SQLite state dumps
 phase10
+
+# Removed from remote (2026-08-18) — kept local only, pending decision
+/artifacts/
+/demos/
+/projects/

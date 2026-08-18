@@ -151,15 +151,12 @@ TaskFault_Inject(targetTask, TASK_FAULT_SIM_TIMEOUT);
 - Safety builds should explicitly `#undef` or override at the build system
   level to prevent accidental enablement.
 
-## Migration from ref/
+## History
 
-This module is the formal yuleOSH replacement for the reference implementations:
-
-- `ref/fault-inject/FaultInject/` → **`src/fault-inject/`** (Layer 1)
-- `ref/fault-inject/v2/` → **`src/fault-inject/`** (Layers 1 + 2)
-
-The reference implementations are retained for traceability but should not be
-used for new development. All new integration should use `src/fault-inject/`.
+This module supersedes the former reference implementations
+(`ref/fault-inject/FaultInject/` Layer 1 and `ref/fault-inject/v2/` Layers 1 + 2),
+which have been merged into this directory and removed. All new integration
+should use `src/fault-inject/`.
 
 ## See Also
 

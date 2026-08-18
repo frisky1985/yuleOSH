@@ -69,6 +69,6 @@
 //  CMakeLists.txt                — Build integration
 //  README.md                     — Module documentation
 //  doc.go                        — This file (Go-style module doc)
-//  ../../ref/fault-inject/       — Original reference implementations
 //  INTEGRATION_GUIDE.md          — Integration guide (module-level)
+//  (former ref/fault-inject/ reference implementations merged into src/)
 package faultinject
