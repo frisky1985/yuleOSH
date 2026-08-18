@@ -60,6 +60,12 @@ def _extract_shalls(spec_content: str) -> list[dict]:
             continue
         if stripped.startswith("```"):
             continue
+        # Skip spec 头部版本历史 changelog 行 (`> v1.1.x ... SHALL ...` 是
+        # 变更记录不是需求 — r21n 误报 3 个假 uncovered，修复于 2026-08-18)。
+        # 注意: 只跳版本历史行, 不能跳全部 blockquote — spec 正文用 `>` 表达
+        # 真实需求 (接口契约 §1.5 / PRD 全量继承等), 见 spec.md:184-231。
+        if re.match(r"^>\s*(Version:|v\d+\.\d+\.\d+)", stripped):
+            continue
         m = _SHALL_RE.match(stripped)
         if m:
             shalls.append({
