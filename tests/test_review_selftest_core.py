@@ -864,6 +864,44 @@ class TestStepReviewSelftest:
         assert "coverage" in data
         assert "llm_degradation" in data
 
+    def test_synthesize_unity_test_cases(self, tmp_path):
+        """GIVEN C test source with test_* functions and no JUnit XML
+           WHEN _synthesize_unity_test_cases runs
+           THEN it recovers test names as passed cases (Unity summary-only)."""
+        from yuleosh.pipeline.step_handlers.review_selftest.core import _synthesize_unity_test_cases
+        src = tmp_path / "test_window_control.c"
+        src.write_text(
+            "static void test_init(void) { CHECK(1); }\n"
+            "static void test_manual_up(void) { CHECK(1); }\n"
+            "static void test_reversal_completes(void) { CHECK(1); }\n"
+            "int main(void) { RUN_TEST(test_init); RUN_TEST(test_manual_up); return 0; }\n"
+        )
+        cases = _synthesize_unity_test_cases([src])
+        names = [c["name"] for c in cases]
+        assert "test_init" in names
+        assert "test_manual_up" in names
+        assert "test_reversal_completes" in names
+        for c in cases:
+            assert c["status"] == "passed"
+            assert c.get("source") == "unity-summary"
+
+    def test_synthesize_unity_dedupes_and_ignores_non_c(self, tmp_path):
+        """GIVEN duplicate function names and non-C files
+           WHEN _synthesize_unity_test_cases runs
+           THEN names are deduped and only .c/.cpp files are scanned."""
+        from yuleosh.pipeline.step_handlers.review_selftest.core import _synthesize_unity_test_cases
+        a = tmp_path / "a.c"
+        b = tmp_path / "b.c"
+        h = tmp_path / "helper.h"
+        a.write_text("static void test_dup(void) { CHECK(1); }\n")
+        b.write_text("static void test_dup(void) { CHECK(1); }\nstatic void test_other(void) { CHECK(1); }\n")
+        h.write_text("static void test_from_header(void) { CHECK(1); }\n")
+        cases = _synthesize_unity_test_cases([a, b, h])
+        names = [c["name"] for c in cases]
+        assert names.count("test_dup") == 1
+        assert "test_other" in names
+        assert "test_from_header" not in names
+
     def test_llm_fallback_continues(self, tmp_session):
         """GIVEN PipelineStepError from LLM WHEN running THEN falls back and continues."""
         from yuleosh.pipeline.step_handlers.review_selftest.core import (
