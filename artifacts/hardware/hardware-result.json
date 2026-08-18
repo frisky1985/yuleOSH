@@ -1,9 +1,0 @@
-{
-  "success": false,
-  "flash_ok": false,
-  "monitor_ok": false,
-  "report": null,
-  "artifacts": {},
-  "error": "Unexpected hardware crash",
-  "duration_ms": 1
-}
