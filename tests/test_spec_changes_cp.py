@@ -18,6 +18,7 @@ from yuleosh.spec.changes import (
     get_blocking_cps,
     list_changes,
     load_proposal,
+    mark_implemented,
     propose_change,
     set_status,
     validate_proposal,
@@ -89,15 +90,68 @@ def test_status_machine_transitions(project: Path):
 
 
 def test_archive_moves_to_archive_dir(project: Path):
-    """GIVEN implemented cp WHEN archive THEN moves to archive/<date>-<id>/."""
+    """GIVEN implemented cp WITH evidence WHEN archive THEN moves to archive/."""
     propose_change(project, "cp-001", title="x")
     set_status(project, "cp-001", "approved")
-    set_status(project, "cp-001", "implemented")
+    mark_implemented(project, "cp-001", "run-abc123")
     target = archive_change(project, "cp-001")
     assert "archive" in str(target)
     assert (target / "proposal.md").exists()
     assert load_proposal(project, "cp-001") is None
     assert list_changes(project) == []
+
+
+def test_archive_rejects_missing_evidence(project: Path):
+    """GIVEN implemented WITHOUT evidence WHEN archive THEN ValueError (fail-closed)."""
+    propose_change(project, "cp-001", title="x")
+    set_status(project, "cp-001", "approved")
+    set_status(project, "cp-001", "implemented")  # no evidence
+    with pytest.raises(ValueError) as exc:
+        archive_change(project, "cp-001")
+    assert "evidence" in str(exc.value).lower()
+
+
+def test_mark_implemented_requires_evidence_and_approved(project: Path):
+    """GIVEN approved cp WHEN mark_implemented THEN evidence written; guards enforced."""
+    propose_change(project, "cp-001", title="x")
+    with pytest.raises(ValueError):
+        mark_implemented(project, "cp-001", "")  # empty evidence
+    with pytest.raises(ValueError):
+        mark_implemented(project, "cp-001", "run-1")  # not approved yet
+    set_status(project, "cp-001", "approved")
+    cp = mark_implemented(project, "cp-001", "run-abc123")
+    assert cp.status == "implemented"
+    assert cp.implemented_by == "run-abc123"
+    assert cp.has_implementation_evidence is True
+
+
+def test_mark_implemented_persists_across_reload(project: Path):
+    """GIVEN mark_implemented THEN reload sees evidence in frontmatter."""
+    propose_change(project, "cp-001", title="x")
+    set_status(project, "cp-001", "approved")
+    mark_implemented(project, "cp-001", "run-xyz789")
+    cp = load_proposal(project, "cp-001")
+    assert cp is not None
+    assert cp.implemented_by == "run-xyz789"
+
+
+def test_mark_implemented_recovery_after_manual_implemented(project: Path):
+    """GIVEN manually implemented (no evidence) WHEN mark_implemented THEN evidence attached."""
+    propose_change(project, "cp-001", title="x")
+    set_status(project, "cp-001", "approved")
+    set_status(project, "cp-001", "implemented")  # manual, no evidence
+    cp = mark_implemented(project, "cp-001", "run-recovery-1")
+    assert cp.implemented_by == "run-recovery-1"
+    archive_change(project, "cp-001")  # now allowed
+
+
+def test_mark_implemented_rejects_overwrite(project: Path):
+    """GIVEN implemented WITH evidence WHEN mark_implemented again THEN ValueError."""
+    propose_change(project, "cp-001", title="x")
+    set_status(project, "cp-001", "approved")
+    mark_implemented(project, "cp-001", "run-first")
+    with pytest.raises(ValueError):
+        mark_implemented(project, "cp-001", "run-second")
 
 
 def test_archive_rejects_non_implemented(project: Path):

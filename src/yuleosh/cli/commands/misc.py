@@ -547,6 +547,7 @@ def cmd_spec_cp(args) -> None:
         archive_change,
         list_changes,
         load_proposal,
+        mark_implemented,
         propose_change,
         set_status,
         validate_proposal,
@@ -571,7 +572,8 @@ def cmd_spec_cp(args) -> None:
                 return
             for cp in cps:
                 blocking = " ⛔ BLOCKING (approved, not implemented)" if cp.is_blocking else ""
-                print(f"  {cp.change_id:12s} [{cp.status:12s}] {cp.title}{blocking}")
+                evidence = f" (evid:{cp.implemented_by})" if cp.implemented_by else ""
+                print(f"  {cp.change_id:12s} [{cp.status:12s}] {cp.title}{blocking}{evidence}")
         elif sub == "status":
             cp = load_proposal(project_dir, args.change_id)
             if cp is None:
@@ -583,12 +585,20 @@ def cmd_spec_cp(args) -> None:
             print(f"created: {cp.created}")
             print(f"affects: {', '.join(cp.affects) if cp.affects else '-'}")
             print(f"tasks:   {len(cp.tasks)} unchecked")
+            print(f"evidence:{cp.implemented_by or '-'}")
         elif sub == "approve":
             cp = set_status(project_dir, args.change_id, "approved")
             print(f"✅ {cp.change_id} → approved (implementation may proceed)")
         elif sub == "implement":
-            cp = set_status(project_dir, args.change_id, "implemented")
-            print(f"✅ {cp.change_id} → implemented (ready to archive)")
+            pipeline_run = getattr(args, "pipeline_run", "") or ""
+            if pipeline_run:
+                cp = mark_implemented(project_dir, args.change_id, pipeline_run)
+                print(f"✅ {cp.change_id} → implemented (evidence: {pipeline_run}, ready to archive)")
+            else:
+                cp = set_status(project_dir, args.change_id, "implemented")
+                print(f"⚠️  {cp.change_id} → implemented WITHOUT pipeline-run evidence")
+                print("   archive will be BLOCKED — run `yuleosh spec cp implement "
+                      f"{args.change_id} --pipeline-run <run_id>` or `yuleosh spec cp auto` first")
         elif sub == "archive":
             target = archive_change(project_dir, args.change_id)
             print(f"✅ {args.change_id} archived → {target}")
@@ -604,12 +614,58 @@ def cmd_spec_cp(args) -> None:
                 print(f"  ⚠️ {w}")
         elif sub == "review":
             _cmd_spec_cp_review(project_dir)
+        elif sub == "auto":
+            _cmd_spec_cp_auto(project_dir, mock=getattr(args, "mock", False))
         else:
-            print("usage: yuleosh spec cp <propose|list|status|approve|implement|archive|validate|review>", file=sys.stderr)
+            print("usage: yuleosh spec cp <propose|list|status|approve|implement|archive|validate|review|auto>", file=sys.stderr)
             sys.exit(2)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         print(f"❌ {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def _cmd_spec_cp_auto(project_dir: str, mock: bool = False) -> None:
+    """Auto-implement approved CPs by running the pipeline (non-intrusive).
+
+    For each approved-but-not-implemented CP: find the spec target
+    (.osh/specs/ dir or spec.md), run the pipeline against it, and on
+    completion record the pipeline run id as implementation evidence
+    (implemented_by frontmatter). Archive afterwards is allowed.
+    """
+    from yuleosh.spec.changes import get_blocking_cps, mark_implemented
+
+    blocking = get_blocking_cps(project_dir)
+    if not blocking:
+        print("(no approved-but-unimplemented change proposals — nothing to auto)")
+        return
+    spec_target = Path(project_dir) / ".osh" / "specs"
+    if not spec_target.exists():
+        alt = Path(project_dir) / "spec.md"
+        if alt.exists():
+            spec_target = alt
+        else:
+            print("❌ No spec found (.osh/specs/ or spec.md) — cannot auto-run pipeline", file=sys.stderr)
+            sys.exit(1)
+
+    from yuleosh.pipeline.orchestrator import run_pipeline
+
+    for cp in blocking:
+        print(f"▶️  Auto-implementing {cp.change_id} ({cp.title})...")
+        try:
+            session = run_pipeline(
+                str(spec_target),
+                name=f"cp-auto-{cp.change_id}",
+                mock=mock,
+            )
+        except SystemExit as e:
+            print(f"❌ {cp.change_id}: pipeline exited {e.code}", file=sys.stderr)
+            continue
+        run_id = getattr(session, "run_id", None) or getattr(session, "name", "unknown")
+        if getattr(session, "status", "") == "completed":
+            mark_implemented(project_dir, cp.change_id, run_id)
+            print(f"✅ {cp.change_id} → implemented (pipeline {run_id})")
+        else:
+            print(f"⚠️  {cp.change_id}: pipeline finished with status '{getattr(session, 'status', '?')}' — not marked implemented", file=sys.stderr)
 
 
 def _cmd_spec_cp_review(project_dir: str) -> None:

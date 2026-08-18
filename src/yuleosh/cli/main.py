@@ -205,6 +205,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_cp_approve.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_cp_implement = cpsub.add_parser("implement", help="Mark approved change implemented (→ implemented)")
     p_cp_implement.add_argument("change_id", help="Change proposal ID")
+    p_cp_implement.add_argument("--pipeline-run", default="", help="Pipeline run id (evidence required for archive)")
     p_cp_implement.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_cp_archive = cpsub.add_parser("archive", help="Archive implemented change (→ archived)")
     p_cp_archive.add_argument("change_id", help="Change proposal ID")
@@ -214,6 +215,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_cp_validate.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_cp_review = cpsub.add_parser("review", help="Review pending change proposals via LLM (standalone)")
     p_cp_review.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_auto = cpsub.add_parser("auto", help="Auto-run pipeline for approved-unimplemented CPs")
+    p_cp_auto.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_auto.add_argument("--mock", action="store_true", help="Run pipeline in mock mode (no LLM)")
 
     # pipeline
     p_pipe = sub.add_parser("pipeline", help="Agent pipeline management")

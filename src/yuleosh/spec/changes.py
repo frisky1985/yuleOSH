@@ -88,6 +88,7 @@ class ChangeProposal:
     created: str = ""
     affects: list[str] = field(default_factory=list)
     tasks: list[str] = field(default_factory=list)
+    implemented_by: str = ""
 
     @property
     def proposal_path(self) -> Path:
@@ -101,6 +102,11 @@ class ChangeProposal:
     def is_blocking(self) -> bool:
         """True when an approved change has not been implemented yet."""
         return self.status == "approved"
+
+    @property
+    def has_implementation_evidence(self) -> bool:
+        """True when a pipeline run id is recorded as implementation evidence."""
+        return bool(self.implemented_by)
 
 
 def _parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -164,6 +170,7 @@ def load_proposal(project_dir: str | Path, change_id: str) -> Optional[ChangePro
         created=meta.get("created", ""),
         affects=meta.get("affects", []),
         tasks=tasks,
+        implemented_by=meta.get("implemented_by", ""),
     )
 
 
@@ -249,6 +256,60 @@ def set_status(project_dir: str | Path, change_id: str, new_status: str) -> Chan
     return load_proposal(project_dir, change_id)  # type: ignore[return-value]
 
 
+def mark_implemented(
+    project_dir: str | Path,
+    change_id: str,
+    pipeline_run_id: str,
+) -> ChangeProposal:
+    """Mark a CP implemented with pipeline-run evidence (fail-closed archive).
+
+    Writes ``implemented_by: <pipeline_run_id>`` into the proposal
+    frontmatter and advances status approved → implemented. Archive
+    afterwards requires this evidence — an implemented CP with no
+    recorded pipeline run is treated as unimplemented by ``archive_change``.
+
+    Accepts either ``approved`` (normal path) or ``implemented`` WITHOUT
+    evidence (recovery path: user marked implemented manually, then runs
+    the pipeline and wants to attach evidence before archiving).
+    """
+    if not pipeline_run_id or not str(pipeline_run_id).strip():
+        raise ValueError("pipeline_run_id is required as implementation evidence")
+    cp = load_proposal(project_dir, change_id)
+    if cp is None:
+        raise FileNotFoundError(f"change proposal '{change_id}' not found")
+    if cp.status not in ("approved", "implemented"):
+        raise ValueError(
+            f"cannot mark CP '{change_id}' implemented from status '{cp.status}' — "
+            "must be 'approved' (or 'implemented' without evidence) first"
+        )
+    if cp.status == "implemented" and cp.has_implementation_evidence:
+        raise ValueError(
+            f"CP '{change_id}' already has implementation evidence "
+            f"({cp.implemented_by}) — cannot overwrite"
+        )
+    text = cp.proposal_path.read_text(encoding="utf-8")
+    if re.search(r"^implemented_by:.*$", text, flags=re.MULTILINE):
+        updated = re.sub(
+            r"^implemented_by:.*$",
+            f"implemented_by: {pipeline_run_id}",
+            text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    else:
+        # Insert after status line
+        updated = re.sub(
+            r"^(status:.*)$",
+            f"\\1\nimplemented_by: {pipeline_run_id}",
+            text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    cp.proposal_path.write_text(updated, encoding="utf-8")
+    _update_frontmatter_status(cp, "implemented")
+    return load_proposal(project_dir, change_id)  # type: ignore[return-value]
+
+
 def _update_frontmatter_status(cp: ChangeProposal, new_status: str) -> None:
     text = cp.proposal_path.read_text(encoding="utf-8")
     updated = re.sub(r"^status:.*$", f"status: {new_status}", text, count=1, flags=re.MULTILINE)
@@ -256,13 +317,25 @@ def _update_frontmatter_status(cp: ChangeProposal, new_status: str) -> None:
 
 
 def archive_change(project_dir: str | Path, change_id: str) -> Path:
-    """Archive an implemented CP to changes/archive/<date>-<id>/."""
+    """Archive an implemented CP to changes/archive/<date>-<id>/.
+
+    Fail-closed (RULES §13): a CP in status ``implemented`` but WITHOUT a
+    recorded pipeline run id (``implemented_by`` frontmatter) is treated as
+    unimplemented — archive is refused. This prevents the "approved but
+    never actually generated/built by the pipeline" false-closure.
+    """
     cp = load_proposal(project_dir, change_id)
     if cp is None:
         raise FileNotFoundError(f"change proposal '{change_id}' not found")
     if cp.status != "implemented":
         raise ValueError(
             f"cannot archive CP '{change_id}' in status '{cp.status}' — must be 'implemented' first"
+        )
+    if not cp.has_implementation_evidence:
+        raise ValueError(
+            f"cannot archive CP '{change_id}': no pipeline-run evidence recorded "
+            "(implemented_by frontmatter). Run `yuleosh spec cp implement "
+            f"{change_id} --pipeline-run <run_id>` or `yuleosh spec cp auto` first."
         )
     changes_dir = find_changes_dir(project_dir)
     archive_root = changes_dir / "archive"
