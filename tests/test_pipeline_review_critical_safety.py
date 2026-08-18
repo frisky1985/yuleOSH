@@ -134,6 +134,28 @@ class TestScanNullDeref:
         nulls = [v for v in scanner.violations if "state" in v.message]
         assert len(nulls) >= 1
 
+    def test_string_literal_deref_not_flagged(self):
+        """GIVEN a line where the pointer deref pattern appears ONLY inside
+           a string literal (e.g. strstr(buf, \"ctx->state == ...\") in a
+           source-guard unit test)
+           WHEN _scan_null_deref runs
+           THEN no CRIT-NULL-001 is emitted — string literals are data,
+           not code (2026-08-18 r21q regression: window-anti-pinch
+           test_misra_required_clean_guards was falsely flagged 3×)."""
+        scanner = CriticalSafetyScanner(Path("/tmp"))
+        f = Path("/tmp/test.c")
+        lines = [
+            "static void test_guard(void) {",
+            "    char buf[1024];",
+            "    CHECK(strstr(buf, \"ctx->state == WINDOW_CONTROL_CLOSING ||\") == NULL);",
+            "    CHECK(strstr(buf, \"ctx->state == WINDOW_CONTROL_OPENING ||\") == NULL);",
+            "    const char *chain = strstr(buf, \"else if (ctx->state == WINDOW_CONTROL_PINCH_REVERSAL)\");",
+            "}",
+        ]
+        scanner._scan_null_deref(f, lines)
+        nulls = [v for v in scanner.violations if "ctx" in v.message]
+        assert len(nulls) == 0, f"string-literal deref must not be flagged: {nulls}"
+
 
 class TestScanStackOverflow:
     def test_large_local_array_detected(self):

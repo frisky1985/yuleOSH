@@ -317,6 +317,11 @@ class CriticalSafetyScanner:
 
         for lineno, line in enumerate(lines, 1):
             stripped = line.strip()
+            # 2026-08-18 (r21q): 匹配前剥离注释与字符串/字符字面量 —
+            # 测试代码 strstr(buf, "ctx->state == ...") 的字符串内容
+            # 是数据不是代码, 直接匹配会把字面量里的 -> 误判为解引用
+            # (CRIT-NULL-001 假阳性, window-anti-pinch 实测 3 条)。
+            code = _strip_comment_and_strings(stripped)
             opens = stripped.count("{")
             closes = stripped.count("}")
             if depth == 0 and opens > 0:
@@ -325,17 +330,17 @@ class CriticalSafetyScanner:
                 # 指针豁免 NULL 检查 (调用者保证, 公共 API 已防御)。
                 # 注意: '{' 单独一行 (签名行已在上行记录参数) 时不能清空
                 # static_func_params — 仅当本行本身是函数签名才重新解析。
-                if re.match(r"^\s*static\b", stripped):
-                    static_func_params = _extract_func_params(stripped)
-                elif not static_func_params and "(" not in stripped:
+                if re.match(r"^\s*static\b", code):
+                    static_func_params = _extract_func_params(code)
+                elif not static_func_params and "(" not in code:
                     static_func_params = set()
-            elif depth == 0 and opens == 0 and "(" in stripped \
-                    and re.match(r"^\s*static\b", stripped):
+            elif depth == 0 and opens == 0 and "(" in code \
+                    and re.match(r"^\s*static\b", code):
                 # 签名行与 '{' 分行 (嵌入式常见风格):
                 #   static void setLampOn(Type* state, int id)
                 #   {
                 # 在 '{' 出现前先记录 static 参数集合。
-                static_func_params = _extract_func_params(stripped)
+                static_func_params = _extract_func_params(code)
             depth += opens - closes
             if depth == 0 and closes > 0:
                 # 函数体结束 → 清空检查状态
@@ -348,13 +353,13 @@ class CriticalSafetyScanner:
                     del null_checked[var]
 
             # malloc 后立即解引用，没有 NULL 检查
-            m = re.match(r'(\w+)\s*=\s*(?:pvPortMalloc|malloc|calloc)\s*\((.*?)\)', stripped)
+            m = re.match(r'(\w+)\s*=\s*(?:pvPortMalloc|malloc|calloc)\s*\((.*?)\)', code)
             if m:
                 var = m.group(1)
                 # 检查后续 5 行是否有 NULL 检查
                 checked = False
                 for nxt in range(lineno, min(lineno + 5, len(lines) + 1)):
-                    nl = lines[nxt - 1].strip()
+                    nl = _strip_comment_and_strings(lines[nxt - 1].strip())
                     if re.search(rf'\b{var}\s*==\s*NULL', nl) or \
                        re.search(rf'\b{var}\s*!=\s*NULL', nl) or \
                        re.search(rf'!{var}\b', nl):
@@ -372,19 +377,19 @@ class CriticalSafetyScanner:
             # 带 early-exit（return/continue/break/goto）的检查按函数级生效；
             # 否则仅覆盖当前块（作用域 = 块内深度）。
             checked_vars: set[str] = set()
-            for m3 in re.finditer(r'\b(\w+)\s*(?:==|!=)\s*NULL', stripped):
+            for m3 in re.finditer(r'\b(\w+)\s*(?:==|!=)\s*NULL', code):
                 checked_vars.add(m3.group(1))
-            for m3 in re.finditer(r'NULL\s*(?:==|!=)\s*(\w+)', stripped):
+            for m3 in re.finditer(r'NULL\s*(?:==|!=)\s*(\w+)', code):
                 checked_vars.add(m3.group(1))
-            m_n = re.match(r'!(\w+)\b', stripped)
+            m_n = re.match(r'!(\w+)\b', code)
             if m_n:
                 checked_vars.add(m_n.group(1))
             if checked_vars:
-                exit_guard = _has_early_exit(stripped)
+                exit_guard = _has_early_exit(code)
                 if not exit_guard:
                     # 检查行之后的 2 行内是否有 early-exit（覆盖 if (X == NULL) { return; }）
                     for nl in lines[lineno:min(lineno + 2, len(lines))]:
-                        if _has_early_exit(nl.strip()):
+                        if _has_early_exit(_strip_comment_and_strings(nl.strip())):
                             exit_guard = True
                             break
                 scope = 0 if exit_guard else depth
@@ -392,7 +397,7 @@ class CriticalSafetyScanner:
                     null_checked[var] = (lineno, scope)
 
             # 函数返回指针直接解引用（无 NULL 检查）
-            m2 = re.search(r'([&\w.]+)\s*->\s*\w+', stripped)
+            m2 = re.search(r'([&\w.]+)\s*->\s*\w+', code)
             if m2:
                 deref_obj = m2.group(1).strip()
                 # 剔除点号表达式（obj.field->x 是成员解引用，跳过）
