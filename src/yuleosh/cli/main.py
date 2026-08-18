@@ -100,6 +100,7 @@ from yuleosh.cli.commands.misc import (  # noqa: E402
     cmd_spec_merge,
     cmd_spec_validate,
     cmd_spec_diff,
+    cmd_spec_cp,
     cmd_pipeline_run,
     cmd_pipeline_status,
     cmd_review_auto,
@@ -186,6 +187,33 @@ def _build_parser() -> argparse.ArgumentParser:
     p_spec_merge.add_argument("delta_file", help="Spec-delta markdown file path")
     p_spec_merge.add_argument("--dry-run", action="store_true", help="Validate without writing")
     p_spec_merge.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    # Change Proposal (OpenSpec evolution) — RULES §13
+    p_spec_cp = ssub.add_parser("cp", help="Change Proposal (OpenSpec spec evolution)")
+    cpsub = p_spec_cp.add_subparsers(dest="cp_sub")
+    p_cp_propose = cpsub.add_parser("propose", help="Create a new change proposal")
+    p_cp_propose.add_argument("change_id", help="Change proposal ID (e.g. cp-001)")
+    p_cp_propose.add_argument("--title", default="Untitled change", help="Proposal title")
+    p_cp_propose.add_argument("--affects", default="core", help="Affected capability(s)")
+    p_cp_propose.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_list = cpsub.add_parser("list", help="List change proposals")
+    p_cp_list.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_status = cpsub.add_parser("status", help="Show a change proposal status")
+    p_cp_status.add_argument("change_id", help="Change proposal ID")
+    p_cp_status.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_approve = cpsub.add_parser("approve", help="Approve a proposed change (→ approved)")
+    p_cp_approve.add_argument("change_id", help="Change proposal ID")
+    p_cp_approve.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_implement = cpsub.add_parser("implement", help="Mark approved change implemented (→ implemented)")
+    p_cp_implement.add_argument("change_id", help="Change proposal ID")
+    p_cp_implement.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_archive = cpsub.add_parser("archive", help="Archive implemented change (→ archived)")
+    p_cp_archive.add_argument("change_id", help="Change proposal ID")
+    p_cp_archive.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_validate = cpsub.add_parser("validate", help="Validate a change proposal structure")
+    p_cp_validate.add_argument("change_id", help="Change proposal ID")
+    p_cp_validate.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_cp_review = cpsub.add_parser("review", help="Review pending change proposals via LLM (standalone)")
+    p_cp_review.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
 
     # pipeline
     p_pipe = sub.add_parser("pipeline", help="Agent pipeline management")
@@ -585,6 +613,8 @@ def main():
                 project_dir=getattr(args, "project_dir", None),
                 dry_run=getattr(args, "dry_run", False),
             )
+        elif args.spec_sub == "cp":
+            cmd_spec_cp(args)
         else:
             parser.print_help()
             sys.exit(1)

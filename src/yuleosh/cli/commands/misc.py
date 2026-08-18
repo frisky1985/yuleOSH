@@ -541,6 +541,110 @@ def cmd_spec_diff(old: str, new: str):
         sys.exit(1)
 
 
+def cmd_spec_cp(args) -> None:
+    """Dispatch `yuleosh spec cp <sub>` — Change Proposal management."""
+    from yuleosh.spec.changes import (
+        archive_change,
+        list_changes,
+        load_proposal,
+        propose_change,
+        set_status,
+        validate_proposal,
+    )
+
+    project_dir = getattr(args, "project_dir", None) or os.environ.get("OSH_HOME", ".")
+    sub = getattr(args, "cp_sub", None)
+    try:
+        if sub == "propose":
+            path = propose_change(
+                project_dir,
+                args.change_id,
+                title=args.title,
+                affects=args.affects,
+            )
+            print(f"✅ Change proposal created: {path}")
+            print(f"   status: proposed — run `yuleosh spec cp validate {args.change_id}` to check")
+        elif sub == "list":
+            cps = list_changes(project_dir)
+            if not cps:
+                print("(no change proposals)")
+                return
+            for cp in cps:
+                blocking = " ⛔ BLOCKING (approved, not implemented)" if cp.is_blocking else ""
+                print(f"  {cp.change_id:12s} [{cp.status:12s}] {cp.title}{blocking}")
+        elif sub == "status":
+            cp = load_proposal(project_dir, args.change_id)
+            if cp is None:
+                print(f"❌ change proposal '{args.change_id}' not found")
+                sys.exit(1)
+            print(f"id:      {cp.change_id}")
+            print(f"status:  {cp.status}")
+            print(f"title:   {cp.title}")
+            print(f"created: {cp.created}")
+            print(f"affects: {', '.join(cp.affects) if cp.affects else '-'}")
+            print(f"tasks:   {len(cp.tasks)} unchecked")
+        elif sub == "approve":
+            cp = set_status(project_dir, args.change_id, "approved")
+            print(f"✅ {cp.change_id} → approved (implementation may proceed)")
+        elif sub == "implement":
+            cp = set_status(project_dir, args.change_id, "implemented")
+            print(f"✅ {cp.change_id} → implemented (ready to archive)")
+        elif sub == "archive":
+            target = archive_change(project_dir, args.change_id)
+            print(f"✅ {args.change_id} archived → {target}")
+        elif sub == "validate":
+            result = validate_proposal(project_dir, args.change_id)
+            if not result["valid"]:
+                print(f"❌ Change proposal '{args.change_id}' invalid:")
+                for e in result["errors"]:
+                    print(f"  - {e}")
+                sys.exit(1)
+            print(f"✅ Change proposal '{args.change_id}' valid")
+            for w in result["warnings"]:
+                print(f"  ⚠️ {w}")
+        elif sub == "review":
+            _cmd_spec_cp_review(project_dir)
+        else:
+            print("usage: yuleosh spec cp <propose|list|status|approve|implement|archive|validate|review>", file=sys.stderr)
+            sys.exit(2)
+    except (FileNotFoundError, FileExistsError, ValueError) as e:
+        print(f"❌ {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _cmd_spec_cp_review(project_dir: str) -> None:
+    """Standalone CP review via LLM (no pipeline session)."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    from yuleosh.pipeline.session import PipelineSession
+    from yuleosh.pipeline.step_handlers.spec_cp_review import step_spec_cp_review
+    from yuleosh.spec.changes import list_changes
+
+    pending = [cp for cp in list_changes(project_dir) if cp.status == "proposed"]
+    if not pending:
+        print("(no pending change proposals to review)")
+        return
+    # Pick a spec target: .osh/specs/ directory if present, else spec.md
+    spec_target = _Path(project_dir) / ".osh" / "specs"
+    if not spec_target.exists():
+        alt = _Path(project_dir) / "spec.md"
+        if alt.exists():
+            spec_target = alt
+        else:
+            print("❌ No spec found (.osh/specs/ or spec.md) — cannot review", file=sys.stderr)
+            sys.exit(1)
+    import os as _os
+    _os.environ.setdefault("OSH_HOME", project_dir)
+    session = PipelineSession(name="spec-cp-review-cli", spec_path=str(spec_target))
+    try:
+        out = step_spec_cp_review(session)
+    except Exception as e:
+        print(f"❌ CP review failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(_json.dumps(_json.loads(_Path(out).read_text(encoding="utf-8")), indent=2, ensure_ascii=False))
+
+
 def cmd_pipeline_run(spec_path: str, mock: bool = False, from_step: int = 0):
     from yuleosh.pipeline.run import run_pipeline
 
