@@ -432,6 +432,53 @@ class TestCheckAllocaVla:
         infos = [f for f in findings if f["severity"] == "info"]
         assert len(infos) >= 2  # one for alloca, one for vla
 
+    def test_macro_constant_array_not_vla(self, tmp_path):
+        """GIVEN an array whose size is a #define macro constant (e.g.
+           uint8_t rec[CAL_RECORD_LEN]) — a COMPILE-TIME constant
+           WHEN _check_alloca_vla runs
+           THEN no VLA finding is emitted (r21q regression: window-anti-pinch
+           window_position.c/hal_nvm.c 宏常量数组被误判为 VLA)."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.c").write_text(
+            '#define CAL_RECORD_LEN 16\n'
+            'void f(void) {\n'
+            '    uint8_t rec[CAL_RECORD_LEN];\n'
+            '    rec[0] = 1;\n'
+            '    static bool g_written[HAL_NVM_MAX_SECTORS];\n'
+            '}\n'
+        )
+        files = [src / "main.c"]
+        findings = _check_alloca_vla(files, tmp_path)
+        vla_findings = [f for f in findings if f["category"] == "vla"]
+        assert len(vla_findings) == 1, f"macro-constant arrays must not be VLA: {vla_findings}"
+        assert vla_findings[0]["severity"] == "info", (
+            "macro-constant array sizes are compile-time constants, not VLA"
+        )
+
+    def test_artifacts_dir_excluded_from_source_discovery(self, tmp_path):
+        """GIVEN a project with stale artifacts/generated-code snapshots
+           WHEN _find_source_files runs
+           THEN artifacts/ and build/ are excluded (r21q regression:
+           review-memory scanned generated-code run-* snapshots → 95 VLA
+           hits, only 4 in real src/)."""
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "app.c").write_text("// real code\n")
+        (tmp_path / "artifacts" / "generated-code" / "run-20260817-185751" / "src").mkdir(parents=True)
+        (tmp_path / "artifacts" / "generated-code" / "run-20260817-185751" / "src" / "gen.c").write_text("// stale\n")
+        (tmp_path / "build").mkdir()
+        (tmp_path / "build" / "gen.c").write_text("// build artifact\n")
+
+        result = _find_source_files(tmp_path)
+        paths = [str(p.relative_to(tmp_path)) for p in result]
+        assert "src/app.c" in paths
+        assert not any("artifacts" in p for p in paths), (
+            f"artifacts/ must be excluded: {paths}"
+        )
+        assert not any("build" in p for p in paths), (
+            f"build/ must be excluded: {paths}"
+        )
+
 
 class TestCheckStackProtection:
     """Tests for _check_stack_protection — stack canary / MPU detection."""

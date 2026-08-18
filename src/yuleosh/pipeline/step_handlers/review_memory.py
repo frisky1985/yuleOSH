@@ -33,13 +33,25 @@ MemoryFinding = dict
 
 
 def _find_source_files(project_dir: Path) -> list[Path]:
-    """Discover C / C++ / header / assembly source files."""
+    """Discover C / C++ / header / assembly source files.
+
+    2026-08-18 (r21q): 排除集对齐 c-unit-test 的 _iter_sources() —
+    此前只挡 . 开头与 __pycache__，artifacts/generated-code/run-* 陈旧
+    快照与 build/ 产物被扫入 → memory-review 把生成历史当真实源码
+    (实测 95 处 VLA 命中, 仅 4 处在真实 src/)。
+    """
     patterns = ["**/*.c", "**/*.h", "**/*.cpp", "**/*.hpp", "**/*.s", "**/*.S"]
+    _EXCLUDED_PARTS = {
+        ".git", ".osh", ".yuleosh", ".pytest_cache", "__pycache__",
+        "artifacts", "build", "cmake-build", "cmake-build-coverage",
+        "cmake-build-review", "node_modules", "third_party", "third-party",
+        "vendor", "external", ".benchmarks", "build-review", "build-scan",
+    }
     found: list[Path] = []
     for pat in patterns:
         for p in project_dir.glob(pat):
             if p.is_file() and not any(
-                part.startswith(".") or part == "__pycache__"
+                part.startswith(".") or part in _EXCLUDED_PARTS
                 for part in p.relative_to(project_dir).parts
             ):
                 found.append(p)
@@ -535,7 +547,10 @@ def _check_alloca_vla(source_files: list[Path], project_dir: Path) -> list[Memor
 
             # VLA detection — look for array declarations with non-constant sizes
             # Pattern: type name[expr] where expr contains a variable/expression
-            # Exclude: static arrays with literal sizes, function parameters
+            # Exclude: static arrays with literal sizes, function parameters,
+            # and #define macro constants (ALL_CAPS identifiers are
+            # compile-time constants, not runtime VLAs — r21q regression:
+            # uint8_t rec[CAL_RECORD_LEN] 被误判为 VLA).
             vla_pattern = re.compile(
                 r'(?:int|char|short|long|float|double|'
                 r'uint8_t|uint16_t|uint32_t|uint64_t|'
@@ -545,6 +560,8 @@ def _check_alloca_vla(source_files: list[Path], project_dir: Path) -> list[Memor
                 r'\w+'                             # name
                 r'\s*\['                           # [
                 r'(?!\s*\d+\s*\])'               # not a literal size
+                r'(?!\s*[A-Z_][A-Z0-9_]*\s*\])'  # not a macro constant size
+                r'(?!\s*\]\s*\]|\s*\]\s*,)'      # not empty [] / multi-dim
                 r'(?!\s*\])'                      # not empty []
                 r'[^\]]+'                          # expression inside
                 r'\]'
