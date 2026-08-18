@@ -149,6 +149,7 @@ def _format_artifacts_for_prompt(artifacts: dict[str, str]) -> str:
 def _build_codex_prompt(spec_content: str, artifacts_block: str,
                         project_dir: str) -> str:
     """Build the Codex verification prompt (Chinese, structured JSON output)."""
+    deploy_note = _deploy_status_note(project_dir)
     return f"""你在 yuleOSH 流水线中担任测试验证 agent（角色 verifier）。
 对当前项目产出做真实测试验证，发现缺陷后以严格 JSON 输出。
 
@@ -159,10 +160,18 @@ def _build_codex_prompt(spec_content: str, artifacts_block: str,
 当前产物:
 {artifacts_block[:ARTIFACT_INJECT_LIMIT]}
 
+代码部署状态:
+{deploy_note}
+
 验证要求（工程诚实，禁止假绿）:
 1. 运行项目的测试（pytest / go test / ctest / 其他），确认真实测试结果。
-2. 检查产物与 spec 的一致性：需求是否被实现、测试是否覆盖关键路径。
-3. 如实报告：不通过就是失败，不要为通过而编造证据。
+2. **验证对象 = 当前产品状态**：codegen-deploy 状态为 skipped_codegen_failed
+   / skipped_api_mismatch 时，说明本轮生成产物未部署、现有 src/ 未被覆盖，
+   验证应以**现有 src/ 实际内容**为准（编译/测试/契约检查都针对 src/）；
+   不要以 artifacts/generated-code/ 下的失败产物为缺陷依据（它们不会进入
+   产品）。若部署状态为 deployed，则验证部署后的 src/。
+3. 检查产物与 spec 的一致性：需求是否被实现、测试是否覆盖关键路径。
+4. 如实报告：不通过就是失败，不要为通过而编造证据。
 
 输出 ONLY 一个 JSON 对象（不要 markdown 代码块，不要多余文字）:
 {{
