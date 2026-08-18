@@ -138,7 +138,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
                 if bv.get("line") == v.get("line"):  # Same line = same violation
                     return False
         return True
-    print("  🔍 CI: MISRA C:2023 static analysis...")
+    print("  🔍 CI: MISRA static analysis (cppcheck misra addon — C:2012 semantics; C:2023 rule set mapping)")
 
     # Load config
     try:

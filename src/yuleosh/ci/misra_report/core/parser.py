@@ -28,6 +28,12 @@ from yuleosh.ci.misra_report.core.config import (
 # We build this mapping once at import time by scanning the YAML file.
 _CANONICAL_RULE_LOOKUP: dict[str, str] = {}
 
+# C:2012 rule ID ("Rule 10.4") → change status ("unchanged" | "modified" | "removed")
+# from meta.backward_compat.mapping. Only *unchanged* rules may be safely
+# re-labeled as C:2023 (identical semantics); modified/removed rules keep
+# their C:2012 identity so reports never mislabel a C:2012 finding.
+_C2012_CHANGE_LOOKUP: dict[str, str] = {}
+
 
 def _build_rule_lookup():
     """Build a lookup from short rule ID to canonical YAML key.
@@ -38,8 +44,9 @@ def _build_rule_lookup():
     - Directive IDs: "Dir 4.1" → "misra-c2023-dir-4.1"
     - Canonical IDs: already handled elsewhere
     """
-    global _CANONICAL_RULE_LOOKUP
+    global _CANONICAL_RULE_LOOKUP, _C2012_CHANGE_LOOKUP
     _CANONICAL_RULE_LOOKUP.clear()
+    _C2012_CHANGE_LOOKUP.clear()
     try:
         from yuleosh.ci.misra_report.core.config import load_rule_definitions
         rule_defs = load_rule_definitions()
@@ -73,7 +80,9 @@ def _build_rule_lookup():
         backward_compat = meta.get("backward_compat", {})
         c2012_mapping = backward_compat.get("mapping", {})
         for c2012_id, info in c2012_mapping.items():
-            c2023_id = info.get("c2023_id", "")
+            c2023_id = info.get("c2023_id", "") if isinstance(info, dict) else ""
+            change = info.get("change", "unchanged") if isinstance(info, dict) else "unchanged"
+            _C2012_CHANGE_LOOKUP[c2012_id.lower()] = change
             if c2023_id:
                 # Store the C:2012-style ID as a lookup key
                 _CANONICAL_RULE_LOOKUP[c2012_id.lower()] = c2023_id
@@ -81,7 +90,8 @@ def _build_rule_lookup():
                 num_part = re.sub(r'^(?:rule|dir)\s+', '', c2012_id, flags=re.IGNORECASE)
                 _CANONICAL_RULE_LOOKUP[f"rule {num_part.lower()}"] = c2023_id
 
-        log.debug("Rule lookup built: %d entries", len(_CANONICAL_RULE_LOOKUP))
+        log.debug("Rule lookup built: %d entries, %d c2012 change entries",
+                  len(_CANONICAL_RULE_LOOKUP), len(_C2012_CHANGE_LOOKUP))
     except Exception as e:
         log.debug("Failed to build rule lookup: %s", e)
 
@@ -144,9 +154,23 @@ def parse_cppcheck_output(text: str) -> list[dict]:
         if "unmatchedSuppression" in message or "branch-limit" in message:
             continue
 
-        # Extract rule ID from message
+        # Extract rule ID from message. cppcheck's misra addon (through 2.17
+        # and current main) ONLY implements C:2012 checks, so its output
+        # carries "[misra-c2012-X.Y]" IDs. The year is preserved through
+        # normalization so modified/removed rules keep their true identity
+        # (see _normalize_rule_id honesty rule).
         rule_match = _PATTERN_MISRA_RULE.search(message) or _PATTERN_TEXT_RULE.search(message)
-        rule_id = _normalize_rule_id(rule_match.group("rule_id")) if rule_match else None
+        rule_id = None
+        rule_year = "2012"  # default: cppcheck misra addon checks C:2012
+        if rule_match:
+            gd = rule_match.groupdict()
+            year = gd.get("year") if "year" in gd else None
+            num = rule_match.group("rule_id")
+            if year:
+                rule_id = _normalize_rule_id(f"misra-c{year}-{num}")
+                rule_year = year
+            else:
+                rule_id = _normalize_rule_id(num)
 
         violations.append({
             "file": file_path or raw_file,
@@ -155,7 +179,7 @@ def parse_cppcheck_output(text: str) -> list[dict]:
             "severity": severity,
             "message": message,
             "rule_id": rule_id,
-            "rule_year": "2012",  # default
+            "rule_year": rule_year,
         })
     return violations
 
@@ -168,11 +192,29 @@ def _normalize_rule_id(rule_id: str) -> str:
     "misra-c2023-1.1", "misra-c2023-dir-4.1".
 
     This function normalizes cppcheck output to match the YAML keys.
+
+    Honesty rule (2026-08-18, r21q): a rule ID that explicitly carries a
+    C:2012 year (``misra-c2012-X.Y``) is only re-labeled to the C:2023 ID
+    when the backward-compat mapping says ``unchanged`` (identical text).
+    For ``modified``/``removed`` rules the C:2012 identity is preserved so
+    reports never mislabel a C:2012 finding as a different C:2023 rule.
     """
     rule_id = rule_id.strip()
 
     # Already canonical (starts with misra-cXXXX-)
     if re.match(r'^misra-c\d{4}-', rule_id, re.IGNORECASE):
+        m2012 = re.match(r'^misra-c2012-(\d+\.\d+)$', rule_id, re.IGNORECASE)
+        if m2012:
+            num = m2012.group(1)
+            lookup_key = f"rule {num}".lower()
+            change = _C2012_CHANGE_LOOKUP.get(lookup_key, "unchanged")
+            if change == "unchanged":
+                # Identical semantics → safe to re-label as C:2023
+                c2023 = _CANONICAL_RULE_LOOKUP.get(lookup_key)
+                if c2023:
+                    return c2023
+            # modified / removed / unknown: keep honest C:2012 identity
+            return rule_id.lower()
         return rule_id.lower()
 
     # Normalize by stripping MISRA/Rule/Dir prefixes

@@ -62,6 +62,11 @@ def generate_json_report(
         "generated_at": datetime.now().isoformat(),
         "tool_version": get_tool_version(),
         "ruleset_version": get_ruleset_version(rule_defs),
+        # Honesty field (2026-08-18, r21q): cppcheck's misra addon only
+        # implements C:2012 checks. Rule IDs are mapped to the C:2023 rule
+        # set where semantics are unchanged; modified/removed rules keep
+        # their C:2012 identity (see parser._normalize_rule_id).
+        "check_standard": "MISRA C:2012 (cppcheck misra addon; C:2023 rule set mapping)",
         "ci_environ": get_ci_environ(),
         **stats,
         "category_breakdown": category_bd,

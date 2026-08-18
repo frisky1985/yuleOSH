@@ -87,6 +87,13 @@ def enrich_with_definitions(
 
     Sets severity_category from the rule definition's 'severity' field
     (required/advisory) rather than the heuristic _classify_rule_type().
+
+    Honesty rule (2026-08-18, r21q): violations whose rule_id still carries
+    the C:2012 year (``misra-c2012-X.Y``) represent findings from cppcheck's
+    C:2012-only misra addon. For rules whose C:2023 text changed, the C:2023
+    definition does NOT describe the finding — we use the C:2012 severity and
+    title instead, and mark the rule as ``c2023_change=modified`` so consumers
+    know the report is C:2012-accurate.
     """
     if not rule_defs:
         rule_defs = load_rule_definitions()
@@ -106,6 +113,20 @@ def enrich_with_definitions(
         # Use actual rule definition severity (required/advisory) instead of heuristic
         v["severity_category"] = defn.get("severity", _classify_rule_type(rid))
         v["rule_type"] = defn.get("severity", _classify_rule_type(rid))
+
+        # C:2012-identity violations (modified/removed rules keep their year):
+        # the C:2023 definition text does not describe the C:2012 finding.
+        if isinstance(rid, str) and rid.lower().startswith("misra-c2012-"):
+            from yuleosh.ci.misra_report.core.c2012_meta import c2012_info
+            info = c2012_info(rid)
+            if info:
+                v["severity_category"] = info["severity"]
+                v["rule_type"] = info["severity"]
+                v["description"] = info["title"] + " (C:2012 semantics; C:2023 rule text modified)"
+                v["c2023_change"] = "modified"
+            # Category from the C:2023 counterpart is still useful as a grouping hint
+            if not v.get("category"):
+                v["category"] = _classify_rule_type(rid)
         enriched.append(v)
     return enriched
 

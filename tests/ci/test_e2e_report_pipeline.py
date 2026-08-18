@@ -410,9 +410,9 @@ class TestToolDrivers:
         violations = driver.parse(raw)
         assert len(violations) == 2
         for v in violations:
-            # Parser normalizes to canonical C:2023 format
-            assert v["rule_id"] in ("misra-c2023-17.7", "misra-c2023-10.1"), (
-                f"Expected canonical misra-c2023-17.7 or misra-c2023-10.1, got {v['rule_id']}"
+            # 17.7 是 unchanged 规则 → 规范化到 C:2023；10.1 是 modified 规则 → 保留 C:2012 身份
+            assert v["rule_id"] in ("misra-c2023-17.7", "misra-c2012-10.1"), (
+                f"Expected misra-c2023-17.7 or misra-c2012-10.1, got {v['rule_id']}"
             )
 
     def test_clang_tidy_driver_stub(self, tmp_path):

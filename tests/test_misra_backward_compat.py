@@ -557,3 +557,50 @@ class TestCppcheckOutputBackwardCompat:
         assert violations[2]["rule_id"] == "misra-c2023-5.6", (
             f"Expected misra-c2023-5.6, got {violations[2]['rule_id']}"
         )
+
+    def test_cppcheck_c2012_modified_rule_keeps_year(self):
+        """GIVEN cppcheck [misra-c2012-10.4] (C:2012 semantics) THEN the
+        modified rule keeps its C:2012 identity instead of being mislabeled.
+
+        cppcheck's misra addon only implements C:2012. Rule 10.4's text
+        CHANGED in C:2023 (C:2012: "different essential type categories";
+        C:2023: "complex floating types"). Mapping a C:2012 finding to the
+        C:2023 ID would mislabel it — the parser must preserve the year.
+        """
+        from yuleosh.ci.misra_report.core.parser import parse_cppcheck_output, _normalize_rule_id
+        # Real cppcheck output shape (bracketed ID with year)
+        text = "[src/app.c:10:5] (style) misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-10.4]\n"
+        violations = parse_cppcheck_output(text)
+        assert len(violations) == 1
+        assert violations[0]["rule_id"] == "misra-c2012-10.4", (
+            f"Expected misra-c2012-10.4 (modified rule must keep C:2012 identity), "
+            f"got {violations[0]['rule_id']}"
+        )
+        assert violations[0]["rule_year"] == "2012"
+        # Unchanged rules may safely map to C:2023 (identical semantics)
+        assert _normalize_rule_id("misra-c2012-8.9") == "misra-c2023-8.9"
+        assert _normalize_rule_id("misra-c2012-17.7") == "misra-c2023-17.7"
+
+    def test_cppcheck_c2012_modified_rule_enriched_honestly(self):
+        """GIVEN a C:2012-identity 10.4 violation THEN enrichment uses the
+        C:2012 severity/title, not the C:2023 "complex floating types" text.
+        """
+        from yuleosh.ci.misra_report.core.parser import parse_cppcheck_output
+        from yuleosh.ci.misra_report.core.analysis import enrich_with_definitions
+        from yuleosh.ci.misra_report.core.config import load_rule_definitions
+        text = "[src/app.c:10:5] (style) misra violation (use --rule-texts=<file> to get proper output) [misra-c2012-10.4]\n"
+        violations = parse_cppcheck_output(text)
+        rule_defs = load_rule_definitions()
+        enriched = enrich_with_definitions(violations, rule_defs)
+        v = enriched[0]
+        assert v["rule_id"] == "misra-c2012-10.4"
+        assert v["severity_category"] == "required", (
+            f"C:2012 10.4 is required; got {v['severity_category']}"
+        )
+        assert "complex" not in (v.get("description") or "").lower(), (
+            "C:2023 'complex floating types' description must NOT be used for a C:2012 finding"
+        )
+        assert "essential type category" in v.get("description", ""), (
+            f"Expected C:2012 essential-type description, got: {v.get('description')}"
+        )
+        assert v.get("c2023_change") == "modified"

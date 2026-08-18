@@ -48,7 +48,7 @@ _PATTERN_CPPCHECK = re.compile(
     re.MULTILINE | re.VERBOSE,
 )
 _PATTERN_MISRA_RULE = re.compile(
-    r"(?:MISRA[- ]?(?:C\d{4})?[-.]?)(?P<rule_id>\d+\.\d+)",
+    r"(?:MISRA[- ]?(?:C(?P<year>\d{4}))?[-.]?)(?P<rule_id>\d+\.\d+)",
     re.IGNORECASE,
 )
 _PATTERN_TEXT_RULE = re.compile(
