@@ -19,9 +19,12 @@ class FakeSession:
 class TestClassification:
     def test_cacheable_steps(self):
         from yuleosh.pipeline.step_cache import is_cacheable
-        for key in ["c-unit-test", "review-memory", "coverage-review",
+        # r22 重构 (2026-08-19): review-memory 已并入 code-review 超集 (LLM 不可缓存),
+        # 可缓存集为确定性步骤。
+        for key in ["c-unit-test", "coverage-review", "misra-review",
                     "review-critical-safety", "test-qualification",
-                    "codegen-deploy", "merge-gate"]:
+                    "codegen-deploy", "merge-gate", "qemu-verify",
+                    "integration-test", "fault-injection"]:
             assert is_cacheable(key), key
 
     def test_llm_steps_never_cacheable(self):

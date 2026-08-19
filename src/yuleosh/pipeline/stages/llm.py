@@ -213,6 +213,49 @@ def _call_llm(
     # Deferred import from the run shim so that test mocks on
     # yuleosh.pipeline.run.chat_completion take effect.
     from yuleosh.pipeline.run import chat_completion as _fallback
+
+    # 9.3.1 (2026-08-19 第九轮): 上下文安全强制化 — 运行时估算水位,
+    # >50% 自动切换引用式注入（不静默截断）, >80% 保持 TokenBudgetChecker
+    # 拒绝/降级逻辑但带 context_mode=over_limit 标记。mock 模式不触发
+    # （上方 mock 分支已短路; 此处再加一道守卫保持诚实）。
+    if getattr(session, "mock_mode", None) is not True:
+        try:
+            from yuleosh.pipeline.context_guard import (
+                CONTEXT_OVER_LIMIT,
+                CONTEXT_REFERENCE,
+                estimate_context_level,
+                reference_inject,
+            )
+
+            level = estimate_context_level(effective_system, user_prompt)
+            mode = level.get("mode", CONTEXT_OVER_LIMIT)
+            if mode == CONTEXT_REFERENCE:
+                new_user, changes = reference_inject(
+                    user_prompt, getattr(session, "session_dir", ".")
+                )
+                if changes:
+                    log.info(
+                        "context_guard: reference injection replaced %d "
+                        "artifact block(s) (%s)",
+                        len(changes),
+                        ", ".join(c["key"] for c in changes[:5]),
+                    )
+                    user_prompt = new_user
+                    level["changes"] = changes
+            elif mode == CONTEXT_OVER_LIMIT:
+                log.warning(
+                    "context_guard: %s — keep TokenBudgetChecker reject/"
+                    "degrade (context_mode=over_limit)",
+                    level.get("reason", ""),
+                )
+            # 记录到 session（报告 JSON 可见, 不静默）
+            try:
+                session.context_guard = level
+            except Exception:  # pragma: no cover - defensive  # noqa: BLE001
+                pass
+        except Exception as e:  # pragma: no cover - defensive  # noqa: BLE001
+            log.warning("context_guard check failed (non-fatal): %s", e)
+
     client = session.llm_client if session.llm_client is not None else _fallback
     return client(effective_system, user_prompt, **kwargs)
 

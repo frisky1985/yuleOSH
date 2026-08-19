@@ -44,6 +44,9 @@ ENV_ENABLE = "OSH_DIFF_SKIP"
 
 # 跨切面步骤（G3）: 全局影响 / 无有意义文件 glob，强制保留
 # 与 gate_policy 的 block 集有重叠但语义不同 —— 这里是无 glob 硬编码保留。
+# 2026-08-19 (24 步重构): 旧 key (self-test/self-test-review/qemu-run/
+# c-coverage-gate/review-*) 已合并进 verify-loop/code-review/qemu-verify —
+# 合并步骤跨切面，永不按 diff 裁剪。
 CROSS_CUTTING_STEPS = {
     "spec-check",
     "super-analysis",
@@ -54,15 +57,14 @@ CROSS_CUTTING_STEPS = {
     "development",
     "development-review",
     "internal-code-review",
+    "claude-review",
     "test-planning",
-    "self-test",
-    "self-test-review",
+    "verify-loop",
     "code-review",
     "integration-test",
     "misra-review",
     "coverage-review",
-    "qemu-run",
-    "c-coverage-gate",
+    "qemu-verify",
     "review-critical-safety",
     "fault-injection",
     "merge-gate",
@@ -274,25 +276,16 @@ def skip_summary(decisions: list[SkipDecision]) -> str:
 
 
 def _default_file_globs() -> dict[str, list[str]]:
-    """Default step→glob mapping (can be overridden by STEP_FILE_GLOBS)."""
+    """Default step→glob mapping (can be overridden by STEP_FILE_GLOBS).
+
+    2026-08-19 (24 步重构): 嵌入式专项已合并进 code-review 超集（跨切面
+    永不按 diff 裁剪），旧 review-* glob 键移除；保留仍为独立步骤的
+    c-unit-test / fault-injection globs（test-integration 旧键更名为
+    integration-test 对齐 PIPELINE_STEPS）。
+    """
     return {
-        "review-linker": ["**/*.ld", "**/*.lds", "**/*.icf", "**/*.scat", "**/linker/**"],
-        "review-startup": ["**/*.s", "**/*.S", "**/*.asm", "**/startup/**", "**/*_startup*"],
-        "review-rtos": ["**/*rtos*", "**/freertos*/**", "**/*os_config*", "**/rtos/**"],
-        "review-memory": ["**/*.h", "**/*.c", "**/*.cpp", "**/*.map", "**/*.ld"],
-        "review-bsp": ["**/bsp/**", "**/*board*", "**/*hal*"],
-        "review-build": ["**/CMakeLists.txt", "**/*.cmake", "**/Makefile", "**/*.mk"],
-        "review-power": ["**/*power*", "**/*pm*", "**/low_power/**"],
-        "review-stack": ["**/*.h", "**/*.c", "**/*.cpp", "**/*.ld"],
-        "review-mmio": ["**/*mmio*", "**/*reg*", "**/*peripheral*"],
-        "review-arch": ["**/*.md", "**/docs/**", "**/architecture/**"],
-        "review-prd": ["**/*.md", "**/docs/**", "**/prd/**"],
-        "review-devplan": ["**/*.md", "**/docs/**", "**/plan/**"],
-        "review-code": ["**/*.py", "**/*.go", "**/*.c", "**/*.cpp", "**/*.h"],
-        "review-selftest": ["**/tests/**", "**/*test*", "**/*.py"],
-        "review-test-coverage": ["**/tests/**", "**/*test*", "**/*.py"],
         "c-unit-test": ["**/tests/**", "**/*test*", "**/*.c", "**/*.cpp", "**/*.h"],
-        "test-integration": ["**/tests/**", "**/*test*"],
+        "integration-test": ["**/tests/**", "**/*test*"],
         "fault-injection": ["**/tests/**", "**/*fault*", "**/*inject*"],
     }
 

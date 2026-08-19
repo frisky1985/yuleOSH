@@ -158,5 +158,6 @@ TASK_BUDGETS: Dict[str, Dict[str, float]] = {
     "Hermes": {"max_cost_usd": 0.80, "max_tokens_out": 6144},  # architecture_design
     "Claude": {"max_cost_usd": 0.80, "max_tokens_out": 6144},  # architecture_design
     "Codex": {"max_cost_usd": 0.50, "max_tokens_out": 4096},  # review_blocking
+    "小仓": {"max_cost_usd": 0.50, "max_tokens_out": 4096},  # review_blocking (CM Gate, 2026-08-19)
     "QEMU": {"max_cost_usd": 0.10, "max_tokens_out": 1024},  # simple_summary
 }

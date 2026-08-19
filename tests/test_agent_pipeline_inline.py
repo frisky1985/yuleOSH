@@ -88,7 +88,7 @@ KEY_ARTIFACTS = [
     "final-report.md",
 ]
 
-EXPECTED_STEP_COUNT = 36  # 2026-08-14: 34 → 36 (codex-verify/claude-review 外部 agent 步骤) — 与 PIPELINE_STEPS 保持同步
+EXPECTED_STEP_COUNT = len(PIPELINE_STEPS)  # 单一事实源：跟随注册表，结构重构零维护（r22: 36→24）
 
 
 @pytest.fixture(scope="module")
@@ -176,9 +176,11 @@ class TestB13InlineMockFullChain:
         assert missing == [], f"缺少关键产物: {missing}"
 
     def test_mock_pipeline_artifact_registry_consistent(self, mock_full_session):
-        """artifacts 注册表 33 项，除两个已知豁免外全部指向真实文件。"""
+        """artifacts 注册表 25 项（24 步 + verify-loop 兼容性子产物 self-test），除已知豁免外全部指向真实文件。"""
         s, _ = mock_full_session
-        assert len(s.artifacts) == EXPECTED_STEP_COUNT
+        # 24 步 + 1: verify-loop 合并 handler 为兼容旧 self-test-review 依赖
+        # 显式 set_artifact("self-test")（见 verify_loop.py 兼容性注释）。
+        assert len(s.artifacts) == EXPECTED_STEP_COUNT + 1
         broken = [
             key for key, path in s.artifacts.items()
             if key not in KNOWN_NONFILE_ARTIFACTS

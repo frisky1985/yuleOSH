@@ -179,6 +179,7 @@
   .step .body { min-width: 0; }
   .step .nm { font-weight: 650; font-size: 14.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .step .desc { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+  .step .gid { font-size: 10.5px; color: var(--accent-3); background: rgba(245, 158, 11, .1); border: 1px solid rgba(245, 158, 11, .25); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; }
   .step .agent {
     font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
     padding: 2px 8px; border-radius: 999px;
@@ -351,14 +352,14 @@
 <header class="hero">
   <div class="wrap">
     <div class="logo"><span class="logo-badge">yO</span> yuleOSH · Embedded Software Compliance Automation</div>
-    <h1>从 Spec 到合规证据包<br><span class="grad">36 步 Pipeline 全自动</span></h1>
+    <h1>从 Spec 到合规证据包<br><span class="grad">24 步 Pipeline · 10 Gate 全自动</span></h1>
     <p class="sub">
       yuleOSH 是面向<b>嵌入式 / 汽车电子</b>的合规开发自动化平台。把需求、架构、代码生成、
       评审、测试、MISRA 合规、证据包生成编排成一条 <b>ASPICE SWE.1–SWE.6 对齐</b>的
       可审计流水线 —— 写一份 spec，跑一条命令，拿回一个<b>可交付的合规证据包</b>。
     </p>
     <div class="badges">
-      <div class="badge"><span class="num">36</span><span class="lbl">Pipeline 步骤</span></div>
+      <div class="badge"><span class="num">24</span><span class="lbl">Pipeline 步骤</span></div>
       <div class="badge"><span class="num">6+</span><span class="lbl">AI Agent 矩阵</span></div>
       <div class="badge"><span class="num">3</span><span class="lbl">CI 分层门禁</span></div>
       <div class="badge"><span class="num">SWE.1–6</span><span class="lbl">ASPICE 追溯</span></div>
@@ -366,7 +367,7 @@
       <div class="badge"><span class="num">12,589+</span><span class="lbl">平台测试用例</span></div>
     </div>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#pipeline">查看 36 步 Pipeline ↓</a>
+      <a class="btn btn-primary" href="#pipeline">查看 24 步 Pipeline ↓</a>
       <a class="btn btn-ghost" href="#quickstart"><code>yuleosh pipeline run</code></a>
     </div>
   </div>
@@ -400,12 +401,12 @@
   </div>
 </section>
 
-<!-- ═══════════ 36 步 Pipeline ═══════════ -->
+<!-- ═══════════ 24 步 Pipeline · 10 Gate ═══════════ -->
 <section id="pipeline" class="alt">
   <div class="wrap">
     <div class="sec-head">
       <span class="sec-tag">The Pipeline</span>
-      <h2>36 步 · ASPICE V 模型</h2>
+      <h2>24 步 · 10 Gate · ASPICE V 模型</h2>
       <p>左侧规格化（SWE.1 需求 → SWE.3 设计）、底部实现与单元验证（SWE.4）、右侧验证（SWE.5 集成 → SWE.6 合格性）。每一步都产出落盘产物，红色为阻断门禁，粉色为外部 Agent 独立验证。</p>
     </div>
 
@@ -522,7 +523,7 @@
       </div>
       <div class="ci-row">
         <div class="lv l25">L2.5 · AI Review</div>
-        <div class="what"><h4>多 Agent 并行代码评审</h4><p>4-Agent 矩阵并行审查，独立结论交叉验证</p></div>
+        <div class="what"><h4>多角色审查矩阵 + 外部双轨</h4><p>顺序执行的多角色审查矩阵，claude/codex CLI 外部独立验证</p></div>
         <div class="when">MR / 发布</div>
       </div>
       <div class="ci-row">
@@ -606,9 +607,9 @@
         <p>57 个文件从 690 条违规清零，混合语言 CI 门禁全绿，SDK↔Hub 契约 E2E 测试通过。</p>
       </div>
       <div class="proof">
-        <div class="big">36/36</div>
+        <div class="big">24/24</div>
         <h4>window-anti-pinch · 全流程</h4>
-        <p>防夹车窗控制器完整跑通 36 步：P0 关键安全门禁 0 violations，claude-review / codex-verify 双外部验证通过。</p>
+        <p>防夹车窗控制器完整跑通 24 步：P0 关键安全门禁 0 violations，claude-review / codex-verify 双外部验证通过。</p>
       </div>
       <div class="proof">
         <div class="big">93.7<span class="u">%</span></div>
@@ -645,7 +646,7 @@
         <div class="n">3</div>
         <p>跑全流程 Pipeline：</p>
         <pre class="code">cd my-project
-yuleosh pipeline run docs/spec.md        # 完整 36 步
+yuleosh pipeline run docs/spec.md        # 完整 24 步
 yuleosh pipeline run --from-step 14      # 从失败点续跑
 yuleosh pipeline run --mock docs/spec.md # 无 LLM Key 演示模式</pre>
       </div>
@@ -679,47 +680,35 @@ yuleosh pipeline run --mock docs/spec.md # 无 LLM Key 演示模式</pre>
 </footer>
 
 <script>
-// ═══════════ 36-step pipeline data (source of truth: PIPELINE_STEPS) ═══════════
+// ═══════════ 24-step pipeline data + 10 gates (source of truth: PIPELINE_STEPS / GATES) ═══════════
 const STEPS = [
   // Left arm: specification (SWE.1 → SWE.3)
-  {n:1,  key:"spec-check",            agent:"小明",  cls:"s-left",  desc:"OpenSpec 合规检查 · 契约机器校验", ext:false, gate:false},
-  {n:2,  key:"super-analysis",        agent:"小明",  cls:"s-left",  desc:"S.U.P.E.R 启动分析", ext:false, gate:false},
-  {n:3,  key:"prd",                   agent:"Hermes",cls:"s-left",  desc:"产品需求分析 (PRD)", ext:false, gate:false},
-  {n:4,  key:"prd-review",            agent:"小马",  cls:"s-left",  desc:"PRD 质量审查", ext:false, gate:false},
-  {n:5,  key:"architecture",          agent:"Claude",cls:"s-left",  desc:"架构设计", ext:false, gate:false},
-  {n:6,  key:"arch-review",           agent:"小克",  cls:"s-left",  desc:"架构审查", ext:false, gate:false},
-  {n:7,  key:"development",           agent:"Claude",cls:"s-left",  desc:"开发计划与代码实现", ext:false, gate:false},
-  {n:8,  key:"development-review",    agent:"小克",  cls:"s-left",  desc:"开发产物审查 (计划/codegen 报告)", ext:false, gate:false},
-  {n:9,  key:"codegen-deploy",        agent:"小明",  cls:"s-left",  desc:"代码产物部署 · 护栏备份/回滚", ext:false, gate:false},
-  {n:10, key:"internal-code-review",  agent:"小克",  cls:"s-left",  desc:"代码实现预审", ext:false, gate:false},
-  {n:11, key:"test-planning",         agent:"Claude",cls:"s-left",  desc:"测试规划", ext:false, gate:false},
-  {n:12, key:"claude-review",         agent:"Claude",cls:"s-left",  desc:"Claude 方案评审 (外部 agent)", ext:true,  gate:false},
+  {n:1,  key:"spec-check",            agent:"小明",  cls:"s-left",  desc:"OpenSpec 合规检查 · 契约机器校验", ext:false, gate:"G1"},
+  {n:2,  key:"super-analysis",        agent:"小明",  cls:"s-left",  desc:"S.U.P.E.R 启动分析", ext:false, gate:"G1"},
+  {n:3,  key:"prd",                   agent:"Hermes",cls:"s-left",  desc:"产品需求分析 (PRD)", ext:false, gate:"G1"},
+  {n:4,  key:"prd-review",            agent:"小马",  cls:"s-left",  desc:"PRD 双视角审查 (质量+产品 advisory)", ext:false, gate:"G1"},
+  {n:5,  key:"architecture",          agent:"Claude",cls:"s-left",  desc:"架构设计", ext:false, gate:"G2"},
+  {n:6,  key:"arch-review",           agent:"小克",  cls:"s-left",  desc:"架构审查", ext:false, gate:"G2"},
+  {n:7,  key:"development",           agent:"Claude",cls:"s-left",  desc:"开发计划与代码实现", ext:false, gate:"G3"},
+  {n:8,  key:"development-review",    agent:"小克",  cls:"s-left",  desc:"开发产物审查 (计划/codegen 报告)", ext:false, gate:"G3"},
+  {n:9,  key:"codegen-deploy",        agent:"小明",  cls:"s-left",  desc:"代码产物部署 · 护栏备份/回滚", ext:false, gate:"G3"},
+  {n:10, key:"internal-code-review",  agent:"小克",  cls:"s-left",  desc:"代码实现预审", ext:false, gate:"G3"},
+  {n:11, key:"claude-review",         agent:"Claude",cls:"s-left",  desc:"Claude 方案评审 (外部 agent · 先挑战 spec 假设)", ext:true,  gate:"G4"},
+  {n:12, key:"test-planning",         agent:"Claude",cls:"s-left",  desc:"测试规划 (注入 claude-review 结论)", ext:false, gate:"G5"},
   // Bottom arm: implementation + unit verification (SWE.4)
-  {n:13, key:"self-test",             agent:"Claude",cls:"s-bottom",desc:"自测验证", ext:false, gate:false},
-  {n:14, key:"codex-verify",          agent:"Codex", cls:"s-bottom",desc:"Codex 测试验证 (外部 agent)", ext:true,  gate:false},
-  {n:15, key:"self-test-review",      agent:"小克",  cls:"s-bottom",desc:"自测结果审查", ext:false, gate:false},
-  {n:16, key:"c-unit-test",           agent:"小克",  cls:"s-bottom",desc:"C 单元测试 (Unity)", ext:false, gate:false},
+  {n:13, key:"verify-loop",           agent:"小克",  cls:"s-bottom",desc:"自测循环 (self-test → codex-verify → self-test-review)", ext:true,  gate:"G6"},
+  {n:14, key:"c-unit-test",           agent:"小克",  cls:"s-bottom",desc:"C 单元测试 (Unity)", ext:false, gate:"G6"},
   // Right arm: verification (SWE.4 → SWE.6)
-  {n:17, key:"code-review",           agent:"Hermes",cls:"s-right", desc:"集成代码审查 (SHALL 清单对照)", ext:false, gate:false},
-  {n:18, key:"integration-test",      agent:"小克",  cls:"s-right", desc:"接口集成测试", ext:false, gate:false},
-  {n:19, key:"misra-review",          agent:"小马",  cls:"s-right", desc:"MISRA 合规审查 (报告陈旧校验)", ext:false, gate:false},
-  {n:20, key:"coverage-review",       agent:"小马",  cls:"s-right", desc:"测试覆盖审查", ext:false, gate:false},
-  {n:21, key:"qemu-run",              agent:"QEMU",  cls:"s-right", desc:"QEMU 仿真测试 (L2)", ext:true,  gate:false},
-  {n:22, key:"c-coverage-gate",       agent:"小克",  cls:"s-right", desc:"C 覆盖率门禁 (L2)", ext:false, gate:true},
-  {n:23, key:"review-linker",         agent:"小克",  cls:"s-right", desc:"链接脚本审查", ext:false, gate:false},
-  {n:24, key:"review-startup",        agent:"小克",  cls:"s-right", desc:"启动代码审查", ext:false, gate:false},
-  {n:25, key:"review-rtos",           agent:"小克",  cls:"s-right", desc:"RTOS 配置审查", ext:false, gate:false},
-  {n:26, key:"review-memory",         agent:"小克",  cls:"s-right", desc:"内存安全审查", ext:false, gate:false},
-  {n:27, key:"review-bsp",            agent:"小克",  cls:"s-right", desc:"BSP 板级支持包验证", ext:false, gate:false},
-  {n:28, key:"review-build",          agent:"小克",  cls:"s-right", desc:"编译输出验证", ext:false, gate:false},
-  {n:29, key:"review-power",          agent:"小克",  cls:"s-right", desc:"低功耗审查", ext:false, gate:false},
-  {n:30, key:"review-stack",          agent:"小克",  cls:"s-right", desc:"堆栈使用分析 (P0/DEF-007)", ext:false, gate:false},
-  {n:31, key:"review-mmio",           agent:"小克",  cls:"s-right", desc:"MMIO 配置审查 (P0/DEF-008)", ext:false, gate:false},
-  {n:32, key:"review-critical-safety",agent:"小明",  cls:"s-right", desc:"关键安全异常阻塞检查", ext:false, gate:true},
-  {n:33, key:"fault-injection",       agent:"小克",  cls:"s-right", desc:"故障注入测试 (SWE.5/SWE.6)", ext:false, gate:false},
-  {n:34, key:"merge-gate",            agent:"小马",  cls:"s-right", desc:"KG Merge Gate · 图一致性/置信度", ext:false, gate:true},
-  {n:35, key:"test-qualification",    agent:"小明",  cls:"s-right", desc:"合格性测试 (SWE.6)", ext:false, gate:true},
-  {n:36, key:"final-report",          agent:"小明",  cls:"s-right", desc:"最终报告 · 证据包汇总", ext:false, gate:false},
+  {n:15, key:"code-review",           agent:"小克",  cls:"s-right", desc:"集成审查超集 (code + 嵌入式 12 专项)", ext:false, gate:"G7"},
+  {n:16, key:"misra-review",          agent:"小马",  cls:"s-right", desc:"MISRA 合规审查 (报告陈旧校验)", ext:false, gate:"G7"},
+  {n:17, key:"integration-test",      agent:"小克",  cls:"s-right", desc:"接口集成测试", ext:false, gate:"G7"},
+  {n:18, key:"qemu-verify",           agent:"小克",  cls:"s-right", desc:"QEMU 仿真验证 (qemu-run + c-coverage-gate)", ext:true,  gate:"G7"},
+  {n:19, key:"coverage-review",       agent:"小马",  cls:"s-right", desc:"测试覆盖审查", ext:false, gate:"G7"},
+  {n:20, key:"review-critical-safety",agent:"小明",  cls:"s-right", desc:"关键安全异常阻塞检查 (P0 GATE)", ext:false, gate:"G8"},
+  {n:21, key:"fault-injection",       agent:"小克",  cls:"s-right", desc:"故障注入测试 (SWE.5/SWE.6)", ext:false, gate:"G8"},
+  {n:22, key:"merge-gate",            agent:"小仓",  cls:"s-right", desc:"CM Gate · KG 图一致性 + 仓库管理 4 检查", ext:false, gate:"G9"},
+  {n:23, key:"test-qualification",    agent:"小明",  cls:"s-right", desc:"合格性测试 (SWE.6)", ext:false, gate:"G10"},
+  {n:24, key:"final-report",          agent:"小明",  cls:"s-right", desc:"最终报告 · 证据包汇总", ext:false, gate:"G10"},
 ];
 
 function stepHTML(s) {
@@ -729,7 +718,7 @@ function stepHTML(s) {
     <div class="no">${s.n}</div>
     <div class="body">
       <div class="nm">${s.key} <span class="agent">${s.agent}</span></div>
-      <div class="desc">${s.desc}</div>
+      <div class="desc">${s.desc} <span class="gid">[${s.gate}]</span></div>
     </div>
   </div>`;
 }

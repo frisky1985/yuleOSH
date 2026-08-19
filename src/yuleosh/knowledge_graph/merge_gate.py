@@ -1029,7 +1029,70 @@ def step_merge_gate(session) -> str:
             f"Fix issues and re-run pipeline."
         )
 
+    # ── CM Gate（第九轮决策 2026-08-19, 角色=小仓）─────────────
+    # KG 检查通过后执行 4 项确定性 CM 检查（非 LLM）:
+    #   1) 工作区清洁 (warning 不阻断)  2) 提交规范 (failed 阻断)
+    #   3) 生成产物泄漏 (failed 阻断)   4) 部署护栏状态确认
+    cm_result = _run_cm_gate_checks(project_dir, session)
+
+    # 把 CM 检查结果并入 merge-gate 报告（追加 section, 保留 KG 部分）
+    try:
+        _merge_cm_into_report(output_path, cm_result)
+    except Exception as e:  # pragma: no cover - defensive  # noqa: BLE001
+        log.warning("CM report merge failed (non-fatal): %s", e)
+
+    if cm_result.get("status") == "failed":
+        failed_checks = cm_result.get("failed_checks", [])
+        raise PipelineStepError(
+            f"CM Gate BLOCKED: {failed_checks} — 仓库管理检查未通过\n"
+            f"{cm_result.get('summary', '')}\n"
+            f"详见 merge-gate-report.json (cm_checks section)。"
+        )
+
+    if cm_result.get("status") == "warning":
+        print(f"  🟡 [小仓] CM Gate: {cm_result.get('summary', '')} "
+              f"(warning 不阻断)")
+    else:
+        print(f"  {'✅' if cm_result.get('status') == 'passed' else '⏭️'} "
+              f"[小仓] CM Gate: {cm_result.get('summary', '')}")
+
     return output_path
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CM Gate helpers（第九轮决策 2026-08-19, 角色=小仓）
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _run_cm_gate_checks(project_dir: str, session) -> dict:
+    """Run the 4 deterministic CM checks (non-LLM).
+
+    Merges results into the session report and returns the aggregated dict.
+    """
+    from yuleosh.knowledge_graph.cm_checks import run_cm_checks
+
+    session_dir = None
+    if hasattr(session, "session_dir") and session.session_dir:
+        session_dir = Path(session.session_dir)
+    return run_cm_checks(project_dir, session_dir)
+
+
+def _merge_cm_into_report(report_path: str, cm_result: dict) -> None:
+    """Append the CM check results into the existing merge-gate report JSON.
+
+    Preserves the KG gate section; adds a top-level ``cm_checks`` section.
+    """
+    import json as _json
+
+    p = Path(report_path)
+    if not p.exists():
+        return
+    data = _json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return
+    data["cm_checks"] = cm_result
+    p.write_text(_json.dumps(data, indent=2, ensure_ascii=False, default=str),
+                 encoding="utf-8")
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -59,7 +59,8 @@ class TestStepAgentMap:
         assert STEP_AGENT_MAP["architecture"] == "Claude"
         assert STEP_AGENT_MAP["arch-review"] == "小克"
         assert STEP_AGENT_MAP["misra-review"] == "小马"
-        assert STEP_AGENT_MAP["qemu-run"] == "QEMU"
+        assert STEP_AGENT_MAP["qemu-verify"] == "小克"  # r22: qemu-run → qemu-verify (QEMU 仿真 + 覆盖率门禁合并)
+        assert STEP_AGENT_MAP["merge-gate"] == "小仓"
         assert STEP_AGENT_MAP["final-report"] == "小明"
 
     def test_map_is_lazy_and_cached(self):

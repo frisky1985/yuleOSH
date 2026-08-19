@@ -391,6 +391,115 @@ def _check_super_analysis_consistency(
 
 
 # ------------------------------------------------------------------
+# 产品视角（第九轮决策 2026-08-19: prd-review 双视角 — 质量 + 产品）
+# ------------------------------------------------------------------
+# 产品视角为**建议性**（suggestions），不改变 fail/pass 语义——防止产品
+# 偏好阻塞工程正确性。对齐 yuleOSH 自身产品蓝图（docs/product/
+# yuleOSH-product-blueprint.md）: 双引擎定位（AI 开发钩子 + 合规证据锚）、
+# 开源边界（CLI/单项目开源, 多租户/企业版闭源）、市场 80:20。
+
+# 产品定位一致性关键词（对齐产品蓝图双引擎）
+_POSITIONING_KEYWORDS = [
+    "双引擎", "合规", "证据", "流水线", "自动化", "pipeline",
+    "开发", "效率", "质量", "门禁", "traceability", "可追溯",
+]
+# 开源边界关键词
+_OPENSOURCE_KEYWORDS = [
+    "开源", "open source", "elastic", "许可证", "license",
+    "企业版", "多租户", "私有化", "闭源",
+]
+# 需求价值排序（roadmap 对齐）— 优先级分布检查
+_PRIORITY_RE = re.compile(r"\bP([0-3])\b|优先级\s*[:：]\s*P?([0-3])", re.IGNORECASE)
+# YAGNI / 非核心场景信号
+_YAGNI_SIGNALS = [
+    "可选功能", "nice-to-have", "锦上添花", "后续版本", "v2 再做",
+    "可能有用", "顺便", "附带",
+]
+
+
+def _assess_product_view(prd_content: str, spec_content: str) -> dict:
+    """产品视角评估（建议性，不阻断）。
+
+    三个维度:
+      1. 产品定位一致性 — 对齐双引擎/合规证据/质量门禁语义
+      2. 需求价值排序   — 优先级分布是否合理（P0/P1 为主, 无 P2 绑架核心）
+      3. 砍需求判断     — YAGNI 信号扫描（非核心场景是否被误列为核心需求）
+
+    输出 JSON 新增 ``product`` 维度字段，全部为 suggestions。
+    """
+    prd_lower = (prc or "").lower() if (prc := prd_content) else ""
+
+    positioning_hits = [k for k in _POSITIONING_KEYWORDS
+                        if k.lower() in prd_lower]
+    opensource_hits = [k for k in _OPENSOURCE_KEYWORDS
+                       if k.lower() in prd_lower]
+
+    # 优先级分布
+    prio_counts = {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
+    for m in _PRIORITY_RE.finditer(prd_content):
+        group = m.group(1) or m.group(2)
+        if group:
+            prio_counts[f"P{group}"] = prio_counts.get(f"P{group}", 0) + 1
+
+    # YAGNI 信号
+    yagni_hits = [k for k in _YAGNI_SIGNALS if k.lower() in prd_lower]
+
+    suggestions: list[str] = []
+
+    # 维度 1: 定位一致性
+    if len(positioning_hits) < 3:
+        suggestions.append(
+            "产品定位一致性: PRD 中产品定位关键词覆盖不足 "
+            f"({len(positioning_hits)}/8: {', '.join(positioning_hits[:5]) or '无'})"
+            " — 建议对齐产品蓝图双引擎定位（AI 开发钩子 + 合规证据锚），"
+            "明确交付物如何同时服务开发效率与合规证据链。"
+        )
+    if opensource_hits and "开源" not in prd_content and "license" not in prd_lower:
+        suggestions.append(
+            "开源边界: PRD 提到开源相关语义但未明确许可证/边界表述 — "
+            "建议确认开源范围（CLI/单项目能力）与企业版边界（多租户/私有化）。"
+        )
+
+    # 维度 2: 价值排序
+    total_prio = sum(prio_counts.values())
+    if total_prio:
+        p0p1 = prio_counts["P0"] + prio_counts["P1"]
+        if p0p1 / total_prio < 0.6:
+            suggestions.append(
+                f"需求价值排序: 高优先级需求占比偏低 (P0+P1={p0p1}/{total_prio})"
+                " — 建议对照产品路线图重排，核心场景优先。"
+            )
+    else:
+        suggestions.append(
+            "需求价值排序: PRD 未检测到优先级标注 (P0-P3) — "
+            "建议为每条需求标注优先级，对齐产品路线图价值排序。"
+        )
+
+    # 维度 3: 砍需求判断 (YAGNI)
+    if yagni_hits:
+        suggestions.append(
+            f"砍需求判断 (YAGNI): 检测到非核心信号 {yagni_hits[:3]} — "
+            "建议评估这些条目是否为'可做可不做'，避免范围蔓延。"
+        )
+
+    return {
+        "dimension": "product",
+        "advisory": True,
+        "positioning_hits": positioning_hits,
+        "opensource_hits": opensource_hits,
+        "priority_distribution": prio_counts,
+        "yagni_signals": yagni_hits,
+        "suggestions": suggestions,
+        "summary": (
+            "产品视角评估完成（建议性）: "
+            f"{len(suggestions)} 条建议"
+            if suggestions else
+            "产品视角评估完成（建议性）: 未发现明显偏差"
+        ),
+    }
+
+
+# ------------------------------------------------------------------
 # Main step handler
 # ------------------------------------------------------------------
 
@@ -467,6 +576,9 @@ def step_review_prd(session: PipelineSession) -> str:
         # --- 5. Check super analysis consistency ---
         consistency_findings = _check_super_analysis_consistency(spec_content, super_content) if super_content else []
 
+        # --- 6. 产品视角（第九轮决策 2026-08-19: 双视角 — 建议性, 不阻断）---
+        product_view = _assess_product_view(prd_content, spec_content)
+
         # --- Compile report ---
         review = {
             "session": session.name,
@@ -497,6 +609,8 @@ def step_review_prd(session: PipelineSession) -> str:
             "uncovered_shalls": [
                 f["shall"] for f in coverage_findings if not f["covered"]
             ],
+            # 产品视角（建议性 suggestions, 不改变 fail/pass 语义）
+            "product": product_view,
             "recommendations": [],
         }
 

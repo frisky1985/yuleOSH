@@ -29,16 +29,18 @@ from yuleosh.ci.diff_planner import (
 )
 
 # (step_key, agent, name, handler) 四元组 mock
+# r22 (2026-08-19): 嵌入式专项已合并进 code-review 超集（跨切面永不按 diff
+# 裁剪），旧 review-linker/review-startup/review-rtos/review-memory 不再是
+# 独立步骤 —— 与 _default_file_globs / PIPELINE_STEPS 保持一致。
 MOCK_STEPS = [
     ("spec-check", "小明", "合规检查", lambda s: ""),
-    ("review-linker", "小克", "链接脚本审查", lambda s: ""),
-    ("review-startup", "小克", "启动代码审查", lambda s: ""),
-    ("review-rtos", "小克", "RTOS 配置审查", lambda s: ""),
-    ("review-memory", "小克", "内存安全审查", lambda s: ""),
+    ("code-review", "小克", "集成审查 + 嵌入式专项 (合并超集)", lambda s: ""),
     ("review-critical-safety", "小明", "P0 GATE", lambda s: ""),
-    ("merge-gate", "小马", "Merge Gate", lambda s: ""),
+    ("merge-gate", "小仓", "CM Gate", lambda s: ""),
     ("final-report", "小明", "最终报告", lambda s: ""),
     ("c-unit-test", "小克", "C 单元测试", lambda s: ""),
+    ("integration-test", "小克", "接口集成测试", lambda s: ""),
+    ("fault-injection", "小克", "故障注入测试", lambda s: ""),
 ]
 
 # 默认 glob 由 diff_planner._default_file_globs 提供；测试用其内置集
@@ -130,26 +132,37 @@ class TestPlanSkipsG5:
 class TestPlanSkipsBehavior:
     """正常裁剪行为。"""
 
-    def test_linker_script_change_keeps_review_linker(self):
-        """变更 linker 脚本 → review-linker 保留。"""
+    def test_linker_script_change_keeps_code_review(self):
+        """变更 linker 脚本 → code-review（合并超集）保留。"""
         decisions = plan_skips(
             MOCK_STEPS, ["linker/STM32.ld"], gate_policy={}, file_globs=DEFAULT_GLOBS
         )
         skipped = {d.step_key for d in decisions}
-        assert "review-linker" not in skipped
+        assert "code-review" not in skipped
 
-    def test_src_change_skips_unrelated_embedded_reviews(self):
-        """变更 src/main.c → 嵌入式专项步骤（linker/startup）被裁剪。"""
+    def test_src_change_keeps_cross_cutting_steps(self):
+        """变更 src/main.c → r22 后嵌入式专项全并入跨切面集，永不按 diff 裁剪。"""
         decisions = plan_skips(
             MOCK_STEPS, ["src/main.c"], gate_policy={}, file_globs=DEFAULT_GLOBS
         )
         skipped = {d.step_key for d in decisions}
-        # review-linker glob 是 *.ld 等 → main.c 不匹配 → 跳过
-        assert "review-linker" in skipped
-        # review-startup glob 是 *.s/*.asm → main.c 不匹配 → 跳过
-        assert "review-startup" in skipped
+        # r22: 嵌入式专项已合并进 code-review 超集（跨切面，永不裁剪）
+        assert "code-review" not in skipped
+        # integration-test / fault-injection 也在 CROSS_CUTTING_STEPS → 不裁剪
+        assert "integration-test" not in skipped
+        assert "fault-injection" not in skipped
         # c-unit-test glob 含 *.c → main.c 匹配 → 保留
         assert "c-unit-test" not in skipped
+
+    def test_docs_change_skips_c_unit_test(self):
+        """变更 docs/*.md → c-unit-test glob 不匹配 → 被裁剪（裁剪机制仍生效）。"""
+        decisions = plan_skips(
+            MOCK_STEPS, ["docs/readme.md"], gate_policy={}, file_globs=DEFAULT_GLOBS
+        )
+        skipped = {d.step_key for d in decisions}
+        assert "c-unit-test" in skipped
+        # 跨切面步骤仍不裁剪
+        assert "code-review" not in skipped
 
     def test_no_glob_step_not_skipped(self):
         """未声明 glob 的步骤 → 不裁剪（视为跨切面）。"""

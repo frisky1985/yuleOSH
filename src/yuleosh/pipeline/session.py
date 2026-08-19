@@ -121,6 +121,10 @@ class PipelineSession:
         # 方向2 (2026-08-11): diff 裁剪决策（OSH_DIFF_SKIP=1 时由 orchestrator 写入）
         # G2: skip 显式报告 —— 每个决策 {step, reason} 进 session，禁止静默消失。
         self.diff_skip_decisions: list[dict] = []
+        # 9.3.1 (2026-08-19 第九轮): 上下文安全强制化 — context_guard 水位
+        # 检查结果（normal/reference/over_limit + 估算 tokens + 触发原因）。
+        # 由 stages/llm.py _call_llm 写入, 报告 JSON 可见, 不静默降质。
+        self.context_guard: dict | None = None
         # B1/B2 (2026-08-08): current step context — set by
         # agent_checkpoint._make_session_factory / subprocess worker so
         # handlers can read which step they're running as.  Declared here

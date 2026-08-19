@@ -153,32 +153,38 @@ cd my-project
 yuleosh pipeline run docs/spec.md
 ```
 
-跑完 exit code 0 = 成功。完整 pipeline 有 30+ 步:
+跑完 exit code 0 = 成功。完整 pipeline 是 24 子步骤 + 10 Gate 编排层（r22 重构，
+2026-08-19）:
 
 ```
-spec-check          OpenSpec 合规检查
-super-analysis      S.U.P.E.R 启动分析
-prd / prd-review    产品需求分析 + 审查
-architecture / arch-review     架构设计 + 审查
-development / development-review   开发计划与代码实现 + 产物审查
-internal-code-review           代码实现预审
-test-planning                  测试规划
-self-test / self-test-review   自测验证 + 审查
-c-unit-test         C 单元测试 (Unity)
-code-review         集成代码审查
-integration-test    接口集成测试
-misra-review        MISRA 合规审查
-coverage-review     测试覆盖审查
-qemu-run            QEMU 仿真测试
-c-coverage-gate     C 覆盖率门禁
-review-linker/startup/rtos/memory/bsp/build/power/stack/mmio
-                    嵌入式专项审查
-review-critical-safety   ⛔ P0 关键安全门禁（不可跳过）
-fault-injection     故障注入测试
-merge-gate          KG Merge Gate（图一致性门禁）
-test-qualification  SWE.6 合格性测试
-final-report        最终报告（session 置 completed）
+spec-check          OpenSpec 合规检查                [G1 SWE.1]
+super-analysis      S.U.P.E.R 启动分析                [G1 SWE.1]
+prd / prd-review    产品需求分析 + 双视角审查(质量+产品)  [G1 SWE.1]
+architecture / arch-review     架构设计 + 审查        [G2 SWE.2]
+development / development-review   开发计划与代码实现 + 产物审查 [G3 SWE.3]
+codegen-deploy      代码产物部署（护栏备份/回滚）      [G3 SWE.3]
+internal-code-review           代码实现预审           [G3 SWE.3]
+claude-review       方案评审（外部 agent，先挑战 spec 假设）[G4]
+test-planning       测试规划（注入 claude-review 结论） [G5]
+verify-loop         自测循环（self-test → codex-verify → self-test-review）[G6 SWE.4]
+c-unit-test         C 单元测试 (Unity)               [G6 SWE.4]
+code-review         集成审查超集（code + 嵌入式 12 专项）[G7 SWE.5]
+misra-review        MISRA 合规审查                   [G7 SWE.5]
+integration-test    接口集成测试                     [G7 SWE.5]
+qemu-verify         QEMU 仿真验证（qemu-run + c-coverage-gate）[G7 SWE.5]
+coverage-review     测试覆盖审查                     [G7 SWE.5]
+review-critical-safety   ⛔ P0 关键安全门禁（不可跳过）[G8]
+fault-injection     故障注入测试                     [G8]
+merge-gate          CM Gate（KG 图一致性 + 仓库管理 4 检查）[G9]
+test-qualification  SWE.6 合格性测试                 [G10 SWE.6]
+final-report        最终报告（session 置 completed）  [G10 SWE.6]
 ```
+
+> 嵌入式专项审查（linker/startup/rtos/memory/bsp/build/power/stack/mmio +
+> interrupt/nvm/watchdog/timing = 12 专项）已合并进 `code-review` 超集步骤，
+> 对外显示一个步骤，内部顺序执行（能力不损失）。
+> gate status 聚合输出 `.osh/sessions/<id>/gate-summary.json`（failed > retry >
+> skipped > passed）。
 
 ### 5.2 Profile 档位
 
@@ -193,8 +199,8 @@ misra:
 
 | 档位 | 语义 | 步骤数 |
 |------|------|--------|
-| `minimal` | 白名单基线: spec-check / c-unit-test / integration-test / c-coverage-gate / review-critical-safety / merge-gate | 6 |
-| `safety` | 全量 pipeline（默认） | 33 |
+| `minimal` | 白名单基线: spec-check / c-unit-test / integration-test / qemu-verify / review-critical-safety / merge-gate | 6 |
+| `safety` | 全量 pipeline（默认） | 24 |
 | `ci` / `performance` / `testing` | 黑名单裁剪 | 视配置 |
 
 > **P0 保护集**: `review-critical-safety` 和 `merge-gate` 是语义上不可绕过的

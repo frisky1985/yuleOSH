@@ -109,7 +109,14 @@ def _write_report(session: PipelineSession, step_key: str, report: dict) -> str:
 
 
 def _collect_spec_and_artifacts(session: PipelineSession) -> tuple[str, dict[str, str]]:
-    """Collect spec content + existing artifact summaries for context."""
+    """Collect spec content + existing artifact summaries for context.
+
+    9.3.2 (2026-08-19 第九轮): 单 artifact 尾部硬截断改为「契约/结论尾段
+    保留 + 显式省略标记」（truncate_with_reference_marker）——外部 agent
+    见省略标记后可自主读文件取全文, 语义不丢失。
+    """
+    from yuleosh.pipeline.context_guard import truncate_with_reference_marker
+
     spec_path = Path(session.spec_path)
     spec_content = spec_path.read_text(encoding="utf-8", errors="ignore") \
         if spec_path.exists() else "(spec file not found)"
@@ -126,14 +133,26 @@ def _collect_spec_and_artifacts(session: PipelineSession) -> tuple[str, dict[str
                 # every contract section past FR-041 (SW-005..008, §8 interface
                 # contract, guardrail map) → claude-review "FR 段止于 SW-004"
                 # blocker (run-20260816-174313). PRD itself is 26K+; keep enough.
-                artifacts[key] = ap.read_text(encoding="utf-8", errors="ignore")[:SPEC_INJECT_LIMIT]
+                # 2026-08-19: tail 截断 → 头尾保留 + 省略标记（引用式）。
+                artifacts[key] = truncate_with_reference_marker(
+                    ap.read_text(encoding="utf-8", errors="ignore"),
+                    SPEC_INJECT_LIMIT,
+                    str(ap),
+                )
             except OSError:
                 artifacts[key] = "(read error)"
     return spec_content, artifacts
 
 
 def _format_artifacts_for_prompt(artifacts: dict[str, str]) -> str:
-    """Render artifact contents into a compact prompt section."""
+    """Render artifact contents into a compact prompt section.
+
+    9.3.2 (2026-08-19 第九轮): 合并总上限从尾部硬截断改为「头尾保留 +
+    省略标记」（contracts/JSON 结论字段通常在后段）——外部 agent 见
+    ``…[omitted N chars — 全文见 <path>]`` 后可自主读文件取全文。
+    """
+    from yuleosh.pipeline.context_guard import truncate_with_reference_marker
+
     if not artifacts:
         return "(no artifacts available)"
     blocks = []
@@ -143,7 +162,8 @@ def _format_artifacts_for_prompt(artifacts: dict[str, str]) -> str:
     # Combined cap: all artifacts concatenated can exceed the per-file limit;
     # keep the full set (PRD 26K + arch 17K + test-plan 16K ≈ 60K) so reviewers
     # see the tail contracts instead of only the first artifact.
-    return joined[:ARTIFACT_INJECT_LIMIT]
+    return truncate_with_reference_marker(joined, ARTIFACT_INJECT_LIMIT,
+                                          "<session_dir>/artifacts")
 
 
 def _build_codex_prompt(spec_content: str, artifacts_block: str,

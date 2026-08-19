@@ -78,7 +78,8 @@ class TestAgentRegistry:
         assert AGENT_ROLES["Claude"] == "architect"
 
     def test_step_agent_map_codex_verify(self):
-        assert resolve_agent_for_step("codex-verify") == "Codex"
+        # r22 重构: codex-verify 并入 verify-loop；Codex 角色仍注册可反查。
+        assert resolve_agent_for_step("verify-loop") == "小克"
         assert resolve_agent_role("Codex") == "verifier"
 
     def test_step_agent_map_claude_review(self):
@@ -87,11 +88,10 @@ class TestAgentRegistry:
 
     def test_steps_registered_in_pipeline(self):
         keys = [s[0] for s in PIPELINE_STEPS]
-        assert "codex-verify" in keys
+        assert "verify-loop" in keys
         assert "claude-review" in keys
-        # codex-verify 紧跟 self-test；claude-review 在 test-planning 后
-        assert keys.index("codex-verify") == keys.index("self-test") + 1
-        assert keys.index("claude-review") == keys.index("test-planning") + 1
+        # r22 重构: claude-review 在 test-planning 前（三轮决策互换）
+        assert keys.index("claude-review") == keys.index("test-planning") - 1
 
     def test_handlers_exported(self):
         assert callable(step_codex_verify)

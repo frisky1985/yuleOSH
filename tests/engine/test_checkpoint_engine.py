@@ -453,10 +453,10 @@ class TestAgentCheckpoint:
         from yuleosh.engine.agent_checkpoint import create_agent_pipeline
         engine = create_agent_pipeline("/tmp/test")
         step_ids = engine.get_step_ids()
-        assert len(step_ids) > 20  # 29 steps in PIPELINE_STEPS
+        assert len(step_ids) >= 24  # r22 重构 (2026-08-19): 24 子步骤
         assert "spec-check" in step_ids
         assert "architecture" in step_ids
-        assert "self-test" in step_ids
+        assert "verify-loop" in step_ids  # self-test/codex-verify/self-test-review 合并
         assert "final-report" in step_ids
 
     def test_list_injection_points(self, capsys):

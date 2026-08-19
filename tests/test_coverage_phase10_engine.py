@@ -1083,11 +1083,41 @@ class TestSyncCheckSchema:
 
 
 class TestSyncCheckGateStatus:
-    def test_gate_warning_status(self, tmp_path):
-        """tracking warning（无规则）+ schema 无 error → 整体 warning。"""
+    def test_gate_no_rules_skipped_passed(self, tmp_path):
+        """无规则 = 无可检查项 → passed（2026-08-19 防 CI 噪音契约，非 warning）。"""
         result = run_sync_check_gate(str(tmp_path))
+        assert result["status"] == "passed"
+        assert "skipped" in result["tracking_results"]["summary"]
+
+    def test_gate_warning_status(self, tmp_path):
+        """tracking warning（文档 >30 天未更新）+ schema 无 error → 整体 warning。"""
+        docs = tmp_path / "docs"
+        docs.mkdir(parents=True, exist_ok=True)
+        (docs / ".sync-gate.yaml").write_text(
+            "tracking:\n"
+            "  - code_path: \"src/main.c\"\n"
+            "    docs: [\"docs/api.md\"]\n"
+            "    reason: \"r\"\n",
+            encoding="utf-8",
+        )
+        # 文档存在但 31 天前更新 → warning 级（check_mtime_freshness 阈值 30 天）
+        api = docs / "api.md"
+        api.write_text("# API", encoding="utf-8")
+        import os
+        import time
+        old = time.time() - 31 * 86400
+        os.utime(api, (old, old))
+        with patch(
+            "yuleosh.ci.sync_check.get_changed_files",
+            return_value=["src/main.c"],
+        ):
+            result = run_sync_check_gate(str(tmp_path))
         assert result["status"] == "warning"
         assert "tracking_results" in result
+        assert any(
+            r.get("severity") == "warning"
+            for r in result["tracking_results"].get("rule_results", [])
+        )
 
     def test_gate_passed_status(self, tmp_path):
         """tracking passed + schema 仅 info → 整体 passed。"""

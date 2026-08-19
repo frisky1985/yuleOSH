@@ -401,6 +401,7 @@ def build_test_planning_prompt(
     architecture_content: Optional[str] = None,
     development_plan_content: Optional[str] = None,
     repo_facts: str = "",
+    claude_review_feedback: str = "",
 ) -> tuple[str, str]:
     """Build a test-planning prompt that generates a comprehensive test plan.
 
@@ -414,6 +415,10 @@ def build_test_planning_prompt(
             framework / coverage / ASIL) injected so the plan is grounded in
             the real repo (2026-08-18 r21e: plan hallucinated Unity harness
             and non-existent test files).
+        claude_review_feedback: claude-review 结论摘要（blockers/suggestions）
+            — 2026-08-19 三轮决策: test-planning 挪到 claude-review 之后,
+            评审结论注入测试策略/用例设计参考（防止测试计划忽略已识别的
+            方案缺陷）。
 
     Returns:
         Tuple of (system_prompt, user_prompt).
@@ -476,6 +481,15 @@ def build_test_planning_prompt(
         user_prompt_parts.append(
             f"## Repository Facts (machine-collected — 测试基建描述必须以此为准)\n"
             f"```\n{repo_facts}\n```\n\n"
+        )
+
+    if claude_review_feedback:
+        user_prompt_parts.append(
+            "## Claude 方案评审反馈（2026-08-19 起注入 — 测试规划必须覆盖 "
+            "评审指出的 blocker/suggestion 对应场景）\n"
+            "```\n"
+            f"{claude_review_feedback[:4000]}\n"
+            "```\n\n"
         )
 
     user_prompt_parts.append(

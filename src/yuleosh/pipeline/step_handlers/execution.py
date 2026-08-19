@@ -130,7 +130,7 @@ def step_claude_arch(session: PipelineSession) -> str:
             # 默认 4096 会截断输出 (r18 architecture.md §5.1 表截断被
             # claude-review 指出). 对齐 TASK_BUDGETS architecture_design.
             result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             log.error(f"LLM call failed during architecture analysis: {e}")
             raise PipelineStepError(
                 f"Architecture analysis LLM call failed: {e}\n"
@@ -833,6 +833,39 @@ def step_test_planning(session: PipelineSession) -> str:
         except Exception as e:  # pragma: no cover - defensive
             log.warning("repo_facts collect failed (non-fatal): %s", e)
 
+        # 2026-08-19 三轮决策: claude-review 提前到 test-planning 之前 —
+        # 读 claude-review.json 的 blockers/suggestions 注入测试策略参考。
+        claude_review_feedback = ""
+        claude_review_path = session.session_dir / "claude-review.json"
+        if claude_review_path.exists():
+            try:
+                cr = json.loads(claude_review_path.read_text(encoding="utf-8"))
+                if isinstance(cr, dict):
+                    parts = []
+                    verdict = cr.get("verdict", "")
+                    summary = cr.get("summary", "")
+                    if summary:
+                        parts.append(f"结论: {summary}")
+                    blockers = cr.get("blockers") or []
+                    if blockers:
+                        parts.append("Blocker 清单:")
+                        for b in blockers[:10]:
+                            parts.append(
+                                f"- [{b.get('severity', '?')}] {b.get('item', b)}"
+                            )
+                    suggestions = cr.get("suggestions") or []
+                    if suggestions:
+                        parts.append("Suggestions:")
+                        for s in suggestions[:10]:
+                            parts.append(f"- {s}")
+                    if parts:
+                        claude_review_feedback = (
+                            f"(claude-review verdict={verdict or 'unknown'})\n"
+                            + "\n".join(parts)
+                        )
+            except Exception as e:  # pragma: no cover - defensive  # noqa: BLE001
+                log.warning("claude-review read failed (non-fatal): %s", e)
+
         # --- Build prompt ---
         system_prompt, user_prompt = build_test_planning_prompt(
             spec_content=spec_content,
@@ -840,6 +873,7 @@ def step_test_planning(session: PipelineSession) -> str:
             architecture_content=architecture_content,
             development_plan_content=dev_plan_content,
             repo_facts=repo_facts_str,
+            claude_review_feedback=claude_review_feedback,
         )
 
         # --- Call LLM ---
@@ -849,7 +883,7 @@ def step_test_planning(session: PipelineSession) -> str:
             # claude-review 报"测试计划中途截断"。spec 增长 (16 guardrails +
             # 多 SW 追溯矩阵) 需要更大输出预算。对齐 TASK_BUDGETS.
             result = _call_llm(session, system_prompt, user_prompt, max_tokens=8192)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             log.error(f"LLM call failed during test planning: {e}")
             raise PipelineStepError(
                 f"Test planning LLM call failed: {e}\n"

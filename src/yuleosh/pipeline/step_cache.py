@@ -42,6 +42,9 @@ log = logging.getLogger("pipeline.step_cache")
 # 可缓存: verdict 由确定性逻辑决定 (无 LLM 主调用)。
 # 注意: review-* 嵌入式审查含 LLM 附加字段 (llm_review), 但 status 由
 # 静态扫描决定 → 产物 verdict 确定性成立; 缓存命中时提示附加字段为旧值。
+# 2026-08-19 (八轮决策, 24 步重构): 合并后的步骤 key 替换旧 key —
+#   qemu-verify 替代 qemu-run + c-coverage-gate（确定性）；
+#   verify-loop / code-review 含外部 agent + LLM → 不可缓存 (LLM_STEPS)。
 CACHEABLE_STEPS = frozenset({
     "spec-check",
     "codegen-deploy",
@@ -49,17 +52,7 @@ CACHEABLE_STEPS = frozenset({
     "misra-review",
     "coverage-review",
     "integration-test",
-    "qemu-run",
-    "c-coverage-gate",
-    "review-linker",
-    "review-startup",
-    "review-rtos",
-    "review-memory",
-    "review-bsp",
-    "review-build",
-    "review-power",
-    "review-stack",
-    "review-mmio",
+    "qemu-verify",
     "review-critical-safety",
     "fault-injection",
     "merge-gate",
@@ -79,6 +72,10 @@ FAILED_STATUSES = frozenset({
 })
 
 # LLM 主调用步骤: 永不缓存 (B2 opt-in 接口预留)。
+# 2026-08-19 (八轮决策, 24 步重构): verify-loop / code-review 为合并步骤
+# （内部含外部 agent codex-verify / claude-review + LLM 审查）→ 不可缓存；
+# 旧 key (self-test / self-test-review / review-linker 等) 已不再出现在
+# PIPELINE_STEPS, 从集合移除（保留 claude-review / test-planning）。
 LLM_STEPS = frozenset({
     "super-analysis",
     "prd",
@@ -88,9 +85,9 @@ LLM_STEPS = frozenset({
     "development",
     "development-review",
     "internal-code-review",
+    "claude-review",
     "test-planning",
-    "self-test",
-    "self-test-review",
+    "verify-loop",
     "code-review",
     "final-report",
 })

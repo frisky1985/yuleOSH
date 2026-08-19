@@ -276,6 +276,7 @@ The loop chain covers, but is not limited to:
 
 > **背景**: 防需求截断。需求从入口到验收必须经历固定链条:
 > 需求总体架构 → 原子需求拆解 → 原子化评审/开发/测试 → 原子化验收。
+> 任一环节缺失都会导致需求被截断/半成品收尾 (长任务中途被 kill 教训)。
 > 本规则要求**从一开始 (写需求/分析需求时) 就这么做**,不是事后补救。
 
 ### 11.1 需求总体架构 (写需求/分析需求时的第一动作)
@@ -426,3 +427,101 @@ The loop chain covers, but is not limited to:
   与 OpenSpec 规范 (§12) 同一套目录聚合校验。
 - `yuleosh spec cp validate <id>` SHALL 是机器校验 (frontmatter/结构/状态
   合法性),评审 (review) 是 LLM 人工判读,两者 SHALL 都通过才 approve。
+
+## 14. 编排层/执行层分层原则 + 角色矩阵 (2026-08-19 老板拍板)
+
+> 背景：pipeline 重构为「24 子步骤执行层 + 10 Gate 编排层」。老板钦定：
+> 编排层 10 Gate 是对外稳定契约（对齐 ASPICE 过程域），一旦约定不再变动；
+> 所有修正/调整/规则变更/handler 增删都发生在执行层（24 子步骤内部）。
+
+### 14.1 分层原则 R1-R4
+
+**R1 变动域 (SHALL)**：
+- 子步骤只能在所属 gate 内增删/重排；跨 gate 移动 = 编排层变更。
+- 新 handler / 新子步骤 SHALL 归属现有 gate，不新增 gate。
+
+**R2 升级机制 (SHALL)**：
+- Gate 级变更（新增/改边界/删除）SHALL 老板/架构评审拍板——契约变更流程。
+- 编排层 GATES 常量变更 SHALL 同步 gate-summary / README / HTML（R4）。
+
+**R3 契约守护 (SHALL)**：
+- `validate_gates_contract` SHALL 断言：所有 24 子步骤被 gate 全覆盖、无重复、
+  无悬挂、顺序一致（tests/test_step_handlers_init_deep.py TestGatesContract）。
+- gate status 聚合语义 failed > retry > skipped > passed 不得破坏。
+
+**R4 文档同步 (SHALL)**：
+- 执行层改动若改变子步骤 gate 归属 → SHALL 同步 gate-summary / README / HTML。
+
+### 14.2 角色矩阵（九角色链条）
+
+| 链条 | 角色 | 职责 |
+|:--|:--|:--|
+| 项目 | 小明 | 编排 + 进度/风险 |
+| 产品 | Hermes | PRD 生成，产品蓝图 product-blueprint 对齐 |
+| 需求 | 小明 | S.U.P.E.R 分析，spec 契约 |
+| 架构 | Claude | arch-review 外部评审 |
+| 开发 | Claude/Codex | development/codegen + 测试验证 |
+| 审查 | 小马 | prd-review/arch-review/development-review/code-review/misra-review |
+| 测试 | Codex/小克 | codex-verify + 单测/集成 |
+| 合规 | 小马(MISRA) + 小明(P0 门禁) | MISRA 合规 + P0 安全门禁 |
+| 仓库管理 | 小仓(CM) | merge-gate CM Gate：工作区清洁/提交规范/产物泄漏/部署护栏 |
+
+**SHALL**：
+- merge-gate 步骤角色 SHALL 是「小仓」（CM），负责 4 项确定性 CM 检查。
+- 任一 CM 检查 failed → gate failed；warning 仅记录不阻断。
+- 无 git 仓库的项目 CM 检查 SHALL skipped（容错）。
+
+### 14.3 审查步骤归属表
+
+```
+文档审查类 → G1(prd-review) G2(arch-review) G3(development-review)
+             G6(self-test-review) G7(misra-review, coverage-review)
+代码审查类 → G3(internal-code-review) G7(code-review 超集: 集成审查 + 12 专项)
+门禁类     → G8(review-critical-safety)
+外部评审   → G4(claude-review)
+产品评审   → G1(prd-review 双视角: 质量 + 产品, advisory 建议性)
+```
+
+**SHALL**：
+- prd-review 产品视角 SHALL 是建议性（advisory=True），不改变 fail/pass 语义；
+  产品偏好不得阻塞工程正确性。
+- claude-review SHALL 先挑战 spec 假设（需求完整性/边界/可测试性）再评方案。
+
+### 14.4 上下文安全强制化（第九轮 9.3）
+
+**SHALL**：
+- 上下文水位 >50% → 自动启用引用式注入（context_guard），禁止静默尾部截断。
+- 引用式注入 SHALL 带显式省略标记 `…[omitted N chars — 全文见 <path>]`，
+  外部 agent 可自主读文件取全文。
+- 上下文水位 >80% → 保持 TokenBudgetChecker 拒绝/降级，报错带
+  `context_mode="over_limit"` 标记 + 建议。
+- 任何降级/跳过/回退 SHALL 显式记录（不静默降质）。
+
+**MAY**：
+- 引用式注入的摘要长度 MAY 用 `YULEOSH_CONTEXT_WINDOW` 环境变量调整窗口。
+
+## 15. 测试断言契约 — 禁止写死步骤数/数量 (2026-08-19 老板钦定)
+
+**背景（教训）**：r22 重构 36→24 步导致 12 个测试批量失败，全部是
+`assert len(...) == 36` 这类写死数量断言。步数每次合理演进都要人肉
+同步 N 处断言，漏一处红一处 —— 这是设计债，不是测试的正常成本。
+
+**SHALL**：
+- 测试断言「行为一致性」时 SHALL 从单一事实源推导数量：
+  `len(PIPELINE_STEPS)` / `len(step_defs) == len(PIPELINE_STEPS)`，
+  禁止硬编码 24/36/33 等具体步数。
+- 断言「注册表自身」时 SHALL 用契约断言（首/末步 key、关键步骤存在、
+  合理下限），禁止用精确数量：`PIPELINE_STEPS[0][0] == "spec-check"`、
+  `PIPELINE_STEPS[-1][0] == "final-report"`、`>= 20` 下限。
+- 步骤改名（如 qemu-run → qemu-verify）后，相关测试引用 SHALL 同步新 key，
+  并保留一行注释说明变更。
+- 新增 agent 角色（AGENT_ROLES）SHALL 同步三处：AGENT_MODEL_ROUTES
+  (llm/client.py)、TASK_BUDGETS (llm/providers/base.py)、别名表
+  (agent_registry.py)，测试 test_llm_routing 会强制校验。
+
+**SHALL NOT**：
+- 禁止 `assert len(X) == <具体数字>` 断言 pipeline 步骤/产物数量
+  （UUID/TOKEN 长度等非结构数量除外）。
+
+**MAY**：
+- 合理下限（如 `>= 20`）MAY 用于防误删（数量异常缩水时红，合理重构不红）。

@@ -152,7 +152,9 @@ class TestAgentPipelineSessionFactory:
 
         engine = create_agent_pipeline(str(tmp_path))
         step_defs = engine._step_defs
-        assert len(step_defs) == 36  # 2026-08-14: 34→36 (codex-verify/claude-review 外部 agent 步骤)
+        # 行为一致性：工厂产物必须与注册表同步（单一事实源，不写死数字）
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+        assert len(step_defs) == len(PIPELINE_STEPS)
         for s in step_defs:
             assert isinstance(s["handler"], HandlerAdapter), s["step_id"]
         # 全部为 session 风格（首参名 session/ctx/context），无 invalid

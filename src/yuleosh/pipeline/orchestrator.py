@@ -602,6 +602,16 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
 
         if session.status != "failed":
             session._save()
+
+        # 编排层 10 Gate 报告聚合 (2026-08-19 方案 B):
+        # gate status = 内部子步骤最差状态; 写 .osh/sessions/<id>/gate-summary.json。
+        # 失败不阻断 pipeline 收尾（证据产物, 只记录）。
+        try:
+            from yuleosh.pipeline.gates import write_gate_summary
+            _gate_path = write_gate_summary(session)
+            log.info("Gate summary written: %s", _gate_path)
+        except Exception as _gate_err:  # pragma: no cover - defensive  # noqa: BLE001
+            log.warning("gate-summary write failed (non-fatal): %s", _gate_err)
         
         print(f"\n{'='*50}")
         # 三色结果分级 (2026-08-12):

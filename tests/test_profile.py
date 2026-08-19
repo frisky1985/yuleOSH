@@ -232,7 +232,7 @@ class TestProfileInversion:
         ("review-linker", "小克", "链接脚本审查", lambda s: "/tmp/ld.md"),
         ("review-startup", "小克", "启动代码审查", lambda s: "/tmp/startup.md"),
         ("integration-test", "小克", "接口集成测试", lambda s: "/tmp/it.md"),
-        ("c-coverage-gate", "小克", "C 覆盖率门禁检查 (L2)", lambda s: "/tmp/ccov.md"),
+        ("qemu-verify", "小克", "QEMU 验证 + C 覆盖率门禁 (L2)", lambda s: "/tmp/ccov.md"),
     ]
 
     def test_minimal_profile_exists(self):
@@ -247,7 +247,7 @@ class TestProfileInversion:
         assert "spec-check" in keys
         assert "c-unit-test" in keys
         assert "integration-test" in keys
-        assert "c-coverage-gate" in keys
+        assert "qemu-verify" in keys
 
     def test_invariant1_safety_equals_all(self):
         """AC2/不变量1: safety 恒等于全集（含 P0 保护集）。"""

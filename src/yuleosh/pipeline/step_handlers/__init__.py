@@ -13,6 +13,12 @@ Import paths preserved:
   from yuleosh.pipeline.step_handlers import step_spec_check  (works)
   from yuleosh.pipeline.step_handlers import PIPELINE_STEPS    (works)
   from yuleosh.pipeline.step_handlers import _check_llm_key    (works)
+
+24 子步骤执行层 + 10 Gate 编排层（2026-08-19 老板八轮拍板, checkpoint v9）:
+  - 执行层 PIPELINE_STEPS = 24 个子步骤（合并后）; checkpoint/resume /
+    step_cache / --from-step 全按 24 步
+  - 编排层 GATES（yuleosh.pipeline.gates）: 10 Gate 对外稳定契约,
+    gate status = 内部子步骤最差状态; 报告聚合 gate-summary.json
 """
 
 from yuleosh.pipeline.step_handlers.spec import step_spec_check
@@ -50,12 +56,25 @@ from yuleosh.pipeline.step_handlers.review_linker import step_review_linker
 from yuleosh.pipeline.step_handlers.review_startup import step_review_startup
 from yuleosh.pipeline.step_handlers.review_rtos import step_review_rtos
 from yuleosh.pipeline.step_handlers.review_memory import step_review_memory
-from yuleosh.pipeline.step_handlers.review_bsp import step_review_bsp
-from yuleosh.pipeline.step_handlers.review_build import step_review_build
-from yuleosh.pipeline.step_handlers.review_power import step_review_power
+from yuleosh.pipeline.step_handlers.review_bsp import step_review_bsp  # noqa: F401
+from yuleosh.pipeline.step_handlers.review_build import step_review_build  # noqa: F401
+from yuleosh.pipeline.step_handlers.review_power import step_review_power  # noqa: F401
 from yuleosh.pipeline.step_handlers.review_stack import step_review_stack
 from yuleosh.pipeline.step_handlers.review_mmio import step_review_mmio
 from yuleosh.pipeline.step_handlers.review_critical_safety import step_review_critical_safety
+# 2026-08-19 第八轮新增 4 专项（并入 code-review 超集组, 不注册为独立步骤）
+from yuleosh.pipeline.step_handlers.review_interrupt import step_review_interrupt
+from yuleosh.pipeline.step_handlers.review_nvm import step_review_nvm
+from yuleosh.pipeline.step_handlers.review_watchdog import step_review_watchdog
+from yuleosh.pipeline.step_handlers.review_timing import step_review_timing
+# 2026-08-19 八轮决策: 合并 handler（PIPELINE_STEPS 引用, 旧 handler 保留不删）
+from yuleosh.pipeline.step_handlers.verify_loop import step_verify_loop
+from yuleosh.pipeline.step_handlers.code_review_unified import step_code_review_unified
+from yuleosh.pipeline.step_handlers.review_embedded_build import step_review_embedded_build
+from yuleosh.pipeline.step_handlers.review_embedded_runtime import step_review_embedded_runtime
+from yuleosh.pipeline.step_handlers.review_embedded_peripheral import step_review_embedded_peripheral
+from yuleosh.pipeline.step_handlers.review_embedded_realtime import step_review_embedded_realtime
+from yuleosh.pipeline.step_handlers.qemu_verify import step_qemu_verify
 
 # QEMU firmware emulation test (L2)
 from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
@@ -66,10 +85,13 @@ from yuleosh.pipeline.step_handlers.c_coverage_gate import coverage_gate_step
 # Fault Injection testing (SWE.5 / SWE.6)
 from yuleosh.pipeline.step_handlers.fault_inject import step_fault_injection
 
-# KG Merge Gate (KG-42)
+# KG Merge Gate (KG-42) — 第九轮: 扩展为 CM Gate（小仓）
 from yuleosh.knowledge_graph.merge_gate import step_merge_gate
 
 from yuleosh.pipeline.stages import _check_llm_key
+
+# 编排层 10 Gate（方案 B, 2026-08-19）
+from yuleosh.pipeline.gates import GATES, write_gate_summary, validate_gates_contract
 
 
 # Lazy import for step class registry
@@ -105,6 +127,17 @@ __all__ = [
     "step_review_stack",
     "step_review_mmio",
     "step_review_critical_safety",
+    "step_review_interrupt",
+    "step_review_nvm",
+    "step_review_watchdog",
+    "step_review_timing",
+    "step_verify_loop",
+    "step_code_review_unified",
+    "step_review_embedded_build",
+    "step_review_embedded_runtime",
+    "step_review_embedded_peripheral",
+    "step_review_embedded_realtime",
+    "step_qemu_verify",
     "step_fault_injection",
     "step_merge_gate",
     "step_test_qualification",
@@ -113,6 +146,9 @@ __all__ = [
     "qemu_run",
     "coverage_gate_step",
     "PIPELINE_STEPS",
+    "GATES",
+    "write_gate_summary",
+    "validate_gates_contract",
     "_check_llm_key",
     "_resolve_handler",
 ]
@@ -128,16 +164,17 @@ qemu_run = QemuTestHandler()
 
 
 # ═══════════════════════════════════════════════════════════════
-# yuleOSH Pipeline — ASPICE V-Model 对齐
+# yuleOSH Pipeline — ASPICE V-Model 对齐（24 子步骤执行层）
 #
-# Left side (specification):      Steps 1-9    SWE.1→SWE.3
-# Bottom (implementation):        Steps 10-11
-# Right side (verification):      Steps 12-17  SWE.4→SWE.6
+# 2026-08-19 老板八轮拍板（checkpoint v9）: 合理下限合并，不牺牲能力。
+# 36 → 24 步；旧 handler 文件保留不删（子逻辑复用）；外部 agent 独立
+# 超时/重试保留（verify-loop 内部 codex-verify 仍独立调用）；
+# P0 门禁（review-critical-safety）独立步骤；--from-step 按 24 步编号。
 #
-# Each left-side stage has a corresponding review step on the right
+# 编排层 10 Gate 视图见 yuleosh.pipeline.gates.GATES（对外稳定契约）。
 # ═══════════════════════════════════════════════════════════════
 PIPELINE_STEPS = [
-    # ── Left side: SWE.1 Requirements ────────────────
+    # ── G1 SWE.1 Requirements ──────────────────────────────
     ("spec-check", "小明", "OpenSpec 合规检查", step_spec_check),
     ("super-analysis", "小明", "S.U.P.E.R 启动分析",
      _resolve_handler("super-analysis", step_super_analysis)),
@@ -146,79 +183,66 @@ PIPELINE_STEPS = [
     ("prd-review", "小马", "PRD 质量审查",
      _resolve_handler("prd-review", step_review_prd)),
 
-    # ── Left side: SWE.2 Architecture Design ─────────
+    # ── G2 SWE.2 Architecture Design ───────────────────────
     ("architecture", "Claude", "架构设计",
      _resolve_handler("architecture", step_claude_arch)),
     ("arch-review", "小克", "架构审查", step_review_arch),
 
-    # ── Left side: SWE.3 Detailed Design & Code ─────
+    # ── G3 SWE.3 Detailed Design & Code ────────────────────
     ("development", "Claude", "开发计划与代码实现",
      _resolve_handler("development", step_claude_dev)),
-    # development-review (2026-08-19 老板拍板 A+B): 原名 devplan-review, 前移到
-    # codegen-deploy 之前 — 审查 development 产物 (planning 模式: 计划 / generate-code
-    # 模式: codegen 报告), 不再依赖部署状态; 部署状态 skip 判断由 internal-code-review 承担。
     ("development-review", "小克", "开发产物审查", step_review_development),
-    # codegen 产物部署: development(generate-code) 写 artifacts/generated-code/<session>/,
-    # 此步同步 src/ 树 → 后续 build/test/coverage 测的是真实生成代码而非模板空壳
     ("codegen-deploy", "小明", "代码产物部署",
      step_codegen_deploy),
-
-    # ── Bottom: Code Pre-Review ─────────────────────
     ("internal-code-review", "小克", "代码实现预审", step_review_code),
+
+    # ── G4 方案评审（外部 agent）───────────────────────────
+    # 2026-08-19 三轮决策: claude-review 提前到 test-planning 前 —
+    # 方案评审应在测试规划前完成（评审结论注入 test-planning prompt）
+    ("claude-review", "Claude", "Claude 方案评审 (外部 agent)", step_claude_review),
+
+    # ── G5 测试规划 ────────────────────────────────────────
+    # 挪后: 读 claude-review 结论（blockers/suggestions 注入 prompt）
     ("test-planning", "Claude", "测试规划",
      _resolve_handler("test-planning", step_test_planning)),
 
-    # ── 外部 Agent 协作闭环 ────────────────────────
-    # claude-review: 方案评审/头脑风暴（外部 claude CLI，未一致即阻断）
-    ("claude-review", "Claude", "Claude 方案评审 (外部 agent)", step_claude_review),
-
-    # ── Right side: SWE.4 Unit Testing ──────────────
-    ("self-test", "Claude", "自测验证", step_claude_test),
-    # codex-verify: 外部 Codex CLI 对产出做真实测试验证，缺陷即阻断
-    ("codex-verify", "Codex", "Codex 测试验证 (外部 agent)", step_codex_verify),
-    ("self-test-review", "小克", "自测结果审查", step_review_selftest),
+    # ── G6 SWE.4 Unit Testing ──────────────────────────────
+    # verify-loop = 合并 self-test + codex-verify + self-test-review
+    # （内部顺序调用旧 handler, 任一 failed → failed）
+    ("verify-loop", "小克", "自测 + Codex 验证 + 自测审查 (合并)", step_verify_loop),
     ("c-unit-test", "小克", "C 单元测试 (Unity)", step_c_unit_test),
 
-    # ── Right side: SWE.5 Integration Testing ───────
-    # 顺序说明 (2026-08-07 优化): code-review 前移到 integration-test 之前——
-    # 代码终审应在集成测试执行前完成（发现缺陷越早成本越低，避免测试白跑）；
-    # misra-review / coverage-review 保持测试后评估（读 misra-report.json /
-    # .yuleosh/reports），符合 ASPICE SWE.5「先执行后评估」的 V 模型。
-    ("code-review", "Hermes", "集成代码审查",
-     _resolve_handler("code-review", step_hermes_review)),
-    ("integration-test", "小克", "接口集成测试", step_integration_test),
+    # ── G7 SWE.5 Integration Testing ───────────────────────
+    # code-review 超集 = 集成审查 + 4 嵌入式专项组（build/runtime/peripheral/realtime）
+    ("code-review", "小克", "集成代码审查 + 嵌入式专项 (合并超集)",
+     step_code_review_unified),
+    # misra-review 前置（测试前评估，避免测试白跑）
     ("misra-review", "小马", "MISRA 合规审查",
      _resolve_handler("misra-review", step_review_misra_ci)),
+    ("integration-test", "小克", "接口集成测试", step_integration_test),
+    # qemu-verify = 合并 qemu-run + c-coverage-gate
+    ("qemu-verify", "小克", "QEMU 仿真 + 覆盖率门禁 (合并)", step_qemu_verify),
+    # coverage-review 保持测试后（依赖覆盖率数据）
     ("coverage-review", "小马", "测试覆盖审查",
      _resolve_handler("coverage-review", step_review_test_coverage)),
 
-    # ── CI Layer steps (L1/L2/L3) ────────────────────
-    ("qemu-run", "QEMU", "QEMU 仿真测试 (L2)", qemu_run),
-    ("c-coverage-gate", "小克", "C 覆盖率门禁检查 (L2)", coverage_gate_step),
-
-    # ── Embedded review steps (SWE.5) ────────────────
-    ("review-linker", "小克", "链接脚本审查", step_review_linker),
-    ("review-startup", "小克", "启动代码审查", step_review_startup),
-    ("review-rtos", "小克", "RTOS 配置审查", step_review_rtos),
-    ("review-memory", "小克", "内存安全审查", step_review_memory),
-
-    # ── P2: Embedded Special Focus ─────────────────
-    ("review-bsp", "小克", "BSP 板级支持包验证", step_review_bsp),
-    ("review-build", "小克", "编译输出验证", step_review_build),
-    ("review-power", "小克", "低功耗审查", step_review_power),
-    ("review-stack", "小克", "堆栈使用分析 (P0/DEF-007)", step_review_stack),
-    ("review-mmio", "小克", "MMIO 配置审查 (P0/DEF-008)", step_review_mmio),
-
-    # ── ⛔ P0 CRITICAL GATE: 关键安全异常阻塞检查 ──────
-    ("review-critical-safety", "小明", "关键安全异常阻塞检查 (P0 GATE)", step_review_critical_safety),
-
-    # ── SWE.5 / SWE.6: Fault Injection Testing ────
+    # ── G8 安全门禁 ────────────────────────────────────────
+    # ⛔ P0 CRITICAL GATE: 确定性 cppcheck 非 LLM，保留独立阻断
+    ("review-critical-safety", "小明", "关键安全异常阻塞检查 (P0 GATE)",
+     step_review_critical_safety),
     ("fault-injection", "小克", "故障注入测试 (SWE.5/SWE.6)", step_fault_injection),
 
-    # ── Merge Gate (KG-42): Pre-merge KG validation ──
-    ("merge-gate", "小马", "KG Merge Gate — 图一致性/置信度检查", step_merge_gate),
+    # ── G9 合并门禁（CM Gate, 小仓）────────────────────────
+    # 第九轮决策 (2026-08-19): merge-gate 扩展为 CM Gate — KG 图一致性/
+    # 置信度检查 + 4 项确定性 CM 检查（工作区/提交规范/产物泄漏/部署护栏）
+    ("merge-gate", "小仓", "CM Gate — KG 一致性 + 仓库管理检查", step_merge_gate),
 
-    # ── Right side: SWE.6 Qualification Testing ─────
+    # ── G10 SWE.6 Qualification Testing ────────────────────
     ("test-qualification", "小明", "合格性测试", step_test_qualification),
     ("final-report", "小明", "最终报告", step_final_report),
 ]
+
+
+def _step_keys() -> list[str]:
+    """Return the ordered step keys of PIPELINE_STEPS."""
+    return [s[0] for s in PIPELINE_STEPS]

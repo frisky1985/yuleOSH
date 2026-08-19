@@ -132,7 +132,9 @@ class TestSubprocessRunner:
         state = engine.status()
         assert state is not None
         assert state["status"] == "completed"
-        assert len(state["steps"]) == 36  # 2026-08-14: 34→36 (codex-verify/claude-review 外部 agent 步骤)
+        # 行为一致性：subprocess 模式跑出的步骤数必须与注册表同步（单一事实源）
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+        assert len(state["steps"]) == len(PIPELINE_STEPS)
         assert all(s["status"] == "passed" for s in state["steps"])
 
 

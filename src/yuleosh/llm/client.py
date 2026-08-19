@@ -168,6 +168,12 @@ AGENT_MODEL_ROUTES: dict[str, dict[str, str]] = {
         "task_type": "review_blocking",
         "risk_level": "L4",
     },
+    "小仓": {
+        "model": "deepseek-v4",
+        "provider": "deepseek",
+        "task_type": "review_blocking",
+        "risk_level": "L4",  # 2026-08-19 第九轮: CM Gate（merge-gate P0 门禁，KG 一致性 + 仓库管理检查）
+    },
     "QEMU": {
         "model": "deepseek-v4",
         "provider": "deepseek",

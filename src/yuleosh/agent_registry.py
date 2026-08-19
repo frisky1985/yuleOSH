@@ -29,6 +29,7 @@ AGENT_ROLES: dict[str, str] = {
     "小明": "pm",
     "小克": "developer",
     "小马": "qa",
+    "小仓": "cm",  # 2026-08-19 第九轮: 仓库管理角色（merge-gate = CM Gate）
     "Hermes": "requirements",
     "Claude": "architect",
     "Codex": "verifier",
@@ -45,6 +46,7 @@ _AGENT_ALIASES: dict[str, str] = {
     "xiaoming": "小明",
     "xiaoke": "小克",
     "xiaoma": "小马",
+    "xiaocang": "小仓",
     "hermes": "Hermes",
     "claude": "Claude",
     "codex": "Codex",
@@ -57,7 +59,8 @@ _AGENT_ALIASES: dict[str, str] = {
 
 AGENT_SAFE_BASELINE = """# 共享安全基线（所有角色通用）
 - 审计诚信：输出必须真实反映实际执行结果，禁止编造证据或虚报通过。
-- 上下文安全：上下文使用超过 50% 时主动拆分，避免截断导致误判。
+- 上下文安全：上下文使用超过 50% 时自动启用引用式注入（context_guard），
+  禁止静默尾部截断；超过 80% 时拒绝/降级并显式标记。
 - 不静默降质：任何降级/跳过/回退必须显式记录，禁止悄悄降低质量。
 """
 
