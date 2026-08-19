@@ -156,28 +156,32 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 [User Story / Spec] ──▶ [OpenSpec Engine] ──▶ [Agent Pipeline] ──▶ [Code Gen]
                               │                       │                    │
                               ▼                       ▼                    ▼
-                      SHALL/SHOULD/MAY         10-Step Agent        C + Python
-                      + GIVEN/WHEN/THEN        Orchestration        Firmware
+                      SHALL/SHOULD/MAY         10-stage gate          C + Python
+                      + GIVEN/WHEN/THEN        orchestration over     Firmware
+                                                24 execution units
                                                                          │
                               ┌──────────────────────────────────────────┘
                               ▼
                     ┌─────────────────┐
                     │    Review        │
-                    │  (4-Agent Matrix) │
+                    │  (Multi-Role     │
+                    │   Review Matrix) │
                     └────────┬────────┘
                              ▼
                     ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
                     │   CI Layer 1    │▶──▶ │   CI Layer 2     │▶──▶ │   CI Layer 3     │
                     │  Unit + Coverage │     │  Cross-Compile    │     │  System Verify    │
                     │  + Plan-Lint     │     │  + Static Analysis│     │  + Evidence       │
-                    └─────────────────┘     └──────────────────┘     └──────────────────┘
-                                                                              │
-                                                                              ▼
-                                                                     ┌──────────────────┐
-                                                                     │  Deploy Hardware │
-                                                                     │  OpenOCD / JLink  │
-                                                                     │  / esptool        │
-                                                                     └──────────────────┘
+                    │  + docsync/meth  │     └──────────────────┘     └──────────────────┘
+                    └─────────────────┘                                          │
+                                                                                  ▼
+                                                                         ┌──────────────────┐
+                                                                         │  Deploy Hardware │
+                                                                         │  OpenOCD / JLink  │
+                                                                         │  / esptool        │
+                                                                         │  (可选后端, 默认   │
+                                                                         │   QEMU 仿真)      │
+                                                                         └──────────────────┘
 ```
 
 ### Layer Details
@@ -193,21 +197,22 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 </details>
 
 <details>
-<summary><strong>2. Agent Pipeline</strong> — 10-step LLM orchestration</summary>
+<summary><strong>2. Agent Pipeline</strong> — 10-stage gate orchestration over 24 execution units (ASPICE V-model)</summary>
 
-- 10-step orchestration: spec → SDD → DDD → code → test → review
+- 10-stage gate orchestration (G1-G10) over 24 execution units: spec → SDD → DDD → code → test → review
 - LLM-agnostic client (OpenAI-compatible API)
 - Blocking review gates before each stage transition
 - S.U.P.E.R. startup analysis for new requirements
+- Context guard: reference injection >50% watermark, no silent truncation
 - **Location**: `src/yuleosh/pipeline/`, `src/yuleosh/llm/`
 </details>
 
 <details>
 <summary><strong>3. CI/CD Engine</strong> — 3-layer automated verification</summary>
 
-- **Layer 1 — Dev Verify**: Unit tests + coverage gate + plan-lint on every commit
+- **Layer 1 — Dev Verify**: Unit tests + coverage gate + plan-lint + docsync-gate/methodology 门禁 on every commit
 - **Layer 2 — Integration**: Cross-compilation + MISRA static analysis on MR
-- **Layer 2.5 — AI Review**: 4-agent parallel code review
+- **Layer 2.5 — AI Review**: multi-role review matrix (sequential) + external agent dual-track (claude/codex CLI)
 - **Layer 3 — System Verify**: System tests + evidence pack on release tag
 - **Location**: `src/yuleosh/ci/`
 </details>
@@ -227,7 +232,7 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 | Module | Path | Purpose |
 |:-------|:-----|:--------|
 | Evidence Engine | `src/yuleosh/evidence/` | Traceability matrix + acceptance matrix + compliance ZIP |
-| Review Engine | `src/yuleosh/review/` | 4-agent parallel review + resource predictor |
+| Review Engine | `src/yuleosh/review/` | multi-role review matrix + external agent dual-track + resource predictor |
 | CodeGen Engine | `src/yuleosh/codegen/` | D3 code generation + compile verification + auto-repair loop |
 | Skills Library | `src/yuleosh/skills/` | Skill registry (`autosar-coding`/`misra-fix`/`python-testing`) + prompt injection |
 | Loop Engine | `src/yuleosh/loop_engine/` | 4 closed-loop feedback (defect/FMEA/KPI/KG) |
@@ -263,9 +268,9 @@ Test Planning → Code Review → CI Run → Evidence Pack → Deployment
 yuleOSH/
 ├── src/yuleosh/
 │   ├── spec/          OpenSpec parser, validator, differ
-│   ├── pipeline/      Agent pipeline orchestrator (10 steps)
+│   ├── pipeline/      Agent pipeline orchestrator (24 units, 10 gates)
 │   ├── ci/            3-layer CI/CD with dependency chaining
-│   ├── review/        4-agent parallel review + resource predictor
+│   ├── review/        multi-role review matrix + external agent dual-track + resource predictor
 │   ├── codegen/       D3 code generation + compile verify + auto-repair
 │   ├── skills/        Skills registry + prompt injection
 │   ├── evidence/      Traceability + acceptance + compliance ZIP
