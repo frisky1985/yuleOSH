@@ -74,6 +74,9 @@ class MemoryContextItem:
     trust: float = 0.0
     kind: str = ""
     created_at: str = ""
+    # Reflective distillation metadata (P2, 2026-08-19)
+    distilled_at: str = ""
+    verified_count: int = 0
 
 
 class MemoryContextAssembler:
@@ -166,6 +169,8 @@ class MemoryContextAssembler:
                     tags=f.get("tags", ""),
                     trust=float(f.get("trust", 0.0) or 0.0),
                     created_at=f.get("created_at", ""),
+                    distilled_at=f.get("distilled_at") or "",
+                    verified_count=int(f.get("verified_count", 0) or 0),
                 )
             )
         fact_items.sort(key=lambda i: i.trust, reverse=True)
@@ -223,6 +228,14 @@ class MemoryContextAssembler:
                     meta.append(f"tags={i.tags}")
                 if i.trust:
                     meta.append(f"trust={i.trust:.2f}")
+                # 意识增强 (P2, 2026-08-19): 蒸馏元信息
+                # [蒸馏于 2026-08-19 · 验证 3 次 · trust 0.82]
+                if i.distilled_at:
+                    dist_parts = [f"蒸馏于 {i.distilled_at[:10]}"]
+                    if i.verified_count:
+                        dist_parts.append(f"验证 {i.verified_count} 次")
+                    dist_parts.append(f"trust {i.trust:.2f}")
+                    meta.append("[" + " · ".join(dist_parts) + "]")
                 suffix = f" ({', '.join(meta)})" if meta else ""
                 lines.append(f"- [fact #{i.item_id}] {i.content}{suffix}")
             lines.append("")
