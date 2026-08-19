@@ -53,12 +53,12 @@ add_library(fault-inject STATIC
 target_include_directories(fault-inject PUBLIC ${FAULT_INJECT_INCS})
 
 # In production, fault injection is disabled via default config. The
-# application must NOT override A66T_FAULT_INJECTION_TEST_ENABLE /
-# A66T_TASK_FAULT_INJECT_ENABLE in its own compile definitions for
+# application must NOT override GENERIC_FAULT_INJECTION_TEST_ENABLE /
+# GENERIC_TASK_FAULT_INJECT_ENABLE in its own compile definitions for
 # safety-critical builds.
 target_compile_definitions(fault-inject PRIVATE
-    $<$<BOOL:${FAULT_INJECT_TESTS}>:A66T_FAULT_INJECTION_TEST_ENABLE=STD_ON>
-    $<$<BOOL:${FAULT_INJECT_TESTS}>:A66T_TASK_FAULT_INJECT_ENABLE=STD_ON>
+    $<$<BOOL:${FAULT_INJECT_TESTS}>:GENERIC_FAULT_INJECTION_TEST_ENABLE=STD_ON>
+    $<$<BOOL:${FAULT_INJECT_TESTS}>:GENERIC_TASK_FAULT_INJECT_ENABLE=STD_ON>
 )
 
 # ============================================================================
@@ -72,8 +72,8 @@ if(FAULT_INJECT_TESTS)
 
     target_include_directories(fault-inject-test PUBLIC ${FAULT_INJECT_INCS})
     target_compile_definitions(fault-inject-test PRIVATE
-        A66T_FAULT_INJECTION_TEST_ENABLE=STD_ON
-        A66T_TASK_FAULT_INJECT_ENABLE=STD_ON
+        GENERIC_FAULT_INJECTION_TEST_ENABLE=STD_ON
+        GENERIC_TASK_FAULT_INJECT_ENABLE=STD_ON
     )
 
     # ── Self-test executable ──────────────────────────────────────────────

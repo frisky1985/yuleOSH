@@ -19,7 +19,7 @@
  * into src/fault-inject/ and removed. Use src/fault-inject/ for all development.
  *
  * This guide shows how to wire the TaskFaultInject module into the existing
- * Generic codebase. All changes are guarded by A66T_TASK_FAULT_INJECT_ENABLE
+ * Generic codebase. All changes are guarded by GENERIC_TASK_FAULT_INJECT_ENABLE
  * and compile to nothing when STD_OFF.
  *
  * Integration Checklist:
@@ -56,8 +56,8 @@
  *   2. Add src/fault-inject/src/TaskFaultInject.c to the project sources
  *   3. Add src/fault-inject/src/FaultInject.c to the project sources
  *   4. Ensure FreeRTOS include path is accessible
- *   5. Set A66T_TASK_FAULT_INJECT_ENABLE = STD_ON in TaskFaultInject_Cfg.h
- *   6. Set A66T_FAULT_INJECTION_TEST_ENABLE = STD_ON in FaultInject_Cfg.h
+ *   5. Set GENERIC_TASK_FAULT_INJECT_ENABLE = STD_ON in TaskFaultInject_Cfg.h
+ *   6. Set GENERIC_FAULT_INJECTION_TEST_ENABLE = STD_ON in FaultInject_Cfg.h
  *
  * OLD PATH (deprecated) — ref/fault-inject/v2/:
  *   target_sources(app PRIVATE
@@ -73,7 +73,7 @@
  * Add after the scheduler starts (e.g., at the end of Rtos_InitTask or
  * at the start of SchedTask_Init):
  *
- *   #if (A66T_TASK_FAULT_INJECT_ENABLE == STD_ON)
+ *   #if (GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON)
  *   TaskFault_Init();
  *   #endif
  *
@@ -85,7 +85,7 @@
  *     SchedTask_Init();
  *     Rtos_Say_Hello();
  *
- *     #if (A66T_TASK_FAULT_INJECT_ENABLE == STD_ON)
+ *     #if (GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON)
  *     TaskFault_Init();
  *     #endif
  *
@@ -110,7 +110,7 @@
  *     (void)pvParameters;
  *
  *     // Register for fault injection (one-time)
- *     #if (A66T_TASK_FAULT_INJECT_ENABLE == STD_ON)
+ *     #if (GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON)
  *     TaskFault_RegisterTask(xTaskGetCurrentTaskHandle(), "RteHigh");
  *     #endif
  *
@@ -206,7 +206,7 @@
 /*
  * Wire the new DID 0xF193 into Desc_yule.c's WriteDataByIdentifier handler:
  *
- *   case 0xF193:   // A66T_TASK_FAULT_INJECT_UDS_DID
+ *   case 0xF193:   // GENERIC_TASK_FAULT_INJECT_UDS_DID
  *   {
  *       TaskHandle_t targetTask;
  *       TaskFault_Type_E faultType;

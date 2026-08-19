@@ -539,7 +539,7 @@ Connect → Inject → WaitForReset → Verify → Disconnect
 > **层级标识**: Layer 2 — 任务级模拟故障注入
 > **注入通道**: FreeRTOS Task Notification（或等价的轻量级 IPC）
 > **UDS DID**: 0xF193（写入注入指令），0xF192（读取注入结果）
-> **编译开关**: `A66T_TASK_FAULT_INJECT_ENABLE`
+> **编译开关**: `GENERIC_TASK_FAULT_INJECT_ENABLE`
 > **不触发复位**: 区别于 Layer 1 的系统级复位注入
 
 ---
@@ -736,7 +736,7 @@ cases:
 
 **SHALL** — 任务级注入和系统级注入 SHALL 互不干扰：
 - 不同的 UDS DID（Layer 1: 0xF190/F191，Layer 2: 0xF192/F193）
-- 独立的编译开关（`A66T_FAULT_INJECTION_TEST_ENABLE` vs `A66T_TASK_FAULT_INJECT_ENABLE`）
+- 独立的编译开关（`GENERIC_FAULT_INJECTION_TEST_ENABLE` vs `GENERIC_TASK_FAULT_INJECT_ENABLE`）
 - 独立的结果存储（Layer 1: NoInit SRAM，Layer 2: 环形缓冲区）
 - 独立的生命周期（Layer 1: 注入→复位→验证，Layer 2: 注入→通知→报告）
 

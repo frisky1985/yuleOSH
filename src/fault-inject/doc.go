@@ -49,7 +49,7 @@
 //     (handler → save → reset → report) is functionally complete
 //
 // ASIL-B Safety Requirements:
-//   - A66T_FAULT_INJECTION_TEST_ENABLE=STD_OFF: all injection code is
+//   - GENERIC_FAULT_INJECTION_TEST_ENABLE=STD_OFF: all injection code is
 //     compiled out (static inline stubs)
 //   - Dual compile-time guards (master + individual) prevent accidental
 //     enablement in safety builds

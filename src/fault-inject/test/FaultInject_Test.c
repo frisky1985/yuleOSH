@@ -171,7 +171,7 @@ void Test_ResetNotifications(void)
 #include "FaultInject.h"
 #include "TaskFaultInject.h"
 
-#if (A66T_TASK_FAULT_INJECT_ENABLE == STD_ON)
+#if (GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON)
 
 /*===========================================================================
  *  Test Assertion Helpers
@@ -605,24 +605,24 @@ static void Test_UDSConfiguration(void)
     TEST_START("Test 8: UDS DID Configuration");
 
     /* System-level DID */
-    TEST_ASSERT(A66T_FAULT_INJECT_UDS_DID == 0xF190U,
+    TEST_ASSERT(GENERIC_FAULT_INJECT_UDS_DID == 0xF190U,
                 "System fault inject DID = 0xF190");
 
     /* Task-level DID */
-    TEST_ASSERT(A66T_TASK_FAULT_INJECT_UDS_DID == 0xF193U,
+    TEST_ASSERT(GENERIC_TASK_FAULT_INJECT_UDS_DID == 0xF193U,
                 "Task fault inject DID = 0xF193");
 
     /* DIDs are in manufacturer-specific range (0xF000-0xF1FF) */
-    TEST_ASSERT(A66T_FAULT_INJECT_UDS_DID >= 0xF000U &&
-                A66T_FAULT_INJECT_UDS_DID <= 0xF1FFU,
+    TEST_ASSERT(GENERIC_FAULT_INJECT_UDS_DID >= 0xF000U &&
+                GENERIC_FAULT_INJECT_UDS_DID <= 0xF1FFU,
                 "System DID in manufacturer-specific range");
 
-    TEST_ASSERT(A66T_TASK_FAULT_INJECT_UDS_DID >= 0xF000U &&
-                A66T_TASK_FAULT_INJECT_UDS_DID <= 0xF1FFU,
+    TEST_ASSERT(GENERIC_TASK_FAULT_INJECT_UDS_DID >= 0xF000U &&
+                GENERIC_TASK_FAULT_INJECT_UDS_DID <= 0xF1FFU,
                 "Task DID in manufacturer-specific range");
 
     /* DIDs are distinct */
-    TEST_ASSERT(A66T_FAULT_INJECT_UDS_DID != A66T_TASK_FAULT_INJECT_UDS_DID,
+    TEST_ASSERT(GENERIC_FAULT_INJECT_UDS_DID != GENERIC_TASK_FAULT_INJECT_UDS_DID,
                 "System and task DIDs are distinct");
 
     TEST_END();
@@ -716,8 +716,8 @@ int main(void)
     printf("============================================================\n");
     printf("  Generic Fault Injection Framework — Self-Test Suite\n");
     printf("============================================================\n");
-    printf("  Config: A66T_TASK_FAULT_INJECT_ENABLE = STD_ON\n");
-    printf("  Config: A66T_FAULT_INJECTION_TEST_ENABLE = STD_ON\n");
+    printf("  Config: GENERIC_TASK_FAULT_INJECT_ENABLE = STD_ON\n");
+    printf("  Config: GENERIC_FAULT_INJECTION_TEST_ENABLE = STD_ON\n");
     printf("  Buffer: %u entries, Timeout: %u ms\n",
            (unsigned)TASK_FAULT_RESULT_BUFFER_SIZE,
            (unsigned)TASK_FAULT_INJECT_TIMEOUT_MS);
@@ -751,7 +751,7 @@ int main(void)
     return (g_testsFailed > 0) ? 1 : 0;
 }
 
-#endif /* A66T_TASK_FAULT_INJECT_ENABLE == STD_ON */
+#endif /* GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON */
 
 #ifdef __cplusplus
 }

@@ -34,11 +34,11 @@
  *          Target: Generic MCU (Z20K148M, ARM Cortex-M4F, FreeRTOS)
  *
  * @note    Safe for debug/test builds. Compiled out when
- *          A66T_TASK_FAULT_INJECT_ENABLE == STD_OFF (production).
+ *          GENERIC_TASK_FAULT_INJECT_ENABLE == STD_OFF (production).
  ******************************************************************************/
 
-#ifndef A66T_TASKFAULTINJECT_H_
-#define A66T_TASKFAULTINJECT_H_
+#ifndef GENERIC_TASKFAULTINJECT_H_
+#define GENERIC_TASKFAULTINJECT_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,7 +50,7 @@ extern "C" {
 #include "Std_Types.h"
 #include "TaskFaultInject_Cfg.h"
 
-#if (A66T_TASK_FAULT_INJECT_ENABLE == STD_ON)
+#if (GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON)
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -304,7 +304,7 @@ TaskFault_Type_E TaskFault_GetActiveFault(void);
  */
 #define TASK_FAULT_REPORT(_result)            TaskFault_ReportResult(_result)
 
-#else /* A66T_TASK_FAULT_INJECT_ENABLE == STD_OFF */
+#else /* GENERIC_TASK_FAULT_INJECT_ENABLE == STD_OFF */
 
 /* Stub implementations — all compile to nothing in production */
 static inline void    TaskFault_Init(void) {}
@@ -325,6 +325,6 @@ static inline TaskFault_Type_E TaskFault_GetActiveFault(void) { return TASK_FAUL
 #define TASK_FAULT_IS_ACTIVE(_fault_type)     (FALSE)
 #define TASK_FAULT_REPORT(_result)            do {} while(0)
 
-#endif /* A66T_TASK_FAULT_INJECT_ENABLE */
+#endif /* GENERIC_TASK_FAULT_INJECT_ENABLE */
 
-#endif /* A66T_TASKFAULTINJECT_H_ */
+#endif /* GENERIC_TASKFAULTINJECT_H_ */

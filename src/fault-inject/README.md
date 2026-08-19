@@ -63,30 +63,30 @@ ctest  # runs self-test
 
 | Macro | STD_ON | Description |
 |-------|--------|-------------|
-| `A66T_FAULT_INJECTION_TEST_ENABLE` | OFF (default) | Master switch — **must be OFF in production** |
-| `A66T_FAULT_INJECT_NULL_POINTER` | ON | TC-01: Null pointer deref |
-| `A66T_FAULT_INJECT_INVALID_FUNC` | ON | TC-02: Invalid function call |
-| `A66T_FAULT_INJECT_DIV_BY_ZERO` | ON | TC-03: Division by zero |
-| `A66T_FAULT_INJECT_UNALIGNED` | ON | TC-04: Unaligned access |
-| `A66T_FAULT_INJECT_STACK_OVERFLOW` | ON | TC-05: Stack overflow |
-| `A66T_FAULT_INJECT_MPU_VIOLATION` | OFF | TC-06: MPU violation |
-| `A66T_FAULT_INJECT_UNDEF_INSTR` | ON | TC-07: Undefined instruction |
-| `A66T_FAULT_INJECT_DIRECT_SCB` | ON | TC-08: Direct SCB injection |
-| `A66T_FAULT_INJECT_BUS_ACCESS` | ON | TC-09: Bus fault access |
+| `GENERIC_FAULT_INJECTION_TEST_ENABLE` | OFF (default) | Master switch — **must be OFF in production** |
+| `GENERIC_FAULT_INJECT_NULL_POINTER` | ON | TC-01: Null pointer deref |
+| `GENERIC_FAULT_INJECT_INVALID_FUNC` | ON | TC-02: Invalid function call |
+| `GENERIC_FAULT_INJECT_DIV_BY_ZERO` | ON | TC-03: Division by zero |
+| `GENERIC_FAULT_INJECT_UNALIGNED` | ON | TC-04: Unaligned access |
+| `GENERIC_FAULT_INJECT_STACK_OVERFLOW` | ON | TC-05: Stack overflow |
+| `GENERIC_FAULT_INJECT_MPU_VIOLATION` | OFF | TC-06: MPU violation |
+| `GENERIC_FAULT_INJECT_UNDEF_INSTR` | ON | TC-07: Undefined instruction |
+| `GENERIC_FAULT_INJECT_DIRECT_SCB` | ON | TC-08: Direct SCB injection |
+| `GENERIC_FAULT_INJECT_BUS_ACCESS` | ON | TC-09: Bus fault access |
 
 ### Layer 2: `TaskFaultInject_Cfg.h`
 
 | Macro | STD_ON | Description |
 |-------|--------|-------------|
-| `A66T_TASK_FAULT_INJECT_ENABLE` | OFF (default) | Master switch — **must be OFF in production** |
-| `A66T_TASK_FAULT_SIM_NULL_HANDLE` | ON | Simulate critical handle NULL |
-| `A66T_TASK_FAULT_SIM_INVALID_PARAM` | ON | Simulate invalid parameter |
-| `A66T_TASK_FAULT_SIM_TIMEOUT` | ON | Simulate timeout / deadline miss |
-| `A66T_TASK_FAULT_SIM_QUEUE_FULL` | ON | Simulate message queue full |
-| `A66T_TASK_FAULT_SIM_BUFFER_OVF` | ON | Simulate buffer overrun condition |
-| `A66T_TASK_FAULT_SIM_RESOURCE_LOST` | ON | Simulate peripheral resource lost |
-| `A66T_TASK_FAULT_SIM_STATE_CORRUPT` | ON | Simulate state machine corruption |
-| `A66T_TASK_FAULT_REAL_STACK_DEPLETE` | OFF | Real stack consumption (risky) |
+| `GENERIC_TASK_FAULT_INJECT_ENABLE` | OFF (default) | Master switch — **must be OFF in production** |
+| `GENERIC_TASK_FAULT_SIM_NULL_HANDLE` | ON | Simulate critical handle NULL |
+| `GENERIC_TASK_FAULT_SIM_INVALID_PARAM` | ON | Simulate invalid parameter |
+| `GENERIC_TASK_FAULT_SIM_TIMEOUT` | ON | Simulate timeout / deadline miss |
+| `GENERIC_TASK_FAULT_SIM_QUEUE_FULL` | ON | Simulate message queue full |
+| `GENERIC_TASK_FAULT_SIM_BUFFER_OVF` | ON | Simulate buffer overrun condition |
+| `GENERIC_TASK_FAULT_SIM_RESOURCE_LOST` | ON | Simulate peripheral resource lost |
+| `GENERIC_TASK_FAULT_SIM_STATE_CORRUPT` | ON | Simulate state machine corruption |
+| `GENERIC_TASK_FAULT_REAL_STACK_DEPLETE` | OFF | Real stack consumption (risky) |
 
 ## API Quick Reference
 
@@ -101,7 +101,7 @@ FaultInject_Run(FAULT_INJECT_NULL_POINTER);
 
 // After reset: check if a test result is available
 if (FaultInject_CheckResult()) {
-    const A66T_FaultInject_TestResult_St *r = FaultInject_GetResult();
+    const GENERIC_FaultInject_TestResult_St *r = FaultInject_GetResult();
     // r->status == FAULT_INJECT_STATUS_PASSED or FAILED or ERROR
 }
 ```

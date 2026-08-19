@@ -18,7 +18,7 @@
  *            - Mcu_PerformReset() resets the system
  *            - After reboot, FaultInject_CheckResult() verifies the record
  *
- * @warning NEVER compile with A66T_FAULT_INJECTION_TEST_ENABLE=STD_ON
+ * @warning NEVER compile with GENERIC_FAULT_INJECTION_TEST_ENABLE=STD_ON
  *          in production. This code intentionally triggers CPU faults.
  *
  * @note    Prerequisites (from Generic safety reports):
@@ -38,7 +38,7 @@ extern "C" {
  *=========================================================================*/
 #include "FaultInject.h"
 
-#if (A66T_FAULT_INJECTION_TEST_ENABLE == STD_ON)
+#if (GENERIC_FAULT_INJECTION_TEST_ENABLE == STD_ON)
 
 #include "NoInit.h"
 #include "McalLib.h"
@@ -112,7 +112,7 @@ static void FaultInject_EnableFaultHandlers(void)
  *  Each triggers a real CPU exception and does NOT return.
  *=========================================================================*/
 
-#if (A66T_FAULT_INJECT_NULL_POINTER == STD_ON)
+#if (GENERIC_FAULT_INJECT_NULL_POINTER == STD_ON)
 /**
  * TC-01: Null pointer write → BusFault → HardFault
  * CFSR: BFSR.PRECISERR (0x200) or BFSR.IMPRECISERR (0x400)
@@ -125,7 +125,7 @@ static void FaultInject_DoNullPointer(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_INVALID_FUNC == STD_ON)
+#if (GENERIC_FAULT_INJECT_INVALID_FUNC == STD_ON)
 /**
  * TC-02: Invalid function call (T-bit=0) → UsageFault: INVSTATE
  * CFSR: UFSR.INVSTATE (0x00020000)
@@ -138,7 +138,7 @@ static void FaultInject_DoInvalidFunc(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_DIV_BY_ZERO == STD_ON)
+#if (GENERIC_FAULT_INJECT_DIV_BY_ZERO == STD_ON)
 /**
  * TC-03: Division by zero → UsageFault: DIVBYZERO
  * CFSR: UFSR.DIVBYZERO (0x02000000)
@@ -158,7 +158,7 @@ static void FaultInject_DoDivByZero(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_UNALIGNED == STD_ON)
+#if (GENERIC_FAULT_INJECT_UNALIGNED == STD_ON)
 /**
  * TC-04: Unaligned access → UsageFault: UNALIGNED
  * CFSR: UFSR.UNALIGNED (0x01000000)
@@ -177,7 +177,7 @@ static void FaultInject_DoUnaligned(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_STACK_OVERFLOW == STD_ON)
+#if (GENERIC_FAULT_INJECT_STACK_OVERFLOW == STD_ON)
 /**
  * TC-05: Stack overflow via infinite recursion
  * FreeRTOS calls vApplicationStackOverflowHook() → faultType=5
@@ -200,7 +200,7 @@ static void FaultInject_DoStackOverflow(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_MPU_VIOLATION == STD_ON)
+#if (GENERIC_FAULT_INJECT_MPU_VIOLATION == STD_ON)
 /**
  * TC-06: MPU violation → MemManage: DACCVIOL
  * Requires configENABLE_MPU=1 (currently 0 on Generic)
@@ -214,7 +214,7 @@ static void FaultInject_DoMPUViolation(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_UNDEF_INSTR == STD_ON)
+#if (GENERIC_FAULT_INJECT_UNDEF_INSTR == STD_ON)
 /**
  * TC-07: Undefined instruction → UsageFault: UNDEFINSTR
  * CFSR: UFSR.UNDEFINSTR (0x00010000)
@@ -225,7 +225,7 @@ static void FaultInject_DoUndefinedInstr(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_DIRECT_SCB == STD_ON)
+#if (GENERIC_FAULT_INJECT_DIRECT_SCB == STD_ON)
 /**
  * TC-08: Direct SCB injection — tests handler save+reset path
  * Sets HFSR.FORCED, calls HardFault_Handler() directly.
@@ -240,7 +240,7 @@ static void FaultInject_DoDirectSCB(void)
 }
 #endif
 
-#if (A66T_FAULT_INJECT_BUS_ACCESS == STD_ON)
+#if (GENERIC_FAULT_INJECT_BUS_ACCESS == STD_ON)
 /**
  * TC-09: Bus access to unmapped address → BusFault
  * 0x40080000 is unmapped peripheral space on Z20K148M
@@ -286,7 +286,7 @@ void FaultInject_Init(void)
 void FaultInject_Run(FaultInject_Type_E testType)
 {
     /* Access test result via NoInit union member (in .share_ram @ 0x1FFE0000) */
-    volatile A66T_FaultInject_TestResult_St *result = NoInit_FaultInjectResultPtrGet();
+    volatile GENERIC_FaultInject_TestResult_St *result = NoInit_FaultInjectResultPtrGet();
 
     /* --- Phase 1: Save test metadata to NoInit RAM --- */
 
@@ -294,7 +294,7 @@ void FaultInject_Run(FaultInject_Type_E testType)
     FaultInject_DisableEccResponse();
 
     result->testId        = (uint32_t)testType;
-    result->magic         = A66T_FAULT_INJECT_RESULT_MAGIC;
+    result->magic         = GENERIC_FAULT_INJECT_RESULT_MAGIC;
     result->status        = (uint32_t)FAULT_INJECT_STATUS_PENDING;
     result->faultTypeSeen = 0U;
     result->pcSeen        = 0U;
@@ -310,31 +310,31 @@ void FaultInject_Run(FaultInject_Type_E testType)
     /* --- Phase 3: Execute injection (none of these return) --- */
     switch (testType)
     {
-#if (A66T_FAULT_INJECT_NULL_POINTER == STD_ON)
+#if (GENERIC_FAULT_INJECT_NULL_POINTER == STD_ON)
         case FAULT_INJECT_NULL_POINTER:   FaultInject_DoNullPointer();   break;
 #endif
-#if (A66T_FAULT_INJECT_INVALID_FUNC == STD_ON)
+#if (GENERIC_FAULT_INJECT_INVALID_FUNC == STD_ON)
         case FAULT_INJECT_INVALID_FUNC:   FaultInject_DoInvalidFunc();   break;
 #endif
-#if (A66T_FAULT_INJECT_DIV_BY_ZERO == STD_ON)
+#if (GENERIC_FAULT_INJECT_DIV_BY_ZERO == STD_ON)
         case FAULT_INJECT_DIV_BY_ZERO:    FaultInject_DoDivByZero();     break;
 #endif
-#if (A66T_FAULT_INJECT_UNALIGNED == STD_ON)
+#if (GENERIC_FAULT_INJECT_UNALIGNED == STD_ON)
         case FAULT_INJECT_UNALIGNED:      FaultInject_DoUnaligned();     break;
 #endif
-#if (A66T_FAULT_INJECT_STACK_OVERFLOW == STD_ON)
+#if (GENERIC_FAULT_INJECT_STACK_OVERFLOW == STD_ON)
         case FAULT_INJECT_STACK_OVERFLOW: FaultInject_DoStackOverflow(); break;
 #endif
-#if (A66T_FAULT_INJECT_MPU_VIOLATION == STD_ON)
+#if (GENERIC_FAULT_INJECT_MPU_VIOLATION == STD_ON)
         case FAULT_INJECT_MPU_VIOLATION:  FaultInject_DoMPUViolation();  break;
 #endif
-#if (A66T_FAULT_INJECT_UNDEF_INSTR == STD_ON)
+#if (GENERIC_FAULT_INJECT_UNDEF_INSTR == STD_ON)
         case FAULT_INJECT_UNDEF_INSTR:    FaultInject_DoUndefinedInstr(); break;
 #endif
-#if (A66T_FAULT_INJECT_DIRECT_SCB == STD_ON)
+#if (GENERIC_FAULT_INJECT_DIRECT_SCB == STD_ON)
         case FAULT_INJECT_DIRECT_SCB:     FaultInject_DoDirectSCB();     break;
 #endif
-#if (A66T_FAULT_INJECT_BUS_ACCESS == STD_ON)
+#if (GENERIC_FAULT_INJECT_BUS_ACCESS == STD_ON)
         case FAULT_INJECT_BUS_ACCESS:     FaultInject_DoBusAccess();     break;
 #endif
         case FAULT_INJECT_NONE:
@@ -353,11 +353,11 @@ void FaultInject_Run(FaultInject_Type_E testType)
 
 boolean FaultInject_CheckResult(void)
 {
-    volatile A66T_FaultInject_TestResult_St *result = NoInit_FaultInjectResultPtrGet();
+    volatile GENERIC_FaultInject_TestResult_St *result = NoInit_FaultInjectResultPtrGet();
     volatile NoInit_FaultRecord_St *rec = NoInit_FaultRecordPtrGet();
 
     /* Check for pending test result from before reset */
-    if (result->magic != A66T_FAULT_INJECT_RESULT_MAGIC)
+    if (result->magic != GENERIC_FAULT_INJECT_RESULT_MAGIC)
     {
         return FALSE;
     }
@@ -404,12 +404,12 @@ boolean FaultInject_CheckResult(void)
     return TRUE;
 }
 
-const A66T_FaultInject_TestResult_St* FaultInject_GetResult(void)
+const GENERIC_FaultInject_TestResult_St* FaultInject_GetResult(void)
 {
-    return (const A66T_FaultInject_TestResult_St *)NoInit_FaultInjectResultPtrGet();
+    return (const GENERIC_FaultInject_TestResult_St *)NoInit_FaultInjectResultPtrGet();
 }
 
-#endif /* A66T_FAULT_INJECTION_TEST_ENABLE == STD_ON */
+#endif /* GENERIC_FAULT_INJECTION_TEST_ENABLE == STD_ON */
 
 #ifdef __cplusplus
 }

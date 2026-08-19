@@ -775,49 +775,49 @@ meta:
   source: "Generic automated test runner (Z20K148M Cortex-M4F)"
 
 test_cases:
-  - id: "FI-A66T-001"
+  - id: "FI-GENERIC-001"
     name: "NullPointer"
     inject:  { method: did_write, did: 0xF190, payload: [0x01] }
     verify:  { check_magic: true, expected_fault_types: [1, 3], cfsr_check: { mask: 0x00000600, logic: nonzero } }
 
-  - id: "FI-A66T-002"
+  - id: "FI-GENERIC-002"
     name: "InvalidFunc"
     inject:  { method: did_write, did: 0xF190, payload: [0x02] }
     verify:  { check_magic: true, expected_fault_types: [1, 4], cfsr_check: { mask: 0x00020000, logic: nonzero } }
 
-  - id: "FI-A66T-003"
+  - id: "FI-GENERIC-003"
     name: "DivByZero"
     inject:  { method: did_write, did: 0xF190, payload: [0x03] }
     verify:  { check_magic: true, expected_fault_types: [1, 4], cfsr_check: { mask: 0x02000000, logic: nonzero } }
     skip_if: "!div_by_zero_trap_enabled"
 
-  - id: "FI-A66T-004"
+  - id: "FI-GENERIC-004"
     name: "Unaligned"
     inject:  { method: did_write, did: 0xF190, payload: [0x04] }
     verify:  { check_magic: true, expected_fault_types: [1, 4], cfsr_check: { mask: 0x01000000, logic: nonzero } }
 
-  - id: "FI-A66T-005"
+  - id: "FI-GENERIC-005"
     name: "StackOverflow"
     inject:  { method: did_write, did: 0xF190, payload: [0x05] }
     verify:  { check_magic: true, expected_fault_types: [5], cfsr_check: { mask: 0x00000000, logic: zero } }
 
-  - id: "FI-A66T-006"
+  - id: "FI-GENERIC-006"
     name: "MPUViolation"
     inject:  { method: did_write, did: 0xF190, payload: [0x06] }
     verify:  { check_magic: true, expected_fault_types: [2], cfsr_check: { mask: 0x00000003, logic: nonzero } }
     skip_if: "!mpu_enabled"
 
-  - id: "FI-A66T-007"
+  - id: "FI-GENERIC-007"
     name: "UndefInstr"
     inject:  { method: did_write, did: 0xF190, payload: [0x07] }
     verify:  { check_magic: true, expected_fault_types: [1, 4], cfsr_check: { mask: 0x00010000, logic: nonzero } }
 
-  - id: "FI-A66T-008"
+  - id: "FI-GENERIC-008"
     name: "DirectSCB"
     inject:  { method: did_write, did: 0xF190, payload: [0x08] }
     verify:  { check_magic: true, expected_fault_types: [1], cfsr_check: { mask: 0x00000000, logic: zero } }
 
-  - id: "FI-A66T-009"
+  - id: "FI-GENERIC-009"
     name: "BusAccess"
     inject:  { method: did_write, did: 0xF190, payload: [0x09] }
     verify:  { check_magic: true, expected_fault_types: [1, 3], cfsr_check: { mask: 0x00000300, logic: nonzero } }
@@ -1547,15 +1547,15 @@ SKIP (MPU 未启用)                    → TestCase.SkipIf = "!mpu_enabled"
 
 | Generic # | yuleOSH ID | 注入 DID / data | 期望 faultType | CFSR mask | 可跳过 |
 |:-------:|------------|:----------------:|:--------------:|:---------:|:------:|
-| 1 | FI-A66T-001 | 0xF190 [01] | 1,3 | 0x00000600 | 否 |
-| 2 | FI-A66T-002 | 0xF190 [02] | 1,4 | 0x00020000 | 否 |
-| 3 | FI-A66T-003 | 0xF190 [03] | 1,4 | 0x02000000 | 是 |
-| 4 | FI-A66T-004 | 0xF190 [04] | 1,4 | 0x01000000 | 否 |
-| 5 | FI-A66T-005 | 0xF190 [05] | 5 | 0x00000000 | 否 |
-| 6 | FI-A66T-006 | 0xF190 [06] | 2 | 0x00000003 | 是 |
-| 7 | FI-A66T-007 | 0xF190 [07] | 1,4 | 0x00010000 | 否 |
-| 8 | FI-A66T-008 | 0xF190 [08] | 1 | 0x00000000 | 否 |
-| 9 | FI-A66T-009 | 0xF190 [09] | 1,3 | 0x00000300 | 否 |
+| 1 | FI-GENERIC-001 | 0xF190 [01] | 1,3 | 0x00000600 | 否 |
+| 2 | FI-GENERIC-002 | 0xF190 [02] | 1,4 | 0x00020000 | 否 |
+| 3 | FI-GENERIC-003 | 0xF190 [03] | 1,4 | 0x02000000 | 是 |
+| 4 | FI-GENERIC-004 | 0xF190 [04] | 1,4 | 0x01000000 | 否 |
+| 5 | FI-GENERIC-005 | 0xF190 [05] | 5 | 0x00000000 | 否 |
+| 6 | FI-GENERIC-006 | 0xF190 [06] | 2 | 0x00000003 | 是 |
+| 7 | FI-GENERIC-007 | 0xF190 [07] | 1,4 | 0x00010000 | 否 |
+| 8 | FI-GENERIC-008 | 0xF190 [08] | 1 | 0x00000000 | 否 |
+| 9 | FI-GENERIC-009 | 0xF190 [09] | 1,3 | 0x00000300 | 否 |
 
 ---
 

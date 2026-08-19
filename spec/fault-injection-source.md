@@ -17,7 +17,7 @@
 │  故障类型: NULL句柄 / 无效参数 / 超时 / 队列满 / 缓存溢出 / ...      │
 │  效果: 不会复位！2秒/测试, 32个测试~64秒                            │
 │  验证: 被测任务的错误处理路径是否被正确执行                            │
-│  编译开关: A66T_TASK_FAULT_INJECT_ENABLE                            │
+│  编译开关: GENERIC_TASK_FAULT_INJECT_ENABLE                            │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Layer 1: FaultInject（系统级·真实CPU异常注入）                       │
 │                                                                     │
@@ -25,7 +25,7 @@
 │  故障类型: NullPointer / DivByZero / Unaligned / BusAccess / ...   │
 │  效果: 触发硬故障 → ECU复位 → 15-30秒/测试                           │
 │  验证: faultType+CFSR掩码+PC+Magic 完整性                           │
-│  编译开关: A66T_FAULT_INJECTION_TEST_ENABLE                         │
+│  编译开关: GENERIC_FAULT_INJECTION_TEST_ENABLE                         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

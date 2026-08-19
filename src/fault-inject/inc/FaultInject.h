@@ -14,11 +14,11 @@
  *          Test results are stored in NoInit_DataType_St.faultInjectResult
  *          (union member, no separate address needed).
  *
- * @note    Only compiled when A66T_FAULT_INJECTION_TEST_ENABLE is STD_ON.
+ * @note    Only compiled when GENERIC_FAULT_INJECTION_TEST_ENABLE is STD_ON.
  ******************************************************************************/
 
-#ifndef A66T_FAULTINJECT_H_
-#define A66T_FAULTINJECT_H_
+#ifndef GENERIC_FAULTINJECT_H_
+#define GENERIC_FAULTINJECT_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,13 +69,13 @@ typedef struct
     uint32_t cfsrSeen;        /**< CFSR from fault record               */
     uint32_t hfsrSeen;        /**< HFSR from fault record               */
     uint32_t status;          /**< FaultInject_Status_E                 */
-} A66T_FaultInject_TestResult_St;
+} GENERIC_FaultInject_TestResult_St;
 
 /*===========================================================================
  *  Public API
  *=========================================================================*/
 
-#if (A66T_FAULT_INJECTION_TEST_ENABLE == STD_ON)
+#if (GENERIC_FAULT_INJECTION_TEST_ENABLE == STD_ON)
 
 /**
  * @brief   Initialize the Generic fault injection test framework.
@@ -103,28 +103,28 @@ boolean FaultInject_CheckResult(void);
 
 /**
  * @brief   Get pointer to the test result structure.
- * @return  Pointer to A66T_FaultInject_TestResult_St in NoInit RAM.
+ * @return  Pointer to GENERIC_FaultInject_TestResult_St in NoInit RAM.
  */
-const A66T_FaultInject_TestResult_St* FaultInject_GetResult(void);
+const GENERIC_FaultInject_TestResult_St* FaultInject_GetResult(void);
 
 /**
  * @brief   Get human-readable name for a test type.
  */
 const char* FaultInject_GetTestName(FaultInject_Type_E testType);
 
-#else /* A66T_FAULT_INJECTION_TEST_ENABLE == STD_OFF */
+#else /* GENERIC_FAULT_INJECTION_TEST_ENABLE == STD_OFF */
 
 /* Stub implementations for production builds — all no-ops */
 static inline void FaultInject_Init(void) {}
 static inline void FaultInject_Run(FaultInject_Type_E testType) { (void)testType; }
 static inline boolean FaultInject_CheckResult(void) { return FALSE; }
-static inline const A66T_FaultInject_TestResult_St* FaultInject_GetResult(void) { return NULL; }
+static inline const GENERIC_FaultInject_TestResult_St* FaultInject_GetResult(void) { return NULL; }
 static inline const char* FaultInject_GetTestName(FaultInject_Type_E testType) { (void)testType; return "Disabled"; }
 
-#endif /* A66T_FAULT_INJECTION_TEST_ENABLE */
+#endif /* GENERIC_FAULT_INJECTION_TEST_ENABLE */
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* A66T_FAULTINJECT_H_ */
+#endif /* GENERIC_FAULTINJECT_H_ */

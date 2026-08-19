@@ -39,7 +39,7 @@ extern "C" {
  *=========================================================================*/
 #include "TaskFaultInject.h"
 
-#if (A66T_TASK_FAULT_INJECT_ENABLE == STD_ON)
+#if (GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON)
 
 #include "task.h"
 #include <string.h>
@@ -410,28 +410,28 @@ const char *TaskFault_GetFaultName(TaskFault_Type_E faultType)
     switch (faultType)
     {
         case TASK_FAULT_NONE:              return "None";
-#if (A66T_TASK_FAULT_SIM_NULL_HANDLE == STD_ON)
+#if (GENERIC_TASK_FAULT_SIM_NULL_HANDLE == STD_ON)
         case TASK_FAULT_SIM_NULL_HANDLE:   return "NullHandle";
 #endif
-#if (A66T_TASK_FAULT_SIM_INVALID_PARAM == STD_ON)
+#if (GENERIC_TASK_FAULT_SIM_INVALID_PARAM == STD_ON)
         case TASK_FAULT_SIM_INVALID_PARAM: return "InvalidParam";
 #endif
-#if (A66T_TASK_FAULT_SIM_TIMEOUT == STD_ON)
+#if (GENERIC_TASK_FAULT_SIM_TIMEOUT == STD_ON)
         case TASK_FAULT_SIM_TIMEOUT:       return "Timeout";
 #endif
-#if (A66T_TASK_FAULT_SIM_QUEUE_FULL == STD_ON)
+#if (GENERIC_TASK_FAULT_SIM_QUEUE_FULL == STD_ON)
         case TASK_FAULT_SIM_QUEUE_FULL:    return "QueueFull";
 #endif
-#if (A66T_TASK_FAULT_SIM_BUFFER_OVF == STD_ON)
+#if (GENERIC_TASK_FAULT_SIM_BUFFER_OVF == STD_ON)
         case TASK_FAULT_SIM_BUFFER_OVF:    return "BufferOverflow";
 #endif
-#if (A66T_TASK_FAULT_SIM_RESOURCE_LOST == STD_ON)
+#if (GENERIC_TASK_FAULT_SIM_RESOURCE_LOST == STD_ON)
         case TASK_FAULT_SIM_RESOURCE_LOST: return "ResourceLost";
 #endif
-#if (A66T_TASK_FAULT_SIM_STATE_CORRUPT == STD_ON)
+#if (GENERIC_TASK_FAULT_SIM_STATE_CORRUPT == STD_ON)
         case TASK_FAULT_SIM_STATE_CORRUPT: return "StateCorrupt";
 #endif
-#if (A66T_TASK_FAULT_REAL_STACK_DEPLETE == STD_ON)
+#if (GENERIC_TASK_FAULT_REAL_STACK_DEPLETE == STD_ON)
         case TASK_FAULT_REAL_STACK_DEPLETE:return "StackDeplete";
 #endif
         default:                           return "Unknown";
@@ -451,7 +451,7 @@ const char *TaskFault_GetResultName(TaskFault_Result_E result)
     }
 }
 
-#endif /* A66T_TASK_FAULT_INJECT_ENABLE == STD_ON */
+#endif /* GENERIC_TASK_FAULT_INJECT_ENABLE == STD_ON */
 
 #ifdef __cplusplus
 }
