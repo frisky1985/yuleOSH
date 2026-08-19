@@ -3,7 +3,7 @@
 > **版本：** v1.0
 > **日期：** 2026-06-20
 > **状态：** 草案，待小马审查
-> **来源：** A66-T HardFault Exception Injection Automated Test Runner（Cortex-M4F / CAN UDS / FreeRTOS）
+> **来源：** Generic HardFault Exception Injection Automated Test Runner（Cortex-M4F / CAN UDS / FreeRTOS）
 
 ---
 
@@ -18,7 +18,7 @@
 7. [Part 5: CI 模块集成](#7-part-5-ci-模块集成)
 8. [Part 6: 实施路线](#8-part-6-实施路线)
 9. [与已有模块集成](#9-与已有模块集成)
-10. [附录：A66-T 测试用例到 Schema 映射](#10-附录a66-t-测试用例到-schema-映射)
+10. [附录：Generic 测试用例到 Schema 映射](#10-附录a66-t-测试用例到-schema-映射)
 11. [附录：目录修订历史](#11-附录目录修订历史)
 12. [§13 任务级故障注入（Layer 2）](#13-任务级故障注入layer-2)
     - [13.1 设计目标](#131-设计目标)
@@ -170,7 +170,7 @@ type FaultInjectTarget interface {
 
 #### 3.2.1 CAN/UDS Target — `can_uds_target`
 
-继承 A66-T 的 CAN + UDS（ISO 14229）通信模式。
+继承 Generic 的 CAN + UDS（ISO 14229）通信模式。
 
 ```go
 type CANUDSTargetConfig struct {
@@ -650,7 +650,7 @@ meta:
   target_type: can_uds        # 默认 target 类型，case 可覆盖
   author: "stefan"
   created: "2026-06-20"
-  source: "A66-T automated test runner"
+  source: "Generic automated test runner"
 
 # ——— 测试用例列表 ———
 test_cases:
@@ -666,7 +666,7 @@ test_cases:
     # ——— 注入定义 ———
     inject:
       method: did_write        # UDS DID 写注入
-      did: 0xF190              # A66-T 约定的注入 DID
+      did: 0xF190              # Generic 约定的注入 DID
       payload: [0x01]          # test case ID 编码
 
     # ——— 验证定义 ———
@@ -729,7 +729,7 @@ test_cases:
         mask: 0x00000300
         logic: nonzero
 
-  # ── Case 5: CAN 超时注入（非 A66-T 风格，新场景示例） ──
+  # ── Case 5: CAN 超时注入（非 Generic 风格，新场景示例） ──
   - id: "FI-CAN-TIMEOUT-001"
     name: "CAN communication timeout → safe state"
     target_type: can_uds
@@ -755,7 +755,7 @@ test_cases:
 | `test_cases[].inject.did` | 条件 | uint16 | method=did_write 时必填 |
 | `test_cases[].inject.payload` | 条件 | []byte | method=did_write 时必填 |
 | `test_cases[].verify.check_magic` | | bool | 默认 true |
-| `test_cases[].verify.expected_fault_types` | | []int | 1-5，参考 A66-T 类型 |
+| `test_cases[].verify.expected_fault_types` | | []int | 1-5，参考 Generic 类型 |
 | `test_cases[].verify.cfsr_check.mask` | | uint32 | 0 表示不检查 |
 | `test_cases[].verify.cfsr_check.logic` | | string | `nonzero` / `zero` / `exact` |
 | `test_cases[].verify.behavior_check` | | object | 行为级验证（非故障记录验证） |
@@ -763,16 +763,16 @@ test_cases:
 | `test_cases[].cooldown_s` | | float | 默认继承全局 cooldown_s |
 | `test_cases[].skip_if` | | string | 空字符串表示永不跳过 |
 
-### 5.3 A66-T 全部 9 个用例 YAML 版本
+### 5.3 Generic 全部 9 个用例 YAML 版本
 
 ```yaml
 # fi/cases/yuleosh/a66-t-compat.yaml
-# A66-T 9 种故障注入测试用例的 yuleOSH 通用格式版本
+# Generic 9 种故障注入测试用例的 yuleOSH 通用格式版本
 meta:
   schema_version: "1.0"
   project: "yuleosh/ecu-fw"
   target_type: can_uds
-  source: "A66-T automated test runner (Z20K148M Cortex-M4F)"
+  source: "Generic automated test runner (Z20K148M Cortex-M4F)"
 
 test_cases:
   - id: "FI-A66T-001"
@@ -909,7 +909,7 @@ type FaultInjectTestCase struct {
 
 
 // ─── FaultRecord ───
-// 从目标读取的故障记录。参考 A66-T faultRecord 结构。
+// 从目标读取的故障记录。参考 Generic faultRecord 结构。
 
 type FaultRecord struct {
     Magic     uint32 `json:"magic"`      // 0xFA017FA0
@@ -1082,7 +1082,7 @@ CREATE INDEX idx_fi_fmea_map_case ON ci.fi_fmea_map(test_case_id);
 ### 6.3 故障类型枚举
 
 ```go
-// FaultType 参考 ARM Cortex-M 异常类型 + A66-T 扩展
+// FaultType 参考 ARM Cortex-M 异常类型 + Generic 扩展
 const (
     FaultTypeHardFault     = 1  // 硬故障
     FaultTypeMemManage     = 2  // MPU 管理故障
@@ -1290,7 +1290,7 @@ func pushFaultInjectionEvidence(ctx context.Context, results []TestCaseResult, r
 
 ### 8.1 Phase 1 — 地基（CAN/UDS + Pipeline Stage + 基础报告）
 
-**目标：** A66-T 9 个用例在 CAN/UDS 目标上可运行，结果纳入 Pipeline，输出 JSON 报告。
+**目标：** Generic 9 个用例在 CAN/UDS 目标上可运行，结果纳入 Pipeline，输出 JSON 报告。
 
 | 编号 | 工作项 | 人·天 | 依赖 |
 |------|--------|:-----:|------|
@@ -1304,7 +1304,7 @@ func pushFaultInjectionEvidence(ctx context.Context, results []TestCaseResult, r
 | FI-08 | CLI `yule ci fi run` 子命令 | 2 | FI-04 + ci 模块 |
 | FI-09 | JSON 报告输出 + Reporter | 1 | FI-04 |
 | FI-10 | FI 结果 → evidence 模块推送 | 2 | FI-09 + evidence 模块 |
-| FI-11 | 预置 A66-T 兼容测试用例 YAML | 1 | FI-06 |
+| FI-11 | 预置 Generic 兼容测试用例 YAML | 1 | FI-06 |
 | FI-12 | CI Pre-commit hook（YAML format check） | 1 | FI-06 + ci hooks |
 | FI-13 | 文档 + 使用指南 | 2 | — |
 | FI-14 | 测试 + 验收 | 3 | FI-01~FI-13 |
@@ -1313,13 +1313,13 @@ func pushFaultInjectionEvidence(ctx context.Context, results []TestCaseResult, r
 **Phase 1 交付状态：**
 - ✅ Target 接口 + CAN/UDS 实现
 - ✅ FI Engine 完整运行循环
-- ✅ Verify 引擎（A66-T 兼容）
+- ✅ Verify 引擎（Generic 兼容）
 - ✅ YAML Schema 解析 + 校验
 - ✅ Pipeline Stage 集成
 - ✅ CLI 子命令
 - ✅ JSON 报告
 - ✅ Evidence 推送
-- ✅ 9 个 A66-T 兼容测试用例
+- ✅ 9 个 Generic 兼容测试用例
 - ❌ DoIP Target
 - ❌ JTAG Target
 - ❌ Simulator Target
@@ -1386,7 +1386,7 @@ Phase 1 (31人·天) ──── Phase 2 (27人·天) ──── Phase 3 (24�
      ├─ Pipeline Stage        ├─ DB 持久化              └─ 全自动闭环
      ├─ CLI + Report          ├─ FMEA 追溯
      ├─ Evidence 推送         └─ Merge gate
-     └─ A66-T 兼容用例
+     └─ Generic 兼容用例
 ```
 
 ---
@@ -1488,7 +1488,7 @@ fault_injection:
       uds_rx_id: 0x7E8
 
   test_suites:
-    - name: "A66-T Basic Faults"
+    - name: "Generic Basic Faults"
       path: "fi/cases/yuleosh/a66-t-compat.yaml"
       max_failures: 1
 
@@ -1504,12 +1504,12 @@ fault_injection:
 
 ---
 
-## 10. 附录：A66-T 测试用例到 Schema 映射
+## 10. 附录：Generic 测试用例到 Schema 映射
 
-### 10.1 A66-T faultRecord 结构 → FaultRecord
+### 10.1 Generic faultRecord 结构 → FaultRecord
 
 ```
-A66-T faultRecord (C struct)         yuleOSH FaultRecord (Go)
+Generic faultRecord (C struct)         yuleOSH FaultRecord (Go)
 
 uint32_t magic;          ─────────→ Magic:     uint32  (0xFA017FA0)
 uint8_t  faultType;      ─────────→ FaultType: uint8
@@ -1521,7 +1521,7 @@ uint32_t hfsr;           ─────────→ HFSR:      uint32
 ### 10.2 PASS 判定映射
 
 ```
-A66-T 判定逻辑                        yuleOSH VerifyConfig
+Generic 判定逻辑                        yuleOSH VerifyConfig
 
 if magic != 0xFA017FA0: FAIL   →   VerifyConfig.CheckMagic = true
 if faultType not in expected: FAIL → VerifyConfig.ExpectedFaultTypes
@@ -1531,7 +1531,7 @@ if (cfsr & mask) == 0: FAIL    →   VerifyConfig.CFSRCheck.Mask + Logic(nonzero
 ### 10.3 测试控制参数映射
 
 ```
-A66-T 参数                           yuleOSH 配置
+Generic 参数                           yuleOSH 配置
 
 --cooldown 3                        → RunConfig.CooldownDuration = 3s
 --max-failures 1                    → RunConfig.MaxFailures = 1
@@ -1545,7 +1545,7 @@ SKIP (MPU 未启用)                    → TestCase.SkipIf = "!mpu_enabled"
 
 ### 10.4 9 个用例快速索引
 
-| A66-T # | yuleOSH ID | 注入 DID / data | 期望 faultType | CFSR mask | 可跳过 |
+| Generic # | yuleOSH ID | 注入 DID / data | 期望 faultType | CFSR mask | 可跳过 |
 |:-------:|------------|:----------------:|:--------------:|:---------:|:------:|
 | 1 | FI-A66T-001 | 0xF190 [01] | 1,3 | 0x00000600 | 否 |
 | 2 | FI-A66T-002 | 0xF190 [02] | 1,4 | 0x00020000 | 否 |
@@ -1579,7 +1579,7 @@ SKIP (MPU 未启用)                    → TestCase.SkipIf = "!mpu_enabled"
 
 # §13 任务级故障注入（Layer 2）
 
-> **参考来源：** TaskFaultInject 源码（A66-T 归档.zip）
+> **参考来源：** TaskFaultInject 源码（Generic 归档.zip）
 > **核心设计模式：** FreeRTOS Task Notification + 环形缓冲区 + 宏 API + 零复位
 > **适用阶段：** 开发期、CI 回归、HIL 预热验证
 
@@ -2426,7 +2426,7 @@ meta:
   project: "yuleosh/ecu-fw"
   layer: task  # 标识为任务级注入
   target_type: task_notification
-  source: "A66-T TaskFaultInject (FreeRTOS Task Notification)"
+  source: "Generic TaskFaultInject (FreeRTOS Task Notification)"
 
 # ——— 任务注册（在注入前完成） ———
 register_task:
@@ -2763,7 +2763,7 @@ Phase 3 (智能化)
 
 ---
 
-> **更新说明：** §13 根据 TaskFaultInject 源码（A66-T 归档.zip）设计，补充了 yuleOSH 的 Layer 2 任务级注入方案。
+> **更新说明：** §13 根据 TaskFaultInject 源码（Generic 归档.zip）设计，补充了 yuleOSH 的 Layer 2 任务级注入方案。
 > 核心思想：不复位、不侵入内核、两行宏包围、生产环境零开销。
 >
 > **依赖关系：**

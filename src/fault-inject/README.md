@@ -1,11 +1,11 @@
-# A66-T Fault Injection Framework
+# Generic Fault Injection Framework
 
 **yuleOSH formal module — ASPICE SWE.5 / ASIL-B (supporting)**
 
 ## Overview
 
 The fault-inject module provides two complementary fault injection layers for
-the A66-T SBM MCU (Z20K148M, ARM Cortex-M4F):
+the Generic MCU (Z20K148M, ARM Cortex-M4F):
 
 | Layer | Name | Mechanism | Effect | Reset Required |
 |-------|------|-----------|--------|:--------------:|

@@ -5,7 +5,7 @@
 > **作者**: 小马 🐴 (质量架构师)
 > **日期**: 2026-06-20
 > **规范文体**: RFC 2119 (SHALL/SHALL NOT/SHOULD/MAY)
-> **输入源**: A66-T HardFault Exception Injection Automated Test Runner 逆向分析 + 团队讨论
+> **输入源**: Generic HardFault Exception Injection Automated Test Runner 逆向分析 + 团队讨论
 > **参考 MCU**: Z20K148M (ARM Cortex-M4F), FreeRTOS
 
 ---
@@ -270,7 +270,7 @@ Build → Unit Test → [Fault Injection] → Integration Test → HIL → Verif
 - register_mask 验证：按 `operator` 判断（默认 `and_nonzero` = `(CFSR & expected_mask) != 0`)
 - 行为验证：按 `operator` 判断
 
-**SHALL** — 验证前置条件 SHALL 包含 `magic` 完整性校验（A66-T 协议兼容）：`magic == 0xFA017FA0`。
+**SHALL** — 验证前置条件 SHALL 包含 `magic` 完整性校验（Generic 协议兼容）：`magic == 0xFA017FA0`。
 
 **SHALL** — 当 `magic` 校验失败时，系统 SHALL 将用例结果标记为 `error`（数据损坏），而非 `fail`。
 
@@ -303,7 +303,7 @@ Build → Unit Test → [Fault Injection] → Integration Test → HIL → Verif
 
 **SHALL** — 每条用例 SHALL 支持 `cooldown_ms` 参数，指定用例执行完成（包括验证）后到下一用例开始之间的等待时间。
 
-**SHALL** — 默认 `cooldown_ms` 为 3000（3 秒），对应 A66-T 脚本的测试间间隔。
+**SHALL** — 默认 `cooldown_ms` 为 3000（3 秒），对应 Generic 脚本的测试间间隔。
 
 **SHALL** — `cooldown_ms` 允许最小值为 0（无间隔），但用户 SHALL 显式确认（如配置中写为 0 时，日志输出警告）。
 
@@ -801,7 +801,7 @@ stages:
 
 ```yaml
 suite_name: "ARM-Cortex-M4F-HardFault-Suite"
-description: "ARM Cortex-M4F 内核异常注入 — 对标 A66-T 九种注入类型"
+description: "ARM Cortex-M4F 内核异常注入 — 对标 Generic 九种注入类型"
 fi_version: "1.0"
 target: "can_uds"  # 引用 pipeline config 中的 injection_target
 
@@ -915,7 +915,7 @@ yuleosh/fault_injection/
 |-------|------|------|
 | P0 | YAML 加载 + schema 校验 | 基础不可减 |
 | P0 | Runner 引擎 + 生命周期管理 | 核心执行 |
-| P0 | CAN/UDS (socketcan) 适配器 | A66-T 兼容 |
+| P0 | CAN/UDS (socketcan) 适配器 | Generic 兼容 |
 | P0 | JSON 报告 + evidence 集成 | 输出可达 |
 | P1 | JTAG/SWD (pyOCD) 适配器 | 多 MCU 兼容 |
 | P1 | 阻断阈值 + 重试策略 | 稳定性 |
@@ -933,9 +933,9 @@ yuleosh/fault_injection/
 | P3 | 自动用例生成 (from FMEA) | 提效 |
 | P4 | 自定义适配器热加载 | 扩展性 |
 
-### 5.3 A66-T 兼容性对照表
+### 5.3 Generic 兼容性对照表
 
-| A66-T 特性 | yuleOSH FI 对应 | 状态 |
+| Generic 特性 | yuleOSH FI 对应 | 状态 |
 |------------|----------------|------|
 | UDS $2E/$22 DID F190/F191 | CAN/UDS 适配器 did_write | 内置 |
 | 复位后 TesterPresent 轮询 | WaitForReset 步骤 | 内置 |

@@ -1,7 +1,7 @@
-# A66-T Fault Injection — 学习笔记（v4）
+# Generic Fault Injection — 学习笔记（v4）
 
-**来源 1：** A66-T_fault_inject_test_runner.py — 测试执行器（Python）
-**来源 2：** A66-T_HardFault_Exception_Injection_Scheme.md — 完整设计方案
+**来源 1：** Generic_fault_inject_test_runner.py — 测试执行器（Python）
+**来源 2：** Generic_HardFault_Exception_Injection_Scheme.md — 完整设计方案
 **来源 3：** FaultInject.zip — 系统级故障注入 C 源码（3 文件）
 **来源 4：** 归档.zip — 任务级故障注入 C 源码（TaskFaultInject + 集成指南）
 
@@ -142,7 +142,7 @@ yuleOSH Pipeline Fault Injection Stage
   │
   ├── Layer 1: hardware_injection（系统级，全复位）
   │   ├── 目标: CAN/UDS / DoIP / JTAG
-  │   ├── 用例: 类似 A66-T 的 9 种 CPU 异常注入
+  │   ├── 用例: 类似 Generic 的 9 种 CPU 异常注入
   │   ├── 耗时: 15-30s/测试
   │   └── 验证: faultType+CFSR+PC+Magic
   │
@@ -163,7 +163,7 @@ yuleOSH Pipeline Fault Injection Stage
 6. **宏全变 no-op** — `STD_OFF` 时代码全部消失
 
 ### yuleOSH 的 "TaskFaultInject" 应该怎么做
-- 提供 embeddable C 头文件（类似 A66-T 的 TaskFaultInject.h）
+- 提供 embeddable C 头文件（类似 Generic 的 TaskFaultInject.h）
 - 用户只需在任务循环加两行宏 + 错误路径加一行宏
 - Pipeline 通过调试口/JTAG 触发任务级注入
 - 无需复位，适合作为 CI 日常关卡

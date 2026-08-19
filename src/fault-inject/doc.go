@@ -1,7 +1,7 @@
 // Copyright (C) 2024 yule, Inc. or its affiliates.  All Rights Reserved.
 // SPDX-License-Identifier: LicenseRef-yule-Proprietary
 //
-// Package fault-inject — A66-T HardFault & Per-Task Fault Injection Framework
+// Package fault-inject — Generic HardFault & Per-Task Fault Injection Framework
 //
 // ASPICE Classification: SWE.5 (Integration Test)
 // Safety Integrity: ASIL-B (supporting verification)
@@ -18,7 +18,7 @@
 // │    Desc: Injects real ARM Cortex-M4F exceptions (HardFault,        │
 // │          BusFault, UsageFault, MemManage) via null-pointer deref,  │
 // │          undefined instructions, stack overflow, etc.              │
-// │    Target: A66-T SBM (Z20K148M, ARM Cortex-M4F)                   │
+// │    Target: Generic (Z20K148M, ARM Cortex-M4F)                   │
 // │    Safety: NEVER enable in production builds                       │
 // │    Config: FaultInject_Cfg.h                                       │
 // │                                                                     │
@@ -26,7 +26,7 @@
 // │    API: TaskFaultInject.h / TaskFaultInject.c                      │
 // │    Desc: Injects simulated fault conditions into FreeRTOS tasks    │
 // │          via Task Notifications. Does NOT trigger CPU exceptions.  │
-// │    Target: A66-T SBM + FreeRTOS                                    │
+// │    Target: Generic + FreeRTOS                                    │
 // │    Safety: Safe for debug/test builds, compiled out in production  │
 // │    Config: TaskFaultInject_Cfg.h                                   │
 // │                                                                     │

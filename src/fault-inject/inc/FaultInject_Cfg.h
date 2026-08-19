@@ -2,10 +2,10 @@
  * Copyright (C) 2024 yule, Inc. or its affiliates.  All Rights Reserved.
  *
  * @file    FaultInject_Cfg.h
- * @brief   A66-T HardFault Exception Injection Test Configuration
+ * @brief   Generic HardFault Exception Injection Test Configuration
  *
  * @details Compile-time configuration for the fault injection test framework.
- *          Target: A66-T SBM MCU (Z20K148M, ARM Cortex-M4F, IAR toolchain).
+ *          Target: Generic MCU (Z20K148M, ARM Cortex-M4F, IAR toolchain).
  *          Enable ONLY in test/debug builds. NEVER enable in production.
  *
  * @note    This module is safety-relevant: enabling fault injection in a
@@ -20,7 +20,7 @@
 
 /*===========================================================================
  *  Master Switch
- *  Set to STD_ON only in dedicated A66-T test builds. Production = STD_OFF.
+ *  Set to STD_ON only in dedicated Generic test builds. Production = STD_OFF.
  *=========================================================================*/
 #define A66T_FAULT_INJECTION_TEST_ENABLE   (STD_OFF)
 

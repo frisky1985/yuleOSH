@@ -1,5 +1,5 @@
 # =============================================================================
-# CMakeLists.txt — A66-T Fault Injection Framework
+# CMakeLists.txt — Generic Fault Injection Framework
 #
 # Targets:
 #   fault-inject          — Static library (production build = stubs only)
@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.16)
 # ── Module identity ──────────────────────────────────────────────────────────
 project(fault-inject
     VERSION 2.0.0
-    DESCRIPTION "A66-T HardFault & Per-Task Fault Injection Framework"
+    DESCRIPTION "Generic HardFault & Per-Task Fault Injection Framework"
     LANGUAGES C
 )
 

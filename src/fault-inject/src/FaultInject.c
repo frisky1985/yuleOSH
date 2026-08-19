@@ -2,12 +2,12 @@
  * Copyright (C) 2024 yule, Inc. or its affiliates.  All Rights Reserved.
  *
  * @file    FaultInject.c
- * @brief   A66-T HardFault Exception Injection Test Framework Implementation
+ * @brief   Generic HardFault Exception Injection Test Framework Implementation
  *
- * @details Implements 9 fault injection methods for testing the A66-T MCU's
+ * @details Implements 9 fault injection methods for testing the Generic MCU's
  *          exception handling chain on Z20K148M (ARM Cortex-M4F).
  *
- *          Target: A66-T SBM MCU
+ *          Target: Generic MCU
  *          MCU:   Z20K148M (ZhiXin Semiconductor)
  *          Core:  ARM Cortex-M4F
  *          SRAM:  .share_ram @ 0x1FFE0000 (1KB, NoInit, SRAML=SRAM0, ECC)
@@ -21,7 +21,7 @@
  * @warning NEVER compile with A66T_FAULT_INJECTION_TEST_ENABLE=STD_ON
  *          in production. This code intentionally triggers CPU faults.
  *
- * @note    Prerequisites (from A66-T safety reports):
+ * @note    Prerequisites (from Generic safety reports):
  *          1. RTCtime: pointer → embedded struct (null pointer fix)
  *          2. memset → 32-bit word writes (ECC read-modify-write fix)
  *          3. EIRU_CR ECC disable at Exception_SaveFaultRecord entry
@@ -86,7 +86,7 @@ extern void Mcu_PerformReset(void);
 /*===========================================================================
  *  Private Helper: Disable SRAM0 ECC response
  *  Prevents recursive BusFault when accessing .share_ram (0x1FFE0000)
- *  during fault handler. Mirrors fix from A66-T_Share_RAM_Safety_Report.
+ *  during fault handler. Mirrors fix from Generic_Share_RAM_Safety_Report.
  *=========================================================================*/
 static void FaultInject_DisableEccResponse(void)
 {
@@ -203,7 +203,7 @@ static void FaultInject_DoStackOverflow(void)
 #if (A66T_FAULT_INJECT_MPU_VIOLATION == STD_ON)
 /**
  * TC-06: MPU violation → MemManage: DACCVIOL
- * Requires configENABLE_MPU=1 (currently 0 on A66-T)
+ * Requires configENABLE_MPU=1 (currently 0 on Generic)
  * CFSR: MMFSR.DACCVIOL (0x02) or IACCVIOL (0x01)
  */
 static void FaultInject_DoMPUViolation(void)

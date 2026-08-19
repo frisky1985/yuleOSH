@@ -31,7 +31,7 @@
  *          - Verify queue-full backpressure handling
  *          - Verify state-machine corruption recovery
  *
- *          Target: A66-T SBM MCU (Z20K148M, ARM Cortex-M4F, FreeRTOS)
+ *          Target: Generic MCU (Z20K148M, ARM Cortex-M4F, FreeRTOS)
  *
  * @note    Safe for debug/test builds. Compiled out when
  *          A66T_TASK_FAULT_INJECT_ENABLE == STD_OFF (production).

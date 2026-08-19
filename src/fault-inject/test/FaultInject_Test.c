@@ -714,7 +714,7 @@ int main(void)
 {
     printf("\n");
     printf("============================================================\n");
-    printf("  A66-T Fault Injection Framework — Self-Test Suite\n");
+    printf("  Generic Fault Injection Framework — Self-Test Suite\n");
     printf("============================================================\n");
     printf("  Config: A66T_TASK_FAULT_INJECT_ENABLE = STD_ON\n");
     printf("  Config: A66T_FAULT_INJECTION_TEST_ENABLE = STD_ON\n");

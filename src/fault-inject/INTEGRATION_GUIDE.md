@@ -1,5 +1,5 @@
 /*******************************************************************************
- * A66-T Fault Injection — Integration Guide (v2.0)
+ * Generic Fault Injection — Integration Guide (v2.0)
  * ========================================================================
  *
  * ⚠️  IMPORTANT: Source moved to src/fault-inject/
@@ -19,7 +19,7 @@
  * into src/fault-inject/ and removed. Use src/fault-inject/ for all development.
  *
  * This guide shows how to wire the TaskFaultInject module into the existing
- * A66-T SBM codebase. All changes are guarded by A66T_TASK_FAULT_INJECT_ENABLE
+ * Generic codebase. All changes are guarded by A66T_TASK_FAULT_INJECT_ENABLE
  * and compile to nothing when STD_OFF.
  *
  * Integration Checklist:
@@ -248,7 +248,7 @@
  * Step 5: Python Test Runner (Optional)
  *=========================================================================*/
 /*
- * Extend the existing A66-T_fault_inject_test_runner.py with task-level tests:
+ * Extend the existing Generic_fault_inject_test_runner.py with task-level tests:
  *
  * TASK_FAULT_TESTS = [
  *     {"id": 1, "task_idx": 0, "task_name": "RteHigh",

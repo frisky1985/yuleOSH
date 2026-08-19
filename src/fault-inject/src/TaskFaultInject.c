@@ -27,7 +27,7 @@
  *             and calls TASK_FAULT_REPORT(PASSED) or TASK_FAULT_REPORT(FAILED)
  *          6. Injector polls TaskFault_GetLatestResult() to get the outcome
  *
- *          Target: A66-T SBM MCU (Z20K148M, ARM Cortex-M4F, FreeRTOS)
+ *          Target: Generic MCU (Z20K148M, ARM Cortex-M4F, FreeRTOS)
  ******************************************************************************/
 
 #ifdef __cplusplus

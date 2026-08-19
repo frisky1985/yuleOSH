@@ -5,7 +5,7 @@
 """
 Pipeline Step Handler — Fault Injection Testing (SWE.5 / SWE.6)
 
-Integrates the A66-T Fault Injection C module into the yuleOSH pipeline.
+Integrates the Generic Fault Injection C module into the yuleOSH pipeline.
 This stage:
 
   1. Builds a fault-injection-enabled firmware variant
@@ -140,7 +140,7 @@ class FaultInjectReport:
 
 class FaultInjectStage:
     """
-    yuleOSH pipeline stage for running A66-T Fault Injection tests.
+    yuleOSH pipeline stage for running Generic Fault Injection tests.
 
     This stage can be invoked either:
       a) Automatically by the pipeline orchestrator (via PIPELINE_STEPS)
@@ -422,7 +422,7 @@ class FaultInjectStage:
             Path to the generated report file.
         """
         lines = []
-        lines.append("# A66-T Fault Injection Test Report\n")
+        lines.append("# Generic Fault Injection Test Report\n")
         lines.append(f"**Generated:** {report.timestamp}\n")
         lines.append(f"**Build OK:** {'✅' if report.build_ok else '❌'}\n")
         lines.append(f"**Target Connected:** {'✅' if report.target_connected else '⚠️'}\n")

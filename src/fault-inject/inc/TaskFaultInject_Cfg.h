@@ -9,7 +9,7 @@
  *          that does NOT trigger CPU exceptions — instead uses FreeRTOS
  *          Task Notifications to inject simulated fault conditions.
  *
- *          Target: A66-T SBM MCU (Z20K148M, ARM Cortex-M4F, FreeRTOS)
+ *          Target: Generic MCU (Z20K148M, ARM Cortex-M4F, FreeRTOS)
  *
  * @note    This module is safe to leave enabled in debug/test builds.
  *          In production, set A66T_TASK_FAULT_INJECT_ENABLE = STD_OFF.

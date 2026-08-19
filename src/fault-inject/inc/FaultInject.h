@@ -2,10 +2,10 @@
  * Copyright (C) 2024 yule, Inc. or its affiliates.  All Rights Reserved.
  *
  * @file    FaultInject.h
- * @brief   A66-T HardFault Exception Injection Test Framework API
+ * @brief   Generic HardFault Exception Injection Test Framework API
  *
  * @details Provides functions to inject CPU exceptions (HardFault, BusFault,
- *          UsageFault, MemManage, StackOverflow) for testing the A66-T fault
+ *          UsageFault, MemManage, StackOverflow) for testing the Generic fault
  *          handling chain on Z20K148M (ARM Cortex-M4F).
  *
  *          Chain: handler invocation → NoInit fault record save (.share_ram
@@ -78,7 +78,7 @@ typedef struct
 #if (A66T_FAULT_INJECTION_TEST_ENABLE == STD_ON)
 
 /**
- * @brief   Initialize the A66-T fault injection test framework.
+ * @brief   Initialize the Generic fault injection test framework.
  * @details Enables MemManage, BusFault, UsageFault handlers in SCB->SHCSR.
  *          Call once during system init, after NoInit_Init().
  */

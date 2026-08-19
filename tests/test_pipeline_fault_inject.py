@@ -172,7 +172,7 @@ class TestFaultInjectGenerateReport:
         with tempfile.TemporaryDirectory() as td:
             path = stage.generate_report(report, str(Path(td) / "report.md"))
             content = Path(path).read_text()
-            assert "A66-T" in content
+            assert "Generic" in content
             assert "TC-01" in content
             assert "TF-01" in content
 
