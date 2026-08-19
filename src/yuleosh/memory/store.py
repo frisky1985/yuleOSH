@@ -15,16 +15,28 @@ Implements the Hermes-style memory capability for yuleOSH:
 The store is SQLite-backed (thread-safe, WAL mode) at `.yuleosh/memory.db`.
 """
 
+import difflib
 import os
+import re
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
 def _now() -> str:
     """ISO-8601 UTC timestamp for records."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def normalize_text(s: str) -> str:
+    """Normalize for similarity comparisons (deterministic dedup support).
+
+    Lowercases, keeps word characters (incl. CJK), collapses whitespace.
+    """
+    if not s:
+        return ""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w]+", " ", str(s).lower())).strip()
 
 
 class MemoryStore:
@@ -87,7 +99,14 @@ class MemoryStore:
                 tags TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                recall_count INTEGER NOT NULL DEFAULT 0
+                recall_count INTEGER NOT NULL DEFAULT 0,
+                -- Reflective distillation (2026-08-19)
+                status TEXT NOT NULL DEFAULT 'active',
+                source TEXT NOT NULL DEFAULT '',
+                source_reliability TEXT NOT NULL DEFAULT 'llm',
+                verified_count INTEGER NOT NULL DEFAULT 0,
+                last_used_at TEXT,
+                distilled_at TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_memory_facts_entity
                 ON memory_facts(entity);
@@ -122,19 +141,80 @@ class MemoryStore:
                 INSERT INTO session_logs_fts(session_logs_fts, rowid, content)
                 VALUES ('delete', old.id, old.content);
             END;
+
+            -- Usage log: which facts were injected into which pipeline step,
+            -- and the step result that settled them (feedback loop, P3).
+            CREATE TABLE IF NOT EXISTS memory_usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fact_id INTEGER NOT NULL,
+                step TEXT NOT NULL DEFAULT '',
+                ts TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'injected',
+                FOREIGN KEY (fact_id) REFERENCES memory_facts(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_memory_usage_fact
+                ON memory_usage_log(fact_id);
+            CREATE INDEX IF NOT EXISTS idx_memory_usage_step
+                ON memory_usage_log(step, ts);
+
+            -- Distill run bookkeeping (P1).
+            CREATE TABLE IF NOT EXISTS distill_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_at TEXT NOT NULL,
+                days INTEGER NOT NULL DEFAULT 1,
+                chunks INTEGER NOT NULL DEFAULT 0,
+                candidates INTEGER NOT NULL DEFAULT 0,
+                inserted INTEGER NOT NULL DEFAULT 0,
+                deduped INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
         """)
+        conn.commit()
+
+        # Migration: additive columns for reflective distillation on stores
+        # created before 2026-08-19 (CREATE TABLE IF NOT EXISTS does not
+        # add columns to existing tables).
+        self._ensure_column(conn, "memory_facts", "status",
+                            "TEXT NOT NULL DEFAULT 'active'")
+        self._ensure_column(conn, "memory_facts", "source",
+                            "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column(conn, "memory_facts", "source_reliability",
+                            "TEXT NOT NULL DEFAULT 'llm'")
+        self._ensure_column(conn, "memory_facts", "verified_count",
+                            "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column(conn, "memory_facts", "last_used_at", "TEXT")
+        self._ensure_column(conn, "memory_facts", "distilled_at", "TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_facts_status "
+            "ON memory_facts(status)"
+        )
         conn.commit()
 
         # Backfill FTS index for any pre-existing rows (idempotent).
         conn.execute("INSERT INTO session_logs_fts(session_logs_fts) VALUES ('rebuild')")
         conn.commit()
 
+    def _ensure_column(self, conn: sqlite3.Connection, table: str,
+                       column: str, ddl: str):
+        """Idempotently add a column to an existing table (SQLite migration)."""
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
     # ── Fact CRUD ────────────────────────────────────────────────────────
 
     def remember(self, content: str, entity: str = "",
                  category: str = "general", tags: str = "",
-                 trust: float | None = None) -> dict:
-        """Store a new fact. Returns the created row dict."""
+                 trust: float | None = None,
+                 source: str = "", source_reliability: str = "llm",
+                 distilled_at: str | None = None) -> dict:
+        """Store a new fact. Returns the created row dict.
+
+        ``source_reliability`` ranks the origin of the fact
+        (``human`` > ``external`` > ``llm``) — used by the reflector for
+        conflict resolution. ``distilled_at`` marks facts produced by the
+        daily distillation loop.
+        """
         conn = self._get_conn()
         now = _now()
         t = self.DEFAULT_TRUST if trust is None else max(self.TRUST_MIN,
@@ -142,9 +222,12 @@ class MemoryStore:
                                                              float(trust)))
         cur = conn.execute(
             "INSERT INTO memory_facts "
-            "(entity, category, content, trust, tags, created_at, updated_at, recall_count) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-            (entity, category, content, t, tags, now, now),
+            "(entity, category, content, trust, tags, created_at, updated_at, "
+            " recall_count, status, source, source_reliability, "
+            " verified_count, last_used_at, distilled_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?, 0, NULL, ?)",
+            (entity, category, content, t, tags, now, now,
+             source, source_reliability, distilled_at),
         )
         conn.commit()
         fid = cur.lastrowid
@@ -161,10 +244,16 @@ class MemoryStore:
 
     def list_facts(self, category: str | None = None,
                    entity: str | None = None,
-                   limit: int = 50, offset: int = 0) -> list[dict]:
-        """List facts with optional filters. Ordered by trust DESC, newest first."""
+                   limit: int = 50, offset: int = 0,
+                   include_archived: bool = False) -> list[dict]:
+        """List facts with optional filters. Ordered by trust DESC, newest first.
+
+        Archived facts are excluded unless ``include_archived=True``.
+        """
         conn = self._get_conn()
         clauses, params = [], []
+        if not include_archived:
+            clauses.append("status = 'active'")
         if category:
             clauses.append("category = ?")
             params.append(category)
@@ -192,7 +281,8 @@ class MemoryStore:
         explicit user recalls reinforce.
         """
         conn = self._get_conn()
-        clauses = ["(content LIKE ? OR tags LIKE ? OR entity LIKE ?)"]
+        clauses = ["status = 'active'",
+                   "(content LIKE ? OR tags LIKE ? OR entity LIKE ?)"]
         params = [f"%{query}%", f"%{query}%", f"%{query}%"]
         if entity:
             clauses.append("entity = ?")
@@ -239,6 +329,200 @@ class MemoryStore:
         )
         conn.commit()
         return self.get_fact(fact_id) if cur.rowcount > 0 else None
+
+    # ── Reflective distillation support (2026-08-19) ─────────────────────
+
+    def archive_fact(self, fact_id: int) -> dict | None:
+        """Move a fact to archived (recoverable, never deleted)."""
+        conn = self._get_conn()
+        cur = conn.execute(
+            "UPDATE memory_facts SET status = 'archived', updated_at = ? "
+            "WHERE id = ? AND status = 'active'",
+            (_now(), fact_id),
+        )
+        conn.commit()
+        return self.get_fact(fact_id) if cur.rowcount > 0 else None
+
+    def unarchive_fact(self, fact_id: int) -> dict | None:
+        """Restore an archived fact (recovery path)."""
+        conn = self._get_conn()
+        cur = conn.execute(
+            "UPDATE memory_facts SET status = 'active', updated_at = ? "
+            "WHERE id = ?",
+            (_now(), fact_id),
+        )
+        conn.commit()
+        return self.get_fact(fact_id) if cur.rowcount > 0 else None
+
+    def remember_many(self, items: list[dict]) -> list[dict]:
+        """Batch remember in a single transaction (distillation persist).
+
+        Each item supports the same fields as :meth:`remember` plus
+        ``source`` / ``source_reliability`` / ``distilled_at``. Rolls back
+        the whole batch on failure.
+        """
+        if not items:
+            return []
+        conn = self._get_conn()
+        now = _now()
+        created: list[dict] = []
+        try:
+            for item in items:
+                t = self.DEFAULT_TRUST if item.get("trust") is None else max(
+                    self.TRUST_MIN,
+                    min(self.TRUST_MAX, float(item.get("trust", self.DEFAULT_TRUST))),
+                )
+                cur = conn.execute(
+                    "INSERT INTO memory_facts "
+                    "(entity, category, content, trust, tags, created_at, updated_at, "
+                    " recall_count, status, source, source_reliability, "
+                    " verified_count, last_used_at, distilled_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?, 0, NULL, ?)",
+                    (
+                        item.get("entity", ""),
+                        item.get("category", "general"),
+                        item["content"],
+                        t,
+                        item.get("tags", ""),
+                        now,
+                        now,
+                        item.get("source", ""),
+                        item.get("source_reliability", "llm"),
+                        item.get("distilled_at") or now,
+                    ),
+                )
+                fid = cur.lastrowid
+                if fid is None:
+                    raise RuntimeError("memory fact insert did not return an id")
+                fact = self.get_fact(fid)
+                if fact is None:
+                    raise RuntimeError("memory fact row missing after insert")
+                created.append(fact)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return created
+
+    def find_similar(self, content: str, entity: str = "",
+                     threshold: float = 0.85, limit: int = 5) -> list[dict]:
+        """Find existing *active* facts similar to ``content``.
+
+        Deterministic dedup support (difflib ratio on normalized text).
+        Requires the same entity when one is given; otherwise a token
+        pre-filter keeps the scan bounded.
+        """
+        norm = normalize_text(content)
+        if not norm:
+            return []
+        conn = self._get_conn()
+        if entity:
+            rows = conn.execute(
+                "SELECT * FROM memory_facts WHERE entity = ? AND status = 'active' "
+                "ORDER BY trust DESC",
+                (entity,),
+            ).fetchall()
+        else:
+            tokens = [t for t in re.split(r"\W+", norm) if len(t) >= 3][:3]
+            if tokens:
+                like = "%" + "%".join(tokens) + "%"
+                rows = conn.execute(
+                    "SELECT * FROM memory_facts WHERE content LIKE ? "
+                    "AND status = 'active' ORDER BY trust DESC LIMIT 200",
+                    (like,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM memory_facts WHERE status = 'active' "
+                    "ORDER BY trust DESC LIMIT 200"
+                ).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            d = dict(r)
+            if difflib.SequenceMatcher(
+                None, norm, normalize_text(d["content"])
+            ).ratio() >= threshold:
+                out.append(d)
+                if len(out) >= limit:
+                    break
+        return out
+
+    def record_usage(self, fact_id: int, step: str = "",
+                     status: str = "injected") -> dict:
+        """Log that ``fact_id`` was injected into a pipeline step (P3)."""
+        conn = self._get_conn()
+        now = _now()
+        cur = conn.execute(
+            "INSERT INTO memory_usage_log (fact_id, step, ts, status) "
+            "VALUES (?, ?, ?, ?)",
+            (fact_id, step, now, status),
+        )
+        conn.execute(
+            "UPDATE memory_facts SET last_used_at = ?, updated_at = ? "
+            "WHERE id = ?",
+            (now, now, fact_id),
+        )
+        conn.commit()
+        return {"id": cur.lastrowid, "fact_id": fact_id, "step": step,
+                "ts": now, "status": status}
+
+    def list_usage(self, fact_id: int | None = None, step: str | None = None,
+                   unsettled_only: bool = False, limit: int = 500) -> list[dict]:
+        """List usage-log rows (optionally for a fact / step / unsettled only)."""
+        conn = self._get_conn()
+        clauses, params = [], []
+        if fact_id is not None:
+            clauses.append("fact_id = ?")
+            params.append(fact_id)
+        if step:
+            clauses.append("step = ?")
+            params.append(step)
+        if unsettled_only:
+            clauses.append("status = 'injected'")
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM memory_usage_log {where} ORDER BY ts DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_usage_settled(self, usage_id: int, status: str) -> bool:
+        """Settle an injected usage row with the step result (passed/failed/retry)."""
+        conn = self._get_conn()
+        cur = conn.execute(
+            "UPDATE memory_usage_log SET status = ? "
+            "WHERE id = ? AND status = 'injected'",
+            (status, usage_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+    def increment_verified(self, fact_id: int) -> dict | None:
+        """Bump verified_count (each feedback settle = one verification)."""
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE memory_facts SET verified_count = verified_count + 1, "
+            "updated_at = ? WHERE id = ?",
+            (_now(), fact_id),
+        )
+        conn.commit()
+        return self.get_fact(fact_id)
+
+    def record_distill_run(self, days: int = 1, chunks: int = 0,
+                           candidates: int = 0, inserted: int = 0,
+                           deduped: int = 0, note: str = "") -> dict:
+        """Record a distillation run (observability + idempotency audit)."""
+        conn = self._get_conn()
+        cur = conn.execute(
+            "INSERT INTO distill_runs "
+            "(run_at, days, chunks, candidates, inserted, deduped, note) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (_now(), days, chunks, candidates, inserted, deduped, note),
+        )
+        conn.commit()
+        return {"id": cur.lastrowid, "days": days, "chunks": chunks,
+                "candidates": candidates, "inserted": inserted,
+                "deduped": deduped, "note": note}
 
     def stats(self) -> dict:
         """Return memory statistics."""
@@ -301,3 +585,26 @@ class MemoryStore:
                 (f"%{query}%", limit),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def list_session_logs(self, days: int | None = None,
+                          limit: int = 200) -> list[dict]:
+        """List recent session logs, newest first (distillation input, P1).
+
+        ``days`` filters by ``created_at >= now - days``. ``None`` returns
+        the ``limit`` most recent rows regardless of age.
+        """
+        conn = self._get_conn()
+        if days is not None:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)
+                      ).isoformat(timespec="seconds")
+            rows = conn.execute(
+                "SELECT * FROM session_logs WHERE created_at >= ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (cutoff, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM session_logs ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
