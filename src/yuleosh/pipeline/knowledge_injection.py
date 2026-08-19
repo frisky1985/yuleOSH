@@ -151,7 +151,26 @@ def _sync_rag_context(
         return ""
 
 
-def _assemble_memory(prompt: str, config: PipelineKnowledgeConfig) -> str:
+def _track_memory_usage(prompt: str, step_key: str) -> None:
+    """P3 埋点：记录本次注入的 fact_ids + step_key（usage_log）。
+
+    与文本组装分离 —— 只在有 step_key 时额外做一次 retrieve 取 fact_ids。
+    失败非致命（记忆注入链路永不阻断）。
+    """
+    try:
+        from yuleosh.memory.llm_context import MemoryContextAssembler
+        from yuleosh.memory.feedback import record_injection
+
+        items = MemoryContextAssembler().retrieve(prompt)
+        fact_ids = [i.item_id for i in items if i.source == "fact"]
+        if fact_ids:
+            record_injection(fact_ids, step_key)
+    except Exception as e:  # noqa: BLE001 — 埋点永不阻断注入
+        log.warning("Memory usage tracking failed (non-fatal): %s", e)
+
+
+def _assemble_memory(prompt: str, config: PipelineKnowledgeConfig,
+                     step_key: str = "") -> str:
     """Project memory section (non-fatal)."""
     try:
         from yuleosh.memory.llm_context import assemble_memory_context
@@ -159,6 +178,8 @@ def _assemble_memory(prompt: str, config: PipelineKnowledgeConfig) -> str:
         ctx = assemble_memory_context(query=prompt, max_chars=config.memory_max_chars)
         if not ctx:
             return ""
+        if step_key:
+            _track_memory_usage(prompt, step_key)
         return f"{MEMORY_HEADER}\n\n{ctx}"
     except Exception as e:  # noqa: BLE001
         log.warning("Memory injection failed (non-fatal): %s", e)
@@ -265,7 +286,7 @@ def assemble_pipeline_knowledge(
 
     sections: list[str] = []
     if config.inject_memory:
-        sections.append(_assemble_memory(prompt, config))
+        sections.append(_assemble_memory(prompt, config, step_key=step_key))
     if config.inject_rag:
         sections.append(_assemble_rag(prompt, config, rag_engine=rag_engine))
     if config.inject_skills:

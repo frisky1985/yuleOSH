@@ -1,7 +1,7 @@
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: MIT
 
-"""yuleOSH Memory CLI — fact store + session search.
+"""yuleOSH Memory CLI — fact store + session search + 反思蒸馏闭环.
 
 Usage:
     yuleosh memory remember "fact" [--entity X] [--category Y] [--tags a,b] [--trust N]
@@ -10,6 +10,9 @@ Usage:
     yuleosh memory list [--category Y] [--entity X] [--limit N]
     yuleosh memory stats
     yuleosh memory log "session note" [--key K] [--kind note|decision|review]
+    yuleosh memory distill [--days N] [--project DIR] [--mock] [--dry-run]
+    yuleosh memory reflect [--days N] [--project DIR] [--mock] [--max-age-days N] [--dry-run]
+    yuleosh memory feedback --step <step_key> --status passed|failed|retry
     yuleosh session search <query> [--limit N]
 """
 
@@ -77,6 +80,46 @@ def build_memory_subparser(subparsers) -> argparse.ArgumentParser:
                    help="Max sessions (default: 3)")
     p.add_argument("--max-chars", type=int, default=2000,
                    help="Max context chars (default: 2000)")
+
+    # memory distill — P1 反思蒸馏闭环：sessions → facts 落库
+    p = msub.add_parser(
+        "distill",
+        help="蒸馏最近 N 天会话为结构化记忆（事实/经验/教训/纠正）",
+    )
+    p.add_argument("--days", type=int, default=1,
+                   help="回看天数（default: 1）")
+    p.add_argument("--project", default=".",
+                   help="项目目录（读 sessions/ 与 .osh/sessions/，default: cwd）")
+    p.add_argument("--mock", action="store_true",
+                   help="确定性启发式抽取（无需 API key，演示/测试）")
+    p.add_argument("--dry-run", action="store_true",
+                   help="只报告不落库")
+
+    # memory reflect — P2 反思器：冲突解决 + 过时归档
+    p = msub.add_parser(
+        "reflect",
+        help="反思蒸馏候选 vs 现有记忆：冲突解决 + 过时归档",
+    )
+    p.add_argument("--days", type=int, default=1,
+                   help="无候选文件时回看天数（default: 1）")
+    p.add_argument("--project", default=".",
+                   help="项目目录（default: cwd）")
+    p.add_argument("--mock", action="store_true",
+                   help="确定性启发式抽取（无候选文件时）")
+    p.add_argument("--max-age-days", type=int, default=30,
+                   help="过时归档阈值天数（default: 30）")
+    p.add_argument("--dry-run", action="store_true",
+                   help="只报告动作不执行")
+
+    # memory feedback — P3 反馈环：步骤结果回采
+    p = msub.add_parser(
+        "feedback",
+        help="步骤结果回采：调整该 step 注入过的事实 trust",
+    )
+    p.add_argument("--step", required=True, help="Pipeline step key")
+    p.add_argument("--status", required=True,
+                   choices=["passed", "failed", "retry"],
+                   help="步骤结果")
 
     return mem
 
@@ -183,6 +226,54 @@ def handle_memory_command(args) -> int:
         print(context)
         print("=" * 72)
         print(f"(chars={len(context)}, max_chars={args.max_chars})")
+
+    elif args.memory_sub == "distill":
+        from yuleosh.memory.distill import Distiller, mock_distill_llm
+
+        d = Distiller(
+            llm_fn=mock_distill_llm if args.mock else None,
+            project_dir=args.project,
+        )
+        summary = d.distill(days=args.days, dry_run=args.dry_run)
+        mode = " [dry-run]" if args.dry_run else ""
+        print(f"🧠 Distill{mode}: days={summary['days']} "
+              f"chunks={summary['chunks']} "
+              f"candidates={summary['candidates']} "
+              f"inserted={summary['inserted']} "
+              f"deduped={summary['deduped']}")
+        if summary.get("note"):
+            print(f"   ({summary['note']})")
+        if summary["facts"]:
+            print(f"   facts: {summary['facts']}")
+
+    elif args.memory_sub == "reflect":
+        from yuleosh.memory.distill import Distiller, load_last_candidates, mock_distill_llm
+        from yuleosh.memory.reflect import Reflector
+
+        candidates = load_last_candidates(args.project)
+        if not candidates:
+            d = Distiller(
+                llm_fn=mock_distill_llm if args.mock else None,
+                project_dir=args.project,
+            )
+            candidates = d.extract_candidates(
+                d.collect_session_texts(days=args.days), days=args.days)
+        r = Reflector(project_dir=args.project)
+        summary = r.reflect(candidates, max_age_days=args.max_age_days,
+                            dry_run=args.dry_run)
+        mode = " [dry-run]" if args.dry_run else ""
+        print(f"🧠 Reflect{mode}: conflicts={summary['conflicts']} "
+              f"obsolete={summary['obsolete']} actions={summary['actions']}")
+        print(f"   applied: archived={summary['archived']} "
+              f"inserted={summary['inserted']} "
+              f"downgraded={summary['downgraded']}")
+
+    elif args.memory_sub == "feedback":
+        from yuleosh.memory.feedback import apply_step_result
+
+        n = apply_step_result(args.step, args.status)
+        print(f"🧠 Feedback: step={args.step} status={args.status} "
+              f"settled={n} usage row(s)")
 
     return 0
 
