@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 # Require a test JWT secret so auth modules don't raise at import time.
 # The exact value is irrelevant for tests; any non-empty string works.
 os.environ.setdefault("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for-production")
@@ -13,6 +15,42 @@ os.environ.setdefault("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for
 # /tmp 污染的真正根因已在 loop_engine/event_bus.py 修复：
 # EventQueuePersistence 默认路径改为 _default_persistence_path()
 # （OSH_HOME 优先，否则 tempfile 隔离目录），不再裸写 /tmp/.yuleosh。
+
+
+@pytest.fixture(autouse=True)
+def _isolate_global_registries():
+    """每个测试后恢复单例注册表，防跨测试污染（2026-08-19）。
+
+    背景：RulesetRegistry / ScannerRegistry 是模块级单例，测试内
+    register(make_default=True) 会永久改写 _default / _registry，
+    泄漏到后续测试。实证案例：test_rulesets.py::test_make_default_overrides
+    注册 Second 为默认 → review_misra 的 GSCR 翻译拿到无
+    translate_violations 的实例 → gscr-report.json 静默缺失
+    （全量回归 -x 才暴露，单独跑单文件全绿）。
+
+    恢复策略：
+    - ScannerRegistry：自带 reset()（清空 + 重建 5 个内置适配器）。
+    - RulesetRegistry：_instance=None 重建后是空注册表（内置注册只在
+      registry.py 模块导入时执行一次），必须显式重注册 4 个内置规则集，
+      与 registry.py 模块级 _registry 一致。
+    """
+    yield
+    from yuleosh.ci.rulesets import (
+        GscCppRuleSet,
+        GscCRuleSet,
+        GscrCompositeRuleSet,
+        MisraC2023RuleSet,
+        RulesetRegistry,
+    )
+    from yuleosh.ci.scanners import ScannerRegistry
+
+    ScannerRegistry().reset()
+    RulesetRegistry._instance = None
+    _reg = RulesetRegistry()
+    _reg.register(MisraC2023RuleSet)
+    _reg.register(GscCRuleSet)
+    _reg.register(GscCppRuleSet)
+    _reg.register(GscrCompositeRuleSet, make_default=True)
 
 
 def pytest_collection_modifyitems(config, items):

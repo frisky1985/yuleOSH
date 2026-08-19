@@ -133,9 +133,15 @@ class TestAuthInternalHelpers:
 
         auth_mod._SIGNIN_RATE_LIMIT.clear()
         auth_mod._SIGNIN_RATE_LIMIT["flood@test.com"] = (15, int(time.time()))
-
-        # Returns True = blocked (exceeds max)
-        assert _check_rate_limit("flood@test.com") is True
+        try:
+            # Returns True = blocked (exceeds max)
+            assert _check_rate_limit("flood@test.com") is True
+        finally:
+            # 必须清理：_SIGNIN_RATE_LIMIT 是与 ui.auth_extended 共享的单例
+            # （SHALL-A1.6），残留 flood@test.com=15 会污染
+            # test_auth_extended_handlers.py::test_blocked_after_max_failed_attempts
+            # （随机顺序暴露：9 次循环内第一次断言即 True → FAIL）。
+            auth_mod._SIGNIN_RATE_LIMIT.pop("flood@test.com", None)
 
     def test_check_rate_limit_window_expired(self):
         from yuleosh.api.auth import _check_rate_limit
@@ -155,9 +161,13 @@ class TestAuthInternalHelpers:
         auth_mod._SIGNIN_RATE_LIMIT.clear()
         # Set 8 attempts (8 < 10 = under limit)
         auth_mod._SIGNIN_RATE_LIMIT["almost@test.com"] = (8, int(time.time()))
-
-        # Returns False = allowed (8+1=9 < 10)
-        assert _check_rate_limit("almost@test.com") is False
+        try:
+            # Returns False = allowed (8+1=9 < 10)
+            assert _check_rate_limit("almost@test.com") is False
+        finally:
+            # 必须清理（同 flood@test.com 泄漏）：_check_rate_limit 对未达上限
+            # 的 key 不做 pop，残留 8 次计数会累积到其他测试的 flood 场景。
+            auth_mod._SIGNIN_RATE_LIMIT.pop("almost@test.com", None)
 
 
 class TestAuthRouting:

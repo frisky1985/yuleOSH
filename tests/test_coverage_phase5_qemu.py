@@ -29,12 +29,22 @@ from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 def _make_session(tmp_path, name="phase5-qemu", **attrs):
     # 关键：session 目录基于 OSH_HOME 生成，必须指向 tmp_path，
     # 否则多个测试会共用 CWD 下的 .osh/ 目录造成互相污染。
+    # 必须保存/恢复 OSH_HOME——直接覆盖且不恢复会泄漏到后续测试
+    # （随机顺序暴露：test_api.py::temp_spec_file 拿到 tmp_path 后
+    # 找不到 docs/spec.md → 11 errors；TestEvidence generate 403）。
+    _old_home = os.environ.get("OSH_HOME")
     os.environ["OSH_HOME"] = str(tmp_path)
-    s = PipelineSession(name=name, spec_path=str(tmp_path / "spec.md"))
-    s.context = {}
-    for k, v in attrs.items():
-        setattr(s, k, v)
-    return s
+    try:
+        s = PipelineSession(name=name, spec_path=str(tmp_path / "spec.md"))
+        s.context = {}
+        for k, v in attrs.items():
+            setattr(s, k, v)
+        return s
+    finally:
+        if _old_home is not None:
+            os.environ["OSH_HOME"] = _old_home
+        else:
+            os.environ.pop("OSH_HOME", None)
 
 
 # =====================================================================

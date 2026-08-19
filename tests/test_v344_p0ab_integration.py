@@ -119,9 +119,11 @@ class TestP0A_FrontendLoginChainProtectedV1:
         assert setup_token, "org_setup token missing"
 
         # 2. org/create (binds token.email == body.email)
+        # slug 必须唯一：abs(hash(email)) % 100000 概率碰撞（多个测试共享
+        # class-scope server 的持久 store，随机顺序下 409 "already taken"）。
         body = {
             "org_name": "P0A Org",
-            "org_slug": f"p0a-{abs(hash(email)) % 100000}",
+            "org_slug": f"p0a-{int(time.time() * 1000)}",
             "project_name": "P0A Project",
             "project_slug": "p0a-project",
             "email": email,

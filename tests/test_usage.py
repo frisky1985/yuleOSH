@@ -3,6 +3,7 @@
 Uses mocking for store and stripe dependencies.
 """
 
+import copy
 import sys
 import os
 import json
@@ -264,7 +265,10 @@ class TestCreateCheckoutSession:
         with mock.patch.dict("sys.modules", {"stripe": mock_stripe}):
             # Patch TIERS to include a price_id for pro
             from yuleosh.usage import metering
-            original = metering.TIERS.copy()
+            # 必须深拷贝：TIERS.copy() 是浅拷贝，内层 pro dict 是同一对象，
+            # 修改会同时污染 original["pro"] → 恢复后 price_id 永久残留，
+            # 随机顺序下 test_missing_price_id（依赖 pro 无 price_id）失败。
+            original = copy.deepcopy(metering.TIERS)
             metering.TIERS["pro"]["stripe_price_id"] = "price_pro_123"
 
             from yuleosh.usage.stripe_gateway import create_checkout_session

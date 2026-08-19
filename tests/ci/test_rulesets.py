@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -9,19 +8,19 @@ Tests the Ruleset Plugin System (BaseRuleSet, MisraC2023RuleSet, RulesetRegistry
 """
 
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
 # ── Module under test ──────────────────────────────────────────────
 from yuleosh.ci.rulesets import (
     BaseRuleSet,
+    GscCppRuleSet,
     GscCRuleSet,
+    GscrCompositeRuleSet,
     MisraC2023RuleSet,
     RulesetRegistry,
-    _DEFAULT_RULES_PATH,
 )
-
 
 # ====================================================================
 # BaseRuleSet — abstract contract
@@ -175,6 +174,21 @@ class TestRulesetRegistry:
         """Reset singleton before each test."""
         # Force re-creation for clean state in each test
         RulesetRegistry._instance = None
+
+    def teardown_method(self):
+        """Restore built-in registrations after each test.
+
+        单例 _default 会被 test_make_default_overrides 等测试改写并永久泄漏，
+        污染后续测试（如 review_misra 的 GSCR 翻译拿到无 translate_violations
+        的自定义规则集 → gscr-report.json 静默缺失）。恢复 registry.py 模块
+        导入时的内置注册（与 registry.py 末尾 _registry 一致）。
+        """
+        RulesetRegistry._instance = None
+        _reg = RulesetRegistry()
+        _reg.register(MisraC2023RuleSet)
+        _reg.register(GscCRuleSet)
+        _reg.register(GscCppRuleSet)
+        _reg.register(GscrCompositeRuleSet, make_default=True)
 
     def test_singleton(self):
         """RulesetRegistry is a singleton."""

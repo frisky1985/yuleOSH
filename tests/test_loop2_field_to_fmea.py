@@ -37,9 +37,14 @@ from yuleosh.loop_engine.feedback_handlers.loop2_field_to_fmea import (
 # ═══════════════════════════════════════════════════════════════════════
 
 @pytest.fixture
-def handler():
-    """创建一个干净的 Loop2 handler。"""
-    return Loop2FieldToFMEAHandler(output_dir=".")
+def handler(tmp_path):
+    """创建一个干净的 Loop2 handler。
+
+    output_dir 必须用 tmp_path——"." 会把 FMEA 条目持久化到仓库工作区
+    fmea_entries/，跨测试共享文件（随机顺序暴露：test_severity_not_downgraded
+    先写 severity=8 残留，test_severity_updated 加载后 max(8,5)=8 断言失败）。
+    """
+    return Loop2FieldToFMEAHandler(output_dir=str(tmp_path))
 
 
 @pytest.fixture

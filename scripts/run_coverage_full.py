@@ -42,6 +42,7 @@ args = [
     "--deselect=tests/test_ratelimit_shared.py::test_concurrent_processes_no_lock_error",
     "-o", "addopts=",   # 清掉 pytest.ini 自带的 --cov 参数
     "-p", "no:cov",     # 彻底禁用 pytest-cov 插件（否则会话结束会再写一次 .coverage）
+    "-p", "randomly",   # 第三层隔离: 随机化测试顺序，暴露单例/全局状态跨测试污染
 ]
 rc = pytest.main(args)
 

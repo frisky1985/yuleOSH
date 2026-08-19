@@ -11,6 +11,7 @@ from yuleosh.pipeline.step_classes import (
     DevelopmentStep,
     TestPlanningStep,
     HermesReviewStep,
+    STEP_CLASSES,
     get_step_instance,
     register_step,
 )
@@ -66,8 +67,14 @@ class TestSteps:
     def test_register_step(self):
         mock_step = MagicMock()
         mock_step.step_key = "custom-step"
-        register_step("custom-step", mock_step)
-        assert get_step_instance("custom-step") is mock_step
+        try:
+            register_step("custom-step", mock_step)
+            assert get_step_instance("custom-step") is mock_step
+        finally:
+            # 必须清理：STEP_CLASSES 是模块级单例，残留 custom-step 会污染
+            # test_coverage_phase6_pipeline_llm.py::test_step_classes_map_has_all_six_steps
+            # （随机顺序暴露：set(STEP_CLASSES) 多出 custom-step → 断言失败）。
+            STEP_CLASSES.pop("custom-step", None)
 
     def test_architecture_build_prompts(self, tmp_path):
         """ArchitectureStep.build_prompts with source tree."""

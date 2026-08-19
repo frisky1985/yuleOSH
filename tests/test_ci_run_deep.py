@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from subprocess import TimeoutExpired
 from unittest import mock
@@ -59,6 +60,26 @@ sys.modules["evidence.pack"] = _mev_pack
 setattr(_mev, "pack", _mev_pack)
 del _mev, _mev_pack
 del _mock_cross, _sub, _m, _types
+
+
+@contextmanager
+def _swap_sys_module(name: str, value):
+    """Swap sys.modules[name] to value; restore previous on exit.
+
+    防止 mock cross.* 子模块泄漏到后续测试（随机顺序暴露：
+    test_hil_detect_real_exception_strict 的 MagicMock 污染
+    test_strict_mode 的 _detect_hil_target → strict False）。
+    """
+    import sys as _sys
+    saved = _sys.modules.get(name)
+    _sys.modules[name] = value
+    try:
+        yield
+    finally:
+        if saved is not None:
+            _sys.modules[name] = saved
+        else:
+            _sys.modules.pop(name, None)
 
 # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
@@ -1798,9 +1819,9 @@ class TestEdgeCasesBranch:
         import sys as _sys
         _mock_tc = mock.MagicMock()
         _mock_tc.discover_targets.return_value = {}
-        _sys.modules["cross.target_config"] = _mock_tc
         ci = CIResult(25, "abc")
-        assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=False) is True
+        with _swap_sys_module("cross.target_config", _mock_tc):
+            assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=False) is True
 
     def test_hil_detect_real_finds_targets(self, tmp_proj):
         """Cover _detect_hil_target real mode with targets found."""
@@ -1809,9 +1830,9 @@ class TestEdgeCasesBranch:
         _mock_tc = mock.MagicMock()
         _mock_tc.discover_targets.return_value = {
             "board1": {"flash_tool": "openocd"}, "board2": {}}
-        _sys.modules["cross.target_config"] = _mock_tc
         ci = CIResult(25, "abc")
-        assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=False) is True
+        with _swap_sys_module("cross.target_config", _mock_tc):
+            assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=False) is True
 
     def test_hil_detect_real_exception_strict(self, tmp_proj):
         """Cover _detect_hil_target real mode exception (strict)."""
@@ -1821,9 +1842,9 @@ class TestEdgeCasesBranch:
         def _raise(*a):
             raise ValueError("discovery error")
         _mock_tc.discover_targets = _raise
-        _sys.modules["cross.target_config"] = _mock_tc
         ci = CIResult(25, "abc")
-        assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=True) is False
+        with _swap_sys_module("cross.target_config", _mock_tc):
+            assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=True) is False
 
     def test_hil_detect_real_exception_non_strict(self, tmp_proj):
         """Cover _detect_hil_target real mode exception (non-strict)."""
@@ -1831,9 +1852,9 @@ class TestEdgeCasesBranch:
         import sys as _sys
         _mock_tc = mock.MagicMock()
         _mock_tc.discover_targets.side_effect = ValueError("discovery error")
-        _sys.modules["cross.target_config"] = _mock_tc
         ci = CIResult(25, "abc")
-        assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=False) is True
+        with _swap_sys_module("cross.target_config", _mock_tc):
+            assert _detect_hil_target(tmp_proj, ci, mock_mode=False, strict=False) is True
 
     def test_run_layer25_no_config(self, tmp_proj):
         """Cover run_layer_25 with no CI config."""
@@ -2024,6 +2045,8 @@ class TestRemainingBranches:
         import sys as _sys
         _mock_flash = mock.MagicMock()
         _mock_hil = mock.MagicMock()
+        _saved_flash = _sys.modules.get("cross.flash")
+        _saved_hil = _sys.modules.get("cross.hil_runner")
         _sys.modules["cross.flash"] = _mock_flash
         _sys.modules["cross.hil_runner"] = _mock_hil
         try:
@@ -2041,12 +2064,17 @@ class TestRemainingBranches:
                                           strict=False, boot_pattern="Boot Complete")
             assert results == []  # firmware not found
         finally:
-            _sys.modules.pop("cross.flash", None)
-            _sys.modules.pop("cross.hil_runner", None)
+            # 恢复文件级注入的原始模块（不得用新 MagicMock 泄漏到后续测试）
+            if _saved_flash is not None:
+                _sys.modules["cross.flash"] = _saved_flash
+            if _saved_hil is not None:
+                _sys.modules["cross.hil_runner"] = _saved_hil
 
     def test_hil_real_tests_import_error_no_strict(self, tmp_proj):
         """Cover _run_hil_real_tests import error (non-strict)."""
         import sys as _sys
+        _saved_flash = _sys.modules.get("cross.flash")
+        _saved_hil = _sys.modules.get("cross.hil_runner")
         for k in list(_sys.modules.keys()):
             if k in ("cross.flash", "cross.hil_runner"):
                 _sys.modules.pop(k, None)
@@ -2058,15 +2086,17 @@ class TestRemainingBranches:
                                           strict=False, boot_pattern="Boot")
             assert results == []
         finally:
-            # Restore mocks
-            from yuleosh.ci.run import _save_hil_report
-            # The modules are already injected at file top
-            _sys.modules["cross.flash"] = mock.MagicMock()
-            _sys.modules["cross.hil_runner"] = mock.MagicMock()
+            # 恢复文件级注入的原始模块（不得用新 MagicMock 泄漏到后续测试）
+            if _saved_flash is not None:
+                _sys.modules["cross.flash"] = _saved_flash
+            if _saved_hil is not None:
+                _sys.modules["cross.hil_runner"] = _saved_hil
 
     def test_hil_real_tests_import_error_strict(self, tmp_proj):
         """Cover _run_hil_real_tests import error (strict)."""
         import sys as _sys
+        _saved_flash = _sys.modules.get("cross.flash")
+        _saved_hil = _sys.modules.get("cross.hil_runner")
         for k in list(_sys.modules.keys()):
             if k in ("cross.flash", "cross.hil_runner"):
                 _sys.modules.pop(k, None)
@@ -2078,8 +2108,10 @@ class TestRemainingBranches:
                                           strict=True, boot_pattern="Boot")
             assert results == []
         finally:
-            _sys.modules["cross.flash"] = mock.MagicMock()
-            _sys.modules["cross.hil_runner"] = mock.MagicMock()
+            if _saved_flash is not None:
+                _sys.modules["cross.flash"] = _saved_flash
+            if _saved_hil is not None:
+                _sys.modules["cross.hil_runner"] = _saved_hil
 
     def test_hil_run_real_mode_no_scripts(self, tmp_proj):
         """Cover run_layer_25 with real mode, no scripts dir."""
@@ -2098,11 +2130,13 @@ class TestRemainingBranches:
         from yuleosh.ci.config import CiConfig, HardwareTestConfig
         cfg = CiConfig()
         cfg.hardware_test = HardwareTestConfig(mock=False, boot_pattern="Boot Complete")
-        with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.stage_utils._run_hil_real_tests",
-                            side_effect=ValueError("hil error")):
-                result = run_layer_25(project_dir=tmp_proj)
-                assert result is True  # Exception is caught, all_passed stays True (strict=False)
+        with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg), \
+             mock.patch("yuleosh.ci.layers.layer_executor._detect_hil_target",
+                        return_value=True), \
+             mock.patch("yuleosh.ci.layers.layer_executor._run_hil_real_tests",
+                        side_effect=ValueError("hil error")):
+            result = run_layer_25(project_dir=tmp_proj)
+            assert result is True  # Exception is caught, all_passed stays True (strict=False)
 
     def test_hil_run_real_mode_exception_strict(self, tmp_proj):
         """Cover run_layer_25 HIL test real mode exception (strict)."""
@@ -2113,12 +2147,14 @@ class TestRemainingBranches:
                                                test_scripts_dir="tests/hil")
         Path(tmp_proj, "tests", "hil").mkdir(parents=True)
         Path(tmp_proj, "tests", "hil", "test.yaml").write_text("test: 1")
-        with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg):
-            with mock.patch("yuleosh.ci.stage_utils._run_hil_real_tests",
-                            side_effect=ValueError("hil error")):
-                with mock.patch.dict(os.environ, {"CI_STRICT": "1"}):
-                    result = run_layer_25(project_dir=tmp_proj)
-                    assert result is False
+        with mock.patch("yuleosh.ci.run._get_ci_config", return_value=cfg), \
+             mock.patch("yuleosh.ci.layers.layer_executor._detect_hil_target",
+                        return_value=True), \
+             mock.patch("yuleosh.ci.layers.layer_executor._run_hil_real_tests",
+                        side_effect=ValueError("hil error")), \
+             mock.patch.dict(os.environ, {"CI_STRICT": "1"}):
+            result = run_layer_25(project_dir=tmp_proj)
+            assert result is False
 
     def test_integration_tests_fail(self, tmp_proj):
         """Cover _integration_test_stage failure."""

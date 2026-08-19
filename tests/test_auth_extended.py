@@ -7,33 +7,33 @@ Covers: auth, session, API key, login page.
 """
 import os
 import time
-import sys
 from unittest import mock
 
-import pytest
+import yuleosh.ui.auth as auth_mod
 
 # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 from yuleosh.ui.auth import (
     API_KEY,
-    AUTH_ENABLED,
-    _sessions,
     SESSION_TTL,
     _generate_session_token,
-    _session_sig,
-    create_session,
-    validate_session,
     cleanup_sessions,
-    is_authenticated,
+    create_session,
     get_login_page,
-    LOGIN_PAGE,
+    is_authenticated,
+    validate_session,
 )
+
+# NOTE: _sessions 不在此 from-import——它是模块级可变单例，其他测试
+# （test_v370_track1_track4 等）会 importlib.reload(auth) 重建模块 dict，
+# 顶部绑定的旧 dict 引用会脱钩（随机顺序暴露：4 个 TestSessionCreation
+# 失败）。所有 _sessions 访问必须走 auth_mod._sessions 动态属性。
 
 
 class TestSessionCreation:
     """GIVEN auth module WHEN creating sessions THEN tokens are valid."""
 
     def setup_method(self):
-        _sessions.clear()
+        auth_mod._sessions.clear()
 
     def test_generate_session_token_is_unique(self):
         """GIVEN _generate_session_token WHEN called twice THEN different tokens."""
@@ -47,7 +47,7 @@ class TestSessionCreation:
         token, cookie_val = create_session()
         assert len(token) >= 32
         assert "." in cookie_val
-        assert token in _sessions
+        assert token in auth_mod._sessions
 
     def test_validate_session_valid(self):
         """GIVEN a valid session cookie WHEN validate_session THEN returns True."""
@@ -70,13 +70,14 @@ class TestSessionCreation:
         """GIVEN expired session WHEN validate_session THEN returns False and removes."""
         token, cookie_val = create_session()
         # Artificially age the session
-        _sessions[token] = time.time() - SESSION_TTL - 60
+        auth_mod._sessions[token] = time.time() - SESSION_TTL - 60
         assert validate_session(cookie_val) is False
-        assert token not in _sessions
+        assert token not in auth_mod._sessions
 
     def test_validate_session_unknown_token(self):
         """GIVEN signed cookie with unknown token WHEN validate_session THEN returns False."""
-        import hmac, hashlib
+        import hashlib
+        import hmac
         fake_token = "x" * 43  # 32 bytes base64
         key = API_KEY.encode("utf-8") if API_KEY else b""
         sig = hmac.new(key, fake_token.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
@@ -91,18 +92,18 @@ class TestSessionCreation:
             tokens.append(token)
 
         # Age two of them
-        _sessions[tokens[0]] = time.time() - SESSION_TTL - 10
-        _sessions[tokens[1]] = time.time() - SESSION_TTL - 20
+        auth_mod._sessions[tokens[0]] = time.time() - SESSION_TTL - 10
+        auth_mod._sessions[tokens[1]] = time.time() - SESSION_TTL - 20
         # tokens[2] stays valid
 
         cleanup_sessions()
-        assert tokens[0] not in _sessions
-        assert tokens[1] not in _sessions
-        assert tokens[2] in _sessions
+        assert tokens[0] not in auth_mod._sessions
+        assert tokens[1] not in auth_mod._sessions
+        assert tokens[2] in auth_mod._sessions
 
     def test_cleanup_sessions_empty(self):
         """GIVEN no sessions WHEN cleanup THEN no error."""
-        _sessions.clear()
+        auth_mod._sessions.clear()
         cleanup_sessions()  # should not crash
 
 
@@ -130,7 +131,7 @@ class TestAuthentication:
     """GIVEN is_authenticated WHEN checking headers THEN correct result."""
 
     def setup_method(self):
-        _sessions.clear()
+        auth_mod._sessions.clear()
 
     def test_authenticated_when_auth_disabled(self):
         """GIVEN no API_KEY set WHEN is_authenticated THEN always True."""
@@ -163,7 +164,6 @@ class TestAuthentication:
 
     def test_authenticated_with_expired_session_cookie(self):
         """GIVEN expired session cookie WHEN check THEN not authenticated."""
-        import importlib
         import yuleosh.ui.auth as auth_mod
         orig_auth = auth_mod.AUTH_ENABLED
         orig_key = auth_mod.API_KEY
@@ -223,7 +223,6 @@ class TestLoginPage:
     def test_auth_enabled_depends_on_env(self):
         """GIVEN YULEOSH_API_KEY set WHEN AUTH_ENABLED THEN true."""
         with mock.patch.dict(os.environ, {"YULEOSH_API_KEY": "test-key"}):
-            import importlib
             import yuleosh.ui.auth as auth_mod
             auth_mod.API_KEY = "test-key"
             auth_mod.AUTH_ENABLED = True
