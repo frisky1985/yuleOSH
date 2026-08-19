@@ -526,6 +526,12 @@ def step_claude_review(session: PipelineSession) -> str:
 
     project_dir = str(Path(os.environ.get("OSH_HOME", ".")).resolve())
     spec_content, artifacts = _collect_spec_and_artifacts(session)
+    # B 项 (2026-08-19, 性能基线): claude-review 评审对象 = 方案文档
+    # (prd/architecture/development), test-planning 全文不注入 — 测试计划
+    # 由 verify-loop 实际验证, 对方案评审价值低; 省 ~16K chars prompt
+    # (基线: claude-review median 132s, prompt ~82K; 预计省 10-20s)。
+    # 省略标记语义不变: agent 需要时可读 .osh/sessions/<id>/artifacts。
+    artifacts.pop("test-planning", None)
     prompt = _build_claude_review_prompt(spec_content,
                                          _format_artifacts_for_prompt(artifacts),
                                          project_dir)
