@@ -591,7 +591,7 @@ class CheckpointEngine:
 
         B2-产物交接：runner 模式（subprocess）下 session 不跨进程共享，
         前序步骤产物必须通过显式注册表传给 worker，worker 预填
-        session.artifacts 后真实 handler 才能读取（如 devplan-review 读
+        session.artifacts 后真实 handler 才能读取（如 development-review 读
         development-plan 产物）。仅包含 PASSED 且有 output_path 的步骤。
         """
         artifacts: dict[str, str] = {}

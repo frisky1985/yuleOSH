@@ -445,7 +445,7 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
         )
 
         # Also record a pointer note as the step output file so downstream
-        # steps (devplan-review etc.) still have content to read.
+        # steps (development-review etc.) still have content to read.
         note = (
             f"# Development (generate-code mode): {session.name}\n\n"
             f"> Status: {result.status}\n"

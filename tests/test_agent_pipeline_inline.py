@@ -75,7 +75,7 @@ KEY_ARTIFACTS = [
     "architecture.md",
     "arch-review.json",
     "development-plan.md",
-    "devplan-review.json",
+    "development-review.json",
     "test-plan.md",
     "self-test-report.md",
     "code-review.json",

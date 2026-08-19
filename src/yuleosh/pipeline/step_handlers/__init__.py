@@ -45,7 +45,7 @@ from yuleosh.pipeline.step_handlers.review_selftest import step_review_selftest
 from yuleosh.pipeline.step_handlers.test_integration import step_integration_test
 from yuleosh.pipeline.step_handlers.test_qualification import step_test_qualification
 from yuleosh.pipeline.step_handlers.test_c_unit import step_c_unit_test
-from yuleosh.pipeline.step_handlers.review_devplan import step_review_devplan
+from yuleosh.pipeline.step_handlers.review_development import step_review_development
 from yuleosh.pipeline.step_handlers.review_linker import step_review_linker
 from yuleosh.pipeline.step_handlers.review_startup import step_review_startup
 from yuleosh.pipeline.step_handlers.review_rtos import step_review_rtos
@@ -96,7 +96,7 @@ __all__ = [
     "step_final_report",
     "step_review_prd",
     "step_review_misra_ci",
-    "step_review_devplan",
+    "step_review_development",
     "step_review_test_coverage",
     "step_review_linker",
     "step_review_startup",
@@ -154,11 +154,14 @@ PIPELINE_STEPS = [
     # ── Left side: SWE.3 Detailed Design & Code ─────
     ("development", "Claude", "开发计划与代码实现",
      _resolve_handler("development", step_claude_dev)),
+    # development-review (2026-08-19 老板拍板 A+B): 原名 devplan-review, 前移到
+    # codegen-deploy 之前 — 审查 development 产物 (planning 模式: 计划 / generate-code
+    # 模式: codegen 报告), 不再依赖部署状态; 部署状态 skip 判断由 internal-code-review 承担。
+    ("development-review", "小克", "开发产物审查", step_review_development),
     # codegen 产物部署: development(generate-code) 写 artifacts/generated-code/<session>/,
     # 此步同步 src/ 树 → 后续 build/test/coverage 测的是真实生成代码而非模板空壳
     ("codegen-deploy", "小明", "代码产物部署",
      step_codegen_deploy),
-    ("devplan-review", "小克", "开发计划审查", step_review_devplan),
 
     # ── Bottom: Code Pre-Review ─────────────────────
     ("internal-code-review", "小克", "代码实现预审", step_review_code),

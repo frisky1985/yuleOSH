@@ -72,8 +72,8 @@ class TestPipelineStepsStructure:
         keys = [e[0] for e in PIPELINE_STEPS]
         expected = [
             "spec-check", "super-analysis", "prd", "prd-review",
-            "architecture", "arch-review", "development", "codegen-deploy",
-            "devplan-review",
+            "architecture", "arch-review", "development", "development-review",
+            "codegen-deploy",
             "internal-code-review", "test-planning", "claude-review",
             "self-test", "codex-verify", "self-test-review",
             "c-unit-test", "code-review", "integration-test", "misra-review",

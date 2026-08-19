@@ -83,32 +83,33 @@ SWE.1 需求 ──▶ SWE.2 架构 ──▶ SWE.3 编码 ──▶ SWE.4 单�
 | 5 | `architecture` | Claude | 架构设计 | SWE.2 |
 | 6 | `arch-review` | 小克 | 架构审查 | SWE.2 |
 | 7 | `development` | Claude | 开发计划与代码实现 | SWE.3 |
-| 8 | `devplan-review` | 小克 | 开发计划审查 | SWE.3 |
-| 9 | `internal-code-review` | 小克 | 代码实现预审 | SWE.3 |
-| 10 | `test-planning` | Claude | 测试规划 | SWE.4 |
-| 11 | `self-test` | Claude | 自测验证 | SWE.4 |
-| 12 | `self-test-review` | 小克 | 自测结果审查 | SWE.4 |
-| 13 | `c-unit-test` | 小克 | C 单元测试（Unity/Ceedling）| SWE.4 |
-| 14 | `code-review` | Hermes | 集成代码审查（**2026-08-07 前移到集成测试前**）| SWE.5 |
-| 15 | `integration-test` | 小克 | 接口集成测试 | SWE.5 |
-| 16 | `misra-review` | 小马 | MISRA 合规审查（测试后评估）| SWE.5 |
-| 17 | `coverage-review` | 小马 | 测试覆盖审查（测试后评估）| SWE.5 |
-| 18 | `qemu-run` | QEMU | QEMU 仿真测试（L2）| SWE.5 |
-| 19 | `c-coverage-gate` | 小克 | C 覆盖率门禁检查（L2）| SWE.5 |
-| 20 | `review-linker` | 小克 | 链接脚本审查 | SWE.5 |
-| 21 | `review-startup` | 小克 | 启动代码审查 | SWE.5 |
-| 22 | `review-rtos` | 小克 | RTOS 配置审查 | SWE.5 |
-| 23 | `review-memory` | 小克 | 内存安全审查 | SWE.5 |
-| 24 | `review-bsp` | 小克 | BSP 板级支持包验证 | SWE.5 |
-| 25 | `review-build` | 小克 | 编译输出验证 | SWE.5 |
-| 26 | `review-power` | 小克 | 低功耗审查 | SWE.5 |
-| 27 | `review-stack` | 小克 | 堆栈使用分析 | SWE.5 |
-| 28 | `review-mmio` | 小克 | MMIO 配置审查 | SWE.5 |
-| 29 | `review-critical-safety` | 小明 | **⛔ 关键安全异常阻塞检查（P0 GATE）** | SWE.5 |
-| 30 | `fault-injection` | 小克 | 故障注入测试 | SWE.5/6 |
-| 31 | `merge-gate` | 小马 | KG Merge Gate（图一致性）| — |
-| 32 | `test-qualification` | 小明 | 合格性测试 | SWE.6 |
-| 33 | `final-report` | 小明 | 最终报告 | SWE.6 |
+| 8 | `development-review` | 小克 | 开发产物审查（2026-08-19 前移: 原名 devplan-review）| SWE.3 |
+| 9 | `codegen-deploy` | 小明 | 代码产物部署（护栏备份/回滚）| SWE.3 |
+| 10 | `internal-code-review` | 小克 | 代码实现预审 | SWE.3 |
+| 11 | `test-planning` | Claude | 测试规划 | SWE.4 |
+| 12 | `self-test` | Claude | 自测验证 | SWE.4 |
+| 13 | `self-test-review` | 小克 | 自测结果审查 | SWE.4 |
+| 14 | `c-unit-test` | 小克 | C 单元测试（Unity/Ceedling）| SWE.4 |
+| 15 | `code-review` | Hermes | 集成代码审查（**2026-08-07 前移到集成测试前**）| SWE.5 |
+| 16 | `integration-test` | 小克 | 接口集成测试 | SWE.5 |
+| 17 | `misra-review` | 小马 | MISRA 合规审查（测试后评估）| SWE.5 |
+| 18 | `coverage-review` | 小马 | 测试覆盖审查（测试后评估）| SWE.5 |
+| 19 | `qemu-run` | QEMU | QEMU 仿真测试（L2）| SWE.5 |
+| 20 | `c-coverage-gate` | 小克 | C 覆盖率门禁检查（L2）| SWE.5 |
+| 21 | `review-linker` | 小克 | 链接脚本审查 | SWE.5 |
+| 22 | `review-startup` | 小克 | 启动代码审查 | SWE.5 |
+| 23 | `review-rtos` | 小克 | RTOS 配置审查 | SWE.5 |
+| 24 | `review-memory` | 小克 | 内存安全审查 | SWE.5 |
+| 25 | `review-bsp` | 小克 | BSP 板级支持包验证 | SWE.5 |
+| 26 | `review-build` | 小克 | 编译输出验证 | SWE.5 |
+| 27 | `review-power` | 小克 | 低功耗审查 | SWE.5 |
+| 28 | `review-stack` | 小克 | 堆栈使用分析 | SWE.5 |
+| 29 | `review-mmio` | 小克 | MMIO 配置审查 | SWE.5 |
+| 30 | `review-critical-safety` | 小明 | **⛔ 关键安全异常阻塞检查（P0 GATE）** | SWE.5 |
+| 31 | `fault-injection` | 小克 | 故障注入测试 | SWE.5/6 |
+| 32 | `merge-gate` | 小马 | KG Merge Gate（图一致性）| — |
+| 33 | `test-qualification` | 小明 | 合格性测试 | SWE.6 |
+| 34 | `final-report` | 小明 | 最终报告 | SWE.6 |
 
 ### 执行机制
 
@@ -134,7 +135,7 @@ SWE.1 需求 ──▶ SWE.2 架构 ──▶ SWE.3 编码 ──▶ SWE.4 单�
 
 **关键设计**:
 1. **多 Agent 矩阵**: 小明（编排/合规）、Hermes（需求/集成审查）、Claude（生成）、小克（嵌入式专家审查）、小马（质量/合规审查）——生成与审查分离
-2. **审查门禁**: 每阶段转换前有 review 步骤（prd-review → arch-review → devplan-review → code-review → ...），verdict 传播到 session
+2. **审查门禁**: 每阶段转换前有 review 步骤（prd-review → arch-review → development-review → code-review → ...），verdict 传播到 session
 3. **⛔ P0 关键门**: review-critical-safety 是阻塞门，检测到关键安全异常直接卡停
 4. **Profile 过滤**: 按项目类型（autosar/embedded/generic）过滤步骤
 

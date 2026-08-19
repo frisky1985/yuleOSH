@@ -1,0 +1,610 @@
+#!/usr/bin/env python3
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
+"""
+Step 5.5: 小克 — Development 产物审查。
+
+在 Development 步骤（双模式）之后、Code Implementation 之前自动执行，审查：
+- planning 模式: Development Plan 是否覆盖架构所有模块/任务粒度/验收标准/估算/依赖
+- generate-code 模式: codegen 报告完整性 (Generated Files + Verification PASS + Behavior Verification)
+
+设计意图 (2026-08-19, 老板拍板 A+B):
+- 原名 devplan-review 位置在 codegen-deploy 之后, 语义错位 (部署状态依赖推后了审查,
+  导致"计划审查"在代码部署后才执行 — 原始设计注释即"Development Plan 生成后、
+  Code Implementation 之前")。
+- 改名 development-review + 前移到 codegen-deploy 之前, 去掉 maybe_skip_code_review
+  (部署状态判断已由 internal-code-review 承担 — review_code.py 已有)。
+
+Exports:
+  step_review_development — LLM-powered Development 产物质量审查
+"""
+
+import json
+import logging
+import os
+import re
+from datetime import datetime
+from pathlib import Path
+
+from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+from yuleosh.pipeline.stages import timed_step, _call_llm
+from yuleosh.pipeline.prompts import _inject_spec, _inject_limited, SPEC_INJECT_LIMIT
+
+log = logging.getLogger("pipeline.step_handlers.review_development")
+
+__all__ = ["step_review_development"]
+
+
+# ------------------------------------------------------------------
+# Static checks for Development Plan completeness
+# ------------------------------------------------------------------
+
+
+def _extract_tasks(devplan_content: str) -> list[dict]:
+    """Extract task entries from the Development Plan.
+
+    Attempts to find structured task descriptions by common markup
+    patterns (numbered lists, markdown headings, bullet points with
+    task identifiers).
+
+    Returns a list of dicts with:
+      - id: task identifier or title
+      - description: the task description text
+      - est_time: estimated time if present, else ""
+    """
+    tasks: list[dict] = []
+    lines = devplan_content.split("\n")
+
+    # Pattern 1: "### Task X.Y: ..." or "## Task X.Y: ..."
+    task_heading_re = re.compile(
+        r'^#{2,3}\s+(?:Task|任务|Step)\s*(\S+)\s*[:：](.+)$',
+        re.IGNORECASE,
+    )
+    # Pattern 2: "- [ ] Task X.Y: ..." (checkbox list)
+    checkbox_re = re.compile(
+        r'^\s*[-*]\s*\[\s*[xX ]?\s*\]\s*(?:Task|任务|Step)?\s*([^\s:：]*)\s*[:：]?(.+?)(?:\s*\((\d+[dhms])\))?\s*$',
+        re.IGNORECASE,
+    )
+    # Pattern 3: "X. Task: ..." (numbered list)
+    numbered_re = re.compile(
+        r'^\s*\d+[.、]\s*(?:Task|任务|Step)?\s*([^\s:：]*)\s*[:：]?(.+)$',
+        re.IGNORECASE,
+    )
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("```"):
+            continue
+
+        m = task_heading_re.match(stripped)
+        if m:
+            tasks.append({"id": m.group(1), "description": m.group(2).strip(), "est_time": ""})
+            continue
+
+        m = checkbox_re.match(stripped)
+        if m:
+            tasks.append({
+                "id": m.group(1) or f"task-{len(tasks)+1}",
+                "description": m.group(2).strip(),
+                "est_time": m.group(3) or "",
+            })
+            continue
+
+        m = numbered_re.match(stripped)
+        if m:
+            tasks.append({
+                "id": m.group(1) or f"task-{len(tasks)+1}",
+                "description": m.group(2).strip(),
+                "est_time": "",
+            })
+
+    return tasks
+
+
+def _check_acceptance_criteria(devplan_content: str) -> dict:
+    """Check for presence of acceptance criteria / delivery standards.
+
+    Returns a dict with:
+      - has_criteria: bool
+      - indicators: list of matched keywords
+      - score: int (0-100)
+    """
+    indicators = [
+        "验收标准", "acceptance criteria", "AC:", "交付标准",
+        "definition of done", "DoD", "完成定义",
+        "gating", "gate", "checklist", "检查清单",
+        "测试用例", "test case", "验证", "verify",
+        "PASS", "FAIL", "expected result",
+    ]
+
+    found = []
+    for ind in indicators:
+        if ind.lower() in devplan_content.lower():
+            found.append(ind)
+
+    score = min(100, len(found) * 12)
+    if "acceptance criteria" in devplan_content.lower() or "验收标准" in devplan_content:
+        score = max(score, 60)
+
+    return {
+        "has_criteria": bool(found),
+        "indicators": found,
+        "score": score,
+    }
+
+
+def _check_dependency_modeling(devplan_content: str) -> dict:
+    """Check whether task dependencies are modeled.
+
+    Returns a dict with dependency analysis results.
+    """
+    dep_keywords = [
+        "依赖", "dependency", "depends on", "blocked by",
+        "前置条件", "prerequisite", "requires",
+        "顺序", "sequence", "order", "后",
+        "并行", "parallel", "concurrent",
+    ]
+
+    found = []
+    for kw in dep_keywords:
+        if kw.lower() in devplan_content.lower():
+            found.append(kw)
+
+    return {
+        "has_dependencies": bool(found),
+        "matched_keywords": found,
+        "score": min(100, len(found) * 15),
+    }
+
+
+def _check_time_estimates(tasks: list[dict], devplan_content: str) -> dict:
+    """Check whether tasks have time or effort estimates.
+
+    Returns a dict with estimation assessment.
+    """
+    est_keywords = [
+        "小时", "hour", "天", "day", "周", "week",
+        "story point", "SP", "人天", "人月",
+        "estimated", "estimate", "预计",
+    ]
+
+    found = []
+    for kw in est_keywords:
+        if kw.lower() in devplan_content.lower():
+            found.append(kw)
+
+    tasks_with_estimates = sum(1 for t in tasks if t["est_time"])
+    total_tasks = len(tasks)
+
+    return {
+        "total_tasks": total_tasks,
+        "tasks_with_estimates": tasks_with_estimates,
+        "estimate_keywords_found": found,
+        "score": min(100, int(tasks_with_estimates / max(total_tasks, 1) * 50) + len(found) * 10),
+    }
+
+
+def _check_module_coverage(
+    devplan_content: str,
+    architecture_content: str,
+) -> list[dict]:
+    """Cross-reference architecture modules against Development Plan tasks.
+
+    Extracts module names from the architecture and checks each one
+    against the devplan content.  Returns a list of coverage findings.
+    """
+    findings: list[dict] = []
+
+    # Extract module/component names from architecture
+    module_re = re.compile(
+        r'^#{2,3}\s+(?:模块|Module|Component|子系统)\s*[:：]?\s*(.+)$',
+        re.IGNORECASE | re.MULTILINE,
+    )
+    arch_sections = module_re.findall(architecture_content)
+    if not arch_sections:
+        # Fallback: extract any heading as a potential module
+        arch_sections = re.findall(r'^##\s+(.+)$', architecture_content, re.MULTILINE)
+
+    for section in arch_sections:
+        section_name = section.strip()
+        key_terms = [w for w in re.split(r'[\s,;:()/\\-]+', section_name) if len(w) > 3]
+        if not key_terms:
+            continue
+        covered = sum(1 for kw in key_terms if kw.lower() in devplan_content.lower())
+        ratio = covered / len(key_terms) if key_terms else 0
+        findings.append({
+            "module": section_name,
+            "covered": ratio >= 0.4,
+            "match_ratio": round(ratio, 2),
+            "matched_terms": [kw for kw in key_terms if kw.lower() in devplan_content.lower()],
+        })
+
+    return findings
+
+
+def _assess_granularity(tasks: list[dict]) -> dict:
+    """Assess whether task granularity is appropriate.
+
+    Rules of thumb:
+      - Very few tasks (< 3) → too coarse, consider splitting
+      - Very many tasks (> 20 for a typical module) → too fine
+      - Each task should be independently completable and testable
+      - Check for generic task descriptions that are too vague
+
+    Returns a dict with granularity assessment.
+    """
+    total = len(tasks)
+    vague_keywords = ["研究", "调查", "research", "investigate", "待定", "TBD", "todo", "待确认"]
+    vague_tasks = 0
+    for t in tasks:
+        desc = t.get("description", "").lower()
+        if any(kw.lower() in desc for kw in vague_keywords):
+            vague_tasks += 1
+
+    assessment = "ok"
+    issues = []
+
+    if total < 3:
+        assessment = "too_coarse"
+        issues.append(f"Only {total} tasks identified — consider splitting into smaller, independently testable units")
+    elif total > 20:
+        assessment = "too_fine"
+        issues.append(f"{total} tasks may be overly granular — consider grouping related items")
+
+    if vague_tasks > max(1, total // 4):
+        issues.append(f"{vague_tasks}/{total} tasks contain vague or undefined descriptions")
+
+    return {
+        "total_tasks": total,
+        "vague_tasks": vague_tasks,
+        "assessment": assessment,
+        "issues": issues,
+    }
+
+
+# ------------------------------------------------------------------
+# LLM-powered development plan review prompt builder
+# ------------------------------------------------------------------
+
+
+def _build_devplan_review_prompt(
+    spec_content: str,
+    spec_name: str,
+    architecture_content: str,
+    devplan_content: str,
+) -> tuple[str, str]:
+    """Build system + user prompts for the LLM-powered devplan review.
+
+    Returns (system_prompt, user_prompt).
+    """
+    system_prompt = (
+        "You are an experienced technical project manager conducting a development plan review.\n"
+        "Evaluate the Development Plan against the specification and architecture design.\n"
+        "Focus on:\n"
+        "1. **Coverage**: Does the plan cover every module/component in the architecture?\n"
+        "2. **Task granularity**: Is each task independently completable and testable?\n"
+        "3. **Acceptance criteria**: Does each task have clear definition of done?\n"
+        "4. **Dependency management**: Are task dependencies correctly identified?\n"
+        "5. **Effort estimation**: Are time/resource estimates reasonable?\n"
+        "6. **Risk identification**: Are there any risks or gaps in the plan?\n\n"
+        "Output a structured review with:\n"
+        "- **PASS/FAIL/RETRY** status\n"
+        "- **Findings** (each with: severity=critical/major/minor/info, "
+        "category=coverage/granularity/criteria/dependency/estimation/risk, "
+        "description, and recommendation)\n"
+        "- **Summary** paragraph\n"
+        "Use markdown format."
+    )
+
+    user_prompt = (
+        f"## Spec: {spec_name}\n\n"
+        f"### Specification Content\n"
+        f"```\n{_inject_spec(spec_content)}\n```\n\n"
+        f"### Architecture Design\n"
+        f"```\n{_inject_limited(architecture_content, SPEC_INJECT_LIMIT, 'architecture')}\n```\n\n"
+        f"### Development Plan\n"
+        f"```\n{_inject_limited(devplan_content, SPEC_INJECT_LIMIT, 'development-plan')}\n```\n\n"
+        f"Review this Development Plan for completeness, granularity, "
+        f"acceptance criteria, dependency modeling, and estimation quality."
+    )
+
+    return system_prompt, user_prompt
+
+
+# ------------------------------------------------------------------
+# Main step handler
+# ------------------------------------------------------------------
+
+
+@timed_step
+def step_review_development(session: PipelineSession) -> str:
+    """Step 5.5: 小克 — Development 产物审查。
+
+    Reviews the Development 产物 (planning 模式: Development Plan;
+    generate-code 模式: codegen 报告) for:
+    - Full coverage of architecture modules
+    - Appropriate task granularity
+    - Presence of acceptance criteria / definition of done
+    - Dependency modeling
+    - Effort estimation quality
+
+    The step is non-blocking: findings are advisory and do not halt
+    the pipeline.  Critical gaps are recorded for downstream awareness.
+
+    2026-08-19 (老板拍板 A+B): 前移到 codegen-deploy 之前, 不再依赖部署状态
+    (maybe_skip_code_review 判断已由 internal-code-review 承担 — review_code.py)。
+    """
+    try:
+        print("  🔍 [小克] Development 产物审查开始...")
+        # 2026-08-19: 无部署状态 skip — 已前移到 codegen-deploy 之前, 始终审查
+        # development 产物; 部署状态判断由 internal-code-review 承担 (review_code.py)。
+        project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
+
+        # --- Read spec ---
+        spec_path = Path(session.spec_path)
+        spec_content = spec_path.read_text() if spec_path.exists() else ""
+
+        if not spec_content:
+            log.warning("Spec file not found or empty: %s", session.spec_path)
+            raise PipelineStepError(f"Spec file not found: {session.spec_path}")
+
+        # --- Read architecture artifact ---
+        architecture_content = ""
+        if "architecture" in session.artifacts:
+            ap = Path(session.artifacts["architecture"])
+            if ap.exists():
+                architecture_content = ap.read_text()
+
+        # --- Read development plan artifact ---
+        devplan_content = ""
+        if "development-plan" in session.artifacts:
+            dp = Path(session.artifacts["development-plan"])
+            if dp.exists():
+                devplan_content = dp.read_text()
+        # Also check for "development" key (backward-compatible naming)
+        if not devplan_content and "development" in session.artifacts:
+            dp = Path(session.artifacts["development"])
+            if dp.exists():
+                devplan_content = dp.read_text()
+
+        if not devplan_content:
+            log.warning("Development plan artifact not found; skipping review")
+            raise PipelineStepError(
+                "Development plan artifact not found in session artifacts. "
+                "Ensure a development-plan (or development) step ran before this review."
+            )
+
+        # --- Static checks ---
+        # 2026-08-17 (P1-5): generate-code 模式下 development-plan.md 是
+        # codegen 报告 (Generated Files + Verification + Behavior Verification),
+        # 没有传统 "### Task X.Y" 任务分解 → _extract_tasks 必然 0 任务,
+        # 任务/粒度/模块覆盖/估算静态检查全部误报 → status=retry 死循环
+        # (r18/r19 实证: Tasks: 0 | Modules: 0/1 | Acceptance: 24/100)。
+        # 检测到 codegen 报告格式时, 任务静态检查改为检查报告完整性
+        # (Generated Files + Verification PASS + Behavior Verification),
+        # 粒度/估算/模块覆盖检查跳过 (不适用, 记入 findings 为 info)。
+        devplan_lower = devplan_content.lower()
+        is_codegen_report = (
+            "generate-code mode" in devplan_lower
+            or "code generation report" in devplan_lower
+            or ("generated files" in devplan_lower and "verification" in devplan_lower)
+        )
+
+        if is_codegen_report:
+            log.info("Devplan review: generate-code 模式 → 检查 codegen 报告完整性")
+            tasks = _extract_tasks(devplan_content)  # 保留用于报告展示 (预期 0)
+            acceptance = _check_acceptance_criteria(devplan_content)
+            dependencies = _check_dependency_modeling(devplan_content)
+            estimates = _check_time_estimates(tasks, devplan_content)
+            granularity = _assess_granularity(tasks)
+            # codegen 报告完整性检查 (替代任务粒度)
+            has_generated_files = "generated files" in devplan_lower
+            has_verification = (
+                "verification" in devplan_lower
+                and ("result: ✅" in devplan_content or "pass" in devplan_lower)
+            )
+            has_behavior_verify = "behavior verification" in devplan_lower
+            report_completeness = {
+                "has_generated_files": has_generated_files,
+                "has_verification": has_verification,
+                "has_behavior_verify": has_behavior_verify,
+                "complete": has_generated_files and has_verification and has_behavior_verify,
+            }
+            # 完整报告不算粒度/估算/模块覆盖缺失 (它们对 codegen 报告不适用)
+            granularity = {"total_tasks": 0, "vague_tasks": 0,
+                           "assessment": "ok", "issues": []}
+            estimates = {"total_tasks": 0, "tasks_with_estimates": 0,
+                         "estimate_keywords_found": [], "score": 100}
+            dependencies = {"has_dependencies": True, "matched_keywords": ["codegen 报告自带验证闭环"],
+                            "score": 100}
+            module_coverage = []  # 模块覆盖由 codegen 的 verify/behavior_verify 保证
+            total_modules = 0
+            covered_modules = 0
+        else:
+            tasks = _extract_tasks(devplan_content)
+            acceptance = _check_acceptance_criteria(devplan_content)
+            dependencies = _check_dependency_modeling(devplan_content)
+            estimates = _check_time_estimates(tasks, devplan_content)
+            granularity = _assess_granularity(tasks)
+            module_coverage = []
+            if architecture_content:
+                module_coverage = _check_module_coverage(devplan_content, architecture_content)
+            total_modules = len(module_coverage)
+            covered_modules = sum(1 for m in module_coverage if m["covered"])
+            report_completeness = None
+
+        log.info(
+            "Devplan static checks: %d tasks, %d/%d modules covered, "
+            "acceptance=%d, dependencies=%d, estimates=%d, granularity=%s",
+            len(tasks),
+            covered_modules, total_modules,
+            acceptance["score"],
+            dependencies["score"],
+            estimates["score"],
+            granularity["assessment"],
+        )
+
+        # --- LLM-powered review ---
+        log.info("Running LLM-powered development plan review...")
+
+        llm_review = ""
+        try:
+            system_prompt, user_prompt = _build_devplan_review_prompt(
+                spec_content=spec_content,
+                spec_name=spec_path.name,
+                architecture_content=architecture_content,
+                devplan_content=devplan_content,
+            )
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
+            llm_review = result["content"]
+            usage = result.get("usage", {})
+            session.token_usage_total += usage.get("total_tokens", 0)
+            session.token_usage_steps.append({"step": "development-review", "usage": usage})
+            log.info("LLM devplan review: %s tokens", usage.get("total_tokens", "?"))
+        except Exception as e:
+            log.warning("LLM devplan review failed (non-fatal): %s", e)
+            llm_review = "(LLM-powered review unavailable)"
+
+        # --- Assemble findings ---
+        findings: list[dict] = []
+
+        # Module coverage findings (skip in codegen-report mode — 见上方注释)
+        for mc in module_coverage:
+            if not mc["covered"]:
+                findings.append({
+                    "severity": "major",
+                    "category": "coverage",
+                    "description": f"Architecture module '{mc['module']}' "
+                                   f"is not covered in the Development Plan",
+                    "recommendation": f"Add tasks for module '{mc['module']}' "
+                                      f"with implementation and testing steps",
+                })
+
+        # Codegen 报告完整性 findings (generate-code 模式替代任务检查)
+        if is_codegen_report and report_completeness and not report_completeness["complete"]:
+            missing_parts = [
+                name for name, present in [
+                    ("Generated Files 列表", report_completeness["has_generated_files"]),
+                    ("Verification 结果", report_completeness["has_verification"]),
+                    ("Behavior Verification", report_completeness["has_behavior_verify"]),
+                ] if not present
+            ]
+            findings.append({
+                "severity": "major",
+                "category": "coverage",
+                "description": "codegen 报告不完整，缺少: " + ", ".join(missing_parts),
+                "recommendation": "确保 codegen 报告含 Generated Files、Verification 结果与 Behavior Verification 段落",
+            })
+
+        # Granularity findings
+        for issue in granularity["issues"]:
+            findings.append({
+                "severity": "minor" if granularity["assessment"] != "too_coarse" else "major",
+                "category": "granularity",
+                "description": issue,
+                "recommendation": "Review task decomposition and split or group tasks as needed",
+            })
+
+        # Acceptance criteria findings
+        # (codegen-report 模式: 验收由 Behavior Verification/测试断言保证,
+        # 放宽文本关键词检查 — 报告自带验证闭环即视为达标)
+        if acceptance["score"] < 40 and not is_codegen_report:
+            findings.append({
+                "severity": "major",
+                "category": "criteria",
+                "description": "Acceptance criteria or definition of done "
+                               "not clearly stated for tasks",
+                "recommendation": "Add explicit acceptance criteria (验收标准) "
+                                  "or definition of done to each task",
+            })
+
+        # Dependency findings
+        if dependencies["score"] < 40:
+            findings.append({
+                "severity": "minor",
+                "category": "dependency",
+                "description": "Task dependencies are not clearly modeled",
+                "recommendation": "Identify and document dependencies between tasks "
+                                  "(e.g., blocked by, requires, parallel)",
+            })
+
+        # Estimation findings
+        if estimates["score"] < 40 and estimates["total_tasks"] > 2:
+            findings.append({
+                "severity": "minor",
+                "category": "estimation",
+                "description": f"Only {estimates['tasks_with_estimates']}/"
+                               f"{estimates['total_tasks']} tasks have time estimates",
+                "recommendation": "Add time or effort estimates to each task "
+                                  "(hours, story points, or person-days)",
+            })
+
+        # --- Build report ---
+        overall_status = "passed"
+        if any(f["severity"] == "critical" for f in findings):
+            overall_status = "failed"
+        elif len([f for f in findings if f["severity"] == "major"]) > 2:
+            overall_status = "retry"
+
+        report = {
+            "session": session.name,
+            "reviewer": "小克",
+            "step": "development-plan-review",
+            "timestamp": datetime.now().isoformat(),
+            "status": overall_status,
+            "findings": findings,
+            "finding_count": len(findings),
+            "finding_breakdown": {
+                "critical": sum(1 for f in findings if f["severity"] == "critical"),
+                "major": sum(1 for f in findings if f["severity"] == "major"),
+                "minor": sum(1 for f in findings if f["severity"] == "minor"),
+                "info": sum(1 for f in findings if f["severity"] == "info"),
+            },
+            "static_checks": {
+                "tasks_found": len(tasks),
+                "tasks_sample": tasks[:10],
+                "mode": "codegen-report" if is_codegen_report else "task-plan",
+                "report_completeness": report_completeness,
+                "module_coverage": {
+                    "total_modules": total_modules,
+                    "covered": covered_modules,
+                    "coverage_pct": round(covered_modules / max(total_modules, 1) * 100, 1),
+                    "details": module_coverage,
+                },
+                "acceptance_criteria": acceptance,
+                "dependency_modeling": dependencies,
+                "effort_estimation": estimates,
+                "task_granularity": granularity,
+            },
+            "llm_review": llm_review,
+            "summary": (
+                f"Static: {covered_modules}/{total_modules} modules covered, "
+                f"{len(tasks)} tasks, acceptance_score={acceptance['score']}, "
+                f"granularity={granularity['assessment']} | "
+                f"LLM: {'analyzed' if llm_review and not llm_review.startswith('(') else 'skipped'}"
+            ),
+        }
+
+        # --- Write output ---
+        out_path = session.session_dir / "development-review.json"
+        try:
+            with open(out_path, "w") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+        except (OSError, IOError) as e:
+            log.error(f"Cannot write devplan review: {e}")
+            raise PipelineStepError(f"Cannot write devplan review: {e}")
+
+        status_icon = {"passed": "✅", "failed": "❌", "retry": "🔄"}
+        print(f"  {status_icon.get(overall_status, '❓')} [小克] Development Plan 审查完成 "
+              f"({len(findings)} findings, status={overall_status})")
+        print(f"       Tasks: {len(tasks)} | Modules: {covered_modules}/{total_modules} | "
+              f"Acceptance: {acceptance['score']}/100")
+        log.info("Devplan review completed: %s", overall_status)
+        return str(out_path)
+
+    except PipelineStepError:
+        raise
+    except Exception as e:
+        log.error(f"Development Plan review step failed: {e}")
+        raise PipelineStepError(f"Development Plan review step failed: {e}")

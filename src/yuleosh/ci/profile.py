@@ -56,7 +56,7 @@ BUILTIN_PROFILES = {
         "exclude_steps": [
             "super-analysis", "prd", "prd-review",
             "architecture", "arch-review",
-            "development", "devplan-review",
+            "development", "development-review",
             "internal-code-review", "test-planning",
             "self-test", "self-test-review",
             "code-review", "final-report",
@@ -76,7 +76,7 @@ BUILTIN_PROFILES = {
         "exclude_steps": [
             "super-analysis", "prd", "prd-review",
             "architecture", "arch-review",
-            "development", "devplan-review",
+            "development", "development-review",
             "internal-code-review", "test-planning",
             "self-test", "self-test-review",
             "code-review", "misra-review", "coverage-review",

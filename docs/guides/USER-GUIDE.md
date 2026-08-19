@@ -160,7 +160,7 @@ spec-check          OpenSpec 合规检查
 super-analysis      S.U.P.E.R 启动分析
 prd / prd-review    产品需求分析 + 审查
 architecture / arch-review     架构设计 + 审查
-development / devplan-review   开发计划与代码实现 + 审查
+development / development-review   开发计划与代码实现 + 产物审查
 internal-code-review           代码实现预审
 test-planning                  测试规划
 self-test / self-test-review   自测验证 + 审查

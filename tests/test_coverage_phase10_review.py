@@ -3,7 +3,7 @@
 目标文件（基线来自 .coverage-report.json）:
   - src/yuleosh/ci/stages/review_misra.py           53.1%  (最大增量来源)
   - src/yuleosh/pipeline/step_handlers/review_critical_safety.py  69.4%
-  - src/yuleosh/pipeline/step_handlers/review_devplan.py          74.3%
+  - src/yuleosh/pipeline/step_handlers/review_development.py          74.3%
   - src/yuleosh/ci/stages/review.py                 47.9%
 
 覆盖重点: 错误路径、边界条件、异常处理、default 分支。
@@ -38,7 +38,7 @@ from yuleosh.pipeline.step_handlers.review_critical_safety import (
     get_build_flags,
     step_review_critical_safety,
 )
-from yuleosh.pipeline.step_handlers.review_devplan import (
+from yuleosh.pipeline.step_handlers.review_development import (
     _assess_granularity,
     _build_devplan_review_prompt,
     _check_acceptance_criteria,
@@ -46,7 +46,7 @@ from yuleosh.pipeline.step_handlers.review_devplan import (
     _check_module_coverage,
     _check_time_estimates,
     _extract_tasks,
-    step_review_devplan,
+    step_review_development,
 )
 
 # ===========================================================================
@@ -1098,7 +1098,7 @@ class TestStepCriticalSafetyManyViolations:
 
 
 # ===========================================================================
-# review_devplan.py — 静态检查函数
+# review_development.py — 静态检查函数
 # ===========================================================================
 
 class TestExtractTasks:
@@ -1262,7 +1262,7 @@ class TestBuildDevplanPrompt:
 
 
 # ===========================================================================
-# review_devplan.py — step_review_devplan
+# review_development.py — step_review_development
 # ===========================================================================
 
 @pytest.fixture
@@ -1290,24 +1290,24 @@ class TestStepReviewDevplan:
     def test_happy_path_with_llm(self, tmp_path, devplan_session):
         _write_devplan_files(tmp_path, devplan_session)
         with mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan._call_llm",
+                "yuleosh.pipeline.step_handlers.review_development._call_llm",
                 return_value={"content": "looks good",
                               "usage": {"total_tokens": 42}}):
-            out = step_review_devplan(devplan_session)
+            out = step_review_development(devplan_session)
         assert isinstance(out, str)
         report = json.loads(Path(out).read_text())
         assert report["status"] == "passed"
         assert report["static_checks"]["tasks_found"] == 2
         assert report["llm_review"] == "looks good"
         assert devplan_session.token_usage_total == 42
-        assert devplan_session.token_usage_steps[-1]["step"] == "devplan-review"
+        assert devplan_session.token_usage_steps[-1]["step"] == "development-review"
 
     def test_llm_failure_non_fatal(self, tmp_path, devplan_session):
         _write_devplan_files(tmp_path, devplan_session)
         with mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan._call_llm",
+                "yuleosh.pipeline.step_handlers.review_development._call_llm",
                 side_effect=RuntimeError("api down")):
-            out = step_review_devplan(devplan_session)
+            out = step_review_development(devplan_session)
         report = json.loads(Path(out).read_text())
         assert report["llm_review"] == "(LLM-powered review unavailable)"
         assert "skipped" in report["summary"]
@@ -1315,28 +1315,28 @@ class TestStepReviewDevplan:
     def test_spec_missing_raises(self, tmp_path, devplan_session):
         devplan_session.spec_path = str(tmp_path / "nope.md")
         with pytest.raises(PipelineStepError, match="Spec file not found"):
-            step_review_devplan(devplan_session)
+            step_review_development(devplan_session)
 
     def test_devplan_missing_raises(self, tmp_path, devplan_session):
         with pytest.raises(PipelineStepError,
                            match="Development plan artifact not found"):
-            step_review_devplan(devplan_session)
+            step_review_development(devplan_session)
 
     def test_development_key_fallback(self, tmp_path, devplan_session):
         _write_devplan_files(tmp_path, devplan_session, plan_key="development")
         with mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan._call_llm",
+                "yuleosh.pipeline.step_handlers.review_development._call_llm",
                 return_value={"content": "ok", "usage": {}}):
-            out = step_review_devplan(devplan_session)
+            out = step_review_development(devplan_session)
         assert Path(out).exists()
 
     def test_no_architecture_no_coverage_findings(self, tmp_path,
                                                   devplan_session):
         _write_devplan_files(tmp_path, devplan_session, arch=False)
         with mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan._call_llm",
+                "yuleosh.pipeline.step_handlers.review_development._call_llm",
                 return_value={"content": "ok", "usage": {}}):
-            out = step_review_devplan(devplan_session)
+            out = step_review_development(devplan_session)
         report = json.loads(Path(out).read_text())
         assert report["static_checks"]["module_coverage"]["total_modules"] == 0
 
@@ -1350,9 +1350,9 @@ class TestStepReviewDevplan:
         dp.write_text("### Task 1: vague\n")
         devplan_session.artifacts["development-plan"] = str(dp)
         with mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan._call_llm",
+                "yuleosh.pipeline.step_handlers.review_development._call_llm",
                 return_value={"content": "ok", "usage": {}}):
-            out = step_review_devplan(devplan_session)
+            out = step_review_development(devplan_session)
         report = json.loads(Path(out).read_text())
         assert report["status"] == "retry"
         assert report["finding_count"] >= 4
@@ -1360,23 +1360,23 @@ class TestStepReviewDevplan:
     def test_write_error_raises(self, tmp_path, devplan_session):
         _write_devplan_files(tmp_path, devplan_session)
         with mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan._call_llm",
+                "yuleosh.pipeline.step_handlers.review_development._call_llm",
                 return_value={"content": "ok", "usage": {}}), \
                 mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan.json.dump",
+                "yuleosh.pipeline.step_handlers.review_development.json.dump",
                 side_effect=OSError("disk full")):
             with pytest.raises(PipelineStepError,
                                match="Cannot write devplan review"):
-                step_review_devplan(devplan_session)
+                step_review_development(devplan_session)
 
     def test_generic_exception_wrapped(self, tmp_path, devplan_session):
         _write_devplan_files(tmp_path, devplan_session)
         with mock.patch(
-                "yuleosh.pipeline.step_handlers.review_devplan._extract_tasks",
+                "yuleosh.pipeline.step_handlers.review_development._extract_tasks",
                 side_effect=RuntimeError("regex broken")):
             with pytest.raises(PipelineStepError,
                                match="Development Plan review step failed"):
-                step_review_devplan(devplan_session)
+                step_review_development(devplan_session)
 
 
 # ===========================================================================

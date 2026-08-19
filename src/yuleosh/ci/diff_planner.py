@@ -52,7 +52,7 @@ CROSS_CUTTING_STEPS = {
     "architecture",
     "arch-review",
     "development",
-    "devplan-review",
+    "development-review",
     "internal-code-review",
     "test-planning",
     "self-test",

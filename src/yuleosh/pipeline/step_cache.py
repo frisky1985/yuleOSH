@@ -86,7 +86,7 @@ LLM_STEPS = frozenset({
     "architecture",
     "arch-review",
     "development",
-    "devplan-review",
+    "development-review",
     "internal-code-review",
     "test-planning",
     "self-test",
