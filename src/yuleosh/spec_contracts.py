@@ -350,7 +350,12 @@ def extract_contracts_dir(spec_dir: str) -> dict:
         merged["spec_size"] += contracts.get("spec_size", 0)
         merged["interfaces"].extend(contracts.get("interfaces", []))
         for g in contracts.get("guardrails", []):
-            gid = g.get("id") or str(g)
+            # _extract_guardrails 返回 list[str]（id 字符串）；目录聚合
+            # 兼容 dict 与 str 两种形态，避免 AttributeError 崩整个聚合
+            if isinstance(g, dict):
+                gid = g.get("id") or str(g)
+            else:
+                gid = str(g)
             if gid not in seen_guardrails:
                 seen_guardrails.add(gid)
                 merged["guardrails"].append(g)

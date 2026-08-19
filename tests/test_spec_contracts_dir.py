@@ -63,3 +63,34 @@ class TestContractsCheckDir:
         assert "contracts" in result
         assert "validation" in result
         assert result["contracts"]["files"]
+
+    def test_guardrails_str_does_not_crash(self, tmp_path):
+        """_extract_guardrails 返回 list[str]；目录聚合不得对 str 调 .get()
+
+        Regression: 曾 AttributeError: 'str' object has no attribute 'get'
+        在 extract_contracts_dir 崩整个聚合（window-anti-pinch 实测 18 条
+        G-01..G-18 全部触发）。聚合须兼容 str 元素并正确去重。
+        """
+        specs = tmp_path / ".osh" / "specs"
+        p = _write_capability(specs, "window", "SR-001", "Window")
+        # 补足 MIN_INTERFACES=8（4 hal + 4 应用头），否则 validation 因接口数不足失败
+        extra_headers = "\n\n".join(
+            f"### {h}.h\n\n```c\nvoid {h}_init(void);\n```"
+            for h in ["hal_hall", "hal_motor", "hal_timer", "hal_nvm",
+                      "window_modes", "window_position", "window_config", "window_control"]
+        )
+        p.write_text(
+            p.read_text()
+            + extra_headers
+            + "\n## 行为护栏映射\n\n"
+            + "| 护栏 | 描述 |\n|:--|:--|\n"
+            + "| G-01 | 状态机合法迁移 |\n"
+            + "| G-02 | 防夹阈值不可变 |\n"
+        )
+        result = contracts_check_dir(str(specs))
+        assert result["mode"] == "directory"
+        guards = result["contracts"]["guardrails"]
+        # G-01/G-02 作为 str id 聚合（不崩、不重复）
+        assert "G-01" in guards and "G-02" in guards
+        assert len(guards) == 2
+        assert result["validation"]["passed"]
