@@ -158,8 +158,8 @@ def _track_memory_usage(prompt: str, step_key: str) -> None:
     失败非致命（记忆注入链路永不阻断）。
     """
     try:
-        from yuleosh.memory.llm_context import MemoryContextAssembler
         from yuleosh.memory.feedback import record_injection
+        from yuleosh.memory.llm_context import MemoryContextAssembler
 
         items = MemoryContextAssembler().retrieve(prompt)
         fact_ids = [i.item_id for i in items if i.source == "fact"]

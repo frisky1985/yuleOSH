@@ -20,13 +20,13 @@ import os
 import re
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
 def _now() -> str:
     """ISO-8601 UTC timestamp for records."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def normalize_text(s: str) -> str:
@@ -595,7 +595,7 @@ class MemoryStore:
         """
         conn = self._get_conn()
         if days is not None:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = (datetime.now(UTC) - timedelta(days=days)
                       ).isoformat(timespec="seconds")
             rows = conn.execute(
                 "SELECT * FROM session_logs WHERE created_at >= ? "

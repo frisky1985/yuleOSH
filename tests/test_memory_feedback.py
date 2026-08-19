@@ -120,8 +120,10 @@ def test_apply_step_result_only_own_step(store):
 # ── knowledge_injection 埋点接线（P3 自动触发）──────────────────────────
 
 def test_knowledge_injection_records_usage(monkeypatch, tmp_path):
-    from yuleosh.pipeline.knowledge_injection import assemble_pipeline_knowledge
-    from yuleosh.pipeline.knowledge_injection import PipelineKnowledgeConfig
+    from yuleosh.pipeline.knowledge_injection import (
+        PipelineKnowledgeConfig,
+        assemble_pipeline_knowledge,
+    )
 
     db = tmp_path / "mem.db"
     s = MemoryStore(db_path=str(db))
@@ -144,8 +146,10 @@ def test_knowledge_injection_records_usage(monkeypatch, tmp_path):
 
 
 def test_knowledge_injection_no_step_key_no_usage(monkeypatch, tmp_path):
-    from yuleosh.pipeline.knowledge_injection import assemble_pipeline_knowledge
-    from yuleosh.pipeline.knowledge_injection import PipelineKnowledgeConfig
+    from yuleosh.pipeline.knowledge_injection import (
+        PipelineKnowledgeConfig,
+        assemble_pipeline_knowledge,
+    )
 
     db = tmp_path / "mem.db"
     s = MemoryStore(db_path=str(db))

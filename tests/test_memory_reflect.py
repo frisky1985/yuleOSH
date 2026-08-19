@@ -10,7 +10,7 @@ Covers: 冲突检测（数字矛盾 / 否定翻转）、来源可靠性解决（
 
 import argparse
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -122,7 +122,7 @@ def test_resolve_old_reliability_wins(store):
 
 def test_detect_obsolete_archives_never_used(store):
     f = store.remember("老旧的未使用记忆", entity="old")
-    old_created = (datetime.now(timezone.utc) - timedelta(days=40)
+    old_created = (datetime.now(UTC) - timedelta(days=40)
                    ).isoformat(timespec="seconds")
     store._get_conn().execute(
         "UPDATE memory_facts SET created_at = ? WHERE id = ?",
@@ -174,13 +174,13 @@ def test_reflect_downgrade_applies(store):
     assert store.get_fact(f["id"])["status"] == "active"  # 旧保留
     active = store.list_facts(entity="coverage")
     assert len(active) == 2
-    downgraded = [x for x in active if "80%" in x["content"]][0]
+    downgraded = next(x for x in active if "80%" in x["content"])
     assert downgraded["trust"] <= 0.4  # 降权
 
 
 def test_reflect_archives_obsolete(store):
     f = store.remember("老旧的未使用记忆", entity="old")
-    old_created = (datetime.now(timezone.utc) - timedelta(days=40)
+    old_created = (datetime.now(UTC) - timedelta(days=40)
                    ).isoformat(timespec="seconds")
     store._get_conn().execute(
         "UPDATE memory_facts SET created_at = ? WHERE id = ?",

@@ -247,7 +247,11 @@ def handle_memory_command(args) -> int:
             print(f"   facts: {summary['facts']}")
 
     elif args.memory_sub == "reflect":
-        from yuleosh.memory.distill import Distiller, load_last_candidates, mock_distill_llm
+        from yuleosh.memory.distill import (
+            Distiller,
+            load_last_candidates,
+            mock_distill_llm,
+        )
         from yuleosh.memory.reflect import Reflector
 
         candidates = load_last_candidates(args.project)

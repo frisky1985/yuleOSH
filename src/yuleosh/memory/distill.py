@@ -22,7 +22,7 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from yuleosh.memory.store import MemoryStore, normalize_text
@@ -82,7 +82,7 @@ class DistillCandidate:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "DistillCandidate":
+    def from_dict(cls, data: dict) -> DistillCandidate:
         known = {k: data.get(k) for k in (
             "content", "entity", "category", "kind", "trust",
             "source_session", "source_reliability", "distilled_at")}
@@ -90,7 +90,7 @@ class DistillCandidate:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _clamp_trust(t) -> float:
@@ -194,7 +194,7 @@ class Distiller:
 
     def _collect_session_dir_text(self, days: int = 1) -> str:
         """从 project_dir 的 sessions/ 与 .osh/sessions/ 目录收集产物文本。"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cutoff = now - timedelta(days=days)
         dirs = [self._project_dir / "sessions", self._project_dir / ".osh" / "sessions"]
         session_dirs: list[Path] = []
@@ -205,7 +205,7 @@ class Distiller:
                 if not d.is_dir():
                     continue
                 try:
-                    mtime = datetime.fromtimestamp(d.stat().st_mtime, tz=timezone.utc)
+                    mtime = datetime.fromtimestamp(d.stat().st_mtime, tz=UTC)
                 except OSError:
                     continue
                 if mtime >= cutoff:
@@ -222,7 +222,7 @@ class Distiller:
                 name = f.name
                 if name == "session.json":
                     continue  # 元数据，非产物
-                if not (name.endswith(".md") or name.endswith(".json")):
+                if not name.endswith((".md", ".json")):
                     continue
                 try:
                     text = f.read_text(encoding="utf-8", errors="replace")

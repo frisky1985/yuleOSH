@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from yuleosh.memory.distill import DistillCandidate, similarity
@@ -164,7 +164,7 @@ class Reflector:
     def detect_obsolete(self, max_age_days: int = DEFAULT_MAX_AGE_DAYS,
                         limit: int = 2000) -> list[dict]:
         """最近使用为空 + 超阈值天数 → 归档（不删）。"""
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)
                   ).isoformat(timespec="seconds")
         out: list[dict] = []
         for f in self._store.list_facts(include_archived=False, limit=limit):

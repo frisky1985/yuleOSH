@@ -9,7 +9,7 @@ Covers: session 文本收集（日志 + 目录产物）、LLM 候选解析、确
 
 import argparse
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -120,7 +120,7 @@ def test_store_list_session_logs_days(store):
     store.log_session("recent note", session_key="s1")
     # 把另一条 backdate 到 2 天前
     store.log_session("old note", session_key="s2")
-    old = (datetime.now(timezone.utc) - timedelta(days=2)
+    old = (datetime.now(UTC) - timedelta(days=2)
            ).isoformat(timespec="seconds")
     store._get_conn().execute(
         "UPDATE session_logs SET created_at = ? WHERE session_key = 's2'",
