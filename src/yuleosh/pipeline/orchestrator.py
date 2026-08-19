@@ -301,6 +301,36 @@ def _find_previous_session(spec_path: str, project_dir: str):
     return best
 
 
+def _print_step_timings(session) -> None:
+    """Print per-step wall-clock timings from session.steps.
+
+    性能可观测性 (2026-08-19): 每次 pipeline 结束后打印耗时表, 与
+    scripts/profile_pipeline_steps.py 的聚合基线配合, 形成优化前后对比。
+    数据来源: session.steps 的 started_at/completed_at (零额外采集)。
+    """
+    rows = []
+    for st in session.steps or []:
+        t0 = st.get("started_at")
+        t1 = st.get("completed_at")
+        if not t0 or not t1:
+            continue
+        try:
+            from datetime import datetime as _dt
+            elapsed = (_dt.fromisoformat(t1) - _dt.fromisoformat(t0)).total_seconds()
+        except (ValueError, TypeError):
+            continue
+        if elapsed >= 0:
+            rows.append((st.get("step_key") or st.get("name", "?"),
+                         st.get("status", ""), elapsed))
+    if not rows:
+        return
+    rows.sort(key=lambda r: -r[2])
+    print("\n⏱ Step Timings (wall-clock)")
+    for key, status, el in rows:
+        flag = "🚀" if el >= 60 else ("⚡" if el >= 10 else "  ")
+        print(f"   {flag} {key:<28} {el:>8.1f}s  ({status})")
+
+
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
                 mock: bool = False, profile: Optional[str] = None, org_id: int = 0,
                 user_id: int | None = None, user_email: str | None = None,
@@ -687,6 +717,11 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 print(f"   {s['step']}: {u.get('total_tokens', 0)} tokens "
                       f"(prompt {u.get('prompt_tokens', 0)}, "
                       f"completion {u.get('completion_tokens', 0)})")
+
+        # ⏱ Step-level timing summary (perf observability, 2026-08-19)
+        # 基线: docs/planning/pipeline-perf-baseline-2026-08-19.md.
+        # 聚合趋势: scripts/profile_pipeline_steps.py --dir <project_root>
+        _print_step_timings(session)
 
         # Send notification on pipeline completion or failure
         if _notify:
