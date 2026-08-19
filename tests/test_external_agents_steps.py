@@ -34,6 +34,10 @@ from yuleosh.pipeline.step_handlers import (
     step_claude_review,
     step_codex_verify,
 )
+from yuleosh.pipeline.step_handlers.external_agents import (
+    _build_claude_review_prompt,
+    _official_shall_block,
+)
 
 # ── fixtures ──────────────────────────────────────────────────────────
 
@@ -309,3 +313,27 @@ class TestParseHelpers:
         assert "角色 verifier" in prompt
         assert "/tmp/proj" in prompt
         assert "defects" in prompt
+
+    def test_build_claude_review_prompt_injects_official_shall(self):
+        """claude-review prompt 注入官方 SHALL 清单（单一事实来源）。
+
+        Regression: r22 实测 PRD 头 SHALLs: 85（LLM 自报）vs spec 结构化
+        提取 41 → claude-review 判 major blocker（SHALL 计数跨文档不一致）。
+        注入后评审 agent 有单一参照，不再被 PRD 自报数字误导。
+        """
+        spec = (
+            "# Test Spec\n\n"
+            "### Req-SW-001: State Machine\n"
+            "- The system SHALL manage window states.\n"
+            "- The system SHALL stop motor on fault.\n\n"
+            "### Req-SW-002: Commands\n"
+            "- The system SHALL support manual commands.\n"
+        )
+        prompt = _build_claude_review_prompt(spec, "(no artifacts)", "/tmp/proj")
+        assert "官方 SHALL 清单" in prompt
+        assert "共 3 条" in prompt
+        assert "Req-SW-001" in prompt
+
+    def test_official_shall_block_empty_spec(self):
+        block = _official_shall_block("# No requirements here\n")
+        assert "未提取到 SHALL" in block

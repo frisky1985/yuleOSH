@@ -229,6 +229,10 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
                                 project_dir: str) -> str:
     """Build the Claude review prompt (Chinese, structured JSON output)."""
     deploy_note = _deploy_status_note(project_dir)
+    # 官方 SHALL 清单 (2026-08-19, r22): PRD 头部 "SHALLs: N" 是 LLM 自报
+    # 统计, 与 spec 结构化提取可能不一致 (window-anti-pinch 实测 85 vs 41)。
+    # 注入单一事实来源, 让评审 agent 不再被 PRD 自报数字误导。
+    shall_block = _official_shall_block(spec_content)
     return f"""你在 yuleOSH 流水线中担任方案评审 agent（角色 architect）。
 对当前建议/方案进行评审与头脑风暴，给出独立结论。不要取悦任何人，
 以证据和工程判断为准。
@@ -236,6 +240,10 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
 项目目录: {project_dir}
 规格 (docs/spec.md 摘要):
 {_inject_spec(spec_content)}
+
+官方 SHALL 清单（单一事实来源，从 spec 结构化提取; PRD/文档头部
+自报的 SHALL 计数若有出入，以此清单为准）:
+{shall_block}
 
 待评审方案/建议:
 {artifacts_block[:ARTIFACT_INJECT_LIMIT]}
@@ -260,6 +268,26 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
 }}
 verdict=agree 表示方向一致可推进；disagree 表示需要修订后再评审。
 """
+
+
+def _official_shall_block(spec_content: str, limit: int = 40) -> str:
+    """从 spec 提取官方 SHALL 清单文本（数量 + 前 N 条，供评审 prompt 注入）。"""
+    try:
+        from yuleosh.pipeline.step_handlers.review_selftest.core import (
+            _extract_shall_statements,
+        )
+        statements = _extract_shall_statements(spec_content)
+    except Exception:
+        return "(SHALL 提取失败 — 以 spec 正文为准)"
+    if not statements:
+        return "(spec 未提取到 SHALL 语句)"
+    lines = [
+        f"- [{s.get('section', '?')}] L{s.get('line', '?')}: {s.get('statement', '')}"
+        for s in statements[:limit]
+    ]
+    if len(statements) > limit:
+        lines.append(f"- ... 共 {len(statements)} 条")
+    return f"共 {len(statements)} 条:\n" + "\n".join(lines)
 
 
 def _run_cli(cmd: list[str], timeout: int, cwd: str | None,
