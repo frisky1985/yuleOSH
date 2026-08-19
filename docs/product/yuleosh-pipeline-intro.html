@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yuleOSH Pipeline — 嵌入式软件合规开发自动化平台</title>
+<style>
+  :root {
+    --bg: #0a0f1a;
+    --bg-soft: #0e1524;
+    --bg-card: #111a2e;
+    --bg-card-hover: #16203a;
+    --border: #1e2a45;
+    --border-strong: #2a3a5f;
+    --text: #e6edf7;
+    --text-dim: #94a3b8;
+    --text-faint: #64748b;
+    --accent: #22d3ee;
+    --accent-2: #34d399;
+    --accent-3: #f59e0b;
+    --danger: #f87171;
+    --purple: #a78bfa;
+    --pink: #f472b6;
+    --stage-left: #38bdf8;
+    --stage-bottom: #34d399;
+    --stage-right: #a78bfa;
+    --stage-gate: #f59e0b;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(34, 211, 238, .3); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* ── Hero ─────────────────────────────── */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 84px 0 64px;
+    background:
+      radial-gradient(900px 420px at 20% -10%, rgba(34, 211, 238, .12), transparent 60%),
+      radial-gradient(800px 400px at 85% 0%, rgba(52, 211, 153, .10), transparent 55%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .hero::after {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(42, 58, 95, .18) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(42, 58, 95, .18) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(600px 300px at 50% 0%, black, transparent 75%);
+    pointer-events: none;
+  }
+  .hero .wrap { position: relative; z-index: 1; }
+  .logo {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; letter-spacing: .12em;
+    color: var(--text-dim); text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+  .logo-badge {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    font-size: 15px; color: #06121a; font-weight: 800;
+  }
+  .hero h1 {
+    font-size: clamp(34px, 5vw, 54px);
+    font-weight: 800; letter-spacing: -.02em;
+    line-height: 1.15; margin-bottom: 18px;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub {
+    font-size: clamp(16px, 2vw, 20px);
+    color: var(--text-dim); max-width: 720px; margin-bottom: 34px;
+  }
+  .hero .sub b { color: var(--text); font-weight: 600; }
+  .badges { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 42px; }
+  .badge {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 18px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .badge .num {
+    font-size: 22px; font-weight: 800; font-family: var(--mono);
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .badge .lbl { font-size: 12px; color: var(--text-faint); }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 26px; border-radius: 10px;
+    font-weight: 600; font-size: 15px; text-decoration: none;
+    border: 1px solid transparent; transition: all .18s;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #06121a;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(34, 211, 238, .25); }
+  .btn-ghost { border-color: var(--border-strong); color: var(--text); background: rgba(17, 26, 46, .6); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn code { font-family: var(--mono); font-size: 13px; opacity: .85; }
+
+  /* ── Section scaffold ─────────────────── */
+  section { padding: 72px 0; border-bottom: 1px solid var(--border); }
+  section.alt { background: var(--bg-soft); }
+  .sec-head { margin-bottom: 44px; }
+  .sec-tag {
+    display: inline-block; font-size: 12px; font-weight: 700;
+    letter-spacing: .18em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid rgba(34, 211, 238, .35);
+    padding: 5px 14px; border-radius: 999px; margin-bottom: 14px;
+  }
+  .sec-head h2 {
+    font-size: clamp(26px, 3.4vw, 36px); font-weight: 800;
+    letter-spacing: -.01em; margin-bottom: 10px;
+  }
+  .sec-head p { color: var(--text-dim); max-width: 760px; font-size: 16px; }
+
+  /* ── Positioning cards ────────────────── */
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 26px; transition: all .2s;
+  }
+  .card:hover { border-color: var(--border-strong); transform: translateY(-3px); background: var(--bg-card-hover); }
+  .card .ic { font-size: 26px; margin-bottom: 14px; }
+  .card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+  .card p { color: var(--text-dim); font-size: 14px; }
+
+  /* ── V-model ──────────────────────────── */
+  .vmodel { display: grid; grid-template-columns: 1fr; gap: 0; margin-top: 8px; }
+  .v-arm {
+    display: grid; gap: 10px; position: relative;
+    padding: 6px 0;
+  }
+  .v-arm.left { grid-template-columns: 1fr; }
+  .v-arm.right { grid-template-columns: 1fr; }
+  .v-labels {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px;
+  }
+  .v-label {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px;
+  }
+  .v-label .k { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
+  .v-label .t { font-weight: 700; font-size: 17px; margin-top: 4px; }
+  .v-label .d { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+  .v-label.left { border-left: 3px solid var(--stage-left); }
+  .v-label.right { border-left: 3px solid var(--stage-right); text-align: left; }
+  .step {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 11px 14px;
+    transition: all .18s; position: relative;
+  }
+  .step:hover { border-color: var(--border-strong); background: var(--bg-card-hover); }
+  .step .no {
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    min-width: 30px; height: 30px; border-radius: 8px;
+    display: grid; place-items: center; flex-shrink: 0;
+    background: rgba(56, 189, 248, .12); color: var(--stage-left);
+    border: 1px solid rgba(56, 189, 248, .3);
+  }
+  .step .body { min-width: 0; }
+  .step .nm { font-weight: 650; font-size: 14.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .step .desc { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+  .step .agent {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+    padding: 2px 8px; border-radius: 999px;
+    background: rgba(148, 163, 184, .12); color: var(--text-dim);
+    border: 1px solid rgba(148, 163, 184, .25); white-space: nowrap;
+  }
+  .step.external .agent { background: rgba(244, 114, 182, .12); color: var(--pink); border-color: rgba(244, 114, 182, .3); }
+  .step.gate { border-color: rgba(245, 158, 11, .45); background: rgba(245, 158, 11, .06); }
+  .step.gate .no { background: rgba(245, 158, 11, .14); color: var(--accent-3); border-color: rgba(245, 158, 11, .4); }
+  .step.gate .agent { background: rgba(245, 158, 11, .12); color: var(--accent-3); border-color: rgba(245, 158, 11, .35); }
+  .step.s-left .no { background: rgba(56, 189, 248, .12); color: var(--stage-left); border-color: rgba(56, 189, 248, .3); }
+  .step.s-left .agent { background: rgba(56, 189, 248, .1); color: var(--stage-left); border-color: rgba(56, 189, 248, .28); }
+  .step.s-bottom .no { background: rgba(52, 211, 153, .12); color: var(--stage-bottom); border-color: rgba(52, 211, 153, .3); }
+  .step.s-bottom .agent { background: rgba(52, 211, 153, .1); color: var(--stage-bottom); border-color: rgba(52, 211, 153, .28); }
+  .step.s-right .no { background: rgba(167, 139, 250, .12); color: var(--stage-right); border-color: rgba(167, 139, 250, .3); }
+  .step.s-right .agent { background: rgba(167, 139, 250, .1); color: var(--stage-right); border-color: rgba(167, 139, 250, .28); }
+  .v-flow {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    margin-top: 4px;
+  }
+  .v-flow .col { display: grid; gap: 10px; align-content: start; }
+  .v-flow .mid {
+    grid-column: 1 / -1; display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    margin: 18px 0; padding: 18px;
+    background: rgba(52, 211, 153, .05);
+    border: 1px dashed rgba(52, 211, 153, .35);
+    border-radius: 14px;
+  }
+  .v-flow .mid .mid-title {
+    grid-column: 1 / -1; font-size: 12px; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--stage-bottom);
+  }
+  .v-connector { display: none; }
+
+  /* ── Agents ───────────────────────────── */
+  .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+  .agent-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px; transition: all .2s;
+  }
+  .agent-card:hover { transform: translateY(-3px); border-color: var(--border-strong); }
+  .agent-card .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .agent-card .av {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: grid; place-items: center; font-size: 20px; font-weight: 800;
+  }
+  .agent-card h3 { font-size: 16px; font-weight: 700; }
+  .agent-card .role { font-size: 12px; color: var(--accent); font-weight: 600; }
+  .agent-card ul { list-style: none; display: grid; gap: 6px; }
+  .agent-card li { font-size: 13px; color: var(--text-dim); padding-left: 16px; position: relative; }
+  .agent-card li::before { content: "▸"; position: absolute; left: 2px; color: var(--accent); }
+  .av-xiaoming { background: rgba(34, 211, 238, .14); color: var(--accent); }
+  .av-hermes { background: rgba(167, 139, 250, .14); color: var(--purple); }
+  .av-claude { background: rgba(245, 158, 11, .14); color: var(--accent-3); }
+  .av-xiaoke { background: rgba(52, 211, 153, .14); color: var(--accent-2); }
+  .av-xiaoma { background: rgba(244, 114, 182, .14); color: var(--pink); }
+  .av-codex { background: rgba(148, 163, 184, .16); color: #cbd5e1; }
+  .agent-note {
+    margin-top: 20px; font-size: 13.5px; color: var(--text-dim);
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px;
+  }
+  .agent-note b { color: var(--text); }
+
+  /* ── CI layers ────────────────────────── */
+  .ci-stack { display: grid; gap: 14px; }
+  .ci-row {
+    display: grid; grid-template-columns: 200px 1fr auto; gap: 20px;
+    align-items: center; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px;
+    transition: all .18s;
+  }
+  .ci-row:hover { border-color: var(--border-strong); }
+  .ci-row .lv { font-family: var(--mono); font-weight: 800; font-size: 14px; }
+  .ci-row .lv.l1 { color: var(--accent); }
+  .ci-row .lv.l2 { color: var(--purple); }
+  .ci-row .lv.l25 { color: var(--pink); }
+  .ci-row .lv.l3 { color: var(--accent-2); }
+  .ci-row .what h4 { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+  .ci-row .what p { font-size: 13px; color: var(--text-dim); }
+  .ci-row .when {
+    font-size: 12px; color: var(--text-faint); text-align: right;
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; white-space: nowrap;
+  }
+
+  /* ── Mechanisms ───────────────────────── */
+  .mech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+  .mech {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px; transition: all .2s;
+  }
+  .mech:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+  .mech .tag { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--accent-3); text-transform: uppercase; }
+  .mech h3 { font-size: 16.5px; font-weight: 700; margin: 6px 0 8px; }
+  .mech p { font-size: 13.5px; color: var(--text-dim); }
+  .mech code {
+    font-family: var(--mono); font-size: 12px; background: rgba(34, 211, 238, .08);
+    border: 1px solid rgba(34, 211, 238, .2); color: var(--accent);
+    padding: 1px 6px; border-radius: 5px;
+  }
+
+  /* ── Numbers / proof ──────────────────── */
+  .proof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+  .proof {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 26px; position: relative; overflow: hidden;
+  }
+  .proof::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+  .proof .big { font-size: 30px; font-weight: 800; font-family: var(--mono); }
+  .proof .big .u { font-size: 16px; color: var(--text-faint); font-weight: 600; }
+  .proof h4 { margin: 8px 0 6px; font-size: 15px; }
+  .proof p { font-size: 13px; color: var(--text-dim); }
+
+  /* ── Quick start ──────────────────────── */
+  .quickstart {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 16px; padding: 30px; position: relative; overflow: hidden;
+  }
+  .quickstart::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(500px 200px at 90% 0%, rgba(34, 211, 238, .08), transparent 60%);
+    pointer-events: none;
+  }
+  .quickstart h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+  .qs-step { display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; position: relative; }
+  .qs-step .n {
+    font-family: var(--mono); font-weight: 800; font-size: 13px;
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: grid; place-items: center;
+    background: rgba(34, 211, 238, .12); color: var(--accent);
+    border: 1px solid rgba(34, 211, 238, .3);
+  }
+  .qs-step p { font-size: 14px; color: var(--text-dim); }
+  .qs-step code, pre.code {
+    font-family: var(--mono); font-size: 13px; color: var(--accent);
+    background: rgba(34, 211, 238, .07); border: 1px solid rgba(34, 211, 238, .18);
+    padding: 2px 8px; border-radius: 6px;
+  }
+  pre.code { display: block; padding: 14px 18px; margin: 6px 0 0; overflow-x: auto; line-height: 1.6; }
+
+  /* ── Platforms ────────────────────────── */
+  .plat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .plat {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; display: flex; gap: 14px; align-items: center;
+  }
+  .plat .ic { font-size: 24px; }
+  .plat .nm { font-weight: 700; font-size: 15px; }
+  .plat .tl { font-size: 12.5px; color: var(--text-dim); font-family: var(--mono); }
+
+  /* ── Footer ───────────────────────────── */
+  footer { padding: 48px 0 64px; color: var(--text-faint); font-size: 13px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; }
+
+  @media (max-width: 760px) {
+    .ci-row { grid-template-columns: 1fr; gap: 8px; }
+    .ci-row .when { text-align: left; justify-self: start; }
+    .v-flow { grid-template-columns: 1fr; }
+    .v-labels { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ Hero ═══════════ -->
+<header class="hero">
+  <div class="wrap">
+    <div class="logo"><span class="logo-badge">yO</span> yuleOSH · Embedded Software Compliance Automation</div>
+    <h1>从 Spec 到合规证据包<br><span class="grad">36 步 Pipeline 全自动</span></h1>
+    <p class="sub">
+      yuleOSH 是面向<b>嵌入式 / 汽车电子</b>的合规开发自动化平台。把需求、架构、代码生成、
+      评审、测试、MISRA 合规、证据包生成编排成一条 <b>ASPICE SWE.1–SWE.6 对齐</b>的
+      可审计流水线 —— 写一份 spec，跑一条命令，拿回一个<b>可交付的合规证据包</b>。
+    </p>
+    <div class="badges">
+      <div class="badge"><span class="num">36</span><span class="lbl">Pipeline 步骤</span></div>
+      <div class="badge"><span class="num">6+</span><span class="lbl">AI Agent 矩阵</span></div>
+      <div class="badge"><span class="num">3</span><span class="lbl">CI 分层门禁</span></div>
+      <div class="badge"><span class="num">SWE.1–6</span><span class="lbl">ASPICE 追溯</span></div>
+      <div class="badge"><span class="num">90.87%</span><span class="lbl">平台测试覆盖</span></div>
+      <div class="badge"><span class="num">12,589+</span><span class="lbl">平台测试用例</span></div>
+    </div>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#pipeline">查看 36 步 Pipeline ↓</a>
+      <a class="btn btn-ghost" href="#quickstart"><code>yuleosh pipeline run</code></a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════ 产品定位 ═══════════ -->
+<section id="positioning">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">What is it</span>
+      <h2>不是又一个 AI 代码生成器</h2>
+      <p>yuleOSH 把「生成代码」约束进一条可审计的合规流水线：每个阶段有专属 Agent、每个转换有评审门禁、每个门禁有机器校验 —— AI 负责产出，平台负责保证产出合规。</p>
+    </div>
+    <div class="grid3">
+      <div class="card">
+        <div class="ic">🧭</div>
+        <h3>Doc-Driven 全流程</h3>
+        <p>Spec → S.U.P.E.R 分析 → PRD → 架构 → 开发计划 → 代码 → 测试规划 → 评审 → CI → 证据包。需求从文档出发，每个产物落盘可追溯。</p>
+      </div>
+      <div class="card">
+        <div class="ic">🛡️</div>
+        <h3>护栏优先于生成</h3>
+        <p>行为护栏 G-01~G-17、P0 关键安全门禁、部署回滚联动。生成代码必须通过真实测试与静态合规检查，失败自动回滚，绝不污染主干。</p>
+      </div>
+      <div class="card">
+        <div class="ic">📦</div>
+        <h3>证据包一键交付</h3>
+        <p>追溯矩阵、验收矩阵、MISRA 报告、覆盖率报告、合规 ZIP 证据包 —— 审计要什么，pipeline 交付什么。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 36 步 Pipeline ═══════════ -->
+<section id="pipeline" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">The Pipeline</span>
+      <h2>36 步 · ASPICE V 模型</h2>
+      <p>左侧规格化（SWE.1 需求 → SWE.3 设计）、底部实现与单元验证（SWE.4）、右侧验证（SWE.5 集成 → SWE.6 合格性）。每一步都产出落盘产物，红色为阻断门禁，粉色为外部 Agent 独立验证。</p>
+    </div>
+
+    <div class="v-labels">
+      <div class="v-label left">
+        <div class="k">Left Arm · Specification</div>
+        <div class="t">规格化 — SWE.1 → SWE.3</div>
+        <div class="d">需求 → PRD → 架构 → 开发计划 → 代码 → 测试规划</div>
+      </div>
+      <div class="v-label right">
+        <div class="k">Right Arm · Verification</div>
+        <div class="t">验证 — SWE.4 → SWE.6</div>
+        <div class="d">单元测试 → 集成测试 → 嵌入式专项 → 合格性测试 → 最终报告</div>
+      </div>
+    </div>
+
+    <div class="v-flow">
+      <!-- Left arm: specification -->
+      <div class="col" id="left-arm"></div>
+      <!-- Bottom: implementation -->
+      <div class="mid" id="bottom-arm">
+        <div class="mid-title">▼ 实现与单元验证 · SWE.4</div>
+      </div>
+      <!-- Right arm: verification -->
+      <div class="col" id="right-arm"></div>
+    </div>
+
+    <p style="font-size:13px;color:var(--text-faint);margin-top:20px;">
+      * 外部 Agent 指独立进程（Claude CLI / Codex CLI / QEMU），与平台内 Agent 形成双轨验证闭环。
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════ Agent 矩阵 ═══════════ -->
+<section id="agents">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Agents</span>
+      <h2>多 Agent 角色矩阵</h2>
+      <p>平台内 5 个专职角色 + 2 个外部独立验证者，形成「生成 — 审查 — 独立验证」的三角制衡。</p>
+    </div>
+    <div class="agent-grid">
+      <div class="agent-card">
+        <div class="head"><div class="av av-xiaoming">明</div><div><h3>小明</h3><div class="role">主编排 · 终审</div></div></div>
+        <ul>
+          <li>Spec 合规检查 / S.U.P.E.R 启动分析</li>
+          <li>Codegen 产物部署（护栏监控）</li>
+          <li>P0 关键安全门禁 · 合格性测试 · 最终报告</li>
+        </ul>
+      </div>
+      <div class="agent-card">
+        <div class="head"><div class="av av-hermes">H</div><div><h3>Hermes</h3><div class="role">需求 · 集成审查</div></div></div>
+        <ul>
+          <li>从 Spec 生成 PRD（需求分析）</li>
+          <li>集成代码终审（SHALL 清单对照）</li>
+        </ul>
+      </div>
+      <div class="agent-card">
+        <div class="head"><div class="av av-claude">C</div><div><h3>Claude</h3><div class="role">架构 · 开发 · 自测</div></div></div>
+        <ul>
+          <li>架构设计 / 开发计划与代码实现</li>
+          <li>测试规划 / 自测验证</li>
+          <li>外部方案评审（独立 CLI 进程）</li>
+        </ul>
+      </div>
+      <div class="agent-card">
+        <div class="head"><div class="av av-xiaoke">克</div><div><h3>小克</h3><div class="role">嵌入式专项审查</div></div></div>
+        <ul>
+          <li>架构 / 开发计划 / 代码实现预审</li>
+          <li>链接脚本 · 启动代码 · RTOS · 内存 · BSP · 编译 · 低功耗 · 堆栈 · MMIO</li>
+          <li>C 单元测试 (Unity) / 集成测试 / 覆盖率门禁</li>
+        </ul>
+      </div>
+      <div class="agent-card">
+        <div class="head"><div class="av av-xiaoma">马</div><div><h3>小马</h3><div class="role">合规 · 质量审查</div></div></div>
+        <ul>
+          <li>PRD 质量审查 / MISRA 合规审查</li>
+          <li>测试覆盖审查 / KG Merge Gate</li>
+        </ul>
+      </div>
+      <div class="agent-card">
+        <div class="head"><div class="av av-codex">X</div><div><h3>Codex</h3><div class="role">外部独立验证</div></div></div>
+        <ul>
+          <li>对生成产物做真实测试验证（外部 CLI）</li>
+          <li>发现缺陷即阻断，不依赖生成方自证</li>
+        </ul>
+      </div>
+    </div>
+    <div class="agent-note">
+      <b>双轨并行闭环：</b>开发与独立检视并行推进，不等待开发完成再检视；外部 Agent（Claude / Codex）与平台内 Agent 各自产出独立结论，
+      以<b>证据为准</b>裁决分歧 —— 测试、编译、可复现结果优先于任何一方的主观判断。
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ CI 分层 ═══════════ -->
+<section id="ci" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">CI Gates</span>
+      <h2>三层 CI · 越早发现成本越低</h2>
+      <p>Pipeline 之外，平台还提供随提交 / MR / 发布标签触发的分层 CI，与 Pipeline 门禁互补。</p>
+    </div>
+    <div class="ci-stack">
+      <div class="ci-row">
+        <div class="lv l1">L1 · Dev</div>
+        <div class="what"><h4>开发验证</h4><p>单元测试 · 覆盖率门禁 · 计划格式检查 · 合格性测试</p></div>
+        <div class="when">每次提交</div>
+      </div>
+      <div class="ci-row">
+        <div class="lv l2">L2 · Integration</div>
+        <div class="what"><h4>集成验证</h4><p>交叉编译 · MISRA 静态分析 · QEMU 仿真 · C 覆盖率门禁</p></div>
+        <div class="when">每个 MR</div>
+      </div>
+      <div class="ci-row">
+        <div class="lv l25">L2.5 · AI Review</div>
+        <div class="what"><h4>多 Agent 并行代码评审</h4><p>4-Agent 矩阵并行审查，独立结论交叉验证</p></div>
+        <div class="when">MR / 发布</div>
+      </div>
+      <div class="ci-row">
+        <div class="lv l3">L3 · System</div>
+        <div class="what"><h4>系统验证</h4><p>系统测试 · 证据包生成 · 合规交付物</p></div>
+        <div class="when">发布标签</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 核心机制 ═══════════ -->
+<section id="mechanics">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Core Mechanisms</span>
+      <h2>合规不是口号，是机器校验</h2>
+      <p>平台把「评审标准」从人肉记忆变成可执行的机器检查 —— 契约抽取、护栏体系、SHALL 清单注入，都是确定性逻辑，可单测、可回归。</p>
+    </div>
+    <div class="mech-grid">
+      <div class="mech">
+        <div class="tag">Contract</div>
+        <h3>Spec 契约抽取与机器校验</h3>
+        <p><code>spec_contracts.py</code> 从叙述性 spec 抽取机器可读 JSON：接口签名、行为护栏 G-01~G-17、参数边界、NVM 布局、需求覆盖。<code>spec-check</code> 步骤做确定性完整性校验，不通过直接 RED —— 合规审查从 LLM 人审迁移到机器检查。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">Guardrail</div>
+        <h3>行为护栏体系</h3>
+        <p>ChangeSet 变更集模型统一备份/回滚；<code>codegen-deploy</code> 部署前备份、门禁失败自动回滚；TestRunner 协议统一 C / Python / Go / 集成测试执行。只有真实行为回归才触发回滚，覆盖率低/规范违规不误伤基线。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">Ground Truth</div>
+        <h3>官方 SHALL 清单注入</h3>
+        <p>评审 prompt 注入从 spec 结构化提取的「官方 SHALL 清单」作为单一事实来源 —— 消除 LLM 自报 SHALL 数量与 spec 正文的分歧（曾导致 85 vs 41 的评审误判）。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">Cache</div>
+        <h3>失败产物防复用</h3>
+        <p><code>step_cache</code> 对失败状态（FAILED_STATUSES）不缓存、查找视为 miss —— 修复后的重跑永远不会复用失败产物；合法 skipped 仍缓存，避免无效重算。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">Codegen</div>
+        <h3>代码生成自动修复环</h3>
+        <p>D3 生成 → 编译验证 → 自动修复循环；<code>seed_contract</code> 保护现有公共函数不被删除；<code>behavior_verify</code> 在生成循环内临时部署并跑真实测试，回归即时反馈给 LLM。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">Evidence</div>
+        <h3>证据引擎</h3>
+        <p>追溯矩阵（需求 ↔ 测试 ↔ 代码）+ 验收矩阵 + 覆盖率报告，一键打包合规 ZIP 证据包 —— ASPICE 审计的完整交付物。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">Loop</div>
+        <h3>四闭环循环工程</h3>
+        <p>缺陷 → Spec 追溯；现场缺陷 → FMEA 安全分析；KPI → RCA → 改进工单；知识图谱置信度自演进。每个闭环都是「发现问题 → 反哺规范 → 回归验证」。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">KG</div>
+        <h3>知识图谱追溯</h3>
+        <p>SQLite BFS / PostgreSQL 递归 CTE 支撑的图存储，做影响分析、增量 CI 钩子、Merge Gate 图一致性 / 置信度检查。</p>
+      </div>
+      <div class="mech">
+        <div class="tag">Mixed</div>
+        <h3>混合语言合规</h3>
+        <p>嵌入式 C MISRA 门禁扩展到 Go / Python 项目（<code>project_language: mixed</code>）；实测 yuleDKCS 690 → 0 MISRA C:2023 violations（57 文件）。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 真实战绩 ═══════════ -->
+<section id="proof" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Proof</span>
+      <h2>已经在真实项目上跑通</h2>
+    </div>
+    <div class="proof-grid">
+      <div class="proof">
+        <div class="big">690 → 0</div>
+        <h4>yuleDKCS · MISRA C:2023</h4>
+        <p>57 个文件从 690 条违规清零，混合语言 CI 门禁全绿，SDK↔Hub 契约 E2E 测试通过。</p>
+      </div>
+      <div class="proof">
+        <div class="big">36/36</div>
+        <h4>window-anti-pinch · 全流程</h4>
+        <p>防夹车窗控制器完整跑通 36 步：P0 关键安全门禁 0 violations，claude-review / codex-verify 双外部验证通过。</p>
+      </div>
+      <div class="proof">
+        <div class="big">93.7<span class="u">%</span></div>
+        <h4>C 行覆盖率</h4>
+        <p>同一项目 C 代码 line 93.67% / branch 83.64%，远超 70% 门禁阈值；CTest 3/3 全绿。</p>
+      </div>
+      <div class="proof">
+        <div class="big">SWE.1–6</div>
+        <h4>ASPICE 全流程追溯</h4>
+        <p>V 模型左右臂与 ASPICE 过程域逐一对应，证据包覆盖 SWE.1 需求到 SWE.6 合格性测试。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 快速开始 ═══════════ -->
+<section id="quickstart">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Quick Start</span>
+      <h2>2 分钟跑通</h2>
+    </div>
+    <div class="quickstart">
+      <h3>三步开始</h3>
+      <div class="qs-step">
+        <div class="n">1</div>
+        <p><code>pip install yuleosh</code> — 安装平台（Python 3.12，Elastic License 2.0 开源版免费）</p>
+      </div>
+      <div class="qs-step">
+        <div class="n">2</div>
+        <p>写一份 OpenSpec 格式的 spec（SHALL/SHOULD/MAY + GIVEN/WHEN/THEN）</p>
+      </div>
+      <div class="qs-step">
+        <div class="n">3</div>
+        <p>跑全流程 Pipeline：</p>
+        <pre class="code">cd my-project
+yuleosh pipeline run docs/spec.md        # 完整 36 步
+yuleosh pipeline run --from-step 14      # 从失败点续跑
+yuleosh pipeline run --mock docs/spec.md # 无 LLM Key 演示模式</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 平台支持 ═══════════ -->
+<section id="platforms" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Targets</span>
+      <h2>目标硬件与部署</h2>
+    </div>
+    <div class="plat-grid">
+      <div class="plat"><div class="ic">🔧</div><div><div class="nm">ESP32 / ESP32-S3</div><div class="tl">esptool · idf-monitor + GDB</div></div></div>
+      <div class="plat"><div class="ic">⚙️</div><div><div class="nm">STM32 F4 / H7 / G0</div><div class="tl">OpenOCD · OpenOCD + GDB</div></div></div>
+      <div class="plat"><div class="ic">🧩</div><div><div class="nm">任意 ARM Cortex-M</div><div class="tl">JLinkExe · JLinkGDBServer</div></div></div>
+      <div class="plat"><div class="ic">🧪</div><div><div class="nm">QEMU 仿真</div><div class="tl">无硬件跑集成验证（L2）</div></div></div>
+      <div class="plat"><div class="ic">🧬</div><div><div class="nm">自定义目标</div><div class="tl">插件 API 扩展</div></div></div>
+      <div class="plat"><div class="ic">📊</div><div><div class="nm">Web Dashboard</div><div class="tl">Next.js · REST API · RBAC · 审计日志</div></div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>yuleOSH · Embedded Software Compliance Automation Platform</div>
+    <div>v3.14.0 · Python 3.12 · Elastic License 2.0 · 12,589+ tests · 90.87% coverage</div>
+  </div>
+</footer>
+
+<script>
+// ═══════════ 36-step pipeline data (source of truth: PIPELINE_STEPS) ═══════════
+const STEPS = [
+  // Left arm: specification (SWE.1 → SWE.3)
+  {n:1,  key:"spec-check",            agent:"小明",  cls:"s-left",  desc:"OpenSpec 合规检查 · 契约机器校验", ext:false, gate:false},
+  {n:2,  key:"super-analysis",        agent:"小明",  cls:"s-left",  desc:"S.U.P.E.R 启动分析", ext:false, gate:false},
+  {n:3,  key:"prd",                   agent:"Hermes",cls:"s-left",  desc:"产品需求分析 (PRD)", ext:false, gate:false},
+  {n:4,  key:"prd-review",            agent:"小马",  cls:"s-left",  desc:"PRD 质量审查", ext:false, gate:false},
+  {n:5,  key:"architecture",          agent:"Claude",cls:"s-left",  desc:"架构设计", ext:false, gate:false},
+  {n:6,  key:"arch-review",           agent:"小克",  cls:"s-left",  desc:"架构审查", ext:false, gate:false},
+  {n:7,  key:"development",           agent:"Claude",cls:"s-left",  desc:"开发计划与代码实现", ext:false, gate:false},
+  {n:8,  key:"codegen-deploy",        agent:"小明",  cls:"s-left",  desc:"代码产物部署 · 护栏备份/回滚", ext:false, gate:false},
+  {n:9,  key:"devplan-review",        agent:"小克",  cls:"s-left",  desc:"开发计划审查", ext:false, gate:false},
+  {n:10, key:"internal-code-review",  agent:"小克",  cls:"s-left",  desc:"代码实现预审", ext:false, gate:false},
+  {n:11, key:"test-planning",         agent:"Claude",cls:"s-left",  desc:"测试规划", ext:false, gate:false},
+  {n:12, key:"claude-review",         agent:"Claude",cls:"s-left",  desc:"Claude 方案评审 (外部 agent)", ext:true,  gate:false},
+  // Bottom arm: implementation + unit verification (SWE.4)
+  {n:13, key:"self-test",             agent:"Claude",cls:"s-bottom",desc:"自测验证", ext:false, gate:false},
+  {n:14, key:"codex-verify",          agent:"Codex", cls:"s-bottom",desc:"Codex 测试验证 (外部 agent)", ext:true,  gate:false},
+  {n:15, key:"self-test-review",      agent:"小克",  cls:"s-bottom",desc:"自测结果审查", ext:false, gate:false},
+  {n:16, key:"c-unit-test",           agent:"小克",  cls:"s-bottom",desc:"C 单元测试 (Unity)", ext:false, gate:false},
+  // Right arm: verification (SWE.4 → SWE.6)
+  {n:17, key:"code-review",           agent:"Hermes",cls:"s-right", desc:"集成代码审查 (SHALL 清单对照)", ext:false, gate:false},
+  {n:18, key:"integration-test",      agent:"小克",  cls:"s-right", desc:"接口集成测试", ext:false, gate:false},
+  {n:19, key:"misra-review",          agent:"小马",  cls:"s-right", desc:"MISRA 合规审查 (报告陈旧校验)", ext:false, gate:false},
+  {n:20, key:"coverage-review",       agent:"小马",  cls:"s-right", desc:"测试覆盖审查", ext:false, gate:false},
+  {n:21, key:"qemu-run",              agent:"QEMU",  cls:"s-right", desc:"QEMU 仿真测试 (L2)", ext:true,  gate:false},
+  {n:22, key:"c-coverage-gate",       agent:"小克",  cls:"s-right", desc:"C 覆盖率门禁 (L2)", ext:false, gate:true},
+  {n:23, key:"review-linker",         agent:"小克",  cls:"s-right", desc:"链接脚本审查", ext:false, gate:false},
+  {n:24, key:"review-startup",        agent:"小克",  cls:"s-right", desc:"启动代码审查", ext:false, gate:false},
+  {n:25, key:"review-rtos",           agent:"小克",  cls:"s-right", desc:"RTOS 配置审查", ext:false, gate:false},
+  {n:26, key:"review-memory",         agent:"小克",  cls:"s-right", desc:"内存安全审查", ext:false, gate:false},
+  {n:27, key:"review-bsp",            agent:"小克",  cls:"s-right", desc:"BSP 板级支持包验证", ext:false, gate:false},
+  {n:28, key:"review-build",          agent:"小克",  cls:"s-right", desc:"编译输出验证", ext:false, gate:false},
+  {n:29, key:"review-power",          agent:"小克",  cls:"s-right", desc:"低功耗审查", ext:false, gate:false},
+  {n:30, key:"review-stack",          agent:"小克",  cls:"s-right", desc:"堆栈使用分析 (P0/DEF-007)", ext:false, gate:false},
+  {n:31, key:"review-mmio",           agent:"小克",  cls:"s-right", desc:"MMIO 配置审查 (P0/DEF-008)", ext:false, gate:false},
+  {n:32, key:"review-critical-safety",agent:"小明",  cls:"s-right", desc:"关键安全异常阻塞检查", ext:false, gate:true},
+  {n:33, key:"fault-injection",       agent:"小克",  cls:"s-right", desc:"故障注入测试 (SWE.5/SWE.6)", ext:false, gate:false},
+  {n:34, key:"merge-gate",            agent:"小马",  cls:"s-right", desc:"KG Merge Gate · 图一致性/置信度", ext:false, gate:true},
+  {n:35, key:"test-qualification",    agent:"小明",  cls:"s-right", desc:"合格性测试 (SWE.6)", ext:false, gate:true},
+  {n:36, key:"final-report",          agent:"小明",  cls:"s-right", desc:"最终报告 · 证据包汇总", ext:false, gate:false},
+];
+
+function stepHTML(s) {
+  const ext = s.ext ? ' external' : '';
+  const gate = s.gate ? ' gate' : '';
+  return `<div class="step ${s.cls}${ext}${gate}">
+    <div class="no">${s.n}</div>
+    <div class="body">
+      <div class="nm">${s.key} <span class="agent">${s.agent}</span></div>
+      <div class="desc">${s.desc}</div>
+    </div>
+  </div>`;
+}
+
+document.getElementById('left-arm').innerHTML   = STEPS.filter(s => s.cls === 's-left').map(stepHTML).join('');
+document.getElementById('bottom-arm').innerHTML += STEPS.filter(s => s.cls === 's-bottom').map(stepHTML).join('');
+document.getElementById('right-arm').innerHTML  = STEPS.filter(s => s.cls === 's-right').map(stepHTML).join('');
+</script>
+
+</body>
+</html>
