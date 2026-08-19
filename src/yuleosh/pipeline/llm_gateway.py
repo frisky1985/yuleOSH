@@ -50,6 +50,21 @@ MOCK_PLACEHOLDER = (
 )
 
 
+def _step_key(session: PipelineSession) -> str:
+    """Resolve current step key — thread-local first (D2 parallel), then session.
+
+    并行组执行时 session.pipeline_knowledge_step_key 是共享字段会被并发
+    覆盖; orchestrator 在 worker 线程内 set_step_key, 这里优先读它。
+    """
+    from yuleosh.pipeline.step_context import get_step_key as _tl_step_key
+
+    tl = _tl_step_key()
+    if tl:
+        return tl
+    sk = getattr(session, "pipeline_knowledge_step_key", "") or ""
+    return sk if isinstance(sk, str) else ""
+
+
 def resolve_step_role(session: PipelineSession) -> str | None:
     """Resolve the current step's agent role for ``task_type`` routing.
 
@@ -57,9 +72,7 @@ def resolve_step_role(session: PipelineSession) -> str | None:
     ``resolve_agent_for_step`` -> ``resolve_agent_role``.  Returns None
     for unknown steps / non-str keys (callers fall back to defaults).
     """
-    step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
-    if not isinstance(step_key, str):
-        step_key = ""
+    step_key = _step_key(session)
     agent = resolve_agent_for_step(step_key)
     return resolve_agent_role(agent) if agent else None
 
@@ -74,7 +87,7 @@ def _check_pipeline_budget(session: PipelineSession) -> None:
     total = getattr(session, "token_usage_total", 0) or 0
     if total <= PIPELINE_TOKEN_BUDGET:
         return
-    step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
+    step_key = _step_key(session)
     log.warning(
         "Pipeline token budget exceeded: %d > %d (step '%s') — continuing "
         "(set %s=1 to enforce)",
@@ -94,13 +107,11 @@ def _record_usage(session: PipelineSession, usage: dict) -> None:
     total = int(usage.get("total_tokens", 0) or 0)
     if total <= 0:
         return
-    step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
+    step_key = _step_key(session)
     if not isinstance(step_key, str) or not step_key:
         step_key = "unknown"
-    session.token_usage_total = (
-        getattr(session, "token_usage_total", 0) or 0
-    ) + total
-    session.token_usage_steps.append({"step": step_key, "usage": usage})
+    # D2 (2026-08-19): 线程安全累加 — 并行组多 worker 同时记录。
+    session.add_token_usage(step_key, usage)
 
 
 def call_step_llm(
@@ -132,7 +143,7 @@ def call_step_llm(
         PipelineStepError: any LLM failure (transport, provider error,
             budget enforce).
     """
-    step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
+    step_key = _step_key(session)
 
     # Mock 模式：直接返回占位内容，不调 LLM。
     # 严格 `is True` 保持 MagicMock session 诚实（与 mock_skip 一致）。

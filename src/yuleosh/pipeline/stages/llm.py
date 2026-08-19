@@ -88,6 +88,13 @@ def _build_role_scoped_prompt(
     step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
     if not isinstance(step_key, str):
         step_key = ""
+    # D2 (2026-08-19): 并行组执行时优先读 thread-local step_key —
+    # session.pipeline_knowledge_step_key 是共享字段, 多线程并发会互相覆盖。
+    from yuleosh.pipeline.step_context import get_step_key as _tl_step_key
+
+    _tl = _tl_step_key()
+    if _tl:
+        step_key = _tl
     agent = resolve_agent_for_step(step_key)
     role = resolve_agent_role(agent) if agent else None
 
@@ -157,7 +164,12 @@ def _call_llm(
     through the ``run`` shim module at call time (deferred import avoids cycles).
     """
     # 方案 C (C5): 灰度切换到 llm_gateway 统一入口。
-    step_key = getattr(session, "pipeline_knowledge_step_key", "") or ""
+    # D2 (2026-08-19): 并行组执行时优先读 thread-local step_key。
+    from yuleosh.pipeline.step_context import get_step_key as _tl_step_key
+
+    step_key = _tl_step_key() or (
+        getattr(session, "pipeline_knowledge_step_key", "") or ""
+    )
     if isinstance(step_key, str) and step_key in _gateway_step_keys():
         from yuleosh.pipeline.llm_gateway import call_step_llm
 

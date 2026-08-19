@@ -16,6 +16,7 @@ import shutil
 import sys
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
@@ -29,6 +30,29 @@ from yuleosh.agent_registry import (
 )
 
 log = logging.getLogger("pipeline.orchestrator")
+
+# ── D2 并行组 (2026-08-19, 老板拍板方案 A) ─────────────────────────────
+# 组内步骤互不依赖（依赖图逐条源码核实, 见 docs/planning/d2-parallel-
+# brainstorm-2026-08-19.md）→ 并发执行; 组间保持 PIPELINE_STEPS 顺序。
+# 门禁语义不变: 组内任一 block → 整组等待结束后中断; 任一 failed →
+# 整组等待结束后中断（与 verify-loop 合并语义一致）。
+#
+# P1: prd ∥ architecture — architecture 只读 spec+扫描 src, 不读 prd。
+# P2: arch-review ∥ development — development 只读 architecture/prd/
+#     super-analysis, 不读 arch-review。
+# P3: development-review ∥ codegen-deploy ∥ internal-code-review ∥
+#     claude-review — 四者都只依赖 development 产物, 互不依赖。
+PARALLEL_GROUPS: list[tuple[str, ...]] = [
+    ("prd", "architecture"),
+    ("arch-review", "development"),
+    ("development-review", "codegen-deploy", "internal-code-review", "claude-review"),
+]
+# 并行组在 PIPELINE_STEPS 中可能不相邻（如 prd 与 architecture 隔 prd-review）,
+# 预注册阶段按 PIPELINE_STEPS 顺序登记全部步骤, 执行阶段按组并发。
+_GROUP_LOOKUP: dict[str, int] = {}
+for _gi, _g in enumerate(PARALLEL_GROUPS):
+    for _k in _g:
+        _GROUP_LOOKUP[_k] = _gi
 
 # Notifications (optional import)
 _notify = None
@@ -536,108 +560,68 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         log.info(f"Pipeline starting: {name}, spec={spec_path}, profile={active_profile}")
         
         _ran_final_report = False
+        # D2 (2026-08-19): 预注册全部步骤 — 保证 step_idx 与 PIPELINE_STEPS
+        # 顺序一致（断点续跑/缓存/verdict 都依赖稳定索引）, 执行阶段再按
+        # 并行组并发调度。
+        _registered: list[tuple[int, str, str, str, Callable]] = []
         for step_key, agent, step_name, handler in _steps:
             if step_key == "final-report":
                 _ran_final_report = True
             step_idx = len(session.steps)
             session.add_step(step_key, agent, step_name)
+            _registered.append((step_idx, step_key, agent, step_name, handler))
 
-            # ── 断点续跑: 前序步骤 (idx+1 < from_step) 标记 skipped, 不执行 ──
+        _executed: set[str] = set()
+        _blocked = False
+        _failed = False
+        _ri = 0
+        while _ri < len(_registered):
+            step_idx, step_key, agent, step_name, handler = _registered[_ri]
+            # 断点续跑: 前序步骤标记 skipped（_execute_step 内处理）
             if step_idx + 1 < from_step:
                 session.steps[step_idx]["status"] = "skipped"
                 session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
+                _executed.add(step_key)
+                _ri += 1
                 continue
-
-            # ── B1 缓存 (2026-08-12): 确定性步骤内容寻址缓存 ──
-            # 输入指纹命中 → 复用产物, 不重编译/重扫描 (省时间);
-            # LLM 步骤永不缓存 (避免固化 LLM 输出); OSH_NO_CACHE=1 禁用。
-            _cache_fp = None
-            try:
-                from yuleosh.pipeline import step_cache as _step_cache
-            except ImportError:  # pragma: no cover - defensive
-                _step_cache = None
-
-            if _step_cache and _step_cache.is_cacheable(step_key) \
-                    and _step_cache.cache_enabled():
-                _cache_fp = _step_cache.compute_fingerprint(session, step_key)
-                if _step_cache.lookup(project_dir, step_key, _cache_fp):
-                    try:
-                        _restored = _step_cache.restore(
-                            project_dir, step_key, _cache_fp, session
-                        )
-                    except OSError as _restore_err:
-                        log.warning("step-cache restore failed (fallback): %s",
-                                    _restore_err)
-                        _cache_fp = None
-                        _restored = None
-                    if _restored:
-                        _fp = _cache_fp or ""  # 命中路径下必非 None (类型收窄)
-                        session.complete_step(step_idx, _restored)
-                        session.set_artifact(step_key, _restored)
-                        session.steps[step_idx]["cached"] = True
-                        session.steps[step_idx]["detail"] = (
-                            f"cached (指纹 {_fp[:10]})"
-                        )
-                        print(f"  ♻️  [{agent}] {step_name} — cached "
-                              f"(指纹 {_fp[:10]}), 复用产物")
-                        _propagate_step_verdict(
-                            session, step_idx, step_key, _restored
-                        )
-                        log.info("Step %s cache hit (%s)", step_key, _fp[:10])
-                        continue
-
-            session.start_step(step_idx)
-            # 方案 A (2026-08-07): expose the current step key so the
-            # unified knowledge injection at _call_llm can match per-step
-            # skills and produce step-specific context.
-            session.pipeline_knowledge_step_key = step_key
-            
-            print(f"  [{step_idx+1}/{len(_steps)}] {agent}: {step_name}")
-            log.info(f"Step {step_idx+1}/{len(_steps)}: [{agent}] {step_name}")
-            
-            try:
-                # Run step handler
-                if step_key == "final-report":
-                    session.status = "completed"
-
-                # --- LLM Fallback Integration ---
-                # Wrap handler call so that if it uses an LLM, the
-                # fallback chain is applied to validate the output.
-                output_path = _run_step_with_fallback(
-                    handler, session, step_key, step_name, spec_path,
-                )
-
-                # B1 缓存: 执行完成后入库 (确定性步骤; 失败/异常不入库)
-                if _cache_fp and _step_cache:
-                    try:
-                        _step_cache.store(project_dir, step_key, _cache_fp, output_path)
-                    except Exception as _store_err:  # pragma: no cover
-                        log.warning("step-cache store failed (non-fatal): %s",
-                                    _store_err)
-
-                session.complete_step(step_idx, str(output_path))
-                session.set_artifact(step_key, str(output_path))
-                # Propagate step-artifact verdicts (e.g. review JSON with
-                # status=failed) into session state so the final summary
-                # reflects real step outcomes instead of always "completed".
-                # 方向3 (2026-08-11): block 级门禁 verdict failed →
-                # _propagate_step_verdict 返回 "block"，中断后续步骤。
-                if _propagate_step_verdict(session, step_idx, step_key, output_path) == "block":
-                    print(f"  ⛔ Block gate failed: {step_key} — pipeline interrupted")
+            # D2: 并行组 — 组内成员一次性并发执行
+            _gid = _GROUP_LOOKUP.get(step_key)
+            if _gid is not None:
+                _members = [r for r in _registered
+                            if r[1] in PARALLEL_GROUPS[_gid] and r[1] not in _executed]
+                if _members:
+                    _gkeys = ", ".join(m[1] for m in _members)
+                    print(f"\n  ⚡ [D2] 并行组 {_gid+1} 并发: {_gkeys}")
+                    _blocked, _failed = _run_parallel_group(
+                        session, _members, from_step, project_dir, spec_path,
+                    )
+                    for _m in _members:
+                        _executed.add(_m[1])
                     print()
-                    break
-                if step_key == "final-report":
-                    session._save()
-                log.info(f"Step {step_idx+1} completed: {step_key}")
-                print()
-            except (PipelineStepError, RuntimeError) as e:
-                log.error(f"Step {step_idx+1} [{agent}] {step_name} failed: {e}")
-                log.debug(traceback.format_exc())
-                session.fail_step(step_idx, str(e))
-                print(f"  ❌ Step failed: {e}")
-                print()
-                # Block dependent steps: no more steps run after failure
+                    if _blocked or _failed:
+                        break
+                _ri += 1
+                continue
+            # 串行步骤
+            _status = _execute_step(
+                session, step_idx, step_key, agent, step_name, handler,
+                spec_path, project_dir, from_step,
+            )
+            _executed.add(step_key)
+            if _status == "block":
+                _blocked = True
                 break
+            if _status == "failed":
+                _failed = True
+                break
+            _ri += 1
+
+        if _blocked:
+            print("  ⛔ Block gate failed — pipeline interrupted")
+            print()
+        if _failed:
+            print("  ❌ Step failed — pipeline interrupted")
+            print()
         
         # E2E 修复 (2026-08-11): minimal 等白名单档不含 final-report —
         # 循环正常跑完即视为 completed（避免 status 停在 created 导致
@@ -901,6 +885,186 @@ def _propagate_step_verdict(
     except Exception as e:  # pragma: no cover - defensive
         log.debug("Verdict propagation skipped for %s: %s", output_path, e)
     return None
+
+
+def _execute_step(
+    session: "PipelineSession",
+    step_idx: int,
+    step_key: str,
+    agent: str,
+    step_name: str,
+    handler: Callable,
+    spec_path: str,
+    project_dir: str,
+    from_step: int,
+) -> str:
+    """Execute a single pipeline step (serial or D2 parallel worker).
+
+    Returns:
+        ``"ok"`` — step completed (possibly cached); ``"block"`` — block
+        gate verdict failed (pipeline must stop); ``"failed"`` — handler
+        raised (pipeline must stop).
+
+    D2 (2026-08-19): 单步执行逻辑从主循环抽出, 供串行与并行组共用 —
+    并行 worker 线程内通过 ``step_context.set_step_key`` 设置 thread-local
+    step_key (session.pipeline_knowledge_step_key 是共享字段, 并发会覆盖)。
+    """
+    from yuleosh.pipeline.step_context import set_step_key as _set_tl_key
+
+    # ── 断点续跑: 前序步骤 (idx+1 < from_step) 标记 skipped, 不执行 ──
+    if step_idx + 1 < from_step:
+        session.steps[step_idx]["status"] = "skipped"
+        session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
+        return "ok"
+
+    # ── B1 缓存 (2026-08-12): 确定性步骤内容寻址缓存 ──
+    _cache_fp = None
+    try:
+        from yuleosh.pipeline import step_cache as _step_cache
+    except ImportError:  # pragma: no cover - defensive
+        _step_cache = None
+
+    if _step_cache and _step_cache.is_cacheable(step_key) \
+            and _step_cache.cache_enabled():
+        _cache_fp = _step_cache.compute_fingerprint(session, step_key)
+        if _step_cache.lookup(project_dir, step_key, _cache_fp):
+            try:
+                _restored = _step_cache.restore(
+                    project_dir, step_key, _cache_fp, session
+                )
+            except OSError as _restore_err:
+                log.warning("step-cache restore failed (fallback): %s",
+                            _restore_err)
+                _cache_fp = None
+                _restored = None
+            if _restored:
+                _fp = _cache_fp or ""  # 命中路径下必非 None (类型收窄)
+                session.complete_step(step_idx, _restored)
+                session.set_artifact(step_key, _restored)
+                session.steps[step_idx]["cached"] = True
+                session.steps[step_idx]["detail"] = (
+                    f"cached (指纹 {_fp[:10]})"
+                )
+                print(f"  ♻️  [{agent}] {step_name} — cached "
+                      f"(指纹 {_fp[:10]}), 复用产物")
+                _propagate_step_verdict(
+                    session, step_idx, step_key, _restored
+                )
+                log.info("Step %s cache hit (%s)", step_key, _fp[:10])
+                return "ok"
+
+    session.start_step(step_idx)
+    # 方案 A (2026-08-07): expose the current step key so the
+    # unified knowledge injection at _call_llm can match per-step
+    # skills and produce step-specific context.
+    session.pipeline_knowledge_step_key = step_key
+    # D2: worker 线程内 thread-local step_key (并发安全)。
+    # try/finally 清理 — 防止 thread-local 残留到后续串行步骤/测试
+    # （pytest 主线程复用, 残留会污染下一个测试的 role 解析）。
+    from yuleosh.pipeline.step_context import clear_step_key as _clear_tl_key
+
+    _set_tl_key(step_key)
+
+    print(f"  [{step_idx+1}] {agent}: {step_name}")
+    log.info(f"Step {step_idx+1}: [{agent}] {step_name}")
+
+    try:
+        # Run step handler
+        if step_key == "final-report":
+            session.status = "completed"
+
+        # --- LLM Fallback Integration ---
+        output_path = _run_step_with_fallback(
+            handler, session, step_key, step_name, spec_path,
+        )
+
+        # B1 缓存: 执行完成后入库 (确定性步骤; 失败/异常不入库)
+        if _cache_fp and _step_cache:
+            try:
+                _step_cache.store(project_dir, step_key, _cache_fp, output_path)
+            except Exception as _store_err:  # pragma: no cover
+                log.warning("step-cache store failed (non-fatal): %s",
+                            _store_err)
+
+        session.complete_step(step_idx, str(output_path))
+        session.set_artifact(step_key, str(output_path))
+        if _propagate_step_verdict(session, step_idx, step_key, output_path) == "block":
+            print(f"  ⛔ Block gate failed: {step_key} — pipeline interrupted")
+            print()
+            return "block"
+        if step_key == "final-report":
+            session._save()
+        log.info(f"Step {step_idx+1} completed: {step_key}")
+        print()
+        return "ok"
+    except (PipelineStepError, RuntimeError) as e:
+        log.error(f"Step {step_idx+1} [{agent}] {step_name} failed: {e}")
+        log.debug(traceback.format_exc())
+        session.fail_step(step_idx, str(e))
+        print(f"  ❌ Step failed: {e}")
+        print()
+        return "failed"
+    finally:
+        _clear_tl_key()
+
+
+def _run_parallel_group(
+    session: "PipelineSession",
+    members: list[tuple[int, str, str, str, Callable]],
+    from_step: int,
+    project_dir: str,
+    spec_path: str,
+) -> tuple[bool, bool]:
+    """Run a D2 parallel group's steps concurrently (ThreadPoolExecutor).
+
+    Args:
+        members: [(step_idx, step_key, agent, step_name, handler), ...]
+        from_step / project_dir / spec_path: forwarded to _execute_step.
+
+    Returns:
+        (blocked, failed) — True when any member's gate blocked / handler
+        failed.  Group semantics: all members run to completion (no early
+        cancellation), then the worst outcome is aggregated — identical to
+        verify-loop's merged semantics.  Block/fail interrupts the pipeline
+        only AFTER the whole group finishes, so no partial state is lost.
+    """
+    from yuleosh.pipeline.step_context import (
+        clear_step_key as _clear_tl_key,
+        set_step_key as _set_tl_key,
+    )
+
+    results: dict[str, str] = {}
+
+    def _worker(m: tuple[int, str, str, str, Callable]) -> tuple[str, str]:
+        _idx, _key, _agent, _name, _handler = m
+        _set_tl_key(_key)
+        try:
+            _status = _execute_step(
+                session, _idx, _key, _agent, _name, _handler,
+                spec_path, project_dir, from_step,
+            )
+            return _key, _status
+        finally:
+            _clear_tl_key()
+
+    with ThreadPoolExecutor(max_workers=len(members)) as _ex:
+        _futures = {_ex.submit(_worker, m): m[1] for m in members}
+        for _fut in as_completed(_futures):
+            _key = _futures[_fut]
+            try:
+                _key2, _status = _fut.result()
+                results[_key2] = _status
+            except Exception as _e:  # pragma: no cover - defensive
+                log.error("Parallel worker for %s crashed: %s", _key, _e)
+                results[_key] = "failed"
+
+    blocked = any(s == "block" for s in results.values())
+    failed = any(s == "failed" for s in results.values())
+    _summary = ", ".join(f"{k}={v}" for k, v in results.items())
+    log.info("Parallel group finished: %s", _summary)
+    if blocked or failed:
+        print(f"  ⛔ 并行组失败: {_summary}")
+    return blocked, failed
 
 
 def _run_step_with_fallback(

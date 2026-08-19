@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import sys
+import threading
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -109,6 +110,9 @@ class PipelineSession:
         # Token usage tracking across all steps
         self.token_usage_total: int = 0
         self.token_usage_steps: list[dict] = []
+        # D2 (2026-08-19): 并行组执行时多线程同时累加 token usage —
+        # += 是读-加-写三步非原子, 需要锁保护。
+        self._usage_lock = threading.RLock()
         # D3 codegen: "planning" (default) or "generate-code".
         # Accepts None (default planning), "generate-code", or "planning".
         self.development_mode: str | None = development_mode
@@ -220,6 +224,16 @@ class PipelineSession:
         else:
             self.artifact_missing.pop(key, None)
         self._save(persist=False)
+
+    def add_token_usage(self, step_key: str, usage: dict) -> None:
+        """Thread-safe token usage accumulation (D2 parallel groups).
+
+        并行组执行时多个 worker 线程同时调用; ``+=`` 与 ``append`` 需要
+        原子性 — 用 _usage_lock 保护, 防止丢失更新/交叉写入。
+        """
+        with self._usage_lock:
+            self.token_usage_total += int(usage.get("total_tokens", 0) or 0)
+            self.token_usage_steps.append({"step": step_key, "usage": usage})
 
     def _save(self, persist: bool = True) -> None:
         """Persist session state to disk (JSON) and SQLite store.

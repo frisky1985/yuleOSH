@@ -420,7 +420,12 @@ def test_completed_final_report_info_verdict_no_errors(osh_home, tmp_path, capsy
 
 
 def test_step_pipeline_error_blocks_pipeline(osh_home, tmp_path):
-    """handler 抛 PipelineStepError → fail_step + break（L417-424）。"""
+    """handler 抛 PipelineStepError → fail_step + break（L417-424）。
+
+    D2 (2026-08-19): 预注册全部步骤后, 失败时后续步骤仍在 session.steps
+    中登记（status=pending）但**未执行** — 断言改为「后续步骤未执行」,
+    而非「未登记」。语义不变: 失败阻断后续执行。
+    """
     spec = _make_spec(tmp_path)
     out = tmp_path / "a.md"
     out.write_text("x", encoding="utf-8")
@@ -434,8 +439,9 @@ def test_step_pipeline_error_blocks_pipeline(osh_home, tmp_path):
     ]
     session = _run(spec, steps=steps)
     assert session.status == "failed"
-    assert len(session.steps) == 1  # 后续步骤未执行
     assert session.steps[0]["status"] == "failed"
+    # 后续步骤已登记但未执行（预注册语义, D2）
+    assert session.steps[1]["status"] == "pending"
     assert session.errors == ["gate failed"]
 
 
