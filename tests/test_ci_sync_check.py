@@ -114,7 +114,9 @@ class TestRunSyncCheck:
     def test_no_rules(self):
         with tempfile.TemporaryDirectory() as td:
             result = run_sync_check(td)
-            assert result["status"] == "warning"
+            # 无规则 = skip（pass），不是 warning —— 未配置 sync gate 的项目
+            # 不应每次 CI 报 warning 噪音（window-anti-pinch 实测）
+            assert result["status"] == "passed"
             assert "No sync gate rules" in result["summary"]
 
     def test_no_changed_files(self):
@@ -206,6 +208,24 @@ class TestRunSyncCheckGate:
             assert "tracking_results" in result
             assert "schema_results" in result
             assert result["status"] in ("passed", "warning", "failed")
+
+    def test_schema_warning_counts_in_summary(self):
+        """schema_findings 的 warning 必须计入 warning_count。
+
+        Regression: 曾 status=warning 但 summary 显示 0 warning(s) ——
+        warning_count 只统计 rule_results，漏算 schema 级 warning。
+        """
+        with tempfile.TemporaryDirectory() as td:
+            with (
+                patch("yuleosh.ci.sync_check.run_sync_check",
+                      return_value={"status": "passed", "rule_results": [], "summary": "ok"}),
+                patch("yuleosh.ci.sync_check.validate_doc_yaml_schema",
+                      return_value=[{"rule": "schema-architecture", "severity": "warning",
+                                    "message": "docs/architecture missing required field"}]),
+            ):
+                result = run_sync_check_gate(td)
+                assert result["status"] == "warning"
+                assert "1 warning(s)" in result["summary"]
 
 
 class TestPrintSyncResult:

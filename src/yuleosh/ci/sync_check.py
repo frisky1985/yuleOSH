@@ -140,8 +140,10 @@ def run_sync_check(project_dir: str, base_ref: str = "HEAD") -> dict:
     # 1. Load gate rules
     rules = load_sync_gate_config(project_dir)
     if not rules:
-        result["status"] = "warning"
-        result["summary"] = "No sync gate rules defined (docs/.sync-gate.yaml not found or empty)"
+        # 无规则 = 无可检查项 → skip（非 warning）。doc sync gate 是可选机制，
+        # 未配置的项目不应每次 CI 都报 warning 噪音（window-anti-pinch 实测）。
+        result["status"] = "passed"
+        result["summary"] = "No sync gate rules defined (docs/.sync-gate.yaml not found or empty) — skipped"
         return result
 
     # 2. Detect changed files
@@ -373,6 +375,9 @@ def run_sync_check_gate(
     )
     warning_count = sum(
         1 for r in tracking.get("rule_results", []) if r.get("severity") == "warning"
+    ) + sum(
+        # schema warning 也计入统计（曾漏算：status=warning 但 0 warning(s) 矛盾）
+        1 for sf in schema_findings if sf.get("severity") == "warning"
     )
 
     result["summary"] = (
