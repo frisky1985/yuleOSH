@@ -466,7 +466,23 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 from_step = 1
             else:
                 _prev_ts, _prev_dir, _prev_data = _prev
+                # r21q/r22: 恢复只带回 from_step 之前的前序产物 — 旧 session 的
+                # 后序步骤产物（step >= from_step）不得混入新 session 证据链
+                # （window-anti-pinch 实测: claude-review 把旧 self-test 当本轮证据）。
+                # 按 PIPELINE_STEPS 顺序映射 step_key → 序号, 只恢复序号 < from_step 的产物。
+                from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+                _step_order = {k: i + 1 for i, (k, *_rest) in enumerate(PIPELINE_STEPS)}
                 for _key, _path in (_prev_data.get("artifacts") or {}).items():
+                    _step_no = _step_order.get(_key)
+                    # 旧 key（不在当前 PIPELINE_STEPS，如 codex-verify/self-test-review
+                    # 已合并进 verify-loop）一律跳过 — r22 后无对应步骤，不得混入。
+                    if _step_no is None:
+                        log.info("Resume: skip stale artifact %s (no step in PIPELINE_STEPS)", _key)
+                        continue
+                    if _step_no >= from_step:
+                        log.info("Resume: skip artifact %s (step %d >= from_step %d)",
+                                 _key, _step_no, from_step)
+                        continue
                     _src = Path(str(_path))
                     if not _src.exists():
                         continue

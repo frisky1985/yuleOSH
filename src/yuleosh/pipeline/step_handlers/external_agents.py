@@ -178,7 +178,7 @@ def _build_codex_prompt(spec_content: str, artifacts_block: str,
 {_inject_spec(spec_content)}
 
 当前产物:
-{artifacts_block[:ARTIFACT_INJECT_LIMIT]}
+{artifacts_block}
 
 代码部署状态:
 {deploy_note}
@@ -266,7 +266,7 @@ def _build_claude_review_prompt(spec_content: str, artifacts_block: str,
 {shall_block}
 
 待评审方案/建议:
-{artifacts_block[:ARTIFACT_INJECT_LIMIT]}
+{artifacts_block}
 
 代码部署状态:
 {deploy_note}
