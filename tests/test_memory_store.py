@@ -3,9 +3,6 @@
 
 """Unit tests for yuleOSH Memory — fact store + session search."""
 
-import os
-import tempfile
-
 import pytest
 
 from yuleosh.memory.store import MemoryStore
