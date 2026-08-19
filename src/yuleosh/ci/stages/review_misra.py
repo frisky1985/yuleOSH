@@ -14,7 +14,6 @@ import logging
 import os
 import subprocess
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -24,7 +23,6 @@ from yuleosh.ci.stage_utils import _handle_stage_error
 from yuleosh.ci.stages.review_collect import (
     _categorize_file,
     _collect_delta_files,
-    _detect_include_paths,
     _exclude_paths,
     _expand_header_dependents,
     _find_c_sources,
@@ -138,7 +136,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
                 if bv.get("line") == v.get("line"):  # Same line = same violation
                     return False
         return True
-    print("  🔍 CI: MISRA static analysis (cppcheck misra addon — C:2012 semantics; C:2023 rule set mapping)")
+    print("  🔍 CI: MISRA static analysis (scanner adapter — C:2012/C:2023 rule set mapping)")
 
     # Load config
     try:
@@ -158,11 +156,6 @@ def run_misra_check(project_dir: str, ci: CIResult,
     fail_on_advisory = misra_cfg.fail_on_advisory if misra_cfg else False
     fail_threshold = misra_cfg.fail_threshold if misra_cfg else 10
     violations_per_kloc = misra_cfg.violations_per_kloc if misra_cfg else 2.0
-    addon = misra_cfg.addon if misra_cfg else "misra"
-    cppcheck_std = misra_cfg.cppcheck_std if misra_cfg else "c11"
-    enable = getattr(misra_cfg, "enable", "all") if misra_cfg else "all"
-    suppress_rules = misra_cfg.suppress_rules if misra_cfg else []
-    rule_overrides = misra_cfg.rule_overrides if misra_cfg else []
     deviations = misra_cfg.deviations if misra_cfg else []
     strict = is_strict()
 
@@ -301,144 +294,49 @@ def run_misra_check(project_dir: str, ci: CIResult,
         mode_label = "L1 增量检查" if is_delta else "全量检查"
     print(f"    📋 Mode: {mode_label} ({len(c_files)} file(s))")
 
-    # Build suppression arguments from config + rule_overrides
-    suppress_args = []
-    for rule_id in suppress_rules:
-        suppress_args.append("--suppress=misra-c2023-" + rule_id)
-        suppress_args.append("--suppress=misra-c2012-" + rule_id)
-    for override in rule_overrides:
-        if not override.enabled and override.rule_id:
-            suppress_args.append("--suppress=" + override.rule_id)
-
-    # ── Auto-detect include paths and add -I flags ──
-    include_paths = _detect_include_paths(project_dir)
-    # Extra configured include dirs (e.g. embedded/freestanding_includes)
-    if misra_cfg and misra_cfg.include_paths:
-        for inc in misra_cfg.include_paths:
-            inc_resolved = os.path.join(project_dir, inc) if not os.path.isabs(inc) else inc
-            if os.path.isdir(inc_resolved) and inc_resolved not in include_paths:
-                include_paths.append(inc_resolved)
-    include_args = []
-    for inc in include_paths:
-        # Use project-relative -I so cppcheck emits relative file paths in its
-        # output — otherwise absolute -I makes included .h paths absolute and
-        # they never match project-relative suppressions-list entries.
-        if os.path.isabs(inc):
-            try:
-                rel_inc = os.path.relpath(inc, project_dir)
-                if not rel_inc.startswith(".."):
-                    inc = rel_inc
-            except ValueError:
-                pass
-        include_args.extend(["-I", inc])
-    if include_args:
-        log.info("Adding include paths: %s", " ".join(
-            [inc for i, inc in enumerate(include_args) if i % 2 == 1]
-        ))
-
-    # Check for compile_commands.json and suggest it
-    compile_db = os.path.join(project_dir, "compile_commands.json")
-    if os.path.isfile(compile_db):
-        log.info("Found compile_commands.json — consider using --project=compile_commands.json")
-
-    # Construct cppcheck command
-    cppcheck_suppressions = os.path.join(project_dir, ".cppcheck_suppressions")
-    suppressions_list_args = []
-    if os.path.isfile(cppcheck_suppressions):
-        suppressions_list_args = ["--suppressions-list=" + cppcheck_suppressions]
-
-    # AUTOSAR macro defines — suppress false positives from common
-    # AUTOSAR platform constants that are not defined in source headers.
-    define_args = [
-        "-DSTD_ON", "-DSTD_OFF", "-DSTD_HIGH", "-DSTD_LOW",
-        "-DSTD_ACTIVE", "-DSTD_IDLE",
-        "-DNULL_PTR", "-DTRUE", "-DFALSE",
-        "-DE_OK", "-DE_NOT_OK",
-        "-DNULL",
-    ]
-
-    # ── cppcheck-config.h for AUTOSAR platform defines ──
-    # Provides configuration constants for MISRA addon completeness.
-    # Simplifies config analysis and suppresses [misra-config] false positives.
-    cppcheck_config_h = os.path.join(project_dir, "cppcheck-config.h")
-    if os.path.isfile(cppcheck_config_h):
-        define_args.append("--include=" + cppcheck_config_h)
-        define_args.append("--max-configs=1")
-        if misra_cfg and misra_cfg.enabled:
-            suppress_args.append("--suppress=misra-config")
-
-    # Determine addon arg: use JSON config when rule_texts_path is set
-    if misra_cfg and misra_cfg.rule_texts_path:
-        rt_path = misra_cfg.rule_texts_path
-        rt_resolved = os.path.join(project_dir, rt_path) if not os.path.isabs(rt_path) else rt_path
-        if os.path.isfile(rt_resolved):
-            # Use JSON addon config to pass --rule-texts to misra.py
-            addon_json = os.path.join(project_dir, ".yuleosh", "misra-addon-config.json")
-            if not os.path.isfile(addon_json):
-                # Create dynamically
-                import json as _json
-                addon_cfg = {
-                    "script": addon,
-                    "python": "python3",
-                    "args": ["--rule-texts=" + rt_resolved],
-                }
-                with open(addon_json, "w") as _f:
-                    _json.dump(addon_cfg, _f, indent=2)
-                log.info("Created addon JSON config: %s", addon_json)
-            addon_arg = addon_json
-        else:
-            log.warning("rule_texts_path configured but file not found: %s", rt_resolved)
-            addon_arg = addon
-    else:
-        addon_arg = addon
-
-    cmd = [
-        "cppcheck",
-        "--addon=" + addon_arg,
-        "--language=c",
-        "--std=" + cppcheck_std,
-        "--enable=" + enable,
-        "--suppress=missingIncludeSystem",
-        "--suppress=missingInclude",
-        "--suppress=normalCheckLevelMaxBranches",
-        "-q",
-    ] + suppressions_list_args + define_args + include_args + suppress_args
-
-    # Pass relative paths to cppcheck so output paths match suppressions-list
-    # entries (which use project-relative paths like embedded/...). Absolute
-    # paths would produce absolute output paths that never match the baseline.
-    rel_c_files = []
-    for f in c_files:
-        if os.path.isabs(f):
-            try:
-                rel = os.path.relpath(f, project_dir)
-                if not rel.startswith(".."):
-                    rel_c_files.append(rel)
-                    continue
-            except ValueError:
-                pass
-        rel_c_files.append(f)
-    cmd += rel_c_files
-
+    # ── 外部扫描器适配层（2026-08-19 ScannerAdapter）──
+    # misra.scanner 配置选择工具（cppcheck 默认 / parasoft / qac / ldra / mcp），
+    # ScannerRegistry 统一 detect → run → parse → normalize；客户换扫描器只改配置。
+    from yuleosh.ci.scanners import ScannerRegistry
+    scanner_name = misra_cfg.scanner if misra_cfg else "cppcheck"
     try:
-        start = time.perf_counter()
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=180, cwd=project_dir
-        )
-        elapsed = time.perf_counter() - start
-    except FileNotFoundError:
-        msg = "cppcheck not installed"
-        print(f"    🔧 Fix: install cppcheck (e.g. 'apt install cppcheck' or 'brew install cppcheck')")
+        scanner = ScannerRegistry().get(scanner_name)
+    except ValueError as exc:
+        msg = f"Unknown MISRA scanner: {scanner_name} — {exc}"
+        print(f"    🔧 Fix: set misra.scanner to one of {ScannerRegistry().available()}")
         return _handle_stage_error(ci, "misra-check", msg, strict)
-    except subprocess.TimeoutExpired:
-        msg = "cppcheck timed out after 180s"
-        print(f"    🔧 Fix: increase timeout or reduce file count. Try 'cppcheck --project=compile_commands.json' for faster analysis")
-        return _handle_stage_error(ci, "misra-check", msg, strict)
-    except Exception as e:
-        return _handle_stage_error(ci, "misra-check", "cppcheck execution error: " + str(e), strict)
+    print(f"    📋 Scanner: {scanner.display_name}")
 
-    # Collect output (cppcheck writes MISRA warnings to stderr)
-    output = result.stderr or result.stdout or ""
+    # 报告 check_standard 口径：cppcheck 保持原串（C:2012 工具链 + C:2023 映射），
+    # 商业工具按实际扫描器标注（C:2023 能力从工具链解耦）。
+    if scanner_name == "cppcheck":
+        check_standard_str = "MISRA C:2012 (cppcheck misra addon; C:2023 rule set mapping)"
+    else:
+        check_standard_str = f"MISRA C:2023 ({scanner.display_name}; C:2023 rule set mapping)"
+
+    if not scanner.detect(project_dir, misra_cfg):
+        msg = f"{scanner.display_name} not detected"
+        print(f"    🔧 Fix: {scanner.detect_hint(project_dir, misra_cfg)}")
+        return _handle_stage_error(ci, "misra-check", msg, strict)
+
+    scan_result = scanner.run(project_dir=project_dir, config=misra_cfg, target_files=c_files)
+    if not scan_result.ok:
+        msg = scan_result.error or f"{scanner.display_name} execution failed"
+        print(f"    🔧 Fix: {scan_result.hint or 'check scanner configuration'}")
+        return _handle_stage_error(ci, "misra-check", msg, strict)
+    output = scan_result.raw_output
+
+    def _scanner_parse(sc, text: str) -> list[dict]:
+        """适配器 parse + normalize → dict 列表（下游 misra_report dict 契约）。
+
+        解析失败向上传播，由调用方已有 except 兜底（不静默降级）：
+        - 主流程：外层大 try → summary reload from disk
+        - L2 delta 重解析：601 行 except → delta 阻断跳过
+        - 三级分类：648 行 except → classification_failed fail-safe 阻断
+        编程错误（AttributeError 等）不捕获，暴露给调用方（工程诚实）。
+        """
+        parsed = sc.normalize(sc.parse(text))
+        return [v.to_dict() if hasattr(v, "to_dict") else v for v in parsed]
 
     # Process output through misra_report module
     summary = None
@@ -446,7 +344,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
         # Try importing from the project-level ci/ directory
         sys.path.insert(0, project_dir)
         from yuleosh.ci.misra_report import (
-            parse_cppcheck_output, group_by_rule, enrich_with_definitions,
+            group_by_rule, enrich_with_definitions,
             compute_summary_stats, save_report, load_rule_definitions,
             print_summary,
             generate_traceability_matrix,
@@ -460,7 +358,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
             rule_defs_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "misra-rules.yaml"
 
         rule_defs = load_rule_definitions(rule_defs_path)
-        violations = parse_cppcheck_output(output)
+        violations = _scanner_parse(scanner, output)
 
         # ── 给每条违规标注代码类别 ──
         for v in violations:
@@ -505,7 +403,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
                                         deviations=deviations_used)
 
         save_report(enriched_violations, groups, summary, rule_defs, output_dir,
-                    deviations=deviations_used)
+                    deviations=deviations_used, check_standard=check_standard_str)
 
         # ── 分类报告摘要 ──
         business_violations = [v for v in enriched_violations if v.get("code_category", "") == "business"]
@@ -620,7 +518,10 @@ def run_misra_check(project_dir: str, ci: CIResult,
     # ── GSCR: Translate MISRA violations to Corporate Standard Rules ──
     try:
         from yuleosh.ci.rulesets import RulesetRegistry
-        gscr_ruleset = RulesetRegistry.get_default()
+        # 2026-08-19 修预存 bug：RulesetRegistry 是单例类，必须先实例化
+        # （RulesetRegistry().get_default()），类级调用 get_default() 必抛
+        # TypeError → GSCR 翻译静默失败（except 吞掉）。
+        gscr_ruleset = RulesetRegistry().get_default()
         if gscr_ruleset and gscr_ruleset.name != "misra-c2023":
             # Translate all violations to GSCR
             gscr_violations = gscr_ruleset.translate_violations(violations)
@@ -686,9 +587,8 @@ def run_misra_check(project_dir: str, ci: CIResult,
             baseline = _load_misra_baseline(project_dir)
             baseline_violations = baseline.get("violations", [])
             if baseline_violations:
-                from yuleosh.ci.misra_report import parse_cppcheck_output
-                # Re-parse violations for comparison
-                current_violations = parse_cppcheck_output(output)
+                # Re-parse violations for comparison（走适配器，兼容非 cppcheck 扫描器）
+                current_violations = _scanner_parse(scanner, output)
                 new_required = [v for v in current_violations
                                 if _is_new_required_violation(v, baseline_violations)]
                 new_required_count = len(new_required)
@@ -706,8 +606,7 @@ def run_misra_check(project_dir: str, ci: CIResult,
     # 从 violations 中计算分类细目
     classification_failed = False
     try:
-        from yuleosh.ci.misra_report import parse_cppcheck_output as _pco
-        _current_violations = _pco(output)
+        _current_violations = _scanner_parse(scanner, output)
         for _v in _current_violations:
             _vf = _v.get("file", "")
             _vfa = os.path.join(project_dir, _vf) if not os.path.isabs(_vf) else _vf

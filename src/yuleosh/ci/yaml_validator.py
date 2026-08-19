@@ -63,6 +63,8 @@ _CI_CONFIG_SCHEMA = {
         "keys": {
             "enabled": {"type": "bool"},
             "addon": {"type": "str"},
+            "scanner": {"type": "str"},
+            "scanner_config": {"type": "dict"},
             "fail_on_required": {"type": "bool"},
             "fail_on_violation": {"type": "bool"},
             "fail_on_advisory": {"type": "bool"},

@@ -44,6 +44,7 @@ def generate_json_report(
     deviation_list: Optional[list] = None,
     excluded_rules: Optional[list] = None,
     excluded_files: Optional[list] = None,
+    check_standard: str | None = None,
 ) -> dict:
     """Generate the full MISRA report as a JSON-serializable dict."""
     rule_defs = rule_defs or load_rule_definitions()
@@ -57,6 +58,11 @@ def generate_json_report(
     prev = _load_prev_report(output_dir)
     diff_info = _compute_prev_build_diff(stats, prev) if prev else {}
 
+    # 2026-08-19 ScannerAdapter：check_standard 可被调用方（review_misra）按实际
+    # 扫描器覆盖（默认保持 cppcheck 口径，零回归）。
+    if check_standard is None:
+        check_standard = "MISRA C:2012 (cppcheck misra addon; C:2023 rule set mapping)"
+
     report = {
         "schema_version": _MISRA_SCHEMA_VERSION,
         "generated_at": datetime.now().isoformat(),
@@ -66,7 +72,7 @@ def generate_json_report(
         # implements C:2012 checks. Rule IDs are mapped to the C:2023 rule
         # set where semantics are unchanged; modified/removed rules keep
         # their C:2012 identity (see parser._normalize_rule_id).
-        "check_standard": "MISRA C:2012 (cppcheck misra addon; C:2023 rule set mapping)",
+        "check_standard": check_standard,
         "ci_environ": get_ci_environ(),
         **stats,
         "category_breakdown": category_bd,
@@ -209,10 +215,12 @@ def save_report(
     rule_defs_or_formats=None,
     output_dir_or_none: str | Path | None = None,
     deviations: list | None = None,
+    check_standard: str | None = None,
 ) -> list[Path] | tuple:
     """Save the MISRA report to disk.
 
     Supports both new-style (report dict) and legacy (violations list) calling.
+    ``check_standard`` (2026-08-19 ScannerAdapter) 按实际扫描器覆盖报告口径。
     """
     # Detect calling convention: new style (pass dict report + output_dir)
     if isinstance(violations_or_report, dict) and isinstance(groups_or_output_dir, (str, Path)):
@@ -253,6 +261,7 @@ def save_report(
         rule_defs=rule_defs,
         output_dir=output_dir,
         deviation_list=deviations,
+        check_standard=check_standard,
     )
 
     # Save JSON

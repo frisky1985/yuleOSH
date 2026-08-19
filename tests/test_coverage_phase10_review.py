@@ -30,6 +30,7 @@ from yuleosh.ci.config import (
     MisraRuleOverride,
 )
 from yuleosh.ci.result import CIResult
+from yuleosh.ci.scanners.base import ScannerResult
 from yuleosh.ci.stages.review import run_docsync_gate
 from yuleosh.ci.stages.review_misra import _format_null_pointer_fix, run_misra_check
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
@@ -108,13 +109,59 @@ class _FakeRuleset:
 
     def rule_definitions(self):
         return {
-            "rules": {
-                "GSCR-01": {
-                    "description_cn": "长度足够的规则描述文本",
-                    "severity": "S1",
-                }
-            }
+            "rules": {},
         }
+
+
+class _FakeScanner:
+    """ScannerAdapter 的假实现（mock 外部扫描器边界）。
+
+    ScannerAdapter 改造后 run_misra_check 通过
+    ``ScannerRegistry().get(name)`` 获取扫描器，外部扫描器（cppcheck 等）
+    是 mock 边界——测试注入 violations 走 fake 的 parse/normalize，
+    不触碰真实工具进程（与旧 subprocess.run mock 语义等价）。
+    """
+
+    name = "cppcheck"
+    display_name = "cppcheck (fake)"
+
+    def __init__(self, violations=None, parse_side_effect=None,
+                 detect_ok=True, run_ok=True):
+        self._violations = violations if violations is not None else []
+        # parse_side_effect: 逐次调用返回/抛出（模拟主流程/L2 delta/分类统计）
+        self._parse_side_effect = parse_side_effect
+        self._parse_calls = 0
+        self._detect_ok = detect_ok
+        self._run_ok = run_ok
+        # run 收到的 config（验证 review_misra 正确透传扫描器配置）
+        self.run_configs: list = []
+
+    def detect(self, project_dir, config=None):
+        return self._detect_ok
+
+    def detect_hint(self, project_dir, config=None):
+        return "install cppcheck"
+
+    def run(self, *, project_dir, config=None, target_files=None):
+        self.run_configs.append(config)
+        if not self._run_ok:
+            return ScannerResult(tool=self.name, raw_output="", ok=False,
+                                 error="fake scanner run failed",
+                                 hint="fake hint")
+        return ScannerResult(tool=self.name, raw_output="fake-output", ok=True)
+
+    def parse(self, raw):
+        if self._parse_side_effect is not None:
+            idx = min(self._parse_calls, len(self._parse_side_effect) - 1)
+            self._parse_calls += 1
+            eff = self._parse_side_effect[idx]
+            if isinstance(eff, BaseException):
+                raise eff
+            return eff
+        return self._violations
+
+    def normalize(self, violations, ruleset=None):
+        return violations
 
 
 class TestReviewMisraConfigDefaults:
@@ -156,7 +203,7 @@ class _MisraRunCtx:
     def __init__(self, *, cfg=None, violations=None, summary=None, stderr="",
                  git_files=None, git_exc=None, cppcheck_exc=None,
                  c_files=None, ruleset=None, strict=False,
-                 misra_fail_fast=False):
+                 misra_fail_fast=False, scanner_parse_side_effect=None):
         self.cfg = cfg if cfg is not None else CiConfig()
         self.violations = violations
         self.summary = summary
@@ -168,9 +215,11 @@ class _MisraRunCtx:
         self.ruleset = ruleset
         self.strict = strict
         self.misra_fail_fast = misra_fail_fast
+        self.scanner_parse_side_effect = scanner_parse_side_effect
         self.stack = ExitStack()
         self.mocks = {}
         self.recorded_cmds: list[list[str]] = []
+        self.scanner: _FakeScanner | None = None
 
     def __enter__(self):
         s = self.stack
@@ -203,6 +252,26 @@ class _MisraRunCtx:
             self.mocks[name] = s.enter_context(
                 mock.patch(f"yuleosh.ci.misra_report.{name}"))
         viols = self.violations if self.violations is not None else []
+        # ScannerAdapter 边界 mock：ScannerRegistry.get → fake scanner。
+        # 外部扫描器是 mock 边界（不触碰真实 cppcheck 进程），violations 经
+        # fake 的 parse/normalize 注入下游（等价旧 parse_cppcheck_output mock）。
+        cppcheck_exc = self.cppcheck_exc
+        if cppcheck_exc is not None and isinstance(cppcheck_exc, FileNotFoundError):
+            # 工具缺失：detect False → skipped/failed
+            self.scanner = _FakeScanner(
+                viols, parse_side_effect=self.scanner_parse_side_effect,
+                detect_ok=False)
+        elif cppcheck_exc is not None:
+            # 工具执行异常：run ok=False → skipped/failed
+            self.scanner = _FakeScanner(
+                viols, parse_side_effect=self.scanner_parse_side_effect,
+                run_ok=False)
+        else:
+            self.scanner = _FakeScanner(
+                viols, parse_side_effect=self.scanner_parse_side_effect)
+        s.enter_context(mock.patch(
+            "yuleosh.ci.scanners.ScannerRegistry.get",
+            return_value=self.scanner))
         self.mocks["parse_cppcheck_output"].return_value = viols
         self.mocks["enrich_with_definitions"].return_value = viols
         self.mocks["group_by_rule"].return_value = {}
@@ -471,21 +540,26 @@ class TestRunMisraCheck:
         assert ci.stages[-1]["status"] == "passed"
 
     def test_rule_texts_path_creates_addon_json(self, tmp_path):
-        """rule_texts_path 指向存在的文件 → 动态生成 misra-addon-config.json。"""
+        """rule_texts_path 指向存在的文件 → 动态生成 misra-addon-config.json。
+
+        ScannerAdapter 改造后 addon JSON 创建下移到 cppcheck_adapter
+        （见 tests/ci/test_cppcheck_adapter.py::test_rule_texts_path_creates_addon_json）；
+        此处验证 review_misra 把 rule_texts_path 正确透传给扫描器 config。
+        """
         proj, cfile = _make_project(tmp_path)
         (proj / "rule-texts.txt").write_text("Rule 10.1: text")
         (proj / ".yuleosh").mkdir(exist_ok=True)  # 生产环境由前置阶段创建
         cfg = CiConfig()
         cfg.misra = MisraConfig(rule_texts_path="rule-texts.txt")
         ci = CIResult(2, "abc")
-        with _MisraRunCtx(cfg=cfg):
+        with _MisraRunCtx(cfg=cfg) as ctx:
             result = run_misra_check(str(proj), ci, mode="full",
                                      target_files=[cfile])
         assert result is True
-        addon_json = proj / ".yuleosh" / "misra-addon-config.json"
-        assert addon_json.exists()
-        data = json.loads(addon_json.read_text())
-        assert data["args"] == ["--rule-texts=" + str(proj / "rule-texts.txt")]
+        # review_misra 透传 misra_cfg 给 scanner.run
+        assert ctx.scanner is not None and ctx.scanner.run_configs
+        assert ctx.scanner.run_configs[0].rule_texts_path == "rule-texts.txt"
+        assert ctx.mocks["save_report"].called
 
     def test_rule_texts_path_missing_warns(self, tmp_path):
         proj, cfile = _make_project(tmp_path)
@@ -595,10 +669,9 @@ class TestRunMisraL2Delta:
         viols = [_violation()]
         ci = CIResult(2, "abc")
         with _MisraRunCtx(violations=viols,
-                          summary=_default_summary(total=1, required=1)), \
-             mock.patch("yuleosh.ci.misra_report.parse_cppcheck_output",
-                        side_effect=[viols, ValueError("corrupt"),
-                                     ValueError("corrupt")]):
+                          summary=_default_summary(total=1, required=1),
+                          scanner_parse_side_effect=[viols, ValueError("corrupt"),
+                                                     ValueError("corrupt")]):
             # 第 1 次解析正常；第 2 次（L2 delta 重解析，baseline 无
             # violations 键实际不触发）；第 3 次（分类统计）抛 ValueError
             result = run_misra_check(str(proj), ci, mode="full",
@@ -620,9 +693,8 @@ class TestRunMisraL2Delta:
         viols = [_violation()]
         ci = CIResult(2, "abc")
         with _MisraRunCtx(violations=viols,
-                          summary=_default_summary(total=1, required=1)), \
-             mock.patch("yuleosh.ci.misra_report.parse_cppcheck_output",
-                        side_effect=[viols, AttributeError("boom")]), \
+                          summary=_default_summary(total=1, required=1),
+                          scanner_parse_side_effect=[viols, AttributeError("boom")]), \
              pytest.raises(AttributeError):
             # 第 1 次解析正常；第 2 次（分类统计）抛编程错误
             run_misra_check(str(proj), ci, mode="full",
@@ -644,9 +716,8 @@ class TestRunMisraL2Delta:
         viols = [_violation()]
         ci = CIResult(2, "abc")
         with _MisraRunCtx(violations=viols,
-                          summary=_default_summary(total=1, required=1)), \
-             mock.patch("yuleosh.ci.misra_report.parse_cppcheck_output",
-                        side_effect=[viols, ValueError("corrupt"), viols]):
+                          summary=_default_summary(total=1, required=1),
+                          scanner_parse_side_effect=[viols, ValueError("corrupt"), viols]):
             # 第 1 次解析正常；第 2 次（L2 delta 重解析）抛 ValueError；
             # 第 3 次（分类统计）正常 → business required 违规仍阻断
             result = run_misra_check(str(proj), ci, mode="full",
@@ -1473,7 +1544,12 @@ class TestMisraEnableConfig:
         assert cfg.misra.enable == "all"
 
     def test_run_misra_check_passes_enable_to_cppcheck(self, tmp_path):
-        """cfg.misra.enable='warning,style' → cppcheck cmd 带 --enable=warning,style。"""
+        """cfg.misra.enable='warning,style' → 透传给扫描器 config。
+
+        ScannerAdapter 改造后命令行构建下移到 cppcheck_adapter
+        （tests/ci/test_cppcheck_adapter.py 已断言 --enable 参数）；
+        此处验证 review_misra 把 enable 正确透传。
+        """
         proj, cfile = _make_project(tmp_path)
         cfg = CiConfig()
         cfg.misra = MisraConfig(enable="warning,style")
@@ -1482,13 +1558,11 @@ class TestMisraEnableConfig:
             result = run_misra_check(str(proj), ci, mode="full",
                                      target_files=[cfile])
         assert result is True
-        cppcheck_cmds = [c for c in ctx.recorded_cmds
-                         if c and c[0] == "cppcheck"]
-        assert cppcheck_cmds
-        assert any(a == "--enable=warning,style" for a in cppcheck_cmds[0])
+        assert ctx.scanner is not None and ctx.scanner.run_configs
+        assert ctx.scanner.run_configs[0].enable == "warning,style"
 
     def test_run_misra_check_default_enable_all(self, tmp_path):
-        """默认配置 → cppcheck cmd 仍带 --enable=all（向后兼容）。"""
+        """默认配置 → 扫描器 config.enable='all'（向后兼容）。"""
         proj, cfile = _make_project(tmp_path)
         cfg = CiConfig()  # MisraConfig() 默认 enable='all'
         ci = CIResult(2, "abc")
@@ -1496,10 +1570,8 @@ class TestMisraEnableConfig:
             result = run_misra_check(str(proj), ci, mode="full",
                                      target_files=[cfile])
         assert result is True
-        cppcheck_cmds = [c for c in ctx.recorded_cmds
-                         if c and c[0] == "cppcheck"]
-        assert cppcheck_cmds
-        assert any(a == "--enable=all" for a in cppcheck_cmds[0])
+        assert ctx.scanner is not None and ctx.scanner.run_configs
+        assert ctx.scanner.run_configs[0].enable == "all"
 
 
 # ===========================================================================

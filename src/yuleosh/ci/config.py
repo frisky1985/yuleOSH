@@ -140,6 +140,12 @@ class MisraConfig:
 
     enabled: bool = True
     addon: str = DEFAULT_MISRA_ADDON  # 'misra' or 'misra-c-2023' or 'misra-c-2012'
+    # 外部扫描器适配层（2026-08-19 ScannerAdapter）:
+    # cppcheck（默认）| parasoft | qac | ldra | mcp
+    scanner: str = "cppcheck"
+    # 扫描器专属配置：api_url / api_token / cli_path / profile / report_file /
+    # mcp_endpoint / mcp_tool / timeout（见 ci/scanners/ 各适配器文档）
+    scanner_config: dict = field(default_factory=dict)
     # cppcheck --enable 级别。默认 'all'（含 unusedFunction/staticFunction，
     # 跨 TU 分析；对库项目会误报 API 函数未使用）。库项目可配置
     # 'warning,style' 关闭 unusedFunction 类检查。
@@ -413,6 +419,10 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
     if isinstance(misra_block, dict):
         cfg.misra.enabled = bool(misra_block.get("enabled", True))
         cfg.misra.addon = str(misra_block.get("addon", DEFAULT_MISRA_ADDON))
+        cfg.misra.scanner = str(misra_block.get("scanner", "cppcheck"))
+        sc_cfg = misra_block.get("scanner_config", {})
+        if isinstance(sc_cfg, dict):
+            cfg.misra.scanner_config = {str(k): v for k, v in sc_cfg.items()}
         cfg.misra.enable = str(misra_block.get("enable", "all"))
         cfg.misra.fail_on_required = bool(misra_block.get("fail_on_required", True))
         cfg.misra.fail_on_violation = bool(misra_block.get("fail_on_violation", False))
