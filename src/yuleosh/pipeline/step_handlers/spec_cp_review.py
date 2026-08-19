@@ -107,6 +107,16 @@ def step_spec_cp_review(session: PipelineSession) -> str:
             system_prompt, user_prompt = build_cp_review_prompt(cp, str(spec_target))
             result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
             content = result.get("content", "")
+            # D3 (2026-08-19): 回填 token usage — spec_cp_review 是全 pipeline
+            # 唯一漏记 _call_llm usage 的 handler (其余 handler 均已记录,
+            # llm_gateway 路径也已记录)。统一后 session.json 的
+            # token_usage_steps 覆盖所有 LLM 步骤, prompt 优化有数据依据。
+            _usage = result.get("usage") or {}
+            session.token_usage_total += _usage.get("total_tokens", 0)
+            session.token_usage_steps.append({
+                "step": "spec-cp-review",
+                "usage": _usage,
+            })
             try:
                 parsed = json.loads(content)
             except (json.JSONDecodeError, TypeError):

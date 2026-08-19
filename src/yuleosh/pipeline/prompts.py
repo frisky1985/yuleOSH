@@ -324,6 +324,21 @@ def build_architecture_prompt(
 # Step 5: Development Planning — Claude
 # ---------------------------------------------------------------------------
 
+def _trunc_ref(text: str, limit: int, ref: str) -> str:
+    """Reference-marked truncation for prompt injection (D1).
+
+    2026-08-19 D1 (性能): artifact 注入从静默截断（``[:N]`` 丢尾）改为
+    引用式截断（头尾保留 + 省略标记 + 全文路径）— 与 external_agents
+    9.3.2 同款。模型需要尾部契约/结论时可见省略标记并自主读文件,
+    语义不丢失; prompt 体积受控。短内容 (<limit) 原样返回。
+    """
+    from yuleosh.pipeline.context_guard import truncate_with_reference_marker
+
+    if not text:
+        return text
+    return truncate_with_reference_marker(text, limit, ref)
+
+
 def build_development_prompt(
     spec_content: str,
     spec_name: str,
@@ -360,17 +375,19 @@ def build_development_prompt(
     context_parts = [
         f"# Specification: {spec_name}\n```markdown\n{_inject_spec(spec_content)}\n```"
     ]
+    # D1 (2026-08-19): 引用式截断替代静默截断 — architecture/PRD/super
+    # 为文档 artifact, 保留头尾 + 省略标记 + 全文路径, 语义不丢失。
     if architecture_content:
         context_parts.append(
-            f"# Architecture Analysis\n```markdown\n{architecture_content[:4000]}\n```"
+            f"# Architecture Analysis\n```markdown\n{_trunc_ref(architecture_content, 4000, 'architecture artifact')}\n```"
         )
     if prd_content:
         context_parts.append(
-            f"# PRD\n```markdown\n{prd_content[:3000]}\n```"
+            f"# PRD\n```markdown\n{_trunc_ref(prd_content, 3000, 'PRD artifact')}\n```"
         )
     if super_analysis_content:
         context_parts.append(
-            f"# S.U.P.E.R. Analysis\n```markdown\n{super_analysis_content[:3000]}\n```"
+            f"# S.U.P.E.R. Analysis\n```markdown\n{_trunc_ref(super_analysis_content, 3000, 'super-analysis artifact')}\n```"
         )
     context_parts.append(
         f"# Project Metrics\n"

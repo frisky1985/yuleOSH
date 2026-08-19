@@ -430,9 +430,9 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
         spec_content = spec_path.read_text() if spec_path.exists() else "(spec file not found)"
 
         # --- Read artifacts ---
-        architecture_content = artifacts_read(session.artifacts, "architecture")
-        prd_content = artifacts_read(session.artifacts, "prd")
-        super_content = artifacts_read(session.artifacts, "super-analysis")
+        architecture_content = artifacts_read(session.artifacts, "architecture") or ""
+        prd_content = artifacts_read(session.artifacts, "prd") or ""
+        super_content = artifacts_read(session.artifacts, "super-analysis") or ""
 
         # --- Build LLM prompt ---
         # 2026-08-18 r21e 复盘: 注入仓库事实快照 (测试文件列表/框架/ASIL),

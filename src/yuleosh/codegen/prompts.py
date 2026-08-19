@@ -89,6 +89,21 @@ def collect_seed_sources(project_dir: str | Path, max_files: int = SEED_MAX_FILE
     return "\n\n".join(parts)
 
 
+def _trunc_ref(text: str, limit: int, ref: str) -> str:
+    """Reference-marked truncation for prompt injection (D1).
+
+    2026-08-19 D1 (性能): artifact 注入从静默截断（``[:N]`` 丢尾）改为
+    引用式截断（头尾保留 + 省略标记 + 全文路径）— 与 external_agents
+    9.3.2 同款。模型需要尾部契约/结论时可见省略标记并自主读文件,
+    语义不丢失; prompt 体积受控。短内容 (<limit) 原样返回。
+    """
+    from yuleosh.pipeline.context_guard import truncate_with_reference_marker
+
+    if not text:
+        return text
+    return truncate_with_reference_marker(text, limit, ref)
+
+
 def build_codegen_prompt(
     spec_content: str,
     spec_name: str,
@@ -161,30 +176,32 @@ def build_codegen_prompt(
             "# 机器抽取契约 (MUST OBEY — 接口签名/护栏/边界/NVM 布局)\n"
             "以下是 spec 的确定性契约抽取 (spec_contracts 生成)。你生成的代码 "
             "**必须**遵守其中的接口签名、行为护栏、参数边界与数据布局:\n"
-            f"```json\n{contracts_json[:SPEC_INJECT_LIMIT]}\n```",
+            f"```json\n{_trunc_ref(contracts_json, SPEC_INJECT_LIMIT, 'contracts.json (机器抽取契约)')}\n```",
         )
     # Project context (2026-08-14, headlamp dogfood): CONTEXT.md 领域术语 +
     # 语言约束放最前 — LLM 必须先知道项目语言/约束再写代码。
     if context_content:
         context_parts.insert(
             1,
-            f"# Project Context (必须遵守)\n```markdown\n{context_content[:8000]}\n```",
+            f"# Project Context (必须遵守)\n```markdown\n{_trunc_ref(context_content, 8000, 'CONTEXT.md')}\n```",
         )
     if architecture_content:
         context_parts.append(
-            f"# Architecture\n```markdown\n{architecture_content[:12000]}\n```"
+            f"# Architecture\n```markdown\n{_trunc_ref(architecture_content, 12000, 'architecture artifact')}\n```"
         )
     if prd_content:
         # 2026-08-16: was [:4000] — codegen LLM saw only the PRD head (FR-001..),
         # missing the tail contracts (FR-044 |delta|, G-01..G-12 guardrail map,
         # SW-005..008 FRs) → generated signed-delta / raw-memcpy code every round.
         # PRD is the behavioral contract for codegen; inject it in full.
+        # D1 (2026-08-19): 保留全量语义 — 引用式截断只在大幅超限时触发,
+        # 且保留尾部 40% (契约/护栏映射常在后段) + 全文路径, 语义不丢失。
         context_parts.append(
-            f"# PRD\n```markdown\n{prd_content[:SPEC_INJECT_LIMIT]}\n```"
+            f"# PRD\n```markdown\n{_trunc_ref(prd_content, SPEC_INJECT_LIMIT, 'PRD artifact')}\n```"
         )
     if super_analysis_content:
         context_parts.append(
-            f"# S.U.P.E.R Analysis\n```markdown\n{super_analysis_content[:6000]}\n```"
+            f"# S.U.P.E.R Analysis\n```markdown\n{_trunc_ref(super_analysis_content, 6000, 'super-analysis artifact')}\n```"
         )
     # 既有 API 契约 (2026-08-12): 必须实现, 不得改名/改签名
     if existing_headers:
