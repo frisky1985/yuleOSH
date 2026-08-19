@@ -132,7 +132,7 @@ Built-in skills (`autosar-coding`, `misra-fix`, `python-testing`) that are injec
 Three-layer enforcement gates blending engineering methodology into agent behavior: L1 behavior constraints → L2 methodology contract gates (executable) → L3-B standalone gate engine (zero-dependency, one-click mount to any project with a standalone gate CLI). Piloted on yuleASR.
 
 ### 🌐 Mixed-Language CI (v3.12+)
-Embedded C MISRA gates extended to **Go/Python projects** (`project_language: mixed`), Go monorepo multi-module build/vet/test; cppcheck relative-path/exclude/scan_dirs fixes. yuleDKCS measured **690 → 0 MISRA C:2023 violations** (57 files).
+Embedded C MISRA gates extended to **Go/Python projects** (`project_language: mixed`), Go monorepo multi-module build/vet/test; cppcheck relative-path/exclude/scan_dirs fixes. yuleDKCS measured **690 → 0 MISRA violations** (57 files, cppcheck C:2012 scan + C:2023 rule-set mapping).
 
 ### 🔄 Loop Engineering (v3.0+)
 Four closed-loop feedback systems: defect→spec traceability, field defect→FMEA safety analysis, KPI→RCA→improvement tickets, and self-evolving knowledge graph with confidence scoring.
@@ -493,7 +493,7 @@ Next.js 管理面板 + PostgreSQL 多租户存储 + JWT 认证 + 组织/项目�
 融合工程方法论的**三层门禁体系**：L1 行为约束层 → L2 方法论契约门禁（可执行化）→ L3-B 独立门禁引擎（standalone 零依赖，一键挂载到任意项目，含独立门禁 CLI）。已在 yuleASR 试点成功。
 
 ### 🌐 混合语言 CI（v3.12+）
-嵌入式 C MISRA 门禁扩展支持 **Go/Python 项目**（`project_language: mixed`），Go monorepo 多模块 build/vet/test；cppcheck 相对路径/exclude/scan_dirs 修复。yuleDKCS 实测 MISRA C:2023 **690 → 0 违规**（57 文件）。
+嵌入式 C MISRA 门禁扩展支持 **Go/Python 项目**（`project_language: mixed`），Go monorepo 多模块 build/vet/test；cppcheck 相对路径/exclude/scan_dirs 修复。yuleDKCS 实测 MISRA **690 → 0 违规**（57 文件；cppcheck C:2012 扫描 + C:2023 规则集映射）。
 
 ### 🔄 Loop Engineering（v3.0+）
 四大闭环：缺陷→需求回溯、现场→FMEA 安全分析、KPI→RCA→改进工单、知识图谱自进化（置信度评分）。
