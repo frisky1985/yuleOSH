@@ -426,3 +426,28 @@ class TestCheckReportStaleness:
         """无 src/ 且非 git 仓库 → 无法判断新鲜度 → 不误报（None）。"""
         report = self._write_report(tmp_path)
         assert _check_report_staleness(tmp_path, report) is None
+
+    def test_doc_only_commit_does_not_make_report_stale(self, tmp_path):
+        """最新提交只含文档（TASK_STATUS.md）→ 不误判 stale。
+
+        Regression: r22 实测 misra-review 因 TASK_STATUS.md 提交（12:41）
+        早于报告（11:20）误判 stale warning，pipeline YELLOW。旧实现用
+        git 最新提交时间（含文档提交）当代码变更；新实现只比较
+        src/tests 的 .c/.h mtime。
+        """
+        report = self._write_report(tmp_path)  # mtime=now
+        # 文档提交（晚于报告）——旧实现会因此判 stale
+        import subprocess
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True,
+                       capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@t"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"],
+                       check=True, capture_output=True)
+        (tmp_path / "TASK_STATUS.md").write_text("# status\n")
+        subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True,
+                       capture_output=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "docs"],
+                       check=True, capture_output=True)
+        # src/ 无 C 文件变更 → 不 stale
+        assert _check_report_staleness(tmp_path, report) is None

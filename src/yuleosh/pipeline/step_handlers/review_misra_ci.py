@@ -69,29 +69,20 @@ def _read_misra_report(project_dir: Path) -> Optional[dict]:
 
 
 def _latest_src_change_time(project_dir: Path) -> Optional[float]:
-    """项目最新代码变更时间戳（epoch 秒）。
+    """项目最新 MISRA 相关代码变更时间戳（epoch 秒）。
 
-    判定顺序：
-      1. git 仓库 → 最新提交时间（`git log -1 --format=%ct`）——报告必须晚于
-         最近一次提交，否则必然陈旧；
-      2. 非 git 仓库 → src/ 下最新 .c/.h 文件 mtime；
-      3. 两者都拿不到 → None（无法判断，调用方不误报）。
+    只比较 src/ 与 tests/ 下的 .c/.h 文件 mtime —— MISRA 报告的有效性
+    只取决于被扫描的 C 源是否变化。git 提交时间不参与比较：提交可能
+    只含文档/报告（TASK_STATUS.md、codegen-deploy.json 等），会让报告
+    误判陈旧（r22 实测：文档提交触发 stale warning）。非 git 仓库
+    同样按文件 mtime 判定。
     """
-    try:
-        r = subprocess.run(
-            ["git", "-C", str(project_dir), "log", "-1", "--format=%ct"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if r.returncode == 0 and r.stdout.strip():
-            return float(r.stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        pass
-
-    src = project_dir / "src"
     newest: Optional[float] = None
-    if src.exists():
+    for base in (project_dir / "src", project_dir / "tests"):
+        if not base.exists():
+            continue
         try:
-            for p in src.rglob("*"):
+            for p in base.rglob("*"):
                 if p.is_file() and p.suffix in (".c", ".h"):
                     mtime = p.stat().st_mtime
                     if newest is None or mtime > newest:
