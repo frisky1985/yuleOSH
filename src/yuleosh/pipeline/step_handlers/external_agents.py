@@ -51,10 +51,13 @@ __all__ = ["step_claude_review", "step_codex_verify"]
 # 2026-08-17: 600s → 900s. 完整 prompt (spec 22K + contracts 6K + PRD 26K +
 # arch 15K + test-plan 16K ≈ 100K chars) 让 codex exec 读代码验证耗时
 # >600s (r19 实证: 死于 step 14 codex-verify, 启动 11 分钟后无输出 = 600s
-# 超时被杀). 900s 与 CLAUDE_TIMEOUT 对齐, 覆盖大 prompt 验证, 仍防挂死。
-# codex-verify: 全自动验证 (读代码+独立复现+跑测试)。r19 实测 256s;
-# r20j 835s 仍超时 (DeepSeek 响应慢 + 任务重) → 900s 不够, 提到 1800s。
-CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "1800"))
+# 超时被杀). r20j 835s 仍超时 (DeepSeek 响应慢 + 任务重) → 提到 1800s。
+# 2026-08-19 (性能基线 A): 1800s → 900s, 与 CLAUDE_TIMEOUT 对齐。
+# 基线数据 (window-anti-pinch 74 条真实 session): codex-verify 通过 run
+# 仅 10-156s (median 511s 被失败 run 拉高); 失败 run 900-1800s (= 超时掐断,
+# codex --full-auto 失败时无限深挖). prompt 已加"发现即停止"指令 (第 5 条),
+# 失败路径应显著缩短. 仍可 YULEOSH_CODEX_TIMEOUT 环境变量覆盖。
+CODEX_TIMEOUT = int(os.environ.get("YULEOSH_CODEX_TIMEOUT", "900"))
 # claude-review 默认 300s 不够 (2026-08-16 实证: run c88797033141 超时,
 # claude 读代码评审 14KB+ prompt 需 3-5 分钟) → 提到 600s。
 # 2026-08-17: 600s → 900s. 完整 prompt (spec 22K + contracts 6K + PRD 26K +
@@ -192,6 +195,10 @@ def _build_codex_prompt(spec_content: str, artifacts_block: str,
    产品）。若部署状态为 deployed，则验证部署后的 src/。
 3. 检查产物与 spec 的一致性：需求是否被实现、测试是否覆盖关键路径。
 4. 如实报告：不通过就是失败，不要为通过而编造证据。
+5. **发现即停止（性能要求，2026-08-19）**：验证目标 = 判定「是否通过」，
+   不是穷举所有缺陷。一旦发现足以判定失败（critical/major）的缺陷，或
+   确认全部测试通过且关键契约抽查完成，**立即停止深挖并输出 JSON 结论**。
+   禁止为寻找更多缺陷而长时间循环重试——宁可少报次要缺陷，不可拖到超时。
 
 输出 ONLY 一个 JSON 对象（不要 markdown 代码块，不要多余文字）:
 {{
