@@ -21,7 +21,13 @@ DEFAULT_CODEGEN_SKILLS = ["autosar-coding"]
 
 # Seed 基线限制: 最多收集的文件数与单文件字符数 (防止 prompt 超长)。
 SEED_MAX_FILES = 15
-SEED_MAX_CHARS = 4000
+# 2026-08-20 (G-17/r22 复盘): 4000 → 20000 — seed 基线是防回归的核心上下文,
+# 4000 字符静默截断把 window_control.c 的尾部契约 (cooldown 在 237 行、
+# switch 结构在 ~350 行) 全部藏掉 → LLM 重写时凭印象补全 → 行为回归
+# (r22 run-20260820-085554: cooldown 提前到 pinch 检测、G-18 结构守卫失败)。
+# 20000 ≥ 当前最大文件 16214 字符 (window_control.c) → 全量可见; 未来更大
+# 文件由 _trunc_ref 头尾保留 + 省略标记兜底。
+SEED_MAX_CHARS = 20000
 # 复制 seed 时排除的目录名 (构建产物/缓存)。
 SEED_EXCLUDE_DIRS = {
     "build", "cmake-build-debug", "cmake-build-release", "cmake-build-coverage",
