@@ -219,6 +219,31 @@ class TestBuildPrdPrompt:
         # 旧错误示例必须消失（50 ms pinch response 单值示例）
         assert "50 ms pinch response" not in system
 
+    def test_out_of_scope_and_counting_discipline(self, sample_spec_content, sample_requirements, sample_scenarios):
+        """r22 p9 复盘: Out-of-Scope 不得裁剪 spec 未限制的功能; 头部计数口径; 接口权威源。
+
+        历史根因: PRD 自行声明 'Anti-pinch in manual mode' 为 Out of Scope
+        （spec SW-004 无模式限制），claude-review 3 blockers 拦截 —— 若被
+        codegen 采信会裁剪手动防夹（安全回归）。prompt 必须含纪律约束。
+        """
+        from yuleosh.pipeline.prompts import build_prd_prompt
+
+        system, _ = build_prd_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            requirements=sample_requirements,
+            scenarios=sample_scenarios,
+        )
+        # Out-of-Scope 纪律段存在
+        assert "Out of Scope 不得声明 spec 未限制的功能" in system
+        assert "Anti-pinch in manual mode" in system  # 反例明确列出
+        # 计数口径纪律
+        assert "头部计数口径" in system
+        assert "FRs: N (P0 x + P1 y)" in system
+        # 接口权威源纪律
+        assert "接口契约权威源" in system
+        assert "src/app/include" in system
+
     def test_project_asil_injected_when_configured(self, sample_spec_content, sample_requirements, sample_scenarios):
         """r21b (claude-review minor): PRD 自封 ASIL-B/C 而 spec 未分级 —
         project_asil 注入后 prompt 必须携带 ASIL 纪律约束。
