@@ -162,7 +162,14 @@ def maybe_skip_code_review(
     reviewer : str
         审查者角色名 (写入报告)。
     """
-    project_dir = Path(getattr(session, "project_dir", None) or ".")
+    project_dir = getattr(session, "project_dir", None)
+    if not project_dir:
+        # 无项目目录时无法判定部署状态 — 保守: 审查照常执行。
+        # (2026-08-20 污染复盘: 回退 cwd 会误读仓库根目录残留的
+        #  .yuleosh/reports/codegen-deploy.json — 某次从仓库根跑 mock pipeline
+        #  写入 status=skipped, 导致全部 step-handler 测试误 skip 47+ 项)
+        return None
+    project_dir = Path(project_dir)
     status = deploy_status(project_dir)
     if has_deployed_code(project_dir):
         return None

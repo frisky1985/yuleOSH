@@ -196,6 +196,21 @@ def build_prd_prompt(
         "where the spec defines them (e.g. 50 ms pinch response, 100 mm reversal "
         "distance, 1 s cool-down, 300 ms Hall-loss). NEVER leave an AC as an empty "
         "stub or a bare restatement of the requirement.\n\n"
+        "CRITICAL — 行为护栏映射表 verbatim (2026-08-20, r22 G-17 复盘):\n"
+        "- The spec's `行为护栏 → 需求映射` table (G-01..G-18) is the single source of "
+        "truth for codegen regression guardrails. The spec states: PRD SHALL 逐条引用本表"
+        "（不得合并/省略).\n"
+        "- Reproduce EVERY G-item as its own FR row (or a dedicated guardrail section "
+        "with one row per G-item), copying the FULL implementation note verbatim — "
+        "including file references (`对照 src/app/src/window_modes.c`), recurrence "
+        "history (e.g. `r21f window_modes.c:124 → r22 :136 同点复现`), regression test "
+        "names, and the `codegen 不得...` prohibitions.\n"
+        "- NEVER compress a G-item into a generic rule. Example failure (r22 "
+        "run-20260820-081635): G-17's precise contract — `window_modes_check_pinch`'s "
+        "`lastCheckTimeMs` is structurally unused under G-03 fixed-window semantics, "
+        "signature SHALL be preserved with `(void)lastCheckTimeMs;` — was compressed "
+        "into FR-009 \"未用参数必须 (void) 抑制\", and codegen dropped the suppression "
+        "again. The full instance-level detail is what makes the contract actionable.\n\n"
     )
     if project_asil:
         system_prompt += (

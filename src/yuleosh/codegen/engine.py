@@ -349,6 +349,17 @@ class CodegenEngine:
             written = self.write_files(files, out_dir)
             result.files = [str(p) for p in written]
 
+            # ── 确定性修复 (2026-08-20, G-17) ────────────────────────
+            # LLM 重写会丢掉 seed 基线的 (void)param; 未用参数抑制 →
+            # 项目真实 -Werror -Wunused-parameter 失败且 4 轮 repair 修不好。
+            # 机械转换引擎直接做, 不让已知编译错误进入 repair LLM。
+            sync_n = self._sync_void_suppressions(out_dir, written)
+            if sync_n:
+                log.info(
+                    "Codegen void-suppression sync: %d suppression(s) applied",
+                    sync_n,
+                )
+
             # verify 整个输出目录 (seed 副本 + 本轮修改) — 跨文件引用可被捕获
             verify_files = self._collect_code_files(out_dir)
             # 2026-08-12: 默认 verifier 透传项目根 → 生成的 app 代码可
@@ -562,6 +573,149 @@ class CodegenEngine:
             written.append(target)
             log.debug("Wrote generated file %s (%d bytes)", target, len(f.content))
         return written
+
+    # ---- 确定性 void 抑制同步 (2026-08-20, G-17) ----------------------
+
+    # G-17 根因 (r21f/r22 反复): LLM 重写 .c 文件时会丢掉 seed 基线里
+    # ``(void)param;`` 未用参数抑制 (window_modes.c 丢 (void)lastCheckTimeMs;),
+    # 项目真实 -Werror -Wunused-parameter 构建失败, 且 4 轮 LLM repair 都
+    # 修不好 (worsening → 回退 seed 基线)。该转换是机械的 — 由引擎直接做,
+    # 不依赖 LLM: 每轮 write 后把 seed 基线的 (void)param; 抑制同步进生成文件。
+    _VOID_CAST_RE = re.compile(r"\(void\)\s*(\w+)\s*;")
+    # 函数定义: 返回类型必须以单词字符开头 (禁止全空白类型 → 否则
+    # `if (`/`for (` 控制流被误判为函数定义, 见 test_static_function_and_nested_block)。
+    # re.MULTILINE: finditer 需要 ^ 匹配每行行首。
+    _FUNC_DEF_RE = re.compile(
+        r"^\s*(?:static\s+)?(?:\w[\w\s\*]*?)\s+(\w+)\s*\(",
+        re.MULTILINE,
+    )
+
+    def _iter_void_suppressions(
+        self, seed_content: str
+    ) -> list[tuple[str, str]]:
+        """Extract ``(param, enclosing_function)`` from a seed .c file.
+
+        Scans each ``(void)X;`` statement and walks backwards to the nearest
+        function-definition line to attribute it to a function.
+        """
+        out: list[tuple[str, str]] = []
+        lines = seed_content.splitlines()
+        for idx, line in enumerate(lines):
+            m = self._VOID_CAST_RE.search(line)
+            if not m:
+                continue
+            param = m.group(1)
+            fn_name: str | None = None
+            for back in range(idx - 1, -1, -1):
+                fm = self._FUNC_DEF_RE.match(lines[back])
+                if fm:
+                    fn_name = fm.group(1)
+                    break
+            if fn_name:
+                out.append((param, fn_name))
+        return out
+
+    @staticmethod
+    def _signature_region(content: str, fn_start: int) -> str:
+        """Return the parameter-list text of the function starting at
+        ``fn_start`` (the opening paren .. matching close paren)."""
+        i = content.find("(", fn_start)
+        if i == -1:
+            return ""
+        depth = 0
+        j = i
+        while j < len(content):
+            c = content[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        return content[i:j]
+
+    def _sync_void_suppressions(
+        self, out_dir: Path, written: list[Path]
+    ) -> int:
+        """Deterministic G-17 guard: carry ``(void)param;`` suppressions over.
+
+        For each written .c file that has a seed-baseline counterpart:
+          - take every ``(void)X;`` statement from the seed file and its
+            enclosing function name;
+          - if the generated file defines the same function AND declares the
+            same parameter X but lacks the suppression anywhere, insert
+            ``(void)X;`` right after the function's opening brace.
+
+        Applied after every write (initial + each repair round), so this
+        known compile error never reaches the repair LLM.
+        """
+        applied = 0
+        for target in written:
+            if target.suffix.lower() != ".c":
+                continue
+            rel = target.relative_to(out_dir).as_posix()
+            seed_content = self._seed_baseline.get(rel)
+            if not seed_content:
+                continue
+            gen_content = target.read_text(encoding="utf-8", errors="replace")
+            original = gen_content
+            for param, fn_name in self._iter_void_suppressions(seed_content):
+                marker = f"(void){param};"
+                if marker in gen_content:
+                    continue
+                # 只在同名函数且参数列表含 X 时插入 — 避免误伤其它函数
+                fn_found = False
+                for fm in self._FUNC_DEF_RE.finditer(gen_content):
+                    if fm.group(1) != fn_name:
+                        continue
+                    fn_found = True
+                    sig = self._signature_region(gen_content, fm.start())
+                    if not re.search(r"\b" + re.escape(param) + r"\b", sig):
+                        continue
+                    gen_content = self._insert_void_suppression(
+                        gen_content, fm.start(), param
+                    )
+                    applied += 1
+                    log.info(
+                        "Codegen void-suppression sync: inserted (void)%s; "
+                        "in %s (%s)", param, rel, fn_name,
+                    )
+                    break
+                if not fn_found:
+                    log.debug(
+                        "Codegen void-suppression sync: function %s missing "
+                        "in generated %s (seed_contract will flag if public)",
+                        fn_name, rel,
+                    )
+            if gen_content != original:
+                target.write_text(gen_content, encoding="utf-8")
+        return applied
+
+    @staticmethod
+    def _insert_void_suppression(
+        content: str, fn_start: int, param: str
+    ) -> str:
+        """Insert ``(void)param;`` after the function body's opening brace."""
+        sig = content[fn_start:]
+        # 参数列表内无花括号 (嵌入式 C 契约, 不支持函数指针参数), 第一个
+        # '{' 即函数体起始。
+        brace = sig.find("{")
+        if brace == -1:
+            return content
+        brace_abs = fn_start + brace
+        line_start = content.rfind("\n", 0, brace_abs) + 1
+        indent = content[line_start:brace_abs]
+        insertion = (
+            f"{indent}    (void){param};"
+            "  /* deterministic sync from seed baseline (G-17) */\n"
+        )
+        return (
+            content[: brace_abs + 1]
+            + "\n"
+            + insertion
+            + content[brace_abs + 1:]
+        )
 
     # ---- Seed 增量 (方案 C, 2026-08-12) --------------------------------
 

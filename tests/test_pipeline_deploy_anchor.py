@@ -68,7 +68,7 @@ class TestDeployState:
 class FakeSession:
     def __init__(self, project_dir, session_dir):
         self.name = "test-run"
-        self.project_dir = str(project_dir)
+        self.project_dir = str(project_dir) if project_dir is not None else None
         self.session_dir = Path(session_dir)
         self.spec_path: str = ""
         self.mock_mode: bool = False
@@ -101,6 +101,28 @@ class TestMaybeSkipCodeReview:
         )
         session = FakeSession(tmp_path, tmp_path / ".osh" / "sessions" / "s1")
         assert maybe_skip_code_review(session, "review-memory") is None
+
+    def test_no_project_dir_ignores_cwd_stray_report(self, tmp_path, monkeypatch):
+        """无 project_dir 时不得回退 cwd 读杂散报告 (2026-08-20 污染复盘)。
+
+        仓库根目录残留 .yuleosh/reports/codegen-deploy.json (status=skipped)
+        曾导致全量 step-handler 测试误 skip 47+ 项。无项目目录时审查照常。
+        """
+        from yuleosh.pipeline.deploy_state import maybe_skip_code_review
+
+        # cwd 伪造一个 status=skipped 的杂散报告
+        stray = Path.cwd() / ".yuleosh" / "reports"
+        stray.mkdir(parents=True, exist_ok=True)
+        stray_f = stray / "codegen-deploy.json"
+        stray_f.write_text(
+            json.dumps({"status": "skipped", "deployed": []}), encoding="utf-8"
+        )
+        try:
+            session = FakeSession(None, tmp_path / ".osh" / "sessions" / "s1")
+            session.project_dir = None  # 模拟未设置 project_dir
+            assert maybe_skip_code_review(session, "review-memory") is None
+        finally:
+            stray_f.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
