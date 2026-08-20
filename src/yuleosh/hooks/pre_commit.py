@@ -119,12 +119,15 @@ def _extract_rule_id(message: str) -> Optional[str]:
 
 def _run_cppcheck(files: list[str]) -> str:
     """Run cppcheck with MISRA addon on *files* and return raw stdout+stderr."""
+    # C++ 泛化 (2026-08-21 A1 dogfood): 含 .cpp 时用 C++ 语言模式
+    has_cpp = any(f.endswith((".cpp", ".cc", ".cxx", ".c++")) for f in files)
+    lang = "c++" if has_cpp else "c"
     cmd = [
         "cppcheck",
         "--enable=all",
         "--suppress=missingIncludeSystem",
         "--addon=misra",
-        "--language=c",
+        f"--language={lang}",
         "-q",
     ] + files
 

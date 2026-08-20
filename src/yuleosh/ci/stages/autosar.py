@@ -39,6 +39,31 @@ ARM_CORTEX_M7_FLAGS = [
 ]
 
 AUTOSAR_C_STANDARD = "-std=c99"
+AUTOSAR_CPP_STANDARD = "-std=c++17"
+
+# C++ 泛化 (2026-08-21 A1 dogfood): BSW 层同时收集 .c/.cpp。
+# 语言选择: 按文件扩展名选编译器与标准 (gcc/g++, c99/c++17)。
+_CPP_EXTENSIONS = {".cpp", ".cc", ".cxx", ".c++"}
+
+
+def _collect_sources(source_dir: Path) -> list:
+    """Collect BSW source files (.c + .cpp), sorted for determinism."""
+    c_files = sorted(source_dir.rglob("*.c"))
+    cpp_files = sorted(
+        f for ext in _CPP_EXTENSIONS for f in source_dir.rglob(f"*{ext}")
+    )
+    return c_files + cpp_files
+
+
+def _compiler_for(src_file: Path, prefix: str = "") -> str:
+    """Pick compiler by source extension: .cpp → g++, else gcc."""
+    if src_file.suffix in _CPP_EXTENSIONS:
+        return shutil.which(f"{prefix}g++") or shutil.which("g++") or f"{prefix}g++"
+    return shutil.which(f"{prefix}gcc") or shutil.which("gcc") or f"{prefix}gcc"
+
+
+def _std_flag_for(src_file: Path) -> str:
+    return AUTOSAR_CPP_STANDARD if src_file.suffix in _CPP_EXTENSIONS else AUTOSAR_C_STANDARD
 
 BSW_LAYER_NAMES = {
     "mcal": "MCAL (Microcontroller Abstraction Layer)",
@@ -155,16 +180,16 @@ def run_autosar_build(
             results[layer] = {"status": "skip", "reason": f"Source dir not found: {source_dir}"}
             continue
 
-        # Collect source files
-        src_files = list(source_dir.rglob("*.c"))
+        # Collect source files (.c + .cpp, C++ 泛化 2026-08-21)
+        src_files = _collect_sources(source_dir)
         if not src_files:
-            log.warning("No C source files found in %s", source_dir)
-            results[layer] = {"status": "skip", "reason": "No .c files found"}
+            log.warning("No C/C++ source files found in %s", source_dir)
+            results[layer] = {"status": "skip", "reason": "No .c/.cpp files found"}
             continue
 
         # Run compilation check (syntax + warnings only)
         # Layer 1: prefer native compiler; cross-compiler is for L2
-        cc = shutil.which("gcc") or shutil.which("cc") or shutil.which("arm-none-eabi-gcc") or "cc"
+        cc = _compiler_for(src_files[0])
         compile_errors = []
         compile_warnings = []
         compiled_count = 0
@@ -175,9 +200,9 @@ def run_autosar_build(
             obj_path = out_dir / src_file.with_suffix(".o").name
 
             cmd = [
-                cc,
+                _compiler_for(src_file),
                 "-c",
-                AUTOSAR_C_STANDARD,
+                _std_flag_for(src_file),
                 "-Wall", "-Wextra", "-Wshadow",
                 "-Wconversion", "-Wunused-parameter",
                 "-ffunction-sections", "-fdata-sections",
@@ -309,11 +334,14 @@ def run_autosar_cross_build(
             docker_image=docker_image,
         )
 
-    # Local cross-compilation
+    # Local cross-compilation (C 或 C++ 编译器至少一个可用)
     cc = shutil.which(f"{toolchain_prefix}gcc")
-    if not cc:
-        return {"status": "fail", "error": f"Cross-compiler '{toolchain_prefix}gcc' not found. "
+    cxx = shutil.which(f"{toolchain_prefix}g++")
+    if not cc and not cxx:
+        return {"status": "fail", "error": f"Cross-compiler '{toolchain_prefix}gcc/g++' not found. "
                                            f"Install ARM GNU toolchain or use --docker."}
+    if cc is None:
+        cc = cxx
 
     # Build all BSW layers with cross-compiler
     all_results = {}
@@ -327,7 +355,7 @@ def run_autosar_cross_build(
         if not source_dir.exists():
             continue
 
-        src_files = list(source_dir.rglob("*.c"))
+        src_files = _collect_sources(source_dir)
         if not src_files:
             continue
 
@@ -337,9 +365,9 @@ def run_autosar_cross_build(
         for src_file in src_files:
             obj_path = layer_out / src_file.with_suffix(".o").name
             cmd = [
-                cc,
+                _compiler_for(src_file, prefix=toolchain_prefix),
                 "-c",
-                AUTOSAR_C_STANDARD,
+                _std_flag_for(src_file),
                 *arch_flags,
                 "-Os", "-g",
                 "-ffunction-sections", "-fdata-sections",
@@ -520,9 +548,9 @@ def run_autosar_misra_check(
             all_results[layer] = {"status": "skip", "reason": "Source dir not found"}
             continue
 
-        src_files = [str(f) for f in source_dir.rglob("*.c")]
+        src_files = [str(f) for f in _collect_sources(source_dir)]
         if not src_files:
-            all_results[layer] = {"status": "skip", "reason": "No .c files found"}
+            all_results[layer] = {"status": "skip", "reason": "No .c/.cpp files found"}
             continue
 
         print(f"  🔍 MISRA-C:2023 check: {BSW_LAYER_NAMES.get(layer, layer)} "
@@ -531,10 +559,17 @@ def run_autosar_misra_check(
         config_dir = project_path / "config"
         common_dir = project_path / "src"
 
+        # C++ 泛化 (2026-08-21): 混合源按 cppcheck 语言选择
+        # (cppcheck 单次调用只接受单一 --language)
+        has_cpp = any(f.suffix in _CPP_EXTENSIONS
+                      for f in _collect_sources(source_dir))
+        cppcheck_language = "c++" if has_cpp else "c"
+        cppcheck_std = "--std=c++17" if has_cpp else "--std=c99"
+
         cmd = [
             cppcheck,
-            "--std=c99",
-            "--language=c",
+            cppcheck_std,
+            f"--language={cppcheck_language}",
             "--enable=all",
             "--addon=misra.py",
             "--suppress=unmatchedSuppression",
@@ -625,9 +660,9 @@ def _run_misra_fallback(project_dir: str, layers: List[str]) -> Dict:
             results[layer] = {"status": "skip", "reason": "Source dir not found"}
             continue
 
-        src_files = list(source_dir.rglob("*.c"))
+        src_files = _collect_sources(source_dir)
         if not src_files:
-            results[layer] = {"status": "skip", "reason": "No .c files found"}
+            results[layer] = {"status": "skip", "reason": "No .c/.cpp files found"}
             continue
 
         print(f"  🔍 MISRA-C:2023 analysis (built-in): {BSW_LAYER_NAMES.get(layer, layer)}...")

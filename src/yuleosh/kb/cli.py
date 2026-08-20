@@ -501,18 +501,28 @@ def _classify_misra_category(rule_id: str | None) -> str:
 
 
 def _collect_source_files(src_dir: str, project_root: str | None = None) -> list[str]:
-    """Collect all .c/.h files under *src_dir* (absolute or relative)."""
+    """Collect all .c/.h/.cpp files under *src_dir* (absolute or relative).
+
+    C++ 泛化 (2026-08-21 A1 dogfood): 原 `*.[ch]` glob 不匹配 .cpp。
+    """
     base = Path(src_dir)
     if not base.is_absolute() and project_root:
         base = Path(project_root) / src_dir
     if not base.exists():
         return []
-    return [str(p) for p in base.rglob("*.[ch]") if p.is_file()]
+    files = [str(p) for p in base.rglob("*.c") if p.is_file()]
+    files += [str(p) for p in base.rglob("*.h") if p.is_file()]
+    files += [str(p) for p in base.rglob("*.cpp") if p.is_file()]
+    files += [str(p) for p in base.rglob("*.hpp") if p.is_file()]
+    return files
 
 
 def _run_cppcheck_for_ingest(files: list[str]) -> str:
     """Run cppcheck with MISRA addon and return raw output."""
-    cmd = ["cppcheck", "--enable=all", "--suppress=missingIncludeSystem", "--addon=misra", "--language=c", "-q"] + files
+    # C++ 泛化 (2026-08-21): 含 .cpp 文件时用 C++ 语言模式, 避免 syntaxError 误报
+    has_cpp = any(f.endswith((".cpp", ".cc", ".cxx", ".c++")) for f in files)
+    lang = "c++" if has_cpp else "c"
+    cmd = ["cppcheck", "--enable=all", "--suppress=missingIncludeSystem", "--addon=misra", f"--language={lang}", "-q"] + files
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=120)
         return result.stderr + "\n" + result.stdout

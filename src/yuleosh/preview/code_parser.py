@@ -146,7 +146,7 @@ def _measure_complexity(source_dir: Path) -> dict:
     max_function_lines = 0
     function_lengths: list[int] = []
 
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
         except Exception:
@@ -194,7 +194,7 @@ def _measure_complexity(source_dir: Path) -> dict:
 def _measure_max_nesting(source_dir: Path) -> int:
     """Measure maximum nesting depth of control structures in .c files."""
     max_nesting = 0
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
         except Exception:
@@ -216,7 +216,7 @@ def _measure_per_file_complexity(source_dir: Path) -> list[dict]:
     """Measure per-file complexity metrics for top-level source files."""
     file_metrics = []
 
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
         except Exception:

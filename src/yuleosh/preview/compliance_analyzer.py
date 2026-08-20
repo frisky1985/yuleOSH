@@ -19,7 +19,7 @@ def _scan_risks(source_dir: Path, complexity: dict) -> list[dict]:
     free_count = 0
     new_count = 0
 
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
         except Exception:
@@ -39,7 +39,7 @@ def _scan_risks(source_dir: Path, complexity: dict) -> list[dict]:
 
     # 2. Recursion detection
     recursion_count = 0
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
         except Exception:
@@ -56,7 +56,7 @@ def _scan_risks(source_dir: Path, complexity: dict) -> list[dict]:
 
     # 3. Unbounded loops (while(1) / for(;;) with no break/return)
     unbounded_count = 0
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
         except Exception:
@@ -74,7 +74,7 @@ def _scan_risks(source_dir: Path, complexity: dict) -> list[dict]:
 
     # 4. Lack of assertions
     assert_count = 0
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
         except Exception:
@@ -140,7 +140,7 @@ def _scan_risks(source_dir: Path, complexity: dict) -> list[dict]:
     # 9. Comment deficiency
     total_source = 0
     total_comments = 0
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
             for line in content.split("\n"):

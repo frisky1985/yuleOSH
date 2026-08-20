@@ -340,10 +340,13 @@ def run_pilot_scan(
 
     for module in modules:
         sources = list(yuleasr_path.glob(f"src/bsw/**/{module}/**/*.c"))
+        sources += list(yuleasr_path.glob(f"src/bsw/**/{module}/**/*.cpp"))
         if not sources:
-            log.warning("No C sources found for module: %s", module)
+            log.warning("No C/C++ sources found for module: %s", module)
             sources = list(yuleasr_path.glob(f"src/**/mcal/{module}/**/*.c"))
             sources += list(yuleasr_path.glob(f"src/**/ecual/{module}/**/*.c"))
+            sources += list(yuleasr_path.glob(f"src/**/mcal/{module}/**/*.cpp"))
+            sources += list(yuleasr_path.glob(f"src/**/ecual/{module}/**/*.cpp"))
 
         pilot_results["module_results"][module] = {
             "sources": [str(s.relative_to(yuleasr_path)) for s in sources],
@@ -374,7 +377,7 @@ def run_pilot_scan(
                         "--std=c11",
                         "--suppress=missingInclude",
                         "--suppress=missingIncludeSystem",
-                        "--language=c",
+                        "--language=" + ("c++" if any(s.suffix in (".cpp", ".cc", ".cxx", ".c++") for s in sources) else "c"),
                         f"--cppcheck-build-dir={_build_dir}",
                         "--output-file",
                     ] + [str(s) for s in sources],

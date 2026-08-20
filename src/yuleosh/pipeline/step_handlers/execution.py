@@ -26,6 +26,9 @@ from typing import Optional
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm, _parse_spec
+
+# C++ 泛化 (2026-08-21 A1 dogfood): 语言检测/seed 收集需识别 C++ 扩展名
+_CPP_EXTENSIONS = {".cpp", ".cc", ".cxx", ".c++"}
 from yuleosh.pipeline.prompts import (
     build_architecture_prompt,
     build_development_prompt,
@@ -187,13 +190,33 @@ def _detect_project_language(project_dir: Path) -> Optional[str]:
     """Heuristic project language detection for codegen language_hint.
 
     Returns ``c`` for CMake/C projects (CMakeLists.txt present or .c/.h
-    sources dominate), ``python`` for Python projects, else None.
+    sources dominate), ``cpp`` for C++ projects, ``python`` for Python
+    projects, else None.
 
     2026-08-14 headlamp dogfood: language_hint 未设置时 LLM 自由发挥 →
     生成 Python 到 C 项目假绿。此探测给 codegen 明确语言约束。
+
+    2026-08-21 A1 dogfood: CMakeLists.txt 存在但源码以 .cpp 为主时
+    返回 ``cpp`` —— 之前一律返回 ``c`` 导致 C++ 项目 codegen 生成
+    C 代码假绿。
     """
     root = Path(project_dir)
-    if (root / "CMakeLists.txt").exists() or (root / "Makefile").exists():
+    has_cmake = (root / "CMakeLists.txt").exists() or (root / "Makefile").exists()
+    if has_cmake:
+        # 只统计项目自有源码: 排除 third_party/build (FreeRTOS 等第三方
+        # 大量 .c 会淹没项目真实语言, A1 dogfood 实测 2026-08-21)
+        def _count(ext: str) -> int:
+            n = 0
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames
+                               if d not in ("third_party", "build", ".git", "__pycache__")]
+                n += sum(1 for fn in filenames if fn.endswith(ext))
+            return n
+
+        cpp_count = sum(_count(ext) for ext in _CPP_EXTENSIONS)
+        c_count = _count(".c")
+        if cpp_count > 0 and cpp_count >= c_count:
+            return "cpp"
         return "c"
     if (root / "pyproject.toml").exists() or (root / "setup.py").exists():
         return "python"

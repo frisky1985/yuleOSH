@@ -87,14 +87,14 @@ class TestRunAutosarBuild:
         assert "Source dir not found" in r["mcal"]["reason"]
 
     def test_layer_without_sources_skipped(self, project):
-        """GIVEN layer dir without .c files WHEN build THEN skip."""
+        """GIVEN layer dir without .c/.cpp files WHEN build THEN skip."""
         (project / "src" / "mcal").mkdir(parents=True)
         with mock.patch("yuleosh.ci.stages.autosar.shutil.which", return_value="gcc"):
             with mock.patch("yuleosh.ci.stages.autosar.subprocess.run") as m_run:
                 m_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
                 r = A.run_autosar_build(str(project))
         assert r["mcal"]["status"] == "skip"
-        assert "No .c files found" in r["mcal"]["reason"]
+        assert "No .c/.cpp files found" in r["mcal"]["reason"]
 
     def test_compile_failure(self, project):
         """GIVEN compiler errors WHEN build THEN layer fail + error details."""
@@ -107,6 +107,25 @@ class TestRunAutosarBuild:
         assert r["mcal"]["status"] == "fail"
         assert r["mcal"]["failed"] == 2
         assert r["_meta"]["all_pass"] is False
+
+    def test_cpp_sources_collected(self, project):
+        """GIVEN layer with .cpp sources WHEN build THEN g++ used + compiled.
+
+        C++ 泛化 (2026-08-21 A1 dogfood): rglob 只收 .c 会漏 .cpp。
+        """
+        src = project / "src" / "mcal"
+        src.mkdir(parents=True)
+        (src / "motor.cpp").write_text("namespace motor { int f(){return 0;} }\n")
+        with mock.patch("yuleosh.ci.stages.autosar.shutil.which", return_value="g++"):
+            with mock.patch("yuleosh.ci.stages.autosar.subprocess.run") as m_run:
+                m_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+                r = A.run_autosar_build(str(project))
+        assert r["mcal"]["status"] == "pass"
+        assert r["mcal"]["compiled"] == 1
+        # g++ 编译命令必须带 -std=c++17
+        call_args = m_run.call_args[0][0]
+        assert "g++" in call_args[0]
+        assert "-std=c++17" in call_args
 
     def test_compile_warning_ok(self, project):
         """GIVEN warnings but rc=0 WHEN build THEN pass + warning counted."""

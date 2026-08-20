@@ -108,7 +108,7 @@ def _detect_project_type(project_dir: str) -> dict:
         return {"project_type": "unknown", "detected_frameworks": [], "source_count": 0, "test_count": 0}
 
     # Count files
-    c_files = list(root.rglob("*.c")) + list(root.rglob("*.h"))
+    c_files = list(root.rglob("*.c")) + list(root.rglob("*.cpp")) + list(root.rglob("*.h"))
     cpp_files = list(root.rglob("*.cpp")) + list(root.rglob("*.hpp"))
     py_files = list(root.rglob("*.py"))
     test_files = list(root.rglob("test_*.py")) + list(root.rglob("*test*.c")) + list(root.rglob("*_test.c"))

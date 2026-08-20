@@ -92,7 +92,7 @@ def _assess_documentation(source_dir: Path) -> dict:
 
     comment_lines = 0
     code_lines = 0
-    for f in sorted(source_dir.rglob("*.c")):
+    for f in sorted(list(source_dir.rglob("*.c")) + list(source_dir.rglob("*.cpp"))):
         try:
             content = f.read_text(errors="replace")
             for line in content.split("\n"):

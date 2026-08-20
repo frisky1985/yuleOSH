@@ -42,6 +42,27 @@ _AUTOSAR_DEFINES = [
 # cppcheck 默认超时（秒）；scanner_config.timeout 可覆盖
 _DEFAULT_TIMEOUT = 180
 
+# C++ 泛化 (2026-08-21 A1 dogfood): 项目含 .cpp 时 cppcheck 用 C++ 语言模式
+_CPP_EXTENSIONS = (".cpp", ".cc", ".cxx", ".c++")
+
+
+def _detect_cppcheck_language(project_dir: str) -> str:
+    """按项目源码决定 cppcheck 语言: 含 C++ 源 → 'c++', 否则 'c'.
+
+    cppcheck --language=c 解析 .cpp 会报 syntaxError (namespace/class),
+    导致 C++ 项目扫描全量误报 (A1 dogfood 实测, 2026-08-21)。
+    """
+    try:
+        for dirpath, _dirnames, filenames in os.walk(project_dir):
+            if "third_party" in dirpath or "build" in dirpath:
+                continue
+            for fn in filenames:
+                if fn.endswith(_CPP_EXTENSIONS):
+                    return "c++"
+    except OSError:
+        pass
+    return "c"
+
 
 class CppcheckScannerAdapter(ScannerAdapter):
     """cppcheck --addon=misra 适配器（默认扫描器，C:2012 工具链）。"""
@@ -160,7 +181,7 @@ class CppcheckScannerAdapter(ScannerAdapter):
         cmd = [
             "cppcheck",
             "--addon=" + addon_arg,
-            "--language=c",
+            "--language=" + _detect_cppcheck_language(project_dir),
             "--std=" + cppcheck_std,
             "--enable=" + enable,
             "--suppress=missingIncludeSystem",
