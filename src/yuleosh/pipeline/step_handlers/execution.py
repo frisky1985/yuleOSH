@@ -1007,7 +1007,8 @@ def step_claude_test(session: PipelineSession) -> str:
                         capture_output=True, text=True, timeout=300, cwd=project_dir,
                     )
                     result = subprocess.run(
-                        ["ctest", "--output-on-failure", "-j4"],
+                        ["ctest", "--output-on-failure", "-j4",
+                         "--output-junit", str(session.session_dir / "ctest-junit.xml")],
                         capture_output=True, text=True, timeout=300, cwd=build_dir,
                     )
                     test_output = result.stdout + "\n" + result.stderr

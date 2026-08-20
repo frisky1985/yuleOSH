@@ -635,6 +635,34 @@ class TestBuildSelftestReviewPrompt:
         )
         assert "... and 10 more" in user_prompt
 
+    def test_prompt_lists_test_case_names(self):
+        """GIVEN test_case_results WHEN building prompts THEN lists real names (P1 反幻觉).
+
+        r22 real-4: plain-C/Unity summary-only 输出 → LLM 无法在测试输出中验证
+        auto-mapping 的测试名 → shall_covered=0 假红。修复: prompt 必须列出
+        真实函数名 + 明确证据链 + 反幻觉约束。
+        """
+        from yuleosh.pipeline.step_handlers.review_selftest.core import _build_selftest_review_prompt
+        shalls = [{"statement": "System SHALL work.", "section": "Req", "line": 1}]
+        tcs = [
+            {"name": "test_sw004_32bit", "status": "passed"},
+            {"name": "test_g17_void_suppression", "status": "passed"},
+        ]
+        system_prompt, user_prompt = _build_selftest_review_prompt(
+            spec_content="# Spec",
+            spec_name="spec.md",
+            self_test_content="ALL 416 CHECKS PASSED",
+            shall_statements=shalls,
+            test_plan_content="Plan",
+            test_case_results=tcs,
+        )
+        assert "Test Case Names" in user_prompt
+        assert "test_sw004_32bit" in user_prompt
+        assert "test_g17_void_suppression" in user_prompt
+        # 反幻觉约束: 禁止因 summary-only 输出否定测试存在; 禁止虚构证据
+        assert "Do NOT claim a test is absent" in system_prompt
+        assert "Do NOT fabricate" in system_prompt
+
 
 # ===================================================================
 # _generate_selftest_markdown
@@ -849,6 +877,7 @@ class TestStepReviewSelftest:
 
     def test_selftest_json_output(self, tmp_session):
         """GIVEN successful run WHEN checking output THEN JSON has required keys."""
+        import json
         from yuleosh.pipeline.step_handlers.review_selftest.core import step_review_selftest
         with mock.patch("yuleosh.pipeline.step_handlers.review_selftest.core._call_llm",
                         return_value={"content": '```json\n{"status":"passed"}\n```', "usage": {"total_tokens": 30}}):
@@ -863,6 +892,35 @@ class TestStepReviewSelftest:
         assert "build_id" in data
         assert "coverage" in data
         assert "llm_degradation" in data
+
+    def test_junit_xml_persisted_with_names(self, tmp_session, tmp_path):
+        """GIVEN selftest review with test cases WHEN running THEN junit.xml persisted with testcase names (P1).
+
+        r22 real-4 根因链: JUnit XML 无 testcase name → LLM 不采信合成名 →
+        0/43 假红。修复: 把 (真实函数名 + ctest exit 0) 写成标准 JUnit XML
+        到 session 目录, 后续 run 的 _discover_junit_xml 可直接消费。
+        """
+        from yuleosh.pipeline.step_handlers.review_selftest.core import step_review_selftest
+        # 伪造一个带 testcase name 的 JUnit XML, 让解析路径产出 test_case_results
+        junit = tmp_path / "fake-junit.xml"
+        junit.write_text(
+            '<testsuite name="s" tests="1">'
+            '<testcase name="test_sw004_32bit" time="0.1"/>'
+            "</testsuite>"
+        )
+        with mock.patch("yuleosh.pipeline.step_handlers.review_selftest.core._discover_junit_xml",
+                        return_value=[junit]):
+            with mock.patch("yuleosh.pipeline.step_handlers.review_selftest.core._call_llm",
+                            return_value={"content": '```json\n{"status":"passed"}\n```',
+                                          "usage": {"total_tokens": 30}}):
+                with mock.patch("yuleosh.pipeline.step_handlers.review_selftest.core._parse_spec",
+                                return_value=(mock.MagicMock(), [])):
+                    step_review_selftest(tmp_session)
+        out = tmp_session.session_dir / "junit.xml"
+        assert out.exists()
+        content = out.read_text()
+        assert "<testcase" in content
+        assert 'name="test_sw004_32bit"' in content
 
     def test_synthesize_unity_test_cases(self, tmp_path):
         """GIVEN C test source with test_* functions and no JUnit XML

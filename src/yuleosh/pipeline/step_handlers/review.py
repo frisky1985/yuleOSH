@@ -154,6 +154,13 @@ def step_hermes_review(session: PipelineSession) -> str:
 
         validate_review_findings(review, source_files)
 
+        # 2026-08-20 r22 real-8: 重复膨胀去重 — LLM 输出同一 finding
+        # 重复几十次 (run-937fecd9a2bb) → 超长截断 → JSON 解析失败。
+        # 解析/恢复后按 (file,line,snippet,message) 去重, 只保留首个。
+        from yuleosh.pipeline.review_guard import dedupe_review_findings
+
+        dedupe_review_findings(review)
+
         # Ensure required fields
         review.setdefault("session", session.name)
         review.setdefault("reviewer", "Hermes")

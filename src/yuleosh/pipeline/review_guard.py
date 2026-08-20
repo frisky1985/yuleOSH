@@ -23,7 +23,66 @@ Review hallucination guards (2026-08-20 r22 real-4 复盘).
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+log = logging.getLogger("pipeline.review_guard")
+
+
+def dedupe_review_findings(review: dict[str, Any]) -> dict[str, Any]:
+    """去重 review findings (2026-08-20 r22 real-8, code-review 重复膨胀).
+
+    LLM 输出同一 finding 重复几十次 (run-937fecd9a2bb: 同一个 cooldown
+    finding 复制 30+ 次) → 输出超长被截断 → JSON 解析失败 → 整个
+    code-review 报废。解析成功后按 (file, line, snippet, message 前 80
+    字符) 去重, 只保留首个; 重复计数记录到 finding 的 ``duplicate_count``。
+    去重后若 status=failed 且不再有 critical/major → 重算为 passed。
+    """
+    findings = review.get("findings") or []
+    if not findings:
+        return review
+
+    seen: set[tuple] = set()
+    unique: list[dict[str, Any]] = []
+    deduped = 0
+    for f in findings:
+        if not isinstance(f, dict):
+            unique.append(f)
+            continue
+        key = (
+            f.get("file", ""),
+            f.get("line"),
+            (f.get("snippet") or "")[:80],
+            (f.get("message") or "")[:80],
+        )
+        if key in seen:
+            deduped += 1
+            continue
+        seen.add(key)
+        unique.append(f)
+
+    if deduped:
+        review["findings"] = unique
+        review["dedupe_stats"] = {
+            "removed": deduped,
+            "kept": len(unique),
+            "validated": True,
+        }
+        # 重算 breakdown
+        breakdown = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+        for f in unique:
+            sev = f.get("severity", "info")
+            breakdown[sev] = breakdown.get(sev, 0) + 1
+        review["finding_breakdown"] = breakdown
+        # status 重算: 原 failed 但去重后无 critical/major → 通过
+        orig = review.get("status")
+        if orig == "failed" and breakdown["critical"] == 0 and breakdown["major"] == 0:
+            review["status"] = "passed"
+            review["status_recalculated"] = (
+                "failed→passed: 去重后无 critical/major finding (重复膨胀)"
+            )
+        log.info("Review findings dedupe: removed %d duplicate(s), kept %d", deduped, len(unique))
+    return review
 
 
 def numbered_source(content: str) -> str:

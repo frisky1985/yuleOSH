@@ -689,12 +689,27 @@ def _build_selftest_review_prompt(
         passed = sum(1 for tc in test_case_results if tc["status"] == "passed")
         failed = sum(1 for tc in test_case_results if tc["status"] == "failed")
         skipped = sum(1 for tc in test_case_results if tc["status"] == "skipped")
+        # 2026-08-20 (P1 收口): 列出测试名 — r22 real-4 根因: 自定义 plain-C /
+        # Unity 测试二进制只输出 summary 行 ("ALL 416 CHECKS PASSED"), 无逐测试
+        # 名; LLM 无法在测试输出中验证 auto-mapping 的测试名 → shall_covered=0
+        # 假红。测试名是从 C 测试源函数定义 grep 提取的真实函数名 (JUnit XML
+        # testcase name), pass 状态由 ctest exit 0 确认 — 必须写进 prompt。
+        tc_names = [tc.get("name", "") for tc in test_case_results]
+        names_str = "\n".join(f"- {n}" for n in tc_names[:50])
+        if len(tc_names) > 50:
+            names_str += f"\n- ... and {len(tc_names) - 50} more"
         tc_summary = (
-            f"\n### Test Case Summary (from JUnit XML)\n"
+            f"\n### Test Case Summary (from JUnit XML / test source inventory)\n"
             f"- Total: {len(test_case_results)}\n"
             f"- Passed: {passed}\n"
             f"- Failed: {failed}\n"
-            f"- Skipped: {skipped}\n"
+            f"- Skipped: {skipped}\n\n"
+            f"### Test Case Names ({len(tc_names)} total, first 50)\n"
+            f"These names are the REAL test function names extracted from the C\n"
+            f"test source files (grep of `test_*` function definitions) and written\n"
+            f"as JUnit XML testcase names. Pass/fail status is confirmed by the test\n"
+            f"binary exit code (ctest) in the Self-Test Report above.\n"
+            f"{names_str}\n"
         )
 
     system_prompt = (
@@ -707,7 +722,17 @@ def _build_selftest_review_prompt(
         "4. **Suggest improvements**: Recommend additional tests for uncovered areas.\n\n"
         "IMPORTANT: Test cases have already been auto-mapped to SHALL statements "
         "using test function name matching (shown with ✅). Please use these mappings "
-        "as a starting point but also apply your own analysis.\n\n"
+        "as a starting point but also apply your own analysis.\n"
+        "RULES (2026-08-20 P1 收口, 反幻觉):\n"
+        "- The test names in the Test Case Names section are extracted from the actual "
+        "C test source files (grep of `test_*` function definitions). Do NOT claim a "
+        "test is absent merely because the runner output prints only a summary line "
+        "(e.g. 'ALL 416 CHECKS PASSED') without listing every function name.\n"
+        "- A SHALL marked ✅ in Auto-Mapped SHALL Coverage is covered unless you find "
+        "concrete counter-evidence in the test sources. Speculation is not evidence.\n"
+        "- Every finding MUST reference real evidence (test name, function name, or "
+        "source line). Do NOT fabricate line numbers, coverage percentages, or test "
+        "counts. If you did not observe a number in the provided reports, do not invent it.\n"
         "Output a structured JSON with:\n"
         "- `status`: \"passed\" if all critical SHALLs covered and tests pass, "
         "\"failed\" if critical gaps exist, \"retry\" for minor gaps\n"
@@ -1192,12 +1217,36 @@ def step_review_selftest(session: PipelineSession) -> str:
         # 正确做法（技能已记载）：grep C 测试源函数名建立 synthetic
         # test cases（status=passed 源自 c-unit-test 已确认全过），
         # 让 auto-map 与 LLM 有真实测试清单可用。
-        if not test_case_results and test_source_files:
+        # 2026-08-20 (r22 real-8): ctest --output-junit 只产生二进制级
+        # testcase 名（window_control_tests 等 3 个），无 test_ 函数名 →
+        # SHALL auto-map 仍 0/N（run-937fecd9a2bb selftest-review retry）。
+        # 修复: JUnit 名若非 test_ 前缀 → 也合成函数级名并合并去重。
+        if test_source_files:
             synthetic = _synthesize_unity_test_cases(test_source_files)
             if synthetic:
-                log.info("Unity summary-only: synthesized %d test cases from C test sources",
-                         len(synthetic))
-                test_case_results = synthetic
+                binary_level = [
+                    tc for tc in test_case_results
+                    if not tc.get("name", "").startswith("test_")
+                ]
+                fn_level = [
+                    tc for tc in test_case_results
+                    if tc.get("name", "").startswith("test_")
+                ]
+                # 合并: 函数级名(合成+JUnit) 优先, 二进制级名保留为补充
+                merged = synthetic + fn_level
+                seen_merged: set[str] = set()
+                unique_merged: list[dict] = []
+                for tc in merged:
+                    name = tc.get("name", "")
+                    if name not in seen_merged:
+                        seen_merged.add(name)
+                        unique_merged.append(tc)
+                test_case_results = unique_merged + binary_level
+                log.info(
+                    "JUnit binary-level names → merged %d function-level + "
+                    "%d binary-level test cases",
+                    len(unique_merged), len(binary_level),
+                )
 
         auto_covered_indices, shall_to_tests_map, shall_assertion_map = _auto_map_shall_coverage(
             shall_statements, test_case_results, test_source_files,
@@ -1358,6 +1407,19 @@ def step_review_selftest(session: PipelineSession) -> str:
             xunit_xml = _generate_xunit_compatible(test_case_results)
             if xunit_xml:
                 review["xunit_compat"] = xunit_xml
+                # 2026-08-20 (P1 收口): 持久化带 testcase name 的 JUnit XML。
+                # r22 real-4 根因链: plain-C/Unity summary-only 输出 → 报告侧
+                # JUnit XML 无 testcase name → LLM 不采信合成名 → 0/43 假红。
+                # 这里把 (真实函数名 + ctest exit 0 证据) 写成标准 JUnit XML,
+                # _discover_junit_xml 覆盖 session 目录 *.xml, 后续 run 可直接
+                # 从 JUnit 解析路径消费, 不再走 unity-summary 合成路径。
+                try:
+                    junit_path = session.session_dir / "junit.xml"
+                    junit_path.write_text(xunit_xml, encoding="utf-8")
+                    log.info("Persisted JUnit XML with testcase names (%d cases): %s",
+                             len(test_case_results), junit_path)
+                except OSError as e:
+                    log.warning("Cannot persist JUnit XML: %s", e)
 
         # R5-P2-3: Add run history
         current_run_entry = {

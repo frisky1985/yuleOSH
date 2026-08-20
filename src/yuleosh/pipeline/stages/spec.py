@@ -27,6 +27,82 @@ from yuleosh.pipeline.stages.step_timing import timed_step
 
 log = logging.getLogger("pipeline.stages.spec")
 
+
+def _recover_truncated_review(raw: str, session_name: str) -> dict | None:
+    """从被截断的 LLM review JSON 中恢复已完成内容 (2026-08-20 r22 real-8).
+
+    LLM 重复膨胀输出超 max_tokens → 输出在 findings 数组中段截断 →
+    标准 json.loads 失败。策略:
+      1. 先尝试标准解析 (防御: 万一 JSON 实际完整)。
+      2. 用 json.JSONDecoder.raw_decode 从 raw 中连续提取所有完整
+         ``{...}`` 对象 — 每个 finding 对象通常是完整 JSON 值, 截断
+         只发生在最后一个对象上。
+      3. 若提取到 ≥1 个完整 finding 对象, 组装 review dict 返回;
+         否则返回 None (调用方回退 retry)。
+    """
+    if not raw:
+        return None
+    # 1. 标准解析 (防御)
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+
+    # 2. 提取完整对象: 逐段 raw_decode, 收集所有顶层 dict
+    decoder = json.JSONDecoder()
+    collected: list[dict] = []
+    idx = 0
+    n = len(raw)
+    while idx < n:
+        # 跳过非 JSON 起始字符
+        while idx < n and raw[idx] not in "{[\"":
+            idx += 1
+        if idx >= n:
+            break
+        try:
+            obj, end = decoder.raw_decode(raw, idx)
+        except json.JSONDecodeError:
+            idx += 1
+            continue
+        if isinstance(obj, dict):
+            collected.append(obj)
+        idx = end
+
+    if not collected:
+        return None
+
+    # 3. 找到主 review 对象 (含 findings 键的 dict; 优先最后一个)
+    main: dict | None = None
+    for cand in reversed(collected):
+        if isinstance(cand, dict) and "findings" in cand:
+            main = cand
+            break
+    if main is None:
+        # 没有主对象 → 把收集到的都当 findings 容器
+        main = {"findings": collected}
+
+    findings = main.get("findings")
+    if not isinstance(findings, list) or not findings:
+        return None
+
+    # 过滤: 只保留 dict 形式 finding (截断的字符串碎片丢弃)
+    valid = [f for f in findings if isinstance(f, dict)]
+    if not valid:
+        return None
+
+    main["findings"] = valid
+    main.setdefault("session", session_name)
+    main.setdefault("reviewer", "Hermes")
+    main.setdefault("timestamp", datetime.now().isoformat())
+    main.setdefault("status", "retry")
+    main.setdefault("summary", "Recovered from truncated LLM output (重复膨胀截断).")
+    # 注意: 去重由 review_guard.dedupe_review_findings 在调用方执行
+    main["_recovered_truncated"] = True
+    main["_raw_llm_output"] = raw
+    return main
+
 # Store for spec cache (lazy init)
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -241,6 +317,13 @@ def _try_parse_hermes_json(raw: str, session_name: str) -> dict:
 
     # Final fallback: return retry status with raw output embedded
     log.warning(f"Could not parse Hermes review JSON. Raw output (first 500 chars): {raw_preview_500}")
+    # 截断恢复 (2026-08-20 r22 real-8): LLM 输出重复膨胀被 max_tokens
+    # 截断 → JSON 不完整。尝试从截断文本中恢复"已完成"的 findings —
+    # 用 incremental JSON 解码逐段累积, 或提取完整 finding 对象。
+    recovered = _recover_truncated_review(raw, session_name)
+    if recovered is not None:
+        log.warning("Recovered %d finding(s) from truncated review JSON", len(recovered.get("findings", [])))
+        return recovered
     return {
         "session": session_name,
         "reviewer": "Hermes",
