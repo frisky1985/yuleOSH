@@ -388,10 +388,53 @@ def step_review_misra_ci(session: PipelineSession) -> str:
 
         # --- 1.5 Report freshness check (2026-08-17 r20p) ---
         # 报告比最新代码变更旧 → 结论不可信（假绿根因：r20n 修复后报告仍 0 违规）。
-        # fail-safe：陈旧报告绝不 passed，降级为 warning 让 pipeline YELLOW。
-        staleness = _check_report_staleness(
-            project_dir, project_dir / _DEFAULT_REPORT_DIR / "misra-report.json"
-        )
+        # 2026-08-20 (r22p7): 结构性死循环根治 — pipeline 的 development/
+        # codegen-deploy 步骤必然在本步骤前改代码，任何先前生成的报告必然 stale，
+        # 手动刷新 CI 后下一次运行又 stale。因此 stale 时不再直接 warning，
+        # 而是自动重扫（mode=full 覆盖全量源码）后再判定：
+        #   - 重扫成功且报告新鲜 → 继续正常审查路径（自愈，不再 YELLOW）
+        #   - 重扫失败/仍 stale → 保持 warning（fail-safe，工程诚实）
+        report_path = project_dir / _DEFAULT_REPORT_DIR / "misra-report.json"
+        staleness = _check_report_staleness(project_dir, report_path)
+        if staleness:
+            log.warning("MISRA report STALE: %s — auto-rescanning (full)", staleness)
+            print("  🔄 [小马] MISRA 报告陈旧，自动重扫 (mode=full)...")
+            try:
+                from yuleosh.ci.result import CIResult
+                from yuleosh.ci.stages.review_misra import run_misra_check
+                import subprocess
+                commit = "HEAD"
+                try:
+                    commit = subprocess.run(
+                        ["git", "rev-parse", "--short", "HEAD"],
+                        capture_output=True, text=True, cwd=project_dir, timeout=10,
+                    ).stdout.strip() or "HEAD"
+                except Exception:
+                    pass
+                ci = CIResult(1, commit)
+                rescanned = run_misra_check(str(project_dir), ci, mode="full")
+                if not rescanned:
+                    log.warning("MISRA auto-rescan FAILED: %s", ci.errors)
+                    print("  ⚠️  [小马] MISRA 自动重扫失败 — 保持 warning")
+                else:
+                    log.info("MISRA auto-rescan OK — re-reading report")
+                    print("  ✅ [小马] MISRA 自动重扫完成")
+                    # 重扫成功 → 重新读取报告 + 重新检查 freshness
+                    report = _read_misra_report(project_dir)
+                    if report is None:
+                        log.warning("MISRA auto-rescan produced no report — keep warning")
+                        print("  ⚠️  [小马] MISRA 自动重扫后无报告 — 保持 warning")
+                        staleness = staleness or "rescan produced no report"
+                    else:
+                        summary = report.get("summary", {})
+                        total_violations = summary.get("total_violations", 0)
+                        groups = report.get("groups", {})
+                        staleness = _check_report_staleness(project_dir, report_path)
+                        if staleness:
+                            log.warning("MISRA report STILL STALE after rescan: %s", staleness)
+            except Exception as e:
+                log.error("MISRA auto-rescan exception: %s", e)
+                print(f"  ⚠️  [小马] MISRA 自动重扫异常: {e} — 保持 warning")
         if staleness:
             log.warning("MISRA report STALE: %s", staleness)
 
