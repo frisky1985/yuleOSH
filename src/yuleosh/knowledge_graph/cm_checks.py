@@ -247,8 +247,10 @@ def check_deploy_guardrail(project_dir: Path, session_dir: Path | None) -> dict:
         except (OSError, json.JSONDecodeError):
             deploy_status = "unreadable"
 
-    if deploy_status in ("skipped_codegen_failed", "skipped_api_mismatch",
-                         "skipped", "empty", ""):
+    # 2026-08-20 r22 real-6: skipped_src_protected (OSH_GUARD_PROTECT_SRC=1
+    # 保护用户手动代码 → 部署跳过) 也是"无部署动作" — 不能要求证据链。
+    # 所有 skipped* 前缀状态统一视为无部署。
+    if deploy_status.startswith("skipped") or deploy_status in ("empty", ""):
         # 无部署动作 → 跳过（自然无变更集）
         result["status"] = "skipped"
         result["deploy_status"] = deploy_status or "none"

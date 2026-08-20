@@ -160,6 +160,17 @@ class TestDeployGuardrail:
         result = check_deploy_guardrail(git_repo, tmp_path)
         assert result["status"] == "skipped"
 
+    def test_skipped_src_protected_skipped(self, git_repo, tmp_path):
+        # 2026-08-20 r22 real-6: OSH_GUARD_PROTECT_SRC 保护跳过部署
+        # (skipped_src_protected) = 无部署动作 → 不能要求证据链
+        report_dir = git_repo / ".yuleosh" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / "codegen-deploy.json").write_text(
+            json.dumps({"status": "skipped_src_protected"}), encoding="utf-8")
+        result = check_deploy_guardrail(git_repo, tmp_path)
+        assert result["status"] == "skipped"
+        assert result["deploy_status"] == "skipped_src_protected"
+
     def test_deploy_without_evidence_failed(self, git_repo, tmp_path):
         # 有部署报告（status=deployed）但无 deploy-changes.json → failed
         report_dir = git_repo / ".yuleosh" / "reports"
