@@ -96,7 +96,19 @@ def _recover_truncated_review(raw: str, session_name: str) -> dict | None:
     main.setdefault("session", session_name)
     main.setdefault("reviewer", "Hermes")
     main.setdefault("timestamp", datetime.now().isoformat())
-    main.setdefault("status", "retry")
+    # 重算 breakdown (2026-08-20 r22 real-9): 恢复的 findings 必须反映
+    # 真实严重度分布 — 否则全 info 恢复也因 breakdown 全 0 + status
+    # retry 被下游当失败 (run-e3df1269031f code-review retry)。
+    breakdown = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+    for f in valid:
+        sev = f.get("severity", "info")
+        breakdown[sev] = breakdown.get(sev, 0) + 1
+    main["finding_breakdown"] = breakdown
+    # status: 无 critical/major → passed; 否则保持 retry (交由调用方判定)
+    if breakdown["critical"] == 0 and breakdown["major"] == 0:
+        main.setdefault("status", "passed")
+    else:
+        main.setdefault("status", "retry")
     main.setdefault("summary", "Recovered from truncated LLM output (重复膨胀截断).")
     # 注意: 去重由 review_guard.dedupe_review_findings 在调用方执行
     main["_recovered_truncated"] = True
