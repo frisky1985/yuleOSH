@@ -175,6 +175,7 @@ def check_commit_convention(project_dir: Path) -> dict:
         leaked_files = [
             f for f in files_proc.stdout.splitlines()
             if f.strip() and any(f.startswith(p) for p in LEAK_PATTERNS)
+            and not any(f.startswith(ex) for ex in LEAK_EXCLUDE_PREFIXES)
         ]
         if leaked_files:
             result["violations"].append(

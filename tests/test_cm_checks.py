@@ -108,6 +108,18 @@ class TestCommitConvention:
         assert result["status"] == "failed"
         assert any("生成产物" in v for v in result["violations"])
 
+    def test_commit_with_osh_specs_passed(self, git_repo):
+        # .osh/specs/ 是规范真相源 (LEAK_EXCLUDE_PREFIXES), commit 含它不算泄漏
+        (git_repo / ".osh" / "specs" / "core").mkdir(parents=True)
+        (git_repo / ".osh" / "specs" / "core" / "spec.md").write_text(
+            "# Core Spec\n", encoding="utf-8"
+        )
+        _git(git_repo, "add", "-f", ".osh/specs/core/spec.md")
+        _git(git_repo, "commit", "-q", "-m", "docs(core): update spec")
+        result = check_commit_convention(git_repo)
+        assert result["status"] == "passed"
+        assert result["violations"] == []
+
     def test_no_commits_skipped(self, tmp_path):
         _git(tmp_path, "init", "-q")
         result = check_commit_convention(tmp_path)
