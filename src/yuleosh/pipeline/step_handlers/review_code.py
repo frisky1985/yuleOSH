@@ -25,6 +25,7 @@ from yuleosh.pipeline.prompts import (
     SPEC_INJECT_LIMIT,
     _trunc_ref,
 )
+from yuleosh.pipeline.review_guard import numbered_source, validate_review_findings
 log = logging.getLogger("pipeline.step_handlers.review_code")
 
 __all__ = ["step_review_code"]
@@ -133,6 +134,10 @@ def step_review_code(session: PipelineSession) -> str:
         # Parse structured response with robust fallback
         review = _try_parse_hermes_json(raw, session.name)
 
+        # 2026-08-20 r22 real-4 复盘: 幻觉自动验证 — file:line 存在性检查,
+        # 幻觉 finding 降级 info + hallucinated 标记, 不阻塞 pipeline。
+        validate_review_findings(review, source_files_summary)
+
         # Ensure required fields
         review.setdefault("session", session.name)
         review.setdefault("reviewer", "小克")
@@ -191,11 +196,27 @@ def _build_code_review_prompt(
         "3. **Dead code / unused**: Unused imports, variables, functions, unreachable code.\n"
         "4. **Defensive programming**: Missing input validation, edge cases.\n"
         "5. **Test blind spots**: Which parts are likely untested or hard to test?\n\n"
+        "## ANTI-HALLUCINATION RULES (strict — violations degrade the finding to info)\n"
+        "- Source code below is injected with REAL line numbers (`N| code`). Every finding's "
+        "`file`/`line` MUST reference a line number that actually appears in the injected snippet. "
+        "NEVER invent a line number. Use `null` (not 0) for file-wide findings.\n"
+        "- The injected snippet may be TRUNCATED (an `…[omitted …]` marker is present). "
+        "Absence of a line in the snippet does NOT mean the file lacks it. If a claim depends on "
+        "code you cannot see, either open the file yourself or mark the finding `severity: info` "
+        "with `verification_needed: true`.\n"
+        "- NEVER report syntax errors, missing functions, or missing suppressions unless the "
+        "relevant lines are actually visible in the injected snippet. Guessing about unseen code "
+        "is hallucination.\n"
+        "- NEVER invent metrics (e.g. '0% coverage') unless a number was explicitly provided in "
+        "the artifacts.\n"
+        "- For every finding, include a short `snippet` field quoting the exact offending line(s) "
+        "as they appear in the injected source (line number + text). If you cannot quote the line, "
+        "the finding is not grounded — downgrade it.\n"
         "Output a structured JSON with:\n"
         "- `status`: \"passed\", \"failed\", or \"retry\"\n"
         "- `findings`: array of {\"severity\": \"critical\"/\"major\"/\"minor\"/\"info\", "
         "\"category\": \"consistency\"/\"error-handling\"/\"dead-code\"/\"defensive\"/\"test-blindspot\", "
-        "\"file\": \"...\", \"line\": N, \"message\": \"...\"}\n"
+        "\"file\": \"...\", \"line\": N, \"snippet\": \"...\", \"message\": \"...\"}\n"
         "- `finding_breakdown`: {critical: N, major: N, minor: N, info: N}\n"
         "- `test_blind_spots`: [\"description of untested area\", ...]\n"
         "- `summary`: \"Short summary paragraph\"\n"
@@ -237,7 +258,10 @@ def _build_code_review_prompt(
         # mode-dispatch switch) → "excerpt truncated before X" fail-closed
         # critical 假阳性。改引用式截断 (头 60% + 省略标记 + 尾 40%):
         # 关键契约散落在文件中部/尾部时仍可见。
-        content = _trunc_ref(sf["content"], per_file, sf["path"])
+        # 2026-08-20 r22 real-4: 注入带真实行号前缀 (numbered_source), 评审
+        # LLM 引用的行号必须来自真实编号, 配合 validate_review_findings
+        # file:line 存在性检查, 拦截行号幻觉 (hal_hall.c:54 文件仅 53 行)。
+        content = _trunc_ref(numbered_source(sf["content"]), per_file, sf["path"])
         piece = f"### {sf['path']}\n```\n{content}\n```"
         if used + len(piece) > TOTAL_BUDGET:
             piece = piece[: TOTAL_BUDGET - used]

@@ -99,8 +99,12 @@ def step_hermes_review(session: PipelineSession) -> str:
         source_files = []
         for fpath in _selected:
             rel = str(fpath.relative_to(project_dir))
+            # 2026-08-20 r22 real-4: 原 content[:3000] 静默截断 → 评审 LLM
+            # 看不到文件中后部契约 → 系统性幻觉 (window_modes.c 的 (void)
+            # 抑制 / reverse 的 FAULT 分支全在 3000 字符外)。保留全文,
+            # 由 prompts.build_code_review_prompt 统一做引用式截断 + 行号注入。
             content = fpath.read_text() if fpath.exists() and fpath.stat().st_size < 20000 else ""
-            source_files.append({"path": rel, "lines": len(content.splitlines()), "content": content[:3000]})
+            source_files.append({"path": rel, "lines": len(content.splitlines()), "content": content})
 
         # --- Build LLM prompt ---
         # SWC 软件编程规范语义规则注入（有 swc-c-rules.yaml 才注入, 无则保持原行为）
@@ -143,6 +147,12 @@ def step_hermes_review(session: PipelineSession) -> str:
 
         # Parse with robust fallback (handles markdown fences, leading text, etc.)
         review = _try_parse_hermes_json(raw, session.name)
+
+        # 2026-08-20 r22 real-4 复盘: 幻觉自动验证 — file:line 存在性检查,
+        # 幻觉 finding 降级 info + hallucinated 标记, 不阻塞 pipeline。
+        from yuleosh.pipeline.review_guard import validate_review_findings
+
+        validate_review_findings(review, source_files)
 
         # Ensure required fields
         review.setdefault("session", session.name)

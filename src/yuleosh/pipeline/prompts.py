@@ -24,6 +24,8 @@ Steps:
 from pathlib import Path
 from typing import Optional
 
+from yuleosh.pipeline.review_guard import numbered_source
+
 # ---------------------------------------------------------------------------
 # Prompt version management (T1.5: spec-delta 联动)
 # ---------------------------------------------------------------------------
@@ -566,6 +568,22 @@ def build_code_review_prompt(
         "You are an expert code reviewer (Hermes). Review the project's source code "
         "against the specification and all available pipeline artifacts. "
         "Produce a detailed review JSON with findings.\n\n"
+        "## ANTI-HALLUCINATION RULES (strict — violations degrade the finding to info)\n"
+        "- Source code below is injected with REAL line numbers (`N| code`). Every finding's "
+        "`file`/`line` MUST reference a line number that actually appears in the injected snippet. "
+        "NEVER invent a line number. Use `null` (not 0) for file-wide findings.\n"
+        "- The injected snippet may be TRUNCATED (an `…[omitted …]` marker is present). "
+        "Absence of a line in the snippet does NOT mean the file lacks it. If a claim depends on "
+        "code you cannot see, either open the file yourself or mark the finding `severity: info` "
+        "with `verification_needed: true`.\n"
+        "- NEVER report syntax errors, missing functions, missing suppressions, or missing "
+        "branches unless the relevant lines are actually visible. Guessing about unseen code "
+        "is hallucination.\n"
+        "- NEVER invent metrics (e.g. '0% coverage', 'no tests') unless a number was explicitly "
+        "provided in the artifacts.\n"
+        "- For every finding, include a short `snippet` field quoting the exact offending line(s) "
+        "as they appear in the injected source (line number + text). If you cannot quote the line, "
+        "the finding is not grounded — downgrade it.\n\n"
         "Respond with ONLY valid JSON (no markdown, no explanation). "
         "The JSON must have this exact structure:\n"
         "{\n"
@@ -579,6 +597,7 @@ def build_code_review_prompt(
         '      "category": "architecture|domain|style|security|coverage|spec-compliance",\n'
         '      "file": "<relative-file-path>",\n'
         '      "line": <integer-or-null>,\n'
+        '      "snippet": "<exact quoted line(s) from the injected source>",\n'
         '      "message": "<detailed-description>"\n'
         "    }\n"
         "  ],\n"
@@ -591,16 +610,26 @@ def build_code_review_prompt(
 
     artifact_sections = []
     for key, content in artifact_contents.items():
-        artifact_sections.append(f"### {key}\n```\n{content[:3000]}\n```")
+        # 2026-08-20 r22 real-4: artifact 静默截断 [:3000] 改为引用式截断,
+        # 保留尾部 (覆盖率/结论字段常在尾部), 语义不丢失。
+        artifact_sections.append(f"### {key}\n```\n{_trunc_ref(content, 4000, f'{key} artifact')}\n```")
 
     source_sections = []
     for sf in source_files:
+        # 2026-08-20 r22 real-4: 行号注入 + 引用式截断。原注入无行号 →
+        # LLM 只能猜行号 (hal_hall.c:54 文件仅 53 行); 原内容在调用方已
+        # [:3000] 静默截断 → 文件后部契约不可见 → 系统性幻觉。行号前缀
+        # 让 finding 的 file:line 可溯源, validate_review_findings 兜底。
+        numbered = numbered_source(sf.get("content", ""))
+        # .c 实现给足预算 (覆盖 command/process 全文), .h 只给轮廓
+        per_file = 16000 if str(sf["path"]).endswith(".c") else 4000
+        snippet = _trunc_ref(numbered, per_file, sf["path"])
         source_sections.append(
-            f"### {sf['path']} ({sf['lines']} lines)\n```python\n{sf['content']}\n```"
+            f"### {sf['path']} ({sf['lines']} lines)\n```c\n{snippet}\n```"
         )
 
-    if len(source_sections) > 8:
-        source_sections = source_sections[:8]
+    if len(source_sections) > 12:
+        source_sections = source_sections[:12]
         source_sections.append("*(additional source files truncated)*")
 
     user_prompt = (
