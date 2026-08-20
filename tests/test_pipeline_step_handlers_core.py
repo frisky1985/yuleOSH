@@ -319,6 +319,18 @@ class TestEmbeddedReviewHandlers:
         from yuleosh.pipeline.step_handlers.review_misra_ci import step_review_misra_ci
         assert callable(step_review_misra_ci)
 
+    def test_junit_report_path_helper(self):
+        """GIVEN test_qualification._junit_report_path WHEN called THEN returns path under .yuleosh/reports."""
+        from yuleosh.pipeline.step_handlers.test_qualification import _junit_report_path
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td)
+            test_file = Path(td) / "test_qualification.py"
+            p = _junit_report_path(project, test_file)
+            assert p == project / ".yuleosh" / "reports" / "junit-test_qualification.xml"
+            assert p.parent.exists()  # mkdir parents created
+
     def test_step_review_misra_ci_module_has_readers(self):
         """GIVEN review_misra_ci module WHEN checked THEN has helper functions."""
         from yuleosh.pipeline.step_handlers import review_misra_ci as mod

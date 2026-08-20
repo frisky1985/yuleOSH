@@ -271,6 +271,17 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
     return max(executable_candidates, key=lambda p: p.stat().st_mtime)
 
 
+def _junit_report_path(project_dir: Path, test_file: Path) -> Path:
+    """JUnit XML 输出路径 — 放 .yuleosh/reports/junit-<testfile>.xml。
+
+    review_selftest._discover_junit_xml 会扫 .yuleosh/reports/ 与 session
+    目录, 此路径确保带测试名的 JUnit 报告可被发现。
+    """
+    report_dir = project_dir / ".yuleosh" / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    return report_dir / f"junit-{test_file.stem}.xml"
+
+
 def _run_system_tests(
     test_files: list[Path],
     project_dir: Path,
@@ -289,8 +300,15 @@ def _run_system_tests(
         if tf.suffix == ".py":
             try:
                 log.info(f"  Running system test: {tf.name}")
+                # 2026-08-20 r22 real-4: 加 --junit-xml — selftest-review 因
+                # JUnit XML 无测试名无法做 SHALL→用例映射 (43 SHALL 全标
+                # 'no evidence' → verify-loop failed)。pytest 的 junit 输出
+                # 带 testcase name (test_scenario_qualified[场景名]), 供
+                # review_selftest 解析与最终报告引用。
+                junit_path = _junit_report_path(project_dir, tf)
                 proc = subprocess.run(
-                    [sys.executable, "-m", "pytest", str(tf), "-v", "--tb=short"],
+                    [sys.executable, "-m", "pytest", str(tf), "-v", "--tb=short",
+                     "--junit-xml", str(junit_path)],
                     cwd=project_dir,
                     capture_output=True,
                     text=True,
@@ -315,6 +333,7 @@ def _run_system_tests(
                     "returncode": proc.returncode,
                     "stdout_len": len(proc.stdout or ""),
                     "stderr_len": len(proc.stderr or ""),
+                    "junit_xml": str(junit_path) if succeeded else "",
                 })
             except subprocess.TimeoutExpired:
                 results["executed"] += 1
