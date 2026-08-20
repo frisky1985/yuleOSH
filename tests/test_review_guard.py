@@ -164,3 +164,43 @@ class TestValidateReviewFindings:
         review = {"status": "passed", "findings": []}
         validate_review_findings(review, SOURCE_FILES)
         assert review == {"status": "passed", "findings": []}
+
+    def test_snippet_mismatch_flagged(self):
+        # 复现 run-a97bd1d51fdf 内容错位: line 87 是 IDLE cooldown,
+        # 但 LLM 报 G-18 violation (FAULT 检查), snippet 与真实行不匹配
+        review = {
+            "status": "failed",
+            "findings": [
+                {
+                    "severity": "critical",
+                    "file": "src/app/src/window_modes.c",
+                    "line": 3,
+                    "snippet": "if (ctx->state == WINDOW_CONTROL_CLOSING)",
+                    "message": "G-18 violation",
+                }
+            ],
+        }
+        validate_review_findings(review, SOURCE_FILES)
+        f = review["findings"][0]
+        assert f["hallucinated"] is True
+        assert f["severity"] == "info"
+        assert "snippet 与" in f["hallucination_reason"]
+
+    def test_snippet_match_kept(self):
+        # snippet 与真实行内容匹配 → 非幻觉
+        review = {
+            "status": "failed",
+            "findings": [
+                {
+                    "severity": "critical",
+                    "file": "src/app/src/window_modes.c",
+                    "line": 3,
+                    "snippet": "code3",
+                    "message": "real issue on line 3",
+                }
+            ],
+        }
+        validate_review_findings(review, SOURCE_FILES)
+        f = review["findings"][0]
+        assert f.get("hallucinated") is not True
+        assert f["severity"] == "critical"

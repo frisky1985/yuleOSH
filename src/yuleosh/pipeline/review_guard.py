@@ -74,6 +74,7 @@ def validate_review_findings(
 
     # path → 真实行数
     line_count_by_path: dict[str, int] = {}
+    content_by_path: dict[str, str] = {}
     for sf in source_files or []:
         path = sf.get("path", "")
         if not path:
@@ -82,6 +83,7 @@ def validate_review_findings(
         line_count_by_path[path] = int(sf.get("lines") or 0) or _real_line_count(
             sf.get("content", "")
         )
+        content_by_path[path] = sf.get("content", "") or ""
 
     hallucinated = 0
     for f in findings:
@@ -116,6 +118,32 @@ def validate_review_findings(
                 )
                 hallucinated += 1
                 continue
+
+            # 内容错位验证 (2026-08-20 r22 real-5): 行号有效但内容指控错误
+            # (run-a97bd1d51fdf: 报 window_control.c:87 G-18 violation, 实际
+            # 87 行是 IDLE cooldown; 报 202 MANUAL_RELEASE, 实际 202 是
+            # PINCH_REVERSAL 分支开头)。prompt 要求 finding 带 snippet 引用
+            # 真实行文本 — 若 snippet 与文件真实内容不匹配 → 幻觉。
+            snippet = f.get("snippet") or ""
+            if snippet:
+                real_line_text = (
+                    content_by_path.get(fpath, "").splitlines()[line_int - 1]
+                    if content_by_path.get(fpath)
+                    else ""
+                )
+                # 去掉行号前缀比较核心文本 (snippet 可能只引用行内容)
+                norm_snippet = snippet.strip()
+                norm_line = real_line_text.strip()
+                # 宽松匹配: snippet 是行内容子串, 或行内容是 snippet 子串
+                if norm_snippet and norm_line and norm_snippet not in norm_line \
+                        and norm_line not in norm_snippet:
+                    f["hallucinated"] = True
+                    f["hallucination_reason"] = (
+                        f"snippet 与 {fpath}:{line_int} 真实内容不匹配 "
+                        f"(snippet='{norm_snippet[:60]}', 实际='{norm_line[:60]}')"
+                    )
+                    hallucinated += 1
+                    continue
 
     if hallucinated:
         # 降级: 幻觉 finding 一律 info (先记录原始 severity 再降级)
