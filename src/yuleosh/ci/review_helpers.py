@@ -194,6 +194,23 @@ _SHALL_ID_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# 需求 ID 风格 (2026-08-20 r22 实测修复): SW-004 / G-17 / REQ-001 / FI-A66T-001。
+# 1-4 个字母 + 分隔符? + 数字。两种形式:
+#   - SHALL 文本: SW-004 / G-17 (分隔符常见)
+#   - 测试函数名: test_sw004_32bit — sw004 相邻 (无分隔符); test_g17_void — g17 相邻
+# 归一化后同为 SW004 / G17。防误匹配:
+#   - 纯数字开头 (2026-08-18) 不匹配 [A-Za-z] 前缀
+#   - (?!\.\d) 拒绝 "v1.1" 点分版本 (v1 → 后跟 .1)
+#   - 噪声容忍: "r21i" → R21 仅产生多余键, 无测试名撞键即无假覆盖
+_REQ_ID_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])(?:[A-Za-z]{1,4}[-_]?\d+)(?!\.\d)",
+)
+
+
+def _normalize_req_id(raw: str) -> str:
+    """SW-004 → SW004; g17 → G17; REQ-001 → REQ001 (去分隔符 + 大写)。"""
+    return re.sub(r"[-_.]", "", raw).upper()
+
 
 def find_test_source_files(project_dir: Path) -> list[Path]:
     """Discover test source files (*.py, *.c) in the project tree."""
@@ -348,6 +365,15 @@ def auto_map_shall_coverage(
             sid = re.sub(r"[^\d.]", "", section)
         if sid:
             shall_by_id.setdefault(sid, []).append((i, stmt))
+        # 2026-08-20 r22 实测修复: 需求 ID 风格 (SW-004 / G-17 / REQ-001) —
+        # window-anti-pinch spec 用 SW-xxx/G-xx 需求 ID, 旧逻辑只认
+        # SHALL-10.1 / 10.1 → auto-map 0 命中 → selftest-review LLM 无机器
+        # 证据, 把已有测试的契约 (SW-005/SW-006/SW-008) 误判未覆盖。
+        # 归一化: 去分隔符 + 大写 (SW-004 → SW004, g17 → G17)。
+        for rm in _REQ_ID_PATTERN.finditer(stmt):
+            rid = _normalize_req_id(rm.group(0))
+            if rid:
+                shall_by_id.setdefault(rid, []).append((i, stmt))
 
     # Extract SHALL IDs from test function names
     for tc in test_case_results:
@@ -359,6 +385,16 @@ def auto_map_shall_coverage(
                     covered_indices.add(idx)
                     shall_to_tests_map.setdefault(stmt, []).append(test_name)
                     # R4-P0-4: Extract assertion line numbers for this test
+                    if test_source_files and test_name not in shall_assertion_map.setdefault(stmt, {}):
+                        assert_lines = _extract_assertion_lines(test_source_files, test_name)
+                        shall_assertion_map[stmt][test_name] = assert_lines
+        # 2026-08-20: 需求 ID 风格测试名 (test_sw004_32bit / test_g17_void…)
+        for rm in _REQ_ID_PATTERN.finditer(test_name):
+            rid = _normalize_req_id(rm.group(0))
+            if rid in shall_by_id:
+                for idx, stmt in shall_by_id[rid]:
+                    covered_indices.add(idx)
+                    shall_to_tests_map.setdefault(stmt, []).append(test_name)
                     if test_source_files and test_name not in shall_assertion_map.setdefault(stmt, {}):
                         assert_lines = _extract_assertion_lines(test_source_files, test_name)
                         shall_assertion_map[stmt][test_name] = assert_lines

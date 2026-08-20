@@ -106,8 +106,11 @@ def test_parallel_groups_cover_documented_steps():
     """并行组覆盖方案文档中的步骤；lookup 无冲突。"""
     assert PARALLEL_GROUPS[0] == ("prd", "architecture")
     assert PARALLEL_GROUPS[1] == ("arch-review", "development")
+    # 2026-08-20 r22 实测: internal-code-review 从 P3 移除 — maybe_skip_code_review
+    # 读 codegen-deploy 报告 (handler 结尾才写), 与 codegen-deploy 并行会 false-skip
+    # "本次 run 无代码部署"。部署状态消费者必须在 producer 之后 (串行)。
     assert PARALLEL_GROUPS[2] == (
-        "development-review", "codegen-deploy", "internal-code-review", "claude-review",
+        "development-review", "codegen-deploy", "claude-review",
     )
     # 每步只属于一个组
     seen: set[str] = set()
@@ -115,7 +118,7 @@ def test_parallel_groups_cover_documented_steps():
         for k in g:
             assert k not in seen, f"step {k} 出现在多个并行组"
             seen.add(k)
-    assert len(seen) == 8  # 2 + 2 + 4
+    assert len(seen) == 7  # 2 + 2 + 3 (internal-code-review 串行)
 
 
 def test_group_lookup_consistency():

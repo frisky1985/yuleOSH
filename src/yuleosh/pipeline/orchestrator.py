@@ -40,12 +40,16 @@ log = logging.getLogger("pipeline.orchestrator")
 # P1: prd ∥ architecture — architecture 只读 spec+扫描 src, 不读 prd。
 # P2: arch-review ∥ development — development 只读 architecture/prd/
 #     super-analysis, 不读 arch-review。
-# P3: development-review ∥ codegen-deploy ∥ internal-code-review ∥
-#     claude-review — 四者都只依赖 development 产物, 互不依赖。
+# P3: development-review ∥ codegen-deploy ∥ claude-review — 三者都只依赖
+#     development 产物, 互不依赖。
+# ⚠️ internal-code-review 不在 P3 (2026-08-20 r22 实测): maybe_skip_code_review
+#     读 codegen-deploy 报告 (handler 结尾才写) — 与 codegen-deploy 并行会
+#     先读到旧/缺报告 → false-skip "本次 run 无代码部署"。部署状态消费者
+#     必须在 producer 之后 (对齐「互换安全 ⟺ 双方都不消费对方产物」原则)。
 PARALLEL_GROUPS: list[tuple[str, ...]] = [
     ("prd", "architecture"),
     ("arch-review", "development"),
-    ("development-review", "codegen-deploy", "internal-code-review", "claude-review"),
+    ("development-review", "codegen-deploy", "claude-review"),
 ]
 # 并行组在 PIPELINE_STEPS 中可能不相邻（如 prd 与 architecture 隔 prd-review）,
 # 预注册阶段按 PIPELINE_STEPS 顺序登记全部步骤, 执行阶段按组并发。

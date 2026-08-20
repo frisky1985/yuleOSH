@@ -54,6 +54,17 @@ LEAK_PATTERNS = (
     ".benchmarks/",
 )
 
+# 有意跟踪的源/文档（不视为生成产物泄漏）:
+#   .osh/specs/           — OpenSpec 规范源 (2026-08-18 老板钦定: 项目规范
+#                            SHALL 按 .osh/specs/<capability>/spec.md 结构化,
+#                            git add 需 -f 但属规范真相源, 必须跟踪)
+#   .osh/sprint-contract- — harness coding sprint 契约 (先定 done 标准产物)
+# 匹配 .osh/ 前缀时先排除这些, 其余 .osh/sessions|.osh/cache 等仍判泄漏。
+LEAK_EXCLUDE_PREFIXES = (
+    ".osh/specs/",
+    ".osh/sprint-contract-",
+)
+
 
 def _is_git_repo(project_dir: Path) -> bool:
     """True when the project dir is a git checkout."""
@@ -201,6 +212,7 @@ def check_generated_artifacts_leak(project_dir: Path) -> dict:
     leaked = [
         f for f in proc.stdout.splitlines()
         if any(f.startswith(p) for p in LEAK_PATTERNS)
+        and not any(f.startswith(x) for x in LEAK_EXCLUDE_PREFIXES)
     ]
     result["leaked_files"] = leaked[:50]
     if leaked:

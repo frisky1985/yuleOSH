@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -792,6 +793,27 @@ def step_codegen_deploy(session: PipelineSession) -> str:
         # 0️⃣ 回滚后清空 deployed — 部署内容已回滚, 不视为本次部署
         report["deployed"] = []
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    # ── CM Gate 部署证据链 (2026-08-20 r22 实测修复) ─────────────────
+    # merge-gate 的 deploy_guardrail 检查 session_dir/deploy-changes.json
+    # 存在且非空 (有部署动作必有变更集记录)。此前从未写该文件 → 真实
+    # 部署后 CM Gate 误报 "deploy evidence chain broken"。部署成功时
+    # 记录变更集; 回滚/无部署时写状态说明 (dict 非空即通过检查)。
+    try:
+        changes_doc = {
+            "run_id": str(getattr(session, "run_id", "") or session.name),
+            "status": report.get("status", ""),
+            "deployed": report.get("deployed", []),
+            "skipped_empty": report.get("skipped_empty", []),
+            "behavior_guardrail_verdict": report.get("behavior_guardrail", {}).get("verdict", ""),
+            "generated_dir": report.get("generated_dir", ""),
+            "timestamp": datetime.now().isoformat(),
+        }
+        changes_path = Path(session.session_dir) / "deploy-changes.json"
+        changes_path.parent.mkdir(parents=True, exist_ok=True)
+        changes_path.write_text(json.dumps(changes_doc, indent=2), encoding="utf-8")
+    except Exception as e:  # 证据文件写入失败不阻断部署本身
+        log.warning("Cannot write deploy-changes.json evidence: %s", e)
 
     print(f"  ✅ [小明] codegen-deploy: {len(deployed)} files → src/ "
           f"(skipped {len(skipped_empty)} empty)")

@@ -19,7 +19,12 @@ from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm, _try_parse_hermes_json
-from yuleosh.pipeline.prompts import _inject_spec, _inject_limited, SPEC_INJECT_LIMIT
+from yuleosh.pipeline.prompts import (
+    _inject_spec,
+    _inject_limited,
+    SPEC_INJECT_LIMIT,
+    _trunc_ref,
+)
 log = logging.getLogger("pipeline.step_handlers.review_code")
 
 __all__ = ["step_review_code"]
@@ -227,7 +232,12 @@ def _build_code_review_prompt(
             continue
         # .c 实现给足预算 (覆盖中后部契约实现与 command/process), .h 只给轮廓
         per_file = 16000 if str(sf["path"]).endswith(".c") else 2000
-        content = sf["content"][:per_file]
+        # 2026-08-20 r22 实测修复: 头截断 content[:per_file] 让评审 LLM 看不到
+        # 文件中后部 (window_modes.c 的 (void) 抑制行 / window_control.c 的
+        # mode-dispatch switch) → "excerpt truncated before X" fail-closed
+        # critical 假阳性。改引用式截断 (头 60% + 省略标记 + 尾 40%):
+        # 关键契约散落在文件中部/尾部时仍可见。
+        content = _trunc_ref(sf["content"], per_file, sf["path"])
         piece = f"### {sf['path']}\n```\n{content}\n```"
         if used + len(piece) > TOTAL_BUDGET:
             piece = piece[: TOTAL_BUDGET - used]
