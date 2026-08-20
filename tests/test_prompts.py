@@ -194,6 +194,31 @@ class TestBuildPrdPrompt:
         assert "Acceptance Criteria" in system
         assert "Out of Scope" in system
 
+    def test_timing_metric_semantics_preserved(self, sample_spec_content, sample_requirements, sample_scenarios):
+        """r22 复盘 (2026-08-20): PRD AC 时序指标必须保留 spec 分段语义。
+
+        历史根因: prompt 示例 "50 ms pinch response" 把反转触发时间（50ms）
+        误当检测时间，诱导 LLM 把 AC-003 写成 "50ms 内检测到防夹"（实际
+        spec 契约 = 200ms 检测窗口 + 50ms 反转 ≈ 250ms 总响应）。修复后
+        prompt 必须: ① 示例用总响应 + 分段组合; ② 含数值一致性纪律。
+        """
+        from yuleosh.pipeline.prompts import build_prd_prompt
+
+        system, _ = build_prd_prompt(
+            spec_content=sample_spec_content,
+            spec_name="spec.md",
+            requirements=sample_requirements,
+            scenarios=sample_scenarios,
+        )
+        # 正确示例: 总响应 + 分段语义
+        assert "250 ms total pinch response" in system
+        assert "200 ms detection window + 50 ms reversal" in system
+        # 纪律段: 禁止把总响应误写为分段值
+        assert "数值一致性纪律" in system
+        assert "50ms 内检测到防夹" in system  # 反例明确列出
+        # 旧错误示例必须消失（50 ms pinch response 单值示例）
+        assert "50 ms pinch response" not in system
+
     def test_project_asil_injected_when_configured(self, sample_spec_content, sample_requirements, sample_scenarios):
         """r21b (claude-review minor): PRD 自封 ASIL-B/C 而 spec 未分级 —
         project_asil 注入后 prompt 必须携带 ASIL 纪律约束。

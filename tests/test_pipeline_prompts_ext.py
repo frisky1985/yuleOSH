@@ -180,7 +180,7 @@ class TestPromptBuilders:
         assert "src/main.py" in user
 
     def test_build_code_review_truncated(self):
-        """More than 8 source files gets truncated."""
+        """More than 12 source files gets truncated (threshold aligned 2026-08-20)."""
         system, user = build_code_review_prompt(
             spec_content="# S",
             spec_name="s.md",
@@ -188,7 +188,7 @@ class TestPromptBuilders:
             artifact_contents={},
             source_files=[
                 {"path": f"src/file{i}.py", "lines": 10, "content": "pass"}
-                for i in range(10)
+                for i in range(13)
             ],
             timestamp="T",
         )
