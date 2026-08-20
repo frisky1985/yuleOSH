@@ -28,6 +28,91 @@ from yuleosh.pipeline.stages.step_timing import timed_step
 log = logging.getLogger("pipeline.stages.spec")
 
 
+def _parse_jsonl_review(raw: str, session_name: str) -> dict | None:
+    """解析 JSONL review 输出 (2026-08-20 r22 real-10, 截断容错根治).
+
+    新格式 (prompt 约定):
+      Line 1:  header 对象 — {session, reviewer, timestamp, status,
+               finding_breakdown, summary} — 无 findings 键。
+      Line 2+: 每行一个 finding 对象。
+
+    容错:
+      - 截断只影响最后一行 (该行丢弃, 之前 findings 全部存活)。
+      - 兼容旧格式: 若 header 含 findings 键 (旧完整 JSON), 直接返回。
+      - 每行独立 json.loads; 非 JSON 行跳过 (模型可能输出噪音)。
+
+    Returns review dict or None (非 JSONL 格式 → 调用方走旧路径).
+    """
+    if not raw or not raw.strip():
+        return None
+    lines = raw.strip().splitlines()
+    if not lines:
+        return None
+
+    # 旧格式兼容: 整段是完整 JSON (含 findings) → 直接返回
+    if lines[0].lstrip().startswith("{") and "findings" in raw[:2000]:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    # 逐行解析: 第一行 header, 后续行 findings
+    header: dict | None = None
+    findings: list[dict] = []
+    for line in lines:
+        line = line.strip()
+        if not line or not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if header is None:
+            # 第一行是 header (有 status/summary 特征) 或是 finding
+            if "findings" in obj and isinstance(obj.get("findings"), list):
+                # 旧格式 header 带 findings → 直接返回
+                obj.setdefault("session", session_name)
+                return obj
+            header = obj
+        else:
+            findings.append(obj)
+
+    if header is None:
+        return None
+
+    # 组装 review
+    header.setdefault("session", session_name)
+    header.setdefault("reviewer", "Hermes")
+    header.setdefault("timestamp", datetime.now().isoformat())
+    header.setdefault("status", "passed" if not findings else "retry")
+    header.setdefault("summary", "")
+    header.setdefault("finding_breakdown",
+                      {"critical": 0, "major": 0, "minor": 0, "info": 0})
+    header["findings"] = findings
+
+    # 重算 breakdown (保证与实际 findings 一致)
+    breakdown = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+    for f in findings:
+        sev = f.get("severity", "info")
+        breakdown[sev] = breakdown.get(sev, 0) + 1
+    header["finding_breakdown"] = breakdown
+
+    # status 一致性 (JSONL 下 findings 是完整证据清单):
+    #   - findings 有 critical/major → failed (防假绿, 即使 header 说 passed)
+    #   - 否则 (全 info/minor 或空) → passed (信任证据, 即使 header 说 failed)
+    if breakdown["critical"] > 0 or breakdown["major"] > 0:
+        header["status"] = "failed"
+    else:
+        header["status"] = "passed"
+
+    header["_jsonl_format"] = True
+    return header
+
+
 def _recover_truncated_review(raw: str, session_name: str) -> dict | None:
     """从被截断的 LLM review JSON 中恢复已完成内容 (2026-08-20 r22 real-8).
 
@@ -271,6 +356,13 @@ def _try_parse_hermes_json(raw: str, session_name: str) -> dict:
     """
     json_str = raw.strip()
     raw_preview_500 = raw[:500]
+
+    # JSONL 优先 (2026-08-20 r22 real-10): 新格式 — 第一行 header 对象
+    # (无 findings 键), 后续每行一个 finding 对象。截断只丢最后一行,
+    # 前面 findings 全部存活 → 从机制上消灭"重复膨胀→整份报废"。
+    jsonl_review = _parse_jsonl_review(raw, session_name)
+    if jsonl_review is not None:
+        return jsonl_review
 
     # Try bare JSON first
     if json_str.startswith("{") and json_str.endswith("}"):

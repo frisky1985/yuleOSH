@@ -588,28 +588,24 @@ def build_code_review_prompt(
         "- For every finding, include a short `snippet` field quoting the exact offending line(s) "
         "as they appear in the injected source (line number + text). If you cannot quote the line, "
         "the finding is not grounded — downgrade it.\n\n"
-        "Respond with ONLY valid JSON (no markdown, no explanation). "
-        "The JSON must have this exact structure:\n"
-        "{\n"
-        '  "session": "<session-name>",\n'
-        '  "reviewer": "Hermes",\n'
-        '  "timestamp": "<ISO-timestamp>",\n'
-        '  "status": "passed|failed|retry",\n'
-        '  "findings": [\n'
-        "    {\n"
-        '      "severity": "critical|major|minor|info",\n'
-        '      "category": "architecture|domain|style|security|coverage|spec-compliance",\n'
-        '      "file": "<relative-file-path>",\n'
-        '      "line": <integer-or-null>,\n'
-        '      "snippet": "<exact quoted line(s) from the injected source>",\n'
-        '      "message": "<detailed-description>"\n'
-        "    }\n"
-        "  ],\n"
-        '  "finding_breakdown": {\n'
-        '    "critical": <int>, "major": <int>, "minor": <int>, "info": <int>\n'
-        "  },\n"
-        '  "summary": "<overall-review-summary>"\n'
-        "}"
+        "## OUTPUT FORMAT: JSON Lines (JSONL) — truncation-safe (2026-08-20 r22 real-10)\n"
+        "Respond with ONLY JSON Lines — no markdown fences, no explanation.\n"
+        "Line 1 is the review header — ONE complete JSON object with keys "
+        "session/reviewer/timestamp/status/finding_breakdown/summary, and NO findings key:\n"
+        '{"session": "<session-name>", "reviewer": "Hermes", "timestamp": "<ISO>", '
+        '"status": "passed|failed|retry", "finding_breakdown": {"critical": 0, "major": 0, '
+        '"minor": 0, "info": 0}, "summary": "<overall-review-summary>"}\n'
+        "Every following line is ONE complete finding object — one finding per line, "
+        "NO commas, NO wrapping array, NO trailing comma:\n"
+        '{"severity": "critical|major|minor|info", "category": "architecture|domain|style|'
+        'security|coverage|spec-compliance", "file": "<relative-file-path>", '
+        '"line": <integer-or-null>, "snippet": "<exact quoted line(s)>", '
+        '"message": "<detailed-description>"}\n'
+        "Rules:\n"
+        "- Keep each finding on a SINGLE line (escape newlines in message as \\n). "
+        "If the output is truncated mid-line, only that last line is lost — earlier findings survive.\n"
+        "- Never repeat a finding: each (file, line, issue) appears at most once.\n"
+        "- If you have no findings, output ONLY the header line.\n"
     )
 
     artifact_sections = []

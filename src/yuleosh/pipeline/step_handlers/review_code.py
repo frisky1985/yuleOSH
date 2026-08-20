@@ -216,16 +216,28 @@ def _build_code_review_prompt(
         "- For every finding, include a short `snippet` field quoting the exact offending line(s) "
         "as they appear in the injected source (line number + text). If you cannot quote the line, "
         "the finding is not grounded — downgrade it.\n"
-        "Output a structured JSON with:\n"
-        "- `status`: \"passed\", \"failed\", or \"retry\"\n"
-        "- `findings`: array of {\"severity\": \"critical\"/\"major\"/\"minor\"/\"info\", "
-        "\"category\": \"consistency\"/\"error-handling\"/\"dead-code\"/\"defensive\"/\"test-blindspot\", "
-        "\"file\": \"...\", \"line\": N, \"snippet\": \"...\", \"message\": \"...\"}\n"
-        "- `finding_breakdown`: {critical: N, major: N, minor: N, info: N}\n"
-        "- `test_blind_spots`: [\"description of untested area\", ...]\n"
-        "- `summary`: \"Short summary paragraph\"\n"
-        "Wrap the JSON in ```json ... ```.\n"
-        "If the response cannot be parsed as JSON, it will be treated as unstructured markdown."
+        "## OUTPUT FORMAT: JSON Lines (JSONL) — truncation-safe (2026-08-20 r22 real-10)\n"
+        "Respond with ONLY JSON Lines — no markdown fences, no explanation.\n"
+        "Line 1 is the review header — ONE complete JSON object with keys "
+        "session/reviewer/timestamp/status/finding_breakdown/summary/test_blind_spots, "
+        "and NO findings key:\n"
+        '{"session": "<session-name>", "reviewer": "小克", "timestamp": "<ISO>", '
+        '"status": "passed|failed|retry", "finding_breakdown": {"critical": 0, "major": 0, '
+        '"minor": 0, "info": 0}, "test_blind_spots": ["..."], '
+        '"summary": "<overall-review-summary>"}\n'
+        "Every following line is ONE complete finding object — one finding per line, "
+        "NO commas, NO wrapping array, NO trailing comma:\n"
+        '{"severity": "critical|major|minor|info", "category": "consistency|error-handling|'
+        'dead-code|defensive|test-blindspot", "file": "<relative-file-path>", '
+        '"line": <integer-or-null>, "snippet": "<exact quoted line(s)>", '
+        '"message": "<detailed-description>"}\n'
+        "Rules:\n"
+        "- Keep each finding on a SINGLE line (escape newlines in message as \\n). "
+        "If the output is truncated mid-line, only that last line is lost — earlier findings survive.\n"
+        "- Never repeat a finding: each (file, line, issue) appears at most once.\n"
+        "- If you have no findings, output ONLY the header line.\n"
+        "Wrap the whole response in nothing — raw JSONL only.\n"
+        "If the response cannot be parsed as JSONL, it will be treated as unstructured markdown."
     )
 
     # Format source file summaries
