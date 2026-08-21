@@ -24,6 +24,7 @@ import json
 import logging
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -61,9 +62,11 @@ class ContainerExecutor(Executor):
                  extra_env: dict[str, str] | None = None,
                  mock_mode: bool = False,
                  timeout_s: int = 600,
-                 run_id: str | None = None):
+                 run_id: str | None = None,
+                 tenant_id: str | None = None):
         self.project_dir = project_dir
         self.tenant_dir = tenant_dir
+        self.tenant_id = tenant_id
         self.image = image
         self.memory_limit = memory_limit
         self.cpus = cpus
@@ -100,8 +103,15 @@ class ContainerExecutor(Executor):
     # ---- 执行 ----
 
     def _build_env(self) -> list[str]:
-        """容器 env 参数（--env k=v）。网络关闭时注入代理白名单。"""
+        """容器 env 参数（--env k=v）。网络关闭时注入代理白名单。
+
+        EI-M2B.2: tenant_dir 存在时自动加载租户凭据（白名单键）注入 env，
+        仅环境变量传递，不落盘项目目录/工作卷。
+        """
         env = dict(self.extra_env)
+        if self.tenant_dir:
+            from yuleosh.engine.tenant_security import load_credentials
+            env.update(load_credentials(self.tenant_dir))
         env["OSH_HOME"] = CONTAINER_WORK_DIR
         env["YULEOSH_MOCK"] = "1" if self.mock_mode else "0"
         if not self.network_enabled:
@@ -159,6 +169,19 @@ class ContainerExecutor(Executor):
         spec_path = step_def.get("spec_path")
         if spec_path:
             cmd.extend(["--spec-path", spec_path])
+
+        # EI-M2B.3: 容器启动审计（租户/项目/步骤/镜像/限额/网络）
+        if self.tenant_dir:
+            from yuleosh.engine.tenant_security import audit_container_start
+            audit_container_start(
+                self.tenant_dir,
+                tenant_id=self.tenant_id or "unknown",
+                project_name=Path(self.project_dir).name,
+                step_id=step_def["step_id"],
+                image=self.image,
+                limits={"memory": self.memory_limit, "cpus": self.cpus},
+                network=self.network_enabled,
+            )
 
         log.info("ContainerExecutor: %s", " ".join(cmd))
         try:
