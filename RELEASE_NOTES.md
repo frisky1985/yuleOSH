@@ -1,3 +1,84 @@
+# yuleOSH v4.0.0 — 云端沙箱隔离 + RAG 知识库 + Memory 反思闭环 大版本发布
+
+> **发布日期**: 2026-08-21
+> **版本**: v4.0.0
+> **上一个发布 tag**: v3.15.0 (2026-08-14)
+> **版本跨度**: v3.15.0 → v4.0.0（50 commits / 8 feat / 19 fix / 多类）
+
+---
+
+## 🎯 本版核心
+
+从 v3.15.0 到 v4.0.0 共 **50 个 commit**，三大主线：**云端沙箱隔离 + RAG 知识库（12 原子全验收）**、**Memory 反思蒸馏闭环（P1-P3）**、**r22 Pipeline 编排重构（24 步 + 10 Gate 契约化）**。这是 yuleOSH 从"单机 doc-driven 流水线"迈向"云端多租户 AI 开发平台"的大版本。
+
+---
+
+## ✨ 新功能
+
+### 云端沙箱隔离（M1-M2，12 原子之 M1-A/B + M2-A/B/C）
+- **Executor 接口抽象**（`subprocess_executor.make_subprocess_runner` → `Executor` 接口 `execute(step, project_ctx, env) -> StepResult`），LocalExecutor 保持现有 worker 语义、默认路径零回归
+- **LocalExecutor 项目 venv 隔离**：每项目独立虚拟环境，依赖不串扰
+- **ContainerExecutor（docker）**：容器级隔离执行
+- **K8s Job runner（M2-C）**：云端 Job 编排
+- **租户凭据 + 审计（M2-B）**：租户级凭据管理与操作审计
+
+### RAG 知识库（M3-M4，12 原子之 M3-A..E + M4-A/B）
+- **KB 数据源治理（M3-A）**：知识库数据源接入与治理
+- **FTS5 全文检索 + sqlite-vec 向量检索（M3-B/C）**：双路索引，Embedding 接入（bge-m3, Ollama 预留 Qdrant）
+- **摄取管道（M3-D）**：文档 → 分块 → 嵌入 → 入库自动化
+- **RRF 混合检索 + REST API（M3-E）**：BM25/向量混合排序 + 知识库 API
+- **向量租户隔离 + 三源联合召回（M4-A/B）**：SQL tenant_org + 向量 content_hash 候选 + API JWT org_id 三层隔离；FTS/向量/KG 三源联合召回
+
+### Memory 反思蒸馏闭环（P1-P3，reflective-distillation-20260819）
+- **P1 反思蒸馏器**：`yuleosh memory distill` — sessions → facts 落库（MemoryStore schema 迁移、幂等去重 find_similar、28 测试）
+- **P2 反思器**：冲突检测 / 来源可靠性解决 / 过时归档 + 蒸馏元信息注入
+- **P3 反馈环**：注入埋点 / 步骤结果回采 / 自动归档 + CLI `distill/reflect/feedback`
+
+### r22 Pipeline 编排重构
+- **24 步 + 10 Gate 编排层收口**：`PIPELINE_STEPS` 契约化 + 测试断言 `len(PIPELINE_STEPS)`，README 同步 10-stage gate orchestration over 24 execution units
+- **D2 orchestrator 并行组执行框架**（方案 A, P1+P2+P3）：依赖图驱动的并行组执行
+- **development-review 重构**：devplan-review → development-review 前移到 codegen 之后
+- **性能优化（D1-D3）**：development/codegen prompt 引用式截断、claude-review 省略 test-planning 全文、codex-verify 失败路径提速
+- **步骤级性能基线**：pipeline 完成自动打印 step 耗时表 + 首份基线报告
+
+### Review 幻觉治理（r22 real-4..10 系列）
+- **JSONL 输出格式根治截断容错**：重复膨胀不再整份报废，截断恢复后重算 breakdown
+- **三层防幻觉**：行号注入 + prompt 约束 + findings 自动验证（snippet 内容错位验证 — 行号有效但指控内容不符也判幻觉）
+- **spec bounds 对照规则**：减少 config-bound 误报
+- **stale 报告自动重扫自愈**：根治每次 pipeline YELLOW
+- **qualification JUnit XML**：pytest 输出带测试名的 JUnit XML（selftest-review SHALL 对齐）
+
+### Dogfood 泛化（A1 C++ / B Python）
+- **C++ 泛化（A1, motor-cpp-demo）**：语言检测排除 third_party、`_collect_sources`(.c+.cpp)、cppcheck `--language` 按项目自动选、CMake 语言判 'cpp'（1eab79ff）
+- **Python 项目支持（B, can-codec-python-demo）**：repo-facts Python 测试用例数注入（def test_ + pytest collect 含参数化）、c-coverage-gate 无 C/C++ 源码 skip（Python 项目不再跑 cmake 失败）
+- **ScannerAdapter（P1+P2+P3）**：ci/scanners/ 六文件 + 外部扫描器适配层 + registry + canonicalize_rule_id
+
+---
+
+## 🔧 修复
+
+- **r22 JSONL 解析回归**（3b49d899）：单行/围栏 JSON 被误吞为 header + 截断恢复防假绿
+- **PRD prompt 纪律**：Out-of-Scope 不得裁剪 spec 未限制功能（防夹安全回归拦截）、AC 时序指标分段语义（根治 50ms 措辞误写）
+- **codegen**：SEED_MAX_CHARS 4000→20000（seed 基线全量可见）、G-17 确定性 void 抑制同步 + PRD 护栏表 verbatim + deploy-anchor 防污染
+- **cm-gate**：deploy_guardrail 对 skipped_src_protected 跳过、commit_convention 排除 .osh/specs 规范源
+- **随机顺序全量兼容**：修复跨测试污染（registry/sys.modules/OSH_HOME/TIERS/auth session 等）
+- **r22 实测复盘修复集**（f3b9c4d2）与 resume 证据链过滤（7b8db270）
+- ruff 存量清理（F401 / datetime.UTC / import 排序 / endswith）
+
+---
+
+## 📊 质量状态
+
+| 指标 | 值 |
+|:-----|:---|
+| 全量测试 (v4.0.0) | **13455 passed / 0 failed / 127 skipped**（沙箱+RAG 12 原子全验收后回归） |
+| coverage | 89.25% |
+| ruff | 新增行清零 |
+| 验收 | 沙箱+RAG 12/12 原子全部验收（M1-A..M4-B），遗留 11 失败根治（31a5967→3b49d899） |
+| dogfood | A1 C++ (motor-cpp-demo) R01-R11 ctest 2/2 GREEN；B Python (can-codec-python-demo) 132 pytest GREEN |
+
+---
+
 # yuleOSH v3.15.0 — Codex 验证 + Claude 评审 双外部 Agent 协作闭环发布
 
 > **发布日期**: 2026-08-14

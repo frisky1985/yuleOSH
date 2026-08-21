@@ -469,4 +469,4 @@ GET /api/v1/dashboard/device-status
 
 ---
 
-*本设计基于 yuleOSH v3.15.0 现有架构 + 设备管理层（已落地）+ 产品说明书 Phase 1 规划。*
+*本设计基于 yuleOSH v4.0.0 现有架构 + 设备管理层（已落地）+ 产品说明书 Phase 1 规划。*
