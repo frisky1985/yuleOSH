@@ -1200,7 +1200,8 @@ class TestCCoverageGateStep:
         from yuleosh.pipeline.session import PipelineStepError
         from yuleosh.pipeline.step_handlers import c_coverage_gate as mod
         session = self._session(tmp_path, monkeypatch)
-        with mock.patch.object(mod, "_phase_build_coverage",
+        with mock.patch.object(mod, "_has_c_sources", return_value=True), \
+             mock.patch.object(mod, "_phase_build_coverage",
                                return_value={"success": False}), \
              pytest.raises(PipelineStepError):
             mod.coverage_gate_step(session)
@@ -1209,7 +1210,8 @@ class TestCCoverageGateStep:
         from yuleosh.pipeline.session import PipelineStepError
         from yuleosh.pipeline.step_handlers import c_coverage_gate as mod
         session = self._session(tmp_path, monkeypatch)
-        with mock.patch.object(mod, "_phase_build_coverage",
+        with mock.patch.object(mod, "_has_c_sources", return_value=True), \
+             mock.patch.object(mod, "_phase_build_coverage",
                                return_value=self._ok_phase()), \
              mock.patch.object(mod, "_phase_run_tests",
                                return_value={"success": False}), \
@@ -1221,7 +1223,8 @@ class TestCCoverageGateStep:
     def test_all_phases_ok(self, tmp_path, monkeypatch):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as mod
         session = self._session(tmp_path, monkeypatch)
-        with mock.patch.object(mod, "_phase_build_coverage",
+        with mock.patch.object(mod, "_has_c_sources", return_value=True), \
+             mock.patch.object(mod, "_phase_build_coverage",
                                return_value=self._ok_phase()), \
              mock.patch.object(mod, "_phase_run_tests",
                                return_value={"success": True}), \
@@ -1238,7 +1241,8 @@ class TestCCoverageGateStep:
         from yuleosh.pipeline.session import PipelineStepError
         from yuleosh.pipeline.step_handlers import c_coverage_gate as mod
         session = self._session(tmp_path, monkeypatch)
-        with mock.patch.object(mod, "_phase_build_coverage",
+        with mock.patch.object(mod, "_has_c_sources", return_value=True), \
+             mock.patch.object(mod, "_phase_build_coverage",
                                return_value=self._ok_phase()), \
              mock.patch.object(mod, "_phase_run_tests",
                                return_value={"success": True}), \
@@ -1254,7 +1258,8 @@ class TestCCoverageGateStep:
         from yuleosh.pipeline.session import PipelineStepError
         from yuleosh.pipeline.step_handlers import c_coverage_gate as mod
         session = self._session(tmp_path, monkeypatch)
-        with mock.patch.object(mod, "_phase_build_coverage",
+        with mock.patch.object(mod, "_has_c_sources", return_value=True), \
+             mock.patch.object(mod, "_phase_build_coverage",
                                side_effect=RuntimeError("boom")), \
              pytest.raises(PipelineStepError):
             mod.coverage_gate_step(session)

@@ -27,6 +27,13 @@ from yuleosh.pipeline.stages.step_timing import timed_step
 
 log = logging.getLogger("pipeline.stages.spec")
 
+# JSONL header 强特征键 (2026-08-20 r22 real-10 格式): header 必须含其一,
+# 否则视为普通 JSON 走旧路径 — 修复单行/围栏 JSON 被误吞为 JSONL 的回归。
+# 注意: session 是弱特征 (普通 JSON 也可能带 session), 不参与判定。
+_JSONL_HEADER_KEYS = frozenset({
+    "reviewer", "timestamp", "status", "finding_breakdown", "summary",
+})
+
 
 def _parse_jsonl_review(raw: str, session_name: str) -> dict | None:
     """解析 JSONL review 输出 (2026-08-20 r22 real-10, 截断容错根治).
@@ -77,6 +84,13 @@ def _parse_jsonl_review(raw: str, session_name: str) -> dict | None:
                 # 旧格式 header 带 findings → 直接返回
                 obj.setdefault("session", session_name)
                 return obj
+            # 仅当对象含 JSONL header 强特征键 (status/reviewer/timestamp/
+            # finding_breakdown/summary 之一) 才接受为 header。
+            # 修复 r22 real-10 回归: 单行 {"session": "s1"} / 围栏内普通 JSON
+            # (如 {"a": 1}) 只有弱特征或无特征 → 不是 JSONL, 返回 None 让
+            # 调用方走 bare JSON / fence / brace 旧路径。
+            if not _JSONL_HEADER_KEYS.intersection(obj):
+                return None
             header = obj
         else:
             findings.append(obj)
@@ -172,8 +186,15 @@ def _recover_truncated_review(raw: str, session_name: str) -> dict | None:
     if not isinstance(findings, list) or not findings:
         return None
 
-    # 过滤: 只保留 dict 形式 finding (截断的字符串碎片丢弃)
-    valid = [f for f in findings if isinstance(f, dict)]
+    # 过滤: 只保留 dict 形式 finding (截断的字符串碎片丢弃)。
+    # 2026-08-21 防假绿: 恢复对象必须含 finding 特征键 (severity/
+    # category/message/file/line 之一), 否则是无关 JSON 噪音 (如
+    # `{"x": } and {"f": 6}` 里的 {"f": 6}) — 不恢复, 回退 retry。
+    _FINDING_KEYS = {"severity", "category", "message", "file", "line"}
+    valid = [
+        f for f in findings
+        if isinstance(f, dict) and _FINDING_KEYS.intersection(f)
+    ]
     if not valid:
         return None
 
