@@ -37,6 +37,9 @@ def handle_kb(method: str, path_tail: str, body: dict, query: dict, **kwargs):
 
     if resource == "articles":
         return _handle_articles(method, tail, body, query)
+    elif resource == "search":
+        # EI-M3E.2: 混合检索（FTS5 + 向量 RRF 融合）
+        return _handle_hybrid_search(method, tail, body, query)
     elif resource == "lessons":
         return _handle_lessons(method, tail, body, query)
     elif resource == "fmea":
@@ -236,6 +239,80 @@ def _handle_fmea(method: str, tail: str, body: dict, query: dict):
         return json_error("FMEA entry not found", 404)
 
     return json_error("Method not allowed", 405)
+
+
+# ── EI-M3E.2: 混合检索（FTS5 + 向量 RRF 融合）──────────────────────────
+
+
+def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict):
+    """GET /api/v1/kb/search?q=... — 混合检索。
+
+    返回 {query, hits: [{article_id, title, source, score, keyword_hit,
+    vector_hit, keyword_rank, vector_rank}], keyword_count, vector_count,
+    vector_available}。
+    """
+    if method != "GET":
+        return json_error("Method not allowed", 405)
+    q = _get_query_param(query, "q")
+    if not q:
+        return json_error("'q' query parameter is required", 400)
+
+    try:
+        limit = int(_get_query_param(query, "limit", "10"))
+        limit = max(1, min(limit, 50))
+    except ValueError:
+        limit = 10
+
+    store = _get_kb_store()
+    try:
+        from yuleosh.kb.hybrid_search import HybridSearch
+        from yuleosh.kb.embedding import get_provider
+        from yuleosh.kb.vector_store import VectorStore
+
+        conn = store._get_conn()
+        vector_store = VectorStore(conn)
+        embedding = get_provider("ollama") if vector_store.available else None
+        searcher = HybridSearch(store, vector_store, embedding, top_k=limit)
+        result = searcher.search(q, top_k=limit)
+    except Exception as e:  # noqa: BLE001 — 混合检索降级纯关键词
+        # 向量层不可用时退化为 store.list_articles（FTS5/LIKE）
+        articles = store.list_articles(search=q, limit=limit)
+        return json_ok({
+            "query": q,
+            "hits": [{
+                "article_id": a.id,
+                "title": a.title,
+                "source": a.source,
+                "source_ref": a.source_ref,
+                "score": 1.0 / (i + 1),
+                "keyword_hit": True,
+                "vector_hit": False,
+                "keyword_rank": i,
+                "vector_rank": None,
+            } for i, a in enumerate(articles)],
+            "keyword_count": len(articles),
+            "vector_count": 0,
+            "vector_available": False,
+            "fallback": str(e),
+        })
+
+    return json_ok({
+        "query": result.query,
+        "hits": [{
+            "article_id": h.article_id,
+            "title": h.title,
+            "source": h.source,
+            "source_ref": h.source_ref,
+            "score": round(h.score, 6),
+            "keyword_hit": h.keyword_hit,
+            "vector_hit": h.vector_hit,
+            "keyword_rank": h.keyword_rank,
+            "vector_rank": h.vector_rank,
+        } for h in result.hits],
+        "keyword_count": result.keyword_count,
+        "vector_count": result.vector_count,
+        "vector_available": result.vector_available,
+    })
 
 
 # ── Helper ────────────────────────────────────────────────────────────────
