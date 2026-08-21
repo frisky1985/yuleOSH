@@ -215,6 +215,37 @@
   }
   .v-connector { display: none; }
 
+  /* ── 10 Gate 网格 ───────────────────────── */
+  .gate-grid { margin-top: 26px; }
+  .gate-grid h3 { font-size: 15px; }
+  .gate-grid-inner {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px; margin-top: 6px;
+  }
+  .gate-card {
+    background: rgba(245, 158, 11, .06);
+    border: 1px solid rgba(245, 158, 11, .35);
+    border-radius: 12px; padding: 16px 18px;
+    display: flex; gap: 14px; align-items: flex-start;
+    transition: all .2s;
+  }
+  .gate-card:hover { transform: translateY(-2px); border-color: var(--accent-3); }
+  .gate-card .gid {
+    flex: 0 0 auto; min-width: 44px; text-align: center;
+    background: rgba(245, 158, 11, .14); color: var(--accent-3);
+    border-radius: 10px; padding: 8px 6px;
+    font-weight: 800; font-size: 15px; letter-spacing: .02em;
+  }
+  .gate-card .body { min-width: 0; }
+  .gate-card .nm { font-size: 14px; font-weight: 700; color: var(--text-strong); }
+  .gate-card .sw {
+    display: inline-block; margin: 4px 0 6px;
+    font-size: 11px; font-weight: 700; color: var(--accent-3);
+    background: rgba(245, 158, 11, .12);
+    border-radius: 6px; padding: 2px 8px;
+  }
+  .gate-card .desc { font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+
   /* ── Agents ───────────────────────────── */
   .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
   .agent-card {
@@ -352,7 +383,7 @@
 <header class="hero">
   <div class="wrap">
     <div class="logo"><span class="logo-badge">yO</span> yuleOSH · Embedded Software Compliance Automation</div>
-    <h1>从 Spec 到合规证据包<br><span class="grad">24 步 Pipeline · 10 Gate 全自动</span></h1>
+    <h1>从 Spec 到合规证据包<br><span class="grad">ASPICE SWE.1–6 · 10 Gate 全自动</span></h1>
     <p class="sub">
       yuleOSH 是面向<b>嵌入式 / 汽车电子</b>的合规开发自动化平台。把需求、架构、代码生成、
       评审、测试、MISRA 合规、证据包生成编排成一条 <b>ASPICE SWE.1–SWE.6 对齐</b>的
@@ -367,7 +398,7 @@
       <div class="badge"><span class="num">12,654+</span><span class="lbl">平台测试用例</span></div>
     </div>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#pipeline">查看 24 步 Pipeline ↓</a>
+      <a class="btn btn-primary" href="#pipeline">查看 SWE.1–6 · 10 Gate ↓</a>
       <a class="btn btn-ghost" href="#quickstart"><code>yuleosh pipeline run</code></a>
     </div>
   </div>
@@ -401,37 +432,28 @@
   </div>
 </section>
 
-<!-- ═══════════ 24 步 Pipeline · 10 Gate ═══════════ -->
+<!-- ═══════════ Pipeline · SWE.1–6 + 10 Gate ═══════════ -->
 <section id="pipeline" class="alt">
   <div class="wrap">
     <div class="sec-head">
       <span class="sec-tag">The Pipeline</span>
-      <h2>24 步 · 10 Gate · ASPICE V 模型</h2>
-      <p>左侧规格化（SWE.1 需求 → SWE.3 设计）、底部实现与单元验证（SWE.4）、右侧验证（SWE.5 集成 → SWE.6 合格性）。每一步都产出落盘产物，红色为阻断门禁，粉色为外部 Agent 独立验证。</p>
-    </div>
-
-    <div class="v-labels">
-      <div class="v-label left">
-        <div class="k">Left Arm · Specification</div>
-        <div class="t">规格化 — SWE.1 → SWE.3</div>
-        <div class="d">需求 → PRD → 架构 → 开发计划 → 代码 → 测试规划</div>
-      </div>
-      <div class="v-label right">
-        <div class="k">Right Arm · Verification</div>
-        <div class="t">验证 — SWE.4 → SWE.6</div>
-        <div class="d">单元测试 → 集成测试 → 嵌入式专项 → 合格性测试 → 最终报告</div>
-      </div>
+      <h2>ASPICE SWE.1–6 · 10 Gate 门禁</h2>
+      <p>V 模型：左侧规格化（SWE.1 需求 → SWE.3 设计）、底部实现与单元验证（SWE.4）、右侧验证（SWE.5 集成 → SWE.6 合格性）。每个 SWE 阶段由 1–2 个 Gate 门禁把关，红色为阻断门禁。</p>
     </div>
 
     <div class="v-flow">
-      <!-- Left arm: specification -->
+      <!-- Left arm: specification SWE.1-3 -->
       <div class="col" id="left-arm"></div>
-      <!-- Bottom: implementation -->
+      <!-- Bottom: implementation SWE.4 -->
       <div class="mid" id="bottom-arm">
         <div class="mid-title">▼ 实现与单元验证 · SWE.4</div>
       </div>
-      <!-- Right arm: verification -->
+      <!-- Right arm: verification SWE.4-6 -->
       <div class="col" id="right-arm"></div>
+    </div>
+
+    <div class="gate-grid" id="gate-grid">
+      <h3 style="margin-bottom:14px;color:var(--text-strong);">10 Gate 门禁 · 机器强制校验</h3>
     </div>
 
     <p style="font-size:13px;color:var(--text-faint);margin-top:20px;">
@@ -646,7 +668,7 @@
         <div class="n">3</div>
         <p>跑全流程 Pipeline：</p>
         <pre class="code">cd my-project
-yuleosh pipeline run docs/spec.md        # 完整 24 步
+yuleosh pipeline run docs/spec.md        # 完整 ASPICE SWE.1–6
 yuleosh pipeline run --from-step 14      # 从失败点续跑
 yuleosh pipeline run --mock docs/spec.md # 无 LLM Key 演示模式</pre>
       </div>
@@ -680,52 +702,60 @@ yuleosh pipeline run --mock docs/spec.md # 无 LLM Key 演示模式</pre>
 </footer>
 
 <script>
-// ═══════════ 24-step pipeline data + 10 gates (source of truth: PIPELINE_STEPS / GATES) ═══════════
-const STEPS = [
+// ═══════════ SWE 阶段 + 10 Gate (source of truth: GATES in src/yuleosh/pipeline/gates.py) ═══════════
+const SWE_STAGES = [
   // Left arm: specification (SWE.1 → SWE.3)
-  {n:1,  key:"spec-check",            agent:"小明",  cls:"s-left",  desc:"OpenSpec 合规检查 · 契约机器校验", ext:false, gate:"G1"},
-  {n:2,  key:"super-analysis",        agent:"小明",  cls:"s-left",  desc:"S.U.P.E.R 启动分析", ext:false, gate:"G1"},
-  {n:3,  key:"prd",                   agent:"Hermes",cls:"s-left",  desc:"产品需求分析 (PRD)", ext:false, gate:"G1"},
-  {n:4,  key:"prd-review",            agent:"小马",  cls:"s-left",  desc:"PRD 双视角审查 (质量+产品 advisory)", ext:false, gate:"G1"},
-  {n:5,  key:"architecture",          agent:"Claude",cls:"s-left",  desc:"架构设计", ext:false, gate:"G2"},
-  {n:6,  key:"arch-review",           agent:"小克",  cls:"s-left",  desc:"架构审查", ext:false, gate:"G2"},
-  {n:7,  key:"development",           agent:"Claude",cls:"s-left",  desc:"开发计划与代码实现", ext:false, gate:"G3"},
-  {n:8,  key:"development-review",    agent:"小克",  cls:"s-left",  desc:"开发产物审查 (计划/codegen 报告)", ext:false, gate:"G3"},
-  {n:9,  key:"codegen-deploy",        agent:"小明",  cls:"s-left",  desc:"代码产物部署 · 护栏备份/回滚", ext:false, gate:"G3"},
-  {n:10, key:"internal-code-review",  agent:"小克",  cls:"s-left",  desc:"代码实现预审", ext:false, gate:"G3"},
-  {n:11, key:"claude-review",         agent:"Claude",cls:"s-left",  desc:"Claude 方案评审 (外部 agent · 先挑战 spec 假设)", ext:true,  gate:"G4"},
-  {n:12, key:"test-planning",         agent:"Claude",cls:"s-left",  desc:"测试规划 (注入 claude-review 结论)", ext:false, gate:"G5"},
-  // Bottom arm: implementation + unit verification (SWE.4)
-  {n:13, key:"verify-loop",           agent:"小克",  cls:"s-bottom",desc:"自测循环 (self-test → codex-verify → self-test-review)", ext:true,  gate:"G6"},
-  {n:14, key:"c-unit-test",           agent:"小克",  cls:"s-bottom",desc:"C 单元测试 (Unity)", ext:false, gate:"G6"},
+  {swe:"SWE.1", title:"需求",        cls:"s-left",  desc:"Spec 合规检查 · S.U.P.E.R 分析 · PRD 生成与审查", gates:"G1"},
+  {swe:"SWE.2", title:"架构",        cls:"s-left",  desc:"架构设计 · 架构审查", gates:"G2"},
+  {swe:"SWE.3", title:"实现",        cls:"s-left",  desc:"开发计划 · 代码实现 · 产物部署 · 预审", gates:"G3"},
+  // Bottom: implementation + unit verification (SWE.4)
+  {swe:"SWE.4", title:"实现与单元验证", cls:"s-bottom", desc:"自测循环 (self-test → codex-verify → 审查) · C 单元测试 (Unity)", gates:"G6"},
   // Right arm: verification (SWE.4 → SWE.6)
-  {n:15, key:"code-review",           agent:"小克",  cls:"s-right", desc:"集成审查超集 (code + 嵌入式 12 专项)", ext:false, gate:"G7"},
-  {n:16, key:"misra-review",          agent:"小马",  cls:"s-right", desc:"MISRA 合规审查 (报告陈旧校验)", ext:false, gate:"G7"},
-  {n:17, key:"integration-test",      agent:"小克",  cls:"s-right", desc:"接口集成测试", ext:false, gate:"G7"},
-  {n:18, key:"qemu-verify",           agent:"小克",  cls:"s-right", desc:"QEMU 仿真验证 (qemu-run + c-coverage-gate)", ext:true,  gate:"G7"},
-  {n:19, key:"coverage-review",       agent:"小马",  cls:"s-right", desc:"测试覆盖审查", ext:false, gate:"G7"},
-  {n:20, key:"review-critical-safety",agent:"小明",  cls:"s-right", desc:"关键安全异常阻塞检查 (P0 GATE)", ext:false, gate:"G8"},
-  {n:21, key:"fault-injection",       agent:"小克",  cls:"s-right", desc:"故障注入测试 (SWE.5/SWE.6)", ext:false, gate:"G8"},
-  {n:22, key:"merge-gate",            agent:"小仓",  cls:"s-right", desc:"CM Gate · KG 图一致性 + 仓库管理 4 检查", ext:false, gate:"G9"},
-  {n:23, key:"test-qualification",    agent:"小明",  cls:"s-right", desc:"合格性测试 (SWE.6)", ext:false, gate:"G10"},
-  {n:24, key:"final-report",          agent:"小明",  cls:"s-right", desc:"最终报告 · 证据包汇总", ext:false, gate:"G10"},
+  {swe:"SWE.5", title:"集成",        cls:"s-right", desc:"集成审查超集 · MISRA · 集成测试 · QEMU 仿真 · 覆盖率", gates:"G7"},
+  {swe:"SWE.6", title:"合格性",      cls:"s-right", desc:"故障注入 · 合格性测试 · 最终报告 · 证据包", gates:"G8 · G9 · G10"},
 ];
 
-function stepHTML(s) {
-  const ext = s.ext ? ' external' : '';
-  const gate = s.gate ? ' gate' : '';
-  return `<div class="step ${s.cls}${ext}${gate}">
-    <div class="no">${s.n}</div>
+// 10 Gate (source of truth: GATES — 名称/顺序/步骤归属逐项对齐)
+const GATES = [
+  {g:"G1",  name:"SWE.1 需求 Gate",      sw:"需求",   steps:"spec-check · super-analysis · prd · prd-review"},
+  {g:"G2",  name:"SWE.2 架构 Gate",      sw:"架构",   steps:"architecture · arch-review"},
+  {g:"G3",  name:"SWE.3 实现 Gate",      sw:"实现",   steps:"development · development-review · codegen-deploy · internal-code-review"},
+  {g:"G4",  name:"方案评审 Gate",        sw:"方案",   steps:"claude-review (外部 Agent 评审)"},
+  {g:"G5",  name:"测试规划 Gate",        sw:"规划",   steps:"test-planning"},
+  {g:"G6",  name:"SWE.4 单元验证 Gate",  sw:"单元",   steps:"verify-loop · c-unit-test"},
+  {g:"G7",  name:"SWE.5 集成 Gate",      sw:"集成",   steps:"code-review · misra-review · integration-test · qemu-verify · coverage-review"},
+  {g:"G8",  name:"安全门禁 Gate",        sw:"安全",   steps:"review-critical-safety (P0 GATE) · fault-injection"},
+  {g:"G9",  name:"合并门禁 Gate",        sw:"合并",   steps:"merge-gate (KG 一致性 + 仓库管理 4 检查)"},
+  {g:"G10", name:"SWE.6 合格性 Gate",    sw:"合格",   steps:"test-qualification · final-report"},
+];
+
+function stageHTML(s) {
+  return `<div class="step ${s.cls} gate">
+    <div class="no">${s.swe}</div>
     <div class="body">
-      <div class="nm">${s.key} <span class="agent">${s.agent}</span></div>
-      <div class="desc">${s.desc} <span class="gid">[${s.gate}]</span></div>
+      <div class="nm">${s.title}</div>
+      <div class="desc">${s.desc}</div>
+      <div class="desc"><span class="gid">[${s.gates}]</span></div>
     </div>
   </div>`;
 }
 
-document.getElementById('left-arm').innerHTML   = STEPS.filter(s => s.cls === 's-left').map(stepHTML).join('');
-document.getElementById('bottom-arm').innerHTML += STEPS.filter(s => s.cls === 's-bottom').map(stepHTML).join('');
-document.getElementById('right-arm').innerHTML  = STEPS.filter(s => s.cls === 's-right').map(stepHTML).join('');
+function gateHTML(g) {
+  return `<div class="gate-card">
+    <div class="gid">${g.g}</div>
+    <div class="body">
+      <div class="nm">${g.name}</div>
+      <div class="sw">${g.sw}</div>
+      <div class="desc">${g.steps}</div>
+    </div>
+  </div>`;
+}
+
+document.getElementById('left-arm').innerHTML   = SWE_STAGES.filter(s => s.cls === 's-left').map(stageHTML).join('');
+document.getElementById('bottom-arm').innerHTML += SWE_STAGES.filter(s => s.cls === 's-bottom').map(stageHTML).join('');
+document.getElementById('right-arm').innerHTML  = SWE_STAGES.filter(s => s.cls === 's-right').map(stageHTML).join('');
+document.getElementById('gate-grid').innerHTML +=
+  `<div class="gate-grid-inner">${GATES.map(gateHTML).join('')}</div>`;
 </script>
 
 </body>
