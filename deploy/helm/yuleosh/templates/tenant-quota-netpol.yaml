@@ -1,0 +1,43 @@
+# yuleOSH per-tenant ResourceQuota + NetworkPolicy (EI-M2C.3)
+# 每个租户一个 Quota（限额映射 free/pro/enterprise）+ 默认拒绝网络策略。
+# 使用: helm 渲染后按租户 apply（quota 名称含租户名避免冲突）。
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "yuleosh.fullname" . }}-quota-{{ .Values.tenant.slug | default "default" }}
+  labels:
+    {{- include "yuleosh.labels" . | nindent 4 }}
+    yuleosh.io/tenant: {{ .Values.tenant.slug | default "default" | quote }}
+spec:
+  hard:
+    requests.cpu: {{ .Values.tenant.quota.requestsCpu | default "4" }}
+    requests.memory: {{ .Values.tenant.quota.requestsMemory | default "8Gi" }}
+    limits.cpu: {{ .Values.tenant.quota.limitsCpu | default "8" }}
+    limits.memory: {{ .Values.tenant.quota.limitsMemory | default "16Gi" }}
+    count/jobs.batch: {{ .Values.tenant.quota.maxJobs | default "10" }}
+    persistentvolumeclaims: {{ .Values.tenant.quota.maxPvc | default "5" }}
+---
+# 默认拒绝网络（EI-M2C.3）：只允许同 namespace DNS + 自身
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "yuleosh.fullname" . }}-netpol-{{ .Values.tenant.slug | default "default" }}
+  labels:
+    {{- include "yuleosh.labels" . | nindent 4 }}
+    yuleosh.io/tenant: {{ .Values.tenant.slug | default "default" | quote }}
+spec:
+  podSelector:
+    matchLabels:
+      yuleosh.io/tenant: {{ .Values.tenant.slug | default "default" | quote }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

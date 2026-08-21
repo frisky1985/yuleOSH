@@ -62,6 +62,16 @@ def build_kb_subparser(subparsers):
     search_p.add_argument("--limit", type=int, default=20, help="Max results")
     cleanup_p = kb_sub.add_parser("cleanup", help="Deduplicate articles by content hash (EI-M3A)")
 
+    # kb ingest (EI-M3D)
+    ingest_p = kb_sub.add_parser("ingest", help="Ingest project docs into KB (EI-M3D)")
+    ingest_p.add_argument("project", help="Project directory path")
+    ingest_p.add_argument("--source", action="append", default=[],
+                          help="Extra source path (repeatable; defaults: docs/spec.md, TASK_STATUS.md, requirements/)")
+    ingest_p.add_argument("--no-vectors", action="store_true",
+                          help="Skip vector embedding (FTS-only ingest)")
+    ingest_p.add_argument("--remove-stale", action="store_true",
+                          help="Delete ingest records for vanished source files")
+
     # kb lessons
     lessons_p = kb_sub.add_parser("lessons", help="List lessons learned")
     lessons_p.add_argument("--project", default="", help="Filter by project")
@@ -132,6 +142,35 @@ def handle_kb_command(args) -> int:
         print(f"🧹 KB duplicate cleanup: before={result['articles_before']} "
               f"backfilled={result['backfilled']} removed={result['removed']} "
               f"kept={result['kept']}")
+
+    elif args.kb_sub == "ingest":
+        # EI-M3D: 摄取项目文档（分块/增量/可选向量）
+        from yuleosh.kb.ingest import ingest_project, remove_stale_articles
+        if args.remove_stale:
+            removed = remove_stale_articles(args.project, store)
+            print(f"🧽 Removed {removed} stale ingest records")
+        embedding = None
+        vector_store = None
+        if not args.no_vectors:
+            try:
+                from yuleosh.kb.embedding import get_provider
+                from yuleosh.kb.vector_store import VectorStore
+                embedding = get_provider("ollama")
+                vector_store = VectorStore(store._get_conn())
+                if not vector_store.available:
+                    print("⚠️ sqlite-vec unavailable — falling back to FTS-only")
+                    embedding = None
+                    vector_store = None
+            except Exception as e:  # noqa: BLE001
+                print(f"⚠️ Vector init skipped: {e} — FTS-only ingest")
+        report = ingest_project(args.project, store, embedding, vector_store,
+                                extra_sources=args.source)
+        print(f"📥 Ingested {report.chunks} chunks from {len(report.sources)} sources")
+        print(f"   articles_written={report.articles_written} "
+              f"vectors_written={report.vectors_written} "
+              f"skipped_unchanged={report.skipped_unchanged}")
+        if report.errors:
+            print(f"   ⚠️ errors: {len(report.errors)} (first: {report.errors[0]})")
 
     elif args.kb_sub == "search":
         articles = store.list_articles(search=args.query, limit=args.limit)

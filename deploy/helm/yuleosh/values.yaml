@@ -119,3 +119,51 @@ containerSecurityContext:
 # -- Pod disruption budget (min available pods)
 podDisruptionBudget:
   minAvailable: 1
+
+# =============================================================================
+# EI-M2C: Pipeline runner (每任务 = k8s Job)
+# =============================================================================
+runner:
+  # -- Job 名称前缀
+  jobPrefix: "yuleosh-runner"
+  # -- 租户标识（必填）
+  tenant: ""
+  # -- 项目名（容器内 /work/<project>）
+  project: ""
+  # -- 步骤 id（如 spec-check）
+  stepId: ""
+  # -- 运行 id（默认 r0）
+  runId: "r0"
+  # -- mock 模式
+  mock: false
+  # -- 租户 PVC 名（默认 <fullname>-<tenant>-data）
+  tenantPvc: ""
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  imagePullSecrets: []
+  # -- 默认限额（可被 tenant.quota 覆盖）
+  memory: "2Gi"
+  cpu: "2"
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: ""
+      cpu: ""
+
+# =============================================================================
+# EI-M2C.3: per-tenant ResourceQuota + NetworkPolicy
+# =============================================================================
+tenant:
+  # -- 租户 slug（必填）
+  slug: ""
+  quota:
+    requestsCpu: "4"
+    requestsMemory: "8Gi"
+    limitsCpu: "8"
+    limitsMemory: "16Gi"
+    maxJobs: "10"
+    maxPvc: "5"

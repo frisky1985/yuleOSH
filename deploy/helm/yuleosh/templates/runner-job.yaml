@@ -1,0 +1,68 @@
+# yuleOSH pipeline runner Job (EI-M2C.1) — 每 pipeline 任务 = 独立 k8s Job
+# 挂载 per-tenant PVC（EI-M2C.2）+ 资源限额（EI-M2C.3）
+# 使用: helm template 渲染后 apply，或集成到控制面调度器。
+# 参数: tenant (必填), project, step_id, run_id, image, memory, cpu
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.runner.jobPrefix | default "yuleosh-runner" }}-{{ .Values.runner.tenant }}-{{ .Values.runner.runId | default "r0" }}
+  labels:
+    {{- include "yuleosh.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runner
+    yuleosh.io/tenant: {{ .Values.runner.tenant | quote }}
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "yuleosh.selectorLabels" . | nindent 8 }}
+        yuleosh.io/tenant: {{ .Values.runner.tenant | quote }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.runner.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: runner
+          image: "{{ .Values.runner.image.repository | default .Values.image.repository }}:{{ .Values.runner.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.runner.image.pullPolicy | default .Values.image.pullPolicy }}
+          command:
+            - python
+            - -m
+            - yuleosh.engine.subprocess_executor
+            - worker
+          args:
+            - --step-id
+            - {{ .Values.runner.stepId | quote }}
+            - --project-dir
+            - /work/{{ .Values.runner.project }}
+            - --run-id
+            - {{ .Values.runner.runId | default "r0" | quote }}
+          env:
+            - name: OSH_HOME
+              value: /work/{{ .Values.runner.project }}
+            {{- if .Values.runner.mock }}
+            - name: YULEOSH_MOCK
+              value: "1"
+            {{- end }}
+          resources:
+            requests:
+              memory: {{ .Values.runner.resources.requests.memory | default "128Mi" }}
+              cpu: {{ .Values.runner.resources.requests.cpu | default "100m" }}
+            limits:
+              memory: {{ .Values.runner.resources.limits.memory | default .Values.runner.memory | default "2Gi" }}
+              cpu: {{ .Values.runner.resources.limits.cpu | default .Values.runner.cpu | default "2" }}
+          volumeMounts:
+            - name: tenant-data
+              mountPath: /work
+              readOnly: false
+      volumes:
+        - name: tenant-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.runner.tenantPvc | default (printf "%s-%s-data" (include "yuleosh.fullname" .) .Values.runner.tenant) }}
