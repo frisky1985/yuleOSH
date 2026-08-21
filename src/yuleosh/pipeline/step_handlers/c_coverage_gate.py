@@ -49,6 +49,27 @@ def _git_commit_short(project_dir: str) -> str:
     return "unknown"
 
 
+def _has_c_sources(project_dir: str) -> bool:
+    """项目是否含 C/C++ 源码 (排除 third_party/build/.git/.osh/venv)。
+
+    2026-08-21 B dogfood: c-coverage-gate 对 Python 项目直接跑 cmake build
+    失败 → 必须与 qemu-run (无 .elf skip) / autosar (无 .c/.cpp skip) 同
+    模式: 无 C 源码时记录 skipped 报告而非报错。
+    """
+    root = Path(project_dir)
+    if not root.is_dir():
+        return False
+    _SKIP_DIRS = {"third_party", "build", ".git", "__pycache__",
+                  ".osh", ".venv", "venv", "node_modules"}
+    _C_EXTS = (".c", ".h", ".cpp", ".cc", ".cxx", ".hpp")
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+        for fn in filenames:
+            if fn.endswith(_C_EXTS):
+                return True
+    return False
+
+
 def coverage_gate_step(session: PipelineSession) -> str:
     """Run C coverage pipeline verification end-to-end.
 
@@ -103,6 +124,31 @@ def coverage_gate_step(session: PipelineSession) -> str:
         }
         log.info("C Coverage Gate skipped (mock mode)")
         print("  ⏭️  [小克] C 覆盖率门禁跳过 (mock 模式，无真实构建产物)")
+        return _write_results(session, results)
+
+    # ── 无 C/C++ 源码项目 (Python 等): C coverage 不适用, 记录 skipped ──
+    # 2026-08-21 B dogfood: Python 项目无 CMakeLists.txt, cmake build 必然失败
+    # → 与 qemu-run/autosar 同模式 skip, 不阻断 pipeline (Python coverage 由
+    # ci/stages/test.py 的 coverage stage 单独处理)
+    if not _has_c_sources(project_dir):
+        log.info("⏭️  C Coverage Gate skipped — no C/C++ sources in project")
+        results = {
+            "session": session.name,
+            "step": "c-coverage-gate",
+            "timestamp": datetime.now().isoformat(),
+            "project_dir": project_dir,
+            "phases": {},
+            "gate_passed": False,
+            "skipped": True,
+            "reason": "No C/C++ sources — C coverage gate not applicable",
+            "c_fail_under": 70,
+            "line_rate": 0.0,
+            "branch_rate": 0.0,
+            "errors": [],
+            "warnings": ["No C/C++ sources — C coverage gate skipped"],
+        }
+        log.info("C Coverage Gate skipped (no C/C++ sources)")
+        print("  ⏭️  [小克] C 覆盖率门禁跳过 (项目无 C/C++ 源码)")
         return _write_results(session, results)
 
     results = {

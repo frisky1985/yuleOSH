@@ -369,6 +369,43 @@ class TestCoverageGateStep:
         assert out["gate_passed"] is False  # 假绿修复：mock 不伪装通过
         assert out["c_fail_under"] == 70
 
+    def test_no_c_sources_skipped(self, tmp_path):
+        """Python 项目 (无 C/C++ 源码): c-coverage-gate 记录 skipped 不报错 (B dogfood)。"""
+        from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "mod.py").write_text("x = 1\n")
+        session = _make_session(tmp_path, name="cg-py")
+        result_path = ccg.coverage_gate_step(session)
+        out = json.loads(Path(result_path).read_text())
+        assert out["skipped"] is True
+        assert out["gate_passed"] is False
+        assert "No C/C++ sources" in out["reason"]
+
+    def test_has_c_sources_true_for_c_project(self, tmp_path):
+        from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.c").write_text("int main(void){return 0;}\n")
+        assert ccg._has_c_sources(str(tmp_path)) is True
+
+    def test_has_c_sources_false_for_python(self, tmp_path):
+        from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "mod.py").write_text("x = 1\n")
+        assert ccg._has_c_sources(str(tmp_path)) is False
+
+    def test_has_c_sources_ignores_third_party(self, tmp_path):
+        from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        (tmp_path / "third_party" / "freertos").mkdir(parents=True)
+        (tmp_path / "third_party" / "freertos" / "list.c").write_text("/* */\n")
+        assert ccg._has_c_sources(str(tmp_path)) is False
+
+    def test_has_c_sources_ignores_osh(self, tmp_path):
+        from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        (tmp_path / ".osh" / "sessions").mkdir(parents=True)
+        (tmp_path / ".osh" / "sessions" / "seed.c").write_text("/* */\n")
+        assert ccg._has_c_sources(str(tmp_path)) is False
+
     def _phase_dicts(self):
         return {
             "build": {"success": True, "build_dir": "/tmp/build"},
@@ -379,6 +416,9 @@ class TestCoverageGateStep:
 
     def test_full_pass(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        # 老测试语义 = C 项目流程; 2026-08-21 B: 无 C 源码项目走 skip 分支, 需种子文件
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "main.c").write_text("int main(void){return 0;}\n")
         session = _make_session(tmp_path, name="cg-pass")
         phases = self._phase_dicts()
         with mock.patch.object(ccg, "_phase_build_coverage", return_value=phases["build"]), \
@@ -392,6 +432,9 @@ class TestCoverageGateStep:
 
     def test_build_failure_raises(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        # 老测试语义 = C 项目流程; 2026-08-21 B: 无 C 源码项目走 skip 分支, 需种子文件
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "main.c").write_text("int main(void){return 0;}\n")
         session = _make_session(tmp_path, name="cg-buildfail")
         with mock.patch.object(ccg, "_phase_build_coverage",
                                return_value={"success": False, "error": "Build failed"}), \
@@ -401,6 +444,9 @@ class TestCoverageGateStep:
 
     def test_gcovr_failure_raises(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        # 老测试语义 = C 项目流程; 2026-08-21 B: 无 C 源码项目走 skip 分支, 需种子文件
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "main.c").write_text("int main(void){return 0;}\n")
         session = _make_session(tmp_path, name="cg-gcovrfail")
         phases = self._phase_dicts()
         phases["gcovr"] = {"success": False, "error": "gcovr broken"}
@@ -413,6 +459,9 @@ class TestCoverageGateStep:
 
     def test_gate_failure_raises(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        # 老测试语义 = C 项目流程; 2026-08-21 B: 无 C 源码项目走 skip 分支, 需种子文件
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "main.c").write_text("int main(void){return 0;}\n")
         session = _make_session(tmp_path, name="cg-gatefail")
         phases = self._phase_dicts()
         phases["gate"] = {"success": False, "error": "line rate 50 < 70"}
@@ -426,6 +475,8 @@ class TestCoverageGateStep:
 
     def test_unexpected_exception_wrapped(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "main.c").write_text("int main(void){return 0;}\n")
         session = _make_session(tmp_path, name="cg-exc")
         with mock.patch.object(ccg, "_phase_build_coverage",
                                side_effect=RuntimeError("boom")), \
