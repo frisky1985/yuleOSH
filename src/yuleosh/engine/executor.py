@@ -95,14 +95,19 @@ class LocalExecutor(Executor):
 def make_executor(name: str = "local", **kwargs: Any) -> Executor:
     """执行器工厂（EI-M1A.1）。
 
-    ``name`` 支持: local（默认，零回归）。
-    ContainerExecutor (EI-M2A) 后续按同接口接入。
+    ``name`` 支持:
+    - local（默认，零回归）: LocalExecutor，子进程执行 + 可选 venv 隔离
+    - container: ContainerExecutor（EI-M2A），docker 容器内执行
 
     kwargs 透传给具体 Executor 构造（project_dir/mock_mode/spec_path/
-    timeout_s/session_name/run_id/venv_dir）。
+    timeout_s/session_name/run_id/venv_dir/tenant_dir/image/memory_limit/
+    cpus/network_enabled/proxy_env/extra_env）。
     """
     if name == "local":
         return LocalExecutor(**kwargs)
+    if name == "container":
+        from yuleosh.engine.container_executor import ContainerExecutor
+        return ContainerExecutor(**kwargs)
     raise ValueError(
-        f"Unknown executor '{name}'. Available: local"
+        f"Unknown executor '{name}'. Available: local, container"
     )

@@ -126,6 +126,8 @@ def main():
     parser.add_argument("--executor", default="inline",
                         choices=["inline", "subprocess", "local"],
                         help="执行器: inline（当前进程直跑）/ local（默认子进程，Executor 接口，EI-M1A）/ subprocess（B2 旧名，等价 local）")
+    parser.add_argument("--venv", action="store_true",
+                        help="项目 venv 隔离（EI-M1B）: 自动创建/复用 .osh/venvs/<project> 并安装依赖")
     parser.add_argument("--mock", action="store_true",
                         help="mock 模式（session.mock_mode=True，gate 类步骤跳过真实扫描）")
     args = parser.parse_args()
@@ -173,10 +175,17 @@ def main():
 
         from yuleosh.engine.executor import make_executor
         session_name = f"agent-pipeline-{_time.strftime('%Y%m%d-%H%M%S')}"
-        executor = make_executor(
-            "local", project_dir=project_dir, mock_mode=args.mock,
+        executor_kwargs = dict(
+            project_dir=project_dir, mock_mode=args.mock,
             spec_path=args.spec, session_name=session_name,
         )
+        if args.venv:
+            # EI-M1B: 项目 venv 隔离 —— 自动创建/复用 + 安装依赖，
+            # worker 用 venv python 执行（PATH/VIRTUAL_ENV 注入见 LocalExecutor）。
+            from yuleosh.engine.project_venv import ensure_project_venv
+            venv_dir = ensure_project_venv(project_dir)
+            executor_kwargs["venv_dir"] = str(venv_dir)
+        executor = make_executor("local", **executor_kwargs)
         engine.runner = executor.as_runner()
     result = engine.run(inject_at=args.inject_at, resume=args.resume)
     sys.exit(0 if result else 1)

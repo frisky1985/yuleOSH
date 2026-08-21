@@ -120,6 +120,40 @@ class KbStore:
         except sqlite3.OperationalError:
             pass  # 列已存在（幂等）
 
+        # ── FTS5 全文索引 (EI-M3B.1)：trigram tokenizer 支持中文。
+        # 独立 FTS 表（非 external content，避免触发器复杂性与库损坏风险）。
+        # 触发器同步增删改；存量回填由 _ensure_fts_indexed 全量重建。
+        # 注意: 触发器先 DROP 再建（IF NOT EXISTS 不更新旧版本，保证幂等迁移）。
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS kb_articles_fts USING fts5("
+            "title, content, tags, tokenize='trigram')"
+        )
+        for _trg in ("kb_articles_ai", "kb_articles_ad", "kb_articles_au"):
+            conn.execute(f"DROP TRIGGER IF EXISTS {_trg}")
+        for _trg in (
+            """
+            CREATE TRIGGER IF NOT EXISTS kb_articles_ai AFTER INSERT ON kb_articles BEGIN
+              INSERT INTO kb_articles_fts(rowid, title, content, tags)
+              VALUES (new.id, new.title, new.content, new.tags);
+            END
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS kb_articles_ad AFTER DELETE ON kb_articles BEGIN
+              DELETE FROM kb_articles_fts WHERE rowid = old.id;
+            END
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS kb_articles_au AFTER UPDATE ON kb_articles BEGIN
+              DELETE FROM kb_articles_fts WHERE rowid = old.id;
+              INSERT INTO kb_articles_fts(rowid, title, content, tags)
+              VALUES (new.id, new.title, new.content, new.tags);
+            END
+            """,
+        ):
+            conn.execute(_trg)
+        conn.commit()
+        self._ensure_fts_indexed(conn)
+
     # ── helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
@@ -336,13 +370,20 @@ class KbStore:
     def list_articles(self, search: Optional[str] = None, limit: int = 100, offset: int = 0) -> list[KbArticle]:
         conn = self._get_conn()
         if search:
-            pattern = f"%{search}%"
-            cur = conn.execute(
-                """SELECT * FROM kb_articles
-                   WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?
-                   ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
-                (pattern, pattern, pattern, pattern, limit, offset),
-            )
+            # EI-M3B.2: FTS5 MATCH（含中文）；trigram 无法匹配 <3 字符词 → LIKE 回退
+            if len(search.strip()) >= 3:
+                try:
+                    query = self._fts_query(search)
+                    cur = conn.execute(
+                        """SELECT * FROM kb_articles
+                           WHERE id IN (SELECT rowid FROM kb_articles_fts WHERE kb_articles_fts MATCH ?)
+                           ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
+                        (query, limit, offset),
+                    )
+                except Exception:  # noqa: BLE001 — FTS 异常回退 LIKE
+                    cur = self._like_search(search, limit, offset, conn)
+            else:
+                cur = self._like_search(search, limit, offset, conn)
         else:
             cur = conn.execute(
                 "SELECT * FROM kb_articles ORDER BY updated_at DESC LIMIT ? OFFSET ?",
@@ -350,17 +391,74 @@ class KbStore:
             )
         return [self._row_to_article(r) for r in cur.fetchall()]
 
+    @staticmethod
+    def _like_search(search: str, limit: int, offset: int, conn) -> "sqlite3.Cursor":
+        """LIKE 回退查询（短词/无 FTS 场景）。"""
+        pattern = f"%{search}%"
+        return conn.execute(
+            """SELECT * FROM kb_articles
+               WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?
+               ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
+            (pattern, pattern, pattern, pattern, limit, offset),
+        )
+
     def count_articles(self, search: Optional[str] = None) -> int:
         conn = self._get_conn()
         if search:
-            pattern = f"%{search}%"
-            cur = conn.execute(
-                "SELECT COUNT(*) FROM kb_articles WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?",
-                (pattern, pattern, pattern, pattern),
-            )
+            if len(search.strip()) >= 3:
+                try:
+                    query = self._fts_query(search)
+                    cur = conn.execute(
+                        "SELECT COUNT(*) FROM kb_articles WHERE id IN (SELECT rowid FROM kb_articles_fts WHERE kb_articles_fts MATCH ?)",
+                        (query,),
+                    )
+                except Exception:  # noqa: BLE001 — FTS 异常回退 LIKE
+                    cur = self._like_count(search, conn)
+            else:
+                cur = self._like_count(search, conn)
         else:
             cur = conn.execute("SELECT COUNT(*) FROM kb_articles")
         return cur.fetchone()[0]
+
+    @staticmethod
+    def _like_count(search: str, conn) -> "sqlite3.Cursor":
+        """LIKE 回退计数。"""
+        pattern = f"%{search}%"
+        return conn.execute(
+            "SELECT COUNT(*) FROM kb_articles WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?",
+            (pattern, pattern, pattern, pattern),
+        )
+
+    # ── FTS5 helpers (EI-M3B) ──────────────────────────────────────────
+
+    @staticmethod
+    def _fts_query(search: str) -> str:
+        """把用户搜索词转成 FTS5 MATCH 查询（转义特殊字符，短语匹配）。"""
+        # FTS5 特殊字符: " : * ^ ( ) { } - ~ 等；trigram 模式下短语用双引号
+        escaped = search.replace('"', '""')
+        return f'"{escaped}"'
+
+    @staticmethod
+    def _ensure_fts_indexed(conn) -> None:
+        """FTS 索引与 base 表行数对齐；不一致则全量重建（存量回填 EI-M3B.1）。
+
+        新建 FTS 表（或迁移后）时 base 已有数据不会自动进索引，
+        检测行数差异后全量重建（独立 FTS 表：清空 + 从 base 重插）。
+        """
+        try:
+            base_cnt = conn.execute("SELECT COUNT(*) FROM kb_articles").fetchone()[0]
+            fts_cnt = conn.execute("SELECT COUNT(*) FROM kb_articles_fts").fetchone()[0]
+            if base_cnt == fts_cnt:
+                return
+            # 清空 FTS（trigram 无 'delete-all' 命令，逐行 delete 再重插）
+            conn.execute("DELETE FROM kb_articles_fts")
+            conn.execute(
+                """INSERT INTO kb_articles_fts(rowid, title, content, tags)
+                   SELECT id, title, content, tags FROM kb_articles"""
+            )
+            conn.commit()
+        except Exception:  # noqa: BLE001 — 索引对齐失败不影响主表
+            pass
 
     def update_article(self, article_id: int, fields: dict) -> Optional[KbArticle]:
         now = self._now()
