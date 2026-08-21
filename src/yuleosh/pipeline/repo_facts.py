@@ -23,14 +23,51 @@ log = logging.getLogger("pipeline.repo_facts")
 _TEST_FUNC_RE = re.compile(
     r"^\s*(?:static\s+)?(?:void|int)\s+test_\w+\s*\(", re.M
 )
+# Python pytest 用例识别: def test_ 函数
+_PY_TEST_FUNC_RE = re.compile(
+    r"^\s*def\s+test_\w+\s*\(", re.M
+)
 
 
 def count_test_functions(path: Path) -> int:
-    """统计 C/C++ 文件里的测试函数数 (test_ 前缀函数)。"""
+    """统计测试函数/用例数 (静态兜底)。
+
+    - .py → pytest 用例数 (``def test_`` 函数, 不含参数化展开)
+    - C/C++ → ``test_`` 前缀测试函数数
+
+    2026-08-21 B 阶段: 此前只统计 C/C++, Python 项目输出
+    "Test functions: 0" 且 4 个测试文件 → 文档步骤 LLM 误判
+    "测试不存在/84 全绿系伪造" → 绿地视角重写已有实现 (claude-review
+    run-20260821-122137 5 blockers)。Python 用例数必须机器实测注入。
+    """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
-        return len(_TEST_FUNC_RE.findall(text))
     except OSError:
+        return 0
+    if path.suffix == ".py":
+        return len(_PY_TEST_FUNC_RE.findall(text))
+    return len(_TEST_FUNC_RE.findall(text))
+
+
+def _collect_pytest_case_count(project_dir: Path) -> int:
+    """真实 pytest 用例数 (含参数化展开), 失败返回 0。
+
+    2026-08-21 B: 静态 def test_ 计数不含 @pytest.mark.parametrize 展开
+    (can-codec 84 用例 vs 79 def, 差 5)。repo_facts 声称的用例数会被
+    claude-review 实测比对, 必须精确。只对 pytest 框架项目调用。
+    """
+    import subprocess
+    import sys as _sys
+    try:
+        r = subprocess.run(
+            [_sys.executable, "-m", "pytest", "--collect-only", "-q"],
+            cwd=str(project_dir),
+            capture_output=True, text=True, timeout=60,
+        )
+        m = re.search(r"(\d+)\s+tests?\s+collected", r.stdout)
+        return int(m.group(1)) if m else 0
+    except Exception as e:
+        log.warning("pytest collect failed (fallback to static count): %s", e)
         return 0
 
 
@@ -142,14 +179,24 @@ def collect_repo_facts(project_dir: str | Path) -> dict:
                     "tests/**/*.hpp", "tests/**/*.py"):
         for f in sorted(project_dir.glob(pattern)):
             test_files.append(str(f.relative_to(project_dir)))
-            if f.suffix in (".c", ".h", ".cpp", ".hpp"):
+            if f.suffix in (".c", ".h", ".cpp", ".hpp", ".py"):
+                # 2026-08-21 B: .py 走 pytest def test_ 计数 (count_test_functions 内部分发)
                 test_func_count += count_test_functions(f)
     facts["test_file_count"] = len(test_files)
     facts["test_files"] = test_files
     facts["test_func_count"] = test_func_count
 
     # 测试框架
-    facts["test_framework"] = detect_test_framework(project_dir / "tests")
+    framework = detect_test_framework(project_dir / "tests")
+    facts["test_framework"] = framework
+
+    # 2026-08-21 B: pytest 项目用真实 collection (含参数化展开),
+    # 失败回退静态计数; C/C++ 保持静态 test_ 函数计数
+    if framework == "pytest":
+        collected = _collect_pytest_case_count(project_dir)
+        if collected > 0:
+            test_func_count = collected
+    facts["test_func_count"] = test_func_count
 
     # 覆盖率报告 (最新)
     cov_report = project_dir / ".yuleosh" / "reports" / "c-coverage.json"

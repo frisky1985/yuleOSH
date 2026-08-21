@@ -90,6 +90,39 @@ class TestCountTestFunctions:
     def test_missing_file(self, tmp_path: Path):
         assert count_test_functions(tmp_path / "missing.c") == 0
 
+    def test_counts_pytest_functions(self, tmp_path: Path):
+        f = tmp_path / "test_x.py"
+        f.write_text(
+            "import pytest\n"
+            "\n"
+            "def test_one():\n"
+            "    assert True\n"
+            "\n"
+            "def test_two():\n"
+            "    assert 1 + 1 == 2\n"
+            "\n"
+            "def helper():\n"
+            "    return 0\n"
+            "\n"
+            "class TestGroup:\n"
+            "    def test_nested(self):\n"
+            "        assert True\n"
+        )
+        # test_one + test_two + test_nested; helper 不匹配
+        assert count_test_functions(f) == 3
+
+    def test_counts_pytest_ignores_indented_helpers(self, tmp_path: Path):
+        f = tmp_path / "test_y.py"
+        f.write_text(
+            "def setup_module():\n"
+            "    pass\n"
+            "\n"
+            "def test_only():\n"
+            "    assert True\n"
+        )
+        # setup_module 不是 test_ 前缀; 只计 test_only
+        assert count_test_functions(f) == 1
+
 
 class TestGetProjectAsil:
     def test_from_yuleosh_yaml(self, tmp_path: Path):
