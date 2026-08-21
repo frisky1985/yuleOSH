@@ -120,6 +120,21 @@ class KbStore:
         except sqlite3.OperationalError:
             pass  # 列已存在（幂等）
 
+        # ── 兼容迁移 (EI-M4A.1)：kb_articles 增加 tenant_org 列（租户隔离键）。
+        # 幂等：列已存在时跳过。'' = 系统级（未归属租户）。
+        try:
+            conn.execute(
+                "ALTER TABLE kb_articles ADD COLUMN tenant_org TEXT NOT NULL DEFAULT ''"
+            )
+            conn.commit()
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_kb_articles_tenant_org "
+                "ON kb_articles(tenant_org)"
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # 列已存在（幂等）
+
         # ── FTS5 全文索引 (EI-M3B.1)：trigram tokenizer 支持中文。
         # 独立 FTS 表（非 external content，避免触发器复杂性与库损坏风险）。
         # 触发器同步增删改；存量回填由 _ensure_fts_indexed 全量重建。
@@ -168,6 +183,7 @@ class KbStore:
             source=row["source"],
             source_ref=row["source_ref"],
             tags=row["tags"],
+            tenant_org=row["tenant_org"] if "tenant_org" in row.keys() else "",
             created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
             updated_at=datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else None,
         )
@@ -253,11 +269,12 @@ class KbStore:
                 return existing
 
         cur = conn.execute(
-            """INSERT INTO kb_articles (title, content, source, source_ref, tags, content_hash, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO kb_articles (title, content, source, source_ref, tags, content_hash, tenant_org, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (fields.get("title", ""), content,
              source, source_ref,
-             fields.get("tags", ""), content_hash, now, now),
+             fields.get("tags", ""), content_hash,
+             fields.get("tenant_org", ""), now, now),
         )
         conn.commit()
         new_id = cur.lastrowid
@@ -367,66 +384,87 @@ class KbStore:
         row = cur.fetchone()
         return self._row_to_article(row) if row else None
 
-    def list_articles(self, search: Optional[str] = None, limit: int = 100, offset: int = 0) -> list[KbArticle]:
+    def list_articles(self, search: str | None = None, limit: int = 100,
+                      offset: int = 0, tenant_org: str | None = None) -> list[KbArticle]:
+        """列出文章（EI-M4A.1: tenant_org 非 None 时 SQL 层强制过滤）。"""
         conn = self._get_conn()
+        org_filter = "tenant_org = ?" if tenant_org is not None else "1=1"
+        org_params = [tenant_org] if tenant_org is not None else []
         if search:
             # EI-M3B.2: FTS5 MATCH（含中文）；trigram 无法匹配 <3 字符词 → LIKE 回退
             if len(search.strip()) >= 3:
                 try:
                     query = self._fts_query(search)
                     cur = conn.execute(
-                        """SELECT * FROM kb_articles
+                        f"""SELECT * FROM kb_articles
                            WHERE id IN (SELECT rowid FROM kb_articles_fts WHERE kb_articles_fts MATCH ?)
+                           AND {org_filter}
                            ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
-                        (query, limit, offset),
+                        (query, *org_params, limit, offset),
                     )
                 except Exception:  # noqa: BLE001 — FTS 异常回退 LIKE
-                    cur = self._like_search(search, limit, offset, conn)
+                    cur = self._like_search(search, limit, offset, conn, org_filter, org_params)
             else:
-                cur = self._like_search(search, limit, offset, conn)
+                cur = self._like_search(search, limit, offset, conn, org_filter, org_params)
         else:
             cur = conn.execute(
-                "SELECT * FROM kb_articles ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
+                f"SELECT * FROM kb_articles WHERE {org_filter} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (*org_params, limit, offset),
             )
         return [self._row_to_article(r) for r in cur.fetchall()]
 
     @staticmethod
-    def _like_search(search: str, limit: int, offset: int, conn) -> "sqlite3.Cursor":
-        """LIKE 回退查询（短词/无 FTS 场景）。"""
+    def _like_search(search: str, limit: int, offset: int, conn,
+                     org_filter: str = "1=1", org_params: list | None = None) -> "sqlite3.Cursor":
+        """LIKE 回退查询（短词/无 FTS 场景），支持租户过滤。"""
+        org_params = org_params or []
         pattern = f"%{search}%"
         return conn.execute(
-            """SELECT * FROM kb_articles
-               WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?
+            f"""SELECT * FROM kb_articles
+               WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?)
+               AND {org_filter}
                ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
-            (pattern, pattern, pattern, pattern, limit, offset),
+            (pattern, pattern, pattern, pattern, *org_params, limit, offset),
         )
 
-    def count_articles(self, search: Optional[str] = None) -> int:
+    def count_articles(self, search: str | None = None,
+                       tenant_org: str | None = None) -> int:
+        """文章计数（EI-M4A.1: tenant_org 非 None 时 SQL 层强制过滤）。"""
         conn = self._get_conn()
+        org_filter = "tenant_org = ?" if tenant_org is not None else "1=1"
+        org_params = [tenant_org] if tenant_org is not None else []
         if search:
             if len(search.strip()) >= 3:
                 try:
                     query = self._fts_query(search)
                     cur = conn.execute(
-                        "SELECT COUNT(*) FROM kb_articles WHERE id IN (SELECT rowid FROM kb_articles_fts WHERE kb_articles_fts MATCH ?)",
-                        (query,),
+                        f"""SELECT COUNT(*) FROM kb_articles
+                            WHERE id IN (SELECT rowid FROM kb_articles_fts WHERE kb_articles_fts MATCH ?)
+                            AND {org_filter}""",
+                        (query, *org_params),
                     )
                 except Exception:  # noqa: BLE001 — FTS 异常回退 LIKE
-                    cur = self._like_count(search, conn)
+                    cur = self._like_count(search, conn, org_filter, org_params)
             else:
-                cur = self._like_count(search, conn)
+                cur = self._like_count(search, conn, org_filter, org_params)
         else:
-            cur = conn.execute("SELECT COUNT(*) FROM kb_articles")
+            cur = conn.execute(
+                f"SELECT COUNT(*) FROM kb_articles WHERE {org_filter}",
+                org_params,
+            )
         return cur.fetchone()[0]
 
     @staticmethod
-    def _like_count(search: str, conn) -> "sqlite3.Cursor":
-        """LIKE 回退计数。"""
+    def _like_count(search: str, conn, org_filter: str = "1=1",
+                    org_params: list | None = None) -> "sqlite3.Cursor":
+        """LIKE 回退计数（支持租户过滤）。"""
+        org_params = org_params or []
         pattern = f"%{search}%"
         return conn.execute(
-            "SELECT COUNT(*) FROM kb_articles WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?",
-            (pattern, pattern, pattern, pattern),
+            f"""SELECT COUNT(*) FROM kb_articles
+                WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ? OR source LIKE ?)
+                AND {org_filter}""",
+            (pattern, pattern, pattern, pattern, *org_params),
         )
 
     # ── FTS5 helpers (EI-M3B) ──────────────────────────────────────────

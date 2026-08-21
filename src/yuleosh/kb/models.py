@@ -20,6 +20,7 @@ class KbArticle:
     source: str = ""
     source_ref: str = ""
     tags: str = ""
+    tenant_org: str = ""
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -32,6 +33,7 @@ class KbArticle:
             "source": self.source,
             "source_ref": self.source_ref,
             "tags": self.tags,
+            "tenant_org": self.tenant_org,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -52,6 +54,7 @@ class KbArticle:
             source=d.get("source", ""),
             source_ref=d.get("source_ref", ""),
             tags=d.get("tags", ""),
+            tenant_org=d.get("tenant_org", ""),
             created_at=created,
             updated_at=updated,
         )

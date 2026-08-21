@@ -38,8 +38,11 @@ def handle_kb(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     if resource == "articles":
         return _handle_articles(method, tail, body, query)
     elif resource == "search":
-        # EI-M3E.2: 混合检索（FTS5 + 向量 RRF 融合）
-        return _handle_hybrid_search(method, tail, body, query)
+        # EI-M3E.2: 混合检索（FTS5 + 向量 RRF 融合；M4-A 租户过滤）
+        return _handle_hybrid_search(method, tail, body, query, **kwargs)
+    elif resource == "unified":
+        # EI-M4B.1: 三源联合召回（articles + lessons + fmea + KG）
+        return _handle_unified_search(method, tail, body, query, **kwargs)
     elif resource == "lessons":
         return _handle_lessons(method, tail, body, query)
     elif resource == "fmea":
@@ -244,8 +247,8 @@ def _handle_fmea(method: str, tail: str, body: dict, query: dict):
 # ── EI-M3E.2: 混合检索（FTS5 + 向量 RRF 融合）──────────────────────────
 
 
-def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict):
-    """GET /api/v1/kb/search?q=... — 混合检索。
+def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict, **kwargs):
+    """GET /api/v1/kb/search?q=... — 混合检索（EI-M4A: JWT 租户 SQL 层强制过滤）。
 
     返回 {query, hits: [{article_id, title, source, score, keyword_hit,
     vector_hit, keyword_rank, vector_rank}], keyword_count, vector_count,
@@ -263,6 +266,10 @@ def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict):
     except ValueError:
         limit = 10
 
+    # EI-M4A.1: 从 JWT 取 org_id 强制租户过滤（SQL 层，非应用层）
+    current_user = kwargs.get("current_user") or {}
+    org_id = str(current_user.get("org_id", "") or "")
+
     store = _get_kb_store()
     try:
         from yuleosh.kb.hybrid_search import HybridSearch
@@ -273,10 +280,10 @@ def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict):
         vector_store = VectorStore(conn)
         embedding = get_provider("ollama") if vector_store.available else None
         searcher = HybridSearch(store, vector_store, embedding, top_k=limit)
-        result = searcher.search(q, top_k=limit)
+        result = searcher.search(q, top_k=limit, tenant_org=org_id)
     except Exception as e:  # noqa: BLE001 — 混合检索降级纯关键词
-        # 向量层不可用时退化为 store.list_articles（FTS5/LIKE）
-        articles = store.list_articles(search=q, limit=limit)
+        # 向量层不可用时退化为 store.list_articles（FTS5/LIKE + 租户过滤）
+        articles = store.list_articles(search=q, limit=limit, tenant_org=org_id)
         return json_ok({
             "query": q,
             "hits": [{
@@ -293,6 +300,7 @@ def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict):
             "keyword_count": len(articles),
             "vector_count": 0,
             "vector_available": False,
+            "tenant_org": org_id,
             "fallback": str(e),
         })
 
@@ -312,6 +320,80 @@ def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict):
         "keyword_count": result.keyword_count,
         "vector_count": result.vector_count,
         "vector_available": result.vector_available,
+        "tenant_org": org_id,
+    })
+
+
+def _handle_unified_search(method: str, tail: str, body: dict, query: dict, **kwargs):
+    """GET /api/v1/kb/unified?q=... — 三源联合召回（EI-M4B.1/.2）。
+
+    一次查询联合召回 articles（向量+FTS5）+ lessons + fmea + KG 节点，
+    融合排序 + hit_type 来源标注。JWT 租户 SQL 层强制过滤（M4-A 延续）。
+    """
+    if method != "GET":
+        return json_error("Method not allowed", 405)
+    q = _get_query_param(query, "q")
+    if not q:
+        return json_error("'q' query parameter is required", 400)
+
+    try:
+        limit = int(_get_query_param(query, "limit", "10"))
+        limit = max(1, min(limit, 50))
+    except ValueError:
+        limit = 10
+
+    # EI-M4A.1: 从 JWT 取 org_id 强制租户过滤（SQL 层，非应用层）
+    current_user = kwargs.get("current_user") or {}
+    org_id = str(current_user.get("org_id", "") or "")
+
+    store = _get_kb_store()
+    try:
+        from yuleosh.kb.hybrid_search import HybridSearch
+        from yuleosh.kb.embedding import get_provider
+        from yuleosh.kb.vector_store import VectorStore
+
+        conn = store._get_conn()
+        vector_store = VectorStore(conn)
+        embedding = get_provider("ollama") if vector_store.available else None
+        searcher = HybridSearch(store, vector_store, embedding, top_k=limit)
+        hits = searcher.unified_search(q, top_k=limit, tenant_org=org_id)
+    except Exception as e:  # noqa: BLE001 — 联合检索降级单源文章
+        articles = store.list_articles(search=q, limit=limit, tenant_org=org_id)
+        return json_ok({
+            "query": q,
+            "hits": [{
+                "article_id": a.id,
+                "title": a.title,
+                "source": a.source,
+                "source_ref": a.source_ref,
+                "score": 1.0 / (i + 1),
+                "keyword_hit": True,
+                "vector_hit": False,
+                "keyword_rank": i,
+                "vector_rank": None,
+                "hit_type": "article",
+                "extra": None,
+            } for i, a in enumerate(articles)],
+            "tenant_org": org_id,
+            "fallback": str(e),
+        })
+
+    return json_ok({
+        "query": q,
+        "hits": [{
+            "article_id": h.article_id,
+            "title": h.title,
+            "source": h.source,
+            "source_ref": h.source_ref,
+            "score": round(h.score, 6),
+            "keyword_hit": h.keyword_hit,
+            "vector_hit": h.vector_hit,
+            "keyword_rank": h.keyword_rank,
+            "vector_rank": h.vector_rank,
+            "hit_type": h.hit_type,
+            "extra": h.extra,
+        } for h in hits],
+        "tenant_org": org_id,
     })
 
 
