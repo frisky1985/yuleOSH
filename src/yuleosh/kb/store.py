@@ -67,7 +67,6 @@ class KbStore:
                 created_at TEXT,
                 updated_at TEXT
             );
-
             CREATE TABLE IF NOT EXISTS lessons (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL DEFAULT '',
@@ -105,6 +104,21 @@ class KbStore:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass  # 列已存在（幂等）
+
+        # ── 兼容迁移 (EI-M3A.1)：kb_articles 增加 content_hash 列（写入去重键）。
+        # 幂等：列已存在时跳过。旧行 hash 由 cleanup_duplicate_articles 回填。
+        try:
+            conn.execute(
+                "ALTER TABLE kb_articles ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''"
+            )
+            conn.commit()
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_kb_articles_content_hash "
+                "ON kb_articles(content_hash)"
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # 列已存在（幂等）
 
     # ── helpers ──────────────────────────────────────────────────────────
 
@@ -156,17 +170,162 @@ class KbStore:
     # ── kb_articles CRUD ─────────────────────────────────────────────────
 
     def create_article(self, fields: dict) -> KbArticle:
+        """创建知识库文章（EI-M3A.1：写入去重，防复发）。
+
+        去重键（SHALL NOT 重复插入，返回已有记录并更新 updated_at）：
+        - ``source='misra_analysis'``: 语义键 (rule_id, file, line) —— 从
+          title（MISRA-x.y 前缀或 tags rule-x-y）解析 rule_id，从 source_ref
+          （file:line）解析位置。同一违规多次 CI 扫描只保留最新一条。
+        - 其他来源: content hash（去空白差异）。
+
+        这修复了 misra_analysis 逐条灌库导致的 4 万条重复问题（防复发）。
+        """
+        source = fields.get("source", "") or ""
+        content = fields.get("content", "") or ""
+        source_ref = fields.get("source_ref", "") or ""
         now = self._now()
         conn = self._get_conn()
+        import hashlib
+
+        # 去重查询：misra 语义键 (rule_id, file, line) 存 content_hash；
+        # 其他来源 content hash（空 content 不去重 —— 无实质内容可判重复）。
+        dedup = True
+        if source == "misra_analysis":
+            rule_id, file_path, line_num = self._parse_misra_key(fields, source_ref)
+            content_hash = hashlib.sha256(
+                f"misra|{rule_id}|{file_path}|{line_num}".encode("utf-8")
+            ).hexdigest()
+        elif content.strip():
+            content_hash = self._content_hash(content)
+        else:
+            dedup = False  # 空内容：跳过去重，每次插入
+            content_hash = ""
+
+        row = None
+        if dedup:
+            cur = conn.execute(
+                "SELECT id FROM kb_articles WHERE content_hash = ? ORDER BY id DESC LIMIT 1",
+                (content_hash,),
+            )
+            row = cur.fetchone()
+        if row is not None:
+            conn.execute(
+                "UPDATE kb_articles SET updated_at = ? WHERE id = ?",
+                (now, row["id"]),
+            )
+            conn.commit()
+            existing = self.get_article(row["id"])
+            if existing is not None:
+                return existing
+
         cur = conn.execute(
-            """INSERT INTO kb_articles (title, content, source, source_ref, tags, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (fields.get("title", ""), fields.get("content", ""),
-             fields.get("source", ""), fields.get("source_ref", ""),
-             fields.get("tags", ""), now, now),
+            """INSERT INTO kb_articles (title, content, source, source_ref, tags, content_hash, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (fields.get("title", ""), content,
+             source, source_ref,
+             fields.get("tags", ""), content_hash, now, now),
         )
         conn.commit()
-        return self.get_article(cur.lastrowid)
+        new_id = cur.lastrowid
+        if new_id is None:
+            raise RuntimeError("Failed to create kb_article")
+        created = self.get_article(new_id)
+        if created is None:
+            raise RuntimeError("Failed to create kb_article")
+        return created
+
+    @staticmethod
+    def _parse_misra_key(fields: dict, source_ref: str) -> tuple[str, str, int]:
+        """从 title/tags + source_ref 解析 MISRA 语义键 (rule_id, file, line)。
+
+        与 deduplicate_misra_articles 同解析逻辑，保证写入去重与存量清理一致。
+        """
+        import re
+        title = fields.get("title", "") or ""
+        tags = fields.get("tags", "") or ""
+        rule_id = ""
+        m = re.match(r"^MISRA[- ]([\d.]+)", title)
+        if m:
+            rule_id = m.group(1)
+        if not rule_id:
+            m = re.search(r"rule-(\d+)-(\d+)", tags)
+            if m:
+                rule_id = f"{m.group(1)}.{m.group(2)}"
+        file_path = ""
+        line_num = 0
+        if ":" in source_ref:
+            parts = source_ref.rsplit(":", 1)
+            file_path = parts[0]
+            try:
+                line_num = int(parts[1])
+            except (ValueError, IndexError):
+                pass
+        return rule_id, file_path, line_num
+
+    @staticmethod
+    def _content_hash(content: str) -> str:
+        """计算内容去重 hash（去空白差异，敏感于实质内容）。"""
+        import hashlib
+        import re
+        normalized = re.sub(r"\s+", "", content or "")
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    def cleanup_duplicate_articles(self) -> dict:
+        """存量清理（EI-M3A.3）：按 content_hash 去重，保留每 hash 最新一条。
+
+        同时回填旧行（content_hash 为空）的 hash，然后删除同 hash 的重复行。
+        返回 {articles_before, backfilled, removed, kept}。
+        """
+        conn = self._get_conn()
+
+        # Step 1: 回填空 hash
+        cur = conn.execute(
+            "SELECT id, content FROM kb_articles WHERE content_hash = '' OR content_hash IS NULL"
+        )
+        rows = cur.fetchall()
+        backfilled = 0
+        for row in rows:
+            h = self._content_hash(row["content"] or "")
+            if h:
+                conn.execute(
+                    "UPDATE kb_articles SET content_hash = ? WHERE id = ?",
+                    (h, row["id"]),
+                )
+                backfilled += 1
+        if backfilled:
+            conn.commit()
+
+        # Step 2: 统计总量（含新写入）
+        cur = conn.execute("SELECT COUNT(*) AS c FROM kb_articles")
+        articles_before = cur.fetchone()["c"]
+
+        # Step 3: 删除同 hash 的重复行（保留每个 hash 的最新 id）
+        cur = conn.execute(
+            """SELECT content_hash, MAX(id) AS keep_id
+               FROM kb_articles
+               WHERE content_hash != '' AND content_hash IS NOT NULL
+               GROUP BY content_hash"""
+        )
+        keep_ids: set[int] = set()
+        for row in cur.fetchall():
+            keep_ids.add(row["keep_id"])
+
+        if keep_ids:
+            placeholders = ",".join("?" for _ in keep_ids)
+            conn.execute(
+                f"DELETE FROM kb_articles WHERE content_hash != '' AND content_hash IS NOT NULL AND id NOT IN ({placeholders})",
+                list(keep_ids),
+            )
+            conn.commit()
+
+        cur = conn.execute("SELECT COUNT(*) AS c FROM kb_articles")
+        kept = cur.fetchone()["c"]
+        return {
+            "articles_before": articles_before,
+            "backfilled": backfilled,
+            "removed": articles_before - kept,
+            "kept": kept,
+        }
 
     def get_article(self, article_id: int) -> Optional[KbArticle]:
         conn = self._get_conn()

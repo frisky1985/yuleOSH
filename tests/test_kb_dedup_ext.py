@@ -63,9 +63,20 @@ class TestDeduplicateMisraArticles:
         assert result["kept"] == 2
 
     def test_duplicates_removed(self, store):
-        """GIVEN duplicate MISRA entries for same (rule, file, line) WHEN dedup THEN removes older."""
-        a1 = _create_misra_article(store, "MISRA-10.1: test", "file1.c:10")
-        a2 = _create_misra_article(store, "MISRA-10.1: test again", "file1.c:10")
+        """GIVEN duplicate MISRA entries for same (rule, file, line) WHEN dedup THEN removes older.
+
+        EI-M3A.1 后 create_article 已在写入时按语义键去重，本测试用 SQL 直插
+        模拟旧库遗留重复，验证 deduplicate_misra_articles 存量清理仍生效。
+        """
+        conn = store._get_conn()
+        for i in range(2):
+            conn.execute(
+                "INSERT INTO kb_articles (title, content, source, source_ref, tags, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("MISRA-10.1: test", "msg", "misra_analysis", "file1.c:10",
+                 "misra,required,rule-10-1", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+            )
+        conn.commit()
         result = store.deduplicate_misra_articles()
         assert result["articles_before"] == 2
         assert result["removed"] == 1
@@ -79,12 +90,23 @@ class TestDeduplicateMisraArticles:
         assert result["removed"] == 0
 
     def test_rule_id_from_tags(self, store):
-        """GIVEN articles with rule in tags WHEN dedup THEN extracts rule_id from tags."""
-        a1 = _create_misra_article(store, "Random title", "file.c:5", tags="misra,required,rule-10-1")
-        a2 = _create_misra_article(store, "Random title 2", "file.c:5", tags="misra,required,rule-10-1")
+        """GIVEN articles with rule in tags WHEN dedup THEN extracts rule_id from tags.
+
+        EI-M3A.1 后 create_article 已按语义键去重，本测试用 SQL 直插模拟
+        旧库遗留数据，验证存量清理仍能解析 tags 中的 rule_id 去重。
+        """
+        conn = store._get_conn()
+        for i in range(2):
+            conn.execute(
+                "INSERT INTO kb_articles (title, content, source, source_ref, tags, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"Random title {i}", "msg", "misra_analysis", "file.c:5",
+                 "misra,required,rule-10-1", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+            )
+        conn.commit()
         result = store.deduplicate_misra_articles()
         assert result["removed"] == 1
-
+        assert result["kept"] == 1
     def test_source_ref_no_colon(self, store):
         """GIVEN source_ref without colon WHEN dedup THEN file_path empty, line_num=0."""
         a = _create_misra_article(store, "MISRA-10.1: test", "nocolon")
@@ -99,10 +121,21 @@ class TestDeduplicateMisraArticles:
         assert result["articles_before"] == 1
 
     def test_dedup_keeps_highest_id(self, store):
-        """GIVEN 3 duplicates WHEN dedup THEN keeps only 1 (the latest/highest id)."""
-        a1 = _create_misra_article(store, "MISRA-17.7: violation", "main.c:50", tags="rule-17-7")
-        a2 = _create_misra_article(store, "MISRA-17.7: violation", "main.c:50", tags="rule-17-7")
-        a3 = _create_misra_article(store, "MISRA-17.7: violation", "main.c:50", tags="rule-17-7")
+        """GIVEN 3 duplicates (旧库直插，绕过写入去重) WHEN dedup THEN keeps 1。
+
+        EI-M3A.1 后 create_article 已在写入时按 (source, source_ref) 去重，
+        因此本测试用 SQL 直插模拟旧库遗留数据，验证 deduplicate_misra_articles
+        作为存量清理仍生效。
+        """
+        conn = store._get_conn()
+        for i in range(3):
+            conn.execute(
+                "INSERT INTO kb_articles (title, content, source, source_ref, tags, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("MISRA-17.7: violation", "msg", "misra_analysis", "main.c:50",
+                 "rule-17-7", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+            )
+        conn.commit()
         result = store.deduplicate_misra_articles()
         assert result["articles_before"] == 3
         assert result["removed"] == 2

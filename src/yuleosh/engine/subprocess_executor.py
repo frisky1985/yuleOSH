@@ -207,7 +207,8 @@ def _run_step_in_subprocess(step_def: dict, project_dir: str,
                             timeout_s: int = 600,
                             session_name: str | None = None,
                             run_id: str | None = None,
-                            artifacts: dict | None = None) -> StepResult:
+                            artifacts: dict | None = None,
+                            python_executable: str | None = None) -> StepResult:
     """提交单步到子进程并解析结果。
 
     artifacts（B2-产物交接）：前序步骤的产物注册表（step_id → output_path）。
@@ -216,9 +217,12 @@ def _run_step_in_subprocess(step_def: dict, project_dir: str,
 
     Phase 9 (2026-08-10): run_id 优先——主进程与 worker 共用同一 run_id
     目录（.osh/sessions/<run_id>），与 PipelineSession 目录规则一致。
+
+    python_executable（EI-M1B.3）: 显式指定 worker 解释器（项目 venv 的
+    python）。None 时用当前解释器（零回归）。
     """
     cmd = [
-        _python_executable(), "-m", "yuleosh.engine.subprocess_executor",
+        python_executable or _python_executable(), "-m", "yuleosh.engine.subprocess_executor",
         "worker",
         "--step-id", step_def["step_id"],
         "--project-dir", project_dir,

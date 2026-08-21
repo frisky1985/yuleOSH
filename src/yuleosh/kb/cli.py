@@ -60,6 +60,7 @@ def build_kb_subparser(subparsers):
     search_p = kb_sub.add_parser("search", help="Search knowledge base")
     search_p.add_argument("query", help="Search query")
     search_p.add_argument("--limit", type=int, default=20, help="Max results")
+    cleanup_p = kb_sub.add_parser("cleanup", help="Deduplicate articles by content hash (EI-M3A)")
 
     # kb lessons
     lessons_p = kb_sub.add_parser("lessons", help="List lessons learned")
@@ -124,6 +125,13 @@ def handle_kb_command(args) -> int:
             "tags": args.tags,
         })
         print(f"✅ Article created: [{article.id}] {article.title}")
+
+    elif args.kb_sub == "cleanup":
+        # EI-M3A.3: 存量重复清理（content hash 去重 + 回填空 hash）
+        result = store.cleanup_duplicate_articles()
+        print(f"🧹 KB duplicate cleanup: before={result['articles_before']} "
+              f"backfilled={result['backfilled']} removed={result['removed']} "
+              f"kept={result['kept']}")
 
     elif args.kb_sub == "search":
         articles = store.list_articles(search=args.query, limit=args.limit)

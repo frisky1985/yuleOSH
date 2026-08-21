@@ -124,8 +124,8 @@ def main():
     parser.add_argument("--clear", action="store_true",
                         help="清除 checkpoint 状态")
     parser.add_argument("--executor", default="inline",
-                        choices=["inline", "subprocess"],
-                        help="执行器: inline（默认，当前进程直跑）/ subprocess（B2，独立进程臂）")
+                        choices=["inline", "subprocess", "local"],
+                        help="执行器: inline（当前进程直跑）/ local（默认子进程，Executor 接口，EI-M1A）/ subprocess（B2 旧名，等价 local）")
     parser.add_argument("--mock", action="store_true",
                         help="mock 模式（session.mock_mode=True，gate 类步骤跳过真实扫描）")
     args = parser.parse_args()
@@ -165,18 +165,19 @@ def main():
 
     # ── run ──
     engine = create_agent_pipeline(project_dir, args.spec, mock_mode=args.mock)
-    if args.executor == "subprocess":
-        # B2-1: 注入 subprocess runner —— 步骤在独立进程臂执行。
+    if args.executor in ("subprocess", "local"):
+        # EI-M1A: 统一走 Executor 接口（LocalExecutor = subprocess 语义）。
         # 固定 session 名（时间戳级）：主进程与所有 worker 共用同一
         # 会话目录，产物交接链依赖路径一致。
         import time as _time
 
-        from yuleosh.engine.subprocess_executor import make_subprocess_runner
+        from yuleosh.engine.executor import make_executor
         session_name = f"agent-pipeline-{_time.strftime('%Y%m%d-%H%M%S')}"
-        engine.runner = make_subprocess_runner(
-            project_dir, mock_mode=args.mock, spec_path=args.spec,
-            session_name=session_name,
+        executor = make_executor(
+            "local", project_dir=project_dir, mock_mode=args.mock,
+            spec_path=args.spec, session_name=session_name,
         )
+        engine.runner = executor.as_runner()
     result = engine.run(inject_at=args.inject_at, resume=args.resume)
     sys.exit(0 if result else 1)
 
