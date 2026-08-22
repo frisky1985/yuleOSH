@@ -224,12 +224,22 @@ def check_generated_artifacts_leak(project_dir: Path) -> dict:
     return result
 
 
-def check_deploy_guardrail(project_dir: Path, session_dir: Path | None) -> dict:
+def check_deploy_guardrail(
+    project_dir: Path | str, session_dir: Path | str | None,
+    deploy_step_executed: bool = True,
+) -> dict:
     """CM 检查 4: 部署护栏状态确认。
 
     有部署动作（codegen-deploy 非 skipped）必有 deploy-changes.json
     变更集记录；无部署 skipped 则跳过。找不到变更集 → failed（部署
     证据链断裂）。
+
+    2026-08-22 r21q: 断点续跑 (--from-step > 9) / diff 裁剪未执行
+    codegen-deploy 时, 全局 codegen-deploy.json 仍是上次 run 的
+    deployed, 但本次 run 无部署动作 — deploy-changes.json 缺失是
+    正常的, 必须 skipped 而非误报 failed (window-anti-pinch 恢复 run
+    实测 merge-gate 误 RED)。调用方 (merge-gate handler) 通过 session
+    步骤状态计算 deploy_step_executed 传入。
     """
     result: dict = {
         "check": "deploy_guardrail",
@@ -246,6 +256,16 @@ def check_deploy_guardrail(project_dir: Path, session_dir: Path | None) -> dict:
             deploy_status = str(data.get("status", ""))
         except (OSError, json.JSONDecodeError):
             deploy_status = "unreadable"
+
+    # 本次 run 未执行 codegen-deploy 步骤（断点续跑/裁剪）→ 无部署动作
+    if not deploy_step_executed:
+        result["status"] = "skipped"
+        result["deploy_status"] = deploy_status or "none"
+        result["reason"] = (
+            "codegen-deploy not executed in this run (resume from later "
+            "step or diff-skip) — deploy-changes check not applicable"
+        )
+        return result
 
     # 2026-08-20 r22 real-6: skipped_src_protected (OSH_GUARD_PROTECT_SRC=1
     # 保护用户手动代码 → 部署跳过) 也是"无部署动作" — 不能要求证据链。
@@ -294,13 +314,20 @@ def check_deploy_guardrail(project_dir: Path, session_dir: Path | None) -> dict:
     return result
 
 
-def run_cm_checks(project_dir: str | Path, session_dir: str | Path | None = None) -> dict:
+def run_cm_checks(
+    project_dir: str | Path,
+    session_dir: str | Path | None = None,
+    deploy_step_executed: bool = True,
+) -> dict:
     """Run all 4 CM checks and aggregate.
 
     Returns a dict with:
       - checks: list of per-check results
       - status: passed | warning | failed | skipped
       - failed_checks / warnings: aggregates
+
+    ``deploy_step_executed`` (r21q): 断点续跑/裁剪未执行 codegen-deploy 时
+    传 False, deploy_guardrail 跳过（避免读上次 run 的全局部署报告误报）。
     """
     pdir = Path(project_dir)
     sdir = Path(session_dir) if session_dir else None
@@ -309,7 +336,7 @@ def run_cm_checks(project_dir: str | Path, session_dir: str | Path | None = None
         check_workspace_clean(pdir),
         check_commit_convention(pdir),
         check_generated_artifacts_leak(pdir),
-        check_deploy_guardrail(pdir, sdir),
+        check_deploy_guardrail(pdir, sdir, deploy_step_executed=deploy_step_executed),
     ]
 
     failed = [c for c in checks if c["status"] == "failed"]

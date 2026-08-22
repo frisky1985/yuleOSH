@@ -1074,7 +1074,20 @@ def _run_cm_gate_checks(project_dir: str, session) -> dict:
     session_dir = None
     if hasattr(session, "session_dir") and session.session_dir:
         session_dir = Path(session.session_dir)
-    return run_cm_checks(project_dir, session_dir)
+    # r21q: 断点续跑 (--from-step > 9) / diff 裁剪未执行 codegen-deploy 时,
+    # 全局 codegen-deploy.json 仍是上次 run 的 deployed → deploy_guardrail
+    # 必须跳过, 否则恢复 run 的 merge-gate 误报 RED (window-anti-pinch 实测)。
+    deploy_step_executed = _deploy_step_executed_in_session(session)
+    return run_cm_checks(project_dir, session_dir, deploy_step_executed=deploy_step_executed)
+
+
+def _deploy_step_executed_in_session(session) -> bool:
+    """codegen-deploy (step 9) 是否在本 session 执行过 (completed)。"""
+    steps = getattr(session, "steps", None) or []
+    for s in steps:
+        if isinstance(s, dict) and s.get("name") == "codegen-deploy":
+            return s.get("status") == "completed"
+    return False
 
 
 def _merge_cm_into_report(report_path: str, cm_result: dict) -> None:

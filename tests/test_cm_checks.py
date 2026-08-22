@@ -203,6 +203,29 @@ class TestDeployGuardrail:
         assert result["status"] == "failed"
         assert "empty" in result["summary"]
 
+    def test_resume_without_deploy_skipped(self, git_repo, tmp_path):
+        # 2026-08-22 r21q: 断点续跑 (--from-step > 9) 未执行 codegen-deploy →
+        # 全局 codegen-deploy.json 仍是上次 run 的 deployed, 但本次 run 无部署
+        # 动作, deploy-changes.json 缺失是正常的 → 必须 skipped 而非误报 failed
+        # (实测: window-anti-pinch 恢复 run merge-gate 误 RED)。
+        report_dir = git_repo / ".yuleosh" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / "codegen-deploy.json").write_text(
+            json.dumps({"status": "deployed"}), encoding="utf-8")
+        result = check_deploy_guardrail(git_repo, tmp_path, deploy_step_executed=False)
+        assert result["status"] == "skipped"
+        assert "not executed" in result["reason"]
+
+    def test_run_cm_checks_resume_deploy_skipped(self, git_repo, tmp_path):
+        # 聚合入口同样透传 deploy_step_executed=False → deploy_guardrail 不阻断
+        report_dir = git_repo / ".yuleosh" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / "codegen-deploy.json").write_text(
+            json.dumps({"status": "deployed"}), encoding="utf-8")
+        result = run_cm_checks(git_repo, tmp_path, deploy_step_executed=False)
+        assert result["status"] != "failed"
+        assert "deploy_guardrail" not in result["failed_checks"]
+
 
 class TestRunCmChecks:
     """聚合语义: 任一 failed → failed；warning 仅记录；全 skipped → skipped。"""
