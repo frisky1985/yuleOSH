@@ -14,8 +14,8 @@
 | P0-1 | P0 | 包边界泄漏 | 小克 | ✅ | — |
 | P0-2 | P0 | 覆盖率门禁阈值脱节 | 小明/小马 | ✅ | — |
 | P1-1 | P1 | CLI 双轨制 | 小明 | ✅ | — |
-| P1-2 | P1 | 知识子系统收敛 | 小克 | ⬜ | P0-1 已完成，已解锁 |
-| P1-3 | P1 | 生产关键路径无覆盖 | 小克 | ⬜ | P0-2 已完成，已解锁 |
+| P1-2 | P1 | 知识子系统收敛 | 小克 | 🔄 | P0-1 已完成，已解锁 |
+| P1-3 | P1 | 生产关键路径无覆盖 | 小克 | 🔄 | P0-2 已完成，已解锁 |
 | P2-1 | P2 | 部署单一来源 | 小马 | ⬜ | — |
 | P2-2 | P2 | 依赖拆 extras | 小明 | ⬜ | P0-1 已完成，已解锁 |
 | P2-3 | P2 | 版本号漂移 | 小明 | ⬜ | — |
@@ -130,71 +130,63 @@
 - 动作: ci.yml 新增 "Root CLI regression gate (P1-1f)" 步骤 — grep 仓内 `yuleosh_cli.py` 引用，白名单 RELEASE_NOTES/docs/planning//docs/architecture//TASK_STATUS。
 - 验证: 本地 grep 零匹配通过。
 
-### P1-2 · 知识子系统收敛
+### P1-2 · 知识子系统收敛 🔄
 
 - **角色**: 小克
+- **状态**: 🔄 进行中 (4/5 子任务完成, 2026-08-24)
 - **问题**: 知识子系统经核实**非"5 处重叠"**而是：① `src/knowledge/store_*.py` **零引用者=死码**；② 三个活跃子系统职责**本就不同**（knowledge_graph=追溯图 SQL+pg 双后端 / kb=RAG 向量检索 / memory=LLM 会话记忆）；③ 唯一真重叠——`knowledge_management.KnowledgeArticle`(km_articles) 与 `kb.KbArticle`(kb_articles) 两个 article 存储。外加 knowledge_graph 有 SQLite/Postgres 双套实现（store/queries/models 各有 `_pg` 变体）需策略文档化。
 - **证据**: `grep store_ll/store_kb/store_fmea` 在 src/yuleosh+tests **零命中**；knowledge_management/models.py:52 `KnowledgeArticle` vs kb/models.py:15 `KbArticle`；knowledge_graph 有 store.py+store_pg.py 等 6 个 `_pg` 变体。
 - **DoD**: 死码删除；职责矩阵定稿（3 子系统边界清晰）；article 双存储消解；pg/SQLite 策略文档化。
 
 #### 子任务拆解
 
-**P1-2a · 删死代码 `src/knowledge/store_*.py`**
-- 现状: store_ll/store_kb/store_fmea 三个 .py 在 src/yuleosh+tests 零引用者（v1 遗留，已被 kb/ 取代）。
-- 动作: 删三文件（与 P0-1c 的 .go 处置并行：P0-1c 管 .go+migrations 迁出，本任务管 .py 死码删除）。
-- 验证: `grep -r store_ll` 全仓零命中；测试不退化。
+**P1-2a · 删死代码 `src/knowledge/store_*.py`** ✅
+- 动作: 删除 `src/knowledge/` 整目录 (3 py + 2 go + 1 sql + README, 共 2441 行死码)。
+- 验证: `grep -r store_ll/store_kb/store_fmea` 全仓零命中。
 
-**P1-2b · 职责矩阵定稿**
-- 现状: 三活跃子系统边界靠约定，无文档。
-- 动作: 产出 ADR 矩阵——knowledge_graph（追溯图，spec→code→test 边）/ kb（RAG 向量检索，articles/lessons/fmea）/ memory（LLM 会话记忆，distill/reflect/feedback）。明确谁该被谁调用。
+**P1-2b · 职责矩阵定稿** ✅
+- 动作: ADR-001 已写入 `docs/adr/ADR-001-knowledge-subsystem-responsibilities.md` — knowledge_graph (追溯图) / kb (RAG 检索) / memory (LLM 会话记忆) 三子系统职责矩阵。
 - 验证: 矩阵入 docs/adr/；agent 读矩阵即知该用哪个 store。
 
-**P1-2c · 消解 article 双存储**
-- 现状: knowledge_management `KnowledgeArticle`(km_articles，供 loop_engine) vs kb `KbArticle`(kb_articles，供 api/hooks/cli)。两套 article 模型+表。
-- 动作: 定权威方（建议 kb，因 RAG+API+hooks 已集成）；若 knowledge_management 仅供 loop_engine 差异化用途 → 文档化并存理由，否则并入 kb 并迁 loop_engine 引用（src/yuleosh/loop_engine/cli.py 等）。
-- 验证: 仅剩一套 article 模型，或双存有 ADR 明确分工。
-- 风险: loop_engine 依赖 knowledge_management 的 article 字段 → 迁移前 diff 字段集。
+**P1-2c · 消解 article 双存储** ✅
+- 结论: `KnowledgeArticle` (knowledge_management, 25+字段, 1个生产调用方 loop_engine) 与 `KbArticle` (kb, 9字段, 30+调用方) **非重复** — 服务不同层 (spec合规生命周期 vs RAG读取路径)。ADR-001 文档化共存理由。
+- 验证: 双存有 ADR 明确分工。
 
-**P1-2d · pg/SQLite 双后端策略文档化**
-- 现状: knowledge_graph 有 store.py+store_pg.py / queries.py+queries_pg.py / models.py+models_pg.py（SQLite+Postgres 双实现），是否都在用、有无 drift 不明。
-- 动作: 核实两后端活跃度；文档化选择策略（本地 SQLite / SaaS Postgres）；检查 _pg 变体是否与基础版字段 drift。
-- 验证: ADR 记录后端策略；_pg 与基础版无未文档化 drift。
+**P1-2d · pg/SQLite 双后端策略文档化** ✅
+- 动作: ADR-001 记录选择策略 (`YULEOSH_DB_URL` → PostgreSQL, 默认 SQLite)；两后端均为活跃且有测试覆盖；清理 `knowledge_graph/__init__.py` 中 8 个死 `_pg` 私有 re-export。
+- 验证: ADR 记录后端策略；死 re-export 已清。
 
-**P1-2e · 加门禁防新 store 蔓生**
-- 动作: CI 检查新增 store 模块须在职责矩阵登记。
+**P1-2e · 加门禁防新 store 蔓生** ⬜ 待办
+- 动作: CI 检查新增 store 模块须在 ADR-001 职责矩阵登记。
 - 验证: 未登记的新 store 被门禁拦。
-- **Blocking Edge**: 本任务整体等 P0-1c（store 归属依赖包边界定稿）。
 
-### P1-3 · 生产关键路径无覆盖
+### P1-3 · 生产关键路径无覆盖 🔄
 
 - **角色**: 小克
+- **状态**: 🔄 进行中 (2/4 子任务完成, 2026-08-24)
 - **问题**: `coverage.omit`（pyproject:65-70）排除三路径，使其覆盖率**不计入分母**（非"不挡"——真门禁 60%，见 P0-2）。经核实三路径测试现状不一：① `llm/client.py`（755 行）**有测试**（test_llm_client.py 直接 import LLMClient）但被 omit → 覆盖率不可见；② `sil/adapter.py` 现有测试覆盖的是兄弟模块 `cross/sil_assert`，**非**被 omit 的 adapter 本身 → adapter 实测欠测；③ `plugins/sandbox.py`（249 行，安全关键——fs/network/syscall 限制）仅 smoke 测，缺安全强制路径测。
 - **证据**: omit 列表 pyproject:65-70；test_llm_client.py:19 `from yuleosh.llm.client import`；test_cross_sil_assert_deep.py 测 `cross.sil_assert` 非 `sil.adapter`；sandbox 测试多在 test_plugins*.py（registry，非强制路径）。
 - **DoD**: 各 omit 路径或补测或显式记录 omit 理由；安全关键 sandbox.py 有强制路径测；移出 omit 后覆盖率可见且有子门禁。
 
 #### 子任务拆解
 
-**P1-3a · `llm/client.py` — tested-but-omitted 处置**
-- 现状: 有 test_llm_client.py 覆盖，但 omit 使其覆盖率不可见。
-- 动作: 评估移出 omit（让已测覆盖计入报告），或在 omit 处加注释说明"为何不计"（如依赖外部 LLM provider 难全测）。
-- 验证: 移出后覆盖率数字含 client.py；或 omit 有 ADR 理由。
-- 联动: P0-2d（omit 路径单列）。
+**P1-3a · `llm/client.py` — tested-but-omitted 处置** ⬜ 待办
+- 现状: 有 test_llm_client.py 覆盖 (118行, 9测试)，但 omit 使覆盖率不可见。缺 `resolve_config` 的 env 优先级/L3-L4防幻觉/agent路由分支测试。
+- 待办: 补 ~15 项 `resolve_config` 分支测试 (env 优先级、L3/L4 防幻觉硬规则、AGENT_MODEL_ROUTES 路由、invalid provider 报错)；评估移出 omit 或保留并加 ADR 理由。
+- 验证: 移出后覆盖率含 client.py；或 omit 有 ADR 理由。
 
-**P1-3b · `sil/adapter.py` — 补 adapter 专项测**
-- 现状: 现有测试覆盖兄弟 `cross/sil_assert`，adapter 本身欠测；adapter 是 SIL 硬件适配（需 mock）。
-- 动作: 用 mock fixture 给 adapter 加契约测（端口打开/读写/超时/错误路径）。
-- 验证: adapter.py 有专项测；移出 omit 后覆盖率达标。
+**P1-3b · `sil/adapter.py` — 补 adapter 专项测** ✅
+- 动作: 新建 `tests/test_sil_adapter_deep.py` — 29 项测试覆盖: connect/shutdown 状态、convert_testcases 边界 (signals缺省/timeout int→float)、run_simulation 中间状态转换、parse_results 边界 (空bytes/字节长度/multi-bracket)、generate_report 边界 (>5 warnings 截断/TIMED_OUT/时间取整/crashed/errors)。
+- 验证: 29/29 PASS。
 
-**P1-3c · `plugins/sandbox.py` — 安全强制路径测**
-- 现状: 安全关键（fs/network/exec 限制、超时），仅 smoke 测，强制阻断路径未测。
-- 动作: 加测——声明外路径 fs 访问被拒、未声明网络被禁、exec/subprocess 被拦、超时触发；覆盖逃逸尝试。
-- 验证: sandbox.py 强制路径全覆盖；安全回归有测兜底。
-- 风险: 沙箱本身可能拦截测试 fixture → 用子进程/隔离环境测。
+**P1-3c · `plugins/sandbox.py` — 安全强制路径测** ✅
+- 动作: 新建 `tests/test_sandbox_security_deep.py` — 39 项测试覆盖: 读沙箱外文件被拒、写 extra_read_dirs 被拒 (读写隔离)、symlink 逃逸被拒、`..` 逃逸被拒、extra_read_dirs (constructor + manifest) 白名单、safe_import 白名单正向/黑名单反向 (os/subprocess)、SAFE_BUILTINS 排除危险 builtins (eval/exec/compile)、block_subprocess 验证。
+- 验证: 39/39 PASS；sandbox.py 已从 pyproject.toml omit 移除。
 
-**P1-3d · 关键路径子门禁**
-- 动作: 上述补测后，给三路径设模块级覆盖率子门禁（独立于全局 60%），防退化。
+**P1-3d · 关键路径子门禁** ⬜ 待办
+- 现状: `scripts/coverage_subgate.sh` 已创建 (sandbox ≥85% / sil_adapter ≥80%)，但尚未挂入 ci.yml。
+- 待办: ci.yml 加 "Coverage sub-gates" 步骤调用 subgate 脚本；P1-3a 补测后加 llm/client.py 子门禁。
 - 验证: CI 报各路径覆盖率；低于子门禁则 block。
-- **Blocking Edge**: 等 P0-2 阈值策略定（先定门禁语义再补测）。
 
 ### P2-1 · 部署单一来源
 
