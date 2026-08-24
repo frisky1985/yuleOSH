@@ -12,7 +12,6 @@ FROM python:3.13-slim AS builder
 WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-COPY yuleosh_cli.py ./
 
 RUN pip install --no-cache-dir --user .
 

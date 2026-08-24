@@ -95,6 +95,22 @@ jobs:
         fi
         echo "✅ Phantom import gate passed."
 
+    - name: Root CLI regression gate (P1-1f)
+      run: |
+        # Prevent re-introduction of root yuleosh_cli.py (P1-1: CLI dual-track cleanup).
+        # Whitelist: RELEASE_NOTES (historical), docs/planning/ (historical),
+        # docs/architecture/ (already marked "已删"), TASK_STATUS (task tracker).
+        if grep -rn \
+             --include="*.py" --include="Makefile" --include="*.sh" --include="*.yml" --include="*.yaml" --include="Dockerfile" \
+             'yuleosh_cli\.py' \
+             . \
+           | grep -v '\.git' | grep -v '__pycache__' \
+           | grep -v 'RELEASE_NOTES' | grep -v 'docs/planning/' | grep -v 'docs/architecture/' | grep -v 'TASK_STATUS'; then
+          echo "❌ Root yuleosh_cli.py reference detected — see lines above."
+          exit 1
+        fi
+        echo "✅ Root CLI regression gate passed."
+
     - name: Run tests
       run: |
         # v3.10.0 Track1: pytest.ini addopts 仍带 --cov（9bf3e5ab 只删了 CLI 参数

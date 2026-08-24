@@ -553,7 +553,7 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
             "error": "Evidence generation timed out (300s)",
         })
     except FileNotFoundError:
-        log.warning("yuleosh CLI not found at %s — using simulated evidence", cli_script)
+        log.warning("yuleosh CLI not found on PATH — using simulated evidence")
         _simulate_evidence_completion(task_id)
     except Exception as e:
         _ev_tasks[task_id].update({

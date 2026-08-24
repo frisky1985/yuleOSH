@@ -78,17 +78,6 @@ from yuleosh.knowledge_graph.queries import (
     get_confirmation_trace,
 )
 
-# Also export case-insensitive alias for the new queries submodule
-from yuleosh.knowledge_graph.queries_pg import (
-    trace_by_req_id as _trace_by_req_id_pg,
-    trace_by_file_path as _trace_by_file_path_pg,
-    trace_by_test_function as _trace_by_test_function_pg,
-    impact_analysis as _impact_analysis_pg,
-    list_uncovered_requirements as _list_uncovered_pg,
-    list_orphan_code_files as _list_orphan_pg,
-    get_confirmation_trace as _get_confirmation_trace_pg,
-)
-
 from yuleosh.knowledge_graph.git_hook_check import (
     check_installed as git_hook_installed,
     is_version_current as git_hook_version_current,

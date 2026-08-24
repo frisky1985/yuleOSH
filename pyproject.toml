@@ -65,7 +65,6 @@ branch = true
 omit = [
     "src/yuleosh/templates/*",       # Jinja2 模板文件，非逻辑代码
     "src/yuleosh/sil/*",             # 依赖真实串口硬件，无法在 CI mock；见 P1-3b
-    "src/yuleosh/plugins/sandbox.py", # 安全强制路径需子进程隔离测试；见 P1-3c
     "src/yuleosh/llm/client.py",     # 有 test_llm_client.py 但 provider 调用难全 mock；见 P1-3a
 ]
 

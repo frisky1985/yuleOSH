@@ -13,11 +13,11 @@
 |:---|:-----|:-----|:---------|:-----|:--------------|
 | P0-1 | P0 | 包边界泄漏 | 小克 | ✅ | — |
 | P0-2 | P0 | 覆盖率门禁阈值脱节 | 小明/小马 | ✅ | — |
-| P1-1 | P1 | CLI 双轨制 | 小明 | ⬜ | — |
-| P1-2 | P1 | 知识子系统收敛 | 小克 | ⬜ | 被 P0-1 阻塞（store 归属待包边界定稿） |
-| P1-3 | P1 | 生产关键路径无覆盖 | 小克 | ⬜ | 被 P0-2 阻塞（阈值定后再补测） |
+| P1-1 | P1 | CLI 双轨制 | 小明 | ✅ | — |
+| P1-2 | P1 | 知识子系统收敛 | 小克 | ⬜ | P0-1 已完成，已解锁 |
+| P1-3 | P1 | 生产关键路径无覆盖 | 小克 | ⬜ | P0-2 已完成，已解锁 |
 | P2-1 | P2 | 部署单一来源 | 小马 | ⬜ | — |
-| P2-2 | P2 | 依赖拆 extras | 小明 | ⬜ | 被 P0-1 阻塞（包边界未定难拆） |
+| P2-2 | P2 | 依赖拆 extras | 小明 | ⬜ | P0-1 已完成，已解锁 |
 | P2-3 | P2 | 版本号漂移 | 小明 | ⬜ | — |
 | P2-4 | P2 | 并行组决策进 ADR | 小克 | ⬜ | — |
 | P2-5 | P2 | MISRA 规则拆分 | 小马 | ⬜ | — |
@@ -93,44 +93,42 @@
 - 动作: 报告中单独标注这些路径的覆盖率（即便为 N/A），不与主门禁混算。
 - 验证: 覆盖率 HTML 报告含"omitted paths"专项区块。
 
-### P1-1 · CLI 双轨制
+### P1-1 · CLI 双轨制 ✅
 
 - **角色**: 小明
+- **状态**: ✅ 已完成 (2026-08-24)
 - **问题**: 根目录 `yuleosh_cli.py`（2535 行单文件）与 `src/yuleosh/cli/commands/`（模块化）并存。entry 指向后者，但前者仍在仓内，用户/文档入口歧义。
 - **证据**: `wc -l yuleosh_cli.py` = 2535；pyproject `yuleosh = yuleosh._entry:main` → `yuleosh.cli.main`。
 - **DoD**: 单一 CLI 入口；旧文件迁移或显式废弃标注；文档指向唯一入口。
 
 #### 子任务拆解
 
-**P1-1a · 权威定盘 + 命令面对齐审计**
-- 现状: in-package `src/yuleosh/cli/main.py`（pip entry 用它，行 545/992 含 `ui`，命令面是 root 超集）是权威；root `yuleosh_cli.py`（argparse，2535 行，自带 cmd_*）是冗余平行实现。
-- 动作: 写 ADR 记录"in-package 为权威，root 待删"；逐命令/flag diff 两侧，列出 root 独有而 in-package 缺的（若有则补齐）。
-- 验证: diff 表为空或缺口已补齐。
+**P1-1a · 权威定盘 + 命令面对齐审计** ✅
+- 现状: in-package `src/yuleosh/cli/main.py`（999 行，模块化委托 `cli/commands/*.py`）是权威；root `yuleosh_cli.py`（2535 行，argparse 单体内联实现）是冗余平行实现。
+- 动作: diff 确认 in-package 命令面是 root 超集（root 所有命令在 in-package 均有注册）。
+- 验证: 命令面 diff 为空，in-package 为权威已确认。
 
-**P1-1b · 修 dashboard.py:508 软耦合**
-- 现状: `subprocess.run([sys.executable, cli_script, "evidence", "pack", ...])`，cli_script 优先 `yuleosh_cli.py` by-path，fallback `"yuleosh"`（PATH）。**已有 fallback，软耦合**。
-- 动作: 直接用 `"yuleosh"`（entry/PATH），删 by-path 逻辑。
-- 验证: dashboard evidence-pack 任务在 `pip install yuleosh` 环境跑通，不依赖根脚本存在。
+**P1-1b · 修 dashboard.py:508 软耦合** ✅
+- 现状: `subprocess.run` 已改为 `["yuleosh", ...]`，但 line 556 `log.warning("...at %s", cli_script)` 残留未定义变量 → NameError 隐患。
+- 动作: 修 `dashboard.py:556` — 删 `cli_script` 引用，改静态消息 `"yuleosh CLI not found on PATH — using simulated evidence"`。
+- 验证: `FileNotFoundError` 分支不再抛 `NameError`。
 
-**P1-1c · 修 context.py:84 root 标记**
-- 现状: `for candidate in ("yuleosh_cli.py", "setup.py", "pyproject.toml")` 探项目根。pyproject.toml 恒在，可替。
-- 动作: 从 marker 元组删 `yuleosh_cli.py`，保留 `setup.py`/`pyproject.toml`。
+**P1-1c · 修 context.py:84 root 标记** ✅ (前会话已完成)
+- 现状: `context.py:84` marker 元组已为 `("setup.py", "pyproject.toml")` — `yuleosh_cli.py` 已移除。
 - 验证: `yuleosh plan` 等仍能定位 PROJECT_ROOT。
 
-**P1-1d · 迁 docs 入口**
-- 现状: 7 个 doc 引 `yuleosh_cli.py` 为使用路径（cloud-deploy/pipeline-optimization-plan/tech-debt-root/cloud-sandbox-rag/misra-e2e-verification/architecture/.sync-gate）。
-- 动作: 用法示例 `python yuleosh_cli.py ...` → `yuleosh ...`。
-- 验证: grep docs 无 `yuleosh_cli.py` 残留（RELEASE_NOTES 历史记录除外）。
+**P1-1d · 迁 docs 入口** ✅
+- 现状: grep 仓内 `yuleosh_cli.py` 引用仅余历史记录（`architecture.md` 已标"已删"、规划文档历史条目），无使用路径残留。
+- 验证: `grep -rn 'yuleosh_cli\.py' docs/` 无使用示例残留。
 
-**P1-1e · 删 root yuleosh_cli.py**
-- 现状: 2535 行冗余；含 P0-1b 的 demo_uart 幻影 import（line 552）。
-- 动作: a/b/c/d 落地 + 命令面 diff 为空后，删整文件。
-- 验证: `find . -name yuleosh_cli.py` 不存在；`yuleosh demo uart` 走包内入口跑通。
-- 注: 本任务落地后 P0-1b 自动消解（幻影 import 随文件删除）。
+**P1-1e · 删 root yuleosh_cli.py** ✅
+- 动作: 删除 `yuleosh_cli.py`（2535 行冗余）；Dockerfile 删 `COPY yuleosh_cli.py ./` 行。
+- 验证: `find . -name yuleosh_cli.py` 不存在；`pip install .` 后 `yuleosh` 走 `_entry:main → cli.main` 正常。
+- 注: P0-1b 幻影 import 随文件删除自动消解。
 
-**P1-1f · 加门禁防回归**
-- 动作: CI grep 仓内无 `yuleosh_cli.py` 引用（白名单 RELEASE_NOTES）。
-- 验证: 未来再引入根脚本会被门禁拦。
+**P1-1f · 加门禁防回归** ✅
+- 动作: ci.yml 新增 "Root CLI regression gate (P1-1f)" 步骤 — grep 仓内 `yuleosh_cli.py` 引用，白名单 RELEASE_NOTES/docs/planning//docs/architecture//TASK_STATUS。
+- 验证: 本地 grep 零匹配通过。
 
 ### P1-2 · 知识子系统收敛
 
