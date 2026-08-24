@@ -28,7 +28,7 @@ tracking:
     docs: ["docs/ci/runner.md"]
     reason: "CI 执行器变更必须同步更新运行器文档"
 
-  - code_path: "yuleosh_cli.py"
+  - code_path: "src/yuleosh/cli/main.py"
     docs: ["README.md"]
     reason: "CLI 命令变更必须同步更新 README 使用说明"
 

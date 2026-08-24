@@ -652,7 +652,7 @@ yuleOSH/
 │   └── architecture.md           # 💡 本文档
 ├── tests/                        # 测试
 ├── frontend/                     # 前端（Next.js）
-├── yuleosh_cli.py                # 独立 CLI 脚本（旧入口）
+├── yuleosh_cli.py                # 旧 CLI 脚本（已删，入口改为 `yuleosh` 命令）
 ├── pyproject.toml                # 项目元数据
 ├── setup.py                      # 兼容 setup.py
 └── Makefile                      # 构建/测试命令

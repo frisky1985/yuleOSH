@@ -79,6 +79,22 @@ jobs:
         name: frontend-out
         path: frontend/out/
 
+    - name: Phantom import gate (P0-1 regression check)
+      run: |
+        # Ensure no phantom src.ci / src.cli / src.knowledge module references
+        # sneak back in after the P0-1 fix. These directories either don't exist
+        # as packages or are Phase-1-pending (src/knowledge), so importing them
+        # via python -m or "from src.*" in production code is always wrong.
+        if grep -rn \
+             --include="*.py" --include="Makefile" --include="*.sh" \
+             'from src\.ci\b\|from src\.cli\b\|from src\.knowledge\b\|python -m src\.ci\b\|python -m src\.cli\b' \
+             . \
+           | grep -v '\.git' | grep -v '\.venv' | grep -v '__pycache__'; then
+          echo "❌ Phantom src.* import detected — see lines above."
+          exit 1
+        fi
+        echo "✅ Phantom import gate passed."
+
     - name: Run tests
       run: |
         # v3.10.0 Track1: pytest.ini addopts 仍带 --cov（9bf3e5ab 只删了 CLI 参数

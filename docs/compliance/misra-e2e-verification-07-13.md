@@ -190,7 +190,7 @@ cppcheck --addon=misra --language=c --std=c11 --enable=all \
   --suppress=missingIncludeSystem -q *.c 2>&1 | tee misra-output.txt
 
 # 通过 yuleOSH MISRA report 解析
-python3 /path/to/yuleosh_cli.py misra report --input misra-output.txt --format summary
+yuleosh misra report --input misra-output.txt --format summary
 ```
 
 *报告由 Push 10 Step 4 自动化端到端验证生成*

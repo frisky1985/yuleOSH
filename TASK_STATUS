@@ -1,0 +1,300 @@
+# TASK_STATUS — yuleOSH 优化任务盘
+
+> **来源**: 三人小队优化空间讨论（2026-08-24，完整解读工程后）
+> **角色**: 小明=PM/编排器 · 小克=架构/开发/测试 · 小马=质量/评审
+> **状态图例**: ⬜ pending | 🔄 in_progress | ✅ done | ⛔ blocked
+> **依赖**: 用 Blocking Edge 标注（见 CONTEXT.md）——"此任务被 X 阻塞，须等其完成才能开工"
+
+---
+
+## 总览
+
+| ID | 级别 | 标题 | 提出角色 | 状态 | Blocking Edge |
+|:---|:-----|:-----|:---------|:-----|:--------------|
+| P0-1 | P0 | 包边界泄漏 | 小克 | ✅ | — |
+| P0-2 | P0 | 覆盖率门禁阈值脱节 | 小明/小马 | ✅ | — |
+| P1-1 | P1 | CLI 双轨制 | 小明 | ⬜ | — |
+| P1-2 | P1 | 知识子系统收敛 | 小克 | ⬜ | 被 P0-1 阻塞（store 归属待包边界定稿） |
+| P1-3 | P1 | 生产关键路径无覆盖 | 小克 | ⬜ | 被 P0-2 阻塞（阈值定后再补测） |
+| P2-1 | P2 | 部署单一来源 | 小马 | ⬜ | — |
+| P2-2 | P2 | 依赖拆 extras | 小明 | ⬜ | 被 P0-1 阻塞（包边界未定难拆） |
+| P2-3 | P2 | 版本号漂移 | 小明 | ⬜ | — |
+| P2-4 | P2 | 并行组决策进 ADR | 小克 | ⬜ | — |
+| P2-5 | P2 | MISRA 规则拆分 | 小马 | ⬜ | — |
+| P2-6 | P2 | CSP 注入门禁 | 小马 | ⬜ | — |
+| P2-7 | P2 | overrides 定期核对 | 小马 | ⬜ | — |
+| P2-8 | P2 | _entry.py 委托层清理 | 小克 | ⬜ | — |
+
+---
+
+## 任务详情
+
+### P0-1 · 包边界泄漏
+
+- **角色**: 小克
+- **问题**: `src/ci/`、`src/knowledge/`、`src/cli/` 三目录**无 `__init__.py`**（已核实），位于安装包 `src/yuleosh/` 之外。Makefile 却用 `python -m src.ci.run` 调 CI → `pip install yuleosh` 装包后跑不了，只能在源码树跑。
+- **证据**: `find` 确认三目录无 `__init__`；Makefile:128 `cd $(CURDIR) && $(PYTHON) -m src.ci.run 1`；pyproject `packages.find where=["src"]` 只发现 `yuleosh`。
+- **DoD**: `pip install yuleosh` 后 `yuleosh ci layer1` 在干净环境跑通；CI 入口不再依赖源码树 cwd。
+
+#### 子任务拆解
+
+**P0-1a · 修 Makefile CI 幻影入口（`src.ci.run` → `yuleosh.ci.run`）**
+- 现状: Makefile 共 8 处 `python -m src.ci.run N`（行 128/135/142/149/158/160/162/164），但 `src/ci/run.py` **不存在**、`src/ci/` 无 `__init__`。真身在 `src/yuleosh/ci/run.py`（有 `main` + `run_layer1/2/25/3` 路由）。
+- 动作: 8 处 `src.ci.run` → `yuleosh.ci.run`，保留 layer 数字参数。
+- 验证: `make ci-layer1` 在 `pip install -e .` 后跑通；`make check-tools` 不受影响。
+- 风险: 若 `yuleosh.ci.run.main` 不解析 `sys.argv` 数字需补参数路由（已确认有 run_layerN，低风险）。
+
+**P0-1b · 修根 CLI 幻影 import（demo_uart）**
+- 现状: `yuleosh_cli.py:552` `from src.cli.commands.demo_uart import cmd_demo_uart`，但源码已在 commit `69d2b670` 迁入包内并删旧文件，仅靠 `src/cli/commands/__pycache__/*.pyc` 兜底。
+- 动作: import 改指包内 `from yuleosh.cli.commands.demo_uart import cmd_demo_uart`；删 `src/cli/` 整目录（含 `__pycache__`）；全仓 grep 确认无其他 `src.cli` 引用（已确认无）。
+- 验证: `python yuleosh_cli.py demo uart` 不依赖 .pyc 即可跑；`find src/cli` 不存在。
+- 风险: 若包内 `demo_uart` 已被重构/改名 → 先核对包内实际路径。
+
+**P0-1c · 处置 `src/knowledge/` Go+Python 混合堆放**
+- 现状: `interfaces.go`+`models.go`+`migrations/001_create_tables.sql`（Go 服务源码）与 `store_fmea.py`/`store_kb.py`/`store_ll.py`（Python 孤儿 store）混在 `src/knowledge/`，无 `__init__`。包内 `yuleosh/knowledge_management/` 才是 Python 权威 store。
+- 动作（两步）:
+  - (i) Go 服务源码迁出 → 新建 `services/knowledge-service/`（或按既有约定目录），移 `.go`+`migrations/`。
+  - (ii) 三个 .py store 判活: 若 `knowledge_management` 已覆盖其职责 → 删；若仍有调用方 → 并入 `knowledge_management` 并迁引用。需 grep `store_fmea/store_kb/store_ll` 调用方（P1-2 深做，此处先标归属）。
+- 验证: `src/knowledge/` 清空或不存在；`find src -name "*.go"` 指向 services/；包安装不误带 .go。
+- 风险: Go 服务可能有独立构建/部署链 → 迁移前核对 deploy/ 与 CI 是否引用 `src/knowledge/*.go`。
+
+**P0-1d · 加门禁防回归**
+- 动作: 新增 CI 步骤——干净 venv `pip install .` 后跑 `yuleosh ci layer1 --mock`（或等价），失败即 block，挂 Layer 1。
+- 验证: 该步骤成 Layer 1 gate；未来再有 `src.*` 幻影 import 会被此门禁拦。
+- 风险: 干净 venv 安装耗时 → 可缓存 wheel。
+
+### P0-2 · 覆盖率门禁阈值脱节
+
+- **角色**: 小明 / 小马
+- **问题**: 覆盖率阈值**三处不一致且其一已失效**：pytest.ini `--cov-fail-under=5`（本地 dev 子集下沿，有注释说明）/ pyproject `fail_under=30`（CI 用显式 flag 覆盖，此值**实际失效且误导**，无注释）/ ci.yml:97 `--cov-fail-under=60`（**真门禁**）。真门禁 60% vs 实绩 90.87%，头部空间大；pyproject 的 30 无说明，易被误读为"门禁只挡 30%"。
+- **证据**: pytest.ini addopts `--cov-fail-under=5`；pyproject.toml:83 `fail_under = 30`；ci.yml:97 `--cov-fail-under=60`；README.md:16 `90.87%`。
+- **DoD**: 阈值单一真相源（或三处各有注释明确分层角色）；真门禁对齐实绩下沿（如 80~85）或 ADR 记录缓冲理由；pyproject 死值删除或补注释。
+
+#### 子任务拆解
+
+**P0-2a · 清理 pyproject 失效的 `fail_under=30`**
+- 现状: CI 已用 ci.yml:60 覆盖，pyproject:83 的 30 既不生效又误导（读者以为门禁只挡 30%）。
+- 动作: 删除该行，或改为注释"真门禁在 .github/workflows/ci.yml，本值仅作非 CI 调用的回退下沿"。
+- 验证: `grep fail_under pyproject.toml` 不再有裸 30 或注释清晰。
+
+**P0-2b · 提真门禁 60 → 目标值**
+- 现状: 真门禁 60% 远低于实绩 90.87%，退化 30 个百分点才咬。
+- 动作: 全量跑一次测实绩（确认 90 量级），设新阈为实绩下沿 − 缓冲（如 80），让退化早咬；或在 ADR 记录"为何留 60 缓冲"。
+- 验证: ci.yml:97 `--cov-fail-under` 更新；人为降覆盖到新阈下验证 block。
+- 风险: 提阈后 flaky/环境差异导致误杀 → 先观察一周再收紧。
+
+**P0-2c · 阈值单一真相源**
+- 现状: 5/30/60 三数分散三文件，漂移源。
+- 动作: 阈值抽到一处（如 `.yuleosh/ci-config.yaml` 的 `coverage.fail_under`），pytest.ini/pyproject/ci.yml 三处引用同一变量。
+- 验证: 改一处即三处生效；grep 无硬编码阈值残留。
+
+**P0-2d ·（联动 P1-3）omit 路径单列**
+- 现状: `llm/client.py`/`sil/`/`plugins/sandbox.py` 既不测也不计入分母 → 覆盖率报告里"零可见"。
+- 动作: 报告中单独标注这些路径的覆盖率（即便为 N/A），不与主门禁混算。
+- 验证: 覆盖率 HTML 报告含"omitted paths"专项区块。
+
+### P1-1 · CLI 双轨制
+
+- **角色**: 小明
+- **问题**: 根目录 `yuleosh_cli.py`（2535 行单文件）与 `src/yuleosh/cli/commands/`（模块化）并存。entry 指向后者，但前者仍在仓内，用户/文档入口歧义。
+- **证据**: `wc -l yuleosh_cli.py` = 2535；pyproject `yuleosh = yuleosh._entry:main` → `yuleosh.cli.main`。
+- **DoD**: 单一 CLI 入口；旧文件迁移或显式废弃标注；文档指向唯一入口。
+
+#### 子任务拆解
+
+**P1-1a · 权威定盘 + 命令面对齐审计**
+- 现状: in-package `src/yuleosh/cli/main.py`（pip entry 用它，行 545/992 含 `ui`，命令面是 root 超集）是权威；root `yuleosh_cli.py`（argparse，2535 行，自带 cmd_*）是冗余平行实现。
+- 动作: 写 ADR 记录"in-package 为权威，root 待删"；逐命令/flag diff 两侧，列出 root 独有而 in-package 缺的（若有则补齐）。
+- 验证: diff 表为空或缺口已补齐。
+
+**P1-1b · 修 dashboard.py:508 软耦合**
+- 现状: `subprocess.run([sys.executable, cli_script, "evidence", "pack", ...])`，cli_script 优先 `yuleosh_cli.py` by-path，fallback `"yuleosh"`（PATH）。**已有 fallback，软耦合**。
+- 动作: 直接用 `"yuleosh"`（entry/PATH），删 by-path 逻辑。
+- 验证: dashboard evidence-pack 任务在 `pip install yuleosh` 环境跑通，不依赖根脚本存在。
+
+**P1-1c · 修 context.py:84 root 标记**
+- 现状: `for candidate in ("yuleosh_cli.py", "setup.py", "pyproject.toml")` 探项目根。pyproject.toml 恒在，可替。
+- 动作: 从 marker 元组删 `yuleosh_cli.py`，保留 `setup.py`/`pyproject.toml`。
+- 验证: `yuleosh plan` 等仍能定位 PROJECT_ROOT。
+
+**P1-1d · 迁 docs 入口**
+- 现状: 7 个 doc 引 `yuleosh_cli.py` 为使用路径（cloud-deploy/pipeline-optimization-plan/tech-debt-root/cloud-sandbox-rag/misra-e2e-verification/architecture/.sync-gate）。
+- 动作: 用法示例 `python yuleosh_cli.py ...` → `yuleosh ...`。
+- 验证: grep docs 无 `yuleosh_cli.py` 残留（RELEASE_NOTES 历史记录除外）。
+
+**P1-1e · 删 root yuleosh_cli.py**
+- 现状: 2535 行冗余；含 P0-1b 的 demo_uart 幻影 import（line 552）。
+- 动作: a/b/c/d 落地 + 命令面 diff 为空后，删整文件。
+- 验证: `find . -name yuleosh_cli.py` 不存在；`yuleosh demo uart` 走包内入口跑通。
+- 注: 本任务落地后 P0-1b 自动消解（幻影 import 随文件删除）。
+
+**P1-1f · 加门禁防回归**
+- 动作: CI grep 仓内无 `yuleosh_cli.py` 引用（白名单 RELEASE_NOTES）。
+- 验证: 未来再引入根脚本会被门禁拦。
+
+### P1-2 · 知识子系统收敛
+
+- **角色**: 小克
+- **问题**: 知识子系统经核实**非"5 处重叠"**而是：① `src/knowledge/store_*.py` **零引用者=死码**；② 三个活跃子系统职责**本就不同**（knowledge_graph=追溯图 SQL+pg 双后端 / kb=RAG 向量检索 / memory=LLM 会话记忆）；③ 唯一真重叠——`knowledge_management.KnowledgeArticle`(km_articles) 与 `kb.KbArticle`(kb_articles) 两个 article 存储。外加 knowledge_graph 有 SQLite/Postgres 双套实现（store/queries/models 各有 `_pg` 变体）需策略文档化。
+- **证据**: `grep store_ll/store_kb/store_fmea` 在 src/yuleosh+tests **零命中**；knowledge_management/models.py:52 `KnowledgeArticle` vs kb/models.py:15 `KbArticle`；knowledge_graph 有 store.py+store_pg.py 等 6 个 `_pg` 变体。
+- **DoD**: 死码删除；职责矩阵定稿（3 子系统边界清晰）；article 双存储消解；pg/SQLite 策略文档化。
+
+#### 子任务拆解
+
+**P1-2a · 删死代码 `src/knowledge/store_*.py`**
+- 现状: store_ll/store_kb/store_fmea 三个 .py 在 src/yuleosh+tests 零引用者（v1 遗留，已被 kb/ 取代）。
+- 动作: 删三文件（与 P0-1c 的 .go 处置并行：P0-1c 管 .go+migrations 迁出，本任务管 .py 死码删除）。
+- 验证: `grep -r store_ll` 全仓零命中；测试不退化。
+
+**P1-2b · 职责矩阵定稿**
+- 现状: 三活跃子系统边界靠约定，无文档。
+- 动作: 产出 ADR 矩阵——knowledge_graph（追溯图，spec→code→test 边）/ kb（RAG 向量检索，articles/lessons/fmea）/ memory（LLM 会话记忆，distill/reflect/feedback）。明确谁该被谁调用。
+- 验证: 矩阵入 docs/adr/；agent 读矩阵即知该用哪个 store。
+
+**P1-2c · 消解 article 双存储**
+- 现状: knowledge_management `KnowledgeArticle`(km_articles，供 loop_engine) vs kb `KbArticle`(kb_articles，供 api/hooks/cli)。两套 article 模型+表。
+- 动作: 定权威方（建议 kb，因 RAG+API+hooks 已集成）；若 knowledge_management 仅供 loop_engine 差异化用途 → 文档化并存理由，否则并入 kb 并迁 loop_engine 引用（src/yuleosh/loop_engine/cli.py 等）。
+- 验证: 仅剩一套 article 模型，或双存有 ADR 明确分工。
+- 风险: loop_engine 依赖 knowledge_management 的 article 字段 → 迁移前 diff 字段集。
+
+**P1-2d · pg/SQLite 双后端策略文档化**
+- 现状: knowledge_graph 有 store.py+store_pg.py / queries.py+queries_pg.py / models.py+models_pg.py（SQLite+Postgres 双实现），是否都在用、有无 drift 不明。
+- 动作: 核实两后端活跃度；文档化选择策略（本地 SQLite / SaaS Postgres）；检查 _pg 变体是否与基础版字段 drift。
+- 验证: ADR 记录后端策略；_pg 与基础版无未文档化 drift。
+
+**P1-2e · 加门禁防新 store 蔓生**
+- 动作: CI 检查新增 store 模块须在职责矩阵登记。
+- 验证: 未登记的新 store 被门禁拦。
+- **Blocking Edge**: 本任务整体等 P0-1c（store 归属依赖包边界定稿）。
+
+### P1-3 · 生产关键路径无覆盖
+
+- **角色**: 小克
+- **问题**: `coverage.omit`（pyproject:65-70）排除三路径，使其覆盖率**不计入分母**（非"不挡"——真门禁 60%，见 P0-2）。经核实三路径测试现状不一：① `llm/client.py`（755 行）**有测试**（test_llm_client.py 直接 import LLMClient）但被 omit → 覆盖率不可见；② `sil/adapter.py` 现有测试覆盖的是兄弟模块 `cross/sil_assert`，**非**被 omit 的 adapter 本身 → adapter 实测欠测；③ `plugins/sandbox.py`（249 行，安全关键——fs/network/syscall 限制）仅 smoke 测，缺安全强制路径测。
+- **证据**: omit 列表 pyproject:65-70；test_llm_client.py:19 `from yuleosh.llm.client import`；test_cross_sil_assert_deep.py 测 `cross.sil_assert` 非 `sil.adapter`；sandbox 测试多在 test_plugins*.py（registry，非强制路径）。
+- **DoD**: 各 omit 路径或补测或显式记录 omit 理由；安全关键 sandbox.py 有强制路径测；移出 omit 后覆盖率可见且有子门禁。
+
+#### 子任务拆解
+
+**P1-3a · `llm/client.py` — tested-but-omitted 处置**
+- 现状: 有 test_llm_client.py 覆盖，但 omit 使其覆盖率不可见。
+- 动作: 评估移出 omit（让已测覆盖计入报告），或在 omit 处加注释说明"为何不计"（如依赖外部 LLM provider 难全测）。
+- 验证: 移出后覆盖率数字含 client.py；或 omit 有 ADR 理由。
+- 联动: P0-2d（omit 路径单列）。
+
+**P1-3b · `sil/adapter.py` — 补 adapter 专项测**
+- 现状: 现有测试覆盖兄弟 `cross/sil_assert`，adapter 本身欠测；adapter 是 SIL 硬件适配（需 mock）。
+- 动作: 用 mock fixture 给 adapter 加契约测（端口打开/读写/超时/错误路径）。
+- 验证: adapter.py 有专项测；移出 omit 后覆盖率达标。
+
+**P1-3c · `plugins/sandbox.py` — 安全强制路径测**
+- 现状: 安全关键（fs/network/exec 限制、超时），仅 smoke 测，强制阻断路径未测。
+- 动作: 加测——声明外路径 fs 访问被拒、未声明网络被禁、exec/subprocess 被拦、超时触发；覆盖逃逸尝试。
+- 验证: sandbox.py 强制路径全覆盖；安全回归有测兜底。
+- 风险: 沙箱本身可能拦截测试 fixture → 用子进程/隔离环境测。
+
+**P1-3d · 关键路径子门禁**
+- 动作: 上述补测后，给三路径设模块级覆盖率子门禁（独立于全局 60%），防退化。
+- 验证: CI 报各路径覆盖率；低于子门禁则 block。
+- **Blocking Edge**: 等 P0-2 阈值策略定（先定门禁语义再补测）。
+
+### P2-1 · 部署单一来源
+
+- **角色**: 小马
+- **问题**: `deploy/k8s/quickstart.yaml`（原始清单）与 `deploy/helm/yuleosh/templates/*`（9 模板）并存，两份真相 drift 风险。
+- **证据**: `ls deploy/k8s deploy/helm/yuleosh/templates`。
+- **DoD**: `quickstart.yaml` 由 `helm template` 生成；CI 校验两者一致。
+- **子任务拆解**:
+  - P2-1a · 确认 `quickstart.yaml` 当前是否手工维护（diff `helm template deploy/helm/yuleosh` 输出）。
+  - P2-1b · 改为生成式: `helm template deploy/helm/yuleosh > deploy/k8s/quickstart.yaml`。
+  - P2-1c · CI 加步校验 `helm template` 输出 == quickstart.yaml，drift 则 block。
+
+### P2-2 · 依赖拆 extras
+
+- **角色**: 小明
+- **问题**: `pip install yuleosh` 拉入 `psycopg2-binary`+`stripe`+`pyserial`+`bcrypt`+`pyjwt`，纯 CLI 用户被强塞 SaaS 栈。
+- **证据**: pyproject.toml:13-27 `dependencies`。
+- **DoD**: 拆 `cli`/`saas`/`dev` extras；默认安装只含核心。
+- **子任务拆解**:
+  - P2-2a · 核心 deps 只留运行时必需（click/pyyaml/jinja2/msgpack/openpyxl/pillow 等），`psycopg2-binary`/`stripe`/`bcrypt`/`pyjwt`/`pyserial` 移入 `saas` extras。
+  - P2-2b · 代码内 SaaS 依赖 import 加 try/except 友好提示或延迟 import（避免 CLI 模式缺包即崩）。
+  - P2-2c · README/install 文档补 `pip install "yuleosh[saas]"` 用法。
+- **Blocking Edge**: 等 P0-1（包边界未定难拆 extras）。
+
+### P2-3 · 版本号漂移
+
+- **角色**: 小明
+- **问题**: README 徽章 `version-3.14.0` vs pyproject `4.0.0`。
+- **证据**: README.md:12 vs pyproject.toml:7。
+- **DoD**: 徽章同步或 CI 动态生成。
+- **子任务拆解**:
+  - P2-3a · README 徽章 3.14.0 → 4.0.0（或改 shields.io 动态读 pyproject）。
+  - P2-3b · CI 加校验: README 徽章版本 == pyproject `version`，drift 则 block。
+  - P2-3c · 同步 RELEASE_NOTES 顶层版本声明。
+
+### P2-4 · 并行组决策进 ADR
+
+- **角色**: 小克
+- **问题**: `orchestrator.py` 内 "2026-08-19 老板拍板方案 A" + P1/P2/P3 分组硬编码在注释，但项目有 `docs/adr/` 机制。
+- **证据**: orchestrator.py:34-53。
+- **DoD**: 决策进 ADR；代码只引用 ADR 号。
+- **子任务拆解**:
+  - P2-4a · 写 ADR-XXXX "Pipeline 并行组方案 A"（P1/P2/P3 分组 + internal-code-review 不并进的互换安全理由）。
+  - P2-4b · orchestrator.py:34-53 注释改为引用 ADR 号，保留 PARALLEL_GROUPS 定义。
+  - P2-4c · docs/planning/d2-parallel-brainstorm-2026-08-19.md 链入 ADR。
+
+### P2-5 · MISRA 规则拆分
+
+- **角色**: 小马
+- **问题**: `misra-rules.yaml` 单文件 94KB，偏差管理粒度粗。
+- **证据**: `ls -la misra-rules.yaml`。
+- **DoD**: 按类别拆分 + 索引文件（前提工具支持多文件导入）。
+- **子任务拆解**:
+  - P2-5a · 先验工具是否支持多文件导入（查 `ci/scanners` 加载方式）；不支持则降级为"加分类索引注释"。
+  - P2-5b · 按类别拆分（mandatory/advisory 或 rule class），加 `index.yaml` 聚合。
+  - P2-5c · 偏差条目与代码位置精确对应，文档化。
+
+### P2-6 · CSP 注入门禁
+
+- **角色**: 小马
+- **问题**: 前端 CSP 靠构建后 `scripts/inject-meta-csp.py` 注入，脚本失败则 CSP 缺失且无门禁。
+- **证据**: frontend/package.json build 脚本 + frontend/scripts/inject-meta-csp.py。
+- **DoD**: CI 校验"构建产物含 CSP meta"或 Next.js 配置层原生注入。
+- **子任务拆解**:
+  - P2-6a · 优先评估 Next.js 配置层 `headers()` 原生注入 CSP（替代 post-build 脚本）。
+  - P2-6b · 若保留脚本 → CI 加校验"build 产物 HTML 含 CSP meta"，缺失则 block。
+  - P2-6c · 文档化 CSP 策略与变更流程。
+
+### P2-7 · overrides 定期核对
+
+- **角色**: 小马
+- **问题**: `frontend/package.json` 的 `overrides` 块钉安全传递依赖，掩盖上游未修，维护负担高。
+- **证据**: package.json:42 `"overrides"`。
+- **DoD**: 定期核对哪些 override 仍必要；用 renovate/dependabot 替代手动钉。
+- **子任务拆解**:
+  - P2-7a · 列出 overrides 全部条目，逐条查上游是否已修（npm audit / changelog）。
+  - P2-7b · 已修的删 override；未修的留并标注 upstream issue 链接。
+  - P2-7c · 接入 renovate/dependabot 自动化替代手动钉。
+
+### P2-8 · _entry.py 委托层清理
+
+- **角色**: 小克
+- **问题**: `_entry.py` → `cli/main.py` 多一层委托，pyproject 可直接指 `yuleosh.cli.main:main`。
+- **证据**: src/yuleosh/_entry.py。
+- **DoD**: 评估并移除冗余委托层或记录保留理由。
+- **子任务拆解**:
+  - P2-8a · 评估 pyproject entry 直接指 `yuleosh.cli.main:main` 是否兼容 dev（`pip install -e .`）+ prod 安装。
+  - P2-8b · 若兼容 → 删 `_entry.py`，改 pyproject scripts；若不兼容 → 写注释保留理由。
+
+---
+
+## 拆解进度
+
+> 逐条拆解，每条完成后在此勾选并填入子任务。
+
+- [x] P0-1 拆解
+- [x] P0-2 拆解
+- [x] P1-1 拆解
+- [x] P1-2 拆解
+- [x] P1-3 拆解
+- [x] P2-1~P2-8 拆解

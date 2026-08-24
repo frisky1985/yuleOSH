@@ -366,7 +366,7 @@ docker image prune -f
 | `docker compose down -v` | **⚠️ Destroys all data volumes** |
 | `docker compose logs -f` | Tail logs |
 | `docker compose restart yuleosh` | Restart app only |
-| `docker compose exec yuleosh python3 yuleosh_cli.py stats` | Run CLI command |
+| `docker compose exec yuleosh yuleosh stats` | Run CLI command |
 | `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile` | Reload Caddy config |
 
 ---

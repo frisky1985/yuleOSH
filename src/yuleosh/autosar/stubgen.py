@@ -743,7 +743,7 @@ def register_cli(subparsers) -> None:
 
     Designed to be called from the yuleOSH CLI's main parser setup::
 
-        # In yuleosh_cli.py's _build_parser() or main():
+        # In yuleosh CLI's _build_parser() (src/yuleosh/cli/main.py):
         p_autosar = sub.add_parser("autosar", help="AUTOSAR management")
         asub = p_autosar.add_subparsers(dest="autosar_sub")
         from yuleosh.autosar.stubgen import register_cli

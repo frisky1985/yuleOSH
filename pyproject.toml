@@ -63,10 +63,10 @@ include-package-data = true
 source = ["yuleosh"]
 branch = true
 omit = [
-    "src/yuleosh/templates/*",
-    "src/yuleosh/sil/*",
-    "src/yuleosh/plugins/sandbox.py",
-    "src/yuleosh/llm/client.py",
+    "src/yuleosh/templates/*",       # Jinja2 模板文件，非逻辑代码
+    "src/yuleosh/sil/*",             # 依赖真实串口硬件，无法在 CI mock；见 P1-3b
+    "src/yuleosh/plugins/sandbox.py", # 安全强制路径需子进程隔离测试；见 P1-3c
+    "src/yuleosh/llm/client.py",     # 有 test_llm_client.py 但 provider 调用难全 mock；见 P1-3a
 ]
 
 [tool.coverage.report]
@@ -80,5 +80,7 @@ exclude_lines = [
     "def main",
     "def _check_llm_key",
 ]
-fail_under = 30
+fail_under = 60   # P0-2: 与 ci.yml "Coverage gate (fail-under 60)" 保持一致。
+                  # 本地跑全量测试时此值生效；子集运行用 pytest.ini addopts 的 --cov-fail-under=5。
+                  # 提阈计划: 待实绩稳定后升至 80（见 TASK_STATUS P0-2b）。
 show_missing = true

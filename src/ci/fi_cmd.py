@@ -571,7 +571,7 @@ def cmd_fi_list_runs(args):
 def register_ci_fi_subcommand(subparsers):
     """Register the 'ci fi' subcommand with argparse.
 
-    This is designed to be called from yuleosh_cli.py's _build_parser().
+    This is designed to be called from the yuleosh CLI's _build_parser() (src/yuleosh/cli/main.py).
     """
     # 'ci fi' is a third-level subcommand under 'ci'
     # It's registered as: yuleosh ci fi <action> [args]
@@ -621,13 +621,13 @@ def register_ci_fi_subcommand(subparsers):
 
 
 # ====================================================================
-# Action dispatcher (called from yuleosh_cli.py main loop)
+# Action dispatcher (called from yuleosh CLI main loop)
 # ====================================================================
 
 def handle_fi_command(args):
     """Dispatch 'ci fi <action>' commands.
 
-    Called from yuleosh_cli.py when args.command == "ci" and args.ci_sub == "fi".
+    Called from yuleosh CLI when args.command == "ci" and args.ci_sub == "fi".
     """
     dispatch = {
         "run": cmd_fi_run,

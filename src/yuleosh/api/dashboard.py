@@ -504,13 +504,8 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
         _ev_tasks[task_id]["progress_pct"] = 10
         _ev_tasks[task_id]["status"] = "running"
 
-        # Find the yuleosh CLI script — it could be in PATH or relative to project
-        cli_script = str(Path(PROJECT_ROOT) / "yuleosh_cli.py")
-        if not os.path.exists(cli_script):
-            cli_script = "yuleosh"  # try PATH as fallback
-
         result = subprocess.run(
-            [sys.executable, cli_script, "evidence", "pack",
+            ["yuleosh", "evidence", "pack",
              "--project-dir", str(project_dir)],
             capture_output=True, text=True, timeout=300,
             cwd=str(Path(project_dir).resolve()),

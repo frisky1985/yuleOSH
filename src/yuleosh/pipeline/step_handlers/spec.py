@@ -29,7 +29,7 @@ __all__ = ["step_spec_check"]
 def _spec_validator_env() -> dict:
     """Build env so the spec-validator subprocess can import yuleosh.
 
-    yuleosh_cli.py may be invoked by absolute path from an arbitrary cwd;
+    yuleosh CLI may be invoked by absolute path from an arbitrary cwd;
     the child process inherits PYTHONPATH and would fail with
     ``No module named 'yuleosh'`` unless the package src dir is injected.
     """

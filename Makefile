@@ -125,28 +125,28 @@ PYTHON ?= python3
 # ------------------------------------------------------------------
 ci-layer1:
 	@echo "=== CI Layer 1: Development Verification ==="
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 1
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 1
 
 # ------------------------------------------------------------------
 # CI Layer 2: Integration Verification
 # ------------------------------------------------------------------
 ci-layer2:
 	@echo "=== CI Layer 2: Integration Verification ==="
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 2
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 2
 
 # ------------------------------------------------------------------
 # CI Layer 2.5: Hardware-in-the-Loop (mock mode by default)
 # ------------------------------------------------------------------
 ci-layer25:
 	@echo "=== CI Layer 2.5: Hardware-in-the-Loop (mock) ==="
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 25
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 25
 
 # ------------------------------------------------------------------
 # CI Layer 3: System Verification
 # ------------------------------------------------------------------
 ci-layer3:
 	@echo "=== CI Layer 3: System Verification ==="
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 3
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 3
 
 # ------------------------------------------------------------------
 # Full CI pipeline: L1 → L2 → L2.5 → L3
@@ -155,13 +155,13 @@ ci-layer3:
 ci:
 	@echo "=== yuleOSH Full CI Pipeline ==="
 	@echo "Layer 1: Dev Verify + Coverage Gate"
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 1 || exit 1
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 1 || exit 1
 	@echo "Layer 2: Integration Verify"
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 2 || exit 1
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 2 || exit 1
 	@echo "Layer 2.5: HIL (mock mode)"
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 25 || exit 1
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 25 || exit 1
 	@echo "Layer 3: System Verify"
-	cd $(CURDIR) && $(PYTHON) -m src.ci.run 3 || exit 1
+	cd $(CURDIR) && $(PYTHON) -m yuleosh.ci.run 3 || exit 1
 	@echo "✅ Full CI Pipeline: ALL LAYERS PASSED"
 
 # ------------------------------------------------------------------

@@ -81,7 +81,7 @@ class PlanContext:
                 log.warning("Could not list tests/ directory", exc_info=True)
 
         # Main entry
-        for candidate in ("yuleosh_cli.py", "setup.py", "pyproject.toml"):
+        for candidate in ("setup.py", "pyproject.toml"):
             p = self.project_dir / candidate
             if p.is_file():
                 summary["main_entry"] = str(p)
