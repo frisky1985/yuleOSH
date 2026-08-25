@@ -198,6 +198,54 @@ def scan_test_code_links(project_dir: Path) -> dict[str, dict]:
 # ── SHALL statement extraction ──────────────────────────────────────────
 
 
+def _parse_req_trace_links(project_dir: str) -> list[dict]:
+    """解析 docs/*requirements*.md 的 "测试追溯" 字段 → 需求→测试链接。
+
+    格式 (requirements.md):
+      ### REQ-SWR-001.1-01
+      - **SWR-001.1-01**: SHALL statement...
+      - 测试追溯: tests/unit/foo/test_x.c, tests/unit/foo/test_y.c
+
+    Returns list of dicts (scan_test_reports 同构): {
+      "file": 测试文件相对路径, "source": "requirements.md 追溯字段",
+      "req_id": 需求 ID (嵌入 file 供 _find_tests_for_requirement 匹配)
+    }
+    """
+    links: list[dict] = []
+    proj = Path(project_dir)
+    for doc in sorted(proj.glob("docs/*requirements*.md")):
+        if not doc.is_file():
+            continue
+        text = doc.read_text(encoding="utf-8", errors="replace")
+        # 按需求块切分 (### REQ-XXX 或 ### REQ-)
+        blocks = re.split(r"^###\s+REQ-", text, flags=re.MULTILINE)[1:]
+        for block in blocks:
+            lines = block.splitlines()
+            rid = ""
+            # 块内找需求 ID (SWR-xxx.xx-xx 或 KL-SHALL-nn)
+            for ln in lines[:6]:
+                m = re.search(r"\*\*(SWR-\d+\.\d+-\d+)\*\*", ln)
+                if m:
+                    rid = m.group(1)
+                    break
+            if not rid:
+                continue
+            # 找测试追溯行
+            for ln in lines:
+                tm = re.search(r"测试追溯[:：]\s*(.+)", ln)
+                if tm:
+                    for tf in re.split(r"[;,，]", tm.group(1)):
+                        tf = tf.strip()
+                        if tf and tf.endswith((".c", ".py", ".cpp")):
+                            links.append({
+                                "file": tf,
+                                "source": "requirements.md 追溯字段",
+                                "req_id": rid,
+                                "status": "traced",
+                            })
+    return links
+
+
 def extract_shall_statements(spec_path: str) -> list[dict]:
     """Extract SHALL statements from a specification file (markdown).
 
@@ -753,6 +801,19 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         shalls.extend(sf_shalls)
     reviews = scan_review_artifacts(project_dir)
     test_reports = scan_test_reports(project_dir)
+
+    # 补充: 解析 requirements.md 的 "测试追溯" 字段 (SWR 需求 → 测试文件权威映射)
+    # 部分项目在 requirements.md 维护追溯字段但 software-requirements.md 没有;
+    # LRM 若不消费会导致需求→测试覆盖率虚低。 (fix 2026-08-25: yuleASR 18 需求)
+    try:
+        _req_trace = _parse_req_trace_links(project_dir)
+        if _req_trace:
+            _before = len(test_reports)
+            test_reports = list(test_reports) + _req_trace
+            log.info("Parsed %d requirement→test links from docs/*requirements*.md (%d → %d)",
+                     len(_req_trace), _before, len(test_reports))
+    except Exception as _e:  # noqa: BLE001 — best-effort enrichment
+        log.warning("req-trace enrichment failed: %s", _e)
 
     # Build code → requirement mapping by scanning src/ for comments
     src_dir = Path(project_dir) / "src"
