@@ -141,6 +141,18 @@ def run_coverage_check(project_dir: str, ci: CIResult) -> bool:
 
     print("  📊 CI: coverage check...")
 
+    # coverage.enabled: false (ci-config.yaml) — skip Python-coverage stage
+    # for C-only / mixed repos where it is meaningless (C coverage is handled
+    # by the gcov / c-coverage-gate stage). Default True (backward compatible).
+    try:
+        _cfg = _get_ci_config(project_dir)
+        if _cfg is not None and not _cfg.coverage.enabled:
+            ci.add_stage("coverage", "skipped", "coverage.enabled=false — C coverage via c-coverage-gate")
+            print("    ⏭️  coverage.enabled=false (C coverage via c-coverage-gate)")
+            return True
+    except Exception:
+        pass  # config unreadable — fall through to default behavior
+
     # Python-coverage only applies when Python tests exist.  C/C++ projects
     # are covered by the separate gcov stage (c-coverage / c-coverage-gate);
     # running `coverage run -m pytest` here on a C-only repo collects no

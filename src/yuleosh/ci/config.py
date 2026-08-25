@@ -193,6 +193,11 @@ class MisraConfig:
 class CoverageConfig:
     """Coverage gate configuration (SWR-003.2)."""
 
+    # C-only / mixed projects: Python-coverage stage measures src/ Python via
+    # `coverage run pytest tests/`, which is meaningless when the repo's real
+    # coverage is C (handled by the gcov/c-coverage-gate stage). Set
+    # coverage.enabled: false in ci-config.yaml to skip it (default True).
+    enabled: bool = True
     threshold_line: float = DEFAULT_COVERAGE_THRESHOLD_LINE
     threshold_condition: float = DEFAULT_COVERAGE_THRESHOLD_COND
     strict: bool = DEFAULT_STRICT
@@ -396,6 +401,7 @@ def _parse_ci_config(raw: dict | None) -> CiConfig:
     # Coverage block
     cov_block = raw.get("coverage", {})
     if isinstance(cov_block, dict):
+        cfg.coverage.enabled = bool(cov_block.get("enabled", True))
         cfg.coverage.threshold_line = float(
             cov_block.get("threshold_line", DEFAULT_COVERAGE_THRESHOLD_LINE)
         )
