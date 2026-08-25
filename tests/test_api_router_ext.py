@@ -1,5 +1,7 @@
 """Tests for api/router.py — REST API router."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 from unittest.mock import MagicMock, patch
 from yuleosh.api.router import dispatch, ROUTES, _LAZY_HANDLERS
 

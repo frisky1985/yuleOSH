@@ -7,6 +7,8 @@ Covers:
   - Various tag/rule_id extraction edge cases
 """
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import sys
 import tempfile

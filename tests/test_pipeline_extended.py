@@ -10,6 +10,8 @@ Targets additional coverage for:
 Total goal: drive pipeline test LOC > 3000.
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import json
 import os
 import sys

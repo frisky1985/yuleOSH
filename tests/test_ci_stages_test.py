@@ -1,5 +1,7 @@
 """Tests for yuleosh.ci.stages.test — CI test stage functions."""
 
+# @tests src/yuleosh/ci/run.py
+
 from unittest import mock
 from pathlib import Path
 import pytest

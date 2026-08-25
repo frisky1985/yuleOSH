@@ -12,6 +12,8 @@ tmp_path/monkeypatch 隔离；不设置 YULEOSH_JWT_SECRET（conftest 已 setdef
 不用 sys-path 注入（pytest.ini 已配 pythonpath=src）。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import subprocess
 import sys

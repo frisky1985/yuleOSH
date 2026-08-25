@@ -1,5 +1,7 @@
 """Tests for api/pipeline_steps.py — Pipeline steps list endpoint."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 from unittest.mock import patch
 from yuleosh.api.pipeline_steps import handle_pipeline_steps

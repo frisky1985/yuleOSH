@@ -8,6 +8,8 @@ Covers (2026-08-12 sprint):
   5. _find_previous_session — 断点续跑的上一 session 查找
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import json
 import os
 from pathlib import Path

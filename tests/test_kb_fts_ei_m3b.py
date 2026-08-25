@@ -1,5 +1,7 @@
 """Tests for kb/store.py — FTS5 full-text search (EI-M3B)."""
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import tempfile
 

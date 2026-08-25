@@ -5,6 +5,8 @@ Tests pack_evidence_bundle with real subdirectories, check_evidence_integrity
 with various states, and edge cases for the CL2 audit evidence bundle functions.
 """
 
+# @tests src/yuleosh/evidence/generator.py
+
 import hashlib
 import json
 import os

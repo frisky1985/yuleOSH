@@ -10,6 +10,8 @@ Covers:
   - Error case: unsupported layer
 """
 
+# @tests src/yuleosh/ci/run.py
+
 import os
 import sys
 import json

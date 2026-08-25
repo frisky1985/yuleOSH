@@ -1,5 +1,7 @@
 """Tests for kb/hybrid_search.py — RRF hybrid search (EI-M3E)."""
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import tempfile
 

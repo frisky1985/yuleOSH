@@ -1,5 +1,7 @@
 """Tests for api/audit.py — Audit logging endpoints."""
 
+# @tests src/yuleosh/api/audit.py
+
 from unittest.mock import patch, MagicMock
 from yuleosh.api.audit import handle_audit, log_request
 

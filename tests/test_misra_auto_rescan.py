@@ -6,6 +6,8 @@
 则继续正常判定（自愈），重扫失败则保持 warning（fail-safe）。
 """
 
+# @tests src/yuleosh/ci/misra_fusion.py
+
 import json
 import os
 import shutil

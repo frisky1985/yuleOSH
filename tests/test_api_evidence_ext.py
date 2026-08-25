@@ -1,5 +1,7 @@
 """Tests for api/evidence.py — Evidence endpoints."""
 
+# @tests src/yuleosh/api/evidence.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.evidence import handle_evidence, _generate_evidence

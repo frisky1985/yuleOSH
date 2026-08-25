@@ -1,5 +1,7 @@
 """Tests for api/kb.py — Knowledge base endpoints."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 from unittest.mock import patch, MagicMock
 from yuleosh.api.kb import (
     handle_kb,

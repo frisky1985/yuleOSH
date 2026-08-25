@@ -1,5 +1,7 @@
 """Tests for OpenSpec directory aggregation in spec/validate.py."""
 
+# @tests src/yuleosh/spec/validate.py
+
 import pytest
 from pathlib import Path
 

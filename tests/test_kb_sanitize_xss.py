@@ -6,6 +6,8 @@ event-handler / javascript: payloads must be neutralized on save, while
 normal markdown and C++-style angle-bracket text must survive intact.
 """
 
+# @tests src/yuleosh/kb/store.py
+
 from yuleosh.kb.models import sanitize_kb_article_fields, _strip_html
 
 

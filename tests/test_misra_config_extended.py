@@ -23,6 +23,8 @@ Tests:
   18. Multiple deviations for different rules
 """
 
+# @tests src/yuleosh/ci/misra_fusion.py
+
 import json
 import os
 import sys

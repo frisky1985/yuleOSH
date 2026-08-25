@@ -23,6 +23,8 @@
 mock.patch 注入。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import sys
 from types import SimpleNamespace

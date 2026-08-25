@@ -1,5 +1,7 @@
 """Tests for kb/embedding.py + kb/vector_store.py — Embedding + sqlite-vec (EI-M3C)."""
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import sqlite3
 import tempfile

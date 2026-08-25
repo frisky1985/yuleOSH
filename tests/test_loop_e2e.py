@@ -13,6 +13,8 @@ Usage:
     pytest tests/test_loop_e2e.py -v
 """
 
+# @tests src/yuleosh/loop_engine/spec_delta_gen.py
+
 import json
 import os
 import sys

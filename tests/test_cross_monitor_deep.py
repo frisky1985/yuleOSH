@@ -1,5 +1,7 @@
 """Deep tests for cross.serial_monitor — SerialMonitor, PipeSerialMonitor."""
 
+# @tests src/yuleosh/cross/sil_assert.py
+
 import time
 import threading
 import pytest

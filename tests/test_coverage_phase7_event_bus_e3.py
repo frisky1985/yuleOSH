@@ -4,6 +4,8 @@
 时间依赖全部 mock (yuleosh.loop_engine.event_bus.time.time) —— 无真实时间/网络/subprocess。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 from unittest.mock import patch
 
 import pytest

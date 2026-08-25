@@ -437,6 +437,22 @@ meta:
         c2023_id: misra-c2023-8.13
         change: modified
     total_c2012_rules: 143
+# ── Category Index (P2-5) ──────────────────────────────────────────────────
+# Profile distribution:  safety=167  testing=37  performance=5
+# Severity distribution: required=162  advisory=47
+# Categories (count):
+#   标准库 (Standard Library)=22  控制流 (Control Flow)=18
+#   声明 (Declarations)=17  预处理器 (Preprocessing)=16
+#   函数 (Functions)=13  资源 (Resources)=11
+#   标识符 (Identifiers)=10  指针类型转换 (Pointer Type Conversions)=8
+#   指针与数组 (Pointers & Arrays)=8  基本类型 (Essential Types)=8
+#   P0-CRITICAL=8  未分类 (Uncategorized)=7
+#   初始化 (Initialization)=7  表达式 (Expressions)=6
+#   字面量 (Literals)=6  副作用 (Side Effects)=6
+#   环境 (Environment)=5  mcu-specific=5
+#   类型 (Types)=3  其他=11
+# Deviation entries should reference rule key + code location;
+# tracked in project-level .yuleosh/misra-deviations.yaml (if present).
 misra-c2023-1.1:
   title: ISO C standard compliance
   severity: required

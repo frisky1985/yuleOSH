@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.testgen — generator, formatter, runner."""
+
+# @tests src/yuleosh/testgen/
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

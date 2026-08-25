@@ -18,6 +18,8 @@ Covers:
   - row helpers (_row_to_node / _row_to_edge)
 """
 
+# @tests src/yuleosh/knowledge_graph/store.py
+
 import sys
 import os
 from datetime import datetime

@@ -1,4 +1,6 @@
 """Smoke tests for sil/ module — adapter and integration (__init__)."""
+
+# @tests src/yuleosh/sil/adapter.py
 import pytest
 from unittest.mock import MagicMock, patch
 

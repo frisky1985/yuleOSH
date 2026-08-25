@@ -5,6 +5,8 @@ Tests T11: .yuleosh/agents/ file format and loading
 Tests T12: Pipeline integration — loading and injection into LLM context
 """
 
+# @tests src/yuleosh/agent_registry.py
+
 import os
 import pytest
 import tempfile

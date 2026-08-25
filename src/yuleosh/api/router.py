@@ -36,6 +36,7 @@ from .auth import handle_auth
 
 # Lazy-loaded modules (AR-P2-01): only imported when their route is hit
 # These are loaded lazily to avoid importing optional/seldom-used modules.
+# @req NFR-003
 _LAZY_HANDLERS = {
     "webhooks": ("yuleosh.api.webhooks", "handle_webhooks"),
     "demo": ("yuleosh.api.demo", "handle_demo"),

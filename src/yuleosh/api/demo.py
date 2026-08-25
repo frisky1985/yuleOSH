@@ -32,6 +32,7 @@ from yuleosh.api.cors import get_cors_origin
 
 # ── Demo state ──────────────────────────────────────────────────────────
 
+# @req SWR-012.1
 DEMO_STEPS = [
     {
         "id": "spec-parse",

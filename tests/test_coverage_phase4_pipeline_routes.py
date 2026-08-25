@@ -11,6 +11,8 @@ yuleasr-notify/checkpoint/list/status）。handle_pipeline_trigger 是死代码
 （真实 trigger 走 api.pipeline._trigger_pipeline），仍直测保证行为。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 from pathlib import Path
 from unittest import mock

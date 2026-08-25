@@ -6,6 +6,8 @@ Covers the OpenSpec spec evolution mechanism (RULES §13):
 - blocking gate semantics (approved-but-not-implemented)
 """
 
+# @tests src/yuleosh/spec/changes.py
+
 from __future__ import annotations
 
 import pytest

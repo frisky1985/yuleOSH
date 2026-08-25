@@ -29,6 +29,7 @@ import os
 import time
 from collections import defaultdict
 
+# @req SWR-013.3
 _requests: dict[str, list[float]] = defaultdict(list)
 
 _RATE_LIMIT = int(os.environ.get("YULEOSH_RATE_LIMIT", "100"))

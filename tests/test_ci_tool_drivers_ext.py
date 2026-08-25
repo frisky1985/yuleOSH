@@ -2,6 +2,8 @@
 Extended tests for yuleosh.ci.tool_drivers — push coverage ≥ 60%.
 """
 
+# @tests src/yuleosh/ci/run.py
+
 import os
 import sys
 from pathlib import Path

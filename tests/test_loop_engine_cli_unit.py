@@ -16,6 +16,8 @@ event bus — fully offline:
   - handle_loop_command dispatch
 """
 
+# @tests src/yuleosh/loop_engine/spec_delta_gen.py
+
 import io
 import os
 import sys

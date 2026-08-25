@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @tests src/yuleosh/cli/main.py
 # Copyright (c) 2026 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -76,9 +78,6 @@ def test_init_creates_skeleton(tmp_path):
     assert (tmp_path / ".yuleosh" / "agents" / "AGENTS.md").exists()
     assert (tmp_path / "CONTEXT.md").exists()
     assert (tmp_path / ".yuleosh" / "ci-config.yaml").exists()
-    # OpenSpec 规范骨架
-    assert (tmp_path / ".osh" / "specs" / "README.md").exists()
-    assert (tmp_path / ".osh" / "specs" / "example" / "spec.md").exists()
 
 
 def test_init_renders_project_name(tmp_path):

@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.ci.config — pure Python, no external deps."""
 
+# @tests src/yuleosh/ci/run.py
+
 import pytest
 from yuleosh.ci.config import (
     CoverageConfig,

@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.engine.checkpoint — pure Python, no external deps."""
 
+# @tests src/yuleosh/engine/
+
 import pytest
 from yuleosh.engine.checkpoint import StepRecord, StepStatus, CheckpointState, CheckpointEngine
 

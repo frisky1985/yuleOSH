@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.sil and yuleosh.skills modules."""
+
+# @tests src/yuleosh/sil/adapter.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

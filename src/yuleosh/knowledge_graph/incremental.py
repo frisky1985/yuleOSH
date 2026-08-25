@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-015  @req KG-001
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 

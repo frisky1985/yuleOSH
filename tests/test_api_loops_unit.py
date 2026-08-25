@@ -7,6 +7,8 @@ Covers:
   - get_all_loops_data(): summary payload
 """
 
+# @tests src/yuleosh/api/pipeline.py
+
 import os
 import sys
 from datetime import datetime, timezone

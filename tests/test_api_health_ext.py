@@ -1,5 +1,7 @@
 """Tests for api/health.py — Health endpoint."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.health import handle_health

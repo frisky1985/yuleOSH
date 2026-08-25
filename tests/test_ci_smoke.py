@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.ci — CI config and runner."""
+
+# @tests src/yuleosh/ci/run.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

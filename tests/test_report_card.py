@@ -1,5 +1,7 @@
 """Tests for yuleosh.report.card_generator — quality card generation."""
 
+# @tests src/yuleosh/report/
+
 import json
 import tempfile
 from pathlib import Path

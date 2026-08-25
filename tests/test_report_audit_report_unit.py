@@ -11,6 +11,8 @@ Covers:
   - main() CLI
 """
 
+# @tests src/yuleosh/report/
+
 import json
 import os
 import sys

@@ -12,6 +12,8 @@ Covers:
   - main(): --status, --report --dry-run, --autosar --dry-run, no-args help
 """
 
+# @tests src/yuleosh/ci/run.py
+
 import json
 import os
 import sys

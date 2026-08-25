@@ -1,5 +1,7 @@
 """Tests for engine/project_venv.py — project venv isolation (EI-M1B)."""
 
+# @tests src/yuleosh/project_detection.py
+
 import os
 import subprocess
 import sys

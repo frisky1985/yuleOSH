@@ -1,4 +1,6 @@
 """Tests for ci/agent_traceability.py — Agent Traceability (G-47)."""
+
+# @tests src/yuleosh/ci/run.py
 import json
 import tempfile
 from pathlib import Path

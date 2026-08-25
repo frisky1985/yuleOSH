@@ -9,6 +9,8 @@ and documentation gaps.
 import re
 from pathlib import Path
 
+# @req RS-013  @req SWR-013.2
+
 
 def _scan_risks(source_dir: Path, complexity: dict) -> list[dict]:
     """Scan for compliance risk factors (PREVIEW-REQ-004.2)."""

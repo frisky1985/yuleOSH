@@ -6,6 +6,8 @@
 支持 cflags 参数 + discover_project_cflags 从 CMakeLists 自动发现。
 """
 
+# @tests src/yuleosh/codegen/engine.py
+
 import shutil
 import subprocess
 from pathlib import Path

@@ -2,6 +2,8 @@
 Extended tests for yuleosh.ci.stages (build, traceability, validation) — push coverage ≥ 60%.
 """
 
+# @tests src/yuleosh/ci/run.py
+
 import json
 import os
 import sys

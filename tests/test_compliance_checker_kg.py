@@ -8,6 +8,8 @@ Covers:
 - Backward compatibility: original file-based checks still work
 """
 
+# @tests src/yuleosh/compliance/compliance_checker.py
+
 import os
 import sys
 import tempfile

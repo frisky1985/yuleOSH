@@ -1,5 +1,7 @@
 """Deep tests for hardware.debugger — AIDebugger, DebugReport."""
 
+# @tests src/yuleosh/hardware/debugger.py
+
 import pytest
 from unittest.mock import MagicMock, patch
 

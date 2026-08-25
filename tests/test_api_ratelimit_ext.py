@@ -1,5 +1,7 @@
 """Tests for api/ratelimit.py — Rate limiter."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import time
 import pytest
 from yuleosh.api.ratelimit import (

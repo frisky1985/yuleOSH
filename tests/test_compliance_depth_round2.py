@@ -17,6 +17,8 @@ closes the remaining shallow checks found during full re-audit:
 Each test asserts BOTH directions: substantive content passes, stub fails.
 """
 
+# @tests src/yuleosh/compliance/compliance_checker.py
+
 import json
 from pathlib import Path
 

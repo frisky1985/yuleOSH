@@ -30,6 +30,7 @@ from . import Plugin, PluginManifest
 # 安全受限的 __builtins__ 白名单
 # ---------------------------------------------------------------------------
 
+# @req FSR-003
 SAFE_BUILTINS: set[str] = {
     # 基本类型和容器
     "bool", "int", "float", "str", "bytes", "bytearray",

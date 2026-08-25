@@ -1,5 +1,7 @@
 """Tests for pipeline/orchestrator.py — focused on mock_llm and status."""
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 from unittest.mock import patch, MagicMock
 import pytest
 from yuleosh.pipeline.orchestrator import _mock_llm_client, status_pipeline

@@ -1,5 +1,7 @@
 """Extended tests for evidence.pack — covering generate_evidence and main."""
 
+# @tests src/yuleosh/evidence/generator.py
+
 import sys
 import os
 import tempfile

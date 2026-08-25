@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.llm.cost — pure Python, no external deps."""
 
+# @tests src/yuleosh/llm/client.py
+
 import pytest
 from yuleosh.llm.cost import LLMCallLog, CostLogger
 

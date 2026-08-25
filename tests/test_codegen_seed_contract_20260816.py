@@ -5,6 +5,8 @@ C: CodegenEngine._check_seed_contract — 生成代码删除既有公共函数 �
 A: _make_behavior_verify — 编译通过后跑真实测试, 失败反馈给 repair 轮
 """
 
+# @tests src/yuleosh/codegen/engine.py
+
 import sys
 from pathlib import Path
 

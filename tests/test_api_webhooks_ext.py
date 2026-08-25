@@ -1,5 +1,7 @@
 """Tests for api/webhooks.py — GitHub Webhook handler (updated for pipeline trigger)."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import hmac
 import hashlib
 import json

@@ -6,6 +6,8 @@ An empty architecture doc, a comment-only .clang-format, or test files
 without passing-run evidence must now FAIL instead of PASS.
 """
 
+# @tests src/yuleosh/compliance/compliance_checker.py
+
 import json
 
 from yuleosh.compliance.compliance_checker import ComplianceChecker

@@ -11,6 +11,8 @@ Covers the RTE stub/mock C generator offline (no ARXML parsing):
   - register_cli + _handle_gen_stub_command
 """
 
+# @tests src/yuleosh/autosar/
+
 import sys
 import os
 import argparse

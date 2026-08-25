@@ -19,6 +19,8 @@ MISRA 误报率/漏报率基准测试 (Benchmark).
     - 通过 cppcheck --addon=misra 实际扫描，与预期结果比对
 """
 
+# @tests src/yuleosh/ci/misra_fusion.py
+
 import json
 import os
 import re

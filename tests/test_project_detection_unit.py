@@ -4,6 +4,8 @@ Note: This module requires os, pathlib for directory scanning.
 Tests are file-system based but use temp directories.
 """
 
+# @tests src/yuleosh/project_detection.py
+
 import os
 import tempfile
 from pathlib import Path

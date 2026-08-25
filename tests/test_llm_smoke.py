@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.llm.client — LLM client functions (v3.4.0 API)."""
+
+# @tests src/yuleosh/llm/client.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

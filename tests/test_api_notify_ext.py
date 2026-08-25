@@ -1,5 +1,7 @@
 """Tests for api/notify.py — Notification config endpoints."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 from unittest.mock import patch, MagicMock
 from yuleosh.api.notify import handle_notify, _get_config, _put_config
 

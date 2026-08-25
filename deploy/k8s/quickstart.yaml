@@ -1,6 +1,10 @@
 # =============================================================================
 # quickstart.yaml — Single-file yuleOSH deployment (no Helm required)
 # =============================================================================
+# SINGLE SOURCE: deploy/helm/yuleosh/ (Helm chart).
+# Regenerate:    helm template yuleosh deploy/helm/yuleosh > deploy/k8s/quickstart.yaml
+# CI verifies:   helm template output must match this file (drift → block).
+# =============================================================================
 # Apply directly:
 #   kubectl apply -f quickstart.yaml
 #

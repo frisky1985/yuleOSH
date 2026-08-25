@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.ui.auth — authentication module."""
+
+# @tests src/yuleosh/ui/
 import os, sys, json
 from pathlib import Path
 from unittest.mock import patch, MagicMock

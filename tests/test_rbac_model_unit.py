@@ -8,6 +8,8 @@ Covers:
   - require_role(): decorator success path, 403 denial path (token/no token)
 """
 
+# @tests src/yuleosh/rbac/model.py
+
 import io
 import json
 import os

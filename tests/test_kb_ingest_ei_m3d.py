@@ -1,5 +1,7 @@
 """Tests for kb/ingest.py — ingestion pipeline (EI-M3D)."""
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import tempfile
 from pathlib import Path

@@ -4,6 +4,8 @@ Covers the 2026-08-07 feature: `yuleosh audit evidence` now runs
 `AuditLog.verify()` and writes audit-log-verification.json into the bundle.
 """
 
+# @tests src/yuleosh/audit/model.py
+
 import json
 import subprocess
 import sys

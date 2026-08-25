@@ -1,5 +1,7 @@
 """Tests for engine/tenant_security.py — tenant credentials + audit (EI-M2B)."""
 
+# @tests src/yuleosh/tenant/model.py
+
 import json
 import os
 import stat

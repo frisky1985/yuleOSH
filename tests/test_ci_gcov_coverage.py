@@ -1,4 +1,6 @@
 """Tests for ci/gcov_coverage.py — C/C++ coverage via gcov/lcov."""
+
+# @tests src/yuleosh/ci/run.py
 import tempfile
 import json
 import os

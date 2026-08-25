@@ -1,5 +1,7 @@
 """Tests for api/wizard.py — Wizard completion endpoint."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 from unittest.mock import patch, MagicMock
 from yuleosh.api.wizard import handle_wizard, _get_org_id_from_handler
 

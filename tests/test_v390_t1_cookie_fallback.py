@@ -1,3 +1,5 @@
+
+# @tests src/yuleosh/api/dashboard.py
 # Copyright (c) 2026 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 

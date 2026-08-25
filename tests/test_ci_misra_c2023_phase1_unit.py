@@ -10,6 +10,8 @@ Covers:
   - main(): missing rules file → SystemExit; dry-run completes
 """
 
+# @tests src/yuleosh/ci/run.py
+
 import json
 import os
 import subprocess

@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.cli — stats and template."""
+
+# @tests src/yuleosh/cli/main.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

@@ -8,6 +8,8 @@ Covers:
   - create_checkout_session: edge cases
 """
 
+# @tests src/yuleosh/usage/metering.py
+
 import json
 import os
 import sys

@@ -4,6 +4,8 @@ Tests basic import, class instantiation, and method invocation.
 No external dependencies — all I/O mocked.
 """
 
+# @tests src/yuleosh/adapter/dspace_adapter.py
+
 import os
 import sys
 import tempfile

@@ -2,6 +2,8 @@
 Extended tests for yuleosh.ui.auth_extended — push coverage ≥ 60%.
 """
 
+# @tests src/yuleosh/ui/
+
 import json
 import os
 import re

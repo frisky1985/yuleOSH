@@ -10,6 +10,8 @@ KB 使用真实 SQLite（tmp 库），demo_quick 的 10 个 step handler 全部 
 （不真跑管线、不碰网络、不执行子进程）。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import contextlib
 import os
 from pathlib import Path

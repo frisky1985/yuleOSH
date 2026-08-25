@@ -8,6 +8,8 @@ Covers:
     config get/set, list/delete semantics
 """
 
+# @tests src/yuleosh/tenant/model.py
+
 import json
 import os
 import sys

@@ -12,6 +12,8 @@ A1-A4: agent 约束按角色隔离 — agent_registry + llm 层隔离注入测�
   - 向后兼容（无 by_role 字段时走原 session.agent_constraints 路径）
 """
 
+# @tests src/yuleosh/agent_registry.py
+
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 

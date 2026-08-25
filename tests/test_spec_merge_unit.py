@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.spec.merge — pure Python, no external deps."""
 
+# @tests src/yuleosh/spec/merge.py
+
 import json
 import os
 import tempfile

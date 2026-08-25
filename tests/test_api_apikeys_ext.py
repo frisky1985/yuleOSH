@@ -1,5 +1,7 @@
 """Tests for api/apikeys.py — API key management endpoints."""
 
+# @tests src/yuleosh/api/apikeys.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.apikeys import (

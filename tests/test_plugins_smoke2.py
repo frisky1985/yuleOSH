@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.plugins — registry, sandbox, manager."""
+
+# @tests src/yuleosh/plugins/registry.py
 import os, sys, json, tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open

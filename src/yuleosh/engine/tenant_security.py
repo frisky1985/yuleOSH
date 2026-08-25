@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# @req CR-002
 log = logging.getLogger("engine.tenant_security")
 
 # 允许注入容器的凭据键（白名单，防误注入）

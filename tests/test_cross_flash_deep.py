@@ -1,5 +1,7 @@
 """Deep tests for cross.flash — FlashRunner, OpenOCDRunner, JLinkRunner, etc."""
 
+# @tests src/yuleosh/cross/sil_assert.py
+
 import time
 import pytest
 from unittest.mock import MagicMock, patch, mock_open

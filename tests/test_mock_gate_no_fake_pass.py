@@ -4,6 +4,8 @@
 - c_coverage_gate / merge_gate 在 mock 模式产出报告必须 passed=False + skipped=True，
   下游不得把 mock 产物当"门禁通过"证据。
 """
+
+# @tests src/yuleosh/ci/honesty_gate.py
 import json
 import pathlib
 from unittest.mock import MagicMock

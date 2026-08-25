@@ -15,6 +15,7 @@ from .middleware import require_auth
 from yuleosh.store import Store
 
 
+# @req NFR-004
 @require_auth
 def handle_stats(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to stats sub-resources."""

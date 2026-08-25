@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.spec.diff — CLI interface, no external deps."""
 
+# @tests src/yuleosh/spec/diff.py
+
 import pytest
 
 from yuleosh.spec.diff import (

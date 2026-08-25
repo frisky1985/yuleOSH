@@ -1,5 +1,7 @@
 """Deep tests for hardware.flasher — BaseFlasher, OpenOCDFlasher, JLinkFlasher, ESPToolFlasher."""
 
+# @tests src/yuleosh/hardware/flasher.py
+
 import os
 import sys
 import pytest

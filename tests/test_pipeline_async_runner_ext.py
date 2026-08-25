@@ -1,5 +1,7 @@
 """Tests for pipeline/async_runner.py — Async pipeline scheduler."""
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.pipeline.async_runner import (

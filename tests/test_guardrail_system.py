@@ -11,6 +11,8 @@
   B8 (3️⃣): PytestRunner / GoRunner 真实执行 + 结果解析
 """
 
+# @tests src/yuleosh/pipeline/guardrail.py
+
 import json
 import os
 import shutil

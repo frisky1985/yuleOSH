@@ -4,6 +4,8 @@
 验证 hit_type 来源标注、融合排序、单源失败降级。
 """
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import tempfile
 

@@ -3,6 +3,8 @@ Tests import and basic main() delegation.
 All external calls mocked.
 """
 
+# @tests src/yuleosh/_entry.py
+
 import os
 import sys
 from pathlib import Path

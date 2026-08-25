@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Optional
 import zipfile
 
+# @req RS-005
+
 log = logging.getLogger("evidence.collector")
 
 

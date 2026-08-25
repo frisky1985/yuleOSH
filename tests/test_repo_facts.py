@@ -5,6 +5,8 @@ ASIL 来源扩展 (yuleosh.yaml → project-context.md/README.md)、
 collect_repo_facts 快照结构、format_repo_facts 注入文本。
 """
 
+# @tests src/yuleosh/pipeline/repo_facts.py
+
 import json
 from pathlib import Path
 

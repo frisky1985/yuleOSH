@@ -1,5 +1,7 @@
 """Tests for yuleosh.preview.code_parser — file discovery and analysis."""
 
+# @tests src/yuleosh/preview/analyzer.py
+
 import tempfile
 from pathlib import Path
 import pytest

@@ -7,6 +7,8 @@ Covers the Change Proposal review step:
 - pending CP + LLM reject/needs-work → PipelineStepError (blocked)
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 from __future__ import annotations
 
 import json

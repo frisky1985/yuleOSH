@@ -1,5 +1,7 @@
 """Deep tests for hardware.monitor — SerialMonitor, _MockSerial."""
 
+# @tests src/yuleosh/hardware/monitor.py
+
 import threading
 import time
 import pytest

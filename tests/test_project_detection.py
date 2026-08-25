@@ -1,5 +1,7 @@
 """Tests for project_detection.py — .yuleosh.yaml auto-detection."""
 
+# @tests src/yuleosh/project_detection.py
+
 import os
 import tempfile
 from pathlib import Path

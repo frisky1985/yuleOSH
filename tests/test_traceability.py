@@ -17,6 +17,8 @@ Tests:
   12. Traceability matrix serializes to JSON
 """
 
+# @tests src/yuleosh/alm/traceability.py
+
 import json
 import os
 import shutil

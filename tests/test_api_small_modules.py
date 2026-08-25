@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @tests src/yuleosh/api/pipeline.py
 # Copyright (c) 2026 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 

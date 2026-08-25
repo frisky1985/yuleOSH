@@ -8,6 +8,8 @@
   5. B2-4: subprocess 模式 resume 从失败步续跑
 """
 
+# @tests src/yuleosh/agent_registry.py
+
 import json
 import os
 import sys

@@ -10,6 +10,8 @@ Covers the logs routes offline against a tmp_path-backed fake sessions tree
   - unknown sub-path -> 404
 """
 
+# @tests src/yuleosh/api/pipeline.py
+
 import json
 
 import pytest

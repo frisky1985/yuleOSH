@@ -1,5 +1,7 @@
 """Tests for api/project.py — Project CRUD endpoints."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.project import handle_project

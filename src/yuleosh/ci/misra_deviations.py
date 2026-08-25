@@ -19,6 +19,8 @@ Usage:
 
 from __future__ import annotations
 
+# @req RS-004
+
 import json
 import logging
 import os

@@ -1,5 +1,7 @@
 """Tests for api/__init__.py — Shared helpers and constants."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 from yuleosh.api import json_ok, json_error, read_body, OSH_HOME
 
 

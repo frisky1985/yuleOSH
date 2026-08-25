@@ -1,5 +1,7 @@
 """Tests for yuleosh.evidence.evidence_check — evidence bundle verification."""
 
+# @tests src/yuleosh/evidence/generator.py
+
 import json
 import hashlib
 from pathlib import Path

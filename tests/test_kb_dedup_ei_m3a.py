@@ -1,5 +1,7 @@
 """Tests for kb/store.py — write-time dedup + cleanup (EI-M3A)."""
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import tempfile
 

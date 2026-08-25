@@ -3,6 +3,8 @@
 Uses mocking for store and stripe dependencies.
 """
 
+# @tests src/yuleosh/usage/metering.py
+
 import copy
 import sys
 import os

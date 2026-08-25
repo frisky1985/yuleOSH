@@ -1,5 +1,7 @@
 """Tests for yuleosh.report.trend_exporter — trend data export."""
 
+# @tests src/yuleosh/report/
+
 import json
 import tempfile
 from pathlib import Path

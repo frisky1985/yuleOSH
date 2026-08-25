@@ -1,4 +1,6 @@
 
+
+# @req RS-004  @req SWR-004.1  @req SWR-003.2  @req NFR-006
 """
 yuleOSH CI Configuration — load and validate `.yuleosh/ci-config.yaml`.
 

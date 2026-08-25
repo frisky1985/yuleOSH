@@ -7,6 +7,8 @@ Covers:
   - generate_feishu_card_json full output
 """
 
+# @tests src/yuleosh/report/
+
 from __future__ import annotations
 
 import json

@@ -11,6 +11,8 @@ Covers:
   - get_org_by_stripe_subscription: lookup by sub ID
 """
 
+# @tests src/yuleosh/store.py
+
 import os
 import sys
 import tempfile

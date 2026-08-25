@@ -6,6 +6,8 @@ code coverage based on test infrastructure, density, and complexity.
 """
 
 
+
+# @req RS-013
 def _predict_coverage(test_density: float, test_framework: str,
                       complexity_score: float) -> dict:
     """Predict current and projected coverage (PREVIEW-REQ-004.1).

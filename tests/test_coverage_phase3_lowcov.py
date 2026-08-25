@@ -9,6 +9,8 @@ Target modules（低覆盖大户）:
 策略：mock handler 直测 dispatch 分支 + TenantStore 直测项目 CRUD。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 from pathlib import Path

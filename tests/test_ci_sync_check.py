@@ -1,4 +1,6 @@
 """Tests for ci/sync_check.py — Document Sync Gate (E05/E06)."""
+
+# @tests src/yuleosh/ci/run.py
 import tempfile
 import json
 from pathlib import Path

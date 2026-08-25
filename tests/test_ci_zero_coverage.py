@@ -4,6 +4,8 @@ Covers: agent_traceability, build_metadata, coverage_pipeline, coverage_trend,
         gcov_coverage, misra_fusion, misra_trend, profile, sync_check.
 """
 
+# @tests src/yuleosh/ci/run.py
+
 import json
 import os
 import sys

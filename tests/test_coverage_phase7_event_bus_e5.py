@@ -9,6 +9,8 @@ processed ids、recover_unconsumed 模拟崩溃窗口), 无真实时间/网络/s
 依赖 (事件 timestamp 全部显式传入)。仅允许新建本测试文件, 零 src/ 改动。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import logging
 import os

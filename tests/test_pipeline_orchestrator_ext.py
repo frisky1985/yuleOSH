@@ -1,5 +1,7 @@
 """Tests for pipeline/orchestrator.py — Pipeline orchestrator."""
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 import pathlib as _pathlib

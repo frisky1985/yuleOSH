@@ -1,5 +1,7 @@
 """Tests for yuleosh.report.exporter — CI report generation."""
 
+# @tests src/yuleosh/report/
+
 import json
 import tempfile
 from pathlib import Path

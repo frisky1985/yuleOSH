@@ -14,6 +14,8 @@ Target modules (Phase 6 baseline, 2026-08-09):
 风格：直测函数/分支，外部命令 mock，全部落在 tmp_path。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import os
 from pathlib import Path

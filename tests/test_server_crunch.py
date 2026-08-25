@@ -1,4 +1,6 @@
 """Additional tests to push coverage past 50% - targeting ui/server.py."""
+
+# @tests src/yuleosh/api/dashboard.py
 import os, sys, json, io
 from pathlib import Path
 from unittest.mock import patch, MagicMock, ANY

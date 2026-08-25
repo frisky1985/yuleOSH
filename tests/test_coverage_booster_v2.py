@@ -1,4 +1,6 @@
 """Coverage booster — fill gaps in core yuleOSH modules."""
+
+# @tests src/yuleosh/ci/coverage_pipeline.py
 import json
 import os
 import sys

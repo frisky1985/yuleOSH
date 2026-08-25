@@ -1,4 +1,6 @@
 """Deep execution tests for remaining uncovered modules - spec, testgen, skills."""
+
+# @tests src/yuleosh/pipeline/orchestrator.py
 import os, sys, re, tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open, PropertyMock, call

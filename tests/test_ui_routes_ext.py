@@ -3,6 +3,8 @@ Extended tests for yuleosh.ui.routes — push coverage ≥ 60%.
 Covers auth_routes, page_routes, and helpers.
 """
 
+# @tests src/yuleosh/ui/
+
 import json
 import os
 import sys

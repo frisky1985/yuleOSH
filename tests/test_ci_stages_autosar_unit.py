@@ -15,6 +15,8 @@ Covers:
   - STAGES_REGISTRY + register_autosar_stages()
 """
 
+# @tests src/yuleosh/ci/run.py
+
 import json
 import os
 import shutil

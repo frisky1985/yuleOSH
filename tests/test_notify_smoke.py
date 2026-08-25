@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.notify."""
+
+# @tests src/yuleosh/notify.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

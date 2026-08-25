@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.cross.target_config."""
+
+# @tests src/yuleosh/cross/target_config.py
 import sys
 from pathlib import Path
 # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src

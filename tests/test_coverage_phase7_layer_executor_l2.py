@@ -10,6 +10,8 @@ Targets (src/yuleosh/ci/layers/layer_executor.py L168-444):
 All subprocess/signal/git interactions are mocked; no real time deps.
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import os
 import signal
 import subprocess

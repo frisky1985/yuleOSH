@@ -1,5 +1,7 @@
 """Tests for OpenSpec directory mode in step_spec_check."""
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock

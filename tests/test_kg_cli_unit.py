@@ -14,6 +14,8 @@ Covers:
   - cmd_events / _cmd_events_listen / _cmd_events_history
 """
 
+# @tests src/yuleosh/knowledge_graph/store.py
+
 import os
 import sys
 import json

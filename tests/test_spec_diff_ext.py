@@ -1,5 +1,7 @@
 """Tests for spec/diff.py — Spec diff CLI and helpers."""
 
+# @tests src/yuleosh/spec/diff.py
+
 import pytest
 import json
 from unittest.mock import patch, MagicMock

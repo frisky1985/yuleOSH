@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
+# @req RS-013  @req SWR-013.1
+
 from yuleosh.preview.compliance_analyzer import _scan_risks
 
 # Supported file extensions for analysis (PREVIEW-REQ-002)

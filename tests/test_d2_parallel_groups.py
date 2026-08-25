@@ -9,6 +9,8 @@
   - thread-local step_key 隔离（并行 worker 的 _call_llm 用各自 step_key）
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import json
 import time
 from contextlib import ExitStack

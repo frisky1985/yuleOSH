@@ -5,6 +5,8 @@ Tests aspice_gap_check, _format_gap_markdown, _format_gap_json,
 _add_cli_hints, and the mock-controlled ComplianceChecker interaction.
 """
 
+# @tests src/yuleosh/evidence/generator.py
+
 import json
 import os
 import sys

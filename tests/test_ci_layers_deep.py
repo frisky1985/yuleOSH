@@ -1,5 +1,7 @@
 """Deep tests for yuleosh.ci.layers — CI layer orchestration."""
 
+# @tests src/yuleosh/ci/run.py
+
 import json
 import tempfile
 from pathlib import Path

@@ -11,6 +11,8 @@ Tests: traceability report「需求↔问题↔知识」闭环 (closure) 扩展�
   6. 未关联工单与 lessons 计入 orphan
 """
 
+# @tests src/yuleosh/alm/traceability.py
+
 import json
 import os
 import shutil

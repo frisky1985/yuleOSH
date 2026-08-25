@@ -13,6 +13,8 @@ returns a fake instance):
   - unknown sub-path -> 404
 """
 
+# @tests src/yuleosh/api/device_ui.py
+
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -10,6 +10,8 @@ Tests cover:
   - Unknown template fallback
 """
 
+# @tests src/yuleosh/evidence/oem_templates.py
+
 import csv
 import io
 import json

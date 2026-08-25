@@ -1,5 +1,7 @@
 """Tests for evidence/oem_templates.py — OEM traceability matrix export."""
 
+# @tests src/yuleosh/evidence/generator.py
+
 import json
 import tempfile
 from pathlib import Path

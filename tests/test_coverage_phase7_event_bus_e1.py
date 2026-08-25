@@ -14,6 +14,8 @@ Target (src/yuleosh/loop_engine/event_bus.py):
   - 无网络 / 时间依赖（时间戳断言只验格式与存在性），无 multiprocessing。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import sys
 import uuid
 from datetime import UTC, datetime

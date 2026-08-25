@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.spec.validate — spec parser and validator."""
+
+# @tests src/yuleosh/spec/validate.py
 import os, sys, re
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open

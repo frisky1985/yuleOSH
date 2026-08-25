@@ -7,6 +7,8 @@
 - async_runner org_id 传递 + _record_pipeline_usage（org_id=0 跳过）
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import os
 from unittest import mock

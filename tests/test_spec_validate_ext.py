@@ -1,5 +1,7 @@
 """Tests for spec/validate.py — OpenSpec parser, validator, diff engine."""
 
+# @tests src/yuleosh/spec/validate.py
+
 import pytest
 import json
 import tempfile

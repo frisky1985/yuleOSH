@@ -1,5 +1,7 @@
 """Extended tests for evidence.collection — targeting uncovered paths."""
 
+# @tests src/yuleosh/evidence/generator.py
+
 import sys
 import os
 import json

@@ -5,6 +5,8 @@ Tests import, class instantiation, and basic method invocation.
 No external dependencies — all filesystem/hardware calls mocked.
 """
 
+# @tests src/yuleosh/cross/sil_assert.py
+
 import io
 import os
 import sys

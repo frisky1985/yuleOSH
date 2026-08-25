@@ -1,5 +1,7 @@
 """Tests for yuleosh.preview.score_engine — pure function coverage."""
 
+# @tests src/yuleosh/preview/analyzer.py
+
 import json
 import tempfile
 from pathlib import Path

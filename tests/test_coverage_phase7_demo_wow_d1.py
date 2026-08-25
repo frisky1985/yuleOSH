@@ -14,6 +14,8 @@
 模板补丁，并新增 test_create_project_src_include_uses_real_header_name 回归断言。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 from datetime import datetime
 from pathlib import Path
 

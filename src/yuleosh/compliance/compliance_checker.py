@@ -14,6 +14,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Optional
 
+# @req CR-005  @req FSR-001
+
 # Path to the ASPICE v3.1 definition YAML
 _DEFAULT_TEMPLATE = Path(__file__).resolve().parent / "aspice_v3.1.yaml"
 

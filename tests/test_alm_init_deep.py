@@ -11,6 +11,8 @@ Covers:
   - Edge cases: unknown adapter, case-insensitive registry
 """
 
+# @tests src/yuleosh/alm/traceability.py
+
 import os
 import sys
 from unittest import mock

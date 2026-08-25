@@ -12,6 +12,8 @@
   8. 集成：session_factory + HandlerAdapter run 全绿
 """
 
+# @tests src/yuleosh/pipeline/session.py
+
 from pathlib import Path
 from types import SimpleNamespace
 

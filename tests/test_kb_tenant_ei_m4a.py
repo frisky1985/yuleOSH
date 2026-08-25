@@ -1,5 +1,7 @@
 """Tests for tenant-scoped KB search (EI-M4A) — SQL-layer org isolation."""
 
+# @tests src/yuleosh/kb/store.py
+
 import os
 import tempfile
 

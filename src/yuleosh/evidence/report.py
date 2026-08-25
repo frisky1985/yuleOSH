@@ -7,6 +7,8 @@ reports, acceptance matrices, and review logs into Markdown and JSON.
 
 from datetime import datetime
 
+# @req RS-005
+
 
 def format_maturity_label(score: int) -> str:
     """Convert a maturity score (0-100) into a human-readable label."""

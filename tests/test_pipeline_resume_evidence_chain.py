@@ -16,6 +16,8 @@ r21q resume 证据链修复 — RED→GREEN 回归测试。
 不截断尾部契约 (评审看得见全量 test-plan)。
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import json
 import os
 from pathlib import Path

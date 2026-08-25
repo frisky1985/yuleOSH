@@ -12,6 +12,8 @@
     （仅 remove_from_whitelist 会 discard），故直接操作私有属性做白盒分支覆盖。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import hashlib
 import hmac
 

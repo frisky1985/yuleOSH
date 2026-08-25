@@ -16,6 +16,8 @@ Target functions (src/yuleosh/ci/layers/layer_executor.py):
   - 无网络 / 时间依赖，无 multiprocessing。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import subprocess
 from unittest import mock
 

@@ -5,6 +5,8 @@ Covers TG-REQ-001 through TG-REQ-006, DEMO-REQ-002 through DEMO-REQ-006,
 and PREVIEW-REQ-001 through PREVIEW-REQ-005.
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import json
 import os
 import sys

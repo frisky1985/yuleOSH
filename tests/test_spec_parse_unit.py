@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.spec.validate parse_spec — pure Python, no external deps."""
 
+# @tests src/yuleosh/spec/validate.py
+
 import tempfile
 import os
 

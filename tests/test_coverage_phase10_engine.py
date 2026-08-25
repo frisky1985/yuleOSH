@@ -10,6 +10,8 @@
 隔离约定: tmp_path / monkeypatch，无 sys-path 注入，无 YULEOSH_JWT_SECRET 干预。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 from __future__ import annotations
 
 import json

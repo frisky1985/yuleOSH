@@ -8,6 +8,8 @@ Target modules (2026-08-09 baseline):
 风格：直测函数/分支，外部命令 mock，全部落在 tmp_path。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import subprocess
 from pathlib import Path

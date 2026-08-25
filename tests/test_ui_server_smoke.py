@@ -3,6 +3,8 @@ Checks import, class instantiation, and basic helpers.
 All external calls mocked.
 """
 
+# @tests src/yuleosh/ui/
+
 import json
 import os
 import sys

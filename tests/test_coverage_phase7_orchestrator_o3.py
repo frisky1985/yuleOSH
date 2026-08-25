@@ -17,6 +17,8 @@
 mock.patch 注入；Store / notify 副作用在 autouse fixture 中屏蔽。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import builtins
 import json
 from contextlib import ExitStack

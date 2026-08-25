@@ -6,6 +6,8 @@ missing must be INVALID (not silently skipped); artifacts packed without a
 stored SHA-256 must surface as a warning (not silently skipped).
 """
 
+# @tests src/yuleosh/evidence/generator.py
+
 import hashlib
 import json
 

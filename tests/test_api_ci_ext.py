@@ -1,5 +1,7 @@
 """Tests for api/ci.py — CI endpoints."""
 
+# @tests src/yuleosh/api/ci.py
+
 from unittest.mock import patch, MagicMock
 from yuleosh.api.ci import handle_ci, _run_ci_layer
 

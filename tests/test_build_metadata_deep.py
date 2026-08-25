@@ -1,5 +1,7 @@
 """Deep tests for yuleosh.ci.build_metadata."""
 
+# @tests src/yuleosh/ci/build_metadata.py
+
 import json
 import tempfile
 from pathlib import Path

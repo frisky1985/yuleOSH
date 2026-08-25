@@ -6,6 +6,8 @@
 扫描 <project_root>/src/**/include 加入 -I。
 """
 
+# @tests src/yuleosh/codegen/engine.py
+
 import shutil
 import subprocess
 from pathlib import Path

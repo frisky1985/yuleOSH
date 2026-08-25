@@ -14,6 +14,8 @@ Covers:
     入审计链；失败调用 / audit_ai=False 不写
 """
 
+# @tests src/yuleosh/audit/model.py
+
 import json
 
 import pytest

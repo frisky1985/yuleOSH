@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 
+# @req RS-012 @req SWR-012.2
 DEMO_SPEC_TEMPLATE = """# {spec_title}
 
 > Version: 1.0.0-demo | Generated: {timestamp}

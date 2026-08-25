@@ -9,6 +9,8 @@ Covers:
   - get_summary(): aggregation by action
 """
 
+# @tests src/yuleosh/audit/model.py
+
 import json
 import os
 import sys

@@ -9,6 +9,8 @@ Patches target lazy-import binding sites; OSH_HOME patched via
 monkeypatch.setattr(main_module, "OSH_HOME", ...).
 """
 
+# @tests src/yuleosh/cli/main.py
+
 import json
 import os
 import sys

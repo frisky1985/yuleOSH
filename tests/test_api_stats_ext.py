@@ -1,5 +1,7 @@
 """Tests for api/stats.py — Usage statistics endpoints."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.stats import handle_stats, _overview, _trends

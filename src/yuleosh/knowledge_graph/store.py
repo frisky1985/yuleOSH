@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-015  @req KG-001
 # Copyright (c) 2025 frisky1985
 """
 Knowledge Graph Store — SQLite-backed persistent store for nodes and edges.

@@ -14,6 +14,8 @@
 固定时钟、所有外部调用打桩）；文件系统仅用 pytest tmp_path 真实落盘。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import os
 from contextlib import contextmanager
 from datetime import datetime

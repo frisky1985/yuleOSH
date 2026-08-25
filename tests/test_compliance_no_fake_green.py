@@ -4,6 +4,8 @@
 - T3: KG total_covers>0 不再即通过（需 >=3 边 + 测试文件）
 - T4: 无 SHALL 语句的需求文档不再算通过（_srs_has_shall_statements 接线）
 """
+
+# @tests src/yuleosh/compliance/compliance_checker.py
 import json
 import pathlib
 from unittest.mock import MagicMock, patch

@@ -8,6 +8,8 @@ from the sub-modules (generator, compliance, report, analysis).
 from yuleosh.evidence.generator import EvidenceCollector
 from yuleosh.evidence.compliance import pack_compliance_zip, _check_pipeline_not_running
 from yuleosh.evidence.analysis import (
+
+# @req RS-005
     parse_scenario_refs,
     parse_module_covers,
     parse_comment_covers,

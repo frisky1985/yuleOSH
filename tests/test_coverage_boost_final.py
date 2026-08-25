@@ -1,4 +1,6 @@
 """Final coverage booster — executing function bodies in uncovered modules."""
+
+# @tests src/yuleosh/ci/coverage_pipeline.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

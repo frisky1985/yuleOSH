@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.plan.models — pure Python, no external deps."""
 
+# @tests src/yuleosh/plan/
+
 import pytest
 
 from yuleosh.plan.models import (

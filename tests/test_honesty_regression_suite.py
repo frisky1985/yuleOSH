@@ -11,6 +11,8 @@
 已有单测覆盖的用例（H2/H5/H6/H7）直接引用既有测试文件，不在本套件重复实现
 （见各自 docstring 的 reference）。
 """
+
+# @tests src/yuleosh/ci/honesty_gate.py
 import json
 import pathlib
 import subprocess

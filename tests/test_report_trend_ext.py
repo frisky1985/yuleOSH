@@ -10,6 +10,8 @@ Covers:
   - CLI main()
 """
 
+# @tests src/yuleosh/report/
+
 from __future__ import annotations
 
 import json

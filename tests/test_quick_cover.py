@@ -1,4 +1,6 @@
 """Quick coverage booster — hitting remaining uncovered module bodies."""
+
+# @tests src/yuleosh/ci/coverage_pipeline.py
 import os, sys, tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open, call

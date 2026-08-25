@@ -1,4 +1,6 @@
 """Additional smoke tests for yuleosh.api coverage — hitting more lines."""
+
+# @tests src/yuleosh/api/pipeline.py
 import os, sys, json
 from pathlib import Path
 from unittest.mock import patch, MagicMock, PropertyMock, ANY

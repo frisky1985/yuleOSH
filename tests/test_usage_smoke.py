@@ -1,4 +1,6 @@
 """Smoke tests for yuleosh.usage — metering and stripe."""
+
+# @tests src/yuleosh/usage/metering.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

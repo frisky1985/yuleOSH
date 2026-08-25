@@ -4,6 +4,8 @@ Tests basic import, function existence, and core helpers.
 No external dependencies: all store/sys calls are mocked.
 """
 
+# @tests src/yuleosh/api/pipeline.py
+
 import json
 import os
 import sys

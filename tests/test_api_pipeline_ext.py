@@ -1,5 +1,7 @@
 """Tests for api/pipeline.py — Pipeline endpoints."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.pipeline import (

@@ -1,5 +1,7 @@
 """Deep tests for cross.sil_runner — QemuSilRunner, SilResult, parse_qemu_version."""
 
+# @tests src/yuleosh/sil/adapter.py
+
 import os
 import time
 import pytest

@@ -1,4 +1,6 @@
 """Smoke tests for review/ module — run, c_review, resource_predictor."""
+
+# @tests src/yuleosh/review/run.py
 import pytest
 from unittest.mock import MagicMock, patch, mock_open
 import json

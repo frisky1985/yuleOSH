@@ -9,6 +9,8 @@ Covers the 安全可审计 (security & auditability) feature (2026-08-07):
   - cross-day files are verified sequentially with a continuing chain
 """
 
+# @tests src/yuleosh/audit/model.py
+
 import json
 from pathlib import Path
 

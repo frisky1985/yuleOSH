@@ -2,6 +2,8 @@
 
 Uses mock sockets to exercise OSHHandler do_GET/do_POST/do_DELETE/do_OPTIONS.
 """
+
+# @tests src/yuleosh/ui/
 import io
 import json
 import os

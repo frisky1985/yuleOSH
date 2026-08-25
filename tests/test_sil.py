@@ -6,6 +6,8 @@ Uses mocking to verify the adapter and integration layer without needing
 a real SIL Kit runtime.
 """
 
+# @tests src/yuleosh/sil/adapter.py
+
 from __future__ import annotations
 
 from typing import Any, Dict

@@ -11,6 +11,8 @@ Covers the dashboard-v2 routes offline:
   - 指标加载器: misra jsonl / traceability manifest 三形态 / evidence manifest
 """
 
+# @tests src/yuleosh/api/dashboard.py
+
 import json
 
 import pytest

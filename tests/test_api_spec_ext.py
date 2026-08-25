@@ -1,5 +1,7 @@
 """Tests for api/spec.py — Spec validate/diff endpoints."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.spec import handle_spec

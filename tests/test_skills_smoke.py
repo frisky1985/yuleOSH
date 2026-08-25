@@ -1,4 +1,6 @@
 """Smoke tests for skills/__init__.py — SkillManifest, SkillManager, Workflow."""
+
+# @tests src/yuleosh/skills/registry.py
 import pytest
 from unittest.mock import MagicMock, patch
 import json

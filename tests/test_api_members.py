@@ -8,6 +8,8 @@ Covers, offline against a REAL seeded SQLite store:
   - org-missing → 403 fail-closed, auth-required → 401
 """
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 
 from yuleosh.api import members as M

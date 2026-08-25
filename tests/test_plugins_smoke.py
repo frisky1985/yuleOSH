@@ -1,4 +1,6 @@
 """Smoke tests for plugins/ module — registry, sandbox, and __init__ exports."""
+
+# @tests src/yuleosh/plugins/registry.py
 import pytest
 from unittest.mock import MagicMock, patch, mock_open
 import json

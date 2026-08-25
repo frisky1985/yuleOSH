@@ -1,5 +1,7 @@
 """Deep tests for cross.hil_runner — HilTestRunner, HilTestResult."""
 
+# @tests src/yuleosh/cross/hil_runner.py
+
 import time
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock

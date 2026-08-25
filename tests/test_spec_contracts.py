@@ -5,6 +5,8 @@
 步骤确定性校验 + codegen prompt 全量注入.
 """
 
+# @tests src/yuleosh/spec/validate.py
+
 import json
 import os
 import subprocess

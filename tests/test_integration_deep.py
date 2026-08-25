@@ -1,5 +1,7 @@
 """Deep tests for hardware.integration — HardwareStep, StepResult."""
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import pytest
 from unittest.mock import MagicMock, patch, mock_open
 

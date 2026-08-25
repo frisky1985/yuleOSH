@@ -4,6 +4,8 @@ Phase 0 Coverage Boost — Tests for previously omitted modules.
 Focuses on pure-logic, testable modules with correct API signatures.
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import os
 import sys
 import json

@@ -11,6 +11,8 @@ Covers:
     lifecycle (_activate/_renew/_downgrade), get/cancel subscription
 """
 
+# @tests src/yuleosh/billing/metering.py
+
 import json
 import os
 import sys

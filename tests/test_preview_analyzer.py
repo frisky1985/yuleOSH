@@ -5,6 +5,8 @@ Covers: language detection, documentation quality, effort estimation,
 maturity rating, per-file complexity, nesting depth, and new risk checks.
 """
 
+# @tests src/yuleosh/preview/analyzer.py
+
 import sys
 import tempfile
 from pathlib import Path

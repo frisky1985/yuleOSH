@@ -6,6 +6,8 @@
 - L1 走 delta / L2 走 full 的接线
 - 增量模式正确性：只扫相关集，不退化回全量
 """
+
+# @tests src/yuleosh/ci/misra_fusion.py
 import os
 import subprocess
 import sys

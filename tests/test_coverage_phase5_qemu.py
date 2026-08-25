@@ -12,6 +12,8 @@ Target modules (2026-08-09 baseline):
 检测分支从不生效。已修产品代码（小写比较），见源码注释根因。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import os
 import subprocess

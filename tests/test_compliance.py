@@ -10,6 +10,8 @@ Covers:
 - Edge cases: empty project, missing files, custom templates
 """
 
+# @tests src/yuleosh/compliance/compliance_checker.py
+
 import json
 import os
 import sys

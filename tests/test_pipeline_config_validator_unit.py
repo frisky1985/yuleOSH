@@ -9,6 +9,8 @@ Covers:
   - cli_validate(): file-not-found / read-error / valid / invalid exits
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import json
 import os
 import sys

@@ -6,6 +6,8 @@ based on detected frameworks, complexity, and risk findings.
 """
 
 
+
+# @req RS-013
 def _recommend_template(frameworks: list, complexity: dict, risks: list) -> dict:
     """Recommend a pipeline template based on analysis (PREVIEW-REQ-004.3)."""
     framework_names = [f["name"] for f in frameworks]

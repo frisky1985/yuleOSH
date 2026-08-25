@@ -1,5 +1,7 @@
 """Tests for api/middleware.py — JWT auth middleware."""
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.middleware import (

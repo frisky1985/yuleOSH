@@ -31,6 +31,8 @@ All subprocess/network/tooling interactions are mocked; no real
 subprocesses, no multiprocessing, no time-dependent logic.
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import builtins
 import json
 import os

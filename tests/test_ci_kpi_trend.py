@@ -1,4 +1,6 @@
 """Tests for ci/kpi/trend.py."""
+
+# @tests src/yuleosh/ci/run.py
 import json
 import tempfile
 from pathlib import Path

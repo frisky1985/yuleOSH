@@ -1,5 +1,7 @@
 """EI-M1B.5 隔离验收 — 两项目不同依赖并行互不污染。"""
 
+# @tests src/yuleosh/project_detection.py
+
 import subprocess
 
 from yuleosh.engine.project_venv import ensure_venv, install_dependencies

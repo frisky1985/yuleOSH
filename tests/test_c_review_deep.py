@@ -1,5 +1,7 @@
 """Deep tests for yuleosh.review.c_review — embedded C code review."""
 
+# @tests src/yuleosh/review/c_review.py
+
 from unittest import mock
 import json
 import tempfile

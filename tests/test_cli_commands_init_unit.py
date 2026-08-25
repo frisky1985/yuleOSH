@@ -10,6 +10,8 @@ Covers:
   - Successful copy without template.json (no metadata)
 """
 
+# @tests src/yuleosh/cli/main.py
+
 import json
 import os
 import sys

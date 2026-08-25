@@ -21,6 +21,8 @@ B1-4（resume 续跑）:
     另一 worker 未落地时自动 skip，落地后自动点亮。
 """
 
+# @tests src/yuleosh/agent_registry.py
+
 import inspect
 import json
 import os

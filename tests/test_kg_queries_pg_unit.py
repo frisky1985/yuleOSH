@@ -11,6 +11,8 @@ PostgreSQL required — offline-safe):
   - get_confirmation_trace (dict-row and tuple-row cursors)
 """
 
+# @tests src/yuleosh/knowledge_graph/store.py
+
 import sys
 import os
 from unittest.mock import MagicMock

@@ -1,5 +1,7 @@
 """Tests for api/compliance.py — Compliance overview API."""
 
+# @tests src/yuleosh/api/compliance.py
+
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock

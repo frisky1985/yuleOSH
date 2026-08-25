@@ -7,6 +7,8 @@ Covers:
   C2: build_prd_prompt existing_headers injection + priority discipline
 """
 
+# @tests src/yuleosh/pipeline/step_handlers/review_prd.py
+
 import sys
 from pathlib import Path
 

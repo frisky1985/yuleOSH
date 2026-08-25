@@ -6,6 +6,8 @@ used in src/yuleosh/cli/main.py. Module-level imports are rare; most are
 per-function inline imports.
 """
 
+# @tests src/yuleosh/cli/main.py
+
 import json
 import os
 import sys

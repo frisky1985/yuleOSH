@@ -12,6 +12,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+# @req RS-005
+
 from yuleosh.evidence.analysis import categorize_uncovered
 
 log = logging.getLogger("evidence.report_builder")

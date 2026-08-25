@@ -4,6 +4,8 @@ in compliance.py (generate_evidence), report.py (template utilities),
 and uncovered paths in generator.py (pipeline waiting, error paths).
 """
 
+# @tests src/yuleosh/evidence/generator.py
+
 import json
 import os
 import sys

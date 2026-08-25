@@ -4,6 +4,8 @@ This test should be the single fastest win for coverage — every module init
 line that gets hit is free coverage.
 """
 
+# @tests src/yuleosh/__init__.py
+
 import os, sys
 # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 

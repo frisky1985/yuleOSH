@@ -8,6 +8,8 @@
 无 subprocess/网络/multiprocessing。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import json
 import logging
 from datetime import UTC, datetime

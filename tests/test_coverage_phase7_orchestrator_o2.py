@@ -19,6 +19,8 @@ Error paths are exercised with real filesystem objects (a directory named
 ScannerError in yaml.safe_load) — no mocks needed.
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 from yuleosh.pipeline.orchestrator import (
     _DEFAULT_AGENT_SPEC,
     _mock_llm_client,

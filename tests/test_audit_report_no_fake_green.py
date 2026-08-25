@@ -4,6 +4,8 @@
 - T1: 空对象 {"type":..,"status":"passed"} 不再让维度绿（需实质内容）
 - T2: 实质内容证据仍正常通过（不误杀）
 """
+
+# @tests src/yuleosh/audit/model.py
 import json
 import pathlib
 

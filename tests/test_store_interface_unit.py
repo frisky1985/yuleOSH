@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.store_interface — pure Python interface definitions."""
 
+# @tests src/yuleosh/store.py
+
 import pytest
 from yuleosh.store_interface import (
     AbstractStore,

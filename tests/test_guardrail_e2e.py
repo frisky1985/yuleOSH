@@ -11,6 +11,8 @@
 「部署 → 门禁 → 回滚 → 复跑」链路, 不是 FakeRunner 模拟。
 """
 
+# @tests src/yuleosh/pipeline/guardrail.py
+
 import json
 import os
 import shutil

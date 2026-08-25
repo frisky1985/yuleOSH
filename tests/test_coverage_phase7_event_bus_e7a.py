@@ -22,6 +22,8 @@ Target (src/yuleosh/loop_engine/event_bus.py, SystemEventBus L1285-2261):
   - 无网络 / 真实时间依赖 / multiprocessing。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import hashlib
 import json
 import queue

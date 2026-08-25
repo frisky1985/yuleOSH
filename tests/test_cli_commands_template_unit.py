@@ -6,6 +6,8 @@ Covers:
   - cmd_ecu_template_list(): missing dir, populated dir
 """
 
+# @tests src/yuleosh/cli/main.py
+
 import json
 import os
 import sys

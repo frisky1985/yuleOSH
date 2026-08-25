@@ -20,6 +20,8 @@
   - 无网络 / 无 subprocess / 无 multiprocessing / 无真实时间依赖。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 from typing import ClassVar
 from unittest import mock
 

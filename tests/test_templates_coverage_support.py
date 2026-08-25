@@ -6,6 +6,8 @@ must respond to that flag (``--coverage`` instrumentation), otherwise no
 .gcno/.gcda files are produced and lcov fails with "produced no output".
 """
 
+# @tests src/yuleosh/templates/
+
 import shutil
 import subprocess
 from pathlib import Path

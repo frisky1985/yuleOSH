@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-001  @req SWR-001.1  @req FSR-002 @req NFR-001
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -31,9 +33,10 @@ from yuleosh.agent_registry import (
 
 log = logging.getLogger("pipeline.orchestrator")
 
-# ── D2 并行组 (2026-08-19, 老板拍板方案 A) ─────────────────────────────
-# 组内步骤互不依赖（依赖图逐条源码核实, 见 docs/planning/d2-parallel-
-# brainstorm-2026-08-19.md）→ 并发执行; 组间保持 PIPELINE_STEPS 顺序。
+# ── D2 并行组 (ADR-002: Pipeline Parallel Groups, 方案 A) ──────────────────
+# 详见 docs/adr/ADR-002-pipeline-parallel-groups.md
+# 组内步骤互不依赖（依赖图见 docs/planning/d2-parallel-brainstorm-2026-08-19.md）
+# → 并发执行; 组间保持 PIPELINE_STEPS 顺序。
 # 门禁语义不变: 组内任一 block → 整组等待结束后中断; 任一 failed →
 # 整组等待结束后中断（与 verify-loop 合并语义一致）。
 #

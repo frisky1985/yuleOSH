@@ -4,6 +4,8 @@ Tests import, class instantiation, and basic method invocation.
 No external dependencies — all subprocess/serial calls mocked.
 """
 
+# @tests src/yuleosh/hardware/
+
 import os
 import sys
 import json

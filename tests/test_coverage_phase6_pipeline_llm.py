@@ -12,6 +12,8 @@ Target modules (Phase 6 baseline, 2026-08-10):
 异步入口统一用 ``asyncio.run`` 包一层，不依赖 pytest-asyncio 的全局模式。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import asyncio
 import json
 import os

@@ -10,6 +10,8 @@ Tests cover:
 - Edge cases: empty graph, no changes, all errors, all pass
 """
 
+# @tests src/yuleosh/knowledge_graph/merge_gate.py
+
 import json
 import os
 from unittest.mock import MagicMock, patch

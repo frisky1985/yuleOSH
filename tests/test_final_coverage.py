@@ -1,4 +1,6 @@
 """Targeted tests for modules with largest remaining uncovered lines."""
+
+# @tests src/yuleosh/ci/coverage_pipeline.py
 import os, sys, tempfile, json
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open

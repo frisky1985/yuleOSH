@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.spec.version — pure Python, no external deps."""
 
+# @tests src/yuleosh/spec/version.py
+
 import json
 import os
 import tempfile

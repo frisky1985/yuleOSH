@@ -1,5 +1,7 @@
 """Tests for engine/runner_spec.py — K8s runner Job spec (EI-M2C)."""
 
+# @tests src/yuleosh/pipeline/run.py
+
 import pytest
 
 from yuleosh.engine.runner_spec import RunnerSpec, quota_manifest

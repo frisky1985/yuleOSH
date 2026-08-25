@@ -8,6 +8,8 @@ SIL Kit output into structured Pipeline reports.
 
 from __future__ import annotations
 
+# @req RS-008  @req SWR-008.1  @req RS-010 @req SWR-008.3
+
 import logging
 from dataclasses import dataclass, field
 from enum import Enum, auto

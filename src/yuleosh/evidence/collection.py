@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# @req RS-005
+
 # JSON Schema for session.json validation
 # Covers both pipeline session.json and review-session.json formats.
 SESSION_JSON_SCHEMA = {

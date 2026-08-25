@@ -12,6 +12,8 @@ Covers:
   - Internal helpers: _extract_keywords, _find_code_by_keywords, _find_step_handlers_for_requirement
 """
 
+# @tests src/yuleosh/alm/traceability.py
+
 import json
 import os
 import sys

@@ -1,4 +1,6 @@
 """Targeted execution tests for spec, testgen, skills, store_pg modules."""
+
+# @tests src/yuleosh/pipeline/orchestrator.py
 import os, sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open

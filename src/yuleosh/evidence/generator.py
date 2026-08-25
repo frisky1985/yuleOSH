@@ -15,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# @req RS-005
+
 from yuleosh.evidence.analysis import (
     parse_scenario_refs,
     parse_covers_from_file,

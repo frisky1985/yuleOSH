@@ -12,6 +12,8 @@ Target functions (src/yuleosh/pipeline/orchestrator.py):
   - 无 subprocess / 网络 / 时间依赖。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import logging
 
 from yuleosh.pipeline import orchestrator as orch

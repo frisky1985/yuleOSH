@@ -1,5 +1,7 @@
 """Tests for ci/kpi/kg_source.py — KG KPI data source."""
 
+# @tests src/yuleosh/ci/run.py
+
 import json
 import os
 import tempfile

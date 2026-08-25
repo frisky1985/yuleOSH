@@ -11,6 +11,8 @@ v3.12.x 遗留 7 失败修复 — 根因回归测试（sprint-contract-v312-fixe
 另含 fault-inject fixture 挂载语义验证（无 CMakeLists 时跳过构建不报错）。
 """
 
+# @tests src/yuleosh/ci/misra_fusion.py
+
 from __future__ import annotations
 
 import json

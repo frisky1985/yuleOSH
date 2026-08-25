@@ -10,6 +10,8 @@ OSH_HOME is patched via monkeypatch.setattr(main_module, "OSH_HOME", ...)
 where a function reads the module-level constant.
 """
 
+# @tests src/yuleosh/cli/main.py
+
 import json
 import os
 import sys

@@ -1,5 +1,7 @@
 """Deep tests for yuleosh.report.feishu_notifier — Feishu webhook notifications."""
 
+# @tests src/yuleosh/report/feishu_notifier.py
+
 from unittest import mock
 from urllib.error import URLError
 import pytest

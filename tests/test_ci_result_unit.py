@@ -1,5 +1,7 @@
 """Unit tests for yuleosh.ci.result — pure Python, no external deps."""
 
+# @tests src/yuleosh/ci/run.py
+
 import pytest
 from yuleosh.ci.result import CIResult
 

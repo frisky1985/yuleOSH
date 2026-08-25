@@ -3,6 +3,8 @@ Extended tests for yuleosh.report.feishu_notifier — _post_json,
 post_quality_card_to_feishu, _resolve_webhook_url, and CLI main().
 """
 
+# @tests src/yuleosh/report/feishu_notifier.py
+
 from __future__ import annotations
 
 import json

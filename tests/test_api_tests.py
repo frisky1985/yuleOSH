@@ -15,6 +15,8 @@ Test data is created in tmp_path which is pointed to via OSH_HOME
 (monkeypatched) — the same isolation pattern as test_api_dashboard_unit.
 """
 
+# @tests src/yuleosh/api/pipeline.py
+
 import json
 
 import pytest

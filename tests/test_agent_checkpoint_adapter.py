@@ -8,6 +8,8 @@
   5. CheckpointEngine 集成：适配层接入 run/resume 全绿，旧 no-arg 路径不碎
 """
 
+# @tests src/yuleosh/agent_registry.py
+
 import pytest
 
 from yuleosh.engine.checkpoint import CheckpointEngine, StepStatus

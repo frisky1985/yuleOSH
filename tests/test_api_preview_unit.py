@@ -13,6 +13,8 @@ Covers the AI Preview Assessment API offline:
   - handle_preview routing (POST/GET/DELETE + error paths)
 """
 
+# @tests src/yuleosh/api/pipeline.py
+
 import hashlib
 import io
 import os

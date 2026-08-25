@@ -11,6 +11,8 @@ Target modules (Phase 6 baseline, 2026-08-10, 均为 0.0%):
 JWT 装饰器通过 sanctioned bypass（current_user kwarg）穿透。
 """
 
+# @tests src/yuleosh/ci/coverage_pipeline.py
+
 import importlib
 import json
 import os

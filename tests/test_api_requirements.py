@@ -10,6 +10,8 @@ Covers, offline against tmp_path project dirs:
   - auth-required → 401
 """
 
+# @tests src/yuleosh/api/pipeline.py
+
 import pytest
 
 from yuleosh.api import requirements as R
