@@ -163,8 +163,11 @@ def scan_test_code_links(project_dir: Path) -> dict[str, dict]:
     if not tests_dir.exists():
         return {}
 
-    # Scan all Python test files
-    for test_file in sorted(tests_dir.rglob("test_*.py")):
+    # Scan all test files: Python (test_*.py) + C/C++ (test_*.c / test_*.cpp)
+    # C projects (e.g. AUTOSAR BSW) keep tests as .c files with @tests
+    # annotations in // comments. (fix 2026-08-25: yuleASR 271 test files)
+    test_files = sorted(tests_dir.rglob("test_*.py")) + sorted(tests_dir.rglob("test_*.c"))
+    for test_file in test_files:
         if not test_file.is_file():
             continue
         try:
