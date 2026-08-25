@@ -557,6 +557,12 @@ def scan_test_reports(project_dir: str) -> list[dict]:
                 continue
 
             if isinstance(data, dict):
+                # 相对路径与 scan_test_code_links 的 key 对齐 (fix 2026-08-25:
+                # 绝对路径永远无法匹配 test_code_links 相对路径 → tested_code 注入失效)
+                try:
+                    rel_file = str(test_file.relative_to(Path(project_dir)))
+                except ValueError:
+                    rel_file = str(test_file)
                 reports.append({
                     "session": session_dir.name,
                     "step": data.get("step", test_file.stem),
@@ -564,7 +570,7 @@ def scan_test_reports(project_dir: str) -> list[dict]:
                     "passed": data.get("passed", 0),
                     "failed": data.get("failed", 0),
                     "runner": data.get("test_runner", data.get("runner", "unknown")),
-                    "file": str(test_file),
+                    "file": rel_file,
                 })
 
     log.info("Found %d test reports", len(reports))
@@ -1299,7 +1305,7 @@ def _scan_test_pytest_files(project_dir: str, req_id: str) -> list[dict]:
     normalized_variants = {id_normalized, id_normalized.upper()}
     all_variants = variants | normalized_variants
 
-    for test_file in sorted(tests_dir.rglob("test_*.py")):
+    for test_file in sorted(tests_dir.rglob("test_*.py")) + sorted(tests_dir.rglob("test_*.c")):
         if not test_file.is_file():
             continue
         try:
@@ -1310,9 +1316,17 @@ def _scan_test_pytest_files(project_dir: str, req_id: str) -> list[dict]:
         found_match = any(variant in text for variant in all_variants)
 
         if found_match:
-            test_funcs = re.findall(r'def\s+(test_\w+|check_\w+)\(', text)
+            # Python: def test_xxx(); C/Unity: void test_xxx(void)
+            if test_file.suffix == ".py":
+                test_funcs = re.findall(r'def\s+(test_\w+|check_\w+)\(', text)
+            else:
+                test_funcs = re.findall(r'(?:void|int)\s+(test_\w+)\(', text)
+            try:
+                rel_file = str(test_file.relative_to(tests_dir.parent))
+            except ValueError:
+                rel_file = str(test_file)
             matching.append({
-                "file": str(test_file),
+                "file": rel_file,
                 "test_functions": test_funcs,
                 "test_count": len(test_funcs),
             })
