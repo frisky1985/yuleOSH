@@ -182,3 +182,6 @@ phase10
 /artifacts/
 /demos/
 /projects/
+frontend/incr_test
+frontend/test
+frontend/test_cs

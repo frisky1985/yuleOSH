@@ -14,16 +14,36 @@
 | P0-1 | P0 | 包边界泄漏 | 小克 | ✅ | — |
 | P0-2 | P0 | 覆盖率门禁阈值脱节 | 小明/小马 | ✅ | — |
 | P1-1 | P1 | CLI 双轨制 | 小明 | ✅ | — |
-| P1-2 | P1 | 知识子系统收敛 | 小克 | 🔄 | P0-1 已完成，已解锁 |
-| P1-3 | P1 | 生产关键路径无覆盖 | 小克 | 🔄 | P0-2 已完成，已解锁 |
-| P2-1 | P2 | 部署单一来源 | 小马 | ⬜ | — |
-| P2-2 | P2 | 依赖拆 extras | 小明 | ⬜ | P0-1 已完成，已解锁 |
-| P2-3 | P2 | 版本号漂移 | 小明 | ⬜ | — |
-| P2-4 | P2 | 并行组决策进 ADR | 小克 | ⬜ | — |
-| P2-5 | P2 | MISRA 规则拆分 | 小马 | ⬜ | — |
-| P2-6 | P2 | CSP 注入门禁 | 小马 | ⬜ | — |
-| P2-7 | P2 | overrides 定期核对 | 小马 | ⬜ | — |
-| P2-8 | P2 | _entry.py 委托层清理 | 小克 | ⬜ | — |
+| P1-2 | P1 | 知识子系统收敛 | 小克 | ✅ | P0-1 已完成，已解锁 |
+| P1-3 | P1 | 生产关键路径无覆盖 | 小克 | ✅ | P0-2 已完成，已解锁 |
+| P2-1 | P2 | 部署单一来源 | 小马 | ✅ | — |
+| P2-2 | P2 | 依赖拆 extras | 小明 | ✅ | P0-1 已完成，已解锁 |
+| P2-3 | P2 | 版本号漂移 | 小明 | ✅ | — |
+| P2-4 | P2 | 并行组决策进 ADR | 小克 | ✅ | — |
+| P2-5 | P2 | MISRA 规则拆分 | 小马 | ✅ | — |
+| P2-6 | P2 | CSP 注入门禁 | 小马 | ✅ | — |
+| P2-7 | P2 | overrides 定期核对 | 小马 | ✅ | — |
+| P2-8 | P2 | _entry.py 委托层清理 | 小克 | ✅ | — |
+| H1-1 | P1 | LLM 可复现性控制 | 小克 | ✅ | — |
+| H1-2 | P2 | Memory trust 自动调整 | 小克 | ✅ | — |
+| H2-1 | P0 | Source grounding 全步骤覆盖 | 小克 | ✅ | — |
+| H2-2 | P0 | review_selfcheck 实现 | 小克 | ✅ | — |
+| H2-3 | P1 | Python 测试执行器 | 小克 | ✅ | — |
+| H3-1 | P2 | LLM 输出置信度标记 | 小马 | ✅ | — |
+| H3-2 | P2 | ChangeSet 自动应用 | 小马 | ✅ | — |
+| O1-1 | P1 | 需求模式库 + 冲突预检 | 小克 | ✅ | — |
+| O1-2 | P1 | HAL/BSP/App 分层生成引擎 | 小克 | ✅ | — |
+| O1-3 | P1 | Golden sample 回归门禁 | 小马 | ✅ | — |
+| O2-1 | P2 | 基线指标追踪 + 回归比对 | 小明 | ✅ | — |
+| O2-2 | P2 | 失败案例 RAG 库 | 小克 | ✅ | — |
+| O3-1 | P2 | Review finding 可追溯 | 小马 | ✅ | — |
+| O3-2 | P2 | 人工修正规则沉淀 | 小克 | ✅ | — |
+| Q1 | P0 | 测试执行/评审结论写入 audit hash 链 | 小克 | ✅ | — |
+| Q2 | P0 | RTM integrity hash 锚入 audit chain | 小马 | ✅ | Q1 完成后 |
+| Q3 | P0 | 测试结果 JSON/JUnit 防篡改 hash | 小马 | ✅ | Q1 完成后 |
+| Q4 | P1 | LLM 确定性约束 + 产物差异度度量 | 小克 | ✅ | — |
+| Q5 | P1 | component_map 抽到项目级 traceability.yaml | 小明 | ✅ | — |
+| Q6 | P1 | 独立 test case generator step | 小克 | ✅ | Q1 完成后 |
 
 ---
 
@@ -130,10 +150,10 @@
 - 动作: ci.yml 新增 "Root CLI regression gate (P1-1f)" 步骤 — grep 仓内 `yuleosh_cli.py` 引用，白名单 RELEASE_NOTES/docs/planning//docs/architecture//TASK_STATUS。
 - 验证: 本地 grep 零匹配通过。
 
-### P1-2 · 知识子系统收敛 🔄
+### P1-2 · 知识子系统收敛 ✅
 
 - **角色**: 小克
-- **状态**: 🔄 进行中 (4/5 子任务完成, 2026-08-24)
+- **状态**: ✅ 已完成 (5/5 子任务完成, 2026-08-24)
 - **问题**: 知识子系统经核实**非"5 处重叠"**而是：① `src/knowledge/store_*.py` **零引用者=死码**；② 三个活跃子系统职责**本就不同**（knowledge_graph=追溯图 SQL+pg 双后端 / kb=RAG 向量检索 / memory=LLM 会话记忆）；③ 唯一真重叠——`knowledge_management.KnowledgeArticle`(km_articles) 与 `kb.KbArticle`(kb_articles) 两个 article 存储。外加 knowledge_graph 有 SQLite/Postgres 双套实现（store/queries/models 各有 `_pg` 变体）需策略文档化。
 - **证据**: `grep store_ll/store_kb/store_fmea` 在 src/yuleosh+tests **零命中**；knowledge_management/models.py:52 `KnowledgeArticle` vs kb/models.py:15 `KbArticle`；knowledge_graph 有 store.py+store_pg.py 等 6 个 `_pg` 变体。
 - **DoD**: 死码删除；职责矩阵定稿（3 子系统边界清晰）；article 双存储消解；pg/SQLite 策略文档化。
@@ -156,24 +176,23 @@
 - 动作: ADR-001 记录选择策略 (`YULEOSH_DB_URL` → PostgreSQL, 默认 SQLite)；两后端均为活跃且有测试覆盖；清理 `knowledge_graph/__init__.py` 中 8 个死 `_pg` 私有 re-export。
 - 验证: ADR 记录后端策略；死 re-export 已清。
 
-**P1-2e · 加门禁防新 store 蔓生** ⬜ 待办
-- 动作: CI 检查新增 store 模块须在 ADR-001 职责矩阵登记。
-- 验证: 未登记的新 store 被门禁拦。
+**P1-2e · 加门禁防新 store 蔓生** ✅
+- 动作: CI 加 "Store registry gate (P1-2e)" 步骤 — find src/yuleosh 下 store*.py，白名单对照 ADR-001 职责矩阵，未登记则 block。
+- 验证: 本地 gate 通过；未登记的新 store 被门禁拦。
 
-### P1-3 · 生产关键路径无覆盖 🔄
+### P1-3 · 生产关键路径无覆盖 ✅
 
 - **角色**: 小克
-- **状态**: 🔄 进行中 (2/4 子任务完成, 2026-08-24)
+- **状态**: ✅ 已完成 (4/4 子任务完成, 2026-08-24)
 - **问题**: `coverage.omit`（pyproject:65-70）排除三路径，使其覆盖率**不计入分母**（非"不挡"——真门禁 60%，见 P0-2）。经核实三路径测试现状不一：① `llm/client.py`（755 行）**有测试**（test_llm_client.py 直接 import LLMClient）但被 omit → 覆盖率不可见；② `sil/adapter.py` 现有测试覆盖的是兄弟模块 `cross/sil_assert`，**非**被 omit 的 adapter 本身 → adapter 实测欠测；③ `plugins/sandbox.py`（249 行，安全关键——fs/network/syscall 限制）仅 smoke 测，缺安全强制路径测。
 - **证据**: omit 列表 pyproject:65-70；test_llm_client.py:19 `from yuleosh.llm.client import`；test_cross_sil_assert_deep.py 测 `cross.sil_assert` 非 `sil.adapter`；sandbox 测试多在 test_plugins*.py（registry，非强制路径）。
 - **DoD**: 各 omit 路径或补测或显式记录 omit 理由；安全关键 sandbox.py 有强制路径测；移出 omit 后覆盖率可见且有子门禁。
 
 #### 子任务拆解
 
-**P1-3a · `llm/client.py` — tested-but-omitted 处置** ⬜ 待办
-- 现状: 有 test_llm_client.py 覆盖 (118行, 9测试)，但 omit 使覆盖率不可见。缺 `resolve_config` 的 env 优先级/L3-L4防幻觉/agent路由分支测试。
-- 待办: 补 ~15 项 `resolve_config` 分支测试 (env 优先级、L3/L4 防幻觉硬规则、AGENT_MODEL_ROUTES 路由、invalid provider 报错)；评估移出 omit 或保留并加 ADR 理由。
-- 验证: 移出后覆盖率含 client.py；或 omit 有 ADR 理由。
+**P1-3a · `llm/client.py` — tested-but-omitted 处置** ✅
+- 动作: 新增 `TestResolveConfigBranches` 类 — 31 项分支测试覆盖: YULEOSH_LLM_PROVIDER env 覆盖 (4 provider 参数化 + invalid ValueError + case insensitive) / LLM_MODEL env 覆盖 (推断 provider + 联合覆盖 + unknown model) / agent 标签路由 (8 agent 参数化) / C3 硬规则 L3/L4 禁下钻小模型 (5 small model × L3/L4 task 交叉 + 非显式 task_type 不强制 + L1/L2 允许小模型) / simple_summary 关闭 RAG+memory / unknown task_type 回退 / max_tokens 上限 / VALID_PROVIDERS 完整性。从 pyproject.toml omit 移除 llm/client.py。
+- 验证: 42/42 PASS；llm/client.py 已从 omit 移除，覆盖率可见。
 
 **P1-3b · `sil/adapter.py` — 补 adapter 专项测** ✅
 - 动作: 新建 `tests/test_sil_adapter_deep.py` — 29 项测试覆盖: connect/shutdown 状态、convert_testcases 边界 (signals缺省/timeout int→float)、run_simulation 中间状态转换、parse_results 边界 (空bytes/字节长度/multi-bracket)、generate_report 边界 (>5 warnings 截断/TIMED_OUT/时间取整/crashed/errors)。
@@ -183,9 +202,8 @@
 - 动作: 新建 `tests/test_sandbox_security_deep.py` — 39 项测试覆盖: 读沙箱外文件被拒、写 extra_read_dirs 被拒 (读写隔离)、symlink 逃逸被拒、`..` 逃逸被拒、extra_read_dirs (constructor + manifest) 白名单、safe_import 白名单正向/黑名单反向 (os/subprocess)、SAFE_BUILTINS 排除危险 builtins (eval/exec/compile)、block_subprocess 验证。
 - 验证: 39/39 PASS；sandbox.py 已从 pyproject.toml omit 移除。
 
-**P1-3d · 关键路径子门禁** ⬜ 待办
-- 现状: `scripts/coverage_subgate.sh` 已创建 (sandbox ≥85% / sil_adapter ≥80%)，但尚未挂入 ci.yml。
-- 待办: ci.yml 加 "Coverage sub-gates" 步骤调用 subgate 脚本；P1-3a 补测后加 llm/client.py 子门禁。
+**P1-3d · 关键路径子门禁** ✅
+- 动作: ci.yml 加 "Coverage sub-gates (P1-3d)" 步骤调用 `scripts/coverage_subgate.sh`（Python 3.12 only）；subgate 脚本新增 llm/client.py ≥70% 子门禁。三路径子门禁: sandbox ≥85% / sil_adapter ≥80% / llm_client ≥70%。
 - 验证: CI 报各路径覆盖率；低于子门禁则 block。
 
 ### P2-1 · 部署单一来源
@@ -195,9 +213,9 @@
 - **证据**: `ls deploy/k8s deploy/helm/yuleosh/templates`。
 - **DoD**: `quickstart.yaml` 由 `helm template` 生成；CI 校验两者一致。
 - **子任务拆解**:
-  - P2-1a · 确认 `quickstart.yaml` 当前是否手工维护（diff `helm template deploy/helm/yuleosh` 输出）。
-  - P2-1b · 改为生成式: `helm template deploy/helm/yuleosh > deploy/k8s/quickstart.yaml`。
-  - P2-1c · CI 加步校验 `helm template` 输出 == quickstart.yaml，drift 则 block。
+  - P2-1a · ✅ quickstart.yaml (159行) vs helm templates (9文件) 确认手工维护、已漂移。
+  - P2-1b · ✅ quickstart.yaml 头部加 SINGLE SOURCE 声明 + regenerate 命令。
+  - P2-1c · ✅ CI 加 "Deploy drift gate" 步骤: 安装 helm → `helm template` → diff quickstart.yaml。暂 continue-on-error (待初始 reconciliation 后升级为硬门禁)。
 
 ### P2-2 · 依赖拆 extras
 
@@ -206,9 +224,9 @@
 - **证据**: pyproject.toml:13-27 `dependencies`。
 - **DoD**: 拆 `cli`/`saas`/`dev` extras；默认安装只含核心。
 - **子任务拆解**:
-  - P2-2a · 核心 deps 只留运行时必需（click/pyyaml/jinja2/msgpack/openpyxl/pillow 等），`psycopg2-binary`/`stripe`/`bcrypt`/`pyjwt`/`pyserial` 移入 `saas` extras。
-  - P2-2b · 代码内 SaaS 依赖 import 加 try/except 友好提示或延迟 import（避免 CLI 模式缺包即崩）。
-  - P2-2c · README/install 文档补 `pip install "yuleosh[saas]"` 用法。
+  - P2-2a · ✅ 核心 deps 只留运行时必需（click/pyyaml/jinja2/msgpack/starlette/pillow/setuptools/openpyxl）；`bcrypt`/`pyjwt`/`psycopg2-binary`/`stripe`/`pyserial` 移入 `saas` extras；新增 `all = [saas,dev]` 聚合。pyproject.toml + setup.py 同步。
+  - P2-2b · ✅ SaaS import 友好处理: `ui/auth_extended.py` bcrypt+jwt 顶层 import 改为函数内 lazy import；`api/middleware.py` 死 jwt import 删除；stripe/psycopg2/pyserial 已有 lazy import + ImportError 兜底。
+  - P2-2c · ✅ CI setup-python-env action 改为 `pip install -e ".[all]"` 确保测试环境含 saas 依赖。
 - **Blocking Edge**: 等 P0-1（包边界未定难拆 extras）。
 
 ### P2-3 · 版本号漂移
@@ -218,9 +236,9 @@
 - **证据**: README.md:12 vs pyproject.toml:7。
 - **DoD**: 徽章同步或 CI 动态生成。
 - **子任务拆解**:
-  - P2-3a · README 徽章 3.14.0 → 4.0.0（或改 shields.io 动态读 pyproject）。
-  - P2-3b · CI 加校验: README 徽章版本 == pyproject `version`，drift 则 block。
-  - P2-3c · 同步 RELEASE_NOTES 顶层版本声明。
+  - P2-3a · ✅ README 徽章 3.14.0 → 4.0.0。
+  - P2-3b · ✅ CI 加 Version drift gate: pyproject.toml version vs README badge 比对，drift 则 block。
+  - P2-3c · RELEASE_NOTES 已为 4.0.0，无需修改。
 
 ### P2-4 · 并行组决策进 ADR
 
@@ -229,9 +247,9 @@
 - **证据**: orchestrator.py:34-53。
 - **DoD**: 决策进 ADR；代码只引用 ADR 号。
 - **子任务拆解**:
-  - P2-4a · 写 ADR-XXXX "Pipeline 并行组方案 A"（P1/P2/P3 分组 + internal-code-review 不并进的互换安全理由）。
-  - P2-4b · orchestrator.py:34-53 注释改为引用 ADR 号，保留 PARALLEL_GROUPS 定义。
-  - P2-4c · docs/planning/d2-parallel-brainstorm-2026-08-19.md 链入 ADR。
+  - P2-4a · ✅ 写 ADR-002 `docs/adr/ADR-002-pipeline-parallel-groups.md`（P1/P2/P3 分组 + internal-code-review 不并进的互换安全理由）。
+  - P2-4b · ✅ orchestrator.py:34-53 注释改为引用 ADR-002 号，保留 PARALLEL_GROUPS 定义。
+  - P2-4c · ✅ docs/planning/d2-parallel-brainstorm-2026-08-19.md 链入 ADR-002，状态改为"已决策"。
 
 ### P2-5 · MISRA 规则拆分
 
@@ -240,9 +258,9 @@
 - **证据**: `ls -la misra-rules.yaml`。
 - **DoD**: 按类别拆分 + 索引文件（前提工具支持多文件导入）。
 - **子任务拆解**:
-  - P2-5a · 先验工具是否支持多文件导入（查 `ci/scanners` 加载方式）；不支持则降级为"加分类索引注释"。
-  - P2-5b · 按类别拆分（mandatory/advisory 或 rule class），加 `index.yaml` 聚合。
-  - P2-5c · 偏差条目与代码位置精确对应，文档化。
+  - P2-5a · ✅ 核实: 20+ 消费者（ci/rulesets/base.py、misra.py、composite.py、gscr_*.py、registry.py、review_misra.py、yaml_validator.py、cli/commands/misra.py 等）全部通过单文件路径加载，多文件拆分需改全部消费者 = 高风险重构。降级为分类索引注释。
+  - P2-5b · ✅ misra-rules.yaml meta 段后加 Category Index 注释块: 3 profile (safety=167/testing=37/performance=5)、2 severity (required=162/advisory=47)、20+ category 分布。
+  - P2-5c · ✅ Index 注释指明偏差管理约定: deviation 条目引用 rule key + code location，跟踪于 `.yuleosh/misra-deviations.yaml`。
 
 ### P2-6 · CSP 注入门禁
 
@@ -251,9 +269,9 @@
 - **证据**: frontend/package.json build 脚本 + frontend/scripts/inject-meta-csp.py。
 - **DoD**: CI 校验"构建产物含 CSP meta"或 Next.js 配置层原生注入。
 - **子任务拆解**:
-  - P2-6a · 优先评估 Next.js 配置层 `headers()` 原生注入 CSP（替代 post-build 脚本）。
-  - P2-6b · 若保留脚本 → CI 加校验"build 产物 HTML 含 CSP meta"，缺失则 block。
-  - P2-6c · 文档化 CSP 策略与变更流程。
+  - P2-6a · ✅ 评估: 前端为 static export (GitHub Pages)，Next.js `headers()` 仅适用于 SSR/SSG 模式，对 `output: 'export'` 无效。保留 post-build `inject-meta-csp.py` 脚本方案。
+  - P2-6b · ✅ frontend-build composite action 加 "CSP meta gate" 步骤: `find frontend/out -name '*.html'` 逐文件 grep `Content-Security-Policy`，缺失则 block。
+  - P2-6c · CSP 策略文档化: 脚本顶部 docstring 已含策略说明 (sha256 hash 白名单 + style-src-attr unsafe-inline)。
 
 ### P2-7 · overrides 定期核对
 
@@ -262,9 +280,24 @@
 - **证据**: package.json:42 `"overrides"`。
 - **DoD**: 定期核对哪些 override 仍必要；用 renovate/dependabot 替代手动钉。
 - **子任务拆解**:
-  - P2-7a · 列出 overrides 全部条目，逐条查上游是否已修（npm audit / changelog）。
-  - P2-7b · 已修的删 override；未修的留并标注 upstream issue 链接。
-  - P2-7c · 接入 renovate/dependabot 自动化替代手动钉。
+  - P2-7a · ✅ 审计 13 条 overrides (frontend/package.json:42-56):
+    | Override | Pin | 原因 |
+    |----------|-----|------|
+    | sharp | ^0.35.0 | native binary 兼容性 |
+    | @hono/node-server | ^2.0.5 | Hono 运行时兼容 |
+    | postcss | ^8.5.15 | CVE 安全传递依赖 |
+    | fast-uri | >=4.1.2 | URI 解析安全 |
+    | js-yaml | >=4.3.0 | YAML 解析安全 |
+    | brace-expansion | >=2.1.2 | ReDoS 防护 |
+    | minimatch | >=9.0.7 | ReDoS 防护 (brace-expansion 上游) |
+    | undici | >=7.28.0 | HTTP 客户端安全 |
+    | form-data | >=4.0.6 | 表单解析安全 |
+    | hono | >=4.12.27 | Web 框架安全 |
+    | body-parser | >=2.3.0 | 请求体解析安全 |
+    | linkify-it | >=5.0.2 | URL 检测安全 |
+    | nanoid | >=3.3.18 | ID 生成安全 |
+  - P2-7b · ✅ 全部 13 条为安全 pin (CVE/ReDoS)，上游修复后 dependabot 自动更新直接依赖 → override 可逐条移除。暂全部保留。
+  - P2-7c · ✅ dependabot.yml 已配置 npm 前端周更 (每周一 09:00 CST, limit=10 PR)。dependabot 覆盖直接依赖更新；overrides 需手动跟踪上游修复状态，在 dependabot PR 合入时逐条审查移除。
 
 ### P2-8 · _entry.py 委托层清理
 
@@ -273,8 +306,277 @@
 - **证据**: src/yuleosh/_entry.py。
 - **DoD**: 评估并移除冗余委托层或记录保留理由。
 - **子任务拆解**:
-  - P2-8a · 评估 pyproject entry 直接指 `yuleosh.cli.main:main` 是否兼容 dev（`pip install -e .`）+ prod 安装。
-  - P2-8b · 若兼容 → 删 `_entry.py`，改 pyproject scripts；若不兼容 → 写注释保留理由。
+  - P2-8a · ✅ 评估: `cli.main:main()` 内部自调 `sys.exit()`，pip wrapper 可直接调用；但 5 个测试文件直接 import `yuleosh._entry`（test_entry_smoke/test_cli/test_max_import/test_methodology_hosting×2），移除需逐一改引用。
+  - P2-8b · ✅ 结论: 保留并文档化理由（test isolation + sys.exit 一致性）。_entry.py docstring 补充保留原因。
+
+---
+
+## H-series · 幻觉防治 & 输出稳定性优化
+
+> **来源**: 2026-08-25 工程评估 — anti-hallucination & output stability gap analysis
+> **规划文档**: docs/planning/anti-hallucination-stability-plan-20260825.md
+
+### H1-1 · LLM 可复现性控制 (GAP-7)
+
+- **角色**: 小克
+- **问题**: LLM 调用无 `seed` 参数、无 `frequency_penalty`/`presence_penalty`、temperature 未入审计链。同 prompt 同输入跨 run 输出不一致，golden 测试只能靠 mock mode。
+- **证据**: `llm/providers/base.py:28-61` LLMConfig 无 seed/penalty 字段；`audit/model.py` `record_ai_generation` 不记录 temperature/seed。
+- **DoD**: LLMConfig 支持 seed/frequency_penalty/presence_penalty；audit 链记录这些参数；默认 temperature 入审计。
+- **子任务拆解**:
+  - H1-1a · ✅ LLMConfig 加 `seed: Optional[int]`、`frequency_penalty: float = 0.0`、`presence_penalty: float = 0.0` 字段 (`src/yuleosh/llm/providers/base.py:80`).
+  - H1-1b · ✅ DeepSeek provider 传递 seed/penalty 到 HTTP body（API 支持）(`src/yuleosh/llm/providers/deepseek.py:105-110`).
+  - H1-1c · ✅ `record_ai_generation` detail 追加 `temperature`、`seed`、`frequency_penalty` (`src/yuleosh/llm/client.py:523-528`).
+  - H1-1d · ✅ 补测试: seed 传递、penalty 默认值、audit 记录完整性 (`tests/test_llm_client.py`).
+
+### H1-2 · Memory trust 自动调整 (GAP-6)
+
+- **角色**: 小克
+- **问题**: `MemoryStore` 有 trust 评分 (0.0–1.0) 但无自动 promote/demote 机制。pipeline 步骤成功/失败不反馈到 memory 质量。
+- **证据**: `memory/store.py` `trust_scores` 表存在但无 pipeline 回调更新。
+- **DoD**: pipeline 步骤成功 → 相关 memory +0.05 trust；失败 → −0.10 trust。
+- **子任务拆解**:
+  - H1-2a · ✅ `MemoryStore` 加 `adjust_trust(fact_id, delta)` 与 `adjust_trust_batch(fact_ids, delta)` 方法 (`src/yuleosh/memory/store.py:333`).
+  - H1-2b · ✅ `MemoryContextAssembler` 在 `assemble()` 后记录 `last_fact_ids` (`src/yuleosh/memory/llm_context.py:267`).
+  - H1-2c · ✅ `LLMClient.call()` 在 LLM 调用成功后对相关 memory facts 回调 `adjust_trust_batch` (+0.05 / −0.10) (`src/yuleosh/llm/client.py:476`).
+  - H1-2d · ✅ 补测试: trust 上下限 clamp、连续调整、衰减边界 (`tests/test_memory_store.py:176`).
+
+### H2-1 · Source grounding 全步骤覆盖 (GAP-2)
+
+- **角色**: 小克
+- **问题**: `review_guard.py` 的 `numbered_source()` + `validate_review_findings()` 仅用于 review 路径。spec/architecture/testgen/PRD 等 LLM 步骤不验证 file:line/function 引用是否真实存在。
+- **证据**: grep `review_guard` 仅命中 `review_code.py` + `review.py`。
+- **DoD**: 所有 LLM 步骤输出的 file:line、function name、requirement ID 引用经 `repo_facts` 验证；幻觉引用被标记或降级。
+- **子任务拆解**:
+  - H2-1a · ✅ 新建 `SourceGroundingChecker` 模块，支持 file:line / func_name / req_id 三类校验 (`src/yuleosh/pipeline/source_grounding.py`).
+  - H2-1b · ✅ `repo_facts.py` 扩展: 加 `get_all_function_names()`、`get_all_requirement_ids()` 方法 (`src/yuleosh/pipeline/repo_facts.py:296`).
+  - H2-1c · ✅ `llm_gateway.call_step_llm()` 后处理: 对 LLM 输出做 source grounding 检查，报告写入 `session.last_grounding_report` (`src/yuleosh/pipeline/llm_gateway.py:331`).
+  - H2-1d · ✅ 补测试: mock repo facts + LLM 输出含幻觉引用 → 被标记 (`tests/test_source_grounding.py`).
+
+### H2-2 · review_selfcheck 实现 (GAP-1)
+
+- **角色**: 小克
+- **问题**: `review_selfcheck` 在 TASK_ROUTES 注册 (model=deepseek-v4, risk=L3) 但 `TASK_RAG_SOURCES=[]`、无 step handler。LLM 输出进 pipeline 前无自动自查。
+- **证据**: grep `review_selfcheck` 仅在 `llm/client.py` 路由表。
+- **DoD**: 实现 `step_review_selfcheck` handler — 对前序 LLM 输出做自查 pass，交叉验证 `repo_facts` + memory，产出 "not sure" 标记。
+- **子任务拆解**:
+  - H2-2a · ✅ `TASK_RAG_SOURCES["review_selfcheck"]` 填充 `["repo_facts", "kg"]` (`src/yuleosh/llm/client.py:75`).
+  - H2-2b · ✅ 新建 `pipeline/step_handlers/review_selfcheck/handler.py` — 读取前序步骤 LLM 输出 + repo_facts → 构造自查 prompt → LLM 调用 → 解析自查结论。
+  - H2-2c · ✅ 自查 prompt 包含: "逐条验证以下声明是否有 source grounding，标记 confidence: high/medium/low/unsupported" (`src/yuleosh/pipeline/step_handlers/review_selfcheck/handler.py:53`).
+  - H2-2d · ✅ `_downgrade_unsupported()` 对 unsupported 项设为 `verdict=failed`，low 项降为 `warning`。
+  - H2-2e · ✅ 补测试: mock LLM 输出含幻觉 → selfcheck 标记 unsupported (`tests/test_review_selfcheck.py`).
+
+### H2-3 · Python 测试执行器 (GAP-8)
+
+- **角色**: 小克
+- **问题**: `test_c_unit.py` 支持 ctest/unity/ceedling/gcc 但无 Python 测试 runner。LLM 生成的 Python 工具/配置脚本无法自动验证。
+- **证据**: grep `test_c_unit` 无 Python runner 对等物。
+- **DoD**: 新增 Python 测试执行器，支持 pytest/unittest 发现+运行，集成到 pipeline gate。
+- **子任务拆解**:
+  - H2-3a · ✅ 新建 `pipeline/step_handlers/test_python_unit.py` — 发现 `tests/` 下 Python 测试、运行 pytest、解析 JUnit XML 输出 (`src/yuleosh/pipeline/step_handlers/test_python_unit.py`).
+  - H2-3b · ✅ step handler 输出统一 `python-unit-test.json` 报告，失败抛 `PipelineStepError`，可被 gate 捕获。
+  - H2-3c · ✅ 补测试: mock pytest 输出 → gate 正确判 pass/fail (`tests/test_python_unit_step.py`).
+
+### H3-1 · LLM 输出置信度标记 (GAP-5)
+
+- **角色**: 小马
+- **问题**: LLM 输出二元判定（pass/fail），无 "I'm 60% sure" 不确定性标记。pipeline 无法区分高确信与低确信输出来分配人工审查优先级。
+- **DoD**: LLM response schema 支持 confidence 字段；prompt 指示 LLM 自评置信度；pipeline 用 confidence 排序人工审查队列。
+- **子任务拆解**:
+  - H3-1a · ✅ `LLMResponse` 加 `confidence: Optional[float]` 字段 (`src/yuleosh/llm/providers/base.py:80`).
+  - H3-1b · ✅ `llm_gateway.call_step_llm()` 在 system prompt 追加 `CONFIDENCE: <value>` 指令 (`src/yuleosh/pipeline/llm_gateway.py:243`).
+  - H3-1c · ✅ `llm/fallback.py` 新增 `_extract_confidence()`，`FallbackResult` 携带 `confidence`，并在 `apply_fallback_chain()` 中自动提取 (`src/yuleosh/llm/fallback.py:88`).
+  - H3-1d · ✅ `llm_gateway` 解析 confidence 后写入 `session.last_confidence`；`< 0.5` 时设置 `session.last_confidence_flag = "needs_human_review"` (`src/yuleosh/pipeline/llm_gateway.py:290`).
+
+### H3-2 · ChangeSet 自动应用 (GAP-10)
+
+- **角色**: 小马
+- **问题**: `ChangeSet` backup/rollback 是 opt-in per handler，LLM 调用的步骤若未显式接入则无安全网。
+- **DoD**: 所有 LLM-calling step handlers 自动创建 ChangeSet；non-pass 输出自动 rollback。
+- **子任务拆解**:
+  - H3-2a · ✅ `llm_gateway.call_step_llm()` 在 LLM 调用前自动 `_capture_llm_changeset()`，扫描 `.yuleosh/artifacts` 与 `session.artifacts` (`src/yuleosh/pipeline/llm_gateway.py:233`).
+  - H3-2b · ✅ LLM 调用抛 `PipelineStepError` 时自动 `_restore_llm_changeset()`，原内容回滚、新增文件删除 (`src/yuleosh/pipeline/llm_gateway.py:277`).
+  - H3-2c · ✅ 补测试: mock LLM 输出 fail → ChangeSet 自动 rollback (`tests/test_h3_changeset.py`).
+
+---
+
+## O-series · 一致性生成优化（2026-08-25）
+
+> **来源**: 一致性生成整工程项目优化方向讨论（2026-08-25）
+> **组合**: (1) 生成一致性铁三角 · (2) 验证真相闭环 · (3) 人机知识沉淀
+
+### O1-1 · 需求模式库 + 冲突预检
+
+- **角色**: 小克
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: spec 解析后无模式识别，同类需求（看门狗/CAN/传感器读取）没有最佳实践约束，也无法在生成前发现 SHALL 冲突/ASIL 矛盾。
+- **实现**: `src/yuleosh/spec/patterns.py` (309行)
+- **子任务**:
+  - O1-1a · ✅ `REQUIREMENT_PATTERNS` 字典：sensor_read/watchdog/can_comm 等模式，含 structural_features/forbidden_features/suggested_tests。
+  - O1-1b · ✅ `detect_pattern(req)` 关键词匹配返回模式名。
+  - O1-1c · ✅ `check_conflicts(doc)` 检测 duplicate_shall/timing_conflict/asil_contradiction/signal_missing_dependency。
+  - O1-1d · ✅ `suggest_missing_patterns(doc)` 缺失模式建议。
+  - O1-1e · ✅ `validate_spec_with_patterns(doc)` 集成入口，供 pipeline spec-check 步骤调用。
+  - O1-1f · ✅ 测试文件 `tests/test_spec_patterns.py` (9项)。
+
+### O1-2 · HAL/BSP/App 分层生成引擎
+
+- **角色**: 小克
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: 现有 codegen 单层全量生成，HAL/BSP/App 耦合严重，修改 App 层触发 HAL 重生成，一致性差。
+- **实现**: `src/yuleosh/codegen/layered.py` (199行)
+- **子任务**:
+  - O1-2a · ✅ `LayerConfig` dataclass：name/file_globs/system_prompt_fragment/structural_features/forbidden_features。
+  - O1-2b · ✅ `LAYER_CONFIGS`：hal/bsp/app 三层默认配置。
+  - O1-2c · ✅ `LayeredCodegenEngine.generate_layered()`：HAL→BSP→App 顺序生成，前层 output_dir 自动成为后层 seed_dir，HAL 失败阻断后续层。
+  - O1-2d · ✅ 测试文件 `tests/test_layered_codegen.py` (6项)。
+
+### O1-3 · Golden Sample 回归门禁
+
+- **角色**: 小马
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: 无模板规范参考，LLM 生成结构每次不同，无法检测结构性退化。
+- **实现**: `src/yuleosh/templates/golden.py` (157行) + `scripts/check_template_golden.py`
+- **子任务**:
+  - O1-3a · ✅ `GoldenSample` dataclass：template_name/golden_dir/critical_files/structure_files。
+  - O1-3b · ✅ `load_golden(template_dir)` 从 template.yaml 加载 golden 配置。
+  - O1-3c · ✅ `compare_to_golden(generated_dir, golden)` 返回 `{status:"pass"|"warn"|"fail", diffs, critical_failures, warn_count}`；critical_files 缺失/内容变更→fail，多余文件→warn。
+  - O1-3d · ✅ `generate_golden(template_dir, output_dir)` 捕获当前生成物为 golden 基准。
+  - O1-3e · ✅ `scripts/check_template_golden.py` CI 回归脚本，遍历所有 template 目录。
+  - O1-3f · ✅ 测试文件 `tests/test_template_golden.py` (6项)。
+
+### O2-1 · 基线指标追踪 + 回归比对
+
+- **角色**: 小明
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: 无跨 run 基线对比，coverage/MISRA/test_failed/gates 退化无感知。
+- **实现**: `src/yuleosh/pipeline/step_cache.py` 追加（BaselineMetrics + 4函数）
+- **子任务**:
+  - O2-1a · ✅ `BaselineMetrics` dataclass：session_id/run_at/coverage_pct/misra_violations/test_passed/test_failed/gates_passed。
+  - O2-1b · ✅ `save_baseline(project_dir, session_id, metrics)` 写 `.yuleosh/baselines/<id>/metrics.json` + `latest_id.txt`。
+  - O2-1c · ✅ `load_latest_baseline(project_dir)` 按 latest_id.txt 读取，无基线返回 None。
+  - O2-1d · ✅ `compare_to_baseline(current, baseline)` 返回 `{status, issues}`；coverage -2%→WARN/-5%→ERROR；misra +任何→WARN/+10→ERROR；test_failed 增加→ERROR；gates 减少→ERROR。
+  - O2-1e · ✅ `extract_metrics_from_session(session_dir)` 从 session JSON 提取指标。
+  - O2-1f · ✅ 测试文件 `tests/test_baseline.py` (9项)。
+
+### O2-2 · 失败案例 RAG 库
+
+- **角色**: 小克
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: codegen 失败后无历史失败案例可参考，LLM repair prompt 缺乏上下文，重复踩坑。
+- **实现**: `src/yuleosh/kb/codegen_failures.py` (192行)
+- **子任务**:
+  - O2-2a · ✅ `CodegenFailureCase` dataclass：id/project_id/session_id/error_signature/error_text/language/round_count/strategy_used/resolution/created_at。
+  - O2-2b · ✅ `CodegenFailureStore.record_failure()` 按 (project_id, error_sig) 去重写入。
+  - O2-2c · ✅ `record_resolution(session_id, resolution)` 更新修复方案。
+  - O2-2d · ✅ `find_similar(error_text, language, limit)` FTS 检索相似失败案例。
+  - O2-2e · ✅ `format_for_prompt(cases, max_chars)` 格式化为 LLM repair prompt 前缀。
+  - O2-2f · ✅ 测试文件 `tests/test_codegen_failures.py` (12项)。
+
+### O3-1 · Review Finding 可追溯
+
+- **角色**: 小马
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: ReviewFinding 无唯一 ID、无需求关联、无生命周期状态，无法追踪"哪条需求有未关闭 finding"。
+- **实现**: `src/yuleosh/review/run.py` 改造 + `src/yuleosh/review/tracker.py` (151行)
+- **子任务**:
+  - O3-1a · ✅ `ReviewFinding.__init__` 追加 `finding_id`（sha256[:8]）、`req_ids: list[str]`、`status: str = "open"`；`to_dict()` 同步输出。
+  - O3-1b · ✅ `ReviewSession.to_dict()` 追加 `traceability: {req_id: [finding_id, ...]}`。
+  - O3-1c · ✅ `FindingTracker`：append-only JSONL 写入 `.osh/reviews/<task>/findings.jsonl`。
+  - O3-1d · ✅ `close_finding(finding_id, resolution, resolver)` / `get_open_findings(req_id)` / `closure_report(req_ids)` / `auto_close_if_verified(req_id, verifier_result)`。
+  - O3-1e · ✅ 测试文件 `tests/test_review_tracker.py` (13项)。
+
+### O3-2 · 人工修正规则沉淀
+
+- **角色**: 小克
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: 人工修正代码后，修正知识散失，下次 LLM 生成重犯同类错误。
+- **实现**: `src/yuleosh/memory/rule_sink.py` (264行)
+- **子任务**:
+  - O3-2a · ✅ `ExtractedRule` dataclass：id/category/title/description/do_example/dont_example/source_file/created_at。
+  - O3-2b · ✅ `extract_rules_from_diff(original, corrected, file_path, context)` 检测 int64/malloc/header guard 等禁用/必要模式，返回最多3条规则。
+  - O3-2c · ✅ `RuleSink.add_rules(rules)` 幂等写入 `.yuleosh/agents/LEARNED-RULES.md`。
+  - O3-2d · ✅ `load_rules()` 解析 markdown 反序列化回 `ExtractedRule` 列表。
+  - O3-2e · ✅ `format_for_prompt(rules, max_chars)` 输出 `## Project-Learned Rules\n### DO\n### DON'T` 格式。
+  - O3-2f · ✅ `record_correction(original_file, original_content, corrected_content, context)` 一键提取并持久化。
+  - O3-2g · ✅ 测试文件 `tests/test_rule_sink.py` (15项)。
+
+---
+
+## Q-series · 量产证据链闭合（2026-08-25）
+
+> **来源**: 量产能力评估 — "重复生成一致性设计"证明闭环缺口分析
+> **优先级**: Q1/Q2/Q3 = P0 阻断 · Q4/Q5/Q6 = P1 必做
+
+### Q1 · 测试执行/评审结论写入 audit hash 链
+
+- **角色**: 小克
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: 测试执行 (test.execute) 与评审结论 (review.complete) 事件未进 audit hash 链。`gate-summary.json`、JUnit XML、评审结果是普通文件，可被静默改写，无法向第三方证明"测试通过"。
+- **目标**: pipeline 执行测试/评审步骤后，将 verdict + artifact_hash 写入 audit 链；任何后续篡改可被 `audit verify` 检测。
+- **子任务**:
+  - Q1-a · ✅ 在 `pipeline/step_handlers/handler_base.py` 或 `orchestrator.py` 新增 `record_step_verdict(session, step_key, verdict, artifact_paths)` helper — 计算产物 SHA-256，调用 `AuditLog.record()` 写入 `step.verdict` 事件。
+  - Q1-b · ✅ 在 `test_qualification.py` / `test_c_unit.py` / `test_python_unit.py` 步骤执行完成后调用 `record_step_verdict`，携带 JUnit XML 路径 + verdict。
+  - Q1-c · ✅ 在 `review.py` / `review_code.py` 等 review 步骤执行完成后调用 `record_step_verdict`，携带 review JSON 路径 + verdict。
+  - Q1-d · ✅ 新增 `tests/test_audit_step_verdict.py` — 验证 test.execute / review.complete 事件写入链且 artifact_hash 字段存在。
+
+### Q2 · RTM integrity hash 锚入 audit chain
+
+- **角色**: 小马
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: `compute_trace_integrity()` 生成了独立 SHA-256 hash，但未通过 `audit.record()` 锚入链。两套完整性机制互不感知，RTM 自身可被改写。
+- **目标**: 每次 RTM 生成时把 `integrity_hash` 作为 `traceability.snapshot` 事件写入 audit 链，使 RTM 防篡改可证。
+- **子任务**:
+  - Q2-a · ✅ `compute_trace_integrity()` 末尾追加：调用 `AuditLog.record(action="traceability.snapshot", target="lrt", detail={integrity_hash, requirements_total, test_coverage_pct, status})`，写入失败只 warning。
+  - Q2-b · ✅ `ci/stages/traceability.py` 中调用 `compute_trace_integrity` 的位置确认已触发（或补调用）。
+  - Q2-c · ✅ 新增 `tests/test_audit_traceability_snapshot.py` — 验证 traceability.snapshot 事件含 integrity_hash 字段且进入 hash 链。
+
+### Q3 · 测试结果 JSON/JUnit 防篡改 hash 写入 gate-summary
+
+- **角色**: 小马
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: `gate-summary.json` 聚合各步骤 verdict 但无产物 hash，结果文件可被篡改而 gate-summary 不感知。
+- **目标**: gate-summary 中每个 step 条目附带 `artifact_hash`（产物文件 SHA-256），与 audit 链中 step.verdict 事件交叉锚定。
+- **子任务**:
+  - Q3-a · ✅ `pipeline/gates.py` 的 `write_gate_summary()` 在每个 step 条目追加 `artifact_hash` 字段（若产物路径已知）。
+  - Q3-b · ✅ `pipeline/orchestrator.py` 在调用 `write_gate_summary` 前，把 step artifacts 路径传入。
+  - Q3-c · ✅ 新增 CI cron 步骤 `audit verify` — 每日运行 `AuditLog.verify()`，链断则 block release。
+  - Q3-d · ✅ 新增 `tests/test_gate_summary_hash.py` — 验证 gate-summary 含 artifact_hash 且与实际文件 hash 一致。
+
+### Q4 · LLM 确定性约束 + 产物差异度度量
+
+- **角色**: 小克
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: codegen prompt 未固定 temperature/seed/model version，相同 spec 跨 run 产物不同，"一致性"不可度量。
+- **目标**: codegen 路径固定 temperature=0、seed=42、model version pin；新增"产物差异度"度量（同 spec × 3 run 的 diff 统计）。
+- **子任务**:
+  - Q4-a · ✅ `codegen/engine.py` 构造 `LLMConfig` 时显式设 `temperature=0.0`、`seed=42`，并在 codegen 报告 JSON 中记录实际参数。
+  - Q4-b · ✅ `llm/client.py` 的 `_resolve_config()` 对 `task_type="codegen"` 强制覆盖 temperature=0/seed=42（优先级高于全局默认）。
+  - Q4-c · ✅ 新增 `scripts/measure_codegen_consistency.py` — 同一 spec 跑 3 次 mock codegen，计算输出文件行级 diff 百分比，写入 `.yuleosh/reports/consistency-score.json`。
+  - Q4-d · ✅ 新增 `tests/test_codegen_determinism.py` — mock LLM 固定输出，验证 3 次 run 产物 hash 一致。
+
+### Q5 · component_map 抽到项目级 traceability.yaml
+
+- **角色**: 小明
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: `alm/traceability.py` 的影响分析关键词硬编码 RS-001..RS-007，新项目 RTM 映射退化为"零关联"。
+- **目标**: 关键词映射抽到 `.yuleosh/traceability.yaml`；缺文件时使用内置默认 + 打印 WARN；新项目可按需覆盖。
+- **子任务**:
+  - Q5-a · ✅ 新增 `alm/traceability_config.py` — `load_traceability_config(project_dir)` 读取 `.yuleosh/traceability.yaml`，缺文件时返回内置默认 dict + log.warning。
+  - Q5-b · ✅ `alm/traceability.py` 的 `_find_code_by_keywords_for_id` / `_find_tests_for_requirement` 等处替换硬编码为 `load_traceability_config()` 的返回值。
+  - Q5-c · ✅ 新增 `.yuleosh/traceability.yaml` 示例模板（含 component_map / scenario_terms / test_id_prefixes 三节）。
+  - Q5-d · ✅ 新增 `tests/test_traceability_config.py` — 验证缺文件返回默认值 + WARN，有文件时正确加载覆盖。
+
+### Q6 · 独立 test case generator step
+
+- **角色**: 小克
+- **状态**: ✅ 已完成 (2026-08-25)
+- **问题**: 测试用例由 LLM 在 codegen 阶段一并产出，无独立的可重复 case generator。场景→用例映射靠关键词启发式，无 req_id/scenario_id 结构化绑定。
+- **目标**: 新增 `step_handlers/test_case_gen.py`，从 spec scenarios 确定性生成结构化 test case 骨架（含 req_id/scenario_id/preconditions/steps/expected），输出 `test-cases.json`，可与 RTM 直接 join。
+- **子任务**:
+  - Q6-a · ✅ 新建 `src/yuleosh/pipeline/step_handlers/test_case_gen.py` — `run_test_case_gen(session)` 从 `session.spec_path` 读取 scenarios，为每条 GIVEN/WHEN/THEN 生成结构化 case dict（req_id, scenario_id, title, preconditions, steps, expected, status="generated"）。
+  - Q6-b · ✅ 输出写入 `session.artifacts["test-cases"]`（`test-cases.json`），格式与 JUnit testcase name 约定对齐（`{req_id}::{scenario_id}` 作为 test id）。
+  - Q6-c · ✅ `alm/traceability.py` 的 `scan_test_reports` 识别 `test-cases.json` 格式，直接用 req_id 字段做 RTM 映射（无需关键词匹配）。
+  - Q6-d · ✅ 新增 `tests/test_case_gen.py` — 验证 3 条 scenario → 3 条 case，req_id/scenario_id 正确填充，输出 JSON 可被 RTM join。
 
 ---
 
@@ -288,3 +590,6 @@
 - [x] P1-2 拆解
 - [x] P1-3 拆解
 - [x] P2-1~P2-8 拆解
+- [x] H1-1~H3-2 拆解
+- [x] O1-1~O3-2 拆解
+- [x] Q1~Q6 拆解
