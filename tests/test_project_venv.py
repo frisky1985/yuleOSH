@@ -18,8 +18,16 @@ from yuleosh.engine.project_venv import (
 
 
 @pytest.fixture
-def project_dir(tmp_path):
-    """临时项目目录（含 requirements.txt 或空）。"""
+def project_dir(tmp_path, monkeypatch):
+    """临时项目目录（含 requirements.txt 或空）。
+
+    OSH_HOME 隔离（2026-08-25）: resolve_venv_dir 以 OSH_HOME 优先（见
+    engine/project_venv._osh_home）。全量随机序下 OSH_HOME 会被其他测试
+    改写，导致 venv 路径指向共享目录、签名/安装断言互相干扰（实证:
+    test_install_dependencies_* 全量失败、单独通过）。这里固定 OSH_HOME
+    到本测试的 tmp_path，保证 venv 路径确定且互不共享。
+    """
+    monkeypatch.setenv("OSH_HOME", str(tmp_path))
     p = tmp_path / "my-project"
     p.mkdir()
     return p

@@ -52,6 +52,22 @@ def _isolate_global_registries():
     _reg.register(GscCppRuleSet)
     _reg.register(GscrCompositeRuleSet, make_default=True)
 
+    # Store / KGStore 单例清理（2026-08-25）: 单例 key 是 db_path 或 "default"，
+    # db 路径来自 OSH_HOME env。全量随机序下，其他测试写入 OSH_HOME 后
+    # Store() 会缓存指向临时 db 的实例，泄漏到后续测试（实证:
+    # test_v380_a6_dashboard_f2 全量失败、单独通过）。此处每测试后重置，
+    # 与 test_coverage_phase9_billing_user.py 的手动清理模式一致。
+    try:
+        from yuleosh.store import Store
+        Store._instances = {}
+    except Exception:  # noqa: BLE001 — store 可选，清理失败不阻断
+        pass
+    try:
+        from yuleosh.knowledge_graph.store import KGStore
+        KGStore._instances = {}
+    except Exception:  # noqa: BLE001
+        pass
+
 
 def pytest_collection_modifyitems(config, items):
     """Skip perf-marked tests unless explicitly requested.
