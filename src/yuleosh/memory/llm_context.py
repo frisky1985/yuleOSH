@@ -1,3 +1,5 @@
+
+# @req RS-015
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: MIT
 
@@ -259,8 +261,15 @@ class MemoryContextAssembler:
 
         Truncation keeps the final block within the configured budget so
         injected memory can never exceed the token-budget guardrails.
+
+        After calling, ``self.last_fact_ids`` contains the IDs of facts
+        injected (H1-2: pipeline uses this for trust auto-adjust).
         """
-        context = self.format_context(self.retrieve(query))
+        items = self.retrieve(query)
+        self.last_fact_ids = [
+            item.item_id for item in items if item.source == "fact"
+        ]
+        context = self.format_context(items)
         if not context:
             return ""
         if len(context) <= self.max_chars:

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-003  @req SWR-003.1
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -22,6 +24,8 @@ from yuleosh.pipeline.prompts import (
     build_code_review_prompt,
     build_final_report_prompt,
 )
+
+from yuleosh.pipeline.step_handlers.audit_utils import record_step_verdict
 
 log = logging.getLogger("pipeline.step_handlers.review")
 
@@ -179,6 +183,7 @@ def step_hermes_review(session: PipelineSession) -> str:
             raise PipelineStepError(f"Cannot write code review: {e}")
         print(f"  ✅ [Hermes] AI code review completed ({len(review['findings'])} findings, status={review['status']})")
         log.info(f"AI code review: {len(review['findings'])} findings, status={review['status']}")
+        record_step_verdict(session, "code-review", review["status"], [str(out_path)])
         return str(out_path)
     except PipelineStepError:
         raise

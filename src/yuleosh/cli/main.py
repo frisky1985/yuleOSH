@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-006
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -296,6 +298,10 @@ def _build_parser() -> argparse.ArgumentParser:
     # traceability (A5: commands extracted to cli/commands/traceability.py)
     from yuleosh.cli.commands.traceability import build_parser as _build_traceability
     _build_traceability(sub)
+
+    # consistency/baseline (T-004: cross-run consistency verification)
+    from yuleosh.cli.commands.consistency import build_parser as _build_consistency
+    _build_consistency(sub)
 
     # gap (v3.9.0): ASPICE 差距 → 改进工单（受控生成）
     _build_gap(sub)

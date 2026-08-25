@@ -27,6 +27,11 @@ run_subgate \
   "tests/test_sil_adapter_deep.py tests/test_sil.py" \
   80
 
+run_subgate \
+  "src/yuleosh/llm/client.py" \
+  "tests/test_llm_client.py" \
+  70
+
 if [ $fail -eq 1 ]; then
   echo "❌ Coverage sub-gate FAILED — see thresholds above."
   exit 1

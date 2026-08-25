@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @tests src/yuleosh/ci/stage_utils.py
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -308,7 +310,10 @@ class TestCheckLlmKey:
     def test_key_found_via_openai_api_key(self):
         from yuleosh.pipeline.stages import _check_llm_key
 
-        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-openai"}):
+        with mock.patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-openai", "LLM_API_KEY": "", "DEEPSEEK_API_KEY": ""},
+        ):
             key = _check_llm_key()
 
         assert key == "sk-openai"

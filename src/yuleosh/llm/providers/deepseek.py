@@ -99,6 +99,12 @@ class DeepSeekProvider(AbstractProvider):
             "top_p": config.top_p,
             "stream": False,
         }
+        if config.seed is not None:
+            body["seed"] = config.seed
+        if config.frequency_penalty:
+            body["frequency_penalty"] = config.frequency_penalty
+        if config.presence_penalty:
+            body["presence_penalty"] = config.presence_penalty
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",

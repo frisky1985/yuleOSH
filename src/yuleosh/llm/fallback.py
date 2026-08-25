@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-001
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -40,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -72,12 +75,17 @@ class FallbackResult:
         Number of retry attempts made.
     errors : list[str]
         Validation/error messages from the chain.
+    confidence : float | None
+        LLM self-reported confidence (0.0–1.0) parsed from the
+        ``CONFIDENCE: <value>`` line appended to the output (H3-1c).
+        None when the line is absent.
     """
     status: str = "ok"          # ok | fallback | abort
     output: str = ""
     level: int = 0
     retries: int = 0
     errors: list[str] = field(default_factory=list)
+    confidence: Optional[float] = None
 
 
 # ------------------------------------------------------------------
@@ -119,6 +127,35 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Review the validation failures and re-run the pipeline.\n"
     ),
 }
+
+
+# ------------------------------------------------------------------
+# Confidence extraction (H3-1c)
+# ------------------------------------------------------------------
+
+_CONFIDENCE_RE = re.compile(
+    r"(?:^|\n)CONFIDENCE:\s*([01](?:\.\d+)?|\.\d+)\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def _extract_confidence(text: str) -> tuple[str, Optional[float]]:
+    """Extract and strip the ``CONFIDENCE: <value>`` line from LLM output.
+
+    Returns ``(cleaned_text, confidence)`` where ``confidence`` is a float
+    in [0.0, 1.0] or None if not present.  Values outside [0, 1] are
+    clamped silently.
+    """
+    m = _CONFIDENCE_RE.search(text)
+    if not m:
+        return text, None
+    try:
+        raw = float(m.group(1))
+        confidence = max(0.0, min(1.0, raw))
+    except ValueError:
+        return text, None
+    cleaned = _CONFIDENCE_RE.sub("", text).rstrip()
+    return cleaned, confidence
 
 
 # ------------------------------------------------------------------
@@ -502,12 +539,18 @@ def apply_fallback_chain(
         step_name=step_name,
         session_dir=session_dir,
     )
-    state.output = llm_output
+    # H3-1c: extract confidence from the raw output before validation.
+    cleaned_output, confidence = _extract_confidence(llm_output)
+    state.output = cleaned_output
     state.schema = schema or {}
     state.template = template or ""
     state.template_ctx = template_ctx or {}
     state.llm_call = llm_call
     state.original_prompt = original_prompt
+
+    def _with_confidence(result: FallbackResult) -> FallbackResult:
+        result.confidence = confidence
+        return result
 
     # Run the chain starting from start_level
     # Level 0 is only used when NO schema is provided (raw passthrough)
@@ -515,31 +558,28 @@ def apply_fallback_chain(
         if start_level <= 0:
             l0 = _level_0_raw(state)
             if l0.status == "ok" and l0.output:
-                return l0
+                return _with_confidence(l0)
 
     # Level 1: Schema validation (always runs when schema is provided)
     if start_level <= 1 and state.schema:
         l1 = _level_1_schema(state)
         if l1.status == "ok":
-            return l1
+            return _with_confidence(l1)
 
     # Level 2: Content validation
     if start_level <= 2:
         l2 = _level_2_content(state)
         if l2.status == "ok":
-            return l2
+            return _with_confidence(l2)
 
     if start_level <= 3:
         l3 = _level_3_semantic(state)
 
     # Level 4: Template fallback — always returns usable output
     l4 = _level_4_template(state)
-    # Template fallback is our last resort; return it even though
-    # validation didn't pass — it's better than an abort.
-    # Only abort if the template itself produces empty output.
     if l4.output:
-        return l4
+        return _with_confidence(l4)
 
     # Level 5: Abort (only if even template fallback returns nothing)
     l5 = _level_5_abort(state)
-    return l5
+    return _with_confidence(l5)

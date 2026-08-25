@@ -50,6 +50,23 @@ runs:
       run: |
         ls -la frontend/out/index.html
 
+    - name: CSP meta gate (P2-6b)
+      shell: bash
+      run: |
+        MISSING=""
+        for f in $(find frontend/out -name '*.html'); do
+          if ! grep -qi 'Content-Security-Policy' "$f"; then
+            MISSING="${MISSING}${f}"$'\n'
+          fi
+        done
+        if [ -n "$MISSING" ]; then
+          echo "❌ CSP meta tag missing in:"
+          echo "$MISSING"
+          echo "inject-meta-csp.py must run as part of npm run build."
+          exit 1
+        fi
+        echo "✅ CSP meta gate passed."
+
     - name: Upload frontend build artifact
       uses: actions/upload-artifact@v7
       with:

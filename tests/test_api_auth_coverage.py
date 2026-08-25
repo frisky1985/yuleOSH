@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @tests src/yuleosh/api/auth.py
 # Copyright (c) 2026 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -49,7 +51,7 @@ class TestAuthInternalHelpers:
         assert _MAX_SIGNIN_ATTEMPTS == 10
         assert _RATE_WINDOW_SECONDS == 300
 
-    @mock.patch("yuleosh.ui.auth_extended.bcrypt.hashpw")
+    @mock.patch("bcrypt.hashpw")
     def test_hash_password(self, mock_hash):
         from yuleosh.api.auth import _hash_password
 
@@ -58,14 +60,14 @@ class TestAuthInternalHelpers:
         assert result is not None
         assert isinstance(result, str)
 
-    @mock.patch("yuleosh.ui.auth_extended.bcrypt.checkpw")
+    @mock.patch("bcrypt.checkpw")
     def test_verify_password_correct(self, mock_check):
         from yuleosh.api.auth import _verify_password
 
         mock_check.return_value = True
         assert _verify_password("testpass", "hashed") is True
 
-    @mock.patch("yuleosh.ui.auth_extended.bcrypt.checkpw")
+    @mock.patch("bcrypt.checkpw")
     def test_verify_password_incorrect(self, mock_check):
         from yuleosh.api.auth import _verify_password
 

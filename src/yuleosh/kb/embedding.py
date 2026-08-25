@@ -103,7 +103,7 @@ class OllamaEmbeddingProvider:
                     raise EmbeddingUnavailableError(
                         f"Ollama /api/embed 无 embeddings (model={self.model})")
                 vectors.append(list(emb[0]))
-            except urllib.error.URLError as e:
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
                 raise EmbeddingUnavailableError(
                     f"Ollama embed failed: {e} (is 'ollama serve' running?)"
                 ) from e

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-003
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -28,6 +30,8 @@ from yuleosh.review.run import review_architecture as _run_arch_review
 from yuleosh.pipeline.prompts import _inject_spec, _inject_limited, SPEC_INJECT_LIMIT
 
 log = logging.getLogger("pipeline.step_handlers.review_arch")
+
+from yuleosh.pipeline.step_handlers.audit_utils import record_step_verdict
 
 __all__ = ["step_review_arch"]
 
@@ -146,6 +150,7 @@ def step_review_arch(session: PipelineSession) -> str:
         print(f"  {status_icon.get(overall_status, '❓')} [小克] 架构审查完成 "
               f"({len(findings_json)} findings, status={overall_status})")
         log.info(f"Architecture review completed: {overall_status}")
+        record_step_verdict(session, "arch-review", overall_status, [str(out_path)])
         return str(out_path)
 
     except PipelineStepError:

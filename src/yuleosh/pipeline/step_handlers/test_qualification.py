@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req SWR-001.2
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -30,6 +32,46 @@ from yuleosh.pipeline.stages import timed_step, _call_llm, _parse_spec
 log = logging.getLogger("pipeline.step_handlers.test_qualification")
 
 __all__ = ["step_test_qualification"]
+
+
+def _record_step_verdict(session, verdict: str, artifact_paths: list) -> None:
+    """Write step.verdict audit event non-fatally (Q1)."""
+    try:
+        import hashlib as _hl
+        import os as _os
+        from yuleosh.audit.model import AuditLog
+
+        def _sha256(p: str) -> str:
+            h = _hl.sha256()
+            try:
+                with open(p, "rb") as f:
+                    for chunk in iter(lambda: f.read(65536), b""):
+                        h.update(chunk)
+            except OSError:
+                return ""
+            return h.hexdigest()
+
+        artifact_hashes = {
+            _os.path.basename(p): _sha256(p)
+            for p in artifact_paths if p
+        }
+        audit_root = _os.environ.get("YULEOSH_AUDIT_ROOT")
+        audit_log = AuditLog(data_root=audit_root)
+        session_id = getattr(session, "name", "") or getattr(session, "session_id", "")
+        audit_log.record(
+            actor="system",
+            action="step.verdict",
+            target="step:test-qualification",
+            tenant="",
+            detail={
+                "step": "test-qualification",
+                "session_id": session_id,
+                "verdict": verdict,
+                "artifact_hashes": artifact_hashes,
+            },
+        )
+    except Exception as _e:
+        log.warning("_record_step_verdict failed (non-fatal): %s", _e)
 
 # ── Scenario data model ─────────────────────────────────────────────────
 
@@ -584,6 +626,7 @@ def step_test_qualification(session: PipelineSession) -> str:
                 log.error(f"Cannot write qualification test report: {e}")
                 raise PipelineStepError(f"Cannot write qualification test report: {e}")
             log.info("Qualification testing completed (fail-fast): incomplete")
+            _record_step_verdict(session, "incomplete", [str(out_path)])
             return str(out_path)
 
         # ── Phase 3: Test execution ──
@@ -621,6 +664,12 @@ def step_test_qualification(session: PipelineSession) -> str:
             raise PipelineStepError(f"Cannot write qualification test report: {e}")
 
         log.info(f"Qualification testing completed: {verdict}")
+        junit_paths = [
+            d.get("junit_xml", "")
+            for d in test_results.get("details", [])
+            if d.get("junit_xml")
+        ]
+        _record_step_verdict(session, verdict, [str(out_path)] + junit_paths)
         return str(out_path)
 
     except PipelineStepError:

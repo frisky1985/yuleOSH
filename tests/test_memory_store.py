@@ -1,3 +1,5 @@
+
+# @tests src/yuleosh/memory/store.py
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: MIT
 
@@ -170,3 +172,80 @@ def test_env_db_override(tmp_path, monkeypatch):
     assert db.exists()
     assert s.stats()["facts"] == 1
     s.close()
+
+
+# ── adjust_trust / adjust_trust_batch (H1-2d) ───────────────────────────────
+
+def test_adjust_trust_positive_delta(store):
+    fact = store.remember("CAN bus speed 1Mbit", trust=0.5)
+    updated = store.adjust_trust(fact["id"], 0.05)
+    assert updated is not None
+    assert updated["trust"] == pytest.approx(0.55)
+
+
+def test_adjust_trust_negative_delta(store):
+    fact = store.remember("LIN slave timeout 20ms", trust=0.6)
+    updated = store.adjust_trust(fact["id"], -0.10)
+    assert updated is not None
+    assert updated["trust"] == pytest.approx(0.50)
+
+
+def test_adjust_trust_clamps_at_max(store):
+    """Trust must never exceed TRUST_MAX (1.0) regardless of delta."""
+    fact = store.remember("high-trust fact", trust=0.97)
+    updated = store.adjust_trust(fact["id"], 0.10)
+    assert updated["trust"] == pytest.approx(store.TRUST_MAX)
+
+
+def test_adjust_trust_clamps_at_min(store):
+    """Trust must never go below TRUST_MIN (0.0) regardless of delta."""
+    fact = store.remember("low-trust fact", trust=0.03)
+    updated = store.adjust_trust(fact["id"], -0.20)
+    assert updated["trust"] == pytest.approx(store.TRUST_MIN)
+
+
+def test_adjust_trust_nonexistent_returns_none(store):
+    result = store.adjust_trust(99999, 0.05)
+    assert result is None
+
+
+def test_adjust_trust_consecutive_accumulate(store):
+    """Multiple sequential adjustments accumulate correctly."""
+    fact = store.remember("UART DMA ring buffer", trust=0.50)
+    store.adjust_trust(fact["id"], 0.05)
+    store.adjust_trust(fact["id"], 0.05)
+    store.adjust_trust(fact["id"], 0.05)
+    updated = store.get_fact(fact["id"])
+    assert updated["trust"] == pytest.approx(0.65)
+
+
+def test_adjust_trust_decay_to_floor(store):
+    """Repeated failures decay trust to TRUST_MIN and no further."""
+    fact = store.remember("unreliable fact", trust=0.20)
+    for _ in range(5):
+        store.adjust_trust(fact["id"], -0.10)
+    updated = store.get_fact(fact["id"])
+    assert updated["trust"] == pytest.approx(store.TRUST_MIN)
+
+
+def test_adjust_trust_batch_all_valid(store):
+    f1 = store.remember("fact one", trust=0.5)
+    f2 = store.remember("fact two", trust=0.5)
+    f3 = store.remember("fact three", trust=0.5)
+    count = store.adjust_trust_batch([f1["id"], f2["id"], f3["id"]], 0.05)
+    assert count == 3
+    for fid in [f1["id"], f2["id"], f3["id"]]:
+        assert store.get_fact(fid)["trust"] == pytest.approx(0.55)
+
+
+def test_adjust_trust_batch_with_missing_id(store):
+    """Batch skips missing IDs without raising; returns count of updated."""
+    fact = store.remember("valid fact", trust=0.5)
+    count = store.adjust_trust_batch([fact["id"], 99999], 0.05)
+    assert count == 1
+    assert store.get_fact(fact["id"])["trust"] == pytest.approx(0.55)
+
+
+def test_adjust_trust_batch_empty(store):
+    count = store.adjust_trust_batch([], 0.05)
+    assert count == 0

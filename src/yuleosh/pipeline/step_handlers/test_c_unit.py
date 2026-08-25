@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req SWR-001.2  @req RS-008
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -28,6 +30,46 @@ from yuleosh.pipeline.guardrail import TestResult
 log = logging.getLogger("pipeline.step_handlers.test_c_unit")
 
 __all__ = ["step_c_unit_test"]
+
+
+def _record_step_verdict(session, verdict: str, artifact_paths: list) -> None:
+    """Write step.verdict audit event non-fatally (Q1)."""
+    try:
+        import hashlib as _hl
+        import os as _os
+        from yuleosh.audit.model import AuditLog
+
+        def _sha256(p: str) -> str:
+            h = _hl.sha256()
+            try:
+                with open(p, "rb") as f:
+                    for chunk in iter(lambda: f.read(65536), b""):
+                        h.update(chunk)
+            except OSError:
+                return ""
+            return h.hexdigest()
+
+        artifact_hashes = {
+            _os.path.basename(p): _sha256(p)
+            for p in artifact_paths if p
+        }
+        audit_root = _os.environ.get("YULEOSH_AUDIT_ROOT")
+        audit_log = AuditLog(data_root=audit_root)
+        session_id = getattr(session, "name", "") or getattr(session, "session_id", "")
+        audit_log.record(
+            actor="system",
+            action="step.verdict",
+            target="step:c-unit-test",
+            tenant="",
+            detail={
+                "step": "c-unit-test",
+                "session_id": session_id,
+                "verdict": verdict,
+                "artifact_hashes": artifact_hashes,
+            },
+        )
+    except Exception as _e:
+        log.warning("_record_step_verdict failed (non-fatal): %s", _e)
 
 
 @timed_step
@@ -488,6 +530,7 @@ def step_c_unit_test(session: PipelineSession) -> str:
             test_runner, passed, failed, c_files,
         )
 
+        _record_step_verdict(session, status, [str(out_path)])
         return str(out_path)
 
     except PipelineStepError:

@@ -11,6 +11,8 @@ ASIL_B)。claude-review 是唯一真正读仓库的 agent, 所以它总能抓到
 
 from __future__ import annotations
 
+# @req RS-001
+
 import json
 import logging
 import re
@@ -237,3 +239,87 @@ def format_repo_facts(facts: dict) -> str:
         f"- Project ASIL: {facts.get('project_asil') or '(not declared — do NOT invent one)'}",
     ]
     return "\n".join(lines)
+
+
+# ── H2-1b: Symbol / requirement extraction ────────────────────────────────────
+
+# C/C++ function definitions: "void foo(" / "static int bar_baz("
+_C_FUNC_DEF_RE = re.compile(
+    r"^\s*(?:static\s+|extern\s+|inline\s+)*"
+    r"(?:const\s+)?(?:\w+(?:\s*\*+)?)\s+"
+    r"([a-zA-Z_]\w{1,})\s*\(",
+    re.M,
+)
+# Python function definitions: "def foo("
+_PY_FUNC_DEF_RE = re.compile(r"^\s*(?:async\s+)?def\s+([a-zA-Z_]\w+)\s*\(", re.M)
+
+# Requirement ID patterns (see also source_grounding._REQ_ID_RE)
+_REQ_DEF_RE = re.compile(
+    r"\b((?:REQ|SWR|SRS|ASPICE|SW[-_]REQ|UC|HW[-_]REQ)[-_][A-Z0-9][-A-Z0-9_]{0,30})\b",
+    re.I,
+)
+
+
+def get_all_function_names(project_dir: str | Path) -> set[str]:
+    """Return all function names defined in source files under ``project_dir``.
+
+    Scans ``src/`` for C/C++ (.c, .h, .cpp, .hpp) and Python (.py) files
+    and extracts defined function names via static regex.  Returns an empty
+    set on error.
+
+    Used by SourceGroundingChecker to validate LLM-mentioned function refs.
+    """
+    project_dir = Path(project_dir)
+    names: set[str] = set()
+    c_patterns = ("src/**/*.c", "src/**/*.h", "src/**/*.cpp", "src/**/*.hpp")
+    py_patterns = ("src/**/*.py",)
+
+    for pat in c_patterns:
+        for f in project_dir.glob(pat):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+                names.update(m.group(1) for m in _C_FUNC_DEF_RE.finditer(text))
+            except OSError:
+                continue
+
+    for pat in py_patterns:
+        for f in project_dir.glob(pat):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+                names.update(m.group(1) for m in _PY_FUNC_DEF_RE.finditer(text))
+            except OSError:
+                continue
+
+    return names
+
+
+def get_all_requirement_ids(project_dir: str | Path) -> set[str]:
+    """Return all requirement IDs declared in the project docs.
+
+    Scans ``docs/``, ``requirements/``, and ``*.md`` / ``*.txt`` files in
+    the project root for requirement ID patterns (REQ-*, SWR-*, SRS-*, etc.).
+    Returns an empty set on error.
+
+    Used by SourceGroundingChecker to validate LLM-mentioned requirement refs.
+    """
+    project_dir = Path(project_dir)
+    ids: set[str] = set()
+    search_patterns = (
+        "docs/**/*.md",
+        "docs/**/*.txt",
+        "requirements/**/*.md",
+        "requirements/**/*.txt",
+        "*.md",
+    )
+
+    for pat in search_patterns:
+        for f in project_dir.glob(pat):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+                ids.update(
+                    m.group(1).upper() for m in _REQ_DEF_RE.finditer(text)
+                )
+            except OSError:
+                continue
+
+    return ids

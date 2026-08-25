@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-001
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -319,3 +321,215 @@ def restore(
     shutil.copy2(src, dst)
     log.info("step-cache restored: %s → %s (%s)", src.name, dst, fingerprint[:10])
     return str(dst)
+
+
+# ── Regression Baseline (基线快照, 2026-08-25) ─────────────────────────────
+# 目的: 记录上次成功 pipeline run 的指标作为基线; 后续 run 与基线对比,
+# 指标下降时发出警告或阻断, 防止「表面 GREEN 实际退步」。
+#
+# 存储: .yuleosh/baselines/<session_id>/metrics.json + latest_id.txt 指针
+# （与 T-004 consistency CLI 的 .yuleosh/baselines/ 惯例保持一致）
+# 对比规则:
+#   coverage_pct: 下降 > 2% → WARN; 下降 > 5% → ERROR
+#   misra_violations: 增加 > 0 → WARN; 增加 > 10 → ERROR
+#   test_failed: 增加 > 0 → ERROR
+#   gates_passed: 减少 → ERROR
+
+from dataclasses import dataclass as _dc
+
+
+@_dc
+class BaselineMetrics:
+    """Pipeline run metrics snapshot for regression comparison."""
+
+    session_id: str
+    run_at: str
+    coverage_pct: float = 0.0
+    misra_violations: int = 0
+    test_passed: int = 0
+    test_failed: int = 0
+    gates_passed: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "session_id": self.session_id,
+            "run_at": self.run_at,
+            "coverage_pct": self.coverage_pct,
+            "misra_violations": self.misra_violations,
+            "test_passed": self.test_passed,
+            "test_failed": self.test_failed,
+            "gates_passed": self.gates_passed,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BaselineMetrics":
+        return cls(
+            session_id=d.get("session_id", ""),
+            run_at=d.get("run_at", ""),
+            coverage_pct=float(d.get("coverage_pct", 0.0)),
+            misra_violations=int(d.get("misra_violations", 0)),
+            test_passed=int(d.get("test_passed", 0)),
+            test_failed=int(d.get("test_failed", 0)),
+            gates_passed=int(d.get("gates_passed", 0)),
+        )
+
+
+def _baseline_root(project_dir) -> Path:
+    return Path(project_dir) / ".yuleosh" / "baselines"
+
+
+def save_baseline(
+    project_dir, session_id: str, metrics: "BaselineMetrics"
+) -> Path:
+    """Persist *metrics* as the named baseline and update latest_id.txt pointer."""
+    d = _baseline_root(project_dir) / session_id
+    d.mkdir(parents=True, exist_ok=True)
+    out = d / "metrics.json"
+    out.write_text(json.dumps(metrics.to_dict(), indent=2), encoding="utf-8")
+    (_baseline_root(project_dir) / "latest_id.txt").write_text(
+        session_id, encoding="utf-8"
+    )
+    return out
+
+
+def load_latest_baseline(project_dir) -> "Optional[BaselineMetrics]":
+    """Load the most recently saved baseline, or None if not present."""
+    ptr = _baseline_root(project_dir) / "latest_id.txt"
+    if not ptr.exists():
+        return None
+    session_id = ptr.read_text(encoding="utf-8").strip()
+    metrics_path = _baseline_root(project_dir) / session_id / "metrics.json"
+    if not metrics_path.exists():
+        return None
+    try:
+        return BaselineMetrics.from_dict(
+            json.loads(metrics_path.read_text(encoding="utf-8"))
+        )
+    except (json.JSONDecodeError, KeyError, ValueError):
+        return None
+
+
+def compare_to_baseline(
+    current: "BaselineMetrics", baseline: "BaselineMetrics"
+) -> dict:
+    """Compare *current* run metrics against *baseline*.
+
+    Returns {status: "pass"|"warn"|"error", issues: [...]}
+    """
+    issues: list[dict] = []
+
+    def _issue(metric, bval, cval, delta, severity):
+        issues.append({
+            "metric": metric,
+            "baseline_val": bval,
+            "current_val": cval,
+            "delta": delta,
+            "severity": severity,
+        })
+
+    cov_delta = current.coverage_pct - baseline.coverage_pct
+    if cov_delta < -5:
+        _issue("coverage_pct", baseline.coverage_pct, current.coverage_pct, cov_delta, "ERROR")
+    elif cov_delta < -2:
+        _issue("coverage_pct", baseline.coverage_pct, current.coverage_pct, cov_delta, "WARN")
+
+    misra_delta = current.misra_violations - baseline.misra_violations
+    if misra_delta > 10:
+        _issue("misra_violations", baseline.misra_violations, current.misra_violations, misra_delta, "ERROR")
+    elif misra_delta > 0:
+        _issue("misra_violations", baseline.misra_violations, current.misra_violations, misra_delta, "WARN")
+
+    fail_delta = current.test_failed - baseline.test_failed
+    if fail_delta > 0:
+        _issue("test_failed", baseline.test_failed, current.test_failed, fail_delta, "ERROR")
+
+    gate_delta = current.gates_passed - baseline.gates_passed
+    if gate_delta < 0:
+        _issue("gates_passed", baseline.gates_passed, current.gates_passed, gate_delta, "ERROR")
+
+    has_error = any(i["severity"] == "ERROR" for i in issues)
+    has_warn = any(i["severity"] == "WARN" for i in issues)
+    return {
+        "status": "error" if has_error else ("warn" if has_warn else "pass"),
+        "issues": issues,
+    }
+
+
+def extract_metrics_from_session(session_dir: Path) -> "BaselineMetrics":
+    """Extract pipeline metrics from a completed session directory.
+
+    Reads gate-summary.json, coverage report, MISRA report.
+    Gracefully defaults to 0 when files are absent.
+    """
+    session_id = session_dir.name
+
+    gates_passed = 0
+    gate_summary = session_dir / "gate-summary.json"
+    if gate_summary.exists():
+        try:
+            gs = json.loads(gate_summary.read_text(encoding="utf-8"))
+            gates = gs.get("gates") or gs.get("results") or []
+            if isinstance(gates, list):
+                gates_passed = sum(
+                    1 for g in gates
+                    if isinstance(g, dict) and g.get("status") == "passed"
+                )
+            elif isinstance(gates, dict):
+                gates_passed = sum(
+                    1 for v in gates.values()
+                    if isinstance(v, dict) and v.get("status") == "passed"
+                )
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+    coverage_pct = 0.0
+    for cov_name in ("coverage-report.json", "coverage.json", "c-coverage.json"):
+        cov_path = session_dir / cov_name
+        if cov_path.exists():
+            try:
+                cov_data = json.loads(cov_path.read_text(encoding="utf-8"))
+                totals = cov_data.get("totals") or cov_data
+                raw = float(
+                    totals.get("percent_covered")
+                    or totals.get("line_rate", 0)
+                    or 0
+                )
+                coverage_pct = raw * 100.0 if raw <= 1.0 else raw
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                pass
+            break
+
+    misra_violations = 0
+    for misra_name in ("misra-report.json", "misra-review.json"):
+        mp = session_dir / misra_name
+        if mp.exists():
+            try:
+                md = json.loads(mp.read_text(encoding="utf-8"))
+                misra_violations = int(
+                    md.get("violation_count") or md.get("total_violations") or 0
+                )
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                pass
+            break
+
+    test_passed = test_failed = 0
+    for test_name in ("test-results.json", "unit-test.json", "c-unit-test.json"):
+        tp = session_dir / test_name
+        if tp.exists():
+            try:
+                td = json.loads(tp.read_text(encoding="utf-8"))
+                test_passed = int(td.get("passed") or td.get("tests_passed") or 0)
+                test_failed = int(td.get("failed") or td.get("tests_failed") or 0)
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                pass
+            break
+
+    return BaselineMetrics(
+        session_id=session_id,
+        run_at=datetime.now().isoformat(),
+        coverage_pct=coverage_pct,
+        misra_violations=misra_violations,
+        test_passed=test_passed,
+        test_failed=test_failed,
+        gates_passed=gates_passed,
+    )

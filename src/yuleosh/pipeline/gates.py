@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-001  @req SWR-001.1
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -21,8 +23,10 @@ GATES ↔ PIPELINE_STEPS 契约（R3 守护，由 tests/test_step_handlers_init_
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -157,6 +161,18 @@ def _worst_status(statuses: list[str]) -> str:
     return "passed"
 
 
+def _sha256_file(path: Path) -> str:
+    """Return SHA-256 hex digest of a file, or '' if unreadable."""
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return ""
+
+
 def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
                        output_path: str | None = None) -> str:
     """Aggregate the session's step statuses into gate-summary.json.
@@ -183,6 +199,8 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         }
     gate_statuses = aggregate_gate_status(step_statuses)
 
+    sdir = getattr(session, "session_dir", None)
+
     summary = {
         "schema": "gate-summary-v1",
         "session": getattr(session, "name", ""),
@@ -192,15 +210,25 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         "worst_gate_status": _worst_status(list(gate_statuses.values())),
     }
     for g in GATES:
-        summary["gates"].append({
+        # Q3: compute SHA-256 of each step's artifact file for tamper-evidence.
+        artifact_hashes: dict[str, str] = {}
+        if sdir is not None:
+            for step_key in g["step_keys"]:
+                artifact_path = Path(sdir) / f"{step_key}.json"
+                digest = _sha256_file(artifact_path)
+                if digest:
+                    artifact_hashes[step_key] = digest
+        gate_entry = {
             "gate": g["gate"],
             "name": g["name"],
             "status": gate_statuses.get(g["gate"], "passed"),
             "step_keys": g["step_keys"],
-        })
+        }
+        if artifact_hashes:
+            gate_entry["artifact_hashes"] = artifact_hashes
+        summary["gates"].append(gate_entry)
 
     if output_path is None:
-        sdir = getattr(session, "session_dir", None)
         if sdir is None:
             raise ValueError("session has no session_dir — pass output_path explicitly")
         output_path = str(Path(sdir) / "gate-summary.json")

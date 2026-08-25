@@ -23,9 +23,6 @@ import threading
 import time
 from typing import Optional
 
-import bcrypt
-import jwt  # PyJWT
-
 from yuleosh.store import Store
 from yuleosh.ui.auth_cookies import (  # T1 (v3.9.0): single cookie policy source
     ACCESS_TTL_HOURS,     # 0.5h — short-lived access token (SHALL-T1.2)
@@ -284,11 +281,13 @@ def _cleanup_stale_ip_entries():
 
 def _hash_password(password: str) -> str:
     """Hash password with bcrypt (12 rounds). Returns hashed string."""
+    import bcrypt
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 def _verify_password(password: str, hashed: str) -> bool:
     """Verify password against bcrypt hash. Constant-time comparison."""
+    import bcrypt
     try:
         return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
     except (ValueError, TypeError):
@@ -324,11 +323,13 @@ def _generate_token(user_id: int = 0, org_id: int = 0, email: str = "",
     }
     if purpose:
         payload["purpose"] = purpose
+    import jwt
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def _decode_token(token: str) -> dict | None:
     """Decode and validate JWT. Returns payload dict or None if invalid/expired."""
+    import jwt
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except Exception as e:

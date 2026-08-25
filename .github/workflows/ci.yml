@@ -111,6 +111,65 @@ jobs:
         fi
         echo "✅ Root CLI regression gate passed."
 
+    - name: Store registry gate (P1-2e)
+      run: |
+        # Prevent new store modules outside ADR-001 registered subsystems.
+        # Registered paths (see docs/adr/ADR-001-knowledge-subsystem-responsibilities.md):
+        #   knowledge_graph/{store,store_pg}.py
+        #   kb/store.py, memory/store.py, knowledge_management/store.py
+        #   top-level store.py, store_pg.py, store_interface.py (multi-tenant)
+        ALLOWED=$(cat <<'WL'
+src/yuleosh/store.py
+src/yuleosh/store_pg.py
+src/yuleosh/store_interface.py
+src/yuleosh/knowledge_graph/store.py
+src/yuleosh/knowledge_graph/store_pg.py
+src/yuleosh/kb/store.py
+src/yuleosh/memory/store.py
+src/yuleosh/knowledge_management/store.py
+WL
+        )
+        FOUND=$(find src/yuleosh -name 'store*.py' -type f)
+        UNREGISTERED=""
+        while IFS= read -r f; do
+          if ! echo "$ALLOWED" | grep -qxF "$f"; then
+            UNREGISTERED="${UNREGISTERED}${f}"$'\n'
+          fi
+        done <<< "$FOUND"
+        if [ -n "$UNREGISTERED" ]; then
+          echo "❌ Unregistered store module(s) detected:"
+          echo "$UNREGISTERED"
+          echo "Register in ADR-001 (docs/adr/ADR-001-knowledge-subsystem-responsibilities.md) before merging."
+          exit 1
+        fi
+        echo "✅ Store registry gate passed."
+
+    - name: Version drift gate (P2-3b)
+      run: |
+        PYPROJECT_VER=$(python -c "import tomllib; print(tomllib.loads(open('pyproject.toml').read())['project']['version'])")
+        README_VER=$(grep -oP 'version-\K[0-9]+\.[0-9]+\.[0-9]+' README.md | head -1)
+        if [ "$PYPROJECT_VER" != "$README_VER" ]; then
+          echo "❌ Version drift: pyproject.toml=$PYPROJECT_VER vs README.md=$README_VER"
+          exit 1
+        fi
+        echo "✅ Version drift gate passed ($PYPROJECT_VER)."
+
+    - name: Deploy drift gate (P2-1c)
+      continue-on-error: true
+      run: |
+        # Verify quickstart.yaml matches helm template output.
+        # continue-on-error until initial reconciliation is done.
+        curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        helm template yuleosh deploy/helm/yuleosh > /tmp/helm-output.yaml
+        if diff -q /tmp/helm-output.yaml deploy/k8s/quickstart.yaml >/dev/null 2>&1; then
+          echo "✅ Deploy drift gate passed."
+        else
+          echo "⚠️  quickstart.yaml drifted from helm template output."
+          echo "   Regenerate: helm template yuleosh deploy/helm/yuleosh > deploy/k8s/quickstart.yaml"
+          diff /tmp/helm-output.yaml deploy/k8s/quickstart.yaml | head -30
+          exit 1
+        fi
+
     - name: Run tests
       run: |
         # v3.10.0 Track1: pytest.ini addopts 仍带 --cov（9bf3e5ab 只删了 CLI 参数
@@ -130,6 +189,11 @@ jobs:
           --ignore=tests/test_e2e.py --ignore=tests/test_e2e_pipeline.py \
           --ignore=tests/test_alpha01_full_flow.py --ignore=tests/test_alpha02_onboarding.py \
           --ignore=tests/test_onboarding_e2e.py --ignore=tests/ci/test_e2e_report_pipeline.py 2>&1 | tail -20
+
+    - name: Coverage sub-gates (P1-3d)
+      if: matrix.python-version == '3.12'
+      run: |
+        bash scripts/coverage_subgate.sh
 
     - name: Upload pytest log (always)
       if: always()

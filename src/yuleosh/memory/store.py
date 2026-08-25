@@ -1,3 +1,5 @@
+
+# @req RS-015
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: MIT
 
@@ -329,6 +331,31 @@ class MemoryStore:
         )
         conn.commit()
         return self.get_fact(fact_id) if cur.rowcount > 0 else None
+
+    def adjust_trust(self, fact_id: int, delta: float) -> dict | None:
+        """Adjust trust by a relative delta (H1-2). +0.05 on pipeline success,
+        −0.10 on failure. Clamped to [TRUST_MIN, TRUST_MAX]."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT trust FROM memory_facts WHERE id = ?", (fact_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        new_trust = max(self.TRUST_MIN, min(self.TRUST_MAX, row["trust"] + delta))
+        conn.execute(
+            "UPDATE memory_facts SET trust = ?, updated_at = ? WHERE id = ?",
+            (new_trust, _now(), fact_id),
+        )
+        conn.commit()
+        return self.get_fact(fact_id)
+
+    def adjust_trust_batch(self, fact_ids: list[int], delta: float) -> int:
+        """Batch-adjust trust for multiple facts. Returns count updated."""
+        updated = 0
+        for fid in fact_ids:
+            if self.adjust_trust(fid, delta) is not None:
+                updated += 1
+        return updated
 
     # ── Reflective distillation support (2026-08-19) ─────────────────────
 

@@ -9,6 +9,8 @@ Covers:
 - 灰度迁移 YULEOSH_LLM_GATEWAY_STEPS（命中走 gateway，其余走旧路径）
 """
 
+# @tests src/yuleosh/pipeline/orchestrator.py
+
 import logging
 from unittest.mock import MagicMock, patch
 
@@ -201,7 +203,10 @@ class TestRoleScopedConstraints:
         session.agent_constraints = ""
         session.agent_shared_baseline = ""
         mock_call_sync.return_value = _fake_call_sync_return()
-        call_step_llm(session, "sys", "usr")
+        # Disable the confidence-instruction injection so the strict
+        # "no constraints → prompt passes through unchanged" contract holds.
+        with patch("yuleosh.pipeline.llm_gateway.CONFIDENCE_INSTRUCTION_ENABLED", False):
+            call_step_llm(session, "sys", "usr")
         _, kwargs = mock_call_sync.call_args
         assert kwargs["system_prompt"] == "sys"
 

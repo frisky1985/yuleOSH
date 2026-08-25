@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-001  @req SWR-001.1
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -294,6 +296,64 @@ class BaseHandler(ABC):
             encoding="utf-8",
         )
         return out_path
+
+    def record_step_verdict(
+        self,
+        session: "PipelineSession",
+        verdict: str,
+        artifact_paths: "list[str] | None" = None,
+    ) -> None:
+        """Write a step.verdict audit event into the SHA-256 hash chain (Q1).
+
+        Computes SHA-256 of each artifact file and records a ``step.verdict``
+        event so that any post-hoc tampering of test/review output is
+        detectable by ``AuditLog.verify()``.  Failures are non-fatal — audit
+        must never block the pipeline.
+
+        Args:
+            session: Current pipeline session.
+            verdict: Step verdict string (e.g. "passed", "failed", "skipped").
+            artifact_paths: Optional list of produced artifact file paths to
+                hash and anchor.  If None, uses ``build_output_path``.
+        """
+        try:
+            import hashlib as _hl
+            import os as _os
+            from yuleosh.audit.model import AuditLog
+
+            def _sha256(path: str) -> str:
+                h = _hl.sha256()
+                try:
+                    with open(path, "rb") as f:
+                        for chunk in iter(lambda: f.read(65536), b""):
+                            h.update(chunk)
+                except OSError:
+                    return ""
+                return h.hexdigest()
+
+            paths = artifact_paths or [str(self.build_output_path(session))]
+            artifact_hashes = {
+                _os.path.basename(p): _sha256(p)
+                for p in paths if p
+            }
+
+            audit_root = _os.environ.get("YULEOSH_AUDIT_ROOT")
+            audit_log = AuditLog(data_root=audit_root)
+            session_id = getattr(session, "name", "") or getattr(session, "session_id", "")
+            audit_log.record(
+                actor="system",
+                action="step.verdict",
+                target=f"step:{self.step_name}",
+                tenant="",
+                detail={
+                    "step": self.step_name,
+                    "session_id": session_id,
+                    "verdict": verdict,
+                    "artifact_hashes": artifact_hashes,
+                },
+            )
+        except Exception as _e:  # noqa: BLE001 — audit must never block pipeline
+            log.warning("record_step_verdict failed (non-fatal): %s", _e)
 
     def should_skip(self, session: PipelineSession) -> bool:
         """跳过条件。返回 True 则跳过执行。"""

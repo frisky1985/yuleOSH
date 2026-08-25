@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-005  @req SWR-001.2
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -25,6 +27,23 @@ from pathlib import Path
 from typing import Optional
 
 log = logging.getLogger("yuleosh.alm.traceability")
+
+# Source file extensions to scan for requirement annotations and code
+_SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp")
+
+# Regex for @req annotation: matches @req RS-001, @req(RS-001), @req RS-001, RS-002
+_REQ_ANNOTATION_RE = re.compile(
+    r'@req\s*[\(\s]\s*([A-Z][A-Z0-9_\-\.]+(?:\s*,\s*[A-Z][A-Z0-9_\-\.]+)*)',
+    re.IGNORECASE,
+)
+
+# Regex for @tests annotation: matches @tests src/init.py, @tests src/init.py:init()
+# Captures: (file_path, optional_function_list)
+_TEST_ANNOTATION_RE = re.compile(
+    r'@tests\s+([\w./\\\-]+(?:\.[\w]+))'  # file path (e.g., src/init.py)
+    r'(?:\s*:\s*([^\n\r]+))?',             # optional function list after colon (rest of line)
+    re.IGNORECASE,
+)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -66,6 +85,111 @@ def _is_shall_table_header(col_names: list[str]) -> bool:
         or "STATEMENT" in col_names[1].upper()
     )
     return id_found and desc_found
+
+
+def scan_req_annotations(src_dir: Path) -> dict[str, list[str]]:
+    """Scan source files for @req annotations linking code to requirements.
+
+    Supports annotation syntax:
+      - ``# @req RS-001`` (Python/shell line comment)
+      - ``// @req RS-001`` (C/C++ line comment)
+      - ``/* @req RS-001 */`` (C/C++ block comment)
+      - ``@req(RS-001)`` (decorator style)
+      - ``@req RS-001, RS-002`` (multiple IDs on one line)
+
+    Returns dict mapping req_id (uppercased) to list of relative file paths.
+    Annotation matches are authoritative — they take priority over keyword
+    heuristics in generate_lrm().
+    """
+    if not src_dir.exists():
+        return {}
+
+    annotation_map: dict[str, list[str]] = {}
+
+    for ext in _SOURCE_EXTENSIONS:
+        for source_file in sorted(src_dir.rglob(f"*{ext}")):
+            if not source_file.is_file():
+                continue
+            try:
+                text = source_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            # For C/C++ files, strip block comments to avoid false positives
+            # from commented-out code (but keep line comments)
+            if ext in (".c", ".h", ".cpp", ".hpp"):
+                # Strip /* ... */ block comments but preserve // line comments
+                text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+
+            # Find all @req annotations
+            for match in _REQ_ANNOTATION_RE.finditer(text):
+                id_group = match.group(1)
+                # Split comma-separated IDs and normalize to uppercase
+                for req_id in id_group.split(","):
+                    req_id = req_id.strip().upper()
+                    if req_id:
+                        rel_path = str(source_file.relative_to(src_dir.parent))
+                        if req_id not in annotation_map:
+                            annotation_map[req_id] = []
+                        if rel_path not in annotation_map[req_id]:
+                            annotation_map[req_id].append(rel_path)
+
+    return annotation_map
+
+
+def scan_test_code_links(project_dir: Path) -> dict[str, dict]:
+    """Scan test files for @tests annotations linking tests to source code.
+
+    Supports annotation syntax:
+      - ``@tests src/init.py`` (test file tests this source file)
+      - ``@tests src/init.py:init()`` (test file tests this specific function)
+      - ``@tests src/init.py:init, helper`` (multiple functions)
+
+    Returns dict mapping test_file (relative path) to:
+      {
+        "source_file": str,       # source file being tested
+        "functions": list[str],   # specific functions being tested (may be empty)
+      }
+
+    This enables direct test → code traceability, complementing the indirect
+    link via requirement IDs.
+    """
+    if not project_dir.exists():
+        return {}
+
+    test_links: dict[str, dict] = {}
+    tests_dir = project_dir / "tests"
+
+    if not tests_dir.exists():
+        return {}
+
+    # Scan all Python test files
+    for test_file in sorted(tests_dir.rglob("test_*.py")):
+        if not test_file.is_file():
+            continue
+        try:
+            text = test_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        # Find all @tests annotations
+        for match in _TEST_ANNOTATION_RE.finditer(text):
+            source_path = match.group(1)
+            functions_str = match.group(2)
+
+            # Parse function list if present
+            functions = []
+            if functions_str:
+                functions = [f.strip().rstrip("()") for f in functions_str.split(",")]
+                functions = [f for f in functions if f]
+
+            rel_test_path = str(test_file.relative_to(project_dir))
+            test_links[rel_test_path] = {
+                "source_file": source_path,
+                "functions": functions,
+            }
+
+    return test_links
 
 
 # ── SHALL statement extraction ──────────────────────────────────────────
@@ -623,7 +747,20 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
 
     # Build code → requirement mapping by scanning src/ for comments
     src_dir = Path(project_dir) / "src"
+
+    # Scan for @req annotations (authoritative, language-agnostic)
+    annotation_map = scan_req_annotations(src_dir)
+
+    # Scan for @tests annotations (test → code direct links)
+    test_code_links = scan_test_code_links(Path(project_dir))
+
+    # Scan for SHALL-N / REQ-ID comments
     code_map = _scan_comments_for_requirements(src_dir, shalls)
+
+    # Merge annotation hits into code_map with annotation paths first
+    for req_id, paths in annotation_map.items():
+        existing = code_map.get(req_id, [])
+        code_map[req_id] = list(dict.fromkeys(paths + existing))
 
     requirements = []
     for shall in shalls:
@@ -643,8 +780,29 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         # Find tests that reference this requirement (use spec_req_id for better matches)
         matching_tests = _find_tests_for_requirement(test_reports, spec_req_id, shall["statement"])
 
+        # Enrich test entries with @tests annotation links (test → code direct traceability)
+        for test_entry in matching_tests:
+            if isinstance(test_entry, dict) and "file" in test_entry:
+                test_file = test_entry["file"]
+                if test_file in test_code_links:
+                    link = test_code_links[test_file]
+                    test_entry["tested_code"] = {
+                        "source_file": link["source_file"],
+                        "functions": link["functions"],
+                    }
+
         # Find reviews that reference this requirement
         matching_reviews = _find_reviews_for_requirement(reviews, spec_req_id, shall["statement"])
+
+        # Determine match method for traceability audit
+        if req_id in annotation_map or spec_req_id in annotation_map:
+            match_method = "annotation"
+        elif req_id in code_map and code_map[req_id]:
+            match_method = "comment"
+        elif matching_code:
+            match_method = "keyword"
+        else:
+            match_method = "none"
 
         requirements.append({
             "id": req_id,
@@ -657,6 +815,7 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
             "has_code": len(matching_code) > 0,
             "has_test": len(matching_tests) > 0,
             "has_review": len(matching_reviews) > 0,
+            "match_method": match_method,
             "step_handlers": _find_step_handlers_for_requirement(project_dir, req_id, shall),
         })
 
@@ -971,42 +1130,65 @@ def _scan_comments_for_requirements(src_dir: Path, shalls: list[dict]) -> dict:
     req_pattern = re.compile(r'SHALL-\d+')
     comment_pattern = re.compile(r'REQ[- ]?(?:ID)?[:\s]+(.*?)(?:\*/|$)', re.IGNORECASE)
 
-    for source_file in src_dir.rglob("*.py"):
-        if not source_file.is_file():
-            continue
-        try:
-            text = source_file.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
+    for ext in _SOURCE_EXTENSIONS:
+        for source_file in sorted(src_dir.rglob(f"*{ext}")):
+            if not source_file.is_file():
+                continue
+            try:
+                text = source_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
 
-        # Scan for SHALL references in both comments and code
-        found_ids = set()
-        for match in req_pattern.findall(text):
-            if match in code_map:
-                found_ids.add(match)
+            # For C/C++ files, strip block comments to avoid false positives
+            if ext in (".c", ".h", ".cpp", ".hpp"):
+                text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
 
-        for req_id in found_ids:
-            rel_path = str(source_file.relative_to(src_dir.parent))
-            if rel_path not in code_map.get(req_id, []):
-                if req_id in code_map:
-                    code_map[req_id].append(rel_path)
+            # Scan for SHALL references in both comments and code
+            found_ids = set()
+            for match in req_pattern.findall(text):
+                if match in code_map:
+                    found_ids.add(match)
+
+            for req_id in found_ids:
+                rel_path = str(source_file.relative_to(src_dir.parent))
+                if rel_path not in code_map.get(req_id, []):
+                    if req_id in code_map:
+                        code_map[req_id].append(rel_path)
 
     return code_map
 
 
-def _extract_keywords(statement: str) -> list[str]:
+def _extract_keywords(statement: str, project_dir: str | None = None) -> list[str]:
     """Extract meaningful keywords from a SHALL statement."""
-    # Remove common stop words
-    stop_words = {
-        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to",
-        "for", "of", "with", "by", "from", "as", "is", "was", "be",
-        "are", "been", "being", "have", "has", "had", "do", "does",
-        "did", "will", "would", "could", "should", "may", "might",
-        "shall", "must", "not", "no", "its", "it's", "their", "them",
-        "they", "this", "that", "these", "those",
-    }
+    try:
+        from yuleosh.alm.traceability_config import get_stop_words
+        stop_words = get_stop_words(project_dir)
+    except Exception:
+        stop_words = frozenset({
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to",
+            "for", "of", "with", "by", "from", "as", "is", "was", "be",
+            "are", "been", "being", "have", "has", "had", "do", "does",
+            "did", "will", "would", "could", "should", "may", "might",
+            "shall", "must", "not", "no", "its", "it's", "their", "them",
+            "they", "this", "that", "these", "those",
+        })
     tokens = re.findall(r'\b[a-zA-Z_]\w+\b', statement.lower())
-    return [t for t in tokens if t not in stop_words and len(t) > 2]
+    keywords = [t for t in tokens if t not in stop_words and len(t) > 2]
+
+    # CJK bigrams — slide 2-char window over each contiguous CJK run
+    cjk_runs = re.findall(r'[\u4e00-\u9fff]+', statement)
+    for run in cjk_runs:
+        if len(run) == 1:
+            if run not in stop_words:
+                keywords.append(run)
+        else:
+            for i in range(len(run) - 1):
+                bigram = run[i:i+2]
+                if bigram not in stop_words:
+                    keywords.append(bigram)
+
+    # Deduplicate while preserving order
+    return list(dict.fromkeys(keywords))
 
 
 def _find_code_by_keywords(src_dir: Path, keywords: list[str]) -> list[str]:
@@ -1015,18 +1197,22 @@ def _find_code_by_keywords(src_dir: Path, keywords: list[str]) -> list[str]:
         return []
 
     matching = []
-    for source_file in sorted(src_dir.rglob("*.py")):
-        if not source_file.is_file():
-            continue
-        try:
-            text = source_file.read_text(encoding="utf-8", errors="replace").lower()
-        except OSError:
-            continue
-        # Count matching keywords
-        matches = sum(1 for kw in keywords if kw in text)
-        if matches > 0:
-            rel = str(source_file.relative_to(src_dir.parent))
-            matching.append(rel)
+    for ext in _SOURCE_EXTENSIONS:
+        for source_file in sorted(src_dir.rglob(f"*{ext}")):
+            if not source_file.is_file():
+                continue
+            try:
+                text = source_file.read_text(encoding="utf-8", errors="replace")
+                if ext in (".c", ".h", ".cpp", ".hpp"):
+                    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+                text = text.lower()
+            except OSError:
+                continue
+            # Count matching keywords
+            matches = sum(1 for kw in keywords if kw in text)
+            if matches > 0:
+                rel = str(source_file.relative_to(src_dir.parent))
+                matching.append(rel)
 
     return matching[:20]  # limit
 
@@ -1038,16 +1224,20 @@ def _find_code_by_keywords_for_id(src_dir: Path, req_id: str) -> list[str]:
 
     matching = []
     id_lower = req_id.lower()
-    for source_file in sorted(src_dir.rglob("*.py")):
-        if not source_file.is_file():
-            continue
-        try:
-            text = source_file.read_text(encoding="utf-8", errors="replace").lower()
-        except OSError:
-            continue
-        if id_lower in text:
-            rel = str(source_file.relative_to(src_dir.parent))
-            matching.append(rel)
+    for ext in _SOURCE_EXTENSIONS:
+        for source_file in sorted(src_dir.rglob(f"*{ext}")):
+            if not source_file.is_file():
+                continue
+            try:
+                text = source_file.read_text(encoding="utf-8", errors="replace")
+                if ext in (".c", ".h", ".cpp", ".hpp"):
+                    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+                text = text.lower()
+            except OSError:
+                continue
+            if id_lower in text:
+                rel = str(source_file.relative_to(src_dir.parent))
+                matching.append(rel)
 
     return matching[:20]
 
@@ -1214,6 +1404,31 @@ def compute_trace_integrity(project_dir: str,
     canonical = json.dumps(body, sort_keys=True, ensure_ascii=False, default=str)
     digest.update(canonical.encode("utf-8"))
     record["integrity_hash"] = digest.hexdigest()
+
+    # Q2: anchor the RTM integrity hash into the SHA-256 audit chain so any
+    # post-hoc mutation of the traceability snapshot is detectable.
+    try:
+        from yuleosh.audit.model import AuditLog as _AuditLog
+        _audit_root = os.environ.get("YULEOSH_AUDIT_ROOT")
+        _audit = _AuditLog(data_root=_audit_root)
+        _audit.record(
+            actor="system",
+            action="traceability.snapshot",
+            target=f"project:{os.path.basename(project_dir)}",
+            tenant="",
+            detail={
+                "project_dir": str(project_dir),
+                "integrity_hash": record["integrity_hash"],
+                "status": record["status"],
+                "requirements_total": record["requirements_total"],
+                "test_coverage_pct": record["test_coverage_pct"],
+                "broken_link_count": len(record["broken_links"]),
+                "orphaned_test_count": len(record["orphaned_tests"]),
+                "generated_at": record["generated_at"],
+            },
+        )
+    except Exception as _e:
+        log.warning("compute_trace_integrity: audit anchor failed (non-fatal): %s", _e)
 
     return record
 

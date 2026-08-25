@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-003
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -26,6 +28,8 @@ from yuleosh.pipeline.stages import timed_step
 log = logging.getLogger("pipeline.step_handlers.review_prd")
 
 __all__ = ["step_review_prd"]
+
+from yuleosh.pipeline.step_handlers.audit_utils import record_step_verdict
 
 
 # ------------------------------------------------------------------
@@ -659,6 +663,7 @@ def step_review_prd(session: PipelineSession) -> str:
         print(f"       Status: {review['status']}")
         log.info("PRD review: covered=%d/%d, testability=%d, status=%s",
                  covered, len(coverage_findings), testability["score"], review["status"])
+        record_step_verdict(session, "prd-review", review["status"], [str(out_path)])
         return str(out_path)
 
     except PipelineStepError:

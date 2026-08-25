@@ -11,8 +11,6 @@ import functools
 import logging
 from typing import Optional
 
-import jwt
-
 from . import json_error
 from yuleosh.ui.auth_extended import (
     JWT_SECRET as _JWT_SECRET,          # A1: unified source (SHALL-A1.1)

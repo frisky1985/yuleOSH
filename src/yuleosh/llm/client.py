@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-001
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -72,7 +74,7 @@ TASK_RAG_SOURCES: Dict[str, List[str]] = {
     "test_generation": ["best_practices"],
     "architecture_design": ["best_practices"],
     "review_blocking": ["misra_c"],
-    "review_selfcheck": [],
+    "review_selfcheck": ["repo_facts", "kg"],
     "simple_summary": [],
 }
 
@@ -309,17 +311,19 @@ def resolve_config(
 
     task_budget = TASK_BUDGETS.get(route_task_type, TASK_BUDGETS["code_generation"])
 
+    # Q4: codegen must be deterministic — pin temperature=0.0, seed=42 so
+    # repeated runs from the same spec produce byte-comparable outputs.
+    is_codegen = route_task_type == "code_generation"
     return LLMConfig(
         model=model,
         provider=provider,
         max_tokens=min(4096, int(task_budget.get("max_tokens_out", 4096))),
-        temperature=0.3,
+        temperature=0.0 if is_codegen else 0.3,
+        seed=42 if is_codegen else None,
         rag_enabled=route_task_type not in ("simple_summary",),
         rag_sources=TASK_RAG_SOURCES.get(route_task_type, []),
         max_cost_usd=task_budget.get("max_cost_usd", 0.50),
         task_type=route_task_type,
-        # Project memory follows the same routing rule as RAG: cheap
-        # "simple_summary" tasks skip memory injection too.
         memory_enabled=route_task_type not in ("simple_summary",),
     )
 
@@ -429,22 +433,27 @@ class LLMClient:
 
         # 3.5 Project memory injection (if enabled) — memory facts +
         # session history as the "project memory" RAG knowledge source.
+        _memory_assembler = None  # kept for H1-2c trust adjust below
         if resolved_config.memory_enabled:
             try:
-                from yuleosh.memory.llm_context import assemble_memory_context
-
-                memory_context = assemble_memory_context(
-                    query=prompt,
-                    max_facts=resolved_config.memory_max_facts,
-                    max_sessions=resolved_config.memory_max_sessions,
-                    max_chars=resolved_config.memory_max_chars,
+                from yuleosh.memory.llm_context import (
+                    MemoryContextAssembler,
+                    is_memory_context_enabled,
                 )
-                if memory_context:
-                    effective_system = (
-                        f"{effective_system}\n\n{memory_context}"
-                        if effective_system
-                        else memory_context
+
+                if is_memory_context_enabled():
+                    _memory_assembler = MemoryContextAssembler(
+                        max_facts=resolved_config.memory_max_facts,
+                        max_sessions=resolved_config.memory_max_sessions,
+                        max_chars=resolved_config.memory_max_chars,
                     )
+                    memory_context = _memory_assembler.assemble(prompt)
+                    if memory_context:
+                        effective_system = (
+                            f"{effective_system}\n\n{memory_context}"
+                            if effective_system
+                            else memory_context
+                        )
             except Exception as e:  # noqa: BLE001 — memory must never block LLM
                 log.warning(
                     "Project memory injection failed (non-fatal): %s", e
@@ -471,6 +480,19 @@ class LLMClient:
         )
         duration = time.time() - start_time
         response.duration_s = duration
+
+        # 5.5 Memory trust auto-adjust (H1-2c): reinforce facts that were
+        # injected into the context. +0.05 on a successful call, −0.10 on
+        # error. Non-fatal — trust adjustment must never block the response.
+        if _memory_assembler is not None:
+            try:
+                fact_ids = getattr(_memory_assembler, "last_fact_ids", [])
+                if fact_ids:
+                    _store = _memory_assembler._store
+                    delta = -0.10 if response.error else 0.05
+                    _store.adjust_trust_batch(fact_ids, delta)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Memory trust auto-adjust failed (non-fatal): %s", e)
 
         # 6. Log the call — the provider field records the provider actually
         # used (after any degradation), not the configured primary.
@@ -521,6 +543,10 @@ class LLMClient:
                     detail={
                         "task_type": task_type,
                         "provider": response.provider or resolved_config.provider,
+                        "temperature": resolved_config.temperature,
+                        "seed": resolved_config.seed,
+                        "frequency_penalty": resolved_config.frequency_penalty,
+                        "presence_penalty": resolved_config.presence_penalty,
                     },
                 )
             except Exception as e:  # noqa: BLE001 — audit must never block the LLM call

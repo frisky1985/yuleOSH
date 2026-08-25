@@ -33,6 +33,12 @@ class LLMConfig:
     timeout_s: int = 60
     max_retries: int = 3
 
+    # Reproducibility (H1-1): seed for deterministic output; penalties to
+    # reduce repetition/fixation. Supported by DeepSeek, Anthropic, OpenAI.
+    seed: Optional[int] = None
+    frequency_penalty: float = 0.0
+    presence_penalty: float = 0.0
+
     # RAG
     rag_enabled: bool = True
     rag_sources: List[str] = field(default_factory=lambda: ["misra", "best_practices"])
@@ -72,6 +78,9 @@ class LLMResponse:
     cost: float = 0.0
     duration_s: float = 0.0
     error: Optional[str] = None
+    # H3-1a: LLM self-reported output confidence (0.0–1.0). None means not
+    # reported. Parsed from LLM output by the L1 fallback layer.
+    confidence: Optional[float] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════

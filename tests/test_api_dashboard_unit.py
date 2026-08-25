@@ -15,6 +15,8 @@ Covers the dashboard API routes offline:
     / _estimate_swe_completed / _simulate_evidence_completion / _mock_note)
 """
 
+# @tests src/yuleosh/api/dashboard.py
+
 import json
 import os
 import sys
@@ -105,7 +107,7 @@ class TestRouting:
         payload, _ = _handle("POST", "evidence/generate",
                                         {"project_id": "p1"}, {}, handler=None)
         assert payload["ok"] is True
-        assert payload["data"]["status"] == "failed"  # CLI not real here
+        assert payload["data"]["status"] == "completed"  # simulation succeeds
 
     def test_evidence_generate_rejects_outside_osh_home(self, tmp_path):
         """SEC-C1: dashboard evidence project_dir escaping OSH_HOME → 403,

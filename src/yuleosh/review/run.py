@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# @req RS-003  @req SWR-003.1
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
@@ -26,6 +28,13 @@ class ReviewFinding:
         self.file = file
         self.line = line
         self.message = message
+        # Traceability fields (2026-08-25)
+        import hashlib as _hashlib
+        self.finding_id = _hashlib.sha256(
+            f"{file}{line}{message}".encode("utf-8")
+        ).hexdigest()[:8]
+        self.req_ids: list[str] = []
+        self.status: str = "open"  # open | fixed | accepted | wont_fix
 
     def to_dict(self) -> dict:
         """Serialize finding to dictionary."""
@@ -35,6 +44,9 @@ class ReviewFinding:
             "file": self.file,
             "line": self.line,
             "message": self.message,
+            "finding_id": self.finding_id,
+            "req_ids": self.req_ids,
+            "status": self.status,
         }
 
 
@@ -136,12 +148,21 @@ class ReviewSession:
 
     def to_dict(self) -> dict:
         """Serialize review session to dictionary."""
+        # Build req_id → [finding_id] traceability map (2026-08-25)
+        traceability: dict[str, list[str]] = {}
+        for review in self.reviews:
+            for finding in review.findings:
+                for rid in getattr(finding, "req_ids", []):
+                    traceability.setdefault(rid, []).append(
+                        getattr(finding, "finding_id", "")
+                    )
         return {
             "task": self.task_name,
             "created_at": self.created_at,
             "status": self.status,
             "decision": self.decision,
             "reviews": [r.to_dict() for r in self.reviews],
+            "traceability": traceability,
         }
 
 

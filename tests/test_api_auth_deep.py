@@ -7,6 +7,8 @@ Covers: _hash_password, _verify_password, _generate_token, _decode_token,
         handle_auth dispatch.
 """
 
+# @tests src/yuleosh/api/auth.py
+
 import json
 import os
 import sys
@@ -122,7 +124,7 @@ class TestJWTToken:
     def test_decode_expired_sig(self):
         from yuleosh.api.auth import _decode_token
         # A1: the unified decoder lives in ui/auth_extended.
-        with patch("yuleosh.ui.auth_extended.jwt.decode") as mock_decode:
+        with patch("jwt.decode") as mock_decode:
             import jwt as jwt_mod
             mock_decode.side_effect = jwt_mod.ExpiredSignatureError()
             result = _decode_token("expired")
@@ -131,7 +133,7 @@ class TestJWTToken:
     def test_decode_invalid_error(self):
         from yuleosh.api.auth import _decode_token
         # A1: the unified decoder lives in ui/auth_extended.
-        with patch("yuleosh.ui.auth_extended.jwt.decode") as mock_decode:
+        with patch("jwt.decode") as mock_decode:
             import jwt as jwt_mod
             mock_decode.side_effect = jwt_mod.InvalidTokenError()
             result = _decode_token("bad")
