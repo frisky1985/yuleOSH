@@ -33,6 +33,9 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 
+# WorkBuddy 工作区元数据
+.workbuddy/
+
 # Environment
 .env
 .venv/
