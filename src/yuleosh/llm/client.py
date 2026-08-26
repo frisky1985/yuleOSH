@@ -494,6 +494,61 @@ class LLMClient:
             except Exception as e:  # noqa: BLE001
                 log.warning("Memory trust auto-adjust failed (non-fatal): %s", e)
 
+        # 5.6 KG anchoring gate (双层幻觉防护 — anti-hallucination)
+        # Layer 1: 检查输出是否引用 KG 中已知实体；Layer 2: 无锚点时触发投票。
+        # 锚定失败不阻塞主流程，只标记 response 供下游决策。
+        if (
+            resolved_config.anchoring_enabled
+            and not response.error
+            and task_type
+            and task_type in resolved_config.anchoring_tasks
+        ):
+            try:
+                from yuleosh.llm.anchoring import (
+                    check_anchoring,
+                    consistency_vote,
+                    write_consensus_to_kg,
+                )
+
+                anchor_result = check_anchoring(
+                    response.content, task_type
+                )
+                response.anchored = anchor_result.anchored
+                response.anchor_method = anchor_result.method
+                response.anchor_ids = anchor_result.entity_ids
+
+                if not anchor_result.anchored:
+                    # Layer 2: 无锚点 → 投票
+                    log.info(
+                        "Output unanchored for task_type=%s, triggering voting",
+                        task_type,
+                    )
+                    vote_result = await consistency_vote(
+                        prompt=prompt,
+                        task_type=task_type,
+                        config=resolved_config,
+                        n_variants=resolved_config.voting_n_variants,
+                        consensus_threshold=resolved_config.voting_consensus_threshold,
+                    )
+                    if vote_result.consensus:
+                        response.content = vote_result.merged_output
+                        response.anchor_method = "voting-consensus"
+                        response.anchored = True
+                        # 回写 KG
+                        write_consensus_to_kg(
+                            entity_id=f"vote-{task_type}-{int(time.time())}",
+                            output=vote_result.merged_output,
+                        )
+                    else:
+                        response.anchor_method = "voting-divergent"
+                        log.warning(
+                            "Voting divergent for task_type=%s (agreement=%.2f)",
+                            task_type,
+                            vote_result.agreement,
+                        )
+            except Exception as e:  # noqa: BLE001 — anchoring must never block
+                log.warning("KG anchoring gate failed (non-fatal): %s", e)
+
         # 6. Log the call — the provider field records the provider actually
         # used (after any degradation), not the configured primary.
         try:

@@ -66,6 +66,15 @@ class LLMConfig:
     # SHA-256 审计链（ai.generation 事件）。设 False 可关闭。
     audit_ai: bool = True
 
+    # Anti-hallucination: KG anchoring (双层幻觉防护)
+    anchoring_enabled: bool = True
+    anchoring_tasks: list[str] = field(default_factory=lambda: [
+        "code_generation", "safety_code_generation", "spec_review",
+        "architecture_design", "test_generation",
+    ])
+    voting_n_variants: int = 3
+    voting_consensus_threshold: float = 0.7
+
 
 @dataclass
 class LLMResponse:
@@ -81,6 +90,11 @@ class LLMResponse:
     # H3-1a: LLM self-reported output confidence (0.0–1.0). None means not
     # reported. Parsed from LLM output by the L1 fallback layer.
     confidence: Optional[float] = None
+
+    # Anti-hallucination: KG anchoring (双层幻觉防护)
+    anchored: bool = True
+    anchor_method: str = "none"  # "kg-entity" | "voting-consensus" | "voting-divergent" | "none"
+    anchor_ids: list[str] = field(default_factory=list)
 
 
 # ═══════════════════════════════════════════════════════════════════════
