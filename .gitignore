@@ -46,6 +46,11 @@ venv/
 tests/unity/coverage-*
 tests/unity/*.info
 
+# BSW C 单元测试编译产物（源码 .c/.h 入库，可执行文件忽略）
+tests/bsw/mcal/wdg/test_wdg
+tests/bsw/mcal/dio/test_dio
+tests/bsw/services/ecum/test_ecum
+
 # Runtime data (persistent DB, session state)
 .yuleosh/
 .osh/
@@ -104,6 +109,7 @@ reports/*.md
 # === 商业秘密保护 (2026-08-05) ===
 # 内部文档/报告/评审 — 已移至 yuleOSH-private/
 yuleOSH-business-report.md
+docs/ROADMAP-multistandard-legacy.md
 TASK_STATUS.md
 coverage-phase1-report.md
 aspice-report.txt

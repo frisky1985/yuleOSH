@@ -38,9 +38,9 @@ from yuleosh.loop_engine.rca_engine import RCAEngine, RCAReport
 # ═══════════════════════════════════════════════════════════════════════
 
 @pytest.fixture
-def handler():
-    """创建一个干净的 Loop3 handler。"""
-    h = Loop3KPIToImproveHandler(output_dir=".")
+def handler(tmp_path):
+    """创建一个干净的 Loop3 handler（临时目录隔离，防止工单/KPI 趋势泄漏到仓库根目录）。"""
+    h = Loop3KPIToImproveHandler(output_dir=str(tmp_path))
     return h
 
 

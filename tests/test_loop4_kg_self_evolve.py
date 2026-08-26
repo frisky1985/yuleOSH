@@ -41,9 +41,9 @@ from yuleosh.loop_engine.feedback_handlers.loop4_kg_self_evolve import (
 # ═══════════════════════════════════════════════════════════════════════
 
 @pytest.fixture
-def handler():
-    """创建一个干净的 Loop4 handler。"""
-    return Loop4KGSelfEvolveHandler(output_dir=".")
+def handler(tmp_path):
+    """创建一个干净的 Loop4 handler（临时目录隔离，防止工单/快照泄漏到仓库根目录）。"""
+    return Loop4KGSelfEvolveHandler(output_dir=str(tmp_path))
 
 
 @pytest.fixture
