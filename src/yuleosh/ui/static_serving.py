@@ -19,6 +19,13 @@ from pathlib import Path
 
 from yuleosh.ui.http_security import _csp_for_html, _inject_csp_nonce
 
+# next.config.js sets ``assetPrefix: "/yuleOSH"`` — a URL-only prefix that
+# Next.js prepends to every exported asset reference.  The files themselves
+# live at the frontend/out root (out/_next/static/...), so the prefix must be
+# stripped before resolving on disk; otherwise every CSS/JS bundle misses and
+# falls through to the 404 page, leaving the Next.js UI unstyled and inert.
+_ASSET_PREFIXES = ("yuleOSH/",)
+
 
 def _serve_static(self, path: str) -> None:
     """Serve a static file from frontend/out/."""
@@ -55,6 +62,12 @@ def _serve_static(self, path: str) -> None:
     else:
         # Strip leading / and sanitize
         rel = path.lstrip("/")
+        # assetPrefix is URL-only (see _ASSET_PREFIXES) — drop it so
+        # /yuleOSH/_next/static/x.css resolves to out/_next/static/x.css.
+        for prefix in _ASSET_PREFIXES:
+            if rel.startswith(prefix):
+                rel = rel[len(prefix):]
+                break
         file_path = static_dir / rel
         # If path is a directory, try index.html
         if file_path.is_dir():

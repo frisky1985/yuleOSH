@@ -238,7 +238,17 @@ def handle_get(handler) -> None:
         else:
             handler._serve_page("404.html", {})
     else:
-        handler._serve_page("404.html", {})
+        # Static asset passthrough for the Next.js frontend: hashed bundles
+        # (/yuleOSH/_next/static/*.css|js) and exported pages under
+        # frontend/out/.  Previously every unmatched path fell through to
+        # the 404 page, so CSS/JS bundles were answered with a 200 HTML
+        # error page and the Next.js UI never rendered.
+        # Paths without a file extension keep the unknown-path contract
+        # (404 page) so page routing stays authoritative.
+        if Path(path).suffix:
+            handler._serve_static(path)
+        else:
+            handler._serve_page("404.html", {})
 
 
 def handle_post(handler) -> None:
