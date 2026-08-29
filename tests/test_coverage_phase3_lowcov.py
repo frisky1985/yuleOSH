@@ -187,7 +187,6 @@ class TestHandleGet:
         ("/en", "en/index.html"),
         ("/en/index.html", "en/index.html"),
         ("/en/pricing", "en/pricing.html"),
-        ("/dashboard", "dashboard-v5.html"),
         ("/onboarding", "onboarding.html"),
         ("/pipeline-flow", "pipeline-flow.html"),
         ("/pipeline-board", "pipeline-board.html"),
@@ -208,6 +207,17 @@ class TestHandleGet:
             else:
                 handler._serve_file.assert_called_once()
                 assert str(handler._serve_file.call_args[0][0]).endswith(filename)
+
+    def test_dashboard_serves_nextjs_app(self):
+        """/dashboard serves the Next.js export (frontend/out/dashboard) instead
+        of the legacy Python dashboard-v5.html (2026-08-30)."""
+        from yuleosh.ui.routes.handler_helpers import handle_get
+        handler = _make_handler(path="/dashboard")
+        handler._check_auth = mock.MagicMock(return_value=True)
+        handler._serve_static = mock.MagicMock()
+        with mock.patch("yuleosh.ui.server.api_v1_dispatch", return_value=False):
+            handle_get(handler)
+        handler._serve_static.assert_called_once_with("/dashboard")
 
     def test_apikeys_page(self):
         from yuleosh.ui.routes.handler_helpers import handle_get

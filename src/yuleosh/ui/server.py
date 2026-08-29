@@ -27,7 +27,7 @@ Environment variables:
   GET /, /index.html, /* — Serve frontend/out/ static files
 
 ### Pages
-  GET /dashboard     — Dashboard landing page (dashboard-v5.html)
+  GET /dashboard     — Dashboard landing page (Next.js app: frontend/out/dashboard/index.html)
   GET /health        — Health check endpoint
   GET /status        — System status endpoint
   GET /login         — Login page

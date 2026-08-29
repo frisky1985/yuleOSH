@@ -169,7 +169,14 @@ def handle_get(handler) -> None:
     elif path == "/en/pricing":
         handler._serve_file(UI_DIR / "marketing" / "en" / "pricing.html", "text/html; charset=utf-8")
     elif path == "/dashboard":
-        handler._serve_file(UI_DIR / "pages" / "dashboard-v5.html", "text/html; charset=utf-8")
+        # Serve the Next.js dashboard app (frontend/out/dashboard/index.html)
+        # instead of the legacy Python dashboard-v5.html. The whole /dashboard/*
+        # subtree is Next.js now; the Python landing page carried stale sidebar
+        # links (/pipeline, /projects, /evidence, /settings, /project/*) that
+        # 404'd against the new route tree, and keeping it split the theme from
+        # its own sub-routes. 2026-08-30.
+        handler._serve_static("/dashboard")
+        return
     elif path == "/apikeys":
         handler._serve_page("apikeys.html", {})
     elif path == "/api/status":

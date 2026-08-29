@@ -89,6 +89,7 @@ import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
+import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1002,6 +1003,9 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
+            <PipelineStageBoard />
 
             {/* Compliance Progress + Coverage side by side */}
             <div className="grid lg:grid-cols-3 gap-5 mb-6">
