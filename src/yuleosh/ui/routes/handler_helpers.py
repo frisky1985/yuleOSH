@@ -86,7 +86,9 @@ def handle_get(handler) -> None:
     """Route and serve all GET requests (non-API-v1 routes)."""
     from yuleosh.ui import server as _s
     parsed = urllib.parse.urlparse(handler.path)
-    path = parsed.path
+    # Normalize trailing slash so /dashboard/ resolves the same as /dashboard
+    # (P0: pages were 404'ing on the canonical trailing-slash form).
+    path = parsed.path.rstrip("/") or "/"
 
     # ── API v1 router (single source of truth for /api/v1/*) ──
     if path.startswith("/api/v1/"):
