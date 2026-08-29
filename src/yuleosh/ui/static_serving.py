@@ -16,6 +16,7 @@ yuleosh/ui/routes/handler_helpers.py).
 import os
 import re
 from pathlib import Path
+from typing import Optional
 
 from yuleosh.ui.http_security import _csp_for_html, _inject_csp_nonce
 
@@ -27,40 +28,48 @@ from yuleosh.ui.http_security import _csp_for_html, _inject_csp_nonce
 _ASSET_PREFIXES = ("yuleOSH/",)
 
 
-def _serve_static(self, path: str) -> None:
-    """Serve a static file from frontend/out/."""
-    # TD-004: OSH_HOME / _REPO_ROOT are read lazily via the server module
-    # so ``mock.patch("yuleosh.ui.server.OSH_HOME", ...)`` keeps working.
+def _static_export_dir() -> Optional[Path]:
+    """Locate the Next.js export dir (frontend/out/), or None when absent.
+
+    TD-004: OSH_HOME / _REPO_ROOT are read lazily via the server module so
+    ``mock.patch("yuleosh.ui.server.OSH_HOME", ...)`` keeps working.
+    """
     from yuleosh.ui import server as _server
     OSH_HOME = _server.OSH_HOME
     _REPO_ROOT = _server._REPO_ROOT
     OSH_HOME_DIR = Path(os.environ.get("HOME", "."))
-    # Look for frontend/out at the repo root
     candidates = [
         # OSH_HOME 优先（含测试 mock）：显式指定的项目根。
         Path(OSH_HOME) / "frontend" / "out",
         # v3.12.x CI 真跑修复: repo-root checkout 兜底（CI
         # download-artifact 将 frontend/out 放在 checkout 根）。
-        # OSH_HOME 默认值已与 _REPO_ROOT 一致，仅当 OSH_HOME 被
-        # 显式覆盖（如测试 mock）时此处才成为独立候选。
         _REPO_ROOT / "frontend" / "out",
         OSH_HOME_DIR / ".openclaw" / "workspace" / "tasks" / "yuleOSH" / "frontend" / "out",
     ]
-    static_dir = None
     for c in candidates:
         if c.exists():
-            static_dir = c
-            break
+            return c
+    return None
 
-    if not static_dir:
-        self._json_response({"error": "Static files not found"}, 500)
-        return
 
-    # Resolve file path
+def _resolve_static_file(path: str) -> Optional[Path]:
+    """Resolve a URL path to a real file under frontend/out/, or None.
+
+    Shared by ``_serve_static`` (serves it) and the page router (probes
+    whether an exported page exists, without writing a response).  Directory
+    paths resolve to their ``index.html`` — the Next.js export layout — so
+    ``/dashboard/pipeline`` finds ``out/dashboard/pipeline/index.html``.
+
+    Returns None for missing files, traversal attempts, and a missing export
+    dir; callers decide what that means (404.html vs the page-router 404).
+    """
+    static_dir = _static_export_dir()
+    if static_dir is None:
+        return None
+
     if path == "/" or path == "":
         file_path = static_dir / "index.html"
     else:
-        # Strip leading / and sanitize
         rel = path.lstrip("/")
         # assetPrefix is URL-only (see _ASSET_PREFIXES) — drop it so
         # /yuleOSH/_next/static/x.css resolves to out/_next/static/x.css.
@@ -75,16 +84,31 @@ def _serve_static(self, path: str) -> None:
 
     # Security: prevent directory traversal
     try:
-        file_path = file_path.resolve()
-        if not str(file_path).startswith(str(static_dir.resolve())):
-            file_path = static_dir / "404.html"
+        resolved = file_path.resolve()
+        if not str(resolved).startswith(str(static_dir.resolve())):
+            return None
     except (ValueError, OSError):
-        file_path = static_dir / "404.html"
+        return None
+    return resolved if resolved.is_file() else None
 
-    if not file_path.exists():
-        file_path = static_dir / "404.html"
-        if not file_path.exists():
-            self._json_response({"error": "Not found"}, 404)
+
+def _serve_static(self, path: str) -> None:
+    """Serve a static file from frontend/out/."""
+    file_path = _resolve_static_file(path)
+
+    if file_path is None:
+        # Historical fallbacks preserved (tests and _serve_page rely on
+        # them): 404.html when the export dir has one, else a JSON error.
+        static_dir = _static_export_dir()
+        if static_dir is not None:
+            fallback = static_dir / "404.html"
+            if fallback.exists():
+                file_path = fallback
+        if file_path is None:
+            if static_dir is None:
+                self._json_response({"error": "Static files not found"}, 500)
+            else:
+                self._json_response({"error": "Not found"}, 404)
             return
 
     mime_map = {
