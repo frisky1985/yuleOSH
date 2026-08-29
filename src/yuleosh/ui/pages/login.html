@@ -78,12 +78,12 @@ body {
 <div class="login-card">
   <h1><span class="green">🔱 OSH</span><span class="blue">-Fusion</span></h1>
   <p class="subtitle" id="subtitle">Sign in to your organization</p>
-  <div class="msg" id="msg">{msg}</div>
+  <div class="msg" id="msg"></div>
   <form id="authForm" onsubmit="return handleAuth(event)">
     <label for="email">Email</label>
     <input type="email" id="email" name="email" placeholder="you@example.com" autofocus required>
 
-    <label for="invite_code" id="inviteLabel">Invite Code <span style="color:var(--text2);font-weight:400;">(optional — leave blank to create a new org)</span></label>
+    <label for="invite_code" id="inviteLabel">Invite Code <span style="color:var(--text2);font-weight:400;">(skip for new orgs)</span></label>
     <input type="text" id="invite_code" name="invite_code" placeholder="org-slug">
 
     <button type="submit" id="submitBtn">→ Continue</button>
