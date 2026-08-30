@@ -125,8 +125,11 @@ def handle_get(handler) -> None:
         return
 
     # Tenant auth pages (no legacy auth required)
+    # /login serves the Next.js app (email + password + signup).  The legacy
+    # pages/login.html is still used by _send_auth_denied as the fallback
+    # page for unauthenticated requests to protected routes.
     if path == "/login":
-        handler._serve_page("login.html", {"msg": ""})
+        handler._serve_static("/login")
         return
     if path == "/register":
         handler.send_response(302)

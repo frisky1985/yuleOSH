@@ -126,7 +126,6 @@ class TestHandleGet:
 
     @pytest.mark.parametrize("path,page,ctx", [
         ("/welcome", "welcome.html", {}),
-        ("/login", "login.html", {"msg": ""}),
         ("/org/setup", "org-setup.html", {}),
         ("/project/select", "project-select.html", {}),
     ])
@@ -218,6 +217,20 @@ class TestHandleGet:
         with mock.patch("yuleosh.ui.server.api_v1_dispatch", return_value=False):
             handle_get(handler)
         handler._serve_static.assert_called_once_with("/dashboard")
+
+    def test_login_serves_nextjs_app(self):
+        """/login serves the Next.js export (frontend/out/login) so the
+        email+password form is reachable at the canonical /login URL
+        (2026-08-30).  The legacy pages/login.html stays as the
+        _send_auth_denied fallback for protected routes.
+        """
+        from yuleosh.ui.routes.handler_helpers import handle_get
+        handler = _make_handler(path="/login")
+        handler._check_auth = mock.MagicMock(return_value=True)
+        handler._serve_static = mock.MagicMock()
+        with mock.patch("yuleosh.ui.server.api_v1_dispatch", return_value=False):
+            handle_get(handler)
+        handler._serve_static.assert_called_once_with("/login")
 
     def test_apikeys_page(self):
         from yuleosh.ui.routes.handler_helpers import handle_get

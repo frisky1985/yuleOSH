@@ -30,7 +30,8 @@ Environment variables:
   GET /dashboard     — Dashboard landing page (Next.js app: frontend/out/dashboard/index.html)
   GET /health        — Health check endpoint
   GET /status        — System status endpoint
-  GET /login         — Login page
+  GET /login         — Login page (Next.js app: frontend/out/login/index.html;
+                       legacy pages/login.html is the auth-denied fallback)
 
 ### API v0 (legacy)
   GET  /api/reviews        — List review sessions
