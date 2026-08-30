@@ -215,6 +215,18 @@ class Store(AbstractStore):
         """)
         self.conn.commit()
 
+        # Role × module permission matrix (v4.x dashboard): editable, seeded
+        # from the design-doc defaults on first read (see api/members.py).
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS role_permissions (
+                role TEXT NOT NULL,
+                module TEXT NOT NULL,
+                level TEXT NOT NULL,
+                PRIMARY KEY (role, module)
+            );
+        """)
+        self.conn.commit()
+
         # Migration v3 — add stat tracking columns
         version = self.get_migration_version()
         if version < 3:
@@ -462,6 +474,39 @@ class Store(AbstractStore):
         cur = self.conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,))
         row = cur.fetchone()
         return dict(row) if row else None
+
+    # ------------------------------------------------------------------
+    # Role × module permission matrix (dashboard 权限矩阵, editable)
+    # ------------------------------------------------------------------
+
+    def get_role_permissions(self) -> dict:
+        """Return {role: {module: level}} from the role_permissions table.
+
+        Empty dict when the table has not been seeded yet.
+        """
+        rows = self.conn.execute(
+            "SELECT role, module, level FROM role_permissions"
+        ).fetchall()
+        result: dict = {}
+        for r in rows:
+            result.setdefault(r["role"], {})[r["module"]] = r["level"]
+        return result
+
+    def save_role_permissions(self, matrix: dict) -> None:
+        """Replace the whole role_permissions table atomically.
+
+        ``matrix`` shape: {role: {module: level}}.
+        """
+        with self.conn:  # implicit transaction + commit
+            self.conn.execute("DELETE FROM role_permissions")
+            for role, perms in matrix.items():
+                if not isinstance(perms, dict):
+                    continue
+                for module, level in perms.items():
+                    self.conn.execute(
+                        "INSERT INTO role_permissions (role, module, level) VALUES (?, ?, ?)",
+                        (str(role), str(module), str(level)),
+                    )
 
     def get_org_llm_config(self, org_id: int) -> dict:
         """Return the org's pinned LLM provider/model (v9).

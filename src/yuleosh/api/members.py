@@ -113,10 +113,12 @@ def handle_members(method: str, path_tail: str, body: dict, query: dict,
         return _list_members(org_id, query)
     if method == "POST" and path_tail == "invite":
         return _invite_member(org_id, body, current_user)
+    if method == "GET" and path_tail == "roles":
+        return _roles_matrix(current_user)
+    if method == "PATCH" and path_tail == "roles":
+        return _update_roles(current_user, body)
     if method == "PATCH" and path_tail and "/" not in path_tail:
         return _update_role(org_id, path_tail, body, current_user)
-    if method == "GET" and path_tail == "roles":
-        return _roles_matrix()
 
     return json_error(f"Unknown members sub-path or method: {method} {path_tail}", 404)
 
@@ -218,17 +220,125 @@ def _update_role(org_id: Any, user_id_str: str, body: dict,
     })
 
 
-def _roles_matrix() -> tuple[dict, int]:
-    """GET /api/v1/members/roles — static role × module permission matrix.
+def _default_matrix() -> dict:
+    """Build the design-doc default matrix as {role: {module: level}}.
 
-    Static data taken verbatim from the design doc chapter 4 table
-    (6 roles × 8 modules; values: full / read / none).
+    Keeps VALID_ROLES / PERMISSION_MODULES ordering for stable rendering.
     """
+    return {
+        role: {m: _PERMISSION_MATRIX.get(role, {}).get(m, "none") for m in PERMISSION_MODULES}
+        for role in VALID_ROLES
+    }
+
+
+def _roles_matrix(current_user: dict) -> tuple[dict, int]:
+    """GET /api/v1/members/roles — role × module permission matrix.
+
+    Reads from the persistent role_permissions store; on first read (empty
+    table) seeds it with the design-doc defaults so the matrix is always
+    populated. ``can_edit`` is True only for Owner/Admin.
+    """
+    try:
+        from yuleosh.store import Store
+        store = Store()
+        matrix = store.get_role_permissions()
+        if not matrix:
+            matrix = _default_matrix()
+            store.save_role_permissions(matrix)
+    except Exception as e:
+        log.error("roles matrix load failed: %s", e)
+        matrix = _default_matrix()
+
     roles = []
     for role in VALID_ROLES:
-        perms = _PERMISSION_MATRIX.get(role, {})
+        perms = matrix.get(role, {})
         roles.append({
             "role": role,
             "permissions": {m: perms.get(m, "none") for m in PERMISSION_MODULES},
         })
-    return json_ok({"roles": roles, "modules": list(PERMISSION_MODULES)})
+
+    can_edit = current_user.get("role") in ADMIN_ROLES
+    return json_ok({
+        "roles": roles,
+        "modules": list(PERMISSION_MODULES),
+        "can_edit": bool(can_edit),
+    })
+
+
+def _update_roles(current_user: dict, body: dict) -> tuple[dict, int]:
+    """PATCH /api/v1/members/roles — update the permission matrix.
+
+    Body (either form accepted):
+        {"matrix": {role: {module: level}}}            — full replacement
+        {"updates": [{role, module, level}, ...]}      — partial patches
+    Server-side enforced: only Owner/Admin may mutate. Levels are validated
+    against (full / read / none) and roles/modules against the known vocab.
+    """
+    if current_user.get("role") not in ADMIN_ROLES:
+        return json_error("仅 Owner/Admin 可以编辑权限矩阵", 403)
+
+    # Resolve the incoming change set into a {role: {module: level}} delta.
+    delta: dict = {}
+    matrix_arg = body.get("matrix")
+    updates_arg = body.get("updates")
+
+    if isinstance(matrix_arg, dict):
+        for role, perms in matrix_arg.items():
+            if role not in VALID_ROLES:
+                return json_error(f"非法角色: {role}", 400)
+            if not isinstance(perms, dict):
+                return json_error(f"角色 {role} 的权限必须是对象", 400)
+            for module, level in perms.items():
+                if module not in PERMISSION_MODULES:
+                    return json_error(f"非法模块: {module}", 400)
+                if level not in ("full", "read", "none"):
+                    return json_error(f"非法权限级别: {level}（应为 full/read/none）", 400)
+                delta.setdefault(role, {})[module] = level
+    elif isinstance(updates_arg, list):
+        for item in updates_arg:
+            role = str(item.get("role") or "")
+            module = str(item.get("module") or "")
+            level = str(item.get("level") or "")
+            if role not in VALID_ROLES:
+                return json_error(f"非法角色: {role}", 400)
+            if module not in PERMISSION_MODULES:
+                return json_error(f"非法模块: {module}", 400)
+            if level not in ("full", "read", "none"):
+                return json_error(f"非法权限级别: {level}（应为 full/read/none）", 400)
+            delta.setdefault(role, {})[module] = level
+    else:
+        return json_error("请求体需包含 matrix 或 updates 字段", 400)
+
+    if not delta:
+        return json_error("未提供任何权限变更", 400)
+
+    try:
+        from yuleosh.store import Store
+        store = Store()
+        # Merge delta onto the current matrix so partial updates keep the rest.
+        current = store.get_role_permissions() or _default_matrix()
+        for role, perms in delta.items():
+            current.setdefault(role, {})
+            current[role].update(perms)
+            # Drop any module not in the vocab (defensive).
+            current[role] = {
+                m: lv for m, lv in current[role].items() if m in PERMISSION_MODULES
+            }
+        store.save_role_permissions(current)
+    except Exception as e:
+        log.error("roles matrix update failed: %s", e)
+        return json_error("权限矩阵更新失败，请稍后重试", 503)
+
+    roles = []
+    for role in VALID_ROLES:
+        perms = current.get(role, {})
+        roles.append({
+            "role": role,
+            "permissions": {m: perms.get(m, "none") for m in PERMISSION_MODULES},
+        })
+    return json_ok({
+        "roles": roles,
+        "modules": list(PERMISSION_MODULES),
+        "can_edit": True,
+        "updated": sum(len(p) for p in delta.values()),
+    })

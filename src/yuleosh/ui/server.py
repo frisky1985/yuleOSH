@@ -318,6 +318,25 @@ class OSHHandler(BaseHTTPRequestHandler):
             self._response_status = getattr(self, "_response_status", 200)
             log_audit(self)
 
+    def do_PATCH(self) -> None:
+        """Route PATCH requests (e.g. /api/v1/members/{id}, members/roles).
+
+        Mirrors do_PUT: reuses handle_post's body reading + /api/v1 dispatch,
+        which resolves the real method from handler.command. Without this,
+        the BaseHTTPRequestHandler base returns 501 for PATCH.
+        """
+        from yuleosh.ui.routes.handler_helpers import handle_post, log_audit
+        self._request_start_time = time.time()
+        try:
+            handle_post(self)
+        except Exception as e:  # noqa: BLE001 — P1-7: generic msg client, detail logs
+            logging.error("PATCH %s: %s", self.path, e, exc_info=True)
+            self._json_response({"error": "Internal server error"}, 500)
+            self._response_status = 500
+        finally:
+            self._response_status = getattr(self, "_response_status", 200)
+            log_audit(self)
+
     def do_OPTIONS(self) -> None:
         from yuleosh.ui.routes.handler_helpers import handle_options
         handle_options(self)
