@@ -18,25 +18,16 @@ import {
   LogOut,
   User as UserIcon,
   Settings,
-  Layers,
   ArrowRight,
   FileDown,
   Info,
   Search,
   ExternalLink,
-  BookOpen,
-  TrendingUp,
   X,
   BookMarked,
   Hash,
   ShieldCheck,
   Activity,
-  GitBranch,
-  Cpu,
-  FlaskConical,
-  ScrollText,
-  Users,
-  ListChecks,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -58,6 +49,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { TopNav } from "@/components/dashboard/top-nav";
 import {
   getDashboardProjects,
   getSWEStatus,
@@ -567,158 +559,57 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
       {/* ── Top Nav ── */}
-      <nav className="sticky top-0 z-50 border-b border-[#1e293b]/60 nav-blur" style={{ background: "rgba(10,14,23,.85)" }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14">
-            <Link href="/" className="text-lg font-black tracking-tight shrink-0">
-              <span className="text-[#10b981]">yule</span><span className="text-[#1677ff]">OSH</span>
-            </Link>
-
-            {/* Tab navigation */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setActiveTab("overview")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === "overview"
-                    ? "bg-[#722ed1]/15 text-[#722ed1] border border-[#722ed1]/30"
-                    : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-                }`}
+      <TopNav mode="tabs" activeTab={activeTab} onTabChange={setActiveTab}>
+        {/* User menu */}
+        <div className="flex items-center gap-2">
+          {session ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
+                <Avatar className="w-7 h-7 border border-[#1e293b]">
+                  <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
+                    {session ? getInitials(session.email) : "YU"}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
+                  {session?.email || "用户"}
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
               >
-                <Layers className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                概览
-              </button>
-              <button
-                onClick={() => setActiveTab("gap-analysis")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === "gap-analysis"
-                    ? "bg-[#722ed1]/15 text-[#722ed1] border border-[#722ed1]/30"
-                    : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-                }`}
-              >
-                <AlertTriangle className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                差距分析
-              </button>
-              <button
-                onClick={() => setActiveTab("knowledge-base")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === "knowledge-base"
-                    ? "bg-[#722ed1]/15 text-[#722ed1] border border-[#722ed1]/30"
-                    : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                知识库
-              </button>
-              <button
-                onClick={() => setActiveTab("misra-trends")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === "misra-trends"
-                    ? "bg-[#722ed1]/15 text-[#722ed1] border border-[#722ed1]/30"
-                    : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-                }`}
-              >
-                <TrendingUp className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                MISRA 趋势
-              </button>
-
-              {/* Module links (sub-pages) */}
-              <div className="w-px h-4 bg-[#1e293b] mx-1" />
-              <Link
-                href="/dashboard/pipeline"
-                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-              >
-                <GitBranch className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                流水线
-              </Link>
-              <Link
-                href="/dashboard/devices"
-                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-              >
-                <Cpu className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                设备
-              </Link>
-              <Link
-                href="/dashboard/tests"
-                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-              >
-                <FlaskConical className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                测试
-              </Link>
-              <Link
-                href="/dashboard/logs"
-                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-              >
-                <ScrollText className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                日志
-              </Link>
-              <Link
-                href="/dashboard/roles"
-                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-              >
-                <Users className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                角色
-              </Link>
-              <Link
-                href="/dashboard/requirements"
-                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-              >
-                <ListChecks className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                需求
-              </Link>
-            </div>
-
-            {/* User menu */}
-            <div className="flex items-center gap-2">
-              {session ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
-                    <Avatar className="w-7 h-7 border border-[#1e293b]">
-                      <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
-                        {session ? getInitials(session.email) : "YU"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
-                      {session?.email || "用户"}
-                    </span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
-                  >
-                    <DropdownMenuLabel className="text-xs text-[#94a3b8]">
-                      {session?.org_name || "账号"}
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-[#1e293b]" />
-                    <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-                      <UserIcon className="w-3.5 h-3.5" />
-                      个人信息
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-                      <Settings className="w-3.5 h-3.5" />
-                      项目设置
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-[#1e293b]" />
-                    <DropdownMenuItem
-                      onClick={handleLogout}
-                      className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      退出登录
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Link
-                  href="/login"
-                  className="text-sm px-3 py-1.5 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 transition-all"
+                <DropdownMenuLabel className="text-xs text-[#94a3b8]">
+                  {session?.org_name || "账号"}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-[#1e293b]" />
+                <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
+                  <UserIcon className="w-3.5 h-3.5" />
+                  个人信息
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
+                  <Settings className="w-3.5 h-3.5" />
+                  项目设置
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-[#1e293b]" />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
                 >
-                  登录
-                </Link>
-              )}
-            </div>
-          </div>
+                  <LogOut className="w-3.5 h-3.5" />
+                  退出登录
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Link
+              href="/login"
+              className="text-sm px-3 py-1.5 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 transition-all"
+            >
+              登录
+            </Link>
+          )}
         </div>
-      </nav>
+      </TopNav>
 
       {/* ── Main Content Area ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

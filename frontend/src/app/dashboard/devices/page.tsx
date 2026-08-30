@@ -1,32 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   Activity,
   AlertCircle,
-  BookMarked,
   ChevronDown,
   ChevronRight,
   Clock,
   Cpu,
-  FlaskConical,
   Gauge,
   History,
   Info,
-  LayoutDashboard,
   Loader2,
   Play,
   RefreshCw,
-  ScrollText,
-  ShieldCheck,
   Square,
-  Workflow,
   Zap,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { TopNav } from "@/components/dashboard/top-nav";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -149,58 +142,12 @@ function eventLabel(type: string): string {
 
 // ─── Nav ─────────────────────────────────────────────────────────────────────
 
-const NAV_LINKS: { href: string; label: string; icon: typeof LayoutDashboard }[] = [
-  { href: "/dashboard", label: "座舱", icon: LayoutDashboard },
-  { href: "/dashboard/pipeline", label: "流水线", icon: Workflow },
-  { href: "/dashboard/devices", label: "设备", icon: Cpu },
-  { href: "/dashboard/tests", label: "测试", icon: FlaskConical },
-  { href: "/dashboard/logs", label: "日志", icon: ScrollText },
-  { href: "/dashboard/roles", label: "角色", icon: ShieldCheck },
-  { href: "/dashboard/requirements", label: "需求", icon: BookMarked },
-];
-
-function TopNav({ pathname }: { pathname: string }) {
-  return (
-    <nav
-      className="sticky top-0 z-50 border-b border-[#1e293b]/60"
-      style={{ background: "rgba(10,14,23,.85)", backdropFilter: "blur(12px)" }}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14 gap-4">
-          <Link href="/" className="text-lg font-black tracking-tight shrink-0">
-            <span className="text-[#10b981]">yule</span>
-            <span className="text-[#1677ff]">OSH</span>
-          </Link>
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href;
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
-                    active
-                      ? "bg-[#722ed1]/15 text-[#722ed1] border border-[#722ed1]/30"
-                      : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-          <div className="shrink-0" />
-        </div>
-      </div>
-    </nav>
-  );
-}
+// Navigation is rendered by the shared TopNav component
+// (see src/components/dashboard/top-nav.tsx).
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function DevicesPage() {
-  const pathname = usePathname();
 
   const [devices, setDevices] = useState<DeviceItem[]>([]);
   const [stats, setStats] = useState<DeviceStatsResponse | null>(null);
@@ -319,7 +266,7 @@ export default function DevicesPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
-      <TopNav pathname={pathname} />
+      <TopNav mode="links" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
