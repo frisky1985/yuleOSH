@@ -315,6 +315,31 @@ async function getV1Stats(): Promise<any> {
   return data;
 }
 
+// v9: per-user usage + org LLM model config (cockpit panel)
+async function getMyUsage(): Promise<any> {
+  const data = await request<any>("/api/v1/me/usage", { method: "GET" });
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function getOrgLLMConfig(): Promise<any> {
+  const data = await request<any>("/api/v1/org/llm-config", { method: "GET" });
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function updateOrgLLMConfig(payload: {
+  provider?: string | null;
+  model?: string | null;
+}): Promise<any> {
+  const data = await request<any>("/api/v1/org/llm-config", {
+    method: "PUT",
+    body: JSON.stringify(payload || {}),
+  });
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -342,6 +367,13 @@ export const api = {
       status: getPipelineStatus,
     },
     stats: getV1Stats,
+    me: {
+      usage: getMyUsage,
+    },
+    org: {
+      llmConfig: getOrgLLMConfig,
+      updateLLMConfig: updateOrgLLMConfig,
+    },
   },
 };
 

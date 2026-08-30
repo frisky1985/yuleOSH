@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -32,6 +32,9 @@ import {
   ListChecks,
   FolderPlus,
   Sparkles,
+  Cpu,
+  MessageSquare,
+  Coins,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -89,6 +92,7 @@ import { EvidenceModal } from "@/components/dashboard/evidence-modal";
 import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
 import { CreateProjectModal } from "@/components/dashboard/create-project-modal";
 import { DemoGalleryModal, DEMO_SLUGS } from "@/components/dashboard/demo-gallery-modal";
+import LLMSettingsModal from "@/components/dashboard/llm-settings-modal";
 import { GapBatchModal } from "@/components/dashboard/gap-batch-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
@@ -256,6 +260,43 @@ function clampScore(score: number): number {
   return Math.max(0, Math.min(100, score));
 }
 
+// ─── v9: 我的用量 helpers ────────────────────────────────────────────────────
+
+function fmtTokens(n: number): string {
+  if (!n || n <= 0) return "0";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "k";
+  return String(n);
+}
+
+function UsageStat({
+  icon,
+  label,
+  value,
+  unit,
+  sub,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+  unit?: string;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[#1e293b] bg-[#0b1220] px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] text-[#64748b] mb-1">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="text-lg font-semibold text-[#e2e8f0] leading-tight truncate">
+        {value}
+        {unit ? <span className="text-xs text-[#64748b] ml-0.5">{unit}</span> : null}
+      </div>
+      {sub ? <div className="text-[10px] text-[#475569] mt-0.5 truncate">{sub}</div> : null}
+    </div>
+  );
+}
+
 // ─── Mini Coverage Bar ───────────────────────────────────────────────────────
 
 
@@ -314,6 +355,15 @@ export default function DashboardPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState("");
   const [datanote, setDatanote] = useState<string | null>(null);
+
+  // v9: per-user usage panel (我的用量) + org LLM model config
+  const [myUsage, setMyUsage] = useState<any>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [showLLMSettings, setShowLLMSettings] = useState(false);
+  const [llmCfg, setLlmCfg] = useState<{ provider?: string | null; model?: string | null }>({
+    provider: null,
+    model: null,
+  });
 
   // ─── Load initial data ─────────────────────────────────────────────────────
 
@@ -411,6 +461,24 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // v9: 我的用量 — 当前用户 pipeline 次数 / 对话次数 / token / 当前模型
+  const loadMyUsage = useCallback(async () => {
+    setUsageLoading(true);
+    try {
+      const { api } = await import("@/lib/api");
+      const [usage, cfg] = await Promise.all([
+        api.v1.me.usage(),
+        api.v1.org.llmConfig().catch(() => null),
+      ]);
+      if (usage && usage.ok !== false) setMyUsage(usage.data ?? usage);
+      if (cfg && cfg.ok !== false) setLlmCfg(cfg.data ?? cfg);
+    } catch (err: any) {
+      console.warn("Failed to load my usage:", err);
+    } finally {
+      setUsageLoading(false);
+    }
+  }, []);
+
   const loadGapAnalysis = useCallback(
     async (projectId: string, page: number, severity: string) => {
       setGapLoading(true);
@@ -459,6 +527,7 @@ export default function DashboardPage() {
       }
 
       await loadProjects();
+      loadMyUsage();
       setPageLoading(false);
     }
     boot();
@@ -973,6 +1042,68 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* v9: 我的用量 — 当前用户 pipeline 次数 / 对话次数 / token / 当前模型 */}
+            <Card className="border-[#1e293b] bg-[#111827]">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-[#1677ff]" />
+                    我的用量
+                  </CardTitle>
+                  <button
+                    onClick={() => setShowLLMSettings(true)}
+                    className="flex items-center gap-1 text-xs text-[#1677ff] hover:bg-[#1677ff]/5 rounded px-2 py-1 transition-colors"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    模型设置
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {usageLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-[#94a3b8]">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    加载用量...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <UsageStat
+                      icon={<Play className="w-4 h-4 text-[#1677ff]" />}
+                      label="Pipeline 调用"
+                      value={myUsage?.pipeline_runs ?? 0}
+                      unit="次"
+                    />
+                    <UsageStat
+                      icon={<MessageSquare className="w-4 h-4 text-[#722ed1]" />}
+                      label="对话请求"
+                      value={myUsage?.llm_calls ?? 0}
+                      unit="次"
+                    />
+                    <UsageStat
+                      icon={<Coins className="w-4 h-4 text-[#52c41a]" />}
+                      label="Token 消耗"
+                      value={fmtTokens(
+                        (myUsage?.tokens_in ?? 0) + (myUsage?.tokens_out ?? 0)
+                      )}
+                      unit=""
+                      sub={`in ${(myUsage?.tokens_in ?? 0).toLocaleString()} / out ${(myUsage?.tokens_out ?? 0).toLocaleString()}`}
+                    />
+                    <UsageStat
+                      icon={<Cpu className="w-4 h-4 text-[#faad14]" />}
+                      label="当前模型"
+                      value={myUsage?.current_model || llmCfg?.model || llmCfg?.provider || "默认"}
+                      unit=""
+                    />
+                  </div>
+                )}
+                {!usageLoading && myUsage?.cost != null && (
+                  <div className="mt-3 text-xs text-[#64748b]">
+                    预估成本 ${Number(myUsage.cost || 0).toFixed(2)}（基于 LLM 调用审计日志）
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1546,6 +1677,17 @@ export default function DashboardPage() {
         onClose={() => setShowDemoGallery(false)}
         existingSlugs={demoLoadedSlugs}
         onLoaded={handleDemoLoaded}
+      />
+
+      <LLMSettingsModal
+        open={showLLMSettings}
+        current={llmCfg}
+        onClose={() => setShowLLMSettings(false)}
+        onSaved={(cfg) => {
+          setLlmCfg(cfg);
+          // 刷新当前模型显示
+          setMyUsage((prev: any) => (prev ? { ...prev, current_model: cfg.model || cfg.provider || prev.current_model } : prev));
+        }}
       />
 
       {/* Gap batch modal (bulk analyze / remediate) */}
