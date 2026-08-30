@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Activity,
   Play,
+  ListChecks,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,7 @@ import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
 import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
+import { GapBatchModal } from "@/components/dashboard/gap-batch-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
 import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board";
@@ -289,6 +291,11 @@ export default function DashboardPage() {
   // Gap detail modal (per-item 分析 / 运行)
   const [showGapDetail, setShowGapDetail] = useState(false);
   const [selectedGapId, setSelectedGapId] = useState<string | null>(null);
+
+  // Gap batch (bulk analyze / remediate)
+  const [selectedGapIds, setSelectedGapIds] = useState<string[]>([]);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchMode, setBatchMode] = useState<"analyze" | "remediate">("remediate");
 
   // Evidence generation
   const [evTask, setEvTask] = useState<EvidenceTask | null>(null);
@@ -1147,6 +1154,30 @@ export default function DashboardPage() {
                   <FileDown className="w-3.5 h-3.5" />
                   导出 CSV
                 </Button>
+                <div className="w-px h-5 bg-[#1e293b] mx-0.5" />
+                <Button
+                  disabled={!selectedGapIds.length}
+                  onClick={() => {
+                    setBatchMode("analyze");
+                    setShowBatchModal(true);
+                  }}
+                  className="border-[#1e293b] text-[#94a3b8] h-9 text-xs gap-1.5 hover:text-white hover:bg-[#722ed1]/15 disabled:opacity-40"
+                  variant="outline"
+                >
+                  <ListChecks className="w-3.5 h-3.5 text-[#722ed1]" />
+                  批量分析
+                </Button>
+                <Button
+                  disabled={!selectedGapIds.length}
+                  onClick={() => {
+                    setBatchMode("remediate");
+                    setShowBatchModal(true);
+                  }}
+                  className="bg-gradient-to-r from-[#10b981] to-[#1677ff] text-white h-9 text-xs gap-1.5 disabled:opacity-50 shadow-lg shadow-[#10b981]/20"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  批量修复
+                </Button>
               </div>
             </div>
 
@@ -1214,6 +1245,29 @@ export default function DashboardPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-[#1e293b]">
+                          <th className="w-10 py-3 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              className="accent-[#722ed1] w-4 h-4 cursor-pointer"
+                              checked={
+                                displayGapItems.length > 0 &&
+                                displayGapItems.every((i) => selectedGapIds.includes(i.id))
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedGapIds((prev) =>
+                                    Array.from(
+                                      new Set([...prev, ...displayGapItems.map((i) => i.id)])
+                                    )
+                                  );
+                                } else {
+                                  const cur = new Set(displayGapItems.map((i) => i.id));
+                                  setSelectedGapIds((prev) => prev.filter((id) => !cur.has(id)));
+                                }
+                              }}
+                              aria-label="全选"
+                            />
+                          </th>
                           <th className="text-left py-3 px-4 text-xs text-[#64748b] font-medium uppercase tracking-wider">
                             SWE
                           </th>
@@ -1246,6 +1300,24 @@ export default function DashboardPage() {
                               setShowGapDetail(true);
                             }}
                           >
+                            <td
+                              className="py-3 px-3 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                className="accent-[#722ed1] w-4 h-4 cursor-pointer"
+                                checked={selectedGapIds.includes(item.id)}
+                                onChange={(e) =>
+                                  setSelectedGapIds((prev) =>
+                                    e.target.checked
+                                      ? Array.from(new Set([...prev, item.id]))
+                                      : prev.filter((id) => id !== item.id)
+                                  )
+                                }
+                                aria-label={`选择 ${item.id}`}
+                              />
+                            </td>
                             <td className="py-3 px-4">
                               <Badge
                                 variant="outline"
@@ -1405,6 +1477,18 @@ export default function DashboardPage() {
           setTimeout(() => {
             void loadGapAnalysis(selectedProject, 1, gapSeverity);
           }, 300);
+        }}
+      />
+
+      {/* Gap batch modal (bulk analyze / remediate) */}
+      <GapBatchModal
+        open={showBatchModal}
+        mode={batchMode}
+        gapIds={selectedGapIds}
+        onClose={() => setShowBatchModal(false)}
+        onComplete={() => {
+          void loadGapAnalysis(selectedProject, 1, gapSeverity);
+          setSelectedGapIds([]);
         }}
       />
     </div>

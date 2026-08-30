@@ -21,6 +21,7 @@ import logging
 import os
 import sys
 import subprocess
+import threading
 import uuid
 import time
 from datetime import datetime, timezone
@@ -48,6 +49,11 @@ _gap_runs: dict[str, dict] = {}
 # Keyed by gap_id; on read, list/detail merges these on top of the
 # base item so a re-run after restart will fall back to default status.
 _gap_status_overrides: dict[str, dict] = {}
+
+# Batch remediation runs (post-MVP bulk analyze/remediate).
+# Keyed by batch_id; tracks per-item progress so the UI can poll the
+# overall batch status. Items run sequentially in a background thread.
+_gap_batches: dict[str, dict] = {}
 
 # ── Mock data (other endpoints only; projects is real-data-only since P0-2) ──
 
@@ -271,6 +277,8 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
         GET  /api/v1/dashboard/gap-analysis/{gap_id}       — 单条差距详情
         POST /api/v1/dashboard/gap-analysis/{gap_id}/run   — 触发差距修复（异步）
         GET  /api/v1/dashboard/gap-analysis/{gap_id}/status — 修复进度轮询
+        POST /api/v1/dashboard/gap-analysis/batch-run      — 批量触发差距修复（异步）
+        GET  /api/v1/dashboard/gap-analysis/batch/{batch_id} — 批量修复进度轮询
         POST /api/v1/dashboard/evidence/generate    — 一键生成证据包
         GET  /api/v1/dashboard/evidence/status      — 证据包生成状态
         GET  /api/v1/dashboard/coverage             — 覆盖率数据
@@ -288,6 +296,13 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
         return _dashboard_swe_status(query)
     if path_tail == "gap-analysis" and method == "GET":
         return _dashboard_gap_analysis(query)
+    if path_tail == "gap-analysis/batch-run" and method == "POST":
+        return _dashboard_gap_batch_run(body or {})
+    if path_tail.startswith("gap-analysis/batch/"):
+        # /api/v1/dashboard/gap-analysis/batch/{batch_id}  (GET status)
+        batch_id = path_tail[len("gap-analysis/batch/"):]
+        if method == "GET":
+            return _dashboard_gap_batch_status(batch_id)
     if path_tail.startswith("gap-analysis/"):
         # /api/v1/dashboard/gap-analysis/{gap_id}
         # /api/v1/dashboard/gap-analysis/{gap_id}/run   (POST)
@@ -761,6 +776,126 @@ def _dashboard_gap_run_status(gap_id: str, query: dict) -> tuple[dict, int]:
         return json_error(f"No runs found for gap: {gap_id}", 404)
     candidates.sort(key=lambda r: r.get("started_at") or "", reverse=True)
     return json_ok(candidates[0])
+
+
+def _dashboard_gap_batch_run(body: dict) -> tuple[dict, int]:
+    """POST /api/v1/dashboard/gap-analysis/batch-run — bulk remediation.
+
+    Accepts optional ``{"ids": [...]}``; when omitted, runs ALL gap items.
+    Creates a batch record and remediates each gap sequentially in the
+    background (reusing ``_simulate_gap_run``), tracking per-item progress
+    so the UI can poll the overall batch status via ``/batch/{id}``.
+    """
+    items, _note = _load_gap_items()
+    requested = body.get("ids") or []
+    if requested:
+        want = set(requested)
+        target_ids = [i["id"] for i in items if i["id"] in want]
+    else:
+        target_ids = [i["id"] for i in items]
+
+    if not target_ids:
+        return json_error("没有可执行的差距项（选择为空或数据缺失）", 400)
+
+    batch_id = f"gapbatch-{uuid.uuid4().hex[:12]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    _gap_batches[batch_id] = {
+        "batch_id": batch_id,
+        "status": "running",
+        "total": len(target_ids),
+        "done": 0,
+        "failed": 0,
+        "started_at": now_iso,
+        "finished_at": None,
+        "items": {
+            gid: {"gap_id": gid, "status": "queued", "progress_pct": 0, "run_id": None}
+            for gid in target_ids
+        },
+    }
+
+    import threading
+    t = threading.Thread(
+        target=_run_gap_batch,
+        args=(batch_id, target_ids),
+        daemon=True,
+        name=f"gap-batch-{batch_id}",
+    )
+    t.start()
+
+    return json_ok({
+        "batch_id": batch_id,
+        "total": len(target_ids),
+        "status": "running",
+    })
+
+
+def _run_gap_batch(batch_id: str, gap_ids: list[str]) -> None:
+    """Sequentially remediate each gap in the batch, updating progress.
+
+    Reuses the single-item simulation ``_simulate_gap_run`` (joined) so the
+    per-item run records and status overrides stay consistent. A batch of
+    N gaps therefore takes ~N x 2.6s; the UI shows live progress.
+    """
+    batch = _gap_batches.get(batch_id)
+    if not batch:
+        return
+    for gid in gap_ids:
+        if batch_id not in _gap_batches:
+            break  # batch record removed — abort
+        rid = f"gaprun-{uuid.uuid4().hex[:12]}"
+        now_iso = datetime.now(timezone.utc).isoformat()
+        _gap_runs[rid] = {
+            "run_id": rid,
+            "gap_id": gid,
+            "status": "queued",
+            "progress_pct": 0,
+            "started_at": now_iso,
+            "finished_at": None,
+            "log": [f"[{now_iso}] 批量修复任务包含差距项 {gid}"],
+        }
+        _gap_status_overrides[gid] = {
+            "status": "in_progress",
+            "last_run_id": rid,
+            "last_run_at": now_iso,
+        }
+        batch["items"][gid] = {"gap_id": gid, "status": "running", "progress_pct": 10, "run_id": rid}
+
+        # Reuse the single-item simulation; join so items run in order.
+        worker = threading.Thread(target=_simulate_gap_run, args=(gid, rid), daemon=True)
+        worker.start()
+        worker.join()
+
+        final_status = _gap_status_overrides.get(gid, {}).get("status", "completed")
+        batch["items"][gid] = {
+            "gap_id": gid,
+            "status": final_status,
+            "progress_pct": 100 if final_status == "completed" else 0,
+            "run_id": rid,
+        }
+        batch["done"] = batch.get("done", 0) + 1
+
+    batch["status"] = "completed"
+    batch["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _dashboard_gap_batch_status(batch_id: str) -> tuple[dict, int]:
+    """GET /api/v1/dashboard/gap-analysis/batch/{batch_id} — batch progress."""
+    batch = _gap_batches.get(batch_id)
+    if batch is None:
+        return json_error(f"Batch not found: {batch_id}", 404)
+    items = list(batch["items"].values())
+    running = sum(1 for it in items if it["status"] in ("queued", "running"))
+    return json_ok({
+        "batch_id": batch["batch_id"],
+        "status": batch["status"],
+        "total": batch["total"],
+        "done": batch["done"],
+        "failed": batch["failed"],
+        "running": running,
+        "started_at": batch["started_at"],
+        "finished_at": batch["finished_at"],
+        "items": items,
+    })
 
 
 def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:

@@ -507,6 +507,25 @@ interface GapRunStatus {
   log: string[];
 }
 
+interface GapBatchItem {
+  gap_id: string;
+  status: string;
+  progress_pct: number;
+  run_id: string | null;
+}
+
+interface GapBatchStatus {
+  batch_id: string;
+  status: string;
+  total: number;
+  done: number;
+  failed: number;
+  running: number;
+  started_at: string;
+  finished_at: string | null;
+  items: GapBatchItem[];
+}
+
 async function getGapDetail(gapId: string): Promise<GapDetailResponse> {
   const data = await request<any>(
     `/api/v1/dashboard/gap-analysis/${encodeURIComponent(gapId)}`,
@@ -531,6 +550,24 @@ async function getGapRunStatus(
 ): Promise<GapRunStatus> {
   const data = await request<any>(
     `/api/v1/dashboard/gap-analysis/${encodeURIComponent(gapId)}/status?run_id=${encodeURIComponent(runId)}`,
+    { method: "GET" }
+  );
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function batchRunGap(ids?: string[]): Promise<{ batch_id: string; total: number; status: string }> {
+  const data = await request<any>(
+    "/api/v1/dashboard/gap-analysis/batch-run",
+    { method: "POST", body: JSON.stringify({ ids: ids || [] }) }
+  );
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function getGapBatchStatus(batchId: string): Promise<GapBatchStatus> {
+  const data = await request<any>(
+    `/api/v1/dashboard/gap-analysis/batch/${encodeURIComponent(batchId)}`,
     { method: "GET" }
   );
   if (data && data.ok === true) return data.data;
@@ -700,6 +737,8 @@ export {
   getGapDetail,
   runGap,
   getGapRunStatus,
+  batchRunGap,
+  getGapBatchStatus,
   generateEvidence,
   getEvidenceStatus,
   getCoverage,
@@ -722,6 +761,8 @@ export type {
   GapRunResponse,
   GapRunStatus,
   GapRunRecord,
+  GapBatchItem,
+  GapBatchStatus,
   GapFixStep,
   GapRelatedRequirement,
   EvidenceTask,
