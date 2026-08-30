@@ -60,10 +60,12 @@ export default function OnboardingPage() {
   const [specContent, setSpecContent] = useState(TEMPLATE_SPEC);
   const [pipelineStatus, setPipelineStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [completed, setCompleted] = useState(false);
 
   async function createProject() {
     setLoading(true);
+    setCreateError("");
     try {
       const slug = projectName.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-");
       const resp = await fetch("/api/v1/project", {
@@ -77,11 +79,14 @@ export default function OnboardingPage() {
           description: "通过 Onboarding 向导创建",
         }),
       });
-      const json = await resp.json();
-      if (json.error) {
-        console.error("Project create error:", json.error);
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || json.error) {
+        setCreateError(json.error || `创建失败（HTTP ${resp.status}）`);
+        return;
       }
       setCurrentStep(2);
+    } catch (err: any) {
+      setCreateError(err?.message || "创建项目请求失败");
     } finally {
       setLoading(false);
     }
@@ -255,6 +260,11 @@ export default function OnboardingPage() {
               </div>
             </CardContent>
             <div className="px-6 pb-6">
+              {createError && (
+                <div className="mb-3 rounded-lg border border-[#ff4d4f]/20 bg-[#ff4d4f]/5 px-3 py-2 text-xs text-[#ff4d4f]">
+                  {createError}
+                </div>
+              )}
               <Button
                 onClick={createProject}
                 disabled={loading || !projectName.trim()}
