@@ -859,19 +859,20 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Run pipeline → 运行控制面板（重跑 / 勾选某几项 / 续跑 / 停止） */}
-              <Link href="/dashboard/pipeline">
-                <Button
-                  variant="outline"
-                  className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 gap-2"
-                >
-                  <Play className="w-4 h-4" />
-                  运行 Pipeline
-                </Button>
-              </Link>
+              {/* 右侧动作组：运行 Pipeline + 生成证据包 紧贴靠右 */}
+              <div className="flex items-center gap-2 sm:ml-auto">
+                {/* Run pipeline → 运行控制面板（重跑 / 勾选某几项 / 续跑 / 停止） */}
+                <Link href="/dashboard/pipeline">
+                  <Button
+                    variant="outline"
+                    className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    运行 Pipeline
+                  </Button>
+                </Link>
 
-              {/* Evidence button */}
-              <div className="flex items-center gap-2">
+                {/* Evidence button */}
                 <Button
                   onClick={handleGenerateEvidence}
                   disabled={evGenerating || !selectedProject}

@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
   BookMarked,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -100,6 +101,29 @@ interface PreviewState {
   loading: boolean;
 }
 
+interface StepRecord {
+  step_id: string;
+  name: string;
+  agent: string;
+  status: "pending" | "running" | "passed" | "failed" | "skipped" | string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_s?: number | null;
+  error?: string | null;
+  output_path?: string | null;
+}
+
+interface CheckpointSnapshot {
+  state?: {
+    pipeline_name?: string;
+    status?: string;
+    updated_at?: string | null;
+  } | null;
+  steps: StepRecord[];
+  op_active: boolean;
+  count: number;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Fetch an API v1 endpoint and unwrap the {ok, data?} envelope (flat or data-wrapped). */
@@ -170,6 +194,22 @@ function pipelineStatusMeta(status: string): { label: string; color: string } {
   return { label: status || "unknown", color: "#64748b" };
 }
 
+const STEP_STATUS_META: Record<
+  string,
+  { label: string; color: string; symbol: string; ring: string }
+> = {
+  pending: { label: "待运行", color: "#475569", symbol: "○", ring: "#1e293b" },
+  running: { label: "运行中", color: "#1677ff", symbol: "◐", ring: "#1677ff" },
+  passed: { label: "已通过", color: "#10b981", symbol: "✓", ring: "#10b981" },
+  failed: { label: "失败", color: "#ff4d4f", symbol: "✗", ring: "#ff4d4f" },
+  skipped: { label: "已跳过", color: "#faad14", symbol: "⊘", ring: "#faad14" },
+};
+
+function stepMeta(status: string) {
+  const key = (status || "").toLowerCase();
+  return STEP_STATUS_META[key] ?? STEP_STATUS_META.pending;
+}
+
 // ─── Nav ─────────────────────────────────────────────────────────────────────
 
 // Navigation is rendered by the shared TopNav component
@@ -200,6 +240,53 @@ export default function PipelinePage() {
   const [opRunning, setOpRunning] = useState(false);
   const [opMsg, setOpMsg] = useState("");
   const [stepPanelOpen, setStepPanelOpen] = useState(true);
+
+  // ── 运行过程看板（轮询 checkpoint）──
+  const [checkpoint, setCheckpoint] = useState<CheckpointSnapshot | null>(null);
+  const [checkpointError, setCheckpointError] = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasRunRef = useRef(false); // 用户曾经点过运行/续跑/停止才轮询
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const fetchCheckpoint = useCallback(async () => {
+    try {
+      const res = await apiFetch<CheckpointSnapshot>(
+        "/api/v1/pipeline/checkpoint?pipeline=agent-pipeline"
+      );
+      setCheckpoint(res);
+      setCheckpointError("");
+      // 终止条件：无 op_active 且没有 running 中步骤
+      const stillRunning = (res.steps || []).some((s) => (s.status || "").toLowerCase() === "running");
+      if (!res.op_active && !stillRunning && pollRef.current) {
+        stopPolling();
+      }
+    } catch (err) {
+      setCheckpointError(errMessage(err));
+    }
+  }, [stopPolling]);
+
+  const startPolling = useCallback(() => {
+    if (pollRef.current) return;
+    void fetchCheckpoint();
+    pollRef.current = setInterval(() => {
+      void fetchCheckpoint();
+    }, 1500);
+  }, [fetchCheckpoint]);
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
+
+  // 挂载即拉一次 checkpoint：刷新后也能看到上次运行结果（仅取一次，不轮询）
+  useEffect(() => {
+    void fetchCheckpoint();
+  }, [fetchCheckpoint]);
 
   // ── Load pipeline list ────────────────────────────────────────────────────
   const loadPipelines = useCallback(async () => {
@@ -342,13 +429,16 @@ export default function PipelinePage() {
                 });
           setOpMsg(`已提交：${res?.op || "ok"}（${ids.length}/${steps.length} 步）`);
         }
+        // 提交成功后启动实时进度轮询（看板数据源）
+        hasRunRef.current = true;
+        startPolling();
       } catch (err) {
         setOpMsg(errMessage(err));
       } finally {
         setOpRunning(false);
       }
     },
-    [steps, selected]
+    [steps, selected, startPolling]
   );
 
   const isEmpty = !loading && pipelines.length === 0;
@@ -493,6 +583,15 @@ export default function PipelinePage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── 运行过程看板（轮询 checkpoint） ── */}
+        <CheckpointPanel
+          snapshot={checkpoint}
+          polling={pollRef.current !== null}
+          error={checkpointError}
+          stepDefs={steps}
+          selectedKeys={selected}
+        />
 
         {/* Data note */}
         {listNote && (
@@ -731,5 +830,221 @@ export default function PipelinePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── 运行过程看板 ────────────────────────────────────────────────────────────
+
+interface CheckpointPanelProps {
+  snapshot: CheckpointSnapshot | null;
+  polling: boolean;
+  error: string;
+  stepDefs: { key: string; name: string; agent: string }[];
+  selectedKeys: Set<string>;
+}
+
+function CheckpointPanel({
+  snapshot,
+  polling,
+  error,
+  stepDefs,
+  selectedKeys,
+}: CheckpointPanelProps) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const steps = snapshot?.steps ?? [];
+  const totals = steps.reduce(
+    (acc, s) => {
+      const k = (s.status || "").toLowerCase();
+      if (k === "passed") acc.passed++;
+      else if (k === "failed") acc.failed++;
+      else if (k === "running") acc.running++;
+      else if (k === "skipped") acc.skipped++;
+      else acc.pending++;
+      return acc;
+    },
+    { passed: 0, failed: 0, running: 0, skipped: 0, pending: 0 }
+  );
+
+  const finished = totals.passed + totals.failed;
+  const total = steps.length || stepDefs.length || 24;
+  const pct = total > 0 ? Math.round((finished / total) * 100) : 0;
+
+  const overall = snapshot?.state?.status || (snapshot?.op_active ? "running" : "idle");
+  const overallMeta = pipelineStatusMeta(overall);
+
+  // Map stepId → selectedKey status (highlight勾选的列)
+  const selectedByKey = new Map<string, boolean>();
+  for (const d of stepDefs) selectedByKey.set(d.key, selectedKeys.has(d.key));
+
+  // 看板默认隐藏（点击运行前不出现），有数据或有轮询时显示
+  if (!polling && !snapshot) return null;
+
+  return (
+    <Card className="border-[#1e293b] bg-[#111827] mb-4">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+            <Activity2 />
+            运行过程看板
+            <Badge
+              variant="outline"
+              className="border-transparent ml-1"
+              style={{
+                color: overallMeta.color,
+                background: `${overallMeta.color}1f`,
+                borderColor: `${overallMeta.color}4d`,
+              }}
+            >
+              {overallMeta.label}
+            </Badge>
+            {polling && (
+              <span className="text-[10px] text-[#94a3b8] inline-flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> 实时刷新
+              </span>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-3 text-[11px] text-[#94a3b8]">
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#10b981" }} />
+              <span className="text-[#10b981] font-medium">{totals.passed}</span> 已通过
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#ff4d4f" }} />
+              <span className="text-[#ff4d4f] font-medium">{totals.failed}</span> 失败
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#1677ff" }} />
+              <span className="text-[#1677ff] font-medium">{totals.running}</span> 运行中
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#faad14" }} />
+              <span className="text-[#faad14] font-medium">{totals.skipped}</span> 跳过
+            </span>
+            <span className="inline-flex items-center gap-1 text-[#e2e8f0]">
+              <span className="text-[#94a3b8]">进度</span>
+              <span className="font-mono">{finished}/{total}</span>
+              <span className="text-[#722ed1] font-medium">{pct}%</span>
+            </span>
+          </div>
+        </div>
+        {/* 进度条 */}
+        <div className="mt-2 h-1.5 rounded-full bg-[#0a0e17] overflow-hidden">
+          <div
+            className="h-full transition-all duration-500"
+            style={{
+              width: `${pct}%`,
+              background:
+                totals.failed > 0
+                  ? "linear-gradient(90deg, #10b981 0%, #ff4d4f 100%)"
+                  : "linear-gradient(90deg, #722ed1 0%, #10b981 100%)",
+            }}
+          />
+        </div>
+        {error && (
+          <div className="mt-2 rounded bg-[#ff4d4f]/10 border border-[#ff4d4f]/20 px-2 py-1 text-[11px] text-[#ff4d4f]">
+            轮询失败：{error}
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="pt-0">
+        {steps.length === 0 ? (
+          <div className="py-6 text-center text-xs text-[#64748b]">
+            等待 checkpoint 数据…（后端会写入最近一次运行的步骤状态）
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+            {steps.map((s) => {
+              const meta = stepMeta(s.status || "");
+              const isRunning = (s.status || "").toLowerCase() === "running";
+              const isSkipped = (s.status || "").toLowerCase() === "skipped";
+              const isFailed = (s.status || "").toLowerCase() === "failed";
+              const isSelected = selectedByKey.get(s.step_id);
+              const hasError = !!(s.error && String(s.error).trim());
+              const canExpand = isFailed && hasError;
+              const isOpen = expanded === s.step_id;
+              return (
+                <Fragment key={s.step_id}>
+                  <div
+                    className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-[11px] transition-all ${
+                      isSelected === false
+                        ? "border-[#1e293b]/60 bg-[#0a0e17]/40 text-[#475569]"
+                        : isRunning
+                        ? "border-[#1677ff]/60 bg-[#1677ff]/10 text-[#e2e8f0] shadow-[0_0_0_1px_rgba(22,119,255,0.3)]"
+                        : isSkipped
+                        ? "border-[#faad14]/30 bg-[#0a0e17] text-[#faad14]"
+                        : isFailed
+                        ? "border-[#ff4d4f]/40 bg-[#ff4d4f]/10 text-[#ffb4b4] cursor-pointer hover:bg-[#ff4d4f]/15"
+                        : "border-[#1e293b] bg-[#0a0e17] text-[#cbd5e1]"
+                    }`}
+                    title={
+                      s.error
+                        ? `${s.name} · ${meta.label} · ${s.error}`
+                        : `${s.name} · ${meta.label}${
+                            typeof s.duration_s === "number" ? ` · ${s.duration_s.toFixed(1)}s` : ""
+                          }`
+                    }
+                    onClick={canExpand ? () => setExpanded(isOpen ? null : s.step_id) : undefined}
+                  >
+                    <span
+                      className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shrink-0 ${
+                        isRunning ? "animate-pulse" : ""
+                      }`}
+                      style={{
+                        color: meta.color,
+                        background: `${meta.color}1f`,
+                        border: `1px solid ${meta.ring}`,
+                      }}
+                    >
+                      {meta.symbol}
+                    </span>
+                    <span className="font-mono opacity-60 shrink-0">{s.step_id}</span>
+                    <span className="truncate flex-1">{s.name}</span>
+                    {typeof s.duration_s === "number" && s.duration_s > 0 && (
+                      <span className="text-[10px] text-[#64748b] shrink-0">
+                        {s.duration_s.toFixed(1)}s
+                      </span>
+                    )}
+                    {canExpand && (
+                      <ChevronDown
+                        className={`w-3 h-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                        style={{ color: meta.color }}
+                      />
+                    )}
+                    <span className="text-[10px] shrink-0" style={{ color: meta.color }}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  {isOpen && hasError && (
+                    <div className="col-span-full rounded-md border border-[#ff4d4f]/30 bg-[#ff4d4f]/10 px-3 py-2 text-[11px] text-[#ffc9c9] whitespace-pre-wrap break-words leading-relaxed">
+                      <span className="font-medium text-[#ff4d4f]">失败原因：</span>
+                      {s.error}
+                    </div>
+                  )}
+                </Fragment>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Minimal Activity icon (lucide doesn't ship one in this codebase), reused as funnel
+function Activity2() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-[#722ed1]"
+    >
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
   );
 }
