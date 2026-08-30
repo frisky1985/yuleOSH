@@ -199,6 +199,7 @@ export default function PipelinePage() {
   const [allChecked, setAllChecked] = useState(true);
   const [opRunning, setOpRunning] = useState(false);
   const [opMsg, setOpMsg] = useState("");
+  const [stepPanelOpen, setStepPanelOpen] = useState(true);
 
   // ── Load pipeline list ────────────────────────────────────────────────────
   const loadPipelines = useCallback(async () => {
@@ -388,45 +389,63 @@ export default function PipelinePage() {
                 <ListChecks className="w-4 h-4 text-[#722ed1]" />
                 运行控制
               </CardTitle>
-              <label className="flex items-center gap-1.5 text-xs text-[#94a3b8] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={allChecked}
-                  onChange={() => void toggleAll()}
-                  className="accent-[#722ed1] w-3.5 h-3.5"
-                />
-                全选
-              </label>
+              <button
+                type="button"
+                onClick={() => setStepPanelOpen((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-[#94a3b8] hover:text-white transition-colors select-none"
+              >
+                {stepPanelOpen ? "收起" : "展开选择"}
+                {stepPanelOpen ? (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5" />
+                )}
+              </button>
             </div>
             <CardDescription className="text-xs text-[#64748b] mt-1">
-              勾选要运行的阶段（默认全选）；可只跑选中的几项，其余标记为跳过
+              {stepPanelOpen
+                ? "勾选要运行的阶段（默认全选）；可只跑选中的几项，其余标记为跳过"
+                : "已收起阶段选择；展开后可勾选特定阶段，或直接点击下方按钮运行/续跑/停止"}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            {steps.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
-                {steps.map((s) => (
-                  <label
-                    key={s.key}
-                    className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
-                      selected.has(s.key)
-                        ? "border-[#722ed1]/50 bg-[#722ed1]/10 text-[#e2e8f0]"
-                        : "border-[#1e293b] bg-[#0a0e17] text-[#64748b]"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(s.key)}
-                      onChange={() => void toggleStep(s.key)}
-                      className="accent-[#722ed1] w-3.5 h-3.5 shrink-0"
-                    />
-                    <span className="font-mono text-[10px] opacity-60">{s.key}</span>
-                    <span className="truncate">{s.name}</span>
-                  </label>
-                ))}
+            {stepPanelOpen && (
+              <div className="mb-3">
+                <label className="flex items-center gap-1.5 text-xs text-[#94a3b8] cursor-pointer select-none mb-2">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={() => void toggleAll()}
+                    className="accent-[#722ed1] w-3.5 h-3.5"
+                  />
+                  全选
+                </label>
+                {steps.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {steps.map((s) => (
+                      <label
+                        key={s.key}
+                        className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
+                          selected.has(s.key)
+                            ? "border-[#722ed1]/50 bg-[#722ed1]/10 text-[#e2e8f0]"
+                            : "border-[#1e293b] bg-[#0a0e17] text-[#64748b]"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.has(s.key)}
+                          onChange={() => void toggleStep(s.key)}
+                          className="accent-[#722ed1] w-3.5 h-3.5 shrink-0"
+                        />
+                        <span className="font-mono text-[10px] opacity-60">{s.key}</span>
+                        <span className="truncate">{s.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-[#64748b]">加载阶段列表…</div>
+                )}
               </div>
-            ) : (
-              <div className="text-xs text-[#64748b] mb-3">加载阶段列表…</div>
             )}
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -440,25 +459,37 @@ export default function PipelinePage() {
               </Button>
               <Button
                 size="sm"
-                variant="outline"
                 onClick={() => void runControl("resume")}
                 disabled={opRunning}
-                className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#1677ff]/40"
+                className="bg-[#faad14] hover:bg-[#ffc53d] text-[#0a0e17]"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${opRunning ? "animate-spin" : ""}`} />
                 续跑
               </Button>
               <Button
                 size="sm"
-                variant="outline"
                 onClick={() => void runControl("stop")}
                 disabled={opRunning}
-                className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#ff4d4f]/40"
+                className="bg-[#ff4d4f] hover:bg-[#ff7875] text-white"
               >
                 <Square className="w-3.5 h-3.5" />
                 停止
               </Button>
-              {opMsg && <span className="text-xs text-[#94a3b8] ml-1">{opMsg}</span>}
+              {opMsg && (
+                <span
+                  className={`text-xs ml-1 ${
+                    opMsg.startsWith("已停止")
+                      ? "text-[#ff4d4f]"
+                      : opMsg.startsWith("已提交续跑")
+                      ? "text-[#faad14]"
+                      : opMsg.startsWith("已提交")
+                      ? "text-[#722ed1]"
+                      : "text-[#94a3b8]"
+                  }`}
+                >
+                  {opMsg}
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
