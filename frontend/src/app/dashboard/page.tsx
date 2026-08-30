@@ -119,13 +119,26 @@ interface DashboardV2OverviewResponse {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getInitials(name: string): string {
-  return name
-    .split(/[\s@]+/)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+// Derive a short display name from the email (the local part before `@`).
+// The users table does not store a real `name`, so we avoid showing the
+// full email address in the user menu. Falls back to "用户" if absent.
+function displayNameFromEmail(email: string | undefined | null): string {
+  const local = (email || "").split("@")[0];
+  if (!local) return "用户";
+  return local.charAt(0).toUpperCase() + local.slice(1);
+}
+
+// Avatar initials: 2–3 letters derived straight from the email's local part.
+// Multi-segment names (john.doe / mary_jane / li-ming) → first letter of each
+// segment (JD / MJ / LM); a single segment (demo) → first 2 letters (DE).
+function getAvatarInitials(email: string | undefined | null): string {
+  const local = (email || "").split("@")[0];
+  if (!local) return "YU";
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return parts.slice(0, 3).map((p) => p[0].toUpperCase()).join("");
+  }
+  return local.slice(0, 2).toUpperCase();
 }
 
 function formatDate(dateStr: string): string {
@@ -567,11 +580,11 @@ export default function DashboardPage() {
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
                 <Avatar className="w-7 h-7 border border-[#1e293b]">
                   <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
-                    {session ? getInitials(session.email) : "YU"}
+                    {session ? getAvatarInitials(session.email) : "YU"}
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
-                  {session?.email || "用户"}
+                  {session ? displayNameFromEmail(session.email) : "用户"}
                 </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent
