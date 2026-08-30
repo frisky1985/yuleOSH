@@ -14,10 +14,14 @@ import {
   FolderOpen,
   Info,
   LayoutDashboard,
+  ListChecks,
   Loader2,
+  Pause,
+  Play,
   RefreshCw,
   ScrollText,
   ShieldCheck,
+  Square,
   Workflow,
 } from "lucide-react";
 import { TopNav } from "@/components/dashboard/top-nav";
@@ -189,6 +193,13 @@ export default function PipelinePage() {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewError, setPreviewError] = useState("");
 
+  // ── Pipeline 运行控制（重跑 / 选中某几项 / 续跑 / 停止）──
+  const [steps, setSteps] = useState<{ index: number; key: string; agent: string; name: string }[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [allChecked, setAllChecked] = useState(true);
+  const [opRunning, setOpRunning] = useState(false);
+  const [opMsg, setOpMsg] = useState("");
+
   // ── Load pipeline list ────────────────────────────────────────────────────
   const loadPipelines = useCallback(async () => {
     setLoading(true);
@@ -210,6 +221,21 @@ export default function PipelinePage() {
   useEffect(() => {
     void loadPipelines();
   }, [loadPipelines]);
+
+  // 拉取真实 pipeline steps（用于勾选重跑）
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await apiFetch<any>("/api/v1/pipeline/steps");
+        const list = (res?.steps || []) as { index: number; key: string; agent: string; name: string }[];
+        setSteps(list);
+        setSelected(new Set(list.map((s) => s.key)));
+        setAllChecked(true);
+      } catch {
+        /* 步骤列表不可用时静默，不阻塞页面 */
+      }
+    })();
+  }, []);
 
   // ── Project name for artifacts query (fallback: pipeline name) ───────────
   const projectNameFor = useCallback(
@@ -261,6 +287,69 @@ export default function PipelinePage() {
     }
   }, []);
 
+  // ── 运行控制 ──────────────────────────────────────────────────────────────
+  const toggleStep = useCallback((key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      setAllChecked(next.size === steps.length);
+      return next;
+    });
+  }, [steps.length]);
+
+  const toggleAll = useCallback(() => {
+    setAllChecked((prev) => {
+      const next = !prev;
+      setSelected(next ? new Set(steps.map((s) => s.key)) : new Set());
+      return next;
+    });
+  }, [steps]);
+
+  const runControl = useCallback(
+    async (action: "run-selected" | "resume" | "stop") => {
+      setOpRunning(true);
+      setOpMsg("");
+      try {
+        if (action === "resume") {
+          const res = await apiFetch<any>("/api/v1/pipeline/resume", {
+            method: "POST",
+            body: JSON.stringify({}),
+          });
+          setOpMsg(`已提交续跑：${res?.op || "resume"}`);
+        } else if (action === "stop") {
+          const res = await apiFetch<any>("/api/v1/pipeline/stop", {
+            method: "POST",
+            body: JSON.stringify({}),
+          });
+          setOpMsg(`已停止：${res?.op || "stop"}`);
+        } else {
+          const ids = steps.filter((s) => selected.has(s.key)).map((s) => s.key);
+          if (ids.length === 0) {
+            setOpMsg("请至少勾选一个阶段");
+            return;
+          }
+          const res =
+            ids.length === steps.length
+              ? await apiFetch<any>("/api/v1/pipeline/rerun", {
+                  method: "POST",
+                  body: JSON.stringify({}),
+                })
+              : await apiFetch<any>("/api/v1/pipeline/retry", {
+                  method: "POST",
+                  body: JSON.stringify({ step_ids: ids }),
+                });
+          setOpMsg(`已提交：${res?.op || "ok"}（${ids.length}/${steps.length} 步）`);
+        }
+      } catch (err) {
+        setOpMsg(errMessage(err));
+      } finally {
+        setOpRunning(false);
+      }
+    },
+    [steps, selected]
+  );
+
   const isEmpty = !loading && pipelines.length === 0;
 
   return (
@@ -290,6 +379,89 @@ export default function PipelinePage() {
             刷新
           </Button>
         </div>
+
+        {/* ── 运行控制：重跑 / 勾选某几项 / 续跑 / 停止 ── */}
+        <Card className="border-[#1e293b] bg-[#111827] mb-4">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+                <ListChecks className="w-4 h-4 text-[#722ed1]" />
+                运行控制
+              </CardTitle>
+              <label className="flex items-center gap-1.5 text-xs text-[#94a3b8] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={() => void toggleAll()}
+                  className="accent-[#722ed1] w-3.5 h-3.5"
+                />
+                全选
+              </label>
+            </div>
+            <CardDescription className="text-xs text-[#64748b] mt-1">
+              勾选要运行的阶段（默认全选）；可只跑选中的几项，其余标记为跳过
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {steps.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+                {steps.map((s) => (
+                  <label
+                    key={s.key}
+                    className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
+                      selected.has(s.key)
+                        ? "border-[#722ed1]/50 bg-[#722ed1]/10 text-[#e2e8f0]"
+                        : "border-[#1e293b] bg-[#0a0e17] text-[#64748b]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(s.key)}
+                      onChange={() => void toggleStep(s.key)}
+                      className="accent-[#722ed1] w-3.5 h-3.5 shrink-0"
+                    />
+                    <span className="font-mono text-[10px] opacity-60">{s.key}</span>
+                    <span className="truncate">{s.name}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-[#64748b] mb-3">加载阶段列表…</div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => void runControl("run-selected")}
+                disabled={opRunning}
+                className="bg-[#722ed1] hover:bg-[#8b5cf6] text-white"
+              >
+                <Play className="w-3.5 h-3.5" />
+                运行选中
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void runControl("resume")}
+                disabled={opRunning}
+                className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#1677ff]/40"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${opRunning ? "animate-spin" : ""}`} />
+                续跑
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void runControl("stop")}
+                disabled={opRunning}
+                className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#ff4d4f]/40"
+              >
+                <Square className="w-3.5 h-3.5" />
+                停止
+              </Button>
+              {opMsg && <span className="text-xs text-[#94a3b8] ml-1">{opMsg}</span>}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Data note */}
         {listNote && (

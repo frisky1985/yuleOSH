@@ -307,6 +307,52 @@ async function getPipelineStatus(): Promise<{ sessions: PipelineSession[]; count
   return data;
 }
 
+// ── Pipeline 运行控制（重跑 / 续跑 / 选中某几项 / 停止）──
+// projectDir 不传时后端自动用 OSH_HOME（当前项目根）。
+async function getPipelineSteps(): Promise<{
+  steps: { index: number; key: string; agent: string; name: string }[];
+  count: number;
+}> {
+  return request<any>("/api/v1/pipeline/steps", { method: "GET" });
+}
+
+async function rerunPipeline(projectDir?: string): Promise<any> {
+  return request<any>("/api/v1/pipeline/rerun", {
+    method: "POST",
+    body: JSON.stringify(projectDir ? { project_dir: projectDir } : {}),
+  });
+}
+
+async function resumePipeline(projectDir?: string): Promise<any> {
+  return request<any>("/api/v1/pipeline/resume", {
+    method: "POST",
+    body: JSON.stringify(projectDir ? { project_dir: projectDir } : {}),
+  });
+}
+
+async function retryPipelineStep(stepId: string, projectDir?: string): Promise<any> {
+  return request<any>("/api/v1/pipeline/retry", {
+    method: "POST",
+    body: JSON.stringify(projectDir ? { step_id: stepId, project_dir: projectDir } : { step_id: stepId }),
+  });
+}
+
+async function retryPipelineSteps(stepIds: string[], projectDir?: string): Promise<any> {
+  return request<any>("/api/v1/pipeline/retry", {
+    method: "POST",
+    body: JSON.stringify(
+      projectDir ? { step_ids: stepIds, project_dir: projectDir } : { step_ids: stepIds }
+    ),
+  });
+}
+
+async function stopPipeline(projectDir?: string): Promise<any> {
+  return request<any>("/api/v1/pipeline/stop", {
+    method: "POST",
+    body: JSON.stringify(projectDir ? { project_dir: projectDir } : {}),
+  });
+}
+
 async function getV1Stats(): Promise<any> {
   const data = await request<any>("/api/v1/project/stats", { method: "GET" });
   if (data && data.ok === true) {
@@ -365,6 +411,12 @@ export const api = {
     },
     pipeline: {
       status: getPipelineStatus,
+      steps: getPipelineSteps,
+      rerun: rerunPipeline,
+      resume: resumePipeline,
+      retryStep: retryPipelineStep,
+      retrySteps: retryPipelineSteps,
+      stop: stopPipeline,
     },
     stats: getV1Stats,
     me: {
