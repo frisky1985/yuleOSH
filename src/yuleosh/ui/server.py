@@ -299,6 +299,25 @@ class OSHHandler(BaseHTTPRequestHandler):
             self._response_status = getattr(self, "_response_status", 200)
             log_audit(self)
 
+    def do_PUT(self) -> None:
+        """Route PUT requests (e.g. /api/v1/org/llm-config).
+
+        Reuses handle_post's body reading + /api/v1 dispatch — the v1 router
+        resolves the actual method from handler.command, so PUT is honored
+        without a separate code path.
+        """
+        from yuleosh.ui.routes.handler_helpers import handle_post, log_audit
+        self._request_start_time = time.time()
+        try:
+            handle_post(self)
+        except Exception as e:  # noqa: BLE001 — P1-7: generic msg client, detail logs
+            logging.error("PUT %s: %s", self.path, e, exc_info=True)
+            self._json_response({"error": "Internal server error"}, 500)
+            self._response_status = 500
+        finally:
+            self._response_status = getattr(self, "_response_status", 200)
+            log_audit(self)
+
     def do_OPTIONS(self) -> None:
         from yuleosh.ui.routes.handler_helpers import handle_options
         handle_options(self)

@@ -33,6 +33,7 @@ from .apikeys import handle_apikeys
 from .wizard import handle_wizard
 from .audit import handle_audit
 from .auth import handle_auth
+from .usage import handle_me, handle_org
 
 # Lazy-loaded modules (AR-P2-01): only imported when their route is hit
 # These are loaded lazily to avoid importing optional/seldom-used modules.
@@ -87,6 +88,8 @@ ROUTES: dict[str, object] = {
     "audit": handle_audit,
     "auth": handle_auth,
     "kb": handle_kb,
+    "me": handle_me,
+    "org": handle_org,
 }
 
 # A3: tenant/billing/projects (复数资源，裁决 B7) — migrated legacy

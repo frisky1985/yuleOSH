@@ -22,6 +22,26 @@ from yuleosh.ui.auth_extended import (
 logger = logging.getLogger("yuleosh.api.middleware")
 
 
+def _apply_org_llm_override(user: dict) -> None:
+    """Pin the org's LLM provider/model for the current request (v9).
+
+    Reads the tenant's stored llm provider/model from the store and pushes it
+    into a request-scoped ContextVar consumed by LLMClient.resolve_config.
+    Best-effort: any failure degrades to the system default without breaking
+    the request.
+    """
+    try:
+        from yuleosh.llm.client import set_org_llm_override
+        org_id = user.get("org_id")
+        if not org_id:
+            return
+        from yuleosh.store import Store
+        cfg = Store().get_org_llm_config(org_id)
+        set_org_llm_override(cfg.get("provider"), cfg.get("model"))
+    except Exception as e:  # noqa: BLE001
+        logger.debug("org llm override skipped: %s", e)
+
+
 def _resolve_local_dev_user() -> dict:
     """AUTH_DISABLED 本地开发模式：构造一个 admin 用户注入，使依赖
     ``current_user.org_id`` 的路由（如 dashboard/projects）也能正常工作。
@@ -111,6 +131,7 @@ def require_auth(handler):
         # 直接注入本地 admin 用户并放行，使 /api/v1/* 也免认证。
         if not AUTH_ENABLED:
             kwargs["current_user"] = _resolve_local_dev_user()
+            _apply_org_llm_override(kwargs["current_user"])
             return handler(method=method, path_tail=path_tail, body=body,
                            query=query, **kwargs)
 
@@ -149,6 +170,7 @@ def require_auth(handler):
             "email": user.get("email", ""),
             "role": user.get("role", "member"),
         }
+        _apply_org_llm_override(kwargs["current_user"])
 
         return handler(method=method, path_tail=path_tail, body=body,
                        query=query, **kwargs)

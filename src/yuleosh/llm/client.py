@@ -27,6 +27,7 @@ Backward-compatible shim ``_call_llm()`` is provided at module bottom.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -227,6 +228,27 @@ def _get_provider(provider_name: str) -> AbstractProvider:
     return _PROVIDER_REGISTRY[provider_name]
 
 
+# Org-level LLM default (set per-request by the API auth middleware so the
+# tenant's pinned model takes effect without threading org_id through every
+# call site). Stored in a ContextVar — concurrency-safe and request-scoped
+# (no cross-org leakage). Highest priority except an explicit caller config.
+_org_llm_override: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar(
+    "yuleosh_org_llm", default=None
+)
+
+
+def set_org_llm_override(provider: Optional[str], model: Optional[str]) -> None:
+    """Set the current request's org-pinned LLM provider/model.
+
+    Pass (None, None) to clear. Only provider/model are honored; task-specific
+    budget / RAG / memory still come from resolve_config defaults.
+    """
+    if provider is None and model is None:
+        _org_llm_override.set(None)
+    else:
+        _org_llm_override.set({"provider": provider, "model": model})
+
+
 def resolve_config(
     prompt: str,
     system_prompt: Optional[str],
@@ -308,6 +330,20 @@ def resolve_config(
         model = default_model
         if not provider_env:
             provider = PROVIDER_MODEL_MAP.get(model, provider)
+
+    # Org-level default (set per-request by auth middleware). Takes priority
+    # over env / agent-route / task-route defaults, but below an explicit
+    # caller config (which already returned above). Applied after the L3/L4
+    # safety rule so an org pin is honored as intended.
+    org_cfg = _org_llm_override.get()
+    if org_cfg:
+        _op = org_cfg.get("provider")
+        _om = org_cfg.get("model")
+        if _om:
+            model = _om
+            provider = _op or PROVIDER_MODEL_MAP.get(_om, provider)
+        elif _op:
+            provider = _op
 
     task_budget = TASK_BUDGETS.get(route_task_type, TASK_BUDGETS["code_generation"])
 
