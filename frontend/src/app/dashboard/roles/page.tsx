@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertCircle,
   BookMarked,
+  ChevronDown,
   ChevronRight,
   Cpu,
   FlaskConical,
@@ -158,6 +159,7 @@ export default function RolesPage() {
   const [listNote, setListNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showAllMembers, setShowAllMembers] = useState(false);
 
   // Invite form
   const [inviteEmail, setInviteEmail] = useState("");
@@ -362,59 +364,87 @@ export default function RolesPage() {
                     <span className="w-32 text-right">加入时间</span>
                   </div>
 
-                  {members.map((m) => {
-                    const meta = roleMeta(m.role);
-                    const saving = savingId === String(m.id);
+                  {(() => {
+                    const MEMBER_PREVIEW = 3;
+                    const visible = showAllMembers ? members : members.slice(0, MEMBER_PREVIEW);
+                    const hidden = members.length - visible.length;
                     return (
-                      <div
-                        key={String(m.id)}
-                        className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 items-center border-b border-[#1e293b] last:border-b-0 hover:bg-[#1e293b]/40 transition-all"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Mail className="w-4 h-4 text-[#722ed1] shrink-0" />
-                          <span className="text-sm text-[#e2e8f0] truncate">{m.email}</span>
-                        </div>
-                        <div className="w-44 flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className="border-transparent shrink-0"
-                            style={{
-                              color: meta.color,
-                              background: `${meta.color}1f`,
-                              borderColor: `${meta.color}4d`,
-                            }}
-                          >
-                            {meta.label}
-                          </Badge>
-                          {saving ? (
-                            <span className="flex items-center gap-1 text-xs text-[#64748b]">
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              保存中…
-                            </span>
-                          ) : (
-                            <Select
-                              value={m.role}
-                              onValueChange={(v) => void handleRoleChange(m, v ?? "")}
+                      <>
+                        {visible.map((m) => {
+                          const meta = roleMeta(m.role);
+                          const saving = savingId === String(m.id);
+                          return (
+                            <div
+                              key={String(m.id)}
+                              className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 items-center border-b border-[#1e293b] last:border-b-0 hover:bg-[#1e293b]/40 transition-all"
                             >
-                              <SelectTrigger size="sm" className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent align="start">
-                                {ROLE_OPTIONS.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                        <div className="w-32 text-right text-xs text-[#94a3b8]">
-                          {formatDate(m.created_at)}
-                        </div>
-                      </div>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Mail className="w-4 h-4 text-[#722ed1] shrink-0" />
+                                <span className="text-sm text-[#e2e8f0] truncate">{m.email}</span>
+                              </div>
+                              <div className="w-44 flex items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className="border-transparent shrink-0"
+                                  style={{
+                                    color: meta.color,
+                                    background: `${meta.color}1f`,
+                                    borderColor: `${meta.color}4d`,
+                                  }}
+                                >
+                                  {meta.label}
+                                </Badge>
+                                {saving ? (
+                                  <span className="flex items-center gap-1 text-xs text-[#64748b]">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    保存中…
+                                  </span>
+                                ) : (
+                                  <Select
+                                    value={m.role}
+                                    onValueChange={(v) => void handleRoleChange(m, v ?? "")}
+                                  >
+                                    <SelectTrigger size="sm" className="w-full">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent align="start">
+                                      {ROLE_OPTIONS.map((opt) => (
+                                        <SelectItem key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              </div>
+                              <div className="w-32 text-right text-xs text-[#94a3b8]">
+                                {formatDate(m.created_at)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {hidden > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllMembers(true)}
+                            className="w-full px-4 py-2.5 text-xs text-[#722ed1] hover:text-white hover:bg-[#722ed1]/10 transition-colors flex items-center justify-center gap-1.5 border-b border-[#1e293b] last:border-b-0"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                            显示更多（还有 {hidden} 位成员）
+                          </button>
+                        )}
+                        {showAllMembers && members.length > MEMBER_PREVIEW && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllMembers(false)}
+                            className="w-full px-4 py-2.5 text-xs text-[#64748b] hover:text-white hover:bg-[#1e293b]/50 transition-colors flex items-center justify-center gap-1.5 border-b border-[#1e293b] last:border-b-0"
+                          >
+                            收起
+                          </button>
+                        )}
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
               )}
             </CardContent>
