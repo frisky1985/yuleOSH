@@ -517,6 +517,46 @@ class Store(AbstractStore):
         )
         return [dict(r) for r in cur.fetchall()]
 
+    def update_org_project(self, org_id: int, slug: str, name: str = None,
+                           new_slug: str = None, description: str = None):
+        """UPDATE org_projects SET ... WHERE org_id=? AND slug=? (A4).
+
+        Used to promote/rename a demo project in place without creating a
+        duplicate row (the Dashboard lists projects by org_id + slug).
+        """
+        fields, params = [], []
+        if name is not None:
+            fields.append("name=?"); params.append(name)
+        if new_slug is not None:
+            fields.append("slug=?"); params.append(new_slug)
+        if description is not None:
+            fields.append("description=?"); params.append(description)
+        if not fields:
+            return
+        params += [org_id, slug]
+        self.conn.execute(
+            "UPDATE org_projects SET " + ", ".join(fields) + " WHERE org_id=? AND slug=?",
+            params,
+        )
+        self.conn.commit()
+
+    def rename_project(self, old_name: str, new_name: str, new_description: str = None):
+        """UPDATE projects SET name=?[, description=?] WHERE name=? (A4).
+
+        Keeps the spec/pipeline chain (which resolves projects by name) pointing
+        at the renamed project; spec_path is re-linked by the caller afterwards.
+        """
+        if new_description is not None:
+            self.conn.execute(
+                "UPDATE projects SET name=?, description=? WHERE name=?",
+                (new_name, new_description, old_name),
+            )
+        else:
+            self.conn.execute(
+                "UPDATE projects SET name=? WHERE name=?", (new_name, old_name)
+            )
+        self.conn.commit()
+
     # ------------------------------------------------------------------
     # Multi-tenant: Sessions
     # ------------------------------------------------------------------
