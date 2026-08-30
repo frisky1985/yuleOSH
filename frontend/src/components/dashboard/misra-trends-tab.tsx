@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   TrendingUp, Loader2, AlertCircle, AlertTriangle,
   RefreshCw, Info, BarChart3, Target, CheckCircle2,
@@ -19,23 +19,27 @@ import { getMISRATrend, type MisraTrendResponse } from "@/lib/api";
 export function MisraTrendsTab() {
   const [trendData, setTrendData] = useState<MisraTrendResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const res = await getMISRATrend();
-        setTrendData(res);
-      } catch (err: any) {
-        setError(err.message || "加载 MISRA 趋势失败");
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError("");
+    try {
+      const res = await getMISRATrend();
+      setTrendData(res);
+    } catch (err: any) {
+      setError(err.message || "加载 MISRA 趋势失败");
+    } finally {
+      if (isRefresh) setRefreshing(false);
+      else setLoading(false);
     }
-    load();
   }, []);
+
+  useEffect(() => {
+    void load(false);
+  }, [load]);
 
   if (loading) {
     return (
@@ -77,11 +81,16 @@ export function MisraTrendsTab() {
           </p>
         </div>
         <Button
-          onClick={() => window.location.reload()}
+          onClick={() => load(true)}
+          disabled={refreshing}
           variant="outline"
           className="border-[#1e293b] text-[#94a3b8] h-9 text-xs gap-1.5"
         >
-          <RefreshCw className="w-3.5 h-3.5" />
+          {refreshing ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
           刷新
         </Button>
       </div>
