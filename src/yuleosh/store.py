@@ -8,12 +8,14 @@ Usage:
     YULEOSH_DB_URL=postgresql://user:pass@host:5432/dbname  → PostgreSQL
     YULEOSH_DB=/path/to/store.db or unset                  → SQLite (default)
 """
-import json, os, re, sqlite3, threading
+import json, os, re, sqlite3, threading, logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from yuleosh.store_interface import AbstractStore
+
+log = logging.getLogger(__name__)
 
 
 def _session_token_hash(token: str) -> str:
@@ -63,7 +65,7 @@ class Store(AbstractStore):
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 8  # v0.9.0: usage/subscription tables + org tier; v8: usage_log user attribution
+    _MIGRATION_VERSION = 9  # v0.9.0: usage/subscription tables + org tier; v8: usage_log user attribution; v9: org llm config
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -223,6 +225,8 @@ class Store(AbstractStore):
             self._run_migration_v7()
         if version < 8:
             self._run_migration_v8()
+        if version < 9:
+            self._run_migration_v9()
 
         # Record migration version
         self.conn.execute(
@@ -286,6 +290,23 @@ class Store(AbstractStore):
             "ALTER TABLE usage_log ADD COLUMN user_id INTEGER",
             "ALTER TABLE usage_log ADD COLUMN run_id TEXT",
             "ALTER TABLE usage_log ADD COLUMN user_email TEXT",
+        ):
+            try:
+                self.conn.execute(sql)
+            except OperationalError:
+                pass
+        self.conn.commit()
+
+    def _run_migration_v9(self):
+        """Migration v9: per-org LLM provider/model config (Portal usage + model picker, 2026-08-30).
+
+        Adds llm_provider / llm_model columns to organizations so the tenant
+        can pin a default model. Idempotent (guarded by OperationalError).
+        """
+        from sqlite3 import OperationalError
+        for sql in (
+            "ALTER TABLE organizations ADD COLUMN llm_provider TEXT",
+            "ALTER TABLE organizations ADD COLUMN llm_model TEXT",
         ):
             try:
                 self.conn.execute(sql)
@@ -441,6 +462,39 @@ class Store(AbstractStore):
         cur = self.conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,))
         row = cur.fetchone()
         return dict(row) if row else None
+
+    def get_org_llm_config(self, org_id: int) -> dict:
+        """Return the org's pinned LLM provider/model (v9).
+
+        Returns {provider, model}; either may be None when unset, in which
+        case the system falls back to env / task-route defaults.
+        """
+        try:
+            row = self.conn.execute(
+                "SELECT llm_provider, llm_model FROM organizations WHERE id=?",
+                (org_id,)
+            ).fetchone()
+        except Exception:
+            row = None
+        if not row:
+            return {"provider": None, "model": None}
+        return {
+            "provider": row["llm_provider"] or None,
+            "model": row["llm_model"] or None,
+        }
+
+    def set_org_llm_config(self, org_id: int, provider: str | None = None,
+                           model: str | None = None) -> dict:
+        """Persist the org's pinned LLM provider/model (v9).
+
+        None values are stored as NULL (meaning "use system default").
+        """
+        self.conn.execute(
+            "UPDATE organizations SET llm_provider=?, llm_model=? WHERE id=?",
+            (provider, model, org_id)
+        )
+        self.conn.commit()
+        return self.get_org_llm_config(org_id)
 
     def count_org_users(self, org_id: int) -> int:
         """Count users belonging to an org (Phase 9, billing usage)."""
@@ -822,6 +876,77 @@ class Store(AbstractStore):
             "llm_tokens": r["llm_tokens"] or 0,
             "pipeline_runs": r["pipeline_runs"] or 0,
         } for r in rows]
+
+    def get_user_usage_summary(self, org_id: int, user_id: Any) -> dict:
+        """Single-user usage summary for the "我的用量" cockpit panel (v9).
+
+        Aggregates, for ``user_id`` within ``org_id``:
+          - pipeline_runs : count of pipeline invocations (usage_log)
+          - llm_calls     : count of LLM/agent invocations (llm_calls.jsonl)
+          - tokens_in/out : prompt/completion tokens (llm_calls.jsonl)
+          - cost          : estimated USD cost (llm_calls.jsonl)
+          - current_model : last model used by this user (or org default)
+
+        user_id is matched as text (the dev user is the string "local-dev";
+        real users carry an int id — SQLite stores both, so CAST avoids misses).
+        """
+        uid = str(user_id)
+        pipeline_runs = self.conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM usage_log"
+            " WHERE org_id=? AND resource='pipeline_runs' AND CAST(user_id AS TEXT)=?",
+            (org_id, uid)
+        ).fetchone()[0] or 0
+
+        llm_calls = 0
+        tokens_in = 0
+        tokens_out = 0
+        cost = 0.0
+        last_model = None
+        try:
+            from yuleosh.llm.cost import CostLogger
+            log_path = CostLogger._ensure_log_path()
+            if os.path.exists(log_path):
+                with open(log_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except Exception:
+                            continue
+                        if str(rec.get("user_id")) != uid:
+                            continue
+                        llm_calls += 1
+                        tokens_in += int(rec.get("tokens_in") or 0)
+                        tokens_out += int(rec.get("tokens_out") or 0)
+                        try:
+                            cost += float(rec.get("cost") or 0)
+                        except (TypeError, ValueError):
+                            pass
+                        if rec.get("model"):
+                            last_model = rec.get("model")
+        except Exception as e:  # noqa: BLE001
+            log.warning("get_user_usage_summary llm log parse failed: %s", e)
+
+        # current model: last used by user, else org-pinned default
+        current_model = last_model
+        if not current_model:
+            try:
+                org_cfg = self.get_org_llm_config(org_id)
+                current_model = org_cfg.get("model") or org_cfg.get("provider")
+            except Exception:
+                pass
+
+        return {
+            "user_id": user_id,
+            "pipeline_runs": int(pipeline_runs),
+            "llm_calls": llm_calls,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost": round(cost, 4),
+            "current_model": current_model,
+        }
 
     def get_subscription(self, org_id: int):
         """Get subscription info for an org."""
