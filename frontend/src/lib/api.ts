@@ -185,10 +185,21 @@ async function request<T>(
 // Multi-tenant auth endpoints (under /api/auth/ and /api/org/)
 // ---------------------------------------------------------------------------
 
-async function signin(email: string, password: string): Promise<SigninResult> {
+async function signin(
+  email: string,
+  password: string,
+  inviteCode?: string,
+): Promise<SigninResult> {
+  // invite_code is the target organisation slug.  When supplied the backend
+  // creates a "member" user inside that existing org (join-by-invite) instead
+  // of diverting to the create-org flow.  Omitted => behaviour unchanged.
+  const payload: Record<string, string> = { email, password };
+  if (inviteCode && inviteCode.trim()) {
+    payload.invite_code = inviteCode.trim().toLowerCase();
+  }
   const result = await request<SigninResult>("/api/auth/signin", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(payload),
   });
   return result;
 }

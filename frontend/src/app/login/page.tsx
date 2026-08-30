@@ -3,7 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, ArrowRight, Lock, Loader2, Eye, EyeOff, User, Building2 } from "lucide-react";
+import { Mail, ArrowRight, Lock, Loader2, Eye, EyeOff, User, Building2, Ticket } from "lucide-react";
 import { GithubIcon } from "@/components/github-icon";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,17 @@ import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";  // T1 (v3.9.0): token 由服务端 Set-Cookie，前端不再落盘
 
 type AuthMode = "login" | "register";
+
+// Mirrors the backend rule in auth_extended._validate_password_strength
+// (min 8 chars + upper + lower + digit) so the surfaced message matches what
+// the server would otherwise reject after a wasted round-trip.
+function passwordError(pwd: string): string | null {
+  if (pwd.length < 8) return "密码至少需要8个字符";
+  if (!/[A-Z]/.test(pwd)) return "密码需包含至少一个大写字母";
+  if (!/[a-z]/.test(pwd)) return "密码需包含至少一个小写字母";
+  if (!/[0-9]/.test(pwd)) return "密码需包含至少一个数字";
+  return null;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,6 +37,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [orgName, setOrgName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [showInvite, setShowInvite] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -40,7 +53,21 @@ export default function LoginPage() {
           setLoading(false);
           return;
         }
-        const result = await api.auth.signin(email, password);
+        // With an invite code the backend may create a brand-new member
+        // account, so the same strength rules apply as on signup.
+        if (inviteCode.trim()) {
+          const pwdErr = passwordError(password);
+          if (pwdErr) {
+            setError(pwdErr);
+            setLoading(false);
+            return;
+          }
+        }
+        // Only pass the third argument when an invite code is actually
+        // supplied — keeps the original 2-arg contract for normal signin.
+        const result = inviteCode.trim()
+          ? await api.auth.signin(email, password, inviteCode)
+          : await api.auth.signin(email, password);
 
         if (result.error) {
           setError(result.error);
@@ -94,14 +121,34 @@ export default function LoginPage() {
           setLoading(false);
           return;
         }
+        // Baseline matches handle_org_create, which only requires a password.
         if (password.length < 8) {
           setError("密码至少需要8个字符");
           setLoading(false);
           return;
         }
+        // With an invite code the member account is created by handle_signin,
+        // which DOES enforce the full strength rules — check up front.
+        if (inviteCode.trim()) {
+          const pwdErr = passwordError(password);
+          if (pwdErr) {
+            setError(pwdErr);
+            setLoading(false);
+            return;
+          }
+        }
 
         // First try signin
-        const signinResult = await api.auth.signin(email, password);
+        const signinResult = inviteCode.trim()
+          ? await api.auth.signin(email, password, inviteCode)
+          : await api.auth.signin(email, password);
+
+        // Joined an existing org via invite code: the backend already created
+        // the member account and issued a session — no org creation needed.
+        if (signinResult.token && !signinResult.needs_org) {
+          router.push("/dashboard");
+          return;
+        }
 
         if (signinResult.error && !signinResult.needs_org) {
           setError(signinResult.error);
@@ -162,6 +209,7 @@ export default function LoginPage() {
   function toggleMode() {
     setMode(mode === "login" ? "register" : "login");
     setError("");
+    setInviteCode("");
   }
 
   return (
@@ -304,6 +352,49 @@ export default function LoginPage() {
                   </div>
                 </div>
               )}
+
+              {/* Invite code — join an existing org instead of creating one */}
+              <div className="space-y-2">
+                {!showInvite ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowInvite(true)}
+                    className="text-xs text-[#1677ff] hover:text-[#1677ff]/80 transition-colors bg-transparent border-none cursor-pointer"
+                  >
+                    使用邀请码加入已有组织
+                  </button>
+                ) : (
+                  <div className="space-y-1">
+                    <Label htmlFor="inviteCode" className="text-sm text-[#94a3b8]">
+                      邀请码 / 组织标识
+                    </Label>
+                    <div className="relative">
+                      <Ticket className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748b]" />
+                      <Input
+                        id="inviteCode"
+                        type="text"
+                        placeholder="例如 demo"
+                        value={inviteCode}
+                        onChange={(e) => setInviteCode(e.target.value)}
+                        className="pl-9 border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] placeholder:text-[#64748b] focus-visible:ring-[#722ed1]"
+                      />
+                    </div>
+                    <p className="text-xs text-[#64748b] leading-relaxed">
+                      填写后将以成员身份加入该组织，而不是新建组织。留空则保持原有流程。
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInvite(false);
+                        setInviteCode("");
+                      }}
+                      className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors bg-transparent border-none cursor-pointer"
+                    >
+                      取消使用邀请码
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {mode === "register" && (
                 <p className="text-xs text-[#64748b] leading-relaxed">
