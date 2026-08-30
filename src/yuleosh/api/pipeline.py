@@ -337,20 +337,37 @@ def _resolve_pipeline_ctx(body: dict) -> tuple[tuple[str, str] | None, str | Non
     return (pipeline_name, str(resolved)), None
 
 
-def _run_engine_op(pipeline_name: str, project_dir: str, op: str, step_id: str = "") -> None:
+def _run_engine_op(pipeline_name: str, project_dir: str, op: str,
+                  step_id: str = "", selected: list[str] | None = None) -> None:
     """后台线程执行 CheckpointEngine 控制操作（retry/resume/rerun）。
 
     状态真相源始终是 CheckpointEngine（B2-3 sqlite），本函数只负责触发
     执行并释放锁；前端看板轮询 checkpoint 接口看到状态变化。
+
+    selected: 选中模式步骤 id 列表（retry 时若提供，则只跑这些步骤，
+    其余 SKIPPED；优先级高于单点 inject_at）。
     """
     try:
         from yuleosh.engine.checkpoint import CheckpointEngine
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+        from yuleosh.engine.handler_adapter import HandlerAdapter
         engine = CheckpointEngine(
             pipeline_name, project_dir,
             state_backend="sqlite",
         )
+        # 注册真实步骤定义（与 agent_checkpoint 一致），否则 run() 无步骤可执行，
+        # rerun/resume/retry/selected 都会变成空操作。
+        for step_key, agent, step_name, handler in PIPELINE_STEPS:
+            engine.add_step(
+                step_key, step_name,
+                HandlerAdapter(handler) if handler else None,
+                agent=agent,
+            )
         if op == "retry":
-            engine.run(inject_at=step_id)
+            if selected:
+                engine.run(selected=selected)
+            else:
+                engine.run(inject_at=step_id)
         elif op == "rerun":
             # 全量重跑：无参 run() = _prepare_full()，从头开始
             engine.run()
@@ -366,13 +383,23 @@ def _run_engine_op(pipeline_name: str, project_dir: str, op: str, step_id: str =
 
 
 def _retry_pipeline(body: dict) -> tuple[dict, int]:
-    """POST /api/v1/pipeline/retry — retry from a specific step (inject_at)."""
+    """POST /api/v1/pipeline/retry — retry from a specific step OR run selected steps.
+
+    Body (二选一):
+      - {"step_id": "step-3"}            → 从 step-3 单点注入（向后兼容）
+      - {"step_ids": ["step-3","step-7"]} → 仅运行选中的步骤，其余 SKIPPED
+                                           （UI「勾选某几项阶段重跑」）
+    """
     if not isinstance(body, dict):
         return json_error("Request body must be a JSON object", 400)
 
     step_id = body.get("step_id", "")
-    if not step_id:
-        return json_error("step_id is required (retry from which step?)", 400)
+    step_ids = body.get("step_ids") or []
+    if step_ids and not isinstance(step_ids, list):
+        return json_error("step_ids must be a list of step_id strings", 400)
+    if not step_id and not step_ids:
+        return json_error(
+            "step_id or step_ids is required (retry from a step, or run selected steps)", 400)
 
     ctx, err = _resolve_pipeline_ctx(body)
     if err:
@@ -387,14 +414,24 @@ def _retry_pipeline(body: dict) -> tuple[dict, int]:
 
     t = threading.Thread(
         target=_run_engine_op,
-        args=(pipeline_name, project_dir, "retry", step_id),
+        args=(pipeline_name, project_dir, "retry", step_id, step_ids),
         daemon=True,
         name=f"pipeline-retry-{pipeline_name}",
     )
     t.start()
+    if step_ids:
+        return json_ok({
+            "status": "started",
+            "op": "retry",
+            "mode": "selected",
+            "pipeline": pipeline_name,
+            "step_ids": step_ids,
+            "note": "选中模式已提交，状态变化通过 /api/v1/pipeline/checkpoint 轮询",
+        })
     return json_ok({
         "status": "started",
         "op": "retry",
+        "mode": "inject",
         "pipeline": pipeline_name,
         "step_id": step_id,
         "note": "状态变化通过 /api/v1/pipeline/checkpoint 轮询",
