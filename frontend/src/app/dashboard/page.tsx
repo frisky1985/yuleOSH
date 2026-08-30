@@ -88,6 +88,7 @@ import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
 import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
 import { CreateProjectModal } from "@/components/dashboard/create-project-modal";
+import { DemoGalleryModal, DEMO_SLUGS } from "@/components/dashboard/demo-gallery-modal";
 import { GapBatchModal } from "@/components/dashboard/gap-batch-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
@@ -270,7 +271,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [seedingDemo, setSeedingDemo] = useState(false);
+  const [showDemoGallery, setShowDemoGallery] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
 
@@ -332,28 +333,22 @@ export default function DashboardPage() {
     }
   }, [selectedProject]);
 
-  const handleSeedDemo = async () => {
-    setSeedingDemo(true);
+  const handleDemoLoaded = async () => {
     try {
-      const proj = (await api.v1.projects.seed({})) as any;
-      if (proj?.error) {
-        console.error("seed demo error:", proj.error);
-        return;
-      }
       const res = await getDashboardProjects();
       if (res?.projects?.length) {
         setProjects(res.projects);
-        const match = res.projects.find(
-          (p) => p.name === (proj?.name || "UART 驱动演示项目")
-        );
-        if (match) setSelectedProject(match.id);
+        const uart = res.projects.find((p) => p.slug === "uart-demo");
+        if (uart) setSelectedProject(uart.id);
       }
     } catch (e: any) {
-      console.error("seed demo failed:", e?.message || e);
-    } finally {
-      setSeedingDemo(false);
+      console.error("refresh projects after seed failed:", e?.message || e);
     }
   };
+
+  const demoLoadedSlugs = projects
+    .filter((p) => DEMO_SLUGS.includes(p.slug))
+    .map((p) => p.slug);
 
   const handleCreated = async (proj: { id?: string; name: string; slug?: string }) => {
     try {
@@ -753,7 +748,14 @@ export default function DashboardPage() {
                             }`}
                           >
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium truncate">{p.name}</div>
+                              <div className="font-medium truncate flex items-center gap-1.5">
+                                {p.name}
+                                {DEMO_SLUGS.includes(p.slug) && (
+                                  <span className="text-[9px] px-1 py-0.5 rounded bg-[#1677ff]/15 text-[#1677ff] shrink-0">
+                                    示例
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-[10px] text-[#64748b] truncate mt-0.5">
                                 {p.swe_completed_count}/{p.swe_total} SWE
                               </div>
@@ -777,15 +779,10 @@ export default function DashboardPage() {
                         新建项目
                       </button>
                       <button
-                        onClick={handleSeedDemo}
-                        disabled={seedingDemo}
-                        className="w-full text-left px-2 py-1.5 text-xs text-[#1677ff] hover:bg-[#1677ff]/5 rounded transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        onClick={() => setShowDemoGallery(true)}
+                        className="w-full text-left px-2 py-1.5 text-xs text-[#1677ff] hover:bg-[#1677ff]/5 rounded transition-colors flex items-center gap-1.5"
                       >
-                        {seedingDemo ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-3 h-3" />
-                        )}
+                        <Sparkles className="w-3 h-3" />
                         加载示例项目
                       </button>
                     </div>
@@ -1542,6 +1539,13 @@ export default function DashboardPage() {
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={handleCreated}
+      />
+
+      <DemoGalleryModal
+        open={showDemoGallery}
+        onClose={() => setShowDemoGallery(false)}
+        existingSlugs={demoLoadedSlugs}
+        onLoaded={handleDemoLoaded}
       />
 
       {/* Gap batch modal (bulk analyze / remediate) */}
