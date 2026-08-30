@@ -28,6 +28,7 @@ import {
   Hash,
   ShieldCheck,
   Activity,
+  Play,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,8 @@ import {
   getDashboardProjects,
   getSWEStatus,
   getGapAnalysis,
+  getGapDetail,
+  runGap,
   generateEvidence,
   getEvidenceStatus,
   getCoverage,
@@ -79,6 +82,7 @@ import { simpleMarkdown } from "@/lib/markdown";
 import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
+import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
 import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board";
@@ -281,6 +285,10 @@ export default function DashboardPage() {
   const [gapSeverity, setGapSeverity] = useState("");
   const [gapAllItems, setGapAllItems] = useState<GapItem[]>([]);
   const [gapShowAll, setGapShowAll] = useState(false);
+
+  // Gap detail modal (per-item 分析 / 运行)
+  const [showGapDetail, setShowGapDetail] = useState(false);
+  const [selectedGapId, setSelectedGapId] = useState<string | null>(null);
 
   // Evidence generation
   const [evTask, setEvTask] = useState<EvidenceTask | null>(null);
@@ -1221,15 +1229,22 @@ export default function DashboardPage() {
                           <th className="text-left py-3 px-4 text-xs text-[#64748b] font-medium uppercase tracking-wider hidden lg:table-cell">
                             建议
                           </th>
+                          <th className="text-right py-3 px-4 text-xs text-[#64748b] font-medium uppercase tracking-wider">
+                            操作
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {displayGapItems.map((item, idx) => (
                           <tr
                             key={item.id}
-                            className={`border-b border-[#1e293b] hover:bg-[#1e293b]/50 transition-colors ${
+                            className={`border-b border-[#1e293b] hover:bg-[#1e293b]/50 transition-colors cursor-pointer ${
                               idx % 2 === 0 ? "bg-[#0a0e17]/30" : ""
                             }`}
+                            onClick={() => {
+                              setSelectedGapId(item.id);
+                              setShowGapDetail(true);
+                            }}
                           >
                             <td className="py-3 px-4">
                               <Badge
@@ -1265,6 +1280,36 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-3 px-4 text-xs text-[#64748b] hidden lg:table-cell max-w-xs">
                               <span className="line-clamp-2">{item.suggestion || "-"}</span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="inline-flex items-center gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px] text-[#94a3b8] hover:text-white hover:bg-[#722ed1]/15"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedGapId(item.id);
+                                    setShowGapDetail(true);
+                                  }}
+                                >
+                                  <Search className="w-3 h-3 mr-1" />
+                                  分析
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] bg-gradient-to-r from-[#10b981] to-[#1677ff] text-white disabled:opacity-50"
+                                  disabled={item.status === "completed"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedGapId(item.id);
+                                    setShowGapDetail(true);
+                                  }}
+                                >
+                                  <Play className="w-3 h-3 mr-1" />
+                                  运行
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1343,6 +1388,25 @@ export default function DashboardPage() {
 
       {/* Evidence Modal */}
       <EvidenceModal open={showEvModal} task={evTask} onClose={handleCloseEvModal} />
+
+      {/* Gap detail modal (per-item 分析 / 运行) */}
+      <GapDetailModal
+        open={showGapDetail}
+        gapId={selectedGapId}
+        onClose={() => {
+          setShowGapDetail(false);
+          setSelectedGapId(null);
+        }}
+        onRunComplete={() => {
+          // Refresh the gap list so the row reflects the new status.
+          // Use a tiny delay so the in-memory override is fully written
+          // (the server marks the gap "in_progress" synchronously on POST
+          // and "completed" inside the background thread).
+          setTimeout(() => {
+            void loadGapAnalysis(selectedProject, 1, gapSeverity);
+          }, 300);
+        }}
+      />
     </div>
   );
 }

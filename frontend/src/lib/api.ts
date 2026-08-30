@@ -462,6 +462,81 @@ async function getGapAnalysis(params?: {
   return data;
 }
 
+// ── Gap detail / run (per-item analysis & remediation) ────────────────
+
+interface GapFixStep {
+  step: string;
+}
+
+interface GapRelatedRequirement {
+  req_id: string;
+  source: string;
+}
+
+interface GapRunRecord {
+  run_id: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  progress_pct: number;
+}
+
+interface GapDetailResponse {
+  item: GapItem;
+  swe_label: string;
+  fix_steps: string[];
+  related_requirements: GapRelatedRequirement[];
+  related_artifacts: Array<Record<string, unknown>>;
+  run_history: GapRunRecord[];
+  note: string | null;
+}
+
+interface GapRunResponse {
+  run_id: string;
+  gap_id: string;
+  status: string;
+}
+
+interface GapRunStatus {
+  run_id: string;
+  gap_id: string;
+  status: string;
+  progress_pct: number;
+  started_at: string;
+  finished_at: string | null;
+  log: string[];
+}
+
+async function getGapDetail(gapId: string): Promise<GapDetailResponse> {
+  const data = await request<any>(
+    `/api/v1/dashboard/gap-analysis/${encodeURIComponent(gapId)}`,
+    { method: "GET" }
+  );
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function runGap(gapId: string): Promise<GapRunResponse> {
+  const data = await request<any>(
+    `/api/v1/dashboard/gap-analysis/${encodeURIComponent(gapId)}/run`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function getGapRunStatus(
+  gapId: string,
+  runId: string
+): Promise<GapRunStatus> {
+  const data = await request<any>(
+    `/api/v1/dashboard/gap-analysis/${encodeURIComponent(gapId)}/status?run_id=${encodeURIComponent(runId)}`,
+    { method: "GET" }
+  );
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
 async function generateEvidence(projectId?: string): Promise<{ task_id: string; status: string }> {
   const data = await request<any>("/api/v1/dashboard/evidence/generate", {
     method: "POST",
@@ -622,6 +697,9 @@ export {
   getDashboardProjects,
   getSWEStatus,
   getGapAnalysis,
+  getGapDetail,
+  runGap,
+  getGapRunStatus,
   generateEvidence,
   getEvidenceStatus,
   getCoverage,
@@ -640,6 +718,12 @@ export type {
   GapItem,
   GapSummary,
   GapAnalysisResponse,
+  GapDetailResponse,
+  GapRunResponse,
+  GapRunStatus,
+  GapRunRecord,
+  GapFixStep,
+  GapRelatedRequirement,
   EvidenceTask,
   CoverageResponse,
   CoverageModule,

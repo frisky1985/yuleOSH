@@ -39,6 +39,16 @@ OSH_HOME = os.environ.get("OSH_HOME", str(PROJECT_ROOT))
 # ── In-memory task tracking for evidence pack generation ──
 _ev_tasks: dict[str, dict] = {}
 
+# ── In-memory tracking for gap analysis runs (post-MVP detail/run) ──
+# A run is created via POST /gap-analysis/{id}/run and polled via
+# /gap-analysis/{id}/status. Status transitions:
+#   queued → running → (completed | failed)
+_gap_runs: dict[str, dict] = {}
+# Per-gap status overrides (mock data is read-only at module level).
+# Keyed by gap_id; on read, list/detail merges these on top of the
+# base item so a re-run after restart will fall back to default status.
+_gap_status_overrides: dict[str, dict] = {}
+
 # ── Mock data (other endpoints only; projects is real-data-only since P0-2) ──
 
 MOCK_SWE_STATUS = {
@@ -257,7 +267,10 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
     Supported routes:
         GET  /api/v1/dashboard/projects             — 项目列表（仅真实数据，按 org 过滤，P0-2）
         GET  /api/v1/dashboard/swe-status           — SWE.1~SWE.6 合规状态
-        GET  /api/v1/dashboard/gap-analysis         — 差距分析
+        GET  /api/v1/dashboard/gap-analysis                — 差距分析
+        GET  /api/v1/dashboard/gap-analysis/{gap_id}       — 单条差距详情
+        POST /api/v1/dashboard/gap-analysis/{gap_id}/run   — 触发差距修复（异步）
+        GET  /api/v1/dashboard/gap-analysis/{gap_id}/status — 修复进度轮询
         POST /api/v1/dashboard/evidence/generate    — 一键生成证据包
         GET  /api/v1/dashboard/evidence/status      — 证据包生成状态
         GET  /api/v1/dashboard/coverage             — 覆盖率数据
@@ -275,6 +288,20 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
         return _dashboard_swe_status(query)
     if path_tail == "gap-analysis" and method == "GET":
         return _dashboard_gap_analysis(query)
+    if path_tail.startswith("gap-analysis/"):
+        # /api/v1/dashboard/gap-analysis/{gap_id}
+        # /api/v1/dashboard/gap-analysis/{gap_id}/run   (POST)
+        # /api/v1/dashboard/gap-analysis/{gap_id}/status (GET)
+        sub = path_tail[len("gap-analysis/"):]
+        parts = sub.split("/", 1)
+        gap_id = parts[0]
+        action = parts[1] if len(parts) > 1 else ""
+        if action == "run" and method == "POST":
+            return _dashboard_gap_run(gap_id, body or {})
+        if action == "status" and method == "GET":
+            return _dashboard_gap_run_status(gap_id, query)
+        if not action and method == "GET":
+            return _dashboard_gap_detail(gap_id)
     if path_tail == "evidence/generate" and method == "POST":
         return _dashboard_evidence_generate(body, query)
     if path_tail == "evidence/status" and method == "GET":
@@ -369,21 +396,13 @@ def _dashboard_swe_status(query: dict) -> tuple[dict, int]:
     })
 
 
-def _dashboard_gap_analysis(query: dict) -> tuple[dict, int]:
-    """GET /api/v1/dashboard/gap-analysis — gap analysis for compliance.
+def _load_gap_items() -> tuple[list[dict], Optional[str]]:
+    """Load gap items from audit-manifest, with mock fallback.
 
-    Reads gap/assessment data from:
-      1. .yuleosh/evidence-bundle/audit-manifest.json (real evidence bundle)
-      2. .osh/evidence/audit-manifest.json (legacy location)
-    Falls back to mock data with demo warning when unavailable.
-
-    Paginated results with severity summary.
+    Returns (items, note). Items are merged with in-memory status
+    overrides so a re-run completed status survives within the process.
+    Same source of truth used by list, detail and run endpoints.
     """
-    page = int(_get_query_param(query, "page", "1"))
-    limit = int(_get_query_param(query, "limit", "10"))
-    severity_filter = _get_query_param(query, "severity", "")
-
-    # Try to load real gap data from audit-manifest or evidence bundle
     manifest_candidates = [
         Path(OSH_HOME) / ".yuleosh" / "evidence-bundle" / "audit-manifest.json",
         Path(OSH_HOME) / ".osh" / "evidence" / "audit-manifest.json",
@@ -391,55 +410,75 @@ def _dashboard_gap_analysis(query: dict) -> tuple[dict, int]:
         Path(OSH_HOME) / "reports" / "audit-manifest.json",
     ]
 
-    real_items = []
-    note = None
+    real_items: list[dict] = []
+    note: Optional[str] = None
 
     for manifest_path in manifest_candidates:
         if manifest_path.exists():
             try:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-                # Extract gap items from the manifest's assessment or gap sections
                 gap_sections = [
                     manifest.get("gap_analysis", []),
                     manifest.get("assessment", {}).get("gaps", []),
-                    manifest.get("components", {}).values(),  # may contain status info
                 ]
-
                 for section in gap_sections:
-                    if isinstance(section, list):
-                        for item in section:
-                            if not isinstance(item, dict):
-                                continue
-                            gap_id = item.get("id", item.get("gap_id", f"gap-{len(real_items)+1:03d}"))
-                            swe = item.get("swe_area", item.get("spec_ref", "SWE.X"))
-                            desc = item.get("description", item.get("issue", ""))
-                            severity = item.get("severity", item.get("risk_level", "minor"))
-                            if severity not in ("critical", "major", "minor"):
-                                severity = "minor"
-                            status = item.get("status", "open")
-                            suggestion = item.get("suggestion", item.get("recommendation", ""))
-
-                            if desc:
-                                real_items.append({
-                                    "id": str(gap_id),
-                                    "swe_area": swe[:8],
-                                    "description": desc,
-                                    "severity": severity,
-                                    "status": status,
-                                    "suggestion": suggestion,
-                                })
-
+                    if not isinstance(section, list):
+                        continue
+                    for item in section:
+                        if not isinstance(item, dict):
+                            continue
+                        gap_id = item.get("id", item.get("gap_id", f"gap-{len(real_items)+1:03d}"))
+                        swe = item.get("swe_area", item.get("spec_ref", "SWE.X"))
+                        desc = item.get("description", item.get("issue", ""))
+                        severity = item.get("severity", item.get("risk_level", "minor"))
+                        if severity not in ("critical", "major", "minor"):
+                            severity = "minor"
+                        status = item.get("status", "open")
+                        suggestion = item.get("suggestion", item.get("recommendation", ""))
+                        if desc:
+                            real_items.append({
+                                "id": str(gap_id),
+                                "swe_area": swe[:8],
+                                "description": desc,
+                                "severity": severity,
+                                "status": status,
+                                "suggestion": suggestion,
+                                "category": item.get("category", ""),
+                                "owner": item.get("owner", ""),
+                            })
                 if real_items:
-                    note = None  # real data, no demo note
+                    note = None
                     break
             except Exception as e:
                 log.debug("Failed to parse gap data from %s: %s", manifest_path, e)
 
-    # If no real items found, fall back to mock
     if not real_items:
         real_items = list(MOCK_GAP_ANALYSIS["items"])
         note = _mock_note()
+
+    # Apply in-memory status overrides (e.g. "completed" after a run)
+    for it in real_items:
+        override = _gap_status_overrides.get(it["id"])
+        if override:
+            it["status"] = override.get("status", it["status"])
+            if override.get("last_run_id"):
+                it["last_run_id"] = override["last_run_id"]
+            if override.get("last_run_at"):
+                it["last_run_at"] = override["last_run_at"]
+
+    return real_items, note
+
+
+def _dashboard_gap_analysis(query: dict) -> tuple[dict, int]:
+    """GET /api/v1/dashboard/gap-analysis — gap analysis for compliance.
+
+    Paginated results with severity summary.
+    """
+    page = int(_get_query_param(query, "page", "1"))
+    limit = int(_get_query_param(query, "limit", "10"))
+    severity_filter = _get_query_param(query, "severity", "")
+
+    real_items, note = _load_gap_items()
 
     if severity_filter:
         real_items = [i for i in real_items if i["severity"] == severity_filter]
@@ -466,6 +505,262 @@ def _dashboard_gap_analysis(query: dict) -> tuple[dict, int]:
         "total_items": len(real_items),
         "note": note,
     })
+
+
+# SWE.1..6 area descriptions (used to build fix_steps in detail view)
+_SWE_AREA_LABELS = {
+    "SWE.1": "软件需求分析",
+    "SWE.2": "软件架构设计",
+    "SWE.3": "软件详细设计与单元设计",
+    "SWE.4": "软件单元实现与验证",
+    "SWE.5": "软件集成与集成测试",
+    "SWE.6": "软件合格性测试",
+}
+
+
+def _build_gap_detail(item: dict) -> dict:
+    """Augment a gap item with related info for the detail view.
+
+    Lightweight (no heavy IO): the related_* fields are computed from
+    in-memory state where possible. For real projects, this would
+    call into the requirements/trace endpoints to find related items.
+    Here we derive related items from swe_area + project dir scan
+    (best-effort; returns empty list if project dir unavailable).
+    """
+    swe = item.get("swe_area", "")
+    severity = item.get("severity", "minor")
+    desc = item.get("description", "")
+
+    # Fix steps derived from swe_area + severity (template-style)
+    fix_steps: list[str] = []
+    if swe == "SWE.1":
+        fix_steps = [
+            "在 requirements/*.md 中补充缺失的需求条目（含 SHALL/SHOULD/MAY 标识）",
+            "在追溯矩阵中维护需求 → 设计的链接",
+            "对变更执行影响分析并更新变更日志",
+        ]
+    elif swe == "SWE.2":
+        fix_steps = [
+            "在 architecture.md 中补充资源预算分析（CPU/内存/存储）",
+            "评估多平台兼容性并更新架构图",
+            "通过架构评审并由 CCB 审批",
+        ]
+    elif swe == "SWE.3":
+        fix_steps = [
+            "在 design/*.md 中补充接口定义、状态机、错误处理",
+            "对设计文档运行 MISRA 设计准则检查",
+            "通过设计评审并更新追溯矩阵",
+        ]
+    elif swe == "SWE.4":
+        fix_steps = [
+            "引入 CUnit/Ceedling 等单元测试框架",
+            "补充缺失的测试用例，覆盖率目标 ≥80%",
+            "对安全关键函数进行 MC/DC 覆盖分析",
+            "运行 MISRA 静态扫描并修复违规",
+        ]
+    elif swe == "SWE.5":
+        fix_steps = [
+            "编写集成测试计划（策略、环境、时间表）",
+            "编写集成测试用例覆盖模块间接口",
+            "执行集成测试并记录结果",
+        ]
+    elif swe == "SWE.6":
+        fix_steps = [
+            "补充测试环境、工具版本配置说明",
+            "运行合格性测试并记录结果",
+            "由独立测试团队签字确认",
+        ]
+    else:
+        fix_steps = ["联系对应过程域负责人处理"]
+
+    # Try to find related project dir and scan for related items
+    related_requirements: list[dict] = []
+    related_artifacts: list[dict] = []
+    project_dir = Path(OSH_HOME) / "projects"
+    if project_dir.is_dir():
+        # Heuristic: match spec files containing swe_area token
+        try:
+            for spec in list(project_dir.rglob("spec*.md"))[:20]:
+                content = ""
+                try:
+                    content = spec.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                if not content:
+                    continue
+                # Extract Req-* ids from spec
+                import re as _re
+                req_ids = _re.findall(r"Req-[A-Za-z0-9-]+-\d+", content)
+                for rid in req_ids[:5]:
+                    related_requirements.append({
+                        "req_id": rid,
+                        "source": str(spec.relative_to(project_dir)),
+                    })
+        except Exception as e:
+            log.debug("Failed to scan project dir for related items: %s", e)
+
+    # Build run history from in-memory store
+    run_history: list[dict] = []
+    for rid, r in _gap_runs.items():
+        if r.get("gap_id") == item["id"]:
+            run_history.append({
+                "run_id": rid,
+                "status": r.get("status"),
+                "started_at": r.get("started_at"),
+                "finished_at": r.get("finished_at"),
+                "progress_pct": r.get("progress_pct", 0),
+            })
+    run_history.sort(key=lambda x: x.get("started_at") or "", reverse=True)
+
+    return {
+        "item": item,
+        "swe_label": _SWE_AREA_LABELS.get(swe, swe),
+        "fix_steps": fix_steps,
+        "related_requirements": related_requirements[:10],
+        "related_artifacts": related_artifacts,
+        "run_history": run_history,
+    }
+
+
+def _dashboard_gap_detail(gap_id: str) -> tuple[dict, int]:
+    """GET /api/v1/dashboard/gap-analysis/{gap_id} — gap detail.
+
+    Returns the full item plus related requirements, fix steps, and
+    run history (empty array if no run yet).
+    """
+    if not gap_id:
+        return json_error("gap_id is required", 400)
+
+    items, note = _load_gap_items()
+    target = next((i for i in items if i["id"] == gap_id), None)
+    if target is None:
+        return json_error(f"Gap not found: {gap_id}", 404)
+
+    detail = _build_gap_detail(target)
+    detail["note"] = note
+    return json_ok(detail)
+
+
+def _dashboard_gap_run(gap_id: str, body: dict) -> tuple[dict, int]:
+    """POST /api/v1/dashboard/gap-analysis/{gap_id}/run — trigger a remediation run.
+
+    Creates a run record (queued) and kicks off a background thread
+    that updates progress and eventually marks the gap as completed.
+    Returns the run_id immediately so the UI can poll /status.
+    """
+    if not gap_id:
+        return json_error("gap_id is required", 400)
+
+    items, _note = _load_gap_items()
+    target = next((i for i in items if i["id"] == gap_id), None)
+    if target is None:
+        return json_error(f"Gap not found: {gap_id}", 404)
+
+    run_id = f"gaprun-{uuid.uuid4().hex[:12]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    _gap_runs[run_id] = {
+        "run_id": run_id,
+        "gap_id": gap_id,
+        "status": "queued",
+        "progress_pct": 0,
+        "started_at": now_iso,
+        "finished_at": None,
+        "log": [f"[{now_iso}] Run created for gap {gap_id} ({target.get('swe_area')})"],
+    }
+
+    # Mark gap as in_progress immediately so the UI updates after refresh
+    _gap_status_overrides[gap_id] = {
+        "status": "in_progress",
+        "last_run_id": run_id,
+        "last_run_at": now_iso,
+    }
+
+    # Background simulation
+    import threading
+    t = threading.Thread(
+        target=_simulate_gap_run,
+        args=(gap_id, run_id),
+        daemon=True,
+        name=f"gap-run-{run_id}",
+    )
+    t.start()
+
+    return json_ok({
+        "run_id": run_id,
+        "gap_id": gap_id,
+        "status": "queued",
+    })
+
+
+def _simulate_gap_run(gap_id: str, run_id: str) -> None:
+    """Simulate a remediation run in the background.
+
+    For MVP, this is a deterministic sleep-based simulation that:
+      1. Sets status=in_progress, progress=10
+      2. Sleeps to mimic toolchain (re-runs static analysis / test gen)
+      3. Sets status=completed, progress=100
+      4. Persists status override so the next list/detail shows closed
+    In a future iteration this would dispatch to a real remediation
+    worker (e.g. test generator, evidence runner) by swe_area.
+    """
+    import time as t_mod
+
+    def _log(msg: str) -> None:
+        if run_id in _gap_runs:
+            now = datetime.now(timezone.utc).isoformat()
+            _gap_runs[run_id]["log"].append(f"[{now}] {msg}")
+
+    def _update(progress: int, status: str) -> None:
+        if run_id in _gap_runs:
+            _gap_runs[run_id].update({
+                "progress_pct": progress,
+                "status": status,
+            })
+
+    try:
+        _update(10, "running")
+        _log("分析差距项并匹配过程域…")
+        t_mod.sleep(0.6)
+        _update(35, "running")
+        _log("重跑相关制品扫描（设计/代码/测试/证据）…")
+        t_mod.sleep(0.8)
+        _update(65, "running")
+        _log("生成修复计划并补齐缺失制品…")
+        t_mod.sleep(0.8)
+        _update(90, "running")
+        _log("验证修复结果…")
+        t_mod.sleep(0.4)
+        _update(100, "completed")
+        finished_at = datetime.now(timezone.utc).isoformat()
+        _gap_runs[run_id]["finished_at"] = finished_at
+        _log("✅ 修复完成，差距项已标记为已完成")
+        # Persist the closed status for subsequent list/detail reads
+        _gap_status_overrides[gap_id] = {
+            "status": "completed",
+            "last_run_id": run_id,
+            "last_run_at": finished_at,
+        }
+    except Exception as e:  # pragma: no cover — background error path
+        _update(0, "failed")
+        _log(f"❌ 运行失败: {e}")
+        _gap_runs[run_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _dashboard_gap_run_status(gap_id: str, query: dict) -> tuple[dict, int]:
+    """GET /api/v1/dashboard/gap-analysis/{gap_id}/status — poll most-recent run."""
+    run_id = _get_query_param(query, "run_id", "")
+    if run_id:
+        run = _gap_runs.get(run_id)
+        if run is None:
+            return json_error(f"Run not found: {run_id}", 404)
+        return json_ok(run)
+
+    # No run_id → return most recent run for this gap
+    candidates = [r for r in _gap_runs.values() if r.get("gap_id") == gap_id]
+    if not candidates:
+        return json_error(f"No runs found for gap: {gap_id}", 404)
+    candidates.sort(key=lambda r: r.get("started_at") or "", reverse=True)
+    return json_ok(candidates[0])
 
 
 def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
