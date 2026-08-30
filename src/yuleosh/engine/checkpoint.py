@@ -240,13 +240,17 @@ class CheckpointEngine:
     # ------------------------------------------------------------------
 
     def run(self, inject_at: str | None = None,
-            resume: bool = False) -> bool:
+            resume: bool = False,
+            selected: list[str] | None = None) -> bool:
         """
         运行流水线。
 
         Args:
             inject_at: 注入点 step_id。从此步骤开始执行，之前步骤标记为 SKIPPED。
             resume: 从上次中断位置继续（读取存储的状态）。
+            selected: 仅运行指定的步骤 id 列表（如 ["step-3", "step-7"]），
+                列表外的步骤标记为 SKIPPED。优先级高于 resume/inject_at。
+                用于 UI「勾选某几项阶段重跑」。
 
         Returns:
             True 表示全部步骤通过，False 表示有步骤失败或用户请求停止。
@@ -259,7 +263,9 @@ class CheckpointEngine:
         start_idx = 0
 
         # ---- 确定模式 ----
-        if resume:
+        if selected:
+            steps_to_run, start_idx = self._prepare_selected(selected)
+        elif resume:
             steps_to_run, start_idx = self._prepare_resume()
         elif inject_at:
             steps_to_run, start_idx = self._prepare_inject(inject_at)
@@ -445,6 +451,45 @@ class CheckpointEngine:
             )
             return [], 0
         return self._step_defs, 0
+
+    def _prepare_selected(self, step_ids: list[str]) -> tuple[list[dict], int]:
+        """选中模式：仅执行 step_ids 中的步骤，其余标记为 SKIPPED。
+
+        用于 UI「勾选某几项阶段重跑」。step_ids 必须都是合法 step_id，
+        任一不存在即抛 ValueError（与 find_step_index 行为一致）。
+        """
+        selected_set = set(step_ids or [])
+        if not selected_set:
+            # 空列表视为全量（不跳过任何步骤）
+            return self._prepare_full()
+        for sid in selected_set:
+            self.find_step_index(sid)  # 非法 step_id → ValueError
+
+        state = CheckpointState(
+            pipeline_name=self.pipeline_name,
+            inject_at=None,
+            created_at=datetime.now().isoformat(),
+            status="running",
+        )
+        for s in self._step_defs:
+            if s["step_id"] in selected_set:
+                state.steps.append(StepRecord(
+                    step_id=s["step_id"],
+                    name=s["name"],
+                    agent=s.get("agent", ""),
+                    status=StepStatus.PENDING,
+                ))
+            else:
+                state.steps.append(StepRecord(
+                    step_id=s["step_id"],
+                    name=s["name"],
+                    agent=s.get("agent", ""),
+                    status=StepStatus.SKIPPED,
+                ))
+        self._state = state
+        steps_to_run = [s for s in self._step_defs if s["step_id"] in selected_set]
+        print(f"🎯 选中模式: 仅运行 {len(steps_to_run)}/{len(self._step_defs)} 个步骤")
+        return steps_to_run, 0
 
     # ------------------------------------------------------------------
     # Internal: execution
