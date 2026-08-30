@@ -286,6 +286,19 @@ async function createV1Project(name: string, description?: string): Promise<Proj
   return data;
 }
 
+async function seedDemoProject(
+  body?: { name?: string; slug?: string; description?: string }
+): Promise<ProjectDetail> {
+  const data = await request<any>("/api/v1/project/seed-demo", {
+    method: "POST",
+    body: JSON.stringify(body || {}),
+  });
+  if (data && data.ok === true) {
+    return data.data;
+  }
+  return data;
+}
+
 async function getPipelineStatus(): Promise<{ sessions: PipelineSession[]; count: number }> {
   const data = await request<any>("/api/v1/pipeline/status", { method: "GET" });
   if (data && data.ok === true) {
@@ -323,6 +336,7 @@ export const api = {
       list: getV1Projects,
       get: getV1Project,
       create: createV1Project,
+      seed: seedDemoProject,
     },
     pipeline: {
       status: getPipelineStatus,

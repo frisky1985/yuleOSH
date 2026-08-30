@@ -30,6 +30,8 @@ import {
   Activity,
   Play,
   ListChecks,
+  FolderPlus,
+  Sparkles,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -79,11 +81,13 @@ import {
   type MisraTrendResponse,
 } from "@/lib/api";
 import type { UserInfo } from "@/lib/api";
+import { api } from "@/lib/api";
 import { simpleMarkdown } from "@/lib/markdown";
 import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
 import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
+import { CreateProjectModal } from "@/components/dashboard/create-project-modal";
 import { GapBatchModal } from "@/components/dashboard/gap-batch-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
@@ -265,6 +269,8 @@ export default function DashboardPage() {
   // Projects
   const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [seedingDemo, setSeedingDemo] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
 
@@ -325,6 +331,42 @@ export default function DashboardPage() {
       console.warn("Failed to load projects:", err);
     }
   }, [selectedProject]);
+
+  const handleSeedDemo = async () => {
+    setSeedingDemo(true);
+    try {
+      const proj = (await api.v1.projects.seed({})) as any;
+      if (proj?.error) {
+        console.error("seed demo error:", proj.error);
+        return;
+      }
+      const res = await getDashboardProjects();
+      if (res?.projects?.length) {
+        setProjects(res.projects);
+        const match = res.projects.find(
+          (p) => p.name === (proj?.name || "UART 驱动演示项目")
+        );
+        if (match) setSelectedProject(match.id);
+      }
+    } catch (e: any) {
+      console.error("seed demo failed:", e?.message || e);
+    } finally {
+      setSeedingDemo(false);
+    }
+  };
+
+  const handleCreated = async (proj: { id?: string; name: string; slug?: string }) => {
+    try {
+      const res = await getDashboardProjects();
+      if (res?.projects?.length) {
+        setProjects(res.projects);
+        const match = res.projects.find((p) => p.name === proj.name);
+        if (match) setSelectedProject(match.id);
+      }
+    } catch (e: any) {
+      console.error("refresh projects failed:", e?.message || e);
+    }
+  };
 
   const loadSWE = useCallback(async (projectId: string) => {
     setSweLoading(true);
@@ -726,10 +768,25 @@ export default function DashboardPage() {
                         </div>
                       )}
                     </div>
-                    <div className="border-t border-[#1e293b] p-2">
-                      <button className="w-full text-left px-2 py-1.5 text-xs text-[#722ed1] hover:bg-[#722ed1]/5 rounded transition-colors flex items-center gap-1.5">
-                        <ExternalLink className="w-3 h-3" />
-                        新建项目（CLI 指引）
+                    <div className="border-t border-[#1e293b] p-2 space-y-1">
+                      <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="w-full text-left px-2 py-1.5 text-xs text-[#722ed1] hover:bg-[#722ed1]/5 rounded transition-colors flex items-center gap-1.5"
+                      >
+                        <FolderPlus className="w-3 h-3" />
+                        新建项目
+                      </button>
+                      <button
+                        onClick={handleSeedDemo}
+                        disabled={seedingDemo}
+                        className="w-full text-left px-2 py-1.5 text-xs text-[#1677ff] hover:bg-[#1677ff]/5 rounded transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {seedingDemo ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        加载示例项目
                       </button>
                     </div>
                   </div>
@@ -1478,6 +1535,13 @@ export default function DashboardPage() {
             void loadGapAnalysis(selectedProject, 1, gapSeverity);
           }, 300);
         }}
+      />
+
+      {/* Create project modal (方案 B: 内联创建，替代空占位的 CLI 指引按钮) */}
+      <CreateProjectModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={handleCreated}
       />
 
       {/* Gap batch modal (bulk analyze / remediate) */}
