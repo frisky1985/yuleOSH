@@ -12,6 +12,7 @@ import logging
 from typing import Optional
 
 from . import json_error
+from yuleosh.ui.auth import AUTH_ENABLED  # 与 server._check_auth 同步：本地免登录开关
 from yuleosh.ui.auth_extended import (
     JWT_SECRET as _JWT_SECRET,          # A1: unified source (SHALL-A1.1)
     JWT_ALGORITHM as _JWT_ALGORITHM,    # A1: unified source
@@ -19,6 +20,30 @@ from yuleosh.ui.auth_extended import (
 )
 
 logger = logging.getLogger("yuleosh.api.middleware")
+
+
+def _resolve_local_dev_user() -> dict:
+    """AUTH_DISABLED 本地开发模式：构造一个 admin 用户注入，使依赖
+    ``current_user.org_id`` 的路由（如 dashboard/projects）也能正常工作。
+
+    优先取 ``demo`` 组织；取不到时 org_id 留空（由路由自身决定行为）。
+    仅在本地免登录模式下调用，任何异常都降级而非崩溃。
+    """
+    org_id = None
+    try:
+        from yuleosh.store import Store
+        store = Store()
+        org = store.get_organization("demo")
+        if org:
+            org_id = org.get("id")
+    except Exception as e:  # 本地模式不应因 store 问题中断
+        logger.debug("local-dev user org resolution failed: %s", e)
+    return {
+        "user_id": "local-dev",
+        "org_id": org_id,
+        "email": "local-dev@yuleosh.local",
+        "role": "admin",
+    }
 
 
 # JWT secret — single source of truth (v3.8.0 A1): the value comes from
@@ -82,6 +107,13 @@ def require_auth(handler):
     @functools.wraps(handler)
     def wrapper(method: str, path_tail: str, body: dict, query: dict,
                 **kwargs):
+        # 与 server._check_auth 对称：本地免登录模式（YULEOSH_AUTH_DISABLED=1）
+        # 直接注入本地 admin 用户并放行，使 /api/v1/* 也免认证。
+        if not AUTH_ENABLED:
+            kwargs["current_user"] = _resolve_local_dev_user()
+            return handler(method=method, path_tail=path_tail, body=body,
+                           query=query, **kwargs)
+
         # Extract headers from the handler object
         http_handler = kwargs.get("handler")
         if http_handler is None:
