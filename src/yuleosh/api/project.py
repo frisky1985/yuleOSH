@@ -104,35 +104,68 @@ def _create_project(store, body: dict, user: dict | None = None) -> tuple[dict, 
 
 
 # Sample spec written for the demo project so its pipeline can be run at once.
-_DEMO_SPEC_YAML = """\
-# yuleOSH demo spec — {name}
-project: {name}
-domain: automotive
-module: uart_driver
+# Catalog of ready-to-run demo projects injected by `seed-demo`. Each entry is
+# a self-contained spec (requirements + pipeline stages) so the demo can run a
+# compliance pipeline immediately after being loaded.
+_PIPELINE_STAGES = [
+    "spec_validation", "plan_lint", "clang_tidy", "unit_tests",
+    "coverage", "sil", "cross_compile", "hil", "evidence",
+]
+
+DEMO_CATALOG = {
+    "uart-demo": {
+        "name": "UART 驱动演示项目",
+        "description": "yuleOSH pipeline demo 示例项目（UART 驱动），可立即运行合规流水线。",
+        "domain": "automotive", "module": "uart_driver",
+        "requirements": [
+            ("REQ-UART-001", "UART 波特率可配置", "100%"),
+            ("REQ-UART-002", "发送 FIFO 溢出保护", "100%"),
+            ("REQ-UART-003", "接收中断丢帧防护", "100%"),
+        ],
+    },
+    "gpio-demo": {
+        "name": "GPIO 流水灯演示",
+        "description": "yuleOSH pipeline demo 示例项目（GPIO 流水灯），可立即运行合规流水线。",
+        "domain": "automotive", "module": "gpio_led",
+        "requirements": [
+            ("REQ-GPIO-001", "LED 引脚输出可控", "100%"),
+            ("REQ-GPIO-002", "流水灯时序正确", "100%"),
+            ("REQ-GPIO-003", "低功耗休眠模式", "100%"),
+        ],
+    },
+    "can-demo": {
+        "name": "CAN 通信演示",
+        "description": "yuleOSH pipeline demo 示例项目（CAN 总线通信），可立即运行合规流水线。",
+        "domain": "automotive", "module": "can_bus",
+        "requirements": [
+            ("REQ-CAN-001", "报文收发可靠", "100%"),
+            ("REQ-CAN-002", "总线错误恢复", "100%"),
+            ("REQ-CAN-003", "波特率自适应", "100%"),
+        ],
+    },
+}
+
+
+def _build_demo_spec_yaml(demo: dict) -> str:
+    """Render a demo project's spec YAML from its catalog entry."""
+    reqs = "\n".join(
+        f"  - id: {rid}\n    title: {title}\n    coverage: {cov}"
+        for rid, title, cov in demo["requirements"]
+    )
+    stages = "\n".join(f"    - {s}" for s in _PIPELINE_STAGES)
+    return f"""\
+# yuleOSH demo spec — {demo['name']}
+project: {demo['name']}
+domain: {demo['domain']}
+module: {demo['module']}
 requirements:
-  - id: REQ-UART-001
-    title: UART 波特率可配置
-    coverage: 100%
-  - id: REQ-UART-002
-    title: 发送 FIFO 溢出保护
-    coverage: 100%
-  - id: REQ-UART-003
-    title: 接收中断丢帧防护
-    coverage: 100%
+{reqs}
 tests:
   unit: 1020
   coverage_target: 85
 pipeline:
   stages:
-    - spec_validation
-    - plan_lint
-    - clang_tidy
-    - unit_tests
-    - coverage
-    - sil
-    - cross_compile
-    - hil
-    - evidence
+{stages}
 """
 
 
@@ -144,64 +177,87 @@ def _write_demo_spec(name: str, slug: str) -> str | None:
         spec_dir.mkdir(parents=True, exist_ok=True)
         spec_file = spec_dir / "spec.yaml"
         if not spec_file.exists():
-            spec_file.write_text(_DEMO_SPEC_YAML.format(name=name), encoding="utf-8")
+            demo = DEMO_CATALOG.get(slug, DEMO_CATALOG["uart-demo"])
+            spec_file.write_text(_build_demo_spec_yaml(demo), encoding="utf-8")
         return str(spec_file)
     except Exception as e:  # noqa: BLE001
         logger.warning("seed spec write failed: %s", e)
         return None
 
 
-def _seed_demo_project(store, body: dict, user: dict | None = None) -> tuple[dict, int]:
-    """POST /api/v1/project/seed-demo — inject a ready-to-run demo project.
+# One-time data upgrade: the two E2E test shells created earlier (Demo Pipe X/Y)
+# are promoted in place into proper runnable demo projects (GPIO / CAN) so they
+# join the seed catalog instead of lingering as empty shells in the Dashboard.
+_LEGACY_TEST_MIGRATIONS = [
+    ("demo-pipe-x", "gpio-demo", "GPIO 流水灯演示",
+     "yuleOSH pipeline demo 示例项目（GPIO 流水灯），可立即运行合规流水线。"),
+    ("demo-pipe-y", "can-demo", "CAN 通信演示",
+     "yuleOSH pipeline demo 示例项目（CAN 总线通信），可立即运行合规流水线。"),
+]
 
-    Creates a demo org_project (so it shows up in the Dashboard project list)
-    plus the legacy ``projects`` row, and seeds a sample spec file so the
-    pipeline can be run immediately. Idempotent: re-running returns the
-    existing project when the slug already exists for the org.
+
+def _migrate_existing_test_projects(store, org_id: int) -> None:
+    """Promote the earlier E2E test shells (slug demo-pipe-x / demo-pipe-y)
+    into real demo projects (gpio-demo / can-demo) in place. Idempotent: once
+    renamed, the old slugs no longer exist and this becomes a no-op.
+    """
+    for old_slug, new_slug, new_name, new_desc in _LEGACY_TEST_MIGRATIONS:
+        old = store.get_org_project(org_id, old_slug)
+        if not old:
+            continue
+        store.update_org_project(org_id, old_slug, name=new_name,
+                                 new_slug=new_slug, description=new_desc)
+        store.rename_project(old["name"], new_name, new_desc)
+        spec_path = _write_demo_spec(new_name, new_slug)
+        if spec_path:
+            try:
+                store.update_project_spec_path(new_name, spec_path)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("migrate update_project_spec_path failed: %s", e)
+
+
+def _seed_demo_project(store, body: dict, user: dict | None = None) -> tuple[dict, int]:
+    """POST /api/v1/project/seed-demo — inject the ready-to-run demo catalog.
+
+    Seeds every project in DEMO_CATALOG (UART / GPIO / CAN demos) so they all
+    appear in the Dashboard and can run a compliance pipeline immediately.
+    Idempotent: re-running just ensures each demo's spec file is present.
     """
     org_id = (user or {}).get("org_id")
     if not org_id:
         return json_error("seed-demo requires an authenticated org context", 400)
 
-    name = (body.get("name") or "UART 驱动演示项目").strip()
-    slug = (body.get("slug") or "uart-demo").strip() or re.sub(
-        r"[^a-z0-9-]", "", name.lower().replace(" ", "-")
-    )
-    description = body.get("description") or (
-        "yuleOSH pipeline demo 示例项目（UART 驱动），可立即运行合规流水线。"
-    )
+    # 1) one-time upgrade of the earlier E2E test shells into real demos
+    _migrate_existing_test_projects(store, org_id)
 
-    # Idempotent on the project row: if the org project already exists,
-    # still ensure the sample spec file is present (and its path recorded)
-    # so the pipeline can run immediately.
-    existing = store.get_org_project(org_id, slug)
-    if existing:
+    primary_slug = (body.get("slug") or "uart-demo").strip() or "uart-demo"
+    seeded, primary = [], None
+    for slug, demo in DEMO_CATALOG.items():
+        name = demo["name"]
+        description = demo["description"]
+
+        # Idempotent: only create the org row if it isn't there yet; always
+        # (re)ensure the sample spec file so the pipeline can run immediately.
+        if not store.get_org_project(org_id, slug):
+            store.init_project(name, description)
+            try:
+                store.create_org_project(org_id, name, slug, description)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("seed create_org_project(org=%s) failed: %s", org_id, e)
+
         spec_path = _write_demo_spec(name, slug)
         if spec_path:
             try:
                 store.update_project_spec_path(name, spec_path)
             except Exception as e:  # noqa: BLE001
-                logger.warning("seed update_project_spec_path(existing) failed: %s", e)
-        return json_ok(existing)
+                logger.warning("seed update_project_spec_path failed: %s", e)
 
-    # 1) legacy table (spec/pipeline chain resolves projects by name)
-    store.init_project(name, description)
-    # 2) org-scoped table (Dashboard lists per-org projects)
-    try:
-        store.create_org_project(org_id, name, slug, description)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("seed create_org_project(org=%s) failed: %s", org_id, e)
+        proj = store.get_org_project(org_id, slug) or store.get_project(name) or {}
+        seeded.append(proj)
+        if slug == primary_slug:
+            primary = proj
 
-    # 3) sample spec file so the pipeline can be run immediately
-    spec_path = _write_demo_spec(name, slug)
-    if spec_path:
-        try:
-            store.update_project_spec_path(name, spec_path)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("seed update_project_spec_path failed: %s", e)
-
-    proj = store.get_org_project(org_id, slug) or store.get_project(name) or {}
-    return json_ok(proj)
+    return json_ok(primary or (seeded[0] if seeded else {}))
 
 
 def _project_stats(store) -> tuple[dict, int]:
