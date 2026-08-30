@@ -5,18 +5,22 @@ import Link from "next/link";
 import {
   AlertCircle,
   BookMarked,
+  Check,
   ChevronDown,
   ChevronRight,
   Cpu,
   FlaskConical,
   LayoutDashboard,
   Loader2,
+  Lock,
   Mail,
+  Pencil,
   RefreshCw,
   ScrollText,
   ShieldCheck,
   UserPlus,
   Workflow,
+  X,
 } from "lucide-react";
 import { TopNav } from "@/components/dashboard/top-nav";
 
@@ -63,6 +67,7 @@ interface RolePerms {
 interface RolesResponse {
   roles: RolePerms[];
   modules?: string[];
+  canEdit?: boolean;
 }
 
 interface MemberResponse {
@@ -94,6 +99,13 @@ const PERM_META: Record<PermLevel, { label: string; color: string; symbol: strin
   read: { label: "只读", color: "#1677ff", symbol: "◐" },
   none: { label: "无权限", color: "#475569", symbol: "○" },
 };
+
+// Click-to-cycle order for editable matrix cells.
+const PERM_CYCLE: PermLevel[] = ["full", "read", "none"];
+function nextLevel(level: PermLevel): PermLevel {
+  const i = PERM_CYCLE.indexOf(level);
+  return PERM_CYCLE[(i + 1) % PERM_CYCLE.length];
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -175,6 +187,13 @@ export default function RolesPage() {
   const [matrix, setMatrix] = useState<RolesResponse | null>(null);
   const [matrixLoading, setMatrixLoading] = useState(true);
   const [matrixError, setMatrixError] = useState("");
+  const canEdit = matrix?.canEdit ?? false;
+
+  // Matrix edit mode
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<RolesResponse | null>(null);
+  const [savingMatrix, setSavingMatrix] = useState(false);
+  const [matrixMsg, setMatrixMsg] = useState("");
 
   // ── Load members ─────────────────────────────────────────────────────────
   const loadMembers = useCallback(async () => {
@@ -257,6 +276,59 @@ export default function RolesPage() {
     },
     [savingId, loadMembers]
   );
+
+  // ── Edit permission matrix ─────────────────────────────────────────────
+  const startEdit = useCallback(() => {
+    if (!matrix) return;
+    setDraft({
+      roles: matrix.roles.map((r) => ({ role: r.role, permissions: { ...r.permissions } })),
+      modules: matrix.modules,
+    });
+    setEditing(true);
+    setMatrixMsg("");
+  }, [matrix]);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false);
+    setDraft(null);
+    setMatrixMsg("");
+  }, []);
+
+  const cycleCell = useCallback((roleIdx: number, module: string) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const roles = prev.roles.map((r, i) =>
+        i === roleIdx
+          ? { ...r, permissions: { ...r.permissions, [module]: nextLevel(r.permissions[module] || "none") } }
+          : r
+      );
+      return { ...prev, roles };
+    });
+  }, []);
+
+  const saveMatrix = useCallback(async () => {
+    if (!draft) return;
+    const matrixObj: Record<string, Record<string, PermLevel>> = {};
+    draft.roles.forEach((r) => {
+      matrixObj[r.role] = r.permissions;
+    });
+    setSavingMatrix(true);
+    setMatrixMsg("");
+    try {
+      const res = await apiFetch<RolesResponse & { updated?: number }>("/api/v1/members/roles", {
+        method: "PATCH",
+        body: JSON.stringify({ matrix: matrixObj }),
+      });
+      setMatrix(res);
+      setEditing(false);
+      setDraft(null);
+      setMatrixMsg(`已保存权限矩阵（更新 ${res.updated ?? 0} 项）`);
+    } catch (err) {
+      setMatrixMsg(`保存失败：${errMessage(err)}`);
+    } finally {
+      setSavingMatrix(false);
+    }
+  }, [draft]);
 
   const isEmpty = !loading && members.length === 0;
 
@@ -525,15 +597,53 @@ export default function RolesPage() {
         {/* ── Permission matrix ── */}
         <Card className="border-[#1e293b] bg-[#111827] mt-6">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-[#722ed1]" />
-              权限矩阵
-              {!matrixLoading && matrixRoles.length > 0 && (
-                <span className="text-xs font-normal text-[#64748b]">
-                  {matrixRoles.length} 角色 × {matrixModules.length} 模块
-                </span>
-              )}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#722ed1]" />
+                权限矩阵
+                {!matrixLoading && matrixRoles.length > 0 && (
+                  <span className="text-xs font-normal text-[#64748b]">
+                    {matrixRoles.length} 角色 × {matrixModules.length} 模块
+                  </span>
+                )}
+              </CardTitle>
+              <div className="flex items-center gap-2 shrink-0">
+                {canEdit && !editing && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void startEdit()}
+                    className="border-[#722ed1]/40 text-[#722ed1] hover:text-white hover:bg-[#722ed1]/10"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    编辑
+                  </Button>
+                )}
+                {editing && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => void saveMatrix()}
+                      disabled={savingMatrix}
+                      className="bg-[#10b981] hover:bg-[#10b981]/80 text-white"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      保存
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void cancelEdit()}
+                      disabled={savingMatrix}
+                      className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#ff4d4f]/40"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      取消
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
             <CardDescription className="text-xs text-[#64748b]">
               <span className="inline-flex items-center gap-3">
                 <span className="inline-flex items-center gap-1">
@@ -549,7 +659,32 @@ export default function RolesPage() {
                   无权限
                 </span>
               </span>
+              {editing && (
+                <span className="ml-2 text-[#722ed1]">· 点击单元格在 完全 / 只读 / 无 之间切换</span>
+              )}
             </CardDescription>
+            {!canEdit && !matrixLoading && (
+              <p className="text-xs text-[#64748b] mt-1 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                仅 Owner/Admin 可编辑权限矩阵
+              </p>
+            )}
+            {matrixMsg && (
+              <p
+                className={`text-xs mt-1 flex items-center gap-1 ${
+                  matrixMsg.startsWith("保存失败")
+                    ? "text-[#ff4d4f]"
+                    : "text-[#10b981]"
+                }`}
+              >
+                {matrixMsg.startsWith("保存失败") ? (
+                  <AlertCircle className="w-3 h-3" />
+                ) : (
+                  <Check className="w-3 h-3" />
+                )}
+                {matrixMsg}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="px-0">
             {matrixLoading ? (
@@ -584,19 +719,37 @@ export default function RolesPage() {
                     {matrixModules.map((mod) => (
                       <tr key={mod} className="border-b border-[#1e293b]/60 last:border-b-0 hover:bg-[#1e293b]/30">
                         <td className="px-4 py-2 text-[#e2e8f0] whitespace-nowrap">{mod}</td>
-                        {matrixRoles.map((r) => {
-                          const level = (r.permissions || {})[mod] || "none";
+                        {matrixRoles.map((r, rIdx) => {
+                          const view = editing && draft ? draft.roles[rIdx] : r;
+                          const level = (view.permissions || {})[mod] || "none";
                           const meta = PERM_META[level];
+                          const cellStyle = {
+                            color: meta.color,
+                            background: `${meta.color}1f`,
+                            border: `1px solid ${meta.color}4d`,
+                          };
+                          const title = `${roleMeta(r.role).label} · ${mod} · ${meta.label}`;
+                          if (editing) {
+                            return (
+                              <td key={r.role} className="px-2 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => void cycleCell(rIdx, mod)}
+                                  title={`${title}（点击切换）`}
+                                  className="inline-flex items-center justify-center w-6 h-6 rounded-full cursor-pointer transition-transform hover:scale-125"
+                                  style={cellStyle}
+                                >
+                                  {meta.symbol}
+                                </button>
+                              </td>
+                            );
+                          }
                           return (
                             <td key={r.role} className="px-2 py-2 text-center">
                               <span
-                                title={`${roleMeta(r.role).label} · ${mod} · ${meta.label}`}
+                                title={title}
                                 className="inline-flex items-center justify-center w-6 h-6 rounded-full cursor-default transition-transform hover:scale-125"
-                                style={{
-                                  color: meta.color,
-                                  background: `${meta.color}1f`,
-                                  border: `1px solid ${meta.color}4d`,
-                                }}
+                                style={cellStyle}
                               >
                                 {meta.symbol}
                               </span>
@@ -615,7 +768,7 @@ export default function RolesPage() {
         {/* Footer hint */}
         <div className="mt-6 flex items-center gap-1 text-xs text-[#475569]">
           <ChevronRight className="w-3 h-3" />
-          角色权限依据设计文档第 4 章矩阵静态渲染；成员数据来自当前组织。
+          权限矩阵存储于数据库，可在界面编辑{canEdit ? "（点击「编辑」后逐格调整）" : "；仅 Owner/Admin 拥有编辑权限"}；成员数据来自当前组织。
         </div>
       </div>
     </div>
