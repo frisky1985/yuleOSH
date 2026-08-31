@@ -18,6 +18,7 @@ import {
   RefreshCw,
   ScrollText,
   ShieldCheck,
+  Trash2,
   UserPlus,
   Workflow,
   X,
@@ -50,6 +51,7 @@ interface Member {
   id: number | string;
   email: string;
   role: string;
+  status?: string | null;
   created_at?: string | null;
 }
 
@@ -73,6 +75,26 @@ interface RolesResponse {
 interface MemberResponse {
   member: Member;
 }
+
+/** 权限矩阵变更审计条目（GET /api/v1/members/roles/audit） */
+interface AuditEntry {
+  id: number;
+  actor: string;
+  role: string;
+  module: string;
+  old_level: string | null;
+  new_level: string;
+  changed_at: string;
+}
+
+interface AuditResponse {
+  audit: AuditEntry[];
+  count: number;
+  note?: string | null;
+}
+
+/** 批量设置的作用域：整行（某角色全模块）或整列（某模块全角色）。 */
+type BatchScope = "role" | "module";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -157,6 +179,13 @@ function roleMeta(role: string): { label: string; color: string } {
   return ROLE_META[role] || { label: role || "未知", color: "#64748b" };
 }
 
+/** 权限级别 → {label, color}；审计日志里的旧值可能为 null/未知级别。 */
+function levelMeta(level: string | null): { label: string; color: string } {
+  if (!level) return { label: "-", color: "#475569" };
+  const m = PERM_META[level as PermLevel];
+  return m ? { label: m.label, color: m.color } : { label: level, color: "#64748b" };
+}
+
 // ─── Nav ─────────────────────────────────────────────────────────────────────
 
 // Navigation is rendered by the shared TopNav component
@@ -194,6 +223,16 @@ export default function RolesPage() {
   const [draft, setDraft] = useState<RolesResponse | null>(null);
   const [savingMatrix, setSavingMatrix] = useState(false);
   const [matrixMsg, setMatrixMsg] = useState("");
+
+  // 批量设置（T7）：整行（某角色全模块）/ 整列（某模块全角色）
+  const [batchScope, setBatchScope] = useState<BatchScope>("role");
+  const [batchTarget, setBatchTarget] = useState("developer");
+  const [batchLevel, setBatchLevel] = useState<PermLevel>("read");
+
+  // 权限矩阵审计日志（T7）
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   // ── Load members ─────────────────────────────────────────────────────────
   const loadMembers = useCallback(async () => {
@@ -277,6 +316,25 @@ export default function RolesPage() {
     [savingId, loadMembers]
   );
 
+  // 移除成员（仅 Owner/Admin；二次确认防误删）
+  const handleRemoveMember = useCallback(
+    async (member: Member) => {
+      if (!canEdit) return;
+      if (!window.confirm(`确定移除成员 ${member.email}？此操作不可撤销。`)) return;
+      setSavingId(String(member.id));
+      setActionError("");
+      try {
+        await apiFetch(`/api/v1/members/${String(member.id)}`, { method: "DELETE" });
+        await loadMembers();
+      } catch (err) {
+        setActionError(`移除 ${member.email} 失败：${errMessage(err)}`);
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [canEdit, loadMembers]
+  );
+
   // ── Edit permission matrix ─────────────────────────────────────────────
   const startEdit = useCallback(() => {
     if (!matrix) return;
@@ -306,6 +364,39 @@ export default function RolesPage() {
     });
   }, []);
 
+  // ── 审计日志（T7）：权限矩阵变更记录 ──────────────────────────────────
+  const loadAudit = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const res = await apiFetch<AuditResponse>("/api/v1/members/roles/audit");
+      setAudit(res.audit || []);
+    } catch {
+      setAudit([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
+
+  // ── 批量设置（T7）：整行 / 整列一次改到同一级别 ───────────────────────
+  const applyBatch = useCallback((scope: BatchScope, target: string, level: PermLevel) => {
+    if (!target) return;
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const roles = prev.roles.map((r) => {
+        if (scope === "role" && r.role === target) {
+          const perms: Record<string, PermLevel> = { ...r.permissions };
+          for (const m of Object.keys(perms)) perms[m] = level;
+          return { ...r, permissions: perms };
+        }
+        if (scope === "module") {
+          return { ...r, permissions: { ...r.permissions, [target]: level } };
+        }
+        return r;
+      });
+      return { ...prev, roles };
+    });
+  }, []);
+
   const saveMatrix = useCallback(async () => {
     if (!draft) return;
     const matrixObj: Record<string, Record<string, PermLevel>> = {};
@@ -323,12 +414,13 @@ export default function RolesPage() {
       setEditing(false);
       setDraft(null);
       setMatrixMsg(`已保存权限矩阵（更新 ${res.updated ?? 0} 项）`);
+      if (auditOpen) void loadAudit();
     } catch (err) {
       setMatrixMsg(`保存失败：${errMessage(err)}`);
     } finally {
       setSavingMatrix(false);
     }
-  }, [draft]);
+  }, [draft, auditOpen, loadAudit]);
 
   const isEmpty = !loading && members.length === 0;
 
@@ -448,11 +540,24 @@ export default function RolesPage() {
                           return (
                             <div
                               key={String(m.id)}
-                              className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 items-center border-b border-[#1e293b] last:border-b-0 hover:bg-[#1e293b]/40 transition-all"
+                              className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 items-center border-b border-[#1e293b] last:border-b-0 hover:bg-[#1e293b]/40 transition-all"
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <Mail className="w-4 h-4 text-[#722ed1] shrink-0" />
                                 <span className="text-sm text-[#e2e8f0] truncate">{m.email}</span>
+                                {m.status === "pending" && (
+                                  <span
+                                    className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                    style={{
+                                      color: "#faad14",
+                                      background: "#faad141f",
+                                      border: "1px solid #faad144d",
+                                    }}
+                                    title="已发送邀请，等待对方首次登录激活"
+                                  >
+                                    待接受
+                                  </span>
+                                )}
                               </div>
                               <div className="w-44 flex items-center gap-2">
                                 <Badge
@@ -492,6 +597,19 @@ export default function RolesPage() {
                               <div className="w-32 text-right text-xs text-[#94a3b8]">
                                 {formatDate(m.created_at)}
                               </div>
+                              {canEdit && (
+                                <div className="w-8 flex justify-end">
+                                  <button
+                                    type="button"
+                                    title="移除成员"
+                                    disabled={saving}
+                                    onClick={() => void handleRemoveMember(m)}
+                                    className="p-1.5 rounded-md text-[#64748b] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 transition-colors disabled:opacity-40"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -700,8 +818,73 @@ export default function RolesPage() {
             ) : matrixRoles.length === 0 ? (
               <div className="py-14 text-center text-[#64748b] text-sm">暂无权限数据</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+              <>
+                {/* ── 批量设置（T7）：整行 / 整列一次改到同一级别 ── */}
+                {editing && (
+                  <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-[#1e293b] bg-[#0a0e17]/60">
+                    <span className="text-xs text-[#94a3b8]">批量设置</span>
+                    <Select
+                      value={batchScope}
+                      onValueChange={(v) => {
+                        const s = (v ?? "role") as BatchScope;
+                        setBatchScope(s);
+                        setBatchTarget(s === "role" ? "developer" : matrixModules[0] ?? "");
+                      }}
+                    >
+                      <SelectTrigger size="sm" className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        <SelectItem value="role">整行（角色）</SelectItem>
+                        <SelectItem value="module">整列（模块）</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={batchTarget} onValueChange={(v) => setBatchTarget(v ?? "")}>
+                      <SelectTrigger size="sm" className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        {(batchScope === "role"
+                          ? ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))
+                          : matrixModules.map((m) => ({ value: m, label: m }))
+                        ).map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={batchLevel}
+                      onValueChange={(v) => setBatchLevel((v ?? "read") as PermLevel)}
+                    >
+                      <SelectTrigger size="sm" className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        {(Object.keys(PERM_META) as PermLevel[]).map((lv) => (
+                          <SelectItem key={lv} value={lv}>
+                            {PERM_META[lv].label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!batchTarget}
+                      onClick={() => applyBatch(batchScope, batchTarget, batchLevel)}
+                      className="border-[#722ed1]/40 text-[#722ed1] hover:text-white hover:bg-[#722ed1]/10"
+                    >
+                      应用到{batchScope === "role" ? "该角色全行" : "该模块全列"}
+                    </Button>
+                    <span className="text-[11px] text-[#64748b]">
+                      批量改动随「保存」一并提交并计入审计日志
+                    </span>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-[#1e293b] text-[#64748b]">
                       <th className="px-4 py-2 text-left font-medium w-32">模块 \\ 角色</th>
@@ -760,7 +943,92 @@ export default function RolesPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+
+                {/* ── 审计日志（T7）：权限矩阵变更记录 ── */}
+                <div className="border-t border-[#1e293b]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !auditOpen;
+                      setAuditOpen(next);
+                      if (next) void loadAudit();
+                    }}
+                    className="w-full px-4 py-2.5 text-xs text-[#94a3b8] hover:text-white hover:bg-[#1e293b]/50 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <ScrollText className="w-3.5 h-3.5" />
+                    {auditOpen
+                      ? "收起审计日志"
+                      : `查看审计日志${audit.length ? `（${audit.length}）` : ""}`}
+                  </button>
+                  {auditOpen && (
+                    <div className="px-4 pb-3">
+                      {auditLoading ? (
+                        <div className="flex items-center justify-center py-6 text-[#64748b]">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
+                          加载中…
+                        </div>
+                      ) : audit.length === 0 ? (
+                        <div className="py-6 text-center text-[#64748b] text-xs">
+                          暂无权限变更记录
+                        </div>
+                      ) : (
+                        <div className="max-h-64 overflow-y-auto space-y-1">
+                          {audit.map((a) => {
+                            const oldMeta = levelMeta(a.old_level);
+                            const newMeta = levelMeta(a.new_level);
+                            const rm = roleMeta(a.role);
+                            return (
+                              <div
+                                key={a.id}
+                                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded bg-[#0a0e17] border border-[#1e293b]"
+                              >
+                                <span className="text-[#64748b] shrink-0 w-28 truncate">
+                                  {formatDate(a.changed_at)}
+                                </span>
+                                <span
+                                  className="text-[#e2e8f0] shrink-0 w-32 truncate"
+                                  title={a.actor}
+                                >
+                                  {a.actor}
+                                </span>
+                                <span className="shrink-0" style={{ color: rm.color }}>
+                                  {rm.label}
+                                </span>
+                                <span className="text-[#475569] shrink-0">·</span>
+                                <span className="text-[#94a3b8] shrink-0">{a.module}</span>
+                                <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                                  <span
+                                    className="px-1.5 py-0.5 rounded text-[10px]"
+                                    style={{
+                                      color: oldMeta.color,
+                                      background: `${oldMeta.color}1f`,
+                                      border: `1px solid ${oldMeta.color}4d`,
+                                    }}
+                                  >
+                                    {oldMeta.label}
+                                  </span>
+                                  <span className="text-[#475569]">→</span>
+                                  <span
+                                    className="px-1.5 py-0.5 rounded text-[10px]"
+                                    style={{
+                                      color: newMeta.color,
+                                      background: `${newMeta.color}1f`,
+                                      border: `1px solid ${newMeta.color}4d`,
+                                    }}
+                                  >
+                                    {newMeta.label}
+                                  </span>
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
