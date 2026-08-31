@@ -7,7 +7,7 @@ import { LogOut, Settings, User as UserIcon } from "lucide-react";
 
 import { TopNav, type DashboardTab } from "@/components/dashboard/top-nav";
 import { EngineerSidebar } from "@/components/dashboard/engineer-sidebar";
-import { isEngineerRole, useSessionRole } from "@/lib/use-session-role";
+import { isEngineerRole, useSessionRole, readViewPreview } from "@/lib/use-session-role";
 import { api } from "@/lib/api";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -65,7 +65,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    setPreview(new URLSearchParams(window.location.search).get("view"));
+    // 读取预览模式：URL ?view 优先并持久化到 localStorage，否则回落 localStorage。
+    // 这样点左栏（链接携带 ?view=engineer）或刷新子页后，工程左栏不会丢失。
+    setPreview(readViewPreview());
   }, []);
 
   const isLanding = pathname === "/dashboard";

@@ -34,6 +34,9 @@ export function EngineerSidebar() {
   const router = useRouter();
   const { session } = useSessionRole();
 
+  // 左栏链接统一携带 ?view=engineer，确保点左栏后的整页加载 / 刷新不会丢失预览状态。
+  const withView = (href: string) => (href === "/dashboard" ? "/dashboard?view=engineer" : `${href}?view=engineer`);
+
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 
@@ -50,7 +53,7 @@ export function EngineerSidebar() {
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col border-r border-[#1e293b] bg-[#0b0f1a] md:flex">
       {/* Logo */}
       <div className="flex h-14 items-center border-b border-[#1e293b] px-5">
-        <Link href="/dashboard" className="text-lg font-black tracking-tight">
+        <Link href="/dashboard?view=engineer" className="text-lg font-black tracking-tight">
           <span className="text-[#10b981]">yule</span>
           <span className="text-[#1677ff]">OSH</span>
         </Link>
@@ -64,7 +67,7 @@ export function EngineerSidebar() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={withView(item.href)}
               className={
                 "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all " +
                 (active
