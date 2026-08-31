@@ -78,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
       { kind: "link", href: "/dashboard/pipeline", label: "流水线", icon: GitBranch },
       { kind: "link", href: "/dashboard/devices", label: "设备", icon: Cpu },
       { kind: "link", href: "/dashboard/tests", label: "测试", icon: FlaskConical },
+      { kind: "link", href: "/dashboard/test-layers", label: "测试分层", icon: Layers },
       { kind: "link", href: "/dashboard/logs", label: "日志", icon: ScrollText },
     ],
   },

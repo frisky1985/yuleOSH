@@ -35,6 +35,7 @@ import {
   Cpu,
   MessageSquare,
   Coins,
+  Layers,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -260,6 +261,47 @@ function clampScore(score: number): number {
   return Math.max(0, Math.min(100, score));
 }
 
+// ─── 测试分层（四层流水线）类型 + 状态映射 ───────────────────────────────────
+
+interface LayerOverview {
+  key: "unit" | "integration" | "hil" | "qualification";
+  label: string;
+  subtitle: string;
+  badge: string;
+  in_steps: boolean;
+  status: "pass" | "fail" | "mock" | "unknown";
+  passed: number | null;
+  failed: number | null;
+  skipped: number | null;
+  source: string;
+  updated_at: string;
+  commit?: string | null;
+  mock_mode?: boolean | null;
+  note?: string | null;
+}
+
+interface LayersResponse {
+  project: string;
+  order: LayerOverview["key"][];
+  layers: LayerOverview[];
+  note?: string | null;
+}
+
+function layerStatusMeta(status: string): { label: string; color: string } {
+  switch ((status || "").toLowerCase()) {
+    case "pass":
+    case "passed":
+      return { label: "PASS", color: "#10b981" };
+    case "fail":
+    case "failed":
+      return { label: "FAIL", color: "#ff4d4f" };
+    case "mock":
+      return { label: "MOCK", color: "#faad14" };
+    default:
+      return { label: "未运行", color: "#64748b" };
+  }
+}
+
 // ─── v9: 我的用量 helpers ────────────────────────────────────────────────────
 
 function fmtTokens(n: number): string {
@@ -323,6 +365,10 @@ export default function DashboardPage() {
   // Coverage
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(true);
+
+  // 测试分层总览（四层流水线，含 HIL Layer 2.5）
+  const [testLayers, setTestLayers] = useState<LayerOverview[]>([]);
+  const [testLayersLoading, setTestLayersLoading] = useState(true);
 
   // Dashboard v2 compliance overview (五维合规总览)
   const [v2Overview, setV2Overview] = useState<DashboardV2Overview | null>(null);
@@ -439,6 +485,23 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // 测试分层总览 — 仓库级数据（.osh/sessions + .osh/ci），无需 project。
+  const loadTestLayers = useCallback(async () => {
+    setTestLayersLoading(true);
+    try {
+      const resp = await fetch("/api/v1/tests/layers", { credentials: "same-origin" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const body: LayersResponse & { ok?: boolean; data?: LayersResponse } = await resp.json();
+      const payload = body.data ?? body;
+      setTestLayers(payload.layers || []);
+    } catch (err: any) {
+      console.warn("Failed to load test layers:", err);
+      setTestLayers([]);
+    } finally {
+      setTestLayersLoading(false);
+    }
+  }, []);
+
   // Dashboard v2 五维合规总览 — cookie 认证自动携带，直接 fetch 即可。
   // 信封 {ok, data}，业务数据在 resp.data；note 非空 = 无真实数据。
   const loadV2Overview = useCallback(async () => {
@@ -541,6 +604,7 @@ export default function DashboardPage() {
       loadSWE(selectedProject);
       loadCoverage(selectedProject);
       loadV2Overview();
+      loadTestLayers();
     } else {
       setGapPage(1);
       setGapSeverity("");
@@ -1122,6 +1186,89 @@ export default function DashboardPage() {
 
             {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
             <PipelineStageBoard />
+
+            {/* Demo 备选2: 首页测试分层总览卡片 */}
+            <Card className="border-[#1e293b] bg-[#111827]">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#722ed1]" />
+                    测试分层总览
+                  </CardTitle>
+                  <Link
+                    href="/dashboard/test-layers"
+                    className="text-xs text-[#722ed1] hover:underline flex items-center gap-1"
+                  >
+                    查看详情
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {testLayersLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-[#94a3b8] py-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    加载中…
+                  </div>
+                ) : (
+                  <div className="flex items-stretch gap-1.5 overflow-x-auto">
+                    {testLayers.map((l, i) => {
+                      const isHil = l.key === "hil";
+                      const meta = layerStatusMeta(l.status);
+                      return (
+                        <div key={l.key} className="flex items-stretch gap-1.5">
+                          <div
+                            className={`flex-1 min-w-[150px] rounded-lg border px-3 py-2 ${
+                              isHil
+                                ? "border-[#faad14]/50 bg-[#faad14]/5"
+                                : "border-[#1e293b] bg-[#0a0e17]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span
+                                className={`text-[9px] font-bold px-1 py-0.5 rounded ${
+                                  isHil
+                                    ? "bg-[#faad14]/15 text-[#faad14]"
+                                    : "bg-[#722ed1]/15 text-[#722ed1]"
+                                }`}
+                              >
+                                {l.badge}
+                              </span>
+                              <span className="text-[11px] font-medium text-[#e2e8f0] truncate">
+                                {l.label}
+                              </span>
+                            </div>
+                            <span
+                              className="text-[9px] rounded px-1.5 py-0.5 font-medium"
+                              style={{
+                                color: meta.color,
+                                background: `${meta.color}1f`,
+                                border: `1px solid ${meta.color}4d`,
+                              }}
+                            >
+                              {meta.label}
+                            </span>
+                            {isHil && l.commit && (
+                              <span className="ml-1 text-[9px] text-[#64748b] font-mono">
+                                @{l.commit}
+                              </span>
+                            )}
+                          </div>
+                          {i < testLayers.length - 1 && (
+                            <div className="flex items-center text-[#334155] text-sm shrink-0">
+                              →
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="mt-2 text-[10px] text-[#64748b]">
+                  HIL 为独立 CI Layer 2.5（默认 mock 模式），不在 .osh/cache/steps 步骤清单内
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Compliance Progress + Coverage side by side */}
             <div className="grid lg:grid-cols-3 gap-5 mb-6">
