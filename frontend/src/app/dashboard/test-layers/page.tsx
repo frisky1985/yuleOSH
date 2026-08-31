@@ -10,7 +10,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { DashboardChrome } from "@/components/dashboard/dashboard-chrome";
+// 导航（顶栏/左栏）由 dashboard/layout 统一渲染，页面只提供内容
 import { Badge } from "@/components/ui/badge";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ export default function TestLayersPage() {
   }, [load]);
 
   return (
-  <DashboardChrome mode="links">
+  <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
@@ -351,6 +351,6 @@ export default function TestLayersPage() {
           </span>
         </div>
       </div>
-  </DashboardChrome>
+  </div>
   );
 }

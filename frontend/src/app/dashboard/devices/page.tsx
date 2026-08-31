@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { DashboardChrome } from "@/components/dashboard/dashboard-chrome";
+// 导航（顶栏/左栏）由 dashboard/layout 统一渲染，页面只提供内容
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -265,7 +265,7 @@ export default function DevicesPage() {
   ];
 
   return (
-  <DashboardChrome mode="links">
+  <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
@@ -518,6 +518,6 @@ export default function DevicesPage() {
           </div>
         )}
       </div>
-  </DashboardChrome>
+  </div>
   );
 }

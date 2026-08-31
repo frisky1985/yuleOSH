@@ -15,8 +15,6 @@ import {
   ChevronRight,
   BarChart3,
   Target,
-  LogOut,
-  User as UserIcon,
   Settings,
   ArrowRight,
   FileDown,
@@ -48,16 +46,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { DashboardChrome } from "@/components/dashboard/dashboard-chrome";
+import { useDashboardShell } from "@/app/dashboard/layout";
 import {
   getDashboardProjects,
   getSWEStatus,
@@ -136,28 +125,6 @@ interface DashboardV2OverviewResponse {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-// Derive a short display name from the email (the local part before `@`).
-// The users table does not store a real `name`, so we avoid showing the
-// full email address in the user menu. Falls back to "用户" if absent.
-function displayNameFromEmail(email: string | undefined | null): string {
-  const local = (email || "").split("@")[0];
-  if (!local) return "用户";
-  return local.charAt(0).toUpperCase() + local.slice(1);
-}
-
-// Avatar initials: 2–3 letters derived straight from the email's local part.
-// Multi-segment names (john.doe / mary_jane / li-ming) → first letter of each
-// segment (JD / MJ / LM); a single segment (demo) → first 2 letters (DE).
-function getAvatarInitials(email: string | undefined | null): string {
-  const local = (email || "").split("@")[0];
-  if (!local) return "YU";
-  const parts = local.split(/[._-]+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return parts.slice(0, 3).map((p) => p[0].toUpperCase()).join("");
-  }
-  return local.slice(0, 2).toUpperCase();
-}
 
 function formatDate(dateStr: string): string {
   if (!dateStr || dateStr === "-") return "-";
@@ -347,7 +314,8 @@ function UsageStat({
 
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  // 顶部 tab 状态由 dashboard/layout 持有（导航渲染在 layout，避免子页重复渲染）
+  const { activeTab, setActiveTab } = useDashboardShell();
 
   // Session / nav
   const [session, setSession] = useState<UserInfo | null>(null);
@@ -777,75 +745,13 @@ export default function DashboardPage() {
 
   // ─── Logout ────────────────────────────────────────────────────────────────
 
-  const handleLogout = async () => {
-    try {
-      const { api } = await import("@/lib/api");
-      await api.auth.logout();
-    } catch {
-      // Ignore
-    }
-    // T1 (v3.9.0): 服务端 logout 已清双 cookie（Max-Age=0），无需 clearToken
-    window.location.href = "/login";
-  };
-
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const displayGapItems = gapShowAll ? gapAllItems : (gapData?.items || []);
   const displayGapSummary = gapData?.summary || { total: 0, critical: 0, major: 0, minor: 0 };
 
-  const userMenu = (
-    <div className="flex items-center gap-2">
-      {session ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
-            <Avatar className="w-7 h-7 border border-[#1e293b]">
-              <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
-                {session ? getAvatarInitials(session.email) : "YU"}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
-              {session ? displayNameFromEmail(session.email) : "用户"}
-            </span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
-          >
-            <DropdownMenuLabel className="text-xs text-[#94a3b8]">
-              {session?.org_name || "账号"}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-[#1e293b]" />
-            <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-              <UserIcon className="w-3.5 h-3.5" />
-              个人信息
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-              <Settings className="w-3.5 h-3.5" />
-              项目设置
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-[#1e293b]" />
-            <DropdownMenuItem
-              onClick={handleLogout}
-              className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              退出登录
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <Link
-          href="/login"
-          className="text-sm px-3 py-1.5 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 transition-all"
-        >
-          登录
-        </Link>
-      )}
-    </div>
-  );
-
   return (
-    <DashboardChrome mode="tabs" activeTab={activeTab} onTabChange={setActiveTab} userMenu={userMenu}>
+    <>
       {/* ── Main Content Area ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Data note banner */}
@@ -1954,6 +1860,6 @@ export default function DashboardPage() {
           setSelectedGapIds([]);
         }}
       />
-    </DashboardChrome>
+    </>
   );
 }
