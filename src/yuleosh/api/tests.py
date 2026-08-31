@@ -219,6 +219,197 @@ def _layer_note(layer: str) -> str:
     return f"未找到测试用例数据（.osh/sessions 下无 {layer} 层测试产物）"
 
 
+# ── Four-layer overview (unit · integration · HIL · qualification) ──────
+#
+# HIL (Hardware-in-the-Loop) is NOT a .osh/sessions test artifact — it is
+# an independent CI Layer 2.5 whose real evidence lives in
+# ``.osh/ci/layer25-*.json`` + ``.osh/ci/hil-report-*.json``.  This overview
+# aggregator reads both sources so the dashboard can show all four layers
+# from one endpoint (real data only, no fabrication).
+
+LAYER_ORDER = ["unit", "integration", "hil", "qualification"]
+
+# Pipeline position (L1/L2/L2.5/L3) + display metadata for each layer.
+LAYER_META = {
+    "unit": {
+        "label": "单元测试", "subtitle": "Unit",
+        "badge": "L1", "in_steps": True, "source": "c-unit-test.json",
+    },
+    "integration": {
+        "label": "集成测试", "subtitle": "Integration",
+        "badge": "L2", "in_steps": True, "source": "integration-test.json",
+    },
+    "hil": {
+        "label": "HIL 台架测试", "subtitle": "Hardware-in-the-Loop",
+        "badge": "L2.5", "in_steps": False, "source": "hil_runner.py + tests/hil",
+    },
+    "qualification": {
+        "label": "系统验证 / 合格性", "subtitle": "Qualification",
+        "badge": "L3", "in_steps": True, "source": "test-qualification.json",
+    },
+}
+
+
+def _latest_layer_record(layer: str) -> Optional[dict]:
+    """Latest parsed test artifact record for a .osh/sessions layer (newest first)."""
+    if layer not in LAYER_FILES:
+        return None
+    best: Optional[dict] = None
+    for run_id, session_dir, _meta in _iter_sessions():
+        for record in _find_test_artifacts(session_dir, layer):
+            candidate = {**record, "_run_id": run_id}
+            if best is None:
+                best = candidate
+            else:
+                if (candidate["updated_at"], run_id) > (best["updated_at"], best["_run_id"]):
+                    best = candidate
+    return best
+
+
+def _ci_dir() -> Path:
+    return Path(OSH_HOME) / ".osh" / "ci"
+
+
+def _newest_json(ci_dir: Path, prefix: str) -> Optional[tuple[dict, float]]:
+    """(data, mtime) of the newest ``prefix-*.json`` file, or None."""
+    if not ci_dir.is_dir():
+        return None
+    best_data: Optional[dict] = None
+    best_mtime = -1.0
+    for p in ci_dir.glob(f"{prefix}-*.json"):
+        if not p.is_file():
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            log.debug("Unreadable %s — skipped", p)
+            continue
+        mtime = p.stat().st_mtime
+        if mtime > best_mtime:
+            best_mtime = mtime
+            best_data = data
+    return (best_data, best_mtime) if best_data is not None else None
+
+
+def _hil_status() -> dict:
+    """Aggregate HIL (Layer 2.5) status from real .osh/ci artifacts."""
+    ci_dir = _ci_dir()
+    report = _newest_json(ci_dir, "hil-report")
+    layer = _newest_json(ci_dir, "layer25")
+
+    if report is None and layer is None:
+        return {
+            "key": "hil",
+            "status": "unknown",
+            "mock_mode": None,
+            "passed": None,
+            "commit": None,
+            "timestamp": None,
+            "source": LAYER_META["hil"]["source"],
+            "updated_at": "",
+            "note": "未找到 HIL 测试产物（.osh/ci 下无 layer25 / hil-report 文件）",
+        }
+
+    report_data = report[0] if report else {}
+    layer_data = layer[0] if layer else {}
+
+    mock_mode = bool((report_data.get("config") or {}).get("mock_mode", False))
+    passed = report_data.get("passed")
+    layer_status = str(layer_data.get("status") or "")
+    if layer_status in ("passed", "pass", "success"):
+        status = "pass"
+    elif layer_status in ("failed", "fail", "error"):
+        status = "fail"
+    elif passed is True:
+        status = "pass"
+    elif passed is False:
+        status = "fail"
+    else:
+        status = "mock" if mock_mode else "unknown"
+
+    ts = (report_data.get("timestamp")
+          or layer_data.get("completed_at")
+          or layer_data.get("started_at")
+          or "")
+    commit = layer_data.get("commit") or report_data.get("commit") or None
+
+    return {
+        "key": "hil",
+        "status": status,
+        "mock_mode": mock_mode,
+        "passed": passed,
+        "commit": commit,
+        "timestamp": ts,
+        "source": LAYER_META["hil"]["source"],
+        "updated_at": str(ts or ""),
+        "note": None,
+    }
+
+
+def _session_layer_record(layer: str, project: str) -> Optional[dict]:
+    """Latest layer record filtered by project (None when absent)."""
+    for run_id, session_dir, meta in _iter_sessions():
+        if project and not _session_matches_project(meta, project):
+            continue
+        for record in _find_test_artifacts(session_dir, layer):
+            return {**record, "_run_id": run_id}
+    return None
+
+
+def _tests_layers(query: dict) -> tuple[dict, int]:
+    """GET /api/v1/tests/layers — four-layer overview incl. HIL (Layer 2.5).
+
+    unit/integration/qualification come from .osh/sessions test artifacts;
+    hil comes from .osh/ci layer25-*.json + hil-report-*.json.  Real data
+    only — an absent layer returns status "unknown" plus a note.
+    """
+    project = _q(query, "project")
+    layers = []
+    for key in LAYER_ORDER:
+        meta = LAYER_META[key]
+        if key == "hil":
+            info = _hil_status()
+        else:
+            rec = _session_layer_record(key, project)
+            if rec is None:
+                info = {
+                    "key": key,
+                    "status": "unknown",
+                    "passed": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "source": meta["source"],
+                    "updated_at": "",
+                    "note": _layer_note(key),
+                }
+            else:
+                info = {
+                    "key": key,
+                    "status": str(rec.get("status") or "unknown"),
+                    "passed": rec.get("passed", 0),
+                    "failed": rec.get("failed", 0),
+                    "skipped": rec.get("skipped", 0),
+                    "source": meta["source"],
+                    "updated_at": str(rec.get("updated_at") or ""),
+                    "note": None,
+                }
+        layers.append({
+            "key": key,
+            "label": meta["label"],
+            "subtitle": meta["subtitle"],
+            "badge": meta["badge"],
+            "in_steps": meta["in_steps"],
+            **info,
+        })
+
+    return json_ok({
+        "project": project,
+        "order": LAYER_ORDER,
+        "layers": layers,
+        "note": None,
+    })
+
+
 # ── Handlers ────────────────────────────────────────────────────────────
 
 @require_auth
@@ -241,6 +432,8 @@ def handle_tests(method: str, path_tail: str, body: dict, query: dict,
         return _tests_runs(query)
     if path_tail == "coverage":
         return _tests_coverage(query)
+    if path_tail == "layers":
+        return _tests_layers(query)
     return json_error(f"Unknown tests sub-path or method: {method} {path_tail}", 404)
 
 

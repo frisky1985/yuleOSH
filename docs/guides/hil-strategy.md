@@ -194,11 +194,11 @@ steps:
 
 ### 3.3 编排流水线集成
 
-HIL 测试在 CI Layer 3（系统验证）中运行：
+HIL 测试在独立的 **CI Layer 2.5（HIL 台架测试）** 中运行，位于集成测试（Layer 2）与合格性测试（Layer 3）之间。注意：它**不是** `.osh/cache/steps/` 步骤清单中的普通同步步骤，而是一个异步层级，由 `make ci-layer25`（即 `python -m yuleosh.ci.run 25`）单独驱动，产出 `.osh/ci/layer25-*.json` 与 `hil-report-*.json`。默认以 mock 模式运行，真实硬件需在 self-hosted runner 上直连执行。
 
 ```
-Pipeline Step 8 (System Verify)
-    └── HIL Test Suite
+Pipeline L1 (Unit) → L2 (Integration) → L2.5 (HIL, 独立层级) → L3 (Qualification)
+    L2.5: HIL Test Suite
          ├── UART Loopback (STM32F4)
          ├── GPIO Test (ESP32)
          ├── Sensor Read (Custom)
