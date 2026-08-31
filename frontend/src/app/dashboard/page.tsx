@@ -1185,10 +1185,12 @@ export default function DashboardPage() {
             </Card>
 
             {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
+            <div className="mt-6">
             <PipelineStageBoard />
+            </div>
 
             {/* Demo 备选2: 首页测试分层总览卡片 */}
-            <Card className="border-[#1e293b] bg-[#111827]">
+            <Card className="mt-6 border-[#1e293b] bg-[#111827]">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
@@ -1271,7 +1273,7 @@ export default function DashboardPage() {
             </Card>
 
             {/* Compliance Progress + Coverage side by side */}
-            <div className="grid lg:grid-cols-3 gap-5 mb-6">
+            <div className="grid lg:grid-cols-3 gap-5 mt-6 mb-6">
               {/* Overall compliance progress (spans 2 cols) */}
               <Card className="lg:col-span-2 border-[#1e293b] bg-[#111827]">
                 <CardHeader className="pb-3">
