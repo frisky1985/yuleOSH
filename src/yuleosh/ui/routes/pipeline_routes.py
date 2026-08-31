@@ -12,15 +12,21 @@ Endpoints:
 Request/response are JSON.
 """
 
+import io
 import json
 import logging
 import os
+import time
+import zipfile
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger("routes.pipeline")
+
+# 证据包下载体积上限（防 zip 炸弹 / 磁盘打满）：单个包最多打包 50 MB 产物。
+_EVIDENCE_MAX_BYTES = 50 * 1024 * 1024
 
 
 def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dict:
@@ -623,6 +629,38 @@ def handle_pipeline_checkpoint(handler: BaseHTTPRequestHandler, path: str) -> di
     if not project_dir:
         project_dir = os.environ.get("OSH_HOME", "")
 
+    # 历史回看：?run_id=xxx 返回某次运行的快照（与最新 checkpoint 同一渲染结构）
+    run_id = (qs.get("run_id") or [None])[0]
+    if run_id:
+        try:
+            from yuleosh.engine.checkpoint import CheckpointEngine
+            eng = CheckpointEngine(
+                pipeline_name or "agent-pipeline",
+                project_dir or ".",
+                state_backend="sqlite",
+            )
+            row = eng.get_run(run_id)
+        except Exception as e:  # noqa: BLE001 — 看板接口必须容错
+            log.warning("run %s read failed: %s", run_id, e)
+            return {"ok": False, "error": f"Failed to read run: {e}"}
+        if not row or not row.get("snapshot"):
+            return {"ok": False, "error": f"Run {run_id} not found"}
+        snap = json.loads(row["snapshot"])
+        return {
+            "ok": True,
+            "state": {
+                "pipeline_name": snap.get("pipeline_name"),
+                "status": snap.get("status"),
+                "inject_at": snap.get("inject_at"),
+                "created_at": snap.get("created_at"),
+                "updated_at": snap.get("updated_at"),
+            },
+            "steps": snap.get("steps", []),
+            "op_active": False,
+            "run_id": run_id,
+            "is_history": True,
+        }
+
     try:
         from yuleosh.engine.checkpoint import CheckpointEngine
         engine = CheckpointEngine(
@@ -667,3 +705,365 @@ def handle_pipeline_checkpoint(handler: BaseHTTPRequestHandler, path: str) -> di
         "op_active": op_active,
         "count": len(steps),
     }
+
+
+def handle_pipeline_runs_history(handler: BaseHTTPRequestHandler, path: str) -> dict:
+    """GET /api/v1/pipeline/checkpoint/runs — 列出某 pipeline 的历史运行记录。
+
+    返回不含快照的元信息列表（run_id / op / mode / status / 时间 / 选中步骤），
+    前端点选某条后再用 GET /api/v1/pipeline/checkpoint?run_id=xxx 拉取快照渲染。
+    """
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        return {"ok": False, "error": "Authentication required"}
+
+    parsed = urlparse(path)
+    qs = parse_qs(parsed.query)
+    project_dir = (qs.get("project_dir") or [None])[0] or os.environ.get("OSH_HOME", "")
+    pipeline_name = (qs.get("pipeline") or [None])[0] or "agent-pipeline"
+    try:
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        eng = CheckpointEngine(pipeline_name, project_dir or ".", state_backend="sqlite")
+        runs = eng.list_runs(limit=50)
+    except Exception as e:  # noqa: BLE001 — 列表接口必须容错
+        log.warning("runs list failed: %s", e)
+        return {"ok": False, "error": f"Failed to list runs: {e}"}
+    return {"ok": True, "runs": runs, "count": len(runs)}
+
+
+# ======================================================================
+# T9 — 证据包历史 + 下载
+# ======================================================================
+
+def _load_run_row(engine, run_id: str) -> dict | None:
+    """读取单条运行记录（含快照）；异常时返回 None（看板容错）。"""
+    try:
+        return engine.get_run(run_id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("run %s read failed: %s", run_id, e)
+        return None
+
+
+def _parse_snapshot(row: dict) -> dict:
+    """把 run 记录的 snapshot 字段解析成 checkpoint state dict。"""
+    raw = row.get("snapshot") if row else None
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _resolve_artifact_path(path_str: str, project_dir: str) -> Path:
+    """产物路径解析：相对路径按 project_dir 补齐。"""
+    p = Path(path_str)
+    return p if p.is_absolute() else (Path(project_dir) / p)
+
+
+def _inside_osh_home(path: Path) -> bool:
+    """产物必须落在 OSH_HOME 内（防任意文件读取 / 打包外泄）。"""
+    osh_home = Path(os.environ.get("OSH_HOME", ".")).resolve()
+    try:
+        path.resolve().relative_to(osh_home)
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def _run_evidence(row: dict, project_dir: str) -> dict:
+    """把一次运行整理成「证据包」摘要：执行记录 + 产物清单。
+
+    证据包 = 该次运行的完整执行记录（每步状态/耗时/错误）+ 步骤产出的
+    真实文件。失败的运行同样有证据价值（记录失败点与错误信息），因此
+    不按 status 过滤，只要有快照就成包。
+    """
+    snap = _parse_snapshot(row)
+    steps = snap.get("steps", []) or []
+
+    artifacts: list[dict] = []
+    for s in steps:
+        raw_path = s.get("output_path")
+        if not raw_path:
+            continue
+        fp = _resolve_artifact_path(str(raw_path), project_dir)
+        exists = fp.exists() and _inside_osh_home(fp)
+        size = 0
+        if exists:
+            try:
+                size = fp.stat().st_size
+            except OSError:
+                exists, size = False, 0
+        artifacts.append({
+            "step_id": s.get("step_id"),
+            "name": s.get("name"),
+            "status": s.get("status"),
+            "path": str(raw_path),
+            "size": size,
+            "exists": exists,
+        })
+
+    passed = sum(1 for s in steps if s.get("status") == "passed")
+    failed = sum(1 for s in steps if s.get("status") == "failed")
+    skipped = sum(1 for s in steps if s.get("status") == "skipped")
+
+    return {
+        "run_id": row.get("run_id"),
+        "op": row.get("op"),
+        "mode": row.get("mode"),
+        "status": row.get("status"),
+        "started_at": row.get("started_at"),
+        "finished_at": row.get("finished_at"),
+        "step_count": len(steps),
+        "step_passed": passed,
+        "step_failed": failed,
+        "step_skipped": skipped,
+        "artifact_count": len(artifacts),
+        "artifact_available": sum(1 for a in artifacts if a["exists"]),
+        "total_size": sum(a["size"] for a in artifacts),
+        "artifacts": artifacts,
+    }
+
+
+def handle_pipeline_evidence(handler: BaseHTTPRequestHandler, path: str) -> dict:
+    """GET /api/v1/pipeline/evidence — 证据包历史（每次运行一条，含产物清单）。
+
+    Query params:
+        project_dir: 项目目录（默认 OSH_HOME）
+        pipeline:    pipeline 名（默认 agent-pipeline）
+    """
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        return {"ok": False, "error": "Authentication required"}
+
+    parsed = urlparse(path)
+    qs = parse_qs(parsed.query)
+    project_dir = (qs.get("project_dir") or [None])[0] or os.environ.get("OSH_HOME", "")
+    pipeline_name = (qs.get("pipeline") or [None])[0] or "agent-pipeline"
+
+    try:
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        eng = CheckpointEngine(pipeline_name, project_dir or ".", state_backend="sqlite")
+        runs = eng.list_runs(limit=50)
+    except Exception as e:  # noqa: BLE001 — 列表接口必须容错
+        log.warning("evidence list failed: %s", e)
+        return {"ok": False, "error": f"Failed to list evidence: {e}"}
+
+    packages: list[dict] = []
+    for r in runs:
+        row = _load_run_row(eng, r["run_id"])
+        if not row:
+            continue
+        pkg = _run_evidence(row, project_dir)
+        # 没有快照的运行不成包（无执行记录可交付）
+        if pkg["step_count"] == 0:
+            continue
+        packages.append(pkg)
+
+    return {"ok": True, "packages": packages, "count": len(packages)}
+
+
+def handle_pipeline_evidence_download(handler: BaseHTTPRequestHandler, path: str) -> None:
+    """GET /api/v1/pipeline/evidence/download?run_id=xxx — 打包下载证据包（zip）。
+
+    包内容：
+        manifest.json  — 运行元信息 + 逐步执行记录（状态/耗时/错误）
+        artifacts/*    — 步骤产出的真实文件（存在且在 OSH_HOME 内才打包）
+
+    二进制响应：直接写 handler.wfile（不经 _json_response）。
+    """
+    from yuleosh.ui.routes.http_response import _send_security_headers
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+    user = _require_auth(handler)
+    if not user:
+        handler._json_response({"ok": False, "error": "Authentication required"}, 401)
+        return
+
+    parsed = urlparse(path)
+    qs = parse_qs(parsed.query)
+    run_id = (qs.get("run_id") or [None])[0]
+    project_dir = (qs.get("project_dir") or [None])[0] or os.environ.get("OSH_HOME", "")
+    pipeline_name = (qs.get("pipeline") or [None])[0] or "agent-pipeline"
+
+    if not run_id:
+        handler._json_response({"ok": False, "error": "run_id is required"}, 400)
+        return
+
+    try:
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        eng = CheckpointEngine(pipeline_name, project_dir or ".", state_backend="sqlite")
+        row = _load_run_row(eng, run_id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("evidence download read failed: %s", e)
+        handler._json_response({"ok": False, "error": "Failed to read run"}, 500)
+        return
+
+    if not row:
+        handler._json_response({"ok": False, "error": f"Run {run_id} not found"}, 404)
+        return
+
+    pkg = _run_evidence(row, project_dir)
+    snap = _parse_snapshot(row)
+
+    manifest = {
+        "schema": "yuleosh-evidence/1.0",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "pipeline": pipeline_name,
+        "project_dir": project_dir,
+        "run": {k: pkg[k] for k in (
+            "run_id", "op", "mode", "status", "started_at", "finished_at",
+            "step_count", "step_passed", "step_failed", "step_skipped",
+            "artifact_count", "artifact_available", "total_size",
+        )},
+        "steps": snap.get("steps", []),
+        "artifacts": pkg["artifacts"],
+    }
+
+    buf = io.BytesIO()
+    packed = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+        )
+        for a in pkg["artifacts"]:
+            if not a["exists"] or packed >= _EVIDENCE_MAX_BYTES:
+                continue
+            fp = _resolve_artifact_path(a["path"], project_dir)
+            if not fp.exists() or not _inside_osh_home(fp):
+                continue
+            arcname = f"artifacts/{a['step_id']}-{fp.name}"
+            zf.write(fp, arcname=arcname)
+            packed += a["size"]
+
+    data = buf.getvalue()
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/zip")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.send_header(
+        "Content-Disposition", f'attachment; filename="evidence-{run_id}.zip"')
+    _send_security_headers(handler)
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+# ======================================================================
+# T10 — SSE 状态推送（替代前端 1.5s 轮询）
+# ======================================================================
+
+def _latest_checkpoint_payload(project_dir: str, pipeline_name: str) -> dict:
+    """读取最新 checkpoint 状态（state + steps + op_active），HTTP 与 SSE 共用。"""
+    try:
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        engine = CheckpointEngine(pipeline_name, project_dir or ".", state_backend="sqlite")
+        state = engine.status()
+        if state is None:
+            # sqlite 无记录 → JSON 后端兜底
+            engine = CheckpointEngine(pipeline_name, project_dir or ".", state_backend="json")
+            state = engine.status()
+    except Exception as e:  # noqa: BLE001 — 看板接口必须容错
+        log.warning("checkpoint status read failed: %s", e)
+        return {"ok": False, "error": f"Failed to read checkpoint: {e}"}
+
+    try:
+        from yuleosh.api import pipeline as api_pipeline
+        op_active = bool(api_pipeline._ENGINE_OP_ACTIVE.get(pipeline_name))
+    except Exception:  # noqa: BLE001 — 读不到就视为无操作
+        op_active = False
+
+    if state is None:
+        return {"ok": True, "state": None, "steps": [], "op_active": op_active, "count": 0}
+
+    steps = state.get("steps", [])
+    return {
+        "ok": True,
+        "state": {
+            "pipeline_name": state.get("pipeline_name"),
+            "status": state.get("status"),
+            "inject_at": state.get("inject_at"),
+            "created_at": state.get("created_at"),
+            "updated_at": state.get("updated_at"),
+        },
+        "steps": steps,
+        "op_active": op_active,
+        "count": len(steps),
+    }
+
+
+def handle_pipeline_checkpoint_stream(handler: BaseHTTPRequestHandler, path: str) -> None:
+    """GET /api/v1/pipeline/checkpoint/stream — SSE 推送 checkpoint 状态。
+
+    替代前端 1.5s 定时轮询：服务端只在状态真的变化时推 event，无变化时
+    发心跳注释保活。连接最长 10 分钟后关闭（EventSource 会自动重连）。
+
+    Query params 与 /api/v1/pipeline/checkpoint 一致（project_dir / pipeline）。
+    """
+    from yuleosh.ui.routes.http_response import _send_security_headers
+    from yuleosh.ui.routes.tenant_routes import _require_auth
+
+    user = _require_auth(handler)
+    if not user:
+        handler._json_response({"ok": False, "error": "Authentication required"}, 401)
+        return
+
+    parsed = urlparse(path)
+    qs = parse_qs(parsed.query)
+    project_dir = (qs.get("project_dir") or [None])[0] or os.environ.get("OSH_HOME", "")
+    pipeline_name = (qs.get("pipeline") or [None])[0] or "agent-pipeline"
+
+    try:
+        from yuleosh.engine.checkpoint import CheckpointEngine
+        eng = CheckpointEngine(pipeline_name, project_dir or ".", state_backend="sqlite")
+    except Exception as e:  # noqa: BLE001
+        log.warning("stream engine init failed: %s", e)
+        handler._json_response({"ok": False, "error": "Failed to open pipeline"}, 500)
+        return
+
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+    handler.send_header("Cache-Control", "no-cache, no-transform")
+    handler.send_header("Connection", "keep-alive")
+    handler.send_header("X-Accel-Buffering", "no")  # 禁止反向代理缓冲
+    _send_security_headers(handler)
+    handler.end_headers()
+
+    interval = 1.5
+    max_seconds = 600.0
+    started = time.time()
+    last_ckpt: str | None = None
+    last_runs: str | None = None
+
+    try:
+        while time.time() - started < max_seconds:
+            payload = _latest_checkpoint_payload(project_dir, pipeline_name)
+            serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+            if serialized != last_ckpt:
+                handler.wfile.write(
+                    f"event: checkpoint\ndata: {serialized}\n\n".encode("utf-8"))
+                last_ckpt = serialized
+
+            try:
+                runs = eng.list_runs(limit=50)
+            except Exception as e:  # noqa: BLE001 — 单次失败不中断流
+                log.warning("stream runs read failed: %s", e)
+                runs = None
+            if runs is not None:
+                runs_payload = json.dumps(
+                    {"ok": True, "runs": runs, "count": len(runs)},
+                    ensure_ascii=False, sort_keys=True)
+                if runs_payload != last_runs:
+                    handler.wfile.write(
+                        f"event: runs\ndata: {runs_payload}\n\n".encode("utf-8"))
+                    last_runs = runs_payload
+
+            handler.wfile.write(b": keep-alive\n\n")
+            time.sleep(interval)
+    except (BrokenPipeError, ConnectionResetError):
+        return  # 客户端断开 —— 正常退出
+    except OSError as e:
+        log.debug("SSE stream closed: %s", e)
+        return

@@ -65,7 +65,7 @@ class Store(AbstractStore):
         cls._instances = {}
 
     # Current migration version — bump to trigger new table creation
-    _MIGRATION_VERSION = 9  # v0.9.0: usage/subscription tables + org tier; v8: usage_log user attribution; v9: org llm config
+    _MIGRATION_VERSION = 11  # v0.11: role_permission_audit log; v0.10: users.status
 
     def _migrate(self):
         # Create or update meta table for tracking migration version
@@ -118,6 +118,7 @@ class Store(AbstractStore):
                 email TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'member',
                 password_hash TEXT DEFAULT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (org_id) REFERENCES organizations(id),
                 UNIQUE(org_id, email)
@@ -227,6 +228,40 @@ class Store(AbstractStore):
         """)
         self.conn.commit()
 
+        # Permission-matrix audit log (v4.x dashboard, 2026-08-31): every
+        # matrix edit writes one row per changed cell (who/when/old/new).
+        # CREATE IF NOT EXISTS → safe to run on every migration pass.
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS role_permission_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor TEXT NOT NULL,
+                role TEXT NOT NULL,
+                module TEXT NOT NULL,
+                old_level TEXT,
+                new_level TEXT,
+                changed_at TEXT NOT NULL
+            );
+        """)
+        self.conn.commit()
+        # Pipeline run history (v4.x dashboard): each run writes a record carrying a
+        # full checkpoint snapshot so the dashboard can replay past runs.
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS pipeline_runs (
+                run_id TEXT NOT NULL,
+                pipeline_name TEXT NOT NULL,
+                op TEXT NOT NULL,
+                mode TEXT,
+                selected_steps TEXT,
+                status TEXT,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                snapshot TEXT,
+                PRIMARY KEY (run_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_pipeline_runs_name ON pipeline_runs (pipeline_name, started_at);
+        """)
+        self.conn.commit()
+
         # Migration v3 — add stat tracking columns
         version = self.get_migration_version()
         if version < 3:
@@ -239,6 +274,10 @@ class Store(AbstractStore):
             self._run_migration_v8()
         if version < 9:
             self._run_migration_v9()
+        if version < 10:
+            self._run_migration_v10()
+        if version < 11:
+            self._run_migration_v11()
 
         # Record migration version
         self.conn.execute(
@@ -324,6 +363,43 @@ class Store(AbstractStore):
                 self.conn.execute(sql)
             except OperationalError:
                 pass
+        self.conn.commit()
+
+    def _run_migration_v10(self):
+        """Migration v10: users.status (pending/active) for the invite-accept flow (2026-08-31).
+
+        New invites land as ``pending`` and flip to ``active`` on first sign-in.
+        Idempotent (guarded by OperationalError; existing rows keep their value).
+        """
+        from sqlite3 import OperationalError
+        try:
+            self.conn.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
+        except OperationalError:
+            pass
+        # 旧行 status 为 NULL 时统一视为 active
+        try:
+            self.conn.execute("UPDATE users SET status='active' WHERE status IS NULL")
+        except OperationalError:
+            pass
+        self.conn.commit()
+
+    def _run_migration_v11(self):
+        """Migration v11: role_permission_audit log table (2026-08-31).
+
+        The table is created idempotently in ``_migrate`` already; this hook
+        exists so the migration version advances cleanly and future additive
+        columns can be added here (guarded by OperationalError).
+        """
+        from sqlite3 import OperationalError
+        try:
+            self.conn.execute(
+                "CREATE TABLE IF NOT EXISTS role_permission_audit ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " actor TEXT NOT NULL, role TEXT NOT NULL, module TEXT NOT NULL,"
+                " old_level TEXT, new_level TEXT, changed_at TEXT NOT NULL)"
+            )
+        except OperationalError:
+            pass
         self.conn.commit()
 
     # ------------------------------------------------------------------
@@ -508,6 +584,80 @@ class Store(AbstractStore):
                         (str(role), str(module), str(level)),
                     )
 
+    # ── Permission-matrix audit log (dashboard 矩阵批量改 + 审计) ──
+
+    def add_permission_audit(self, actor: str, role: str, module: str,
+                             old_level: str | None, new_level: str) -> None:
+        """Append one audit row for a single cell change."""
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "INSERT INTO role_permission_audit (actor, role, module, old_level, new_level, changed_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (str(actor), str(role), str(module), old_level, str(new_level), now),
+        )
+        self.conn.commit()
+
+    def list_permission_audit(self, limit: int = 50) -> list[dict]:
+        """Return the most recent matrix-change audit rows (newest first)."""
+        rows = self.conn.execute(
+            "SELECT id, actor, role, module, old_level, new_level, changed_at "
+            "FROM role_permission_audit ORDER BY changed_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Pipeline run history (dashboard 运行过程看板 → 多次运行回看)
+    # ------------------------------------------------------------------
+
+    def record_pipeline_run(
+        self,
+        run_id: str,
+        pipeline_name: str,
+        op: str,
+        mode: str | None,
+        selected_steps: str | None,
+        status: str,
+        started_at: str,
+    ) -> None:
+        self.conn.execute(
+            "INSERT INTO pipeline_runs (run_id, pipeline_name, op, mode, selected_steps, status, started_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (run_id, pipeline_name, op, mode, selected_steps, status, started_at),
+        )
+        self.conn.commit()
+
+    def finish_pipeline_run(
+        self, run_id: str, status: str, finished_at: str, snapshot: str | None = None
+    ) -> None:
+        if snapshot is not None:
+            self.conn.execute(
+                "UPDATE pipeline_runs SET status=?, finished_at=?, snapshot=? WHERE run_id=?",
+                (status, finished_at, snapshot, run_id),
+            )
+        else:
+            self.conn.execute(
+                "UPDATE pipeline_runs SET status=?, finished_at=? WHERE run_id=?",
+                (status, finished_at, run_id),
+            )
+        self.conn.commit()
+
+    def list_pipeline_runs(self, pipeline_name: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT run_id, op, mode, status, started_at, finished_at, selected_steps "
+            "FROM pipeline_runs WHERE pipeline_name=? ORDER BY started_at DESC LIMIT 50",
+            (pipeline_name,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_pipeline_run(self, run_id: str) -> dict | None:
+        row = self.conn.execute(
+            "SELECT run_id, pipeline_name, op, mode, status, started_at, finished_at, snapshot "
+            "FROM pipeline_runs WHERE run_id=?",
+            (run_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
     def get_org_llm_config(self, org_id: int) -> dict:
         """Return the org's pinned LLM provider/model (v9).
 
@@ -556,14 +706,14 @@ class Store(AbstractStore):
     # Multi-tenant: Users
     # ------------------------------------------------------------------
 
-    def create_user(self, org_id: int, email: str, role: str = "member", password_hash: str = None) -> dict:
+    def create_user(self, org_id: int, email: str, role: str = "member", password_hash: str = None, status: str = "active") -> dict:
         now = datetime.now().isoformat()
         cur = self.conn.execute(
-            "INSERT INTO users (org_id, email, role, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-            (org_id, email, role, password_hash, now)
+            "INSERT INTO users (org_id, email, role, password_hash, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (org_id, email, role, password_hash, status, now)
         )
         self.conn.commit()
-        return {"id": cur.lastrowid, "org_id": org_id, "email": email, "role": role, "password_hash": password_hash, "created_at": now}
+        return {"id": cur.lastrowid, "org_id": org_id, "email": email, "role": role, "password_hash": password_hash, "status": status, "created_at": now}
 
     def get_user(self, org_id: int, email: str) -> Optional[dict]:
         cur = self.conn.execute(
@@ -579,7 +729,7 @@ class Store(AbstractStore):
 
     def list_users(self, org_id: int) -> list[dict]:
         cur = self.conn.execute(
-            "SELECT id, email, role, created_at FROM users WHERE org_id=? ORDER BY created_at",
+            "SELECT id, email, role, status, created_at FROM users WHERE org_id=? ORDER BY created_at",
             (org_id,)
         )
         return [dict(r) for r in cur.fetchall()]

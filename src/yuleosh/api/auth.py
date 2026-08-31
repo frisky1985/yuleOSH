@@ -230,6 +230,15 @@ def _handle_login(body: dict) -> tuple:
         authenticated_user["email"],
     )
     store.create_session(authenticated_user["id"], token, TOKEN_TTL_HOURS)
+    # 邀请待接受 → 首次登录即接受（pending 翻 active）
+    if (authenticated_user.get("status") or "active") == "pending":
+        try:
+            store.conn.execute(
+                "UPDATE users SET status='active' WHERE id=?", (authenticated_user["id"],)
+            )
+            store.conn.commit()
+        except Exception:
+            pass
 
     return json_ok({
         "token": token,

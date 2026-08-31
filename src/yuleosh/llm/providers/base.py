@@ -159,6 +159,16 @@ PRICING_TABLE: Dict[str, Dict[str, float]] = {
         "output_per_1k": 0.008,
         "context_window": 128_000,
     },
+    # 兼容别名（T11）：``deepseek-chat`` 是 DeepSeek API 的传输层模型名
+    # （providers/deepseek.py MODEL_ALIASES 把 deepseek-v4 映射过去），但
+    # legacy chat_completion() 与 LLM_MODEL 的默认值直接拿它当逻辑模型名用。
+    # 缺这条时预算检查以 "no pricing data" 失败 → 静默降级到 mock provider，
+    # 真实 LLM 链路因此一直打不通。定价与 deepseek-v4 一致。
+    "deepseek-chat": {
+        "input_per_1k": 0.002,
+        "output_per_1k": 0.008,
+        "context_window": 128_000,
+    },
     "gpt-4o": {
         "input_per_1k": 0.010,
         "output_per_1k": 0.030,

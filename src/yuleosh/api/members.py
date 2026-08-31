@@ -115,10 +115,14 @@ def handle_members(method: str, path_tail: str, body: dict, query: dict,
         return _invite_member(org_id, body, current_user)
     if method == "GET" and path_tail == "roles":
         return _roles_matrix(current_user)
+    if method == "GET" and path_tail == "roles/audit":
+        return _roles_audit(current_user)
     if method == "PATCH" and path_tail == "roles":
         return _update_roles(current_user, body)
     if method == "PATCH" and path_tail and "/" not in path_tail:
         return _update_role(org_id, path_tail, body, current_user)
+    if method == "DELETE" and path_tail and "/" not in path_tail:
+        return _delete_member(org_id, path_tail, current_user)
 
     return json_error(f"Unknown members sub-path or method: {method} {path_tail}", 404)
 
@@ -164,7 +168,7 @@ def _invite_member(org_id: Any, body: dict, current_user: dict) -> tuple[dict, i
     try:
         from yuleosh.store import Store
         store = Store()
-        member = store.create_user(org_id, email, role, password_hash=None)
+        member = store.create_user(org_id, email, role, password_hash=None, status="pending")
     except Exception as e:
         log.error("member invite failed: %s", e)
         if "unique" in str(e).lower():
@@ -220,6 +224,37 @@ def _update_role(org_id: Any, user_id_str: str, body: dict,
     })
 
 
+def _delete_member(org_id: Any, user_id_str: str, current_user: dict) -> tuple[dict, int]:
+    """DELETE /api/v1/members/{id} — 移除一名成员（仅 Owner/Admin）。
+
+    Org-scoped 与防自删：调用者不能移除自己，避免组织失去管理员。
+    """
+    if current_user.get("role") not in ADMIN_ROLES:
+        return json_error("仅 Owner/Admin 可以移除成员", 403)
+    if not user_id_str.isdigit():
+        return json_error(f"无效的用户 ID: {user_id_str}", 400)
+
+    caller_id = str(current_user.get("user_id") or current_user.get("id") or "")
+    if str(user_id_str) == caller_id:
+        return json_error("不能移除你自己", 400)
+
+    try:
+        from yuleosh.store import Store
+        store = Store()
+        user = store.get_user_by_id(int(user_id_str))
+        if user is None or user.get("org_id") != org_id:
+            return json_error(f"成员不存在: {user_id_str}", 404)
+        store.conn.execute(
+            "DELETE FROM users WHERE id=? AND org_id=?", (user["id"], org_id)
+        )
+        store.conn.commit()
+    except Exception as e:
+        log.error("member delete failed: %s", e)
+        return json_error("成员移除失败，请稍后重试", 503)
+
+    return json_ok({"deleted": int(user_id_str)})
+
+
 def _default_matrix() -> dict:
     """Build the design-doc default matrix as {role: {module: level}}.
 
@@ -263,6 +298,23 @@ def _roles_matrix(current_user: dict) -> tuple[dict, int]:
         "modules": list(PERMISSION_MODULES),
         "can_edit": bool(can_edit),
     })
+
+
+def _roles_audit(current_user: dict) -> tuple[dict, int]:
+    """GET /api/v1/members/roles/audit — 权限矩阵变更审计日志（T7）。
+
+    返回最近 50 条逐格变更记录（actor / role / module / old→new / 时间），
+    按时间倒序。读取失败时降级为空列表而不是 500（看板不因审计日志崩）。
+    """
+    try:
+        from yuleosh.store import Store
+        store = Store()
+        rows = store.list_permission_audit(limit=50)
+    except Exception as e:  # noqa: BLE001 — 审计只读，失败降级为空列表
+        log.error("roles audit load failed: %s", e)
+        return json_ok({"audit": [], "count": 0, "note": "审计日志暂不可用"})
+
+    return json_ok({"audit": rows, "count": len(rows)})
 
 
 def _update_roles(current_user: dict, body: dict) -> tuple[dict, int]:
@@ -315,8 +367,10 @@ def _update_roles(current_user: dict, body: dict) -> tuple[dict, int]:
     try:
         from yuleosh.store import Store
         store = Store()
+        # previous = 旧矩阵（审计 diff 基线）
+        previous = store.get_role_permissions() or _default_matrix()
         # Merge delta onto the current matrix so partial updates keep the rest.
-        current = store.get_role_permissions() or _default_matrix()
+        current = {r: dict(p) for r, p in previous.items()}
         for role, perms in delta.items():
             current.setdefault(role, {})
             current[role].update(perms)
@@ -324,6 +378,14 @@ def _update_roles(current_user: dict, body: dict) -> tuple[dict, int]:
             current[role] = {
                 m: lv for m, lv in current[role].items() if m in PERMISSION_MODULES
             }
+        # 审计：逐格比较 old/new，记录谁在何时改了哪一项（T7）
+        actor = current_user.get("email") or str(current_user.get("user_id") or "unknown")
+        for role in current:
+            for module in PERMISSION_MODULES:
+                old_lv = previous.get(role, {}).get(module)
+                new_lv = current[role].get(module)
+                if new_lv != old_lv:
+                    store.add_permission_audit(actor, role, module, old_lv, new_lv)
         store.save_role_permissions(current)
     except Exception as e:
         log.error("roles matrix update failed: %s", e)

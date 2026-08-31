@@ -40,6 +40,21 @@ def _check_trigger_throttle() -> bool:
         return True
 
 
+def _request_path(kwargs: dict, path_tail: str) -> str:
+    """Return the request path WITH its query string.
+
+    ``handle_pipeline`` only receives ``path_tail`` — the ``?pipeline=...``
+    / ``?run_id=...`` query is dropped, while downstream handlers parse it
+    via ``urlparse(path).query`` (evidence download cannot work without
+    ``run_id``).  Prefer ``handler.path`` (the raw request line, query
+    included) and only fall back to re-joining when there is no handler
+    (bare unit-test calls).
+    """
+    handler = kwargs.get("handler")
+    raw = getattr(handler, "path", None)
+    return raw or f"/api/v1/pipeline/{path_tail}"
+
+
 @require_auth
 def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwargs):
     """Route to pipeline sub-resources."""
@@ -109,6 +124,43 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
         full_path = f"/api/v1/pipeline/{path_tail}"
         result = handle_pipeline_checkpoint(kwargs.get("handler"), full_path)
         return (result, 200) if isinstance(result, dict) else result
+
+    # ── 以下路由必须注册在 handle_pipeline 内（而不是 handler_helpers 的
+    #    elif 分支）：api_v1_dispatch 对所有 /api/v1/* 路径恒返回 True，
+    #    handler_helpers 里的 /api/v1/... 分支永远不会被执行（死代码）。
+    #    此前 checkpoint/runs 就挂在那个死分支上，实际一直 404。 ──
+
+    if path_tail == "checkpoint/runs" and method == "GET":
+        # T4-运行历史：列出某 pipeline 的历史运行（不含快照）。
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_runs_history
+        full_path = _request_path(kwargs, path_tail)
+        result = handle_pipeline_runs_history(kwargs.get("handler"), full_path)
+        return (result, 200) if isinstance(result, dict) else result
+
+    if path_tail == "checkpoint/stream" and method == "GET":
+        # T10-SSE：状态变化时才推 event，替代前端 1.5s 轮询。
+        # 该处理器自行写响应（长连接），必须返回 None，否则 router 会再
+        # 补写一次 JSON（router 见 None 直接 return，不写响应）。
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_checkpoint_stream
+        handle_pipeline_checkpoint_stream(
+            kwargs.get("handler"), _request_path(kwargs, path_tail))
+        return None
+
+    if path_tail == "evidence" and method == "GET":
+        # T9-证据包历史：每次运行一条（执行记录 + 产物清单）。
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_evidence
+        full_path = _request_path(kwargs, path_tail)
+        result = handle_pipeline_evidence(kwargs.get("handler"), full_path)
+        return (result, 200) if isinstance(result, dict) else result
+
+    if path_tail == "evidence/download" and method == "GET":
+        # T9-证据包下载：自行写 zip 二进制响应，返回 None 阻止 router 补写。
+        from yuleosh.ui.routes.pipeline_routes import (
+            handle_pipeline_evidence_download,
+        )
+        handle_pipeline_evidence_download(
+            kwargs.get("handler"), _request_path(kwargs, path_tail))
+        return None
 
     if path_tail == "list" and method == "GET":
         # B5-看板 (2026-08-10): 列出可用 pipeline（选择器数据源）。
@@ -347,6 +399,11 @@ def _run_engine_op(pipeline_name: str, project_dir: str, op: str,
     selected: 选中模式步骤 id 列表（retry 时若提供，则只跑这些步骤，
     其余 SKIPPED；优先级高于单点 inject_at）。
     """
+    import datetime as _dt
+    import uuid
+    engine = None
+    run_id = uuid.uuid4().hex[:12]
+    started = _dt.datetime.now().isoformat()
     try:
         from yuleosh.engine.checkpoint import CheckpointEngine
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
@@ -363,6 +420,14 @@ def _run_engine_op(pipeline_name: str, project_dir: str, op: str,
                 HandlerAdapter(handler) if handler else None,
                 agent=agent,
             )
+        # 记录本次运行（dashboard 看板可回看历史）
+        mode = (
+            "selected" if (op == "retry" and selected)
+            else "inject" if op == "retry"
+            else "full" if op == "rerun"
+            else "resume"
+        )
+        engine.record_run(run_id, op, mode, selected, "running", started)
         if op == "retry":
             if selected:
                 engine.run(selected=selected)
@@ -373,10 +438,18 @@ def _run_engine_op(pipeline_name: str, project_dir: str, op: str,
             engine.run()
         else:
             engine.run(resume=True)
+        final = engine.status()
+        final_status = (final or {}).get("status", "unknown")
+        engine.finish_run(run_id, final_status, _dt.datetime.now().isoformat(), final)
     except Exception as e:  # noqa: BLE001 — 后台任务必须兜底，不能吞进程
         import logging
         logging.getLogger(__name__).warning(
             "pipeline %s op=%s failed: %s", pipeline_name, op, e)
+        if engine is not None:
+            try:
+                engine.finish_run(run_id, "failed", _dt.datetime.now().isoformat())
+            except Exception:
+                pass
     finally:
         with _ENGINE_OP_LOCK:
             _ENGINE_OP_ACTIVE.pop(pipeline_name, None)

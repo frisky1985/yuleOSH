@@ -66,11 +66,31 @@ import os
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler
-from http.server import HTTPServer  # noqa: F401 — test-patch seam (mock.patch("yuleosh.ui.server.HTTPServer"))
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
 from yuleosh.store import Store  # noqa: F401 — test-patch seam (mock.patch("yuleosh.ui.server.Store"))
+
+
+class HTTPServer(ThreadingHTTPServer):
+    """Thread-per-request HTTP server for the dashboard (T10).
+
+    The dashboard now serves a long-lived SSE endpoint
+    (``GET /api/v1/pipeline/checkpoint/stream``).  With the stdlib's
+    single-threaded ``http.server.HTTPServer``, one open stream blocks
+    every other request — the whole UI hangs for as long as the stream is
+    held (observed: a POST queued behind an open stream was not served
+    until the stream closed).  ``ThreadingHTTPServer`` gives each
+    connection its own thread, so streaming and normal API calls coexist.
+
+    The public name stays ``HTTPServer``: it is the documented test-patch
+    seam (tests do ``mock.patch("yuleosh.ui.server.HTTPServer")``), and
+    ``main()`` in ``ui/http_app.py`` instantiates it by that name.
+    """
+
+    daemon_threads = True  # 不因 SSE 长连接卡住进程退出
+    allow_reuse_address = True
 
 # ── Configuration ──────────────────────────────────────────────────────────
 

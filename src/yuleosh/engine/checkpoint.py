@@ -708,6 +708,7 @@ class CheckpointEngine:
         import sqlite3
         self._state_db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self._state_db_path), timeout=10.0)
+        conn.row_factory = sqlite3.Row  # 行可按列名取，便于 dict(row)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=10000")
         conn.execute("PRAGMA synchronous=NORMAL")
@@ -724,6 +725,18 @@ class CheckpointEngine:
                     pipeline_name TEXT PRIMARY KEY,
                     state_json TEXT NOT NULL,
                     updated_at TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_runs (
+                    run_id TEXT PRIMARY KEY,
+                    op TEXT,
+                    mode TEXT,
+                    selected_steps TEXT,
+                    status TEXT,
+                    started_at TEXT,
+                    finished_at TEXT,
+                    snapshot TEXT
                 )
             """)
             conn.execute(
@@ -757,5 +770,84 @@ class CheckpointEngine:
                 TypeError, ValueError) as e:
             log.warning("Corrupted sqlite checkpoint state: %s", e)
             return None
+        finally:
+            conn.close()
+
+    # -- run history (dashboard 看板 → 多次运行回看) --------------------
+
+    def record_run(self, run_id: str, op: str, mode: str | None,
+                   selected_steps: list[str] | None, status: str, started_at: str) -> None:
+        """Insert a pipeline run record with running status."""
+        conn = self._sqlite_conn()
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_runs (
+                    run_id TEXT PRIMARY KEY, op TEXT, mode TEXT,
+                    selected_steps TEXT, status TEXT, started_at TEXT,
+                    finished_at TEXT, snapshot TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, op, mode, selected_steps, status, started_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    run_id, op, mode,
+                    json.dumps(selected_steps or [], ensure_ascii=False),
+                    status, started_at,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def finish_run(self, run_id: str, status: str, finished_at: str,
+                   snapshot: dict | None = None) -> None:
+        """Update a run record with final status + full checkpoint snapshot."""
+        conn = self._sqlite_conn()
+        try:
+            if snapshot is not None:
+                conn.execute(
+                    "UPDATE pipeline_runs SET status=?, finished_at=?, snapshot=? WHERE run_id=?",
+                    (status, finished_at, json.dumps(snapshot, ensure_ascii=False), run_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE pipeline_runs SET status=?, finished_at=? WHERE run_id=?",
+                    (status, finished_at, run_id),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def list_runs(self, limit: int = 50) -> list[dict]:
+        """Return recent runs (newest first), without the heavy snapshot field."""
+        conn = self._sqlite_conn()
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_runs (
+                    run_id TEXT PRIMARY KEY, op TEXT, mode TEXT,
+                    selected_steps TEXT, status TEXT, started_at TEXT,
+                    finished_at TEXT, snapshot TEXT
+                )
+            """)
+            rows = conn.execute(
+                "SELECT run_id, op, mode, status, started_at, finished_at, selected_steps "
+                "FROM pipeline_runs ORDER BY started_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def get_run(self, run_id: str) -> dict | None:
+        """Return a single run record including its checkpoint snapshot."""
+        conn = self._sqlite_conn()
+        try:
+            row = conn.execute(
+                "SELECT run_id, op, mode, status, started_at, finished_at, snapshot "
+                "FROM pipeline_runs WHERE run_id=?",
+                (run_id,),
+            ).fetchone()
+            return dict(row) if row else None
         finally:
             conn.close()

@@ -222,6 +222,9 @@ def handle_get(handler) -> None:
     elif path == "/api/v1/pipeline/checkpoint":
         from yuleosh.ui.routes.pipeline_routes import handle_pipeline_checkpoint
         handler._json_response(handle_pipeline_checkpoint(handler, path))
+    elif path.startswith("/api/v1/pipeline/checkpoint/runs"):
+        from yuleosh.ui.routes.pipeline_routes import handle_pipeline_runs_history
+        handler._json_response(handle_pipeline_runs_history(handler, path))
     # ── Loop Engineering API routes ──
     elif path == "/api/loops/summary":
         from yuleosh.api.loops import get_all_loops_data
