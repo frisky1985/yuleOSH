@@ -57,7 +57,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { TopNav } from "@/components/dashboard/top-nav";
+import { DashboardChrome } from "@/components/dashboard/dashboard-chrome";
 import {
   getDashboardProjects,
   getSWEStatus,
@@ -608,12 +608,18 @@ export default function DashboardPage() {
         const { api } = await import("@/lib/api");
         const s = await api.auth.session();
         setSession(s);
-        // 视角默认值：优先读 localStorage，否则按角色推荐。
+        // 视角默认值：?view 预览 > localStorage > 角色推荐。
         const stored =
           typeof window !== "undefined"
             ? window.localStorage.getItem("yuleosh_dashboard_perspective")
             : null;
-        if (stored === "manage" || stored === "engineer") {
+        const previewView =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("view")
+            : null;
+        if (previewView === "engineer" || previewView === "manage") {
+          setPerspective(previewView);
+        } else if (stored === "manage" || stored === "engineer") {
           setPerspective(stored);
         } else if (s?.role) {
           setPerspective(s.role === "admin" ? "manage" : "engineer");
@@ -787,61 +793,59 @@ export default function DashboardPage() {
   const displayGapItems = gapShowAll ? gapAllItems : (gapData?.items || []);
   const displayGapSummary = gapData?.summary || { total: 0, critical: 0, major: 0, minor: 0 };
 
-  return (
-    <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
-      {/* ── Top Nav ── */}
-      <TopNav mode="tabs" activeTab={activeTab} onTabChange={setActiveTab}>
-        {/* User menu */}
-        <div className="flex items-center gap-2">
-          {session ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
-                <Avatar className="w-7 h-7 border border-[#1e293b]">
-                  <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
-                    {session ? getAvatarInitials(session.email) : "YU"}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
-                  {session ? displayNameFromEmail(session.email) : "用户"}
-                </span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
-              >
-                <DropdownMenuLabel className="text-xs text-[#94a3b8]">
-                  {session?.org_name || "账号"}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-[#1e293b]" />
-                <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-                  <UserIcon className="w-3.5 h-3.5" />
-                  个人信息
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-                  <Settings className="w-3.5 h-3.5" />
-                  项目设置
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-[#1e293b]" />
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  退出登录
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Link
-              href="/login"
-              className="text-sm px-3 py-1.5 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 transition-all"
+  const userMenu = (
+    <div className="flex items-center gap-2">
+      {session ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
+            <Avatar className="w-7 h-7 border border-[#1e293b]">
+              <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
+                {session ? getAvatarInitials(session.email) : "YU"}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
+              {session ? displayNameFromEmail(session.email) : "用户"}
+            </span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
+          >
+            <DropdownMenuLabel className="text-xs text-[#94a3b8]">
+              {session?.org_name || "账号"}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-[#1e293b]" />
+            <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
+              <UserIcon className="w-3.5 h-3.5" />
+              个人信息
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
+              <Settings className="w-3.5 h-3.5" />
+              项目设置
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-[#1e293b]" />
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
             >
-              登录
-            </Link>
-          )}
-        </div>
-      </TopNav>
+              <LogOut className="w-3.5 h-3.5" />
+              退出登录
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <Link
+          href="/login"
+          className="text-sm px-3 py-1.5 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 transition-all"
+        >
+          登录
+        </Link>
+      )}
+    </div>
+  );
 
+  return (
+    <DashboardChrome mode="tabs" activeTab={activeTab} onTabChange={setActiveTab} userMenu={userMenu}>
       {/* ── Main Content Area ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Data note banner */}
@@ -1950,6 +1954,6 @@ export default function DashboardPage() {
           setSelectedGapIds([]);
         }}
       />
-    </div>
+    </DashboardChrome>
   );
 }

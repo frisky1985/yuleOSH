@@ -23,7 +23,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import { TopNav } from "@/components/dashboard/top-nav";
+import { DashboardChrome } from "@/components/dashboard/dashboard-chrome";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -433,8 +433,7 @@ export default function RolesPage() {
       : [];
 
   return (
-    <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
-      <TopNav mode="links" />
+  <DashboardChrome mode="links">
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
@@ -1039,6 +1038,6 @@ export default function RolesPage() {
           权限矩阵存储于数据库，可在界面编辑{canEdit ? "（点击「编辑」后逐格调整）" : "；仅 Owner/Admin 拥有编辑权限"}；成员数据来自当前组织。
         </div>
       </div>
-    </div>
+  </DashboardChrome>
   );
 }

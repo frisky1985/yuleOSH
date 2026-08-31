@@ -22,7 +22,7 @@ import {
   Target,
   Workflow,
 } from "lucide-react";
-import { TopNav } from "@/components/dashboard/top-nav";
+import { DashboardChrome } from "@/components/dashboard/dashboard-chrome";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -281,8 +281,7 @@ export default function RequirementsPage() {
   const noProjects = !projectsLoading && projects.length === 0;
 
   return (
-    <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
-      <TopNav mode="links" />
+  <DashboardChrome mode="links">
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
@@ -724,6 +723,6 @@ export default function RequirementsPage() {
           需求由 projects/&lt;项目&gt;/spec*.md 解析；追溯与差距分析扫描项目目录中引用需求编号的制品。
         </div>
       </div>
-    </div>
+  </DashboardChrome>
   );
 }

@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { TopNav } from "@/components/dashboard/top-nav";
+import { DashboardChrome } from "@/components/dashboard/dashboard-chrome";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -265,8 +265,7 @@ export default function DevicesPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
-      <TopNav mode="links" />
+  <DashboardChrome mode="links">
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
@@ -519,6 +518,6 @@ export default function DevicesPage() {
           </div>
         )}
       </div>
-    </div>
+  </DashboardChrome>
   );
 }
