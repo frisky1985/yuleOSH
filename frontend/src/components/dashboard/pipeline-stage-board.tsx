@@ -36,6 +36,7 @@ interface PipelinePhase {
     labelBg: string;
     labelText: string;
     labelBorder: string;
+    borderHex: string;
   };
   stages: PipelineStage[];
 }
@@ -50,6 +51,7 @@ const PHASES: PipelinePhase[] = [
       labelBg: "bg-[#722ed1]/12",
       labelText: "text-[#722ed1]",
       labelBorder: "border-[#722ed1]/25",
+      borderHex: "#722ed1",
     },
     stages: [
       { num: 0, icon: BarChart3, title: "Spec Validation", meta: "需求覆盖率 100%", gated: true },
@@ -65,6 +67,7 @@ const PHASES: PipelinePhase[] = [
       labelBg: "bg-[#1677ff]/12",
       labelText: "text-[#1677ff]",
       labelBorder: "border-[#1677ff]/25",
+      borderHex: "#1677ff",
     },
     stages: [
       { num: 3, icon: FlaskConical, title: "Unit Tests", meta: "1020+ tests", gated: true },
@@ -80,6 +83,7 @@ const PHASES: PipelinePhase[] = [
       labelBg: "bg-[#10b981]/12",
       labelText: "text-[#10b981]",
       labelBorder: "border-[#10b981]/25",
+      borderHex: "#10b981",
     },
     stages: [
       { num: 6, icon: Hammer, title: "Cross-Compile", meta: "ARM / RISC-V", gated: false },
@@ -118,7 +122,16 @@ export function PipelineStageBoard() {
                 return (
                   <div
                     key={stage.num}
-                    className="relative rounded-lg border border-[#1e293b] bg-[#0a0e17] p-3.5 hover:border-[#722ed1]/40 transition-colors"
+                    className={`relative rounded-lg border border-[#1e293b] bg-[#0a0e17] p-3.5 hover:border-[#722ed1]/40 transition-colors border-l-[3px] ${
+                      stage.gated
+                        ? "border-l-[#faad14] bg-[#faad14]/[0.04]"
+                        : ""
+                    }`}
+                    style={
+                      stage.gated
+                        ? undefined
+                        : { borderLeftColor: phase.accent.borderHex }
+                    }
                   >
                     {stage.gated && (
                       <span

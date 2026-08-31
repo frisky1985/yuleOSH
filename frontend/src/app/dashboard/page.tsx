@@ -98,6 +98,8 @@ import { GapBatchModal } from "@/components/dashboard/gap-batch-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
 import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board";
+import { LoopEngineering } from "@/components/dashboard/loop-engineering";
+import { YuleASRStatus } from "@/components/dashboard/yuleasr-status";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -350,6 +352,27 @@ export default function DashboardPage() {
   // Session / nav
   const [session, setSession] = useState<UserInfo | null>(null);
 
+  // 视角：管理视角（决策者，合规/用量优先）/ 工程视角（工程师，流水线优先）
+  // 默认按角色推荐：admin → 管理视角，其余 → 工程视角；用户手动切换后持久化。
+  const [perspective, setPerspective] = useState<"manage" | "engineer">("manage");
+
+  const roleLabel =
+    session?.role === "admin"
+      ? "Administrator"
+      : session?.role === "developer"
+      ? "Developer"
+      : session?.role === "reviewer"
+      ? "Reviewer"
+      : session?.role === "auditor"
+      ? "Auditor"
+      : "—";
+
+  const switchPerspective = (next: "manage" | "engineer") => {
+    setPerspective(next);
+    if (typeof window !== "undefined")
+      window.localStorage.setItem("yuleosh_dashboard_perspective", next);
+  };
+
   // Projects
   const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
@@ -585,6 +608,16 @@ export default function DashboardPage() {
         const { api } = await import("@/lib/api");
         const s = await api.auth.session();
         setSession(s);
+        // 视角默认值：优先读 localStorage，否则按角色推荐。
+        const stored =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("yuleosh_dashboard_perspective")
+            : null;
+        if (stored === "manage" || stored === "engineer") {
+          setPerspective(stored);
+        } else if (s?.role) {
+          setPerspective(s.role === "admin" ? "manage" : "engineer");
+        }
       } catch {
         // No valid session — proceed without session (redirect already fired)
       }
@@ -957,7 +990,44 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Dashboard v2: 五维合规总览卡 */}
+            {/* 视角切换：管理视角（决策者）/ 工程视角（工程师，流水线优先） */}
+            <div className="flex items-center gap-2 mb-6">
+              <span className="text-xs text-[#64748b]">视角</span>
+              <div className="inline-flex rounded-lg border border-[#1e293b] overflow-hidden">
+                <button
+                  onClick={() => switchPerspective("manage")}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    perspective === "manage"
+                      ? "bg-[#722ed1]/15 text-[#722ed1]"
+                      : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+                  }`}
+                >
+                  管理视角
+                </button>
+                <button
+                  onClick={() => switchPerspective("engineer")}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    perspective === "engineer"
+                      ? "bg-[#1677ff]/15 text-[#1677ff]"
+                      : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+                  }`}
+                >
+                  工程视角
+                </button>
+              </div>
+              <span className="text-[10px] text-[#64748b]">当前角色：{roleLabel}</span>
+            </div>
+
+            {/* 工程视角：Loop Engineering 置顶（流水线优先） */}
+            {perspective === "engineer" && (
+              <div className="mb-6">
+                <LoopEngineering />
+              </div>
+            )}
+
+            {/* Dashboard v2: 五维合规总览卡 — 管理视角 */}
+            {perspective === "manage" && (
+            <>
             <Card className="border-[#1e293b] bg-[#111827] mb-6">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -1183,6 +1253,8 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+            </>
+            )}
 
             {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
             <div className="mt-6">
@@ -1272,7 +1344,15 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Compliance Progress + Coverage side by side */}
+            {/* 工程视角：yuleASR BSW 状态（工程师关注实时编译 / MISRA / 覆盖率） */}
+            {perspective === "engineer" && (
+              <div className="mt-6">
+                <YuleASRStatus />
+              </div>
+            )}
+
+            {/* Compliance Progress + Coverage side by side — 管理视角 */}
+            {perspective === "manage" && (
             <div className="grid lg:grid-cols-3 gap-5 mt-6 mb-6">
               {/* Overall compliance progress (spans 2 cols) */}
               <Card className="lg:col-span-2 border-[#1e293b] bg-[#111827]">
@@ -1461,6 +1541,14 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             </div>
+            )}
+
+            {/* 管理视角：Loop Engineering 置底 */}
+            {perspective === "manage" && (
+              <div className="mt-6">
+                <LoopEngineering />
+              </div>
+            )}
           </>
         )}
 
