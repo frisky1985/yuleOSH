@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   GitBranch,
+  Cpu,
+  Terminal,
   ListChecks,
   FlaskConical,
   Layers,
@@ -26,6 +28,10 @@ const NAV: {
 }[] = [
   { href: "/dashboard", label: "概览", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/pipeline", label: "流水线", icon: GitBranch },
+  // 设备（HIL 台架注册）与日志（排查步骤失败，数据源 .osh/sessions/*.log）
+  // 都是工程执行向页面，此前入口只在决策顶栏，工程师反而进不去 —— 补在此处。
+  { href: "/dashboard/devices", label: "设备", icon: Cpu },
+  { href: "/dashboard/logs", label: "日志", icon: Terminal },
   { href: "/dashboard/requirements", label: "项目需求", icon: ListChecks },
   { href: "/dashboard/tests", label: "测试用例", icon: FlaskConical },
   { href: "/dashboard/test-layers", label: "阶段看板", icon: Layers },
