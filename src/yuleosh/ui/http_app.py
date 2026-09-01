@@ -53,6 +53,11 @@ def main(host: str | None = None, port: int | None = None) -> None:
                 ensure_demo_account(store)
             except Exception as e:  # noqa: BLE001
                 logger.warning("Demo account seed skipped: %s", e)
+            try:
+                from yuleosh.ui.auth_extended import ensure_view_test_accounts
+                ensure_view_test_accounts(store)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("View-test accounts seed skipped: %s", e)
     except Exception as e:  # noqa: BLE001 — 故意 fail-open：无 Store 时 dashboard 仍可用
         logger.warning("Store init failed (dashboard will work without it): %s", e)
 

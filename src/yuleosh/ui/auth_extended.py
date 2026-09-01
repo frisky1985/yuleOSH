@@ -599,6 +599,60 @@ def ensure_demo_account(store: "Store") -> None:
         logging.getLogger("yuleosh.auth").warning("ensure_demo_account failed: %s", e)
 
 
+# ── Dual-view test accounts ───────────────────────────────────────────────
+# The dashboard shell splits by the user's role (see frontend
+# use-session-role.ts / dashboard/layout.tsx):
+#   - admin                         → horizontal TopNav  (decision-maker view)
+#   - developer / reviewer / auditor → vertical EngineerSidebar (engineer view)
+# These two seeded accounts let the two views be exercised by distinct users.
+VIEW_DECISION_EMAIL = "decision@yuleosh.com"
+VIEW_DECISION_PASSWORD = "Demo2026!decision"
+VIEW_ENGINEER_EMAIL = "engineer@yuleosh.com"
+VIEW_ENGINEER_PASSWORD = "Demo2026!engineer"
+
+
+def ensure_view_test_accounts(store: "Store") -> None:
+    """Seed two role-based test accounts so the dual dashboard view can be
+    exercised by distinct users.
+
+    Idempotent: creates/repairs only, never clobbers a working password.
+    Both accounts co-locate with the demo account's org (so they share demo
+    projects); falls back to a fresh demo org when the demo account is absent.
+    """
+    try:
+        demo = store.get_user_by_email(DEMO_EMAIL)
+        if demo:
+            org_id = demo["org_id"]
+        else:
+            org = store.get_organization(DEMO_ORG_SLUG)
+            if not org:
+                org = store.create_organization(DEMO_ORG_NAME, DEMO_ORG_SLUG)
+            org_id = org["id"]
+
+        _seed_view_account(store, org_id, VIEW_DECISION_EMAIL, "admin", VIEW_DECISION_PASSWORD)
+        _seed_view_account(store, org_id, VIEW_ENGINEER_EMAIL, "developer", VIEW_ENGINEER_PASSWORD)
+    except Exception as e:  # noqa: BLE001
+        logging.getLogger("yuleosh.auth").warning("ensure_view_test_accounts failed: %s", e)
+
+
+def _seed_view_account(store: "Store", org_id: int, email: str,
+                       role: str, password: str) -> None:
+    """Create or repair a single view-test account (idempotent)."""
+    user = store.get_user_by_email(email)
+    if user:
+        # Repair only a broken/empty password — never overwrite a good one.
+        existing_hash = user.get("password_hash")
+        if not existing_hash or not _verify_password(password, existing_hash):
+            store.update_user_password(
+                user["org_id"], email, _hash_password(password))
+            logging.getLogger("yuleosh.auth").info(
+                "Repaired view-test account %s (org=%s)", email, user.get("org_id"))
+        return
+    store.create_user(org_id, email, role, _hash_password(password))
+    logging.getLogger("yuleosh.auth").info(
+        "Seeded view-test account %s (role=%s, org=%s)", email, role, org_id)
+
+
 def handle_signin(body: dict, ip: str = "") -> dict:
     """POST /api/auth/signin — Password-based signin/signup.
 
