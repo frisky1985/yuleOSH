@@ -163,7 +163,7 @@ export default function LogsPage() {
   const [summaryNote, setSummaryNote] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState("");
-  const [summaryWindowDays, setSummaryWindowDays] = useState<number | null>(null);
+  const [summaryRange, setSummaryRange] = useState<string>("7d");
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sumExpanded, setSumExpanded] = useState<Record<string, boolean>>({});
@@ -204,21 +204,19 @@ export default function LogsPage() {
     setSummaryLoading(true);
     setSummaryError("");
     try {
-      const since = rangeToSince("7d");
+      const since = rangeToSince(summaryRange);
       const qs = since ? `?since=${since}` : "";
       const res = await apiFetch<LogsSummaryResponse>(`/api/v1/logs/summary${qs}`);
       setSummary(res.runs || []);
       setSummaryNote(res.note ?? null);
-      setSummaryWindowDays(res.window_days ?? 7);
     } catch (err) {
       setSummaryError(errMessage(err));
       setSummary([]);
       setSummaryNote(null);
-      setSummaryWindowDays(null);
     } finally {
       setSummaryLoading(false);
     }
-  }, []);
+  }, [summaryRange]);
 
   useEffect(() => {
     void loadSummary();
@@ -238,6 +236,7 @@ export default function LogsPage() {
     setLimit(DEFAULT_FILTERS.limit);
     setRange(DEFAULT_FILTERS.range);
     setLevel(DEFAULT_FILTERS.level);
+    setSummaryRange("7d");
     setExpanded({});
     setSumExpanded({});
     setFilters(DEFAULT_FILTERS);
@@ -500,11 +499,9 @@ export default function LogsPage() {
               <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#722ed1]" />
                 日志摘要
-                {summaryWindowDays ? (
-                  <span className="text-[10px] font-normal text-[#a78bfa] bg-[#722ed1]/10 border border-[#722ed1]/20 rounded px-1.5 py-0.5">
-                    近 {summaryWindowDays} 天
-                  </span>
-                ) : null}
+                <span className="text-[10px] font-normal text-[#a78bfa] bg-[#722ed1]/10 border border-[#722ed1]/20 rounded px-1.5 py-0.5">
+                  {summaryRange === "all" ? "全部" : summaryRange === "30d" ? "近30天" : summaryRange === "90d" ? "近90天" : "近7天"}
+                </span>
                 {!summaryLoading && (
                   <span className="text-xs font-normal text-[#64748b]">
                     共 {summary.length} 个 run
@@ -512,8 +509,20 @@ export default function LogsPage() {
                 )}
               </CardTitle>
               <CardDescription className="text-xs text-[#64748b]">
-                每个 run 的日志文件数 / 总行数 / ERROR 数（默认近 7 天，更早请在左侧按时间搜索）
+                每个 run 的日志文件数 / 总行数 / ERROR 数（默认近 7 天，可切到 30/90 天或全部）
               </CardDescription>
+              <div className="mt-2">
+                <select
+                  value={summaryRange}
+                  onChange={(e) => setSummaryRange(e.target.value)}
+                  className="w-full h-8 rounded-md border border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] text-xs px-2 outline-none focus:border-[#722ed1]/50"
+                >
+                  <option value="7d">近 7 天</option>
+                  <option value="30d">近 30 天</option>
+                  <option value="90d">近 90 天</option>
+                  <option value="all">全部</option>
+                </select>
+              </div>
             </CardHeader>
             <CardContent>
               {summaryError && (
