@@ -321,7 +321,30 @@ def handle_post(handler) -> None:
 
 
 def handle_delete(handler) -> None:
-    """Route and serve all DELETE requests (non-API-v1 routes)."""
+    """Route and serve all DELETE requests.
+
+    Dispatches ``/api/v1/*`` to the modular router first — mirroring
+    ``handle_get`` and the ``do_PUT``/``do_PATCH`` handlers, which reuse
+    ``handle_post`` for exactly this reason (the v1 router resolves the
+    real method from ``handler.command``, so DELETE is honored without a
+    separate code path).
+
+    历史：本函数原先无条件 ``_serve_page("404.html")``，使**所有** DELETE
+    端点不可达 —— ``/api/v1/members/{id}``（移除成员）、``/api/v1/apikeys/*``、
+    ``/api/v1/kb/*``、``/api/v1/preview/*`` 全部返回 HTML 404，前端 apiFetch
+    因收到非 JSON 而抛 ``Non-JSON response (404): <!DOCTYPE html>``。
+    这同时违反 ``api_dispatch.api_v1_dispatch`` 的 P0-1 契约
+    （"a /api/v1/* path is NEVER degraded to an HTML page"）。
+    """
+    from yuleosh.ui import server as _s
+    parsed = urllib.parse.urlparse(handler.path)
+    path = parsed.path.rstrip("/") or "/"
+
+    # ── API v1 router (single source of truth for /api/v1/*) ──
+    if path.startswith("/api/v1/"):
+        if _s.api_v1_dispatch(handler, path):
+            return
+
     handler._serve_page("404.html", {})
 
 
