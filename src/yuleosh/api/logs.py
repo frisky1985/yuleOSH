@@ -12,18 +12,20 @@
 Mounted at /api/v1/logs in the main server router.
 
 Endpoints:
-    GET /api/v1/logs?project=&query=&device=&pipeline=&limit=50
+    GET /api/v1/logs?project=&query=&device=&pipeline=&limit=50&since=&until=&level=
         — 跨 run 日志检索，返回 [{run_id, file, line, content, level, updated_at}]
+        时间窗口 since/until 基于日志文件更新时间（文件 mtime，UTC），按 run/文件级过滤
     GET /api/v1/logs/pipeline?run=xxx
         — 某流水线 run 的全部 *.log 文件 + 内容前 200 行
-    GET /api/v1/logs/summary?project=xxx
-        — 日志统计：每 run 的日志文件数 / 总行数 / ERROR 出现次数
+    GET /api/v1/logs/summary?project=xxx[&since=YYYY-MM-DD]
+        — 日志统计：每 run 的日志文件数 / 总行数 / ERROR 出现次数；默认近 7 天且硬上限 7 天
 """
 
 import json
 import logging
 import os
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -102,6 +104,36 @@ def _meta_haystack(meta: dict) -> str:
     return " ".join(str(v or "") for v in meta.values()).lower()
 
 
+def _to_dt(s: Optional[str]) -> Optional[datetime]:
+    """把 ISO/带时区字符串解析为 datetime（无时区按 UTC）。解析失败返回 None。"""
+    if not s:
+        return None
+    try:
+        d = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return d
+
+
+def _parse_window(s: Optional[str], end_of_day: bool = False) -> Optional[datetime]:
+    """解析时间窗口参数（since/until）。
+
+    支持 ``YYYY-MM-DD``（按 UTC 0 点 / 当日 23:59:59.999999）或
+    ``YYYY-MM-DDTHH:MM``。返回 None 表示不过滤。
+    """
+    s = (s or "").strip()
+    if not s:
+        return None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        d = datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        if end_of_day:
+            d = d.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return d
+    return _to_dt(s)
+
+
 @require_auth
 def handle_logs(method: str, path_tail: str, body: dict, query: dict,
                 handler: Any = None, **kwargs) -> Optional[tuple[dict, int]]:
@@ -130,11 +162,17 @@ def _logs_search(query: dict) -> tuple[dict, int]:
       device   — 匹配日志行内容或文件路径（串口日志常含设备 id）
       pipeline — 匹配 run 元数据（run_id/name/project）
       limit    — 结果上限（默认 50，上限 500）
+      since/until — 时间窗口（YYYY-MM-DD 或 YYYY-MM-DDTHH:MM），基于日志文件更新时间
+      level    — 按级别过滤（ERROR/FATAL/WARN/INFO/DEBUG/TRACE）
+    注：时间窗口按 run/文件级过滤（updated_at 取文件 mtime，非日志内容时间戳）。
     """
     project = _qp(query, "project")
     keyword = _qp(query, "query") or _qp(query, "q")
     device = _qp(query, "device")
     pipeline = _qp(query, "pipeline")
+    since = _parse_window(_qp(query, "since"))
+    until = _parse_window(_qp(query, "until"), end_of_day=True)
+    level = _qp(query, "level").upper()
     try:
         limit = min(int(_qp(query, "limit", str(DEFAULT_LIMIT)) or DEFAULT_LIMIT), MAX_LIMIT)
     except ValueError:
@@ -170,6 +208,11 @@ def _logs_search(query: dict) -> tuple[dict, int]:
                 log.debug("skip unreadable log %s: %s", fp, e)
                 continue
             updated_at = _file_updated_at(fp)
+            ua = _to_dt(updated_at)
+            if since and ua and ua < since:
+                continue
+            if until and ua and ua > until:
+                continue
             rel = str(fp.relative_to(root))
             file_hay = f"{rel} {fp.name}".lower()
             for lineno, line in enumerate(lines, start=1):
@@ -177,6 +220,8 @@ def _logs_search(query: dict) -> tuple[dict, int]:
                 if keyword_l and keyword_l not in line_l:
                     continue
                 if device_l and device_l not in line_l and device_l not in file_hay:
+                    continue
+                if level and _detect_level(line) != level:
                     continue
                 results.append({
                     "run_id": meta["run_id"],
@@ -242,11 +287,22 @@ def _logs_pipeline(query: dict) -> tuple[dict, int]:
 
 
 def _logs_summary(query: dict) -> tuple[dict, int]:
-    """GET /api/v1/logs/summary?project=xxx — 每 run 的日志统计。
+    """GET /api/v1/logs/summary?project=xxx[&since=YYYY-MM-DD] — 每 run 的日志统计。
 
     统计项：日志文件数、总行数、ERROR/FATAL 出现次数、最后更新时间。
+    时间窗口：默认近 7 天，且硬上限 7 天（更旧的 run 不进入摘要，需用检索接口按时间查询）。
+      since — 窗口起点（YYYY-MM-DD），若早于 7 天前则按 7 天前裁剪
+      until — 窗口终点（默认不限制）
     """
     project = _qp(query, "project").lower()
+
+    # 摘要硬上限 7 天：即便前端请求更早，也只保留近 7 天
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    req_since = _parse_window(_qp(query, "since"))
+    if req_since and req_since > cutoff:
+        cutoff = req_since
+    until = _parse_window(_qp(query, "until"), end_of_day=True)
+
     root = _sessions_root()
 
     runs: list[dict] = []
@@ -278,6 +334,13 @@ def _logs_summary(query: dict) -> tuple[dict, int]:
                 if u and (updated_at is None or u > updated_at):
                     updated_at = u
 
+            # 7 天窗口过滤（按 run 最新日志文件更新时间）
+            latest_dt = _to_dt(updated_at)
+            if latest_dt and latest_dt < cutoff:
+                continue
+            if until and latest_dt and latest_dt > until:
+                continue
+
             runs.append({
                 "run_id": meta["run_id"],
                 "name": meta.get("name"),
@@ -292,4 +355,10 @@ def _logs_summary(query: dict) -> tuple[dict, int]:
     note = None if runs else (
         "no session logs found" + (f" for project {project}" if project else "")
     )
-    return json_ok({"runs": runs, "count": len(runs), "note": note})
+    return json_ok({
+        "runs": runs,
+        "count": len(runs),
+        "note": note,
+        "window_days": 7,
+        "applied_since": cutoff.isoformat(),
+    })
