@@ -52,6 +52,7 @@ _LAZY_HANDLERS = {
     "logs": ("yuleosh.api.logs", "handle_logs"),
     "members": ("yuleosh.api.members", "handle_members"),
     "requirements": ("yuleosh.api.requirements", "handle_requirements"),
+    "matrix": ("yuleosh.api.matrix", "handle_matrix"),
 }
 
 logger = logging.getLogger("yuleosh.api.router")
