@@ -28,6 +28,25 @@ async function loadSession(): Promise<UserInfo | null> {
   return s;
 }
 
+/**
+ * 失效会话缓存 —— 登出、以及重新登录（可能换了账号）时必须调用。
+ *
+ * 关键：`_sessionPromise` 是**模块级**缓存，而 router.push("/login") 属客户端
+ * 跳转、不会重载页面，模块状态原样保留。若不主动失效，用另一个账号重新登录后
+ * loadSession() 会直接返回上一次账号的会话，骨架/邮箱/组织全部停留在旧身份，
+ * 表现为「换了账号但视图没变」。localStorage 的角色缓存同理，一并清除。
+ */
+export function resetSessionCache() {
+  _sessionPromise = null;
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(LS_ROLE_KEY);
+    } catch {
+      /* 忽略隐私模式写入失败 */
+    }
+  }
+}
+
 /** 同步读取上次缓存的角色（仅用于首帧骨架判定）。 */
 export function getCachedRole(): AppRole {
   if (typeof window === "undefined") return null;

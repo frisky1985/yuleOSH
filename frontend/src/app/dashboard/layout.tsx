@@ -7,7 +7,7 @@ import { LogOut, Settings, User as UserIcon } from "lucide-react";
 
 import { TopNav, type DashboardTab } from "@/components/dashboard/top-nav";
 import { EngineerSidebar } from "@/components/dashboard/engineer-sidebar";
-import { isEngineerRole, useSessionRole } from "@/lib/use-session-role";
+import { isEngineerRole, resetSessionCache, useSessionRole } from "@/lib/use-session-role";
 import { api } from "@/lib/api";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -79,6 +79,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     } catch {
       /* 忽略登出失败，直接跳转 */
     }
+    // 失效模块级会话缓存：否则换账号重新登录后会继续读到上一个账号的身份。
+    resetSessionCache();
     router.push("/login");
   };
 

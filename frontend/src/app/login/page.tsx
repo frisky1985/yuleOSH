@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";  // T1 (v3.9.0): token 由服务端 Set-Cookie，前端不再落盘
+import { resetSessionCache } from "@/lib/use-session-role";
 
 type AuthMode = "login" | "register";
 
@@ -42,6 +43,9 @@ export default function LoginPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    // 任何登录/注册尝试都先失效会话缓存：本次很可能正切换到另一个账号，
+    // 否则进入 dashboard 后仍会读到上一个账号的身份（骨架/邮箱/组织）。
+    resetSessionCache();
     setError("");
     setLoading(true);
 

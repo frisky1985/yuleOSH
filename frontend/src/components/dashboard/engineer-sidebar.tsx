@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { useSessionRole } from "@/lib/use-session-role";
+import { resetSessionCache, useSessionRole } from "@/lib/use-session-role";
 
 // v5 风格左侧栏导航 — 工程视角优先展示流水线相关内容。
 const NAV: {
@@ -58,6 +58,8 @@ export function EngineerSidebar() {
     } catch {
       /* 忽略登出失败，直接跳转 */
     }
+    // 失效模块级会话缓存：否则换账号重新登录后会继续读到上一个账号的身份。
+    resetSessionCache();
     router.push("/login");
   };
 
