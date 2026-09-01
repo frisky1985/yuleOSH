@@ -62,6 +62,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { kind: "tab", tab: "gap-analysis", label: "差距分析", icon: AlertTriangle },
       { kind: "tab", tab: "misra-trends", label: "MISRA 趋势", icon: TrendingUp },
+      // 证据包是合规交付物，决策者（本顶栏的使用者）是主要受众，必须可达。
+      // 刻意用 link 而非 tab：tab 仅在落地页渲染，用 link 才能在子页也进得去。
+      {
+        kind: "link",
+        href: "/dashboard/evidence",
+        label: "证据包",
+        icon: ScrollText,
+      },
     ],
   },
   {
