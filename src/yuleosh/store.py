@@ -735,6 +735,19 @@ class Store(AbstractStore):
         row = cur.fetchone()
         return dict(row) if row else None
 
+    def get_user_by_email(self, email: str) -> Optional[dict]:
+        """Find a user by email across ALL organizations (signin semantics).
+
+        Returns the first match or None.  Used by the demo-account seed so it
+        can repair the documented credentials no matter which org the demo
+        user happens to live in (e.g. org_id=86 instead of slug "demo").
+        """
+        cur = self.conn.execute(
+            "SELECT * FROM users WHERE email=?", (email,)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
     def list_users(self, org_id: int) -> list[dict]:
         cur = self.conn.execute(
             "SELECT id, email, role, status, created_at FROM users WHERE org_id=? ORDER BY created_at",

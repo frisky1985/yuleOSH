@@ -567,29 +567,34 @@ def ensure_demo_account(store: "Store") -> None:
     Called once at server startup (http_app.main).  Safe to call on every
     boot: it only creates/repairs, never clobbers a working password.
 
-      - demo org missing           -> create it (slug "demo")
-      - demo user missing          -> create admin with DEMO_PASSWORD hash
-      - demo user exists, password empty/wrong -> reset to DEMO_PASSWORD
-      - demo user exists, password correct   -> no-op
+    The demo user may already live in ANY organization (e.g. org_id=86 from
+    an earlier provisioning run) — so we search across all orgs by email,
+    not just under a hardcoded slug "demo":
+
+      - demo user found in some org, password empty/wrong -> reset to DEMO_PASSWORD
+      - demo user found, password correct                -> no-op
+      - demo user not found anywhere                     -> create demo org + admin
     """
     try:
+        user = store.get_user_by_email(DEMO_EMAIL)
+        if user:
+            # Repair only a broken/empty password — never overwrite a good one.
+            existing_hash = user.get("password_hash")
+            if not existing_hash or not _verify_password(DEMO_PASSWORD, existing_hash):
+                store.update_user_password(
+                    user["org_id"], DEMO_EMAIL, _hash_password(DEMO_PASSWORD))
+                logging.getLogger("yuleosh.auth").info(
+                    "Repaired demo account password %s (org=%s)",
+                    DEMO_EMAIL, user.get("org_id"))
+            return
+        # Not found anywhere — create a fresh demo org + admin user.
         org = store.get_organization(DEMO_ORG_SLUG)
         if not org:
             org = store.create_organization(DEMO_ORG_NAME, DEMO_ORG_SLUG)
-        user = store.get_user(org["id"], DEMO_EMAIL)
-        if not user:
-            store.create_user(
-                org["id"], DEMO_EMAIL, "admin", _hash_password(DEMO_PASSWORD))
-            logging.getLogger("yuleosh.auth").info(
-                "Seeded demo account %s (org=%s)", DEMO_EMAIL, DEMO_ORG_SLUG)
-            return
-        # Repair only a broken/empty password — never overwrite a good one.
-        existing_hash = user.get("password_hash")
-        if not existing_hash or not _verify_password(DEMO_PASSWORD, existing_hash):
-            store.update_user_password(org["id"], DEMO_EMAIL,
-                                       _hash_password(DEMO_PASSWORD))
-            logging.getLogger("yuleosh.auth").info(
-                "Repaired demo account password %s", DEMO_EMAIL)
+        store.create_user(
+            org["id"], DEMO_EMAIL, "admin", _hash_password(DEMO_PASSWORD))
+        logging.getLogger("yuleosh.auth").info(
+            "Seeded demo account %s (org=%s)", DEMO_EMAIL, DEMO_ORG_SLUG)
     except Exception as e:  # noqa: BLE001 — seed 失败不影响 dashboard 启动
         logging.getLogger("yuleosh.auth").warning("ensure_demo_account failed: %s", e)
 
