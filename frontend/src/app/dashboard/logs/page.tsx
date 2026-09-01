@@ -13,6 +13,7 @@ import {
   Cpu,
   FileText,
   FlaskConical,
+  Download,
   Info,
   LayoutDashboard,
   Loader2,
@@ -112,6 +113,34 @@ function rangeToSince(range: string): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function toCsv(rows: LogEntry[]): string {
+  const header = ["run_id", "file", "line", "level", "updated_at", "content"];
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = [header.map(esc).join(",")];
+  for (const r of rows) {
+    lines.push(
+      [r.run_id, r.file, r.line, r.level, r.updated_at ?? "", r.content]
+        .map(esc)
+        .join(","),
+    );
+  }
+  // 前置 BOM，保证 Excel 正确识别 UTF-8
+  return "﻿" + lines.join("\r\n");
+}
+
+function downloadCsv(rows: LogEntry[], filename?: string): void {
+  const csv = toCsv(rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || `yuleosh-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─── Nav ─────────────────────────────────────────────────────────────────────
@@ -400,9 +429,20 @@ export default function LogsPage() {
                     <span className="text-xs font-normal text-[#64748b]">共 {logs.length} 条</span>
                   )}
                 </CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadCsv(logs)}
+                  disabled={loading || logs.length === 0}
+                  className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  导出 CSV
+                </Button>
               </div>
               <CardDescription className="text-xs text-[#64748b]">
-                真实日志数据（扫描 .osh/sessions 下的 *.log），点击条目展开查看全文
+                真实日志数据（扫描 .osh/sessions 下的 *.log），点击条目展开查看全文；导出为当前检索结果
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
