@@ -18,7 +18,7 @@ Endpoints:
     GET /api/v1/logs/pipeline?run=xxx
         — 某流水线 run 的全部 *.log 文件 + 内容前 200 行
     GET /api/v1/logs/summary?project=xxx[&since=YYYY-MM-DD]
-        — 日志统计：每 run 的日志文件数 / 总行数 / ERROR 出现次数；默认近 7 天且硬上限 7 天
+        — 日志统计：每 run 的日志文件数 / 总行数 / ERROR 出现次数；默认近 7 天，可传 since 放宽
 """
 
 import json
@@ -290,17 +290,17 @@ def _logs_summary(query: dict) -> tuple[dict, int]:
     """GET /api/v1/logs/summary?project=xxx[&since=YYYY-MM-DD] — 每 run 的日志统计。
 
     统计项：日志文件数、总行数、ERROR/FATAL 出现次数、最后更新时间。
-    时间窗口：默认近 7 天，且硬上限 7 天（更旧的 run 不进入摘要，需用检索接口按时间查询）。
-      since — 窗口起点（YYYY-MM-DD），若早于 7 天前则按 7 天前裁剪
+    时间窗口：默认近 7 天；若前端显式传 since（含更早），则尊重该窗口，不再硬卡 7 天。
+      since — 窗口起点（YYYY-MM-DD）；不传则默认近 7 天
       until — 窗口终点（默认不限制）
     """
     project = _qp(query, "project").lower()
 
-    # 摘要硬上限 7 天：即便前端请求更早，也只保留近 7 天
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    # 默认近 7 天；前端显式给 since（含更早）则尊重，不再硬卡 7 天
     req_since = _parse_window(_qp(query, "since"))
-    if req_since and req_since > cutoff:
-        cutoff = req_since
+    cutoff = req_since if req_since is not None else (
+        datetime.now(timezone.utc) - timedelta(days=7)
+    )
     until = _parse_window(_qp(query, "until"), end_of_day=True)
 
     root = _sessions_root()
@@ -359,6 +359,6 @@ def _logs_summary(query: dict) -> tuple[dict, int]:
         "runs": runs,
         "count": len(runs),
         "note": note,
-        "window_days": 7,
+        "window_days": 7 if req_since is None else None,
         "applied_since": cutoff.isoformat(),
     })
