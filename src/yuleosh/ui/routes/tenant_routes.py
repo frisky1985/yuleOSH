@@ -33,30 +33,19 @@ def _get_bearer_token(handler) -> Optional[str]:
 def _require_auth(handler) -> Optional[dict]:
     """Extract and validate session. Returns user info dict or None.
 
-    Legacy semantics: no token → 401 {"error": "Authorization required"};
-    invalid/expired session → 401 {"error": "Invalid or expired session"}.
-    Handlers disambiguate via ``_get_bearer_token``.
+    Cookie-aware (SHALL-T1.4): falls back to the ``yuleosh_at`` access
+    cookie when no ``Authorization: Bearer`` header is present, so the
+    browser / local-dev cookie-mode (apiFetch, credentials: same-origin)
+    no longer 401s.  See ``auth_extended.resolve_session`` for the full
+    contract.  ``AUTH_ENABLED=False`` injects the local-dev admin user.
 
-    本地免登录模式 (2026-08-31 修复):
-        与 ``api/middleware.require_auth`` 对称 —— ``AUTH_ENABLED=False``
-        （YULEOSH_AUTH_DISABLED=1）时直接注入本地 admin 用户放行。
-
-        背景：前端 ``apiFetch`` 用 ``credentials: "same-origin"``（纯 cookie，
-        不发 Authorization 头），而本函数原先只认 Bearer 头。结果依赖它的
-        checkpoint 系列接口（/pipeline/checkpoint、/checkpoint/runs、
-        /checkpoint/stream、/pipeline/evidence）在浏览器与本地 dev 下**恒
-        返回 401**，而同页面的 /pipeline/list 走 middleware 却正常 —— 表现
-        为「运行过程看板永远取不到数据」。
+    历史：本函数原先只认 Bearer 头，导致 checkpoint 系列接口
+    （/pipeline/checkpoint、/checkpoint/runs、/checkpoint/stream、
+    /pipeline/evidence）在浏览器与本地 dev 下恒返回 401，而同页
+    /pipeline/list 走 middleware 却正常 —— 即「运行看板取不到数据」。
     """
-    # 惰性导入：避免 yuleosh.api.middleware ↔ yuleosh.ui.routes.* 循环导入
-    from yuleosh.ui.auth import AUTH_ENABLED
-    if not AUTH_ENABLED:
-        from yuleosh.api.middleware import _resolve_local_dev_user
-        return _resolve_local_dev_user()
-    token = _get_bearer_token(handler)
-    if not token:
-        return None
-    return get_session_user(token)
+    from yuleosh.ui.auth_extended import resolve_session
+    return resolve_session(handler)
 
 
 def _auth_error(handler) -> tuple:

@@ -435,6 +435,39 @@ def verify_token(token: str) -> dict | None:
 # Session helpers
 # ---------------------------------------------------------------------------
 
+def resolve_session(handler) -> dict | None:
+    """Resolve the current user from a request handler, cookie-aware.
+
+    SHALL-T1.4 (mirror ``auth.py:is_authenticated`` step 4): the frontend
+    ``apiFetch`` uses ``credentials: "same-origin"`` and sends NO
+    ``Authorization`` header, so a Bearer-only check would 401 every
+    browser / local-dev request.  We therefore fall back to the
+    ``yuleosh_at`` access cookie when no Bearer header is present.
+
+    Contract:
+      - ``AUTH_ENABLED=False`` (YULEOSH_AUTH_DISABLED=1) → inject the
+        local-dev admin user (symmetric with ``api.middleware.require_auth``).
+      - An ``Authorization`` header that IS present but is not ``Bearer``
+        fails closed (no cookie fallback) — same rule as the API middleware.
+      - Returns the user dict (incl. org info) on success, else None.
+    """
+    from yuleosh.ui.auth import AUTH_ENABLED
+    if not AUTH_ENABLED:
+        from yuleosh.api.middleware import _resolve_local_dev_user
+        return _resolve_local_dev_user()
+    auth = (handler.headers.get("Authorization", "")
+            or handler.headers.get("authorization", ""))
+    if auth:
+        if auth.startswith("Bearer "):
+            return get_session_user(auth[7:])
+        return None  # present but not Bearer → fail closed, no cookie fallback
+    from yuleosh.ui.auth_cookies import ACCESS_COOKIE_NAME, read_cookie_value
+    cookie = read_cookie_value(handler.headers, ACCESS_COOKIE_NAME)
+    if cookie:
+        return get_session_user(cookie)
+    return None
+
+
 def get_session_user(token: str) -> dict | None:
     """Resolve a bearer token to a user dict with org info.
 

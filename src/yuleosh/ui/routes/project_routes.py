@@ -43,10 +43,8 @@ def _get_token(handler) -> Optional[str]:
 
 
 def _require_auth(handler) -> Optional[dict]:
-    token = _get_token(handler)
-    if not token:
-        return None
-    return get_session_user(token)
+    from yuleosh.ui.auth_extended import resolve_session
+    return resolve_session(handler)
 
 
 def _auth_error(handler) -> tuple:

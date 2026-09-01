@@ -135,19 +135,17 @@ def handle_pipeline_status(handler: BaseHTTPRequestHandler, path: str):
 
 def handle_usage(handler: BaseHTTPRequestHandler) -> dict:
     """Get current org usage summary."""
-    token = None
-    auth = handler.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        token = auth[7:]
-
-    if not token:
+    from yuleosh.ui.auth_extended import resolve_session
+    user = resolve_session(handler)
+    if not user:
         return {"error": "Unauthorized"}, 401
 
     try:
-        from yuleosh.ui.auth_extended import get_session_user
-        user = get_session_user(token)
-        if not user:
-            return {"error": "Invalid session"}, 401
+        from yuleosh.store import Store
+        store = Store()
+        from yuleosh.usage.metering import get_usage_summary
+        summary = get_usage_summary(store, user["org_id"])
+        return summary
         from yuleosh.store import Store
         store = Store()
         from yuleosh.usage.metering import get_usage_summary

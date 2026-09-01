@@ -245,12 +245,10 @@ def require_role(required_resource: str, required_action: str = "view"):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(handler, *args, **kwargs):
-            # Extract token from request
-            auth = handler.headers.get("Authorization", "")
-            token = ""
-            if auth.startswith("Bearer "):
-                token = auth[7:]
-            user_info = get_session_user(token) if token else None
+            # Cookie-aware session resolution (SHALL-T1.4): Bearer OR
+            # yuleosh_at access cookie — mirror auth_extended.resolve_session.
+            from yuleosh.ui.auth_extended import resolve_session
+            user_info = resolve_session(handler)
 
             if not check_role(user_info, required_resource, required_action):
                 from yuleosh.ui.routes.http_response import _add_cors_header, _send_security_headers
