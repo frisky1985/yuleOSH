@@ -368,6 +368,31 @@ async function getMyUsage(): Promise<any> {
   return data;
 }
 
+// v10: 完整账户信息 / 注销（决策者顶栏用户菜单）
+export interface AccountInfo {
+  user: { id: number | string; email: string; role: string; status: string; created_at: string | null };
+  org: { id: number; name: string; slug: string };
+  active_sessions: number | null;
+}
+
+async function getMyAccount(): Promise<AccountInfo> {
+  const data = await request<any>("/api/v1/me/account", { method: "GET" });
+  if (data && data.ok === true) return data.data as AccountInfo;
+  return data;
+}
+
+async function deleteMyAccount(payload: {
+  confirmation_code: string;
+  password: string;
+}): Promise<{ status: string; user_id: number | string; note: string }> {
+  const data = await request<any>("/api/v1/me/account", {
+    method: "DELETE",
+    body: JSON.stringify(payload),
+  });
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
 async function getOrgLLMConfig(): Promise<any> {
   const data = await request<any>("/api/v1/org/llm-config", { method: "GET" });
   if (data && data.ok === true) return data.data;
@@ -421,6 +446,8 @@ export const api = {
     stats: getV1Stats,
     me: {
       usage: getMyUsage,
+      account: getMyAccount,
+      deleteAccount: deleteMyAccount,
     },
     org: {
       llmConfig: getOrgLLMConfig,

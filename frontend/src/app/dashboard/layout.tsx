@@ -1,14 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Settings, User as UserIcon } from "lucide-react";
+import { LogOut, Settings, Trash2, User as UserIcon } from "lucide-react";
 
 import { TopNav, type DashboardTab } from "@/components/dashboard/top-nav";
 import { EngineerSidebar } from "@/components/dashboard/engineer-sidebar";
 import { isEngineerRole, resetSessionCache, useSessionRole } from "@/lib/use-session-role";
-import { api } from "@/lib/api";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -18,6 +16,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AccountInfoDialog } from "@/components/account/account-info-dialog";
+import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
+import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
+import { DeleteAccountDialog } from "@/components/account/delete-account-dialog";
 
 interface DashboardShellContextValue {
   activeTab: DashboardTab;
@@ -54,7 +56,6 @@ function nameOf(email?: string) {
  */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { role, session } = useSessionRole();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
@@ -66,6 +67,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     setMounted(true);
   }, []);
 
+  // 用户菜单受控 Dialog（决策者专属；工程师视角不挂这套，避免 placeholder 干扰）
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   const isLanding = pathname === "/dashboard";
   // 视图完全由登录用户的角色决定：admin -> 横向决策顶栏（TopNav）；
   // developer / reviewer / auditor -> 纵向工程左栏（EngineerSidebar）。
@@ -73,64 +80,100 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // 污染，使两个角色的视图趋同（即"显示没区别"的根因）。
   const engineer = isEngineerRole(role);
 
-  const handleLogout = async () => {
-    try {
-      await api.auth.logout();
-    } catch {
-      /* 忽略登出失败，直接跳转 */
-    }
-    // 失效模块级会话缓存：否则换账号重新登录后会继续读到上一个账号的身份。
-    resetSessionCache();
-    router.push("/login");
-  };
-
   const userMenu = (
     <div className="flex items-center gap-2">
       {session ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
-            <Avatar className="w-7 h-7 border border-[#1e293b]">
-              <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
-                {initialOf(session.email)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
-              {nameOf(session.email)}
-            </span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
-          >
-            <DropdownMenuLabel className="text-xs text-[#94a3b8]">
-              {session.org_name || "账号"}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-[#1e293b]" />
-            <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-              <UserIcon className="w-3.5 h-3.5" />
-              个人信息
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2">
-              <Settings className="w-3.5 h-3.5" />
-              项目设置
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-[#1e293b]" />
-            <DropdownMenuItem
-              onClick={handleLogout}
-              className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
+        <>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
+              <Avatar className="w-7 h-7 border border-[#1e293b]">
+                <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
+                  {initialOf(session.email)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
+                {nameOf(session.email)}
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              退出登录
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuLabel className="text-xs text-[#94a3b8]">
+                {session.org_name || "账号"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-[#1e293b]" />
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  // DropdownMenuItem 选择后会自动关闭，做先手动拦截 + 设置状态
+                  e.preventDefault();
+                  setAccountOpen(true);
+                }}
+                className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2"
+              >
+                <UserIcon className="w-3.5 h-3.5" />
+                个人信息
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setSettingsOpen(true);
+                }}
+                className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                用户设置
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[#1e293b]" />
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setLogoutOpen(true);
+                }}
+                className="text-sm text-[#f59e0b] hover:text-[#f59e0b] hover:bg-[#f59e0b]/10 cursor-pointer gap-2"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                退出登录
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setDeleteOpen(true);
+                }}
+                className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                注销账户
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <AccountInfoDialog
+            open={accountOpen}
+            onOpenChange={setAccountOpen}
+            fallbackEmail={session.email}
+            fallbackOrgName={session.org_name}
+          />
+          <UserSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} userId={session.user_id} />
+          <LogoutConfirmDialog
+            open={logoutOpen}
+            onOpenChange={setLogoutOpen}
+            emailLabel={session.email}
+          />
+          <DeleteAccountDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            emailLabel={session.email}
+          />
+        </>
       ) : (
-        <Link
+        // 已登出但仍在 /dashboard/* → layout 显示「登录」入口（不区分角色，按钮跳转通用）
+        <a
           href="/login"
           className="text-sm px-3 py-1.5 rounded-lg border border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 transition-all"
         >
           登录
-        </Link>
+        </a>
       )}
     </div>
   );
