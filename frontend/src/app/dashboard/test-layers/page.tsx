@@ -1,5 +1,7 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-fetch";
+
 import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
@@ -43,28 +45,6 @@ interface LayersResponse {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Fetch an API v1 endpoint and unwrap the {ok, data?} envelope. */
-async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  const contentType = res.headers.get("content-type") || "";
-  let body: unknown = null;
-  if (contentType.includes("application/json")) {
-    body = await res.json();
-  } else {
-    const text = await res.text();
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
-  }
-  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  if (record.ok === false) {
-    throw new Error(typeof record.error === "string" ? record.error : `API error (${res.status})`);
-  }
-  const payload = record.data !== undefined ? record.data : body;
-  return payload as T;
-}
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
