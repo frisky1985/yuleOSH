@@ -28,7 +28,20 @@ log = logging.getLogger("api.usage")
 @require_auth
 def handle_me(method: str, path_tail: str, body: Optional[dict], query: dict,
               handler: Any = None, **kwargs) -> Optional[tuple[dict, int]]:
-    """GET /api/v1/me/usage — current user usage summary for the cockpit panel."""
+    """GET /api/v1/me/usage — current user usage summary for the cockpit panel.
+
+    Sub-resource dispatcher for /api/v1/me/* — only handles the `usage`
+    sub-path; everything else is forwarded to ``yuleosh.api.me.handle_me``
+    (account info / account deletion).
+    """
+    sub = (path_tail or "").strip("/")
+    if sub != "usage":
+        # Delegate other /me/ sub-resources (e.g. /me/account) to the
+        # dedicated me handler.  This avoids registering a second route
+        # and keeps the resource key ("me") stable in router.py.
+        from .me import handle_me as _me_handle
+        return _me_handle(method, path_tail, body, query, handler=handler, **kwargs)
+
     current_user = kwargs.get("current_user") or {}
     org_id = current_user.get("org_id")
     if org_id is None:
