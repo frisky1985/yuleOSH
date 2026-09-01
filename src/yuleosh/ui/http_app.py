@@ -45,6 +45,14 @@ def main(host: str | None = None, port: int | None = None) -> None:
             "Store initialized at %s",
             store.db_path if hasattr(store, "db_path") else "memory",
         )
+        # 演示账号开箱即用：确保 demo@yuleosh.com 存在且密码正确（幂等）。
+        # 仅在鉴权启用时 seed —— 本地免登录模式（AUTH_ENABLED=False）无需账号。
+        if _server.AUTH_ENABLED:
+            try:
+                from yuleosh.ui.auth_extended import ensure_demo_account
+                ensure_demo_account(store)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Demo account seed skipped: %s", e)
     except Exception as e:  # noqa: BLE001 — 故意 fail-open：无 Store 时 dashboard 仍可用
         logger.warning("Store init failed (dashboard will work without it): %s", e)
 

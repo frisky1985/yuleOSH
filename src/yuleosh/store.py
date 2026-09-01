@@ -722,6 +722,14 @@ class Store(AbstractStore):
         row = cur.fetchone()
         return dict(row) if row else None
 
+    def update_user_password(self, org_id: int, email: str, password_hash: str) -> None:
+        """Set/replace a user's bcrypt password_hash (used by demo seed)."""
+        self.conn.execute(
+            "UPDATE users SET password_hash=? WHERE org_id=? AND email=?",
+            (password_hash, org_id, email),
+        )
+        self.conn.commit()
+
     def get_user_by_id(self, user_id: int) -> Optional[dict]:
         cur = self.conn.execute("SELECT * FROM users WHERE id=?", (user_id,))
         row = cur.fetchone()

@@ -550,6 +550,50 @@ def register(body: dict) -> tuple:
             "org_id": org["id"], "role": "admin"}, 200
 
 
+# Demo account seeded at server startup so the documented credentials
+# (demo@yuleosh.com / Demo2026!yuleosh) work out of the box.  Idempotent:
+# creates the demo org + user when missing, and repairs a wrong/empty
+# password_hash so the documented login always succeeds — without ever
+# downgrading a password that already verifies.
+DEMO_EMAIL = "demo@yuleosh.com"
+DEMO_PASSWORD = "Demo2026!yuleosh"
+DEMO_ORG_SLUG = "demo"
+DEMO_ORG_NAME = "yuleOSH Demo"
+
+
+def ensure_demo_account(store: "Store") -> None:
+    """Ensure the demo account exists with the documented credentials.
+
+    Called once at server startup (http_app.main).  Safe to call on every
+    boot: it only creates/repairs, never clobbers a working password.
+
+      - demo org missing           -> create it (slug "demo")
+      - demo user missing          -> create admin with DEMO_PASSWORD hash
+      - demo user exists, password empty/wrong -> reset to DEMO_PASSWORD
+      - demo user exists, password correct   -> no-op
+    """
+    try:
+        org = store.get_organization(DEMO_ORG_SLUG)
+        if not org:
+            org = store.create_organization(DEMO_ORG_NAME, DEMO_ORG_SLUG)
+        user = store.get_user(org["id"], DEMO_EMAIL)
+        if not user:
+            store.create_user(
+                org["id"], DEMO_EMAIL, "admin", _hash_password(DEMO_PASSWORD))
+            logging.getLogger("yuleosh.auth").info(
+                "Seeded demo account %s (org=%s)", DEMO_EMAIL, DEMO_ORG_SLUG)
+            return
+        # Repair only a broken/empty password — never overwrite a good one.
+        existing_hash = user.get("password_hash")
+        if not existing_hash or not _verify_password(DEMO_PASSWORD, existing_hash):
+            store.update_user_password(org["id"], DEMO_EMAIL,
+                                       _hash_password(DEMO_PASSWORD))
+            logging.getLogger("yuleosh.auth").info(
+                "Repaired demo account password %s", DEMO_EMAIL)
+    except Exception as e:  # noqa: BLE001 — seed 失败不影响 dashboard 启动
+        logging.getLogger("yuleosh.auth").warning("ensure_demo_account failed: %s", e)
+
+
 def handle_signin(body: dict, ip: str = "") -> dict:
     """POST /api/auth/signin — Password-based signin/signup.
 
