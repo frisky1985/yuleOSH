@@ -304,6 +304,24 @@ export default function LogsPage() {
     void loadSummary();
   };
 
+  const focusRun = (run: RunSummary) => {
+    const lvl = run.error_count > 0 ? "ERROR" : "";
+    setQuery("");
+    setDevice("");
+    setPipeline(run.run_id);
+    setLevel(lvl);
+    setRange(summaryRange);
+    setExpanded({});
+    setFilters({
+      query: "",
+      device: "",
+      pipeline: run.run_id,
+      limit,
+      range: summaryRange,
+      level: lvl,
+    });
+  };
+
   const toggleExpand = (key: string) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -641,14 +659,33 @@ export default function LogsPage() {
                             </span>
                           )}
                         </div>
-                        {run.error_count > 0 && (
+                        <div className="flex items-center gap-2 shrink-0">
                           <span
-                            className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded"
-                            style={{ color: "#ff4d4f", background: "#ff4d4f1f", border: "1px solid #ff4d4f4d" }}
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              focusRun(run);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.stopPropagation();
+                                focusRun(run);
+                              }
+                            }}
+                            className="text-[10px] text-[#a78bfa] hover:text-white hover:underline cursor-pointer select-none"
                           >
-                            {run.error_count} ERROR
+                            查看 →
                           </span>
-                        )}
+                          {run.error_count > 0 && (
+                            <span
+                              className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded"
+                              style={{ color: "#ff4d4f", background: "#ff4d4f1f", border: "1px solid #ff4d4f4d" }}
+                            >
+                              {run.error_count} ERROR
+                            </span>
+                          )}
+                        </div>
                       </button>
                       {open && (
                         <div className="px-3 pb-3">
