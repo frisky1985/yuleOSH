@@ -36,6 +36,7 @@ const NAV: {
   { href: "/dashboard/tests", label: "测试用例", icon: FlaskConical },
   { href: "/dashboard/test-layers", label: "阶段看板", icon: Layers },
   { href: "/dashboard/evidence", label: "证据包", icon: ScrollText },
+  { href: "/dashboard/traceability", label: "追溯矩阵", icon: ListChecks },
 ];
 
 export function EngineerSidebar() {

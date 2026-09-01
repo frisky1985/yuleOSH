@@ -70,6 +70,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: "证据包",
         icon: ScrollText,
       },
+      {
+        kind: "link",
+        href: "/dashboard/traceability",
+        label: "追溯矩阵",
+        icon: ListChecks,
+      },
     ],
   },
   {
