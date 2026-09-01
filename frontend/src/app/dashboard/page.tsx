@@ -89,6 +89,7 @@ import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
 import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board";
 import { LoopEngineering } from "@/components/dashboard/loop-engineering";
 import { YuleASRStatus } from "@/components/dashboard/yuleasr-status";
+import { PortfolioCompliance } from "@/components/dashboard/portfolio-compliance";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1453,11 +1454,16 @@ export default function DashboardPage() {
             </div>
             )}
 
-            {/* 管理视角：Loop Engineering 置底 */}
+            {/* 管理视角：组合视图 & 合规就绪评分（置顶），Loop Engineering 置底 */}
             {perspective === "manage" && (
-              <div className="mt-6">
-                <LoopEngineering />
-              </div>
+              <>
+                <div className="mt-6">
+                  <PortfolioCompliance />
+                </div>
+                <div className="mt-6">
+                  <LoopEngineering />
+                </div>
+              </>
             )}
           </>
         )}
