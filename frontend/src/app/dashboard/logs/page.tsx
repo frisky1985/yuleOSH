@@ -67,6 +67,8 @@ interface LogsSummaryResponse {
   runs: RunSummary[];
   count: number;
   note?: string | null;
+  window_days?: number | null;
+  applied_since?: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -101,6 +103,17 @@ function levelMeta(level: string): { label: string; color: string } {
   return { label: l || "INFO", color: "#1677ff" };
 }
 
+function rangeToSince(range: string): string {
+  if (range === "all") return "";
+  const days = range === "30d" ? 30 : range === "90d" ? 90 : 7;
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // ─── Nav ─────────────────────────────────────────────────────────────────────
 
 // Navigation is rendered by the shared TopNav component
@@ -113,9 +126,18 @@ interface LogFilters {
   device: string;
   pipeline: string;
   limit: string;
+  range: string; // "7d" | "30d" | "90d" | "all"
+  level: string; // "" | ERROR | FATAL | WARN | INFO | DEBUG
 }
 
-const DEFAULT_FILTERS: LogFilters = { query: "", device: "", pipeline: "", limit: "50" };
+const DEFAULT_FILTERS: LogFilters = {
+  query: "",
+  device: "",
+  pipeline: "",
+  limit: "50",
+  range: "7d",
+  level: "",
+};
 
 export default function LogsPage() {
 
@@ -124,6 +146,8 @@ export default function LogsPage() {
   const [device, setDevice] = useState("");
   const [pipeline, setPipeline] = useState("");
   const [limit, setLimit] = useState(DEFAULT_FILTERS.limit);
+  const [range, setRange] = useState(DEFAULT_FILTERS.range);
+  const [level, setLevel] = useState(DEFAULT_FILTERS.level);
 
   // ── Applied filters (drives the fetch) ───────────────────────────────────
   const [filters, setFilters] = useState<LogFilters>(DEFAULT_FILTERS);
@@ -139,8 +163,10 @@ export default function LogsPage() {
   const [summaryNote, setSummaryNote] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState("");
+  const [summaryWindowDays, setSummaryWindowDays] = useState<number | null>(null);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [sumExpanded, setSumExpanded] = useState<Record<string, boolean>>({});
 
   // ── Load log search results ──────────────────────────────────────────────
   const loadLogs = useCallback(async () => {
@@ -151,6 +177,9 @@ export default function LogsPage() {
       if (filters.query.trim()) params.set("query", filters.query.trim());
       if (filters.device.trim()) params.set("device", filters.device.trim());
       if (filters.pipeline.trim()) params.set("pipeline", filters.pipeline.trim());
+      const since = rangeToSince(filters.range);
+      if (since) params.set("since", since);
+      if (filters.level.trim()) params.set("level", filters.level.trim().toUpperCase());
       const lim = parseInt(filters.limit, 10);
       if (!Number.isNaN(lim) && lim > 0) params.set("limit", String(Math.min(lim, 500)));
       const qs = params.toString();
@@ -175,13 +204,17 @@ export default function LogsPage() {
     setSummaryLoading(true);
     setSummaryError("");
     try {
-      const res = await apiFetch<LogsSummaryResponse>("/api/v1/logs/summary");
+      const since = rangeToSince("7d");
+      const qs = since ? `?since=${since}` : "";
+      const res = await apiFetch<LogsSummaryResponse>(`/api/v1/logs/summary${qs}`);
       setSummary(res.runs || []);
       setSummaryNote(res.note ?? null);
+      setSummaryWindowDays(res.window_days ?? 7);
     } catch (err) {
       setSummaryError(errMessage(err));
       setSummary([]);
       setSummaryNote(null);
+      setSummaryWindowDays(null);
     } finally {
       setSummaryLoading(false);
     }
@@ -195,7 +228,7 @@ export default function LogsPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setExpanded({});
-    setFilters({ query, device, pipeline, limit });
+    setFilters({ query, device, pipeline, limit, range, level });
   };
 
   const handleReset = () => {
@@ -203,7 +236,10 @@ export default function LogsPage() {
     setDevice(DEFAULT_FILTERS.device);
     setPipeline(DEFAULT_FILTERS.pipeline);
     setLimit(DEFAULT_FILTERS.limit);
+    setRange(DEFAULT_FILTERS.range);
+    setLevel(DEFAULT_FILTERS.level);
     setExpanded({});
+    setSumExpanded({});
     setFilters(DEFAULT_FILTERS);
   };
 
@@ -231,7 +267,7 @@ export default function LogsPage() {
               测试日志管理
             </h1>
             <p className="text-xs text-[#94a3b8] mt-0.5">
-              检索测试运行日志（按 run/设备/流水线/关键词过滤，点击条目展开全文）
+              按时间 / 关键词 / 设备 / 流水线检索测试运行日志，点击条目展开全文（时间按日志文件更新时间过滤）
             </p>
           </div>
           <Button
@@ -287,6 +323,34 @@ export default function LogsPage() {
                   onChange={(e) => setLimit(e.target.value)}
                   className="border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] placeholder:text-[#475569]"
                 />
+              </div>
+              <div className="w-32">
+                <label className="block text-xs text-[#94a3b8] mb-1.5">时间范围</label>
+                <select
+                  value={range}
+                  onChange={(e) => setRange(e.target.value)}
+                  className="w-full h-9 rounded-md border border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] text-xs px-2 outline-none focus:border-[#722ed1]/50"
+                >
+                  <option value="7d">近 7 天</option>
+                  <option value="30d">近 30 天</option>
+                  <option value="90d">近 90 天</option>
+                  <option value="all">全部</option>
+                </select>
+              </div>
+              <div className="w-32">
+                <label className="block text-xs text-[#94a3b8] mb-1.5">级别</label>
+                <select
+                  value={level}
+                  onChange={(e) => setLevel(e.target.value)}
+                  className="w-full h-9 rounded-md border border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] text-xs px-2 outline-none focus:border-[#722ed1]/50"
+                >
+                  <option value="">全部</option>
+                  <option value="ERROR">ERROR</option>
+                  <option value="FATAL">FATAL</option>
+                  <option value="WARN">WARN</option>
+                  <option value="INFO">INFO</option>
+                  <option value="DEBUG">DEBUG</option>
+                </select>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -436,6 +500,11 @@ export default function LogsPage() {
               <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#722ed1]" />
                 日志摘要
+                {summaryWindowDays ? (
+                  <span className="text-[10px] font-normal text-[#a78bfa] bg-[#722ed1]/10 border border-[#722ed1]/20 rounded px-1.5 py-0.5">
+                    近 {summaryWindowDays} 天
+                  </span>
+                ) : null}
                 {!summaryLoading && (
                   <span className="text-xs font-normal text-[#64748b]">
                     共 {summary.length} 个 run
@@ -443,7 +512,7 @@ export default function LogsPage() {
                 )}
               </CardTitle>
               <CardDescription className="text-xs text-[#64748b]">
-                每个 run 的日志文件数 / 总行数 / ERROR 数
+                每个 run 的日志文件数 / 总行数 / ERROR 数（默认近 7 天，更早请在左侧按时间搜索）
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -469,53 +538,79 @@ export default function LogsPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {summary.map((run) => (
+                  {summary.map((run) => {
+                    const open = sumExpanded[run.run_id] ?? run.error_count > 0;
+                    return (
                     <div
                       key={run.run_id}
-                      className="rounded-lg border border-[#1e293b] bg-[#0a0e17]/60 p-3"
+                      className="rounded-lg border border-[#1e293b] bg-[#0a0e17]/60 overflow-hidden"
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-mono text-[10px] text-[#a78bfa] bg-[#722ed1]/10 border border-[#722ed1]/20 rounded px-1.5 py-0.5 truncate">
-                          {run.run_id}
-                        </span>
-                        {run.name && (
-                          <span className="text-xs text-[#e2e8f0] font-medium truncate">
-                            {run.name}
+                      <button
+                        type="button"
+                        onClick={() => setSumExpanded((p) => ({ ...p, [run.run_id]: !open }))}
+                        className="w-full flex items-center justify-between gap-2 p-3 text-left hover:bg-[#1e293b]/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {open ? (
+                            <ChevronDown className="w-3.5 h-3.5 text-[#64748b] shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 text-[#64748b] shrink-0" />
+                          )}
+                          <span className="font-mono text-[10px] text-[#a78bfa] bg-[#722ed1]/10 border border-[#722ed1]/20 rounded px-1.5 py-0.5 truncate">
+                            {run.run_id}
+                          </span>
+                          {run.name && (
+                            <span className="text-xs text-[#e2e8f0] font-medium truncate">
+                              {run.name}
+                            </span>
+                          )}
+                        </div>
+                        {run.error_count > 0 && (
+                          <span
+                            className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded"
+                            style={{ color: "#ff4d4f", background: "#ff4d4f1f", border: "1px solid #ff4d4f4d" }}
+                          >
+                            {run.error_count} ERROR
                           </span>
                         )}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="rounded-md border border-[#1e293b] py-1.5">
-                          <div className="text-sm font-bold text-[#e2e8f0]">{run.log_files}</div>
-                          <div className="text-[10px] text-[#64748b]">日志文件</div>
-                        </div>
-                        <div className="rounded-md border border-[#1e293b] py-1.5">
-                          <div className="text-sm font-bold text-[#e2e8f0]">{run.total_lines}</div>
-                          <div className="text-[10px] text-[#64748b]">总行数</div>
-                        </div>
-                        <div
-                          className="rounded-md border py-1.5"
-                          style={{
-                            borderColor: run.error_count > 0 ? "#ff4d4f4d" : "#1e293b",
-                            background: run.error_count > 0 ? "#ff4d4f1f" : "transparent",
-                          }}
-                        >
-                          <div
-                            className="text-sm font-bold"
-                            style={{ color: run.error_count > 0 ? "#ff4d4f" : "#e2e8f0" }}
-                          >
-                            {run.error_count}
+                      </button>
+                      {open && (
+                        <div className="px-3 pb-3">
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="rounded-md border border-[#1e293b] py-1.5">
+                              <div className="text-sm font-bold text-[#e2e8f0]">{run.log_files}</div>
+                              <div className="text-[10px] text-[#64748b]">日志文件</div>
+                            </div>
+                            <div className="rounded-md border border-[#1e293b] py-1.5">
+                              <div className="text-sm font-bold text-[#e2e8f0]">{run.total_lines}</div>
+                              <div className="text-[10px] text-[#64748b]">总行数</div>
+                            </div>
+                            <div
+                              className="rounded-md border py-1.5"
+                              style={{
+                                borderColor: run.error_count > 0 ? "#ff4d4f4d" : "#1e293b",
+                                background: run.error_count > 0 ? "#ff4d4f1f" : "transparent",
+                              }}
+                            >
+                              <div
+                                className="text-sm font-bold"
+                                style={{ color: run.error_count > 0 ? "#ff4d4f" : "#e2e8f0" }}
+                              >
+                                {run.error_count}
+                              </div>
+                              <div className="text-[10px] text-[#64748b]">ERROR</div>
+                            </div>
                           </div>
-                          <div className="text-[10px] text-[#64748b]">ERROR</div>
-                        </div>
-                      </div>
-                      {run.updated_at && (
-                        <div className="mt-2 text-[10px] text-[#475569] text-right">
-                          更新于 {formatDate(run.updated_at)}
+                          {run.updated_at && (
+                            <div className="mt-2 text-[10px] text-[#475569] text-right">
+                              更新于 {formatDate(run.updated_at)}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
 
                   {summaryNote && (
                     <div className="flex items-center gap-1.5 rounded-lg bg-[#faad14]/10 border border-[#faad14]/20 px-3 py-2 text-[11px] text-[#faad14]">
