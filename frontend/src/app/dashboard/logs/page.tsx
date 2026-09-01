@@ -2,7 +2,7 @@
 
 import { apiFetch } from "@/lib/api-fetch";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -141,6 +141,33 @@ function downloadCsv(rows: LogEntry[], filename?: string): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function highlightMatches(text: string, keyword: string): string | ReactNode {
+  const k = keyword.trim();
+  if (!k) return text;
+  const lower = text.toLowerCase();
+  const kl = k.toLowerCase();
+  const out: ReactNode[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const j = lower.indexOf(kl, i);
+    if (j === -1) {
+      out.push(text.slice(i));
+      break;
+    }
+    if (j > i) out.push(text.slice(i, j));
+    out.push(
+      <span
+        key={`${j}-${out.length}`}
+        className="bg-[#faad14]/25 text-[#fde68a] rounded px-0.5"
+      >
+        {text.slice(j, j + kl.length)}
+      </span>,
+    );
+    i = j + kl.length;
+  }
+  return out;
 }
 
 // ─── Nav ─────────────────────────────────────────────────────────────────────
@@ -509,7 +536,7 @@ export default function LogsPage() {
                               </span>
                             </div>
                             <div className="mt-1 pl-5 text-xs text-[#94a3b8] truncate">
-                              {preview}
+                              {highlightMatches(preview, filters.query.trim())}
                             </div>
                           </div>
                           <div className="w-36 text-right text-xs text-[#64748b] shrink-0">
@@ -521,7 +548,7 @@ export default function LogsPage() {
                         {isOpen && (
                           <div className="px-4 pb-4 pl-10">
                             <pre className="rounded-lg border border-[#1e293b] bg-[#0a0e17] p-3 text-xs text-[#cbd5e1] whitespace-pre-wrap break-words leading-relaxed">
-                              {log.content}
+                              {highlightMatches(log.content, filters.query.trim())}
                             </pre>
                           </div>
                         )}
