@@ -150,7 +150,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           activeTab={activeTab}
           onTabChange={setActiveTab}
         >
-          {isLanding ? userMenu : undefined}
+          {/* 用户菜单（含退出登录）必须在落地页与所有子页常驻：
+              此前用 isLanding 门控，导致决策者一旦进入流水线/设备/日志等子页
+              右上角菜单整块消失、无法登出（工程师侧栏底部常驻登出，故仅决策者受影响）。 */}
+          {userMenu}
         </TopNav>
         {children}
       </div>

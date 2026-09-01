@@ -104,7 +104,11 @@ interface TopNavProps {
   activeTab?: DashboardTab;
   /** Tab switch handler — required in "tabs" mode. */
   onTabChange?: (tab: DashboardTab) => void;
-  /** Right-hand slot (user menu).  Only the landing page provides one. */
+  /**
+   * Right-hand slot (user menu with logout).  Rendered on **both** the landing
+   * page and sub-pages — gating it to the landing page removed the only logout
+   * entry point for decision-maker (admin) accounts on every sub-page.
+   */
   children?: ReactNode;
 }
 
