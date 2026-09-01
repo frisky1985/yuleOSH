@@ -322,7 +322,7 @@ export default function DashboardPage() {
   const [session, setSession] = useState<UserInfo | null>(null);
 
   // 视角：管理视角（决策者，合规/用量优先）/ 工程视角（工程师，流水线优先）
-  // 默认按角色推荐：admin → 管理视角，其余 → 工程视角；用户手动切换后持久化。
+  // 默认严格按角色（见 boot 中设置）；用户手动切换仅当前会话有效，不持久化。
   const [perspective, setPerspective] = useState<"manage" | "engineer">("manage");
 
   const roleLabel =
@@ -337,9 +337,9 @@ export default function DashboardPage() {
       : "—";
 
   const switchPerspective = (next: "manage" | "engineer") => {
+    // 仅当前会话级覆盖，不持久化到 localStorage —— 避免同一浏览器下
+    // 跨账号污染（即两角色视图趋同的根因）。刷新 / 重新登录回落角色默认值。
     setPerspective(next);
-    if (typeof window !== "undefined")
-      window.localStorage.setItem("yuleosh_dashboard_perspective", next);
   };
 
   // Projects
@@ -577,20 +577,9 @@ export default function DashboardPage() {
         const { api } = await import("@/lib/api");
         const s = await api.auth.session();
         setSession(s);
-        // 视角默认值：?view 预览 > localStorage > 角色推荐。
-        const stored =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem("yuleosh_dashboard_perspective")
-            : null;
-        const previewView =
-          typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search).get("view")
-            : null;
-        if (previewView === "engineer" || previewView === "manage") {
-          setPerspective(previewView);
-        } else if (stored === "manage" || stored === "engineer") {
-          setPerspective(stored);
-        } else if (s?.role) {
+        // 视角完全由登录用户角色决定：admin -> 管理视角，其余 -> 工程视角。
+        // 不读 ?view / localStorage，避免同一浏览器下预览状态跨账号污染。
+        if (s?.role) {
           setPerspective(s.role === "admin" ? "manage" : "engineer");
         }
       } catch {

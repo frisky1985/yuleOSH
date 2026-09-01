@@ -7,7 +7,7 @@ import { LogOut, Settings, User as UserIcon } from "lucide-react";
 
 import { TopNav, type DashboardTab } from "@/components/dashboard/top-nav";
 import { EngineerSidebar } from "@/components/dashboard/engineer-sidebar";
-import { isEngineerRole, useSessionRole, readViewPreview } from "@/lib/use-session-role";
+import { isEngineerRole, useSessionRole } from "@/lib/use-session-role";
 import { api } from "@/lib/api";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -61,18 +61,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // mounted 门控：服务端/静态 HTML 无法预知角色，未确定前不渲染导航，
   // 既避免 hydration mismatch，也避免闪出错误骨架。
   const [mounted, setMounted] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    // 读取预览模式：URL ?view 优先并持久化到 localStorage，否则回落 localStorage。
-    // 这样点左栏（链接携带 ?view=engineer）或刷新子页后，工程左栏不会丢失。
-    setPreview(readViewPreview());
   }, []);
 
   const isLanding = pathname === "/dashboard";
-  const engineer =
-    preview === "engineer" || (preview !== "manage" && isEngineerRole(role));
+  // 视图完全由登录用户的角色决定：admin -> 横向决策顶栏（TopNav）；
+  // developer / reviewer / auditor -> 纵向工程左栏（EngineerSidebar）。
+  // 不再依赖 ?view 预览参数 / localStorage，避免同一浏览器下预览状态跨账号
+  // 污染，使两个角色的视图趋同（即"显示没区别"的根因）。
+  const engineer = isEngineerRole(role);
 
   const handleLogout = async () => {
     try {
