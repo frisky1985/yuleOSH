@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Cpu,
   Download,
   Eye,
@@ -1386,6 +1387,10 @@ function EvidencePanel({
   loading: boolean;
   onRefresh: () => void;
 }) {
+  // 默认只展示最新的 10 条，其余折叠；超出时可一键展开/收起。
+  const VISIBLE = 10;
+  const [expanded, setExpanded] = useState(false);
+  const visiblePackages = expanded ? packages : packages.slice(0, VISIBLE);
   return (
     <Card className="border-[#1e293b] bg-[#111827] mb-4">
       <CardHeader className="pb-3">
@@ -1425,57 +1430,78 @@ function EvidencePanel({
             暂无证据包（运行一次流水线后自动生成）
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {packages.map((p) => {
-              const rm = pipelineStatusMeta(p.status || "");
-              return (
-                <div
-                  key={p.run_id}
-                  className="flex items-center gap-3 rounded-md border border-[#1e293b] bg-[#0a0e17] px-3 py-2 text-xs"
-                >
-                  <span className="font-mono text-[#64748b] shrink-0 w-24 truncate">
-                    {p.run_id}
-                  </span>
-                  <span
-                    className="px-1.5 py-0.5 rounded text-[10px] shrink-0"
-                    style={{
-                      color: rm.color,
-                      background: `${rm.color}1f`,
-                      border: `1px solid ${rm.color}4d`,
-                    }}
+          <>
+            <div className="space-y-1.5">
+              {visiblePackages.map((p) => {
+                const rm = pipelineStatusMeta(p.status || "");
+                return (
+                  <div
+                    key={p.run_id}
+                    className="flex items-center gap-3 rounded-md border border-[#1e293b] bg-[#0a0e17] px-3 py-2 text-xs"
                   >
-                    {p.status}
-                  </span>
-                  <span className="text-[#94a3b8] shrink-0">
-                    {p.op}
-                    {p.mode ? ` · ${p.mode}` : ""}
-                  </span>
-                  <span className="text-[#64748b] shrink-0">
-                    {p.step_count} 步（
-                    <span className="text-[#10b981]">{p.step_passed}</span> /{" "}
-                    <span className="text-[#ff4d4f]">{p.step_failed}</span>）
-                  </span>
-                  <span
-                    className="text-[#64748b] shrink-0"
-                    title="磁盘上仍存在的产物 / 记录到的产物"
-                  >
-                    产物 {p.artifact_available}/{p.artifact_count}
-                  </span>
-                  <span className="text-[#475569] shrink-0 ml-auto">
-                    {(p.started_at || "").replace("T", " ").slice(0, 19)}
-                  </span>
-                  <a
-                    href={`/api/v1/pipeline/evidence/download?run_id=${p.run_id}`}
-                    className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded border border-[#722ed1]/40 text-[#722ed1] hover:text-white hover:bg-[#722ed1]/10 transition-colors"
-                    title="下载证据包（zip：执行记录 manifest + 产物）"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    下载
-                  </a>
-                </div>
-              );
-            })}
-          </div>
+                    <span className="font-mono text-[#64748b] shrink-0 w-24 truncate">
+                      {p.run_id}
+                    </span>
+                    <span
+                      className="px-1.5 py-0.5 rounded text-[10px] shrink-0"
+                      style={{
+                        color: rm.color,
+                        background: `${rm.color}1f`,
+                        border: `1px solid ${rm.color}4d`,
+                      }}
+                    >
+                      {p.status}
+                    </span>
+                    <span className="text-[#94a3b8] shrink-0">
+                      {p.op}
+                      {p.mode ? ` · ${p.mode}` : ""}
+                    </span>
+                    <span className="text-[#64748b] shrink-0">
+                      {p.step_count} 步（
+                      <span className="text-[#10b981]">{p.step_passed}</span> /{" "}
+                      <span className="text-[#ff4d4f]">{p.step_failed}</span>）
+                    </span>
+                    <span
+                      className="text-[#64748b] shrink-0"
+                      title="磁盘上仍存在的产物 / 记录到的产物"
+                    >
+                      产物 {p.artifact_available}/{p.artifact_count}
+                    </span>
+                    <span className="text-[#475569] shrink-0 ml-auto">
+                      {(p.started_at || "").replace("T", " ").slice(0, 19)}
+                    </span>
+                    <a
+                      href={`/api/v1/pipeline/evidence/download?run_id=${p.run_id}`}
+                      className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded border border-[#722ed1]/40 text-[#722ed1] hover:text-white hover:bg-[#722ed1]/10 transition-colors"
+                      title="下载证据包（zip：执行记录 manifest + 产物）"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      下载
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+            {packages.length > VISIBLE && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-[#1e293b] py-2 text-xs text-[#94a3b8] transition-colors hover:border-[#722ed1]/40 hover:text-white"
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="w-3.5 h-3.5" />
+                    收起，仅显示最新 {VISIBLE} 条
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    展开剩余 {packages.length - VISIBLE} 条
+                  </>
+                )}
+              </button>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
