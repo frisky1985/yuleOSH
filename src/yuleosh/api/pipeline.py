@@ -364,7 +364,7 @@ def _list_pipelines() -> tuple[dict, int]:
 
 # ── B3-看板操作（2026-08-08）: retry / resume 异步执行器 ──────────────
 # 同一 pipeline 同一时刻只允许一个控制操作（重试/续跑/全量）在跑，
-# 防止用户点 N 次重试导致 33 步流水线并发执行、sqlite 状态互相覆盖。
+# 防止用户点 N 次重试导致 24 步流水线并发执行、sqlite 状态互相覆盖。
 _ENGINE_OP_LOCK = threading.Lock()
 _ENGINE_OP_ACTIVE: dict[str, bool] = {}  # pipeline_name → running?
 

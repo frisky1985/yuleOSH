@@ -47,7 +47,7 @@ def _record_pipeline_usage(org_id: int, user_id: int | None = None,
     """Portal 方案 B (2026-08-10): 记录 pipeline_run 计量到 usage_log。
 
     6 阶段模拟器无 LLM 调用，llm_tokens=0；真实 token 消费在
-    run_pipeline（33 步）结束处计量。失败不阻塞；org_id=0（CLI/单机）跳过。
+    run_pipeline（24 步）结束处计量。失败不阻塞；org_id=0（CLI/单机）跳过。
     Phase 9 (2026-08-10): 携带用户归因（user_id/user_email）。
     """
     if not org_id:

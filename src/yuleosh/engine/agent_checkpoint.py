@@ -5,7 +5,7 @@
 """
 Agent Pipeline 的 Checkpoint 封装。
 
-将 PIPELINE_STEPS（33 步）适配到 CheckpointEngine，
+将 PIPELINE_STEPS（24 步）适配到 CheckpointEngine，
 支持任意 agent step 注入 + 自动续跑。
 """
 
@@ -76,7 +76,7 @@ def create_agent_pipeline(project_dir: str,
     """
     创建 Agent 流水线的 Checkpoint 版本。
 
-    与 PIPELINE_STEPS 定义严格对齐（33 步）。每个 handler 均用
+    与 PIPELINE_STEPS 定义严格对齐（24 步）。每个 handler 均用
     HandlerAdapter 包装（fallback_safe=False 默认 —— 异常绝不静默降质），
     并在 engine 上注入 session_factory：运行时 HandlerAdapter 分支会收到
     构造好的真实 PipelineSession（而非 SimpleNamespace）。

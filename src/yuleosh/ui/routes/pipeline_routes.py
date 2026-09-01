@@ -605,7 +605,7 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
 
 
 def handle_pipeline_checkpoint(handler: BaseHTTPRequestHandler, path: str) -> dict:
-    """GET /api/v1/pipeline/checkpoint — CheckpointEngine 33 步实时状态（看板数据源）。
+    """GET /api/v1/pipeline/checkpoint — CheckpointEngine 24 步实时状态（看板数据源）。
 
     B3-看板（2026-08-08）：从 CheckpointEngine 持久化状态（sqlite 优先，
     JSON 兜底）读取当前/最近一次 pipeline 的步骤级状态，供前端看板渲染。
