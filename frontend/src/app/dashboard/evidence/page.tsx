@@ -122,6 +122,17 @@ export default function EvidencePage() {
     a.remove();
   };
 
+  // 单个证据文件下载：审计时只想看某一份报告（如 traceability-matrix.md），
+  // 不必下载整包再解压。走 GET /api/v1/evidence/file?name=<bare>。
+  const handleDownloadFile = (name: string) => {
+    const a = document.createElement("a");
+    a.href = `/api/v1/evidence/file?name=${encodeURIComponent(name)}`;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -194,6 +205,7 @@ export default function EvidencePage() {
                       <th className="px-3 py-2 font-medium">类型</th>
                       <th className="px-3 py-2 font-medium">大小</th>
                       <th className="px-3 py-2 font-medium">修改时间</th>
+                      <th className="px-3 py-2 font-medium text-right">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -215,6 +227,16 @@ export default function EvidencePage() {
                         </td>
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtSize(f.size)}</td>
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtTime(f.mtime)}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <button
+                            onClick={() => handleDownloadFile(f.name)}
+                            title={`下载 ${f.name}`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-[#1e293b] px-2.5 py-1 text-xs text-[#e2e8f0] transition-colors hover:bg-[#1e293b]"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            下载
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
