@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
-  CheckCircle2,
   ChevronRight,
   Clock,
   FileText,
@@ -21,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { TaskStageProgress } from "@/components/dashboard/task-stage-progress";
 import {
   getGapDetail,
   getGapRunStatus,
@@ -29,6 +29,11 @@ import {
   type GapRunStatus,
 } from "@/lib/api";
 import { startExponentialPoll, type PollHandle } from "@/lib/poll";
+
+// 差距单 run 修复阶段（前端按 progressPct 自动映射）。后端进度跳变间隔较粗，
+// 因此真实运行时会停在「当前阶段」的 spinner，直到子步骤完成才推进。
+const RUN_STAGES = ["排队", "分析差距", "生成 patch", "应用修复", "提交"];
+const RUN_BREAKPOINTS = [0, 5, 25, 55, 90, 100];
 
 const SEVERITY_META: Record<
   string,
@@ -319,32 +324,12 @@ export function GapDetailModal({
 
                   {runStatus && (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="flex items-center gap-1.5 text-[#cbd5e1]">
-                          {isRunning && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#722ed1]" />}
-                          {isCompleted && <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981]" />}
-                          {isFailed && <AlertCircle className="w-3.5 h-3.5 text-[#ff4d4f]" />}
-                          {isRunning && "正在执行…"}
-                          {isCompleted && "执行完成"}
-                          {isFailed && "执行失败"}
-                        </span>
-                        <span className="text-[#64748b] font-mono">
-                          {progress}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[#1e293b] overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${progress}%`,
-                            background: isFailed
-                              ? "#ff4d4f"
-                              : isCompleted
-                              ? "#10b981"
-                              : "linear-gradient(90deg, #10b981, #1677ff)",
-                          }}
-                        />
-                      </div>
+                      <TaskStageProgress
+                        stages={RUN_STAGES}
+                        breakpoints={RUN_BREAKPOINTS}
+                        progressPct={progress}
+                        isFailed={isFailed}
+                      />
                       {runStatus.log.length > 0 && (
                         <div className="mt-2 max-h-32 overflow-y-auto rounded border border-[#1e293b] bg-black/30 px-2 py-1.5 font-mono text-[10px] text-[#94a3b8] space-y-0.5">
                           {runStatus.log.map((line, i) => (

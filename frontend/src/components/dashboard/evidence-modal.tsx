@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Download, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,7 +9,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { TaskStageProgress } from "@/components/dashboard/task-stage-progress";
 import type { EvidenceTask } from "@/lib/api";
+
+// 证据生成任务阶段（前端按 progressPct 自动映射；真实 CLI 路径只在 10%/100%
+// 跳变，因此阶段 2-4 在真实路径下会一直停在「进行中」等子进程返回）。
+const EVIDENCE_STAGES = [
+  "准备",
+  "收集证据",
+  "生成清单",
+  "打包并写入",
+  "完成",
+];
+const EVIDENCE_BREAKPOINTS = [0, 10, 30, 60, 95, 100];
 
 export function EvidenceModal({
   open,
@@ -46,40 +58,31 @@ export function EvidenceModal({
           )}
         </CardHeader>
         <CardContent className="pb-4">
-          {/* Progress bar */}
+          {/* 阶段进度：准备→收集→生成清单→打包→完成 */}
           <div className="mb-4">
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-[#64748b]">进度</span>
-              <span className="text-[#94a3b8] font-mono">{progress}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-[#1e293b] overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${progress}%`,
-                  background: isFailed
-                    ? "#ff4d4f"
-                    : `linear-gradient(90deg, #722ed1, #1677ff)`,
-                }}
-              />
-            </div>
+            <TaskStageProgress
+              stages={EVIDENCE_STAGES}
+              breakpoints={EVIDENCE_BREAKPOINTS}
+              progressPct={progress}
+              isFailed={isFailed}
+            />
           </div>
 
-          {/* Status details */}
-          {isRunning && (
-            <div className="rounded-lg bg-[#722ed1]/5 border border-[#722ed1]/10 px-3 py-2 text-xs text-[#94a3b8]">
-              正在收集合规证据、生成审计清单...
+          {/* 状态详情 */}
+          {isCompleted && task?.note && (
+            <div className="rounded-lg bg-[#faad14]/10 border border-[#faad14]/20 px-3 py-2 text-xs text-[#faad14] mb-3">
+              {task.note}
             </div>
           )}
 
           {isFailed && task?.error && (
-            <div className="rounded-lg bg-[#ff4d4f]/10 border border-[#ff4d4f]/20 px-3 py-2 text-xs text-[#ff4d4f] break-words">
+            <div className="rounded-lg bg-[#ff4d4f]/10 border border-[#ff4d4f]/20 px-3 py-2 text-xs text-[#ff4d4f] break-words mb-3">
               {task.error}
             </div>
           )}
 
           {isCompleted && task?.download_url && (
-            <div className="rounded-lg bg-[#10b981]/10 border border-[#10b981]/20 px-3 py-2 text-xs text-[#10b981]">
+            <div className="rounded-lg bg-[#10b981]/10 border border-[#10b981]/20 px-3 py-2 text-xs text-[#10b981] mb-3">
               证据包已生成，可下载使用。
             </div>
           )}
@@ -110,6 +113,4 @@ export function EvidenceModal({
     </div>
   );
 }
-
-// ─── Main Dashboard Component ────────────────────────────────────────────────
 
