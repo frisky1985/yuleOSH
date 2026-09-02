@@ -274,6 +274,10 @@ export default function LogsPage() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sumExpanded, setSumExpanded] = useState<Record<string, boolean>>({});
+  // 摘要面板默认折叠（之前只有 error_count>0 自动展开，但 2000+ run 时体验压力大）；
+  // 同时默认只渲染最近 10 条，「查看全部 / 收起」可一键切换完整列表。
+  const SUMMARY_VISIBLE_LIMIT = 10;
+  const [summaryShowAll, setSummaryShowAll] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -783,7 +787,7 @@ export default function LogsPage() {
                 )}
               </CardTitle>
               <CardDescription className="text-xs text-[#64748b]">
-                每个 run 的日志文件数 / 总行数 / ERROR 数（默认近 7 天，可切到 30/90 天或全部）
+                每个 run 的日志文件数 / 总行数 / ERROR 数（默认近 7 天，可切到 30/90 天或全部；默认全部折叠、仅显示最近 {SUMMARY_VISIBLE_LIMIT} 条，超出可一键查看全部）
               </CardDescription>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <select
@@ -849,8 +853,8 @@ export default function LogsPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {summary.map((run) => {
-                    const open = sumExpanded[run.run_id] ?? run.error_count > 0;
+                  {(summaryShowAll ? summary : summary.slice(0, SUMMARY_VISIBLE_LIMIT)).map((run) => {
+                    const open = !!sumExpanded[run.run_id];
                     return (
                     <div
                       key={run.run_id}
@@ -1014,6 +1018,19 @@ export default function LogsPage() {
                     </div>
                     );
                   })}
+
+                  {/* 查看全部 / 收起 切换：超过 SUMMARY_VISIBLE_LIMIT 行时可一键展开 */}
+                  {summary.length > SUMMARY_VISIBLE_LIMIT && (
+                    <button
+                      type="button"
+                      onClick={() => setSummaryShowAll((v) => !v)}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-[#1e293b] text-[11px] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 transition-colors"
+                    >
+                      {summaryShowAll
+                        ? `收起（仅显示最近 ${SUMMARY_VISIBLE_LIMIT} 条）`
+                        : `查看全部 ${summary.length} 个 run`}
+                    </button>
+                  )}
 
                   {summaryNote && (
                     <div className="flex items-center gap-1.5 rounded-lg bg-[#faad14]/10 border border-[#faad14]/20 px-3 py-2 text-[11px] text-[#faad14]">
