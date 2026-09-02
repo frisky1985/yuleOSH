@@ -290,7 +290,8 @@ export default function LoginPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="leading-relaxed min-w-0">
                       <span className="text-[#e2e8f0] font-medium">决策者</span>
-                      <span className="text-[#64748b]"> · 决策视角（顶栏）</span>
+                      <span className="ml-1 inline-flex items-center rounded-full border border-[#722ed1]/40 bg-[#722ed1]/10 px-1.5 py-0.5 text-[10px] leading-none text-[#a78bfa]">决策视角</span>
+                      <span className="text-[#64748b]">（顶栏）</span>
                       <div className="text-[#c4b5fd] truncate">decision@yuleosh.com / Demo2026!decision</div>
                     </div>
                     <button
@@ -312,7 +313,8 @@ export default function LoginPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="leading-relaxed min-w-0">
                       <span className="text-[#e2e8f0] font-medium">工程师</span>
-                      <span className="text-[#64748b]"> · 工程视角（左栏）</span>
+                      <span className="ml-1 inline-flex items-center rounded-full border border-[#1677ff]/40 bg-[#1677ff]/10 px-1.5 py-0.5 text-[10px] leading-none text-[#60a5fa]">工程视角</span>
+                      <span className="text-[#64748b]">（左栏）</span>
                       <div className="text-[#c4b5fd] truncate">engineer@yuleosh.com / Demo2026!engineer</div>
                     </div>
                     <button
@@ -334,7 +336,7 @@ export default function LoginPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="leading-relaxed min-w-0">
                       <span className="text-[#e2e8f0] font-medium">通用管理员</span>
-                      <span className="text-[#64748b]"> · 决策视角</span>
+                      <span className="ml-1 inline-flex items-center rounded-full border border-[#722ed1]/40 bg-[#722ed1]/10 px-1.5 py-0.5 text-[10px] leading-none text-[#a78bfa]">决策视角</span>
                       <div className="text-[#c4b5fd] truncate">demo@yuleosh.com / Demo2026!yuleosh</div>
                     </div>
                     <button
