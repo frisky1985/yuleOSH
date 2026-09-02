@@ -75,6 +75,14 @@ interface LogsSummaryResponse {
   statuses?: string[];
 }
 
+interface LogsExportResponse {
+  rows: LogEntry[];
+  count: number;
+  truncated: boolean;
+  limit?: number;
+  note?: string | null;
+}
+
 interface RunLogFile {
   file: string;
   lines: number;
@@ -267,22 +275,30 @@ export default function LogsPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sumExpanded, setSumExpanded] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  // ── 构造检索参数（检索与导出共用；导出不带 limit，走后端全量上限）─────────
+  const buildLogParams = useCallback((f: LogFilters, includeLimit: boolean) => {
+    const params = new URLSearchParams();
+    if (f.query.trim()) params.set("query", f.query.trim());
+    if (f.device.trim()) params.set("device", f.device.trim());
+    if (f.pipeline.trim()) params.set("pipeline", f.pipeline.trim());
+    const since = rangeToSince(f.range);
+    if (since) params.set("since", since);
+    if (f.level.trim()) params.set("level", f.level.trim().toUpperCase());
+    if (includeLimit) {
+      const lim = parseInt(f.limit, 10);
+      if (!Number.isNaN(lim) && lim > 0) params.set("limit", String(Math.min(lim, 500)));
+    }
+    return params;
+  }, []);
 
   // ── Load log search results ──────────────────────────────────────────────
   const loadLogs = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams();
-      if (filters.query.trim()) params.set("query", filters.query.trim());
-      if (filters.device.trim()) params.set("device", filters.device.trim());
-      if (filters.pipeline.trim()) params.set("pipeline", filters.pipeline.trim());
-      const since = rangeToSince(filters.range);
-      if (since) params.set("since", since);
-      if (filters.level.trim()) params.set("level", filters.level.trim().toUpperCase());
-      const lim = parseInt(filters.limit, 10);
-      if (!Number.isNaN(lim) && lim > 0) params.set("limit", String(Math.min(lim, 500)));
-      const qs = params.toString();
+      const qs = buildLogParams(filters, true).toString();
       const res = await apiFetch<LogsListResponse>(`/api/v1/logs${qs ? `?${qs}` : ""}`);
       setLogs(res.logs || []);
       setListNote(res.note ?? null);
@@ -293,7 +309,7 @@ export default function LogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, buildLogParams]);
 
   useEffect(() => {
     void loadLogs();
@@ -432,6 +448,29 @@ export default function LogsPage() {
       setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
     } catch {
       /* 复制失败静默忽略 */
+    }
+  };
+
+  const handleExportAll = async () => {
+    setExporting(true);
+    try {
+      const qs = buildLogParams(filters, false).toString();
+      const res = await apiFetch<LogsExportResponse>(`/api/v1/logs/export${qs ? `?${qs}` : ""}`);
+      const rows = res.rows || [];
+      if (rows.length === 0) {
+        setListNote("没有符合当前过滤条件的日志可导出");
+        return;
+      }
+      downloadCsv(rows, `yuleosh-logs-all-${new Date().toISOString().slice(0, 10)}.csv`);
+      setListNote(
+        res.truncated
+          ? `已导出 ${rows.length} 条（已达上限 ${res.limit ?? "?"} 条，建议收紧过滤条件后重试）`
+          : `已导出全部 ${rows.length} 条`,
+      );
+    } catch (err) {
+      setListNote(`导出失败：${errMessage(err)}`);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -583,20 +622,39 @@ export default function LogsPage() {
                     <span className="text-xs font-normal text-[#64748b]">共 {logs.length} 条</span>
                   )}
                 </CardTitle>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => downloadCsv(logs)}
-                  disabled={loading || logs.length === 0}
-                  className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  导出 CSV
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadCsv(logs)}
+                    disabled={loading || logs.length === 0}
+                    title="导出当前页检索结果"
+                    className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    导出当前
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleExportAll()}
+                    disabled={exporting}
+                    title="按当前过滤条件导出全部日志，不受检索条数上限约束（上限 20000 条）"
+                    className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40"
+                  >
+                    {exporting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    导出全部
+                  </Button>
+                </div>
               </div>
               <CardDescription className="text-xs text-[#64748b]">
-                真实日志数据（扫描 .osh/sessions 下的 *.log），点击条目展开查看全文；导出为当前检索结果
+                真实日志数据（扫描 .osh/sessions 下的 *.log），点击条目展开查看全文；「导出当前」导出当前结果，「导出全部」按过滤条件全量导出（上限 20000 条）
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
