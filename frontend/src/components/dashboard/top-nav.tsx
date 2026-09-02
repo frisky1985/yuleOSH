@@ -191,6 +191,7 @@ export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) 
 
   return (
     <nav
+      data-testid="top-nav"
       className="sticky top-0 z-50 border-b border-[#1e293b]/60 nav-blur"
       style={{ background: "rgba(10,14,23,.85)" }}
     >

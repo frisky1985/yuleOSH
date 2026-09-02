@@ -136,7 +136,7 @@ export function EngineerSidebar() {
       </div>
 
       {/* 桌面侧栏（>=768px） */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col border-r border-[#1e293b] bg-[#0b0f1a] md:flex">
+      <aside data-testid="engineer-sidebar" className="fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col border-r border-[#1e293b] bg-[#0b0f1a] md:flex">
         {/* Logo */}
         <div className="flex h-14 items-center border-b border-[#1e293b] px-5">
           <Link href="/dashboard" className="text-lg font-black tracking-tight">
