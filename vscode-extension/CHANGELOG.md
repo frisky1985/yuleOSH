@@ -1,5 +1,11 @@
 # Change Log
 
+## [4.2.0] - 2026-09-03
+
+### Changed
+- **Version sync**: 扩展版本与 yuleOSH 平台发布版对齐（`0.1.0` → `4.2.0`），使整套客户端共享同一版本号。
+- **Documentation**: 命令表补齐到当前已注册的 15 条；修正项目仓库链接大小写（`frisky1985/yuleosh` → `frisky1985/yuleOSH`）；明确 `backendUrl` 默认值 `http://localhost:8080`；license 与 `package.json` 对齐（Elastic-2.0）。
+
 ## [0.1.0] - 2026-07-27
 
 ### Added

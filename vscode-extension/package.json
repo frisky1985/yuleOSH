@@ -2,7 +2,7 @@
   "name": "yuleosh-vscode",
   "displayName": "yuleOSH",
   "description": "AI-Powered Embedded Development Pipeline",
-  "version": "0.1.0",
+  "version": "4.2.0",
   "publisher": "frisky1985",
   "license": "Elastic-2.0",
   "engines": {
