@@ -277,24 +277,78 @@ export default function LoginPage() {
                 GitHub OAuth 登录
               </Button>
 
-              {/* 演示账号快捷登录（本地 demo 体验）：后端 ensure_demo_account 已 seed
-                  demo@yuleosh.com / Demo2026!yuleosh，一键填入即可进入 dashboard。 */}
+              {/* 演示账号：决策者 / 工程师 两角色视图不同，一键填入即可体验。
+                  后端 ensure_view_test_accounts 幂等 seed（admin / developer）；
+                  demo@yuleosh.com 为通用管理员（同决策视角），保留历史凭据。 */}
               {mode === "login" && (
-                <div className="rounded-lg bg-[#722ed1]/10 border border-[#722ed1]/20 px-3 py-2.5 text-xs text-[#c4b5fd] flex items-center justify-between gap-3">
-                  <span className="leading-relaxed">
-                    演示账号：<span className="text-[#e2e8f0]">demo@yuleosh.com</span> / <span className="text-[#e2e8f0]">Demo2026!yuleosh</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail("demo@yuleOSH.com");
-                      setPassword("Demo2026!yuleosh");
-                      setError("");
-                    }}
-                    className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    一键填入
-                  </button>
+                <div className="rounded-lg bg-[#722ed1]/10 border border-[#722ed1]/20 px-3 py-3 text-xs text-[#c4b5fd] space-y-2.5">
+                  <p className="text-[#94a3b8] leading-relaxed">
+                    演示账号（一键填入，体验不同角色视图）：
+                  </p>
+
+                  {/* 决策者 → 决策视角（顶部横向导航） */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="leading-relaxed min-w-0">
+                      <span className="text-[#e2e8f0] font-medium">决策者</span>
+                      <span className="text-[#64748b]"> · 决策视角（顶栏）</span>
+                      <div className="text-[#c4b5fd] truncate">decision@yuleosh.com / Demo2026!decision</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail("decision@yuleosh.com");
+                        setPassword("Demo2026!decision");
+                        setError("");
+                      }}
+                      className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      一键填入
+                    </button>
+                  </div>
+
+                  <Separator className="bg-[#722ed1]/20" />
+
+                  {/* 工程师 → 工程视角（左侧纵向导航） */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="leading-relaxed min-w-0">
+                      <span className="text-[#e2e8f0] font-medium">工程师</span>
+                      <span className="text-[#64748b]"> · 工程视角（左栏）</span>
+                      <div className="text-[#c4b5fd] truncate">engineer@yuleosh.com / Demo2026!engineer</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail("engineer@yuleosh.com");
+                        setPassword("Demo2026!engineer");
+                        setError("");
+                      }}
+                      className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      一键填入
+                    </button>
+                  </div>
+
+                  <Separator className="bg-[#722ed1]/20" />
+
+                  {/* 通用管理员（同决策视角），保留历史演示账号 */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="leading-relaxed min-w-0">
+                      <span className="text-[#e2e8f0] font-medium">通用管理员</span>
+                      <span className="text-[#64748b]"> · 决策视角</span>
+                      <div className="text-[#c4b5fd] truncate">demo@yuleosh.com / Demo2026!yuleosh</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail("demo@yuleosh.com");
+                        setPassword("Demo2026!yuleosh");
+                        setError("");
+                      }}
+                      className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      一键填入
+                    </button>
+                  </div>
                 </div>
               )}
 
