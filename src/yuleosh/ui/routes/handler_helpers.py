@@ -82,6 +82,22 @@ def _send_auth_denied(handler) -> None:
 # Dispatch: GET, POST, DELETE, OPTIONS
 # ------------------------------------------------------------------
 
+def _api_v1_full_path(parsed, path: str) -> str:
+    """Re-attach the query string to the normalized path before v1 dispatch.
+
+    BUGFIX (T11-SSE)：此前三个 dispatch 点都只传 ``parsed.path``，导致 router
+    里 ``parse_qs(urlparse(path).query)`` 恒为空字典 —— **所有** /api/v1
+    处理函数都收不到任何查询参数。实际症状：
+      - GET /api/v1/dashboard/evidence/status?task_id=… → 400 "task_id is
+        required"，前端证据进度轮询从未拿到过一次成功响应；
+      - GET /api/v1/dashboard/gap-analysis/{id}/status?run_id=… → 同上；
+      - GET /api/v1/dashboard/gap-analysis?page/severity → 分页与严重度筛选
+        被静默忽略，永远返回第 1 页全量；
+      - SSE 端点（?task_id= / ?run_id=）无法识别订阅对象。
+    """
+    return f"{path}?{parsed.query}" if parsed.query else path
+
+
 def handle_get(handler) -> None:
     """Route and serve all GET requests (non-API-v1 routes)."""
     from yuleosh.ui import server as _s
@@ -92,7 +108,7 @@ def handle_get(handler) -> None:
 
     # ── API v1 router (single source of truth for /api/v1/*) ──
     if path.startswith("/api/v1/"):
-        if _s.api_v1_dispatch(handler, path):
+        if _s.api_v1_dispatch(handler, _api_v1_full_path(parsed, path)):
             return
 
     # Healthcheck — always accessible
@@ -272,7 +288,7 @@ def handle_post(handler) -> None:
     # ── API v1 router (single source of truth for /api/v1/*) ──
     if path.startswith("/api/v1/"):
         from yuleosh.ui import server as _s
-        if _s.api_v1_dispatch(handler, path):
+        if _s.api_v1_dispatch(handler, _api_v1_full_path(parsed, path)):
             return
 
     if path == "/_auth/login":
@@ -342,7 +358,7 @@ def handle_delete(handler) -> None:
 
     # ── API v1 router (single source of truth for /api/v1/*) ──
     if path.startswith("/api/v1/"):
-        if _s.api_v1_dispatch(handler, path):
+        if _s.api_v1_dispatch(handler, _api_v1_full_path(parsed, path)):
             return
 
     handler._serve_page("404.html", {})

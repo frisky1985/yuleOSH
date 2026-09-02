@@ -103,11 +103,17 @@ class TestRouting:
         assert payload["data"]["has_more"] is True
 
     def test_evidence_generate_route(self, tmp_path):
-        """GIVEN POST evidence/generate WHEN handle THEN task response."""
+        """GIVEN POST evidence/generate WHEN handle THEN task response.
+
+        T11-SSE：生成在后台线程跑，POST 立即返回 running（不再阻塞最长
+        300s）；join 工作线程后应落到 completed。
+        """
         payload, _ = _handle("POST", "evidence/generate",
                                         {"project_id": "p1"}, {}, handler=None)
         assert payload["ok"] is True
-        assert payload["data"]["status"] == "completed"  # simulation succeeds
+        assert payload["data"]["status"] == "running"
+        task = _wait_evidence_task(payload["data"]["task_id"])
+        assert task["status"] == "completed"  # simulation succeeds
 
     def test_evidence_generate_rejects_outside_osh_home(self, tmp_path):
         """SEC-C1: dashboard evidence project_dir escaping OSH_HOME → 403,
@@ -351,6 +357,24 @@ class _FakeCompleted:
         self.stdout = stdout
 
 
+def _wait_evidence_task(task_id, timeout=10.0):
+    """Wait for the background evidence worker to settle, then return the task.
+
+    T11-SSE：证据包生成已从「POST 内同步阻塞」改为后台线程执行，POST 立即
+    返回 status=running。断言终态前必须 join 工作线程，否则测出的是竞态。
+    """
+    import time as _t
+
+    task = D._ev_tasks[task_id]
+    thread = task.get("_thread")
+    if thread is not None:
+        thread.join(timeout)
+    deadline = _t.time() + 1.0
+    while _t.time() < deadline and task.get("status") == "running":
+        _t.sleep(0.01)
+    return task
+
+
 class TestEvidenceGenerate:
     def test_success_with_manifest(self, monkeypatch, _isolate):
         """GIVEN CLI success + manifest WHEN generate THEN completed."""
@@ -364,7 +388,7 @@ class TestEvidenceGenerate:
             "POST", "evidence/generate", {"project_id": "p1"}, {}, handler=None)
         assert payload["ok"] is True
         task_id = payload["data"]["task_id"]
-        task = D._ev_tasks[task_id]
+        task = _wait_evidence_task(task_id)
         assert task["status"] == "completed"
         assert task["valid"] is True
         assert task["total_artifacts"] == 7
@@ -375,7 +399,7 @@ class TestEvidenceGenerate:
                             lambda *a, **kw: _FakeCompleted(0))
         payload, _ = _handle(
             "POST", "evidence/generate", {"project_id": "p1"}, {}, handler=None)
-        task = D._ev_tasks[payload["data"]["task_id"]]
+        task = _wait_evidence_task(payload["data"]["task_id"])
         assert task["status"] == "failed"
         assert "no manifest" in task["error"]
 
@@ -385,7 +409,7 @@ class TestEvidenceGenerate:
                             lambda *a, **kw: _FakeCompleted(1, stderr="boom"))
         payload, _ = _handle(
             "POST", "evidence/generate", {"project_id": "p1"}, {}, handler=None)
-        task = D._ev_tasks[payload["data"]["task_id"]]
+        task = _wait_evidence_task(payload["data"]["task_id"])
         assert task["status"] == "failed"
         assert "boom" in task["error"]
 
@@ -398,7 +422,7 @@ class TestEvidenceGenerate:
         monkeypatch.setattr(D.subprocess, "run", timeout)
         payload, _ = _handle(
             "POST", "evidence/generate", {"project_id": "p1"}, {}, handler=None)
-        task = D._ev_tasks[payload["data"]["task_id"]]
+        task = _wait_evidence_task(payload["data"]["task_id"])
         assert task["status"] == "failed"
         assert "timed out" in task["error"]
 
@@ -411,7 +435,7 @@ class TestEvidenceGenerate:
         monkeypatch.setattr(D.subprocess, "run", nf)
         payload, _ = _handle(
             "POST", "evidence/generate", {"project_id": "p1"}, {}, handler=None)
-        task = D._ev_tasks[payload["data"]["task_id"]]
+        task = _wait_evidence_task(payload["data"]["task_id"])
         assert task["status"] == "completed"
         assert task["valid"] is True
         assert "演示" in task["note"]
@@ -425,7 +449,7 @@ class TestEvidenceGenerate:
         monkeypatch.setattr(D.subprocess, "run", boom)
         payload, _ = _handle(
             "POST", "evidence/generate", {"project_id": "p1"}, {}, handler=None)
-        task = D._ev_tasks[payload["data"]["task_id"]]
+        task = _wait_evidence_task(payload["data"]["task_id"])
         assert task["status"] == "failed"
         assert "weird" in task["error"]
 
@@ -461,6 +485,224 @@ class TestEvidenceStatus:
             "GET", "evidence/status", {}, {"task_id": "t9"}, None)
         assert status == 200
         assert payload["data"]["progress_pct"] == 10
+
+    def test_status_excludes_private_keys(self):
+        """GIVEN task with _thread WHEN status THEN private key stripped.
+
+        T11-SSE：任务记录里挂了 Thread 对象，直接 json.dumps 整个 dict 会抛
+        TypeError —— status 端点必须先过滤下划线前缀字段。
+        """
+        D._ev_tasks["t-th"] = {"task_id": "t-th", "status": "running",
+                               "progress_pct": 10, "_thread": None}
+        payload, status = _handle(
+            "GET", "evidence/status", {}, {"task_id": "t-th"}, None)
+        assert status == 200
+        assert "_thread" not in payload["data"]
+        assert payload["data"]["progress_pct"] == 10
+
+
+# ── SSE streams (T11) ──────────────────────────────────────────────────
+
+class _FakeWFile:
+    def __init__(self):
+        self.chunks: list = []
+
+    def write(self, data):
+        self.chunks.append(data)
+
+
+class _FakeSSEHandler:
+    """Minimal stand-in for OSHHandler that records what the SSE pump writes."""
+
+    def __init__(self):
+        self.wfile = _FakeWFile()
+        self.headers: list = []
+        self.status = None
+        self.ended = False
+
+    def send_response(self, code):
+        self.status = code
+
+    def send_header(self, name, value):
+        self.headers.append((name, value))
+
+    def end_headers(self):
+        self.ended = True
+
+    def frames(self) -> str:
+        return b"".join(self.wfile.chunks).decode("utf-8")
+
+
+class TestSSEStream:
+    """Unit tests for the shared SSE pump ``_sse_stream`` (T11-SSE)."""
+
+    def test_emits_event_stream_headers(self):
+        h = _FakeSSEHandler()
+        D._sse_stream(h, "status", lambda: {"pct": 100}, lambda s: True)
+        assert h.status == 200
+        assert ("Content-Type", "text/event-stream; charset=utf-8") in h.headers
+        assert ("Cache-Control", "no-cache, no-transform") in h.headers
+        # X-Accel-Buffering 禁止反向代理缓冲 SSE
+        assert ("X-Accel-Buffering", "no") in h.headers
+        assert h.ended is True
+
+    def test_deduplicates_identical_snapshots(self):
+        """GIVEN unchanged snapshot WHEN pump THEN no duplicate event frames."""
+        h = _FakeSSEHandler()
+        state = {"n": 0}
+
+        def snap():
+            state["n"] += 1
+            return {"pct": 1} if state["n"] < 3 else {"pct": 2}
+
+        D._sse_stream(h, "status", snap, lambda s: s["pct"] == 2, interval=0.0)
+        frames = h.frames()
+        # pct=1 连来两次（去重后只推一帧），pct=2 一帧 → 共 2 帧
+        assert frames.count("event: status") == 2
+        assert frames.count(": keep-alive") == 2
+        assert '"pct": 2' in frames
+
+    def test_gone_event_when_resource_vanishes(self):
+        """GIVEN snapshot None WHEN pump THEN gone event + stream closed."""
+        h = _FakeSSEHandler()
+        D._sse_stream(h, "status", lambda: None, lambda s: False)
+        assert "event: gone" in h.frames()
+
+    def test_terminal_state_closes_without_keepalive(self):
+        """GIVEN already-terminal snapshot WHEN pump THEN one frame, no heartbeat."""
+        h = _FakeSSEHandler()
+        D._sse_stream(h, "status", lambda: {"status": "completed"},
+                      lambda s: s.get("status") in ("completed", "failed"))
+        frames = h.frames()
+        assert frames.count("event: status") == 1
+        assert "keep-alive" not in frames
+
+
+class TestEvidenceStream:
+    """GET /api/v1/dashboard/evidence/stream (T11-SSE)."""
+
+    def test_missing_task_id(self):
+        """GIVEN no task_id WHEN stream THEN 400."""
+        payload, status = _handle(
+            "GET", "evidence/stream", {}, {}, handler=_FakeSSEHandler())
+        assert status == 400
+
+    def test_task_not_found(self):
+        """GIVEN unknown task WHEN stream THEN 404."""
+        payload, status = _handle(
+            "GET", "evidence/stream", {}, {"task_id": "nope"},
+            handler=_FakeSSEHandler())
+        assert status == 404
+
+    def test_handler_required(self):
+        """GIVEN no handler WHEN stream THEN 500 (cannot write a live stream)."""
+        D._ev_tasks["ev-nh"] = {"task_id": "ev-nh", "status": "running"}
+        payload, status = _handle(
+            "GET", "evidence/stream", {}, {"task_id": "ev-nh"}, handler=None)
+        assert status == 500
+
+    def test_pushes_status_and_closes_on_terminal(self):
+        """GIVEN completed task WHEN stream THEN status frame, then close."""
+        D._ev_tasks["ev-sse"] = {
+            "task_id": "ev-sse", "status": "completed", "progress_pct": 100,
+            "_thread": None,
+        }
+        h = _FakeSSEHandler()
+        result = _handle(
+            "GET", "evidence/stream", {}, {"task_id": "ev-sse"}, handler=h)
+        assert result is None  # 自行写响应，router 不得再补一次 JSON
+        frames = h.frames()
+        assert "event: status" in frames
+        assert '"status": "completed"' in frames
+        assert "_thread" not in frames  # 私有字段不上线
+        assert "keep-alive" not in frames
+
+
+class TestGapBatchStream:
+    """GET /api/v1/dashboard/gap-analysis/batch/{id}/stream (T11-SSE)."""
+
+    def test_batch_not_found(self):
+        """GIVEN unknown batch WHEN stream THEN 404."""
+        payload, status = _handle(
+            "GET", "gap-analysis/batch/nope/stream", {}, {},
+            handler=_FakeSSEHandler())
+        assert status == 404
+
+    def test_pushes_batch_and_closes_on_terminal(self):
+        """GIVEN completed batch WHEN stream THEN batch frame, then close."""
+        D._gap_batches["gb-sse"] = {
+            "batch_id": "gb-sse", "status": "completed", "total": 1,
+            "done": 1, "failed": 0, "started_at": "t0", "finished_at": "t1",
+            "items": {"g1": {"gap_id": "g1", "status": "completed",
+                             "progress_pct": 100, "run_id": "r1"}},
+        }
+        h = _FakeSSEHandler()
+        result = _handle(
+            "GET", "gap-analysis/batch/gb-sse/stream", {}, {}, handler=h)
+        assert result is None
+        frames = h.frames()
+        assert "event: batch" in frames
+        assert '"status": "completed"' in frames
+        assert '"done": 1' in frames
+
+    def test_plain_status_route_still_works(self):
+        """GIVEN batch id WHEN GET without /stream THEN JSON status (回归)."""
+        D._gap_batches["gb-plain"] = {
+            "batch_id": "gb-plain", "status": "running", "total": 2,
+            "done": 0, "failed": 0, "started_at": "t0", "finished_at": None,
+            "items": {},
+        }
+        payload, status = _handle(
+            "GET", "gap-analysis/batch/gb-plain", {}, {}, handler=None)
+        assert status == 200
+        assert payload["data"]["batch_id"] == "gb-plain"
+
+
+class TestGapRunStream:
+    """GET /api/v1/dashboard/gap-analysis/{gap_id}/status/stream (T11-SSE)."""
+
+    def test_handler_required(self):
+        """GIVEN no handler WHEN stream THEN 500 (cannot write a live stream)."""
+        payload, status = _handle(
+            "GET", "gap-analysis/g1/status/stream", {}, {}, handler=None)
+        assert status == 500
+
+    def test_unknown_run_id(self):
+        """GIVEN unknown run_id WHEN stream THEN 404."""
+        payload, status = _handle(
+            "GET", "gap-analysis/g1/status/stream", {}, {"run_id": "nope"},
+            handler=_FakeSSEHandler())
+        assert status == 404
+
+    def test_pushes_run_and_closes_on_terminal(self):
+        """GIVEN completed run WHEN stream THEN run frame, then close."""
+        D._gap_runs["run-sse"] = {
+            "run_id": "run-sse", "gap_id": "g1", "status": "completed",
+            "progress_pct": 100, "started_at": "t0", "finished_at": "t1",
+            "log": ["done"],
+        }
+        h = _FakeSSEHandler()
+        result = _handle(
+            "GET", "gap-analysis/g1/status/stream", {}, {"run_id": "run-sse"},
+            handler=h)
+        assert result is None
+        frames = h.frames()
+        assert "event: run" in frames
+        assert '"status": "completed"' in frames
+        assert "keep-alive" not in frames
+
+    def test_plain_status_route_still_works(self):
+        """GIVEN run_id WHEN GET status (no /stream) THEN JSON (回归)."""
+        D._gap_runs["run-plain"] = {
+            "run_id": "run-plain", "gap_id": "g1", "status": "running",
+            "progress_pct": 20, "started_at": "t0", "finished_at": None,
+            "log": [],
+        }
+        payload, status = _handle(
+            "GET", "gap-analysis/g1/status", {}, {"run_id": "run-plain"},
+            handler=None)
+        assert status == 200
+        assert payload["data"]["progress_pct"] == 20
 
 
 # ── coverage ───────────────────────────────────────────────────────────

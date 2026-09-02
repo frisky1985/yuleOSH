@@ -40,6 +40,10 @@ OSH_HOME = os.environ.get("OSH_HOME", str(PROJECT_ROOT))
 # ── In-memory task tracking for evidence pack generation ──
 _ev_tasks: dict[str, dict] = {}
 
+# 模拟生成（本机无 yuleosh CLI 时）每个阶段之间的间隔（秒）。留白是为了让
+# 进度可被真实观测 —— 之前 4 步瞬时跑完，前端只看到 0 → 100 的跳变。
+_SIM_EVIDENCE_STEP_SECONDS = 0.25
+
 # ── In-memory tracking for gap analysis runs (post-MVP detail/run) ──
 # A run is created via POST /gap-analysis/{id}/run and polled via
 # /gap-analysis/{id}/status. Status transitions:
@@ -279,8 +283,10 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
         GET  /api/v1/dashboard/gap-analysis/{gap_id}/status — 修复进度轮询
         POST /api/v1/dashboard/gap-analysis/batch-run      — 批量触发差距修复（异步）
         GET  /api/v1/dashboard/gap-analysis/batch/{batch_id} — 批量修复进度轮询
-        POST /api/v1/dashboard/evidence/generate    — 一键生成证据包
-        GET  /api/v1/dashboard/evidence/status      — 证据包生成状态
+        POST /api/v1/dashboard/evidence/generate    — 一键生成证据包（后台线程，立即返回 task_id）
+        GET  /api/v1/dashboard/evidence/status      — 证据包生成状态（轮询兜底）
+        GET  /api/v1/dashboard/evidence/stream      — 证据包生成进度 SSE 推送（T11-SSE）
+        GET  /api/v1/dashboard/gap-analysis/batch/{batch_id}/stream — 批量修复进度 SSE（T11-SSE）
         GET  /api/v1/dashboard/coverage             — 覆盖率数据
         GET  /api/v1/dashboard/misra-trend          — MISRA 违规趋势
     """
@@ -299,10 +305,15 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
     if path_tail == "gap-analysis/batch-run" and method == "POST":
         return _dashboard_gap_batch_run(body or {})
     if path_tail.startswith("gap-analysis/batch/"):
-        # /api/v1/dashboard/gap-analysis/batch/{batch_id}  (GET status)
-        batch_id = path_tail[len("gap-analysis/batch/"):]
+        # /api/v1/dashboard/gap-analysis/batch/{batch_id}         (GET status)
+        # /api/v1/dashboard/gap-analysis/batch/{batch_id}/stream   (GET SSE, T11)
+        rest = path_tail[len("gap-analysis/batch/"):]
+        if rest.endswith("/stream"):
+            # T11-SSE：批量修复进度推送。成功时自行写长连接响应并返回 None；
+            # 前置校验失败返回 (payload, status) 交给 router 回 JSON 错误。
+            return _dashboard_gap_batch_stream(rest[: -len("/stream")], handler)
         if method == "GET":
-            return _dashboard_gap_batch_status(batch_id)
+            return _dashboard_gap_batch_status(rest)
     if path_tail.startswith("gap-analysis/"):
         # /api/v1/dashboard/gap-analysis/{gap_id}
         # /api/v1/dashboard/gap-analysis/{gap_id}/run   (POST)
@@ -315,12 +326,20 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
             return _dashboard_gap_run(gap_id, body or {})
         if action == "status" and method == "GET":
             return _dashboard_gap_run_status(gap_id, query)
+        if action == "status/stream" and method == "GET":
+            # T11-SSE：单条差距修复进度推送（替代前端轮询）。
+            return _dashboard_gap_run_stream(gap_id, query, handler)
         if not action and method == "GET":
             return _dashboard_gap_detail(gap_id)
     if path_tail == "evidence/generate" and method == "POST":
         return _dashboard_evidence_generate(body, query)
     if path_tail == "evidence/status" and method == "GET":
         return _dashboard_evidence_status(query)
+    if path_tail == "evidence/stream" and method == "GET":
+        # T11-SSE：证据包生成进度推送（替代前端轮询）。成功时自行写长连接响应
+        # 并返回 None，阻止 router 再补写一次 JSON；参数/鉴权前置校验失败则
+        # 返回 (payload, status) 交给 router 正常回 JSON 错误。
+        return _dashboard_evidence_stream(query, handler)
     if path_tail == "coverage" and method == "GET":
         return _dashboard_coverage(query)
     if path_tail == "misra-trend" and method == "GET":
@@ -778,6 +797,40 @@ def _dashboard_gap_run_status(gap_id: str, query: dict) -> tuple[dict, int]:
     return json_ok(candidates[0])
 
 
+def _dashboard_gap_run_stream(gap_id: str, query: dict,
+                              handler: Any) -> Optional[tuple[dict, int]]:
+    """GET .../gap-analysis/{gap_id}/status/stream — SSE 推送单条修复进度。
+
+    T11-SSE：与批量流共用 ``_sse_stream``。带 ``run_id`` 时跟踪指定运行，
+    否则跟踪该差距项最近一次运行。
+
+    Returns:
+        None —— 已自行写完 SSE 长连接响应；(payload, status) —— 前置校验失败。
+    """
+    run_id = _get_query_param(query, "run_id", "")
+    if handler is None:
+        return json_error("handler required for SSE", 500)
+    if run_id and run_id not in _gap_runs:
+        return json_error(f"Run not found: {run_id}", 404)
+
+    def _snapshot():
+        if run_id:
+            return _gap_runs.get(run_id)
+        candidates = [r for r in _gap_runs.values() if r.get("gap_id") == gap_id]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda r: r.get("started_at") or "", reverse=True)
+        return candidates[0]
+
+    _sse_stream(
+        handler,
+        event="run",
+        snapshot_fn=_snapshot,
+        is_done=lambda snap: snap.get("status") in ("completed", "failed"),
+    )
+    return None
+
+
 def _dashboard_gap_batch_run(body: dict) -> tuple[dict, int]:
     """POST /api/v1/dashboard/gap-analysis/batch-run — bulk remediation.
 
@@ -901,7 +954,13 @@ def _dashboard_gap_batch_status(batch_id: str) -> tuple[dict, int]:
 def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
     """POST /api/v1/dashboard/evidence/generate — trigger evidence pack generation.
 
-    Creates an async task and returns task_id for polling.
+    Creates an async task and returns ``task_id`` immediately.
+
+    T11-SSE：生成在**后台线程**执行（``_run_evidence_task``），HTTP 连接不再
+    被阻塞最长 300s —— 这一时长远超浏览器与反向代理的超时，此前会让请求直接
+    失败、前端拿不到 task_id。进度通过 SSE 推送
+    ``GET /api/v1/dashboard/evidence/stream?task_id=...``；SSE 不可用时退回
+    ``/api/v1/dashboard/evidence/status`` 轮询。
 
     SECURITY (SEC-C1): project_dir must resolve inside OSH_HOME (same
     guard as the pipeline trigger) — otherwise an authenticated user
@@ -931,6 +990,31 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
         "error": None,
     }
 
+    # T11-SSE：后台线程跑生成，HTTP 立即返回 task_id 供 SSE / 轮询订阅。
+    worker = threading.Thread(
+        target=_run_evidence_task,
+        args=(task_id, project_dir),
+        daemon=True,
+        name=f"evidence-{task_id}",
+    )
+    _ev_tasks[task_id]["_thread"] = worker
+    worker.start()
+
+    return json_ok({
+        "task_id": task_id,
+        "status": "running",
+        "project_id": project_id,
+    })
+
+
+def _run_evidence_task(task_id: str, project_dir: str) -> None:
+    """Background worker for evidence pack generation (T11-SSE).
+
+    Extracted from ``_dashboard_evidence_generate`` so the POST is no longer
+    blocked for up to 300s. Mutates ``_ev_tasks[task_id]`` in place; SSE
+    subscribers (and the polling fallback) pick the change up on their next
+    tick. Never raises — every failure path is recorded on the task.
+    """
     # Attempt real evidence generation via yuleosh evidence pack CLI
     try:
         _ev_tasks[task_id]["progress_pct"] = 10
@@ -1005,26 +1089,27 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
             "error": str(e),
         })
 
-    return json_ok({
-        "task_id": task_id,
-        "status": _ev_tasks[task_id]["status"],
-        "project_id": project_id,
-    })
+    # 任务状态已写入 _ev_tasks[task_id]；SSE 流/轮询会读到这里的最新值。
 
 
 def _simulate_evidence_completion(task_id: str):
-    """Simulate evidence generation completion when the actual command is not available."""
+    """Simulate evidence generation completion when the actual command is not available.
+
+    T11-SSE：每一步之间留出间隔，让进度可被真实观测（此前 4 步瞬时跑完，
+    前端只能看到 0 → 100 的跳变，SSE 也只会推一帧）。
+    """
     import time as t_mod
 
     def _update_progress(progress: int):
         if task_id in _ev_tasks:
             _ev_tasks[task_id]["progress_pct"] = progress
 
-    # Simulate 3 phases
-    _update_progress(20)
-    _update_progress(50)
-    _update_progress(80)
-    _update_progress(100)
+    # Simulate 3 phases（阶段间留白，便于观察进度推进）
+    for pct in (20, 50, 80, 100):
+        t_mod.sleep(_SIM_EVIDENCE_STEP_SECONDS)
+        if task_id not in _ev_tasks:
+            return  # 任务记录被清理 —— 停止模拟
+        _update_progress(pct)
 
     if task_id in _ev_tasks:
         _ev_tasks[task_id].update({
@@ -1033,6 +1118,60 @@ def _simulate_evidence_completion(task_id: str):
             "download_url": f"/api/v1/evidence/pack?task_id={task_id}",
             "note": "⚠️ 演示数据 — 已生成模拟证据包",
         })
+
+
+def _public_task(task: dict) -> dict:
+    """Strip private bookkeeping keys (``_thread`` …) before serialising.
+
+    T11-SSE：任务记录里挂了 Thread 对象等不可序列化的内部字段，直接
+    ``json.dumps`` 整个 dict 会在 status/stream 端点抛 TypeError。
+    """
+    return {k: v for k, v in task.items() if not k.startswith("_")}
+
+
+def _sse_stream(handler: Any, event: str, snapshot_fn, is_done,
+                interval: float = 0.5, max_seconds: float = 600.0) -> None:
+    """Generic SSE pump shared by the evidence / gap-batch streams (T11-SSE).
+
+    替代前端指数退避轮询：只在快照真的变化时写 ``event:`` 帧，其余时间发
+    心跳注释（``: keep-alive``）保活，避免被反向代理掐断。到达终态后写完
+    最后一帧即返回，释放线程与 socket。
+
+    ``snapshot_fn()`` 返回 None 表示资源已不存在（推 ``gone`` 后关流）。
+    客户端断开（BrokenPipe / ConnectionReset）属正常退出，不打错误日志。
+    """
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+    handler.send_header("Cache-Control", "no-cache, no-transform")
+    handler.send_header("Connection", "keep-alive")
+    handler.send_header("X-Accel-Buffering", "no")  # 禁止反向代理缓冲
+    _add_sec = getattr(handler, "_add_security_headers", None)
+    if callable(_add_sec):
+        _add_sec()
+    handler.end_headers()
+
+    started = time.time()
+    last: Optional[str] = None
+    try:
+        while time.time() - started < max_seconds:
+            snapshot = snapshot_fn()
+            if snapshot is None:
+                handler.wfile.write(b"event: gone\ndata: {}\n\n")
+                break
+            serialized = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+            if serialized != last:
+                handler.wfile.write(
+                    f"event: {event}\ndata: {serialized}\n\n".encode("utf-8"))
+                last = serialized
+            if is_done(snapshot):
+                break
+            handler.wfile.write(b": keep-alive\n\n")
+            time.sleep(interval)
+    except (BrokenPipeError, ConnectionResetError):
+        return  # 客户端断开 —— 正常退出
+    except OSError as e:
+        log.debug("SSE stream closed: %s", e)
+        return
 
 
 def _dashboard_evidence_status(query: dict) -> tuple[dict, int]:
@@ -1047,7 +1186,62 @@ def _dashboard_evidence_status(query: dict) -> tuple[dict, int]:
     if task is None:
         return json_error(f"Task not found: {task_id}", 404)
 
-    return json_ok({k: v for k, v in task.items()})
+    return json_ok(_public_task(task))
+
+
+def _dashboard_evidence_stream(query: dict, handler: Any) -> Optional[tuple[dict, int]]:
+    """GET /api/v1/dashboard/evidence/stream — SSE 推送证据包生成进度（T11-SSE）。
+
+    只在任务状态变化时推 ``event: status``，终态（completed/failed）后关流。
+    前端 EventSource 不可用/连接失败时自动退回 ``/evidence/status`` 轮询。
+
+    Returns:
+        None  —— 已自行写完 SSE 长连接响应，router 不得再补写 JSON；
+        (payload, status) —— 前置校验失败，交给 router 回 JSON 错误。
+    """
+    task_id = _get_query_param(query, "task_id", "")
+    if not task_id:
+        return json_error("task_id is required", 400)
+    if task_id not in _ev_tasks:
+        return json_error(f"Task not found: {task_id}", 404)
+    if handler is None:
+        return json_error("handler required for SSE", 500)
+
+    _sse_stream(
+        handler,
+        event="status",
+        snapshot_fn=lambda: _public_task(_ev_tasks[task_id])
+        if task_id in _ev_tasks else None,
+        is_done=lambda snap: snap.get("status") in ("completed", "failed"),
+    )
+
+
+def _dashboard_gap_batch_stream(batch_id: str, handler: Any) -> Optional[tuple[dict, int]]:
+    """GET .../gap-analysis/batch/{batch_id}/stream — SSE 推送批量修复进度。
+
+    T11-SSE：与 evidence/stream 共用 ``_sse_stream``；批量任务本就在后台线程
+    顺序执行，SSE 让前端不必再以指数退避反复打 status 接口。
+
+    Returns:
+        None —— 已自行写完 SSE 长连接响应；(payload, status) —— 前置校验失败。
+    """
+    if batch_id not in _gap_batches:
+        return json_error(f"Batch not found: {batch_id}", 404)
+    if handler is None:
+        return json_error("handler required for SSE", 500)
+
+    def _snapshot():
+        if batch_id not in _gap_batches:
+            return None
+        _payload, status = _dashboard_gap_batch_status(batch_id)
+        return _payload.get("data") if status == 200 else None
+
+    _sse_stream(
+        handler,
+        event="batch",
+        snapshot_fn=_snapshot,
+        is_done=lambda snap: snap.get("status") in ("completed", "failed"),
+    )
 
 
 def _dashboard_coverage(query: dict) -> tuple[dict, int]:
