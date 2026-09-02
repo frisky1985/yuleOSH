@@ -30,7 +30,26 @@ export interface UserMenuSession {
   email: string;
   org_name?: string | null;
   user_id?: number | string;
+  /** 登录用户角色（admin→决策视角；developer/reviewer/auditor→工程视角）。 */
+  role?: string | null;
 }
+
+/** 角色 → 视图标签 + 色调（与 dashboard/layout.tsx 的 isEngineerRole 分流一致）。 */
+function viewOf(role?: string | null): { label: string; tone: "decision" | "engineer" | "member" } {
+  if (role === "developer" || role === "reviewer" || role === "auditor") {
+    return { label: "工程视角", tone: "engineer" };
+  }
+  if (role === "admin") {
+    return { label: "决策视角", tone: "decision" };
+  }
+  return { label: "成员视角", tone: "member" };
+}
+
+const VIEW_BADGE_CLS: Record<"decision" | "engineer" | "member", string> = {
+  decision: "border-[#722ed1]/40 text-[#a78bfa] bg-[#722ed1]/10",
+  engineer: "border-[#1677ff]/40 text-[#60a5fa] bg-[#1677ff]/10",
+  member: "border-[#334155] text-[#94a3b8] bg-[#1e293b]",
+};
 
 export interface UserMenuActions {
   onOpenAccount: () => void;
@@ -54,6 +73,7 @@ function nameOf(email?: string) {
 
 export function UserMenu({ session, actions }: UserMenuProps) {
   const [open, setOpen] = useState(false);
+  const view = viewOf(session.role);
   const [menuStyle, setMenuStyle] = useState<{ right: number; top: number }>({
     right: 16,
     top: 56,
@@ -151,6 +171,12 @@ export function UserMenu({ session, actions }: UserMenuProps) {
         <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
           {nameOf(session.email)}
         </span>
+        <span
+          className={`hidden md:inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${VIEW_BADGE_CLS[view.tone]}`}
+          title={`当前角色：${session.role ?? "未知"}`}
+        >
+          {view.label}
+        </span>
       </button>
 
       {open && (
@@ -174,8 +200,14 @@ export function UserMenu({ session, actions }: UserMenuProps) {
             e.stopPropagation();
           }}
         >
-          <div className="px-2 py-1.5 text-xs text-[#94a3b8] border-b border-[#1e293b] mb-1">
-            {session.org_name || "账号"}
+          <div className="px-2 py-1.5 text-xs text-[#94a3b8] border-b border-[#1e293b] mb-1 flex items-center justify-between gap-2">
+            <span className="truncate">{session.org_name || "账号"}</span>
+            <span
+              className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] leading-none shrink-0 ${VIEW_BADGE_CLS[view.tone]}`}
+              title={`当前角色：${session.role ?? "未知"}`}
+            >
+              {view.label}
+            </span>
           </div>
           <MenuItem
             icon={<UserIcon className="w-3.5 h-3.5" />}

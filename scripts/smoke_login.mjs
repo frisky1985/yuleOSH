@@ -16,6 +16,13 @@ const BASE = process.argv[2] || process.env.YULEOSH_BASE_URL || "http://127.0.0.
 const DEMO_EMAIL = "demo@yuleosh.com";
 const DEMO_PASSWORD = "Demo2026!yuleosh";
 
+// 两角色演示账号：角色视图不同（admin→决策视角；developer→工程视角），
+// 见 src/yuleosh/ui/auth_extended.py ensure_view_test_accounts。
+const DECISION_EMAIL = "decision@yuleosh.com";
+const DECISION_PASSWORD = "Demo2026!decision";
+const ENGINEER_EMAIL = "engineer@yuleosh.com";
+const ENGINEER_PASSWORD = "Demo2026!engineer";
+
 const results = [];
 function check(name, cond, detail = "") {
   results.push({ name, ok: !!cond, detail });
@@ -76,6 +83,33 @@ async function main() {
     "错误密码登录 -> 401 且 error=Invalid email or password",
     r8.status === 401 && b8.error === "Invalid email or password",
     `status=${r8.status} err=${b8.error}`,
+  );
+
+  // 5) 两角色演示账号：登录可用且角色不同（保护"决策/工程视图不同"不变量）
+  const rd = await fetch(`${BASE}/api/auth/signin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: DECISION_EMAIL, password: DECISION_PASSWORD }),
+    redirect: "manual",
+  });
+  const bd = await rd.json().catch(() => ({}));
+  check("决策者登录 -> 200", rd.status === 200, `status=${rd.status} role=${bd.role}`);
+  check("决策者角色 = admin（决策视角）", bd.role === "admin", `role=${bd.role}`);
+
+  const re = await fetch(`${BASE}/api/auth/signin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: ENGINEER_EMAIL, password: ENGINEER_PASSWORD }),
+    redirect: "manual",
+  });
+  const be = await re.json().catch(() => ({}));
+  check("工程师登录 -> 200", re.status === 200, `status=${re.status} role=${be.role}`);
+  check("工程师角色 = developer（工程视角）", be.role === "developer", `role=${be.role}`);
+
+  check(
+    "两角色演示账号视图不同（role 不相等）",
+    bd.role && be.role && bd.role !== be.role,
+    `decision=${bd.role} engineer=${be.role}`,
   );
 
   return finish();
