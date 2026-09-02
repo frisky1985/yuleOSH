@@ -727,7 +727,9 @@ app.whenReady().then(async () => {
   await createWindow();
 
   // 2. AR-P1-03: 先启动后端，等待健康检查通过后再加载 UI
-  const healthCheckUrl = `http://localhost:${BACKEND_PORT}/api/health`;
+  //    注意：路径须与 server-manager.js 的 HEALTH_CHECK_PATH (/api/v1/health) 一致，
+  //    否则轮询到 404 会空等 15s 才「勉强加载 UI」。
+  const healthCheckUrl = `http://localhost:${BACKEND_PORT}/api/v1/health`;
 
   // Start backend (fires healthy event on success)
   startBackend();
