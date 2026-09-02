@@ -14,6 +14,8 @@ import {
   FileText,
   FlaskConical,
   Download,
+  Copy,
+  Check,
   Info,
   LayoutDashboard,
   Loader2,
@@ -223,6 +225,7 @@ export default function LogsPage() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sumExpanded, setSumExpanded] = useState<Record<string, boolean>>({});
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // ── Load log search results ──────────────────────────────────────────────
   const loadLogs = useCallback(async () => {
@@ -324,6 +327,27 @@ export default function LogsPage() {
 
   const toggleExpand = (key: string) => {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const copyLog = async (key: string, text: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
+    } catch {
+      /* 复制失败静默忽略 */
+    }
   };
 
   const isEmpty = !loading && logs.length === 0 && !error;
@@ -565,6 +589,28 @@ export default function LogsPage() {
                         {/* Expanded: full content */}
                         {isOpen && (
                           <div className="px-4 pb-4 pl-10">
+                            <div className="flex items-center justify-end mb-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void copyLog(key, log.content);
+                                }}
+                                className="flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-[#1e293b] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#334155] transition-colors"
+                              >
+                                {copiedKey === key ? (
+                                  <>
+                                    <Check className="w-3 h-3" style={{ color: "#52c41a" }} />
+                                    <span style={{ color: "#52c41a" }}>已复制</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    复制
+                                  </>
+                                )}
+                              </button>
+                            </div>
                             <pre className="rounded-lg border border-[#1e293b] bg-[#0a0e17] p-3 text-xs text-[#cbd5e1] whitespace-pre-wrap break-words leading-relaxed">
                               {highlightMatches(log.content, filters.query.trim())}
                             </pre>
