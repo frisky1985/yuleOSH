@@ -67,7 +67,9 @@ DEFAULT_FALLBACK_ORDER: tuple = ("deepseek", "anthropic", "openai", "mock")
 PROVIDER_KEY_ENVS: dict[str, tuple] = {
     "deepseek": ("DEEPSEEK_API_KEY", "LLM_API_KEY"),
     "anthropic": ("ANTHROPIC_API_KEY",),
-    "openai": ("OPENAI_API_KEY",),
+    # openai 也接受 LLM_API_KEY：自建 OpenAI 兼容端点（如本机 Ollama）通常
+    # 填 LLM_API_KEY=任意非空串（见 PROVIDER_DEFAULT_MODELS / OpenAIProvider）。
+    "openai": ("OPENAI_API_KEY", "LLM_API_KEY"),
     "mock": (),
 }
 

@@ -416,19 +416,194 @@ class TestSkeletonProviders:
         assert "预留" in str(exc_info.value)
         assert "anthropic" in str(exc_info.value)
 
-    def test_openai_chat_not_implemented(self):
-        """GIVEN OpenAIProvider WHEN chat THEN NotImplementedError with 预留 note."""
-        with pytest.raises(NotImplementedError) as exc_info:
+    def test_openai_no_longer_skeleton(self):
+        """GIVEN OpenAIProvider WHEN chat with no key THEN RuntimeError (not NotImplementedError).
+
+        方案 A 已落地真实调用（见 TestOpenAIProvider）；此处仅确认不再是 skeleton
+        占位、缺 key 时抛 RuntimeError 且绝不抛 NotImplementedError。
+        """
+        assert not getattr(OpenAIProvider, "is_skeleton", False)
+        with pytest.raises(RuntimeError) as exc_info:
             asyncio.run(
                 OpenAIProvider().chat(
                     messages=[{"role": "user", "content": "hi"}],
                     config=LLMConfig(model="gpt-4o"),
                 )
             )
-        assert "预留" in str(exc_info.value)
         assert "openai" in str(exc_info.value)
+        assert "NotImplemented" not in str(exc_info.value)
 
     def test_skeleton_estimate_cost(self):
         """GIVEN skeleton providers WHEN estimate_cost THEN PRICING_TABLE numbers."""
         assert ClaudeProvider().estimate_cost(1000, 1000) == pytest.approx(0.015 + 0.075)
         assert OpenAIProvider().estimate_cost(1000, 1000) == pytest.approx(0.010 + 0.030)
+
+
+# ---------------------------------------------------------------------------
+# OpenAIProvider.chat — 真实实现 (方案 A, 替代原 skeleton NotImplementedError)
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAIProvider:
+    def _response_body(self, **overrides):
+        body = {
+            "id": "chatcmpl-test",
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "Hello from OpenAI!"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 1000,
+                "total_tokens": 2000,
+            },
+        }
+        body.update(overrides)
+        return body
+
+    def test_chat_success_default_model(self):
+        """GIVEN config.model=gpt-4o WHEN chat THEN request model honored."""
+        mock_urlopen = _fake_urlopen(self._response_body())
+        with mock.patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-openai", "LLM_BASE_URL": "https://api.openai.com"},
+        ):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                resp = asyncio.run(
+                    OpenAIProvider().chat(
+                        messages=[{"role": "user", "content": "hi"}],
+                        config=LLMConfig(model="gpt-4o"),
+                    )
+                )
+        req = mock_urlopen.call_args[0][0]
+        assert req.full_url == "https://api.openai.com/v1/chat/completions"
+        assert req.headers["Authorization"] == "Bearer sk-openai"
+        body = json.loads(req.data)
+        assert body["model"] == "gpt-4o"
+        assert body["stream"] is False
+        assert resp.content == "Hello from OpenAI!"
+        assert resp.provider == "openai"
+        assert resp.model == "gpt-4o"
+        assert resp.token_usage == {"prompt": 1000, "completion": 1000, "total": 2000}
+        assert resp.cost == pytest.approx(0.010 + 0.030)
+        assert resp.error is None
+
+    def test_chat_uses_llm_api_key(self):
+        """GIVEN only LLM_API_KEY WHEN chat THEN request succeeds (自建端点场景)."""
+        mock_urlopen = _fake_urlopen(self._response_body(model="deepseek-r1:7b"))
+        with mock.patch.dict(
+            os.environ,
+            {"LLM_API_KEY": "ollama", "LLM_BASE_URL": "http://localhost:11434/v1"},
+        ):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                resp = asyncio.run(
+                    OpenAIProvider().chat(
+                        messages=[{"role": "user", "content": "hi"}],
+                        config=LLMConfig(model="deepseek-r1:7b"),
+                    )
+                )
+        req = mock_urlopen.call_args[0][0]
+        assert req.headers["Authorization"] == "Bearer ollama"
+        # OpenAI 兼容端点直接使用 config.model（Ollama tag）。
+        assert json.loads(req.data)["model"] == "deepseek-r1:7b"
+        assert resp.model == "deepseek-r1:7b"
+
+    def test_chat_openai_key_preferred_over_llm_key(self):
+        """GIVEN both keys WHEN chat THEN OPENAI_API_KEY wins (与 deepseek 对称)."""
+        mock_urlopen = _fake_urlopen(self._response_body())
+        with mock.patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-oai", "LLM_API_KEY": "sk-llm"},
+        ):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                asyncio.run(
+                    OpenAIProvider().chat(
+                        messages=[{"role": "user", "content": "hi"}],
+                        config=LLMConfig(model="gpt-4o", max_retries=1),
+                    )
+                )
+        req = mock_urlopen.call_args[0][0]
+        assert req.headers["Authorization"] == "Bearer sk-oai"
+
+    def test_chat_custom_base_url(self):
+        """GIVEN LLM_BASE_URL override WHEN chat THEN URL honored."""
+        mock_urlopen = _fake_urlopen(self._response_body())
+        with mock.patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-openai", "LLM_BASE_URL": "https://proxy.example.com"},
+        ):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                resp = asyncio.run(
+                    OpenAIProvider().chat(
+                        messages=[{"role": "user", "content": "hi"}],
+                        config=LLMConfig(model="gpt-4o", max_retries=1),
+                    )
+                )
+        req = mock_urlopen.call_args[0][0]
+        assert req.full_url == "https://proxy.example.com/v1/chat/completions"
+        assert resp.model == "gpt-4o"
+
+    def test_chat_missing_api_key_error_contains_provider(self):
+        """GIVEN no API key WHEN chat THEN RuntimeError naming provider + key envs."""
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(RuntimeError) as exc_info:
+                asyncio.run(
+                    OpenAIProvider().chat(
+                        messages=[{"role": "user", "content": "hi"}],
+                        config=LLMConfig(model="gpt-4o"),
+                    )
+                )
+        msg = str(exc_info.value)
+        assert "openai" in msg
+        assert "OPENAI_API_KEY" in msg
+        assert "LLM_API_KEY" in msg
+
+    def test_chat_retry_exhausted_raises_with_provider(self):
+        """GIVEN persistent HTTPError WHEN chat THEN RuntimeError naming provider."""
+        mock_urlopen = mock.MagicMock(side_effect=_http_error(500))
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-openai"}):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                with mock.patch("time.sleep"):
+                    with pytest.raises(RuntimeError) as exc_info:
+                        asyncio.run(
+                            OpenAIProvider().chat(
+                                messages=[{"role": "user", "content": "hi"}],
+                                config=LLMConfig(max_retries=2),
+                            )
+                        )
+        assert "openai" in str(exc_info.value)
+
+    def test_chat_no_choices_raises_with_provider(self):
+        """GIVEN response without choices WHEN chat THEN RuntimeError naming provider."""
+        mock_urlopen = _fake_urlopen({"model": "gpt-4o", "usage": {}})
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-openai"}):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                with pytest.raises(RuntimeError) as exc_info:
+                    asyncio.run(
+                        OpenAIProvider().chat(
+                            messages=[{"role": "user", "content": "hi"}],
+                            config=LLMConfig(max_retries=1),
+                        )
+                    )
+        assert "openai" in str(exc_info.value)
+
+    def test_chat_null_content_refusal(self):
+        """GIVEN content=null WHEN chat THEN refusal message with finish_reason."""
+        mock_urlopen = _fake_urlopen(
+            self._response_body(
+                choices=[{"message": {"role": "assistant", "content": None}, "finish_reason": "length"}]
+            )
+        )
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-openai"}):
+            with mock.patch("urllib.request.urlopen", mock_urlopen):
+                resp = asyncio.run(
+                    OpenAIProvider().chat(
+                        messages=[{"role": "user", "content": "hi"}],
+                        config=LLMConfig(max_retries=1),
+                    )
+                )
+        assert "refused" in resp.content
+        assert "length" in resp.content

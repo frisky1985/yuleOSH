@@ -174,6 +174,16 @@ PRICING_TABLE: Dict[str, Dict[str, float]] = {
         "output_per_1k": 0.030,
         "context_window": 128_000,
     },
+    # 本地模型（Ollama / 自建 OpenAI 兼容端点）：零费用，pricing 全 0。
+    # 预算检查（token_budget.py）对无 pricing 条目的模型会判失败并降级跳过
+    # 主 provider，故本地常用 tag 需在此登记；否则 YULEOSH_LLM_UNIFIED=1
+    # （统一入口）路径下真实调用会被降级到备用 provider。换其它本地 tag 时
+    # 复制此条并改模型名即可。
+    "deepseek-r1:7b": {
+        "input_per_1k": 0.0,
+        "output_per_1k": 0.0,
+        "context_window": 128_000,
+    },
 }
 
 TASK_BUDGETS: Dict[str, Dict[str, float]] = {
