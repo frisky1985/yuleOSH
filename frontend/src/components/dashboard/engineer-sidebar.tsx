@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -9,6 +9,7 @@ import {
   Cpu,
   Terminal,
   ListChecks,
+  Network,
   FlaskConical,
   Layers,
   ScrollText,
@@ -19,24 +20,28 @@ import {
 import { api } from "@/lib/api";
 import { resetSessionCache, useSessionRole } from "@/lib/use-session-role";
 
-// v5 风格左侧栏导航 — 工程视角优先展示流水线相关内容。
+// 工程视角侧栏：按 V-model 开发主线分组排序（需求→测试设计→执行→追溯→证据），
+// 基础设施（流水线/设备）与可观测性（日志）下沉为辅助区。
 const NAV: {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
+  section?: string;
 }[] = [
-  { href: "/dashboard", label: "概览", icon: LayoutDashboard, exact: true },
-  { href: "/dashboard/pipeline", label: "流水线", icon: GitBranch },
-  // 设备（HIL 台架注册）与日志（排查步骤失败，数据源 .osh/sessions/*.log）
-  // 都是工程执行向页面，此前入口只在决策顶栏，工程师反而进不去 —— 补在此处。
-  { href: "/dashboard/devices", label: "设备", icon: Cpu },
-  { href: "/dashboard/logs", label: "日志", icon: Terminal },
-  { href: "/dashboard/requirements", label: "项目需求", icon: ListChecks },
+  { href: "/dashboard", label: "概览", icon: LayoutDashboard, exact: true, section: "入口" },
+  // —— V-model 开发主线：需求驱动、测试设计并行、阶段看板为执行核心 ——
+  { href: "/dashboard/requirements", label: "项目需求", icon: ListChecks, section: "V-model 开发主线" },
   { href: "/dashboard/tests", label: "测试用例", icon: FlaskConical },
   { href: "/dashboard/test-layers", label: "阶段看板", icon: Layers },
+  // —— 基础设施：编排与 HIL 台架 ——
+  { href: "/dashboard/pipeline", label: "流水线", icon: GitBranch, section: "基础设施" },
+  { href: "/dashboard/devices", label: "设备", icon: Cpu },
+  // —— 可观测性：排查步骤失败 ——
+  { href: "/dashboard/logs", label: "日志", icon: Terminal, section: "可观测性" },
+  // —— 合规交付：需求↔证据链接，最后打包产出 ——
+  { href: "/dashboard/traceability", label: "追溯矩阵", icon: Network, section: "合规交付" },
   { href: "/dashboard/evidence", label: "证据包", icon: ScrollText },
-  { href: "/dashboard/traceability", label: "追溯矩阵", icon: ListChecks },
 ];
 
 export function EngineerSidebar() {
@@ -73,23 +78,33 @@ export function EngineerSidebar() {
   // 导航项：桌面侧栏与窄屏抽屉共用，选中态与跳转行为保持一致。
   const navItems = (
     <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-      {NAV.map((item) => {
+      {NAV.map((item, idx) => {
         const active = isActive(item.href, item.exact);
         const Icon = item.icon;
+        const showSection = item.section && (idx === 0 || NAV[idx - 1].section !== item.section);
         return (
-          <Link
-            key={item.href}
-            href={withView(item.href)}
-            className={
-              "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all " +
-              (active
-                ? "border-[#722ed1]/30 bg-[#722ed1]/15 text-[#722ed1]"
-                : "border-transparent text-[#94a3b8] hover:bg-[#1e293b] hover:text-white")
-            }
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            {item.label}
-          </Link>
+          <Fragment key={item.href}>
+            {showSection && (
+              <div className={idx === 0 ? "pt-0" : "pt-3"}>
+                {idx !== 0 && <div className="mx-3 mb-2 h-px bg-[#1e293b]" />}
+                <div className="px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.06em] text-[#475569]">
+                  {item.section}
+                </div>
+              </div>
+            )}
+            <Link
+              href={withView(item.href)}
+              className={
+                "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all " +
+                (active
+                  ? "border-[#722ed1]/30 bg-[#722ed1]/15 text-[#722ed1]"
+                  : "border-transparent text-[#94a3b8] hover:bg-[#1e293b] hover:text-white")
+              }
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {item.label}
+            </Link>
+          </Fragment>
         );
       })}
     </nav>
