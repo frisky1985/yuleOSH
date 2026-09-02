@@ -913,3 +913,69 @@ class TestHelpers:
     def test_mock_note(self):
         """GIVEN _mock_note WHEN called THEN demo annotation."""
         assert D._mock_note() == "⚠️ 演示数据 — 需连接实际项目"
+
+
+class _FakeProvider:
+    """Simulates an LLM provider whose chat either succeeds or raises."""
+
+    def __init__(self, ok: bool = True):
+        self._ok = ok
+
+    async def chat(self, messages, config):
+        if not self._ok:
+            # 故意包含 key 明文，验证诊断回显会脱敏
+            raise RuntimeError(
+                "DeepSeek provider (deepseek): 401 Unauthorized sk-secretabc123"
+            )
+        return object()
+
+
+class TestLLMHealth:
+    """GET /api/v1/dashboard/llm-health — 项⑪ LLM provider 健康诊断。"""
+
+    def test_config_only_no_keys(self, monkeypatch):
+        """GIVEN 无任何 key WHEN live=0 THEN 全部 unconfigured + mock 摘要。"""
+        monkeypatch.setattr(
+            "yuleosh.llm.health._get_provider", lambda name: _FakeProvider()
+        )
+        for e in ("DEEPSEEK_API_KEY", "OPENAI_API_KEY",
+                  "ANTHROPIC_API_KEY", "LLM_API_KEY"):
+            monkeypatch.delenv(e, raising=False)
+        payload, status = D._dashboard_llm_health({})
+        assert status == 200
+        assert payload["data"]["live"] is False
+        assert all(not p["key_set"] for p in payload["data"]["providers"])
+        assert "mock" in payload["data"]["summary"]
+
+    def test_live_probe_masks_key_and_reports_error(self, monkeypatch):
+        """GIVEN deepseek key 失效 WHEN live=1 THEN 脱敏且 status=error。"""
+        monkeypatch.setattr(
+            "yuleosh.llm.health._get_provider", lambda name: _FakeProvider(ok=False)
+        )
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-secretabc123")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        payload, status = D._dashboard_llm_health({"live": "1"})
+        assert status == 200
+        ds = next(p for p in payload["data"]["providers"]
+                  if p["provider"] == "deepseek")
+        assert ds["status"] == "error"
+        # key 明文不得出现在任何回显中（可能整体替换为 *** 或 sk-***）
+        assert "sk-secretabc123" not in ds["detail"]
+        assert ("sk-***" in ds["detail"] or "***" in ds["detail"])
+        assert ds["key_preview"] is not None
+
+    def test_live_probe_ok(self, monkeypatch):
+        """GIVEN 可用 key WHEN live=1 THEN status=ok 且计入 usable。"""
+        monkeypatch.setattr(
+            "yuleosh.llm.health._get_provider", lambda name: _FakeProvider(ok=True)
+        )
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-goodkey12345")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        payload, status = D._dashboard_llm_health({"live": "1"})
+        assert status == 200
+        ds = next(p for p in payload["data"]["providers"]
+                  if p["provider"] == "deepseek")
+        assert ds["status"] == "ok"
+        assert "可用" in payload["data"]["summary"]

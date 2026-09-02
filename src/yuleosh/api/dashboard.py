@@ -24,6 +24,7 @@ import subprocess
 import threading
 import uuid
 import time
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -340,6 +341,11 @@ def handle_dashboard(method: str, path_tail: str, body: dict,
         # 并返回 None，阻止 router 再补写一次 JSON；参数/鉴权前置校验失败则
         # 返回 (payload, status) 交给 router 正常回 JSON 错误。
         return _dashboard_evidence_stream(query, handler)
+    if path_tail == "llm-health" and method == "GET":
+        # 项⑪：LLM provider 健康诊断（可观测真实 LLM 链路状态，不泄露 key 明文）。
+        # ?live=1 时对每个已配置 provider 发极短在线探测，回显 402/401/网络等
+        # 真实错误（已 sanitize），便于用户自助充值 / 轮换 key。
+        return _dashboard_llm_health(query)
     if path_tail == "coverage" and method == "GET":
         return _dashboard_coverage(query)
     if path_tail == "misra-trend" and method == "GET":
@@ -1214,6 +1220,30 @@ def _dashboard_evidence_stream(query: dict, handler: Any) -> Optional[tuple[dict
         if task_id in _ev_tasks else None,
         is_done=lambda snap: snap.get("status") in ("completed", "failed"),
     )
+
+
+def _dashboard_llm_health(query: dict) -> tuple[dict, int]:
+    """GET /api/v1/dashboard/llm-health — LLM provider 健康诊断（项⑪）。
+
+    返回各 provider 的 key 配置与（可选）在线探测结果，供前端展示真实 LLM
+    链路是否可用，便于用户自助充值 / 轮换 key。不泄露任何 key 明文。
+    """
+    from yuleosh.llm.health import diagnose_llm_providers
+
+    live = _get_query_param(query, "live", "") in ("1", "true", "yes")
+    try:
+        data = asyncio.run(diagnose_llm_providers(live=live))
+    except Exception as e:  # noqa: BLE001 — 诊断接口本身须健壮，绝不 500
+        return json_ok(
+            {
+                "active_provider": os.environ.get("YULEOSH_LLM_PROVIDER", "deepseek"),
+                "live": live,
+                "providers": [],
+                "summary": f"诊断过程异常：{type(e).__name__}: {e}",
+                "error": True,
+            }
+        )
+    return json_ok(data)
 
 
 def _dashboard_gap_batch_stream(batch_id: str, handler: Any) -> Optional[tuple[dict, int]]:
