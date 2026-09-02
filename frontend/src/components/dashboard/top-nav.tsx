@@ -235,21 +235,21 @@ export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) 
                       const active = isItemActive(item);
                       const cls = `text-sm gap-2 ${active ? ITEM_ACTIVE : ITEM_IDLE}`;
                       if (item.kind === "tab") {
-                        return (
-                          <DropdownMenuItem
-                            key={item.tab}
-                            onSelect={() => onTabChange?.(item.tab)}
-                            className={cls}
-                          >
-                            <item.icon className="w-3.5 h-3.5" />
-                            {item.label}
-                          </DropdownMenuItem>
-                        );
+                      return (
+                        <DropdownMenuItem
+                          key={item.tab}
+                          onClick={() => onTabChange?.(item.tab)}
+                          className={cls}
+                        >
+                          <item.icon className="w-3.5 h-3.5" />
+                          {item.label}
+                        </DropdownMenuItem>
+                      );
                       }
                       return (
                         <DropdownMenuItem
                           key={item.href}
-                          onSelect={() => router.push(item.href)}
+                          onClick={() => router.push(item.href)}
                           className={cls}
                         >
                           <item.icon className="w-3.5 h-3.5" />

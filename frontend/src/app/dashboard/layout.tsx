@@ -104,21 +104,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="bg-[#1e293b]" />
               <DropdownMenuItem
-                onSelect={(e) => {
-                  // DropdownMenuItem 选择后会自动关闭，做先手动拦截 + 设置状态
-                  e.preventDefault();
-                  setAccountOpen(true);
-                }}
+                onClick={() => setAccountOpen(true)}
                 className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2"
               >
                 <UserIcon className="w-3.5 h-3.5" />
                 个人信息
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setSettingsOpen(true);
-                }}
+                onClick={() => setSettingsOpen(true)}
                 className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2"
               >
                 <Settings className="w-3.5 h-3.5" />
@@ -126,20 +119,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-[#1e293b]" />
               <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setLogoutOpen(true);
-                }}
+                onClick={() => setLogoutOpen(true)}
                 className="text-sm text-[#f59e0b] hover:text-[#f59e0b] hover:bg-[#f59e0b]/10 cursor-pointer gap-2"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 退出登录
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setDeleteOpen(true);
-                }}
+                onClick={() => setDeleteOpen(true)}
                 className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
               >
                 <Trash2 className="w-3.5 h-3.5" />
