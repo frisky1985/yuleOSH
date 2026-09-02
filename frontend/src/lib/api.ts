@@ -157,8 +157,20 @@ async function request<T>(
     }
   }
 
-  // 401 → auto-redirect to login (refresh failed or credentials rejected)
+  // 401 处理分两类：
+  //  - 登录/刷新类端点 (NO_REFRESH_PATHS)：401 是业务结果（凭据被拒），
+  //    透传后端 body 给调用方按其 error 字段展示，绝不跳登录页、绝不抛
+  //    "Unauthorized"（否则登录页会把"密码错误"误显成系统级未授权）。
+  //  - 其它端点：401 = 会话过期/未登录 → 失效会话缓存并跳登录页。
   if (res.status === 401) {
+    if (NO_REFRESH_PATHS.includes(path)) {
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("application/json")) {
+        const b = await res.json().catch(() => ({}));
+        return (b && typeof b === "object" ? b : {}) as T;
+      }
+      throw new Error("Invalid credentials");
+    }
     redirectToLogin();
     throw new Error("Unauthorized — redirecting to login");
   }

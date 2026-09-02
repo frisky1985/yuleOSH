@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, ArrowRight, Lock, Loader2, Eye, EyeOff, User, Building2, Ticket } from "lucide-react";
@@ -40,6 +40,22 @@ export default function LoginPage() {
   const [orgName, setOrgName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [showInvite, setShowInvite] = useState(false);
+  const [needAuth, setNeedAuth] = useState(false);
+
+  // 探测后端鉴权态：AUTH_ENABLED=True 时 /api/auth/session 不带 cookie 返回
+  // 401，说明「无需登录」链接在当前环境不可用（进 dashboard 后 API 仍 401
+  // 会被踢回登录页），此时隐藏该链接并提示用演示账号。
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/auth/session", { credentials: "same-origin" })
+      .then((r) => {
+        if (alive && r.status === 401) setNeedAuth(true);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -261,6 +277,27 @@ export default function LoginPage() {
                 GitHub OAuth 登录
               </Button>
 
+              {/* 演示账号快捷登录（本地 demo 体验）：后端 ensure_demo_account 已 seed
+                  demo@yuleosh.com / Demo2026!yuleosh，一键填入即可进入 dashboard。 */}
+              {mode === "login" && (
+                <div className="rounded-lg bg-[#722ed1]/10 border border-[#722ed1]/20 px-3 py-2.5 text-xs text-[#c4b5fd] flex items-center justify-between gap-3">
+                  <span className="leading-relaxed">
+                    演示账号：<span className="text-[#e2e8f0]">demo@yuleosh.com</span> / <span className="text-[#e2e8f0]">Demo2026!yuleosh</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail("demo@yuleOSH.com");
+                      setPassword("Demo2026!yuleosh");
+                      setError("");
+                    }}
+                    className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    一键填入
+                  </button>
+                </div>
+              )}
+
               <div className="relative">
                 <Separator className="bg-[#1e293b]" />
                 <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111827] px-3 text-xs text-[#64748b]">
@@ -454,13 +491,20 @@ export default function LoginPage() {
                 </>
               )}
             </p>
-            <Link
-              href="/dashboard"
-              className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors flex items-center gap-1"
-            >
-              <Lock className="w-3 h-3" />
-              无需登录，直接体验 Dashboard
-            </Link>
+            {needAuth ? (
+              <span className="text-xs text-[#64748b] flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                当前为鉴权模式，请使用上方演示账号登录
+              </span>
+            ) : (
+              <Link
+                href="/dashboard"
+                className="text-xs text-[#64748b] hover:text-[#94a3b8] transition-colors flex items-center gap-1"
+              >
+                <Lock className="w-3 h-3" />
+                无需登录，直接体验 Dashboard
+              </Link>
+            )}
           </CardFooter>
         </Card>
       </div>
