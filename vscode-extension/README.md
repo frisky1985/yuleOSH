@@ -13,6 +13,7 @@ yuleOSH brings AI-driven embedded development workflows directly into VS Code. A
 - **Show / Open Dashboard** — Open the yuleOSH web dashboard (in-editor preview or external browser)
 - **Flash Device** — Flash compiled firmware to your target hardware (ESP32, ESP8266, STM32, RP2040)
 - **Evidence Report** — WebView panel showing evidence/KPI summary with export
+- **Open Evidence Dashboard** — Jump to the web Evidence page in browser (single-file download & history collapse)
 - **MISRA Diagnostics** — Inline diagnostics, code actions, hover, rule detail & docs
 - **Pipeline Status Tree** — Stage-based view (pending/running/pass/fail) with click-to-view-log
 - **Status Bar** — yuleOSH status + MISRA violation count, click for quick command menu
@@ -38,6 +39,7 @@ yuleOSH brings AI-driven embedded development workflows directly into VS Code. A
 | `yuleosh.openMisraDoc` | yuleOSH: Open MISRA Documentation | Open the MISRA rule documentation |
 | `yuleosh.quickCommand` | yuleOSH: Quick Command Menu | Open the quick command picker |
 | `yuleosh.viewPipelineLog` | yuleOSH: View Pipeline Stage Log | Show a pipeline stage log in output channel |
+| `yuleosh.openEvidenceDashboard` | yuleOSH: Open Evidence Dashboard (External) | Open the web Evidence page (`/dashboard/evidence`) in browser — single-file download & 10-row collapse live there |
 
 ## Sidebar Views
 

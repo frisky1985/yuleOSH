@@ -77,6 +77,10 @@
       {
         "command": "yuleosh.viewPipelineLog",
         "title": "yuleOSH: View Pipeline Stage Log"
+      },
+      {
+        "command": "yuleosh.openEvidenceDashboard",
+        "title": "yuleOSH: Open Evidence Dashboard (External)"
       }
     ],
     "viewsContainers": {

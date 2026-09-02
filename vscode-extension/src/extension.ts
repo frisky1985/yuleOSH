@@ -662,6 +662,19 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // VSC-6: Open Evidence Dashboard (external) — bridge to the web evidence page
+  // (single-file download / 10-row collapse live there), so users don't need
+  // the backend evidence/file HTTP endpoint wired into the local-first extension.
+  const openEvidenceDashboardCmd = vscode.commands.registerCommand(
+    'yuleosh.openEvidenceDashboard',
+    () => {
+      const backendUrl = vscode.workspace
+        .getConfiguration('yuleosh')
+        .get<string>('backendUrl', 'http://localhost:8080');
+      vscode.env.openExternal(vscode.Uri.parse(`${backendUrl}/dashboard/evidence`));
+    }
+  );
+
   const flashDeviceCmd = vscode.commands.registerCommand(
     'yuleosh.flashDevice',
     async () => {
@@ -770,6 +783,7 @@ export function activate(context: vscode.ExtensionContext) {
         { label: '$(tools) Run CI', description: 'yuleosh.runCi' },
         { label: '$(dashboard) Show Dashboard', description: 'yuleosh.showDashboard' },
         { label: '$(file) View Evidence Report', description: 'yuleosh.viewEvidence' },
+        { label: '$(globe) Open Evidence Dashboard', description: 'yuleosh.openEvidenceDashboard' },
         { label: '$(circuit-board) Flash Device', description: 'yuleosh.flashDevice' },
         { label: '$(info) View Status', description: 'yuleosh.viewStatus' },
         { label: '$(sync) Reload MISRA Report', description: 'yuleosh.reloadMisraReport' },
@@ -798,6 +812,7 @@ export function activate(context: vscode.ExtensionContext) {
     reloadMisraReportCmd,
     showMisraProblemsCmd,
     viewPipelineLogCmd,
+    openEvidenceDashboardCmd,
     quickCommandCmd
   );
 
