@@ -203,6 +203,14 @@ function gapStatusLabel(s: string): string {
       return "待处理";
     case "in_progress":
       return "处理中";
+    case "queued":
+      return "排队中";
+    case "running":
+      return "执行中";
+    case "completed":
+      return "已完成";
+    case "failed":
+      return "失败";
     case "resolved":
       return "已解决";
     default:
@@ -1726,12 +1734,17 @@ export default function DashboardPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              <span
-                                className="text-xs"
-                                style={{ color: gapStatusColor(item.status) }}
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 font-medium"
+                                style={{
+                                  background: `${gapStatusColor(item.status)}14`,
+                                  color: gapStatusColor(item.status),
+                                  borderColor: `${gapStatusColor(item.status)}30`,
+                                }}
                               >
                                 {gapStatusLabel(item.status)}
-                              </span>
+                              </Badge>
                             </td>
                             <td className="py-3 px-4 text-xs text-[#64748b] hidden lg:table-cell max-w-xs">
                               <span className="line-clamp-2">{item.suggestion || "-"}</span>
