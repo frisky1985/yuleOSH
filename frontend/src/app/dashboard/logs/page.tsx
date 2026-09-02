@@ -75,6 +75,25 @@ interface LogsSummaryResponse {
   statuses?: string[];
 }
 
+interface RunLogFile {
+  file: string;
+  lines: number;
+  preview_lines: number;
+  truncated: boolean;
+  content: string;
+  updated_at?: string | null;
+}
+
+interface LogsPipelineResponse {
+  run_id: string;
+  project?: string | null;
+  name?: string | null;
+  status?: string | null;
+  files: RunLogFile[];
+  count: number;
+  note?: string | null;
+}
+
 function statusStyle(status?: string | null): { color: string; border: string; bg: string } {
   const s = (status || "").toLowerCase();
   if (["done", "success", "passed", "ok", "completed"].includes(s)) {
@@ -240,6 +259,10 @@ export default function LogsPage() {
   const [summarySort, setSummarySort] = useState<string>("updated");
   const [summaryStatus, setSummaryStatus] = useState<string>("");
   const [summaryStatuses, setSummaryStatuses] = useState<string[]>([]);
+  const [runFiles, setRunFiles] = useState<Record<string, RunLogFile[]>>({});
+  const [runFilesLoading, setRunFilesLoading] = useState<Record<string, boolean>>({});
+  const [runFilesError, setRunFilesError] = useState<Record<string, string>>({});
+  const [filesExpanded, setFilesExpanded] = useState<Record<string, boolean>>({});
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sumExpanded, setSumExpanded] = useState<Record<string, boolean>>({});
@@ -276,6 +299,34 @@ export default function LogsPage() {
     void loadLogs();
   }, [loadLogs]);
 
+  // ── Load one run's log files (GET /api/v1/logs/pipeline) ─────────────────
+  const loadRunFiles = useCallback(async (runId: string) => {
+    setRunFilesLoading((p) => ({ ...p, [runId]: true }));
+    setRunFilesError((p) => {
+      const next = { ...p };
+      delete next[runId];
+      return next;
+    });
+    try {
+      const res = await apiFetch<LogsPipelineResponse>(
+        `/api/v1/logs/pipeline?run=${encodeURIComponent(runId)}`,
+      );
+      setRunFiles((p) => ({ ...p, [runId]: res.files || [] }));
+    } catch (err) {
+      setRunFilesError((p) => ({ ...p, [runId]: errMessage(err) }));
+    } finally {
+      setRunFilesLoading((p) => ({ ...p, [runId]: false }));
+    }
+  }, []);
+
+  const ensureRunFiles = useCallback(
+    (runId: string) => {
+      if (runFiles[runId] || runFilesLoading[runId]) return;
+      void loadRunFiles(runId);
+    },
+    [runFiles, runFilesLoading, loadRunFiles],
+  );
+
   // ── Load per-run summary ─────────────────────────────────────────────────
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
@@ -304,6 +355,14 @@ export default function LogsPage() {
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  // 默认展开的（含 ERROR）run 自动预取文件列表，最多 3 个，避免并发过多
+  useEffect(() => {
+    summary
+      .filter((r) => r.error_count > 0)
+      .slice(0, 3)
+      .forEach((r) => ensureRunFiles(r.run_id));
+  }, [summary, ensureRunFiles]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleSubmit = (e: React.FormEvent) => {
@@ -741,7 +800,10 @@ export default function LogsPage() {
                     >
                       <button
                         type="button"
-                        onClick={() => setSumExpanded((p) => ({ ...p, [run.run_id]: !open }))}
+                        onClick={() => {
+                          setSumExpanded((p) => ({ ...p, [run.run_id]: !open }));
+                          if (!open) ensureRunFiles(run.run_id);
+                        }}
                         className="w-full flex items-center justify-between gap-2 p-3 text-left hover:bg-[#1e293b]/40 transition-colors"
                       >
                         <div className="flex items-center gap-2 min-w-0">
@@ -825,6 +887,64 @@ export default function LogsPage() {
                               </div>
                               <div className="text-[10px] text-[#64748b]">ERROR</div>
                             </div>
+                          </div>
+                          <div className="mt-3 border-t border-[#1e293b] pt-2">
+                            <div className="text-[10px] text-[#64748b] mb-1.5">
+                              日志文件（{run.log_files}）
+                            </div>
+                            {runFilesLoading[run.run_id] ? (
+                              <div className="flex items-center text-[11px] text-[#64748b] py-1">
+                                <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                                加载文件…
+                              </div>
+                            ) : runFilesError[run.run_id] ? (
+                              <div className="text-[11px] text-[#ff4d4f]">
+                                {runFilesError[run.run_id]}
+                              </div>
+                            ) : (runFiles[run.run_id] || []).length === 0 ? (
+                              <div className="text-[11px] text-[#475569]">暂无 .log 文件</div>
+                            ) : (
+                              <div className="space-y-1">
+                                {(runFiles[run.run_id] || []).map((f) => {
+                                  const fOpen = !!filesExpanded[f.file];
+                                  return (
+                                    <div
+                                      key={f.file}
+                                      className="rounded border border-[#1e293b] bg-[#0a0e17] overflow-hidden"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setFilesExpanded((p) => ({ ...p, [f.file]: !p[f.file] }))
+                                        }
+                                        className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-[#1e293b]/40 transition-colors"
+                                      >
+                                        <span className="flex items-center gap-1.5 min-w-0">
+                                          {fOpen ? (
+                                            <ChevronDown className="w-3 h-3 text-[#64748b] shrink-0" />
+                                          ) : (
+                                            <ChevronRight className="w-3 h-3 text-[#64748b] shrink-0" />
+                                          )}
+                                          <span className="font-mono text-[10px] text-[#cbd5e1] truncate">
+                                            {f.file.includes("/")
+                                              ? f.file.slice(f.file.indexOf("/") + 1)
+                                              : f.file}
+                                          </span>
+                                        </span>
+                                        <span className="text-[10px] text-[#64748b] shrink-0">
+                                          {f.lines} 行{f.truncated ? ` · 预览 ${f.preview_lines}` : ""}
+                                        </span>
+                                      </button>
+                                      {fOpen && (
+                                        <pre className="px-2 pb-2 text-[11px] text-[#cbd5e1] whitespace-pre-wrap break-words max-h-60 overflow-auto leading-relaxed">
+                                          {highlightMatches(f.content, filters.query.trim())}
+                                        </pre>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                           {run.updated_at && (
                             <div className="mt-2 text-[10px] text-[#475569] text-right">
