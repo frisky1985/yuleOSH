@@ -90,17 +90,20 @@ describe("api.auth.signin", () => {
     }
   });
 
-  it("throws on 401 for signin WITHOUT attempting refresh", async () => {
-    // signin is in NO_REFRESH_PATHS — a failed login is not a renewal case
+  it("returns the server error payload on 401 for signin (no refresh, no redirect, no throw)", async () => {
+    // signin is in NO_REFRESH_PATHS — a failed login is NOT a renewal case and
+    // must surface the server's error text (e.g. "Invalid email or password")
+    // to the caller instead of throwing "Unauthorized" and bouncing the user
+    // back to the login page (that was the pre-fix bug: a wrong password was
+    // misreported as a system-level "unauthorized" / crash).
     const fetchMock = jest
       .fn()
       .mockResolvedValue(jsonResponse(401, { error: "Invalid email or password" }));
     global.fetch = fetchMock;
 
-    await expect(api.auth.signin("bad@test.com", "wrong")).rejects.toThrow(
-      "Unauthorized"
-    );
-    // only the signin call — no refresh call
+    const res = await api.auth.signin("bad@test.com", "wrong");
+    expect(res).toMatchObject({ error: "Invalid email or password" });
+    // only the signin call — no refresh call, no redirect
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/auth/signin");
   });
