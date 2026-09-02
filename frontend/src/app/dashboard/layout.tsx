@@ -1,21 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Settings, Trash2, User as UserIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 import { TopNav, type DashboardTab } from "@/components/dashboard/top-nav";
 import { EngineerSidebar } from "@/components/dashboard/engineer-sidebar";
-import { isEngineerRole, resetSessionCache, useSessionRole } from "@/lib/use-session-role";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { isEngineerRole, useSessionRole } from "@/lib/use-session-role";
+import { UserMenu, type UserMenuActions, type UserMenuSession } from "@/components/account/user-menu";
 import { AccountInfoDialog } from "@/components/account/account-info-dialog";
 import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
 import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
@@ -34,14 +25,6 @@ const DashboardShellContext = createContext<DashboardShellContextValue>({
 /** 落地页消费：读取/切换顶部 tab（导航由本 layout 渲染，状态提升到这里）。 */
 export function useDashboardShell() {
   return useContext(DashboardShellContext);
-}
-
-function initialOf(email?: string) {
-  return email?.[0]?.toUpperCase() ?? "YU";
-}
-
-function nameOf(email?: string) {
-  return email?.split("@")[0] ?? "用户";
 }
 
 /**
@@ -106,56 +89,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="flex items-center gap-2">
       {session ? (
         <>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#1e293b] hover:border-[#722ed1]/40 px-2 py-1 transition-all cursor-pointer">
-              <Avatar className="w-7 h-7 border border-[#1e293b]">
-                <AvatarFallback className="bg-[#722ed1]/20 text-[#722ed1] text-[10px]">
-                  {initialOf(session.email)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-xs text-[#94a3b8] hidden sm:inline max-w-[120px] truncate">
-                {nameOf(session.email)}
-              </span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-56 border-[#1e293b] bg-[#111827] text-[#e2e8f0]"
-            >
-              <DropdownMenuLabel className="text-xs text-[#94a3b8]">
-                {session.org_name || "账号"}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-[#1e293b]" />
-              <DropdownMenuItem
-                onClick={() => setAccountOpen(true)}
-                className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2"
-              >
-                <UserIcon className="w-3.5 h-3.5" />
-                个人信息
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setSettingsOpen(true)}
-                className="text-sm text-[#94a3b8] hover:text-white hover:bg-[#1e293b] cursor-pointer gap-2"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                用户设置
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-[#1e293b]" />
-              <DropdownMenuItem
-                onClick={() => setLogoutOpen(true)}
-                className="text-sm text-[#f59e0b] hover:text-[#f59e0b] hover:bg-[#f59e0b]/10 cursor-pointer gap-2"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                退出登录
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setDeleteOpen(true)}
-                className="text-sm text-[#ff4d4f] hover:text-[#ff4d4f] hover:bg-[#ff4d4f]/10 cursor-pointer gap-2"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                注销账户
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <UserMenu
+            session={session as UserMenuSession}
+            actions={
+              {
+                onOpenAccount: () => setAccountOpen(true),
+                onOpenSettings: () => setSettingsOpen(true),
+                onOpenLogout: () => setLogoutOpen(true),
+                onOpenDelete: () => setDeleteOpen(true),
+              } satisfies UserMenuActions
+            }
+          />
 
           <AccountInfoDialog
             open={accountOpen}
