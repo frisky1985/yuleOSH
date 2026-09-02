@@ -26,6 +26,11 @@ import {
   type GapDetailResponse,
 } from "@/lib/api";
 import { startExponentialPoll, type PollHandle } from "@/lib/poll";
+import {
+  recordGapRun,
+  updateGapRun,
+  type GapRunStatus,
+} from "@/lib/gap-run-history";
 
 const SEVERITY_META: Record<
   string,
@@ -49,12 +54,14 @@ export function GapBatchModal({
   open,
   mode,
   gapIds,
+  projectId,
   onClose,
   onComplete,
 }: {
   open: boolean;
   mode: "analyze" | "remediate";
   gapIds: string[];
+  projectId: string;
   onClose: () => void;
   onComplete?: () => void;
 }) {
@@ -72,6 +79,9 @@ export function GapBatchModal({
   const pollRef = useRef<PollHandle | null>(null);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+
+  // 运行历史（头脑风暴项④）：当前运行记录的 id，用于进度回流时更新同一条。
+  const runIdRef = useRef<string | null>(null);
 
   const idsKey = gapIds.join(",");
 
@@ -103,12 +113,23 @@ export function GapBatchModal({
     setAnalyzeLoading(true);
     setAnalyzeError("");
     Promise.all(gapIds.map((id) => getGapDetail(id)))
-      .then((ds) => setDetails(ds))
+      .then((ds) => {
+        setDetails(ds);
+        // 运行历史（头脑风暴项④）：分析为即时读取，完成即记一条已完成记录。
+        if (!runIdRef.current && projectId) {
+          runIdRef.current = recordGapRun(projectId, {
+            mode: "analyze",
+            count: gapIds.length,
+            gapIds,
+            status: "completed",
+          });
+        }
+      })
       .catch((e) =>
         setAnalyzeError(humanizeError(e, "批量分析失败"))
       )
       .finally(() => setAnalyzeLoading(false));
-  }, [open, mode, idsKey]);
+  }, [open, mode, idsKey, projectId]);
 
   // ── Remediate mode: start batch + poll progress ─────────────────────
   useEffect(() => {
@@ -128,6 +149,16 @@ export function GapBatchModal({
       .then((r) => {
         if (cancelled) return;
         const bid = r.batch_id;
+        // 运行历史（头脑风暴项④）：启动即记一条 running 记录，回流时更新同一条。
+        if (!runIdRef.current && projectId) {
+          runIdRef.current = recordGapRun(projectId, {
+            mode: "remediate",
+            count: gapIds.length,
+            gapIds,
+            batchId: bid,
+            status: "running",
+          });
+        }
         pollRef.current = startExponentialPoll(
           async () => {
             if (cancelled) return true;
@@ -136,12 +167,16 @@ export function GapBatchModal({
             setBatch(s);
             if (s.status === "completed") {
               setRunning(false);
+              if (runIdRef.current && projectId)
+                updateGapRun(projectId, runIdRef.current, { status: "completed" });
               onCompleteRef.current?.();
               return true;
             }
             if (s.status === "failed") {
               // 失败也解除锁定，允许用户关闭后重试。
               setRunning(false);
+              if (runIdRef.current && projectId)
+                updateGapRun(projectId, runIdRef.current, { status: "failed" });
               return true;
             }
             return false;
@@ -152,6 +187,8 @@ export function GapBatchModal({
       .catch((e) => {
         if (!cancelled) {
           setRunning(false);
+          if (runIdRef.current && projectId)
+            updateGapRun(projectId, runIdRef.current, { status: "failed" });
           setBatchError(humanizeError(e, "批量修复启动失败"));
         }
       });
@@ -160,11 +197,15 @@ export function GapBatchModal({
       cancelled = true;
       stopPoll();
     };
-  }, [open, mode, idsKey]);
+  }, [open, mode, idsKey, projectId]);
 
-  // 弹窗关闭（open=false）时解除锁定，避免下次以 analyze 模式打开时残留。
+  // 弹窗关闭（open=false）时解除锁定，避免下次以 analyze 模式打开时残留；
+  // 同时清 runIdRef，使下次打开可重新记一条历史。
   useEffect(() => {
-    if (!open) setRunning(false);
+    if (!open) {
+      setRunning(false);
+      runIdRef.current = null;
+    }
   }, [open]);
 
   if (!open) return null;

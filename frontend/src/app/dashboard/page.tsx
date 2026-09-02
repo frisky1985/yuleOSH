@@ -28,6 +28,9 @@ import {
   Activity,
   Play,
   ListChecks,
+  Trash2,
+  Clock,
+  History,
   FolderPlus,
   Sparkles,
   Cpu,
@@ -78,6 +81,11 @@ import { api } from "@/lib/api";
 import { simpleMarkdown } from "@/lib/markdown";
 import { startExponentialPoll, type PollHandle } from "@/lib/poll";
 import { loadGapSelection, saveGapSelection } from "@/lib/gap-selection";
+import {
+  listGapRuns,
+  clearGapRuns,
+  type GapRunRecord,
+} from "@/lib/gap-run-history";
 import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
@@ -235,6 +243,45 @@ function complianceScoreColor(score: number): string {
   if (score >= 80) return "#10b981";
   if (score >= 60) return "#faad14";
   return "#ff4d4f";
+}
+
+// 运行历史（头脑风暴项④）：运行记录的状态 / 模式 展示元信息。
+function runStatusMeta(status: string): { label: string; color: string } {
+  switch (status) {
+    case "running":
+      return { label: "执行中", color: "#722ed1" };
+    case "completed":
+      return { label: "已完成", color: "#10b981" };
+    case "failed":
+      return { label: "失败", color: "#ff4d4f" };
+    default:
+      return { label: status, color: "#64748b" };
+  }
+}
+
+function runModeMeta(mode: string): { label: string; color: string } {
+  switch (mode) {
+    case "analyze":
+      return { label: "批量分析", color: "#722ed1" };
+    case "remediate":
+      return { label: "批量修复", color: "#10b981" };
+    default:
+      return { label: mode, color: "#64748b" };
+  }
+}
+
+function formatRunTime(epoch: number): string {
+  try {
+    const d = new Date(epoch);
+    return d.toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "-";
+  }
 }
 
 function clampScore(score: number): number {
@@ -404,6 +451,10 @@ export default function DashboardPage() {
   // Gap detail modal (per-item 分析 / 运行)
   const [showGapDetail, setShowGapDetail] = useState(false);
   const [selectedGapId, setSelectedGapId] = useState<string | null>(null);
+
+  // 运行历史（头脑风暴项④）：前端本地记录，按项目展示，刷新/重进可回看。
+  const [gapRuns, setGapRuns] = useState<GapRunRecord[]>([]);
+  const [runsOpen, setRunsOpen] = useState(false);
 
   // Gap batch (bulk analyze / remediate)
   const [selectedGapIds, setSelectedGapIds] = useState<string[]>([]);
@@ -660,6 +711,8 @@ export default function DashboardPage() {
       setGapAllItems([]);
       loadGapAnalysis(selectedProject, 1, "");
     }
+    // 运行历史（头脑风暴项④）：项目切换时按项目从 localStorage 载入本地记录。
+    setGapRuns(listGapRuns(selectedProject));
   }, [selectedProject, activeTab]);
 
   // ─── Project selector ─────────────────────────────────────────────────────
@@ -1616,6 +1669,109 @@ export default function DashboardPage() {
               ))}
             </div>
 
+            {/* 运行历史（头脑风暴项④）：前端本地记录，按项目展示，可回看/清空。 */}
+            <Card className="border-[#1e293b] bg-[#111827] mb-4">
+              <button
+                onClick={() => setRunsOpen((v) => !v)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#1e293b]/40 transition-colors"
+              >
+                <span className="flex items-center gap-2 text-sm font-bold text-[#e2e8f0]">
+                  <History className="w-4 h-4 text-[#722ed1]" />
+                  运行历史
+                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-[#722ed1]/15 text-[#a78bfa]">
+                    {gapRuns.length} 条
+                  </span>
+                  <span className="text-[10px] font-normal text-[#64748b]">
+                    本地记录 · 刷新可回看
+                  </span>
+                </span>
+                <div className="flex items-center gap-2">
+                  {gapRuns.length > 0 && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (
+                          window.confirm(
+                            `确定清空当前项目（${selectedProjectObj?.name || selectedProject}）的全部运行历史吗？`,
+                          )
+                        ) {
+                          clearGapRuns(selectedProject);
+                          setGapRuns([]);
+                        }
+                      }}
+                      className="flex items-center gap-1 text-[11px] text-[#94a3b8] hover:text-[#ff4d4f] px-2 py-1 rounded hover:bg-[#ff4d4f]/5 cursor-pointer"
+                      title="清空当前项目运行历史"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      清空
+                    </span>
+                  )}
+                  {runsOpen ? (
+                    <ChevronUp className="w-4 h-4 text-[#64748b]" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-[#64748b]" />
+                  )}
+                </div>
+              </button>
+              {runsOpen && (
+                <div className="border-t border-[#1e293b] px-4 py-3">
+                  {gapRuns.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-[#64748b]">
+                      暂无运行记录 — 执行「批量分析 / 批量修复」后会出现在这里
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {gapRuns.map((r) => {
+                        const sm = runStatusMeta(r.status);
+                        const mm = runModeMeta(r.mode);
+                        return (
+                          <div
+                            key={r.id}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-[#1e293b] bg-[#0a0e17]/40 px-3 py-2"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0"
+                                style={{
+                                  color: mm.color,
+                                  background: `${mm.color}14`,
+                                  border: `1px solid ${mm.color}30`,
+                                }}
+                              >
+                                {mm.label}
+                              </span>
+                              <span className="text-xs text-[#94a3b8] shrink-0">
+                                {r.count} 项
+                              </span>
+                              <span
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0"
+                                style={{
+                                  color: sm.color,
+                                  background: `${sm.color}14`,
+                                  border: `1px solid ${sm.color}30`,
+                                }}
+                              >
+                                {sm.label}
+                              </span>
+                              {r.batchId && (
+                                <span className="text-[10px] font-mono text-[#64748b] truncate">
+                                  #{r.batchId.slice(0, 8)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] text-[#64748b] shrink-0">
+                              <Clock className="w-3 h-3" />
+                              {formatRunTime(r.startedAt)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+
             {/* Gap analysis table */}
             <Card className="border-[#1e293b] bg-[#111827]">
               <CardContent className="p-0">
@@ -1906,9 +2062,15 @@ export default function DashboardPage() {
         open={showBatchModal}
         mode={batchMode}
         gapIds={selectedGapIds}
-        onClose={() => setShowBatchModal(false)}
+        projectId={selectedProject}
+        onClose={() => {
+          setShowBatchModal(false);
+          // 运行历史（项④）：关闭弹窗时刷新（覆盖修复失败等 onComplete 不触发的情形）。
+          setGapRuns(listGapRuns(selectedProject));
+        }}
         onComplete={() => {
           void loadGapAnalysis(selectedProject, 1, gapSeverity);
+          setGapRuns(listGapRuns(selectedProject));
           setSelectedGapIds([]);
         }}
       />
