@@ -24,6 +24,7 @@ import {
   type GapBatchStatus,
   type GapDetailResponse,
 } from "@/lib/api";
+import { startExponentialPoll, type PollHandle } from "@/lib/poll";
 
 const SEVERITY_META: Record<
   string,
@@ -63,7 +64,7 @@ export function GapBatchModal({
   const [batch, setBatch] = useState<GapBatchStatus | null>(null);
   const [batchError, setBatchError] = useState("");
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<PollHandle | null>(null);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
@@ -113,7 +114,7 @@ export function GapBatchModal({
     setBatch(null);
 
     const stopPoll = () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current?.stop();
       pollRef.current = null;
     };
 
@@ -121,22 +122,20 @@ export function GapBatchModal({
       .then((r) => {
         if (cancelled) return;
         const bid = r.batch_id;
-        const poll = async () => {
-          try {
+        pollRef.current = startExponentialPoll(
+          async () => {
+            if (cancelled) return true;
             const s = await getGapBatchStatus(bid);
-            if (cancelled) return;
+            if (cancelled) return true;
             setBatch(s);
             if (s.status === "completed") {
-              stopPoll();
               onCompleteRef.current?.();
+              return true;
             }
-          } catch (e) {
-            if (cancelled) return;
-            setBatchError(humanizeError(e, "轮询批量进度失败"));
-          }
-        };
-        void poll();
-        pollRef.current = setInterval(poll, 700);
+            return false;
+          },
+          { onError: (e) => setBatchError(humanizeError(e, "轮询批量进度失败")) },
+        );
       })
       .catch((e) => {
         if (!cancelled)

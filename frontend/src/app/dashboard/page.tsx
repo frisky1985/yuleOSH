@@ -76,6 +76,7 @@ import {
 import type { UserInfo } from "@/lib/api";
 import { api } from "@/lib/api";
 import { simpleMarkdown } from "@/lib/markdown";
+import { startExponentialPoll, type PollHandle } from "@/lib/poll";
 import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
@@ -387,7 +388,7 @@ export default function DashboardPage() {
   const [evTask, setEvTask] = useState<EvidenceTask | null>(null);
   const [evGenerating, setEvGenerating] = useState(false);
   const [showEvModal, setShowEvModal] = useState(false);
-  const evPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const evPollRef = useRef<PollHandle | null>(null);
 
   // Global loading/error
   const [pageLoading, setPageLoading] = useState(true);
@@ -646,34 +647,35 @@ export default function DashboardPage() {
     try {
       const res = await generateEvidence(selectedProject);
 
-      // Start polling the status
+      // Start polling the status (exponential backoff: 1s → 5s)
       const taskId = res.task_id;
-      const pollInterval = setInterval(async () => {
-        try {
+      setShowEvModal(true);
+      evPollRef.current = startExponentialPoll(
+        async () => {
           const status = await getEvidenceStatus(taskId);
           setEvTask(status);
           setShowEvModal(true);
 
           if (status.status === "completed" || status.status === "failed") {
-            clearInterval(pollInterval);
-            evPollRef.current = null;
             setEvGenerating(false);
+            evPollRef.current = null;
 
             if (status.status === "completed") {
               // Auto-refresh SWE data
               loadSWE(selectedProject);
               loadCoverage(selectedProject);
             }
+            return true;
           }
-        } catch {
-          clearInterval(pollInterval);
-          evPollRef.current = null;
-          setEvGenerating(false);
-        }
-      }, 1500);
-
-      evPollRef.current = pollInterval;
-      setShowEvModal(true);
+          return false;
+        },
+        {
+          onError: () => {
+            setEvGenerating(false);
+            evPollRef.current = null;
+          },
+        },
+      );
     } catch (err: any) {
       setError(err.message || "证据包生成失败");
       setEvGenerating(false);
@@ -683,7 +685,7 @@ export default function DashboardPage() {
   const handleCloseEvModal = () => {
     // Stop polling if still running
     if (evPollRef.current) {
-      clearInterval(evPollRef.current);
+      evPollRef.current.stop();
       evPollRef.current = null;
     }
     setShowEvModal(false);
@@ -692,7 +694,7 @@ export default function DashboardPage() {
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
-      if (evPollRef.current) clearInterval(evPollRef.current);
+      if (evPollRef.current) evPollRef.current.stop();
     };
   }, []);
 

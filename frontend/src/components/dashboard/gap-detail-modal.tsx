@@ -28,6 +28,7 @@ import {
   type GapDetailResponse,
   type GapRunStatus,
 } from "@/lib/api";
+import { startExponentialPoll, type PollHandle } from "@/lib/poll";
 
 const SEVERITY_META: Record<
   string,
@@ -90,25 +91,29 @@ export function GapDetailModal({
   useEffect(() => {
     if (!runId || !gapId) return;
     let cancelled = false;
-    const poll = async () => {
-      try {
-        const s = await getGapRunStatus(gapId, runId);
-        if (cancelled) return;
-        setRunStatus(s);
-        if (s.status === "completed") {
-          onRunComplete?.();
+    const handle: PollHandle = startExponentialPoll(
+      async () => {
+        if (cancelled) return true;
+        try {
+          const s = await getGapRunStatus(gapId, runId);
+          if (cancelled) return true;
+          setRunStatus(s);
+          if (s.status === "completed") {
+            onRunComplete?.();
+            return true;
+          }
+          return false;
+        } catch (e) {
+          if (cancelled) return true;
+          const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "轮询失败";
+          setRunError(msg);
+          return false;
         }
-      } catch (e) {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "轮询失败";
-        setRunError(msg);
-      }
-    };
-    void poll();
-    const t = setInterval(poll, 700);
+      },
+    );
     return () => {
       cancelled = true;
-      clearInterval(t);
+      handle.stop();
     };
   }, [runId, gapId, onRunComplete]);
 
