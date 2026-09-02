@@ -25,7 +25,7 @@ import {
   type GapBatchStatus,
   type GapDetailResponse,
 } from "@/lib/api";
-import { startExponentialPoll, type PollHandle } from "@/lib/poll";
+import { subscribeSSE, type SSEHandle } from "@/lib/sse";
 import {
   recordGapRun,
   updateGapRun,
@@ -76,7 +76,7 @@ export function GapBatchModal({
   // 禁止关闭或放弃弹窗，避免误关丢失进度视图（后端任务仍在跑）。
   const [running, setRunning] = useState(false);
 
-  const pollRef = useRef<PollHandle | null>(null);
+  const pollRef = useRef<SSEHandle | null>(null);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
@@ -145,6 +145,28 @@ export function GapBatchModal({
       pollRef.current = null;
     };
 
+    // 把批量修复状态应用到 UI：更新进度，终态（completed/failed）时解除锁定
+    // 并回流运行历史。cancelled 为真时提前收尾（避免卸载/重开后的竞态）。
+    const applyBatchStatus = (s: GapBatchStatus): boolean => {
+      if (cancelled) return true;
+      setBatch(s);
+      if (s.status === "completed") {
+        setRunning(false);
+        if (runIdRef.current && projectId)
+          updateGapRun(projectId, runIdRef.current, { status: "completed" });
+        onCompleteRef.current?.();
+        return true;
+      }
+      if (s.status === "failed") {
+        // 失败也解除锁定，允许用户关闭后重试。
+        setRunning(false);
+        if (runIdRef.current && projectId)
+          updateGapRun(projectId, runIdRef.current, { status: "failed" });
+        return true;
+      }
+      return false;
+    };
+
     batchRunGap(gapIds)
       .then((r) => {
         if (cancelled) return;
@@ -159,30 +181,13 @@ export function GapBatchModal({
             status: "running",
           });
         }
-        pollRef.current = startExponentialPoll(
-          async () => {
-            if (cancelled) return true;
-            const s = await getGapBatchStatus(bid);
-            if (cancelled) return true;
-            setBatch(s);
-            if (s.status === "completed") {
-              setRunning(false);
-              if (runIdRef.current && projectId)
-                updateGapRun(projectId, runIdRef.current, { status: "completed" });
-              onCompleteRef.current?.();
-              return true;
-            }
-            if (s.status === "failed") {
-              // 失败也解除锁定，允许用户关闭后重试。
-              setRunning(false);
-              if (runIdRef.current && projectId)
-                updateGapRun(projectId, runIdRef.current, { status: "failed" });
-              return true;
-            }
-            return false;
-          },
-          { onError: (e) => setBatchError(humanizeError(e, "轮询批量进度失败")) },
-        );
+        // 项⑩：优先 SSE 推送进度，连接失败/不支持时自动退回指数退避轮询。
+        pollRef.current = subscribeSSE<GapBatchStatus>({
+          url: `/api/v1/dashboard/gap-analysis/batch/${encodeURIComponent(bid)}/stream`,
+          onStatus: applyBatchStatus,
+          fallbackPoll: async () => applyBatchStatus(await getGapBatchStatus(bid)),
+          onError: (e) => setBatchError(humanizeError(e, "获取批量进度失败")),
+        });
       })
       .catch((e) => {
         if (!cancelled) {

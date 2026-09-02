@@ -79,7 +79,7 @@ import {
 import type { UserInfo } from "@/lib/api";
 import { api } from "@/lib/api";
 import { simpleMarkdown } from "@/lib/markdown";
-import { startExponentialPoll, type PollHandle } from "@/lib/poll";
+import { subscribeSSE, type SSEHandle } from "@/lib/sse";
 import { loadGapSelection, saveGapSelection } from "@/lib/gap-selection";
 import {
   listGapRuns,
@@ -482,7 +482,7 @@ export default function DashboardPage() {
   const [evTask, setEvTask] = useState<EvidenceTask | null>(null);
   const [evGenerating, setEvGenerating] = useState(false);
   const [showEvModal, setShowEvModal] = useState(false);
-  const evPollRef = useRef<PollHandle | null>(null);
+  const evPollRef = useRef<SSEHandle | null>(null);
 
   // 证据历史（头脑风暴项⑨）：前端本地记录，按项目展示，可回看/再次下载。
   const [evidenceHistory, setEvidenceHistory] = useState<EvidenceHistoryEntry[]>([]);
@@ -760,6 +760,38 @@ export default function DashboardPage() {
 
   // ─── Evidence generation ───────────────────────────────────────────────────
 
+  // 把证据任务状态应用到 UI：更新进度/弹窗，并在终态（completed/failed）
+  // 时收尾（刷新 SWE/覆盖率、记证据历史）。返回 true 表示已到终态。
+  const applyEvidenceStatus = (status: EvidenceTask): boolean => {
+    setEvTask(status);
+    setShowEvModal(true);
+    if (status.status === "completed" || status.status === "failed") {
+      setEvGenerating(false);
+      if (status.status === "completed") {
+        // 生成成功：自动刷新 SWE / 覆盖率数据
+        loadSWE(selectedProject);
+        loadCoverage(selectedProject);
+        // 证据历史（项⑨）：成功生成，记一条可回看/下载的记录。
+        recordEvidence(selectedProject, {
+          taskId: status.task_id ?? null,
+          download_url: status.download_url ?? null,
+          note: status.note ?? null,
+          status: "completed",
+        });
+      } else {
+        // 证据历史（项⑨）：生成失败也记录，便于排查。
+        recordEvidence(selectedProject, {
+          taskId: status.task_id ?? null,
+          note: status.error ?? null,
+          status: "failed",
+        });
+      }
+      setEvidenceHistory(listEvidenceHistory(selectedProject));
+      return true;
+    }
+    return false;
+  };
+
   const handleGenerateEvidence = async () => {
     if (evGenerating) return;
     setEvGenerating(true);
@@ -767,52 +799,18 @@ export default function DashboardPage() {
 
     try {
       const res = await generateEvidence(selectedProject);
-
-      // Start polling the status (exponential backoff: 1s → 5s)
       const taskId = res.task_id;
       setShowEvModal(true);
-      evPollRef.current = startExponentialPoll(
-        async () => {
-          const status = await getEvidenceStatus(taskId);
-          setEvTask(status);
-          setShowEvModal(true);
 
-          if (status.status === "completed" || status.status === "failed") {
-            setEvGenerating(false);
-            evPollRef.current = null;
-
-            if (status.status === "completed") {
-              // Auto-refresh SWE data
-              loadSWE(selectedProject);
-              loadCoverage(selectedProject);
-              // 证据历史（项⑨）：成功生成，记一条可回看/下载的记录。
-              recordEvidence(selectedProject, {
-                taskId: status.task_id ?? null,
-                download_url: status.download_url ?? null,
-                note: status.note ?? null,
-                status: "completed",
-              });
-              setEvidenceHistory(listEvidenceHistory(selectedProject));
-            } else {
-              // 证据历史（项⑨）：生成失败也记录，便于排查。
-              recordEvidence(selectedProject, {
-                taskId: status.task_id ?? null,
-                note: status.error ?? null,
-                status: "failed",
-              });
-              setEvidenceHistory(listEvidenceHistory(selectedProject));
-            }
-            return true;
-          }
-          return false;
-        },
-        {
-          onError: () => {
-            setEvGenerating(false);
-            evPollRef.current = null;
-          },
-        },
-      );
+      // 项⑩：优先 SSE 推送进度（只在状态变化时来包），连接失败/不支持时
+      // 自动退回指数退避轮询（getEvidenceStatus）。
+      evPollRef.current = subscribeSSE<EvidenceTask>({
+        url: `/api/v1/dashboard/evidence/stream?task_id=${encodeURIComponent(taskId)}`,
+        onStatus: applyEvidenceStatus,
+        fallbackPoll: async () =>
+          applyEvidenceStatus(await getEvidenceStatus(taskId)),
+        onError: () => setEvGenerating(false),
+      });
     } catch (err: any) {
       setError(err.message || "证据包生成失败");
       setEvGenerating(false);

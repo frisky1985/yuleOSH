@@ -28,7 +28,7 @@ import {
   type GapDetailResponse,
   type GapRunStatus,
 } from "@/lib/api";
-import { startExponentialPoll, type PollHandle } from "@/lib/poll";
+import { subscribeSSE, type SSEHandle } from "@/lib/sse";
 
 // 差距单 run 修复阶段（前端按 progressPct 自动映射）。后端进度跳变间隔较粗，
 // 因此真实运行时会停在「当前阶段」的 spinner，直到子步骤完成才推进。
@@ -96,8 +96,21 @@ export function GapDetailModal({
   useEffect(() => {
     if (!runId || !gapId) return;
     let cancelled = false;
-    const handle: PollHandle = startExponentialPoll(
-      async () => {
+    // 项⑩：优先 SSE 推送单条修复进度（event: run），连接失败/不支持时
+    // 自动退回 getGapRunStatus 指数退避轮询。
+    const handle = subscribeSSE<GapRunStatus>({
+      url: `/api/v1/dashboard/gap-analysis/${encodeURIComponent(gapId)}/status/stream?run_id=${encodeURIComponent(runId)}`,
+      eventName: "run",
+      onStatus: (s) => {
+        if (cancelled) return true;
+        setRunStatus(s);
+        if (s.status === "completed") {
+          onRunComplete?.();
+          return true;
+        }
+        return false;
+      },
+      fallbackPoll: async () => {
         if (cancelled) return true;
         try {
           const s = await getGapRunStatus(gapId, runId);
@@ -110,12 +123,13 @@ export function GapDetailModal({
           return false;
         } catch (e) {
           if (cancelled) return true;
-          const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "轮询失败";
-          setRunError(msg);
+          setRunError(e instanceof Error ? e.message : typeof e === "string" ? e : "获取进度失败");
           return false;
         }
       },
-    );
+      onError: (e) =>
+        setRunError(e instanceof Error ? e.message : typeof e === "string" ? e : "获取进度失败"),
+    });
     return () => {
       cancelled = true;
       handle.stop();
