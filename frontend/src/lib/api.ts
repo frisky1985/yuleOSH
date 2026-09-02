@@ -862,6 +862,31 @@ async function getMISRATrend(projectId?: string): Promise<MisraTrendResponse> {
   return data;
 }
 
+// ── LLM health (项⑪ 真实 LLM 链路诊断) ───────────────────────────────
+export interface LLMProviderHealth {
+  provider: string;
+  model: string;
+  key_set: boolean;
+  key_preview: string | null;
+  status: "ok" | "error" | "configured" | "unconfigured";
+  detail: string | null;
+}
+export interface LLMHealth {
+  active_provider: string;
+  active_model: string;
+  live: boolean;
+  providers: LLMProviderHealth[];
+  summary: string;
+  error?: boolean;
+}
+export async function getLLMHealth(live = false): Promise<LLMHealth> {
+  const qs = live ? "?live=1" : "";
+  const data = await request<any>(`/api/v1/dashboard/llm-health${qs}`, {
+    method: "GET",
+  });
+  return data && data.ok === true ? data.data : data;
+}
+
 export {
   getToken,
   setToken,

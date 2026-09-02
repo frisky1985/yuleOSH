@@ -97,6 +97,7 @@ import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
 import { TaskStageProgress } from "@/components/dashboard/task-stage-progress";
 import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
+import { LLMHealthCard } from "@/components/dashboard/llm-health-card";
 import { CreateProjectModal } from "@/components/dashboard/create-project-modal";
 import { DemoGalleryModal, DEMO_SLUGS } from "@/components/dashboard/demo-gallery-modal";
 import LLMSettingsModal from "@/components/dashboard/llm-settings-modal";
@@ -1383,6 +1384,11 @@ export default function DashboardPage() {
             {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
             <div className="mt-6">
             <PipelineStageBoard />
+            </div>
+
+            {/* 项⑪：真实 LLM 链路状态诊断（配置检查 + 在线探测，不泄露 key） */}
+            <div className="mt-6">
+              <LLMHealthCard />
             </div>
 
             {/* 证据历史（头脑风暴项⑨）：前端本地记录，按项目展示，可回看/再次下载/清空。 */}
