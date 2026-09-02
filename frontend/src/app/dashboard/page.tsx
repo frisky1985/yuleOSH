@@ -77,6 +77,7 @@ import type { UserInfo } from "@/lib/api";
 import { api } from "@/lib/api";
 import { simpleMarkdown } from "@/lib/markdown";
 import { startExponentialPoll, type PollHandle } from "@/lib/poll";
+import { loadGapSelection, saveGapSelection } from "@/lib/gap-selection";
 import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
@@ -398,6 +399,11 @@ export default function DashboardPage() {
 
   // Gap batch (bulk analyze / remediate)
   const [selectedGapIds, setSelectedGapIds] = useState<string[]>([]);
+  // 持久化选择（头脑风暴项①）：勾选跨刷新保留，按项目隔离。
+  // restoredRef 记录已为哪个项目恢复过，避免切换项目时误存旧选择；
+  // skipSaveRef 跳过挂载首帧（此时 selectedGapIds=[] 会把持久化清空）。
+  const restoredRef = useRef<string | null>(null);
+  const skipSaveRef = useRef(true);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchMode, setBatchMode] = useState<"analyze" | "remediate">("remediate");
 
@@ -573,6 +579,17 @@ export default function DashboardPage() {
             setGapAllItems((prev) => [...prev, ...res.items]);
           }
         }
+
+        // 持久化选择（头脑风暴项①）：page 1 整页重拉时，从 localStorage 恢复
+        // 该项目已勾选的差距项（与当前可用项求交集，剔除已不存在的）。
+        // 恢复后置 restoredRef 并放开保存，避免挂载首帧把持久化清空。
+        if (page === 1) {
+          const avail = new Set(res.items.map((i) => i.id));
+          const valid = loadGapSelection(projectId).filter((id) => avail.has(id));
+          restoredRef.current = projectId;
+          skipSaveRef.current = false;
+          setSelectedGapIds(valid);
+        }
       } catch (err: any) {
         console.warn("Failed to load gap analysis:", err);
       } finally {
@@ -581,6 +598,14 @@ export default function DashboardPage() {
     },
     []
   );
+
+  // 持久化选择（头脑风暴项①）：选择变更即写回 localStorage（按当前项目分桶）。
+  // 跳过挂载首帧与「尚未为该项目恢复」的情况，避免清空已有持久化。
+  useEffect(() => {
+    if (skipSaveRef.current) return;
+    if (!selectedProject || restoredRef.current !== selectedProject) return;
+    saveGapSelection(selectedProject, selectedGapIds);
+  }, [selectedGapIds, selectedProject]);
 
   // Boot
   useEffect(() => {
