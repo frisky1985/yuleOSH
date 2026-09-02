@@ -11,7 +11,6 @@ import {
   FlaskConical,
   GitBranch,
   Layers,
-  LayoutDashboard,
   ListChecks,
   ScrollText,
   TrendingUp,
@@ -37,20 +36,18 @@ export type DashboardTab =
 
 type NavItem =
   | { kind: "tab"; tab: DashboardTab; label: string; icon: LucideIcon }
-  | {
-      kind: "link";
-      href: string;
-      label: string;
-      icon: LucideIcon;
-      /** Rendered on sub-pages only — e.g. the "座舱" back-to-dashboard link. */
-      subPagesOnly?: boolean;
-    };
+  | { kind: "link"; href: string; label: string; icon: LucideIcon };
 
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
 // Navigation grouped by decision-maker workflow (2026-09-02).
-// Logo points at /dashboard. "tab" items render only on /dashboard;
-// sub-pages render link items only (previous behaviour preserved).
+// Logo points at /dashboard. Tab items render in both modes:
+//   - "tabs" mode (/dashboard): click → in-page tab switch
+//   - "links" mode (sub-pages): click → router.push("/dashboard?tab=<tab>"),
+//     dashboard reads the query and activates that tab. This keeps the
+//     decision-maker able to jump straight to any tab from any sub-page,
+//     rather than losing tab entries (gap-analysis / misra-trends) once
+//     they leave /dashboard.
 //
 // 2026-09-02 (rev 2): groups are now **click-to-open dropdowns** instead of a
 // flat 11-item row. Each group label is the DropdownMenu trigger; its items
@@ -68,13 +65,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "概览",
     items: [
       { kind: "tab", tab: "overview", label: "概览", icon: Layers },
-      {
-        kind: "link",
-        href: "/dashboard",
-        label: "座舱",
-        icon: LayoutDashboard,
-        subPagesOnly: true,
-      },
     ],
   },
   {
@@ -152,15 +142,21 @@ export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) 
   const pathname = usePathname();
   const router = useRouter();
 
-  // Sub-pages must not show the landing-page tabs — they have no tab state.
-  const groups = NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => {
-      if (item.kind === "tab") return mode === "tabs";
-      if (item.subPagesOnly) return mode === "links";
-      return true;
-    }),
-  })).filter((group) => group.items.length > 0);
+  // Tab items render in BOTH modes (so the decision-maker keeps gap-analysis /
+  // misra-trends / overview entries reachable from any sub-page). Their click
+  // behaviour switches by mode — see handlers below.
+  const groups = NAV_GROUPS;
+
+  // Click handler for a "tab" item. In tabs mode it switches the in-page tab;
+  // in links mode (sub-pages) it routes back to /dashboard?tab=<tab> so the
+  // landing page can activate the requested tab on mount.
+  const handleTabClick = (tab: DashboardTab) => {
+    if (mode === "tabs") {
+      onTabChange?.(tab);
+    } else {
+      router.push(`/dashboard?tab=${tab}`);
+    }
+  };
 
   const isItemActive = (item: NavItem): boolean =>
     item.kind === "tab"
@@ -173,7 +169,7 @@ export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) 
       return (
         <button
           key={item.tab}
-          onClick={() => onTabChange?.(item.tab)}
+          onClick={() => handleTabClick(item.tab)}
           className={active ? PILL_ACTIVE : PILL_IDLE}
         >
           <item.icon className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
@@ -238,7 +234,7 @@ export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) 
                       return (
                         <DropdownMenuItem
                           key={item.tab}
-                          onClick={() => onTabChange?.(item.tab)}
+                          onClick={() => handleTabClick(item.tab)}
                           className={cls}
                         >
                           <item.icon className="w-3.5 h-3.5" />

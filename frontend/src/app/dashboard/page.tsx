@@ -319,6 +319,23 @@ export default function DashboardPage() {
   // 顶部 tab 状态由 dashboard/layout 持有（导航渲染在 layout，避免子页重复渲染）
   const { activeTab, setActiveTab } = useDashboardShell();
 
+  // 子页面（/dashboard/evidence 等）下点顶栏 tab 项时跳到 /dashboard?tab=<tab>，
+  // 这里读 query 同步到 layout 持有的 activeTab。layout 也读了一次，这里是双保险：
+  // 直接读 window.location，避免触发 useSearchParams 在静态导出下的 Suspense 要求。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (
+      t === "overview" ||
+      t === "gap-analysis" ||
+      t === "misra-trends" ||
+      t === "knowledge-base"
+    ) {
+      if (t !== activeTab) setActiveTab(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Session / nav
   const [session, setSession] = useState<UserInfo | null>(null);
 

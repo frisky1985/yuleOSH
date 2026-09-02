@@ -58,7 +58,29 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { role, session } = useSessionRole();
 
+  // Active tab is URL-driven: /dashboard?tab=gap-analysis activates gap-analysis
+  // on first paint. TopNav pushes ?tab= when a tab is clicked from a sub-page
+  // (links mode), so the landing page opens straight onto the requested tab
+  // without flashing the default "overview" first.
+  //
+  // NOTE: we deliberately avoid `useSearchParams()` — in `output: "export"`
+  // (static) builds Next.js requires it to be wrapped in <Suspense>, which
+  // would propagate to every /dashboard/* page and break prerender. Instead
+  // we read window.location once at mount (client-only; SSR sees the default).
+  // The `mounted` gate below guarantees SSR emits no visible shell, so no
+  // hydration mismatch.
+  const isValidTab = (t: string | null | undefined): t is DashboardTab =>
+    t === "overview" ||
+    t === "gap-analysis" ||
+    t === "misra-trends" ||
+    t === "knowledge-base";
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (isValidTab(t)) setActiveTab(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
   // mounted 门控：服务端/静态 HTML 无法预知角色，未确定前不渲染导航，
   // 既避免 hydration mismatch，也避免闪出错误骨架。
   const [mounted, setMounted] = useState(false);
