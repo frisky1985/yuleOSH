@@ -86,9 +86,16 @@ import {
   clearGapRuns,
   type GapRunRecord,
 } from "@/lib/gap-run-history";
+import {
+  listEvidenceHistory,
+  recordEvidence,
+  clearEvidenceHistory,
+  type EvidenceHistoryEntry,
+} from "@/lib/evidence-history";
 import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
+import { TaskStageProgress } from "@/components/dashboard/task-stage-progress";
 import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
 import { CreateProjectModal } from "@/components/dashboard/create-project-modal";
 import { DemoGalleryModal, DEMO_SLUGS } from "@/components/dashboard/demo-gallery-modal";
@@ -288,6 +295,11 @@ function clampScore(score: number): number {
   return Math.max(0, Math.min(100, score));
 }
 
+// 生成进度可视化（头脑风暴项⑧）：证据包生成的阶段定义，供常驻横幅复用
+// （与 EvidenceModal 一致：准备→收集证据→生成清单→打包并写入→完成）。
+const EVIDENCE_STAGES = ["准备", "收集证据", "生成清单", "打包并写入", "完成"];
+const EVIDENCE_BREAKPOINTS = [0, 10, 30, 60, 95, 100];
+
 // ─── 测试分层（四层流水线）类型 + 状态映射 ───────────────────────────────────
 
 interface LayerOverview {
@@ -471,6 +483,10 @@ export default function DashboardPage() {
   const [evGenerating, setEvGenerating] = useState(false);
   const [showEvModal, setShowEvModal] = useState(false);
   const evPollRef = useRef<PollHandle | null>(null);
+
+  // 证据历史（头脑风暴项⑨）：前端本地记录，按项目展示，可回看/再次下载。
+  const [evidenceHistory, setEvidenceHistory] = useState<EvidenceHistoryEntry[]>([]);
+  const [evHistoryOpen, setEvHistoryOpen] = useState(false);
 
   // Global loading/error
   const [pageLoading, setPageLoading] = useState(true);
@@ -713,6 +729,8 @@ export default function DashboardPage() {
     }
     // 运行历史（头脑风暴项④）：项目切换时按项目从 localStorage 载入本地记录。
     setGapRuns(listGapRuns(selectedProject));
+    // 证据历史（项⑨）：项目切换时按项目从 localStorage 载入本地记录。
+    setEvidenceHistory(listEvidenceHistory(selectedProject));
   }, [selectedProject, activeTab]);
 
   // ─── Project selector ─────────────────────────────────────────────────────
@@ -767,6 +785,22 @@ export default function DashboardPage() {
               // Auto-refresh SWE data
               loadSWE(selectedProject);
               loadCoverage(selectedProject);
+              // 证据历史（项⑨）：成功生成，记一条可回看/下载的记录。
+              recordEvidence(selectedProject, {
+                taskId: status.task_id ?? null,
+                download_url: status.download_url ?? null,
+                note: status.note ?? null,
+                status: "completed",
+              });
+              setEvidenceHistory(listEvidenceHistory(selectedProject));
+            } else {
+              // 证据历史（项⑨）：生成失败也记录，便于排查。
+              recordEvidence(selectedProject, {
+                taskId: status.task_id ?? null,
+                note: status.error ?? null,
+                status: "failed",
+              });
+              setEvidenceHistory(listEvidenceHistory(selectedProject));
             }
             return true;
           }
@@ -786,12 +820,19 @@ export default function DashboardPage() {
   };
 
   const handleCloseEvModal = () => {
-    // Stop polling if still running
+    // 生成进度可视化（项⑧）：关闭弹窗不中断轮询，进度转入顶部常驻横幅
+    // （后台运行）。轮询在 completed/failed 时由 startExponentialPoll 自动停止。
+    setShowEvModal(false);
+  };
+
+  // 关闭/清除常驻生成进度横幅（项⑧）：停止轮询并清空任务状态。
+  const dismissEvBanner = () => {
     if (evPollRef.current) {
       evPollRef.current.stop();
       evPollRef.current = null;
     }
-    setShowEvModal(false);
+    setEvTask(null);
+    setEvGenerating(false);
   };
 
   // Cleanup polling on unmount
@@ -865,6 +906,86 @@ export default function DashboardPage() {
               {error}
             </span>
             <button onClick={() => setError("")} className="ml-2 hover:text-white text-sm">&times;</button>
+          </div>
+        )}
+
+        {/* 生成进度可视化（头脑风暴项⑧）：证据包生成的常驻、非阻塞横幅。
+            弹窗关闭（后台运行）后仍可见；运行中可点「查看详情」回到弹窗，
+            完成/失败常驻直到用户关闭。 */}
+        {evTask && !showEvModal && (evTask.status === "running" || evTask.status === "completed" || evTask.status === "failed") && (
+          <div
+            className="mb-4 rounded-lg border px-4 py-3"
+            style={{
+              background:
+                evTask.status === "failed"
+                  ? "#ff4d4f10"
+                  : evTask.status === "completed"
+                  ? "#10b98110"
+                  : "#722ed114",
+              borderColor:
+                evTask.status === "failed"
+                  ? "#ff4d4f30"
+                  : evTask.status === "completed"
+                  ? "#10b98130"
+                  : "#722ed130",
+            }}
+          >
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span
+                className="text-xs font-medium flex items-center gap-1.5"
+                style={{
+                  color:
+                    evTask.status === "failed"
+                      ? "#ff4d4f"
+                      : evTask.status === "completed"
+                      ? "#10b981"
+                      : "#a78bfa",
+                }}
+              >
+                {evTask.status === "running" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {evTask.status === "completed" && <CheckCircle2 className="w-3.5 h-3.5" />}
+                {evTask.status === "failed" && <AlertCircle className="w-3.5 h-3.5" />}
+                {evTask.status === "running" && "正在生成证据包…"}
+                {evTask.status === "completed" && "证据包已生成完成"}
+                {evTask.status === "failed" && "证据包生成失败"}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {evTask.status === "running" && (
+                  <button
+                    onClick={() => setShowEvModal(true)}
+                    className="text-[11px] text-[#722ed1] hover:text-white px-2 py-1 rounded hover:bg-[#722ed1]/10"
+                  >
+                    查看详情
+                  </button>
+                )}
+                {evTask.status === "completed" && evTask.download_url && (
+                  <a
+                    href={evTask.download_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-[#10b981] hover:text-white px-2 py-1 rounded hover:bg-[#10b981]/10"
+                  >
+                    <Download className="w-3 h-3" />
+                    下载
+                  </a>
+                )}
+                <button
+                  onClick={dismissEvBanner}
+                  className="text-[11px] text-[#64748b] hover:text-white px-2 py-1 rounded hover:bg-[#1e293b]/60"
+                >
+                  {evTask.status === "running" ? "后台运行" : "关闭"}
+                </button>
+              </div>
+            </div>
+            <TaskStageProgress
+              stages={EVIDENCE_STAGES}
+              breakpoints={EVIDENCE_BREAKPOINTS}
+              progressPct={evTask.progress_pct ?? 0}
+              isFailed={evTask.status === "failed"}
+            />
+            {evTask.status === "failed" && evTask.error && (
+              <div className="mt-2 text-[11px] text-[#ff4d4f] break-words">{evTask.error}</div>
+            )}
           </div>
         )}
 
@@ -1265,6 +1386,107 @@ export default function DashboardPage() {
             <div className="mt-6">
             <PipelineStageBoard />
             </div>
+
+            {/* 证据历史（头脑风暴项⑨）：前端本地记录，按项目展示，可回看/再次下载/清空。 */}
+            <Card className="mt-6 border-[#1e293b] bg-[#111827]">
+              <button
+                onClick={() => setEvHistoryOpen((v) => !v)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#1e293b]/40 transition-colors"
+              >
+                <span className="flex items-center gap-2 text-sm font-bold text-[#e2e8f0]">
+                  <History className="w-4 h-4 text-[#10b981]" />
+                  证据历史
+                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-[#10b981]/15 text-[#10b981]">
+                    {evidenceHistory.length} 条
+                  </span>
+                  <span className="text-[10px] font-normal text-[#64748b]">
+                    本地记录 · 可再次下载
+                  </span>
+                </span>
+                <div className="flex items-center gap-2">
+                  {evidenceHistory.length > 0 && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (
+                          window.confirm(
+                            `确定清空当前项目（${selectedProjectObj?.name || selectedProject}）的证据历史吗？`,
+                          )
+                        ) {
+                          clearEvidenceHistory(selectedProject);
+                          setEvidenceHistory([]);
+                        }
+                      }}
+                      className="flex items-center gap-1 text-[11px] text-[#94a3b8] hover:text-[#ff4d4f] px-2 py-1 rounded hover:bg-[#ff4d4f]/5 cursor-pointer"
+                      title="清空当前项目证据历史"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      清空
+                    </span>
+                  )}
+                  {evHistoryOpen ? (
+                    <ChevronUp className="w-4 h-4 text-[#64748b]" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-[#64748b]" />
+                  )}
+                </div>
+              </button>
+              {evHistoryOpen && (
+                <div className="border-t border-[#1e293b] px-4 py-3">
+                  {evidenceHistory.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-[#64748b]">
+                      暂无证据记录 — 点击「生成证据包」后会出现在这里
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {evidenceHistory.map((e) => {
+                        const ok = e.status === "completed";
+                        const color = ok ? "#10b981" : "#ff4d4f";
+                        return (
+                          <div
+                            key={e.id}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-[#1e293b] bg-[#0a0e17]/40 px-3 py-2"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0"
+                                style={{
+                                  color,
+                                  background: `${color}14`,
+                                  border: `1px solid ${color}30`,
+                                }}
+                              >
+                                {ok ? "已生成" : "失败"}
+                              </span>
+                              {e.download_url ? (
+                                <a
+                                  href={e.download_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-[#1677ff] hover:text-white truncate flex items-center gap-1"
+                                  title="下载证据包"
+                                >
+                                  <Download className="w-3 h-3 shrink-0" />
+                                  下载
+                                </a>
+                              ) : (
+                                <span className="text-xs text-[#94a3b8] truncate">
+                                  {e.note || "无下载链接"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] text-[#64748b] shrink-0">
+                              <Clock className="w-3 h-3" />
+                              {formatRunTime(e.createdAt)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
 
             {/* Demo 备选2: 首页测试分层总览卡片 */}
             <Card className="mt-6 border-[#1e293b] bg-[#111827]">
