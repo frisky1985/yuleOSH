@@ -7,6 +7,7 @@ import {
   Layers,
   Link2,
   Loader2,
+  Lock,
   Play,
   X,
 } from "lucide-react";
@@ -64,6 +65,10 @@ export function GapBatchModal({
   const [batch, setBatch] = useState<GapBatchStatus | null>(null);
   const [batchError, setBatchError] = useState("");
 
+  // 运行期间锁定（头脑风暴项②）：批量修复进行中 / 批量分析拉取中，
+  // 禁止关闭或放弃弹窗，避免误关丢失进度视图（后端任务仍在跑）。
+  const [running, setRunning] = useState(false);
+
   const pollRef = useRef<PollHandle | null>(null);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
@@ -112,6 +117,7 @@ export function GapBatchModal({
     let cancelled = false;
     setBatchError("");
     setBatch(null);
+    setRunning(true);
 
     const stopPoll = () => {
       pollRef.current?.stop();
@@ -129,7 +135,13 @@ export function GapBatchModal({
             if (cancelled) return true;
             setBatch(s);
             if (s.status === "completed") {
+              setRunning(false);
               onCompleteRef.current?.();
+              return true;
+            }
+            if (s.status === "failed") {
+              // 失败也解除锁定，允许用户关闭后重试。
+              setRunning(false);
               return true;
             }
             return false;
@@ -138,8 +150,10 @@ export function GapBatchModal({
         );
       })
       .catch((e) => {
-        if (!cancelled)
+        if (!cancelled) {
+          setRunning(false);
           setBatchError(humanizeError(e, "批量修复启动失败"));
+        }
       });
 
     return () => {
@@ -148,16 +162,25 @@ export function GapBatchModal({
     };
   }, [open, mode, idsKey]);
 
+  // 弹窗关闭（open=false）时解除锁定，避免下次以 analyze 模式打开时残留。
+  useEffect(() => {
+    if (!open) setRunning(false);
+  }, [open]);
+
   if (!open) return null;
 
   const isRemediate = mode === "remediate";
+  // 运行期间锁定（头脑风暴项②）：修复进行中 / 分析拉取中禁止关闭。
+  const isLocked = isRemediate ? running : analyzeLoading;
   const totalPct =
     batch && batch.total ? Math.round((batch.done / batch.total) * 100) : 0;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={() => {
+        if (!isLocked) onClose();
+      }}
     >
       <Card
         className="w-full max-w-2xl max-h-[88vh] flex flex-col border-[#1e293b] bg-[#111827] shadow-2xl"
@@ -176,6 +199,12 @@ export function GapBatchModal({
                 <span className="text-[11px] font-normal text-[#64748b]">
                   {gapIds.length} 项差距
                 </span>
+                {isLocked && (
+                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-[#722ed1]/15 text-[#a78bfa] flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    执行中 · 已锁定
+                  </span>
+                )}
               </CardTitle>
               <p className="text-[11px] text-[#64748b] mt-1">
                 {isRemediate
@@ -185,7 +214,9 @@ export function GapBatchModal({
             </div>
             <button
               onClick={onClose}
-              className="text-[#64748b] hover:text-white text-lg leading-none"
+              disabled={isLocked}
+              title={isLocked ? "执行中，暂不可关闭" : undefined}
+              className="text-[#64748b] hover:text-white text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-[#64748b]"
               aria-label="关闭"
             >
               <X className="w-4 h-4" />
