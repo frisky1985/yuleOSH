@@ -72,6 +72,21 @@ interface LogsSummaryResponse {
   note?: string | null;
   window_days?: number | null;
   applied_since?: string | null;
+  statuses?: string[];
+}
+
+function statusStyle(status?: string | null): { color: string; border: string; bg: string } {
+  const s = (status || "").toLowerCase();
+  if (["done", "success", "passed", "ok", "completed"].includes(s)) {
+    return { color: "#52c41a", border: "#52c41a4d", bg: "#52c41a1f" };
+  }
+  if (["failed", "failure", "error", "aborted"].includes(s)) {
+    return { color: "#ff4d4f", border: "#ff4d4f4d", bg: "#ff4d4f1f" };
+  }
+  if (["running", "pending", "queued", "in_progress"].includes(s)) {
+    return { color: "#1677ff", border: "#1677ff4d", bg: "#1677ff1f" };
+  }
+  return { color: "#64748b", border: "#334155", bg: "#1e293b66" };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -222,6 +237,9 @@ export default function LogsPage() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState("");
   const [summaryRange, setSummaryRange] = useState<string>("7d");
+  const [summarySort, setSummarySort] = useState<string>("updated");
+  const [summaryStatus, setSummaryStatus] = useState<string>("");
+  const [summaryStatuses, setSummaryStatuses] = useState<string[]>([]);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sumExpanded, setSumExpanded] = useState<Record<string, boolean>>({});
@@ -263,19 +281,25 @@ export default function LogsPage() {
     setSummaryLoading(true);
     setSummaryError("");
     try {
+      const params = new URLSearchParams();
       const since = rangeToSince(summaryRange);
-      const qs = since ? `?since=${since}` : "";
-      const res = await apiFetch<LogsSummaryResponse>(`/api/v1/logs/summary${qs}`);
+      if (since) params.set("since", since);
+      if (summarySort && summarySort !== "updated") params.set("sort", summarySort);
+      if (summaryStatus) params.set("status", summaryStatus);
+      const qs = params.toString();
+      const res = await apiFetch<LogsSummaryResponse>(`/api/v1/logs/summary${qs ? `?${qs}` : ""}`);
       setSummary(res.runs || []);
       setSummaryNote(res.note ?? null);
+      setSummaryStatuses(res.statuses || []);
     } catch (err) {
       setSummaryError(errMessage(err));
       setSummary([]);
       setSummaryNote(null);
+      setSummaryStatuses([]);
     } finally {
       setSummaryLoading(false);
     }
-  }, [summaryRange]);
+  }, [summaryRange, summarySort, summaryStatus]);
 
   useEffect(() => {
     void loadSummary();
@@ -296,6 +320,8 @@ export default function LogsPage() {
     setRange(DEFAULT_FILTERS.range);
     setLevel(DEFAULT_FILTERS.level);
     setSummaryRange("7d");
+    setSummarySort("updated");
+    setSummaryStatus("");
     setExpanded({});
     setSumExpanded({});
     setFilters(DEFAULT_FILTERS);
@@ -642,10 +668,11 @@ export default function LogsPage() {
               <CardDescription className="text-xs text-[#64748b]">
                 每个 run 的日志文件数 / 总行数 / ERROR 数（默认近 7 天，可切到 30/90 天或全部）
               </CardDescription>
-              <div className="mt-2">
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 <select
                   value={summaryRange}
                   onChange={(e) => setSummaryRange(e.target.value)}
+                  aria-label="摘要时间范围"
                   className="w-full h-8 rounded-md border border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] text-xs px-2 outline-none focus:border-[#722ed1]/50"
                 >
                   <option value="7d">近 7 天</option>
@@ -653,7 +680,34 @@ export default function LogsPage() {
                   <option value="90d">近 90 天</option>
                   <option value="all">全部</option>
                 </select>
+                <select
+                  value={summarySort}
+                  onChange={(e) => setSummarySort(e.target.value)}
+                  aria-label="摘要排序方式"
+                  className="w-full h-8 rounded-md border border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] text-xs px-2 outline-none focus:border-[#722ed1]/50"
+                >
+                  <option value="updated">最近更新</option>
+                  <option value="errors">错误最多</option>
+                  <option value="name">按名称</option>
+                </select>
               </div>
+              {summaryStatuses.length > 0 && (
+                <div className="mt-2">
+                  <select
+                    value={summaryStatus}
+                    onChange={(e) => setSummaryStatus(e.target.value)}
+                    aria-label="按状态筛选"
+                    className="w-full h-8 rounded-md border border-[#1e293b] bg-[#0a0e17] text-[#e2e8f0] text-xs px-2 outline-none focus:border-[#722ed1]/50"
+                  >
+                    <option value="">全部状态</option>
+                    {summaryStatuses.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               {summaryError && (
@@ -702,6 +756,18 @@ export default function LogsPage() {
                           {run.name && (
                             <span className="text-xs text-[#e2e8f0] font-medium truncate">
                               {run.name}
+                            </span>
+                          )}
+                          {run.status && (
+                            <span
+                              className="shrink-0 text-[10px] px-1.5 py-0.5 rounded"
+                              style={{
+                                color: statusStyle(run.status).color,
+                                background: statusStyle(run.status).bg,
+                                border: `1px solid ${statusStyle(run.status).border}`,
+                              }}
+                            >
+                              {run.status}
                             </span>
                           )}
                         </div>
