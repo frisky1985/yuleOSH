@@ -1,4 +1,4 @@
-import { isEngineerRole, type AppRole } from "@/lib/use-session-role";
+import { isEngineerRole, type AppRole, viewOf } from "@/lib/role-view";
 
 // 角色 → 视图分流（与 dashboard/layout.tsx:86 的渲染判断、user-menu.tsx 的
 // viewOf 保持一致）。这是"决策者/工程师两角色视图不同"的核心不变量，必须
@@ -26,5 +26,13 @@ describe("isEngineerRole（决策/工程视图分流）", () => {
     expect(isEngineerRole(engineer)).toBe(true);
     // 关键不变量：两个演示账号必须分属不同视图
     expect(isEngineerRole(decision)).not.toBe(isEngineerRole(engineer));
+  });
+
+  it("viewOf 标签与 isEngineerRole 一致（决策/工程/成员）", () => {
+    expect(viewOf("admin").label).toBe("决策视角");
+    expect(viewOf("developer").label).toBe("工程视角");
+    expect(viewOf("developer").tone).toBe("engineer");
+    expect(viewOf("member").label).toBe("成员视角");
+    expect(viewOf(null).label).toBe("成员视角");
   });
 });

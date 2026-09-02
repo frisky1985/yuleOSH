@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { api, type UserInfo } from "@/lib/api";
+import { type AppRole, isEngineerRole } from "@/lib/role-view";
+// 角色 → 视图判定集中到 @/lib/role-view（单一事实来源），本模块 re-export
+// 以兼容既有引用（layout.tsx、role-view.test.ts 等）。
+export { isEngineerRole, type AppRole } from "@/lib/role-view";
 
 // ── 模块级缓存：所有消费方共享同一次会话请求 ───────────────────────────────
 let _sessionPromise: Promise<UserInfo | null> | null = null;
@@ -57,16 +61,12 @@ export function getCachedRole(): AppRole {
   }
 }
 
-export type AppRole = "admin" | "developer" | "reviewer" | "auditor" | "member" | null;
-
-// 角色 → 应用骨架分流：
+// 角色 → 应用骨架分流逻辑已移至 @/lib/role-view（见该模块注释）；
+// 本模块仅 re-export（顶部 export ... from "@/lib/role-view"），不再本地定义，
+// 避免分流逻辑漂移。
 //   admin / 未登录(null)        → 决策视角（顶栏 dashboard，横向）
 //   developer / reviewer / auditor → 工程视角（v5 左侧栏，纵向）
-// 注意：视图仅由角色决定，不再引入 ?view 预览 / localStorage 覆盖，
-// 否则同一浏览器下预览状态会跨账号污染，导致两个角色视图趋同。
-export function isEngineerRole(role: AppRole): boolean {
-  return role === "developer" || role === "reviewer" || role === "auditor";
-}
+
 
 export function useSessionRole() {
   const [state, setState] = useState<{ role: AppRole; session: UserInfo | null }>({

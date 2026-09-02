@@ -25,31 +25,16 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { LogOut, Settings, Trash2, User as UserIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { viewOf, VIEW_BADGE_CLS } from "@/lib/role-view";
 
 export interface UserMenuSession {
   email: string;
   org_name?: string | null;
   user_id?: number | string;
-  /** 登录用户角色（admin→决策视角；developer/reviewer/auditor→工程视角）。 */
+  /** 登录用户角色（admin→决策视角；developer/reviewer/auditor→工程视角）。
+   *  视图标签/色调由 @/lib/role-view 的 viewOf 统一提供。 */
   role?: string | null;
 }
-
-/** 角色 → 视图标签 + 色调（与 dashboard/layout.tsx 的 isEngineerRole 分流一致）。 */
-function viewOf(role?: string | null): { label: string; tone: "decision" | "engineer" | "member" } {
-  if (role === "developer" || role === "reviewer" || role === "auditor") {
-    return { label: "工程视角", tone: "engineer" };
-  }
-  if (role === "admin") {
-    return { label: "决策视角", tone: "decision" };
-  }
-  return { label: "成员视角", tone: "member" };
-}
-
-const VIEW_BADGE_CLS: Record<"decision" | "engineer" | "member", string> = {
-  decision: "border-[#722ed1]/40 text-[#a78bfa] bg-[#722ed1]/10",
-  engineer: "border-[#1677ff]/40 text-[#60a5fa] bg-[#1677ff]/10",
-  member: "border-[#334155] text-[#94a3b8] bg-[#1e293b]",
-};
 
 export interface UserMenuActions {
   onOpenAccount: () => void;
