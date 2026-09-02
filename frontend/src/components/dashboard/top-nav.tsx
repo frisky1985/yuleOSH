@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BookOpen,
+  ChevronDown,
   Cpu,
   FlaskConical,
   GitBranch,
@@ -17,6 +18,12 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Note: "knowledge-base" stays in the union because the landing page
 // (/dashboard) still keeps inner tab state for backwards compatibility.
@@ -44,13 +51,14 @@ type NavGroup = { id: string; label: string; items: NavItem[] };
 // Navigation grouped by decision-maker workflow (2026-09-02).
 // Logo points at /dashboard. "tab" items render only on /dashboard;
 // sub-pages render link items only (previous behaviour preserved).
-// Group label is rendered before each group so the structure is visible
-// at a glance — this fixes the previous "looks like a single 11-item row"
-// issue caused by 1px-only dividers being invisible on the dark surface.
 //
-// Groups are designed as 4 concerns (1-5 items each, no orphan single-item
-// groups):
-//   概览        — landing anchor (1 item)
+// 2026-09-02 (rev 2): groups are now **click-to-open dropdowns** instead of a
+// flat 11-item row. Each group label is the DropdownMenu trigger; its items
+// appear in the menu. A group with a single visible item in the current mode
+// is rendered inline (no pointless one-option dropdown).
+//
+// Groups are designed as 4 concerns:
+//   概览        — landing anchor (1 item; inline)
 //   合规与交付  — compliance output axis (4 items, what decision-makers act on)
 //   工程执行    — operations / live signal (5 items)
 //   管理        — resource & policy control (3 items, includes 知识库)
@@ -111,13 +119,19 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-const ACTIVE_CLS =
+// Inline pill (single-item groups + active state)
+const PILL_ACTIVE =
   "px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap bg-[#722ed1]/15 text-[#722ed1] border border-[#722ed1]/30";
-const IDLE_CLS =
+const PILL_IDLE =
   "px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap text-[#94a3b8] hover:text-white hover:bg-[#1e293b]";
-// Group label: 10px 灰全大写紧凑字,让分组"看得见"但不喧宾夺主.
-// 用 uppercase + tracking 在中文下相当于零作用,因此 group.label 仍展示中文,
-// letter-spacing 依然让字与字之间松一口气。
+// Dropdown trigger (multi-item groups)
+const TRIGGER_ACTIVE =
+  "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap bg-[#722ed1]/15 text-[#722ed1] border border-[#722ed1]/30 flex items-center gap-1 cursor-pointer";
+const TRIGGER_IDLE =
+  "px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap text-[#94a3b8] hover:text-white hover:bg-[#1e293b] flex items-center gap-1 cursor-pointer";
+// Dropdown item
+const ITEM_ACTIVE = "text-[#722ed1] bg-[#722ed1]/10";
+const ITEM_IDLE = "text-[#cbd5e1] hover:text-white hover:bg-[#1e293b]";
 
 interface TopNavProps {
   /** "tabs" on /dashboard (renders in-page tab items), "links" on sub-pages. */
@@ -136,6 +150,7 @@ interface TopNavProps {
 
 export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
   // Sub-pages must not show the landing-page tabs — they have no tab state.
   const groups = NAV_GROUPS.map((group) => ({
@@ -146,6 +161,37 @@ export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) 
       return true;
     }),
   })).filter((group) => group.items.length > 0);
+
+  const isItemActive = (item: NavItem): boolean =>
+    item.kind === "tab"
+      ? mode === "tabs" && activeTab === item.tab
+      : pathname === item.href;
+
+  const renderInlineItem = (item: NavItem) => {
+    const active = isItemActive(item);
+    if (item.kind === "tab") {
+      return (
+        <button
+          key={item.tab}
+          onClick={() => onTabChange?.(item.tab)}
+          className={active ? PILL_ACTIVE : PILL_IDLE}
+        >
+          <item.icon className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+          {item.label}
+        </button>
+      );
+    }
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={active ? PILL_ACTIVE : PILL_IDLE}
+      >
+        <item.icon className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
+        {item.label}
+      </Link>
+    );
+  };
 
   return (
     <nav
@@ -163,44 +209,58 @@ export function TopNav({ mode, activeTab, onTabChange, children }: TopNavProps) 
           </Link>
 
           <div className="flex items-center gap-1 overflow-x-auto">
-            {groups.map((group, groupIndex) => (
-              <div
-                key={group.id}
-                className="flex items-center gap-0.5"
-                title={group.label}
-              >
-                {groupIndex > 0 && (
-                  <div className="w-px h-6 bg-[#1e293b] mx-2 shrink-0" />
-                )}
-                <span
-                  className="hidden md:inline-block text-[10px] font-medium uppercase tracking-[0.3px] text-[#475569] mr-1.5 select-none shrink-0"
-                  aria-hidden="true"
-                >
-                  {group.label}
-                </span>
-                {group.items.map((item) =>
-                  item.kind === "tab" ? (
-                    <button
-                      key={item.tab}
-                      onClick={() => onTabChange?.(item.tab)}
-                      className={activeTab === item.tab ? ACTIVE_CLS : IDLE_CLS}
-                    >
-                      <item.icon className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                      {item.label}
-                    </button>
-                  ) : (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={pathname === item.href ? ACTIVE_CLS : IDLE_CLS}
-                    >
-                      <item.icon className="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5" />
-                      {item.label}
-                    </Link>
-                  ),
-                )}
-              </div>
-            ))}
+            {groups.map((group) => {
+              // 单 item 组直接平铺，不套无意义的单选项下拉
+              if (group.items.length === 1) {
+                return (
+                  <div key={group.id} className="flex items-center">
+                    {renderInlineItem(group.items[0])}
+                  </div>
+                );
+              }
+              const groupActive = group.items.some(isItemActive);
+              return (
+                <DropdownMenu key={group.id}>
+                  <DropdownMenuTrigger
+                    className={groupActive ? TRIGGER_ACTIVE : TRIGGER_IDLE}
+                  >
+                    {group.label}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="w-48 border-[#1e293b] bg-[#111827] text-[#e2e8f0] mt-1"
+                  >
+                    {group.items.map((item) => {
+                      const active = isItemActive(item);
+                      const cls = `text-sm gap-2 ${active ? ITEM_ACTIVE : ITEM_IDLE}`;
+                      if (item.kind === "tab") {
+                        return (
+                          <DropdownMenuItem
+                            key={item.tab}
+                            onSelect={() => onTabChange?.(item.tab)}
+                            className={cls}
+                          >
+                            <item.icon className="w-3.5 h-3.5" />
+                            {item.label}
+                          </DropdownMenuItem>
+                        );
+                      }
+                      return (
+                        <DropdownMenuItem
+                          key={item.href}
+                          onSelect={() => router.push(item.href)}
+                          className={cls}
+                        >
+                          <item.icon className="w-3.5 h-3.5" />
+                          {item.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            })}
           </div>
 
           {children ?? <div className="shrink-0" />}
