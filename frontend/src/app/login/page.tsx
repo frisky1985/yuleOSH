@@ -302,6 +302,7 @@ export default function LoginPage() {
                         setError("");
                       }}
                       className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
+                      data-testid="demo-fill-decision"
                     >
                       一键填入
                     </button>
@@ -325,6 +326,7 @@ export default function LoginPage() {
                         setError("");
                       }}
                       className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
+                      data-testid="demo-fill-engineer"
                     >
                       一键填入
                     </button>
@@ -347,6 +349,7 @@ export default function LoginPage() {
                         setError("");
                       }}
                       className="text-[#a78bfa] hover:text-white underline bg-transparent border-none cursor-pointer whitespace-nowrap shrink-0"
+                      data-testid="demo-fill-demo"
                     >
                       一键填入
                     </button>

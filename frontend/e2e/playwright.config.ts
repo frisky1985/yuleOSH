@@ -14,7 +14,7 @@ import { defineConfig } from "@playwright/test";
 // 注意：本目录已被 tsconfig.json 的 exclude 排除，不参与 next build / tsc
 // 类型检查（避免 @playwright/test 类型未安装时污染构建）。
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: ".",
   timeout: 30000,
   expect: { timeout: 6000 },
   fullyParallel: false,
