@@ -955,13 +955,23 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
                 except Exception:
                     total_artifacts = 0
 
+                # Snapshot the bundle into the evidence history store so the
+                # dashboard generation is also retrievable/downloadable later.
+                from .evidence import snapshot_bundle
+                version = snapshot_bundle(str(bundle_dir))
+                download_url = (
+                    f"/api/v1/evidence/pack?version={version}"
+                    if version
+                    else "/api/v1/evidence/pack"
+                )
+
                 _ev_tasks[task_id].update({
                     "status": "completed",
                     "progress_pct": 100,
                     "valid": True,
                     "manifest_path": str(manifest_path),
                     "total_artifacts": total_artifacts,
-                    "download_url": f"/api/v1/evidence/pack?task_id={task_id}",
+                    "download_url": download_url,
                 })
             else:
                 _ev_tasks[task_id].update({

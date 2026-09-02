@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 import subprocess
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -62,6 +63,39 @@ def _snapshot_pack() -> str | None:
         dst = ev_dir / version
         n += 1
     shutil.copy2(src, dst)
+    return version
+
+
+def snapshot_bundle(bundle_dir: str) -> str | None:
+    """Zip an evidence *bundle directory* (e.g. `.yuleosh/evidence-bundle`)
+    into a versioned `.osh/evidence/compliance-pack-<ts>.zip` and overwrite the
+    latest `compliance-pack.zip`.  Returns the versioned name, or None when the
+    bundle dir is missing.
+
+    Used by the dashboard generate flow so its real generations also land in
+    the evidence history list (the dashboard produces a bundle dir + manifest,
+    whereas the evidence-page path produces compliance-pack.zip directly).
+    """
+    from . import OSH_HOME
+
+    src = Path(bundle_dir)
+    if not src.exists() or not src.is_dir():
+        return None
+    ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
+    ev_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    version = f"compliance-pack-{ts}.zip"
+    dst = ev_dir / version
+    n = 1
+    while dst.exists():
+        version = f"compliance-pack-{ts}-{n}.zip"
+        dst = ev_dir / version
+        n += 1
+    with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in sorted(src.rglob("*")):
+            if p.is_file():
+                zf.write(p, p.relative_to(src))
+    shutil.copy2(dst, ev_dir / "compliance-pack.zip")
     return version
 
 
