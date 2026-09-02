@@ -289,12 +289,17 @@ def _logs_pipeline(query: dict) -> tuple[dict, int]:
 def _logs_summary(query: dict) -> tuple[dict, int]:
     """GET /api/v1/logs/summary?project=xxx[&since=YYYY-MM-DD] — 每 run 的日志统计。
 
-    统计项：日志文件数、总行数、ERROR/FATAL 出现次数、最后更新时间。
+    统计项：日志文件数、总行数、ERROR/FATAL 出现次数、最后更新时间、状态。
     时间窗口：默认近 7 天；若前端显式传 since（含更早），则尊重该窗口，不再硬卡 7 天。
-      since — 窗口起点（YYYY-MM-DD）；不传则默认近 7 天
-      until — 窗口终点（默认不限制）
+      since  — 窗口起点（YYYY-MM-DD）；不传则默认近 7 天
+      until  — 窗口终点（默认不限制）
+      status — 按 run 状态过滤（匹配 session.json 的 status，大小写不敏感）
+      sort   — 排序：updated（默认，最近更新在前）/ errors（错误多的在前）/ name（run_id）
+    响应额外返回 statuses（当前窗口内出现的全部状态，供前端下拉，不受 status 过滤影响）。
     """
     project = _qp(query, "project").lower()
+    status_filter = _qp(query, "status").strip().lower()
+    sort = _qp(query, "sort", "updated").strip().lower()
 
     # 默认近 7 天；前端显式给 since（含更早）则尊重，不再硬卡 7 天
     req_since = _parse_window(_qp(query, "since"))
@@ -306,12 +311,18 @@ def _logs_summary(query: dict) -> tuple[dict, int]:
     root = _sessions_root()
 
     runs: list[dict] = []
+    statuses: set[str] = set()
     if root.is_dir():
         for run_dir in sorted(root.iterdir()):
             if not run_dir.is_dir():
                 continue
             meta = _load_session_meta(run_dir)
             if project and project not in _meta_haystack(meta):
+                continue
+            run_status = (meta.get("status") or "").strip()
+            if run_status:
+                statuses.add(run_status)
+            if status_filter and run_status.lower() != status_filter:
                 continue
 
             log_files = 0
@@ -352,6 +363,13 @@ def _logs_summary(query: dict) -> tuple[dict, int]:
                 "updated_at": updated_at,
             })
 
+    if sort == "errors":
+        runs.sort(key=lambda r: (-r["error_count"], r["updated_at"] or ""))
+    elif sort == "name":
+        runs.sort(key=lambda r: r["run_id"])
+    else:  # updated（默认）：最近更新在前
+        runs.sort(key=lambda r: r["updated_at"] or "", reverse=True)
+
     note = None if runs else (
         "no session logs found" + (f" for project {project}" if project else "")
     )
@@ -361,4 +379,5 @@ def _logs_summary(query: dict) -> tuple[dict, int]:
         "note": note,
         "window_days": 7 if req_since is None else None,
         "applied_since": cutoff.isoformat(),
+        "statuses": sorted(statuses),
     })
