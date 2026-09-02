@@ -29,6 +29,13 @@ interface EvidenceFile {
   type: string;
 }
 
+interface HistoryVersion {
+  name: string;
+  size: number;
+  mtime: number;
+  type: string;
+}
+
 
 function fmtSize(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -46,6 +53,7 @@ function fmtTime(t: number): string {
 
 export default function EvidencePage() {
   const [files, setFiles] = useState<EvidenceFile[]>([]);
+  const [history, setHistory] = useState<HistoryVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -58,6 +66,17 @@ export default function EvidencePage() {
         "/api/v1/evidence/files",
       );
       setFiles(data.files || []);
+      // 历史版本（生成时快照存档）——失败不影响主列表展示
+      try {
+        const h = await apiFetch<{
+          versions: HistoryVersion[];
+          count: number;
+          has_latest: boolean;
+        }>("/api/v1/evidence/history");
+        setHistory(h.versions || []);
+      } catch {
+        /* history 可选，忽略 */
+      }
     } catch (e: any) {
       setError(e?.message || "加载证据文件失败");
     } finally {
@@ -89,6 +108,15 @@ export default function EvidencePage() {
     const a = document.createElement("a");
     a.href = "/api/v1/evidence/pack";
     a.download = "evidence-pack.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const handleDownloadVersion = (name: string) => {
+    const a = document.createElement("a");
+    a.href = `/api/v1/evidence/pack?version=${encodeURIComponent(name)}`;
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -187,6 +215,66 @@ export default function EvidencePage() {
                         </td>
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtSize(f.size)}</td>
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtTime(f.mtime)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4 border-[#1e293b] bg-[#111827]">
+          <CardHeader>
+            <CardTitle className="text-[#e2e8f0]">历史版本（{history.length}）</CardTitle>
+            <CardDescription className="text-[#64748b]">
+              每次「生成证据包」会自动快照存档，可随时回看并下载任一历史版本
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center gap-2 py-8 text-sm text-[#64748b]">
+                <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
+              </div>
+            ) : history.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-[#64748b]">
+                <FolderOpen className="h-8 w-8 text-[#334155]" />
+                暂无历史版本，生成一次证据包后将自动存档
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#1e293b] text-left text-[#64748b]">
+                      <th className="px-3 py-2 font-medium">版本</th>
+                      <th className="px-3 py-2 font-medium">大小</th>
+                      <th className="px-3 py-2 font-medium">生成时间</th>
+                      <th className="px-3 py-2 font-medium text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((v) => (
+                      <tr
+                        key={v.name}
+                        className="border-b border-[#1e293b]/60 last:border-0"
+                      >
+                        <td className="px-3 py-2.5 text-[#e2e8f0]">
+                          <span className="inline-flex items-center gap-2">
+                            <Archive className="h-4 w-4 text-[#722ed1]" />
+                            {v.name}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-[#94a3b8]">{fmtSize(v.size)}</td>
+                        <td className="px-3 py-2.5 text-[#94a3b8]">{fmtTime(v.mtime)}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <button
+                            onClick={() => handleDownloadVersion(v.name)}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-[#1e293b] px-2.5 py-1 text-xs text-[#e2e8f0] transition-colors hover:bg-[#1e293b]"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            下载
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
