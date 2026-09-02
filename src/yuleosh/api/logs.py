@@ -15,6 +15,8 @@ Endpoints:
     GET /api/v1/logs?project=&query=&device=&pipeline=&limit=50&since=&until=&level=
         — 跨 run 日志检索，返回 [{run_id, file, line, content, level, updated_at}]
         时间窗口 since/until 基于日志文件更新时间（文件 mtime，UTC），按 run/文件级过滤
+    GET /api/v1/logs/export?project=&query=&device=&pipeline=&since=&until=&level=
+        — 全量导出（复用检索的过滤参数，上限 20000 条），返回 {rows, count, truncated}
     GET /api/v1/logs/pipeline?run=xxx
         — 某流水线 run 的全部 *.log 文件 + 内容前 200 行
     GET /api/v1/logs/summary?project=xxx[&since=YYYY-MM-DD]
@@ -40,6 +42,8 @@ OSH_HOME = os.environ.get("OSH_HOME", str(PROJECT_ROOT))
 PREVIEW_LINES = 200
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 500
+# 导出上限：远高于检索上限，但仍设闸门防止单次导出拖垮服务
+MAX_EXPORT = 20000
 
 # 级别启发式 token（按优先级匹配，ERROR 需在 WARN 之前等）
 _LEVEL_TOKENS = ("ERROR", "FATAL", "WARN", "WARNING", "DEBUG", "TRACE", "INFO")
@@ -149,22 +153,16 @@ def handle_logs(method: str, path_tail: str, body: dict, query: dict,
         return _logs_pipeline(query)
     if parts[0] == "summary" and method == "GET":
         return _logs_summary(query)
+    if parts[0] == "export" and method == "GET":
+        return _logs_export(query)
 
     return json_error(f"Unknown logs sub-path or method: {method} {path_tail}", 404)
 
 
-def _logs_search(query: dict) -> tuple[dict, int]:
-    """GET /api/v1/logs — 跨 run 日志检索（子串匹配，轻量实现）。
+def _collect_logs(query: dict, limit: int) -> tuple[list[dict], bool]:
+    """按过滤条件扫描日志行，返回 ``(结果列表, 是否因达到 limit 被截断)``。
 
-    过滤参数（均可选，子串匹配）：
-      project  — 匹配 session.json 的 project/name/run_id
-      query    — 关键词，匹配日志行内容
-      device   — 匹配日志行内容或文件路径（串口日志常含设备 id）
-      pipeline — 匹配 run 元数据（run_id/name/project）
-      limit    — 结果上限（默认 50，上限 500）
-      since/until — 时间窗口（YYYY-MM-DD 或 YYYY-MM-DDTHH:MM），基于日志文件更新时间
-      level    — 按级别过滤（ERROR/FATAL/WARN/INFO/DEBUG/TRACE）
-    注：时间窗口按 run/文件级过滤（updated_at 取文件 mtime，非日志内容时间戳）。
+    检索（/logs）与导出（/logs/export）共用同一套过滤语义，避免重复实现。
     """
     project = _qp(query, "project")
     keyword = _qp(query, "query") or _qp(query, "q")
@@ -173,10 +171,6 @@ def _logs_search(query: dict) -> tuple[dict, int]:
     since = _parse_window(_qp(query, "since"))
     until = _parse_window(_qp(query, "until"), end_of_day=True)
     level = _qp(query, "level").upper()
-    try:
-        limit = min(int(_qp(query, "limit", str(DEFAULT_LIMIT)) or DEFAULT_LIMIT), MAX_LIMIT)
-    except ValueError:
-        limit = DEFAULT_LIMIT
 
     keyword_l = keyword.lower()
     device_l = device.lower()
@@ -185,8 +179,7 @@ def _logs_search(query: dict) -> tuple[dict, int]:
 
     root = _sessions_root()
     if not root.is_dir():
-        return json_ok({"logs": [], "count": 0,
-                        "note": "no session logs found under .osh/sessions"})
+        return [], False
 
     results: list[dict] = []
     for run_dir in sorted(root.iterdir()):
@@ -232,12 +225,63 @@ def _logs_search(query: dict) -> tuple[dict, int]:
                     "updated_at": updated_at,
                 })
                 if len(results) >= limit:
-                    return json_ok({"logs": results, "count": len(results), "note": None})
+                    return results, True
 
+    return results, False
+
+
+def _logs_search(query: dict) -> tuple[dict, int]:
+    """GET /api/v1/logs — 跨 run 日志检索（子串匹配，轻量实现）。
+
+    过滤参数（均可选，子串匹配）：
+      project  — 匹配 session.json 的 project/name/run_id
+      query    — 关键词，匹配日志行内容
+      device   — 匹配日志行内容或文件路径（串口日志常含设备 id）
+      pipeline — 匹配 run 元数据（run_id/name/project）
+      limit    — 结果上限（默认 50，上限 500）
+      since/until — 时间窗口（YYYY-MM-DD 或 YYYY-MM-DDTHH:MM），基于日志文件更新时间
+      level    — 按级别过滤（ERROR/FATAL/WARN/INFO/DEBUG/TRACE）
+    注：时间窗口按 run/文件级过滤（updated_at 取文件 mtime，非日志内容时间戳）。
+    """
+    try:
+        limit = min(int(_qp(query, "limit", str(DEFAULT_LIMIT)) or DEFAULT_LIMIT), MAX_LIMIT)
+    except ValueError:
+        limit = DEFAULT_LIMIT
+
+    root = _sessions_root()
+    if not root.is_dir():
+        return json_ok({"logs": [], "count": 0,
+                        "note": "no session logs found under .osh/sessions"})
+
+    results, _ = _collect_logs(query, limit)
     note = None if results else (
         "no logs matched the filters (real data only, no mock)"
     )
     return json_ok({"logs": results, "count": len(results), "note": note})
+
+
+def _logs_export(query: dict) -> tuple[dict, int]:
+    """GET /api/v1/logs/export — 全量导出（过滤参数同 /logs，但忽略 limit）。
+
+    上限为 MAX_EXPORT（20000）条；达到上限时 truncated=True，前端应提示用户
+    收紧过滤条件。返回 JSON 由前端转 CSV，避免网关层绕过 JSON 统一封装。
+    """
+    root = _sessions_root()
+    if not root.is_dir():
+        return json_ok({"rows": [], "count": 0, "truncated": False, "limit": MAX_EXPORT,
+                        "note": "no session logs found under .osh/sessions"})
+
+    results, truncated = _collect_logs(query, MAX_EXPORT)
+    note = None if results else (
+        "no logs matched the filters (real data only, no mock)"
+    )
+    return json_ok({
+        "rows": results,
+        "count": len(results),
+        "truncated": truncated,
+        "limit": MAX_EXPORT,
+        "note": note,
+    })
 
 
 def _logs_pipeline(query: dict) -> tuple[dict, int]:
