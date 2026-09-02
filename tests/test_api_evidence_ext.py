@@ -88,3 +88,150 @@ class TestEvidence:
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
             result, code = _generate_evidence({"project_dir": str(tmp_path)})
         assert result["data"]["status"] == "completed"
+
+
+_USER = {"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"}
+
+
+def _auth_patch():
+    """Bypass real JWT verification for the HTTP-handler path."""
+    return patch("yuleosh.api.middleware.verify_token", return_value=dict(_USER))
+
+
+def _fake_handler():
+    """Minimal stand-in for the HTTP handler (records what was written).
+
+    Carries a Bearer token so the request clears ``require_auth``; a real
+    browser download via <a href> relies on the cookie fallback instead,
+    which middleware._extract_token also accepts (T1 v3.9.0).
+    """
+    h = MagicMock()
+    h.headers = MagicMock()
+    h.headers.get.side_effect = lambda k, d=None: (
+        "Bearer test-token" if k == "Authorization" else (d or "")
+    )
+    h.sent_headers = {}
+
+    def _send_header(k, v):
+        h.sent_headers[k] = v
+
+    h.send_header.side_effect = _send_header
+    h.written = b""
+
+    def _write(b):
+        h.written += b
+
+    h.wfile.write.side_effect = _write
+    return h
+
+
+class TestEvidenceFileDownload:
+    """GET /api/v1/evidence/file?name=<bare> — single-file download."""
+
+    def _ev_dir(self, tmp_path):
+        d = tmp_path / ".osh" / "evidence"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def test_download_markdown_file(self, tmp_path):
+        """A listed evidence file is streamed with markdown content type."""
+        ev = self._ev_dir(tmp_path)
+        (ev / "traceability-matrix.md").write_text("# matrix\n", encoding="utf-8")
+        h = _fake_handler()
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)), _auth_patch():
+            out = handle_evidence(
+                "GET", "file", {}, {"name": "traceability-matrix.md"},
+                handler=h, current_user=_USER,
+            )
+        assert out is None  # response already sent
+        h.send_response.assert_called_once_with(200)
+        assert h.sent_headers["Content-Type"] == "text/markdown; charset=utf-8"
+        assert h.sent_headers["Content-Disposition"] == (
+            'attachment; filename="traceability-matrix.md"'
+        )
+        assert h.sent_headers["Content-Length"] == str(len("# matrix\n".encode()))
+        assert h.written == b"# matrix\n"
+
+    def test_download_json_and_unknown_type(self, tmp_path):
+        """.json → application/json; unknown extension → octet-stream."""
+        ev = self._ev_dir(tmp_path)
+        (ev / "review-log.json").write_text("{}", encoding="utf-8")
+        (ev / "blob.bin").write_bytes(b"\x00\x01")
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)), _auth_patch():
+            h = _fake_handler()
+            handle_evidence("GET", "file", {}, {"name": "review-log.json"},
+                            handler=h, current_user=_USER)
+            assert h.sent_headers["Content-Type"] == "application/json; charset=utf-8"
+
+            h2 = _fake_handler()
+            handle_evidence("GET", "file", {}, {"name": "blob.bin"},
+                            handler=h2, current_user=_USER)
+            assert h2.sent_headers["Content-Type"] == "application/octet-stream"
+
+    def test_no_handler_returns_metadata(self, tmp_path):
+        """Without a handler we return JSON metadata (used by tests/clients)."""
+        ev = self._ev_dir(tmp_path)
+        (ev / "aspice.md").write_text("x", encoding="utf-8")
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+            result, code = handle_evidence(
+                "GET", "file", {}, {"name": "aspice.md"},
+                handler=None, current_user=_USER,
+            )
+        assert code == 200
+        assert result["data"]["name"] == "aspice.md"
+        assert result["data"]["content_type"] == "text/markdown; charset=utf-8"
+        assert result["data"]["size"] == 1
+
+    @pytest.mark.parametrize("bad", [
+        "../secret.txt", "..", ".", "sub/file.md", "..\\secret.txt",
+        ".hidden", "file\nname.md", 'file"name.md', "", "   ",
+    ])
+    def test_rejects_traversal_and_bad_names(self, bad, tmp_path):
+        """Path traversal / dot-segments / quote-injection names → 400."""
+        self._ev_dir(tmp_path)
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+            result, code = handle_evidence(
+                "GET", "file", {}, {"name": bad},
+                handler=None, current_user=_USER,
+            )
+        assert code == 400, f"expected 400 for {bad!r}"
+        assert "Invalid file name" in result["error"]
+
+    def test_missing_file_returns_404(self, tmp_path):
+        """Well-formed but non-existent name → 404 (not 400, not 500)."""
+        self._ev_dir(tmp_path)
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+            result, code = handle_evidence(
+                "GET", "file", {}, {"name": "nope.md"},
+                handler=None, current_user=_USER,
+            )
+        assert code == 404
+        assert "not found" in result["error"].lower()
+
+    def test_rejects_symlink_escape(self, tmp_path):
+        """A symlink inside evidence/ pointing outside is refused."""
+        ev = self._ev_dir(tmp_path)
+        outside = tmp_path / "outside-secret.txt"
+        outside.write_text("top secret", encoding="utf-8")
+        try:
+            (ev / "escape.md").symlink_to(outside)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks unsupported on this platform")
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+            result, code = handle_evidence(
+                "GET", "file", {}, {"name": "escape.md"},
+                handler=None, current_user=_USER,
+            )
+        assert code == 400
+        assert "Invalid file name" in result["error"]
+
+    def test_directory_name_rejected(self, tmp_path):
+        """A sub-directory name resolves but is not a file → 404."""
+        ev = self._ev_dir(tmp_path)
+        (ev / "subdir").mkdir()
+        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+            result, code = handle_evidence(
+                "GET", "file", {}, {"name": "subdir"},
+                handler=None, current_user=_USER,
+            )
+        assert code == 404

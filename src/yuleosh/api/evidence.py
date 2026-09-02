@@ -38,6 +38,8 @@ def handle_evidence(method: str, path_tail: str, body: dict, query: dict, handle
         return _list_evidence_history()
     elif path_tail == "pack" and method == "GET":
         return _download_pack(handler, query)
+    elif path_tail == "file" and method == "GET":
+        return _download_file(handler, query)
     return json_error(f"Unknown evidence resource: {path_tail}", 404)
 
 
@@ -241,5 +243,79 @@ def _download_pack(handler, query: dict | None = None) -> tuple[dict, int]:
     return json_ok({
         "path": str(zip_path),
         "size": zip_path.stat().st_size,
+        "status": "ready",
+    })
+
+
+# Single-file download: map extension → Content-Type so the browser opens
+# text artifacts inline-friendly and still downloads binaries correctly.
+_FILE_CONTENT_TYPES = {
+    ".md": "text/markdown; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
+    ".log": "text/plain; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".csv": "text/csv; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".htm": "text/html; charset=utf-8",
+    ".pdf": "application/pdf",
+    ".zip": "application/zip",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
+def _download_file(handler, query: dict | None = None) -> tuple[dict, int] | None:
+    """GET /api/v1/evidence/file?name=<bare_name> — download one evidence file.
+
+    Lets an auditor grab a single artifact (e.g. traceability-matrix.md,
+    review-log.json) without downloading and unzipping the whole pack.
+
+    SECURITY: `name` must be a bare file name (no path separators, no
+    dot-segments, no quote/newline/NUL to keep Content-Disposition well-formed),
+    and the resolved path must stay inside .osh/evidence (also blocks symlink
+    escapes).  Missing file → 404, bad name → 400.
+    """
+    from . import OSH_HOME
+
+    ev_dir = Path(OSH_HOME).resolve() / ".osh" / "evidence"
+    name = (_qp(query or {}, "name") or "").strip()
+
+    if (
+        not name
+        or name in (".", "..")
+        or "/" in name
+        or "\\" in name
+        or name.startswith(".")
+        or any(c in name for c in ('"', "\n", "\r", "\x00"))
+    ):
+        return json_error("Invalid file name", 400)
+
+    try:
+        target = (ev_dir / name).resolve()
+        target.relative_to(ev_dir)
+    except (ValueError, OSError):
+        return json_error("Invalid file name", 400)
+
+    if not target.is_file():
+        return json_error("Evidence file not found", 404)
+
+    ctype = _FILE_CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
+
+    if handler is not None:
+        data = target.read_bytes()
+        handler.send_response(200)
+        handler.send_header("Content-Type", ctype)
+        handler.send_header("Content-Disposition", f'attachment; filename="{name}"')
+        handler.send_header("Content-Length", str(len(data)))
+        handler.send_header("Access-Control-Allow-Origin", get_cors_origin(handler.headers.get("Origin")))
+        handler.end_headers()
+        handler.wfile.write(data)
+        # Signal that the response was already sent
+        return None
+
+    return json_ok({
+        "path": str(target),
+        "name": name,
+        "size": target.stat().st_size,
+        "content_type": ctype,
         "status": "ready",
     })
