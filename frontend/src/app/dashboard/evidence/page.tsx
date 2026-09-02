@@ -5,6 +5,8 @@ import { apiFetch } from "@/lib/api-fetch";
 import { useCallback, useEffect, useState } from "react";
 import {
   Archive,
+  ChevronDown,
+  ChevronUp,
   Download,
   FileText,
   FolderOpen,
@@ -51,12 +53,17 @@ function fmtTime(t: number): string {
   }
 }
 
+// 证据文件默认只展示前 N 条（审计时通常只关心最近几份），其余折叠，
+// 点「展开全部」再完整列出，避免长列表把「历史版本」挤到屏幕外。
+const FILE_COLLAPSE_LIMIT = 10;
+
 export default function EvidencePage() {
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [history, setHistory] = useState<HistoryVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [showAllFiles, setShowAllFiles] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,6 +139,9 @@ export default function EvidencePage() {
     a.click();
     a.remove();
   };
+
+  const visibleFiles = showAllFiles ? files : files.slice(0, FILE_COLLAPSE_LIMIT);
+  const hiddenFileCount = files.length - visibleFiles.length;
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
@@ -209,7 +219,7 @@ export default function EvidencePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {files.map((f) => (
+                    {visibleFiles.map((f) => (
                       <tr
                         key={f.name}
                         className="border-b border-[#1e293b]/60 last:border-0"
@@ -241,6 +251,27 @@ export default function EvidencePage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {files.length > FILE_COLLAPSE_LIMIT && (
+              <div className="mt-3 flex items-center justify-center gap-2 border-t border-[#1e293b] pt-3">
+                <button
+                  onClick={() => setShowAllFiles((v) => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[#1e293b] px-3 py-1.5 text-xs text-[#94a3b8] transition-colors hover:bg-[#1e293b] hover:text-[#e2e8f0]"
+                >
+                  {showAllFiles ? (
+                    <>
+                      <ChevronUp className="h-3.5 w-3.5" />
+                      收起（仅显示前 {FILE_COLLAPSE_LIMIT} 条）
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                      展开剩余 {hiddenFileCount} 条（共 {files.length} 条）
+                    </>
+                  )}
+                </button>
               </div>
             )}
           </CardContent>
