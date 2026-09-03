@@ -25,6 +25,11 @@ from typing import Any, Dict, List, Optional
 # 60s 提到 1800s，并允许通过 YULEOSH_LLM_TIMEOUT 覆盖（秒）。
 _DEFAULT_LLM_TIMEOUT_S = int(os.environ.get("YULEOSH_LLM_TIMEOUT", "1800"))
 
+# 本地 ollama 默认 context 窗口（ollama 服务默认仅 4096，真实 step 输入常超限
+# 触发 400 exceed_context_size_error）。通过 YULEOSH_LLM_CONTEXT_WINDOW 可覆盖。
+# 仅对本地端点透传 num_ctx；0 表示不发送（留给云端自行管理）。
+_DEFAULT_LLM_CONTEXT_WINDOW = int(os.environ.get("YULEOSH_LLM_CONTEXT_WINDOW", "32768"))
+
 
 @dataclass
 class LLMConfig:
@@ -37,6 +42,11 @@ class LLMConfig:
     top_p: float = 0.95
     timeout_s: int = _DEFAULT_LLM_TIMEOUT_S
     max_retries: int = 3
+
+    # 本地 ollama 透传的 context 窗口（num_ctx）。默认 32768；>0 时仅对本地
+    # 端点注入请求体，避免把无效参数发给真实 DeepSeek/OpenAI 云端。
+    # 0 = 不发送 num_ctx。可用 YULEOSH_LLM_CONTEXT_WINDOW 覆盖。
+    context_window: int = _DEFAULT_LLM_CONTEXT_WINDOW
 
     # Reproducibility (H1-1): seed for deterministic output; penalties to
     # reduce repetition/fixation. Supported by DeepSeek, Anthropic, OpenAI.
@@ -188,6 +198,19 @@ PRICING_TABLE: Dict[str, Dict[str, float]] = {
         "input_per_1k": 0.0,
         "output_per_1k": 0.0,
         "context_window": 128_000,
+    },
+    # qwen2.5-coder 系列（Mac Mini M4 16GB 推荐 14b，7b 用于快速链路验证）：
+    # 非推理模型，直接输出 content；本地零费用。context 按本地透传的
+    # num_ctx（默认 32768）设定，预算检查不会因窗口过小误报。
+    "qwen2.5-coder:14b": {
+        "input_per_1k": 0.0,
+        "output_per_1k": 0.0,
+        "context_window": 32768,
+    },
+    "qwen2.5-coder:7b": {
+        "input_per_1k": 0.0,
+        "output_per_1k": 0.0,
+        "context_window": 32768,
     },
 }
 

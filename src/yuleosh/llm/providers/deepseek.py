@@ -99,6 +99,11 @@ class DeepSeekProvider(AbstractProvider):
             "top_p": config.top_p,
             "stream": False,
         }
+        # 本地 ollama 透传 num_ctx：ollama 服务默认 context=4096，真实 step 输入
+        # 常超限触发 400 exceed_context_size_error。仅在目标为本地端点时注入，
+        # 避免把 num_ctx 这种 ollama 专有参数发给真实 DeepSeek/OpenAI 云端。
+        if config.context_window and config.context_window > 0 and self._is_local_ollama(base_url):
+            body["num_ctx"] = config.context_window
         if config.seed is not None:
             body["seed"] = config.seed
         if config.frequency_penalty:
@@ -163,6 +168,18 @@ class DeepSeekProvider(AbstractProvider):
         return (
             self._base_url_override or os.environ.get("LLM_BASE_URL") or DEFAULT_BASE_URL
         ).rstrip("/")
+
+    @staticmethod
+    def _is_local_ollama(base_url: str) -> bool:
+        """True 当请求目标是本机 ollama（OpenAI 兼容端点）。
+
+        仅在此时才透传 num_ctx 等 ollama 专有参数，避免污染云端 API。
+        """
+        low = base_url.lower()
+        return any(
+            tok in low
+            for tok in ("localhost", "127.0.0.1", "0.0.0.0", "ollama", "[::1]")
+        )
 
     def _post_json(
         self,
