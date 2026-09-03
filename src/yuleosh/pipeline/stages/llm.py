@@ -288,7 +288,7 @@ def _call_llm(
             _llm_err,
         )
         raise PipelineStepError(
-            f"LLM call failed for step '{step_key}': {_llm_err}"
+            f"LLM call for step {step_key} failed: {_llm_err}"
         ) from _llm_err
 
 
