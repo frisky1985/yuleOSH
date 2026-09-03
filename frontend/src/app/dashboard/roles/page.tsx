@@ -116,6 +116,7 @@ const ROLE_META: Record<string, { label: string; color: string }> = {
   architect: { label: "架构师", color: "#1677ff" },
   developer: { label: "开发者", color: "#faad14" },
   viewer: { label: "访客", color: "#64748b" },
+  member: { label: "成员(legacy)", color: "#64748b" }, // join-by-invite 创建的 legacy 角色，仅存量展示
 };
 
 const PERM_META: Record<PermLevel, { label: string; color: string; symbol: string }> = {
