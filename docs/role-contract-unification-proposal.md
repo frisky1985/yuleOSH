@@ -1,6 +1,6 @@
 # 角色词表统一为单一事实来源 — 实施提案
 
-> 状态：提案待评审（v1，2026-09-03）
+> 状态：已落地 v1（Phase 0~4 均完成并推送 origin/main，2026-09-03）
 > 背景：前一轮已修复 `role-view.ts` 与后端权限映射的**视图分类漂移**（commit `aee4eea8`，本地 `main`，待 push）。本提案解决根因——系统存在三套互不相同的角色词表，长期会再次漂移。
 
 ---
@@ -24,19 +24,19 @@
 **要做**：定义**单一映射契约** `ROLE_CONTRACT`，描述 `组织角色 → 权限档 → UI 视图` 的标准映射，三处都消费它。契约是"映射表"而非"角色列表"。
 
 ```text
-org_role        →  permission_tier        →  ui_view
-owner           →  ROLE_ADMIN             →  decision
-admin           →  ROLE_ADMIN             →  decision
-developer       →  ROLE_DEVELOPER         →  engineer
-reviewer        →  ROLE_REVIEWER          →  engineer
-auditor         →  ROLE_AUDITOR           →  engineer
-member (legacy) →  ROLE_DEVELOPER         →  engineer
-quality_manager →  ROLE_DEVELOPER*        →  engineer
-architect       →  ROLE_DEVELOPER*        →  engineer
-viewer          →  ROLE_VIEWER (新增)     →  decision (只读)
+org_role        →  permission_tier              →  ui_view
+owner           →  ROLE_ADMIN                   →  decision
+admin           →  ROLE_ADMIN                   →  decision
+developer       →  ROLE_DEVELOPER               →  engineer
+reviewer        →  ROLE_REVIEWER                →  engineer
+auditor         →  ROLE_AUDITOR                 →  engineer
+member (legacy) →  ROLE_DEVELOPER               →  engineer
+quality_manager →  ROLE_QUALITY_MANAGER (新增)  →  engineer
+architect       →  ROLE_DEVELOPER (复用)         →  engineer
+viewer          →  ROLE_VIEWER (新增)           →  engineer (只读)
 ```
 
-> ⚠️ **产品决策点（Phase 1 前必须确认）**：`quality_manager / architect / viewer` 在现有 `rbac/model.py` 中**没有对应权限档**。提案默认 `quality_manager/architect → 工程视角(ROLE_DEVELOPER 级)`、`viewer → 新增 ROLE_VIEWER(只读, 决策视图)`。若产品意图不同（如 viewer 应看不到决策顶栏），需先定档再落地。
+> ✅ **产品决策点已采纳（Phase 1 落地）**：原 `quality_manager / architect / viewer` 在 `rbac/model.py` 中无对应权限档，已按如下定档——`quality_manager → ROLE_QUALITY_MANAGER`（审批/驳回 review + evidence/audit 导出，无 commit/run）、`architect → 复用 ROLE_DEVELOPER`、`viewer → 新增 ROLE_VIEWER`（全模块**只读**，工程视角浏览代码/测试/证据）。其中 `viewer` 由提案默认「决策视图」调整为「工程视角（只读）」——采纳建议：查看者只读浏览工程产物更贴合语义。
 
 ---
 
