@@ -8,10 +8,13 @@
 Unified permission matrix covering all yuleOSH resources.
 
 Roles:
-  - Admin:        Full access — manage tenants, users, billing, settings
-  - Developer:    Code, test, CI — run pipelines, view results, manage code
-  - Reviewer:     Review sessions, view evidence, approve/reject pipeline artifacts
-  - Auditor:      View-only — evidence, audit logs, reports, dashboards
+  - Admin:            Full access — manage tenants, users, billing, settings
+  - Developer:        Code, test, CI — run pipelines, view results, manage code
+  - Reviewer:         Review sessions, view evidence, approve/reject pipeline artifacts
+  - Auditor:          View-only — evidence, audit logs, reports, dashboards
+  - Viewer:           Read-only on all modules — no create/edit/run/commit/approve
+  - Quality Manager:  View all + approve/reject reviews + export evidence/audit
+                      (quality oversight); no code commit / pipeline run
 
 Usage:
     # In middleware:
@@ -38,13 +41,21 @@ logger = logging.getLogger("rbac.model")
 
 
 # ── Role constants ──────────────────────────────────────────────────────────
+# 角色字符串常量（ROLE_*）的唯一事实来源是 rbac/role_contract.py；
+# 此处仅从契约导入，避免角色词表再次漂移。
 
-ROLE_ADMIN = "admin"
-ROLE_DEVELOPER = "developer"
-ROLE_REVIEWER = "reviewer"
-ROLE_AUDITOR = "auditor"
+# noqa: F401 — 这些常量被 PERMISSION_MATRIX / ALL_ROLES / 测试用例从 model 直接引用。
+from yuleosh.rbac.role_contract import (  # isort: skip
+    ROLE_ADMIN,
+    ROLE_AUDITOR,
+    ROLE_DEVELOPER,
+    ROLE_QUALITY_MANAGER,
+    ROLE_REVIEWER,
+    ROLE_VIEWER,
+)
 
-ALL_ROLES = [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR]
+ALL_ROLES = [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+             ROLE_VIEWER, ROLE_QUALITY_MANAGER]
 
 # Human-readable labels
 ROLE_LABELS = {
@@ -52,6 +63,8 @@ ROLE_LABELS = {
     ROLE_DEVELOPER: "Developer",
     ROLE_REVIEWER: "Reviewer",
     ROLE_AUDITOR: "Auditor",
+    ROLE_VIEWER: "Viewer",
+    ROLE_QUALITY_MANAGER: "Quality Manager",
 }
 
 
@@ -63,21 +76,24 @@ ROLE_LABELS = {
 PERMISSION_MATRIX = {
     # ── Tenant management ───────────────────────────────────────────────
     "tenant": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "edit":       [ROLE_ADMIN],
         "delete":     [ROLE_ADMIN],
         "manage_billing": [ROLE_ADMIN],
     },
     # ── User management ─────────────────────────────────────────────────
     "user": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "invite":     [ROLE_ADMIN],
         "edit_role":  [ROLE_ADMIN],
         "remove":     [ROLE_ADMIN],
     },
     # ── Project / Kanban ────────────────────────────────────────────────
     "project": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "create":     [ROLE_ADMIN, ROLE_DEVELOPER],
         "edit":       [ROLE_ADMIN, ROLE_DEVELOPER],
         "delete":     [ROLE_ADMIN],
@@ -85,36 +101,40 @@ PERMISSION_MATRIX = {
     },
     # ── Pipeline / CI ───────────────────────────────────────────────────
     "pipeline": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "run":        [ROLE_ADMIN, ROLE_DEVELOPER],
         "configure":  [ROLE_ADMIN, ROLE_DEVELOPER],
         "cancel":     [ROLE_ADMIN, ROLE_DEVELOPER],
     },
     # ── Code / Source ───────────────────────────────────────────────────
     "code": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "edit":       [ROLE_ADMIN, ROLE_DEVELOPER],
         "commit":     [ROLE_ADMIN, ROLE_DEVELOPER],
     },
     # ── Review sessions ─────────────────────────────────────────────────
     "review": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "create":     [ROLE_ADMIN, ROLE_REVIEWER],
-        "approve":    [ROLE_ADMIN, ROLE_REVIEWER],
-        "reject":     [ROLE_ADMIN, ROLE_REVIEWER],
+        "approve":    [ROLE_ADMIN, ROLE_REVIEWER, ROLE_QUALITY_MANAGER],
+        "reject":     [ROLE_ADMIN, ROLE_REVIEWER, ROLE_QUALITY_MANAGER],
         "comment":    [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER],
     },
     # ── Evidence ────────────────────────────────────────────────────────
     "evidence": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "upload":     [ROLE_ADMIN, ROLE_DEVELOPER],
         "delete":     [ROLE_ADMIN],
-        "export":     [ROLE_ADMIN, ROLE_REVIEWER, ROLE_AUDITOR],
+        "export":     [ROLE_ADMIN, ROLE_REVIEWER, ROLE_AUDITOR, ROLE_QUALITY_MANAGER],
     },
     # ── Audit logs ──────────────────────────────────────────────────────
     "audit": {
-        "view":       [ROLE_ADMIN, ROLE_AUDITOR],
-        "export":     [ROLE_ADMIN, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_AUDITOR, ROLE_QUALITY_MANAGER],
+        "export":     [ROLE_ADMIN, ROLE_AUDITOR, ROLE_QUALITY_MANAGER],
     },
     # ── Billing ─────────────────────────────────────────────────────────
     "billing": {
@@ -124,12 +144,13 @@ PERMISSION_MATRIX = {
     },
     # ── Settings ────────────────────────────────────────────────────────
     "settings": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "edit":       [ROLE_ADMIN],
     },
     # ── Test / CI results ───────────────────────────────────────────────
     "test": {
-        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR],
+        "view":       [ROLE_ADMIN, ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_AUDITOR,
+                       ROLE_VIEWER, ROLE_QUALITY_MANAGER],
         "run":        [ROLE_ADMIN, ROLE_DEVELOPER],
         "upload":     [ROLE_ADMIN, ROLE_DEVELOPER],
     },
@@ -191,23 +212,18 @@ class PermissionSet:
 # ── API Middleware ──────────────────────────────────────────────────────────
 
 def get_role_from_user_info(user_info: Optional[dict]) -> str:
-    """Extract the role string from decoded user info.
+    """Extract the permission-tier string from decoded user info.
 
-    Maps existing 'member' role to 'developer' for backward compatibility.
+    Org roles are mapped to permission tiers via the authoritative contract
+    (yuleosh.rbac.role_contract.ROLE_TO_TIER). Legacy 'member' maps to
+    'developer'; unknown/legacy roles fall back to 'developer'.
     """
     if not user_info:
         return ROLE_AUDITOR  # Lowest access when unauthenticated
     role = user_info.get("role", "developer")
-    # Map legacy roles
-    role_map = {
-        "admin": ROLE_ADMIN,
-        "member": ROLE_DEVELOPER,
-        "developer": ROLE_DEVELOPER,
-        "reviewer": ROLE_REVIEWER,
-        "auditor": ROLE_AUDITOR,
-        "owner": ROLE_ADMIN,
-    }
-    return role_map.get(role, ROLE_DEVELOPER)
+    # 懒导入避免与 role_contract 的循环依赖（role_contract 顶部导入 model 的 ROLE_* 常量）。
+    from yuleosh.rbac.role_contract import ROLE_TO_TIER
+    return ROLE_TO_TIER.get(role, ROLE_DEVELOPER)
 
 
 def check_role(user_info: Optional[dict], required_resource: str,
