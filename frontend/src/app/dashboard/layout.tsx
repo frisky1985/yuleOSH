@@ -79,8 +79,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const isLanding = pathname === "/dashboard";
-  // 视图完全由登录用户的角色决定：admin -> 横向决策顶栏（TopNav）；
-  // developer / reviewer / auditor -> 纵向工程左栏（EngineerSidebar）。
+  // 视图完全由登录用户的角色决定：admin / owner -> 横向决策顶栏（TopNav）；
+  // developer / reviewer / auditor / member 及任何未知/遗留角色 -> 纵向工程左栏
+  // （EngineerSidebar）。分类以 @/lib/role-view 为准，与后端 rbac/model.py 权限映射对齐。
   // 不再依赖 ?view 预览参数 / localStorage，避免同一浏览器下预览状态跨账号
   // 污染，使两个角色的视图趋同（即"显示没区别"的根因）。
   const engineer = isEngineerRole(role);

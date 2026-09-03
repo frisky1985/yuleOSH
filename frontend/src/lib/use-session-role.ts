@@ -64,8 +64,9 @@ export function getCachedRole(): AppRole {
 // 角色 → 应用骨架分流逻辑已移至 @/lib/role-view（见该模块注释）；
 // 本模块仅 re-export（顶部 export ... from "@/lib/role-view"），不再本地定义，
 // 避免分流逻辑漂移。
-//   admin / 未登录(null)        → 决策视角（顶栏 dashboard，横向）
-//   developer / reviewer / auditor → 工程视角（v5 左侧栏，纵向）
+//   admin / owner / 未登录(null) → 决策视角（顶栏 dashboard，横向）
+//   developer / reviewer / auditor / member / 未知角色 → 工程视角（v5 左侧栏，纵向）
+//   （分类以 @/lib/role-view 为准，对齐后端 rbac/model.py 权限映射）
 
 
 export function useSessionRole() {
