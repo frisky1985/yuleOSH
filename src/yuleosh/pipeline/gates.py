@@ -156,7 +156,11 @@ def _worst_status(statuses: list[str]) -> str:
         return "retry"
     if any(s == "warning" for s in statuses):
         return "warning"
-    if all(s == "skipped" for s in statuses):
+    # skipped outranks passed (per GATE_STATUS_ORDER): a gate where any
+    # step did not actually run is not a green gate.  Previously this
+    # required *all* steps to be skipped, so a gate mixing passed and
+    # skipped steps reported "passed" while listing skipped children.
+    if any(s == "skipped" for s in statuses):
         return "skipped"
     return "passed"
 
@@ -171,6 +175,110 @@ def _sha256_file(path: Path) -> str:
         return h.hexdigest()
     except OSError:
         return ""
+
+
+def _statuses_from_session_steps(steps) -> dict[str, str]:
+    """Build ``{step_key: status}`` from ``session.steps`` entries.
+
+    ``session.steps`` entries look like::
+
+        {"step": 1, "name": "spec-check", "agent": ..., "status": "completed"}
+
+    The step key lives in ``"name"`` — ``"step"`` is the 1-based ordinal.
+    Reading ``"step"`` (the previous behaviour) produced integer keys that
+    never match ``GATES`` step_keys, so every gate collapsed to ``passed``
+    no matter what actually ran (bug fixed 2026-09-03).
+    """
+    statuses: dict[str, str] = {}
+    for entry in steps or []:
+        if not isinstance(entry, dict):
+            continue
+        key = ""
+        for field in ("name", "step_key", "step"):
+            val = entry.get(field)
+            if isinstance(val, str) and val.strip():
+                key = val.strip()
+                break
+        if key:
+            statuses[key] = entry.get("status", "")
+    return statuses
+
+
+# Artifact filenames that do not follow the "<step_key>.json" convention.
+# Without these, the corresponding gate never sees its step's real verdict
+# and silently stays "passed" (2026-09-03).
+_ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
+    "code-review": ("code-review-unified.json",),
+    "review-critical-safety": ("critical-safety-report.json",),
+    "merge-gate": ("merge-gate-report.json",),
+    "fault-injection": ("fault-injection-report.md", "fault-injection.json"),
+}
+
+
+def _artifact_paths(sdir: Path | None, step_key: str) -> list[Path]:
+    """Return candidate artifact paths for ``step_key`` (existing ones only)."""
+    if sdir is None:
+        return []
+    names = [f"{step_key}.json", *_ARTIFACT_CANDIDATES.get(step_key, ())]
+    paths = [Path(sdir) / n for n in names]
+    return [p for p in paths if p.exists()]
+
+
+def _artifact_verdict(sdir: Path | None, step_key: str) -> str:
+    """Derive a gate verdict from a step's own artifact JSON.
+
+    Returns ``"skipped"``, ``"failed"``, or ``""`` (unknown — the caller
+    then keeps the status recorded in ``session.steps``).
+
+    Why this exists
+    ---------------
+    Step handlers that skip real work (mock mode, no generated code,
+    diff pruning) write ``{"status": "skipped"}`` / ``{"skipped": true}``
+    into *their own artifact*, but the orchestrator still marks the step
+    ``completed`` in ``session.steps``.  Aggregating only ``session.steps``
+    therefore reports every gate as ``passed`` for work that never ran.
+    Reading the artifact restores the real verdict.
+
+    Only explicit skip / explicit-false signals are honoured; anything
+    else returns ``""`` so unknown schemas never flip a passing step.
+    """
+    for path in _artifact_paths(sdir, step_key):
+        if path.suffix == ".json":
+            verdict = _verdict_from_json(path)
+        else:
+            # Markdown artifacts (e.g. the fault-injection report) carry no
+            # status field; an explicit skip banner is the only signal.
+            verdict = _verdict_from_text(path)
+        if verdict:
+            return verdict
+    return ""
+
+
+def _verdict_from_json(path: Path) -> str:
+    """Read a JSON artifact and return ``skipped`` / ``failed`` / ``""``."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    if data.get("skipped") is True or str(data.get("status", "")).strip().lower() == "skipped":
+        return "skipped"
+    # Explicit failure verdicts (e.g. merge-gate "passed": false,
+    # c-coverage-gate "gate_passed": false).
+    for key in ("passed", "gate_passed"):
+        if key in data and data[key] is False:
+            return "failed"
+    return ""
+
+
+def _verdict_from_text(path: Path) -> str:
+    """Return ``skipped`` when a non-JSON artifact opens with a skip banner."""
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace")[:400]
+    except OSError:
+        return ""
+    return "skipped" if "skipped" in head.lower() else ""
 
 
 def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
@@ -191,15 +299,23 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
     str
         Path to the written gate-summary.json.
     """
-    if step_statuses is None:
-        step_statuses = {
-            s.get("step", s.get("step_key", "")): s.get("status", "")
-            for s in getattr(session, "steps", [])
-            if isinstance(s, dict)
-        }
-    gate_statuses = aggregate_gate_status(step_statuses)
-
     sdir = getattr(session, "session_dir", None)
+
+    if step_statuses is None:
+        step_statuses = _statuses_from_session_steps(getattr(session, "steps", []))
+        # Artifact-verdict overlay (2026-09-03): a skipped step is still
+        # marked "completed" by the orchestrator, so session.steps alone
+        # would report passed gates for work that never ran.  Let each
+        # artifact correct its own verdict.  An explicit step_statuses
+        # argument (tests / callers that already know better) is never
+        # overridden.
+        if sdir is not None:
+            for key in list(step_statuses):
+                verdict = _artifact_verdict(Path(sdir), key)
+                if verdict:
+                    step_statuses[key] = verdict
+
+    gate_statuses = aggregate_gate_status(step_statuses)
 
     summary = {
         "schema": "gate-summary-v1",

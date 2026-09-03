@@ -274,6 +274,10 @@ class PipelineSession:
             "user_email": self.user_email,
             "token_usage_total": self.token_usage_total,
             "token_usage_steps": self.token_usage_steps,
+            # Evidence-chain provenance (2026-09-03): a mock run produces
+            # placeholder artifacts.  Without this flag a consumer of the
+            # evidence pack cannot tell mock output from a real LLM run.
+            "mock_mode": bool(getattr(self, "mock_mode", False)),
         }
 
 
