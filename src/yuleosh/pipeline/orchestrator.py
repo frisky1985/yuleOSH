@@ -592,21 +592,41 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                 _ri += 1
                 continue
             # D2: 并行组 — 组内成员一次性并发执行
+            # 例外：YULEOSH_PIPELINE_SERIAL==1 时串行化（单台本地 ollama 14B 并发
+            # 会争用掉 step → transport_error；串行可干净跑完整链）。
             _gid = _GROUP_LOOKUP.get(step_key)
             if _gid is not None:
                 _members = [r for r in _registered
                             if r[1] in PARALLEL_GROUPS[_gid] and r[1] not in _executed]
                 if _members:
                     _gkeys = ", ".join(m[1] for m in _members)
-                    print(f"\n  ⚡ [D2] 并行组 {_gid+1} 并发: {_gkeys}")
-                    _blocked, _failed = _run_parallel_group(
-                        session, _members, from_step, project_dir, spec_path,
-                    )
-                    for _m in _members:
-                        _executed.add(_m[1])
-                    print()
-                    if _blocked or _failed:
-                        break
+                    if os.environ.get("YULEOSH_PIPELINE_SERIAL") == "1":
+                        print(f"\n  🐢 [serial] 并行组 {_gid+1} 串行化: {_gkeys}")
+                        for _m in _members:
+                            _st = _execute_step(
+                                session, _m[0], _m[1], _m[2], _m[3], _m[4],
+                                spec_path, project_dir, from_step,
+                            )
+                            _executed.add(_m[1])
+                            if _st == "block":
+                                _blocked = True
+                                break
+                            if _st == "failed":
+                                _failed = True
+                                break
+                        print()
+                        if _blocked or _failed:
+                            break
+                    else:
+                        print(f"\n  ⚡ [D2] 并行组 {_gid+1} 并发: {_gkeys}")
+                        _blocked, _failed = _run_parallel_group(
+                            session, _members, from_step, project_dir, spec_path,
+                        )
+                        for _m in _members:
+                            _executed.add(_m[1])
+                        print()
+                        if _blocked or _failed:
+                            break
                 _ri += 1
                 continue
             # 串行步骤
