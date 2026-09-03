@@ -1,19 +1,51 @@
 {
   "version": 1,
-  "description": "角色 → 权限档 → UI 视图 的单一事实来源（single source of truth）。Phase 0 的 CI 双向断言测试会拿本文件分别校验后端 rbac/model.py::get_role_from_user_info 与前端 role-view.ts 的 viewOf/isEngineerRole。改任一角色词表时，必须先改本文件，否则对应测试变红——以此在 CI 中防回归。",
-  "pending_phase1": [
-    "viewer / quality_manager / architect 当前在 rbac 里走 unknown-role 兜底 → ROLE_DEVELOPER，且 ui_view=engineer；Phase 1 会引入 ROLE_VIEWER 并定档。此处如实记录 CURRENT 行为，保证 Phase 0 测试全绿。",
-    "member 是 legacy 别名（rbac 把 member→ROLE_DEVELOPER），保留 legacy:true，前端不得自行发明独立语义。"
-  ],
+  "description": "角色 → 权限档 → UI 视图 的单一事实来源镜像。真实 SSOT 为后端 src/yuleosh/rbac/role_contract.py，本文件由 scripts/gen_role_contract.py 生成，供后端 test_role_contract.py 与前端 role-view.test.ts 双向校验。改任一角色映射必须先改后端契约并重跑 codegen，否则对应测试变红。",
   "roles": {
-    "owner":           { "permission_tier": "admin",     "ui_view": "decision", "legacy": false },
-    "admin":           { "permission_tier": "admin",     "ui_view": "decision", "legacy": false },
-    "developer":       { "permission_tier": "developer", "ui_view": "engineer", "legacy": false },
-    "reviewer":        { "permission_tier": "reviewer",  "ui_view": "engineer", "legacy": false },
-    "auditor":         { "permission_tier": "auditor",   "ui_view": "engineer", "legacy": false },
-    "member":          { "permission_tier": "developer", "ui_view": "engineer", "legacy": true },
-    "quality_manager": { "permission_tier": "developer", "ui_view": "engineer", "legacy": false },
-    "architect":       { "permission_tier": "developer", "ui_view": "engineer", "legacy": false },
-    "viewer":          { "permission_tier": "developer", "ui_view": "engineer", "legacy": false }
+    "owner": {
+      "permission_tier": "admin",
+      "ui_view": "decision",
+      "legacy": false
+    },
+    "admin": {
+      "permission_tier": "admin",
+      "ui_view": "decision",
+      "legacy": false
+    },
+    "quality_manager": {
+      "permission_tier": "quality_manager",
+      "ui_view": "engineer",
+      "legacy": false
+    },
+    "architect": {
+      "permission_tier": "developer",
+      "ui_view": "engineer",
+      "legacy": false
+    },
+    "developer": {
+      "permission_tier": "developer",
+      "ui_view": "engineer",
+      "legacy": false
+    },
+    "reviewer": {
+      "permission_tier": "reviewer",
+      "ui_view": "engineer",
+      "legacy": false
+    },
+    "auditor": {
+      "permission_tier": "auditor",
+      "ui_view": "engineer",
+      "legacy": false
+    },
+    "viewer": {
+      "permission_tier": "viewer",
+      "ui_view": "engineer",
+      "legacy": false
+    },
+    "member": {
+      "permission_tier": "developer",
+      "ui_view": "engineer",
+      "legacy": true
+    }
   }
 }

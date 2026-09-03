@@ -3,7 +3,10 @@
   "version": "4.2.0",
   "private": true,
   "scripts": {
+    "gen:role-contract": "python3 ../scripts/gen_role_contract.py",
+    "predev": "python3 ../scripts/gen_role_contract.py",
     "dev": "next dev",
+    "prebuild": "python3 ../scripts/gen_role_contract.py",
     "build": "next build && python3 scripts/inject-meta-csp.py",
     "start": "next start",
     "lint": "eslint",
