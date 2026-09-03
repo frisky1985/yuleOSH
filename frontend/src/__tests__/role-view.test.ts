@@ -1,4 +1,11 @@
 import { isEngineerRole, type AppRole, viewOf } from "@/lib/role-view";
+import fs from "fs";
+import path from "path";
+
+// 契约单一事实来源（仓库根 role_contract.json），Phase 0 CI 双向断言防回归：
+// 后端 test_role_contract.py 校验 rbac，本文件校验前端视图分流。
+const contractPath = path.join(__dirname, "../../../role_contract.json");
+const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
 
 // 角色 → 视图分流（与 dashboard/layout.tsx:86 的渲染判断、user-menu.tsx 的
 // viewOf 保持一致，且必须对齐后端 rbac/model.py::get_role_from_user_info 的权限映射）。
@@ -45,5 +52,24 @@ describe("isEngineerRole（决策/工程视图分流）", () => {
     expect(viewOf("member").tone).toBe("engineer");
     expect(viewOf(null).label).toBe("决策视角");
     expect(viewOf("viewer").label).toBe("工程视角");
+  });
+});
+
+describe("role_contract.json 契约双向一致性（Phase 0 防回归）", () => {
+  it("契约文件定义了 roles 映射", () => {
+    expect(contract.roles).toBeDefined();
+    expect(Object.keys(contract.roles).length).toBeGreaterThan(0);
+  });
+
+  it("viewOf 的 ui_view 与契约一致", () => {
+    for (const [role, spec] of Object.entries<any>(contract.roles)) {
+      expect(viewOf(role).tone).toBe(spec.ui_view);
+    }
+  });
+
+  it("isEngineerRole 与契约 ui_view 一致（engineer<->true）", () => {
+    for (const [role, spec] of Object.entries<any>(contract.roles)) {
+      expect(isEngineerRole(role)).toBe(spec.ui_view === "engineer");
+    }
   });
 });
