@@ -26,6 +26,8 @@ from yuleosh.rbac.model import (
     ROLE_DEVELOPER,
     ROLE_REVIEWER,
     ROLE_AUDITOR,
+    ROLE_VIEWER,
+    ROLE_QUALITY_MANAGER,
     ROLE_LABELS,
     PERMISSION_MATRIX,
     Role,
@@ -74,6 +76,41 @@ class TestRole:
     def test_unknown_action_defaults_false(self):
         """GIVEN unknown action on known resource WHEN can THEN False."""
         assert Role(ROLE_ADMIN).can("tenant", "no_such_action") is False
+
+    def test_viewer_and_quality_manager_registered(self):
+        """GIVEN Phase 1 new tiers WHEN in ALL_ROLES THEN constructible."""
+        assert ROLE_VIEWER in ALL_ROLES
+        assert ROLE_QUALITY_MANAGER in ALL_ROLES
+        assert Role(ROLE_VIEWER).label == ROLE_LABELS[ROLE_VIEWER]
+        assert Role(ROLE_QUALITY_MANAGER).label == ROLE_LABELS[ROLE_QUALITY_MANAGER]
+
+    def test_viewer_is_readonly(self):
+        """GIVEN viewer WHEN can THEN view-only on every module, no write/run/commit."""
+        v = Role(ROLE_VIEWER)
+        assert v.can("tenant", "view") is True
+        assert v.can("code", "view") is True
+        assert v.can("pipeline", "view") is True
+        assert v.can("evidence", "view") is True
+        # 只读：无创建/编辑/运行/提交/审批/导出权限
+        assert v.can("pipeline", "run") is False
+        assert v.can("code", "commit") is False
+        assert v.can("tenant", "edit") is False
+        assert v.can("review", "approve") is False
+        assert v.can("evidence", "export") is False
+
+    def test_quality_manager_approves_and_exports_but_not_dev(self):
+        """GIVEN quality_manager WHEN can THEN approve/reject review + export evidence/audit, no commit/run."""
+        q = Role(ROLE_QUALITY_MANAGER)
+        assert q.can("review", "approve") is True
+        assert q.can("review", "reject") is True
+        assert q.can("evidence", "export") is True
+        assert q.can("audit", "view") is True
+        assert q.can("audit", "export") is True
+        # 非开发者：无代码提交 / 流水线运行 / 租户编辑
+        assert q.can("code", "commit") is False
+        assert q.can("pipeline", "run") is False
+        assert q.can("tenant", "edit") is False
+        assert q.can("billing", "view") is False  # 仅 admin/auditor
 
     def test_repr(self):
         """GIVEN role WHEN repr THEN contains name."""
@@ -185,7 +222,7 @@ class _FakeHandler:
 class TestRequireRole:
     def test_allowed_calls_through(self):
         """GIVEN token with sufficient role WHEN decorator THEN handler runs."""
-        with mock.patch("yuleosh.rbac.model.get_session_user",
+        with mock.patch("yuleosh.ui.auth_extended.resolve_session",
                         return_value={"role": ROLE_ADMIN, "email": "a@x.io"}):
             @require_role("tenant", "delete")
             def handle(handler, *args, **kwargs):
@@ -197,7 +234,7 @@ class TestRequireRole:
 
     def test_denied_returns_403(self):
         """GIVEN token with insufficient role WHEN decorator THEN 403 body."""
-        with mock.patch("yuleosh.rbac.model.get_session_user",
+        with mock.patch("yuleosh.ui.auth_extended.resolve_session",
                         return_value={"role": ROLE_DEVELOPER, "email": "d@x.io"}):
             @require_role("billing", "upgrade")
             def handle(handler, *args, **kwargs):
@@ -211,13 +248,13 @@ class TestRequireRole:
             assert body["ok"] is False
 
     def test_no_token_denied(self):
-        """GIVEN no Authorization header WHEN decorator THEN 403 without user lookup."""
-        with mock.patch("yuleosh.rbac.model.get_session_user") as m_get:
+        """GIVEN no Authorization header WHEN decorator THEN 403 after session resolve."""
+        with mock.patch("yuleosh.ui.auth_extended.resolve_session") as m_get:
             @require_role("tenant", "delete")
             def handle(handler, *args, **kwargs):
                 return "should-not-run"
 
             handler = _FakeHandler(token=None)
             assert handle(handler, "/x") is None
-            m_get.assert_not_called()
+            m_get.assert_called()  # require_role 始终通过 resolve_session 解析会话
             assert ("response", 403) in handler.sent
