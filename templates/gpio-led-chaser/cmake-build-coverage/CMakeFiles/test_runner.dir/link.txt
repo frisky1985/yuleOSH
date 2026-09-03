@@ -1,0 +1,1 @@
+/usr/bin/cc -g -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names --coverage CMakeFiles/test_runner.dir/tests/test_main.c.o -o test_runner

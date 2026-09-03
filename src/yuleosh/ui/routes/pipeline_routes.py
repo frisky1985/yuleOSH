@@ -521,6 +521,46 @@ def _iter_project_dirs(osh_home: str) -> list[Path]:
     return found
 
 
+def _iter_runnable_projects(osh_home: str) -> list[dict]:
+    """发现 OSH_HOME 下含 ``docs/spec.md`` 的可运行项目（一键跑数据源）。
+
+    让前端能选择「要跑哪个 demo / template」并一键启动编排器，而不只列出
+    已有 checkpoint 状态的历史项目。深度 ≤ 3，跳过 venv/.git 等无关目录。
+    """
+    home = Path(osh_home)
+    found: list[dict] = []
+    if not home.exists():
+        return found
+    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox",
+            "dist", "build", "frontend", ".osh", ".yuleosh"}
+    try:
+        for root, dirs, files in os.walk(home):
+            root_path = Path(root)
+            try:
+                rel = root_path.relative_to(home)
+            except ValueError:
+                rel = Path("")
+            depth = len(rel.parts)
+            dirs[:] = [d for d in dirs if d not in skip]
+            if depth > 3:
+                dirs[:] = []
+                continue
+            if "spec.md" in files:
+                spec = root_path / "spec.md"
+                # 项目根 = spec.md 所在目录；约定该项目把 spec 放在
+                # <root>/docs/spec.md，则根是 docs 的父目录，这样编排器
+                # 的 session 落在 <root>/.osh/sessions（而非 <root>/docs/.osh）。
+                project_path = root_path.parent if root_path.name == "docs" else root_path
+                found.append({
+                    "name": project_path.name or str(project_path),
+                    "path": str(project_path),
+                    "spec": str(spec),
+                })
+    except OSError as e:  # 发现阶段容错
+        log.warning("runnable project discovery failed: %s", e)
+    return found
+
+
 def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
     """GET /api/v1/pipeline/list — 列出可用 pipeline（看板选择器数据源）。
 
@@ -547,6 +587,9 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
 
     osh_home = os.environ.get("OSH_HOME", "")
 
+    # 可运行项目（含 docs/spec.md 的 demo/template）——一键跑数据源
+    runnable_projects = _iter_runnable_projects(osh_home)
+
     # 显式 project_dir → 单项目视图（pipelines 兼容旧前端，另附 projects 分组）
     if project_dir:
         pipes = _scan_project_checkpoints(project_dir)
@@ -561,6 +604,7 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
                     "count": len(pipes),
                 }
             ],
+            "runnable_projects": runnable_projects,
             "count": len(pipes),
         }
 
@@ -600,6 +644,7 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
         "ok": True,
         "pipelines": ordered,
         "projects": projects,
+        "runnable_projects": runnable_projects,
         "count": len(ordered),
     }
 

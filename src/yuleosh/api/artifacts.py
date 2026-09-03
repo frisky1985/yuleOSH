@@ -56,8 +56,44 @@ class _PathTraversal(Exception):
 
 
 def _sessions_root() -> Path:
-    """Root directory holding per-run session folders."""
+    """Primary root directory holding per-run session folders."""
     return Path(OSH_HOME) / ".osh" / "sessions"
+
+
+def _sessions_roots() -> list[Path]:
+    """All roots that may contain per-run session dirs.
+
+    Primary: ``OSH_HOME/.osh/sessions``.  PLUS every ``.osh/sessions`` found
+    by recursively walking OSH_HOME (bounded depth) so pipeline runs scoped
+    to a sub-project directory (``OSH_HOME=<project>``) remain discoverable
+    from the backend's ``OSH_HOME`` — e.g. a GPIO demo run under
+    ``templates/gpio-led-chaser/.osh/sessions`` (depth-2) shows up when the
+    server's ``OSH_HOME`` is the repo root.  ``_iter_sessions`` de-dups by
+    resolved path, so overlapping roots are harmless.
+    """
+    roots: list[Path] = [_sessions_root()]
+    home = Path(OSH_HOME)
+    if home.is_dir():
+        skip = {".git", "node_modules", "__pycache__", ".venv", "venv",
+                ".tox", "dist", "build", ".yuleosh", "frontend", ".osh"}
+        try:
+            for root, dirs, _files in os.walk(home):
+                root_path = Path(root)
+                rel_depth = (
+                    len(root_path.relative_to(home).parts)
+                    if root_path != home else 0
+                )
+                # 剪枝：无关大目录不进入；深度 > 5 不再下钻
+                dirs[:] = [d for d in dirs if d not in skip]
+                if rel_depth > 5:
+                    dirs[:] = []
+                    continue
+                cand = root_path / ".osh" / "sessions"
+                if cand.is_dir():
+                    roots.append(cand)
+        except OSError:
+            pass
+    return roots
 
 
 def _q(query: dict, key: str, default: str = "") -> str:
@@ -77,13 +113,16 @@ def _safe_run_id(run_id: str) -> bool:
 def _session_dir(run_id: str) -> Optional[Path]:
     """Return the session directory for a run, or None when unknown.
 
-    A session dir does NOT require session.json — artifact-rich legacy
-    dirs (pipeline runs that predate session.json) stay addressable.
+    Searches every known session root (primary + sub-project dirs) so a
+    run scoped to a project directory is still resolvable by run id.
     """
     if not _safe_run_id(run_id):
         return None
-    d = _sessions_root() / run_id
-    return d if d.is_dir() else None
+    for root in _sessions_roots():
+        d = root / run_id
+        if d.is_dir():
+            return d
+    return None
 
 
 def _session_meta(session_dir: Path) -> dict:
@@ -99,16 +138,21 @@ def _session_meta(session_dir: Path) -> dict:
 def _iter_sessions() -> Iterator[tuple[str, Path, dict]]:
     """Yield (run_id, session_dir, session_meta) for every session dir.
 
-    name/status come from session.json when present; a dir without one
-    yields an empty meta (handlers fall back to run_id / "unknown").
+    Scans all session roots (primary + sub-project dirs); de-duplicates by
+    resolved path so a session found under two roots is yielded once.
     """
-    root = _sessions_root()
-    if not root.is_dir():
-        return
-    for d in sorted(root.iterdir()):
-        if not d.is_dir():
+    seen: set[Path] = set()
+    for root in _sessions_roots():
+        if not root.is_dir():
             continue
-        yield d.name, d, _session_meta(d)
+        for d in sorted(root.iterdir()):
+            if not d.is_dir():
+                continue
+            key = d.resolve()
+            if key in seen:
+                continue
+            seen.add(key)
+            yield d.name, d, _session_meta(d)
 
 
 def _session_matches_project(meta: dict, project: str) -> bool:

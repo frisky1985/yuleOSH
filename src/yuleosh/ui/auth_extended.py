@@ -39,13 +39,24 @@ SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 SESSION_TTL_HOURS = 72  # legacy single-token default (kept for direct callers)
 
 # ── JWT ──────────────────────────────────────────────────────────────────────
+# 本地免登录模式（YULEOSH_AUTH_DISABLED=1 → AUTH_ENABLED=False）下，JWT 签名
+# 不会被任何代码路径使用（is_authenticated 直接放行），因此不必强制要求
+# YULEOSH_JWT_SECRET —— 否则 import 阶段就 raise，会拖垮整条 /api/v1/* 路由
+# （router.dispatch 间接 import auth_extended → 500 "API dispatch failed"）。
+# 仅在鉴权真正启用时才 fail-closed 要求密钥；否则给一个非安全兜底值。
+from yuleosh.ui.auth import AUTH_ENABLED  # 置于 import 顶部，避免顶层循环依赖
+
 _YULEOSH_JWT_SECRET_ENV = os.environ.get("YULEOSH_JWT_SECRET")
-if not _YULEOSH_JWT_SECRET_ENV:
+if _YULEOSH_JWT_SECRET_ENV:
+    JWT_SECRET = _YULEOSH_JWT_SECRET_ENV
+elif AUTH_ENABLED:
     raise RuntimeError(
         "YULEOSH_JWT_SECRET environment variable is required for multi-tenant auth. "
         "Generate one with: openssl rand -base64 48"
     )
-JWT_SECRET = _YULEOSH_JWT_SECRET_ENV
+else:
+    # 本地 dev：仅需要模块可 import，签名密钥不会被实际使用。
+    JWT_SECRET = os.environ.get("YULEOSH_DEV_JWT_SECRET", "dev-insecure-secret-do-not-use")
 JWT_ALGORITHM = "HS256"
 
 # ── Password strength validation ────────────────────────────────────────────

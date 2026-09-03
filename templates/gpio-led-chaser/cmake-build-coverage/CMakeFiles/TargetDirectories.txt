@@ -1,0 +1,6 @@
+/Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/CMakeFiles/firmware.dir
+/Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/CMakeFiles/test_runner.dir
+/Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/CMakeFiles/check.dir
+/Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/CMakeFiles/test.dir
+/Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/CMakeFiles/edit_cache.dir
+/Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/CMakeFiles/rebuild_cache.dir

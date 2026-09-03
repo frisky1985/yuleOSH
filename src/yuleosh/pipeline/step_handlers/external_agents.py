@@ -457,6 +457,24 @@ def step_codex_verify(session: PipelineSession) -> str:
     stderr = result.stderr or ""
     if result.returncode != 0:
         log.error("codex exited %d: %s", result.returncode, stderr[-2000:])
+        # 可选外部验证不可用（CLI 未鉴权 / 版本不兼容导致参数报错）时跳过，
+        # 而非中断整条 pipeline —— 与「CLI 未安装→跳过」语义一致。
+        # 真实验证失败（发现缺陷 / 超时 / JSON 解析失败）仍按原逻辑报错阻断。
+        _combined = (stdout + "\n" + stderr).lower()
+        _unavailable = (
+            "not logged in" in _combined or "run /login" in _combined
+            or "codex login" in _combined or "logged in" in _combined
+            # 版本/参数不兼容（如本机 codex 不识别 --full-auto）→ 工具不可用
+            or "unexpected argument" in _combined or "unknown flag" in _combined
+            or "unrecognized arguments" in _combined or "usage:" in _combined
+            or "error: unexpected" in _combined
+        )
+        if _unavailable:
+            _msg = ("codex CLI unavailable/incompatible — external verification "
+                    "skipped (run `codex login` / upgrade codex, or set "
+                    "OPENAI_API_KEY)")
+            log.warning(_msg)
+            return write_mock_skip(session, step_key, _msg)
         raise PipelineStepError(
             f"[{step_key}] codex CLI exited {result.returncode}: {stderr[-2000:]}"
         )
@@ -565,6 +583,16 @@ def step_claude_review(session: PipelineSession) -> str:
     stderr = result.stderr or ""
     if result.returncode != 0:
         log.error("claude exited %d: %s", result.returncode, stderr[-2000:])
+        # 未鉴权（CLI 已安装但未登录 / 无 ANTHROPIC_API_KEY）：视为可选外部评审
+        # 不可用，跳过而非中断整条 pipeline —— 与「CLI 未安装→跳过」语义一致。
+        # 真实评审结论（disagree / 超时 / JSON 解析失败）仍按原逻辑报错阻断。
+        _combined = (stdout + "\n" + stderr).lower()
+        if "not logged in" in _combined or "run /login" in _combined \
+                or "claude login" in _combined:
+            _msg = ("claude CLI not authenticated — external review skipped "
+                    "(run `claude login` or set ANTHROPIC_API_KEY)")
+            log.warning(_msg)
+            return write_mock_skip(session, step_key, _msg)
         # 2026-08-17 r20f: 'Reached max turns' 等真实错误在 stdout, stderr 空
         # → 错误消息必须含 stdout 摘要, 否则诊断只见 "claude CLI exited 1: "
         _stdout_tail = stdout[-1500:].strip() or "(no stdout)"

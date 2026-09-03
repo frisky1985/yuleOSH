@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from . import json_error, json_ok
@@ -196,58 +197,139 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
     if path_tail == "stop" and method == "POST":
         return _stop_pipeline(body)
 
+    if path_tail == "jobs" and method == "GET":
+        return _list_orchestrator_runs()
+
     return json_error(f"Unknown pipeline resource: {path_tail}", 404)
 
 
+# ── One-click orchestrator run (background) ──────────────────────────────────
+# 后端「一键跑」走真实编排器（yuleosh.pipeline.run_pipeline），它写
+# project_dir/.osh/sessions/<id>/ 全量产物，前端 artifacts 面板可直接读。
+# 与 CheckpointEngine(rerun) 不同：orchestrator 提供完整 session_dir，且
+# LLM 长链（~1.5–2h）放进后台线程，不阻塞 HTTP 响应。
+_RUN_JOBS: dict[str, dict] = {}
+_RUN_JOBS_LOCK = threading.Lock()
+
+
+def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: str) -> None:
+    """后台线程：以 OSH_HOME=project_dir 运行编排器（聚焦源码 + 产物落在项目目录）。"""
+    import os as _os
+    rec = _RUN_JOBS.get(run_id)
+    if rec is None:
+        return
+    prev_home = _os.environ.get("OSH_HOME")
+    _os.environ["OSH_HOME"] = project_dir
+    try:
+        from yuleosh.pipeline.orchestrator import run_pipeline
+        rec["status"] = "running"
+        rec["started_at"] = datetime.now().isoformat()
+        try:
+            run_pipeline(spec_abs, name=name)
+            rec["status"] = "completed"
+        except SystemExit as _e:  # run_pipeline 缺 key 会 sys.exit(1)
+            rec["status"] = "failed"
+            rec["error"] = f"orchestrator exited: {_e}"
+        except Exception as _e:  # noqa: BLE001 — 后台任务必须兜底
+            rec["status"] = "failed"
+            rec["error"] = str(_e)[:500]
+        finally:
+            if prev_home is None:
+                _os.environ.pop("OSH_HOME", None)
+            else:
+                _os.environ["OSH_HOME"] = prev_home
+            rec["finished_at"] = datetime.now().isoformat()
+    except Exception as _e:  # noqa: BLE001
+        rec["status"] = "failed"
+        rec["error"] = str(_e)[:500]
+
+
 def _run_pipeline(body: dict) -> tuple[dict, int]:
-    """POST /api/v1/pipeline/run — run pipeline for a spec.
+    """POST /api/v1/pipeline/run — 一键运行某 spec 的真实编排器（后台）。
 
-    SECURITY: resolves path safely and validates it's within project root.
+    Body: {"spec": "<spec 路径>", "project_dir": "<项目目录>", "name": "..."}
+      - spec 可为相对 OSH_HOME 的路径或绝对路径，必须落在 OSH_HOME 内（防穿越）。
+      - project_dir 决定 session 与源码范围，默认取 spec 父目录的父目录
+        （即 <proj>/docs/spec.md → <proj>）；必须落在 OSH_HOME 内。
+    HTTP 立即返回 {"run_id","session_dir","status":"running"}，编排器在后台
+    线程跑完整 24 步；产物写入 project_dir/.osh/sessions/<id>，前端
+    /api/v1/artifacts/list 可直接读。
     """
-    spec_path = body.get("spec", "")
-    name = body.get("name")
-
+    spec_path = body.get("spec") or body.get("spec_path") or ""
     if not spec_path:
         return json_error("'spec' is required")
 
     from . import OSH_HOME
-    project_root = Path(OSH_HOME).resolve()
-    if Path(spec_path).is_absolute():
-        resolved = Path(spec_path).resolve()
-    else:
-        resolved = (project_root / spec_path.lstrip("/")).resolve()
+    osh_home = Path(OSH_HOME).resolve()
 
-    # SECURITY: path traversal guard — resolved path MUST be inside project root
+    # 解析 spec（防 ../ 穿越）
     try:
-        resolved.relative_to(project_root)
+        if Path(spec_path).is_absolute():
+            resolved = Path(spec_path).resolve()
+        else:
+            resolved = (osh_home / spec_path.lstrip("/")).resolve()
+        resolved.relative_to(osh_home)
     except ValueError:
-        return json_error("Spec path must be within project directory", 403)
+        return json_error("Spec path must be within OSH_HOME", 403)
 
-    if not resolved.exists():
+    if not resolved.exists() or not resolved.is_file():
         return json_error(f"Spec file not found: {resolved}")
 
-    if not resolved.is_file():
-        return json_error("Spec path is not a file", 400)
-
+    # 解析 project_dir（默认 = <proj>/docs/spec.md → <proj>；必须落在 OSH_HOME 内）
+    project_dir_raw = body.get("project_dir") or str(resolved.parent.parent)
     try:
-        result = subprocess.run(
-            [sys.executable, "src/pipeline/run.py", str(resolved)],
-            capture_output=True, text=True, timeout=300,
-            cwd=os.environ.get("OSH_HOME", Path(__file__).resolve().parent.parent.parent),
-        )
-        return json_ok({
+        if Path(project_dir_raw).is_absolute():
+            project_dir = Path(project_dir_raw).expanduser().resolve()
+        else:
+            project_dir = (osh_home / project_dir_raw.lstrip("/")).resolve()
+        project_dir.relative_to(osh_home)
+    except ValueError:
+        return json_error("project_dir must be within OSH_HOME", 403)
+    if not project_dir.is_dir():
+        return json_error(f"project_dir is not a directory: {project_dir}", 400)
+
+    import uuid
+    run_id = uuid.uuid4().hex[:12]
+    name = body.get("name") or f"run-{run_id}"
+    session_dir = project_dir / ".osh" / "sessions" / run_id
+
+    with _RUN_JOBS_LOCK:
+        _RUN_JOBS[run_id] = {
+            "run_id": run_id,
             "spec": str(resolved),
-            "name": name or resolved.stem,
-            "exit_code": result.returncode,
-            "stdout": result.stdout[:2000],
-            "stderr": result.stderr[:1000],
-            "session_dir": str(Path(resolved).parent / ".osh" / "sessions"),
-        })
-    except subprocess.TimeoutExpired:
-        return json_error("Pipeline timed out after 300s", 504)
-    except Exception as e:
-        # SEC-C2: never echo internal exception details to the client.
-        return internal_error("pipeline", e)
+            "project_dir": str(project_dir),
+            "name": name,
+            "session_dir": str(session_dir),
+            "status": "queued",
+            "started_at": None,
+            "finished_at": None,
+            "error": None,
+        }
+
+    t = threading.Thread(
+        target=_run_orchestrator_job,
+        args=(run_id, str(resolved), str(project_dir), name),
+        daemon=True,
+        name=f"orch-run-{run_id}",
+    )
+    t.start()
+    return json_ok({
+        "run_id": run_id,
+        "spec": str(resolved),
+        "project_dir": str(project_dir),
+        "name": name,
+        "session_dir": str(session_dir),
+        "status": "running",
+        "note": "编排器已在后台启动；产物写入 session_dir，可用 /api/v1/artifacts/list?project=<name> 查看",
+    })
+
+
+def _list_orchestrator_runs() -> tuple[dict, int]:
+    """GET /api/v1/pipeline/jobs — 列出后台编排器运行任务（一键跑的运行记录）。"""
+    with _RUN_JOBS_LOCK:
+        jobs = list(_RUN_JOBS.values())
+    jobs.sort(key=lambda j: j.get("started_at") or j.get("run_id"), reverse=True)
+    return json_ok({"jobs": jobs, "count": len(jobs)})
 
 
 def _trigger_pipeline(body: dict) -> tuple[dict, int]:
