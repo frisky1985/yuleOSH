@@ -26,11 +26,13 @@ from typing import Any, Optional
 
 from . import json_ok, json_error
 from .middleware import require_auth
+from yuleosh.rbac.role_contract import INVITABLE_ROLES
 
 log = logging.getLogger("api.members")
 
-# Role vocabulary (design doc chapter 3 / module ①)
-VALID_ROLES = ("owner", "admin", "quality_manager", "architect", "developer", "viewer")
+# 可邀请角色直接消费角色契约（单一事实来源），不再手写副本。
+# 语义见 yuleosh.rbac.role_contract.INVITABLE_ROLES。
+VALID_ROLES = INVITABLE_ROLES
 
 # Roles that may administer the 角色管理 module (design doc chapter 4: ✅ only)
 ADMIN_ROLES = ("owner", "admin")

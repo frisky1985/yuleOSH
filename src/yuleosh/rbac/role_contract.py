@@ -75,3 +75,9 @@ ROLE_TO_UI_VIEW = {
 
 # legacy 别名（不参与邀请，仅存量数据 / join-by-invite 使用）。
 ROLE_LEGACY = {"member"}
+
+# 经「邀请」入口可赋予的组织角色（members.py::VALID_ROLES 从此派生，消除硬编码副本）。
+# 不含 legacy 的 member（仅 join-by-invite 创建，不开放主动邀请）；
+# 也不含 reviewer / auditor —— 二者为评审/审计视角，按设计文档经成员管理后端分配，
+# 不开放邀请入口。
+INVITABLE_ROLES = ("owner", "admin", "quality_manager", "architect", "developer", "viewer")

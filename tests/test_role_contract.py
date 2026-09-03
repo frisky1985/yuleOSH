@@ -98,6 +98,21 @@ def test_members_valid_roles_subset_of_contract(contract: dict) -> None:
         )
 
 
+def test_members_valid_roles_derived_from_contract() -> None:
+    """members.VALID_ROLES 必须源自契约 INVITABLE_ROLES（防硬编码副本回流）。
+
+    守卫：邀请入口的可邀请角色集 == 契约定义的 INVITABLE_ROLES，且不含 legacy 的 member。
+    """
+    if VALID_ROLES is None:
+        pytest.skip("yuleosh.api.members 在当前环境不可导入，跳过 VALID_ROLES 子断言")
+    from yuleosh.rbac.role_contract import INVITABLE_ROLES
+    assert tuple(VALID_ROLES) == INVITABLE_ROLES, (
+        "members.VALID_ROLES 已脱离契约 INVITABLE_ROLES；"
+        "请改回 `from yuleosh.rbac.role_contract import INVITABLE_ROLES`"
+    )
+    assert "member" not in VALID_ROLES, "邀请入口不得主动赋予 legacy 的 member 角色"
+
+
 def test_generated_artifacts_match_contract_source(contract: dict, codegen) -> None:
     """codegen 生成物（TS + JSON）必须与后端契约源完全一致（CI 防漂移）。"""
     assert GEN_TS_PATH.read_text(encoding="utf-8") == codegen.render_ts(), (
