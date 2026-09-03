@@ -87,6 +87,7 @@ interface PipelineProject {
 interface PipelineListResponse {
   pipelines: PipelineItem[];
   projects: PipelineProject[];
+  runnable_projects?: { name: string; path: string; spec: string }[];
   count: number;
   note?: string | null;
 }
@@ -284,6 +285,13 @@ export default function PipelinePage() {
   const [evidence, setEvidence] = useState<EvidencePackage[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── 一键运行 Demo 项目（后端编排器，真实 LLM 全链） ──
+  const [runnableProjects, setRunnableProjects] = useState<{ name: string; path: string; spec: string }[]>([]);
+  const [selectedProject, setSelectedProject] = useState("");
+  const [currentRun, setCurrentRun] = useState<{ run_id: string; name: string; status: string; session_dir: string } | null>(null);
+  const [runArtifacts, setRunArtifacts] = useState<ArtifactsListResponse | null>(null);
+  const [runArtifactsLoading, setRunArtifactsLoading] = useState(false);
+  const runPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasRunRef = useRef(false); // 用户曾经点过运行/续跑/停止才轮询
   const [isPolling, setIsPolling] = useState(false); // 看板是否正在轮询（用于锁定勾选）
   // T10：SSE 长连接（服务端只在状态变化时推 event）；不可用时自动退回轮询
@@ -466,6 +474,7 @@ export default function PipelinePage() {
       const res = await apiFetch<PipelineListResponse>("/api/v1/pipeline/list");
       setPipelines(res.pipelines || []);
       setProjects(res.projects || []);
+      setRunnableProjects(res.runnable_projects || []);
       setListNote(res.note ?? null);
     } catch (err) {
       setError(errMessage(err));
@@ -624,6 +633,62 @@ export default function PipelinePage() {
     [steps, selected, startStream, loadRuns, loadEvidence]
   );
 
+  // ── 一键运行 Demo 项目：POST /api/v1/pipeline/run（后台编排器） + 产出物轮询 ──
+  const loadRunArtifacts = useCallback(async () => {
+    setRunArtifactsLoading(true);
+    try {
+      const res = await apiFetch<ArtifactsListResponse>("/api/v1/artifacts/list");
+      setRunArtifacts(res);
+    } catch {
+      setRunArtifacts(null);
+    } finally {
+      setRunArtifactsLoading(false);
+    }
+  }, []);
+
+  const stopRunPoll = useCallback(() => {
+    if (runPollRef.current) {
+      clearInterval(runPollRef.current);
+      runPollRef.current = null;
+    }
+  }, []);
+
+  const runDemoProject = useCallback(async () => {
+    if (!selectedProject) {
+      setOpMsg("请先选择一个 Demo 项目");
+      return;
+    }
+    const proj = runnableProjects.find((p) => p.path === selectedProject);
+    if (!proj) {
+      setOpMsg("项目不存在");
+      return;
+    }
+    setOpRunning(true);
+    setOpMsg("");
+    try {
+      const res = await apiFetch<{ run_id: string; name: string; status: string; session_dir: string }>(
+        "/api/v1/pipeline/run",
+        { method: "POST", body: JSON.stringify({ spec: proj.spec, project_dir: proj.path, name: proj.name }) }
+      );
+      setCurrentRun({ run_id: res.run_id, name: res.name, status: res.status, session_dir: res.session_dir });
+      setOpMsg(`已启动：${res.name}（${res.run_id}）`);
+      void loadRunArtifacts();
+      // 运行中每 3s 刷新产出物总览（产物按步落盘）
+      stopRunPoll();
+      runPollRef.current = setInterval(() => {
+        void loadRunArtifacts();
+      }, 3000);
+    } catch (err) {
+      setOpMsg(errMessage(err));
+    } finally {
+      setOpRunning(false);
+    }
+  }, [selectedProject, runnableProjects, loadRunArtifacts, stopRunPoll]);
+
+  useEffect(() => {
+    return () => stopRunPoll();
+  }, [stopRunPoll]);
+
   const isEmpty = !loading && pipelines.length === 0;
 
   return (
@@ -779,6 +844,51 @@ export default function PipelinePage() {
           </CardContent>
         </Card>
 
+        {/* ── 一键运行 Demo 项目（后端编排器，真实 LLM 全链） ── */}
+        <Card className="border-[#1e293b] bg-[#111827] mb-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+              <Play className="w-4 h-4 text-[#722ed1]" />
+              一键运行 Demo 项目
+            </CardTitle>
+            <CardDescription className="text-xs text-[#64748b] mt-1">
+              选择一个含 docs/spec.md 的项目，后台编排器（真实 LLM 全链）异步运行，产物自动同步到下方「产出物总览」
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="bg-[#0a0e17] border border-[#1e293b] rounded px-2 py-1.5 text-[#e2e8f0] text-xs max-w-[320px]"
+              >
+                <option value="">选择项目…</option>
+                {runnableProjects.map((p) => (
+                  <option key={p.path} value={p.path}>{p.name}</option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                onClick={() => void runDemoProject()}
+                disabled={opRunning || !selectedProject}
+                className="bg-[#722ed1] hover:bg-[#8b5cf6] text-white"
+              >
+                <Play className="w-3.5 h-3.5" />
+                一键运行
+              </Button>
+              {runnableProjects.length === 0 && (
+                <span className="text-xs text-[#64748b]">未发现可运行项目（需含 docs/spec.md）</span>
+              )}
+            </div>
+            {currentRun && (
+              <div className="mt-2 text-xs text-[#94a3b8]">
+                当前运行：<span className="text-[#e2e8f0] font-mono">{currentRun.name}</span>
+                （{currentRun.run_id}）· 状态 <span className="text-[#722ed1]">{currentRun.status}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* ── 运行过程看板（轮询 checkpoint） ── */}
         <CheckpointPanel
           snapshot={checkpoint}
@@ -797,6 +907,87 @@ export default function PipelinePage() {
           loading={evidenceLoading}
           onRefresh={() => void loadEvidence()}
         />
+
+        {/* ── 产出物总览（一键运行 / 编排器 .osh/sessions） ── */}
+        <Card className="border-[#1e293b] bg-[#111827] mb-4">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-[#722ed1]" />
+                产出物总览
+                {!runArtifactsLoading && runArtifacts && (
+                  <span className="text-xs font-normal text-[#64748b]">共 {runArtifacts.count} 个运行</span>
+                )}
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void loadRunArtifacts()}
+                disabled={runArtifactsLoading}
+                className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${runArtifactsLoading ? "animate-spin" : ""}`} />
+                刷新
+              </Button>
+            </div>
+            <CardDescription className="text-xs text-[#64748b]">
+              所有编排器运行会话（.osh/sessions）的产物树；点击文件在右侧预览面板查看
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-0">
+            {runArtifacts && runArtifacts.runs.length > 0 ? (
+              <div className="divide-y divide-[#1e293b]/60">
+                {runArtifacts.runs.map((run) => (
+                  <div key={run.run_id} className="px-4 py-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-3.5 h-3.5 text-[#1677ff]" />
+                      <span className="text-xs text-[#e2e8f0] font-medium truncate">{run.name}</span>
+                      <span className="text-[10px] text-[#64748b]">{run.run_id}</span>
+                      <Badge
+                        variant="outline"
+                        className="ml-auto border-transparent"
+                        style={{
+                          color: pipelineStatusMeta(run.status).color,
+                          background: `${pipelineStatusMeta(run.status).color}1f`,
+                          borderColor: `${pipelineStatusMeta(run.status).color}4d`,
+                        }}
+                      >
+                        {run.status}
+                      </Badge>
+                    </div>
+                    {run.files.length === 0 ? (
+                      <div className="text-xs text-[#64748b] pl-5">该运行暂无产出物</div>
+                    ) : (
+                      <div className="space-y-1 pl-5">
+                        {run.files.map((f) => (
+                          <button
+                            key={f.path}
+                            onClick={() => void handlePreview(run.run_id, f.path)}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[#1e293b]/50 rounded transition-all cursor-pointer"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-[#94a3b8] shrink-0" />
+                            <span className="text-[#e2e8f0] truncate flex-1">{f.name}</span>
+                            {f.ext && (
+                              <span className="text-[10px] uppercase text-[#722ed1] border border-[#722ed1]/30 rounded px-1 py-0.5 shrink-0">
+                                {f.ext}
+                              </span>
+                            )}
+                            <span className="text-[#64748b] shrink-0">{formatSize(f.size)}</span>
+                            <Eye className="w-3.5 h-3.5 text-[#475569] shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-xs text-[#64748b]">
+                暂无产出物（运行一次流水线后自动出现）
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Data note */}
         {listNote && (
