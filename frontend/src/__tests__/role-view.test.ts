@@ -1,9 +1,10 @@
 import { isEngineerRole, type AppRole, viewOf } from "@/lib/role-view";
+import { ROLE_TIER, ROLE_UI_VIEW } from "@/lib/role-contract.generated";
 import fs from "fs";
 import path from "path";
 
-// 契约单一事实来源（仓库根 role_contract.json），Phase 0 CI 双向断言防回归：
-// 后端 test_role_contract.py 校验 rbac，本文件校验前端视图分流。
+// 契约单一事实来源（仓库根 role_contract.json），Phase 0/1 CI 双向断言防回归：
+// 后端 test_role_contract.py 校验 rbac 与生成物，本文件校验前端视图分流与生成物。
 const contractPath = path.join(__dirname, "../../../role_contract.json");
 const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
 
@@ -70,6 +71,20 @@ describe("role_contract.json 契约双向一致性（Phase 0 防回归）", () =
   it("isEngineerRole 与契约 ui_view 一致（engineer<->true）", () => {
     for (const [role, spec] of Object.entries<any>(contract.roles)) {
       expect(isEngineerRole(role)).toBe(spec.ui_view === "engineer");
+    }
+  });
+});
+
+describe("role-contract.generated.ts 与契约 JSON 一致（codegen 防漂移）", () => {
+  it("生成物 ROLE_UI_VIEW 与契约 ui_view 完全对齐", () => {
+    for (const [role, spec] of Object.entries<any>(contract.roles)) {
+      expect(ROLE_UI_VIEW[role]).toBe(spec.ui_view);
+    }
+  });
+
+  it("生成物 ROLE_TIER 与契约 permission_tier 完全对齐", () => {
+    for (const [role, spec] of Object.entries<any>(contract.roles)) {
+      expect(ROLE_TIER[role as keyof typeof ROLE_TIER]).toBe(spec.permission_tier);
     }
   });
 });
