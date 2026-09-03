@@ -15,6 +15,11 @@ project(gpio_led_chaser C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# 统一把可执行文件输出到 build 根目录, 避免 macOS/多配置生成器把 exe 放进
+# <config>/ 子目录(如 Development/)导致 ctest 找不到可执行文件 (integration-test
+# 步以 cwd=build 跑 ctest -L integration, 期望 exe 在 build 根)。
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 option(ENABLE_COVERAGE "Enable gcov coverage instrumentation" OFF)
 if(ENABLE_COVERAGE)
   add_compile_options(--coverage -O0 -g)
@@ -38,7 +43,12 @@ add_executable(test_runner ${TEST_C})
 target_include_directories(test_runner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(test_runner PRIVATE LED_CHASER_UNIT_TEST=1)
 target_compile_options(test_runner PRIVATE -Wall -Wextra)
+# 单元测试（c-unit-test 步运行 ctest -LE integration）
 add_test(NAME led_chaser_tests COMMAND test_runner)
+# 集成测试（integration-test 步运行 ctest -L integration）——
+# 复用同一份断言覆盖 spec 的 GIVEN/WHEN/THEN 场景级验证
+add_test(NAME led_chaser_integration COMMAND test_runner)
+set_tests_properties(led_chaser_integration PROPERTIES LABELS integration)
 
 # phony 'test' for Makefile-style invocation
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure)
