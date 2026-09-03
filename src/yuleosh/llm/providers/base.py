@@ -11,6 +11,7 @@ Every provider adapter (Claude, DeepSeek, OpenAI, Mock) inherits from
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -19,6 +20,10 @@ from typing import Any, Dict, List, Optional
 # ═══════════════════════════════════════════════════════════════════════
 # Configuration
 # ═══════════════════════════════════════════════════════════════════════
+
+# 本地大模型（Ollama / 非推理模型）单步生成可能耗时数分钟；默认把超时从
+# 60s 提到 1800s，并允许通过 YULEOSH_LLM_TIMEOUT 覆盖（秒）。
+_DEFAULT_LLM_TIMEOUT_S = int(os.environ.get("YULEOSH_LLM_TIMEOUT", "1800"))
 
 
 @dataclass
@@ -30,7 +35,7 @@ class LLMConfig:
     max_tokens: int = 4096
     temperature: float = 0.3
     top_p: float = 0.95
-    timeout_s: int = 60
+    timeout_s: int = _DEFAULT_LLM_TIMEOUT_S
     max_retries: int = 3
 
     # Reproducibility (H1-1): seed for deterministic output; penalties to

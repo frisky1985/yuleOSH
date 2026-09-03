@@ -269,7 +269,27 @@ def _call_llm(
             log.warning("context_guard check failed (non-fatal): %s", e)
 
     client = session.llm_client if session.llm_client is not None else _fallback
-    return client(effective_system, user_prompt, **kwargs)
+    from yuleosh.pipeline.session import PipelineStepError
+
+    try:
+        return client(effective_system, user_prompt, **kwargs)
+    except PipelineStepError:
+        # 已是明确的"不可 fallback"失败语义（如阻塞门禁），原样上抛。
+        raise
+    except Exception as _llm_err:  # noqa: BLE001
+        # 单步 LLM 调用失败（超时 / 网络 / 模型错误）须上报，不可静默成
+        # 空内容假绿，也不可被 orchestrator 的模板 fallback 假绿掩盖。
+        # 包装为 PipelineStepError → orchestrator:1007 的 except 分支直接
+        # 标记 step failed（不 fallback），整链继续而非崩溃。
+        log.error(
+            "LLM call failed for step '%s' (model=%s): %s",
+            step_key,
+            os.environ.get("LLM_MODEL", getattr(session, "llm_model", "") or "?"),
+            _llm_err,
+        )
+        raise PipelineStepError(
+            f"LLM call failed for step '{step_key}': {_llm_err}"
+        ) from _llm_err
 
 
 def _check_llm_key() -> Optional[str]:

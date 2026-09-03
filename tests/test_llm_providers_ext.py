@@ -39,7 +39,7 @@ class TestLLMConfig:
         assert cfg.max_tokens == 4096
         assert cfg.temperature == 0.3
         assert cfg.top_p == 0.95
-        assert cfg.timeout_s == 60
+        assert cfg.timeout_s == 1800  # 本地大模型默认超时提至 1800s (YULEOSH_LLM_TIMEOUT 可覆盖)
         assert cfg.max_retries == 3
         assert cfg.rag_enabled is True
         assert cfg.rag_sources == ["misra", "best_practices"]

@@ -745,7 +745,7 @@ def chat_completion(
     *,
     temperature: float = 0.3,
     max_tokens: int = 4096,
-    timeout: int = 60,
+    timeout: int = int(os.environ.get("YULEOSH_LLM_TIMEOUT", "1800")),
     retries: int = 3,
 ) -> dict:
     """DEPRECATED — backward-compatible synchronous chat completion.
