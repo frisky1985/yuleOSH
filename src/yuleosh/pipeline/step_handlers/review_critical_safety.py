@@ -56,6 +56,74 @@ def _strip_comment_and_strings(line: str) -> str:
     s = re.sub(r"'(?:\\.|[^'\\])*'", " 'c' ", s)
     return s
 
+
+def _strip_block_comments(lines: list[str]) -> list[str]:
+    """剥离跨行 /* ... */ 块注释, 保留行数与行长(注释字符替换为空格)。
+
+    2026-09-03 修复: 下方的 ``_strip_comment_and_strings`` 仅做单行剥离,
+    不跟踪跨行块注释状态(其 docstring 明确 "不做跨行块注释状态跟踪")。
+    当源码在 ``/* ... */`` 块注释内(跨多行)残留示例代码时, 块内形如
+    ``RCC->APB2ENR`` 的寄存器访问会被 NULL 解引用正则误判为
+    CRIT-NULL-001 假阳性。
+
+    本函数在 ``scan_all`` 读文件后、各规则扫描前统一剥离**跨行**块注释:
+      - 行号(lineno)与花括号深度统计保持不变 —— 仅把注释字符替换为空格;
+      - 字符串/字符字面量内的 ``/*`` ``*/`` 不当作注释(逐字符跟踪引号);
+      - 单行 ``/* ... */`` 与 ``//`` 仍交由 ``_strip_comment_and_strings`` 处理。
+    """
+    out: list[str] = []
+    in_block = False
+    for line in lines:
+        res: list[str] = []
+        i = 0
+        n = len(line)
+        while i < n:
+            if in_block:
+                # 块注释内: 只找闭合 */, 其余一律当注释(含其中的引号/字符串)
+                j = line.find("*/", i)
+                if j < 0:
+                    res.append(" " * (n - i))
+                    i = n
+                else:
+                    res.append(" " * (j - i + 2))  # 覆盖 "*/"
+                    i = j + 2
+                    in_block = False
+                continue
+            ch = line[i]
+            # 字符串/字符字面量: 原样保留, 不解析其中 /* */
+            if ch in ('"', "'"):
+                quote = ch
+                res.append(ch)
+                i += 1
+                while i < n:
+                    res.append(line[i])
+                    if line[i] == "\\":  # 转义: 连同下一个字符一起保留
+                        if i + 1 < n:
+                            res.append(line[i + 1])
+                            i += 2
+                            continue
+                    elif line[i] == quote:
+                        i += 1
+                        break
+                    i += 1
+                continue
+            # 块注释开始 /* ... */
+            if ch == "/" and i + 1 < n and line[i + 1] == "*":
+                j = line.find("*/", i + 2)
+                if j < 0:
+                    # 本行不闭合 → 跨行块注释
+                    res.append(" " * (n - i))
+                    i = n
+                    in_block = True
+                else:
+                    res.append(" " * (j - i + 2))
+                    i = j + 2
+                continue
+            res.append(ch)
+            i += 1
+        out.append("".join(res))
+    return out
+
 __all__ = ["step_review_critical_safety", "CRITICAL_RULES"]
 
 
@@ -666,6 +734,10 @@ class CriticalSafetyScanner:
                     lines = fpath.read_text(errors="replace").splitlines()
                 except (OSError, UnicodeDecodeError):
                     continue
+
+                # 2026-09-03: 先统一剥离跨行块注释, 避免块内示例代码触发
+                # 各规则的假阳性(如 CRIT-NULL-001)。行号保持不变。
+                lines = _strip_block_comments(lines)
 
                 files_scanned += 1
 

@@ -85,6 +85,15 @@ def step_integration_test(session: PipelineSession) -> str:
                     "-q",
                     "-m",
                     "integration",
+                    # 2026-09-03: 子项目(如 templates/gpio-led-chaser)本身没有
+                    # pytest 配置, pytest 会沿 rootdir 向上发现仓库根的 pytest.ini,
+                    # 继承其 addopts (--cov=src/yuleosh --cov-fail-under=5)。对纯
+                    # C/CMake 子项目, pytest 收集不到 Python 测试 → 覆盖率 0% →
+                    # --cov-fail-under 触发 rc=1, 把本应 skipped 的步骤误判 failed。
+                    # 这里显式清空 addopts, 让覆盖率交给专门的 coverage 步骤处理,
+                    # 本步骤只关心集成测试本身的通过/失败。
+                    "-o",
+                    "addopts=",
                 ]
                 # --timeout requires pytest-timeout; probe for it first so we
                 # don't crash with "unrecognized arguments" on bare installs.

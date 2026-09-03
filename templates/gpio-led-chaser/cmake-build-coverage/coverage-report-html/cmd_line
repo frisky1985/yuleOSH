@@ -1,1 +1,0 @@
-genhtml /Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/coverage-filtered.info --output-directory /Users/ingeek/workspace/yuleOSH/templates/gpio-led-chaser/cmake-build-coverage/coverage-report-html --title 'C/C++ Coverage Report' --legend --frames
