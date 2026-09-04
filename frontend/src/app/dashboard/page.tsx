@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   AlertCircle,
@@ -414,6 +415,134 @@ function PipelineStageBoardLive() {
           : null
       }
     />
+  );
+}
+
+
+/**
+ * ActiveProjectsCard —— overview 页顶部「活跃项目」卡（头脑风暴项 ④ 落地）。
+ *
+ * 监听 realtime store: 0 个活跃 run 时整卡折叠（避免空状态噪音）;
+ * ≥1 个时显示:
+ *  - featured run 横幅: 项目名 + 当前 stage 标题 + agent + 步骤 N/24 +
+ *    「跳到流水线」按钮（用 router.push, 与侧栏 nav 行为一致）
+ *  - 项目数字总览: 每个项目一行（活跃指示灯 + 缺需求红 / 待测试蓝 /
+ *    证据数绿）—— 数字徽标由 store 实时填充（evidence_count 由
+ *    pipeline.file_produced 触发增量, missing_requirements / pending_tests
+ *    后续接入需求差距 + 待执行测试 API 后填充, 当前为 0 不渲染）
+ *
+ * 与左栏 engineer-sidebar 协同: 侧栏 pipeline 项徽标挂活跃 run 数,
+ * 本卡挂最突出运行详情, 互不重复 —— 侧栏负责「有没有跑」, 本卡负责
+ * 「跑到哪里、卡在哪里」。
+ */
+function ActiveProjectsCard() {
+  const realtime = useRealtimeStore();
+  const router = useRouter();
+  const running = Object.values(realtime.activeRuns).filter(
+    (r) => r.status === "running",
+  );
+  // 0 个活跃 → 整卡折叠, 不渲染空状态壳
+  if (running.length === 0) return null;
+
+  // 取 step_index 最大的（最新推进的）作为 featured
+  const featured = running
+    .slice()
+    .sort((a, b) => (b.current_stage_index ?? -1) - (a.current_stage_index ?? -1))[0];
+  const projectList = Object.values(realtime.statsByProject);
+  const stepIdx = featured.current_stage_index ?? -1;
+  const stepPct = Math.max(0, Math.min(100, ((stepIdx + 1) / 24) * 100));
+
+  return (
+    <Card className="mt-6 border-[#10b981]/30 bg-gradient-to-br from-[#111827] to-[#0b1220]">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-60 animate-ping" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#10b981]" />
+          </span>
+          活跃项目
+          <span className="text-[10px] font-normal text-[#10b981] ml-1">
+            {running.length} 个运行中
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {/* featured run 横幅 */}
+        <div className="rounded-lg border border-[#10b981]/30 bg-[#10b981]/5 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] text-[#64748b] mb-1 truncate">
+                {featured.project_dir || "(未指定项目)"}
+                <span className="ml-2 text-[#475569]">run_id: {featured.run_id.slice(0, 8)}</span>
+              </div>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-base font-bold text-[#e2e8f0]">
+                  {featured.current_stage_title || featured.current_stage_key || "—"}
+                </span>
+                <span className="text-[10px] text-[#64748b]">
+                  步骤 {stepIdx >= 0 ? stepIdx + 1 : "—"} / 24
+                  {featured.agent ? ` · ${featured.agent}` : ""}
+                </span>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-[#10b981]/40 text-[#10b981] hover:bg-[#10b981]/10"
+              onClick={() => router.push("/dashboard/pipeline")}
+            >
+              跳到流水线
+              <ArrowRight className="w-3 h-3 ml-1" />
+            </Button>
+          </div>
+          {/* 进度条 */}
+          <div className="mt-3 h-1.5 rounded-full bg-[#0b1220] overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#10b981] to-[#722ed1] transition-all duration-500"
+              style={{ width: `${stepPct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* 项目数字总览 */}
+        {projectList.length > 0 && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+            {projectList.map((s) => (
+              <div
+                key={s.project_dir}
+                className="flex items-center justify-between gap-2 rounded-lg border border-[#1e293b] bg-[#0b1220] px-3 py-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {s.has_active_run ? (
+                    <span className="h-2 w-2 rounded-full bg-[#10b981] animate-pulse" />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-[#334155]" />
+                  )}
+                  <span className="text-xs text-[#94a3b8] truncate">
+                    {s.project_dir ? s.project_dir.split("/").slice(-2).join("/") : "(未指定)"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] flex-shrink-0">
+                  {s.missing_requirements > 0 && (
+                    <span className="rounded bg-[#ff4d4f]/15 text-[#ff7875] px-1.5 py-0.5">
+                      缺需求 {s.missing_requirements}
+                    </span>
+                  )}
+                  {s.pending_tests > 0 && (
+                    <span className="rounded bg-[#1677ff]/15 text-[#69b1ff] px-1.5 py-0.5">
+                      待测试 {s.pending_tests}
+                    </span>
+                  )}
+                  <span className="rounded bg-[#10b981]/15 text-[#95de64] px-1.5 py-0.5">
+                    证据 {s.evidence_count}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1414,6 +1543,9 @@ export default function DashboardPage() {
             </Card>
             </>
             )}
+
+            {/* 活跃项目卡（阶段 3 落地）—— 0 个 run 时折叠, 多个 run 时实时展示 featured + 项目数字总览 */}
+            <ActiveProjectsCard />
 
             {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
             <div className="mt-6">
