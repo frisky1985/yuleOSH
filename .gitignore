@@ -55,6 +55,12 @@ tests/bsw/mcal/wdg/test_wdg
 tests/bsw/mcal/dio/test_dio
 tests/bsw/services/ecum/test_ecum
 
+# 模板项目本地 cmake 编译产物（review-build / qemu-verify 等
+# 步骤在 templates/* 下 cmake -B build_review 时生成, 留库无意义）
+templates/**/build_review/
+templates/**/build/
+templates/**/cmake-build*/
+
 # Runtime data (persistent DB, session state)
 .yuleosh/
 .osh/
