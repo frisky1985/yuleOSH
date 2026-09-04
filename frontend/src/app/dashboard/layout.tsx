@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { TopNav, type DashboardTab } from "@/components/dashboard/top-nav";
 import { EngineerSidebar } from "@/components/dashboard/engineer-sidebar";
@@ -39,6 +39,7 @@ export function useDashboardShell() {
  */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { role, session } = useSessionRole();
 
   // Active tab is URL-driven: /dashboard?tab=gap-analysis activates gap-analysis
@@ -96,6 +97,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               {
                 onOpenAccount: () => setAccountOpen(true),
                 onOpenSettings: () => setSettingsOpen(true),
+                onOpenApiKeys: () => router.push("/dashboard/settings/api-keys"),
                 onOpenLogout: () => setLogoutOpen(true),
                 onOpenDelete: () => setDeleteOpen(true),
               } satisfies UserMenuActions

@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { LogOut, Settings, Trash2, User as UserIcon } from "lucide-react";
+import { LogOut, Settings, Trash2, User as UserIcon, KeyRound } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { viewOf, VIEW_BADGE_CLS } from "@/lib/role-view";
@@ -41,6 +41,7 @@ export interface UserMenuActions {
   onOpenSettings: () => void;
   onOpenLogout: () => void;
   onOpenDelete: () => void;
+  onOpenApiKeys: () => void;
 }
 
 interface UserMenuProps {
@@ -203,6 +204,11 @@ export function UserMenu({ session, actions }: UserMenuProps) {
             icon={<Settings className="w-3.5 h-3.5" />}
             label="用户设置"
             onClick={choose(actions.onOpenSettings)}
+          />
+          <MenuItem
+            icon={<KeyRound className="w-3.5 h-3.5" />}
+            label="API 密钥"
+            onClick={choose(actions.onOpenApiKeys)}
           />
           <div className="my-1 h-px bg-[#1e293b]" />
           <MenuItem

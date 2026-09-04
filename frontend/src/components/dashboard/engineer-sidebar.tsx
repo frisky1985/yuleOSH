@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   X,
+  KeyRound,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { resetSessionCache, useSessionRole } from "@/lib/use-session-role";
@@ -42,6 +43,8 @@ const NAV: {
   // —— 合规交付：需求↔证据链接，最后打包产出 ——
   { href: "/dashboard/traceability", label: "追溯矩阵", icon: Network, section: "合规交付" },
   { href: "/dashboard/evidence", label: "证据包", icon: ScrollText },
+  // —— 安全：加密 API 密钥管理（SEC-PK）——
+  { href: "/dashboard/settings/api-keys", label: "API 密钥", icon: KeyRound, section: "安全" },
 ];
 
 export function EngineerSidebar() {

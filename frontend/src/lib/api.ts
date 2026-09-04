@@ -423,6 +423,39 @@ async function updateOrgLLMConfig(payload: {
   return data;
 }
 
+// ── Encrypted provider-secret vault (SEC-PK): API Keys panel ─────────────
+export interface SecretMeta {
+  id: number;
+  provider: string;
+  key_name: string;
+  created_at: string | null;
+  updated_at: string | null;
+  last_used_at: string | null;
+}
+
+async function listSecrets(): Promise<{ secrets: SecretMeta[]; count: number }> {
+  const data = await request<any>("/api/v1/secrets", { method: "GET" });
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function createSecret(payload: {
+  provider: string;
+  key_name: string;
+  value: string;
+}): Promise<SecretMeta> {
+  const data = await request<any>("/api/v1/secrets", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (data && data.ok === true) return data.data;
+  return data;
+}
+
+async function deleteSecret(id: number): Promise<void> {
+  await request<any>(`/api/v1/secrets/${id}`, { method: "DELETE" });
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -464,6 +497,11 @@ export const api = {
     org: {
       llmConfig: getOrgLLMConfig,
       updateLLMConfig: updateOrgLLMConfig,
+    },
+    secrets: {
+      list: listSecrets,
+      create: createSecret,
+      remove: deleteSecret,
     },
   },
 };
