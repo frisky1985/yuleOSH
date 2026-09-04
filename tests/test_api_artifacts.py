@@ -138,7 +138,7 @@ class TestList:
 
     def test_session_without_session_json_fallback(self, _isolate):
         """GIVEN dir without session.json WHEN list THEN run listed with fallback."""
-        _write(_isolate, ".osh/sessions/legacy-run/artifact.md", "x")
+        _write(_isolate, ".osh/sessions/legacy-run/prd.md", "x")
         payload, _ = _req("GET", "list")
         data = payload["data"]
         assert data["count"] == 1
@@ -146,7 +146,7 @@ class TestList:
         assert run["run_id"] == "legacy-run"
         assert run["name"] == "legacy-run"  # fallback to run_id
         assert run["status"] == "unknown"
-        assert [f["path"] for f in run["files"]] == ["artifact.md"]
+        assert [f["path"] for f in run["files"]] == ["prd.md"]
 
     def test_corrupt_session_json_fallback(self, _isolate):
         """GIVEN corrupt session.json WHEN list THEN fallback, no crash."""
@@ -216,6 +216,88 @@ class TestList:
         payload, _ = _req("GET", "list")
         run = payload["data"]["runs"][0]
         assert run["project_dir"] == str(_isolate.resolve())
+
+    # ── ASPICE .md 证据二筛（纵深防御） ─────────────────────────────
+    def test_md_evidence_whitelist_keeps_swe_docs(self, _isolate):
+        """GIVEN SWE.1-SWE.6 standard ASPICE documents (.md) WHEN list THEN
+        all kept (architecture.md / prd.md / development-plan.md 等白名单内).
+        """
+        _session(_isolate, "r1")
+        for name in ("prd.md", "spec.md", "architecture.md",
+                     "development-plan.md", "startup-analysis.md",
+                     "self-test-report.md", "test-plan.md",
+                     "requirements-traceability.md", "final-report.md"):
+            _write(_isolate, f".osh/sessions/r1/{name}", f"# {name}\n")
+        payload, _ = _req("GET", "list")
+        run = payload["data"]["runs"][0]
+        names = {f["name"] for f in run["files"]}
+        assert "prd.md" in names
+        assert "spec.md" in names
+        assert "architecture.md" in names
+        assert "development-plan.md" in names
+        assert "startup-analysis.md" in names
+        assert "self-test-report.md" in names
+        assert "test-plan.md" in names
+        assert "requirements-traceability.md" in names
+        assert "final-report.md" in names
+
+    def test_md_tool_reports_filtered(self, _isolate):
+        """GIVEN .md files with tool-report basenames (gate-summary / spec-check /
+        pipeline-log / random) WHEN list THEN all filtered out (编排器合并报告 /
+        OpenSpec 检查器 / pipeline 日志均非 ASPICE 流程证据).
+        """
+        _session(_isolate, "r1")
+        for name in ("gate-summary.md", "spec-check.md", "pipeline-log.md",
+                     "run-log.md", "tool-output.md", "foo.md",
+                     "scratch.md", "temp.md"):
+            _write(_isolate, f".osh/sessions/r1/{name}", "x")
+        payload, _ = _req("GET", "list")
+        run = payload["data"]["runs"][0]
+        # 全部 8 个 .md 都被过滤 → run.files 为空。
+        assert run["files"] == []
+        assert payload["data"]["note"] is None  # run 仍展示, 内部文件为空
+
+    def test_md_evidence_passed_through(self, _isolate):
+        """GIVEN ASPICE 证据 .md + 工具报告 .md WHEN list THEN only evidence kept."""
+        _session(_isolate, "r1")
+        _write(_isolate, ".osh/sessions/r1/prd.md", "# PRD\n")
+        _write(_isolate, ".osh/sessions/r1/architecture.md", "# ARCH\n")
+        _write(_isolate, ".osh/sessions/r1/gate-summary.md", "{\"gate\": \"red\"}")
+        _write(_isolate, ".osh/sessions/r1/spec-check.md", "{\"verdict\": \"fail\"}")
+        payload, _ = _req("GET", "list")
+        run = payload["data"]["runs"][0]
+        paths = {f["path"] for f in run["files"]}
+        assert paths == {"prd.md", "architecture.md"}
+        assert "gate-summary.md" not in paths
+        assert "spec-check.md" not in paths
+
+    def test_non_md_docs_unaffected_by_evidence_filter(self, _isolate):
+        """GIVEN .pdf/.html/.docx 等 ASPICE 文档载体 WHEN list THEN 全部保留
+        (二筛只对风险扩展名 .md 启用; .pdf/.docx 等几乎不会伪装成工具报告).
+        """
+        _session(_isolate, "r1")
+        _write(_isolate, ".osh/sessions/r1/manual.pdf", b"%PDF-1.4")
+        _write(_isolate, ".osh/sessions/r1/render.html", "<html/>")
+        _write(_isolate, ".osh/sessions/r1/spec.docx", b"PK\x03\x04")
+        _write(_isolate, ".osh/sessions/r1/release-notes.rst", "RST")
+        payload, _ = _req("GET", "list")
+        run = payload["data"]["runs"][0]
+        names = {f["name"] for f in run["files"]}
+        assert names == {"manual.pdf", "render.html", "spec.docx", "release-notes.rst"}
+
+    def test_evidence_basename_case_insensitive(self, _isolate):
+        """GIVEN .md basename 大小写 WHEN list THEN matched case-insensitive.
+
+        macOS APFS 默认 case-insensitive, 多 case 变体文件名在 tmp_path
+        上会撞名覆盖, 所以这里只用一个 uppercase 入口验证
+        stem.lower() 路径生效即可 (代码层 frozenset 内全是小写)。
+        """
+        _session(_isolate, "r1")
+        _write(_isolate, ".osh/sessions/r1/PRD.md", "# P\n")
+        payload, _ = _req("GET", "list")
+        names = {f["name"] for f in payload["data"]["runs"][0]["files"]}
+        # PRD.md 经 stem.lower() → "prd" 命中白名单
+        assert "PRD.md" in names
 
 
 class TestViewLatestPerProject:

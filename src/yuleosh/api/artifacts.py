@@ -57,6 +57,36 @@ _METADATA_FILES = {"session.json"}
 #   （中间步骤产物、测试 runner 报告、原始 LLM 输出、配置/清单文件）
 _ASPICE_DOCUMENT_EXTS = {"md", "html", "htm", "pdf", "docx", "rst", "adoc"}
 
+# ASPICE 流程文档证据：仅当文件扩展名是 .md 等"风险扩展名"时，进一步用
+# 文件基名（不含扩展名）做一次精筛，把"工具产物/合并报告"伪装成 .md 的
+# 噪声挡在产出物面板外（例如 gate-summary.md、spec-check.md、pipeline-log.md
+# 这类编排器/检查器工具报告，虽然后缀是 .md 但不属于 SWE.1-SWE.6 流程证据）。
+#
+# 这些 basename 是 yuleOSH 项目产物的"ASPICE 流程文档证据"白名单 —— 与
+# pipeline 中各 step 的输出约定（PR 生成、架构设计、开发计划、自测报告等）
+# 严格对应。新增 step 时如要保留其输出，请把 basename 加入该集合。
+_ASPICE_EVIDENCE_BASENAMES = frozenset({
+    # SWE.1 软件需求基线
+    "prd", "spec", "requirements-traceability", "requirements-spec",
+    "user-requirements", "stakeholder-requirements", "system-requirements",
+    # SWE.2 项目启动 / 早期分析
+    "startup-analysis", "feasibility-analysis", "requirements-analysis",
+    # SWE.3 软件架构设计
+    "architecture", "high-level-architecture", "software-architecture",
+    "adr", "architecture-decision-record",
+    # SWE.4 软件详细设计 / 单元设计
+    "detailed-design", "unit-design", "design-spec",
+    # SWE.5 软件集成 / 单元测试
+    "development-plan", "integration-strategy", "unit-test-design",
+    # SWE.6 软件合格性测试 + 工具合规证据
+    "test-plan", "self-test-report", "test-report",
+    "integration-test-report", "qualification-test-report",
+    "coverage-report", "misra-report", "final-report",
+    "process-compliance-report", "quality-plan",
+    # 用户文档 / 发布说明
+    "user-manual", "user-guide", "operator-manual", "release-notes",
+})
+
 # 视图模式（?view=...） — 默认 = 全量历史（兼容旧前端），
 # 最新模式 = 按 project_dir 分组，每组取最新一次（去掉"每个 commit 列一行"的噪声）
 _VIEW_ALL = "all"
@@ -201,9 +231,17 @@ def _artifact_files(session_dir: Path) -> list[dict]:
     Returns ``[{path, name, size, ext}]`` with ``path`` relative to the
     session directory, sorted for stable output.
 
-    只保留 ASPICE 流程文档证据（见 ``_ASPICE_DOCUMENT_EXTS``）：.json / .xml /
-    .yaml / .toml / .lock / .csv / .txt / .log 等中间产物与配置文件不在
-    产出物总览展示。session.json 仍走 ``_METADATA_FILES`` 排除。
+    Filter (两层):
+      1. 扩展名白名单 ``_ASPICE_DOCUMENT_EXTS``:
+         只保留 md / html / htm / pdf / docx / rst / adoc；
+         .json / .yaml / .xml / .toml / .lock / .csv / .txt / .log
+         等中间产物、测试 runner 报告、原始 LLM 输出、配置文件均被过滤。
+      2. ASPICE 证据二筛（仅对"风险扩展名" .md 启用）:
+         basename 必须命中 ``_ASPICE_EVIDENCE_BASENAMES``,
+         否则视为工具产物（编排器合并报告、OpenSpec 检查报告、pipeline
+         日志等）挡在外面。.html / .pdf / .docx 等"非风险扩展名"无此约束。
+
+    session.json 始终走 ``_METADATA_FILES`` 排除。
     """
     files = []
     for p in sorted(session_dir.rglob("*")):
@@ -214,6 +252,10 @@ def _artifact_files(session_dir: Path) -> list[dict]:
             continue
         ext = p.suffix.lstrip(".").lower()
         if ext not in _ASPICE_DOCUMENT_EXTS:
+            continue
+        # ASPICE 证据二筛：.md 这类"任何内容都能伪装"的风险扩展名
+        # 必须命中白名单；其他风险较低的扩展名直接保留。
+        if ext == "md" and p.stem.lower() not in _ASPICE_EVIDENCE_BASENAMES:
             continue
         files.append({
             "path": rel.as_posix(),
