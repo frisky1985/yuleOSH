@@ -533,6 +533,15 @@ def _iter_runnable_projects(osh_home: str) -> list[dict]:
         return found
     skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox",
             "dist", "build", "frontend", ".osh", ".yuleosh"}
+
+    # 仓库根（yuleOSH 自身源码）：含 pyproject.toml + src/yuleosh/__init__.py。
+    # 这些目录的 docs/spec.md 是 yuleOSH 平台自身的合规规范（source of truth），
+    # 不是某个待开发的产品 demo —— 误入选会触发"跑自己"的怪事（spec-check
+    # 报告 12 ERROR / 60 WARN，且 LLM 链会去生成 yuleOSH 自身的代码）。识别
+    # 后从 demo 列表中排除。
+    def _is_repo_root(p: Path) -> bool:
+        return (p / "pyproject.toml").exists() and (p / "src" / "yuleosh" / "__init__.py").exists()
+
     try:
         for root, dirs, files in os.walk(home):
             root_path = Path(root)
@@ -545,12 +554,16 @@ def _iter_runnable_projects(osh_home: str) -> list[dict]:
             if depth > 3:
                 dirs[:] = []
                 continue
-            if "spec.md" in files:
+            if "spec.md" in files and not _is_repo_root(root_path):
                 spec = root_path / "spec.md"
                 # 项目根 = spec.md 所在目录；约定该项目把 spec 放在
                 # <root>/docs/spec.md，则根是 docs 的父目录，这样编排器
                 # 的 session 落在 <root>/.osh/sessions（而非 <root>/docs/.osh）。
                 project_path = root_path.parent if root_path.name == "docs" else root_path
+                # project_path 也得检查（spec.md 在 docs/ 下时 root_path 是 docs/，
+                # 父目录才是仓库根；这一步漏了会让 yuleOSH 自己的 spec 漏网）。
+                if _is_repo_root(project_path):
+                    continue
                 found.append({
                     "name": project_path.name or str(project_path),
                     "path": str(project_path),
