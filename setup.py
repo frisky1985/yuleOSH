@@ -22,6 +22,7 @@ setup(
         "pillow>=12.3.0",  # Multiple CVEs
         "setuptools>=83.0.0",  # PYSEC-2026-3447
         "jinja2>=3.1.0",
+        "cryptography>=42.0",  # SEC-PK: 加密存储 API Key（provider_secrets 保险库）
     ],
     extras_require={
         "saas": ["bcrypt>=5.0", "pyjwt>=2.13", "psycopg2-binary>=2.9", "pyserial>=3.5", "stripe>=15.0"],

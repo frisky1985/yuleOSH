@@ -19,6 +19,7 @@ dependencies = [
     "setuptools>=83.0.0",  # PYSEC-2026-3447
     "jinja2>=3.1.0",
     "openpyxl>=3.1.0",  # evidence/excel_writer.py 依赖（此前未声明导致 CI 干净环境 18 个测试失败）
+    "cryptography>=42.0",  # SEC-PK: 加密存储 API Key（provider_secrets 保险库）
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

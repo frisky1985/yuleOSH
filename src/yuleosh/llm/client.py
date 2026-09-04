@@ -794,6 +794,13 @@ def chat_completion(
         or _os.environ.get("OPENAI_API_KEY")
         or ""
     )
+    if not api_key:
+        # SEC-PK: fall back to the encrypted vault (env-first above).
+        from yuleosh.secrets import resolve_api_key
+
+        api_key = resolve_api_key(
+            "LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", provider="deepseek"
+        )
     base_url = _os.environ.get("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/")
     model = _os.environ.get("LLM_MODEL", "deepseek-chat")
 

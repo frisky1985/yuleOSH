@@ -28,6 +28,8 @@ import asyncio
 import json
 import logging
 import os
+
+from yuleosh.secrets import resolve_provider_api_key
 import time
 import urllib.error
 import urllib.request
@@ -91,7 +93,7 @@ class OpenAIProvider(AbstractProvider):
                 ``config.max_retries`` attempts. The message always names
                 the provider (``openai``).
         """
-        api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY") or ""
+        api_key = resolve_provider_api_key("openai") or ""
         if not api_key:
             raise RuntimeError(
                 "OpenAI provider (openai): 缺少 API key，请配置环境变量 "

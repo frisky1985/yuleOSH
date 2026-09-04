@@ -204,6 +204,21 @@ class Store(AbstractStore):
         """)
         self.conn.commit()
 
+        # Encrypted provider secrets table (SEC-PK, v6)
+        self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS provider_secrets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,
+                key_name TEXT NOT NULL,
+                ciphertext TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_used_at TEXT,
+                UNIQUE(provider, key_name)
+            );
+        """)
+        self.conn.commit()
+
         # Spec parsing cache table (v5)
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS spec_cache (
@@ -926,6 +941,57 @@ class Store(AbstractStore):
         now = datetime.now().isoformat()
         self.conn.execute(
             "UPDATE api_keys SET last_used_at=? WHERE id=?", (now, key_id)
+        )
+        self.conn.commit()
+
+    # ── Encrypted provider secrets (SEC-PK) ────────────────────────────
+
+    def set_provider_secret(self, provider: str, key_name: str,
+                            ciphertext: str) -> dict:
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "INSERT INTO provider_secrets (provider, key_name, ciphertext, "
+            "created_at, updated_at) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(provider, key_name) DO UPDATE SET "
+            "ciphertext=excluded.ciphertext, updated_at=excluded.updated_at",
+            (provider, key_name, ciphertext, now, now),
+        )
+        self.conn.commit()
+        cur = self.conn.execute(
+            "SELECT id, provider, key_name, created_at, updated_at, last_used_at "
+            "FROM provider_secrets WHERE provider=? AND key_name=?",
+            (provider, key_name),
+        )
+        return dict(cur.fetchone())
+
+    def get_provider_secret_ciphertext(self, provider: str,
+                                        key_name: str) -> Optional[str]:
+        cur = self.conn.execute(
+            "SELECT ciphertext FROM provider_secrets WHERE provider=? AND key_name=?",
+            (provider, key_name),
+        )
+        row = cur.fetchone()
+        return row["ciphertext"] if row else None
+
+    def list_provider_secrets(self) -> list[dict]:
+        cur = self.conn.execute(
+            "SELECT id, provider, key_name, created_at, updated_at, last_used_at "
+            "FROM provider_secrets ORDER BY provider, key_name"
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def delete_provider_secret(self, secret_id: int) -> bool:
+        cur = self.conn.execute(
+            "DELETE FROM provider_secrets WHERE id=?", (secret_id,)
+        )
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    def touch_provider_secret_used(self, provider: str, key_name: str):
+        now = datetime.now().isoformat()
+        self.conn.execute(
+            "UPDATE provider_secrets SET last_used_at=? WHERE provider=? AND key_name=?",
+            (now, provider, key_name),
         )
         self.conn.commit()
 

@@ -30,6 +30,7 @@ from .project import handle_project
 from .stats import handle_stats
 from .notify import handle_notify
 from .apikeys import handle_apikeys
+from .secrets import handle_secrets
 from .wizard import handle_wizard
 from .audit import handle_audit
 from .auth import handle_auth
@@ -86,6 +87,7 @@ ROUTES: dict[str, object] = {
     "stats": handle_stats,
     "notify": handle_notify,
     "apikeys": handle_apikeys,
+    "secrets": handle_secrets,
     "audit": handle_audit,
     "auth": handle_auth,
     "kb": handle_kb,

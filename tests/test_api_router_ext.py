@@ -34,6 +34,8 @@ class TestRouter:
             # Dashboard v2 modules (2026-08-16, D1-D7)
             "dashboard-v2", "artifacts", "tests", "device-ui",
             "logs", "members", "requirements",
+            # Account / org / matrix modules + encrypted secrets vault (SEC-PK)
+            "org", "me", "matrix", "secrets",
         }
         all_resources = set(ROUTES.keys()) | set(_LAZY_HANDLERS.keys())
         assert all_resources == expected

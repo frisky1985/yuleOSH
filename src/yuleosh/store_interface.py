@@ -98,6 +98,21 @@ class AbstractStore(ABC):
     @abstractmethod
     def update_api_key_last_used(self, key_id: int): ...
 
+    # ── Encrypted provider secrets (SEC-PK) ────────────────────────────
+
+    @abstractmethod
+    def set_provider_secret(self, provider: str, key_name: str,
+                            ciphertext: str) -> dict: ...
+    @abstractmethod
+    def get_provider_secret_ciphertext(self, provider: str,
+                                        key_name: str) -> Optional[str]: ...
+    @abstractmethod
+    def list_provider_secrets(self) -> list[dict]: ...
+    @abstractmethod
+    def delete_provider_secret(self, secret_id: int) -> bool: ...
+    @abstractmethod
+    def touch_provider_secret_used(self, provider: str, key_name: str): ...
+
     # ── Pipelines ──────────────────────────────────────────────────────
 
     @abstractmethod

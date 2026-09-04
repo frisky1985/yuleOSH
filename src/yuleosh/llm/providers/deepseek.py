@@ -28,6 +28,8 @@ import logging
 import os
 import time
 import urllib.error
+
+from yuleosh.secrets import resolve_provider_api_key
 import urllib.request
 from typing import Any
 
@@ -81,7 +83,7 @@ class DeepSeekProvider(AbstractProvider):
                 ``config.max_retries`` attempts. The message always names
                 the provider (``deepseek``).
         """
-        api_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("LLM_API_KEY") or ""
+        api_key = resolve_provider_api_key("deepseek") or ""
         if not api_key:
             raise RuntimeError(
                 "DeepSeek provider (deepseek): 缺少 API key，请配置环境变量 "
