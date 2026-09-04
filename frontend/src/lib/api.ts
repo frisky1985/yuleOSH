@@ -373,6 +373,38 @@ async function getV1Stats(): Promise<any> {
   return data;
 }
 
+// Stage-4 (2026-09-05): per-project aggregate counters for the
+// ActiveProjectsCard. Mounted at GET /api/v1/projects-stats/stats.
+//
+// Why a separate helper instead of going through v1.projects.get: the
+// stats endpoint ignores session state and re-scans project files on
+// every call, so it's better to fetch once per project_dir seen on the
+// dashboard and cache it in the realtime store.
+export interface ProjectStats {
+  project: string;
+  missing_requirements: number;
+  pending_tests: number;
+  evidence_count: number;
+  note?: string | null;
+}
+
+async function getV1ProjectsStats(projectName: string): Promise<ProjectStats> {
+  const data = await request<any>(
+    `/api/v1/projects-stats/stats?project=${encodeURIComponent(projectName)}`,
+    { method: "GET" },
+  );
+  if (data && data.ok === true) return data.data as ProjectStats;
+  // Defensive: if the server returns an error envelope, surface zeros so
+  // the card does not crash (the active run banner is still useful).
+  return {
+    project: projectName,
+    missing_requirements: 0,
+    pending_tests: 0,
+    evidence_count: 0,
+    note: typeof data?.error === "string" ? data.error : null,
+  };
+}
+
 // v9: per-user usage + org LLM model config (cockpit panel)
 async function getMyUsage(): Promise<any> {
   const data = await request<any>("/api/v1/me/usage", { method: "GET" });
@@ -489,6 +521,11 @@ export const api = {
       stop: stopPipeline,
     },
     stats: getV1Stats,
+    // Stage-4 (2026-09-05): per-project counters consumed by
+    // ActiveProjectsCard. Lazy-fetched per project_dir.
+    projectsStats: {
+      get: getV1ProjectsStats,
+    },
     me: {
       usage: getMyUsage,
       account: getMyAccount,

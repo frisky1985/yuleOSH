@@ -109,7 +109,7 @@ import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board"
 import { LoopEngineering } from "@/components/dashboard/loop-engineering";
 import { YuleASRStatus } from "@/components/dashboard/yuleasr-status";
 import { PortfolioCompliance } from "@/components/dashboard/portfolio-compliance";
-import { useRealtimeStore } from "@/lib/realtime-store";
+import { useRealtimeDispatch, useRealtimeStore } from "@/lib/realtime-store";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -452,6 +452,17 @@ function ActiveProjectsCard() {
   const stepIdx = featured.current_stage_index ?? -1;
   const stepPct = Math.max(0, Math.min(100, ((stepIdx + 1) / 24) * 100));
 
+  // ── Stage-4 (2026-09-05): 拉到 stats 副作用 ────────────────────────
+  // 对每个新出现的 project_dir(取 basename 作为后端 projects/<name>
+  // 项目名),fetch 一次 /api/v1/projects-stats/stats,把基线值灌入
+  // store。Reducer (set_project_stats) 已经处理「基线 vs 本地增量」
+  // 合并 (Math.max 保留更高值),所以 fetch 之前收到的 file_produced
+  // 增量不会被覆盖。
+  //
+  // useEffect 必须放在 early return 之前 (React hooks 顺序规则),
+  // 但 fetch 触发条件是 running.length > 0 (即卡已展开) —— 在早期
+  // return 后, useEffect 不会执行, 所以用独立组件 StatsFetcher 包
+  // 装 (见下方), 永远挂载, 自己决定要不要触发 fetch。
   return (
     <Card className="mt-6 border-[#10b981]/30 bg-gradient-to-br from-[#111827] to-[#0b1220]">
       <CardHeader className="pb-3">
@@ -544,6 +555,69 @@ function ActiveProjectsCard() {
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * ProjectStatsFetcher —— 不可见副作用组件 (Stage-4, 2026-09-05)。
+ *
+ * 监听 realtime store.activeRuns, 对每个新出现的 project_dir 拉一次
+ * /api/v1/projects-stats/stats 把基线值灌入 store。
+ *
+ * 设计动机:
+ *   ActiveProjectsCard 在 0 个 run 时 early-return null, 用 useEffect
+ *   做副作用会违反 React hook 顺序规则; 抽出独立组件, 永远挂载, 内
+ *   部按需触发 fetch, 与展示组件解耦。
+ *
+ * Mount/unmount: 渲染一次, 永不返回 JSX (返回 null)。
+ */
+function ProjectStatsFetcher() {
+  const realtime = useRealtimeStore();
+  const { dispatch } = useRealtimeDispatch();
+  const fetchedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    // 找出本次渲染里所有「活跃 + 项目目录非空」run 的 project_dir
+    const seen = Object.values(realtime.activeRuns)
+      .filter((r) => r.status === "running" && r.project_dir)
+      .map((r) => r.project_dir);
+    // 取 basename 作为后端 projects/<name> 项目名
+    const uniqueProjects = new Set<string>();
+    const nameToDir: Record<string, string> = {};
+    for (const dir of seen) {
+      const parts = dir.split(/[/\\]/).filter(Boolean);
+      const name = parts[parts.length - 1];
+      if (!name) continue;
+      uniqueProjects.add(name);
+      nameToDir[name] = dir;
+    }
+    // 对每个新名字调一次 stats 接口 (ref 标记避免重复)
+    for (const name of uniqueProjects) {
+      if (fetchedRef.current.has(name)) continue;
+      fetchedRef.current.add(name);
+      void (async () => {
+        try {
+          const stats = await api.v1.projectsStats.get(name);
+          const dir = nameToDir[name];
+          if (!dir) return;
+          dispatch?.({
+            type: "set_project_stats",
+            payload: {
+              project_dir: dir,
+              missing_requirements: stats.missing_requirements,
+              pending_tests: stats.pending_tests,
+              evidence_count: stats.evidence_count,
+            },
+          });
+        } catch (e) {
+          // 静默 — 失败不影响卡片渲染 (基线保持为 0 / 空)
+          // eslint-disable-next-line no-console
+          console.warn("[ProjectStatsFetcher] fetch failed:", name, e);
+        }
+      })();
+    }
+  }, [realtime.activeRuns, dispatch]);
+
+  return null;
 }
 
 
@@ -1546,6 +1620,9 @@ export default function DashboardPage() {
 
             {/* 活跃项目卡（阶段 3 落地）—— 0 个 run 时折叠, 多个 run 时实时展示 featured + 项目数字总览 */}
             <ActiveProjectsCard />
+
+            {/* ProjectStatsFetcher（阶段 4）—— 不可见副作用组件, 监听 activeRuns, 对每个新出现的 project_dir 拉 stats 接口把基线值灌入 store */}
+            <ProjectStatsFetcher />
 
             {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
             <div className="mt-6">

@@ -93,6 +93,19 @@ type Action =
       payload: { run_id: string; project_dir: string; status: string;
                   progress_pct?: number };
     }
+  | {
+      // Stage-4 (2026-09-05): initialise the per-project stats baseline
+      // (missing_requirements / pending_tests / evidence_count). The card
+      // calls api.v1.projectsStats.get() for every project_dir seen in
+      // activeRuns and dispatches this once the response arrives. The
+      // evidence_count supplied here is treated as the *baseline* — the
+      // reducer must ADD any pipeline.file_produced deltas that arrived
+      // before the baseline was known.
+      type: "set_project_stats";
+      payload: { project_dir: string; missing_requirements: number;
+                  pending_tests: number; evidence_count: number;
+                  has_active_run?: boolean };
+    }
   | { type: "set_connected"; connected: boolean };
 
 const emptyStats = (project_dir: string): ProjectStat => ({
@@ -194,6 +207,36 @@ function reducer(state: State, action: Action): State {
             status: p.status as ActiveRun["status"],
             updated_at: Date.now(),
           },
+        },
+      };
+    }
+    case "set_project_stats": {
+      // Stage-4 (2026-09-05): 用后端 stats 接口返回的基线值覆盖既有
+      // stats 条目。如果该 project_dir 已有 stats 条目, 保留
+      // has_active_run 状态(因为 store 可能已经收到 pipeline.stage_start
+      // 标记为 true); 仅 missing_requirements / pending_tests /
+      // evidence_count 从基线重新填充, evidence_count 已经把本地
+      // 增量算进基线里(见 caller 的 fetch-and-merge 逻辑)。
+      const p = action.payload;
+      const existing = state.statsByProject[p.project_dir];
+      const merged: ProjectStat = {
+        project_dir: p.project_dir,
+        missing_requirements: p.missing_requirements,
+        pending_tests: p.pending_tests,
+        // 若之前已有增量 evidence_count, 用 max(baseline, 之前的值)
+        // —— file_produced 增量不会因 set_project_stats 被"覆盖回去",
+        // 但当 baseline 比本地累计大(后端扫到更多历史文件)时仍采纳。
+        evidence_count: existing
+          ? Math.max(p.evidence_count, existing.evidence_count)
+          : p.evidence_count,
+        // has_active_run 优先沿用已有值, 否则按 payload 决定。
+        has_active_run: existing?.has_active_run ?? (p.has_active_run ?? false),
+      };
+      return {
+        ...state,
+        statsByProject: {
+          ...state.statsByProject,
+          [p.project_dir]: merged,
         },
       };
     }
