@@ -54,6 +54,9 @@ _LAZY_HANDLERS = {
     "members": ("yuleosh.api.members", "handle_members"),
     "requirements": ("yuleosh.api.requirements", "handle_requirements"),
     "matrix": ("yuleosh.api.matrix", "handle_matrix"),
+    # Realtime event subscription (SSE, 2026-09-04): ``GET /api/v1/events/stream``
+    # streams process-local realtime events (pipeline / evidence / gap / etc.).
+    "events": ("yuleosh.api.events", "handle_events"),
 }
 
 logger = logging.getLogger("yuleosh.api.router")

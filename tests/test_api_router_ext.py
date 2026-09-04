@@ -36,6 +36,8 @@ class TestRouter:
             "logs", "members", "requirements",
             # Account / org / matrix modules + encrypted secrets vault (SEC-PK)
             "org", "me", "matrix", "secrets",
+            # Realtime event subscription (SSE, 2026-09-04)
+            "events",
         }
         all_resources = set(ROUTES.keys()) | set(_LAZY_HANDLERS.keys())
         assert all_resources == expected

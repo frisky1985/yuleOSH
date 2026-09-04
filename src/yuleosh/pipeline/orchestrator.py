@@ -914,6 +914,93 @@ def _propagate_step_verdict(
     return None
 
 
+# ─── Realtime emit helpers (进程内总线, 失败不阻塞主链路) ───────────────────
+# 2026-09-04: 接入 /api/v1/events/stream (SSE), 把 step 进出/文档证据落盘/
+# run 终态广播给前端看板与左栏徽标。发射失败仅 debug log (业务线程不感知)。
+
+import os as _os  # noqa: E402  (top-level 已导入 os, 此行仅为兼容性注释)
+
+def _emit_realtime_stage_start(session, step_idx: int, step_key: str,
+                               step_name: str, agent: str) -> None:
+    try:
+        from yuleosh.realtime import emit_pipeline_stage_start
+        emit_pipeline_stage_start(
+            run_id=str(getattr(session, "session_id", "") or session.name or ""),
+            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            step_index=step_idx,
+            step_key=step_key,
+            step_title=step_name,
+            agent=agent,
+        )
+    except Exception as _e:  # noqa: BLE001
+        log.debug("realtime stage_start swallowed: %s", _e)
+
+
+def _emit_realtime_stage_end(session, step_idx: int, step_key: str,
+                             step_name: str, agent: str, status: str,
+                             started_at, finished_at) -> None:
+    try:
+        from yuleosh.realtime import emit_pipeline_stage_end
+        _dur_ms: int | None = None
+        try:
+            if started_at and finished_at:
+                _dur_ms = int((finished_at - started_at).total_seconds() * 1000)
+        except Exception:  # noqa: BLE001
+            _dur_ms = None
+        emit_pipeline_stage_end(
+            run_id=str(getattr(session, "session_id", "") or session.name or ""),
+            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            step_index=step_idx,
+            step_key=step_key,
+            step_title=step_name,
+            status=status,
+            duration_ms=_dur_ms,
+        )
+    except Exception as _e:  # noqa: BLE001
+        log.debug("realtime stage_end swallowed: %s", _e)
+
+
+def _emit_realtime_stage_skipped(session, step_idx: int, step_key: str,
+                                 step_name: str, agent: str) -> None:
+    try:
+        from yuleosh.realtime import emit_pipeline_stage_end
+        emit_pipeline_stage_end(
+            run_id=str(getattr(session, "session_id", "") or session.name or ""),
+            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            step_index=step_idx,
+            step_key=step_key,
+            step_title=step_name,
+            status="skipped",
+            duration_ms=None,
+        )
+    except Exception as _e:  # noqa: BLE001
+        log.debug("realtime stage_end(skipped) swallowed: %s", _e)
+
+
+def _emit_realtime_file_produced(output_path, step_key: str, session) -> None:
+    """给前端看板 「文档证据即时显示」用的 file_produced 事件。
+
+    output_path 是 step handler 返回的文件路径。空 / 不存在则跳过。
+    """
+    try:
+        from pathlib import Path as _P
+        if not output_path:
+            return
+        _path = _P(str(output_path))
+        if not _path.exists() or not _path.is_file():
+            return
+        from yuleosh.realtime import emit_pipeline_file_produced
+        emit_pipeline_file_produced(
+            run_id=str(getattr(session, "session_id", "") or session.name or ""),
+            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            file_path=_path.name,
+            category=_path.suffix.lstrip(".").lower() or "file",
+            size_bytes=_path.stat().st_size,
+        )
+    except Exception as _e:  # noqa: BLE001
+        log.debug("realtime file_produced swallowed: %s", _e)
+
+
 def _execute_step(
     session: "PipelineSession",
     step_idx: int,
@@ -938,10 +1025,11 @@ def _execute_step(
     """
     from yuleosh.pipeline.step_context import set_step_key as _set_tl_key
 
-    # ── 断点续跑: 前序步骤 (idx+1 < from_step) 标记 skipped, 不执行 ──
+    # ── Realtime emit: 断点续跑的 skipped 也要给前端一帧, 否则看板会缺位 ──
     if step_idx + 1 < from_step:
         session.steps[step_idx]["status"] = "skipped"
         session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
+        _emit_realtime_skipped(session, step_idx, step_key, step_name, agent)
         return "ok"
 
     # ── B1 缓存 (2026-08-12): 确定性步骤内容寻址缓存 ──
@@ -978,9 +1066,18 @@ def _execute_step(
                     session, step_idx, step_key, _restored
                 )
                 log.info("Step %s cache hit (%s)", step_key, _fp[:10])
+                # Realtime: 缓存命中也要给前端一帧, 否则对未跑到的 step 看板永远 unknown
+                _emit_realtime_stage_end(
+                    session, step_idx, step_key, step_name, agent,
+                    status="cached", started_at=None, finished_at=None,
+                )
+                _emit_realtime_file_produced(_restored, step_key, session)
                 return "ok"
 
+    _rt_started_at = datetime.now()
     session.start_step(step_idx)
+    # Realtime: 进入 step 立即推 stage_start, 前端阶段看板可以即时点亮
+    _emit_realtime_stage_start(session, step_idx, step_key, step_name, agent)
     # 方案 A (2026-08-07): expose the current step key so the
     # unified knowledge injection at _call_llm can match per-step
     # skills and produce step-specific context.
@@ -1015,6 +1112,13 @@ def _execute_step(
 
         session.complete_step(step_idx, str(output_path))
         session.set_artifact(step_key, str(output_path))
+        # Realtime: 成功完成推 stage_end + file_produced (给前端「文件即时显示」)
+        _rt_finished_at = datetime.now()
+        _emit_realtime_stage_end(
+            session, step_idx, step_key, step_name, agent,
+            status="completed", started_at=_rt_started_at, finished_at=_rt_finished_at,
+        )
+        _emit_realtime_file_produced(output_path, step_key, session)
         if _propagate_step_verdict(session, step_idx, step_key, output_path) == "block":
             print(f"  ⛔ Block gate failed: {step_key} — pipeline interrupted")
             print()
@@ -1028,6 +1132,12 @@ def _execute_step(
         log.error(f"Step {step_idx+1} [{agent}] {step_name} failed: {e}")
         log.debug(traceback.format_exc())
         session.fail_step(step_idx, str(e))
+        # Realtime: 失败也推 stage_end, 看板需要红点提示用户
+        _rt_failed_at = datetime.now()
+        _emit_realtime_stage_end(
+            session, step_idx, step_key, step_name, agent,
+            status="failed", started_at=_rt_started_at, finished_at=_rt_failed_at,
+        )
         print(f"  ❌ Step failed: {e}")
         print()
         return "failed"

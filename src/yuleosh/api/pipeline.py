@@ -273,6 +273,26 @@ def _publish_orchestrator_checkpoint(project_dir: str, run_id: str, name: str,
         )
         _engine = CheckpointEngine("agent-pipeline", project_dir, state_backend="sqlite")
         _engine.publish_state(run_id, "run", "full", _state.status, started_at, finished_at, _state)
+        # Realtime: 编排器 checkpoint 已落, 广播 (前端左栏徽标 + 看板数字联动)
+        try:
+            from yuleosh.realtime import emit_pipeline_checkpoint
+            _ok_pct = {"completed": 100.0, "failed": 100.0, "stopped": 100.0}.get(
+                _state.status, 0.0
+            )
+            emit_pipeline_checkpoint(
+                run_id=run_id, project_dir=project_dir,
+                status=_state.status, progress_pct=_ok_pct,
+            )
+            # run_done: 编排器一跑完推一帧, 给「阶段看板 + 证据包」驱动刷新
+            from yuleosh.realtime import emit_pipeline_run_done
+            emit_pipeline_run_done(
+                run_id=run_id, project_dir=project_dir,
+                status=_state.status,
+                summary={"step_count": len(_steps), "name": name},
+            )
+        except Exception as _re:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).debug("realtime emit failed: %s", _re)
     except Exception as _e:  # noqa: BLE001 — 看板回写失败绝不影响主流程
         import logging
         logging.getLogger(__name__).warning("orchestrator checkpoint publish failed: %s", _e)
@@ -604,6 +624,27 @@ def _run_engine_op(pipeline_name: str, project_dir: str, op: str,
         final = engine.status()
         final_status = (final or {}).get("status", "unknown")
         engine.finish_run(run_id, final_status, _dt.datetime.now().isoformat(), final)
+        # Realtime: 引擎路径 rerun/retry/resume 完成后广播 (前端左栏徽标 + 看板联动)
+        try:
+            from yuleosh.realtime import emit_pipeline_checkpoint, emit_pipeline_run_done
+            _steps_done = sum(
+                1 for _s in (final or {}).get("steps", [])
+                if _s.get("status") in ("completed", "passed", "skipped")
+            )
+            _steps_total = max(1, len((final or {}).get("steps", [])))
+            _pct = round(_steps_done / _steps_total * 100.0, 2)
+            emit_pipeline_checkpoint(
+                run_id=run_id, project_dir=project_dir,
+                status=final_status, progress_pct=_pct,
+            )
+            emit_pipeline_run_done(
+                run_id=run_id, project_dir=project_dir,
+                status=final_status,
+                summary={"op": op, "mode": mode, "pct": _pct},
+            )
+        except Exception as _re:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).debug("realtime emit failed: %s", _re)
     except Exception as e:  # noqa: BLE001 — 后台任务必须兜底，不能吞进程
         import logging
         logging.getLogger(__name__).warning(
