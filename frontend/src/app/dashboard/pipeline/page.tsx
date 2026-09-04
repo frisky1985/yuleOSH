@@ -599,7 +599,7 @@ export default function PipelinePage() {
       // OSH_HOME（= 仓库根），导致 spec-check 校验的是仓库根的 docs/spec.md
       // （工作文档，自带 60+ issues / 12 ERROR），第一步必然失败且误导。
       if (!selectedProject) {
-        setOpMsg("请先在上方「一键运行 Demo 项目」下拉中选择一个项目");
+        setOpMsg("请先在上方「选择项目」下拉中选择一个项目");
         return;
       }
       setOpRunning(true);
@@ -816,6 +816,27 @@ export default function PipelinePage() {
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="bg-[#0a0e17] border border-[#1e293b] rounded px-2 py-1.5 text-[#e2e8f0] text-xs max-w-[320px]"
+                aria-label="选择项目"
+              >
+                <option value="">选择项目…</option>
+                {runnableProjects.map((p) => (
+                  <option key={p.path} value={p.path}>{p.name}</option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                onClick={() => void runDemoProject()}
+                disabled={opRunning || !selectedProject}
+                className="bg-[#722ed1] hover:bg-[#8b5cf6] text-white"
+                title="用编排器（真实 LLM 全链）异步跑选中的项目，产物同步到下方「产出物总览」"
+              >
+                <Play className="w-3.5 h-3.5" />
+                一键运行
+              </Button>
               <Button
                 size="sm"
                 onClick={() => void runControl("run-selected")}
@@ -843,6 +864,9 @@ export default function PipelinePage() {
                 <Square className="w-3.5 h-3.5" />
                 停止
               </Button>
+              {runnableProjects.length === 0 && (
+                <span className="text-xs text-[#64748b]">未发现可运行项目（需含 docs/spec.md）</span>
+              )}
               {opMsg && (
                 <span
                   className={`text-xs ml-1 ${
@@ -857,45 +881,6 @@ export default function PipelinePage() {
                 >
                   {opMsg}
                 </span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ── 一键运行 Demo 项目（后端编排器，真实 LLM 全链） ── */}
-        <Card className="border-[#1e293b] bg-[#111827] mb-4">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
-              <Play className="w-4 h-4 text-[#722ed1]" />
-              一键运行 Demo 项目
-            </CardTitle>
-            <CardDescription className="text-xs text-[#64748b] mt-1">
-              选择一个含 docs/spec.md 的项目，后台编排器（真实 LLM 全链）异步运行，产物自动同步到下方「产出物总览」
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                className="bg-[#0a0e17] border border-[#1e293b] rounded px-2 py-1.5 text-[#e2e8f0] text-xs max-w-[320px]"
-              >
-                <option value="">选择项目…</option>
-                {runnableProjects.map((p) => (
-                  <option key={p.path} value={p.path}>{p.name}</option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                onClick={() => void runDemoProject()}
-                disabled={opRunning || !selectedProject}
-                className="bg-[#722ed1] hover:bg-[#8b5cf6] text-white"
-              >
-                <Play className="w-3.5 h-3.5" />
-                一键运行
-              </Button>
-              {runnableProjects.length === 0 && (
-                <span className="text-xs text-[#64748b]">未发现可运行项目（需含 docs/spec.md）</span>
               )}
             </div>
             {currentRun && (
