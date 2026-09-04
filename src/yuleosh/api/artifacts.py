@@ -57,6 +57,11 @@ _METADATA_FILES = {"session.json"}
 #   （中间步骤产物、测试 runner 报告、原始 LLM 输出、配置/清单文件）
 _ASPICE_DOCUMENT_EXTS = {"md", "html", "htm", "pdf", "docx", "rst", "adoc"}
 
+# 视图模式（?view=...） — 默认 = 全量历史（兼容旧前端），
+# 最新模式 = 按 project_dir 分组，每组取最新一次（去掉"每个 commit 列一行"的噪声）
+_VIEW_ALL = "all"
+_VIEW_LATEST_PER_PROJECT = "latest-per-project"
+
 
 class _PathTraversal(Exception):
     """Raised when a requested artifact path escapes its session directory."""
@@ -140,6 +145,23 @@ def _session_meta(session_dir: Path) -> dict:
     except Exception:
         log.debug("Unreadable session.json in %s — treated as absent", session_dir)
         return {}
+
+
+def _project_for_session(session_dir: Path) -> str:
+    """Derive project_dir from a session_dir (``<project>/.osh/sessions/<run_id>``).
+
+    Returns the project path string (resolved) or ``""`` when the layout is
+    unexpected (e.g. orphan sessions without a parent ``.osh``).  Sessions
+    under different projects then dedupe naturally under the same key.
+    """
+    try:
+        # session_dir = <project>/.osh/sessions/<run_id>
+        sessions_root = session_dir.parent      # <project>/.osh/sessions
+        osh_dir = sessions_root.parent          # <project>/.osh
+        proj = osh_dir.parent                   # <project>
+        return str(proj.resolve())
+    except Exception:
+        return ""
 
 
 def _iter_sessions() -> Iterator[tuple[str, Path, dict]]:
@@ -245,13 +267,24 @@ def handle_artifacts(method: str, path_tail: str, body: dict, query: dict,
 
 
 def _artifacts_list(query: dict) -> tuple[dict, int]:
-    """GET /api/v1/artifacts/list — artifact tree for every pipeline run.
+    """GET /api/v1/artifacts/list — artifact tree per pipeline run.
 
-    Each run entry: ``{run_id, name, status, files: [{path, name, size, ext}]}``
-    where ``name``/``status`` come from the session's session.json and
-    ``files`` are the stage output files (session.json excluded).
+    Query params:
+        - ``project``              filter sessions by session.json's project.
+        - ``view=latest-per-project``  group by ``project_dir`` and return
+          only the most-recently-updated session per project (drops the
+          "one row per commit" noise from long-running repos).
+
+    Each run entry: ``{run_id, name, status, project_dir, files}``
+    where ``name``/``status`` come from session.json, ``project_dir`` is
+    derived from the on-disk layout (``<project>/.osh/sessions/<run>``),
+    and ``files`` are the stage output documents (filtered to ASPICE
+    document exts — see ``_ASPICE_DOCUMENT_EXTS``).
     """
     project = _q(query, "project")
+    view = _q(query, "view") or _VIEW_ALL
+    if view not in (_VIEW_ALL, _VIEW_LATEST_PER_PROJECT):
+        return json_error(f"unknown view: {view}", 400)
 
     runs = []
     for run_id, session_dir, meta in _iter_sessions():
@@ -262,21 +295,54 @@ def _artifacts_list(query: dict) -> tuple[dict, int]:
             "run_id": run_id,
             "name": meta.get("name") or run_id,
             "status": meta.get("status", "unknown"),
+            "project_dir": _project_for_session(session_dir),
             "updated_at": meta.get("updated_at", ""),
             "files": files,
         })
-    # Newest first — prefer session updated_at, fall back to run_id.
+
+    # Newest first — prefer session updated_at, fall back to run_id
+    # (run_id is a 12-char hex, also lex-sortable when no updated_at).
     runs.sort(key=lambda r: (r["updated_at"], r["run_id"]), reverse=True)
+
+    if view == _VIEW_LATEST_PER_PROJECT:
+        # Group by project_dir (or "orphan" bucket when unresolvable);
+        # since runs is already newest-first, the first encountered per
+        # project is the most-recent.  De-dup preserves list ordering.
+        seen_projects: set[str] = set()
+        latest: list[dict] = []
+        for r in runs:
+            key = r.get("project_dir") or "__orphan__"
+            if key in seen_projects:
+                continue
+            seen_projects.add(key)
+            latest.append(r)
+        runs = latest
+        total_groups = len(seen_projects)
+    else:
+        total_groups = len(runs)
+
     for r in runs:
         r.pop("updated_at", None)
 
     if not runs:
-        note = f"未找到流水线会话产出物 (.osh/sessions 无数据)"
+        note = "未找到流水线会话产出物 (.osh/sessions 无数据)"
         if project:
             note = f"未找到项目 {project} 的会话产出物"
-        return json_ok({"runs": [], "count": 0, "note": note})
+        return json_ok({
+            "runs": [],
+            "count": 0,
+            "note": note,
+            "view": view,
+            "total_groups": 0,
+        })
 
-    return json_ok({"runs": runs, "count": len(runs), "note": None})
+    return json_ok({
+        "runs": runs,
+        "count": len(runs),
+        "note": None,
+        "view": view,
+        "total_groups": total_groups if view == _VIEW_LATEST_PER_PROJECT else len(runs),
+    })
 
 
 def _artifacts_preview(query: dict) -> tuple[dict, int]:

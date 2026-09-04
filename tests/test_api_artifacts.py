@@ -182,6 +182,127 @@ class TestList:
         payload, _ = _req("GET", "list", query={"project": ["beta"]})
         assert [r["run_id"] for r in payload["data"]["runs"]] == ["rB"]
 
+    def test_default_view_is_all(self, _isolate):
+        """GIVEN multiple sessions under one root WHEN no view THEN returns all."""
+        _session(_isolate, "r1")
+        _session(_isolate, "r2")
+        _write(_isolate, ".osh/sessions/r1/prd.md", "x")
+        _write(_isolate, ".osh/sessions/r2/prd.md", "y")
+        payload, _ = _req("GET", "list")
+        data = payload["data"]
+        assert data["view"] == "all"
+        assert data["count"] == 2
+        assert data["total_groups"] == 2  # all == count in default view
+
+    def test_view_explicit_all(self, _isolate):
+        """GIVEN ?view=all WHEN list THEN same as default (compatibility)."""
+        _session(_isolate, "r1")
+        _session(_isolate, "r2")
+        payload, _ = _req("GET", "list", query={"view": "all"})
+        data = payload["data"]
+        assert data["count"] == 2
+        assert data["view"] == "all"
+
+    def test_view_invalid(self):
+        """GIVEN unknown view WHEN list THEN 400 (no silent fallback)."""
+        payload, status = _req("GET", "list", query={"view": "bogus"})
+        assert status == 400
+        assert payload["ok"] is False
+        assert "view" in payload["error"].lower()
+
+    def test_session_includes_project_dir(self, _isolate):
+        """GIVEN session under tmp_path/.osh/sessions/r1 WHEN list THEN project_dir = tmp_path."""
+        _session(_isolate, "r1")
+        payload, _ = _req("GET", "list")
+        run = payload["data"]["runs"][0]
+        assert run["project_dir"] == str(_isolate.resolve())
+
+
+class TestViewLatestPerProject:
+    """?view=latest-per-project — group by project_dir, keep only newest per group."""
+
+    def test_groups_by_disk_paths(self, _isolate):
+        """GIVEN sessions in two distinct <proj>/.osh/sessions/ trees WHEN
+        ?view=latest-per-project THEN groups by derived project_dir and
+        keeps the newest updated_at run per project.
+
+        The fixture puts everything under tmp_path; to simulate two projects
+        we create a sub-tree ``sub/<name>/.osh/sessions/<run>`` for project
+        "beta" while project "alpha" stays at the root.
+        """
+        # Project alpha — 3 sessions, rA3 newest
+        _session(_isolate, "rA1", project="alpha",
+                 updated_at="2026-01-01T00:00:00")
+        _session(_isolate, "rA3", project="alpha",
+                 updated_at="2026-03-01T00:00:00")
+        _session(_isolate, "rA2", project="alpha",
+                 updated_at="2026-02-01T00:00:00")
+        # Project beta — sessions under sub/beta-app/.osh/sessions/
+        _write(_isolate, "sub/beta-app/.osh/sessions/rB1/session.json",
+               {"name": "beta-rB1", "status": "completed",
+                "project": "beta", "updated_at": "2026-01-15T00:00:00"})
+        _write(_isolate, "sub/beta-app/.osh/sessions/rB3/session.json",
+               {"name": "beta-rB3", "status": "completed",
+                "project": "beta", "updated_at": "2026-04-01T00:00:00"})
+        _write(_isolate, "sub/beta-app/.osh/sessions/rB2/session.json",
+               {"name": "beta-rB2", "status": "completed",
+                "project": "beta", "updated_at": "2026-02-15T00:00:00"})
+        _write(_isolate, "sub/beta-app/.osh/sessions/rB1/spec.md", "x")
+        _write(_isolate, "sub/beta-app/.osh/sessions/rB3/spec.md", "x")
+        _write(_isolate, "sub/beta-app/.osh/sessions/rB2/spec.md", "x")
+
+        payload, _ = _req("GET", "list", query={"view": "latest-per-project"})
+        data = payload["data"]
+        assert data["view"] == "latest-per-project"
+        # 2 distinct project_dirs → 2 runs (newest per project)
+        assert data["count"] == 2
+        assert data["total_groups"] == 2
+        run_ids = {r["run_id"] for r in data["runs"]}
+        # rA3 (alpha, 2026-03-01) and rB3 (beta, 2026-04-01) are newest per group
+        assert run_ids == {"rA3", "rB3"}
+        # project_dir is set to the resolved on-disk path
+        project_dirs = {r["project_dir"] for r in data["runs"]}
+        assert len(project_dirs) == 2
+        assert str(_isolate.resolve()) in project_dirs
+        assert str((_isolate / "sub" / "beta-app").resolve()) in project_dirs
+
+    def test_groups_by_disk_layout_when_meta_empty(self, _isolate):
+        """GIVEN sessions WITHOUT session.json (only on-disk project layout) WHEN
+        ?view=latest-per-project THEN groups by derived project_dir from path.
+        """
+        # No session.json — fall back to on-disk project_dir from <proj>/.osh/sessions/<run>
+        _write(_isolate, ".osh/sessions/orphan1/spec.md", "x")
+        _write(_isolate, ".osh/sessions/orphan2/spec.md", "y")
+        payload, _ = _req("GET", "list", query={"view": "latest-per-project"})
+        data = payload["data"]
+        # Both sessions under the same root → 1 group, 1 newest
+        assert data["count"] == 1
+        assert data["total_groups"] == 1
+        # Newest first by (updated_at, run_id); run_ids are "orphan2", "orphan1"
+        assert data["runs"][0]["run_id"] == "orphan2"
+        assert data["runs"][0]["project_dir"] == str(_isolate.resolve())
+
+    def test_empty_returns_zero_groups(self, _isolate):
+        """GIVEN no sessions WHEN ?view=latest-per-project THEN count=0 + note."""
+        payload, _ = _req("GET", "list", query={"view": "latest-per-project"})
+        data = payload["data"]
+        assert data["runs"] == [] and data["count"] == 0
+        assert data["total_groups"] == 0
+        assert data["view"] == "latest-per-project"
+        assert data["note"] is not None
+
+    def test_each_group_has_documents_filtered(self, _isolate):
+        """GIVEN a session with .json + .md WHEN latest-per-project THEN run.files
+        only contains .md (existing ASPICE whitelist still active).
+        """
+        _session(_isolate, "r1", project="alpha")
+        _write(_isolate, ".osh/sessions/r1/prd.md", "# P\n")
+        _write(_isolate, ".osh/sessions/r1/prd-review.json", {"ok": True})
+        payload, _ = _req("GET", "list", query={"view": "latest-per-project"})
+        run = payload["data"]["runs"][0]
+        assert {f["path"] for f in run["files"]} == {"prd.md"}
+        assert "prd-review.json" not in {f["path"] for f in run["files"]}
+
 
 # ── preview ────────────────────────────────────────────────────────────
 
