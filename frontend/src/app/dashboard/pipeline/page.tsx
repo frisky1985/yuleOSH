@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api-fetch";
 import { marked } from "marked";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRealtimeFeed, type RealtimeFrame } from "@/lib/use-realtime-feed";
 import {
   AlertCircle,
   BookMarked,
@@ -792,6 +793,28 @@ export default function PipelinePage() {
   useEffect(() => {
     return () => stopRunPoll();
   }, [stopRunPoll]);
+
+  // ── Realtime feed: pipeline.* topic 触发增量刷新 + 新文件即时落 ─────────
+  // 后端 /api/v1/events/stream 每帧推送 stage_start / stage_end /
+  // file_produced / run_done / checkpoint。pipeline.run_done 直接刷
+  // artifactlist; file_produced 立刻重新拉 list (单点过滤, 有新文件就出现)。
+  const handleRealtime = useCallback((frame: RealtimeFrame) => {
+    if (frame.topic !== "pipeline") return;
+    const kind = (frame.payload as Record<string, unknown>).kind as string;
+    if (kind === "run_done" || kind === "checkpoint") {
+      // 一键运行/编排器完成 → 重拉历史 + 产出物列表
+      void loadRuns();
+      void loadEvidence();
+      void loadRunArtifacts();
+    } else if (kind === "file_produced") {
+      // 单文件产出 → 重拉列表 (后端 _artifact_files 单点过滤, 增量生效)
+      void loadRunArtifacts();
+    } else if (kind === "stage_end") {
+      // 阶段结束触发一次轻量刷新, 让左侧「运行控制」步骤进度实时更新
+      void loadRunArtifacts();
+    }
+  }, [loadRuns, loadEvidence, loadRunArtifacts]);
+  useRealtimeFeed({ topics: ["pipeline"], onEvent: handleRealtime });
 
   const isEmpty = !loading && pipelines.length === 0;
 

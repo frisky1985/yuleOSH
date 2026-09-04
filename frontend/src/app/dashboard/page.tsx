@@ -108,6 +108,7 @@ import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board"
 import { LoopEngineering } from "@/components/dashboard/loop-engineering";
 import { YuleASRStatus } from "@/components/dashboard/yuleasr-status";
 import { PortfolioCompliance } from "@/components/dashboard/portfolio-compliance";
+import { useRealtimeStore } from "@/lib/realtime-store";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -382,6 +383,39 @@ function UsageStat({
 // ─── Mini Coverage Bar ───────────────────────────────────────────────────────
 
 
+
+
+/**
+ * PipelineStageBoardLive —— 把「当前正在跑的 step」从 realtime store 取出来
+ * 喂给 PipelineStageBoard。让 9 阶段看板上方实时显示当前 step 标题，而不是
+ * 单纯改色。前端看板变成「知道现在跑哪一步」。
+ */
+function PipelineStageBoardLive() {
+  const realtime = useRealtimeStore();
+  const runningRuns = Object.values(realtime.activeRuns).filter(
+    (r) => r.status === "running",
+  );
+  // 取 step_index 最大的（最新推进的）
+  const active = runningRuns.sort((a, b) =>
+    (b.current_stage_index ?? -1) - (a.current_stage_index ?? -1),
+  )[0];
+  return (
+    <PipelineStageBoard
+      totalSteps={24}
+      activeStep={
+        active
+          ? {
+              step_index: active.current_stage_index ?? -1,
+              step_key: active.current_stage_key || "",
+              step_title: active.current_stage_title || "",
+              agent: active.agent || "",
+              run_id: active.run_id,
+            }
+          : null
+      }
+    />
+  );
+}
 
 
 export default function DashboardPage() {
@@ -1383,7 +1417,7 @@ export default function DashboardPage() {
 
             {/* Pipeline Stage Board — recreated from archived dashboard-v5.html Phase/Stage kanban */}
             <div className="mt-6">
-            <PipelineStageBoard />
+            <PipelineStageBoardLive />
             </div>
 
             {/* 项⑪：真实 LLM 链路状态诊断（配置检查 + 在线探测，不泄露 key） */}

@@ -11,6 +11,7 @@ import { AccountInfoDialog } from "@/components/account/account-info-dialog";
 import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
 import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
 import { DeleteAccountDialog } from "@/components/account/delete-account-dialog";
+import { RealtimeProvider } from "@/lib/realtime-store";
 
 interface DashboardShellContextValue {
   activeTab: DashboardTab;
@@ -138,14 +139,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   if (mounted) {
     shell = engineer ? (
-      <>
+      <RealtimeProvider topics={["pipeline", "evidence", "gap", "coverage", "misra"]}>
         <EngineerSidebar />
         {/* pt-14 让出窄屏顶栏（<768px 侧栏隐藏、改由顶栏承载导航），
             md 及以上由侧栏占位 md:pl-60，无需顶部内边距。 */}
         <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0] pt-14 md:pt-0 md:pl-60">
           {children}
         </div>
-      </>
+      </RealtimeProvider>
     ) : (
       <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
         <TopNav

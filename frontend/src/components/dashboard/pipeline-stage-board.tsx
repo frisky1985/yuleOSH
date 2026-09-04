@@ -93,7 +93,24 @@ const PHASES: PipelinePhase[] = [
   },
 ];
 
-export function PipelineStageBoard() {
+export interface PipelineStageBoardProps {
+  /** 来自 RealtimeStore.activeRuns 中第一个正在运行的 run，用于实时高亮当前 step。 */
+  activeStep?: {
+    /** 24 步中的 step index (0..23) */
+    step_index: number;
+    step_key: string;
+    step_title: string;
+    agent: string;
+    run_id: string;
+  } | null;
+  /** 24 步总数（用于进度展示） */
+  totalSteps?: number;
+}
+
+export function PipelineStageBoard({ activeStep, totalSteps }: PipelineStageBoardProps = {}) {
+  // 计算已跑多少步（粗略：activeStep.step_index 之前的算 done; 之后的 pending）
+  const completedSteps = activeStep?.step_index ?? -1; // -1 表示还没开始
+  const total = totalSteps ?? 24;
   return (
     <div className="rounded-xl border border-[#1e293b] bg-[#111827] p-4 sm:p-5">
       <div className="flex items-center justify-between mb-4">
@@ -104,6 +121,39 @@ export function PipelineStageBoard() {
         <span className="text-[10px] text-[#64748b] hidden sm:inline">
           ASPICE SWE 自动化流水线 · 9 阶段
         </span>
+      </div>
+
+      {/* 当前活跃 step 横幅 (实时) —— 没 run 时显示空状态 */}
+      <div className="mb-4 rounded-lg border border-[#1e293b] bg-[#0a0e17]/60 px-3 py-2.5">
+        {activeStep ? (
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-[#722ed1]" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wide text-[#64748b]">
+                当前正在跑
+              </div>
+              <div className="flex items-baseline gap-2 truncate">
+                <span className="text-xs text-[#722ed1] font-mono">
+                  #{activeStep.step_index + 1}
+                </span>
+                <span className="text-sm font-medium text-[#e2e8f0] truncate">
+                  {activeStep.step_title}
+                </span>
+                <span className="text-[10px] text-[#64748b]">· {activeStep.agent}</span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-[10px] text-[#64748b]">进度</div>
+              <div className="text-xs font-mono text-[#94a3b8]">
+                {Math.min(total, Math.max(0, completedSteps + 1))}/{total}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-[#64748b]">
+            当前没有活跃运行（启动「一键运行」后会在这里实时显示当前 step）
+          </div>
+        )}
       </div>
 
       <div className="space-y-5">

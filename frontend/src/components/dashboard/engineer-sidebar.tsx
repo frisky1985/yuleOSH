@@ -20,6 +20,31 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { resetSessionCache, useSessionRole } from "@/lib/use-session-role";
+import { useRealtimeStore } from "@/lib/realtime-store";
+
+// 「导航项 → 后端 topic」映射: 用于根据 active run 的类型推断侧栏徽标
+// 当前阶段只挂 pipeline 徽标; 其它 topic 在阶段 3 接通各页面后挂上。
+function getNavBadge(
+  href: string,
+  state: ReturnType<typeof useRealtimeStore>,
+): { count: number; hint?: string } | null {
+  if (href === "/dashboard/pipeline") {
+    const runs = Object.values(state.activeRuns);
+    if (runs.length === 0) return null;
+    const running = runs.filter((r) => r.status === "running");
+    if (running.length === 0) return null;
+    const first = running[0];
+    return {
+      count: running.length,
+      hint: first.current_stage_title || first.current_stage_key,
+    };
+  }
+  if (href === "/dashboard/evidence") {
+    if (state.newEvidenceCount === 0) return null;
+    return { count: state.newEvidenceCount, hint: "条新证据" };
+  }
+  return null;
+}
 
 // 工程视角侧栏：按 V-model 开发主线分组排序（需求→测试设计→执行→追溯→证据），
 // 基础设施（流水线/设备）与可观测性（日志）下沉为辅助区。
@@ -51,6 +76,7 @@ export function EngineerSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { session } = useSessionRole();
+  const realtimeState = useRealtimeStore();
 
   // 桌面侧栏在 <768px 隐藏（hidden md:flex），窄屏改由「顶栏 + 抽屉」承载
   // 导航与登出，否则工程师在窄屏下既无导航也无登出入口。
@@ -85,6 +111,7 @@ export function EngineerSidebar() {
         const active = isActive(item.href, item.exact);
         const Icon = item.icon;
         const showSection = item.section && (idx === 0 || NAV[idx - 1].section !== item.section);
+        const badge = getNavBadge(item.href, realtimeState);
         return (
           <Fragment key={item.href}>
             {showSection && (
@@ -98,14 +125,22 @@ export function EngineerSidebar() {
             <Link
               href={withView(item.href)}
               className={
-                "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all " +
+                "relative flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all " +
                 (active
                   ? "border-[#722ed1]/30 bg-[#722ed1]/15 text-[#722ed1]"
                   : "border-transparent text-[#94a3b8] hover:bg-[#1e293b] hover:text-white")
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <span className="flex-1 truncate">{item.label}</span>
+              {badge && (
+                <span
+                  className="ml-auto flex items-center gap-1 rounded-full bg-[#722ed1]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#c4b5fd] animate-pulse"
+                  title={badge.hint ? `当前: ${badge.hint}` : undefined}
+                >
+                  {badge.count}
+                </span>
+              )}
             </Link>
           </Fragment>
         );
