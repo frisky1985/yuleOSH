@@ -819,6 +819,28 @@ class CheckpointEngine:
         finally:
             conn.close()
 
+    def publish_state(self, run_id: str, op: str, mode: str | None,
+                      status: str, started_at: str, finished_at: str,
+                      state: "CheckpointState") -> None:
+        """把外部流水线（如编排器一键跑）的最终状态发布为 checkpoint 运行记录。
+
+        打通「运行过程」看板：编排器路径天然不写 CheckpointEngine 状态，
+        看板读不到 24 步进度。本方法把 orchestrator 的 session.steps 映射成
+        CheckpointState 后同时写入两张表，与 _run_engine_op 写入完全同源：
+          - checkpoint_state（最新快照，看板 status() 读取）
+          - pipeline_runs（历史记录，看板 checkpoint/runs 读取）
+        """
+        self._state = state
+        self._save_state()  # 写 checkpoint_state（最新）
+        try:
+            self.record_run(run_id, op, mode, None, status, started_at)
+        except Exception:  # noqa: BLE001 — 历史写入失败不阻塞
+            pass
+        try:
+            self.finish_run(run_id, status, finished_at, state.to_dict())
+        except Exception:  # noqa: BLE001
+            pass
+
     def list_runs(self, limit: int = 50) -> list[dict]:
         """Return recent runs (newest first), without the heavy snapshot field."""
         conn = self._sqlite_conn()

@@ -212,6 +212,66 @@ _RUN_JOBS: dict[str, dict] = {}
 _RUN_JOBS_LOCK = threading.Lock()
 
 
+def _publish_orchestrator_checkpoint(project_dir: str, run_id: str, name: str,
+                                     status: str, started_at: str, finished_at: str,
+                                     session) -> None:
+    """把编排器一次运行的结果回写为 CheckpointEngine 看板状态（打通两条链路）。
+
+    编排器路径天然不写 checkpoint_state 表，看板读不到 24 步进度。本函数把
+    orchestrator 返回的 PipelineSession.steps 映射成 CheckpointState，经
+    CheckpointEngine.publish_state 同时写入 checkpoint_state（最新）+ pipeline_runs
+    （历史），与 _run_engine_op（rerun/retry/resume）写入完全同源。
+
+    session: orchestrator 返回的 PipelineSession（含 steps）；为 None（如缺失 key
+        触发 SystemExit）时退化为全 pending/失败的最小快照，仍保证看板有回显。
+    """
+    try:
+        from yuleosh.engine.checkpoint import (
+            CheckpointEngine, CheckpointState, StepRecord, StepStatus,
+        )
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+
+        _status_by_key: dict[str, str] = {}
+        if session is not None:
+            for _s in (getattr(session, "steps", None) or []):
+                _k = _s.get("name") or _s.get("step_key")
+                if _k:
+                    _status_by_key[_k] = _s.get("status", "pending")
+
+        _ok_final = (status == "completed")
+        _steps: list[StepRecord] = []
+        for _key, _agent, _sname, _handler in PIPELINE_STEPS:
+            _raw = _status_by_key.get(_key)
+            if _raw == "completed":
+                _enum = StepStatus.PASSED
+            elif _raw == "failed":
+                _enum = StepStatus.FAILED
+            elif _raw == "skipped":
+                _enum = StepStatus.SKIPPED
+            elif _raw == "running":
+                _enum = StepStatus.RUNNING
+            else:
+                # 编排器未跑到该步（block/异常中断）→ 按整体状态退化
+                _enum = StepStatus.PASSED if _ok_final else StepStatus.PENDING
+            _steps.append(StepRecord(
+                step_id=_key, name=_sname, agent=_agent, status=_enum,
+                completed_at=finished_at,
+            ))
+        _state = CheckpointState(
+            pipeline_name="agent-pipeline",
+            profile="default",
+            steps=_steps,
+            created_at=started_at,
+            updated_at=finished_at,
+            status=status if status in ("completed", "failed", "stopped") else "completed",
+        )
+        _engine = CheckpointEngine("agent-pipeline", project_dir, state_backend="sqlite")
+        _engine.publish_state(run_id, "run", "full", _state.status, started_at, finished_at, _state)
+    except Exception as _e:  # noqa: BLE001 — 看板回写失败绝不影响主流程
+        import logging
+        logging.getLogger(__name__).warning("orchestrator checkpoint publish failed: %s", _e)
+
+
 def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: str) -> None:
     """后台线程：以 OSH_HOME=project_dir 运行编排器（聚焦源码 + 产物落在项目目录）。"""
     import os as _os
@@ -224,8 +284,9 @@ def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: st
         from yuleosh.pipeline.orchestrator import run_pipeline
         rec["status"] = "running"
         rec["started_at"] = datetime.now().isoformat()
+        _session = None
         try:
-            run_pipeline(spec_abs, name=name)
+            _session = run_pipeline(spec_abs, name=name)
             rec["status"] = "completed"
         except SystemExit as _e:  # run_pipeline 缺 key 会 sys.exit(1)
             rec["status"] = "failed"
@@ -239,6 +300,13 @@ def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: st
             else:
                 _os.environ["OSH_HOME"] = prev_home
             rec["finished_at"] = datetime.now().isoformat()
+        # 打通「运行过程」看板：把编排器本次运行结果回写为 checkpoint 状态，
+        # 否则一键跑只在 .osh/sessions 落产物、看板读不到 24 步进度。
+        # 写到看板读取的位置（prev_home = 看板侧 OSH_HOME = repo 根）。
+        _publish_orchestrator_checkpoint(
+            prev_home or project_dir, run_id, name,
+            rec["status"], rec["started_at"], rec["finished_at"], _session,
+        )
     except Exception as _e:  # noqa: BLE001
         rec["status"] = "failed"
         rec["error"] = str(_e)[:500]
