@@ -18,7 +18,7 @@ from __future__ import annotations
 from . import json_ok, json_error
 from ._errors import internal_error
 from .middleware import require_auth
-from yuleosh.secrets import (
+from yuleosh.secret_vault import (
     set_provider_secret,
     list_provider_secrets,
     delete_provider_secret,

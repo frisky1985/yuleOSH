@@ -30,7 +30,7 @@ from typing import Optional
 
 from cryptography.fernet import Fernet
 
-log = logging.getLogger("yuleosh.secrets")
+log = logging.getLogger("yuleosh.secret_vault")
 
 # Provider -> ordered list of env-var names that may carry its API key.
 # Mirrors llm/provider_fallback.PROVIDER_KEY_ENV.

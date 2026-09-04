@@ -29,7 +29,7 @@ import os
 import time
 import urllib.error
 
-from yuleosh.secrets import resolve_provider_api_key
+from yuleosh.secret_vault import resolve_provider_api_key
 import urllib.request
 from typing import Any
 

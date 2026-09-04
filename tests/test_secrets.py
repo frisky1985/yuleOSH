@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from yuleosh import secrets as vault
+from yuleosh import secret_vault as vault
 from yuleosh.store import Store
 
 

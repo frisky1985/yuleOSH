@@ -29,7 +29,7 @@ import json
 import logging
 import os
 
-from yuleosh.secrets import resolve_provider_api_key
+from yuleosh.secret_vault import resolve_provider_api_key
 import time
 import urllib.error
 import urllib.request
