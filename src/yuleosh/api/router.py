@@ -57,6 +57,10 @@ _LAZY_HANDLERS = {
     # Realtime event subscription (SSE, 2026-09-04): ``GET /api/v1/events/stream``
     # streams process-local realtime events (pipeline / evidence / gap / etc.).
     "events": ("yuleosh.api.events", "handle_events"),
+    # Per-project aggregate counters (2026-09-05, stage-4): powers the
+    # ActiveProjectsCard numbers (missing_requirements / pending_tests /
+    # evidence_count). Delegates to requirements._gaps + tests._tests_cases.
+    "projects-stats": ("yuleosh.api.projects_stats", "handle_projects_stats"),
 }
 
 logger = logging.getLogger("yuleosh.api.router")

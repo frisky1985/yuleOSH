@@ -38,6 +38,9 @@ class TestRouter:
             "org", "me", "matrix", "secrets",
             # Realtime event subscription (SSE, 2026-09-04)
             "events",
+            # Per-project aggregate counters (2026-09-05, stage-4):
+            # powers ActiveProjectsCard numbers.
+            "projects-stats",
         }
         all_resources = set(ROUTES.keys()) | set(_LAZY_HANDLERS.keys())
         assert all_resources == expected
