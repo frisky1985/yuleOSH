@@ -23,11 +23,12 @@ import { resetSessionCache, useSessionRole } from "@/lib/use-session-role";
 import { useRealtimeStore } from "@/lib/realtime-store";
 
 // 「导航项 → 后端 topic」映射: 用于根据 active run 的类型推断侧栏徽标
-// 当前阶段只挂 pipeline 徽标; 其它 topic 在阶段 3 接通各页面后挂上。
+// 当前阶段 5 接入 statsByProject 全局聚合: requirements/tests 项按所有
+// 项目求和挂徽标, 数字随前端 store 实时刷新。
 function getNavBadge(
   href: string,
   state: ReturnType<typeof useRealtimeStore>,
-): { count: number; hint?: string } | null {
+): { count: number; hint?: string; tone?: "warning" | "info" | "neutral" } | null {
   if (href === "/dashboard/pipeline") {
     const runs = Object.values(state.activeRuns);
     if (runs.length === 0) return null;
@@ -37,11 +38,30 @@ function getNavBadge(
     return {
       count: running.length,
       hint: first.current_stage_title || first.current_stage_key,
+      tone: "neutral",
     };
   }
   if (href === "/dashboard/evidence") {
     if (state.newEvidenceCount === 0) return null;
-    return { count: state.newEvidenceCount, hint: "条新证据" };
+    return { count: state.newEvidenceCount, hint: "条新证据", tone: "neutral" };
+  }
+  // 聚合统计徽标 (Stage-5): 跨所有 project_dir 求和, 数字来源是
+  // realtime-store 共享缓存 (Provider 内置 fetcher 拉一次, 全局可见)。
+  if (href === "/dashboard/requirements") {
+    const total = Object.values(state.statsByProject).reduce(
+      (s, p) => s + (p.missing_requirements || 0),
+      0,
+    );
+    if (total === 0) return null;
+    return { count: total, hint: "条缺需求", tone: "warning" };
+  }
+  if (href === "/dashboard/tests") {
+    const total = Object.values(state.statsByProject).reduce(
+      (s, p) => s + (p.pending_tests || 0),
+      0,
+    );
+    if (total === 0) return null;
+    return { count: total, hint: "条待测试", tone: "info" };
   }
   return null;
 }
@@ -135,8 +155,15 @@ export function EngineerSidebar() {
               <span className="flex-1 truncate">{item.label}</span>
               {badge && (
                 <span
-                  className="ml-auto flex items-center gap-1 rounded-full bg-[#722ed1]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#c4b5fd] animate-pulse"
-                  title={badge.hint ? `当前: ${badge.hint}` : undefined}
+                  className={
+                    "ml-auto flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold animate-pulse " +
+                    (badge.tone === "warning"
+                      ? "bg-[#ff4d4f]/20 text-[#ff7875]"
+                      : badge.tone === "info"
+                      ? "bg-[#1677ff]/20 text-[#69b1ff]"
+                      : "bg-[#722ed1]/20 text-[#c4b5fd]")
+                  }
+                  title={badge.hint ? `${badge.count} ${badge.hint}` : undefined}
                 >
                   {badge.count}
                 </span>
