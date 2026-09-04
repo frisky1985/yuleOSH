@@ -121,8 +121,14 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
 
     if path_tail == "checkpoint" and method == "GET":
         # B3-看板 (2026-08-08): CheckpointEngine 步骤级实时状态（看板数据源）。
+        # 必须用 _request_path 保留 query：handler 通过
+        # urlparse(path).query 读 project_dir / pipeline / run_id。此前这里
+        # 用 f"/api/v1/pipeline/{path_tail}" 硬拼，query 被整体丢弃 →
+        # project_dir 恒为 None → 回退 OSH_HOME 根目录，于是看板读到的是
+        # 仓库根的 checkpoint-state.db（陈旧），而不是引擎实际写入的
+        # <project_dir>/.yuleosh/checkpoint-state.db，表现为「状态不刷新」。
         from yuleosh.ui.routes.pipeline_routes import handle_pipeline_checkpoint
-        full_path = f"/api/v1/pipeline/{path_tail}"
+        full_path = _request_path(kwargs, path_tail)
         result = handle_pipeline_checkpoint(kwargs.get("handler"), full_path)
         return (result, 200) if isinstance(result, dict) else result
 
@@ -166,7 +172,7 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
     if path_tail == "list" and method == "GET":
         # B5-看板 (2026-08-10): 列出可用 pipeline（选择器数据源）。
         from yuleosh.ui.routes.pipeline_routes import handle_pipeline_list
-        full_path = f"/api/v1/pipeline/{path_tail}"
+        full_path = _request_path(kwargs, path_tail)
         handler = kwargs.get("handler")
         if handler is None:
             return json_error("handler required", 500)
@@ -175,7 +181,7 @@ def handle_pipeline(method: str, path_tail: str, body: dict, query: dict, **kwar
 
     if path_tail.startswith("status/") and method == "GET":
         from yuleosh.ui.routes.pipeline_routes import handle_pipeline_status
-        full_path = f"/api/v1/pipeline/{path_tail}"
+        full_path = _request_path(kwargs, path_tail)
         result = handle_pipeline_status(kwargs.get("handler"), full_path)
         return (result, 200) if isinstance(result, dict) else result
 
