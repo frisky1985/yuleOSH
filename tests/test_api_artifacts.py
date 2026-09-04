@@ -110,7 +110,9 @@ class TestList:
         assert data["note"] and "无" in data["note"]
 
     def test_session_with_artifacts(self, _isolate):
-        """GIVEN session with prd.md + prd-review.json WHEN list THEN tree."""
+        """GIVEN session with prd.md + prd-review.json + spec.md WHEN list THEN
+        only ASPICE 文档证据 listed (.md), .json 中间产物 / 配置文件被过滤。
+        """
         sdir = _session(_isolate, "run1")
         _write(_isolate, f".osh/sessions/run1/prd.md", "# PRD\n")
         _write(_isolate, f".osh/sessions/run1/prd-review.json", {"ok": True})
@@ -123,15 +125,15 @@ class TestList:
         assert run["name"] == "PRD 生成"
         assert run["status"] == "completed"
         paths = {f["path"] for f in run["files"]}
-        assert paths == {"prd.md", "prd-review.json", "spec.md"}
-        # session.json is metadata — never listed as an artifact
+        # ASPICE 文档 (.md) 进入列表; .json 中间产物被过滤。
+        assert paths == {"prd.md", "spec.md"}
+        # session.json 与 *.json 中间产物均不出现在产出物总览。
         assert "session.json" not in paths
+        assert "prd-review.json" not in paths
         md = next(f for f in run["files"] if f["path"] == "prd.md")
         assert md["name"] == "prd.md"
         assert md["ext"] == "md"
         assert md["size"] == len("# PRD\n")
-        j = next(f for f in run["files"] if f["path"] == "prd-review.json")
-        assert j["ext"] == "json"
         assert data["note"] is None
 
     def test_session_without_session_json_fallback(self, _isolate):

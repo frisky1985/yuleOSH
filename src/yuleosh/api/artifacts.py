@@ -50,6 +50,13 @@ PREVIEW_EXTS = {
 # Files that are metadata, not artifacts (never listed as stage output).
 _METADATA_FILES = {"session.json"}
 
+# 产出物总览只展示 ASPICE 文档证据（用户要求：不要列出每个 commit 的测试、
+# 不要配置文件，只要 ASPICE 流程产出的文档）。
+# - 保留：md / html / pdf / docx / rst / adoc（正式的文档载体）
+# - 过滤：json / xml / yaml / toml / lock / csv / txt / log / 其它
+#   （中间步骤产物、测试 runner 报告、原始 LLM 输出、配置/清单文件）
+_ASPICE_DOCUMENT_EXTS = {"md", "html", "htm", "pdf", "docx", "rst", "adoc"}
+
 
 class _PathTraversal(Exception):
     """Raised when a requested artifact path escapes its session directory."""
@@ -167,10 +174,14 @@ def _session_matches_project(meta: dict, project: str) -> bool:
 
 
 def _artifact_files(session_dir: Path) -> list[dict]:
-    """List artifact files in a session dir (metadata files excluded).
+    """List artifact files in a session dir (metadata + non-document files excluded).
 
     Returns ``[{path, name, size, ext}]`` with ``path`` relative to the
     session directory, sorted for stable output.
+
+    只保留 ASPICE 流程文档证据（见 ``_ASPICE_DOCUMENT_EXTS``）：.json / .xml /
+    .yaml / .toml / .lock / .csv / .txt / .log 等中间产物与配置文件不在
+    产出物总览展示。session.json 仍走 ``_METADATA_FILES`` 排除。
     """
     files = []
     for p in sorted(session_dir.rglob("*")):
@@ -180,6 +191,8 @@ def _artifact_files(session_dir: Path) -> list[dict]:
         if rel.as_posix() in _METADATA_FILES:
             continue
         ext = p.suffix.lstrip(".").lower()
+        if ext not in _ASPICE_DOCUMENT_EXTS:
+            continue
         files.append({
             "path": rel.as_posix(),
             "name": p.name,
