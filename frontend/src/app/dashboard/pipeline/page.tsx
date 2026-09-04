@@ -103,12 +103,15 @@ interface ArtifactRun {
   run_id: string;
   name: string;
   status: string;
+  project_dir?: string;
   files: ArtifactFile[];
 }
 
 interface ArtifactsListResponse {
   runs: ArtifactRun[];
   count: number;
+  total_groups?: number;
+  view?: "all" | "latest-per-project";
   note?: string | null;
 }
 
@@ -291,6 +294,8 @@ export default function PipelinePage() {
   const [currentRun, setCurrentRun] = useState<{ run_id: string; name: string; status: string; session_dir: string } | null>(null);
   const [runArtifacts, setRunArtifacts] = useState<ArtifactsListResponse | null>(null);
   const [runArtifactsLoading, setRunArtifactsLoading] = useState(false);
+  // 视图模式：默认「按项目最新一次」, 取消勾选切换到「全部历史」(向后兼容)
+  const [showAllRuns, setShowAllRuns] = useState(false);
   const runPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasRunRef = useRef(false); // 用户曾经点过运行/续跑/停止才轮询
   const [isPolling, setIsPolling] = useState(false); // 看板是否正在轮询（用于锁定勾选）
@@ -655,14 +660,19 @@ export default function PipelinePage() {
   const loadRunArtifacts = useCallback(async () => {
     setRunArtifactsLoading(true);
     try {
-      const res = await apiFetch<ArtifactsListResponse>("/api/v1/artifacts/list");
+      // 默认按项目聚合（view=latest-per-project），去掉"每一个 commit 列一行"的噪声；
+      // 勾选"显示全部历史"切换到 view=all 调试模式。
+      const view = showAllRuns ? "all" : "latest-per-project";
+      const res = await apiFetch<ArtifactsListResponse>(
+        `/api/v1/artifacts/list?view=${view}`
+      );
       setRunArtifacts(res);
     } catch {
       setRunArtifacts(null);
     } finally {
       setRunArtifactsLoading(false);
     }
-  }, []);
+  }, [showAllRuns]);
 
   const stopRunPoll = useCallback(() => {
     if (runPollRef.current) {
@@ -917,35 +927,84 @@ export default function PipelinePage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
                 <FolderOpen className="w-4 h-4 text-[#722ed1]" />
-                产出物总览
+                {showAllRuns ? "产出物总览（历史全部）" : "项目最新一次运行"}
                 {!runArtifactsLoading && runArtifacts && (
-                  <span className="text-xs font-normal text-[#64748b]">共 {runArtifacts.count} 个运行</span>
+                  <span className="text-xs font-normal text-[#64748b]">
+                    共{" "}
+                    {showAllRuns
+                      ? `${runArtifacts.count} 个运行`
+                      : `${runArtifacts.count} 个项目`}
+                    {runArtifacts.total_groups != null && runArtifacts.total_groups !== runArtifacts.count && !showAllRuns && (
+                      <span className="text-[#475569]"> · 历史 {runArtifacts.total_groups} 个组</span>
+                    )}
+                  </span>
                 )}
               </CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void loadRunArtifacts()}
-                disabled={runArtifactsLoading}
-                className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${runArtifactsLoading ? "animate-spin" : ""}`} />
-                刷新
-              </Button>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-[10px] text-[#64748b] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showAllRuns}
+                    onChange={async (e) => {
+                      const v = e.target.checked;
+                      setShowAllRuns(v);
+                      // 切换视图后立刻重拉一次（不依赖轮询周期）
+                      try {
+                        setRunArtifactsLoading(true);
+                        const res = await apiFetch<ArtifactsListResponse>(
+                          `/api/v1/artifacts/list?view=${v ? "all" : "latest-per-project"}`
+                        );
+                        setRunArtifacts(res);
+                      } catch {
+                        /* 忽略：UI 已显示旧数据 */
+                      } finally {
+                        setRunArtifactsLoading(false);
+                      }
+                    }}
+                    className="w-3 h-3 accent-[#722ed1]"
+                  />
+                  显示全部历史
+                </label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadRunArtifacts()}
+                  disabled={runArtifactsLoading}
+                  className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${runArtifactsLoading ? "animate-spin" : ""}`} />
+                  刷新
+                </Button>
+              </div>
             </div>
             <CardDescription className="text-xs text-[#64748b]">
-              所有编排器运行会话（.osh/sessions）的产物树；点击文件在右侧预览面板查看
+              {showAllRuns
+                ? "所有编排器运行会话（.osh/sessions）历史全量列出 —— 调试模式"
+                : "每个项目（按磁盘 project_dir 分组）仅显示最新一次运行的 ASPICE 文档证据"}
             </CardDescription>
           </CardHeader>
           <CardContent className="px-0">
             {runArtifacts && runArtifacts.runs.length > 0 ? (
               <div className="divide-y divide-[#1e293b]/60">
-                {runArtifacts.runs.map((run) => (
+                {runArtifacts.runs.map((run) => {
+                  const pdir = run.project_dir || "";
+                  const pdirName = pdir
+                    ? pdir.replace(/\/+$/, "").split("/").filter(Boolean).pop() || pdir
+                    : "";
+                  return (
                   <div key={run.run_id} className="px-4 py-3">
                     <div className="flex items-center gap-2 mb-2">
                       <FileText className="w-3.5 h-3.5 text-[#1677ff]" />
-                      <span className="text-xs text-[#e2e8f0] font-medium truncate">{run.name}</span>
-                      <span className="text-[10px] text-[#64748b]">{run.run_id}</span>
+                      <span className="text-xs text-[#e2e8f0] font-medium truncate">{run.name || run.run_id}</span>
+                      {pdirName && (
+                        <span
+                          className="text-[10px] text-[#94a3b8] font-mono truncate max-w-[280px]"
+                          title={pdir}
+                        >
+                          {pdirName}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-[#64748b] font-mono">{run.run_id}</span>
                       <Badge
                         variant="outline"
                         className="ml-auto border-transparent"
@@ -959,7 +1018,7 @@ export default function PipelinePage() {
                       </Badge>
                     </div>
                     {run.files.length === 0 ? (
-                      <div className="text-xs text-[#64748b] pl-5">该运行暂无产出物</div>
+                      <div className="text-xs text-[#64748b] pl-5">该运行暂无 ASPICE 文档证据（仅产出物是 .json/.yaml 等中间产物，已过滤）</div>
                     ) : (
                       <div className="space-y-1 pl-5">
                         {run.files.map((f) => (
@@ -982,7 +1041,8 @@ export default function PipelinePage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="py-8 text-center text-xs text-[#64748b]">
