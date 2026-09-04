@@ -490,8 +490,15 @@ def _run_engine_op(pipeline_name: str, project_dir: str, op: str,
         from yuleosh.engine.checkpoint import CheckpointEngine
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         from yuleosh.engine.handler_adapter import HandlerAdapter
+        from yuleosh.engine.agent_checkpoint import _make_session_factory
+        # 注入真实 PipelineSession 工厂（B1-1）：否则 handler 收到 SimpleNamespace
+        # （无 spec_path 等属性），step_spec_check 访问 session.spec_path 抛
+        # AttributeError，导致「运行过程」看板 rerun/retry 第一步即失败。
+        # 工厂每步新建真实 session，llm_client=None 走全局真实 DeepSeek 链路，
+        # 与一键跑（orchestrator）语义一致。spec_path 取默认 project_dir/docs/spec.md。
         engine = CheckpointEngine(
             pipeline_name, project_dir,
+            session_factory=_make_session_factory(project_dir, None, False),
             state_backend="sqlite",
         )
         # 注册真实步骤定义（与 agent_checkpoint 一致），否则 run() 无步骤可执行，

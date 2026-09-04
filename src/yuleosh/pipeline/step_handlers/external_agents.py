@@ -587,8 +587,15 @@ def step_claude_review(session: PipelineSession) -> str:
         # 不可用，跳过而非中断整条 pipeline —— 与「CLI 未安装→跳过」语义一致。
         # 真实评审结论（disagree / 超时 / JSON 解析失败）仍按原逻辑报错阻断。
         _combined = (stdout + "\n" + stderr).lower()
-        if "not logged in" in _combined or "run /login" in _combined \
-                or "claude login" in _combined:
+        # 未鉴权判定需覆盖多版本 claude CLI 文案：安装但未 login（无
+        # ANTHROPIC_API_KEY）时不同版本报错各异——"not logged in" /
+        # "run /login" / "claude login" 之外，还可能含 "api key" /
+        # "authentication" / "unauthorized" / "401" / "no auth"。命中任一
+        # 即视为可选外部评审不可用 → 跳过而非中断整条 pipeline。
+        if ("not logged in" in _combined or "run /login" in _combined
+                or "claude login" in _combined or "api key" in _combined
+                or "authentication" in _combined or "unauthorized" in _combined
+                or "401" in _combined or "no auth" in _combined):
             _msg = ("claude CLI not authenticated — external review skipped "
                     "(run `claude login` or set ANTHROPIC_API_KEY)")
             log.warning(_msg)
