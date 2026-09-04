@@ -2,6 +2,7 @@
 
 import { apiFetch } from "@/lib/api-fetch";
 
+import { marked } from "marked";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -63,6 +64,24 @@ function persistSelected(set: Set<string>) {
   } catch {
     /* 忽略写入失败（隐私模式等） */
   }
+}
+
+// ── Markdown 安全渲染 ─────────────────────────────────────────
+// 把 ASPICE 文档 .md 转成 HTML，并剔除能触发 XSS 的危险模式（<script>/<iframe>/
+// <object>/<embed>/<form>/on*= attrs/javascript: URLs/内联 <style>）。
+// 内容来源是受信任的 pipeline 产物，但仍做防御性 sanitize。
+function renderMarkdownSafe(content: string): string {
+  const html = marked.parse(content, { gfm: false, breaks: false }) as string;
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<iframe\b[^>]*\/?>(?:<\/iframe>)?/gi, "")
+    .replace(/<object\b[^>]*\/?>(?:<\/object>)?/gi, "")
+    .replace(/<embed\b[^>]*\/?>/gi, "")
+    .replace(/<form\b[^>]*\/?>(?:<\/form>)?/gi, "")
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|src)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
+    .replace(/javascript:/gi, "");
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -270,6 +289,15 @@ export default function PipelinePage() {
 
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewError, setPreviewError] = useState("");
+
+  // ── .md 文件就地展开渲染（在左侧 run 的文件列表里直接看 markdown 渲染）──
+  // key = `${runId}::${filePath}`；与右侧 "产出物预览"（预览纯文本/JSON 等）共用
+  // 同一个 /api/v1/artifacts/preview 端点，但走不同 state，避免覆盖用户当前打开
+  // 的右侧面板大视图。
+  const [expandedMdKeys, setExpandedMdKeys] = useState<Set<string>>(new Set());
+  const [mdPreviewCache, setMdPreviewCache] = useState<Record<string, ArtifactPreviewResponse>>({});
+  const [mdPreviewLoading, setMdPreviewLoading] = useState<Set<string>>(new Set());
+  const [mdPreviewError, setMdPreviewError] = useState<Record<string, string>>({});
 
   // ── Pipeline 运行控制（重跑 / 选中某几项 / 续跑 / 停止）──
   const [steps, setSteps] = useState<{ index: number; key: string; agent: string; name: string }[]>([]);
@@ -574,6 +602,54 @@ export default function PipelinePage() {
       setPreview({ runId, file: filePath, data: null, loading: false });
     }
   }, []);
+
+  // ── .md 文件就地展开（点 row → 列表内 inline 渲染 markdown）──────────────
+  // 与 handlePreview（右侧大面板纯文本）互不影响：.md 走这里、其他 ext 走
+  // 右侧大面板。展开后若没缓存就 fetch 一次；切换折叠/再展开不会重复打。
+  const toggleMdPreview = useCallback(async (runId: string, filePath: string) => {
+    const key = `${runId}::${filePath}`;
+    let shouldFetch = false;
+    setExpandedMdKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+        shouldFetch = !mdPreviewCacheRef.current[key];
+      }
+      return next;
+    });
+    if (!shouldFetch) return;
+    setMdPreviewLoading((prev) => {
+      const n = new Set(prev);
+      n.add(key);
+      return n;
+    });
+    try {
+      const res = await apiFetch<ArtifactPreviewResponse>(
+        `/api/v1/artifacts/preview?run=${encodeURIComponent(runId)}&file=${encodeURIComponent(filePath)}`
+      );
+      setMdPreviewCache((prev) => ({ ...prev, [key]: res }));
+      setMdPreviewError((prev) => {
+        const { [key]: _drop, ...rest } = prev;
+        void _drop;
+        return rest;
+      });
+    } catch (err) {
+      setMdPreviewError((prev) => ({ ...prev, [key]: errMessage(err) }));
+    } finally {
+      setMdPreviewLoading((prev) => {
+        const n = new Set(prev);
+        n.delete(key);
+        return n;
+      });
+    }
+  }, []);
+  // 让 callback 在不变 (==[]) 的同时仍读得到最新 cache —— 一个常规 ref 桥
+  const mdPreviewCacheRef = useRef(mdPreviewCache);
+  useEffect(() => {
+    mdPreviewCacheRef.current = mdPreviewCache;
+  }, [mdPreviewCache]);
 
   // ── 运行控制 ──────────────────────────────────────────────────────────────
   const toggleStep = useCallback((key: string) => {
@@ -1021,23 +1097,77 @@ export default function PipelinePage() {
                       <div className="text-xs text-[#64748b] pl-5">该运行暂无 ASPICE 文档证据（仅产出物是 .json/.yaml 等中间产物，已过滤）</div>
                     ) : (
                       <div className="space-y-1 pl-5">
-                        {run.files.map((f) => (
-                          <button
-                            key={f.path}
-                            onClick={() => void handlePreview(run.run_id, f.path)}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[#1e293b]/50 rounded transition-all cursor-pointer"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-[#94a3b8] shrink-0" />
-                            <span className="text-[#e2e8f0] truncate flex-1">{f.name}</span>
-                            {f.ext && (
-                              <span className="text-[10px] uppercase text-[#722ed1] border border-[#722ed1]/30 rounded px-1 py-0.5 shrink-0">
-                                {f.ext}
-                              </span>
-                            )}
-                            <span className="text-[#64748b] shrink-0">{formatSize(f.size)}</span>
-                            <Eye className="w-3.5 h-3.5 text-[#475569] shrink-0" />
-                          </button>
-                        ))}
+                        {run.files.map((f) => {
+                          const key = `${run.run_id}::${f.path}`;
+                          const expanded = expandedMdKeys.has(key);
+                          const cached = mdPreviewCache[key];
+                          const loading = mdPreviewLoading.has(key);
+                          const errMd = mdPreviewError[key];
+                          const isMd = (f.ext || "").toLowerCase() === "md";
+                          return (
+                            <div key={f.path} className="rounded">
+                              <button
+                                onClick={() => {
+                                  if (isMd) void toggleMdPreview(run.run_id, f.path);
+                                  else void handlePreview(run.run_id, f.path);
+                                }}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[#1e293b]/50 rounded transition-all cursor-pointer"
+                                title={isMd ? "点击就地展开 markdown 渲染" : "点击右侧面板预览"}
+                              >
+                                {isMd ? (
+                                  expanded ? (
+                                    <ChevronDown className="w-3.5 h-3.5 text-[#94a3b8] shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="w-3.5 h-3.5 text-[#94a3b8] shrink-0" />
+                                  )
+                                ) : (
+                                  <FileText className="w-3.5 h-3.5 text-[#94a3b8] shrink-0" />
+                                )}
+                                <span className="text-[#e2e8f0] truncate flex-1">{f.name}</span>
+                                {f.ext && (
+                                  <span className="text-[10px] uppercase text-[#722ed1] border border-[#722ed1]/30 rounded px-1 py-0.5 shrink-0">
+                                    {f.ext}
+                                  </span>
+                                )}
+                                <span className="text-[#64748b] shrink-0">{formatSize(f.size)}</span>
+                                <Eye className="w-3.5 h-3.5 text-[#475569] shrink-0" />
+                              </button>
+                              {expanded && isMd && (
+                                <div className="mt-1 mb-2 ml-4 mr-2 rounded border border-[#1e293b] bg-[#0a0e17]/80 px-4 py-3 text-xs">
+                                  {errMd ? (
+                                    <div className="rounded bg-[#ff4d4f]/10 border border-[#ff4d4f]/20 px-2 py-1 text-[11px] text-[#ff4d4f] flex items-center gap-1">
+                                      <AlertCircle className="w-3 h-3 shrink-0" />
+                                      {errMd}
+                                    </div>
+                                  ) : !cached ? (
+                                    <div className="flex items-center justify-center py-6 text-[#64748b]">
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
+                                      <span>{loading ? "加载中…" : "等待获取"}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2 text-[10px] text-[#64748b] border-b border-[#1e293b]/60 pb-1.5">
+                                        <span className="text-[#94a3b8] font-mono">{cached.name}</span>
+                                        <span>{formatSize(cached.size)}</span>
+                                        {cached.truncated && (
+                                          <span className="text-[#faad14]">已截断（&gt; 100KB）</span>
+                                        )}
+                                      </div>
+                                      <div
+                                        className="yuleosh-md-body text-[#cbd5e1] leading-relaxed"
+                                        // marked 输出已 sanitize（renderMarkdownSafe），
+                                        // 仍属受信任内部 pipeline 产物。
+                                        dangerouslySetInnerHTML={{
+                                          __html: renderMarkdownSafe(cached.content),
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

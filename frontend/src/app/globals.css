@@ -192,3 +192,97 @@
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
 }
+
+/* ── Markdown 文档证据内嵌样式（dashboard/pipeline 产出物面板） ── */
+.yuleosh-md-body {
+  font-size: 12px;
+  line-height: 1.65;
+  color: #cbd5e1;
+}
+.yuleosh-md-body h1,
+.yuleosh-md-body h2,
+.yuleosh-md-body h3,
+.yuleosh-md-body h4,
+.yuleosh-md-body h5,
+.yuleosh-md-body h6 {
+  color: #e2e8f0;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+.yuleosh-md-body h1 { font-size: 1.45em; border-bottom: 1px solid #1e293b; padding-bottom: 0.25em; }
+.yuleosh-md-body h2 { font-size: 1.25em; }
+.yuleosh-md-body h3 { font-size: 1.1em; }
+.yuleosh-md-body h4 { font-size: 1em; }
+.yuleosh-md-body h5,
+.yuleosh-md-body h6 { font-size: 0.95em; color: #94a3b8; }
+.yuleosh-md-body p { margin: 0.6em 0; }
+.yuleosh-md-body ul,
+.yuleosh-md-body ol { margin: 0.5em 0; padding-left: 1.5em; }
+.yuleosh-md-body ul { list-style-type: disc; }
+.yuleosh-md-body ol { list-style-type: decimal; }
+.yuleosh-md-body li { margin: 0.2em 0; }
+.yuleosh-md-body li > p { margin: 0.2em 0; }
+.yuleosh-md-body blockquote {
+  border-left: 3px solid #722ed1;
+  background: rgba(114, 46, 209, 0.06);
+  padding: 0.4em 0.8em;
+  margin: 0.6em 0;
+  color: #cbd5e1;
+  border-radius: 0 4px 4px 0;
+}
+.yuleosh-md-body code {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  color: #e2e8f0;
+}
+.yuleosh-md-body pre {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  margin: 0.6em 0;
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.yuleosh-md-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+}
+.yuleosh-md-body strong { color: #f1f5f9; font-weight: 600; }
+.yuleosh-md-body em { color: #cbd5e1; font-style: italic; }
+.yuleosh-md-body hr {
+  border: none;
+  border-top: 1px solid #1e293b;
+  margin: 1em 0;
+}
+.yuleosh-md-body a {
+  color: #a78bfa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.yuleosh-md-body a:hover { color: #c4b5fd; }
+.yuleosh-md-body table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 11px;
+}
+.yuleosh-md-body th,
+.yuleosh-md-body td {
+  border: 1px solid #1e293b;
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+.yuleosh-md-body th {
+  background: rgba(114, 46, 209, 0.08);
+  color: #e2e8f0;
+  font-weight: 600;
+}
