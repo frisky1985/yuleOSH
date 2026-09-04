@@ -2,7 +2,7 @@
 
 import { apiFetch } from "@/lib/api-fetch";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -318,24 +318,33 @@ export default function PipelinePage() {
     setIsPolling(false);
   }, [stopStream]);
 
+  // 看板所有端点都必须带上当前选中项目的 project_dir：
+  // CheckpointEngine 把状态写到 <project_dir>/.yuleosh/checkpoint-state.db，
+  // 不带该参数时后端回退 OSH_HOME 根目录 → 读到仓库根的 checkpoint-state.db
+  // （陈旧），表现为「点了运行但看板一直是上一次的旧状态」。
+  const pdq = useMemo(
+    () => (selectedProject ? `&project_dir=${encodeURIComponent(selectedProject)}` : ""),
+    [selectedProject]
+  );
+
   // 拉取历史运行列表（看板「运行历史」下拉）
   const loadRuns = useCallback(async () => {
     try {
       const res = await apiFetch<{ runs: any[] }>(
-        "/api/v1/pipeline/checkpoint/runs?pipeline=agent-pipeline"
+        `/api/v1/pipeline/checkpoint/runs?pipeline=agent-pipeline${pdq}`
       );
       setRuns(res.runs || []);
     } catch {
       /* 忽略：历史列表为增强项，失败不影响看板 */
     }
-  }, []);
+  }, [pdq]);
 
   // T9：拉取证据包列表
   const loadEvidence = useCallback(async () => {
     setEvidenceLoading(true);
     try {
       const res = await apiFetch<{ packages: EvidencePackage[] }>(
-        "/api/v1/pipeline/evidence?pipeline=agent-pipeline"
+        `/api/v1/pipeline/evidence?pipeline=agent-pipeline${pdq}`
       );
       setEvidence(res.packages || []);
     } catch {
@@ -343,12 +352,12 @@ export default function PipelinePage() {
     } finally {
       setEvidenceLoading(false);
     }
-  }, []);
+  }, [pdq]);
 
   const fetchCheckpoint = useCallback(async () => {
     try {
       const res = await apiFetch<CheckpointSnapshot>(
-        "/api/v1/pipeline/checkpoint?pipeline=agent-pipeline"
+        `/api/v1/pipeline/checkpoint?pipeline=agent-pipeline${pdq}`
       );
       setCheckpoint(res);
       setCheckpointError("");
@@ -362,7 +371,7 @@ export default function PipelinePage() {
     } catch (err) {
       setCheckpointError(errMessage(err));
     }
-  }, [stopPolling, loadRuns, loadEvidence]);
+  }, [pdq, stopPolling, loadRuns, loadEvidence]);
 
   // 切换到某次历史运行查看（静态快照，不再轮询）；null 回到最新
   const viewRun = useCallback(
@@ -376,7 +385,7 @@ export default function PipelinePage() {
       void (async () => {
         try {
           const res = await apiFetch<CheckpointSnapshot>(
-            `/api/v1/pipeline/checkpoint?run_id=${id}`
+            `/api/v1/pipeline/checkpoint?run_id=${id}${pdq}`
           );
           setCheckpoint(res);
           setCheckpointError("");
@@ -408,7 +417,7 @@ export default function PipelinePage() {
     setIsPolling(true);
     try {
       const es = new EventSource(
-        "/api/v1/pipeline/checkpoint/stream?pipeline=agent-pipeline"
+        `/api/v1/pipeline/checkpoint/stream?pipeline=agent-pipeline${pdq}`
       );
       esRef.current = es;
 
@@ -453,7 +462,7 @@ export default function PipelinePage() {
       sseFailedRef.current = true;
       startPolling();
     }
-  }, [startPolling, stopStream, loadRuns, loadEvidence]);
+  }, [pdq, startPolling, stopStream, loadRuns, loadEvidence]);
 
   useEffect(() => {
     return () => stopPolling();
@@ -585,19 +594,28 @@ export default function PipelinePage() {
 
   const runControl = useCallback(
     async (action: "run-selected" | "resume" | "stop") => {
+      // 看板控制操作必须绑定「一键运行 Demo 项目」下拉里选中的项目：
+      // 早期实现 POST 空 body，后端 _resolve_pipeline_ctx 会 fallback 到
+      // OSH_HOME（= 仓库根），导致 spec-check 校验的是仓库根的 docs/spec.md
+      // （工作文档，自带 60+ issues / 12 ERROR），第一步必然失败且误导。
+      if (!selectedProject) {
+        setOpMsg("请先在上方「一键运行 Demo 项目」下拉中选择一个项目");
+        return;
+      }
       setOpRunning(true);
       setOpMsg("");
       try {
+        const body = JSON.stringify({ project_dir: selectedProject });
         if (action === "resume") {
           const res = await apiFetch<any>("/api/v1/pipeline/resume", {
             method: "POST",
-            body: JSON.stringify({}),
+            body,
           });
           setOpMsg(`已提交续跑：${res?.op || "resume"}`);
         } else if (action === "stop") {
           const res = await apiFetch<any>("/api/v1/pipeline/stop", {
             method: "POST",
-            body: JSON.stringify({}),
+            body,
           });
           setOpMsg(`已停止：${res?.op || "stop"}`);
         } else {
@@ -610,11 +628,11 @@ export default function PipelinePage() {
             ids.length === steps.length
               ? await apiFetch<any>("/api/v1/pipeline/rerun", {
                   method: "POST",
-                  body: JSON.stringify({}),
+                  body: JSON.stringify({ project_dir: selectedProject }),
                 })
               : await apiFetch<any>("/api/v1/pipeline/retry", {
                   method: "POST",
-                  body: JSON.stringify({ step_ids: ids }),
+                  body: JSON.stringify({ step_ids: ids, project_dir: selectedProject }),
                 });
           setOpMsg(`已提交：${res?.op || "ok"}（${ids.length}/${steps.length} 步）`);
         }
@@ -630,7 +648,7 @@ export default function PipelinePage() {
         setOpRunning(false);
       }
     },
-    [steps, selected, startStream, loadRuns, loadEvidence]
+    [steps, selected, selectedProject, startStream, loadRuns, loadEvidence]
   );
 
   // ── 一键运行 Demo 项目：POST /api/v1/pipeline/run（后台编排器） + 产出物轮询 ──
