@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -23,11 +23,16 @@ import { resetSessionCache, useSessionRole } from "@/lib/use-session-role";
 import { useRealtimeStore } from "@/lib/realtime-store";
 
 // 「导航项 → 后端 topic」映射: 用于根据 active run 的类型推断侧栏徽标
-// 当前阶段 5 接入 statsByProject 全局聚合: requirements/tests 项按所有
-// 项目求和挂徽标, 数字随前端 store 实时刷新。
+// 当前阶段 6 全面接入: 活跃运行数 (pipeline) + 各 page 聚合徽标
+// (requirements/tests/overview/test-layers/evidence/traceability/devices)。
+// 数字来源:
+//   - store.activeRuns / statsByProject: realtime-store 全局共享
+//   - 其它 page-level 聚合: 通过 useSidebarExtras() 注入 (避免在此 hook
+//     引 page-specific state, 防止子页面卸载时 sidebar 抖动)。
 function getNavBadge(
   href: string,
   state: ReturnType<typeof useRealtimeStore>,
+  extras?: SidebarExtras,
 ): { count: number; hint?: string; tone?: "warning" | "info" | "neutral" } | null {
   if (href === "/dashboard/pipeline") {
     const runs = Object.values(state.activeRuns);
@@ -41,9 +46,54 @@ function getNavBadge(
       tone: "neutral",
     };
   }
+  // 概览: 活跃项目数 (store 内有 activeRun 的 project_dir 唯一集合)
+  if (href === "/dashboard") {
+    const activeDirs = new Set(
+      Object.values(state.activeRuns)
+        .filter((r) => r.status === "running")
+        .map((r) => r.project_dir)
+        .filter(Boolean),
+    );
+    if (activeDirs.size === 0) return null;
+    return { count: activeDirs.size, hint: "个活跃项目", tone: "neutral" };
+  }
+  // 证据包: 总文件数 (跨所有 project_dir 求和)
   if (href === "/dashboard/evidence") {
-    if (state.newEvidenceCount === 0) return null;
-    return { count: state.newEvidenceCount, hint: "条新证据", tone: "neutral" };
+    const total = Object.values(state.statsByProject).reduce(
+      (s, p) => s + (p.evidence_count || 0),
+      0,
+    );
+    // 新增量 (实时 SSE) 优先, 否则用基线总数
+    const newCount = state.newEvidenceCount;
+    if (total === 0 && newCount === 0) return null;
+    return { count: total || newCount, hint: "份证据", tone: "neutral" };
+  }
+  // 追溯矩阵: 覆盖率缺口 (缺口数=0 时不挂徽标)
+  if (href === "/dashboard/traceability") {
+    const gap = extras?.traceabilityGapCount;
+    if (gap == null || gap <= 0) return null;
+    return { count: gap, hint: "条追溯缺口", tone: "warning" };
+  }
+  // 阶段看板: 当前活跃 step (store 的 first running run 的 stage)
+  if (href === "/dashboard/test-layers") {
+    const runs = Object.values(state.activeRuns).filter((r) => r.status === "running");
+    if (runs.length === 0) return null;
+    const first = runs[0];
+    const stage = (first.current_stage_index ?? -1) + 1;
+    if (stage <= 0) return null;
+    return { count: stage, hint: "当前阶段", tone: "neutral" };
+  }
+  // 设备: 在线设备数 (数据源 extras)
+  if (href === "/dashboard/devices") {
+    const n = extras?.deviceOnlineCount;
+    if (n == null || n <= 0) return null;
+    return { count: n, hint: "台在线", tone: "info" };
+  }
+  // 日志: 错误条数 (extras)
+  if (href === "/dashboard/logs") {
+    const n = extras?.logErrorCount;
+    if (n == null || n <= 0) return null;
+    return { count: n, hint: "条错误", tone: "warning" };
   }
   // 聚合统计徽标 (Stage-5): 跨所有 project_dir 求和, 数字来源是
   // realtime-store 共享缓存 (Provider 内置 fetcher 拉一次, 全局可见)。
@@ -64,6 +114,43 @@ function getNavBadge(
     return { count: total, hint: "条待测试", tone: "info" };
   }
   return null;
+}
+
+/**
+ * 由各 page 主动注入的 sidebar 附加徽标数据（解耦 hook 调用链）。
+ *
+ * 设计动机：这些数字只有对应页面才知道（device 在线数来自 /api/v1/devices，
+ * 日志错误数来自 /api/v1/logs），放在 sidebar 里拉会造成无关页面也发请求。
+ * 所以由页面自己上报，sidebar 只负责渲染。
+ */
+export interface SidebarExtras {
+  traceabilityGapCount?: number;
+  deviceOnlineCount?: number;
+  logErrorCount?: number;
+}
+
+// 值 + setter 拆成两个 Context：值变化时只有 sidebar 重渲染，
+// setter 引用恒定（用 useCallback 稳定），页面侧不会因 set 变化而反复触发 effect。
+const SidebarExtrasCtx = createContext<SidebarExtras>({});
+const SidebarExtrasSetterCtx = createContext<
+  ((patch: SidebarExtras) => void) | null
+>(null);
+
+export const SidebarExtrasContext = SidebarExtrasCtx;
+export const SidebarExtrasSetterContext = SidebarExtrasSetterCtx;
+
+/**
+ * Page 层用：上报本页面的徽标数据（合并语义，只传自己负责的字段）。
+ *
+ * 用法：
+ *   const setExtras = useSidebarExtras();
+ *   useEffect(() => {
+ *     setExtras({ deviceOnlineCount: online });
+ *   }, [online, setExtras]);
+ */
+export function useSidebarExtras(): (patch: SidebarExtras) => void {
+  const setter = useContext(SidebarExtrasSetterCtx);
+  return setter ?? (() => undefined);
 }
 
 // 工程视角侧栏：按 V-model 开发主线分组排序（需求→测试设计→执行→追溯→证据），
@@ -97,6 +184,9 @@ export function EngineerSidebar() {
   const router = useRouter();
   const { session } = useSessionRole();
   const realtimeState = useRealtimeStore();
+  // 子页面通过 SidebarExtrasContext 注入额外徽标数据
+  // (e.g. traceability 页填 traceabilityGapCount, devices 页填 deviceOnlineCount)
+  const extras = useContext(SidebarExtrasCtx);
 
   // 桌面侧栏在 <768px 隐藏（hidden md:flex），窄屏改由「顶栏 + 抽屉」承载
   // 导航与登出，否则工程师在窄屏下既无导航也无登出入口。
@@ -131,7 +221,7 @@ export function EngineerSidebar() {
         const active = isActive(item.href, item.exact);
         const Icon = item.icon;
         const showSection = item.section && (idx === 0 || NAV[idx - 1].section !== item.section);
-        const badge = getNavBadge(item.href, realtimeState);
+        const badge = getNavBadge(item.href, realtimeState, extras);
         return (
           <Fragment key={item.href}>
             {showSection && (

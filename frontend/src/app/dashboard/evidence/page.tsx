@@ -10,8 +10,10 @@ import {
   Download,
   FileText,
   FolderOpen,
+  History,
   Loader2,
   RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
 // 导航（顶栏/左栏）由 dashboard/layout 统一渲染，页面只提供内容
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { usePersistentState } from "@/lib/sidebar-persistence";
 
 interface EvidenceFile {
   name: string;
@@ -64,17 +67,55 @@ export default function EvidencePage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
-  const [showAllFiles, setShowAllFiles] = useState(false);
-  const [showAllHistory, setShowAllHistory] = useState(false);
+  // Stage-6 (2026-09-05): 展开状态持久化 — 关闭浏览器再打开仍在「展开全部」
+  const [showAllFiles, setShowAllFiles] = usePersistentState<boolean>(
+    "evidence", "showAllFiles", false);
+  const [showAllHistory, setShowAllHistory] = usePersistentState<boolean>(
+    "evidence", "showAllHistory", false);
 
-  const load = useCallback(async () => {
+  // Stage-6 (2026-09-05): 生成进度可视化
+  // 后端 /api/v1/evidence/generate 是同步阻塞调用（无中间进度事件），
+  // 所以前端用「耗时 + 阶段提示」做感知反馈：
+  //   * 0–8s   收集证据源
+  //   * 8–20s  渲染报告
+  //   * 20s+   打包归档（提示耗时异常，便于用户判断是否需要查后端日志）
+  // 完成后展示真实增量（生成前后文件数差值），而非假进度。
+  const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
+  const [genElapsed, setGenElapsed] = useState(0);
+  const [genResult, setGenResult] = useState<{
+    added: number;
+    total: number;
+    elapsed_ms: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (genStartedAt === null) return;
+    const t = setInterval(() => {
+      setGenElapsed(Date.now() - genStartedAt);
+    }, 200);
+    return () => clearInterval(t);
+  }, [genStartedAt]);
+
+  /** 生成阶段文案 + 进度百分比（软上限 92%，完成才到 100%）。 */
+  const genPhase = (() => {
+    const s = genElapsed / 1000;
+    if (s < 8) return { label: "收集证据源（需求 / 测试 / 评审记录）", pct: 35 };
+    if (s < 20) return { label: "渲染合规报告（追溯矩阵 / ASPICE 清单）", pct: 68 };
+    if (s < 45) return { label: "打包归档证据包", pct: 88 };
+    return { label: "仍在处理（耗时偏长，可查看后端日志）", pct: 92 };
+  })();
+
+  /** 返回本次加载到的文件数（供生成后计算真实增量，闭包里的 files 是旧值）。 */
+  const load = useCallback(async (): Promise<number> => {
     setLoading(true);
     setError("");
+    let count = 0;
     try {
       const data = await apiFetch<{ files: EvidenceFile[]; count: number }>(
         "/api/v1/evidence/files",
       );
       setFiles(data.files || []);
+      count = (data.files || []).length;
       // 历史版本（生成时快照存档）——失败不影响主列表展示
       try {
         const h = await apiFetch<{
@@ -91,6 +132,7 @@ export default function EvidencePage() {
     } finally {
       setLoading(false);
     }
+    return count;
   }, []);
 
   useEffect(() => {
@@ -98,18 +140,29 @@ export default function EvidencePage() {
   }, [load]);
 
   const handleGenerate = async () => {
+    const before = files.length;
+    const started = Date.now();
     setGenerating(true);
+    setGenStartedAt(started);
+    setGenElapsed(0);
+    setGenResult(null);
     setError("");
     try {
       await apiFetch("/api/v1/evidence/generate", {
         method: "POST",
         body: JSON.stringify({}),
       });
-      await load();
+      const after = await load();
+      setGenResult({
+        added: Math.max(0, after - before),
+        total: after,
+        elapsed_ms: Date.now() - started,
+      });
     } catch (e: any) {
       setError(e?.message || "生成证据包失败");
     } finally {
       setGenerating(false);
+      setGenStartedAt(null);
     }
   };
 
@@ -192,6 +245,51 @@ export default function EvidencePage() {
         {error && (
           <div className="mb-4 rounded-lg border border-[#ff4d4f]/20 bg-[#ff4d4f]/10 px-4 py-2.5 text-sm text-[#ff4d4f]">
             {error}
+          </div>
+        )}
+
+        {/* Stage-6 (2026-09-05): 生成进度可视化 —— 运行中显示阶段 + 耗时,
+            完成后显示真实增量（新增 N 份 / 共 M 份 / 耗时 X.Xs）。 */}
+        {generating && (
+          <div className="mb-4 rounded-lg border border-[#722ed1]/30 bg-[#722ed1]/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="flex items-center gap-2 text-xs text-[#c4b5fd]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {genPhase.label}
+              </span>
+              <span className="font-mono text-xs text-[#94a3b8] tabular-nums">
+                {(genElapsed / 1000).toFixed(1)}s
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#0a0e17] overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] transition-all duration-300"
+                style={{ width: `${genPhase.pct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {!generating && genResult && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#10b981]/30 bg-[#10b981]/5 px-4 py-2.5 text-xs">
+            <CheckCircle2 className="h-3.5 w-3.5 text-[#95de64]" />
+            <span className="text-[#e2e8f0]">证据包生成完成</span>
+            <span className="rounded bg-[#10b981]/15 px-1.5 py-0.5 text-[#95de64]">
+              新增 {genResult.added} 份
+            </span>
+            <span className="rounded bg-[#1e293b] px-1.5 py-0.5 text-[#94a3b8]">
+              共 {genResult.total} 份
+            </span>
+            <span className="font-mono text-[#64748b] tabular-nums">
+              耗时 {(genResult.elapsed_ms / 1000).toFixed(1)}s
+            </span>
+            <button
+              type="button"
+              onClick={() => setGenResult(null)}
+              className="ml-auto text-[10px] text-[#64748b] hover:text-white transition-colors"
+            >
+              关闭
+            </button>
           </div>
         )}
 

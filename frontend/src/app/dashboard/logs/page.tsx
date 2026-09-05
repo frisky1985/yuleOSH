@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 // 导航（顶栏/左栏）由 dashboard/layout 统一渲染，页面只提供内容
 
+import { useSidebarExtras } from "@/components/dashboard/engineer-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -375,6 +376,14 @@ export default function LogsPage() {
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  // Stage-6 (2026-09-05): 上报「错误条数」给左栏徽标 —— 当前时间窗内所有
+  // run 的 error_count 求和（窗口由 summaryRange 决定，默认 7d）。
+  const setSidebarExtras = useSidebarExtras();
+  const errorCount = summary.reduce((s, r) => s + (r.error_count || 0), 0);
+  useEffect(() => {
+    setSidebarExtras({ logErrorCount: errorCount });
+  }, [errorCount, setSidebarExtras]);
 
   // 默认展开的（含 ERROR）run 自动预取文件列表，最多 3 个，避免并发过多
   useEffect(() => {

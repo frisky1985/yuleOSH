@@ -51,6 +51,12 @@ export interface ActiveRun {
   stage_started_at?: number;
   /** 最近一次 file_produced 的相对路径 —— 详情卡展示当前 step 的产物 */
   current_file_path?: string;
+  /** 累计 LLM token (input + output) —— Stage-6 (2026-09-05) */
+  total_tokens?: number;
+  /** 累计 LLM 调用次数 —— 同上 */
+  llm_calls?: number;
+  /** 累计 LLM 成本 (USD) —— 同上 */
+  llm_cost_usd?: number;
   updated_at: number;
 }
 
@@ -102,6 +108,14 @@ type Action =
       type: "pipeline_checkpoint";
       payload: { run_id: string; project_dir: string; status: string;
                   progress_pct?: number };
+    }
+  | {
+      // Stage-6 (2026-09-05): 单次 LLM 调用 token 增量。
+      // 与 file_produced 类似 —— 按 run_id 累加 total_tokens / llm_calls / llm_cost_usd。
+      type: "pipeline_llm_call";
+      payload: { run_id: string; project_dir: string;
+                  prompt_tokens: number; completion_tokens: number;
+                  cost_usd: number; model: string; provider: string };
     }
   | {
       // Stage-4 (2026-09-05): initialise the per-project stats baseline
@@ -234,6 +248,29 @@ function reducer(state: State, action: Action): State {
           [p.run_id]: {
             ...existing,
             status: p.status as ActiveRun["status"],
+            updated_at: Date.now(),
+          },
+        },
+      };
+    }
+    case "pipeline_llm_call": {
+      // Stage-6 (2026-09-05): 累计 LLM 调用次数 + token + 成本, 供详情卡
+      // 实时显示。run 不在 activeRuns 里时 (罕见的 LLM call 在 run_done
+      // 之后) 也累加到 statsByProject (不, 应该是丢——避免污染)。所以仍
+      // 要先确认 active run 存在, 否则忽略。
+      const p = action.payload;
+      const existing = state.activeRuns[p.run_id];
+      if (!existing) return state;
+      const inc = p.prompt_tokens + p.completion_tokens;
+      return {
+        ...state,
+        activeRuns: {
+          ...state.activeRuns,
+          [p.run_id]: {
+            ...existing,
+            total_tokens: (existing.total_tokens ?? 0) + inc,
+            llm_calls: (existing.llm_calls ?? 0) + 1,
+            llm_cost_usd: (existing.llm_cost_usd ?? 0) + p.cost_usd,
             updated_at: Date.now(),
           },
         },
@@ -384,6 +421,19 @@ export function RealtimeProvider({
             project_dir: p.project_dir || "",
             status: p.status || "running",
             progress_pct: p.progress_pct,
+          },
+        });
+      } else if (kind === "llm_call") {
+        dispatchRef.current({
+          type: "pipeline_llm_call",
+          payload: {
+            run_id: p.run_id || "",
+            project_dir: p.project_dir || "",
+            prompt_tokens: p.prompt_tokens ?? 0,
+            completion_tokens: p.completion_tokens ?? 0,
+            cost_usd: p.cost_usd ?? 0,
+            model: p.model || "",
+            provider: p.provider || "",
           },
         });
       }

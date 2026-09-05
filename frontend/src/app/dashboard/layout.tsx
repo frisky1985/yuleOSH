@@ -1,10 +1,15 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { TopNav, type DashboardTab } from "@/components/dashboard/top-nav";
-import { EngineerSidebar } from "@/components/dashboard/engineer-sidebar";
+import {
+  EngineerSidebar,
+  SidebarExtrasContext,
+  SidebarExtrasSetterContext,
+  type SidebarExtras,
+} from "@/components/dashboard/engineer-sidebar";
 import { isEngineerRole, useSessionRole } from "@/lib/use-session-role";
 import { UserMenu, type UserMenuActions, type UserMenuSession } from "@/components/account/user-menu";
 import { AccountInfoDialog } from "@/components/account/account-info-dialog";
@@ -12,6 +17,7 @@ import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
 import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
 import { DeleteAccountDialog } from "@/components/account/delete-account-dialog";
 import { RealtimeProvider } from "@/lib/realtime-store";
+import { useDashboardTabPersistence } from "@/lib/sidebar-persistence";
 
 interface DashboardShellContextValue {
   activeTab: DashboardTab;
@@ -48,6 +54,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // (links mode), so the landing page opens straight onto the requested tab
   // without flashing the default "overview" first.
   //
+  // Stage-6 (2026-09-05): 同步持久化到 localStorage —— 用户上次停在
+  // gap-analysis, 关闭浏览器重开仍直接进 gap-analysis, 不再回 overview。
+  // URL ?tab= 优先级仍高于 localStorage (用户主动切)。
+  //
   // NOTE: we deliberately avoid `useSearchParams()` — in `output: "export"`
   // (static) builds Next.js requires it to be wrapped in <Suspense>, which
   // would propagate to every /dashboard/* page and break prerender. Instead
@@ -59,13 +69,34 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     t === "gap-analysis" ||
     t === "misra-trends" ||
     t === "knowledge-base";
+  // Stage-6 (2026-09-05): 子页面徽标上报（device 在线数 / 日志错误数 /
+  // 追溯缺口）。合并语义 —— 页面只传自己负责的字段，互不覆盖。
+  const [sidebarExtras, setSidebarExtras] = useState<SidebarExtras>({});
+  const patchSidebarExtras = useCallback((patch: SidebarExtras) => {
+    setSidebarExtras((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const [persistedTab, setPersistedTab] = useDashboardTabPersistence();
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const t = new URLSearchParams(window.location.search).get("tab");
-    if (isValidTab(t)) setActiveTab(t);
+    const urlTab = new URLSearchParams(window.location.search).get("tab");
+    if (isValidTab(urlTab)) {
+      setActiveTab(urlTab);
+    } else if (isValidTab(persistedTab)) {
+      // URL 没带时, 还原 localStorage 的上次选择
+      setActiveTab(persistedTab);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
+  // setActiveTab 包装: 同时更新 localStorage
+  const setActiveTabPersisted = useCallback(
+    (tab: DashboardTab) => {
+      setActiveTab(tab);
+      setPersistedTab(tab, { pushUrl: true });
+    },
+    [setPersistedTab],
+  );
   // mounted 门控：服务端/静态 HTML 无法预知角色，未确定前不渲染导航，
   // 既避免 hydration mismatch，也避免闪出错误骨架。
   const [mounted, setMounted] = useState(false);
@@ -140,19 +171,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   if (mounted) {
     shell = engineer ? (
       <RealtimeProvider topics={["pipeline", "evidence", "gap", "coverage", "misra"]}>
-        <EngineerSidebar />
-        {/* pt-14 让出窄屏顶栏（<768px 侧栏隐藏、改由顶栏承载导航），
-            md 及以上由侧栏占位 md:pl-60，无需顶部内边距。 */}
-        <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0] pt-14 md:pt-0 md:pl-60">
-          {children}
-        </div>
+        <SidebarExtrasSetterContext.Provider value={patchSidebarExtras}>
+          <SidebarExtrasContext.Provider value={sidebarExtras}>
+            <EngineerSidebar />
+            {/* pt-14 让出窄屏顶栏（<768px 侧栏隐藏、改由顶栏承载导航），
+                md 及以上由侧栏占位 md:pl-60，无需顶部内边距。 */}
+            <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0] pt-14 md:pt-0 md:pl-60">
+              {children}
+            </div>
+          </SidebarExtrasContext.Provider>
+        </SidebarExtrasSetterContext.Provider>
       </RealtimeProvider>
     ) : (
       <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0]">
         <TopNav
           mode={isLanding ? "tabs" : "links"}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={setActiveTabPersisted}
         >
           {/* 用户菜单（含退出登录）必须在落地页与所有子页常驻：
               此前用 isLanding 门控，导致决策者一旦进入流水线/设备/日志等子页

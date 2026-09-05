@@ -20,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { useSidebarExtras } from "@/components/dashboard/engineer-sidebar";
 import { Badge } from "@/components/ui/badge";
 // 导航（顶栏/左栏）由 dashboard/layout 统一渲染，页面只提供内容
 import { Button } from "@/components/ui/button";
@@ -167,6 +168,15 @@ export default function DevicesPage() {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  // Stage-6 (2026-09-05): 上报「在线设备数」给左栏徽标。
+  // by_state 是 {online, busy, offline, fault, unknown} 计数表；
+  // 只有 online 计入（busy 是占用中，不算空闲可用）。
+  const setSidebarExtras = useSidebarExtras();
+  const onlineCount = stats?.by_state?.online ?? 0;
+  useEffect(() => {
+    setSidebarExtras({ deviceOnlineCount: onlineCount });
+  }, [onlineCount, setSidebarExtras]);
 
   // ── Expand card → fetch event timeline ───────────────────────────────────
   const toggleExpand = useCallback(

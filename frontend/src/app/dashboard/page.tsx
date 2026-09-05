@@ -526,6 +526,32 @@ function ActiveProjectsCard() {
                   </span>
                 </button>
               )}
+              {/* LLM token 累计 (Stage-6) —— 显示总 token / 调用次数 /
+                  累计成本, 工程师可一眼看到「这个 run 烧了多少」 */}
+              {(featured.total_tokens ?? 0) > 0 && (
+                <div className="mt-1 flex items-center gap-2 text-[10px] text-[#94a3b8] flex-wrap">
+                  <span
+                    className="inline-flex items-center gap-1 rounded bg-[#722ed1]/15 text-[#c4b5fd] px-1.5 py-0.5"
+                    title="本 run 累计 LLM token (input + output)"
+                  >
+                    🤖 {(featured.total_tokens ?? 0).toLocaleString()} tokens
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1 rounded bg-[#1677ff]/15 text-[#69b1ff] px-1.5 py-0.5"
+                    title="本 run 累计 LLM 调用次数"
+                  >
+                    {featured.llm_calls ?? 0} calls
+                  </span>
+                  {(featured.llm_cost_usd ?? 0) > 0 && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded bg-[#10b981]/15 text-[#95de64] px-1.5 py-0.5"
+                      title="本 run 累计 LLM 成本 (USD)"
+                    >
+                      ${(featured.llm_cost_usd ?? 0).toFixed(4)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <Button
               variant="outline"
