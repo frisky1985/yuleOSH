@@ -643,6 +643,33 @@ class LLMClient:
             except Exception as e:  # noqa: BLE001 — audit must never block the LLM call
                 log.warning("Failed to record AI generation audit event: %s", e)
 
+        # Stage-6 (2026-09-05): emit pipeline.llm_call 让前端实时看到 token
+        # 用量。读 ContextVar 拿到 run_id + step_key (由 orchestrator._execute_step
+        # 进入时 set); 不在 pipeline run 内 (e.g. 测试 / 脚本) 的调用 ContextVar
+        # 默认 None, 自动跳过 — 不污染 SSE 流。
+        try:
+            from yuleosh.realtime import (
+                emit_pipeline_llm_call,
+                get_current_llm_call_context,
+            )
+            _ctx = get_current_llm_call_context()
+            if _ctx is not None:
+                duration_ms = int(duration * 1000)
+                emit_pipeline_llm_call(
+                    run_id=_ctx.run_id,
+                    project_dir=_ctx.project_dir,
+                    step_key=_ctx.step_key,
+                    step_index=_ctx.step_index,
+                    model=response.model,
+                    provider=response.provider or resolved_config.provider,
+                    prompt_tokens=response.token_usage.get("prompt", 0),
+                    completion_tokens=response.token_usage.get("completion", 0),
+                    cost_usd=response.cost,
+                    duration_ms=duration_ms,
+                )
+        except Exception as _e:  # noqa: BLE001 — realtime 是 best-effort 装饰层
+            log.debug("emit_pipeline_llm_call skipped: %s", _e)
+
         return response
 
     @classmethod

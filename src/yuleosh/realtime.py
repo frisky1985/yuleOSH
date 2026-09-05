@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import threading
 import time
@@ -193,6 +194,43 @@ class EventBus:
 EVENT_BUS = EventBus()
 
 
+# ─── 当前调用上下文（Stage-6, 2026-09-05） ─────────────────────────────────
+# LLMClient 等低层模块**不感知** pipeline run_id, 但需要把 llm_call 事件
+# 关联到具体的 run + step 以便前端按 run 累计 token。解决: 编排器在跑某
+# step 时把上下文塞进 ContextVar, LLMClient 读 ContextVar 并 emit 即可。
+# ContextVar 线程安全 + 异步安全 (asyncio task 内独立); step handler 嵌套
+# 调用不串扰。
+_LLMCallContext = contextvars.ContextVar(
+    "yuleosh_llm_call_ctx",
+    default=None,  # type: ignore[arg-type]
+)
+
+
+@dataclass
+class LLMCallContext:
+    """当前 pipeline step 的 LLM 调用上下文 (低层模块用)."""
+
+    run_id: str
+    project_dir: str
+    step_key: str = ""
+    step_index: int = -1
+
+
+def set_current_llm_call_context(ctx: LLMCallContext | None) -> object:
+    """设置当前 LLM 调用上下文; 返回 token 用于 reset。"""
+    return _LLMCallContext.set(ctx)
+
+
+def reset_current_llm_call_context(token: object) -> None:
+    """还原上下文 (与 set_current_llm_call_context 配对)。"""
+    _LLMCallContext.reset(token)  # type: ignore[arg-type]
+
+
+def get_current_llm_call_context() -> LLMCallContext | None:
+    """读取当前 LLM 调用上下文; 没有时返回 None (低层调用不应该 emit)。"""
+    return _LLMCallContext.get()
+
+
 # ─── 便捷发射器（业务代码直接 ``emit_pipeline_stage_start(...)``） ─────────
 
 
@@ -263,6 +301,33 @@ def emit_pipeline_checkpoint(*, run_id: str, project_dir: str, status: str,
     })
 
 
+def emit_pipeline_llm_call(*, run_id: str, project_dir: str,
+                            step_key: str, step_index: int,
+                            model: str, provider: str,
+                            prompt_tokens: int, completion_tokens: int,
+                            cost_usd: float = 0.0,
+                            duration_ms: int = 0) -> int | None:
+    """``topic=pipeline`` + ``kind=llm_call`` —— 一次 LLM 调用的 token 用量。
+
+    Stage-6 (2026-09-05): 让前端实时看到 LLM token 用量与累计成本, 便于
+    工程师在长跑阶段里观察「卡在哪个 step / token 花了多少」。
+    """
+    return EVENT_BUS.publish("pipeline", {
+        "kind": "llm_call",
+        "run_id": run_id,
+        "project_dir": project_dir,
+        "step_key": step_key,
+        "step_index": step_index,
+        "model": model,
+        "provider": provider,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "cost_usd": cost_usd,
+        "duration_ms": duration_ms,
+    })
+
+
 __all__ = [
     "RealtimeEvent",
     "EventBus",
@@ -272,4 +337,5 @@ __all__ = [
     "emit_pipeline_file_produced",
     "emit_pipeline_run_done",
     "emit_pipeline_checkpoint",
+    "emit_pipeline_llm_call",
 ]

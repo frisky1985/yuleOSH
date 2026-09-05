@@ -365,8 +365,21 @@ def _print_step_timings(session) -> None:
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
                 mock: bool = False, profile: Optional[str] = None, org_id: int = 0,
                 user_id: int | None = None, user_email: str | None = None,
-                from_step: int = 0):
+                from_step: int = 0, run_id: Optional[str] = None):
     """Run the full OSH pipeline for a given spec.
+
+    Args:
+        run_id: Stage-6 (2026-09-05) —— 调用方（``POST /api/v1/pipeline/run``）
+            预先生成的运行 ID。传入后 session 目录与所有 realtime 事件都用它，
+            使「API 侧 run_id」「编排器 session.run_id」``SSE 事件 run_id``
+            三者一致。之前编排器自生成 uuid，导致：
+              * API 记录的 session_dir（``.osh/sessions/<api_run_id>``）与
+                编排器实际写产物的目录（``.osh/sessions/<session.run_id>``）
+                不是同一个 → 产出物面板 / 一键跑看板对不上；
+              * SSE 的 stage_* 事件用 ``session.name``（"run-xxx"）而
+                checkpoint/run_done 用 API run_id（"xxx"）→ 前端 store
+                按 run_id 聚合时两个 key 各存一份，看板与左栏徽标错乱。
+            不传时行为不变（自动生成 uuid），CLI / 测试无感。
     
     Args:
         spec_path: Path to the specification file.
@@ -497,6 +510,8 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             org_id=org_id,
             user_id=user_id,
             user_email=user_email,
+            # Stage-6: 让 session 目录 + realtime 事件与 API 侧 run_id 对齐
+            run_id=run_id,
         )
         # A1-A4: 角色隔离所需的新字段 —— 按角色分组的约束 + 共享安全基线。
         session.agent_constraints_by_role = constraints_by_role
@@ -920,13 +935,43 @@ def _propagate_step_verdict(
 
 import os as _os  # noqa: E402  (top-level 已导入 os, 此行仅为兼容性注释)
 
+def _rt_run_id(session) -> str:
+    """Realtime 事件的 run_id 取值 (Stage-6, 2026-09-05)。
+
+    统一 ``session.run_id`` —— 与 API 侧 ``POST /api/v1/pipeline/run``
+    返回的 run_id、checkpoint/run_done 事件、以及前端「跳到流水线」用的
+    ``?run=<id>`` 完全一致。之前用 ``session.name``（形如 "run-abc123"）
+    会与 API 的 "abc123" 错开, 前端 store 里同一个 run 被拆成两个 key。
+    """
+    return str(
+        getattr(session, "run_id", "")
+        or getattr(session, "session_id", "")
+        or getattr(session, "name", "")
+        or ""
+    )
+
+
+def _rt_project_dir(project_dir: str = "") -> str:
+    """Realtime 事件的 project_dir 取值。
+
+    Stage-6 (2026-09-05) 修正: 之前 4 个 emit helper 一律用 ``OSH_HOME``,
+    导致所有 run 在前端都显示成同一个目录（OSH_HOME 根），且前端
+    ``ProjectStatsFetcher`` 拿 basename 去查 projects-stats 时查的是
+    OSH_HOME 的 basename（例如 "yuleOSH"），永远查不到项目 spec →
+    数字徽标恒为 0。现在优先用编排器传入的真实 ``project_dir``,
+    缺失时才回退 OSH_HOME。
+    """
+    return str(project_dir or _os.environ.get("OSH_HOME", ""))
+
+
 def _emit_realtime_stage_start(session, step_idx: int, step_key: str,
-                               step_name: str, agent: str) -> None:
+                               step_name: str, agent: str,
+                               project_dir: str = "") -> None:
     try:
         from yuleosh.realtime import emit_pipeline_stage_start
         emit_pipeline_stage_start(
-            run_id=str(getattr(session, "session_id", "") or session.name or ""),
-            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            run_id=_rt_run_id(session),
+            project_dir=_rt_project_dir(project_dir),
             step_index=step_idx,
             step_key=step_key,
             step_title=step_name,
@@ -938,7 +983,8 @@ def _emit_realtime_stage_start(session, step_idx: int, step_key: str,
 
 def _emit_realtime_stage_end(session, step_idx: int, step_key: str,
                              step_name: str, agent: str, status: str,
-                             started_at, finished_at) -> None:
+                             started_at, finished_at,
+                             project_dir: str = "") -> None:
     try:
         from yuleosh.realtime import emit_pipeline_stage_end
         _dur_ms: int | None = None
@@ -948,8 +994,8 @@ def _emit_realtime_stage_end(session, step_idx: int, step_key: str,
         except Exception:  # noqa: BLE001
             _dur_ms = None
         emit_pipeline_stage_end(
-            run_id=str(getattr(session, "session_id", "") or session.name or ""),
-            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            run_id=_rt_run_id(session),
+            project_dir=_rt_project_dir(project_dir),
             step_index=step_idx,
             step_key=step_key,
             step_title=step_name,
@@ -961,12 +1007,13 @@ def _emit_realtime_stage_end(session, step_idx: int, step_key: str,
 
 
 def _emit_realtime_stage_skipped(session, step_idx: int, step_key: str,
-                                 step_name: str, agent: str) -> None:
+                                 step_name: str, agent: str,
+                                 project_dir: str = "") -> None:
     try:
         from yuleosh.realtime import emit_pipeline_stage_end
         emit_pipeline_stage_end(
-            run_id=str(getattr(session, "session_id", "") or session.name or ""),
-            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            run_id=_rt_run_id(session),
+            project_dir=_rt_project_dir(project_dir),
             step_index=step_idx,
             step_key=step_key,
             step_title=step_name,
@@ -977,7 +1024,8 @@ def _emit_realtime_stage_skipped(session, step_idx: int, step_key: str,
         log.debug("realtime stage_end(skipped) swallowed: %s", _e)
 
 
-def _emit_realtime_file_produced(output_path, step_key: str, session) -> None:
+def _emit_realtime_file_produced(output_path, step_key: str, session,
+                                 project_dir: str = "") -> None:
     """给前端看板 「文档证据即时显示」用的 file_produced 事件。
 
     output_path 是 step handler 返回的文件路径。空 / 不存在则跳过。
@@ -991,8 +1039,8 @@ def _emit_realtime_file_produced(output_path, step_key: str, session) -> None:
             return
         from yuleosh.realtime import emit_pipeline_file_produced
         emit_pipeline_file_produced(
-            run_id=str(getattr(session, "session_id", "") or session.name or ""),
-            project_dir=str(_os.environ.get("OSH_HOME", "")),
+            run_id=_rt_run_id(session),
+            project_dir=_rt_project_dir(project_dir),
             file_path=_path.name,
             category=_path.suffix.lstrip(".").lower() or "file",
             size_bytes=_path.stat().st_size,
@@ -1029,7 +1077,12 @@ def _execute_step(
     if step_idx + 1 < from_step:
         session.steps[step_idx]["status"] = "skipped"
         session.steps[step_idx]["completed_at"] = datetime.now().isoformat()
-        _emit_realtime_skipped(session, step_idx, step_key, step_name, agent)
+        # 注意: 函数名是 _emit_realtime_stage_skipped (Stage-6 修正拼写,
+        # 之前写成 _emit_realtime_skipped —— 断点续跑时会 NameError 中断)。
+        _emit_realtime_stage_skipped(
+            session, step_idx, step_key, step_name, agent,
+            project_dir=project_dir,
+        )
         return "ok"
 
     # ── B1 缓存 (2026-08-12): 确定性步骤内容寻址缓存 ──
@@ -1070,14 +1123,41 @@ def _execute_step(
                 _emit_realtime_stage_end(
                     session, step_idx, step_key, step_name, agent,
                     status="cached", started_at=None, finished_at=None,
+                    project_dir=project_dir,
                 )
-                _emit_realtime_file_produced(_restored, step_key, session)
+                _emit_realtime_file_produced(
+                    _restored, step_key, session, project_dir=project_dir,
+                )
                 return "ok"
 
     _rt_started_at = datetime.now()
     session.start_step(step_idx)
     # Realtime: 进入 step 立即推 stage_start, 前端阶段看板可以即时点亮
-    _emit_realtime_stage_start(session, step_idx, step_key, step_name, agent)
+    _emit_realtime_stage_start(
+        session, step_idx, step_key, step_name, agent,
+        project_dir=project_dir,
+    )
+    # Stage-6 (2026-09-05): 设置当前 LLM 调用上下文 (ContextVar), 让低层
+    # LLMClient.call 自动 emit pipeline.llm_call 关联到此 run/step。
+    # step handler 可能递归/异步, ContextVar 在 asyncio task 与线程内独立,
+    # 不会污染其它 run。reset 放在下方已有的 finally 里 (不新开 try 块 ——
+    # 新开会让下方 `finally:` 与之配对, 破坏原有的 try/except/finally)。
+    _ctx_token = None
+    try:
+        from yuleosh.realtime import (
+            LLMCallContext,
+            set_current_llm_call_context,
+        )
+
+        _ctx_token = set_current_llm_call_context(LLMCallContext(
+            run_id=session.run_id,
+            project_dir=_rt_project_dir(project_dir),
+            step_key=step_key,
+            step_index=step_idx,
+        ))
+    except Exception as _ctx_err:  # noqa: BLE001 — realtime 是 best-effort 装饰层
+        _ctx_token = None
+        log.debug("set LLM call context skipped: %s", _ctx_err)
     # 方案 A (2026-08-07): expose the current step key so the
     # unified knowledge injection at _call_llm can match per-step
     # skills and produce step-specific context.
@@ -1117,8 +1197,11 @@ def _execute_step(
         _emit_realtime_stage_end(
             session, step_idx, step_key, step_name, agent,
             status="completed", started_at=_rt_started_at, finished_at=_rt_finished_at,
+            project_dir=project_dir,
         )
-        _emit_realtime_file_produced(output_path, step_key, session)
+        _emit_realtime_file_produced(
+            output_path, step_key, session, project_dir=project_dir,
+        )
         if _propagate_step_verdict(session, step_idx, step_key, output_path) == "block":
             print(f"  ⛔ Block gate failed: {step_key} — pipeline interrupted")
             print()
@@ -1137,12 +1220,21 @@ def _execute_step(
         _emit_realtime_stage_end(
             session, step_idx, step_key, step_name, agent,
             status="failed", started_at=_rt_started_at, finished_at=_rt_failed_at,
+            project_dir=project_dir,
         )
         print(f"  ❌ Step failed: {e}")
         print()
         return "failed"
     finally:
         _clear_tl_key()
+        # Stage-6 (2026-09-05): 还原 LLM 调用上下文, 避免污染后续 step/run
+        if _ctx_token is not None:
+            try:
+                from yuleosh.realtime import reset_current_llm_call_context
+
+                reset_current_llm_call_context(_ctx_token)
+            except Exception as _ctx_reset_err:  # noqa: BLE001
+                log.debug("reset LLM call context skipped: %s", _ctx_reset_err)
 
 
 def _run_parallel_group(

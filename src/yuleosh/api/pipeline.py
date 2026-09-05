@@ -312,7 +312,10 @@ def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: st
         rec["started_at"] = datetime.now().isoformat()
         _session = None
         try:
-            _session = run_pipeline(spec_abs, name=name)
+            # Stage-6 (2026-09-05): 把 API 侧 run_id 透传给编排器 ——
+            # 使 session 目录 (.osh/sessions/<run_id>) 与 SSE 事件的 run_id
+            # 与 API 记账三者一致（此前编排器自生成 uuid，目录对不上）。
+            _session = run_pipeline(spec_abs, name=name, run_id=run_id)
             rec["status"] = "completed"
         except SystemExit as _e:  # run_pipeline 缺 key 会 sys.exit(1)
             rec["status"] = "failed"

@@ -16,12 +16,17 @@ import pytest
 from yuleosh.realtime import (
     EVENT_BUS,
     EventBus,
+    LLMCallContext,
     RealtimeEvent,
     emit_pipeline_checkpoint,
     emit_pipeline_file_produced,
+    emit_pipeline_llm_call,
     emit_pipeline_run_done,
     emit_pipeline_stage_end,
     emit_pipeline_stage_start,
+    get_current_llm_call_context,
+    reset_current_llm_call_context,
+    set_current_llm_call_context,
 )
 
 
@@ -165,3 +170,76 @@ class TestEmitHelpers:
         evt = EVENT_BUS._history[-1]
         assert evt.payload["kind"] == "stage_end"
         assert evt.payload["duration_ms"] == 1200
+
+    def test_emit_llm_call(self):
+        # Stage-6 (2026-09-05): 单次 LLM 调用的 token 用量
+        eid = emit_pipeline_llm_call(
+            run_id="r1", project_dir="/p",
+            step_key="prd", step_index=2,
+            model="deepseek-v4", provider="deepseek",
+            prompt_tokens=128, completion_tokens=512,
+            cost_usd=0.005, duration_ms=2300,
+        )
+        assert eid is not None
+        evt = EVENT_BUS._history[-1]
+        assert evt.topic == "pipeline"
+        assert evt.payload["kind"] == "llm_call"
+        assert evt.payload["total_tokens"] == 640  # prompt + completion
+        assert evt.payload["step_key"] == "prd"
+        assert evt.payload["cost_usd"] == 0.005
+
+
+class TestLLMCallContext:
+    """Stage-6 (2026-09-05): ContextVar 承载的「当前 step 的 LLM 调用上下文」。
+
+    编排器在跑某 step 前 set, finally 里 reset; 低层 LLMClient 读它决定
+    要不要 emit pipeline.llm_call 以及关联到哪个 run/step。默认 None 保证
+    非 pipeline 场景（脚本 / CLI / 单测）不污染 SSE 流。
+    """
+
+    def test_default_is_none(self):
+        assert get_current_llm_call_context() is None
+
+    def test_set_and_reset(self):
+        token = set_current_llm_call_context(LLMCallContext(
+            run_id="r1", project_dir="/p", step_key="prd", step_index=2,
+        ))
+        try:
+            ctx = get_current_llm_call_context()
+            assert ctx is not None
+            assert ctx.run_id == "r1"
+            assert ctx.project_dir == "/p"
+            assert ctx.step_key == "prd"
+            assert ctx.step_index == 2
+        finally:
+            reset_current_llm_call_context(token)
+        assert get_current_llm_call_context() is None
+
+    def test_thread_isolation(self):
+        """并行组的 worker 线程各自独立, 互不串扰。"""
+        import threading
+
+        seen: dict[str, object] = {}
+
+        def worker(name: str, rid: str) -> None:
+            token = set_current_llm_call_context(LLMCallContext(
+                run_id=rid, project_dir=f"/{name}", step_key=name, step_index=1,
+            ))
+            try:
+                time.sleep(0.02)
+                ctx = get_current_llm_call_context()
+                seen[name] = None if ctx is None else ctx.run_id
+            finally:
+                reset_current_llm_call_context(token)
+
+        ts = [
+            threading.Thread(target=worker, args=("a", "run-a")),
+            threading.Thread(target=worker, args=("b", "run-b")),
+        ]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        assert seen == {"a": "run-a", "b": "run-b"}
+        # 主线程不受子线程 set 的影响
+        assert get_current_llm_call_context() is None
