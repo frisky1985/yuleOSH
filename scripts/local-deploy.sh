@@ -4,19 +4,24 @@
 #
 # 用法:
 #   bash scripts/local-deploy.sh            # 前台运行（Ctrl+C 停止），适合自己终端
-#   bash scripts/local-deploy.sh install    # 注册为 macOS launchd 守护进程（免登录、会话回收/重启都在）
+#   bash scripts/local-deploy.sh daemon     # 后台常驻（setsid+看门狗，脱离进程树，崩溃自拉起）
+#   bash scripts/local-deploy.sh install    # 注册为 macOS launchd 守护进程（免登录、重启/登出都在）
 #   bash scripts/local-deploy.sh uninstall  # 卸载守护进程（彻底停止）
-#   bash scripts/local-deploy.sh stop       # 停掉「前台/nohup」方式起的服务
+#   bash scripts/local-deploy.sh stop       # 停掉 daemon/前台方式起的服务
 #
 # 浏览器访问: http://localhost:8080
 #
 # 说明:
 #   - 单进程同时提供 API 与前端静态资源（frontend/out/），无需单独起前端。
 #   - 默认 YULEOSH_AUTH_DISABLED=1（免登录体验模式）。
+#   - daemon 模式用 setsid 完全脱离启动它的 shell 进程树 + scripts/yuleosh-ui-server.sh
+#     看门狗循环（崩溃 2s 自动重启）。适合「当前会话内常驻、不想占终端」的场景。
 #   - install 模式把服务交给系统 launchd 托管：只有 `uninstall` 才真正结束，
-#     会话回收、关终端、甚至重启机器都不影响（RunAtLoad + KeepAlive）。
-#   - 注意：launchctl 需要用户 GUI 登录会话，必须在你自己 Terminal 里跑 install，
-#     不能由 agent / 非登录会话执行（会被 macOS 拒绝）。
+#     登出/重启机器都不影响（RunAtLoad + KeepAlive）。这是唯一能跨「会话回收」的真·常驻。
+#   - 注意：launchctl 写操作在非 GUI 登录会话（如 agent 沙箱）会被 macOS 拒绝
+#     （I/O error 5），所以 install 必须由你自己在 Terminal 里执行；
+#     但 plist 已就位（~/Library/LaunchAgents/com.yuleosh.ui.plist，RunAtLoad），
+#     你下次正常登录时 launchd 会自动加载它，无需手动跑命令。
 # =============================================================================
 set -euo pipefail
 
@@ -101,6 +106,19 @@ case "$CMD" in
     echo "▶ 启动 yuleOSH UI @ http://${YULEOSH_HOST}:${YULEOSH_PORT}（Ctrl+C 停止）"
     echo "  OSH_HOME=${OSH_HOME}"
     exec "${INTERP[@]}" ui
+    ;;
+  daemon)
+    ensure_frontend
+    # 看门狗脚本内部已处理 env / 崩溃重启 / 日志
+    setsid bash "$REPO/scripts/yuleosh-ui-server.sh" >/dev/null 2>&1 < /dev/null &
+    DPID=$!
+    sleep 3
+    if curl -s --noproxy 127.0.0.1 -m 5 -o /dev/null http://127.0.0.1:${YULEOSH_PORT:-8080}/health; then
+      echo "✅ 已后台常驻（watchdog pid≈$DPID）：浏览器开 http://localhost:${YULEOSH_PORT:-8080}"
+      echo "  停止：bash $0 stop"
+    else
+      echo "⚠ 启动似乎未完成，查看 /tmp/yuleosh-ui.out.log"
+    fi
     ;;
   install)
     ensure_frontend
