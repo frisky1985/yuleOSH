@@ -89,18 +89,98 @@ def _create_project(store, body: dict, user: dict | None = None) -> tuple[dict, 
 
     # 2) org-scoped table (Dashboard lists per-org projects)
     org_id = (user or {}).get("org_id")
+    proj = None
     if org_id:
         try:
-            if not store.get_org_project(org_id, slug):
-                store.create_org_project(org_id, name, slug, description)
+            proj = _lookup_org_project(store, org_id, slug, name)
+            if not proj:
+                proj = store.create_org_project(org_id, name, slug, description)
         except Exception as e:  # defensive: org write must not break create
             logger.warning("create_org_project(org=%s) failed: %s", org_id, e)
 
-    # Return the org-scoped project so its id matches what the Dashboard
-    # actually lists — the frontend selects the freshly created project by
-    # this id, so a legacy-table id here would select the wrong row.
-    proj = store.get_org_project(org_id, slug) or store.get_project(name) or {}
+    # 3) land a starter docs/spec.md on disk so the freshly created project is
+    #    discoverable & runnable by the pipeline chain (see _ensure_user_project_spec).
+    _ensure_user_project_spec(proj, name)
+
+    # Return the org-scoped project so its id matches what the Dashboard actually
+    # lists — the frontend selects the freshly created project by this id.
+    if not proj:
+        proj = store.get_org_project(org_id, slug) or store.get_project(name) or {}
     return json_ok(proj)
+
+
+def _lookup_org_project(store, org_id: int, slug: str, name: str) -> dict | None:
+    """Find an org-scoped project row.
+
+    slug collapses to '' for CJK project names (re.sub strips non-ASCII), so the
+    slug-keyed lookup alone would collide across CJK projects — fall back to a
+    name match in that case.
+    """
+    if slug:
+        return store.get_org_project(org_id, slug)
+    for p in store.list_org_projects(org_id):
+        if p.get("name") == name:
+            return p
+    return None
+
+
+def _ensure_user_project_spec(proj: dict | None, name: str) -> None:
+    """Write a starter ``docs/spec.md`` under ``OSH_HOME/projects/<id>`` so a
+    freshly created user project (e.g. a CJK-named one) is discoverable &
+    runnable by the pipeline chain.
+
+    The disk path uses the stable org_project ``id`` (slug collapses to '' for
+    CJK names, so it can't be the directory name).
+    """
+    if not proj:
+        return
+    pid = proj.get("id")
+    if not pid:
+        return
+    try:
+        root = os.environ.get("OSH_HOME") or os.getcwd()
+        proj_dir = Path(root) / "projects" / str(pid)
+        spec_md = proj_dir / "docs" / "spec.md"
+        if not spec_md.exists():
+            proj_dir.mkdir(parents=True, exist_ok=True)
+            (proj_dir / "docs").mkdir(parents=True, exist_ok=True)
+            spec_md.write_text(_build_user_spec_md(proj.get("name") or name), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ensure user project spec failed: %s", e)
+
+
+def _build_user_spec_md(name: str) -> str:
+    """Minimal starter spec for a user-created project so its pipeline can run."""
+    return f"""# yuleOSH 项目规范 — {name}
+
+project: {name}
+domain: automotive
+module: {name}
+
+requirements:
+  - id: REQ-001
+    title: 需求占位（请在文档中补充）
+    coverage: 0%
+  - id: REQ-002
+    title: 架构占位（请在文档中补充）
+    coverage: 0%
+
+tests:
+  unit: 0
+  coverage_target: 85
+
+pipeline:
+  stages:
+    - spec_validation
+    - plan_lint
+    - clang_tidy
+    - unit_tests
+    - coverage
+    - sil
+    - cross_compile
+    - hil
+    - evidence
+"""
 
 
 # Sample spec written for the demo project so its pipeline can be run at once.

@@ -341,6 +341,40 @@ def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: st
         rec["error"] = str(_e)[:500]
 
 
+def _build_starter_spec(name: str) -> str:
+    """Minimal starter spec used when a project_dir has no spec.md yet."""
+    return f"""# yuleOSH 项目规范 — {name}
+
+project: {name}
+domain: automotive
+module: {name}
+
+requirements:
+  - id: REQ-001
+    title: 需求占位（请在文档中补充）
+    coverage: 0%
+  - id: REQ-002
+    title: 架构占位（请在文档中补充）
+    coverage: 0%
+
+tests:
+  unit: 0
+  coverage_target: 85
+
+pipeline:
+  stages:
+    - spec_validation
+    - plan_lint
+    - clang_tidy
+    - unit_tests
+    - coverage
+    - sil
+    - cross_compile
+    - hil
+    - evidence
+"""
+
+
 def _run_pipeline(body: dict) -> tuple[dict, int]:
     """POST /api/v1/pipeline/run — 一键运行某 spec 的真实编排器（后台）。
 
@@ -351,13 +385,45 @@ def _run_pipeline(body: dict) -> tuple[dict, int]:
     HTTP 立即返回 {"run_id","session_dir","status":"running"}，编排器在后台
     线程跑完整 24 步；产物写入 project_dir/.osh/sessions/<id>，前端
     /api/v1/artifacts/list 可直接读。
-    """
-    spec_path = body.get("spec") or body.get("spec_path") or ""
-    if not spec_path:
-        return json_error("'spec' is required")
 
+    兼容性：spec 缺失但 project_dir 给定时，在 <project_dir>/docs/spec.md 惰性
+    创建起步 spec（幂等）后运行——让历史自创项目（如座椅控制器，创建时未落盘
+    spec）也能被一键运行。
+    """
+    import logging
     from . import OSH_HOME
+    logger = logging.getLogger(__name__)
+
     osh_home = Path(OSH_HOME).resolve()
+    spec_path = (body.get("spec") or body.get("spec_path") or "").strip()
+
+    # 解析 project_dir（必须落在 OSH_HOME 内）
+    project_dir = None
+    raw_dir = (body.get("project_dir") or "").strip()
+    if raw_dir:
+        try:
+            if Path(raw_dir).is_absolute():
+                project_dir = Path(raw_dir).expanduser().resolve()
+            else:
+                project_dir = (osh_home / raw_dir.lstrip("/")).resolve()
+            project_dir.relative_to(osh_home)
+        except ValueError:
+            return json_error("project_dir must be within OSH_HOME", 403)
+
+    # spec 缺失 → 从 project_dir 推断 / 惰性创建起步 spec（兼容历史自创项目）
+    if not spec_path and project_dir is not None:
+        candidate = project_dir / "docs" / "spec.md"
+        if not candidate.exists():
+            try:
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.write_text(_build_starter_spec(project_dir.name), encoding="utf-8")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("lazy starter spec create failed: %s", e)
+        if candidate.exists():
+            spec_path = str(candidate)
+
+    if not spec_path:
+        return json_error("'spec' or 'project_dir' is required")
 
     # 解析 spec（防 ../ 穿越）
     try:
@@ -372,16 +438,13 @@ def _run_pipeline(body: dict) -> tuple[dict, int]:
     if not resolved.exists() or not resolved.is_file():
         return json_error(f"Spec file not found: {resolved}")
 
-    # 解析 project_dir（默认 = <proj>/docs/spec.md → <proj>；必须落在 OSH_HOME 内）
-    project_dir_raw = body.get("project_dir") or str(resolved.parent.parent)
-    try:
-        if Path(project_dir_raw).is_absolute():
-            project_dir = Path(project_dir_raw).expanduser().resolve()
-        else:
-            project_dir = (osh_home / project_dir_raw.lstrip("/")).resolve()
-        project_dir.relative_to(osh_home)
-    except ValueError:
-        return json_error("project_dir must be within OSH_HOME", 403)
+    # project_dir 最终确定（默认 = <proj>/docs/spec.md → <proj>）
+    if project_dir is None:
+        project_dir = resolved.parent.parent
+        try:
+            project_dir.relative_to(osh_home)
+        except ValueError:
+            return json_error("project_dir must be within OSH_HOME", 403)
     if not project_dir.is_dir():
         return json_error(f"project_dir is not a directory: {project_dir}", 400)
 

@@ -603,6 +603,37 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
     # 可运行项目（含 docs/spec.md 的 demo/template）——一键跑数据源
     runnable_projects = _iter_runnable_projects(osh_home)
 
+    # 用户自建项目（DB org_projects）：与 demo/template 合并进下拉，确保概览页
+    # 创建的项目（含中文名）也能被选中并运行。磁盘路径用稳定 id，spec 缺失置空
+    # （run 时由后端惰性兜底创建）。
+    user_projects: list[dict] = []
+    try:
+        org_id = (user or {}).get("org_id")
+        if org_id:
+            from yuleosh.store import Store
+            store = Store()
+            for op in store.list_org_projects(org_id):
+                pid = op.get("id")
+                if not pid:
+                    continue
+                pdir = Path(osh_home) / "projects" / str(pid)
+                spec_md = pdir / "docs" / "spec.md"
+                user_projects.append({
+                    "id": pid,
+                    "name": op.get("name") or f"project-{pid}",
+                    "path": str(pdir),
+                    "spec": str(spec_md) if spec_md.exists() else "",
+                })
+    except Exception as e:  # noqa: BLE001
+        log.warning("user_projects discovery failed: %s", e)
+
+    # 排除用户项目目录，避免与 runnable 发现重复（runnable 用目录名=id 作显示名，体验差）
+    user_paths = {str(Path(up["path"]).resolve()) for up in user_projects}
+    runnable_projects = [
+        r for r in runnable_projects
+        if str(Path(r["path"]).resolve()) not in user_paths
+    ]
+
     # 显式 project_dir → 单项目视图（pipelines 兼容旧前端，另附 projects 分组）
     if project_dir:
         pipes = _scan_project_checkpoints(project_dir)
@@ -618,6 +649,7 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
                 }
             ],
             "runnable_projects": runnable_projects,
+            "user_projects": user_projects,
             "count": len(pipes),
         }
 
@@ -658,6 +690,7 @@ def handle_pipeline_list(handler: BaseHTTPRequestHandler, path: str) -> dict:
         "pipelines": ordered,
         "projects": projects,
         "runnable_projects": runnable_projects,
+        "user_projects": user_projects,
         "count": len(ordered),
     }
 
