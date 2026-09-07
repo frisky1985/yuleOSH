@@ -108,6 +108,7 @@ interface PipelineListResponse {
   pipelines: PipelineItem[];
   projects: PipelineProject[];
   runnable_projects?: { name: string; path: string; spec: string }[];
+  user_projects?: { id?: string | number; name: string; path: string; spec: string }[];
   count: number;
   note?: string | null;
 }
@@ -319,6 +320,8 @@ export default function PipelinePage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // ── 一键运行 Demo 项目（后端编排器，真实 LLM 全链） ──
   const [runnableProjects, setRunnableProjects] = useState<{ name: string; path: string; spec: string }[]>([]);
+  // 用户自建项目（概览页创建，含中文名）：从 pipeline/list 的 user_projects 合并进下拉
+  const [userProjects, setUserProjects] = useState<{ id?: string | number; name: string; path: string; spec: string }[]>([]);
   const [selectedProject, setSelectedProject] = useState("");
   const [currentRun, setCurrentRun] = useState<{ run_id: string; name: string; status: string; session_dir: string } | null>(null);
   const [runArtifacts, setRunArtifacts] = useState<ArtifactsListResponse | null>(null);
@@ -518,6 +521,7 @@ export default function PipelinePage() {
       setPipelines(res.pipelines || []);
       setProjects(res.projects || []);
       setRunnableProjects(res.runnable_projects || []);
+      setUserProjects(res.user_projects || []);
       setListNote(res.note ?? null);
     } catch (err) {
       setError(errMessage(err));
@@ -531,6 +535,24 @@ export default function PipelinePage() {
   useEffect(() => {
     void loadPipelines();
   }, [loadPipelines]);
+
+  // 合并用户项目与 demo/template：用户项目优先（同名覆盖），保证概览页创建的项目出现在下拉
+  const allProjects = useMemo(() => {
+    const byPath = new Map<string, { id?: string | number; name: string; path: string; spec: string }>();
+    for (const p of runnableProjects) byPath.set(p.path, p);
+    for (const p of userProjects) byPath.set(p.path, p); // user overrides
+    return Array.from(byPath.values());
+  }, [runnableProjects, userProjects]);
+
+  // 概览页「运行 Pipeline」带 ?project=<id> 跳转时，自动预选对应用户项目
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("project");
+    if (!pid) return;
+    const match = allProjects.find((p) => String(p.id) === pid);
+    if (match) setSelectedProject(match.path);
+  }, [allProjects]);
 
   // 拉取真实 pipeline steps（用于勾选重跑）
   useEffect(() => {
@@ -763,7 +785,7 @@ export default function PipelinePage() {
       setOpMsg("请先选择一个 Demo 项目");
       return;
     }
-    const proj = runnableProjects.find((p) => p.path === selectedProject);
+    const proj = allProjects.find((p) => p.path === selectedProject);
     if (!proj) {
       setOpMsg("项目不存在");
       return;
@@ -788,7 +810,7 @@ export default function PipelinePage() {
     } finally {
       setOpRunning(false);
     }
-  }, [selectedProject, runnableProjects, loadRunArtifacts, stopRunPoll]);
+  }, [selectedProject, allProjects, loadRunArtifacts, stopRunPoll]);
 
   useEffect(() => {
     return () => stopRunPoll();
@@ -932,7 +954,7 @@ export default function PipelinePage() {
                 aria-label="选择项目"
               >
                 <option value="">选择项目…</option>
-                {runnableProjects.map((p) => (
+                {allProjects.map((p) => (
                   <option key={p.path} value={p.path}>{p.name}</option>
                 ))}
               </select>
