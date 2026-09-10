@@ -78,3 +78,52 @@ def test_resolver_returns_empty_when_unset(tmp_db, monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     assert vault.resolve_provider_api_key("deepseek") == ""
+
+
+# ── OpenAI-compatible endpoint resolver (Ollama / 自定义) ──────────────────
+
+
+def test_openai_compat_whitelist_allows_endpoint_keys(tmp_db):
+    # LLM_BASE_URL / LLM_MODEL 现在在白名单内，可入库。
+    for kn in ("LLM_BASE_URL", "LLM_MODEL"):
+        rec = vault.set_provider_secret("ollama", kn, f"val-{kn}")
+        assert rec["key_name"] == kn
+        assert vault.get_provider_secret("ollama", kn) == f"val-{kn}"
+
+
+def test_openai_compat_empty_when_unset(tmp_db, monkeypatch):
+    for e in ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(e, raising=False)
+    assert vault.resolve_openai_compat() == {}
+
+
+def test_openai_compat_env_first(tmp_db, monkeypatch):
+    # 环境变量优先于保险库。
+    monkeypatch.setenv("LLM_BASE_URL", "http://env:11434")
+    monkeypatch.setenv("LLM_API_KEY", "env-key")
+    assert vault.resolve_openai_compat().get("base_url") == "http://env:11434"
+    assert vault.resolve_openai_compat().get("api_key") == "env-key"
+    # 保险库里的同名配置不被优先采用
+    vault.set_provider_secret("ollama", "LLM_BASE_URL", "http://vault:11434")
+    assert vault.resolve_openai_compat().get("base_url") == "http://env:11434"
+
+
+def test_openai_compat_vault_fallback(tmp_db, monkeypatch):
+    # 环境变量清空时，跨 ollama/custom 命名空间兜底。
+    for e in ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(e, raising=False)
+    base_rec = vault.set_provider_secret("ollama", "LLM_BASE_URL", "http://localhost:11434")
+    model_rec = vault.set_provider_secret("ollama", "LLM_MODEL", "deepseek-r1:7b")
+    key_rec = vault.set_provider_secret("ollama", "LLM_API_KEY", "ollama")
+    compat = vault.resolve_openai_compat()
+    assert compat.get("base_url") == "http://localhost:11434"
+    assert compat.get("model") == "deepseek-r1:7b"
+    assert compat.get("api_key") == "ollama"
+    # 仅存的字段才返回（删除 LLM_MODEL 后不应再有 model 键）
+    assert vault.delete_provider_secret(model_rec["id"]) is True
+    compat2 = vault.resolve_openai_compat()
+    assert "model" not in compat2
+    assert compat2.get("base_url") == "http://localhost:11434"
+    # 清理其余
+    vault.delete_provider_secret(base_rec["id"])
+    vault.delete_provider_secret(key_rec["id"])

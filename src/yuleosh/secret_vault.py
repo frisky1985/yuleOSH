@@ -43,11 +43,20 @@ PROVIDER_KEY_ENV: dict[str, tuple[str, ...]] = {
 
 # Key names accepted by the vault API (whitelist, prevents storing arbitrary
 # sensitive env vars).
+#
+# OpenAI-compatible endpoints (本机 Ollama / 自定义模型) 需要三类配置：
+#   - LLM_BASE_URL  OpenAI 兼容端点地址（如 http://localhost:11434）
+#   - LLM_MODEL     模型 tag（如 deepseek-r1:7b / qwen2.5-coder:14b）
+#   - LLM_API_KEY   自建端点可填任意非空串（Ollama 通常留空或 "ollama"）
+# 三者与 LLM_API_KEY 一并开放入库，使 UI 配置的 Ollama/自定义端点真正被
+# openai provider 链路消费（见 resolve_openai_compat）。
 ALLOWED_KEY_NAMES = {
     "DEEPSEEK_API_KEY",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "LLM_API_KEY",
+    "LLM_BASE_URL",
+    "LLM_MODEL",
     "YULEOSH_EMBED_API_KEY",
 }
 
@@ -171,3 +180,50 @@ def resolve_api_key(*env_names: str, provider: Optional[str] = None) -> str:
 def resolve_provider_api_key(provider: str) -> str:
     """Convenience: resolve a provider's API key via its known env names."""
     return resolve_api_key(*PROVIDER_KEY_ENV.get(provider, ()), provider=provider)
+
+
+def _resolve_one(env_names: tuple[str, ...], vault_providers: tuple[str, ...]) -> str:
+    """Resolve a single logical value: env vars first, then vault across providers.
+
+    Returns the first non-empty hit (env checked before vault; within each
+    layer the given order is respected). Returns '' if nothing found.
+    """
+    for n in env_names:
+        v = os.environ.get(n)
+        if v:
+            return v
+    for prov in vault_providers:
+        for n in env_names:
+            secret = get_provider_secret(prov, n)
+            if secret:
+                touch_provider_secret_used(prov, n)
+                return secret
+    return ""
+
+
+def resolve_openai_compat(
+    *,
+    vault_providers: tuple[str, ...] = ("openai", "ollama", "custom"),
+) -> dict[str, str]:
+    """Resolve an OpenAI-compatible endpoint config (本机 Ollama / 自定义模型).
+
+    Ollama 与自定义模型在架构上就是 ``openai`` provider 的
+    ``LLM_BASE_URL`` / ``LLM_MODEL`` / ``LLM_API_KEY`` 三件套，复用现有
+    OpenAI 传输层，无需新增 provider 类。本函数统一按
+    **环境变量优先、保险库兜底** 的取值链解析三者，便于 UI 在
+    ``provider=ollama`` / ``custom`` 下写入的配置被 LLM 链路真正消费。
+
+    Returns a dict containing only the keys found (``base_url`` / ``api_key``
+    / ``model``); callers fall back to defaults for the rest.
+    """
+    out: dict[str, str] = {}
+    base_url = _resolve_one(("LLM_BASE_URL",), vault_providers)
+    if base_url:
+        out["base_url"] = base_url
+    api_key = _resolve_one(("OPENAI_API_KEY", "LLM_API_KEY"), vault_providers)
+    if api_key:
+        out["api_key"] = api_key
+    model = _resolve_one(("LLM_MODEL",), vault_providers)
+    if model:
+        out["model"] = model
+    return out

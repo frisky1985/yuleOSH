@@ -27,9 +27,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 
-from yuleosh.secret_vault import resolve_provider_api_key
+from yuleosh.secret_vault import resolve_openai_compat, resolve_provider_api_key
 import time
 import urllib.error
 import urllib.request
@@ -93,16 +92,20 @@ class OpenAIProvider(AbstractProvider):
                 ``config.max_retries`` attempts. The message always names
                 the provider (``openai``).
         """
-        api_key = resolve_provider_api_key("openai") or ""
+        # 统一取值链：环境变量优先，保险库（openai/ollama/custom 命名空间）
+        # 兜底——使 UI 在「API 密钥」页配置的 Ollama / 自定义端点真正生效。
+        compat = resolve_openai_compat()
+        api_key = compat.get("api_key") or resolve_provider_api_key("openai") or ""
         if not api_key:
             raise RuntimeError(
                 "OpenAI provider (openai): 缺少 API key，请配置环境变量 "
-                "OPENAI_API_KEY 或 LLM_API_KEY"
+                "OPENAI_API_KEY 或 LLM_API_KEY，或在「API 密钥」页新增 Ollama / 自定义端点"
             )
 
         # OpenAI 兼容端点直接用 config.model（Ollama tag 等任意模型名）。
-        api_model = config.model or DEFAULT_API_MODEL
-        base_url = self._resolve_base_url()
+        # config.model 优先；UI 配置的 LLM_MODEL 经 vault 兜底。
+        api_model = config.model or compat.get("model") or DEFAULT_API_MODEL
+        base_url = self._base_url_override or compat.get("base_url") or DEFAULT_BASE_URL
         url = f"{base_url}/v1/chat/completions"
         body: dict[str, Any] = {
             "model": api_model,
@@ -171,11 +174,6 @@ class OpenAIProvider(AbstractProvider):
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
-
-    def _resolve_base_url(self) -> str:
-        return (
-            self._base_url_override or os.environ.get("LLM_BASE_URL") or DEFAULT_BASE_URL
-        ).rstrip("/")
 
     def _post_json(
         self,

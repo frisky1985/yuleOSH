@@ -196,7 +196,19 @@ def provider_available(provider_name: str, provider: Any) -> bool:
         return False
     key_envs = PROVIDER_KEY_ENVS.get(name, ())
     if key_envs:
-        return any(os.environ.get(env) for env in key_envs)
+        if any(os.environ.get(env) for env in key_envs):
+            return True
+        # 保险库兜底：UI 在「API 密钥」页可将 Ollama / 自定义端点
+        # （LLM_BASE_URL / LLM_API_KEY / LLM_MODEL）写入 vault，此时环境变量
+        # 为空，但若 vault 中存在 api_key 或 base_url 仍视为可用，避免漏用
+        # vault-only 配置（自建 OpenAI 兼容端点通常无需真实 key）。
+        if name in ("openai",):
+            from yuleosh.secret_vault import resolve_openai_compat
+
+            comp = resolve_openai_compat()
+            if comp.get("api_key") or comp.get("base_url"):
+                return True
+        return False
     return True
 
 
