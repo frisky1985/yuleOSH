@@ -47,6 +47,7 @@ class ProcessArea:
     title: str = ""  # yaml: <area>.title
     description: str = ""  # yaml: <area>.description (块文本)
     base_practices: List[BasePractice] = field(default_factory=list)  # yaml: <area>.base_practices[]
+    key: Optional[str] = None  # yaml: 顶层平铺键 (如 "swe.1")；to_template_dict 据此还原原始键
 
 
 @dataclass
@@ -108,6 +109,53 @@ class StandardProfile:
     def all_base_practice_ids(self) -> List[str]:
         """返回所有 base_practice id（扁平、保序）。"""
         return [bp.id for area in self.areas for bp in area.base_practices]
+
+    # ------------------------------------------------------------------
+    # 反向序列化 (A1-05)：StandardProfile → checker 消费的 template dict
+    # ------------------------------------------------------------------
+    def to_template_dict(self) -> dict:
+        """把 ``StandardProfile`` 还原为 ``ComplianceChecker`` 消费的 template dict。
+
+        与 ``_yaml_to_profile`` 互逆：经 ``load_profile()`` → ``to_template_dict()``
+        得到的 dict 与原始 yaml 在 checker 实际消费的字段上完全一致，从而：
+          - 默认构造 ``ComplianceChecker(project_dir)`` 走 profile 路径后输出
+            与直接读 yaml 字节级等同（A1-01 golden 安全网据此验证零漂移）。
+          - A-M2 接入新标准时，checker 无需任何改动。
+
+        原始 yaml 为顶层平铺结构（``meta`` + ``swe.1``~``swe.6``），
+        故 area 键由 ``ProcessArea.key``（原 yaml 顶层键）还原，
+        缺失时回退 ``area.id.lower()``。
+        """
+        meta = {
+            "standard": self.meta.standard,
+            "version": self.meta.version,
+            "description": self.meta.description,
+        }
+        areas: dict = {}
+        for area in self.areas:
+            area_key = area.key or area.id.lower()
+            areas[area_key] = {
+                "id": area.id,
+                "title": area.title,
+                "description": area.description,
+                "base_practices": [
+                    {
+                        "id": bp.id,
+                        "title": bp.title,
+                        "output_evidence": [
+                            {
+                                "type": ev.type,
+                                "path": ev.path,
+                                "description": ev.description,
+                            }
+                            for ev in bp.output_evidence
+                        ],
+                        "check": list(bp.check),
+                    }
+                    for bp in area.base_practices
+                ],
+            }
+        return {"meta": meta, **areas}
 
 
 # ==================================================================
@@ -264,6 +312,7 @@ def _yaml_to_profile(data: dict) -> StandardProfile:
                 title=str(area.get("title", "")).strip(),
                 description=str(area.get("description", "")).strip(),
                 base_practices=bps,
+                key=str(area_key),
             )
         )
     return StandardProfile(meta=meta, areas=areas)

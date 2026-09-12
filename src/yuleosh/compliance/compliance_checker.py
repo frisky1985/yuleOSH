@@ -14,6 +14,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Optional
 
+# A1-05: profile 驱动改造——默认经 StandardProfile 加载，支持注入自定义 profile
+from yuleosh.compliance.profile import load_profile
+
 # @req CR-005  @req FSR-001
 
 # Path to the ASPICE v3.1 definition YAML
@@ -46,10 +49,28 @@ def _extract_req_ids(text: str) -> set[str]:
 class ComplianceChecker:
     """Check a project directory for ASPICE v3.1 compliance."""
 
-    def __init__(self, project_dir: str, template_path: Optional[Path] = None):
+    def __init__(
+        self,
+        project_dir: str,
+        template_path: Optional[Path] = None,
+        profile: Optional["StandardProfile"] = None,
+    ):
         self.project_dir = Path(project_dir)
-        self.template_path = template_path or _DEFAULT_TEMPLATE
-        self.template = self._load_template()
+        self.template_path = template_path
+        self.profile = profile
+        if profile is not None:
+            # A1-05: 直接注入 StandardProfile（经 to_template_dict 还原为 checker 消费的 dict）
+            self.profile = profile
+            self.template = profile.to_template_dict()
+        elif template_path is not None:
+            # 向后兼容：显式提供 yaml 路径时直接读文件（旧调用零改动）
+            self.profile = None
+            self.template = self._load_template()
+        else:
+            # 默认：经 profile loader 加载 aspice_v3.1，再还原为 template dict
+            # （与直接读 yaml 在 checker 消费字段上字节级一致，A1-01 golden 安全网验证）
+            self.profile = load_profile("aspice_v3.1")
+            self.template = self.profile.to_template_dict()
         self.results: list[dict] = []
         self.generated_at = datetime.now().isoformat()
 

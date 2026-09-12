@@ -210,3 +210,62 @@ def _tmp_profile(name: str, yaml_text: str):
         import shutil
 
         shutil.rmtree(d, ignore_errors=True)
+
+
+# ------------------------------------------------------------------
+# A1-05: to_template_dict 无损还原（checker 消费字段层面）
+# ------------------------------------------------------------------
+
+def _yaml_path():
+    return (
+        Path(__file__).parent.parent
+        / "src"
+        / "yuleosh"
+        / "compliance"
+        / "aspice_v3.1.yaml"
+    )
+
+
+def test_to_template_dict_top_level_keys():
+    prof = load_profile("aspice_v3.1")
+    d = prof.to_template_dict()
+    assert set(d.keys()) == {
+        "meta", "swe.1", "swe.2", "swe.3", "swe.4", "swe.5", "swe.6",
+    }
+    assert d["meta"] == {"standard": "ASPICE", "version": "3.1", "description": prof.meta.description}
+
+
+def test_to_template_dict_lossless_for_checker():
+    """还原结果与原始 yaml 在 checker 消费字段上一致（golden 零漂移依据）。"""
+    prof = load_profile("aspice_v3.1")
+    d = prof.to_template_dict()
+    with open(_yaml_path(), encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+    # meta：standard / version 必须一致；description 经 strip 对齐
+    assert d["meta"]["standard"] == raw["meta"]["standard"]
+    assert d["meta"]["version"] == raw["meta"]["version"]
+    assert d["meta"]["description"].strip() == str(raw["meta"]["description"]).strip()
+    # swe 区块：id / title / description(strip) / base_practices 结构一致
+    for key in raw:
+        if key == "meta":
+            continue
+        src_area = raw[key]
+        out_area = d[key]
+        assert out_area["id"] == src_area["id"]
+        assert out_area["title"] == src_area.get("title", "")
+        assert out_area["description"].strip() == str(src_area.get("description", "")).strip()
+        src_bps = src_area.get("base_practices", []) or []
+        out_bps = out_area["base_practices"]
+        assert len(src_bps) == len(out_bps)
+        for sb, ob in zip(src_bps, out_bps):
+            assert ob["id"] == sb["id"]
+            assert ob["title"] == sb.get("title", "")
+            src_evs = sb.get("output_evidence", []) or []
+            out_evs = ob["output_evidence"]
+            assert len(src_evs) == len(out_evs)
+            for se, oe in zip(src_evs, out_evs):
+                assert oe["type"] == se["type"]
+                assert oe["path"] == se["path"]
+                assert oe["description"].strip() == str(se.get("description", "")).strip()
+            assert list(ob["check"]) == list(sb.get("check", []) or [])
+
