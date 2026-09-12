@@ -215,6 +215,10 @@ __all__ = [
     "FunctionParam",
     "extract_functions",
     "extract_functions_file",
+    "CallEdge",
+    "CallGraph",
+    "extract_call_graph",
+    "extract_call_graph_file",
 ]
 
 
@@ -498,3 +502,275 @@ def extract_functions_file(path: str, encoding: str = "utf-8") -> dict:
     except Exception:
         text = raw.decode("latin-1", errors="replace")
     return extract_functions(text.encode("utf-8", "replace"), filename=path)
+
+
+# ══════════════════════════════════════════════════════════════════
+# B1-05 调用图提取
+# ══════════════════════════════════════════════════════════════════
+# 调用边类型：
+#   "call"            → 直接函数调用（call_expression 的 function 是裸标识符）
+#   "potential-call"  → 潜在调用（函数指针取址 / 赋值 / 间接调用），不静默丢弃，
+#                       交给 B-M2 的 LLM 推断补齐（有 KG 锚定，见 SPRINT §5 风险表）
+_CALL_EDGE = "call"
+_POTENTIAL_EDGE = "potential-call"
+
+
+@dataclass
+class CallEdge:
+    """一条调用边（容错；永不抛异常）。"""
+
+    caller: str
+    callee: str
+    edge_type: str  # _CALL_EDGE | _POTENTIAL_EDGE
+    line: int  # 1-based（call_expression / 取址 / 赋值所在行）
+    raw: Optional[str] = None  # potential-call 时记录原始算子文本（如 "(*fp)" / "&handler"）
+
+    def as_dict(self) -> dict:
+        return {
+            "caller": self.caller,
+            "callee": self.callee,
+            "edge_type": self.edge_type,
+            "line": self.line,
+            "raw": self.raw,
+        }
+
+
+@dataclass
+class CallGraph:
+    """一个 C 文件的调用图（容错；解析失败返回空图 + parse_ok=False）。"""
+
+    filename: str
+    functions: List[str]  # 本文件定义的函数名（去重）
+    edges: List[CallEdge]
+    external_calls: List[str]  # 被 call 但不在本文件定义的函数名（潜在外部依赖）
+    parse_ok: bool = True
+
+    @property
+    def call_count(self) -> int:
+        return sum(1 for e in self.edges if e.edge_type == _CALL_EDGE)
+
+    @property
+    def potential_count(self) -> int:
+        return sum(1 for e in self.edges if e.edge_type == _POTENTIAL_EDGE)
+
+    def as_dict(self) -> dict:
+        return {
+            "filename": self.filename,
+            "functions": self.functions,
+            "edges": [e.as_dict() for e in self.edges],
+            "external_calls": self.external_calls,
+            "call_count": self.call_count,
+            "potential_count": self.potential_count,
+            "parse_ok": self.parse_ok,
+        }
+
+
+def _find_func_declarator(node) -> Optional[object]:
+    """从 function_definition / declaration 取 function_declarator 子节点。"""
+    for c in node.children:
+        if c.type == "function_declarator":
+            return c
+    return None
+
+
+def _function_definitions(root) -> List[Tuple[str, object]]:
+    """返回 [(函数名, function_definition 节点)]（仅顶层，不含原型）。"""
+    out: List[Tuple[str, object]] = []
+
+    def visit(n):
+        if n.type == "function_definition":
+            fd = _find_func_declarator(n)
+            nm = _declarator_name(fd) if fd is not None else None
+            if nm is not None:
+                out.append((nm.text.decode("utf-8", "replace"), n))
+        for c in n.children:
+            visit(c)
+
+    if root is not None:
+        visit(root)
+    return out
+
+
+def _indirect_target(func_child) -> Optional[str]:
+    """从间接调用算子（parenthesized / field_expression / pointer 等）提取可能的指针/对象名。
+
+    例如 ``(*fp)`` → ``fp``；``obj.method`` → ``obj``（raw 仍保留完整文本）；
+    取不到则返回 None。
+    """
+    found: List[str] = []
+
+    def collect(n):
+        if n.type == "identifier":
+            found.append(n.text.decode("utf-8", "replace"))
+        for c in n.children:
+            collect(c)
+
+    collect(func_child)
+    return found[0] if found else None
+
+
+def _handle_call(call_node, caller: str, edges: List[CallEdge], defined: set) -> None:
+    """处理一个 call_expression，产出直接边或潜在边。"""
+    line = call_node.start_point[0] + 1
+    func_child = None
+    for c in call_node.children:
+        if c.type == "arguments":
+            continue
+        if func_child is None:
+            func_child = c
+    if func_child is None:
+        return
+    if func_child.type == "identifier":
+        callee = func_child.text.decode("utf-8", "replace")
+        # 自调用/普通调用统一记 call；外部判定在外层汇总
+        edges.append(
+            CallEdge(caller=caller, callee=callee, edge_type=_CALL_EDGE, line=line)
+        )
+    else:
+        raw = func_child.text.decode("utf-8", "replace")
+        target = _indirect_target(func_child)
+        edges.append(
+            CallEdge(
+                caller=caller,
+                callee=target or raw,
+                edge_type=_POTENTIAL_EDGE,
+                line=line,
+                raw=raw,
+            )
+        )
+
+
+def _collect_calls(func_node, caller: str, defined: set, edges: List[CallEdge]) -> None:
+    """遍历函数体，收集直接调用 + 函数指针取址/赋值（potential-call）。"""
+    body = None
+    for c in func_node.children:
+        if c.type == "compound_statement":
+            body = c
+            break
+    if body is None:
+        return
+
+    def visit(n):
+        # 不进入嵌套函数定义（若有 gcc 嵌套函数扩展）
+        if n is not func_node and n.type == "function_definition":
+            return
+        if n.type == "call_expression":
+            _handle_call(n, caller, edges, defined)
+        elif n.type == "pointer_expression":
+            # &func ：取址（函数指针作为回调传递）
+            operand = None
+            for c in n.children:
+                if c.type == "identifier":
+                    operand = c
+            if operand is not None:
+                name = operand.text.decode("utf-8", "replace")
+                if name in defined:
+                    edges.append(
+                        CallEdge(
+                            caller=caller,
+                            callee=name,
+                            edge_type=_POTENTIAL_EDGE,
+                            line=n.start_point[0] + 1,
+                            raw="&" + name,
+                        )
+                    )
+        elif n.type == "init_declarator":
+            # T x = func; / void (*fp)(void) = bar; ：初始化器右值是已定义函数名
+            ids = [c for c in n.children if c.type == "identifier"]
+            has_eq = any(
+                c.type == "=" or c.text.decode("utf-8", "replace").strip() == "="
+                for c in n.children
+            )
+            if has_eq and ids:
+                rhs = ids[-1].text.decode("utf-8", "replace")
+                if rhs in defined:
+                    edges.append(
+                        CallEdge(
+                            caller=caller,
+                            callee=rhs,
+                            edge_type=_POTENTIAL_EDGE,
+                            line=n.start_point[0] + 1,
+                            raw="=" + rhs,
+                        )
+                    )
+        elif n.type == "assignment_expression":
+            # ptr = func ：右值标识符是已定义函数名 → 潜在调用（指针被赋值）
+            ids = [c for c in n.children if c.type == "identifier"]
+            if len(ids) >= 2:
+                rhs = ids[-1].text.decode("utf-8", "replace")
+                if rhs in defined:
+                    lhs = ids[0].text.decode("utf-8", "replace")
+                    edges.append(
+                        CallEdge(
+                            caller=caller,
+                            callee=rhs,
+                            edge_type=_POTENTIAL_EDGE,
+                            line=n.start_point[0] + 1,
+                            raw=f"{lhs}={rhs}",
+                        )
+                    )
+        for c in n.children:
+            visit(c)
+
+    visit(body)
+
+
+def extract_call_graph(source: bytes, filename: str = "<string>") -> dict:
+    """从 C 源码抽取调用图（容错、永不抛异常）。
+
+    边型：
+      - ``call``          直接调用（``foo()``）
+      - ``potential-call`` 潜在调用（函数指针取址 ``&handler`` / 赋值 ``fp=foo`` /
+                          间接调用 ``(*fp)()``、``obj.method()``），显式建模不丢弃。
+
+    ``external_calls``：被 ``call`` 但不在本文件定义的函数名（潜在外部依赖）；
+    内部调用（含递归、自调用）不计为 external。
+
+    Returns:
+        CallGraph.as_dict()
+    """
+    if not isinstance(source, (bytes, bytearray)):
+        try:
+            source = source.encode("utf-8")
+        except Exception:
+            source = str(source).encode("utf-8", "replace")
+    source_bytes = bytes(source)
+    res = parse(source_bytes, filename=filename)
+    if not res.ok or res.root_node is None:
+        return CallGraph(
+            filename=filename, functions=[], edges=[], external_calls=[], parse_ok=False
+        ).as_dict()
+    root = res.root_node
+    defs = _function_definitions(root)
+    defined = {name for name, _ in defs}
+    edges: List[CallEdge] = []
+    for name, node in defs:
+        _collect_calls(node, name, defined, edges)
+    called_direct = {e.callee for e in edges if e.edge_type == _CALL_EDGE}
+    external = sorted(called_direct - defined)
+    return CallGraph(
+        filename=filename,
+        functions=sorted(defined),
+        edges=edges,
+        external_calls=external,
+        parse_ok=True,
+    ).as_dict()
+
+
+def extract_call_graph_file(path: str, encoding: str = "utf-8") -> dict:
+    """从磁盘 C 文件抽取调用图（容错、永不抛异常）。
+
+    读取/解码失败时不抛异常：返回空图 + ``parse_ok=False``。
+    """
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except Exception:
+        return CallGraph(
+            filename=path, functions=[], edges=[], external_calls=[], parse_ok=False
+        ).as_dict()
+    try:
+        text = raw.decode(encoding)
+    except Exception:
+        text = raw.decode("latin-1", errors="replace")
+    return extract_call_graph(text.encode("utf-8", "replace"), filename=path)
