@@ -20,6 +20,7 @@ dependencies = [
     "jinja2>=3.1.0",
     "openpyxl>=3.1.0",  # evidence/excel_writer.py 依赖（此前未声明导致 CI 干净环境 18 个测试失败）
     "cryptography>=42.0",  # SEC-PK: 加密存储 API Key（provider_secrets 保险库）
+    "tree-sitter>=0.26.0",  # B-M1 (T-011 B1-01): C AST 扫描器依赖。注意：SPRINT 计划误写为 py-tree-sitter，PyPI 实际包名为 tree-sitter
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
