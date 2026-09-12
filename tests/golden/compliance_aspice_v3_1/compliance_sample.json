@@ -1,0 +1,302 @@
+{
+  "kg_data": {},
+  "project_dir": "<GOLDEN_PROJECT_DIR>",
+  "standard": "ASPICE",
+  "summary": {
+    "failed": 13,
+    "partial": 3,
+    "passed": 2,
+    "total_bps": 18
+  },
+  "swe_sections": {
+    "swe.1": {
+      "base_practices": [
+        {
+          "details": [
+            "  ❌ Missing evidence: Software Requirements Specification (SRS)",
+            "  ✅ Evidence found: Alternative requirements document",
+            "  ✅ Check: Each requirement has a unique identifier (REQ-xxx) (2 unique REQ IDs parsed)",
+            "  ✅ Check: Each requirement contains SHALL statements (SRS with SHALL statements)",
+            "  ❌ Check: Requirements are traced to system requirements (no substantive traceability matrix)"
+          ],
+          "failed_checks": 1,
+          "id": "SWE.1.BP1",
+          "passed_checks": 2,
+          "status": "⚠️",
+          "title": "Specify software requirements",
+          "total_checks": 3
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Structured specs directory",
+            "  ❌ Check: Requirements are organized by functional area (no functional-area grouping found)",
+            "  ❌ Check: Requirements have defined attributes (priority, status) (no priority/status attributes found)"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.1.BP2",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Structure software requirements",
+          "total_checks": 2
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Impact analysis document",
+            "  ❌ Check: Changes to requirements trigger impact analysis (no substantive impact analysis found)",
+            "  ❌ Check: Impact analysis covers schedule, resources, and risks (no substantive impact analysis found)"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.1.BP3",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Evaluate impact of requirements",
+          "total_checks": 2
+        }
+      ],
+      "description": "Transform system requirements into a structured set of software requirements.",
+      "id": "SWE.1",
+      "title": "Software Requirements Analysis"
+    },
+    "swe.2": {
+      "base_practices": [
+        {
+          "details": [
+            "  ✅ Evidence found: Software architecture document",
+            "  ❌ Missing evidence: Alternative architecture document",
+            "  ✅ Check: Architecture covers all software requirements (architecture doc with substantive content)",
+            "  ✅ Check: Architecture defines component boundaries and interfaces (architecture doc with substantive content)"
+          ],
+          "failed_checks": 0,
+          "id": "SWE.2.BP1",
+          "passed_checks": 2,
+          "status": "✅",
+          "title": "Develop software architecture",
+          "total_checks": 2
+        },
+        {
+          "details": [
+            "  ✅ Evidence found: Header files defining interfaces",
+            "  ✅ Check: All external interfaces are defined (1 substantive headers)",
+            "  ✅ Check: Interface specifications include data types and range (1 substantive headers)"
+          ],
+          "failed_checks": 0,
+          "id": "SWE.2.BP2",
+          "passed_checks": 2,
+          "status": "✅",
+          "title": "Define interfaces",
+          "total_checks": 2
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Architecture review record",
+            "  ✅ Check: Architecture review is conducted and documented (architecture doc with substantive content)",
+            "  ❌ Check: Review findings are tracked to closure (no substantive review record found)"
+          ],
+          "failed_checks": 1,
+          "id": "SWE.2.BP3",
+          "passed_checks": 1,
+          "status": "⚠️",
+          "title": "Verify architecture",
+          "total_checks": 2
+        }
+      ],
+      "description": "Establish a software architectural design that identifies components,\ntheir interfaces, and data flow.",
+      "id": "SWE.2",
+      "title": "Software Architectural Design"
+    },
+    "swe.3": {
+      "base_practices": [
+        {
+          "details": [
+            "  ✅ Evidence found: Source code directory",
+            "  ❌ Check: Source code follows defined coding standards (no coding-standard config with real rules)",
+            "  ✅ Check: Each function has a clear, single responsibility (source code present)",
+            "  ✅ Check: Code complexity is managed (functions < 50 lines) (source code present)"
+          ],
+          "failed_checks": 1,
+          "id": "SWE.3.BP1",
+          "passed_checks": 2,
+          "status": "⚠️",
+          "title": "Develop detailed design",
+          "total_checks": 3
+        },
+        {
+          "details": [
+            "  ✅ Evidence found: Unit test directory",
+            "  ❌ Check: Unit tests exist for each software unit (no test files found)",
+            "  ❌ Check: Test cases cover normal, boundary, and error conditions (no test files found)",
+            "  ❌ Check: Test cases are traceable to requirements (no substantive traceability matrix)"
+          ],
+          "failed_checks": 3,
+          "id": "SWE.3.BP2",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Define unit test cases",
+          "total_checks": 3
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Design review record",
+            "  ❌ Check: Design review is conducted per component (no substantive review record found)",
+            "  ❌ Check: Review covers correctness, consistency, and testability (no test files found)"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.3.BP3",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Verify detailed design",
+          "total_checks": 2
+        }
+      ],
+      "description": "Develop a detailed design for each software component and construct units.",
+      "id": "SWE.3",
+      "title": "Software Detailed Design and Unit Construction"
+    },
+    "swe.4": {
+      "base_practices": [
+        {
+          "details": [
+            "  ✅ Evidence found: Unit test results",
+            "  ❌ Missing evidence: CI test execution records",
+            "  ❌ Check: All unit tests pass (100% pass rate) (no test files found)",
+            "  ❌ Check: Statement coverage ≥ 80%",
+            "  ❌ Check: Branch/condition coverage ≥ 70%"
+          ],
+          "failed_checks": 3,
+          "id": "SWE.4.BP1",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Perform unit verification",
+          "total_checks": 3
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Traceability matrix",
+            "  ❌ Check: Each requirement is traced to unit tests (no substantive traceability matrix)",
+            "  ❌ Check: Traceability matrix is maintained and current (no substantive traceability matrix)"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.4.BP2",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Establish bidirectional traceability",
+          "total_checks": 2
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Evidence collection",
+            "  ❌ Check: Failed tests are analyzed and documented (no test files found)",
+            "  ❌ Check: Regression test strategy is defined (no test files found)"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.4.BP3",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Evaluate unit verification results",
+          "total_checks": 2
+        }
+      ],
+      "description": "Verify software units against the detailed design and requirements.",
+      "id": "SWE.4",
+      "title": "Software Unit Verification"
+    },
+    "swe.5": {
+      "base_practices": [
+        {
+          "details": [
+            "  ❌ Missing evidence: Integration strategy document",
+            "  ❌ Check: Integration sequence is defined and justified",
+            "  ❌ Check: Stubs/drivers are identified (no stubs/drivers in integration strategy)"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.5.BP1",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Develop integration strategy",
+          "total_checks": 2
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: CI integration records",
+            "  ❌ Check: Integration builds succeed",
+            "  ❌ Check: Integration follows the defined strategy"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.5.BP2",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Integrate software units",
+          "total_checks": 2
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Integration test directory",
+            "  ❌ Missing evidence: Integration test results",
+            "  ❌ Check: Integration tests cover component interfaces (no test files found)",
+            "  ❌ Check: Integration tests verify data flow between components (no test files found)",
+            "  ❌ Check: All integration tests pass (no test files found)"
+          ],
+          "failed_checks": 3,
+          "id": "SWE.5.BP3",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Perform integration tests",
+          "total_checks": 3
+        }
+      ],
+      "description": "Integrate software units and verify the integrated software against\nthe architecture and requirements.",
+      "id": "SWE.5",
+      "title": "Software Integration and Integration Test"
+    },
+    "swe.6": {
+      "base_practices": [
+        {
+          "details": [
+            "  ❌ Missing evidence: Qualification test strategy",
+            "  ❌ Check: Qualification test scope covers all requirements (no test files found)",
+            "  ❌ Check: Acceptance criteria are defined for each requirement (no substantive acceptance matrix)"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.6.BP1",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Develop qualification test strategy",
+          "total_checks": 2
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Qualification test results",
+            "  ❌ Missing evidence: SIL/HIL test results",
+            "  ❌ Check: All qualification tests pass (no test files found)",
+            "  ❌ Check: Tests are executed in target or equivalent environment (no test files found)",
+            "  ❌ Check: Resulting evidence is archived (no archived evidence found)"
+          ],
+          "failed_checks": 3,
+          "id": "SWE.6.BP2",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Perform qualification tests",
+          "total_checks": 3
+        },
+        {
+          "details": [
+            "  ❌ Missing evidence: Acceptance matrix",
+            "  ❌ Missing evidence: Requirement coverage report",
+            "  ❌ Check: Qualification tests are traceable to requirements (no substantive traceability matrix)",
+            "  ❌ Check: Coverage gaps are identified and documented"
+          ],
+          "failed_checks": 2,
+          "id": "SWE.6.BP3",
+          "passed_checks": 0,
+          "status": "❌",
+          "title": "Establish traceability",
+          "total_checks": 2
+        }
+      ],
+      "description": "Test the complete software against software requirements in the target\nenvironment or a simulated environment.",
+      "id": "SWE.6",
+      "title": "Software Qualification Test"
+    }
+  },
+  "version": "3.1"
+}
