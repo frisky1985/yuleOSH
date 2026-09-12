@@ -206,4 +206,295 @@ def parse_file(path: str, encoding: str = "utf-8") -> CParseResult:
 
 
 # 便捷：模块级常量导出，供测试与后续扩展引用
-__all__ = ["CParseResult", "ErrorNode", "parse", "parse_file"]
+__all__ = [
+    "CParseResult",
+    "ErrorNode",
+    "parse",
+    "parse_file",
+    "FunctionInfo",
+    "FunctionParam",
+    "extract_functions",
+    "extract_functions_file",
+]
+
+
+# ══════════════════════════════════════════════════════════════════
+# B1-03 函数级提取
+# ══════════════════════════════════════════════════════════════════
+# 参与「返回类型 / 存储类」拼装的节点类型（按 C 语法分类）。
+_TYPE_NODE_TYPES = {
+    "primitive_type",       # int / char / float / void ...
+    "type_identifier",      # 自定义类型名（typedef / struct tag）
+    "type_specifier",       # signed / unsigned / long / short / _Bool / _Complex ...
+    "struct_specifier",     # struct X { ... }
+    "enum_specifier",       # enum X { ... }
+    "union_specifier",      # union X { ... }
+    "sized_type_specifier", # __int128 / _Float128 ...
+    "typeof_type_specifier",
+    "typedef_type",         # 经 typedef 引入的类型别名
+}
+# declaration 前导中除 declarator / storage 外的修饰节点也并入返回类型。
+_QUAL_NODE_TYPES = {"type_qualifier"}  # const / volatile / restrict / _Atomic
+
+
+@dataclass
+class FunctionParam:
+    """单个函数参数（K&R 老式声明时 type 可能为空，类型在外部声明中解析）。"""
+
+    name: Optional[str]
+    type: str
+
+
+@dataclass
+class FunctionInfo:
+    """一个函数（定义或原型）的提取结果。"""
+
+    name: str
+    return_type: str
+    storage_class: Optional[str]
+    parameters: List[FunctionParam]
+    is_definition: bool  # True=带函数体（function_definition）；False=仅原型
+    start_line: int  # 1-based
+    end_line: int  # 1-based
+    byte_start: int
+    byte_end: int
+    leading_comment: Optional[str]  # 紧邻函数上方的注释块（不含远处注释）
+
+    def as_dict(self) -> dict:
+        """可序列化摘要（供下游调用图 / 知识图谱入库）。"""
+        return {
+            "name": self.name,
+            "return_type": self.return_type,
+            "storage_class": self.storage_class,
+            "parameters": [{"name": p.name, "type": p.type} for p in self.parameters],
+            "is_definition": self.is_definition,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
+            "byte_start": self.byte_start,
+            "byte_end": self.byte_end,
+            "leading_comment": self.leading_comment,
+        }
+
+
+def _declarator_name(declarator) -> Optional[object]:
+    """从 function_declarator（或其包装层）取函数名 identifier 节点。"""
+    if declarator is None:
+        return None
+    if declarator.type == "identifier":
+        return declarator
+    for c in declarator.children:
+        if c.type == "identifier":
+            return c
+        # 穿透 pointer/array/parenthesized/qualified 包装层（函数指针/数组参数名）
+        deeper = _declarator_name(c)
+        if deeper is not None:
+            return deeper
+    return None
+
+
+def _param_list(declarator) -> Optional[object]:
+    for c in declarator.children:
+        if c.type == "parameter_list":
+            return c
+    return None
+
+
+def _declarator_base_type(decl, collected: List[str]) -> None:
+    """把 pointer/array/parenthesized/qualified 包装层拆成类型标记（* / []），剥离名字。
+
+    指针在外层先记 ``*``，数组在内层后记 ``[]``，从而 ``char *argv[]`` →
+    ``char * []``；名字（identifier）不计。
+    """
+    t = decl.type
+    if t == "identifier":
+        return
+    if t == "pointer_declarator":
+        collected.append("*")
+        for c in decl.children:
+            _declarator_base_type(c, collected)
+    elif t == "array_declarator":
+        for c in decl.children:
+            _declarator_base_type(c, collected)
+        collected.append("[]")
+    elif t in ("parenthesized_declarator", "qualified_declarator"):
+        for c in decl.children:
+            _declarator_base_type(c, collected)
+
+
+def _extract_params(plist) -> List[FunctionParam]:
+    """从 parameter_list 抽取参数名与类型。
+
+    支持：普通声明、指针/数组参数（类型剥离参数名）、K&R 老式
+    （parameter_list 直接含 identifier，type 留空由外部声明解析）。
+    """
+    params: List[FunctionParam] = []
+    if plist is None:
+        return params
+    for child in plist.children:
+        if child.type == "parameter_declaration":
+            name = None
+            type_parts: List[str] = []
+            for sub in child.children:
+                if sub.type == "identifier":
+                    name = sub.text.decode("utf-8", "replace")
+                elif sub.type in _TYPE_NODE_TYPES or sub.type in _QUAL_NODE_TYPES:
+                    type_parts.append(sub.text.decode("utf-8", "replace"))
+                elif sub.type in (
+                    "pointer_declarator",
+                    "array_declarator",
+                    "parenthesized_declarator",
+                    "qualified_declarator",
+                ):
+                    _declarator_base_type(sub, type_parts)
+                    nm = _declarator_name(sub)
+                    if nm is not None and name is None:
+                        name = nm.text.decode("utf-8", "replace")
+            params.append(FunctionParam(name=name, type=" ".join(type_parts).strip()))
+        elif child.type == "identifier":
+            # K&R 老式：parameter_list 直接列名，类型在声明内补
+            params.append(FunctionParam(name=child.text.decode("utf-8", "replace"), type=""))
+    return params
+
+
+def _extract_head(func_node) -> Tuple[str, Optional[str]]:
+    """从 function_definition / declaration 前导子节点抽取返回类型与存储类。
+
+    遇到 function_declarator 即停止（其后的 parameter_list 不计入返回类型）。
+    """
+    return_type_parts: List[str] = []
+    storage: Optional[str] = None
+    for c in func_node.children:
+        if c.type == "function_declarator":
+            break
+        if c.type == "storage_class_specifier":
+            storage = c.text.decode("utf-8", "replace")
+        elif c.type in _TYPE_NODE_TYPES or c.type in _QUAL_NODE_TYPES:
+            return_type_parts.append(c.text.decode("utf-8", "replace"))
+    return " ".join(return_type_parts).strip(), storage
+
+
+def _collect_comments(root) -> List[Tuple[int, int, str]]:
+    """收集语法树中所有 comment 节点：(start, end, text) 按 start 排序。"""
+    out: List[Tuple[int, int, str]] = []
+
+    def visit(n):
+        if n.type == "comment":
+            out.append(
+                (n.start_byte, n.end_byte, n.text.decode("utf-8", "replace"))
+            )
+        for c in n.children:
+            visit(c)
+
+    if root is not None:
+        visit(root)
+    out.sort()
+    return out
+
+
+def _leading_comment(func_start: int, source_bytes: bytes, comments) -> Optional[str]:
+    """取紧邻函数上方、仅以空白（含空行）隔开的连续注释块。
+
+    约束：距函数起点不超过 600 字节，避免误吞远处注释。
+    """
+    result: List[str] = []
+    boundary = func_start
+    for s, e, t in reversed(comments):
+        if e > boundary:
+            continue
+        gap = source_bytes[e:boundary]
+        if gap.strip() == b"" and (boundary - e) <= 600:
+            result.append(t)
+            boundary = s
+        else:
+            break
+    if not result:
+        return None
+    return "\n".join(reversed(result))
+
+
+def _extract_functions_from_tree(root, source_bytes: bytes, filename: str) -> List[FunctionInfo]:
+    """遍历语法树，抽取所有函数定义与原型（容错：解析失败/坏树返回空列表）。"""
+    if root is None:
+        return []
+    funcs: List[FunctionInfo] = []
+    comments = _collect_comments(root)
+
+    def visit(n):
+        if n.type in ("function_definition", "declaration"):
+            fd = None
+            for c in n.children:
+                if c.type == "function_declarator":
+                    fd = c
+                    break
+            if fd is not None:
+                info = _build_function(n, fd, source_bytes, comments)
+                if info is not None:
+                    funcs.append(info)
+        for c in n.children:
+            visit(c)
+
+    visit(root)
+    funcs.sort(key=lambda f: f.byte_start)
+    return funcs
+
+
+def _build_function(node, fd, source_bytes: bytes, comments) -> Optional[FunctionInfo]:
+    name_node = _declarator_name(fd)
+    if name_node is None:
+        return None
+    name = name_node.text.decode("utf-8", "replace")
+    return_type, storage = _extract_head(node)
+    params = _extract_params(_param_list(fd))
+    is_def = any(c.type == "compound_statement" for c in node.children)
+    leading = _leading_comment(node.start_byte, source_bytes, comments)
+    return FunctionInfo(
+        name=name,
+        return_type=return_type,
+        storage_class=storage,
+        parameters=params,
+        is_definition=is_def,
+        start_line=node.start_point[0] + 1,
+        end_line=node.end_point[0] + 1,
+        byte_start=node.start_byte,
+        byte_end=node.end_byte,
+        leading_comment=leading,
+    )
+
+
+def extract_functions(source: bytes, filename: str = "<string>") -> dict:
+    """从 C 源码抽取全部函数（定义 + 原型），容错、永不抛异常。
+
+    Returns:
+        dict: ``{filename, functions:[...as_dict], count, parse_ok}``
+    """
+    if not isinstance(source, (bytes, bytearray)):
+        try:
+            source = source.encode("utf-8")
+        except Exception:
+            source = str(source).encode("utf-8", "replace")
+    source_bytes = bytes(source)
+    res = parse(source_bytes, filename=filename)
+    funcs = _extract_functions_from_tree(res.root_node, source_bytes, filename)
+    return {
+        "filename": filename,
+        "functions": [f.as_dict() for f in funcs],
+        "count": len(funcs),
+        "parse_ok": res.ok,
+    }
+
+
+def extract_functions_file(path: str, encoding: str = "utf-8") -> dict:
+    """从磁盘 C 文件抽取函数（容错、永不抛异常）。
+
+    读取/解码失败时不抛异常：返回 ``functions=[]`` 并标记 ``parse_ok=False``。
+    """
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except Exception:
+        return {"filename": path, "functions": [], "count": 0, "parse_ok": False}
+    try:
+        text = raw.decode(encoding)
+    except Exception:
+        text = raw.decode("latin-1", errors="replace")
+    return extract_functions(text.encode("utf-8", "replace"), filename=path)
