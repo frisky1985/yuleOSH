@@ -98,7 +98,10 @@ def test_openai_compat_empty_when_unset(tmp_db, monkeypatch):
 
 
 def test_openai_compat_env_first(tmp_db, monkeypatch):
-    # 环境变量优先于保险库。
+    # 环境变量优先于保险库。注意 api_key 取值链 OPENAI_API_KEY 先于 LLM_API_KEY，
+    # 故断言前清除 OPENAI_API_KEY，确保验证的是 LLM_API_KEY env 优先于 vault 同名。
+    for e in ("OPENAI_API_KEY", "LLM_API_KEY", "LLM_BASE_URL"):
+        monkeypatch.delenv(e, raising=False)
     monkeypatch.setenv("LLM_BASE_URL", "http://env:11434")
     monkeypatch.setenv("LLM_API_KEY", "env-key")
     assert vault.resolve_openai_compat().get("base_url") == "http://env:11434"
