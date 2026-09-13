@@ -106,6 +106,7 @@ import { GapBatchModal } from "@/components/dashboard/gap-batch-modal";
 import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
 import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board";
+import { LiveSyncBar } from "@/components/dashboard/live-sync-bar";
 import { LoopEngineering } from "@/components/dashboard/loop-engineering";
 import { YuleASRStatus } from "@/components/dashboard/yuleasr-status";
 import { PortfolioCompliance } from "@/components/dashboard/portfolio-compliance";
@@ -1625,6 +1626,9 @@ export default function DashboardPage() {
             </Card>
             </>
             )}
+
+            {/* 实时同步条（2026-09-13）—— 常驻展示「页面在自动刷新 / 后台在跑」，与 activeRuns 联动 */}
+            <LiveSyncBar />
 
             {/* 活跃项目卡（阶段 3 落地）—— 0 个 run 时折叠, 多个 run 时实时展示 featured + 项目数字总览 */}
             <ActiveProjectsCard />

@@ -80,6 +80,8 @@ interface State {
   newEvidenceCount: number;
   producedFilesByRun: Record<string, Set<string>>;
   connected: boolean;
+  /** 最近一次轮询时间戳(ms) —— 前端「实时同步中」指示条用，让用户感知页面在自动刷新 */
+  last_poll_at: number;
 }
 
 type Action =
@@ -108,6 +110,14 @@ type Action =
       type: "pipeline_checkpoint";
       payload: { run_id: string; project_dir: string; status: string;
                   progress_pct?: number };
+    }
+  | {
+      // 1s 轮询快照: 把后端 GET /api/v1/pipeline/status 扫到的「正在运行」会话
+      // 回填 activeRuns。CLI 启动的 run 不 emit SSE、API 编排器又不 emit step
+      // 标题, 轮询是「当前在跑哪一步」最可靠的统一来源。与 SSE 增量字段
+      // (total_tokens / llm_calls / current_file_path) 通过合并保留, 互不覆盖。
+      type: "pipeline_poll_snapshot";
+      payload: { runs: ActiveRun[]; last_poll_at: number };
     }
   | {
       // Stage-6 (2026-09-05): 单次 LLM 调用 token 增量。
@@ -321,6 +331,24 @@ function reducer(state: State, action: Action): State {
     }
     case "set_connected":
       return { ...state, connected: action.connected };
+    case "pipeline_poll_snapshot": {
+      // 1s 轮询快照: 合并「正在运行」会话到 activeRuns。先展开 existing 以
+      // 保留 SSE 累加到该 run 的字段(total_tokens / llm_calls / llm_cost_usd /
+      // current_file_path), 再展开 polling 提供的字段(current_step/status);
+      // stage_started_at 优先沿用 SSE 的时间戳, 否则用轮询首次发现时间(耗时倒计时)。
+      const { runs, last_poll_at } = action.payload;
+      const next = { ...state.activeRuns };
+      for (const r of runs) {
+        const existing = next[r.run_id];
+        next[r.run_id] = {
+          ...existing,
+          ...r,
+          stage_started_at: existing?.stage_started_at ?? r.stage_started_at,
+          updated_at: Date.now(),
+        };
+      }
+      return { ...state, activeRuns: next, last_poll_at };
+    }
     default:
       return state;
   }
@@ -332,6 +360,7 @@ const initialState: State = {
   newEvidenceCount: 0,
   producedFilesByRun: {},
   connected: false,
+  last_poll_at: 0,
 };
 
 // ── Context + Provider ─────────────────────────────────────────────────────
@@ -353,6 +382,15 @@ export function RealtimeProvider({
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── 1s 轮询「正在运行」的 pipeline (2026-09-13) ─────────────────────────
+  // SSE 只覆盖 API 编排器且不明确发 step 标题; CLI 启动的 run 完全不 emit
+  // 事件。这里每 1s 拉一次 GET /api/v1/pipeline/status(后端扫 session.json),
+  // 把 running 会话回填 activeRuns, 让「阶段看板 / 活跃项目卡 / 实时同步条」
+  // 真正活起来。SSE 的 llm_call/file_produced 等增量字段在 reducer 合并时保留。
+  const stepDefsRef = useRef<any>(null);
+  const prevPollIdsRef = useRef<Set<string>>(new Set());
+  const firstSeenRef = useRef<Map<string, number>>(new Map());
 
   // ── 全局 stats fetcher (Stage-5) ──────────────────────────────────────
   // 共享缓存: loadedRef (已成功加载) + inFlightRef (在飞请求) 双重去重,
@@ -448,6 +486,103 @@ export function RealtimeProvider({
       dispatchRef.current({ type: "set_connected", connected: false });
     },
   });
+
+  // ── 1s 轮询: 把「正在运行」的 pipeline 会话回填 activeRuns ────────────
+  // 立即跑一次, 之后每 1s 一次; inFlight 防重叠(单次请求 >1s 时跳过下一拍)。
+  // 会话从 running 变为终态(或目录消失)时, 从 prevPollIds 摘掉并 dispatch
+  // run_done 清掉, 让「后台运行中」指示条与阶段看板正确归零。
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        const status = (await api.v1.pipeline.status()) as any;
+        if (cancelled) return;
+        const sessions: any[] = (status && status.sessions) || [];
+        if (!stepDefsRef.current) {
+          try {
+            stepDefsRef.current = await api.v1.pipeline.steps();
+          } catch {
+            /* 步骤定义拉不到也不阻塞轮询 */
+          }
+        }
+        const defs: any[] = (stepDefsRef.current && stepDefsRef.current.steps) || [];
+        // 注意: session.json 的 current_step 是 0-based(对应 self.steps[idx]),
+        // 而 /pipeline/steps 接口返回的 index 是 1-based(start=1)。统一成 0-based
+        // 建索引, 这样 defMap.get(current_step) 直接命中正确步骤的标题/agent。
+        const defMap = new Map<number, any>();
+        for (const d of defs) defMap.set(Number(d.index) - 1, d);
+        const now = Date.now();
+        const incoming: ActiveRun[] = [];
+        const incomingIds = new Set<string>();
+        for (const s of sessions) {
+          const st = (s.status || "").toLowerCase();
+          if (st === "completed" || st === "failed" || st === "cached" || st === "error") {
+            continue;
+          }
+          const stepIdx = typeof s.current_step === "number" ? s.current_step : -1;
+          const def = defMap.get(stepIdx) || {};
+          const runId = s.run_id || s.name || "";
+          if (!runId) continue;
+          if (!firstSeenRef.current.has(runId)) firstSeenRef.current.set(runId, now);
+          // 由 spec_path(…/docs/spec.md) 反推 project_dir(其父目录的父目录)
+          let projectDir = "";
+          const sp = s.spec_path || "";
+          if (sp) {
+            const parts = sp.split("/").filter(Boolean);
+            if (parts.length >= 2) {
+              parts.pop();
+              parts.pop();
+              projectDir = "/" + parts.join("/");
+            }
+          }
+          incoming.push({
+            run_id: runId,
+            project_dir: projectDir,
+            current_stage_index: stepIdx,
+            current_stage_key: def.key || "",
+            current_stage_title:
+              def.name || (typeof s.current_step_title === "string" ? s.current_step_title : ""),
+            agent: def.agent || "",
+            status: "running",
+            stage_started_at: firstSeenRef.current.get(runId),
+            updated_at: now,
+          });
+          incomingIds.add(runId);
+        }
+        // 上一拍在跑、这一拍不在了 → 清掉(终态或目录消失)
+        for (const id of prevPollIdsRef.current) {
+          if (!incomingIds.has(id)) {
+            dispatchRef.current({
+              type: "pipeline_run_done",
+              payload: { run_id: id, project_dir: "", status: "completed" },
+            });
+            firstSeenRef.current.delete(id);
+          }
+        }
+        prevPollIdsRef.current = incomingIds;
+        dispatchRef.current({
+          type: "pipeline_poll_snapshot",
+          payload: { runs: incoming, last_poll_at: now },
+        });
+      } catch {
+        // 后端/网络抖动: 保留上一拍状态, 下一拍重试, 不抛错不打断 UI
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── stats fetcher 主循环 ──────────────────────────────────────────────
   // 监听 activeRuns, 对每个出现过的 project_dir:
