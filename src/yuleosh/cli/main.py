@@ -87,6 +87,10 @@ from yuleosh.cli.commands.reverse import (  # noqa: E402
     build_parser as _build_reverse,
     cmd_reverse_scan,
 )
+from yuleosh.cli.commands.compliance import (  # noqa: E402
+    build_parser as _build_compliance,
+    cmd_compliance_check,
+)
 
 # gap (v3.9.0): ASPICE 差距 → 改进工单（受控生成，需人工确认）
 from yuleosh.cli.commands.gap import (  # noqa: E402
@@ -385,6 +389,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # reverse (B-M1 / B1-11): C AST 逆向扫描报告
     _build_reverse(sub)
+
+    # compliance (A-M1 / A1-07): 按 profile 运行标准合规检查
+    _build_compliance(sub)
 
     # P2: kg report — RTM + Metrics
     p_kg_report = kgsub.add_parser("report", help="Generate reports from KG (P2)")
@@ -1009,6 +1016,13 @@ def main():
     elif args.command == "reverse":
         if getattr(args, "reverse_sub", None) == "scan":
             sys.exit(cmd_reverse_scan(args))
+        else:
+            parser.print_help()
+            sys.exit(1)
+
+    elif args.command == "compliance":
+        if getattr(args, "compliance_sub", None) == "check":
+            sys.exit(cmd_compliance_check(args))
         else:
             parser.print_help()
             sys.exit(1)
