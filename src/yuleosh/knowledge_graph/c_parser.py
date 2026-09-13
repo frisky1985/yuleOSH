@@ -1566,6 +1566,78 @@ def extract_macros_file(path: str, encoding: str = "utf-8") -> dict:
     return extract_macros(text.encode("utf-8", "replace"), filename=path)
 
 
+def extract_c_ast(source: bytes, filename: str = "<string>") -> dict:
+    """一次性解析并提取全部 C AST 信息（函数/全局/ISR/宏/调用图），**单次 parse**。
+
+    供 ``c_code_scanner`` / ``reverse`` CLI / B1-10 KG 入库复用，避免每个提取器
+    重复 parse 同一份源码。容错永不抛异常。
+
+    Returns:
+        {
+          filename, parse_ok, error_rate,
+          functions:[FunctionInfo.as_dict], globals:[GlobalVar.as_dict],
+          isrs:[{...}], macros:[MacroInfo.as_dict], whitelisted_skipped:[...],
+          call_graph:{functions, edges, external_calls, call_count, potential_count}
+        }
+    """
+    if not isinstance(source, (bytes, bytearray)):
+        try:
+            source = source.encode("utf-8")
+        except Exception:
+            source = str(source).encode("utf-8", "replace")
+    source_bytes = bytes(source)
+    res = parse(source_bytes, filename=filename)
+    if not res.ok or res.root_node is None:
+        return {
+            "filename": filename,
+            "parse_ok": False,
+            "error_rate": (res.error_rate if res.ok else 1.0),
+            "functions": [],
+            "globals": [],
+            "isrs": [],
+            "macros": [],
+            "whitelisted_skipped": [],
+            "call_graph": {
+                "functions": [],
+                "edges": [],
+                "external_calls": [],
+                "call_count": 0,
+                "potential_count": 0,
+            },
+        }
+    root = res.root_node
+    funcs = [f.as_dict() for f in _extract_functions_from_tree(root, source_bytes, filename)]
+    g = [x.as_dict() for x in _extract_globals_from_tree(root, source_bytes)]
+    isrs = _extract_isrs_from_tree(root)
+    macros, skipped = _extract_macros_from_tree(root, source_bytes)
+    # 调用图：复用内部 defs + _collect_calls（不二次 parse）
+    defs = _function_definitions(root)
+    defined = {name for name, _ in defs}
+    edges: List[CallEdge] = []
+    for name, node in defs:
+        _collect_calls(node, name, defined, edges)
+    called_direct = {e.callee for e in edges if e.edge_type == _CALL_EDGE}
+    external = sorted(called_direct - defined)
+    cg = {
+        "functions": sorted(defined),
+        "edges": [e.as_dict() for e in edges],
+        "external_calls": external,
+        "call_count": sum(1 for e in edges if e.edge_type == _CALL_EDGE),
+        "potential_count": sum(1 for e in edges if e.edge_type == _POTENTIAL_EDGE),
+    }
+    return {
+        "filename": filename,
+        "parse_ok": True,
+        "error_rate": res.error_rate,
+        "functions": funcs,
+        "globals": g,
+        "isrs": isrs,
+        "macros": [m.as_dict() for m in macros],
+        "whitelisted_skipped": sorted(set(skipped)),
+        "call_graph": cg,
+    }
+
+
 __all__ = [
     "CParseResult",
     "ErrorNode",
@@ -1588,4 +1660,5 @@ __all__ = [
     "ConditionalInfo",
     "extract_macros",
     "extract_macros_file",
+    "extract_c_ast",
 ]
