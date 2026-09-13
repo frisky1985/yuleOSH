@@ -313,6 +313,37 @@ def get_template(template_name: str) -> dict:
     return OEM_TEMPLATES["generic"]
 
 
+def register_oem_template(name: str, template: dict) -> None:
+    """在运行时注册一个 OEM / 标准追溯矩阵模板（A1-08 注册表接口）。
+
+    A-M2 等后续任务（如 ISO 26262 模板、更多车厂模板）通过本函数把新模板
+    动态挂入 ``OEM_TEMPLATES`` 注册表，无需改动 ``export_traceability_matrix``
+    或其它消费方——消费方仅按 ``name`` 检索（见 :func:`get_template`）。
+
+    Args:
+        name: 模板注册名（如 ``"iso26262"``、``"vw"``、``"bmw"``）。
+        template: 模板定义 dict，需含 ``column_map`` / ``required_columns`` /
+            ``sort_key`` / ``sort_reverse`` / ``extra_columns`` / ``header_style``
+            等字段（与 ``OEM_TEMPLATES`` 内建条目同构）。
+
+    Raises:
+        ValueError: ``template`` 缺少必填字段 ``column_map`` 或 ``required_columns``。
+    """
+    if not isinstance(template, dict):
+        raise ValueError(f"template 必须是 dict，收到 {type(template).__name__}")
+    if "column_map" not in template:
+        raise ValueError(f"template '{name}' 缺少必填字段 column_map")
+    if "required_columns" not in template:
+        raise ValueError(f"template '{name}' 缺少必填字段 required_columns")
+    OEM_TEMPLATES[name] = template
+    log.info("Registered OEM/标准模板 '%s' (共 %d 个注册模板)", name, len(OEM_TEMPLATES))
+
+
+def list_oem_templates() -> list[str]:
+    """返回所有已注册模板名（含内建与运行时注册）。"""
+    return sorted(OEM_TEMPLATES.keys())
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # KG Data Pull
 # ═══════════════════════════════════════════════════════════════════════

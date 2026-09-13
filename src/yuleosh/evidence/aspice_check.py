@@ -23,6 +23,11 @@ from typing import Optional
 # @req RS-005
 
 from yuleosh.compliance.compliance_checker import ComplianceChecker
+from yuleosh.compliance.profile import load_profile, ProfileNotFoundError, ProfileError
+
+
+# 默认合规标准 profile（A1-08：gap check 改读 profile）
+_DEFAULT_PROFILE = "aspice_v3.1"
 
 
 # ------------------------------------------------------------------ #
@@ -133,8 +138,9 @@ def aspice_gap_check(
     project_dir: str = None,
     output_format: str = "markdown",
     template_path: Optional[str] = None,
+    profile_name: str = _DEFAULT_PROFILE,
 ) -> str:
-    """Run ASPICE v3.1 gap-oriented compliance check.
+    """Run ASPICE gap-oriented compliance check (A1-08: profile 驱动).
 
     Instead of saying "what exists", this function reports **what is
     still missing** — organized by SWE.1~SWE.6, per BP, with actionable
@@ -147,21 +153,34 @@ def aspice_gap_check(
     output_format : str
         ``"markdown"`` (default) or ``"json"``.
     template_path : str, optional
-        Path to a custom ASPICE YAML template.
+        [向后兼容] 显式 yaml 模板路径；若提供则优先生效。
+    profile_name : str
+        [A1-08] 合规标准 profile 名（不含 .yaml），默认 ``aspice_v3.1``。
+        经 ``load_profile`` 加载后注入 ``ComplianceChecker``，与旧行为
+        在 checker 消费字段上一致（A-M1 golden 安全网保证零漂移）。
 
     Returns
     -------
     str
         Formatted gap report (Markdown or JSON).
+
+    Raises
+    ------
+    ProfileNotFoundError
+        当 ``profile_name`` 对应的 profile 不存在时透传（调用方可据此提示清单）。
     """
     if project_dir is None:
         project_dir = os.environ.get("OSH_HOME", os.getcwd())
 
-    # Run the existing ComplianceChecker
-    checker = ComplianceChecker(
-        project_dir=project_dir,
-        template_path=Path(template_path) if template_path else None,
-    )
+    # 构造 ComplianceChecker：template_path 优先，否则走 profile 路径
+    if template_path:
+        checker = ComplianceChecker(
+            project_dir=project_dir,
+            template_path=Path(template_path),
+        )
+    else:
+        profile = load_profile(profile_name)
+        checker = ComplianceChecker(project_dir=project_dir, profile=profile)
     report = checker.run()
 
     if output_format == "json":
