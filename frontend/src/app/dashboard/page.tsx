@@ -107,6 +107,7 @@ import { KnowledgeBaseTab } from "@/components/dashboard/knowledge-base-tab";
 import { MisraTrendsTab } from "@/components/dashboard/misra-trends-tab";
 import { PipelineStageBoard } from "@/components/dashboard/pipeline-stage-board";
 import { LiveSyncBar } from "@/components/dashboard/live-sync-bar";
+import { RunPipelineButton } from "@/components/dashboard/run-pipeline-button";
 import { LoopEngineering } from "@/components/dashboard/loop-engineering";
 import { YuleASRStatus } from "@/components/dashboard/yuleasr-status";
 import { PortfolioCompliance } from "@/components/dashboard/portfolio-compliance";
@@ -592,15 +593,18 @@ function ActiveProjectsCard() {
               const pname = s.project_name ||
                 (s.project_dir ? s.project_dir.split("/").slice(-2).join("/") : "(未指定)");
               const st = (s.latest_status || "").toLowerCase();
+              // 编排器运行中只把 session.status 保持 "created"，收尾才翻成
+              // completed/failed；故「运行中」以 active 标志为准，而非具体 status 文案。
+              const isRunningState = isActive && st !== "completed" && st !== "failed";
               const stLabel =
                 st === "completed" ? "已完成"
                 : st === "failed" ? "失败"
-                : st === "running" || st === "queued" ? "运行中"
+                : isRunningState ? "运行中"
                 : (s.latest_status || "—");
               const stColor =
                 st === "completed" ? "text-[#95de64] bg-[#10b981]/15"
                 : st === "failed" ? "text-[#ff7875] bg-[#ff4d4f]/15"
-                : st === "running" || st === "queued" ? "text-[#69b1ff] bg-[#1677ff]/15"
+                : isRunningState ? "text-[#69b1ff] bg-[#1677ff]/15"
                 : "text-[#64748b] bg-[#1e293b]";
               // 证据数优先取最新会话的产物清单长度, 否则用 SSE 累计值
               const evCount =
@@ -1365,16 +1369,9 @@ export default function DashboardPage() {
 
               {/* 右侧动作组：运行 Pipeline + 生成证据包 紧贴靠右 */}
               <div className="flex items-center gap-2 sm:ml-auto">
-                {/* Run pipeline → 运行控制面板（重跑 / 勾选某几项 / 续跑 / 停止） */}
-                <Link href={selectedProjectObj ? `/dashboard/pipeline?project=${selectedProjectObj.id}` : "/dashboard/pipeline"}>
-                  <Button
-                    variant="outline"
-                    className="border-[#1e293b] text-[#94a3b8] hover:text-white hover:border-[#722ed1]/40 gap-2"
-                  >
-                    <Play className="w-4 h-4" />
-                    运行 Pipeline
-                  </Button>
-                </Link>
+                {/* 一键触发 LLM 流水线（UI 触发路径）：直接 POST /api/v1/pipeline/run，
+                    触发后 ActiveProjectsCard / LiveSyncBar 经 1s 轮询项目索引实时回显。 */}
+                <RunPipelineButton project={selectedProjectObj} />
 
                 {/* Evidence button */}
                 <Button
