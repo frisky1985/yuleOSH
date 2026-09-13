@@ -267,9 +267,17 @@ class PipelineSession:
 
     def to_dict(self) -> dict:
         """Serialize session to a dictionary for storage."""
+        # project_dir: 由 session_dir 反推 (<project_dir>/.osh/sessions/<id>
+        # 上溯 3 级)。让会话自带项目归属，供 dashboard 按项目聚合最新结果，
+        # 不依赖 spec_path 推断或 SSE stats_by_project 事件。
+        try:
+            project_dir = str(Path(self.session_dir).resolve().parent.parent.parent)
+        except (OSError, ValueError):
+            project_dir = None
         return {
             "name": self.name,
             "run_id": self.run_id,
+            "project_dir": project_dir,
             "spec_path": self.spec_path,
             "status": self.status,
             "current_step": self.current_step,

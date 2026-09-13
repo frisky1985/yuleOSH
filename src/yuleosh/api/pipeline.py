@@ -17,6 +17,7 @@ from pathlib import Path
 from . import json_error, json_ok
 from ._errors import internal_error
 from .middleware import require_auth
+from yuleosh.pipeline.session_index import discover_project_sessions
 
 # ── Submission throttle (P0): protect the async thread pool from DoS ──
 _TRIGGER_GATE_LOCK = threading.Lock()
@@ -579,28 +580,27 @@ def _list_pipeline_steps() -> tuple[dict, int]:
 
 
 def _list_pipelines() -> tuple[dict, int]:
-    """GET /api/v1/pipeline/status — list all pipeline sessions."""
-    from yuleosh.store import Store
+    """GET /api/v1/pipeline/status — list all pipeline sessions.
 
+    统一发现 + 按项目分组（最新优先）：
+
+    * ``sessions``：递归扫描 OSH_HOME 下所有 ``*/.osh/sessions/*/session.json``
+      （扁平、去重），UI 触发跑落在 project_dir 子目录也能被扫到。
+    * ``projects``：按项目聚合，每个项目取 ``updated_at`` 最新的一份会话作为
+      ``latest``，``active`` 标志该项目是否有正在跑的会话。前端据此把
+      「最新结果」关联到对应项目 —— 无论来自后台(CLI)跑还是 UI 触发跑。
+    """
     from . import OSH_HOME
 
-    store = Store()
-    db_sessions = store.list_pipelines()
-
-    # Also scan filesystem sessions
-    sessions_dir = Path(OSH_HOME) / ".osh" / "sessions"
-    fs_sessions = []
-    if sessions_dir.exists():
-        for d in sorted(sessions_dir.iterdir(), reverse=True):
-            if d.is_dir():
-                sess_file = d / "session.json"
-                if sess_file.exists():
-                    data = json.loads(sess_file.read_text())
-                    fs_sessions.append(data)
+    idx = discover_project_sessions(OSH_HOME)
+    projects = idx["projects"]
+    sessions = idx["sessions"]
 
     return json_ok({
-        "sessions": fs_sessions,
-        "count": len(fs_sessions),
+        "sessions": sessions,
+        "count": len(sessions),
+        "projects": projects,
+        "project_count": len(projects),
     })
 
 
