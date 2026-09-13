@@ -193,6 +193,69 @@ MISRA 是车规 / 工规交付门槛，差距分析（gap-analysis）步骤会�
 
 ---
 
+## 4a. 参考实现公共 API 契约（唯一事实来源）
+
+`src/led_chaser.h` 定义的公共 API **是派生文档（PRD / architecture / development）必须对齐的
+唯一事实来源**。任何 pipeline 生成的开发计划 / 架构文档 **必须** 使用下列 **精确签名**，
+**禁止** 自造近义名（如 `led_chaser_blink_all_mask`）、**禁止** 给纯函数强加不存在的参数
+（如给 `led_chaser_bounce_mask` 加 `dir`）、**禁止** 把内联逻辑（如 BLINK_ALL 在
+`led_chaser_current_mask()` 内 `(g_pos&1)?0xFF:0x00`）抽成独立函数后再声称“缺失”。
+
+```c
+/* 运行模式枚举（命名以 LED_MODE_ 前缀，无裸 MODE_*） */
+typedef enum {
+    LED_MODE_CHASE = 0,     /* 单向流水 */
+    LED_MODE_BOUNCE,         /* 往返流水 */
+    LED_MODE_BLINK_ALL,      /* 同步闪烁 */
+    LED_MODE_BREATHE,        /* PWM 呼吸（真·占空比时间分时） */
+    LED_MODE_COUNT
+} led_mode_t;
+
+/* 生命周期 / 控制 */
+void     led_chaser_init(void);
+void     led_chaser_tick(void);                    /* 由定时器 ISR 调用，禁止忙等 */
+void     led_chaser_set_mode(led_mode_t m);
+led_mode_t led_chaser_get_mode(void);
+uint8_t  led_chaser_current_mask(void);            /* PA0..PA7 位掩码，只读无副作用 */
+
+/* 按钮（主循环每 tick 调一次，非 ISR；消抖按 tick 计数） */
+void     led_chaser_handle_button(void);
+
+/* 定时器 ISR 钩子（200 ms 周期中断里调用） */
+void     led_chaser_on_timer_isr(void);            /* 置位 tick 标志 + 累加计数（最小职责） */
+void     led_chaser_wfi(void);                     /* Req-005 空闲占位 */
+
+/* 纯函数（宿主可单测，无副作用） */
+uint8_t  led_chaser_chase_mask(uint8_t pos);       /* 单向流水掩码（含 wrap） */
+uint8_t  led_chaser_bounce_mask(uint8_t pos);      /* 往返流水掩码（单 bit；方向在 tick() 内推进，不取 dir） */
+uint8_t  led_chaser_breathe_duty(uint8_t phase);   /* BREATHE 三角波占空比级数 */
+uint8_t  led_chaser_breathe_mask(uint8_t phase, uint8_t pwm_phase); /* 时间分时占空比（0xFF/0x00） */
+
+/* Req-006 寄存器级初始化（可编译镜像，含写序） */
+typedef struct {
+    uint32_t apb2enr, gpioa_crl, gpiob_crl, gpiob_odr, tim2_psc, tim2_arr;
+    uint8_t  init_order[8];   /* 写序索引：0=apb2enr,1=gpioa_crl,2=gpiob_crl,3=gpiob_odr,4=tim2_psc,5=tim2_arr */
+    uint8_t  init_order_len;
+} target_state_t;
+void     led_chaser_target_init(void);
+const target_state_t* led_chaser_target_state(void);
+
+/* HAL 桩（目标侧替换为 RCC/GPIO 寄存器写） */
+void     gpio_write(uint8_t port, uint8_t pin, uint8_t val);
+uint8_t  gpio_read(uint8_t port, uint8_t pin);
+void     gpio_write_mask(uint8_t port, uint8_t mask);
+
+/* 测试可见性（仅单测断言） */
+uint32_t led_chaser_tick_count(void);
+uint8_t  led_chaser_tick_pending(void);
+```
+
+> ⚠️ development 计划 **必须** 逐条核对上述签名，把任务 T-002~T-006 的验收标准
+> 写成“对现有函数 + 已有 ctest 断言的核对/补强”，**而非重写接口**；否则会造出与
+> 已通过 ctest 的参考实现不一致的接口，破坏基线（PRD §1.4 权威源纪律）。
+
+---
+
 ## 4b. 现有测试套件（事实，供 pipeline 文档引用，避免“0 测试”误述）
 
 `tests/test_main.c` 随模板提供并 **`ctest` 全绿**，覆盖：
@@ -203,7 +266,9 @@ MISRA 是车规 / 工规交付门槛，差距分析（gap-analysis）步骤会�
 | Req-002 | CHASE/BOUNCE（两端折返不越界）/ BLINK_ALL / BREATHE（占空比三角波 0→max→0，且时间分时全亮/全灭均出现） |
 | Req-003 | init 后 PA0 亮、tick 推进并 8 步 wrap |
 | Req-004 | 连续稳定低 `LED_DEBOUNCE_TICKS` 个 tick 才切一次、单次按下只切一次、松开后再按再切 |
-| Req-006 | HAL 桩读写 + `led_chaser_target_init()` 寄存器镜像（APB2ENR=0x0C / CRL / ODR / PSC=7199 / ARR=1999） |
+| Req-006 | HAL 桩读写 + `led_chaser_target_init()` 寄存器镜像（APB2ENR=0x0C / CRL / ODR / PSC=7199 / ARR=1999）+ **初始化写序**（APB2ENR 索引 0 最先写，GPIO/TIM 配置均在其后） |
+| Req-003 | `led_chaser_on_timer_isr()` 最小职责：`tick_pending` 置位 + `tick_count` +1，且 **ISR 内不推进 pattern**（须由 `led_chaser_tick()` 推进） |
+| Req-005 | `led_chaser_wfi()` 可调用（宿主侧空操作，目标侧 `__WFI`） |
 | MISRA | 越界 `set_mode` 忽略 |
 
 > ⚠️ 任何 pipeline 生成的 PRD / architecture / development 文档 **必须** 声明“模板已含
@@ -228,6 +293,12 @@ MISRA 是车规 / 工规交付门槛，差距分析（gap-analysis）步骤会�
 
 > 派生文档（PRD/architecture/development）的 SHALL 计数 **必须 == 7**（与本节一一对应），
 > 不得因措辞拆分/合并而偏离；如确要增减，须先回改本清单。
+
+> ⚠️ **FR / 功能需求计数自洽硬约束**：派生文档（尤其 PRD）头部元数据的 FR 总数（及 P0/P1/P2
+> 拆分）**必须与正文枚举出的 FR 数量严格一致**；**禁止**在同一文档写两个互相矛盾的数字
+> （如头部“FRs 22”与正文“FR-001~FR-025 共 25”）。spec 本身不预定义 FR 编号体系，文档应
+> 自洽地定义并全程一致使用。同时，spec 的 SHALL/SHOULD 条款总数（machine-readable 强制条款）
+> 与 FR 数是**两个独立维度**，不得用同一数字互相引用误导下游统计。
 
 ---
 

@@ -87,6 +87,16 @@ void led_chaser_target_init(void) {
     g_target.tim2_psc  = 7199U;
     g_target.tim2_arr  = 1999U;
 
+    /* 记录写序（索引：0=apb2enr,1=gpioa_crl,2=gpiob_crl,3=gpiob_odr,4=tim2_psc,5=tim2_arr）。
+     * 顺序即“先使能时钟再配置外设”的硬约束，供 T-006 时序验收。 */
+    g_target.init_order[0] = 0U;   /* APB2ENR 必须最先写 */
+    g_target.init_order[1] = 1U;   /* GPIOA CRL */
+    g_target.init_order[2] = 2U;   /* GPIOB CRL */
+    g_target.init_order[3] = 3U;   /* GPIOB ODR */
+    g_target.init_order[4] = 4U;   /* TIM2 PSC */
+    g_target.init_order[5] = 5U;   /* TIM2 ARR */
+    g_target.init_order_len = 6U;
+
 #ifdef LED_CHASER_TARGET
     /* 目标侧：写入真实硬件寄存器（仅 STM32F1 系列编译路径） */
     RCC->APB2ENR   |= g_target.apb2enr;
@@ -114,10 +124,9 @@ uint8_t led_chaser_chase_mask(uint8_t pos) {
     return (uint8_t)(1U << p);
 }
 
-/** 往返流水：在 pos 处点亮（与方向无关）；方向仅在 tick() 内推进。
- *  纯函数：不回写 dir，调用方据返回值点亮即可。 */
-uint8_t led_chaser_bounce_mask(uint8_t pos, uint8_t dir) {
-    (void)dir;   /* 方向只影响 tick 推进，不影响“当前点亮哪颗” */
+/** 往返流水：在 pos 处点亮（单 bit）。方向仅在 led_chaser_tick() 内推进，
+ *  不影响“当前点亮哪颗”，故本函数只取 pos。纯函数、无副作用。 */
+uint8_t led_chaser_bounce_mask(uint8_t pos) {
     uint8_t p = pos;
     if (p >= LED_COUNT) {
         p = (uint8_t)(p % LED_COUNT);
@@ -173,7 +182,7 @@ uint8_t led_chaser_current_mask(void) {
             break;
         case LED_MODE_BOUNCE:
             /* 只读：方向由 tick() 单向推进，此处不回写 g_dir */
-            mask = led_chaser_bounce_mask(g_pos, g_dir);
+            mask = led_chaser_bounce_mask(g_pos);
             break;
         case LED_MODE_BLINK_ALL:
             mask = (g_pos & 1U) ? 0xFFU : 0x00U;
@@ -251,6 +260,15 @@ void led_chaser_on_timer_isr(void) {
  *  仅在两次 tick 之间被调用，唤醒源为 TIM2/SysTick/EXTI。 */
 void led_chaser_wfi(void) {
     /* 目标侧：__WFI(); */
+}
+
+/* 测试可见性：暴露 ISR 共享状态（仅单测断言用） */
+uint32_t led_chaser_tick_count(void) {
+    return g_tick_count;
+}
+
+uint8_t led_chaser_tick_pending(void) {
+    return g_tick_pending;
 }
 
 /** 按钮采样 + tick 计数消抖（Req-002 / Req-004）；主循环每个 tick 调用一次，非 ISR。

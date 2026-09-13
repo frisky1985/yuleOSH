@@ -61,9 +61,10 @@ void led_chaser_wfi(void);            /* Req-005：空闲 WFI 占位（宿主侧
 
 /* ---- 纯函数（宿主可单测，Req NFR-确定性） ---- */
 uint8_t led_chaser_chase_mask(uint8_t pos);
-/* BOUNCE 掩码：给定位置 pos 与方向 dir(0=左 / 1=右) 的当前点亮位掩码。
- * 纯函数、无副作用；方向仅在 led_chaser_tick() 内单向推进。 */
-uint8_t led_chaser_bounce_mask(uint8_t pos, uint8_t dir);
+/* BOUNCE 掩码：给定位置 pos 的当前点亮位掩码（单 bit 点亮）。
+ * 纯函数、无副作用；往返方向仅在 led_chaser_tick() 内单向推进，不影响“当前点亮哪颗”，
+ * 故本函数只取 pos。禁止给纯函数强加不存在的参数（如 dir）。 */
+uint8_t led_chaser_bounce_mask(uint8_t pos);
 /* BREATHE 占空比级数：phase(0..LED_COUNT-1) → 三角波 0..LED_PWM_STEPS..0。
  * 纯函数、无副作用。 */
 uint8_t led_chaser_breathe_duty(uint8_t phase);
@@ -72,7 +73,9 @@ uint8_t led_chaser_breathe_duty(uint8_t phase);
 uint8_t led_chaser_breathe_mask(uint8_t phase, uint8_t pwm_phase);
 
 /* ---- Req-006：寄存器级初始化（可编译参考实现） ---- */
-/* 寄存器镜像：宿主侧填充供单测断言；目标侧（LED_CHASER_TARGET 宏）同步写真实硬件。 */
+/* 寄存器镜像：宿主侧填充供单测断言；目标侧（LED_CHASER_TARGET 宏）同步写真实硬件。
+ * init_order / init_order_len 记录寄存器写序（索引：0=apb2enr,1=gpioa_crl,2=gpiob_crl,
+ * 3=gpiob_odr,4=tim2_psc,5=tim2_arr），供“先使能时钟再配置 GPIO/TIM”的时序验收。 */
 typedef struct {
     uint32_t apb2enr;    /* RCC->APB2ENR  （bit2=IOPA, bit3=IOPB 时钟使能） */
     uint32_t gpioa_crl;  /* GPIOA->CRL    （PA0..7 推挽输出 2MHz = 0x22222222） */
@@ -80,9 +83,15 @@ typedef struct {
     uint32_t gpiob_odr;  /* GPIOB->ODR    （PB0 上拉 = bit0=1） */
     uint32_t tim2_psc;   /* TIM2->PSC     （72MHz → 200ms：PSC=7199, ARR=1999） */
     uint32_t tim2_arr;   /* TIM2->ARR     （(7199+1)*(1999+1)/72e6 = 0.2s） */
+    uint8_t  init_order[8];   /* 写序寄存器索引序列（见上） */
+    uint8_t  init_order_len;  /* 有效长度 */
 } target_state_t;
 void led_chaser_target_init(void);
 const target_state_t* led_chaser_target_state(void);
+
+/* ---- 测试可见性：暴露 ISR 共享状态（仅单测断言用，非对外 API） ---- */
+uint32_t led_chaser_tick_count(void);
+uint8_t  led_chaser_tick_pending(void);
 
 /* ---- HAL 桩（目标侧替换为 RCC/GPIO 寄存器写） ---- */
 void gpio_write(uint8_t port, uint8_t pin, uint8_t val);

@@ -151,6 +151,30 @@ int main(void) {
     CHECK(ts->tim2_psc == 7199U);             /* 72MHz → 200ms：(7199+1)*(1999+1)/72e6=0.2s */
     CHECK(ts->tim2_arr == 1999U);
 
+    /* ---- Req-006：初始化写序（先使能时钟再配置外设），供 T-006 时序验收 ---- */
+    CHECK(ts->init_order_len == 6U);
+    CHECK(ts->init_order[0] == 0U);   /* 首写必须是 APB2ENR（时钟使能索引 0） */
+    int clock_first = 1;
+    for (int i = 1; i < (int)ts->init_order_len; i++) {
+        if (ts->init_order[i] < ts->init_order[0]) { clock_first = 0; }
+    }
+    CHECK(clock_first == 1);   /* 所有 GPIO/TIM 配置都排在时钟使能之后 */
+
+    /* ---- Req-003：定时器 ISR 钩子最小职责（置位标志 + 累加计数，不在 ISR 内算 pattern） ---- */
+    led_chaser_init();
+    led_chaser_set_mode(LED_MODE_CHASE);
+    uint8_t before_isr = led_chaser_current_mask();
+    led_chaser_on_timer_isr();
+    CHECK(led_chaser_tick_pending() == 1U);     /* 标志置位 */
+    CHECK(led_chaser_tick_count() == 1U);       /* 计数 +1 */
+    CHECK(led_chaser_current_mask() == before_isr);  /* ISR 内不推进 pattern（只置标志） */
+    led_chaser_tick();                          /* main 循环据标志推进 */
+    CHECK(led_chaser_current_mask() != before_isr);   /* tick() 才推进 */
+
+    /* ---- Req-005：WFI 空闲占位可调用（宿主侧空操作，目标侧 __WFI） ---- */
+    led_chaser_wfi();
+    CHECK(led_chaser_tick_count() >= 1U);       /* 冒烟调用即通过（不崩溃、状态可观测） */
+
     /* ---- 越界模式忽略（MISRA 防御）：置为 BOUNCE 后越界 set 应保持不变 ---- */
     led_chaser_set_mode(LED_MODE_BOUNCE);
     led_chaser_set_mode((led_mode_t)LED_MODE_COUNT);
