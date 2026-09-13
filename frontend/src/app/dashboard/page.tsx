@@ -448,22 +448,24 @@ function ActiveProjectsCard() {
   const running = Object.values(realtime.activeRuns).filter(
     (r) => r.status === "running",
   );
-  // 0 个活跃 → 整卡折叠, 不渲染空状态壳
-  if (running.length === 0) return null;
+  // 项目聚合索引（后台跑 / UI 触发跑都汇入 projectsByDir）：含运行中与
+  // 已完成的最新结果。没有任何项目会话时才整卡折叠, 避免空状态噪音。
+  const projectIndex = Object.values(realtime.projectsByDir);
+  if (running.length === 0 && projectIndex.length === 0) return null;
 
-  // 取 step_index 最大的（最新推进的）作为 featured
-  const featured = running
-    .slice()
-    .sort((a, b) => (b.current_stage_index ?? -1) - (a.current_stage_index ?? -1))[0];
-  const projectList = Object.values(realtime.statsByProject);
-  const stepIdx = featured.current_stage_index ?? -1;
+  // 取 step_index 最大的（最新推进的）作为 featured（仅在有运行中会话时）
+  const featured = running.length > 0
+    ? running.slice().sort(
+        (a, b) => (b.current_stage_index ?? -1) - (a.current_stage_index ?? -1),
+      )[0]
+    : null;
+  const projectList = projectIndex;
+  const stepIdx = featured ? (featured.current_stage_index ?? -1) : -1;
   const stepPct = Math.max(0, Math.min(100, ((stepIdx + 1) / 24) * 100));
   // ── Stage-5 (2026-09-05): 阶段耗时 ──────────────────────────────────
   // 来自 stage_start 事件的 timestamp; 5s 重渲染驱动 elapsed 更新。
-  // 后端 stage_end 会带 duration_ms 字段, 但前端无需特判, 因为
-  // stage_start 时间戳对 running 状态的 run 永远有效。
-  const elapsedMs = featured.stage_started_at
-    ? Math.max(0, now - featured.stage_started_at)
+  const elapsedMs = featured?.stage_started_at
+    ? Math.max(0, now - (featured.stage_started_at as number))
     : 0;
   const elapsedStr = formatElapsed(elapsedMs);
 
@@ -476,13 +478,20 @@ function ActiveProjectsCard() {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#10b981]" />
           </span>
           活跃项目
-          <span className="text-[10px] font-normal text-[#10b981] ml-1">
-            {running.length} 个运行中
-          </span>
+          {running.length > 0 ? (
+            <span className="text-[10px] font-normal text-[#10b981] ml-1">
+              {running.length} 个运行中
+            </span>
+          ) : (
+            <span className="text-[10px] font-normal text-[#64748b] ml-1">
+              {projectList.length} 个项目
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* featured run 横幅 */}
+        {/* featured run 横幅（仅在有运行中会话时显示） */}
+        {featured && (
         <div className="rounded-lg border border-[#10b981]/30 bg-[#10b981]/5 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -572,48 +581,75 @@ function ActiveProjectsCard() {
             />
           </div>
         </div>
+        )}
 
-        {/* 项目数字总览 */}
+        {/* 项目数字总览 —— 按项目聚合的最新运行结果（后台跑 / UI 触发跑都汇入） */}
         {projectList.length > 0 && (
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-            {projectList.map((s) => (
-              <div
-                key={s.project_dir}
-                className="flex items-center justify-between gap-2 rounded-lg border border-[#1e293b] bg-[#0b1220] px-3 py-2"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  {s.has_active_run ? (
-                    <span className="h-2 w-2 rounded-full bg-[#10b981] animate-pulse" />
-                  ) : (
-                    <span className="h-2 w-2 rounded-full bg-[#334155]" />
-                  )}
-                  <span className="text-xs text-[#94a3b8] truncate">
-                    {s.project_dir ? s.project_dir.split("/").slice(-2).join("/") : "(未指定)"}
-                  </span>
+            {projectList.map((s) => {
+              const stat = realtime.statsByProject[s.project_dir];
+              const isActive = s.active || (stat?.has_active_run ?? false);
+              const pname = s.project_name ||
+                (s.project_dir ? s.project_dir.split("/").slice(-2).join("/") : "(未指定)");
+              const st = (s.latest_status || "").toLowerCase();
+              const stLabel =
+                st === "completed" ? "已完成"
+                : st === "failed" ? "失败"
+                : st === "running" || st === "queued" ? "运行中"
+                : (s.latest_status || "—");
+              const stColor =
+                st === "completed" ? "text-[#95de64] bg-[#10b981]/15"
+                : st === "failed" ? "text-[#ff7875] bg-[#ff4d4f]/15"
+                : st === "running" || st === "queued" ? "text-[#69b1ff] bg-[#1677ff]/15"
+                : "text-[#64748b] bg-[#1e293b]";
+              // 证据数优先取最新会话的产物清单长度, 否则用 SSE 累计值
+              const evCount =
+                (s.latest?.artifacts?.length) ?? stat?.evidence_count ?? 0;
+              return (
+                <div
+                  key={s.project_dir}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-[#1e293b] bg-[#0b1220] px-3 py-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isActive ? (
+                      <span className="h-2 w-2 rounded-full bg-[#10b981] animate-pulse" />
+                    ) : (
+                      <span className="h-2 w-2 rounded-full bg-[#334155]" />
+                    )}
+                    <span className="text-xs text-[#94a3b8] truncate" title={s.project_dir}>
+                      {pname}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] flex-shrink-0">
+                    {/* 最新结果状态徽标 */}
+                    <span className={`rounded px-1.5 py-0.5 ${stColor}`}>
+                      {stLabel}
+                    </span>
+                    {/* 历史运行次数 */}
+                    <span
+                      className="rounded bg-[#1e293b] text-[#64748b] px-1.5 py-0.5"
+                      title="该项目历史运行次数"
+                    >
+                      {s.runs_count} 次
+                    </span>
+                    {/* 叠加 SSE 数字徽标（若有） */}
+                    {stat?.missing_requirements ? (
+                      <span className="rounded bg-[#ff4d4f]/15 text-[#ff7875] px-1.5 py-0.5">
+                        缺需求 {stat.missing_requirements}
+                      </span>
+                    ) : null}
+                    {stat?.pending_tests ? (
+                      <span className="rounded bg-[#1677ff]/15 text-[#69b1ff] px-1.5 py-0.5">
+                        待测试 {stat.pending_tests}
+                      </span>
+                    ) : null}
+                    <span className="rounded bg-[#10b981]/15 text-[#95de64] px-1.5 py-0.5">
+                      证据 {evCount}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-[10px] flex-shrink-0">
-                  {/* 加载骨架 (Stage-5): stats 还在 loading 时显示 ─ */}
-                  {s.load_state === "loading" && (
-                    <span className="rounded bg-[#1e293b] text-[#64748b] px-1.5 py-0.5 animate-pulse">
-                      stats…
-                    </span>
-                  )}
-                  {s.missing_requirements > 0 && (
-                    <span className="rounded bg-[#ff4d4f]/15 text-[#ff7875] px-1.5 py-0.5">
-                      缺需求 {s.missing_requirements}
-                    </span>
-                  )}
-                  {s.pending_tests > 0 && (
-                    <span className="rounded bg-[#1677ff]/15 text-[#69b1ff] px-1.5 py-0.5">
-                      待测试 {s.pending_tests}
-                    </span>
-                  )}
-                  <span className="rounded bg-[#10b981]/15 text-[#95de64] px-1.5 py-0.5">
-                    证据 {s.evidence_count}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>

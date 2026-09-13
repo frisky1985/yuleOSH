@@ -74,9 +74,33 @@ export interface ProjectStat {
   load_state?: "loading" | "loaded" | "error";
 }
 
+/** 后端「按项目聚合（最新优先）」的会话索引条目。
+ *
+ * 来源：GET /api/v1/pipeline/status 的 ``projects`` 字段（递归发现 +
+ * 同项目多会话取 updated_at 最新一份）。无论会话来自后台(CLI)跑还是 UI
+ * 触发跑，只要共享 OSH_HOME 都会被同一份索引聚合 → 前端据此把「最新结果」
+ * 关联到对应项目。 */
+export interface ProjectIndexEntry {
+  project_dir: string;
+  project_name: string;
+  spec_path?: string | null;
+  latest_run_id?: string;
+  latest_status?: string | null;
+  latest_name?: string | null;
+  latest_updated_at?: string | null;
+  /** 该项目是否有正在跑的会话（后台运行中） */
+  active: boolean;
+  runs_count: number;
+  statuses: string[];
+  /** 最新一份会话的完整 session dict */
+  latest: Record<string, any>;
+}
+
 interface State {
   activeRuns: Record<string, ActiveRun>;
   statsByProject: Record<string, ProjectStat>;
+  /** 按项目聚合的会话索引（最新优先）。后台跑 / UI 触发跑都汇入此处。 */
+  projectsByDir: Record<string, ProjectIndexEntry>;
   newEvidenceCount: number;
   producedFilesByRun: Record<string, Set<string>>;
   connected: boolean;
@@ -143,7 +167,16 @@ type Action =
       type: "set_project_stats_state";
       payload: { project_dir: string; load_state: ProjectStat["load_state"] };
     }
-  | { type: "set_connected"; connected: boolean };
+  | { type: "set_connected"; connected: boolean }
+  | {
+      // 1s 轮询：把后端「按项目聚合（最新优先）」的会话索引回填
+      // projectsByDir。这是「后台跑 / UI 触发跑 两条路径的数据最终按最新
+      // 结果关联到对应项目」的统一入口（不依赖 SSE stats_by_project 事件，
+      // CLI 后台跑不会发该事件也能被聚合）。每次轮询都更新 last_poll_at，
+      // 供 LiveSyncBar 展示「页面在自动刷新」。
+      type: "pipeline_projects_snapshot";
+      payload: { projects: ProjectIndexEntry[]; last_poll_at: number };
+    };
 
 const emptyStats = (project_dir: string): ProjectStat => ({
   project_dir,
@@ -331,6 +364,13 @@ function reducer(state: State, action: Action): State {
     }
     case "set_connected":
       return { ...state, connected: action.connected };
+    case "pipeline_projects_snapshot": {
+      // 按项目目录建索引；last_poll_at 每次轮询都刷新（供 LiveSyncBar）。
+      const { projects, last_poll_at } = action.payload;
+      const next: Record<string, ProjectIndexEntry> = {};
+      for (const p of projects) next[p.project_dir] = p;
+      return { ...state, projectsByDir: next, last_poll_at };
+    }
     case "pipeline_poll_snapshot": {
       // 1s 轮询快照: 合并「正在运行」会话到 activeRuns。先展开 existing 以
       // 保留 SSE 累加到该 run 的字段(total_tokens / llm_calls / llm_cost_usd /
@@ -357,6 +397,7 @@ function reducer(state: State, action: Action): State {
 const initialState: State = {
   activeRuns: {},
   statsByProject: {},
+  projectsByDir: {},
   newEvidenceCount: 0,
   producedFilesByRun: {},
   connected: false,
@@ -564,6 +605,13 @@ export function RealtimeProvider({
           }
         }
         prevPollIdsRef.current = incomingIds;
+        // 按项目聚合（最新优先）索引：后台跑 / UI 触发跑都汇入此处。
+        // 即使没有正在跑的会话也照常回填（含已完成会话的最新结果关联）。
+        const projList: ProjectIndexEntry[] = (status && status.projects) || [];
+        dispatchRef.current({
+          type: "pipeline_projects_snapshot",
+          payload: { projects: projList, last_poll_at: now },
+        });
         dispatchRef.current({
           type: "pipeline_poll_snapshot",
           payload: { runs: incoming, last_poll_at: now },
