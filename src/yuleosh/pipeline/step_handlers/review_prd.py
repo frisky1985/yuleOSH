@@ -74,7 +74,10 @@ def _extract_shalls(spec_content: str) -> list[dict]:
         if m:
             shalls.append({
                 "kind": m.group("kind").upper().strip(),
-                "statement": m.group("statement").strip(),
+                # _SHALL_RE 第 2 组为语句文本（无命名 group）；以 SHALL 开头的正文行
+                # （如风险段「SHALL 强制；…」）会命中此分支，必须用 m.group(2) 而非
+                # 不存在的 m.group("statement")，否则 IndexError: no such group。
+                "statement": m.group(2).strip(),
                 "line": idx,
                 "section": current_section,
             })
