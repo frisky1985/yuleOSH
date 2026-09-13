@@ -40,8 +40,12 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-# 视为「仍在跑」的状态（一旦出现，该项目在 UI 上亮起「后台运行中」）
-_ACTIVE_STATUSES = {"running", "queued", "started", "in_progress", "pending"}
+# 终态：一旦出现，该项目视为「已结束」，UI 不再亮起「后台运行中」。
+# 其余一切状态（created / running / queued / started / in_progress / 未知空值）
+# 一律视为「仍在跑 / 进行中」—— 因为编排器在运行全程只把 session.status 保持为
+# "created"，仅在收尾时翻成 completed / failed，中途从不置 running（见
+# yuleosh/pipeline/orchestrator.py：session.status 仅被赋 "completed"/"failed"）。
+_TERMINAL_STATUSES = {"completed", "failed"}
 
 # 安全护栏：从 OSH_HOME 根到 session.json 的路径深度
 #   root/.../.osh/sessions/<id>/session.json  →  .osh(1)+sessions(2)+<id>(3)+session.json(4)
@@ -140,7 +144,8 @@ def discover_project_sessions(
         )
         latest_data, latest_rid = lst_sorted[0]
         statuses = [str(t[0].get("status", "")).lower() for t in lst_sorted]
-        active = any(st in _ACTIVE_STATUSES for st in statuses)
+        # 非终态（completed/failed 之外）即视为活跃：运行中 / 排队中 / 刚创建
+        active = any(st not in _TERMINAL_STATUSES for st in statuses)
         projects.append(
             {
                 "project_dir": pd_str,

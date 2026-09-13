@@ -4,7 +4,8 @@
 * 递归发现 OSH_HOME 下所有 .osh/sessions/*/session.json（含子目录）
 * UI 触发跑（落在 project_dir 子目录）也能被扫到
 * 同一项目多份会话按 updated_at 取最新（latest-wins）
-* active 标志 = 任一会话处于 running/queued
+* active 标志 = 任一会话处于非终态（created/running/queued…，completed/failed 之外）；
+  编排器运行中只把 session.status 保持 "created"，故 created 必须判为活跃
 * project_dir 正确反推（优先 session 自带，否则按路径）
 """
 
@@ -95,6 +96,36 @@ def test_project_dir_field_overrides_path():
     idx = discover_project_sessions(root)
     p = idx["projects"][0]
     assert p["project_dir"] == str(proj.resolve())
+
+
+def test_created_status_counts_as_active():
+    """编排器运行中 session.status 恒为 'created'（收尾才翻 completed/failed）。
+
+    回归：active 判定必须覆盖 created，否则运行中项目在 dashboard 上不会
+    亮起「后台运行中」。
+    """
+    root = Path(tempfile.mkdtemp())
+    proj = root / "proj"
+    # 一份正在跑的会话（编排器中途的实际状态）
+    _write_session(proj, "mid", "created", "2026-09-13T12:00:00",
+                   spec_path=str(proj / "docs" / "spec.md"))
+    (proj / "docs").mkdir(parents=True, exist_ok=True)
+    (proj / "docs" / "spec.md").write_text("# s")
+    idx = discover_project_sessions(root)
+    p = idx["projects"][0]
+    assert p["latest_status"] == "created"
+    assert p["active"] is True, "created 状态必须判为活跃"
+    assert "created" in p["statuses"]
+
+
+def test_completed_and_failed_are_not_active():
+    root = Path(tempfile.mkdtemp())
+    proj = root / "proj"
+    _write_session(proj, "c", "completed", "2026-09-13T12:00:00")
+    _write_session(proj, "f", "failed", "2026-09-13T11:00:00")
+    idx = discover_project_sessions(root)
+    p = idx["projects"][0]
+    assert p["active"] is False, "completed/failed 必须判为非活跃"
 
 
 def test_dedup_by_run_id():
