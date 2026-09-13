@@ -774,3 +774,385 @@ def extract_call_graph_file(path: str, encoding: str = "utf-8") -> dict:
     except Exception:
         text = raw.decode("latin-1", errors="replace")
     return extract_call_graph(text.encode("utf-8", "replace"), filename=path)
+
+
+# ══════════════════════════════════════════════════════════════════
+# B1-06 全局状态 + ISR 提取
+# ══════════════════════════════════════════════════════════════════
+# ISR 命名启发式关键词（大小写不敏感子串匹配）
+_ISR_NAME_KEYWORDS = ("isr", "irq", "handler", "interrupt", "vector")
+
+
+@dataclass
+class GlobalVar:
+    """一个全局/静态变量（容错）。"""
+
+    name: str
+    var_type: str
+    storage_class: Optional[str]  # static / extern / None(全局)
+    is_volatile: bool
+    is_const: bool
+    initializer: Optional[str]
+    line: int
+    byte_start: int
+    byte_end: int
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "var_type": self.var_type,
+            "storage_class": self.storage_class,
+            "is_volatile": self.is_volatile,
+            "is_const": self.is_const,
+            "initializer": self.initializer,
+            "line": self.line,
+            "byte_start": self.byte_start,
+            "byte_end": self.byte_end,
+        }
+
+
+def _is_function_prototype(decl_node) -> bool:
+    """顶层 declaration 直接含函数原型（function_declarator 且其 declarator 是裸标识符，
+    非函数指针变量 ``void (*h)(void)`` 内 pointer/array 包裹）→ 跳过。
+
+    函数指针变量 ``void (*h)(void);`` 顶层直接子即 function_declarator（内含
+    pointer_declarator），不应误判为函数原型。
+    """
+    for c in decl_node.children:
+        if c.type == "function_declarator":
+            for sub in c.children:
+                if sub.type in (
+                    "pointer_declarator",
+                    "array_declarator",
+                    "parenthesized_declarator",
+                ):
+                    return False
+            return True
+    return False
+
+
+def _var_declarator_info(decl, type_marks: List[str]) -> Optional[str]:
+    """从 declarator 抽变量名；指针/数组/函数指针标记追加到 type_marks。
+
+    handled: identifier / pointer_declarator / array_declarator /
+    parenthesized_declarator / function_declarator(函数指针变量) /
+    qualified_declarator / declarator / init_declarator。
+    """
+    t = decl.type
+    if t == "identifier":
+        return decl.text.decode("utf-8", "replace")
+    if t == "pointer_declarator":
+        type_marks.append("*")
+        for c in decl.children:
+            nm = _var_declarator_info(c, type_marks)
+            if nm:
+                return nm
+    elif t == "array_declarator":
+        type_marks.append("[]")
+        for c in decl.children:
+            if c.type in ("[", "]"):
+                continue
+            nm = _var_declarator_info(c, type_marks)
+            if nm:
+                return nm
+    elif t == "parenthesized_declarator":
+        for c in decl.children:
+            nm = _var_declarator_info(c, type_marks)
+            if nm:
+                return nm
+    elif t == "function_declarator":
+        direct_id = next((c for c in decl.children if c.type == "identifier"), None)
+        if direct_id is not None:
+            type_marks.append("(*)")
+            return direct_id.text.decode("utf-8", "replace")
+        for c in decl.children:
+            if c.type == "parameter_list":
+                continue
+            nm = _var_declarator_info(c, type_marks)
+            if nm:
+                return nm
+    elif t == "qualified_declarator":
+        for c in decl.children:
+            nm = _var_declarator_info(c, type_marks)
+            if nm:
+                return nm
+    elif t in ("declarator", "init_declarator"):
+        for c in decl.children:
+            if c.type == "=" or c.text.decode("utf-8", "replace").strip() == "=":
+                continue
+            nm = _var_declarator_info(c, type_marks)
+            if nm:
+                return nm
+    return None
+
+
+def _initializer_text(init_decl_node, limit: int = 60) -> Optional[str]:
+    """从 init_declarator 取 = 后的初始化值文本（常量/字面量），过长截断。"""
+    eq_idx = None
+    for i, c in enumerate(init_decl_node.children):
+        if c.type == "=" or c.text.decode("utf-8", "replace").strip() == "=":
+            eq_idx = i
+            break
+    if eq_idx is None or eq_idx + 1 >= len(init_decl_node.children):
+        return None
+    val = init_decl_node.children[eq_idx + 1]
+    text = val.text.decode("utf-8", "replace").strip()
+    if len(text) > limit:
+        text = text[:limit] + "..."
+    return text
+
+
+def _extract_globals_from_tree(root, source_bytes: bytes) -> List[GlobalVar]:
+    out: List[GlobalVar] = []
+    if root is None:
+        return out
+    for child in root.children:  # translation_unit 顶层
+        if child.type != "declaration":
+            continue
+        if _is_function_prototype(child):
+            continue
+        storage = None
+        type_parts: List[str] = []
+        quals: List[str] = []
+        for c in child.children:
+            if c.type == "storage_class_specifier":
+                storage = c.text.decode("utf-8", "replace")
+            elif c.type in _QUAL_NODE_TYPES:
+                quals.append(c.text.decode("utf-8", "replace"))
+            elif c.type in _TYPE_NODE_TYPES:
+                type_parts.append(c.text.decode("utf-8", "replace"))
+            elif c.type in ("init_declarator", "declarator"):
+                type_marks: List[str] = []
+                name = _var_declarator_info(c, type_marks)
+                if name is None or storage == "typedef":
+                    continue  # typedef 别名不记为变量
+                init = _initializer_text(c) if c.type == "init_declarator" else None
+                var_type = " ".join(quals + type_parts + type_marks).strip()
+                out.append(
+                    GlobalVar(
+                        name=name,
+                        var_type=var_type,
+                        storage_class=storage,
+                        is_volatile="volatile" in quals,
+                        is_const="const" in quals,
+                        initializer=init,
+                        line=child.start_point[0] + 1,
+                        byte_start=child.start_byte,
+                        byte_end=child.end_byte,
+                    )
+                )
+            elif c.type == "identifier":
+                # extern int g_ext; 等无 declarator 包装的顶层变量
+                if storage == "typedef":
+                    continue
+                var_type = " ".join(quals + type_parts).strip()
+                out.append(
+                    GlobalVar(
+                        name=c.text.decode("utf-8", "replace"),
+                        var_type=var_type,
+                        storage_class=storage,
+                        is_volatile="volatile" in quals,
+                        is_const="const" in quals,
+                        initializer=None,
+                        line=child.start_point[0] + 1,
+                        byte_start=child.start_byte,
+                        byte_end=child.end_byte,
+                    )
+                )
+            elif c.type == "function_declarator":
+                # 函数指针变量 void (*g_handler)(void);（非原型，已在上面排除）
+                name = _var_declarator_info(c, [])
+                if name is None or storage == "typedef":
+                    continue
+                var_type = " ".join(quals + type_parts + ["(*)"]).strip()
+                out.append(
+                    GlobalVar(
+                        name=name,
+                        var_type=var_type,
+                        storage_class=storage,
+                        is_volatile="volatile" in quals,
+                        is_const="const" in quals,
+                        initializer=None,
+                        line=child.start_point[0] + 1,
+                        byte_start=child.start_byte,
+                        byte_end=child.end_byte,
+                    )
+                )
+    return out
+
+
+def _collect_vector_isrs(root, func_names: set) -> set:
+    """扫描 init_declarator 初始化器中的函数名（中断向量表注册）→ ISR 候选。"""
+    found: set = set()
+
+    def visit(n):
+        if n.type == "init_declarator":
+            eq_idx = None
+            for i, c in enumerate(n.children):
+                if c.type == "=" or c.text.decode("utf-8", "replace").strip() == "=":
+                    eq_idx = i
+                    break
+            if eq_idx is not None and eq_idx + 1 < len(n.children):
+                val = n.children[eq_idx + 1]
+
+                def scan(o):
+                    if o.type == "identifier" and o.text.decode("utf-8", "replace") in func_names:
+                        found.add(o.text.decode("utf-8", "replace"))
+                    for cc in o.children:
+                        scan(cc)
+
+                scan(val)
+        for c in n.children:
+            visit(c)
+
+    if root is not None:
+        visit(root)
+    return found
+
+
+def _attr_isrs(defs) -> set:
+    """``__attribute__((interrupt/isr))`` 修饰的函数 → ISR。"""
+    found: set = set()
+    for name, node in defs:
+        for c in node.children:
+            if c.type == "attribute_specifier" and (
+                "interrupt" in c.text.decode("utf-8", "replace").lower()
+                or "isr" in c.text.decode("utf-8", "replace").lower()
+            ):
+                found.add(name)
+    return found
+
+
+def _extract_isrs_from_tree(root) -> List[dict]:
+    if root is None:
+        return []
+    defs = _function_definitions(root)
+    func_names = {n for n, _ in defs}
+    by_name: set = set()
+    for name, _ in defs:
+        low = name.lower()
+        if any(k in low for k in _ISR_NAME_KEYWORDS):
+            by_name.add(name)
+    by_vector = _collect_vector_isrs(root, func_names)
+    by_attr = _attr_isrs(defs)
+    merged: dict = {}
+    for name in by_name:
+        merged.setdefault(name, set()).add("name")
+    for name in by_vector:
+        merged.setdefault(name, set()).add("vector_table")
+    for name in by_attr:
+        merged.setdefault(name, set()).add("attribute")
+    line_of = {n: nd.start_point[0] + 1 for n, nd in defs}
+    out = []
+    for name in sorted(merged):
+        reasons = sorted(merged[name])
+        out.append(
+            {
+                "name": name,
+                "line": line_of.get(name, 0),
+                "reason": "+".join(reasons),
+            }
+        )
+    return out
+
+
+def extract_globals(source: bytes, filename: str = "<string>") -> dict:
+    """从 C 源码抽取全局/静态变量（容错、永不抛异常）。
+
+    Returns:
+        {filename, globals:[GlobalVar.as_dict], count, parse_ok}
+    """
+    if not isinstance(source, (bytes, bytearray)):
+        try:
+            source = source.encode("utf-8")
+        except Exception:
+            source = str(source).encode("utf-8", "replace")
+    source_bytes = bytes(source)
+    res = parse(source_bytes, filename=filename)
+    if not res.ok or res.root_node is None:
+        return {"filename": filename, "globals": [], "count": 0, "parse_ok": False}
+    g = _extract_globals_from_tree(res.root_node, source_bytes)
+    return {
+        "filename": filename,
+        "globals": [x.as_dict() for x in g],
+        "count": len(g),
+        "parse_ok": True,
+    }
+
+
+def extract_globals_file(path: str, encoding: str = "utf-8") -> dict:
+    """从磁盘 C 文件抽取全局变量（容错、永不抛异常）。"""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except Exception:
+        return {"filename": path, "globals": [], "count": 0, "parse_ok": False}
+    try:
+        text = raw.decode(encoding)
+    except Exception:
+        text = raw.decode("latin-1", errors="replace")
+    return extract_globals(text.encode("utf-8", "replace"), filename=path)
+
+
+def extract_isrs(source: bytes, filename: str = "<string>") -> dict:
+    """从 C 源码识别 ISR（容错、永不抛异常）。
+
+    识别策略（任一命中即判 ISR）：
+      - 命名启发式：函数名含 isr/irq/handler/interrupt/vector（大小写不敏感）
+      - 中断向量表：初始化器（数组）中引用的本文件函数
+      - ``__attribute__((interrupt/isr))`` 修饰
+
+    Returns:
+        {filename, isrs:[{name,line,reason}], count, parse_ok}
+    """
+    if not isinstance(source, (bytes, bytearray)):
+        try:
+            source = source.encode("utf-8")
+        except Exception:
+            source = str(source).encode("utf-8", "replace")
+    source_bytes = bytes(source)
+    res = parse(source_bytes, filename=filename)
+    if not res.ok or res.root_node is None:
+        return {"filename": filename, "isrs": [], "count": 0, "parse_ok": False}
+    isrs = _extract_isrs_from_tree(res.root_node)
+    return {
+        "filename": filename,
+        "isrs": isrs,
+        "count": len(isrs),
+        "parse_ok": True,
+    }
+
+
+def extract_isrs_file(path: str, encoding: str = "utf-8") -> dict:
+    """从磁盘 C 文件识别 ISR（容错、永不抛异常）。"""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except Exception:
+        return {"filename": path, "isrs": [], "count": 0, "parse_ok": False}
+    try:
+        text = raw.decode(encoding)
+    except Exception:
+        text = raw.decode("latin-1", errors="replace")
+    return extract_isrs(text.encode("utf-8", "replace"), filename=path)
+
+
+__all__ = [
+    "CParseResult",
+    "ErrorNode",
+    "parse",
+    "parse_file",
+    "FunctionInfo",
+    "FunctionParam",
+    "extract_functions",
+    "extract_functions_file",
+    "CallEdge",
+    "CallGraph",
+    "extract_call_graph",
+    "extract_call_graph_file",
+    "GlobalVar",
+    "extract_globals",
+    "extract_globals_file",
+    "extract_isrs",
+    "extract_isrs_file",
+]
