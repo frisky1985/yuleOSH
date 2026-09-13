@@ -42,11 +42,16 @@
   1. `CHASE` — 单向流水（PA0→PA7 循环）
   2. `BOUNCE` — 往返流水（到两端折返）
   3. `BLINK_ALL` — 8 路同步闪烁
-  4. `BREATHE` — PWM 渐变呼吸（占空比三角波）
+  4. `BREATHE` — PWM 渐变呼吸（**SHALL 强制**，≥4 模式之一）
 - The system SHALL switch to the **next mode** on each **debounced** button press
   (see Req-004), wrapping from mode 4 back to mode 1.
 - The system SHOULD persist the current mode to non-volatile storage (Flash) so it
   survives reset (MAY).
+- **BREATHE 实现约定（强制）**：BREATHE 为 SHALL 强制模式，实现为**呼吸效果**。
+  参考实现（宿主机 / 无硬件 PWM 时）采用**软件 PWM 三角波阶梯亮度**（不同相位输出
+  不同占空比的掩码序列，暗→亮→暗），`led_chaser_breathe_mask()` 为纯函数。
+  目标侧若存在 TIMx CHx 硬件 PWM，应替换为占空比调制并在差距分析记录 deviation；
+  **严禁以“全亮常量 0xFF”等静默降质实现冒充 BREATHE**。
 
 #### Reason
 模式切换验证外部中断（EXTI）/ 输入采样、状态机、以及配置持久化，是从“点灯”到
@@ -58,6 +63,10 @@
 - The system SHALL use a **200 ms tick** as the pattern step period.
 - The system SHALL keep timer ISR **minimal** (set a volatile flag / counter only);
   all pattern computation happens in the main loop / super-loop.
+- **定时器选型（单一裁决，ADR-002 定稿）**：**采用 TIM2 产生 200 ms 周期中断**驱动
+  pattern step（`PSC/ARR` 由 72 MHz HSE 推导）。**SysTick@1kHz 被显式否决**——每 1 ms
+  唤醒一次会抵消 Req-005 的低功耗收益；若改用 SysTick 须预分频到 200 ms 后再作唤醒源。
+  架构文档（architecture.md ADR-002）须直接引用本裁决，不得停留在 TBD。
 
 #### Reason
 忙等浪费功耗且不可响应按钮；定时器中断是低功耗与可组合性的基础，也是 MISRA-C
@@ -66,7 +75,9 @@
 ### Req-004: 按钮消抖
 - The system SHALL debounce the button with a **software debounce of 50 ms**
   (sample the pin in the main loop; only count a press after it has been stable
-  low for ≥ 50 ms).
+  low for **≥ 50 ms of elapsed time**。
+- 消抖以**时间（毫秒）计量**，由 200 ms tick 时钟驱动采样；严禁以“调用次数”冒充毫秒
+  （主循环无独立时基时二者不等价）。
 - The system SHALL prevent **auto-repeat / multiple mode switches** from a single
   held press (one press = one mode advance).
 
@@ -169,7 +180,8 @@ MISRA 是车规 / 工规交付门槛，差距分析（gap-analysis）步骤会�
 ## 5. 风险与假设
 
 - **假设**：目标板已焊接 220 Ω 限流电阻与 PB0 上拉；无则为 Req-006 违背。
-- **风险**：`BREATHE` 模式需要 PWM（TIMx CHx），若 timer 资源冲突，可降级为
-  “阶梯亮度”（软件 PWM），差距分析步骤应标注此 deviation。
+- **风险**：`BREATHE` 模式需要 PWM（TIMx CHx）。参考实现已采用**软件 PWM 三角波阶梯亮度**
+  （`led_chaser_breathe_mask`），满足“呼吸”语义且为 SHALL 强制；目标侧若有硬件 PWM 资源，
+  应升级为占空比调制并在差距分析标注 deviation（仅实现手段升级，**不影响 BREATHE 强制性与呼吸效果**）。
 - **风险**：宿主机测试无法覆盖真实中断时序，仅验证逻辑正确性；板级验证需
   OpenOCD + 示波器（不在本 pipeline 内）。

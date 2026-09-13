@@ -80,10 +80,25 @@ int main(void) {
     CHECK(b0 != b1);
     CHECK((b0 == 0xFFU && b1 == 0x00U) || (b0 == 0x00U && b1 == 0xFFU));
 
-    /* ---- Req-002：BREATHE 参考实现输出全亮 ---- */
+    /* ---- Req-002：BREATHE 软件 PWM 呼吸（三角波亮度阶梯 0→4→1） ---- */
     led_chaser_init();
     led_chaser_set_mode(LED_MODE_BREATHE);
-    CHECK(led_chaser_current_mask() == 0xFFU);
+    /* phase0..7 → lvl 0,1,2,3,4,3,2,1 → 低位 lvl 个 LED 点亮 */
+    CHECK(led_chaser_current_mask() == 0x00U);  /* phase0 lvl0 = 全灭 */
+    led_chaser_tick();
+    CHECK(led_chaser_current_mask() == 0x01U);  /* phase1 lvl1 */
+    led_chaser_tick();
+    CHECK(led_chaser_current_mask() == 0x03U);  /* phase2 lvl2 */
+    led_chaser_tick();
+    CHECK(led_chaser_current_mask() == 0x07U);  /* phase3 lvl3 */
+    led_chaser_tick();
+    CHECK(led_chaser_current_mask() == 0x0FU);  /* phase4 lvl4（峰值） */
+    led_chaser_tick();
+    CHECK(led_chaser_current_mask() == 0x07U);  /* phase5 lvl3（回落） */
+    led_chaser_tick();
+    CHECK(led_chaser_current_mask() == 0x03U);  /* phase6 lvl2 */
+    led_chaser_tick();
+    CHECK(led_chaser_current_mask() == 0x01U);  /* phase7 lvl1 */
 
     /* ---- Req-006：HAL 桩读写 ---- */
     g_gpio_out[0] = 0x00U;
@@ -98,33 +113,33 @@ int main(void) {
     gpio_write(9U, 0U, 1U);
     CHECK(g_gpio_out[0] == 0x81U);
 
-    /* ---- Req-004：按钮消抖（单次按下只切一次） ---- */
+    /* ---- Req-004：按钮消抖（以毫秒计量，单次按下只切一次） ---- */
     led_chaser_init();
     CHECK(led_chaser_get_mode() == LED_MODE_CHASE);
     g_gpio_in[1] = 0x00U;   /* PB0 拉低 = 按下（active-low） */
-    for (int i = 0; i < (int)(LED_DEBOUNCE_MS + 5U); i++) {
-        led_chaser_handle_button();
-    }
-    CHECK(led_chaser_get_mode() == LED_MODE_BOUNCE);   /* 仅切一次 */
-    /* 继续按住不应再切 */
-    for (int i = 0; i < 20; i++) {
-        led_chaser_handle_button();
-    }
+    led_chaser_handle_button(LED_DEBOUNCE_MS);   /* 稳定低 ≥50ms → 切换一次 */
+    CHECK(led_chaser_get_mode() == LED_MODE_BOUNCE);
+    /* 继续按住（再给 50ms）不应再切 */
+    led_chaser_handle_button(LED_DEBOUNCE_MS);
     CHECK(led_chaser_get_mode() == LED_MODE_BOUNCE);
     /* 松开后再次按下应再切一次 */
     g_gpio_in[1] = 0x01U;   /* PB0 释放（high） */
-    for (int i = 0; i < (int)LED_DEBOUNCE_MS; i++) {
-        led_chaser_handle_button();
-    }
+    led_chaser_handle_button(LED_DEBOUNCE_MS);
     g_gpio_in[1] = 0x00U;   /* PB0 再次按下 */
-    for (int i = 0; i < (int)(LED_DEBOUNCE_MS + 5U); i++) {
-        led_chaser_handle_button();
-    }
+    led_chaser_handle_button(LED_DEBOUNCE_MS);
     CHECK(led_chaser_get_mode() == LED_MODE_BLINK_ALL);
 
-    /* ---- 越界模式忽略（MISRA 防御） ---- */
+    /* ---- Req-004：消抖须以时间计量（<50ms 不稳定不切换） ---- */
+    led_chaser_init();
+    g_gpio_in[1] = 0x00U;
+    led_chaser_handle_button(20U);   /* 仅 20ms，未达 50ms 阈值 */
+    CHECK(led_chaser_get_mode() == LED_MODE_CHASE);
+    led_chaser_handle_button(40U);   /* 累计 60ms → 跨越阈值 */
+    CHECK(led_chaser_get_mode() == LED_MODE_BOUNCE);
+
+    /* ---- 越界模式忽略（MISRA 防御）：当前为 BOUNCE，越界 set 应保持不变 ---- */
     led_chaser_set_mode((led_mode_t)LED_MODE_COUNT);
-    CHECK(led_chaser_get_mode() == LED_MODE_BLINK_ALL);
+    CHECK(led_chaser_get_mode() == LED_MODE_BOUNCE);
 
     if (g_fail != 0) {
         printf("\n%d CHECK(s) FAILED\n", g_fail);
