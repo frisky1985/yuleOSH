@@ -52,8 +52,8 @@ def test_scan_directory_nodes_and_contains():
         assert summary["code_files"] == 2
         assert summary["test_files"] == 1
         assert summary["functions"] >= 4  # bar/foo/USART1_IRQHandler/test_case
-        # contains 边存在
-        assert summary["contains_edges"] == summary["functions"]
+        # contains 边存在（file→CFunction/CGlobalVar/CMacro/ISR，故 >= functions）
+        assert summary["contains_edges"] >= summary["functions"]
         # code_file 节点存在且 language=c
         a_node = store.get_node("code_file", "a.c")
         assert a_node is not None
@@ -78,7 +78,7 @@ def test_call_and_potential_edges():
         calls = store.list_edges("calls")
         assert len(calls) >= 1
         # 跨文件：USART1_IRQHandler → foo（b.c 调 a.c 的函数）应解析为 calls 边
-        src = store.get_node("code_function", "b.c::USART1_IRQHandler")
+        src = store.get_node("CFunction", "b.c::USART1_IRQHandler")
         outs = store.get_outgoing_edges(src.id)
         callees = {e.edge_type for e, _ in outs}
         assert "calls" in callees
@@ -121,8 +121,8 @@ def test_scan_single_file_incremental():
         r = c_code_scanner.scan_single_file(store, proj, "a.c")
         assert r["functions"] >= 2
         assert r["parse_ok"] is True
-        # 单文件仅 contains 边（无跨文件 calls 解析）
-        assert r["edges"] == r["functions"]
+        # 单文件含 contains 边（函数 + 全局 + 宏），故 edges >= functions
+        assert r["edges"] >= r["functions"]
     finally:
         KGStore.reset()
         os.unlink(db)

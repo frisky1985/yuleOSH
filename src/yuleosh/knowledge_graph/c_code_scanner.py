@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from yuleosh.knowledge_graph.store import KGStore
-from yuleosh.knowledge_graph.models import Node, Edge
+from yuleosh.knowledge_graph.models import Node, Edge, c_entity_confidence
 from yuleosh.knowledge_graph import c_parser
 
 log = logging.getLogger("yuleosh.knowledge_graph.c_code_scanner")
@@ -218,11 +218,18 @@ def scan_directory(store: KGStore, project_base: str) -> dict:
         )
         file_scans.append(fs)
 
+        # B1-10 置信度（文件级）：含语法错误 → 0.5，否则 0.9
+        has_error = (not collector.parse_ok) or collector.error_rate > 0.0
+        func_conf = c_entity_confidence("CFunction", has_error)
+        var_conf = c_entity_confidence("CGlobalVar", has_error)
+        isr_conf = c_entity_confidence("ISR", has_error)
+
         # file 节点（属性携带 C 统计，供门禁）
         file_node = Node(
             entity_type=file_type,
             entity_id=rel_path,
             label=c_file.name,
+            confidence=var_conf,
             properties={
                 "language": lang,
                 "path": rel_path,
@@ -237,22 +244,29 @@ def scan_directory(store: KGStore, project_base: str) -> dict:
         )
         file_nid = store.upsert_node(file_node)
 
-        # function 节点 + contains 边
+        # ── B1-10 专属 C 实体节点 + contains 边 ──
+        # CFunction（代码与测试文件均归为 CFunction，测试文件标记 is_test）
+        func_entity = "CFunction"
         for fn in collector.functions:
             fqn = f"{rel_path}::{fn['name']}"
+            fp = {
+                "file_path": rel_path,
+                "start_line": fn["start_line"],
+                "end_line": fn["end_line"],
+                "kind": "function",
+                "is_definition": fn.get("is_definition", False),
+                "return_type": fn.get("return_type", ""),
+                "source": "c_code_scanner",
+                "confidence": func_conf,
+            }
+            if is_test:
+                fp["is_test"] = True
             func_node = Node(
-                entity_type=func_type,
+                entity_type=func_entity,
                 entity_id=fqn,
                 label=fn["name"],
-                properties={
-                    "file_path": rel_path,
-                    "start_line": fn["start_line"],
-                    "end_line": fn["end_line"],
-                    "kind": "function",
-                    "is_definition": fn.get("is_definition", False),
-                    "return_type": fn.get("return_type", ""),
-                    "source": "c_code_scanner",
-                },
+                confidence=func_conf,
+                properties=fp,
             )
             fn_nid = store.upsert_node(func_node)
             store.upsert_edge(Edge(
@@ -264,6 +278,79 @@ def scan_directory(store: KGStore, project_base: str) -> dict:
             contains_count += 1
             local_name_to_nid[(rel_path, fn["name"])] = fn_nid
             global_name_to_nid.setdefault(fn["name"], fn_nid)
+
+        # CGlobalVar
+        for g in collector.globals:
+            gqn = f"{rel_path}::var::{g['name']}"
+            g_node = Node(
+                entity_type="CGlobalVar",
+                entity_id=gqn,
+                label=g["name"],
+                confidence=var_conf,
+                properties={
+                    "file_path": rel_path,
+                    "var_type": g.get("var_type", ""),
+                    "storage_class": g.get("storage_class"),
+                    "is_volatile": g.get("is_volatile", False),
+                    "is_const": g.get("is_const", False),
+                    "source": "c_code_scanner",
+                    "confidence": var_conf,
+                },
+            )
+            g_nid = store.upsert_node(g_node)
+            store.upsert_edge(Edge(
+                source_id=file_nid, target_id=g_nid, edge_type="contains",
+                properties={"global": g["name"]},
+            ))
+            contains_count += 1
+
+        # CMacro（白名单宏已排除在 collector.macros 外；函数式/flag → 0.35）
+        for m in collector.macros:
+            mqn = f"{rel_path}::macro::{m['name']}"
+            macro_heavy = m.get("kind") in ("function", "empty")
+            m_conf = c_entity_confidence("CMacro", has_error, macro_heavy=macro_heavy)
+            m_node = Node(
+                entity_type="CMacro",
+                entity_id=mqn,
+                label=m["name"],
+                confidence=m_conf,
+                properties={
+                    "file_path": rel_path,
+                    "macro_kind": m.get("kind"),
+                    "body": m.get("body"),
+                    "source": "c_code_scanner",
+                    "confidence": m_conf,
+                },
+            )
+            m_nid = store.upsert_node(m_node)
+            store.upsert_edge(Edge(
+                source_id=file_nid, target_id=m_nid, edge_type="contains",
+                properties={"macro": m["name"]},
+            ))
+            contains_count += 1
+
+        # ISR
+        for isr in collector.isrs:
+            iqn = f"{rel_path}::isr::{isr['name']}"
+            i_node = Node(
+                entity_type="ISR",
+                entity_id=iqn,
+                label=isr["name"],
+                confidence=isr_conf,
+                properties={
+                    "file_path": rel_path,
+                    "line": isr.get("line"),
+                    "reason": isr.get("reason"),
+                    "source": "c_code_scanner",
+                    "confidence": isr_conf,
+                },
+            )
+            i_nid = store.upsert_node(i_node)
+            store.upsert_edge(Edge(
+                source_id=file_nid, target_id=i_nid, edge_type="contains",
+                properties={"isr": isr["name"]},
+            ))
+            contains_count += 1
 
         # 收集调用边（callee 名 → 后续解析）
         for e in collector.call_edges:
@@ -344,10 +431,16 @@ def scan_single_file(store: KGStore, project_base: str, rel_path: str) -> dict:
         raw = b""
 
     collector = CFunctionCollector(norm_path, raw)
+    has_error = (not collector.parse_ok) or collector.error_rate > 0.0
+    func_conf = c_entity_confidence("CFunction", has_error)
+    var_conf = c_entity_confidence("CGlobalVar", has_error)
+    isr_conf = c_entity_confidence("ISR", has_error)
+
     file_node = Node(
         entity_type=file_type,
         entity_id=norm_path,
         label=c_file.name,
+        confidence=var_conf,
         properties={
             "language": lang,
             "path": norm_path,
@@ -366,19 +459,24 @@ def scan_single_file(store: KGStore, project_base: str, rel_path: str) -> dict:
     edge_count = 0
     for fn in collector.functions:
         fqn = f"{norm_path}::{fn['name']}"
+        fp = {
+            "file_path": norm_path,
+            "start_line": fn["start_line"],
+            "end_line": fn["end_line"],
+            "kind": "function",
+            "is_definition": fn.get("is_definition", False),
+            "return_type": fn.get("return_type", ""),
+            "source": "c_code_scanner",
+            "confidence": func_conf,
+        }
+        if is_test:
+            fp["is_test"] = True
         func_node = Node(
-            entity_type=func_type,
+            entity_type="CFunction",
             entity_id=fqn,
             label=fn["name"],
-            properties={
-                "file_path": norm_path,
-                "start_line": fn["start_line"],
-                "end_line": fn["end_line"],
-                "kind": "function",
-                "is_definition": fn.get("is_definition", False),
-                "return_type": fn.get("return_type", ""),
-                "source": "c_code_scanner",
-            },
+            confidence=func_conf,
+            properties=fp,
         )
         fn_nid = store.upsert_node(func_node)
         store.upsert_edge(Edge(
@@ -388,6 +486,62 @@ def scan_single_file(store: KGStore, project_base: str, rel_path: str) -> dict:
             properties={"function": fn["name"], "kind": "function"},
         ))
         func_count += 1
+        edge_count += 1
+
+    # 全局/宏/ISR 实体（单文件增量，仅 contains 边）
+    for g in collector.globals:
+        g_node = Node(
+            entity_type="CGlobalVar",
+            entity_id=f"{norm_path}::var::{g['name']}",
+            label=g["name"],
+            confidence=var_conf,
+            properties={
+                "file_path": norm_path,
+                "var_type": g.get("var_type", ""),
+                "source": "c_code_scanner",
+                "confidence": var_conf,
+            },
+        )
+        g_nid = store.upsert_node(g_node)
+        store.upsert_edge(Edge(source_id=file_nid, target_id=g_nid,
+                               edge_type="contains", properties={"global": g["name"]}))
+        edge_count += 1
+    for m in collector.macros:
+        macro_heavy = m.get("kind") in ("function", "empty")
+        m_conf = c_entity_confidence("CMacro", has_error, macro_heavy=macro_heavy)
+        m_node = Node(
+            entity_type="CMacro",
+            entity_id=f"{norm_path}::macro::{m['name']}",
+            label=m["name"],
+            confidence=m_conf,
+            properties={
+                "file_path": norm_path,
+                "macro_kind": m.get("kind"),
+                "source": "c_code_scanner",
+                "confidence": m_conf,
+            },
+        )
+        m_nid = store.upsert_node(m_node)
+        store.upsert_edge(Edge(source_id=file_nid, target_id=m_nid,
+                               edge_type="contains", properties={"macro": m["name"]}))
+        edge_count += 1
+    for isr in collector.isrs:
+        i_node = Node(
+            entity_type="ISR",
+            entity_id=f"{norm_path}::isr::{isr['name']}",
+            label=isr["name"],
+            confidence=isr_conf,
+            properties={
+                "file_path": norm_path,
+                "line": isr.get("line"),
+                "reason": isr.get("reason"),
+                "source": "c_code_scanner",
+                "confidence": isr_conf,
+            },
+        )
+        i_nid = store.upsert_node(i_node)
+        store.upsert_edge(Edge(source_id=file_nid, target_id=i_nid,
+                               edge_type="contains", properties={"isr": isr["name"]}))
         edge_count += 1
 
     return {

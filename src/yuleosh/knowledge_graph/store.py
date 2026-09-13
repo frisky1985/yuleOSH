@@ -130,6 +130,10 @@ class KGStore:
     def upsert_node(self, node: Node) -> int:
         """Insert or update a node. Returns the rowid."""
         now = datetime.now().isoformat()
+        # B1-10: 置信度并入 properties 持久化（kg_nodes 无独立列）
+        props = dict(node.properties) if node.properties else {}
+        if node.confidence is not None:
+            props["confidence"] = node.confidence
         self.conn.execute("""
             INSERT INTO kg_nodes (entity_type, entity_id, label, properties, is_active, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -142,7 +146,7 @@ class KGStore:
             node.entity_type,
             node.entity_id,
             node.label,
-            json.dumps(node.properties),
+            json.dumps(props),
             1 if node.is_active else 0,
             now,
             now,
@@ -547,15 +551,17 @@ class KGStore:
     # ------------------------------------------------------------------
 
     def _row_to_node(self, row: sqlite3.Row) -> Node:
+        props = json.loads(row["properties"]) if row["properties"] else {}
         return Node(
             id=row["id"],
             entity_type=row["entity_type"],
             entity_id=row["entity_id"],
             label=row["label"],
-            properties=json.loads(row["properties"]) if row["properties"] else {},
+            properties=props,
             is_active=bool(row["is_active"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            confidence=props.get("confidence"),
         )
 
     def _row_to_edge(self, row: sqlite3.Row) -> Edge:
