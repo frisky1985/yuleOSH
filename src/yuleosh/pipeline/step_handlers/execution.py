@@ -130,10 +130,9 @@ def step_claude_arch(session: PipelineSession) -> str:
         )
 
         try:
-            # max_tokens=6144 (2026-08-17): 架构文档随 spec 增长而变长,
-            # 默认 4096 会截断输出 (r18 architecture.md §5.1 表截断被
-            # claude-review 指出). 对齐 TASK_BUDGETS architecture_design.
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=6144)
+            # max_tokens=8192 (2026-09-14): 6144 仍会在 §5.x 处截断 architecture.md
+            # （claude-review 实测指出表格未闭合），8192 为 DeepSeek 安全输出上限。
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=8192)
         except Exception as e:  # noqa: BLE001
             log.error(f"LLM call failed during architecture analysis: {e}")
             raise PipelineStepError(
@@ -485,7 +484,9 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
         )
 
         try:
-            result = _call_llm(session, system_prompt, user_prompt, max_tokens=4096)
+            # max_tokens=8192 (2026-09-14): 4096 会在 T-007 处截断 development-plan.md
+            # （claude-review 实测指出），8192 为 DeepSeek 安全输出上限，与 test-plan 步对齐。
+            result = _call_llm(session, system_prompt, user_prompt, max_tokens=8192)
         except Exception as e:
             log.error(f"LLM call failed during development planning: {e}")
             raise PipelineStepError(
