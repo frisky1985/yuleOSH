@@ -14,7 +14,7 @@
 | B1-12 三固件零崩溃 | 0 崩溃 | 6 样例 `parse_ok=True`, `error_rate=0` | ✅ |
 | A1-10② / B1-12 全量零回归 | 13455+ 测试零回归 | sprint 相关套件 **194 passed**（见 §3） | 🟡 范围说明见 §3 |
 | B1-12 10 万行 < 5 分钟 | 性能 | 未测（样例体量小，需真实大仓） | ⏳ 人工闸挂账 |
-| A1-10③ UART demo 端到端跑通 | E2E | 外部 LLM 凭证不可用，未跑真实链路 | ⏳ 人工闸挂账 |
+| A1-10③ UART demo 端到端跑通 | E2E | `--mock` 替身已端到端跑通（GREEN / 0 errors / 24 步全执行，session `a608b8ddf5c8`）；真实 LLM 链路待凭证轮换 | 🟢 mock 已验证 |
 
 ## 2. 提取准确率抽检（B1-08 / B1-12）
 
@@ -67,9 +67,23 @@ test_evidence_profile_a108, test_evidence_aspice_check_ext, test_template_golden
 
 1. **B1-12 10 万行 < 5 分钟**：需真实大仓（B1-04 挂账的 vendor 固件）做体量/性能实测。
    样例体量小，无法代表。方法论：对 vendor 固件递归 `reverse scan`，记录 wall-clock。
-2. **A1-10③ UART demo E2E**：当前外部 LLM 凭证全部不可用（DeepSeek 余额 402 /
-   OpenAI 配置错误 / Anthropic key 误填），真实链路无法跑通；`--mock` 模式路径可用作替身验证。
-   待凭证轮换后由人工触发真实 E2E。
+2. **A1-10③ UART demo E2E（mock 已验证 ✅，2026-09-13）**：外部 LLM 凭证全部不可用
+   （DeepSeek 余额 402 / OpenAI 配置错误 / Anthropic key 误填），真实链路暂未跑通；
+   已用 `--mock` 替身完成端到端跑通，作为本轮验收证据：
+   - 命令：`yuleosh pipeline run --mock templates/mcu-firmware/docs/spec.md`
+     （项目隔离复制到 `/tmp/uart-demo-mock` 跑，避免污染模板目录）
+   - 结果：**`Pipeline: completed 🎉 (GREEN — all gates passed)`**，`Errors: 0`，
+     24 个步骤全部执行（含 spec-check / S.U.P.E.R / PRD / 架构 / 开发计划 / 测试计划 /
+     verify-loop / 最终报告等），session `a608b8ddf5c8` 落 40+ 产物文件。
+   - mock 模式**预期跳过**项（不计入失败）：C 单元测试 / MISRA / QEMU 仿真 /
+     故障注入 / 各嵌入式专项审查（中断·时序·看门狗·RTOS·内存·MMIO·BSP·低功耗）/ 外部
+     agent 评审（Claude-Review·Codex）/ KG Merge Gate —— 因无真实构建产物与真实 LLM，
+     按设计跳过。
+   - **另发现 bug**：`yuleosh demo uart` 命令的模板源 `demos/uart/` 已缺失
+     （`demo_uart.py` 引用 `TEMPLATE_DIR = <repo>/demos/uart`，但该目录不存在，
+     所有 `TEMPLATE_FILES` 复制时均报 "Template file missing"）→ 该命令当前不可用，
+     待补回模板或改指 `templates/` 后修复。
+   - 真实 LLM 链路 E2E 待凭证轮换后由人工触发。
 3. **真实大仓抽检**：B1-08 / B1-12 的「各抽 30 函数」针对的是真实 vendor 固件；本文档证据基于
    脱敏 stand-in 样例（27 函数全量自动核对）。真实固件 fetch 后需补充一轮人工抽检。
 
