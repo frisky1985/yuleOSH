@@ -222,6 +222,7 @@ def _yaml_path():
         / "src"
         / "yuleosh"
         / "compliance"
+        / "profiles"
         / "aspice_v3.1.yaml"
     )
 

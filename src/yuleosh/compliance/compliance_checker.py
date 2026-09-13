@@ -19,9 +19,6 @@ from yuleosh.compliance.profile import load_profile
 
 # @req CR-005  @req FSR-001
 
-# Path to the ASPICE v3.1 definition YAML
-_DEFAULT_TEMPLATE = Path(__file__).resolve().parent / "aspice_v3.1.yaml"
-
 
 # ── Requirement ID extraction ──────────────────────────────────────────
 # Classic form:            REQ-001

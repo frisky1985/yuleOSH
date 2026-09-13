@@ -30,7 +30,7 @@ import pytest
 @pytest.fixture
 def aspice_yaml_path():
     """Path to the ASPICE v3.1 YAML definition."""
-    path = Path(__file__).resolve().parent.parent / "src" / "yuleosh" / "compliance" / "aspice_v3.1.yaml"
+    path = Path(__file__).resolve().parent.parent / "src" / "yuleosh" / "compliance" / "profiles" / "aspice_v3.1.yaml"
     if path.exists():
         return path
     pytest.skip("aspice_v3.1.yaml not found")

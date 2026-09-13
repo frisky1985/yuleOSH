@@ -18,6 +18,7 @@ _YAML = (
     / "src"
     / "yuleosh"
     / "compliance"
+    / "profiles"
     / "aspice_v3.1.yaml"
 )
 
