@@ -1,13 +1,14 @@
 /**
  * GPIO 流水灯 (LED Chaser) — Public API
  *
- * 参考实现头文件。目标相关寄存器操作在 src/main.c 中以注释标明；
- * 宿主机（gcc + ctest）用 g_gpio_out/g_gpio_in 桩数组模拟端口。
+ * 参考实现头文件。目标相关寄存器操作由 led_chaser_target_init() 以可编译的
+ * 寄存器镜像（target_state_t）给出，宿主侧（gcc + ctest）经 g_gpio_out/g_gpio_in
+ * 桩数组与 g_target 镜像模拟端口与寄存器。
  *
  * MISRA-C:2012 注意点：
  *   - 仅用确定性类型（uint8_t / uint32_t）。
  *   - 状态机共享变量用 volatile 标记（目标侧 ISR 写入，见下方 g_tick_*）。
- *   - 纯函数（*_mask）无副作用，方向状态仅由 led_chaser_tick() 单向推进。
+ *   - 纯函数（*_mask / *_duty）无副作用，方向状态仅由 led_chaser_tick() 单向推进。
  *   - 无隐式 int、无 unbounded loop、无 goto。
  */
 
@@ -17,10 +18,16 @@
 #include <stdint.h>
 
 /* ---- 可配置参数（Req-007：单一真源） ---- */
-#define LED_TICK_MS       200U   /* Req-003 step period（200 ms，TIM2 周期中断） */
-#define LED_DEBOUNCE_MS   50U    /* Req-004 software debounce（稳定低 ≥ 50 ms） */
-#define LED_COUNT         8U     /* PA0..PA7 */
-#define LED_DEFAULT_MODE  0U     /* 0=CHASE */
+#define LED_TICK_MS          200U   /* Req-003 step period（200 ms，TIM2 周期中断） */
+#define LED_COUNT            8U     /* PA0..PA7 */
+#define LED_DEFAULT_MODE     0U     /* 0=CHASE */
+#define LED_PWM_STEPS        8U     /* BREATHE PWM 载波占空比量化级数（时间分时） */
+#define LED_DEBOUNCE_MS      50U    /* Req-004 名义消抖 ≥ 50 ms（按 tick 量化，见下） */
+/* 消抖按“连续稳定低 tick 数”计量，每个 tick = LED_TICK_MS。
+ * LED_DEBOUNCE_TICKS 由名义消抖时间向上取整到 tick 粒度：
+ *   ceil(50 / 200) = 1 → 至少 1 个稳定低 tick（= 200 ms）即满足 ≥ 50 ms。
+ * 取 2 留余量，覆盖机械抖动（≥ 400 ms 稳定低才判按下）。 */
+#define LED_DEBOUNCE_TICKS   2U
 /* 定时器选型（Req-003 / Req-005，单一裁决，见 spec.md §1 Req-003）：
  * 采用 TIM2 产生 200 ms 周期中断驱动 pattern step。
  * SysTick@1kHz 被显式否决：每 1 ms 唤醒一次会抵消 Req-005 的低功耗收益；
@@ -32,7 +39,7 @@ typedef enum {
     LED_MODE_CHASE = 0,     /* 单向流水 */
     LED_MODE_BOUNCE,         /* 往返流水 */
     LED_MODE_BLINK_ALL,      /* 同步闪烁 */
-    LED_MODE_BREATHE,        /* PWM 呼吸（参考实现：软件 PWM 三角波阶梯亮度） */
+    LED_MODE_BREATHE,        /* PWM 呼吸（真·占空比时间分时，参考实现） */
     LED_MODE_COUNT
 } led_mode_t;
 
@@ -43,10 +50,10 @@ void led_chaser_set_mode(led_mode_t m);
 led_mode_t led_chaser_get_mode(void);
 uint8_t led_chaser_current_mask(void);      /* PA0..PA7 当前输出位掩码（只读，无副作用） */
 
-/* ---- 按钮（Req-002 / Req-004）；主循环调用，非 ISR ---- */
-/* elapsed_ms：距上一次调用的经过毫秒（由 200 ms tick 时钟驱动，使 50 ms 消抖
- * 以时间计量而非“调用次数”，满足 Req-004 稳定低 ≥ 50 ms） */
-void led_chaser_handle_button(uint32_t elapsed_ms);
+/* ---- 按钮（Req-002 / Req-004）；主循环每个 tick 调用一次，非 ISR ---- */
+/* 消抖按 tick 计数（连续稳定低 LED_DEBOUNCE_TICKS 个 tick），不接收“毫秒”参数，
+ * 避免以调用次数冒充时间度量。 */
+void led_chaser_handle_button(void);
 
 /* ---- 定时器 ISR 钩子（Req-003）：200 ms 周期中断里调用 ---- */
 void led_chaser_on_timer_isr(void);   /* 置位 tick 标志 + 累加 tick 计数（ISR 最小职责） */
@@ -57,10 +64,25 @@ uint8_t led_chaser_chase_mask(uint8_t pos);
 /* BOUNCE 掩码：给定位置 pos 与方向 dir(0=左 / 1=右) 的当前点亮位掩码。
  * 纯函数、无副作用；方向仅在 led_chaser_tick() 内单向推进。 */
 uint8_t led_chaser_bounce_mask(uint8_t pos, uint8_t dir);
-/* BREATHE 掩码：相位 phase(0..LED_COUNT-1) → 三角波亮度阶梯掩码（软件 PWM 呼吸）。
- * 亮度 lvl = phase<=LED_COUNT/2 ? phase : LED_COUNT-phase；低位 lvl 个 LED 点亮。
+/* BREATHE 占空比级数：phase(0..LED_COUNT-1) → 三角波 0..LED_PWM_STEPS..0。
  * 纯函数、无副作用。 */
-uint8_t led_chaser_breathe_mask(uint8_t phase);
+uint8_t led_chaser_breathe_duty(uint8_t phase);
+/* BREATHE 掩码：给定呼吸相位与 PWM 载波子相 → 8 路时间分时占空比（0xFF=亮 / 0x00=灭），
+ * 真·占空比呼吸（非 LED 数量阶梯）。纯函数、无副作用。 */
+uint8_t led_chaser_breathe_mask(uint8_t phase, uint8_t pwm_phase);
+
+/* ---- Req-006：寄存器级初始化（可编译参考实现） ---- */
+/* 寄存器镜像：宿主侧填充供单测断言；目标侧（LED_CHASER_TARGET 宏）同步写真实硬件。 */
+typedef struct {
+    uint32_t apb2enr;    /* RCC->APB2ENR  （bit2=IOPA, bit3=IOPB 时钟使能） */
+    uint32_t gpioa_crl;  /* GPIOA->CRL    （PA0..7 推挽输出 2MHz = 0x22222222） */
+    uint32_t gpiob_crl;  /* GPIOB->CRL    （PB0 输入上拉 = 0x00000008） */
+    uint32_t gpiob_odr;  /* GPIOB->ODR    （PB0 上拉 = bit0=1） */
+    uint32_t tim2_psc;   /* TIM2->PSC     （72MHz → 200ms：PSC=7199, ARR=1999） */
+    uint32_t tim2_arr;   /* TIM2->ARR     （(7199+1)*(1999+1)/72e6 = 0.2s） */
+} target_state_t;
+void led_chaser_target_init(void);
+const target_state_t* led_chaser_target_state(void);
 
 /* ---- HAL 桩（目标侧替换为 RCC/GPIO 寄存器写） ---- */
 void gpio_write(uint8_t port, uint8_t pin, uint8_t val);
