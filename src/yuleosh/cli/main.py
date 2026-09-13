@@ -83,6 +83,10 @@ from yuleosh.cli.commands.swe6 import (  # noqa: E402
     cmd_swe6_check,
 )
 from yuleosh.cli.commands.review_diff import cmd_review_diff  # noqa: E402
+from yuleosh.cli.commands.reverse import (  # noqa: E402
+    build_parser as _build_reverse,
+    cmd_reverse_scan,
+)
 
 # gap (v3.9.0): ASPICE 差距 → 改进工单（受控生成，需人工确认）
 from yuleosh.cli.commands.gap import (  # noqa: E402
@@ -378,6 +382,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # P3: device management — HIL device pool
     from yuleosh.device.cli import build_device_parser
     build_device_parser(sub)
+
+    # reverse (B-M1 / B1-11): C AST 逆向扫描报告
+    _build_reverse(sub)
 
     # P2: kg report — RTM + Metrics
     p_kg_report = kgsub.add_parser("report", help="Generate reports from KG (P2)")
@@ -998,6 +1005,13 @@ def main():
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main
         ui_main()
+
+    elif args.command == "reverse":
+        if getattr(args, "reverse_sub", None) == "scan":
+            sys.exit(cmd_reverse_scan(args))
+        else:
+            parser.print_help()
+            sys.exit(1)
 
 
 if __name__ == "__main__":
