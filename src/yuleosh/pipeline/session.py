@@ -115,6 +115,10 @@ class PipelineSession:
         # D2 (2026-08-19): 并行组执行时多线程同时累加 token usage —
         # += 是读-加-写三步非原子, 需要锁保护。
         self._usage_lock = threading.RLock()
+        # 2026-09-13: 步骤状态落盘需要跨线程串行化。D2 并行组内多个 worker
+        # 线程会并发调用 start_step/complete_step → 并发写同一个 session.json,
+        # 不加锁会出现半截 JSON / 互相覆盖。用独立 RLock 保护 _save 的磁盘写入。
+        self._save_lock = threading.RLock()
         # D3 codegen: "planning" (default) or "generate-code".
         # Accepts None (default planning), "generate-code", or "planning".
         self.development_mode: str | None = development_mode
@@ -185,7 +189,9 @@ class PipelineSession:
             self.steps[step_idx]["status"] = "running"
             self.steps[step_idx]["started_at"] = datetime.now().isoformat()
             self.current_step = step_idx
-            self._save(persist=False)
+            # 2026-09-13: 落盘。否则 session.json 在运行期间不更新, 前端 1s 轮询
+            # 永远读到旧 current_step, 看板「当前正在跑」横幅无法实时推进。
+            self._save(persist=True)
 
     def complete_step(self, step_idx: int, output_path: str) -> None:
         """Mark a step as completed with its output path."""
@@ -194,7 +200,8 @@ class PipelineSession:
             self.steps[step_idx]["completed_at"] = datetime.now().isoformat()
             self.steps[step_idx]["output_path"] = output_path
             self.updated_at = datetime.now().isoformat()
-            self._save(persist=False)
+            # 2026-09-13: 落盘, 与 start_step 一致, 让前端轮询看到步骤推进。
+            self._save(persist=True)
 
     def fail_step(self, step_idx: int, error: str) -> None:
         """Fail a step, record the error, and set session status to failed."""
@@ -246,9 +253,11 @@ class PipelineSession:
         """
         if not persist:
             return
-        data = self.to_dict()
-        with open(self.session_dir / "session.json", "w") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        # 2026-09-13: 跨线程串行化磁盘写入 (D2 并行组并发 _save 同一文件)。
+        with self._save_lock:
+            data = self.to_dict()
+            with open(self.session_dir / "session.json", "w") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
         # Also persist to SQLite
         if _store:
             try:
