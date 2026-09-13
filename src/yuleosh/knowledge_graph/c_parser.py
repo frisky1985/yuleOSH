@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -1137,6 +1138,434 @@ def extract_isrs_file(path: str, encoding: str = "utf-8") -> dict:
     return extract_isrs(text.encode("utf-8", "replace"), filename=path)
 
 
+# ══════════════════════════════════════════════════════════════════
+# B1-07 宏处理策略（stddef/stdint 白名单 + 函数式宏实体 + #ifdef 分支全解析）
+# ══════════════════════════════════════════════════════════════════
+# 设计目标（验收 B1-07）：
+#   - stddef/stdint 等标准库常见宏走白名单，不记为 KG 实体（避免噪声）。
+#   - 项目自定义**函数式宏**记 macro entity，且给「低置信度」（D4: 宏重度 = 0.35），
+#     因为宏展开后真实语义需 B-M2 的 LLM 推断补齐。
+#   - 对象宏（带值）记 macro entity，置信度 0.9（clean）。
+#   - ``#ifdef`` / ``#ifndef`` / ``#if`` / ``#elif`` / ``#else`` / ``#endif``
+#     分支**全解析**并标注每个分支的「编译激活条件」（active_condition），
+#     供逆向分析判断某段代码所属配置。
+#
+# 置信度取值对齐 B1-10 决策点 D4（三级流转阈值）：
+#   clean = 0.9 / 含 ERROR 节点 = 0.5（此处宏无语法错概念，统一 clean 级） /
+#   宏重度 = 0.35。
+_MACRO_CONF_FUNCTION = 0.35   # 函数式宏 / 空定义（flag 宏）：低置信度
+_MACRO_CONF_OBJECT = 0.90      # 带值对象宏：高置信度
+
+# stddef / stdint / 标准库常见宏白名单（对象宏，不记为实体）。
+# 含精确名集合 + 整数极值宏模式（INT*_MAX / UINT*_MIN / SIZE_MAX ...）。
+_STD_MACRO_WHITELIST = frozenset({
+    # stddef.h
+    "NULL", "nullptr", "offsetof", "max_align_t",
+    # stdbool.h / 通用布尔
+    "true", "false", "TRUE", "FALSE", "bool",
+    # 断言 / 编译器内建
+    "assert", "static_assert", "_Static_assert",
+    "__FILE__", "__LINE__", "__func__", "__FUNCTION__",
+    "__DATE__", "__TIME__", "__COUNTER__", "__cplusplus",
+    "_MSC_VER", "__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__",
+    # 平台/编译器属性常用对象宏
+    "WIN32", "WIN64", "_WIN32", "_WIN64", "__linux__", "__APPLE__",
+    "INT_MAX", "INT_MIN", "UINT_MAX",
+    "LONG_MAX", "LONG_MIN", "ULONG_MAX",
+    "LLONG_MAX", "LLONG_MIN", "ULLONG_MAX",
+    "SIZE_MAX", "PTRDIFF_MAX", "PTRDIFF_MIN",
+    "INTPTR_MAX", "INTPTR_MIN", "UINTPTR_MAX",
+    "INTMAX_MAX", "INTMAX_MIN", "UINTMAX_MAX",
+    "WCHAR_MAX", "WCHAR_MIN", "WINT_MAX", "WINT_MIN",
+    "CHAR_BIT", "MB_LEN_MAX",     "SIG_ATOMIC_MAX", "SIG_ATOMIC_MIN",
+})
+
+# 整数宽度极值宏模式：INT8_MAX / UINT16_MIN / INT_LEAST32_MAX / UINT_FAST64_MAX /
+# SIZE_MAX / INTPTR_MIN / INTMAX_MAX / PTRDIFF_MIN ...（含 INT_LEAST/INT_FAST 的下划线）
+_RE_INT_MACRO = re.compile(
+    r"^(?:[U]?INT(?:_LEAST|_FAST)?[0-9]+|SIZE|PTRDIFF|INTPTR|UINTPTR|"
+    r"INTMAX|UINTMAX|WCHAR|WINT|SIG_ATOMIC)_(?:MAX|MIN)$"
+)
+
+
+def _is_object_macro_whitelisted(name: str) -> bool:
+    """对象宏是否落入标准库白名单（精确名或整数极值宏模式）。"""
+    if name in _STD_MACRO_WHITELIST:
+        return True
+    return bool(_RE_INT_MACRO.match(name))
+
+
+@dataclass
+class MacroInfo:
+    """一个宏定义（容错提取）。
+
+    - ``kind``: ``"object"``（对象宏，``#define X v``）/ ``"function"``（函数式宏）/
+      ``"empty"``（flag 宏，``#define FLAG`` 无值）。
+    - ``confidence``: B1-10 置信度初值（函数式/flag=0.35，带值对象=0.9）。
+    - ``is_whitelisted``: 仅对「被白名单跳过」的宏为真（此类不入库，仅统计）。
+    """
+
+    name: str
+    kind: str  # "object" | "function" | "empty"
+    params: List[str]        # 函数式宏参数名（对象宏为空）
+    body: Optional[str]      # 宏体（对象宏值 / 函数式展开）；flag 宏为 None
+    line: int
+    byte_start: int
+    byte_end: int
+    is_whitelisted: bool
+    confidence: float
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "kind": self.kind,
+            "params": list(self.params),
+            "body": self.body,
+            "line": self.line,
+            "byte_start": self.byte_start,
+            "byte_end": self.byte_end,
+            "is_whitelisted": self.is_whitelisted,
+            "confidence": self.confidence,
+        }
+
+
+@dataclass
+class ConditionalInfo:
+    """条件编译的一个分支（``#ifdef``/``#if``/... 全解析的产出之一）。
+
+    一个条件块（``#ifdef X ... #else ... #endif``）会产出多个分支：
+    consequent（主分支）/ elif / else，每个分支含**编译激活条件**标注。
+
+    - ``block_id``: 同一条件块的所有分支共享（用于聚合）。
+    - ``branch_role``: ``"consequent"`` | ``"elif"`` | ``"else"``。
+    - ``condition``: 该分支原始条件文本（如 ``X`` / ``defined(Z) && A>0``）。
+    - ``active_condition``: 该分支**被编译**时的逻辑条件（含前置分支取反），
+      例如 else 分支 = ``!(X)``，elif 分支 = ``!(X) && (Y)``。
+    - ``depth``: 嵌套深度（顶层 0）。
+    """
+
+    block_id: int
+    directive: str        # "ifdef" | "ifndef" | "if" | "elif" | "else"
+    branch_role: str      # "consequent" | "elif" | "else"
+    condition: Optional[str]
+    active_condition: Optional[str]
+    start_line: int
+    end_line: int
+    depth: int
+
+    def as_dict(self) -> dict:
+        return {
+            "block_id": self.block_id,
+            "directive": self.directive,
+            "branch_role": self.branch_role,
+            "condition": self.condition,
+            "active_condition": self.active_condition,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
+            "depth": self.depth,
+        }
+
+
+def _conditional_expr_text(node) -> Optional[str]:
+    """从条件指令节点取条件表达式文本。
+
+    ``#ifdef X`` / ``#ifndef X`` → 标识符名 ``X``；
+    ``#if expr`` / ``#elif expr`` → expr 子树文本（binary_expression /
+    preproc_defined / number_literal / identifier ...）。
+    """
+    # 跳过首个子节点（指令 token：#ifdef/#if/#ifndef/#elif）
+    for c in node.children:
+        if c.type in ("#ifdef", "#ifndef", "#if", "#elif"):
+            continue
+        # 条件表达式通常是 identifier / binary_expression / preproc_defined /
+        # number_literal / parenthesized_expression 等
+        return c.text.decode("utf-8", "replace").strip()
+    return None
+
+
+def _find_endif_line(node) -> int:
+    """找条件块的 #endif 行（递归，取块子树内首个 #endif）。"""
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        for c in n.children:
+            if c.type == "#endif":
+                return c.start_point[0] + 1
+            stack.append(c)
+    return node.start_point[0] + 1
+
+
+def _collect_branch_nodes(node) -> List[object]:
+    """收集一个条件块的**全部分支节点**（含嵌套的 #elif/#else）。
+
+    tree-sitter-c 的 if/elif/else 为**右嵌套**结构：``#if`` 块根的直接子含首个
+    ``preproc_elif``；该 ``preproc_elif`` 内部又含下一个 ``preproc_elif``/``preproc_else``，
+    依此类推（``#else`` 总是嵌在最后一个 ``preproc_elif`` 内）。本函数沿此链顺序收集，
+    返回 ``[块根(if/ifdef/ifndef), 首个 elif..., 末个 else?]``。
+
+    行区间用相邻分支节点的起始行与 ``#endif`` 行推算，无需展开分支内容。
+    """
+    branches = [node]
+    cur = node
+    while True:
+        nxt = None
+        for c in cur.children:
+            if c.type in ("preproc_elif", "preproc_else"):
+                nxt = c
+                break
+        if nxt is None:
+            break
+        branches.append(nxt)
+        cur = nxt
+    return branches
+
+
+def _process_conditional_block(node, depth: int, block_id: int, out: List[ConditionalInfo]) -> None:
+    """解析单个条件块的各分支，写入 ``out``。
+
+    分支节点经 ``_collect_branch_nodes`` 收集（含右嵌套的 #elif/#else）；
+    ``#endif``（匿名节点，type 即 "#endif"）为终止。每个分支标注
+    「编译激活条件」（active_condition，含前置分支取反）。
+
+    注意：tree-sitter-c 把 ``#ifndef`` 也解析成 ``preproc_ifdef`` 节点，
+    仅首个子 token 文本为 ``#ifndef``（与 ``#ifdef`` 区分）。因此指令类型
+    必须读首个子 token，不能依赖 ``node.type``。
+    """
+    directive_line = node.start_point[0] + 1
+    first_tok = node.children[0].text.decode("utf-8", "replace") if node.children else ""
+    if first_tok == "#ifndef":
+        directive = "ifndef"
+    elif first_tok == "#ifdef":
+        directive = "ifdef"
+    else:
+        directive = "if"  # preproc_if
+    endif_line = _find_endif_line(node)
+
+    branches = _collect_branch_nodes(node)
+
+    # 各分支的「规范化条件」（用于激活条件取反拼接）
+    branch_conds: List[Optional[str]] = []
+    for bi, bnode in enumerate(branches):
+        if bi == 0:
+            raw = _conditional_expr_text(node)
+            if directive == "ifdef":
+                norm = raw
+            elif directive == "ifndef":
+                norm = ("!" + raw) if raw else None
+            else:
+                norm = raw
+        else:
+            if bnode.type == "preproc_elif":
+                norm = _conditional_expr_text(bnode)
+            else:  # preproc_else
+                norm = None
+        branch_conds.append(norm)
+
+    for bi, bnode in enumerate(branches):
+        if bi == 0:
+            role = "consequent"
+            drtv = directive
+            cond = _conditional_expr_text(node)
+            active = branch_conds[0]
+            start_line = directive_line + 1
+        else:
+            if bnode.type == "preproc_elif":
+                role = "elif"
+                drtv = "elif"
+                cond = _conditional_expr_text(bnode)
+            else:
+                role = "else"
+                drtv = "else"
+                cond = None
+            # 激活条件：前置所有分支（consequent + 之前 elif）取反 且 本分支条件
+            prior = [x for x in branch_conds[:bi] if x]
+            selfc = branch_conds[bi]
+            parts = []
+            if prior:
+                parts.append("!(" + " || ".join(prior) + ")")
+            if selfc:
+                parts.append(selfc)
+            active = " && ".join(parts) or None
+            start_line = bnode.start_point[0] + 1
+        # 行区间：到下一分支起始行前一行，或 #endif 前一行
+        if bi + 1 < len(branches):
+            end_line = branches[bi + 1].start_point[0]  # 下一分支 0-based 行 = 本分支结束(1-based)
+        else:
+            end_line = endif_line - 1
+        out.append(
+            ConditionalInfo(
+                block_id=block_id,
+                directive=drtv,
+                branch_role=role,
+                condition=cond,
+                active_condition=active,
+                start_line=start_line,
+                end_line=end_line,
+                depth=depth,
+            )
+        )
+
+
+def _extract_conditionals_from_tree(root) -> List[ConditionalInfo]:
+    out: List[ConditionalInfo] = []
+    if root is None:
+        return out
+    counter = {"id": 0}
+
+    def walk(n, depth: int) -> None:
+        for c in n.children:
+            if c.type in ("preproc_ifdef", "preproc_if"):
+                counter["id"] += 1
+                _process_conditional_block(c, depth, counter["id"], out)
+                walk(c, depth + 1)  # 进入块内找嵌套条件
+            else:
+                walk(c, depth)
+
+    walk(root, 0)
+    return out
+
+
+def _extract_macros_from_tree(root, source_bytes: bytes) -> Tuple[List[MacroInfo], List[str]]:
+    """遍历语法树，抽取所有宏定义（对象/函数式/flag），容错永不抛。
+
+    Returns:
+        (记录为实体的 MacroInfo 列表, 被白名单跳过的宏名列表)
+    """
+    macros: List[MacroInfo] = []
+    skipped: List[str] = []
+    if root is None:
+        return macros, skipped
+
+    def walk(n) -> None:
+        for c in n.children:
+            if c.type == "preproc_function_def":
+                name = None
+                params: List[str] = []
+                body = None
+                for sub in c.children:
+                    if sub.type == "identifier":
+                        name = sub.text.decode("utf-8", "replace")
+                    elif sub.type == "preproc_params":
+                        for p in sub.children:
+                            if p.type == "identifier":
+                                params.append(p.text.decode("utf-8", "replace"))
+                    elif sub.type == "preproc_arg":
+                        body = sub.text.decode("utf-8", "replace").strip()
+                if name is not None:
+                    macros.append(
+                        MacroInfo(
+                            name=name,
+                            kind="function",
+                            params=params,
+                            body=body,
+                            line=c.start_point[0] + 1,
+                            byte_start=c.start_byte,
+                            byte_end=c.end_byte,
+                            is_whitelisted=False,
+                            confidence=_MACRO_CONF_FUNCTION,
+                        )
+                    )
+            elif c.type == "preproc_def":
+                name = None
+                body = None
+                for sub in c.children:
+                    if sub.type == "identifier":
+                        name = sub.text.decode("utf-8", "replace")
+                    elif sub.type == "preproc_arg":
+                        body = sub.text.decode("utf-8", "replace").strip()
+                if name is not None:
+                    if _is_object_macro_whitelisted(name):
+                        skipped.append(name)
+                    else:
+                        kind = "empty" if body is None else "object"
+                        conf = _MACRO_CONF_FUNCTION if body is None else _MACRO_CONF_OBJECT
+                        macros.append(
+                            MacroInfo(
+                                name=name,
+                                kind=kind,
+                                params=[],
+                                body=body,
+                                line=c.start_point[0] + 1,
+                                byte_start=c.start_byte,
+                                byte_end=c.end_byte,
+                                is_whitelisted=False,
+                                confidence=conf,
+                            )
+                        )
+            else:
+                walk(c)
+
+    walk(root)
+    macros.sort(key=lambda m: m.byte_start)
+    return macros, skipped
+
+
+def extract_macros(source: bytes, filename: str = "<string>") -> dict:
+    """从 C 源码抽取宏定义与条件编译分支（容错、永不抛异常）。
+
+    宏策略（验收 B1-07）：
+      - 标准库白名单宏（stddef/stdint 等）跳过实体化，仅计入 ``whitelisted_skipped``。
+      - 函数式宏 / flag 宏 → macro entity，置信度 0.35（低）。
+      - 带值对象宏 → macro entity，置信度 0.9。
+      - ``#ifdef`` 等条件分支全解析，每个分支标注 ``active_condition``。
+
+    Returns:
+        {filename, macros:[MacroInfo.as_dict], macros_count,
+         whitelisted_skipped:[...], conditionals:[ConditionalInfo.as_dict],
+         conditionals_count, parse_ok}
+    """
+    if not isinstance(source, (bytes, bytearray)):
+        try:
+            source = source.encode("utf-8")
+        except Exception:
+            source = str(source).encode("utf-8", "replace")
+    source_bytes = bytes(source)
+    res = parse(source_bytes, filename=filename)
+    if not res.ok or res.root_node is None:
+        return {
+            "filename": filename,
+            "macros": [],
+            "macros_count": 0,
+            "whitelisted_skipped": [],
+            "conditionals": [],
+            "conditionals_count": 0,
+            "parse_ok": False,
+        }
+    macros, skipped = _extract_macros_from_tree(res.root_node, source_bytes)
+    conds = _extract_conditionals_from_tree(res.root_node)
+    return {
+        "filename": filename,
+        "macros": [m.as_dict() for m in macros],
+        "macros_count": len(macros),
+        "whitelisted_skipped": sorted(set(skipped)),
+        "conditionals": [c.as_dict() for c in conds],
+        "conditionals_count": len(conds),
+        "parse_ok": True,
+    }
+
+
+def extract_macros_file(path: str, encoding: str = "utf-8") -> dict:
+    """从磁盘 C 文件抽取宏与条件编译分支（容错、永不抛异常）。"""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except Exception:
+        return {
+            "filename": path,
+            "macros": [],
+            "macros_count": 0,
+            "whitelisted_skipped": [],
+            "conditionals": [],
+            "conditionals_count": 0,
+            "parse_ok": False,
+        }
+    try:
+        text = raw.decode(encoding)
+    except Exception:
+        text = raw.decode("latin-1", errors="replace")
+    return extract_macros(text.encode("utf-8", "replace"), filename=path)
+
+
 __all__ = [
     "CParseResult",
     "ErrorNode",
@@ -1155,4 +1584,8 @@ __all__ = [
     "extract_globals_file",
     "extract_isrs",
     "extract_isrs_file",
+    "MacroInfo",
+    "ConditionalInfo",
+    "extract_macros",
+    "extract_macros_file",
 ]
