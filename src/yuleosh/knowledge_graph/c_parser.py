@@ -781,7 +781,7 @@ def extract_call_graph_file(path: str, encoding: str = "utf-8") -> dict:
 # B1-06 全局状态 + ISR 提取
 # ══════════════════════════════════════════════════════════════════
 # ISR 命名启发式关键词（大小写不敏感子串匹配）
-_ISR_NAME_KEYWORDS = ("isr", "irq", "handler", "interrupt", "vector")
+_ISR_NAME_KEYWORDS = ("isr", "irq", "interrupt", "vector")
 
 
 @dataclass
@@ -995,6 +995,10 @@ def _collect_vector_isrs(root, func_names: set) -> set:
                     break
             if eq_idx is not None and eq_idx + 1 < len(n.children):
                 val = n.children[eq_idx + 1]
+                # 仅当初始化器是聚合（数组/结构体大括号列表）时才视为向量表注册；
+                # 排除 `int rc = foo();` 这类普通调用被误判为向量表 ISR。
+                if val.type != "initializer_list":
+                    return
 
                 def scan(o):
                     if o.type == "identifier" and o.text.decode("utf-8", "replace") in func_names:
@@ -1099,8 +1103,9 @@ def extract_isrs(source: bytes, filename: str = "<string>") -> dict:
     """从 C 源码识别 ISR（容错、永不抛异常）。
 
     识别策略（任一命中即判 ISR）：
-      - 命名启发式：函数名含 isr/irq/handler/interrupt/vector（大小写不敏感）
-      - 中断向量表：初始化器（数组）中引用的本文件函数
+      - 命名启发式：函数名含 isr/irq/interrupt/vector（大小写不敏感）
+        （注：不含裸 "handler" —— STM32 的 `*_Handler` 由中断向量表聚合初始化器捕获）
+      - 中断向量表：仅当初始化器是数组/结构体大括号聚合（`initializer_list`）中引用的本文件函数
       - ``__attribute__((interrupt/isr))`` 修饰
 
     Returns:
