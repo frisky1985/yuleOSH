@@ -1249,11 +1249,15 @@ class ComplianceChecker:
 
     def run(self) -> dict:
         """Run the full compliance check and return the report."""
-        # Support both 'swe' key grouping and flat swe.1/swe.2/... keys
-        swe_sections = self.template.get("swe", {})
-        if not swe_sections:
-            # Flat structure: collect keys starting with 'swe.'
-            swe_sections = {k: v for k, v in self.template.items() if k.startswith("swe.")}
+        # Collect all process-area sections: every top-level key except 'meta'.
+        # Standard-agnostic — works for ASPICE (swe.1..swe.6), ISO 26262
+        # (part6/part8 or iso26262.part6/iso26262.part8), or any custom
+        # standard. Areas are ordered by an optional 'order' field; when
+        # absent the YAML document order (insertion order) is preserved.
+        # (A1-04 决策3 + run() 阻断修复：旧实现仅识别 swe.* 键，非 SWE 标准
+        #  如 ISO 26262 会被整体漏掉生成空报告。)
+        area_keys = [k for k in self.template if k != "meta"]
+        area_keys.sort(key=lambda k: self.template[k].get("order", float("inf")))
         report: dict = {
             "generated_at": self.generated_at,
             "project_dir": str(self.project_dir),
@@ -1273,8 +1277,8 @@ class ComplianceChecker:
         kg_stats = self._get_kg_stats(kg_store) if kg_store is not None else {}
         report["kg_data"] = kg_stats
 
-        for swe_key in sorted(swe_sections.keys()):
-            swe = swe_sections[swe_key]
+        for swe_key in area_keys:
+            swe = self.template[swe_key]
             swe_id = swe.get("id", swe_key.upper())
             bps = swe.get("base_practices", [])
 
@@ -1362,7 +1366,7 @@ class ComplianceChecker:
                     lines.append(f"| _unknown_ | {unknown.get('total_covers', 0)} | — |")
                 lines.append("")
 
-        for swe_key in sorted(report["swe_sections"].keys()):
+        for swe_key in report["swe_sections"]:
             section = report["swe_sections"][swe_key]
             lines.append(f"## {section['id']}: {section['title']}")
             lines.append(f"")

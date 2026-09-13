@@ -80,15 +80,21 @@ area1:                       # ← 过程域顶层键（任意命名，见 §4 �
 
 ### 4.2 过程域顶层键（如 `swe.1`、`area1`、`part6`）
 
-> **键名自由**：loader **不限制** 过程域顶层键名（不强制 `swe.N`）。键名本身会作为
-> `ProcessArea.key` 原样保留，用于还原 checker 消费的 dict 键。新标准（如 ISO 26262）
-> 可用 `part6` / `part8` 等自有命名。
+> **键名自由 + 推荐前缀约定（A1-04 决策3）**：loader **不强制** `swe.N`，键名原样保留为
+> `ProcessArea.key` 并用于还原 checker 消费的 dict 键。新标准（如 ISO 26262）可用
+> `part6` / `part8` 等自有命名。**为避免多标准并存键碰撞，推荐使用 `标准名.过程域` 约定**，
+> 例如 `iso26262.part6`、`iso26262.part8`（仅约定，非强制；引擎对键名不做前缀校验）。
+>
+> ⚠️ **消费端已标准化（A1-04 阻断修复）**：`ComplianceChecker.run()` 遍历**除 `meta` 外的所有
+> 顶层键**，不再仅识别 `swe.*`。因此任意命名的过程域（含 `iso26262.part6`）都能被正常消费，
+> 不会出现旧版「非 SWE 标准生成空报告」的 bug。
 
 | YAML 路径 | 含义 | 类型 | 必填 | 约束 |
 |-----------|------|------|------|------|
 | `<area>.id` | 过程域 ID（展示用） | string | **是** | 非空 |
 | `<area>.title` | 过程域标题 | string | 否 | — |
 | `<area>.description` | 过程域描述 | string（块文本 `|`） | 否 | 块文本原样保留 |
+| `<area>.order` | 章节排序权重（A1-04 决策2，可选） | int | 否 | 升序排列；**缺失则保持 yaml 文档书写顺序**（推荐用文档序，仅在需显式重排时加 `order`） |
 | `<area>.base_practices` | 该域下的基础实践列表 | list | 否（可空） | 元素见 §4.3 |
 
 ### 4.3 `base_practices[]` 元素
@@ -136,7 +142,7 @@ area1:                       # ← 过程域顶层键（任意命名，见 §4 �
 | yaml 结构 | 代码类 | 关键字段 |
 |-----------|--------|----------|
 | 顶层 `meta` | `ProfileMeta` | `standard` / `version` / `description` |
-| 顶层过程域键 | `ProcessArea` | `id` / `title` / `description` / `base_practices` / `key`（= 原 yaml 顶层键） |
+| 顶层过程域键 | `ProcessArea` | `id` / `title` / `description` / `order`(可选) / `base_practices` / `key`（= 原 yaml 顶层键） |
 | `base_practices[]` | `BasePractice` | `id` / `title` / `output_evidence` / `check` |
 | `output_evidence[]` | `EvidenceSpec` | `type` / `path` / `description` |
 | 整体 | `StandardProfile` | `meta` + `areas`（保序 list） |
@@ -210,8 +216,10 @@ meta:
   version: "2018"
   description: "Road vehicles — Functional Safety (Part 6/8 摘录)"
 
-part6:                       # 顶层键自由命名，对应字典键
+# 顶层键采用「标准名.过程域」推荐约定（A1-04 决策3），避免多标准键碰撞
+iso26262.part6:                       # 顶层键自由命名，对应字典键；此处用推荐前缀
   id: "ISO26262-6"
+  order: 1                            # 可选：显式章节排序（缺失则按文档序）
   title: "Product development at the software level"
   description: |
     Specifies the software development process for functional safety.
@@ -219,7 +227,7 @@ part6:                       # 顶层键自由命名，对应字典键
     - id: "ISO26262-6.BP1"
       title: "Software architectural design"
       output_evidence:
-        - type: "document"
+        - type: "document"            # 强制白名单枚举（A1-04 决策1）
           path: "docs/sw-architecture.md"
           description: "Software architectural design specification"
         - type: "source"
@@ -241,7 +249,7 @@ part6:                       # 顶层键自由命名，对应字典键
         - "Unit tests achieve required statement/branch coverage for ASIL"
         - "Verification results are archived with coverage evidence"
 
-part8:
+iso26262.part8:
   id: "ISO26262-8"
   title: "Supporting processes"
   base_practices:
@@ -292,12 +300,20 @@ part8:
 | `ProfileError: 缺少必填字段 meta.standard` | `meta.standard` 缺失或空 | 补非空 `standard` |
 | `ProfileError: base_practices[N] 缺少必填字段 id` | 某 BP 漏 `id` | 补 `id` |
 | `ProfileError: output_evidence[M].type 缺少必填字段 type` | 证据漏 `type`/`path` | 补 `type` 与 `path` |
+| `ProfileError: evidence.type 取值 'foo' 不在允许集合 [...]` | `type` 拼写漂移（如 `documnt`） | 改用下方白名单枚举值（A1-04 决策1 强制校验） |
 | 还原后 dict 键与预期不符 | 改了过程域顶层键名 | 顶层键即 dict 键（§7），对齐命名 |
 
-**`evidence.type` 推荐枚举说明**：引擎对 `type` 取值其实只做「存在性」校验
-（白名单校验的是 `ev` 的**键名**而非值）。但为报告语义清晰，请从
-`document`（文档）/ `source`（源码）/ `test`（测试）/ `ci`（CI 记录）/
-`evidence`（证据包）/ `sil`（SIL/HIL 结果）中选用。
+**`evidence.type` 强制白名单（A1-04 决策1：Option B）**：loader 对 `type` 取值做**强制枚举校验**
+（不再仅校验键名）。允许集合固定为：
+
+```text
+document  (文档)      source    (源码)      test      (测试)
+ci        (CI 记录)   evidence  (证据包)    sil       (SIL/HIL 结果)
+```
+
+> ⚠️ 拼写漂移（如 `documnt`）**过去会静默报「缺证据」假阴性**；自本决策起会**在加载阶段即报
+> `ProfileError` 并带字段路径**，把错误挡在作者侧。新标准需新类型时，在 loader 的
+> `_EVIDENCE_TYPE_ENUM` 一处增删即可（同文件、一行）。
 
 ---
 

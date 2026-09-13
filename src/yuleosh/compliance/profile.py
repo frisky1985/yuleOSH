@@ -47,6 +47,7 @@ class ProcessArea:
     title: str = ""  # yaml: <area>.title
     description: str = ""  # yaml: <area>.description (块文本)
     base_practices: List[BasePractice] = field(default_factory=list)  # yaml: <area>.base_practices[]
+    order: Optional[int] = None  # yaml: <area>.order (可选；控制报告章节排序，缺失则保文档序)
     key: Optional[str] = None  # yaml: 顶层平铺键 (如 "swe.1")；to_template_dict 据此还原原始键
 
 
@@ -134,7 +135,7 @@ class StandardProfile:
         areas: dict = {}
         for area in self.areas:
             area_key = area.key or area.id.lower()
-            areas[area_key] = {
+            area_body = {
                 "id": area.id,
                 "title": area.title,
                 "description": area.description,
@@ -155,6 +156,9 @@ class StandardProfile:
                     for bp in area.base_practices
                 ],
             }
+            if area.order is not None:
+                area_body["order"] = area.order
+            areas[area_key] = area_body
         return {"meta": meta, **areas}
 
 
@@ -172,9 +176,13 @@ _PROFILE_SEARCH_DIRS = [_DEFAULT_PROFILE_DIR, _DEFAULT_PROFILE_DIR / "profiles"]
 
 # 各结构允许的字段白名单（用于「未知字段」校验）
 _ALLOWED_META_KEYS = {"standard", "version", "description"}
-_ALLOWED_AREA_KEYS = {"id", "title", "description", "base_practices"}
+_ALLOWED_AREA_KEYS = {"id", "title", "description", "base_practices", "order"}
 _ALLOWED_BP_KEYS = {"id", "title", "output_evidence", "check"}
 _ALLOWED_EVIDENCE_KEYS = {"type", "path", "description"}
+
+# evidence.type 强制取值白名单（A1-04 决策1：Option B 强制校验）。
+# 拼写漂移原会静默落到「缺证据」假阴性；集中此处便于新标准扩展。
+_EVIDENCE_TYPE_ENUM = frozenset({"document", "source", "test", "ci", "evidence", "sil"})
 
 
 class ProfileError(Exception):
@@ -270,8 +278,12 @@ def _validate(data: dict, name: str) -> None:
                 for k in ev:
                     _require(k in _ALLOWED_EVIDENCE_KEYS, f"{ev_path}.{k}",
                              f"未知字段 '{k}'（evidence 仅允许 {sorted(_ALLOWED_EVIDENCE_KEYS)}）")
-                _require("type" in ev and str(ev.get("type", "")).strip(),
-                         f"{ev_path}.type", "evidence 缺少必填字段 type")
+                ev_type_val = str(ev.get("type", "")).strip()
+                _require(ev_type_val, f"{ev_path}.type", "evidence 缺少必填字段 type")
+                _require(ev_type_val in _EVIDENCE_TYPE_ENUM,
+                         f"{ev_path}.type",
+                         f"evidence.type 取值 '{ev_type_val}' 不在允许集合 {sorted(_EVIDENCE_TYPE_ENUM)}"
+                         "（A1-04 决策1：强制白名单，拼写漂移会静默错报为缺证据）")
                 _require("path" in ev and str(ev.get("path", "")).strip(),
                          f"{ev_path}.path", "evidence 缺少必填字段 path")
 
@@ -288,6 +300,8 @@ def _yaml_to_profile(data: dict) -> StandardProfile:
     for area_key, area in data.items():
         if area_key == "meta":
             continue
+        raw_order = area.get("order")
+        order = int(raw_order) if isinstance(raw_order, (int, float)) else None
         bps: List[BasePractice] = []
         for bp in area.get("base_practices", []) or []:
             evs = [
@@ -312,6 +326,7 @@ def _yaml_to_profile(data: dict) -> StandardProfile:
                 title=str(area.get("title", "")).strip(),
                 description=str(area.get("description", "")).strip(),
                 base_practices=bps,
+                order=order,
                 key=str(area_key),
             )
         )

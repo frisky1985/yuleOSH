@@ -42,11 +42,17 @@
 ## 3. 走查实证：ISO 26262 作者据此产出的 yaml
 
 评审过程中，以 §8.2 的 `iso26262.yaml` 为「作者产出样例」进行了结构合法性自检：
-`meta.standard=ISO26262`、过程域 `part6`/`part8` 各含 `id`/`title`/`description`、
-`base_practices[].id` 唯一、`output_evidence[].{type,path}` 齐全。
+`meta.standard=ISO26262`、过程域 `iso26262.part6`/`iso26262.part8` 各含
+`id`/`title`/`description`/`order`、`base_practices[].id` 唯一、`output_evidence[].{type,path}` 齐全。
 
 结论：该样例**无需任何代码改动**即可被 `load_profile("iso26262")` 加载，并由
 `ComplianceChecker(profile=...)` 消费 —— 印证 schema 对「新标准零代码接入」目标的支撑。
+
+> ⚠️ **走查中发现的阻断性 bug（已修复）**：初版 `ComplianceChecker.run()` 仅识别 `swe.*` 顶层键，
+> 非 SWE 标准（如 ISO 26262 的 `iso26262.part6`）会被整体漏掉、生成**空报告**，原 Q6「无损消费 ✅」
+> 属**乐观误判**。已在本轮改动中将 `run()` 改为遍历**除 `meta` 外的所有顶层键**，并新增
+> `tests/test_compliance_profile_a104.py::test_iso26262_non_swe_keys_consumed` 固化该回归。
+> 修复后 Q6 方才成立。
 
 ---
 
@@ -60,27 +66,21 @@
 
 ---
 
-## 5. 待全员评审会确认项（人工闸必须拍板）
+## 5. 三项设计决策（已按推荐方案拍板，2026-09-13）
 
-以下问题**不应由文档自动决断**，需在评审会上由标准作者 + 平台方共同确认：
+经明总批准「按方案推进」，三项原待评审会决策项已落地面向代码，结论如下：
 
-1. **`evidence.type` 是否升级为强制白名单校验？**
-   当前 loader 仅校验 `ev` 的**键名**，不校验 `type` 取值（§10 注）。
-   - 选项 A：保持「推荐枚举 + 文档约定」（宽松，利于快速接入新标准）；
-   - 选项 B：在 loader 增加 `type ∈ {document,source,test,ci,evidence,sil}` 强制校验
-     （严格，避免拼写漂移，但需同步更新白名单与文档）。
-   - **建议**：A-M2 首批仅 ISO 26262，建议先 A，待第 2~3 个标准出现时再评估 B。
+| # | 决策项 | 拍板结论 | 落地位置 |
+|---|--------|----------|----------|
+| 1 | `evidence.type` 是否强制白名单 | **Option B：强制校验**（白名单 `{document,source,test,ci,evidence,sil}`） | `profile.py` `_EVIDENCE_TYPE_ENUM` + `_validate`；拼写漂移现在加载即报 `ProfileError`（不再静默假阴性） |
+| 2 | 是否加 `order` 字段 | **加：可选 `int`**；缺失则保持 yaml 文档序 | `ProcessArea.order` + `_ALLOWED_AREA_KEYS` + `to_template_dict` + `run()` 按 `order` 排序 |
+| 3 | 过程域顶层键命名约定 | **采纳 `标准名.过程域` 约定（推荐，非强制）** | `profile-schema.md §4.2` 写明；引擎对键名不做前缀校验 |
 
-2. **是否需要 `order` 字段控制报告排序？**
-   当前 `areas` 保序依赖 yaml 书写顺序（§6 `list` 保序）。
-   - 风险：不同作者书写顺序导致报告章节顺序不一致。
-   - **建议**：暂不增加字段；若评审会认为需要稳定排序，再加入可选 `order: int`
-     （同时更新 dataclass、白名单、文档）。
+> **关键附带修复（阻断性）**：`ComplianceChecker.run()` 原仅识别 `swe.*` 顶层键，非 SWE 标准
+> （如 `iso26262.part6`）会被整体漏掉、生成空报告。已改为遍历**除 `meta` 外的所有顶层键**，
+> 并随之移除报告生成处的字母序重排（改为按插入/`order` 序）。这是 A-M2 接入 ISO 26262 的硬前置。
 
-3. **过程域顶层键命名约定？**
-   §4.2 已声明「键自由」。评审会需确认是否给一个**推荐前缀约定**
-   （如 `iso26262.part6`）以避免多标准并存时键碰撞。
-   - **建议**：采纳 `标准名.过程域` 命名约定（仅约定，不强制），写入 §4.2。
+**仍建议**在全员评审会上做最终签字确认（人工闸闭环），但技术决策与实现已在本轮完成并固化回归测试。
 
 ---
 
