@@ -49,6 +49,18 @@ GIVEN 模板副本
 WHEN 跑 `run_pipeline(docs/spec.md)`（真实编排器）
 THEN 硬门禁（`spec-check` / `claude-review` / `review-critical-safety` / `merge-gate` / `test-qualification` 等）须全 `passed` 或按计划 `skipped`，pipeline 整体非 RED。
 
+### GIVEN-6: 需求可追溯性（ASPICE / ISO 26262）
+GIVEN 模板的 `src/` 与 `tests/`
+WHEN `alm.traceability.generate_lrm` 扫描
+THEN 须建立 **需求 ID → 函数接口 → 测试 ID** 全链路，且可被机检：
+- 源码 `src/*.c|cpp|h` 用 **行注释** `// @req Req-00x` 标注需求→函数（块注释 `/* Req */` 会被扫描器剥离，**无效**）。
+- 系统测试 `tests/system/scenario_test.*` 每场景上方用 `// @req Req-00x` + `// @tests src/main.c:func1, func2` 标注需求→测试、函数→测试。
+- `docs/requirement-traceability-matrix.md` 提供 SWR 风格权威映射表（`| SHALL ID | Spec Source | Test File | Test Function | Status |`），`load_swr_mapping_table` 可消费。
+- `alm.traceability.scan_test_code_links` 的扫描 glob 已覆盖 `scenario_test*.c/.cpp`、`e2e*.c/.cpp`、`*_test*.c/.cpp`（与 G10 发现模式对齐）。
+
+> 注：扫描器仅认 `// @req` / `// @tests` 行注释格式（正则 `@req\s*[(]?\s*ID`、`@tests path: func`），
+> 源码里既有的 `/* Req-001 */` 文档块注释对人可读但**不被机检**，须补 `// @req` 行注释方生效。
+
 ---
 
 ## 各模板验收状态
@@ -56,11 +68,11 @@ THEN 硬门禁（`spec-check` / `claude-review` / `review-critical-safety` / `me
 | 模板 | 构建系统 | 语言 | G10 系统测试 | 真实 E2E | 备注 |
 |------|----------|------|-------------|----------|------|
 | `esp-idf-blinky` | CMake | C | ⏳ 待补 | ⏳ 需硬件 | 仅静态结构检查通过 |
-| `gpio-led-chaser` | CMake | C | ✅ `tests/system/scenario_test.c` | ✅ **GREEN (2026-09-14)** | 24 步真实 DeepSeek E2E 全绿 |
-| `mcu-firmware` | Makefile | C++ | ✅ `tests/system/scenario_test.cpp`（即时编译） | ⏳ 待真实 E2E 复跑 | G10 门禁已证 `passed` (2026-09-14) |
-| `ble-sensor` | Makefile | C | ⏳ 待补 | ⏳ | 需补 `tests/system` 场景测试 |
-| `can-bus` | Makefile | C | ⏳ 待补 | ⏳ | 需补 `tests/system` 场景测试 |
-| `autosar` | arxml + BSW | C | ⏳ 待补 | ⏳ | 复杂 BSW，需补 system 测试 + 构建适配 |
+| `gpio-led-chaser` | CMake | C | ✅ `tests/system/scenario_test.c` | ✅ **GREEN (2026-09-14)** | 24 步真实 DeepSeek E2E 全绿；含 @req/@tests 追溯注解 |
+| `mcu-firmware` | Makefile | C++ | ✅ `tests/system/scenario_test.cpp`（即时编译） | ✅ 跑通 (G10 GREEN；G4 含 spec 偏离 RED，待修) | G10 门禁已证 `passed` (2026-09-14)；含 @req/@tests 追溯注解 |
+| `ble-sensor` | Makefile | C | ✅ `tests/system/scenario_test.c`（即时编译） | ✅ 跑通 (G10 GREEN；G4 原 RED，已修 P0 递归，待复跑) | 补 4 场景 + @req/@tests；修 config_load 无限递归 segfault |
+| `can-bus` | Makefile | C | ✅ `tests/system/scenario_test.c`（即时编译，7 场景） | ✅ 跑通 (G10 GREEN；G4 原 RED，已补 3 SHALL，待复跑) | 补 4 场景 + @req/@tests；落实 bus-off/错误帧日志/flash 持久化 3 条 SHALL |
+| `autosar` | arxml + BSW | C | ✅ `tests/system/scenario_test.c`（配置契约，3 项） | ⏳ 需 YULEASR_HOME | 依赖外部 BSW 平台；`Std_Types.h` 桩 + 时钟配置契约验证；含 @req/@tests |
 
 > ✅ = 已验证通过　⏳ = 待补 / 需运行时验证　❌ = 未通过
 
