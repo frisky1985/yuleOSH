@@ -334,6 +334,9 @@ void can_rx_process(void)
 
 int can_send_message(uint32_t id, const uint8_t *data, uint8_t dlc, bool ext)
 {
+    /* Req-002: respect bus-off per ISO 11898-1 — never transmit while the
+       controller is bus-off (g_node_state set by the error-counter FSM). */
+    if (g_node_state == CAN_STATE_BUS_OFF) return -1;
     return hal_can_send(id, data, dlc, ext);
 }
 
@@ -359,6 +362,9 @@ void can_periodic_scheduler(void)
     for (int i = 0; i < g_config.periodic_count; i++) {
         PeriodicMessage *pm = &g_config.periodic_msgs[i];
         if (!pm->enabled) continue;
+
+        /* Req-002: do not attempt transmission while bus-off. */
+        if (g_node_state == CAN_STATE_BUS_OFF) continue;
 
         if ((now_ms - pm->last_tx_ms) >= pm->interval_ms) {
             hal_can_send(pm->can_id, pm->data, pm->dlc, false);
@@ -427,7 +433,8 @@ static void uart_process_command(const char *line)
                 g_config.baud_rate = (CanBaudRate)baud;
                 hal_can_init(g_config.baud_rate);
                 config_save();  /* Req-004: persist to flash */
-                snprintf(response, sizeof(response), "OK Baud=%lu\r\n", baud);
+                /* Req-004 AC-005: byte-exact "OK\r\n" response */
+                snprintf(response, sizeof(response), "OK\r\n");
             } else {
                 snprintf(response, sizeof(response), "ERR Invalid baud\r\n");
             }

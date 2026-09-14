@@ -1,17 +1,27 @@
 # BLE Temperature Sensor — Build System
 #
 # Targets:
-#   all       — Build firmware
-#   test      — Build and run unit tests (host)
-#   clean     — Remove build artifacts
-#   flash     — Flash firmware to target (via JLink / OpenOCD)
+#   all         — Build firmware library (host)
+#   test        — Build and run unit tests (host)
+#   test-system — Build and run system qualification scenarios (SWE.6 G10)
+#   test-all    — Run both unit and system tests
+#   clean       — Remove build artifacts
+#   flash       — Flash firmware to target (via JLink / OpenOCD)
 #
+# Note: src/main.c has no host entry point (it is a freestanding embedded
+# implementation). Unit/system tests #include "../src/main.c" to reach the
+# static implementation functions and supply their own main(). Each test
+# executable therefore compiles main.c exactly once (inlined), so there are
+# no duplicate-symbol collisions. Host tests do not exercise every HAL path,
+# so -Wno-unused-function is allowed for the host build (the target build
+# keeps -Werror strictness).
 
 # Toolchain
 CC      ?= gcc
 CXX     ?= g++
 OBJCOPY ?= objcopy
 SIZE    ?= size
+AR      ?= ar
 
 # Target MCU
 MCU_SERIES ?= nrf52840
@@ -23,19 +33,25 @@ SRC_DIR    ?= src
 TEST_DIR   ?= tests
 
 # Source files
-SRC_C      := $(wildcard $(SRC_DIR)/*.c)
-SRC_CPP    := $(wildcard $(SRC_DIR)/*.cpp)
-TEST_SRC   := $(wildcard $(TEST_DIR)/*.c) $(wildcard $(TEST_DIR)/*.cpp)
+SRC_C         := $(wildcard $(SRC_DIR)/*.c)
+SRC_CPP       := $(wildcard $(SRC_DIR)/*.cpp)
+UNIT_TEST_C   := $(wildcard $(TEST_DIR)/*.c)
+UNIT_TEST_CPP := $(wildcard $(TEST_DIR)/*.cpp)
+SYS_TEST_C    := $(wildcard $(TEST_DIR)/system/*.c)
+SYS_TEST_CPP  := $(wildcard $(TEST_DIR)/system/*.cpp)
 
 # Object files (host build for testing)
-HOST_OBJS  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_C))
-HOST_OBJS  += $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRC_CPP))
-TEST_OBJS  := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/%.o,$(TEST_SRC))
-TEST_OBJS  += $(patsubst $(TEST_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(TEST_SRC))
+HOST_OBJS      := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_C))
+HOST_OBJS      += $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRC_CPP))
+UNIT_TEST_OBJS := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/unit/%.o,$(UNIT_TEST_C))
+UNIT_TEST_OBJS += $(patsubst $(TEST_DIR)/%.cpp,$(BUILD_DIR)/unit/%.o,$(UNIT_TEST_CPP))
+SYS_TEST_OBJS  := $(patsubst $(TEST_DIR)/system/%.c,$(BUILD_DIR)/sys/%.o,$(SYS_TEST_C))
+SYS_TEST_OBJS  += $(patsubst $(TEST_DIR)/system/%.cpp,$(BUILD_DIR)/sys/%.o,$(SYS_TEST_CPP))
 
-# Compiler flags (host)
-CFLAGS     := -Wall -Wextra -Werror -std=c99 -g -O0
-CXXFLAGS   := -Wall -Wextra -Werror -std=c++17 -g -O0
+# Compiler flags (host). -Isrc lets tests/#include "../src/main.c" resolve.
+# -Wno-unused-function: host tests skip some HAL paths defined for real HW.
+CFLAGS     := -Wall -Wextra -Werror -Wno-unused-function -std=c99 -g -O0 -Isrc
+CXXFLAGS   := -Wall -Wextra -Werror -Wno-unused-function -std=c++17 -g -O0 -Isrc
 LDFLAGS    := -lm
 
 # Cross-compiler flags (target)
@@ -45,29 +61,47 @@ LDFLAGS_TARGET  := -nostartfiles -Wl,-T,linker.ld
 # Default target
 all: firmware
 
-# Build firmware (host test build)
-firmware: $(BUILD_DIR)/firmware.elf
+# Build firmware as a static archive (no host entry point in src/main.c)
+firmware: $(BUILD_DIR)/libblesensor.a
 
-$(BUILD_DIR)/firmware.elf: $(HOST_OBJS)
+$(BUILD_DIR)/libblesensor.a: $(HOST_OBJS)
+	$(AR) rcs $@ $^
+
+# Build and run unit tests
+test: $(BUILD_DIR)/unit/test_runner
+	./$(BUILD_DIR)/unit/test_runner
+
+$(BUILD_DIR)/unit/test_runner: $(UNIT_TEST_OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-	$(SIZE) $@
 
-# Build and run tests
-test: $(BUILD_DIR)/test_runner
-	./$(BUILD_DIR)/test_runner
+# Build and run system qualification scenarios (SWE.6 G10)
+test-system: $(BUILD_DIR)/sys/test_runner
+	./$(BUILD_DIR)/sys/test_runner
 
-$(BUILD_DIR)/test_runner: $(HOST_OBJS) $(TEST_OBJS)
+$(BUILD_DIR)/sys/test_runner: $(SYS_TEST_OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Both
+test-all: test test-system
 
 # Pattern rules
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/%.o: $(TEST_DIR)/%.c $(BUILD_DIR)
+$(BUILD_DIR)/unit/%.o: $(TEST_DIR)/%.c $(BUILD_DIR)/unit
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/sys/%.o: $(TEST_DIR)/system/%.c $(BUILD_DIR)/sys
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/unit:
+	mkdir -p $(BUILD_DIR)/unit
+
+$(BUILD_DIR)/sys:
+	mkdir -p $(BUILD_DIR)/sys
 
 # Clean
 clean:
@@ -78,4 +112,4 @@ flash: firmware
 	@echo "Flash target $(MCU_SERIES) — implement with JLinkExe or openocd"
 	# Example: JLinkExe -device NRF52840_XXAA -if SWD -speed 4000 -CommanderScript flash.jlink
 
-.PHONY: all firmware test clean flash
+.PHONY: all firmware test test-system test-all clean flash
