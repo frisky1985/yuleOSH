@@ -166,7 +166,21 @@ def scan_test_code_links(project_dir: Path) -> dict[str, dict]:
     # Scan all test files: Python (test_*.py) + C/C++ (test_*.c / test_*.cpp)
     # C projects (e.g. AUTOSAR BSW) keep tests as .c files with @tests
     # annotations in // comments. (fix 2026-08-25: yuleASR 271 test files)
-    test_files = sorted(tests_dir.rglob("test_*.py")) + sorted(tests_dir.rglob("test_*.c"))
+    # 2026-09-14: 扩展 glob 覆盖 system/qualification 测试命名, 与 G10
+    # (test_qualification.py) 的发现模式对齐 —— 否则 templates 新建的
+    # tests/system/scenario_test.c(.cpp) / e2e*.c / *_test*.c 永远不进
+    # 可追溯性扫描, 需求→测试 关联无法建立。
+    _test_globs = (
+        "test_*.py", "test_*.c", "test_*.cpp",
+        "scenario_test*.c", "scenario_test*.cpp",
+        "e2e*.c", "e2e*.cpp",
+        "*_test*.c", "*_test*.cpp",
+    )
+    test_files: list[Path] = []
+    for _g in _test_globs:
+        test_files.extend(sorted(tests_dir.rglob(_g)))
+    # 去重 (scenario_test*.c 与 *_test*.c 可能重叠)
+    test_files = sorted(set(test_files))
     for test_file in test_files:
         if not test_file.is_file():
             continue
@@ -187,10 +201,26 @@ def scan_test_code_links(project_dir: Path) -> dict[str, dict]:
                 functions = [f for f in functions if f]
 
             rel_test_path = str(test_file.relative_to(project_dir))
-            test_links[rel_test_path] = {
-                "source_file": source_path,
-                "functions": functions,
-            }
+            # 2026-09-14 修复: 单测试文件可能含多个 @tests 注解 (每场景一个),
+            # 旧逻辑用 `=` 覆盖, 仅保留最后一个, 导致 需求→测试 函数链断裂。
+            # 现聚合: source_file 用 ';' 连接, functions 去重合并, 保持调用方
+            # 期望的 {"source_file", "functions"} 结构。
+            if rel_test_path not in test_links:
+                test_links[rel_test_path] = {
+                    "source_file": source_path,
+                    "functions": list(functions),
+                }
+            else:
+                entry = test_links[rel_test_path]
+                if source_path not in entry["source_file"].split(";"):
+                    entry["source_file"] = (
+                        entry["source_file"] + ";" + source_path
+                        if entry["source_file"]
+                        else source_path
+                    )
+                for fn in functions:
+                    if fn not in entry["functions"]:
+                        entry["functions"].append(fn)
 
     return test_links
 
@@ -848,7 +878,9 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
                 matching_code = _find_code_by_keywords_for_id(src_dir, spec_req_id)
 
         # Find tests that reference this requirement (use spec_req_id for better matches)
-        matching_tests = _find_tests_for_requirement(test_reports, spec_req_id, shall["statement"])
+        matching_tests = _find_tests_for_requirement(
+            test_reports, spec_req_id, shall["statement"], project_dir=str(project_dir)
+        )
 
         # Enrich test entries with @tests annotation links (test → code direct traceability)
         for test_entry in matching_tests:
@@ -1397,8 +1429,14 @@ def _scan_test_pytest_files(project_dir: str, req_id: str) -> list[dict]:
 
 # Override the _find_tests_for_requirement to also scan pytest files
 def _find_tests_for_requirement(test_reports: list[dict], req_id: str,
-                                 statement: str) -> list[dict]:
-    """Find test reports and pytest files referencing a specific requirement."""
+                                 statement: str,
+                                 project_dir: Optional[str] = None) -> list[dict]:
+    """Find test reports and pytest files referencing a specific requirement.
+
+    project_dir: 限定的项目根目录 (供 pytest 文件扫描)。若未传则回退
+    OSH_HOME / 当前工作目录 —— 但切勿在 generate_lrm 中以整个仓库为根
+    递归扫描 (历史 bug: 曾因回退 cwd 扫全仓 test_*.py 在沙箱内挂起)。
+    """
     matching = []
 
     # First check test report artifacts
@@ -1416,8 +1454,8 @@ def _find_tests_for_requirement(test_reports: list[dict], req_id: str,
     # (this is the authoritative source for the acceptance matrix)
     # Scan for any spec-defined req_id (RS-XXX, SWR-XXX, NFR-XXX) or plain SHALL-N
     if not matching and not req_id.startswith("SHALL-"):
-        project_dir = os.environ.get("OSH_HOME", os.getcwd())
-        pytest_matches = _scan_test_pytest_files(project_dir, req_id)
+        scan_root = project_dir or os.environ.get("OSH_HOME", os.getcwd())
+        pytest_matches = _scan_test_pytest_files(scan_root, req_id)
         if pytest_matches:
             matching.extend(pytest_matches)
 

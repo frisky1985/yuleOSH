@@ -321,11 +321,17 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
     # 通用兜底: 递归搜 project_dir 下(depth<=4)名称含 stem / qualification /
     # system / scenario / e2e / acceptance 的可执行文件 —— 让 Makefile 或其它
     # 构建系统产出的系统测试二进制也能被发现, 不再强依赖 CMake build/ 约定。
+    # 但必须排除门禁自身生成的临时产物 (.yuleosh) 与 VCS/缓存 (.osh/.git/...),
+    # 否则会复用到上任运行时残留的旧二进制而不重新编译 (表现为「改了源码仍跑旧行为」)。
+    _skip_parts = (".yuleosh", ".osh", ".git", "__pycache__", "node_modules")
     qual_keywords = ("qualification", "system", "scenario", "e2e", "acceptance")
     for cand in project_dir.rglob("*"):
+        rel_parts = cand.relative_to(project_dir).parts
+        if any(p in _skip_parts for p in rel_parts):
+            continue
         if not cand.is_file() or not os.access(cand, os.X_OK):
             continue
-        if len(cand.relative_to(project_dir).parts) > 4:
+        if len(rel_parts) > 4:
             continue
         low = cand.name.lower()
         if stem.lower() in low or any(k in low for k in qual_keywords):

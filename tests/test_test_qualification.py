@@ -174,15 +174,19 @@ class TestRunSystemTests:
         result = _run_system_tests([], tmp_path)
         assert result["executed"] == 0
 
-    def test_skips_c_files(self, tmp_path):
-        """GIVEN C test files WHEN running system tests THEN reports no built binary (defect #8)."""
+    def test_compiles_c_files(self, tmp_path):
+        """GIVEN C test files WHEN running system tests THEN compiles+executes them.
+
+        历史断言 (defect #8) 要求系统测试运行器跳过 C 文件、报告 "no built binary"。
+        但 G10 合格性门禁已演进为「构建系统无关通用验收」(项 3)：对 Makefile/CMake
+        模板即时编译 C/C++ 系统测试（mcu/ble/can 均依赖此路径），不再要求预置构建产物。
+        故此处断言编译型 C 测试文件会被执行 (executed >= 1)，与当前设计一致。
+        """
         from yuleosh.pipeline.step_handlers.test_qualification import _run_system_tests
         c_file = tmp_path / "test.c"
-        c_file.write_text("int main(){}")
+        c_file.write_text("int main(){return 0;}")
         result = _run_system_tests([c_file], tmp_path)
-        assert result["executed"] == 0
-        assert any("no built binary" in str(d.get("message", ""))
-                   for d in result["details"])
+        assert result["executed"] >= 1
 
     def test_python_success(self, tmp_path):
         """GIVEN Python test files WHEN running system tests THEN executes them."""
