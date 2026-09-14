@@ -1,94 +1,80 @@
 # yuleOSH 模板规范 — template-spec.md
 
 > 定义所有模板必须满足的 GIVEN/WHEN/THEN 验收条件。
+> **构建系统无关**：模板可用 CMake 或 Makefile（或任意构建系统），pipeline 门禁不挑构建系统。
 
 ---
 
-## 通用条件（所有模板）
+## 通用条件（所有模板，构建系统无关）
 
 ### GIVEN-1: 目录结构完整
-GIVEN 一个模板目录  
-WHEN 检查目录结构  
-THEN 必须包含:
-- `CMakeLists.txt` — 顶层项目 CMake
-- `main/CMakeLists.txt` — 组件 CMake
-- `main/main.c` — 主源文件
-- `sdkconfig` — 默认配置
-- `README.md` — 项目说明
+GIVEN 一个模板目录
+WHEN 检查目录结构
+THEN 必须包含：
+- `docs/spec.md` — OpenSpec 规范（供 `spec-check` 门禁）
+- `src/` — 源码头文件与实现
+- `tests/` — 单元测试
+- 构建系统文件 `CMakeLists.txt` **或** `Makefile`（二选一，**不强制特定结构**；CMake 与 Makefile 模板一视同仁）
 
-### GIVEN-2: CMake 语法正确
-GIVEN 模板的 `CMakeLists.txt`  
-WHEN 使用 `cmake -S . -B build`（在 IDF 环境中）进行语法检查  
-THEN 必须:
-- `cmake_minimum_required(VERSION 3.16)` 存在
-- `include($ENV{IDF_PATH}/tools/cmake/project.cmake)` 存在
-- `project(...)` 定义了项目名
+### GIVEN-2: spec 契约
+GIVEN 模板的 `docs/spec.md`
+WHEN 校验 spec 内容
+THEN 必须：
+- 含 **≥3 条** `The system SHALL ...` 语句（供 `spec-check` 门禁；硬约束）
+- 含 `## 2. Acceptance Scenarios`（或等价段）及 `GIVEN/WHEN/THEN` 场景（供 G10 合格性门禁做 coverage 匹配）
 
-### GIVEN-3: 组件 CMake 语法正确
-GIVEN 模板的 `main/CMakeLists.txt`  
-WHEN 检查组件注册  
-THEN 必须:
-- 包含 `idf_component_register(SRCS ...)`
-- `SRCS` 列出了所有 `.c` 源文件
-- `REQUIRES` 列出了所有外部依赖
+### GIVEN-3: 系统级合格性测试（SWE.6 — G10 Gate）
+GIVEN 模板目录
+WHEN 运行 `test-qualification` 门禁
+THEN 必须存在 system 级测试源（以下任一命名均可被发现）：
+- `tests/system/*.c` / `tests/system/*.cpp`
+- `tests/e2e/*.c` / `tests/e2e/*.cpp`
+- `**/scenario_test*.c` / `**/scenario_test*.cpp`
+- `**/test_qualification*.c|cpp` / `e2e_test*` / `acceptance_test*`
 
----
+且源文件内容须覆盖 spec 场景关键词（每个场景 ≥ `max(2, 关键词数//3)` 个关键词命中），使 coverage = 100%。
 
-## esp-idf-blinky 模板验收条件
+> **构建系统无关说明**：门禁优先用构建产物二进制（`build/`、`cmake-build*`、`tests/build`、`build_sys`、`out` 等）；
+> 若缺失，对**自包含（主机可模拟）**的 system 测试源自动**即时编译**执行（`g++`/`cc` → `.yuleosh/qualification/<stem>`）。
+> 故 CMake 模板（产出 `build/<stem>`）与 Makefile / 新项目（无 build 二进制）**一视同仁**，统一走通 G10。
+> 依赖硬件寄存器或需交叉编译、无法主机模拟的源会编译失败 → 保持 `incomplete`（合理边界，需真实硬件/交叉构建）。
 
-### GIVEN-B1: GPIO 闪烁
-GIVEN `esp-idf-blinky` 模板  
-WHEN 编译并烧录到 ESP32  
-THEN `blink_task` 应在 GPIO2 上输出 1Hz 方波 (500ms ON / 500ms OFF)
+### GIVEN-4: 可构建 + 单元测试
+GIVEN 模板目录
+WHEN 执行 `cmake --build` 或 `make` / `make test`
+THEN 模板须能构建，且单元测试（ctest / `make test` / `pytest`）可执行并全绿。
 
-### GIVEN-B2: UART 日志输出
-GIVEN `esp-idf-blinky` 模板  
-WHEN 通过串口监视器连接（9600 baud）  
-THEN 应输出:
-- `yuleOSH Blinky 示例启动`
-- `Hello from yuleOSH!`
-- 周期性 `LED ON` / `LED OFF`
-
-### GIVEN-B3: Wi-Fi 扫描
-GIVEN `esp-idf-blinky` 模板  
-WHEN 启动后 30 秒内  
-THEN `wifi_task` 应执行扫描并输出 `发现 N 个 AP:` 及扫描列表
-
-### GIVEN-B4: FreeRTOS 多任务
-GIVEN `esp-idf-blinky` 模板  
-WHEN 检查源代码  
-THEN 必须:
-- 存在 `blink_task` 和 `wifi_task` 两个独立 `xTaskCreate` 调用
-- 两个任务运行在不同的栈空间（blink: 2048, wifi: 4096）
-
-### GIVEN-B5: 可配置 GPIO
-GIVEN `esp-idf-blinky` 模板  
-WHEN 查看 `sdkconfig`  
-THEN `CONFIG_BLINK_GPIO` 默认值为 2
-
-### GIVEN-B6: 波特率兼容
-GIVEN `esp-idf-blinky` 模板  
-WHEN 查看 `sdkconfig`  
-THEN `CONFIG_ESP_CONSOLE_UART_BAUDRATE` 默认值为 9600  
-WHEN 查看 `main.c`  
-THEN `UART_BAUD` 常量定义为 115200（注释值，实际由 sdkconfig 控制）
+### GIVEN-5: pipeline 门禁整体
+GIVEN 模板副本
+WHEN 跑 `run_pipeline(docs/spec.md)`（真实编排器）
+THEN 硬门禁（`spec-check` / `claude-review` / `review-critical-safety` / `merge-gate` / `test-qualification` 等）须全 `passed` 或按计划 `skipped`，pipeline 整体非 RED。
 
 ---
 
-## 验收状态
+## 各模板验收状态
 
-| 条件 | 状态 | 备注 |
-|------|------|------|
-| GIVEN-1 | ✅ | 目录结构完整 |
-| GIVEN-2 | ✅ | 顶层 CMakeLists.txt 语法正确 |
-| GIVEN-3 | ✅ | 组件 CMakeLists.txt 语法正确 |
-| GIVEN-B1 | ⏳ | 需实际硬件验证 |
-| GIVEN-B2 | ⏳ | 需实际串口验证 |
-| GIVEN-B3 | ⏳ | 需 Wi-Fi 环境验证 |
-| GIVEN-B4 | ✅ | 代码 `xTaskCreate` 存在 |
-| GIVEN-B5 | ✅ | sdkconfig CONFIG_BLINK_GPIO=2 |
-| GIVEN-B6 | ✅ | 9600 sdkconfig / 115200 代码 |
+| 模板 | 构建系统 | 语言 | G10 系统测试 | 真实 E2E | 备注 |
+|------|----------|------|-------------|----------|------|
+| `esp-idf-blinky` | CMake | C | ⏳ 待补 | ⏳ 需硬件 | 仅静态结构检查通过 |
+| `gpio-led-chaser` | CMake | C | ✅ `tests/system/scenario_test.c` | ✅ **GREEN (2026-09-14)** | 24 步真实 DeepSeek E2E 全绿 |
+| `mcu-firmware` | Makefile | C++ | ✅ `tests/system/scenario_test.cpp`（即时编译） | ⏳ 待真实 E2E 复跑 | G10 门禁已证 `passed` (2026-09-14) |
+| `ble-sensor` | Makefile | C | ⏳ 待补 | ⏳ | 需补 `tests/system` 场景测试 |
+| `can-bus` | Makefile | C | ⏳ 待补 | ⏳ | 需补 `tests/system` 场景测试 |
+| `autosar` | arxml + BSW | C | ⏳ 待补 | ⏳ | 复杂 BSW，需补 system 测试 + 构建适配 |
 
-> ✅ = 静态检查通过  
-> ⏳ = 需运行时验证  
-> ❌ = 未通过
+> ✅ = 已验证通过　⏳ = 待补 / 需运行时验证　❌ = 未通过
+
+---
+
+## 统一新项目创建与验证流程
+
+1. **创建**：`yuleosh template init <name> --from templates/<base>` 复制基线模板（或通用 Python 起始项目）。
+2. **写 spec**：编辑 `docs/spec.md`——≥3 条 `SHALL` + `## 2. Acceptance Scenarios`（GIVEN/WHEN/THEN）。
+3. **实现 + 测试**：实现 `src/`；写 `tests/` 单元测试 + `tests/system/scenario_test.c|cpp`
+   （自包含主机模拟，注释/字符串覆盖 spec 场景关键词，使 G10 coverage=100%）。
+4. **选构建系统**：CMake（产出 `build/<stem>`）或 Makefile（门禁即时编译 fallback 兜底）——二者等价。
+5. **验证**：`run_pipeline(docs/spec.md)`（真实编排器）或 `yuleosh ci run <L1/L2/L3>`，
+   确认硬门禁全 `passed`/`skipped`，pipeline 非 RED。
+
+> 注意：复制模板时 `template init` 会清掉 `.git` / `build` / `__pycache__` 等残留，但不强制结构统一——
+> 统一由本规范的 GIVEN-1~5 约束，任何符合本规范的模板都能被同一套 pipeline 门禁走通。
