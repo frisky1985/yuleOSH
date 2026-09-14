@@ -98,6 +98,22 @@ class TestDiscoverTestFiles:
             assert any("test_qualification.py" in str(f) for f in files)
 
 
+    def test_finds_cpp_system_test_files(self):
+        """GIVEN a C++ (Makefile) template with tests/system/scenario_test.cpp
+           WHEN _discover_test_files runs
+           THEN .cpp system tests are discovered (修复: 原 patterns 只含 .c/.py
+           漏 .cpp → 所有 C++ 模板的 system 测试永远无法被发现 → G10 永远 incomplete)。"""
+        with tempfile.TemporaryDirectory() as td:
+            sys_dir = Path(td) / "tests" / "system"
+            sys_dir.mkdir(parents=True, exist_ok=True)
+            (sys_dir / "scenario_test.cpp").write_text("int main(){return 0;}")
+            (sys_dir / "e2e_test.cpp").write_text("int main(){return 0;}")
+            files = _discover_test_files(Path(td))
+            names = [str(f) for f in files]
+            assert any(n.endswith("scenario_test.cpp") for n in names)
+            assert any(n.endswith("e2e_test.cpp") for n in names)
+
+
 class TestCheckScenarioCoverage:
     def test_no_scenarios(self):
         coverage = _check_scenario_coverage([], [])
@@ -211,19 +227,45 @@ class TestRunSystemTests:
                 assert results["passed"] >= 1
                 assert str(binary) in str(results["details"][0]["binary"])
 
-    def test_c_test_binary_missing_not_executed(self):
+    def test_c_test_uses_host_compile_fallback(self):
         """GIVEN a C test source with NO built binary
            WHEN _run_system_tests runs
-           THEN it records a 'no built binary' detail instead of executing."""
+           THEN 构建系统无关兜底: 调用 _try_compile_c_test 并用其返回二进制执行
+           (Makefile / 新项目无需 build/ 约定即可走通 G10)。"""
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
             src = td / "tests" / "system" / "test_qualification_y.c"
             src.parent.mkdir(parents=True)
             src.write_text("int main(void){return 0;}")
+            fake_bin = td / "fake_qual_bin"
+            fake_bin.write_text("#!/bin/sh\necho ok\n")
+            fake_bin.chmod(0o755)
+            with patch("yuleosh.pipeline.step_handlers.test_qualification._try_compile_c_test",
+                       return_value=fake_bin) as mock_compile:
+                with patch("subprocess.run") as mock_run:
+                    mock_run.return_value.returncode = 0
+                    mock_run.return_value.stdout = "ok"
+                    mock_run.return_value.stderr = ""
+                    results = _run_system_tests([src], td)
+                    mock_compile.assert_called_once()
+                    assert results["executed"] >= 1
+                    assert results["passed"] >= 1
+                    assert str(fake_bin) in str(results["details"][0]["binary"])
+
+    def test_c_test_fallback_compile_fails_not_executed(self):
+        """GIVEN a C test source that CANNOT be host-compiled (hardware dep)
+           WHEN _run_system_tests runs
+           THEN records a 'host-sim compilation failed' detail, NOT executed
+           (构建系统无关边界: 需真实硬件/交叉编译的源保持 incomplete, 不误判 passed)。"""
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            src = td / "tests" / "system" / "test_qualification_y.c"
+            src.parent.mkdir(parents=True)
+            src.write_text('#include <this_header_does_not_exist_xyz.h>\nint main(void){return 0;}')
             results = _run_system_tests([src], td)
             assert results["executed"] == 0
             assert len(results["details"]) >= 1
-            assert "no built binary" in results["details"][0]["message"]
+            assert "host-sim compilation failed" in results["details"][0]["message"]
 
     def test_find_binary_prefers_newest_not_build_dir(self):
         """GIVEN build/ 下有旧二进制 + cmake-build-coverage 下有新二进制

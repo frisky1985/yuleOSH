@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -166,16 +167,22 @@ def _discover_test_files(project_dir: Path) -> list[Path]:
     patterns = [
         "**/test_qualification*.py",
         "**/test_qualification*.c",
+        "**/test_qualification*.cpp",
         "**/e2e_test*.py",
         "**/e2e_test*.c",
+        "**/e2e_test*.cpp",
         "**/acceptance_test*.py",
         "**/acceptance_test*.c",
+        "**/acceptance_test*.cpp",
         "**/scenario_test*.py",
         "**/scenario_test*.c",
+        "**/scenario_test*.cpp",
         "**/tests/system/*.py",
         "**/tests/system/*.c",
+        "**/tests/system/*.cpp",
         "**/tests/e2e/*.py",
         "**/tests/e2e/*.c",
+        "**/tests/e2e/*.cpp",
     ]
     found: list[Path] = []
     for pat in patterns:
@@ -284,7 +291,15 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
     # 后按 mtime 选最新，杜绝"删 build/ 治标、cmake 重建后又复发"。
     # glob 用 cmake-build*（匹配 cmake-build 与 cmake-build-coverage）——
     # cmake-build-* 漏掉无后缀的 cmake-build/（window-anti-pinch 实际目录）。
-    build_dirs = sorted(project_dir.glob("build")) + sorted(project_dir.glob("cmake-build*"))
+    # 构建系统无关搜索: 覆盖 CMake(build/, cmake-build*)、Makefile 常见产出
+    # (tests/build, build_sys, out) 以及源同级二进制。
+    build_dirs = (
+        sorted(project_dir.glob("build"))
+        + sorted(project_dir.glob("cmake-build*"))
+        + sorted(project_dir.glob("tests/build"))
+        + sorted(project_dir.glob("build_sys"))
+        + sorted(project_dir.glob("out"))
+    )
     candidates: list[Path] = []
     for build_dir in build_dirs:
         if not build_dir.is_dir():
@@ -303,6 +318,18 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
                 continue
             if stem in cand.name or "qualification" in cand.name or "system" in cand.name:
                 candidates.append(cand)
+    # 通用兜底: 递归搜 project_dir 下(depth<=4)名称含 stem / qualification /
+    # system / scenario / e2e / acceptance 的可执行文件 —— 让 Makefile 或其它
+    # 构建系统产出的系统测试二进制也能被发现, 不再强依赖 CMake build/ 约定。
+    qual_keywords = ("qualification", "system", "scenario", "e2e", "acceptance")
+    for cand in project_dir.rglob("*"):
+        if not cand.is_file() or not os.access(cand, os.X_OK):
+            continue
+        if len(cand.relative_to(project_dir).parts) > 4:
+            continue
+        low = cand.name.lower()
+        if stem.lower() in low or any(k in low for k in qual_keywords):
+            candidates.append(cand)
     # 去重 + 只保留存在且可执行的候选，按 mtime 选最新
     executable_candidates = [
         cand for cand in dict.fromkeys(candidates)
@@ -311,6 +338,62 @@ def _find_c_test_binary(test_file: Path, project_dir: Path):
     if not executable_candidates:
         return None
     return max(executable_candidates, key=lambda p: p.stat().st_mtime)
+
+
+def _try_compile_c_test(test_file: Path, project_dir: Path) -> Path | None:
+    """即时编译 fallback —— 构建系统无关的最后一环。
+
+    当 ``_find_c_test_binary`` 在 build/ 等目录都找不到已编译的系统测试二进制时,
+    尝试用主机编译器直接编译**自包含**(主机可模拟)的 system 测试源文件, 产出
+    可执行文件供门禁执行。
+
+    这是「统一新项目验证流程」的关键: 无论模板用 CMake 还是 Makefile, 只要
+    提供了可独立编译的 system 测试源(如 ``tests/system/scenario_test.c``), 门禁
+    就能发现→编译→执行→判定, 不再强依赖特定 ``build/`` 目录约定。
+
+    编译失败(依赖硬件寄存器 / 需交叉编译)时返回 ``None`` —— 调用方据此保持
+    ``incomplete`` 语义, 不会误判为 passed。
+    """
+    is_cpp = test_file.suffix in (".cpp", ".cxx", ".cc")
+    compiler = "g++" if is_cpp else "cc"
+    # 优先探测可用主机编译器; 某些环境 cc 不存在但有 gcc/c++
+    if shutil.which(compiler) is None:
+        compiler = "c++" if is_cpp else "gcc"
+    if shutil.which(compiler) is None:
+        return None
+
+    out_dir = project_dir / ".yuleosh" / "qualification"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_bin = out_dir / test_file.stem
+
+    include_dirs = [
+        project_dir / "src",
+        project_dir / "src" / "include",
+        project_dir / "include",
+        test_file.parent,
+        project_dir / "tests",
+    ]
+    inc_flags = [f"-I{p}" for p in include_dirs if p.is_dir()]
+
+    cmd = [
+        compiler,
+        "-std=c++17" if is_cpp else "-std=c11",
+        "-O0", "-g", *inc_flags, "-o", str(out_bin), str(test_file),
+    ]
+    try:
+        proc = subprocess.run(cmd, cwd=project_dir, capture_output=True,
+                              text=True, timeout=120)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        log.warning(f"  host-sim compile error for {test_file.name}: {e}")
+        return None
+    if proc.returncode != 0:
+        log.warning(f"  host-sim compile failed for {test_file.name}: "
+                    f"{(proc.stderr or '').strip()[:300]}")
+        return None
+    if not out_bin.is_file() or not os.access(out_bin, os.X_OK):
+        return None
+    log.info(f"  host-sim compiled {test_file.name} -> {out_bin}")
+    return out_bin
 
 
 def _junit_report_path(project_dir: Path, test_file: Path) -> Path:
@@ -426,11 +509,15 @@ def _run_system_tests(
             # build 目录查找已编译产物并执行。
             binary = _find_c_test_binary(tf, project_dir)
             if binary is None:
+                # 构建系统无关兜底: 尝试主机即时编译自包含 system 测试源
+                binary = _try_compile_c_test(tf, project_dir)
+            if binary is None:
                 results["details"].append({
                     "file": str(tf),
                     "succeeded": False,
-                    "message": "C/C++ test file found but no built binary "
-                               "in build/ cmake-build-*/ — run cmake build first",
+                    "message": "C/C++ system test found but no built binary and "
+                               "host-sim compilation failed — provide a build step "
+                               "or a self-contained (host-simulatable) test source",
                 })
                 continue
             try:
