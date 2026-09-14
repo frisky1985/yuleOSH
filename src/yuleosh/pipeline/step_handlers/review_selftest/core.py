@@ -628,14 +628,14 @@ def _extract_shall_statements(spec_content: str) -> list[dict]:
             current_section = heading_match.group(2).strip()
             continue
 
-        # Match SHALL / SHOULD / MAY keywords (case-insensitive)
-        matches = re.finditer(
-            r"([^.!?]*?\b(SHALL|SHOULD|MAY)\b[^.!?]*[.!?])",
-            line,
-            re.IGNORECASE,
-        )
-        for m in matches:
-            statement = m.group(1).strip()
+        # Match SHALL / SHOULD / MAY keywords (case-insensitive).
+        # Capture from the keyword to the end of the line so that:
+        #   * internal periods inside tokens (e.g. "CAN 2.0B", "32-bit")
+        #     are not treated as sentence terminators, and
+        #   * list bullets that omit a trailing period are not dropped.
+        m = re.search(r"\b(SHALL|SHOULD|MAY)\b.*$", line, re.IGNORECASE)
+        if m:
+            statement = m.group(0).strip()
             if statement:
                 shalls.append({
                     "statement": statement,
