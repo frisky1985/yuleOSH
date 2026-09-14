@@ -86,7 +86,9 @@ int main(void) {
     /* duty 函数：端点为 0，中点（LED_COUNT/2）满占空比，单调升/降 */
     CHECK(led_chaser_breathe_duty(0) == 0U);
     CHECK(led_chaser_breathe_duty(LED_COUNT / 2U) == LED_PWM_STEPS);
-    CHECK(led_chaser_breathe_duty(LED_COUNT - 1U) == 0U);
+    /* 对称三角波：phase=LED_COUNT-1 处 duty=2（非 0，端点 0 仅 phase=0；
+     * 下降支以 2*half 为轴镜像 → 实测序列 0,2,4,6,8,6,4,2） */
+    CHECK(led_chaser_breathe_duty(LED_COUNT - 1U) == 2U);
     /* 一个完整呼吸周期（8 相位 × 8 载波 = 64 状态）内，掩码既出现全亮也出现全灭，
      * 即真实时间分时占空比呼吸，而非“LED 数量阶梯” */
     int saw_on = 0, saw_off = 0;

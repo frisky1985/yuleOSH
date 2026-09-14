@@ -144,7 +144,9 @@ uint8_t led_chaser_breathe_duty(uint8_t phase) {
     if (phase <= half) {
         tri = phase;
     } else {
-        tri = (uint8_t)((LED_COUNT - 1U) - phase);
+        /* 对称三角波下降支: 以 2*half 为轴镜像 (phase4 满, phase7=2 后回绕 phase0=0),
+         * 而非 (LED_COUNT-1)-phase 的非对称衰减 (claude-review 实测)。 */
+        tri = (uint8_t)(2U * half - phase);
     }
     /* 量化为 LED_PWM_STEPS 级占空比 */
     return (uint8_t)((uint16_t)tri * (uint16_t)LED_PWM_STEPS / (uint16_t)half);
@@ -238,9 +240,15 @@ void led_chaser_tick(void) {
             g_pos ^= 1U;
             break;
         case LED_MODE_BREATHE:
-            /* 慢轴：推进呼吸相位；快轴：推进 PWM 载波子相（连续载波，占空比由相位决定） */
-            g_pos = (uint8_t)((g_pos + 1U) % LED_COUNT);
+            /* 快轴: PWM 载波子相每 tick 推进一级 (0..LED_PWM_STEPS-1);
+             * 慢轴: 呼吸相位 g_pos 每 LED_PWM_STEPS 个 tick 推进一级。
+             * 二者解耦 → 单 tick 输出固定占空比, 跨 LED_PWM_STEPS 个 tick 完成
+             * 8 级 PWM 载波, 呼吸相位再推进 → 真·三角波亮度 (0→满→0), 而非
+             * 锁步 (g_pos==g_pwm_phase) 导致的 50% 方波 (claude-review 实测)。 */
             g_pwm_phase = (uint8_t)((g_pwm_phase + 1U) % LED_PWM_STEPS);
+            if (g_pwm_phase == 0U) {
+                g_pos = (uint8_t)((g_pos + 1U) % LED_PWM_STEPS);
+            }
             break;
         default:
             break;

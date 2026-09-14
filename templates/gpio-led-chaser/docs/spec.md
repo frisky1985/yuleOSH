@@ -50,12 +50,24 @@
   survives reset (MAY).
 - **BREATHE 实现约定（强制）**：BREATHE 为 SHALL 强制模式，实现为**真·占空比呼吸
   效果**（暗→亮→暗的三角波亮度）。参考实现采用**时间分时占空比 PWM**：
-  一个 200 ms tick 内以 `LED_PWM_STEPS`（=8）级 PWM 载波子相调制 8 路全亮/全灭的
-  比例——当子相 `< 占空比级数` 时 8 路全亮、否则全灭，时间平均即亮度。
   `led_chaser_breathe_duty(phase)` 算三角波占空比（端点 0、中点满）、
   `led_chaser_breathe_mask(phase, pwm_phase)` 做时间分时，二者均为纯函数。
-  目标侧若存在 TIMx CHx 硬件 PWM，可整体替换为硬件占空比调制并在差距分析记录 deviation；
-  **严禁以“全亮常量 0xFF”或“LED 数量阶梯”等静默降质实现冒充 BREATHE**。
+  **参考实现真实时间机制（spec↔code 一致性，PRD/architecture/development 须如实复述，不得另算）**：
+  - `led_chaser_tick()` 中 **PWM 载波子相 `g_pwm_phase` 每 tick 仅推进一级**（`0..LED_PWM_STEPS-1`，
+    即 0..7），呼吸相位 `g_pos` 仅在 `g_pwm_phase` 回绕时（每 8 tick）才推进一级
+    （`0..LED_COUNT-1`，即 0..7，与 `LED_PWM_STEPS` 当前同为 8 才正确，
+    常量分叉即故障——属隐性耦合）。
+  - 故 **一个 PWM 载波周期 = 8 tick × 200 ms = 1.6 s**（8 级占空比时间分时）；
+    **一个完整三角波呼吸周期 = 8 相位 × 8 tick = 64 tick × 200 ms = 12.8 s**。
+  - 三角波占空比级数序列（phase 0..7）：`0, 2, 4, 6, 8, 6, 4, 2`
+    （端点 0，中点 `LED_PWM_STEPS=8` 满占空比，对称下降；phase=7→2 而非 0）。
+  - **deviation（必须标注，措辞同 EXTI/硬件 PWM）**：spec 理想语义为“一个 200 ms tick 内
+    以 `LED_PWM_STEPS=8` 级子相调制”（即完整呼吸 ≈ 1.6 s）。参考实现为**宿主机可编译镜像**，
+    每 tick 仅推进一级子相，故完整呼吸 = 12.8 s，**较 spec 理想语义慢 8×**。此为**实现手段降级**
+    （非语义降质，仍满足“真·占空比呼吸”SHALL），目标侧可用 TIMx CHx 硬件 PWM 或在主循环每 tick
+    连调 8 次 `breathe_mask` 取时间平均，升级到 spec 字面的 1.6 s 呼吸；差距分析须将其记为 deviation。
+  - **严禁以“全亮常量 0xFF”或“LED 数量阶梯”等静默降质实现冒充 BREATHE**；亦不得把
+    载波周期（1.6 s）误述为完整呼吸周期（12.8 s），或宣称“单 tick 内已完成 8 子相、无需额外时基”。
 
 #### Reason
 模式切换验证外部中断（EXTI）/ 输入采样、状态机、以及配置持久化，是从“点灯”到
@@ -95,6 +107,13 @@
   waking only on TIM2 / SysTick / EXTI (button) interrupts.
 - The system SHOULD keep GPIO static (no toggling) while sleeping to avoid
   unnecessary I/O power.
+- **参考实现范围说明（spec↔code 一致性）**: 参考实现为**宿主机可编译**
+  (`gcc + cmake + ctest`) 的纯逻辑镜像，其主循环由 **TIM2 周期 tick 驱动**
+  （ISR 置 `g_tick_pending` 标志，主循环据标志推进 pattern），`led_chaser_wfi()`
+  为 **占位空操作**（目标侧映射到 `__WFI()`）。**EXTI 按钮唤醒未在本参考实现中实现**——
+  它是目标硬件（STM32F1）的可选低功耗扩展，需配合 NVIC EXTI 线 + PB0 外部中断服务例程，
+  超出本可编译参考范围，列为 **target-only future work**，不得据此判定参考实现缺失需求。
+  PRD / architecture / development 文档 SHALL 如实注记此范围，不得声明参考实现已含 EXTI 唤醒。
 
 #### Reason
 电池 / 长期运行场景要求空闲即睡眠；流水灯本身视觉占空比低，睡眠收益明显。

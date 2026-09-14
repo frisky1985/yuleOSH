@@ -50,5 +50,22 @@ add_test(NAME led_chaser_tests COMMAND test_runner)
 add_test(NAME led_chaser_integration COMMAND test_runner)
 set_tests_properties(led_chaser_integration PROPERTIES LABELS integration)
 
+# 系统级合格性测试（SWE.6 / test-qualification 门禁）。
+# tests/system/*.c 不被 tests/*.c 通配命中（子目录），独立编译为 system_test，
+# 其二进制 build/system_test 由 test-qualification 的 _find_c_test_binary 发现并执行。
+# 同时挂 LABELS integration，供 integration-test 步一并验证。
+file(GLOB SYS_TEST_C tests/system/*.c)
+if(SYS_TEST_C)
+  foreach(sys_src ${SYS_TEST_C})
+    get_filename_component(sys_stem ${sys_src} NAME_WE)
+    add_executable(${sys_stem} ${sys_src})
+    target_include_directories(${sys_stem} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_definitions(${sys_stem} PRIVATE LED_CHASER_UNIT_TEST=1)
+    target_compile_options(${sys_stem} PRIVATE -Wall -Wextra)
+    add_test(NAME led_chaser_system_${sys_stem} COMMAND ${sys_stem})
+    set_tests_properties(led_chaser_system_${sys_stem} PROPERTIES LABELS integration)
+  endforeach()
+endif()
+
 # phony 'test' for Makefile-style invocation
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure)
