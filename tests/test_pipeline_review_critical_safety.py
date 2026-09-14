@@ -163,9 +163,25 @@ class TestScanStackOverflow:
     def test_large_local_array_detected(self):
         scanner = CriticalSafetyScanner(Path("/tmp"))
         f = Path("/tmp/test.c")
-        scanner._scan_stack_overflow(f, ["uint8_t big_buffer[2048];"])
+        # 数组须位于函数体内（占栈）才会被标记；文件作用域/结构体成员不占栈。
+        scanner._scan_stack_overflow(f, [
+            "void worker(void) {",
+            "    uint8_t big_buffer[2048];",
+            "}",
+        ])
         assert any("big_buffer" in v.message and "2048" in v.message
                    for v in scanner.violations)
+
+    def test_struct_member_array_not_flagged(self):
+        # 2026-09-13: 结构体成员（如扇区对齐填充）虽大，但不占栈，不应误报。
+        scanner = CriticalSafetyScanner(Path("/tmp"))
+        f = Path("/tmp/test.c")
+        scanner._scan_stack_overflow(f, [
+            "struct McuConfig {",
+            "    uint8_t reserved[4072];",
+            "} __attribute__((packed));",
+        ])
+        assert len(scanner.violations) == 0
 
 
 class TestGetBuildFlags:

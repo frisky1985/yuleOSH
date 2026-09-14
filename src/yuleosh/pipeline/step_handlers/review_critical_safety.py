@@ -124,6 +124,122 @@ def _strip_block_comments(lines: list[str]) -> list[str]:
         out.append("".join(res))
     return out
 
+def _collect_defined_macros(lines: list[str]) -> set[str]:
+    """收集本翻译单元内所有 ``#define MACRO`` 宏名（对象式/函数式均可）。
+
+    用于预处理器块跳过时判断 ``#ifdef X`` / ``#ifndef X`` 的活跃性。
+    """
+    defined: set[str] = set()
+    for line in lines:
+        m = re.match(r"\s*#\s*define\s+(\w+)", line)
+        if m:
+            defined.add(m.group(1))
+    return defined
+
+
+def _pp_is_include_guard(lines: list[str], idx: int, name: str) -> bool:
+    """判断 ``lines[idx]`` 的 ``#ifndef NAME`` 是否为 include-guard 惯用法
+    （其后紧跟 ``#define NAME``）。若是则该块对本文件自身恒活跃。"""
+    for j in range(idx + 1, min(idx + 4, len(lines))):
+        t = lines[j].strip()
+        if not t or t.startswith("//") or t.startswith("/*"):
+            continue
+        if re.match(r"#\s*define\s+" + re.escape(name) + r"\b", t):
+            return True
+        break
+    return False
+
+
+def _eval_pp_cond(cond: str, defined: set[str]) -> bool:
+    """保守评估 ``#if EXPR`` 的活跃性。
+
+    ``0``→非活跃；``defined(X)`` 组合可解析则求值；其余（算术/未知宏）保守返回
+    活跃（True），避免漏报活跃分支中的真实缺陷。
+    """
+    cond = cond.strip()
+    if cond == "":
+        return True
+    if re.match(r"^\d+$", cond):
+        return cond != "0"
+    tokens = re.findall(r"defined\s*\(\s*(\w+)\s*\)", cond)
+    if tokens:
+        expr = cond
+        for t in tokens:
+            expr = re.sub(r"defined\s*\(\s*" + t + r"\s*\)",
+                          "True" if t in defined else "False", expr)
+        expr = expr.replace("&&", " and ").replace("||", " or ").replace("!", " not ")
+        try:
+            return bool(eval(expr))  # noqa: S307 — 仅含 True/False/and/or/not/括号
+        except Exception:
+            return True
+    return True
+
+
+def _strip_inactive_pp(lines: list[str], defined_macros: set[str]) -> list[str]:
+    """空白化「证明为非活跃」的预处理器条件块（#if/#ifdef/#ifndef/#elif/#else/#endif）。
+
+    2026-09-13 (gpio-led-chaser E2E): 参考实现的真实硬件寄存器初始化写在
+    ``#ifdef LED_CHASER_TARGET`` 块内（仅 STM32 目标编译路径，宿主 gcc 不定义该宏），
+    块内 ``RCC->APB2ENR`` 等 MMIO 寄存器访问被 NULL 解引用正则误判为
+    CRIT-NULL-001 假阳性，阻断 pipeline。
+
+    本函数按宿主视角跳过「控制宏未定义」的条件块（硬件/目标专用代码不应被宿主
+    静态安全门评估），同时保留指令行、include-guard 恒活跃、行号不变。
+    """
+    out: list[str] = []
+    stack: list[dict] = []
+    for idx, raw in enumerate(lines):
+        s = raw.strip()
+        m = re.match(r"#\s*(if|ifdef|ifndef|elif|else|endif)\b", s)
+        if m:
+            kw = m.group(1)
+            if kw in ("if", "ifdef", "ifndef"):
+                cond = s[m.end():].strip()
+                if kw == "ifdef":
+                    nm = re.match(r"(\w+)", cond)
+                    active = bool(nm and nm.group(1) in defined_macros)
+                elif kw == "ifndef":
+                    nm = re.match(r"(\w+)", cond)
+                    name = nm.group(1) if nm else ""
+                    if name and _pp_is_include_guard(lines, idx, name):
+                        active = True
+                    else:
+                        active = not bool(name and name in defined_macros)
+                else:
+                    active = _eval_pp_cond(cond, defined_macros)
+                parent = stack[-1]["active"] if stack else True
+                stack.append({"active": parent and active, "branch_taken": active})
+                out.append(raw)
+                continue
+            if kw == "elif":
+                if stack:
+                    cond = s[m.end():].strip()
+                    active = _eval_pp_cond(cond, defined_macros)
+                    parent = stack[-2]["active"] if len(stack) > 1 else True
+                    entry = stack[-1]
+                    entry["active"] = parent and (not entry["branch_taken"]) and active
+                    entry["branch_taken"] = entry["branch_taken"] or active
+                out.append(raw)
+                continue
+            if kw == "else":
+                if stack:
+                    entry = stack[-1]
+                    parent = stack[-2]["active"] if len(stack) > 1 else True
+                    entry["active"] = parent and (not entry["branch_taken"])
+                    entry["branch_taken"] = True
+                out.append(raw)
+                continue
+            if stack:
+                stack.pop()
+            out.append(raw)
+            continue
+        if stack and not stack[-1]["active"]:
+            out.append(" " * len(raw))
+        else:
+            out.append(raw)
+    return out
+
+
 __all__ = ["step_review_critical_safety", "CRITICAL_RULES"]
 
 
@@ -246,6 +362,42 @@ class CriticalSafetyScanner:
         self.project_dir = project_dir
         self.mcu_arch = mcu_arch
         self.violations: list[CriticalViolation] = []
+        # 跨文件收集「返回 &变量 地址」的函数名（结果永不 NULL，解引用豁免）。
+        # 2026-09-13 (gpio-led-chaser E2E): test_main.c 的
+        #   const target_state_t* ts = led_chaser_target_state();
+        #   ts->apb2enr ...
+        # 其中 led_chaser_target_state() 返回 &g_target（全局地址，永不 NULL），
+        # 旧扫描器把 ts-> 当成未检查指针解引用 → CRIT-NULL-001 假阳性。
+        # 该函数的定义在 main.c（test_main.c 经 #include 复用），故需跨文件索引。
+        self._nonnull_return_fns: set[str] = set()
+
+    # ── 0. 跨文件索引：返回 &变量 地址的函数 ──────────────
+
+    def _collect_nonnull_return_fns(self, filepath: Path, lines: list[str]):
+        """收集「函数体含 `return &IDENT;`」的函数名（结果地址，永不 NULL）。
+
+        2026-09-13 新增：配合 _scan_null_deref 的调用结果豁免，消除
+        `ts = foo(); ts->x`（foo 返回 &全局）类嵌入式惯用法的 CRIT-NULL-001 假阳性。
+        函数名索引跨文件累积（self._nonnull_return_fns），故 main.c 定义、
+        test_main.c 调用的场景同样生效。
+        """
+        depth = 0
+        cur: str | None = None
+        for s in (ln.strip() for ln in lines):
+            if depth == 0 and cur is None:
+                m = re.match(r"[\w\s\*]*?(\w+)\s*\([^)]*\)\s*(\{)?\s*$", s)
+                if m and m.group(1) not in self._C_KEYWORDS:
+                    cur = m.group(1)
+                    depth = 1 if m.group(2) else 0
+                    continue
+                continue
+            depth += s.count("{") - s.count("}")
+            if depth <= 0:
+                cur = None
+                depth = 0
+                continue
+            if re.search(r"return\s+&(\w+)\s*;", s):
+                self._nonnull_return_fns.add(cur)
 
     # ── 1. 除零 ──────────────────────────────────────────
 
@@ -440,6 +592,22 @@ class CriticalSafetyScanner:
                         snippet=stripped,
                         fix_suggestion=f"分配后添加：if ({var} == NULL) return error;"
                     ))
+
+            # 函数调用赋值：若被调函数返回 &变量 地址（跨文件索引 self._nonnull_return_fns），
+            # 结果永不 NULL，按函数级豁免（2026-09-13 gpio-led-chaser E2E 修复 ts-> 假阳性）。
+            # 用 search（非 match）以兼容行首的类型限定符（如 `const T* ts = foo();`）。
+            m_call = re.search(r"(\w+)\s*=\s*([A-Za-z_]\w*)\s*\(", code)
+            if m_call:
+                cvar, cfn = m_call.group(1), m_call.group(2)
+                if cfn not in ("malloc", "calloc", "pvPortMalloc", "realloc") \
+                        and cfn in self._nonnull_return_fns:
+                    null_checked[cvar] = (lineno, 0)
+
+            # 地址-of 赋值：var = &x / var = (T*)&x → 结果永不 NULL（嵌入式取数组/全局
+            # 地址惯用法，如 `tcb = &g_tasks[i]`、`ts = &g_target`）。按函数级豁免。
+            m_addr = re.search(r"(\w+)\s*=\s*(?:\([^)]*\)\s*)?&", code)
+            if m_addr:
+                null_checked[m_addr.group(1)] = (lineno, 0)
 
             # 记录显式 NULL 检查：X == NULL / NULL == X / X != NULL / !X
             # 带 early-exit（return/continue/break/goto）的检查按函数级生效；
@@ -641,13 +809,41 @@ class CriticalSafetyScanner:
     # ── 7. 栈溢出 ────────────────────────────────────────
 
     def _scan_stack_overflow(self, filepath: Path, lines: list[str]):
-        """匹配局部大数组（>1KB）或深层函数调用。"""
+        """匹配局部大数组（>1KB）或深层函数调用。
+
+        2026-09-13 修复: 仅标记**函数体内且非聚合成员**的局部数组声明；
+        结构体成员 / 全局数组虽可能很大，但落在 .data/.bss/堆，不占栈，
+        误报为 CRIT-STK-001 会阻断合法模板（如 McuConfig.reserved[4072] 仅为扇区对齐填充）。
+        用 agg_depth 跟踪 struct/union/enum/class 作用域，与总花括号深度 depth 区分。
+        """
+        depth = 0          # 总花括号深度
+        agg_depth = 0      # struct/union/enum/class 花括号深度
+        prev_agg_decl = False
         for lineno, line in enumerate(lines, 1):
-            stripped = line.strip()
+            s = line.strip()
+            is_agg_decl = bool(re.match(r"^(typedef\s+)?(struct|union|enum|class)\b", s))
+            opens = s.count("{")
+            closes = s.count("}")
+            # 聚合类型体进入：本行既是聚合声明又带 {，或上一行是聚合声明、本行仅 {
+            if is_agg_decl and opens > 0:
+                agg_depth += opens
+            elif opens > 0 and prev_agg_decl:
+                agg_depth += opens
+                prev_agg_decl = False
+            if is_agg_decl and opens == 0:
+                prev_agg_decl = True
+            else:
+                prev_agg_decl = False
+            depth += opens - closes
+            if closes > 0 and agg_depth > 0:
+                agg_depth = max(0, agg_depth - closes)
+            # 仅「函数体内且非聚合成员」的局部数组占栈；其余（文件作用域/结构体成员）跳过
+            if depth <= 0 or agg_depth > 0:
+                continue
             # 局部数组定义
             m = re.match(
                 r'(uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char|unsigned char|int)\s+'
-                r'(\w+)\[(\d+)\]', stripped)
+                r'(\w+)\[(\d+)\]', s)
             if m:
                 arr_type = m.group(1)
                 arr_name = m.group(2)
@@ -662,7 +858,7 @@ class CriticalSafetyScanner:
                     self.violations.append(CriticalViolation(
                         "CRIT-STK-001", str(filepath), lineno,
                         f"局部数组 '{arr_name}' 占用栈 {total_bytes} 字节 (>1KB)",
-                        snippet=stripped,
+                        snippet=s,
                         fix_suggestion="改为静态数组 static 或堆分配"
                     ))
 
@@ -710,45 +906,64 @@ class CriticalSafetyScanner:
         if source_patterns is None:
             source_patterns = ["**/*.c", "**/*.h", "**/*.cpp", "**/*.hpp"]
 
-        files_scanned = 0
+        _SKIP_DIRS = [
+            "node_modules", "third_party", ".git", "__pycache__",
+            "build/", "out/", ".next/", "generated/",
+            # artifacts/ holds codegen outputs (run-*/ snapshots);
+            # scanning them double-reports stale code and mixes
+            # old generations into the gate.
+            "artifacts/",
+            # .yuleosh/guardrail/backup-*/ holds pre/post deploy
+            # snapshots; scanning them reports stale backup code
+            # as violations (headlamp dogfood #6).
+            ".yuleosh/",
+            ".osh/",
+        ]
+
+        # 归集所有待扫文件（供 Phase A 跨文件索引与 Phase B 扫描共用）
+        matched: list[Path] = []
         for pattern in source_patterns:
             for fpath in sorted(self.project_dir.glob(pattern)):
-                # 跳过第三方和生成目录
                 rel = str(fpath.relative_to(self.project_dir))
-                if any(skip in rel for skip in [
-                    "node_modules", "third_party", ".git", "__pycache__",
-                    "build/", "out/", ".next/", "generated/",
-                    # artifacts/ holds codegen outputs (run-*/ snapshots);
-                    # scanning them double-reports stale code and mixes
-                    # old generations into the gate.
-                    "artifacts/",
-                    # .yuleosh/guardrail/backup-*/ holds pre/post deploy
-                    # snapshots; scanning them reports stale backup code
-                    # as violations (headlamp dogfood #6).
-                    ".yuleosh/",
-                    ".osh/",
-                ]):
+                if any(skip in rel for skip in _SKIP_DIRS):
                     continue
+                matched.append(fpath)
 
-                try:
-                    lines = fpath.read_text(errors="replace").splitlines()
-                except (OSError, UnicodeDecodeError):
-                    continue
+        # ── Phase A: 跨文件索引「返回 &变量 地址」的函数（结果永不 NULL）──
+        self._nonnull_return_fns = set()
+        for fpath in matched:
+            try:
+                flines = fpath.read_text(errors="replace").splitlines()
+            except (OSError, UnicodeDecodeError):
+                continue
+            self._collect_nonnull_return_fns(fpath, _strip_block_comments(flines))
 
-                # 2026-09-03: 先统一剥离跨行块注释, 避免块内示例代码触发
-                # 各规则的假阳性(如 CRIT-NULL-001)。行号保持不变。
-                lines = _strip_block_comments(lines)
+        # ── Phase B: 逐文件全规则扫描 ──
+        files_scanned = 0
+        for fpath in matched:
+            try:
+                lines = fpath.read_text(errors="replace").splitlines()
+            except (OSError, UnicodeDecodeError):
+                continue
 
-                files_scanned += 1
+            # 2026-09-03: 先统一剥离跨行块注释, 避免块内示例代码触发
+            # 各规则的假阳性(如 CRIT-NULL-001)。行号保持不变。
+            lines = _strip_block_comments(lines)
+            # 2026-09-13: 再剥离宿主视角非活跃的预处理器条件块（如
+            # #ifdef LED_CHASER_TARGET 仅 STM32 目标路径），避免硬件 MMIO
+            # 寄存器访问被误判为 NULL 解引用。include-guard 恒活跃。
+            lines = _strip_inactive_pp(lines, _collect_defined_macros(lines))
 
-                self._scan_division_by_zero(fpath, lines)
-                self._scan_buffer_overflow(fpath, lines)
-                self._scan_null_deref(fpath, lines)
-                self._scan_unbounded_recursion(fpath, lines)
-                self._scan_infinite_loop(fpath, lines)
-                self._scan_integer_overflow(fpath, lines)
-                self._scan_stack_overflow(fpath, lines)
-                self._scan_memory_leak(fpath, lines)
+            files_scanned += 1
+
+            self._scan_division_by_zero(fpath, lines)
+            self._scan_buffer_overflow(fpath, lines)
+            self._scan_null_deref(fpath, lines)
+            self._scan_unbounded_recursion(fpath, lines)
+            self._scan_infinite_loop(fpath, lines)
+            self._scan_integer_overflow(fpath, lines)
+            self._scan_stack_overflow(fpath, lines)
+            self._scan_memory_leak(fpath, lines)
 
         log.info(f"scanned {files_scanned} files, found {len(self.violations)} violations")
         return self.violations

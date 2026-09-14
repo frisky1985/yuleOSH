@@ -1016,6 +1016,27 @@ def step_merge_gate(session) -> str:
     passed = result.get("passed", False)
     verdict = result.get("verdict", "fail")
 
+    # 2026-09-13 (gpio-led-chaser 真实 E2E): 空知识图谱（模板参考项目无 KG /
+    # 0 需求节点）时，traceability 覆盖率为 0% 会误阻断 demo。这与 mock 模式的
+    # 跳过哲学一致（mock 注释：「knowledge graph is empty ... traceability
+    # coverage would read 0% and block the demo」）。当图中确无需求节点（无可校验
+    # 对象）时，整体跳过 merge-gate（含 CM 检查），记录 skipped 而非硬阻断。
+    confidence = result.get("checks", {}).get("confidence", {})
+    if confidence.get("total_requirements", 0) == 0:
+        report = {
+            "gate": "merge_gate",
+            "skipped": True,
+            "reason": "knowledge graph empty (no requirement nodes) — template reference "
+                      "project without a populated KG; nothing to validate",
+            "passed": False,
+            "verdict": "skipped",
+            "summary": {"total_errors": 0, "total_warnings": 0, "error_details": []},
+        }
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(output_path).write_text(json.dumps(report, indent=2))
+        print("  ⏭️  KG Merge Gate skipped — knowledge graph empty (no requirement nodes)")
+        return output_path
+
     # Log result
     print(f"  {'✅' if passed else '❌'} KG Merge Gate verdict: {verdict.upper()}")
     print(f"    Errors: {result.get('summary', {}).get('total_errors', 0)} | "

@@ -119,8 +119,6 @@ def build_super_analysis_prompt(
     R = Resources (tools, frameworks, skills needed)
     P = Priority (P0/P1/P2 grouping)
     """
-    total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
-
     system_prompt = (
         "You are a senior product analyst. Perform a S.U.P.E.R. analysis of the given "
         "OpenSpec specification document. Analyze:\n"
@@ -139,7 +137,6 @@ def build_super_analysis_prompt(
         f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"## Parsed Metadata\n"
         f"- Requirements found: {len(requirements)}\n"
-        f"- Total SHALL statements: {total_shall}\n"
         f"- Scenarios found: {len(scenarios)}\n\n"
         f"Write a complete S.U.P.E.R. analysis as Markdown. "
         f"Use the parsed metadata above as a starting point but enrich it "
@@ -162,8 +159,6 @@ def build_prd_prompt(
     project_asil: str = "",
 ) -> tuple[str, str]:
     """Build a Product Requirements Document (PRD) generation prompt."""
-    total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
-
     system_prompt = (
         "You are a senior product manager (Hermes). Given an OpenSpec specification "
         "document and optionally a S.U.P.E.R analysis, generate a comprehensive "
@@ -213,7 +208,13 @@ def build_prd_prompt(
         "- **头部计数口径**: 头部元数据行 SHALL 区分 `FRs: N (P0 x + P1 y)` 与 `SHALL 清单: M (spec 官方)`；"
         "不得把 FR 数误标为 SHALL 数（反例：写 'SHALLs: 85' 而 spec 官方是 43 条 SHALL）。\n"
         "- **接口契约权威源**: §9 接口章节可作索引摘要，但 SHALL 显式声明完整函数原型/枚举/结构体以仓库真实头文件 "
-        "（src/app/include、src/hal/include）为 verbatim 权威源；codegen 与测试以真实头文件为准，本节不得作为生成依据。\n\n"
+        "（各模板目录结构不同，请以本仓库实际存在的 public header，例如 led_chaser.h / 平台 HAL 头文件为 verbatim 权威源；"
+        "不要假设固定的 include 子目录路径）为准；codegen 与测试以真实头文件为准，本节不得作为生成依据。\n\n"
+        "CRITICAL — 优先级汇总表纪律 (2026-09-13 gpio-led-chaser E2E claude-review 复盘):\n"
+        "- **不得单列与正文逐条优先级可能脱节的 P0/P1/P2 聚合汇总表**（如「优先级汇总：P0=30/P1=5/P2=1」）。"
+        "此类聚合表极易与正文逐条需求（FR/NFR）实际计数不一致（spec §4d.3 禁止同文档两组矛盾数字），"
+        "且 claude-review 会据此判 blocker。若确需给出优先级概览，须逐条枚举并 EXACTLY 与正文一致，"
+        "否则直接省略该汇总表（最稳妥）。\n\n"
         "CRITICAL — 行为护栏映射表 verbatim (2026-08-20, r22 G-17 复盘):\n"
         "- The spec's `行为护栏 → 需求映射` table (G-01..G-18) is the single source of "
         "truth for codegen regression guardrails. The spec states: PRD SHALL 逐条引用本表"
@@ -265,7 +266,6 @@ def build_prd_prompt(
         f"```markdown\n{_inject_spec(spec_content)}\n```\n\n"
         f"## Parsed Metadata\n"
         f"- Requirements found: {len(requirements)}\n"
-        f"- Total SHALL/SHOULD statements: {total_shall}\n"
         f"- Scenarios found: {len(scenarios)}\n\n"
     )
     if existing_headers:
@@ -329,7 +329,20 @@ def build_architecture_prompt(
         "Be specific and reference actual file paths and code elements.\n\n"
         "IMPORTANT — test infrastructure descriptions MUST match the Repository "
         "Facts below (test framework is machine-detected); do NOT invent a "
-        "framework (e.g. Unity) the repo does not use."
+        "framework (e.g. Unity) the repo does not use.\n\n"
+        "CRITICAL — 机制保真 (2026-09-13 gpio-led-chaser 真实 E2E): 描述每个模块的 "
+        "运行时行为 (尤其定时器/ISR/PWM/状态机) 须 EXACTLY 对应注入的 Key Source File "
+        "Snippets 中的真实实现。禁止把 spec 理想化设计写成已实现行为——若代码每个 tick "
+        "才推进一次子相计数器, ADR 须如实写『子相每 tick 推进一级, 8 级占空比跨 8 个 tick "
+        "完成』, 不得声称代码未实现的更细粒度或『无需额外时基』。\n"
+        "BREATHE 周期计算（易错，须严格区分）: 一个 PWM 载波周期 = 8 tick × 200 ms = 1.6 s "
+        "(8 级占空比时间分时); 一个完整三角波呼吸周期 = 8 相位 × 8 tick = 64 tick × 200 ms = 12.8 s "
+        "(二者差 8×, 绝不可混淆, 也绝不可把载波周期 1.6 s 误述为完整呼吸 12.8 s)。"
+        "参考实现较 spec 理想语义『单 tick 内 8 子相』慢 8×, 须在 ADR/deviation 中如实标注 "
+        "(措辞同 EXTI/硬件 PWM 的 deviation 处理), 不得仅复述代码行为或宣称『无偏差』。"
+        "**收口纪律**: 上述计数/接口/护栏/机制保真等 CRITICAL 指令仅供你内部遵循, "
+        "**禁止逐字抄入交付文档**; 交付文档只呈现架构设计内容, 须精简并在输出上限前完整收口 "
+        "(表格闭合、任务列表收尾、结尾完整句), 不得留半句截断。"
     )
 
     user_prompt = (
@@ -340,7 +353,10 @@ def build_architecture_prompt(
     )
     if repo_facts:
         user_prompt += (
-            f"## Repository Facts (machine-collected — 测试基建描述必须以此为准)\n"
+            f"## Repository Facts (machine-collected baseline — CONTEXT ONLY)\n"
+            f"以下为防幻觉 grounding 上下文, **禁止**逐字转述为文档交付的 "
+            f"\"Repository Facts / 源码指标\" 表格; 测试基建描述须与本块一致 "
+            f"(如 custom-Check harness, 不得自造 Unity):\n"
             f"```\n{repo_facts}\n```\n\n"
         )
     user_prompt += (
@@ -389,8 +405,6 @@ def build_development_prompt(
     git_log: str = "",
 ) -> tuple[str, str]:
     """Build a development planning prompt."""
-    test_ratio = f"{test_lines / src_lines:.1%}" if src_lines > 0 else "N/A"
-
     system_prompt = (
         "You are a senior software developer and tech lead. "
         "Given a project specification, S.U.P.E.R. analysis, PRD, and architecture document, "
@@ -402,7 +416,34 @@ def build_development_prompt(
         "patterns that don't scale, missing tests, or quality concerns\n"
         "4. **Implementation Order** — recommended sequence of work with dependencies\n"
         "5. **Risk Assessment** — technical risks, unknowns, and mitigation strategies\n"
-        "Be specific, reference actual file paths from the project, and provide actionable tasks."
+        "Be specific, reference actual file paths from the project, and provide actionable tasks.\n\n"
+        "CRITICAL — 机制保真 / 跨文档一致性 (2026-09-13 gpio-led-chaser 真实 E2E):\n"
+        "- **机制须对齐真实代码**: 描述每个模块的运行时行为须 EXACTLY 对应注入的源片段 "
+        "(Key Source File Snippets / Repository Facts)。禁止把 spec 的理想化设计当成已实现 "
+        "行为来写——若代码每个 tick 才推进一次子相计数器, 就如实写『子相每 tick 推进一级, "
+        "8 级占空比跨 8 个 tick 完成』, 不得声称『单 tick 内 8 子相、无需额外时基』等代码未实现的粒度。\n"
+        "- **BREATHE 周期计算（易错，须严格区分）**: 一个 PWM 载波周期 = 8 tick × 200 ms = 1.6 s; "
+        "一个完整三角波呼吸周期 = 8 相位 × 8 tick = 64 tick × 200 ms = 12.8 s (差 8×, 绝不可混淆)。"
+        "参考实现较 spec 理想『单 tick 内 8 子相』慢 8×, 须在 deviation 表如实标注 (措辞同 EXTI), "
+        "不得仅复述代码或宣称『无偏差』。\n"
+        "- **优先级跨文档一致**: SHALL 派生的需求必须为 P0/P1, 绝不得降为 P2; 且与 PRD "
+        "的优先级分配 EXACTLY 一致 (如 PRD 标 P0 的需求, 本计划也须 P0)。\n"
+        "- **测试计数口径 (§4b/§4d.4)**: 交付文档中测试套件一律使用 **spec §4b 口径"
+        "『≥30 内联 CHECK 断言 (custom-Check harness)、ctest 全绿』**; Repository Facts 的"
+        "机器收集具体断言数 (如 42) 仅作内部健全性参考, **禁止**逐字抄入文档作为指标"
+        "(会造成 PRD/dev=≥30 与 arch=具体数的计数漂移, claude-review 据此判 blocker)。\n"
+        "- **禁止引用未定义框架**: 不得发明 spec/PRD/architecture 中不存在的优先级/方法论框架 "
+        "(如『S.U.P.E.R. 优先级映射』), 此类表述须删除或给出定义出处。\n"
+        "- **文档精简收口 (spec §4d.6)**: 合并原子任务 (目标 ≤24 个), 全文 ≤6000 词; "
+        "结尾须为完整闭合句, 不得截断留半句。\n"
+        "- **开发计划须覆盖架构每个模块 (development-review 8×major coverage 根因)**: "
+        "开发计划必须为架构文档的**每个一级模块**（如 Project Overview / Directory Structure / "
+        "Bounded Contexts / ADRs / Key Design Considerations / 需求到架构映射）各列一组任务"
+        "（含实现 + 测试步骤），确保『架构模块 → 开发任务』可追溯覆盖，不得遗漏任一模块；"
+        "且**每个任务须带时间/工作量估算**（人天或 story point），避免『0/N 任务有估算』的 minor finding。\n"
+        "- **禁止抄写纪律 boilerplate**: 本 system prompt 的计数/接口/护栏/机制保真等 CRITICAL "
+        "条款仅供你内部遵循, **不得逐字复制进交付文档** (三份文档雷同的大段纪律声明会撑爆篇幅 "
+        "并触达输出上限导致截断); 交付文档只呈现实现计划与任务, 篇幅控制在可完整收口。"
     )
 
     context_parts = [
@@ -422,15 +463,24 @@ def build_development_prompt(
         context_parts.append(
             f"# S.U.P.E.R. Analysis\n```markdown\n{_trunc_ref(super_analysis_content, 3000, 'super-analysis artifact')}\n```"
         )
+    # 2026-09-13 修正 (gpio-led-chaser 真实 E2E blocker): 旧 "Project Metrics"
+    # 直接罗列 Source lines / Test functions / Recent git commits 等原始数字,
+    # LLM 逐字转述为文档指标表, 违反 spec §4d.4 (codegen 未落地自报仓库事实)
+    # 与 §4d.5 (写 "Test functions: 0")。改为 context-only 纪律注记, 不罗列
+    # 可转述的原始行数/函数数; git 缺失时明确禁止声称 "0 最近提交"。
     context_parts.append(
-        f"# Project Metrics\n"
-        f"- Source lines: {src_lines} across {src_file_count} files\n"
-        f"- Test lines: {test_lines} across {test_file_count} files\n"
-        f"- Test functions: {test_func_count}\n"
-        f"- Test-to-source ratio: {test_ratio}\n"
-        f"- Coverage (latest report): {coverage_summary or 'no report'}\n"
-        f"- Recent git commits: {git_commits}\n"
-        f"```\n{git_log}\n```"
+        "# Project Baseline (CONTEXT ONLY — do NOT transcribe as a document metrics table)\n"
+        "以下仅作防幻觉 grounding 上下文, **禁止**逐字转述为文档交付的 "
+        "\"源码指标 / 测试指标\" 表格。若 codegen-deploy=skipped (参考实现已存在), "
+        "请依据 spec 的 API 契约 (§4a) 与既有测试套件 (§4b) 描述实现, 不要照抄原始行数。\n"
+        "- Git history: "
+        + (f"{git_commits} recent commits available"
+           if git_commits > 0
+           else "not available in this run context — **do NOT** claim '0 recent commits' "
+                "or any commit-count figure in the document")
+        + "\n"
+        "- Test framework & assertion style: see the 'Repository Facts' block below "
+        "(do NOT write 'Test functions: 0' / '0 测试用例' / '无测试')."
     )
 
     if repo_facts:
@@ -473,7 +523,6 @@ def build_test_planning_prompt(
     Returns:
         Tuple of (system_prompt, user_prompt).
     """
-    total_shall = sum(len(r.get("shall_statements", [])) for r in requirements)
     req_summary_lines = []
     for r in requirements:
         name = r.get("name", "?")
@@ -513,7 +562,7 @@ def build_test_planning_prompt(
     user_prompt_parts = [
         f"# Specification: Project Specification\n\n"
         f"```markdown\n{_inject_spec(spec_content)}\n```\n\n",
-        f"## Requirements Summary ({len(requirements)} requirements, {total_shall} SHALL statements)\n",
+        f"## Requirements Summary ({len(requirements)} requirements)\n",
         "\n".join(req_summary_lines) + "\n\n",
     ]
 
@@ -529,7 +578,10 @@ def build_test_planning_prompt(
 
     if repo_facts:
         user_prompt_parts.append(
-            f"## Repository Facts (machine-collected — 测试基建描述必须以此为准)\n"
+            f"## Repository Facts (machine-collected baseline — CONTEXT ONLY)\n"
+            f"以下为防幻觉 grounding 上下文, **禁止**逐字转述为文档交付的 "
+            f"\"Repository Facts / 源码指标\" 表格; 测试基建描述须与本块一致 "
+            f"(如 custom-Check harness, 不得自造 Unity):\n"
             f"```\n{repo_facts}\n```\n\n"
         )
 
@@ -545,7 +597,8 @@ def build_test_planning_prompt(
     user_prompt_parts.append(
         "---\n\n"
         f"Produce the complete Test Plan as Markdown. "
-        f"Ensure the traceability matrix covers ALL {total_shall} SHALL statements, "
+        f"Ensure the traceability matrix covers ALL SHALL statements from the "
+        f"specification (enumerated in the Requirements Summary above), "
         f"each mapped to at least one test case."
     )
 
