@@ -23,12 +23,12 @@
 constexpr uint16_t MAX_TASKS             = 16;
 constexpr uint16_t LOG_RING_BUFFER_SIZE  = 4096;
 constexpr uint32_t CONFIG_FLASH_SECTOR   = 0x08060000;
-constexpr uint32_t CONFIG_FLASH_SIZE     = 16384;
 constexpr uint16_t CONFIG_MAGIC          = 0x594C;  /* "YL" */
 constexpr uint8_t  MAX_CONSECUTIVE_WDT   = 3;
 constexpr uint32_t FACTORY_RESET_HOLD_MS = 10000;
 constexpr uint32_t WDT_TIMEOUT_MIN_S     = 1;
 constexpr uint32_t WDT_TIMEOUT_MAX_S     = 30;
+constexpr uint32_t RSR_IWDGRST_BIT       = (1u << 2);  /* RCC/RSR IWDG reset flag (STM32G4) */
 
 /* ------------------------------------------------------------------ */
 /* Enums and types                                                      */
@@ -81,7 +81,6 @@ struct McuConfig {
 
 static TaskControlBlock g_tasks[MAX_TASKS];
 static uint8_t          g_task_count = 0;
-static uint64_t         g_system_ticks_ms = 0;
 
 /* Log ring buffer */
 static LogEntry         g_log_buffer[LOG_RING_BUFFER_SIZE];
@@ -98,7 +97,6 @@ static uint32_t         g_wdt_timeout_s = 10;
 /* Configuration */
 static McuConfig        g_config;
 static bool             g_config_valid = false;
-static bool             g_factory_reset_requested = false;
 
 /* HAL stubs */
 static void     hal_wdt_init(uint32_t timeout_s);
@@ -108,7 +106,9 @@ static void     hal_flash_read(uint32_t addr, void *buf, size_t len);
 static int      hal_flash_write(uint32_t addr, const void *buf, size_t len);
 static int      hal_flash_erase(uint32_t sector_addr);
 static void     hal_uart_send(const char *str, uint16_t len);
+#ifndef MCU_FW_UNIT_TEST
 static void     hal_gpio_init(void);
+#endif
 static bool     hal_gpio_read_factory_pin(void);
 static uint64_t hal_get_tick_ms(void);
 static uint32_t hal_get_tick_us(void);
@@ -205,25 +205,28 @@ void scheduler_run(void)
 {
     uint64_t now_ms = hal_get_tick_ms();
 
-    for (uint8_t i = 0; i < g_task_count; i++) {
-        auto *tcb = &g_tasks[i];
-        if (!tcb->enabled) continue;
+    /* Req-001: 优先级级别 (HIGH > NORMAL > LOW) 决定执行次序。
+     * 合作式轮询按优先级从高到低遍历，同优先级内按注册顺序，保证高优任务先跑。 */
+    for (int p = static_cast<int>(TaskPriority::HIGH);
+         p <= static_cast<int>(TaskPriority::LOW); p++) {
+        for (uint8_t i = 0; i < g_task_count; i++) {
+            auto *tcb = &g_tasks[i];
+            if (!tcb->enabled) continue;
+            if (static_cast<int>(tcb->priority) != p) continue;
 
-        if ((now_ms - tcb->last_run_ms) >= tcb->period_ms) {
-            uint32_t start_us = hal_get_tick_us();
+            if ((now_ms - tcb->last_run_ms) >= tcb->period_ms) {
+                uint32_t start_us = hal_get_tick_us();
 
-            tcb->handler();
+                tcb->handler();
 
-            uint32_t elapsed_us = hal_get_tick_us() - start_us;
-            tcb->exec_count++;
-            if (elapsed_us > tcb->max_exec_us) tcb->max_exec_us = elapsed_us;
-            if (elapsed_us < tcb->min_exec_us) tcb->min_exec_us = elapsed_us;
-            tcb->last_run_ms = now_ms;
+                uint32_t elapsed_us = hal_get_tick_us() - start_us;
+                tcb->exec_count++;
+                if (elapsed_us > tcb->max_exec_us) tcb->max_exec_us = elapsed_us;
+                if (elapsed_us < tcb->min_exec_us) tcb->min_exec_us = elapsed_us;
+                tcb->last_run_ms = now_ms;
+            }
         }
     }
-
-    /* Update system tick (10 ms tick assumed) */
-    g_system_ticks_ms += 10;
 }
 
 /* ------------------------------------------------------------------ */
@@ -234,7 +237,7 @@ void wdt_init(void)
 {
     /* Check reset reason */
     uint32_t rsr = hal_wdt_get_reset_reason();
-    if (rsr & (1 << 2)) {  /* IWDG reset flag */
+    if (rsr & RSR_IWDGRST_BIT) {  /* IWDG reset flag */
         g_wdt_reset_detected = true;
         g_consecutive_wdt_resets++;
     } else {
@@ -278,8 +281,9 @@ uint8_t wdt_get_consecutive_resets(void)
 /* Req-004: Configuration Storage                                       */
 /* ------------------------------------------------------------------ */
 
-static uint16_t crc16_compute(const uint8_t *data, size_t len)
-{
+static void config_defaults(void);  /* 前向声明：config_load 中回退调用 */
+
+static uint16_t crc16_compute(const uint8_t *data, size_t len){
     uint16_t crc = 0xFFFF;
     for (size_t i = 0; i < len; i++) {
         crc ^= data[i];
@@ -294,21 +298,31 @@ static uint16_t crc16_compute(const uint8_t *data, size_t len)
     return crc;
 }
 
+/* CRC over the config payload, EXCLUDING the crc16 field itself.
+ * 在副本上把 crc16 置 0 后对【整个结构体】求 CRC，避免把 crc16 字段本身计入校验范围
+ * （原实现用 sizeof - sizeof(crc16) 排除的是末尾 reserved 字节，crc16 字段仍在范围内，
+ *  导致 save/load 校验不一致）。 */
+static uint16_t config_crc(const McuConfig *c)
+{
+    McuConfig tmp = *c;
+    tmp.crc16 = 0;
+    return crc16_compute(reinterpret_cast<const uint8_t *>(&tmp), sizeof(tmp));
+}
+
 void config_load(void)
 {
     McuConfig cfg;
     hal_flash_read(CONFIG_FLASH_SECTOR, &cfg, sizeof(cfg));
 
     if (cfg.magic != CONFIG_MAGIC) {
-        log_write(LogLevel::WARN, "Config CRC mismatch — reverting to defaults");
+        log_write(LogLevel::WARN, "Config magic mismatch — reverting to defaults");
         config_defaults();
         return;
     }
 
-    /* Verify CRC */
+    /* Verify CRC (crc16 字段本身不计入校验范围) */
     uint16_t stored_crc = cfg.crc16;
-    cfg.crc16 = 0;
-    uint16_t computed_crc = crc16_compute((const uint8_t *)&cfg, sizeof(cfg) - sizeof(cfg.crc16));
+    uint16_t computed_crc = config_crc(&cfg);
 
     if (computed_crc != stored_crc) {
         log_write(LogLevel::WARN, "Config CRC mismatch — reverting to defaults");
@@ -325,20 +339,20 @@ void config_load(void)
               g_wdt_timeout_s, log_level_to_string(g_log_level));
 }
 
-void config_defaults(void)
+static void config_defaults(void)
 {
     memset(&g_config, 0, sizeof(g_config));
     g_config.magic = CONFIG_MAGIC;
     g_config.watchdog_timeout_s = 10;
-    g_config.log_level = static_cast<uint8_t>(LogLevel::INFO);
-    g_config.crc16 = crc16_compute((const uint8_t *)&g_config, sizeof(g_config) - sizeof(g_config.crc16));
+    g_config.log_level = LogLevel::INFO;
+    g_config.crc16 = config_crc(&g_config);
     g_config_valid = true;
 }
 
 void config_save(void)
 {
-    /* Update CRC */
-    g_config.crc16 = crc16_compute((const uint8_t *)&g_config, sizeof(g_config) - sizeof(g_config.crc16));
+    /* Update CRC (crc16 字段本身不计入校验范围) */
+    g_config.crc16 = config_crc(&g_config);
 
     hal_flash_erase(CONFIG_FLASH_SECTOR);
     int ret = hal_flash_write(CONFIG_FLASH_SECTOR, &g_config, sizeof(g_config));
@@ -369,8 +383,9 @@ void config_check_factory_reset(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Application tasks (example)                                          */
+/* Application tasks (example) — 仅固件构建引用；单元测试构建屏蔽 main() 后无需这些示例任务 */
 /* ------------------------------------------------------------------ */
+#ifndef MCU_FW_UNIT_TEST
 
 static void task_heartbeat(void)
 {
@@ -392,10 +407,13 @@ static void task_comms(void)
     /* Poll communication interfaces */
 }
 
+#endif /* MCU_FW_UNIT_TEST — 示例任务结束 */
+
 /* ------------------------------------------------------------------ */
 /* Application entry point                                              */
 /* ------------------------------------------------------------------ */
 
+#ifndef MCU_FW_UNIT_TEST
 int main(void)
 {
     /* Platform initialization */
@@ -433,6 +451,7 @@ int main(void)
 
     return 0;
 }
+#endif /* MCU_FW_UNIT_TEST */
 
 /* ------------------------------------------------------------------ */
 /* HAL stubs (for host build / test)                                    */
@@ -445,7 +464,9 @@ void     hal_flash_read(uint32_t addr, void *buf, size_t len) { memset(buf, 0, l
 int      hal_flash_write(uint32_t addr, const void *buf, size_t len) { (void)addr; (void)buf; (void)len; return 0; }
 int      hal_flash_erase(uint32_t sector_addr) { (void)sector_addr; return 0; }
 void     hal_uart_send(const char *str, uint16_t len) { (void)str; (void)len; }
+#ifndef MCU_FW_UNIT_TEST
 void     hal_gpio_init(void) {}
+#endif
 bool     hal_gpio_read_factory_pin(void) { return true; }  /* Pulled high (inactive) */
 uint64_t hal_get_tick_ms(void) { static uint64_t t = 0; return t += 10; }
 uint32_t hal_get_tick_us(void) { static uint32_t t = 0; return t += 1000; }

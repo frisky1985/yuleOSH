@@ -25,13 +25,16 @@ TEST_DIR   ?= tests
 # Source files
 SRC_C      := $(wildcard $(SRC_DIR)/*.c)
 SRC_CPP    := $(wildcard $(SRC_DIR)/*.cpp)
-TEST_SRC   := $(wildcard $(TEST_DIR)/*.c) $(wildcard $(TEST_DIR)/*.cpp)
+TEST_C     := $(wildcard $(TEST_DIR)/*.c)
+TEST_CPP   := $(wildcard $(TEST_DIR)/*.cpp)
 
 # Object files (host build for testing)
+# 注意：各 patsubst 必须只作用于同扩展名的源列表，否则不匹配的源文件会被原样透传到
+# 链接行（tests/test_main.cpp 与 build/test_main.o 重复符号）。
 HOST_OBJS  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_C))
 HOST_OBJS  += $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRC_CPP))
-TEST_OBJS  := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/%.o,$(TEST_SRC))
-TEST_OBJS  += $(patsubst $(TEST_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(TEST_SRC))
+TEST_OBJS  := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/%.o,$(TEST_C))
+TEST_OBJS  += $(patsubst $(TEST_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(TEST_CPP))
 
 # Compiler flags (host)
 CXXFLAGS   := -std=c++17 -Wall -Wextra -Werror -g -O0
@@ -53,10 +56,13 @@ $(BUILD_DIR)/firmware.elf: $(HOST_OBJS)
 	$(SIZE) $@
 
 # Build and run tests
+# NOTE: tests/test_main.cpp #includes ../src/main.cpp, so the test runner links
+# ONLY test_main.o (which already contains main.cpp's definitions). Linking the
+# separately-compiled src/main.o would cause duplicate-symbol errors.
 test: $(BUILD_DIR)/test_runner
 	./$(BUILD_DIR)/test_runner
 
-$(BUILD_DIR)/test_runner: $(HOST_OBJS) $(TEST_OBJS)
+$(BUILD_DIR)/test_runner: $(TEST_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Pattern rules

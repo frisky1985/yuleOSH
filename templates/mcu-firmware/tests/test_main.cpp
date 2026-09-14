@@ -14,6 +14,11 @@
 #include <cassert>
 #include <algorithm>
 
+/* 单元测试构建：屏蔽参考实现的 main()，避免与下方测试 runner 的 main 重定义 */
+#ifndef MCU_FW_UNIT_TEST
+#define MCU_FW_UNIT_TEST
+#endif
+
 #include "../src/main.cpp"
 
 /* ------------------------------------------------------------------ */
@@ -51,6 +56,7 @@ static void test_scheduler_max_tasks(void)
 static void test_scheduler_task_stats(void)
 {
     /* SHALL track task execution statistics */
+    g_task_count = 0;  /* 复位任务表，避免前序测试填满后无法登记 */
     scheduler_add_task("stats_test", [](){}, 50, TaskPriority::NORMAL);
     auto *tcb = &g_tasks[g_task_count - 1];
     assert(tcb->exec_count == 0);
@@ -61,6 +67,7 @@ static void test_scheduler_task_stats(void)
 static void test_scheduler_priority_ordering(void)
 {
     /* SHALL support priority levels */
+    g_task_count = 0;  /* 复位任务表，确保 low/high/norm 真正登记到 0/1/2 */
     scheduler_add_task("low",  [](){}, 100, TaskPriority::LOW);
     scheduler_add_task("high", [](){}, 100, TaskPriority::HIGH);
     scheduler_add_task("norm", [](){}, 100, TaskPriority::NORMAL);
@@ -161,6 +168,7 @@ static void test_log_ring_buffer_wraparound(void)
     /* Ring buffer should handle wraparound */
     g_log_head = 0;
     g_log_count = 0;
+    g_log_level = LogLevel::INFO;  /* 复位日志级别，避免前序过滤测试将其留在 WARN 导致 INFO 写入被丢弃 */
 
     /* Fill buffer and wrap */
     for (int i = 0; i < LOG_RING_BUFFER_SIZE + 10; i++) {
@@ -198,16 +206,20 @@ static void test_config_crc_mismatch_handling(void)
     /* SHALL detect CRC mismatch and revert to defaults */
     g_config_valid = false;
     g_config.magic = CONFIG_MAGIC;
-    g_config.crc16 = 0x1234; /* Wrong CRC */
+    g_config.watchdog_timeout_s = 10;
+    g_config.log_level = LogLevel::INFO;
 
     /* config_load would detect this — test the CRC logic directly */
-    uint16_t expected = crc16_compute(
-        (const uint8_t *)&g_config,
-        sizeof(g_config) - sizeof(g_config.crc16));
-    /* Set CRC to match */
+    /* 用参考实现的 config_crc()（crc16 字段本身不计入校验范围）核算正确 CRC */
+    uint16_t expected = config_crc(&g_config);
+
+    /* 写入该 CRC 后应自洽 */
     g_config.crc16 = expected;
-    assert(crc16_compute((const uint8_t *)&g_config,
-                          sizeof(g_config) - sizeof(g_config.crc16)) == expected);
+    assert(config_crc(&g_config) == expected);
+
+    /* 篡改 CRC 后：存储的 crc16 与核算值不符（config_load 据此回退默认） */
+    g_config.crc16 = 0x1234;
+    assert(g_config.crc16 != config_crc(&g_config));
     PASS();
 }
 
