@@ -16,6 +16,8 @@
  *   make
  */
 
+// @req AUTOSAR-BSW: Mcu/Can/Com/Dcm/NvM 配置契约见 config/ 与 docs/spec.md §2 功能需求(SHALL 列表)
+
 #include <stdint.h>
 #include "Mcu.h"
 #include "Port.h"

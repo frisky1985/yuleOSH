@@ -12,6 +12,10 @@
 // Scenario: Corrupted Config Recovery — the configuration flash sector has an invalid
 //   CRC-16; the system boots; the system SHALL detect the CRC mismatch.
 //
+// 需求可追溯性 (供 yuleosh.alm.traceability.generate_lrm):
+//   每场景上方用 `// @req Req-00x` 与 `// @tests <源文件>:<函数>` 注解关联
+//   需求 ID → 函数接口 → 测试 ID。权威映射见 docs/requirement-traceability-matrix.md。
+//
 // 主机模拟: 定义 MCU_FW_UNIT_TEST 屏蔽 main() 与示例任务, 复用 main.cpp 内全部
 // 实现 + HAL 桩, 直接驱动纯逻辑函数验证场景行为 (无需硬件 / 交叉编译)。
 
@@ -29,6 +33,8 @@ static void task_lo(void) { g_order[g_order_idx++] = 2; }
 int main() {
     int failed = 0;
 
+    // @req Req-001
+    // @tests src/main.cpp: config_load, scheduler_add_task, scheduler_run
     // ── Scenario: Normal Boot Sequence ──
     config_load();  // 无有效 flash -> 回退默认
     if (!g_config_valid) { fprintf(stderr, "boot: config not valid\n"); failed++; }
@@ -47,16 +53,22 @@ int main() {
         fprintf(stderr, "scheduler: priority order wrong\n"); failed++;
     }
 
+    // @req Req-004
+    // @tests src/main.cpp: config_load, config_crc
     // ── Scenario: Corrupted Config Recovery (invalid magic / CRC-16) ──
     g_config.magic = 0xDEAD;  // 破坏 magic
     config_load();            // 应检测不匹配 -> 回退默认
     if (g_config.magic != CONFIG_MAGIC) { fprintf(stderr, "config: corrupt magic not recovered\n"); failed++; }
     if (g_config.crc16 != config_crc(&g_config)) { fprintf(stderr, "config: crc not self-consistent\n"); failed++; }
 
+    // @req Req-002
+    // @tests src/main.cpp: wdt_is_safe_mode
     // ── Scenario: Watchdog Reset Recovery / safe mode getter ──
     // (主机 HAL 桩 RSR 返回 0 -> 无复位; 验证 safe-mode 访问器默认关闭且可调用)
     if (wdt_is_safe_mode() != false) { fprintf(stderr, "wdt: unexpected safe mode\n"); failed++; }
 
+    // @req Req-003
+    // @tests src/main.cpp: config_check_factory_reset
     // ── Scenario: Factory Reset (pin 桩为高=未触发) ──
     config_check_factory_reset();
     if (g_config_valid == false) { fprintf(stderr, "factory: unexpected reset\n"); failed++; }

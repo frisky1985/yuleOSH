@@ -18,6 +18,8 @@
  * 不再依赖 codegen 生成）。
  */
 
+// @req Req-001, Req-002, Req-003, Req-004, Req-005, Req-006, Req-007
+
 #include <stdint.h>
 #include <stdbool.h>
 

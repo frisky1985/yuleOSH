@@ -13,6 +13,10 @@
  *   S5 安全配置        — RCC->APB2ENR 置 IOPA/IOPB；GPIOA->CRL 推挽输出 2MHz；
  *                       GPIOB->CRL PB0 输入上拉
  *
+ * 需求可追溯性 (供 yuleosh.alm.traceability.generate_lrm):
+ *   每场景上方用 `// @req Req-00x` 与 `// @tests <源文件>:<函数>` 注解关联
+ *   需求 ID → 函数接口 → 测试 ID。权威映射见 docs/requirement-traceability-matrix.md。
+ *
  * 通过 `#include "../src/main.c"` 复用参考实现，无需重复实现。
  */
 
@@ -44,6 +48,8 @@ int main(void) {
     printf("[led_chaser] SYSTEM qualification test (scenario-driven)\n");
 
     /* ============================================================== */
+    // @req Req-001
+    // @tests src/main.c: led_chaser_init, led_chaser_set_mode, led_chaser_tick, led_chaser_current_mask
     /* S1 上电默认流水: PA0 先亮，PA0→PA7 每 tick 推进并 wrap 回 PA0   */
     /* ============================================================== */
     printf("\n[Scenario 1] 上电默认流水 (CHASE, PA0 first, advance PA0→PA7 wrapping)\n");
@@ -69,6 +75,8 @@ int main(void) {
     CHECK(s1_monotonic == 1);
 
     /* ============================================================== */
+    // @req Req-002
+    // @tests src/main.c: led_chaser_handle_button
     /* S2 按钮切换模式: CHASE→BOUNCE→BLINK_ALL→BREATHE→CHASE            */
     /* ============================================================== */
     printf("\n[Scenario 2] 按钮切换模式 (PB0 debounced: CHASE→BOUNCE→BLINK_ALL→BREATHE→CHASE)\n");
@@ -98,6 +106,8 @@ int main(void) {
     CHECK(led_chaser_get_mode() == LED_MODE_CHASE);          /* 循环回到 CHASE */
 
     /* ============================================================== */
+    // @req Req-003
+    // @tests src/main.c: led_chaser_handle_button
     /* S3 消抖（单次按下只切一次）: 长按 PB0 仅切换一次模式            */
     /* ============================================================== */
     printf("\n[Scenario 3] 消抖（单次按下只切一次）\n");
@@ -110,6 +120,8 @@ int main(void) {
     CHECK(led_chaser_get_mode() == LED_MODE_BOUNCE);       /* 仅切换一次 */
 
     /* ============================================================== */
+    // @req Req-005
+    // @tests src/main.c: led_chaser_wfi, led_chaser_on_timer_isr
     /* S4 低功耗空闲: 空闲调用 WFI（宿主侧空操作，目标侧 __WFI）       */
     /* ============================================================== */
     printf("\n[Scenario 4] 低功耗空闲 (WFI idle sleep)\n");
@@ -121,6 +133,8 @@ int main(void) {
     CHECK(led_chaser_tick_count() >= 1U);                 /* 状态可观测、不崩溃 */
 
     /* ============================================================== */
+    // @req Req-006
+    // @tests src/main.c: led_chaser_target_init, led_chaser_target_state
     /* S5 安全配置: RCC/APB2ENR + GPIOA/B CRL 寄存器级初始化           */
     /* ============================================================== */
     printf("\n[Scenario 5] 安全配置 (RCC APB2ENR IOPA/IOPB, GPIOA CRL push-pull 2MHz, GPIOB CRL PB0 input pull-up)\n");

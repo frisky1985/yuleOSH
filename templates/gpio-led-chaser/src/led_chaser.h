@@ -12,6 +12,8 @@
  *   - 无隐式 int、无 unbounded loop、无 goto。
  */
 
+// @req Req-001, Req-002, Req-003, Req-004, Req-005, Req-006, Req-007
+
 #ifndef LED_CHASER_H
 #define LED_CHASER_H
 

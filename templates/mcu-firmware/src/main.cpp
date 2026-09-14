@@ -11,6 +11,8 @@
  * Toolchain: ARM GCC 12+
  */
 
+// @req Req-001, Req-002, Req-003, Req-004
+
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
