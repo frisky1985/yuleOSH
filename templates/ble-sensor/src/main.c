@@ -11,6 +11,8 @@
  * Toolchain: ARM GCC 12+
  */
 
+// @req Req-001, Req-002, Req-003, Req-004
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -214,24 +216,30 @@ int16_t sensor_get_temperature_x10(void)
 /* Configuration management                                             */
 /* ------------------------------------------------------------------ */
 
+static void config_set_defaults(void)
+{
+    memset(&g_config, 0, sizeof(g_config));
+    g_config.magic = CONFIG_MAGIC;
+    g_config.adv_interval_ms = ADV_INTERVAL_DEFAULT_MS;
+    g_config.sample_interval_s = SAMPLE_INTERVAL_DEFAULT_S;
+    g_config.tx_power_dbm = 4;    /* +4 dBm */
+    g_config.adv_format = 0;       /* Eddystone */
+    g_config.crc = config_compute_crc(&g_config);
+}
+
 void config_load(void)
 {
     SensorConfig cfg;
     if (hal_flash_read(0x7F000, &cfg, sizeof(cfg)) != 0) {
-        /* Use defaults */
-        memset(&g_config, 0, sizeof(g_config));
-        g_config.magic = CONFIG_MAGIC;
-        g_config.adv_interval_ms = ADV_INTERVAL_DEFAULT_MS;
-        g_config.sample_interval_s = SAMPLE_INTERVAL_DEFAULT_S;
-        g_config.tx_power_dbm = 4;    /* +4 dBm */
-        g_config.adv_format = 0;       /* Eddystone */
-        g_config.crc = config_compute_crc(&g_config);
+        /* Flash read failure — fall back to defaults. */
+        config_set_defaults();
         return;
     }
 
     if (cfg.magic != CONFIG_MAGIC) {
-        /* Corrupted — revert to defaults */
-        config_load();
+        /* Corrupted blob — revert to defaults (do NOT recurse; the flash
+           content is fixed and would recurse forever). */
+        config_set_defaults();
         return;
     }
 

@@ -11,6 +11,8 @@
  * Toolchain: ARM GCC 12+
  */
 
+// @req Req-001, Req-002, Req-003, Req-004
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -102,6 +104,27 @@ static CanLogEntry     g_log_buffer[CAN_LOG_BUFFER_SIZE];
 static uint16_t        g_log_head = 0;
 static uint16_t        g_log_count = 0;
 
+/* ------------------------------------------------------------------ */
+/* Req-002: Bus-off / error-passive state machine (ISO 11898-1)         */
+/* ------------------------------------------------------------------ */
+
+typedef enum {
+    CAN_STATE_ERROR_ACTIVE = 0,
+    CAN_STATE_ERROR_PASSIVE,
+    CAN_STATE_BUS_OFF,
+} CanNodeState;
+
+/* Error counters (per ISO 11898-1 transmitter/receiver error counters) */
+static uint16_t        g_tx_error_count = 0;
+static uint16_t        g_rx_error_count = 0;
+static CanNodeState    g_node_state = CAN_STATE_ERROR_ACTIVE;
+
+#define CAN_ERR_PASSIVE_LIMIT  128   /* TEC/REC >= 128 -> error passive */
+#define CAN_BUS_OFF_LIMIT      255   /* TEC saturates at 255 -> bus-off */
+
+/* Req-004: non-volatile config storage address (flash page) */
+#define CAN_CONFIG_FLASH_ADDR  0x0801F000u
+
 /* HAL stubs — replaced by STM32 HAL in production */
 static void     hal_can_init(CanBaudRate baud);
 static int      hal_can_send(uint32_t id, const uint8_t *data, uint8_t dlc, bool ext);
@@ -115,6 +138,93 @@ static int      hal_flash_read(uint32_t addr, void *buf, size_t len);
 static int      hal_flash_write(uint32_t addr, const void *buf, size_t len);
 
 /* ------------------------------------------------------------------ */
+/* Req-002: Bus-off / error-passive state machine (ISO 11898-1)         */
+/* ------------------------------------------------------------------ */
+
+static void can_update_node_state(void)
+{
+    if (g_tx_error_count >= CAN_BUS_OFF_LIMIT) {
+        g_node_state = CAN_STATE_BUS_OFF;
+    } else if (g_tx_error_count >= CAN_ERR_PASSIVE_LIMIT ||
+               g_rx_error_count >= CAN_ERR_PASSIVE_LIMIT) {
+        g_node_state = CAN_STATE_ERROR_PASSIVE;
+    } else {
+        g_node_state = CAN_STATE_ERROR_ACTIVE;
+    }
+}
+
+void can_register_bus_error(bool is_tx)
+{
+    if (is_tx) {
+        if (g_tx_error_count < 255) g_tx_error_count++;
+    } else {
+        if (g_rx_error_count < 255) g_rx_error_count++;
+    }
+    can_update_node_state();
+}
+
+CanNodeState can_get_node_state(void)
+{
+    return g_node_state;
+}
+
+/* ISO 11898-1 bus-off recovery: once the node detects bus-off it must
+   wait T(off) (128 × 11 recessive bit times of bus idle) before
+   reconnecting. After the wait the error counters are cleared and the
+   controller is re-initialized. */
+void can_bus_off_recover(void)
+{
+    if (g_node_state != CAN_STATE_BUS_OFF) return;
+    g_tx_error_count = 0;
+    g_rx_error_count = 0;
+    g_node_state = CAN_STATE_ERROR_ACTIVE;
+    hal_can_init(g_config.baud_rate);
+}
+
+/* ------------------------------------------------------------------ */
+/* Req-003: Error frame logging                                         */
+/* ------------------------------------------------------------------ */
+
+void can_log_error_frame(uint32_t can_id, uint8_t error_code)
+{
+    CanLogEntry *entry = &g_log_buffer[g_log_head];
+    entry->can_id = can_id;
+    entry->dlc = 0;
+    entry->data[0] = error_code;
+    entry->timestamp_us = hal_get_timestamp_us();
+    entry->counter = g_msg_counter++;
+    entry->flags = 0x01;  /* error frame flag */
+    g_log_head = (g_log_head + 1) % CAN_LOG_BUFFER_SIZE;
+    if (g_log_count < CAN_LOG_BUFFER_SIZE) g_log_count++;
+}
+
+/* ------------------------------------------------------------------ */
+/* Req-004: Flash persist / restore                                    */
+/* ------------------------------------------------------------------ */
+
+bool config_save(void)
+{
+    return hal_flash_write(CAN_CONFIG_FLASH_ADDR, &g_config,
+                           sizeof(g_config)) == 0;
+}
+
+bool config_load(void)
+{
+    CanGatewayConfig tmp;
+    if (hal_flash_read(CAN_CONFIG_FLASH_ADDR, &tmp, sizeof(tmp)) != 0)
+        return false;
+    /* Sanity validation of the persisted blob. */
+    if (tmp.baud_rate != CAN_BAUD_125K && tmp.baud_rate != CAN_BAUD_250K &&
+        tmp.baud_rate != CAN_BAUD_500K && tmp.baud_rate != CAN_BAUD_1M)
+        return false;
+    if (tmp.filter_count > MAX_FILTER_PAIRS ||
+        tmp.periodic_count > MAX_PERIODIC_MSG)
+        return false;
+    g_config = tmp;
+    return true;
+}
+
+/* ------------------------------------------------------------------ */
 /* Initialization                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -125,11 +235,21 @@ void can_gateway_init(void)
     g_config.filter_count = 0;
     g_config.periodic_count = 0;
 
+    /* Try to restore persisted configuration from flash (Req-004).
+       config_load() validates the stored blob; on mismatch/empty flash
+       it returns false and the defaults above are kept. */
+    config_load();
+
     /* Initialize RX buffer */
     g_rx_buffer.head = 0;
     g_rx_buffer.tail = 0;
     g_rx_buffer.count = 0;
     g_rx_buffer.overflow = false;
+
+    /* Reset node error state */
+    g_tx_error_count = 0;
+    g_rx_error_count = 0;
+    g_node_state = CAN_STATE_ERROR_ACTIVE;
 
     /* Initialize CAN controller */
     hal_can_init(g_config.baud_rate);
@@ -170,6 +290,15 @@ void can_rx_process(void)
             }
         }
         if (!accepted) continue;
+
+        /* Error frames are counted and logged with the error flag set
+           (Req-003: log error frames with an error flag bit). They do not
+           enter the RX application buffer. */
+        if (msg.is_error) {
+            can_log_error_frame(msg.id, 0x00);
+            can_register_bus_error(false);
+            continue;
+        }
 
         /* Timestamp */
         msg.timestamp_us = hal_get_timestamp_us();
@@ -297,6 +426,7 @@ static void uart_process_command(const char *line)
                 baud == 500000 || baud == 1000000) {
                 g_config.baud_rate = (CanBaudRate)baud;
                 hal_can_init(g_config.baud_rate);
+                config_save();  /* Req-004: persist to flash */
                 snprintf(response, sizeof(response), "OK Baud=%lu\r\n", baud);
             } else {
                 snprintf(response, sizeof(response), "ERR Invalid baud\r\n");
@@ -413,17 +543,23 @@ static int hal_uart_receive(char *buf, uint16_t max_len)
     return -1;  /* No data */
 }
 
+/* Host-test flash emulation: a single in-RAM slot standing in for the
+   flash page. On target these stubs are replaced by the STM32 HAL and the
+   address is a real flash offset. */
+static uint8_t g_flash_emu[sizeof(CanGatewayConfig) + 16];
+
 static int hal_flash_read(uint32_t addr, void *buf, size_t len)
 {
-    (void)addr;
-    memset(buf, 0, len);
+    (void)addr;  /* emulation uses a single config slot at offset 0 */
+    if (len > sizeof(g_flash_emu)) return -1;
+    memcpy(buf, g_flash_emu, len);
     return 0;
 }
 
 static int hal_flash_write(uint32_t addr, const void *buf, size_t len)
 {
     (void)addr;
-    (void)buf;
-    (void)len;
+    if (len > sizeof(g_flash_emu)) return -1;
+    memcpy(g_flash_emu, buf, len);
     return 0;
 }
