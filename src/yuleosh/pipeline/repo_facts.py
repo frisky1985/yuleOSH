@@ -254,12 +254,11 @@ def format_repo_facts(facts: dict) -> str:
     check_assert = facts.get("check_assert_count", 0)
 
     # 测试计数口径: custom-Check harness 用内联 CHECK 断言, 无独立 test_ 函数,
-    # 绝对不得报 "Test functions: 0"。优先报内联断言数; 但机器收集数仅供内部健全性
-    # 参考, 文档须引 spec §4b 的 "≥30" 口径 (见下方头部纪律)。
+    # 绝对不得报 "Test functions: 0"。如实报机器收集的内联断言数; 不得为了迎合
+    # spec §4b 的 "≥30" 而谎报——真实数即真实数 (demo 模板本就精简)。
     if framework == "custom-Check" and check_assert > 0:
         test_desc = (
-            f"{check_assert} inline CHECK assertions "
-            f"(custom-Check harness, satisfies spec §4b ≥30)"
+            f"{check_assert} inline CHECK assertions (custom-Check harness)"
         )
     elif test_func > 0:
         test_desc = f"{test_func} test functions"
@@ -274,11 +273,15 @@ def format_repo_facts(facts: dict) -> str:
         "**禁止**将其作为文档交付的 \"Repository Facts / 源码指标\" 表格逐字转述。\n"
         "若 codegen-deploy=skipped (参考实现已存在), 请依据 spec 的 API 契约 (§4a) "
         "与既有测试套件 (§4b) 描述实现, 不要照抄下列原始行数/函数数。\n"
-        "**测试计数纪律 (§4b/§4d.4 关键)**: 交付文档中测试套件一律用 **spec §4b 口径"
-        "『≥30 内联 CHECK 断言 (custom-Check harness)、ctest 全绿』** 表述; "
-        "下方机器收集的具体断言数 (如本仓库 " + str(check_assert) + " 条) 仅作内部健全性参考, "
-        "**禁止**逐字抄入文档作为指标 (会造成 PRD/dev=≥30 与 arch=具体数的计数漂移, "
-        "且 skipped 状态不可核实, claude-review 据此判 blocker)。\n"
+        "**测试计数纪律 (§4b/§4d.4 关键)**: 交付文档中的测试套件须 **如实对应下方机器收集"
+        "的框架与断言数**, 不得为迎合 spec §4b 的 \"≥30\" 而谎报阈值或声称 ctest 全绿"
+        "(本仓库 demo 模板用 custom-Check 内联断言 + 宿主机 `make test`, 并未接入 ctest/"
+        "CMake CTest)。若模板真实断言数为 " + str(check_assert) + " 条, 文档就写 "
+        + str(check_assert) + " 条; 计数漂移或不实框架声明会被 claude-review 判 blocker。\n"
+        "**HAL 仿真边界 (防幻觉关键)**: 这些 demo 模板的 HAL 函数 (hal_can_*/hal_ble_*/"
+        "gpio_*/寄存器读写) 是**宿主机仿真桩**, 并非真实硅片/外设驱动; 文档须将其明确描述为"
+        "\"host-simulation seam / 仿真层\", 不得声称已落具体 MCU 外设 (如真实 STM32 寄存器"
+        "映射、真实 radio/PHY)。目标相关差异 (如具体 MCU 型号) 须在 deviation 表如实标注。\n"
         "**禁止**写 \"Test functions: 0\" / \"0 测试用例\" / \"无测试\" / \"functions X/X\"。",
         f"- Source files: {facts.get('src_file_count', 0)} "
         f"({facts.get('src_lines', 0)} lines)",

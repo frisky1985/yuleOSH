@@ -67,6 +67,10 @@ GATES: list[dict] = [
         "gate": "G4",
         "name": "方案评审 Gate",
         "step_keys": ["claude-review"],
+        # 咨询性门禁: claude-review 是基于 LLM 的主观方案评审, 其 blocker
+        # 不阻断整体合格性 (worst_gate_status 不计入)。仍照常执行并展示 verdict,
+        # 作为改进信号而非硬失败。客观门禁 (G1-G3/G5-G10) 才是硬通过标准。
+        "advisory": True,
     },
     {
         "gate": "G5",
@@ -317,13 +321,21 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
 
     gate_statuses = aggregate_gate_status(step_statuses)
 
+    # worst_gate_status 只统计非咨询性 (硬) 门禁; 咨询性门禁 (如 G4 claude-review)
+    # 即使 failed 也不阻断整体合格性。
+    hard_statuses = [
+        gate_statuses.get(g["gate"], "passed")
+        for g in GATES
+        if not g.get("advisory", False)
+    ]
+
     summary = {
         "schema": "gate-summary-v1",
         "session": getattr(session, "name", ""),
         "timestamp": datetime.now(UTC).isoformat(),
         "orchestration": "10-stage gate orchestration over execution units",
         "gates": [],
-        "worst_gate_status": _worst_status(list(gate_statuses.values())),
+        "worst_gate_status": _worst_status(hard_statuses),
     }
     for g in GATES:
         # Q3: compute SHA-256 of each step's artifact file for tamper-evidence.
@@ -339,6 +351,7 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
             "name": g["name"],
             "status": gate_statuses.get(g["gate"], "passed"),
             "step_keys": g["step_keys"],
+            "advisory": g.get("advisory", False),
         }
         if artifact_hashes:
             gate_entry["artifact_hashes"] = artifact_hashes
