@@ -48,7 +48,9 @@ SYS_TEST_OBJS  += $(patsubst $(TEST_DIR)/system/%.cpp,$(BUILD_DIR)/sys/%.o,$(SYS
 
 # Compiler flags (host). -Isrc lets tests/#include "../src/main.c" resolve;
 # -I../../common/c-harness lets tests use the shared yuleOSH c-harness.
-COMMON_HARNESS_DIR ?= ../common/c-harness
+# check.h is vendored into tests/ so the template is self-contained
+# (works when instantiated/copied without templates/common).
+COMMON_HARNESS_DIR ?= tests
 CFLAGS     := -Wall -Wextra -Werror -std=c99 -g -O0 -Isrc -I$(COMMON_HARNESS_DIR)
 CXXFLAGS   := -Wall -Wextra -Werror -std=c++17 -g -O0 -Isrc -I$(COMMON_HARNESS_DIR)
 LDFLAGS    := -lm
