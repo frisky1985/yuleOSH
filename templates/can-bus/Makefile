@@ -46,9 +46,11 @@ UNIT_TEST_OBJS += $(patsubst $(TEST_DIR)/%.cpp,$(BUILD_DIR)/unit/%.o,$(UNIT_TEST
 SYS_TEST_OBJS  := $(patsubst $(TEST_DIR)/system/%.c,$(BUILD_DIR)/sys/%.o,$(SYS_TEST_C))
 SYS_TEST_OBJS  += $(patsubst $(TEST_DIR)/system/%.cpp,$(BUILD_DIR)/sys/%.o,$(SYS_TEST_CPP))
 
-# Compiler flags (host). -Isrc lets tests/#include "../src/main.c" resolve.
-CFLAGS     := -Wall -Wextra -Werror -std=c99 -g -O0 -Isrc
-CXXFLAGS   := -Wall -Wextra -Werror -std=c++17 -g -O0 -Isrc
+# Compiler flags (host). -Isrc lets tests/#include "../src/main.c" resolve;
+# -I../../common/c-harness lets tests use the shared yuleOSH c-harness.
+COMMON_HARNESS_DIR ?= ../common/c-harness
+CFLAGS     := -Wall -Wextra -Werror -std=c99 -g -O0 -Isrc -I$(COMMON_HARNESS_DIR)
+CXXFLAGS   := -Wall -Wextra -Werror -std=c++17 -g -O0 -Isrc -I$(COMMON_HARNESS_DIR)
 LDFLAGS    := -lm
 
 # Cross-compiler flags (target)

@@ -6,25 +6,17 @@
  *   Req-002: CAN Message Transmission
  *   Req-003: Message Logging
  *   Req-004: UART Configuration Interface
+ *
+ * Uses the shared yuleOSH c-harness (../common/c-harness/check.h).
  */
 
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <assert.h>
+
+#include "check.h"
 
 #include "../src/main.c"
-
-/* ------------------------------------------------------------------ */
-/* Test counters                                                        */
-/* ------------------------------------------------------------------ */
-
-static int g_tests_passed = 0;
-static int g_tests_failed = 0;
-
-#define TEST(name) do { printf("  TEST: %s ... ", name); } while(0)
-#define PASS() do { printf("PASS\n"); g_tests_passed++; } while(0)
-#define FAIL(msg) do { printf("FAIL: %s\n", msg); g_tests_failed++; } while(0)
 
 /* ------------------------------------------------------------------ */
 /* Req-001: CAN Message Reception                                       */
@@ -32,27 +24,28 @@ static int g_tests_failed = 0;
 
 static void test_filter_addition(void)
 {
+    printf("TEST: test_filter_addition\n");
     /* SHALL support up to 32 configurable ID/mask pairs */
     can_gateway_init();
     for (int i = 0; i < 32; i++) {
         can_add_filter(0x100 + i, 0x7FF);
     }
-    assert(g_config.filter_count == 32);
+    CHECK(g_config.filter_count == 32);
     /* Adding more should be rejected */
     can_add_filter(0x200, 0x7FF);
-    assert(g_config.filter_count == 32);
-    PASS();
+    CHECK(g_config.filter_count == 32);
 }
 
 static void test_rx_buffer_capacity(void)
 {
+    printf("TEST: test_rx_buffer_capacity\n");
     /* SHALL buffer up to 256 received messages */
-    assert(RX_BUFFER_CAPACITY == 256);
-    PASS();
+    CHECK(RX_BUFFER_CAPACITY == 256);
 }
 
 static void test_rx_buffer_overflow(void)
 {
+    printf("TEST: test_rx_buffer_overflow\n");
     /* SHALL set overflow flag when buffer full */
     g_rx_buffer.count = RX_BUFFER_CAPACITY;
     g_rx_buffer.head = 0;
@@ -70,8 +63,7 @@ static void test_rx_buffer_overflow(void)
     g_rx_buffer.head = (g_rx_buffer.head + 1) % RX_BUFFER_CAPACITY;
     g_rx_buffer.overflow = true;
 
-    assert(can_get_overflow() == true);
-    PASS();
+    CHECK(can_get_overflow() == true);
 }
 
 /* ------------------------------------------------------------------ */
@@ -80,26 +72,26 @@ static void test_rx_buffer_overflow(void)
 
 static void test_periodic_message_addition(void)
 {
+    printf("TEST: test_periodic_message_addition\n");
     /* SHALL support periodic messages */
     can_gateway_init();
     uint8_t data[] = {0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00};
     can_add_periodic_message(0x200, data, 8, 1000);
-    assert(g_config.periodic_count == 1);
-    assert(g_config.periodic_msgs[0].interval_ms == 1000);
-    assert(g_config.periodic_msgs[0].can_id == 0x200);
-    PASS();
+    CHECK(g_config.periodic_count == 1);
+    CHECK(g_config.periodic_msgs[0].interval_ms == 1000);
+    CHECK(g_config.periodic_msgs[0].can_id == 0x200);
 }
 
 static void test_max_periodic_messages(void)
 {
+    printf("TEST: test_max_periodic_messages\n");
     /* SHALL support up to MAX_PERIODIC_MSG */
     can_gateway_init();
     uint8_t data[8] = {0};
     for (int i = 0; i < MAX_PERIODIC_MSG + 1; i++) {
         can_add_periodic_message(0x300 + i, data, 8, 100);
     }
-    assert(g_config.periodic_count == MAX_PERIODIC_MSG);
-    PASS();
+    CHECK(g_config.periodic_count == MAX_PERIODIC_MSG);
 }
 
 /* ------------------------------------------------------------------ */
@@ -108,6 +100,7 @@ static void test_max_periodic_messages(void)
 
 static void test_log_buffer_write(void)
 {
+    printf("TEST: test_log_buffer_write\n");
     /* SHALL log messages to circular buffer */
     can_gateway_init();
     g_log_count = 0;
@@ -122,13 +115,13 @@ static void test_log_buffer_write(void)
     g_log_head = (g_log_head + 1) % CAN_LOG_BUFFER_SIZE;
     g_log_count++;
 
-    assert(g_log_count == 1);
-    assert(g_log_buffer[0].can_id == 0x100);
-    PASS();
+    CHECK(g_log_count == 1);
+    CHECK(g_log_buffer[0].can_id == 0x100);
 }
 
 static void test_log_export(void)
 {
+    printf("TEST: test_log_export\n");
     /* SHALL support exporting log */
     can_gateway_init();
     g_log_count = 0;
@@ -145,8 +138,7 @@ static void test_log_export(void)
 
     uint8_t export_buf[512];
     uint16_t written = can_export_log(export_buf, sizeof(export_buf));
-    assert(written == 10 * sizeof(CanLogEntry));
-    PASS();
+    CHECK(written == 10 * sizeof(CanLogEntry));
 }
 
 /* ------------------------------------------------------------------ */
@@ -155,19 +147,16 @@ static void test_log_export(void)
 
 static void test_uart_config_baud(void)
 {
+    printf("TEST: test_uart_config_baud\n");
     /* SHALL accept BAUD command over UART */
     can_gateway_init();
-    /* Simulate UART input buffer */
-    uart_config_poll();
-    /* In test context, hal_uart_receive returns -1 (no input) */
-    /* We test the command parser directly */
     g_config.baud_rate = CAN_BAUD_500K;
-    assert(g_config.baud_rate == CAN_BAUD_500K);
-    PASS();
+    CHECK(g_config.baud_rate == CAN_BAUD_500K);
 }
 
 static void test_uart_config_dump(void)
 {
+    printf("TEST: test_uart_config_dump\n");
     /* SHALL provide DUMP command */
     g_config.baud_rate = CAN_BAUD_500K;
     g_config.filter_count = 3;
@@ -179,8 +168,7 @@ static void test_uart_config_dump(void)
              g_config.baud_rate, g_config.filter_count,
              g_config.periodic_count, g_rx_buffer.count,
              g_rx_buffer.overflow);
-    assert(strlen(buf) > 0);
-    PASS();
+    CHECK(strlen(buf) > 0);
 }
 
 /* ------------------------------------------------------------------ */
@@ -189,7 +177,7 @@ static void test_uart_config_dump(void)
 
 int main(void)
 {
-    printf("\n=== CAN Bus Gateway — Unit Tests ===\n\n");
+    printf("\n=== CAN Bus Gateway — Unit Tests (c-harness) ===\n\n");
 
     test_filter_addition();
     test_rx_buffer_capacity();
@@ -204,8 +192,5 @@ int main(void)
     test_uart_config_baud();
     test_uart_config_dump();
 
-    printf("\n=== Results: %d passed, %d failed ===\n\n",
-           g_tests_passed, g_tests_failed);
-
-    return g_tests_failed > 0 ? 1 : 0;
+    return c_harness_report();
 }
