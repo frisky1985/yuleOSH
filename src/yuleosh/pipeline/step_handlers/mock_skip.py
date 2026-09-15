@@ -65,3 +65,18 @@ def write_mock_skip(session, step_key: str, reason: str,
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
     return str(out_path)
+
+
+def write_llm_unavailable_skip(session, step_key: str, reason: str) -> str:
+    """Write a SKIPPED report because the LLM provider is unreachable.
+
+    Same artifact shape as :func:`write_mock_skip` (``status="skipped"`` so the
+    gate overlay corrects the step verdict), but semantically distinct: this is
+    a provider-infrastructure skip, not a mock-mode skip.  Used by G1 LLM
+    steps (super-analysis / prd) to degrade gracefully when the provider is
+    down instead of hard-aborting the whole pipeline.
+    """
+    return write_mock_skip(
+        session, step_key, reason,
+        report_extra={"category": "llm_provider_unavailable"},
+    )

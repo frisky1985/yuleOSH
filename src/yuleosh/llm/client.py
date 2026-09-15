@@ -885,6 +885,52 @@ def chat_completion(
     raise RuntimeError(f"LLM request failed after {retries} retries")
 
 
+def is_provider_unavailable(exc: Exception) -> bool:
+    """Classify ``exc`` as an LLM *provider-unavailable* failure.
+
+    Returns ``True`` only when the failure means the provider is genuinely
+    unreachable (no credentials, auth/billing/quota rejection, or
+    network/DNS/timeout) — as opposed to a real content/processing failure
+    that should still fail the step.
+
+    Pipeline steps use this to *gracefully degrade* (skip with a clear
+    reason, so the gate shows ``skipped`` instead of hard-aborting the whole
+    pipeline) when the provider is down — consistent with the existing
+    claude-review / codex-verify / doc-gen degradation pattern.  A genuine
+    review failure (provider reachable but returning a negative verdict) is
+    NOT classified here and still fails.
+
+    ``_call_llm`` wraps provider errors in ``PipelineStepError`` via
+    ``raise ... from <original>``, so we walk the ``__cause__`` / ``__context__``
+    chain to inspect the underlying message.
+    """
+    probes = [exc]
+    cur = exc
+    for _ in range(4):
+        nxt = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
+        if nxt is None:
+            break
+        probes.append(nxt)
+        cur = nxt
+
+    blob = " \n".join(str(p).lower() for p in probes)
+
+    # No credentials configured at all.
+    if "no llm api key" in blob or "no api key" in blob:
+        return True
+    # Auth / billing / quota (account-level unavailability, not a code defect).
+    for token in ("401", "402", "403", "429",
+                  "unauthorized", "payment required", "forbidden",
+                  "too many requests"):
+        if token in blob:
+            return True
+    # Network / DNS / timeout (infrastructure-level unavailability).
+    for token in ("urlopen error", "urlerror", "timed out", "timeout",
+                  "name or service not known", "getaddrinfo",
+                  "failed to resolve"):
+        if token in blob:
+            return True
+    return False
 
 async def _call_llm(
     prompt: str,

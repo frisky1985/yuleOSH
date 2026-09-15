@@ -20,6 +20,7 @@ from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _call_llm, _parse_spec
+from yuleosh.pipeline.step_handlers.mock_skip import write_llm_unavailable_skip
 from yuleosh.pipeline.prompts import (
     build_super_analysis_prompt,
     build_prd_prompt,
@@ -172,6 +173,18 @@ def step_super_analysis(session: PipelineSession) -> str:
                                max_tokens=16000)
         except Exception as e:
             log.error(f"LLM call failed during S.U.P.E.R analysis: {e}")
+            # Graceful degradation (2026-09-16): when the LLM provider is
+            # genuinely unreachable (no key / auth+billing / network+timeout),
+            # skip with a clear reason instead of hard-aborting the whole
+            # pipeline — consistent with existing claude-review / codex-verify
+            # / doc-gen degradation.  A real failure still raises (fail-closed).
+            from yuleosh.llm.client import is_provider_unavailable
+            if is_provider_unavailable(e):
+                return write_llm_unavailable_skip(
+                    session, "super-analysis",
+                    f"LLM provider unavailable: {e} "
+                    f"— S.U.P.E.R analysis skipped (pipeline continues)",
+                )
             raise PipelineStepError(
                 f"S.U.P.E.R analysis LLM call failed: {e}\n"
                 f"Spec: {session.spec_path}\n"
@@ -296,6 +309,18 @@ def step_hermes_prd(session: PipelineSession) -> str:
                                    max_tokens=16000, timeout=timeout_s)
             except Exception as e:
                 log.error(f"LLM call failed during PRD generation: {e}")
+                # Graceful degradation (2026-09-16): when the LLM provider is
+                # genuinely unreachable (no key / auth+billing / network+timeout),
+                # skip with a clear reason instead of hard-aborting the whole
+                # pipeline — consistent with existing claude-review / codex-verify
+                # / doc-gen degradation.  A real failure still raises (fail-closed).
+                from yuleosh.llm.client import is_provider_unavailable
+                if is_provider_unavailable(e):
+                    return write_llm_unavailable_skip(
+                        session, "prd",
+                        f"LLM provider unavailable: {e} "
+                        f"— PRD generation skipped (pipeline continues)",
+                    )
                 raise PipelineStepError(
                     f"PRD generation LLM call failed: {e}\n"
                     f"Spec: {session.spec_path}"

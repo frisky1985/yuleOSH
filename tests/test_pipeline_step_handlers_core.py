@@ -147,6 +147,106 @@ class TestAnalysisHandlers:
             result = step_internal_review(tmp_session)
             assert result is not None
 
+    def test_step_super_analysis_llm_provider_unavailable_skips(self, tmp_session):
+        """GIVEN provider-unavailable (402) WHEN step_super_analysis THEN skipped (not raised)."""
+        import json as _json
+        from yuleosh.pipeline.step_handlers.analysis import step_super_analysis
+
+        def _boom(*a, **k):
+            raise RuntimeError(
+                "LLM request failed after 3 retries: HTTP Error 402: Payment Required"
+            )
+
+        with mock.patch("yuleosh.pipeline.step_handlers.analysis._parse_spec") as mp:
+            mp.return_value = {"requirements": [], "scenarios": []}
+            tmp_session.llm_client = _boom
+            result = step_super_analysis(tmp_session)  # must NOT raise
+            assert result is not None
+            report = _json.loads(Path(result).read_text())
+            assert report["status"] == "skipped"
+            assert report.get("category") == "llm_provider_unavailable"
+            assert "provider" in report["reason"].lower()
+
+    def test_step_hermes_prd_llm_provider_unavailable_skips(self, tmp_session):
+        """GIVEN provider-unavailable (401) WHEN step_hermes_prd THEN skipped (not raised)."""
+        import json as _json
+        from yuleosh.pipeline.step_handlers.analysis import step_hermes_prd
+
+        def _boom(*a, **k):
+            raise RuntimeError("HTTP Error 401: Unauthorized")
+
+        with mock.patch("yuleosh.pipeline.step_handlers.analysis._parse_spec") as mp:
+            mp.return_value = {"requirements": [], "scenarios": []}
+            tmp_session.llm_client = _boom
+            result = step_hermes_prd(tmp_session)  # must NOT raise
+            assert result is not None
+            report = _json.loads(Path(result).read_text())
+            assert report["status"] == "skipped"
+            assert report.get("category") == "llm_provider_unavailable"
+
+    def test_step_super_analysis_llm_real_error_still_raises(self, tmp_session):
+        """GIVEN a non-provider error (400) WHEN step_super_analysis THEN PipelineStepError (fail-closed)."""
+        from yuleosh.pipeline.step_handlers.analysis import (
+            step_super_analysis,
+            PipelineStepError,
+        )
+
+        def _boom(*a, **k):
+            raise RuntimeError("HTTP Error 400: Bad Request")
+
+        with mock.patch("yuleosh.pipeline.step_handlers.analysis._parse_spec") as mp:
+            mp.return_value = {"requirements": [], "scenarios": []}
+            tmp_session.llm_client = _boom
+            with pytest.raises(PipelineStepError):
+                step_super_analysis(tmp_session)
+
+
+class TestProviderUnavailableClassification:
+    """Unit tests for llm.client.is_provider_unavailable classification."""
+
+    def test_classifies_no_key(self):
+        from yuleosh.llm.client import is_provider_unavailable
+        assert is_provider_unavailable(RuntimeError("No LLM API key found in environment"))
+
+    def test_classifies_http_402(self):
+        from yuleosh.llm.client import is_provider_unavailable
+        assert is_provider_unavailable(
+            RuntimeError("LLM request failed after 3 retries: HTTP Error 402: Payment Required")
+        )
+
+    def test_classifies_http_401_429(self):
+        from yuleosh.llm.client import is_provider_unavailable
+        assert is_provider_unavailable(RuntimeError("HTTP Error 401: Unauthorized"))
+        assert is_provider_unavailable(RuntimeError("HTTP Error 429: Too Many Requests"))
+
+    def test_classifies_urlerror_and_timeout(self):
+        from yuleosh.llm.client import is_provider_unavailable
+        assert is_provider_unavailable(
+            RuntimeError("LLM request failed after 3 retries: <urlopen error [Errno 8] nodename nor servname provided>")
+        )
+        assert is_provider_unavailable(
+            RuntimeError("LLM request failed after 3 retries: timed out")
+        )
+
+    def test_classifies_wrapped_pipeline_step_error(self):
+        from yuleosh.llm.client import is_provider_unavailable
+        from yuleosh.pipeline.session import PipelineStepError
+        # _call_llm wraps provider errors: raise PipelineStepError(...) from RuntimeError(...)
+        try:
+            raise RuntimeError("HTTP Error 402: Payment Required")
+        except RuntimeError as _cause:
+            wrapped = PipelineStepError("LLM call for step super-analysis failed: HTTP Error 402: Payment Required")
+            wrapped.__cause__ = _cause
+        assert is_provider_unavailable(wrapped)
+
+    def test_rejects_real_errors_fail_closed(self):
+        from yuleosh.llm.client import is_provider_unavailable
+        # 400 / generic / connection-refused / non-LLM errors must NOT be skipped.
+        assert not is_provider_unavailable(RuntimeError("HTTP Error 400: Bad Request"))
+        assert not is_provider_unavailable(RuntimeError("Mock LLM failure"))
+        assert not is_provider_unavailable(RuntimeError("API connection refused"))
+        assert not is_provider_unavailable(ValueError("bad json"))
+
 
 # ===================================================================
 # execution.py — step_claude_arch, step_claude_dev, step_test_planning
