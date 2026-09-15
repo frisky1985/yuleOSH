@@ -72,6 +72,12 @@ def step_integration_test(session: PipelineSession) -> str:
         test_output = ""
         result_returncode = None
         test_runner = "none"
+        # True when a CMake configure failed because the required toolchain is
+        # absent in this environment (e.g. ESP-IDF / IDF_PATH for esp-idf-blinky).
+        # Used to surface an honest non-green (skipped) integration gate instead
+        # of the 0-test "vacuum pass" (configure fails silently → test_runner
+        # stays "none" → status "unknown" → gate collapses to "passed").
+        cmake_configure_failed = False
 
         # Try pytest with integration marker
         test_dir = project_dir / "tests"
@@ -162,6 +168,7 @@ def step_integration_test(session: PipelineSession) -> str:
                             "cmake configure failed for integration-test: %s",
                             (cfg.stderr or cfg.stdout)[-500:],
                         )
+                        cmake_configure_failed = True
                 except FileNotFoundError:
                     log.info("cmake not found — cannot configure build for integration-test")
                 except subprocess.TimeoutExpired:
@@ -258,7 +265,15 @@ def step_integration_test(session: PipelineSession) -> str:
         elif failed > 0:
             status = "failed"
         elif test_runner == "none":
-            status = "unknown"
+            if cmake_configure_failed:
+                # CMake configure failed (toolchain / IDF absent in this env):
+                # integration tests could not be built or run, so this is an
+                # honest non-green (skipped) gate — NOT a false pass. The
+                # project requires a toolchain not present here (e.g. ESP-IDF
+                # for esp-idf-blinky); the spec declares this limitation.
+                status = "skipped"
+            else:
+                status = "unknown"
         else:
             status = "passed"
 
@@ -277,6 +292,14 @@ def step_integration_test(session: PipelineSession) -> str:
             "failed": failed,
             "status": status,
         }
+
+        # Surface the toolchain-absent reason in the artifact for traceability.
+        if cmake_configure_failed:
+            report["reason"] = (
+                "cmake configure failed — project requires a toolchain "
+                "(e.g. ESP-IDF / IDF_PATH) not present in this environment; "
+                "integration tests could not be built or run"
+            )
 
         # ── 门禁联动回滚 (2026-08-13, 方案 A) ─────────────────────
         # 只对真实失败 (status=failed) 联动; skipped/unknown 不动。
