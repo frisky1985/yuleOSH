@@ -242,6 +242,14 @@ void wdt_init(void)
     if (rsr & RSR_IWDGRST_BIT) {  /* IWDG reset flag */
         g_wdt_reset_detected = true;
         g_consecutive_wdt_resets++;
+        /* Req-002: log the watchdog reset event with a reason code at ERROR
+           level. In a real MCU the consecutive-reset count would live in
+           retained RAM and survive the reset; in this host stub it is a
+           process-local counter (see spec Known Debt), so the code below is
+           the observable record of the reset for post-mortem diagnostics. */
+        log_write(LogLevel::ERROR, "Watchdog reset: reason %u (consecutive=%u)",
+                  static_cast<uint32_t>(RSR_IWDGRST_BIT),
+                  static_cast<uint32_t>(g_consecutive_wdt_resets));
     } else {
         /* Clean boot — reset counter */
         g_consecutive_wdt_resets = 0;
