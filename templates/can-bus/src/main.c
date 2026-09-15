@@ -332,11 +332,20 @@ void can_rx_process(void)
 /* Req-002: Message Transmission                                        */
 /* ------------------------------------------------------------------ */
 
+/* Req-002: per ISO 11898-1 the controller must not transmit while it is in a
+   degraded error state. We treat both BUS_OFF and ERROR_PASSIVE as "TX not
+   allowed" (g_node_state is driven by the error-counter FSM) — this satisfies
+   the spec's "respect error passive state and bus-off recovery". */
+static bool can_is_tx_allowed(void)
+{
+    return g_node_state != CAN_STATE_BUS_OFF
+        && g_node_state != CAN_STATE_ERROR_PASSIVE;
+}
+
 int can_send_message(uint32_t id, const uint8_t *data, uint8_t dlc, bool ext)
 {
-    /* Req-002: respect bus-off per ISO 11898-1 — never transmit while the
-       controller is bus-off (g_node_state set by the error-counter FSM). */
-    if (g_node_state == CAN_STATE_BUS_OFF) return -1;
+    /* Req-002: never transmit while bus-off or error-passive. */
+    if (!can_is_tx_allowed()) return -1;
     return hal_can_send(id, data, dlc, ext);
 }
 
@@ -363,8 +372,8 @@ void can_periodic_scheduler(void)
         PeriodicMessage *pm = &g_config.periodic_msgs[i];
         if (!pm->enabled) continue;
 
-        /* Req-002: do not attempt transmission while bus-off. */
-        if (g_node_state == CAN_STATE_BUS_OFF) continue;
+        /* Req-002: do not attempt transmission while bus-off or error-passive. */
+        if (!can_is_tx_allowed()) continue;
 
         if ((now_ms - pm->last_tx_ms) >= pm->interval_ms) {
             hal_can_send(pm->can_id, pm->data, pm->dlc, false);
