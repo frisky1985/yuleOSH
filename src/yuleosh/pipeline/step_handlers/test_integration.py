@@ -15,6 +15,7 @@ Step SWE.5: 小克 — 接口/集成测试。
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +35,56 @@ def _is_project_root(d) -> bool:
     return any((d / m).exists() for m in (
         "tests", "CMakeLists.txt", "go.mod", "package.json", "pyproject.toml",
     ))
+
+
+def _cmake_cache_source_dir(build_dir) -> "str | None":
+    """Extract the project source dir recorded in a build dir's CMakeCache.
+
+    Returns the absolute source path CMake configured this build from, or
+    None if no cache / not parseable. Used to detect a *stale* build dir
+    whose cache still points at a different source tree — e.g. the demo
+    runner copies ``templates/gpio-led-chaser`` to a temp dir, carrying
+    along a ``CMakeCache.txt`` that records the template's original absolute
+    path. Reusing such a cache makes ``ctest`` look for executables at the
+    WRONG location and fail with rc=8.
+    """
+    cache = Path(build_dir) / "CMakeCache.txt"
+    if not cache.exists():
+        return None
+    try:
+        text = cache.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        # e.g.  gpio_led_chaser_SOURCE_DIR:STATIC=/abs/path
+        if "_SOURCE_DIR:" in line and "=" in line and "BINARY_DIR" not in line:
+            return line.split("=", 1)[1].strip()
+    return None
+
+
+def _remove_stale_build_dirs(project_dir) -> "list[str]":
+    """Remove build dirs whose CMakeCache points at a different source tree.
+
+    A project copied/relocated (template -> temp demo dir) can carry a stale
+    ``build/`` whose CMakeCache still records the ORIGINAL source path. Reusing
+    that cache makes ctest resolve executables at the wrong location. We drop
+    such dirs so the step's auto-configure fallback issues a fresh
+    ``cmake -S . -B build``. Returns the list of removed dir paths.
+    """
+    project_dir = Path(project_dir).resolve()
+    removed = []
+    for cand in list(project_dir.glob("build")) + list(project_dir.glob("cmake-build*")):
+        if not cand.is_dir():
+            continue
+        csd = _cmake_cache_source_dir(cand)
+        if csd and Path(csd).resolve() != project_dir:
+            log.warning(
+                "Stale CMake cache in %s (SOURCE_DIR=%s != project %s) — "
+                "removing for fresh configure", cand, csd, project_dir,
+            )
+            shutil.rmtree(cand, ignore_errors=True)
+            removed.append(str(cand))
+    return removed
 
 
 __all__ = ["step_integration_test"]
@@ -172,6 +223,12 @@ def step_integration_test(session: PipelineSession) -> str:
         # (rc==5 / not found) so Python projects keep pytest semantics.
         if (test_runner in ("none", "pytest-integration")
                 and result_returncode in (None, 5)):
+            # 2026-09-16: 先清除 cache 失配的陈旧 build 目录。项目被拷贝/搬迁
+            # (如 demo runner 把 templates/gpio-led-chaser 拷到临时目录) 会把原
+            # 模板路径的 CMakeCache 一并带过来; 复用此类 cache 会让 ctest 到错误
+            # 位置找可执行文件 (rc=8 假失败)。清除后若无可用的 build 目录, 下方
+            # 自动配置逻辑会走全新 cmake -S -B build。
+            _remove_stale_build_dirs(project_dir)
             # 只保留含 CTestTestfile.cmake 的 build 目录参与; 没有 CTestTestfile
             # 的残留目录(如 coverage 步生成的 cmake-build-coverage)不参与。
             cmake_build_dirs = [
@@ -288,11 +345,17 @@ def step_integration_test(session: PipelineSession) -> str:
         # C/CMake project whose tests live in ctest (not pytest), this is
         # expected, not a failure — treat as skipped. Only a real test
         # failure (tests ran and failed) should block the pipeline.
-        # ctest -L integration exits 8 when no test matches the label —
-        # same semantics: C project without integration tests = skipped.
+        # 注 (2026-09-16):
+        #   - ctest 在「无测试匹配 label」时返回 0 (打印 "No tests were found!!!"),
+        #     并非 8。为诚实避免「0 测试真空通过」(vacuum pass), 这种情况判 skipped。
+        #   - ctest 返回 8 表示「有测试失败」, 必须判 failed; 此前
+        #     `rc==8 and ctest-integration -> skipped` 的分支会掩盖真实门禁失败, 已删除。
         if result_returncode == 5 and test_runner == "pytest-integration":
             status = "skipped"
-        elif result_returncode == 8 and test_runner == "ctest-integration":
+        elif (result_returncode == 0
+              and "No tests were found" in (test_output or "")):
+            # ctest -L integration matched nothing — honest non-green (skipped),
+            # not a false pass.
             status = "skipped"
         elif result_returncode is not None and result_returncode != 0:
             status = "failed"

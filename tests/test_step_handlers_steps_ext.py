@@ -557,7 +557,11 @@ class TestStepIntegrationTest:
                     assert report["failed"] == 0
 
     def test_ctest_runner_no_integration_label_skipped(self, mock_session, spec_file, tmp_path):
-        """C project without integration label → ctest rc 8 → skipped (not failed)."""
+        """C project without integration label → ctest rc 0 + 'No tests were found'
+        → skipped (honest non-green, not a 0-test vacuum pass, not failed).
+
+        注: ctest 在「无测试匹配 label」时实际返回 0 (打印 "No tests were found!!!"),
+        而非 8 (8 表示有测试失败)。测试 mock 跟随真实语义修正。"""
         mock_session.spec_path = str(spec_file)
         proj_dir = tmp_path / "cproj2"
         proj_dir.mkdir(parents=True, exist_ok=True)
@@ -578,7 +582,7 @@ class TestStepIntegrationTest:
                         MagicMock(stdout="", stderr="", returncode=0),
                         MagicMock(stdout="no tests ran", stderr="", returncode=5),
                         MagicMock(stdout="", stderr="", returncode=0),
-                        MagicMock(stdout="No tests were found!!!", stderr="", returncode=8),
+                        MagicMock(stdout="No tests were found!!!", stderr="", returncode=0),
                     ]
                     result = step_integration_test(mock_session)
                     with open(result) as f:
