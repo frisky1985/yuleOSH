@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Play, ChevronDown, Check, Loader2, ArrowRight } from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
 
@@ -42,6 +43,7 @@ export function RunPipelineButton({
   const [running, setRunning] = useState(false);
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,6 +86,9 @@ export function RunPipelineButton({
           text: `已启动：${res.name}（${res.run_id}）· 看板实时刷新中`,
         });
         onStarted?.({ name: res.name, run_id: res.run_id });
+        // 运行成功即跳转到 pipeline 页，便于实时观察 G1–G10 门禁卡片逐格变色
+        const pid = p.id != null ? String(p.id) : p.name;
+        if (pid) router.push(`/dashboard/pipeline?project=${encodeURIComponent(pid)}`);
         setOpen(false);
       } catch (e) {
         setFlash({
@@ -94,7 +99,7 @@ export function RunPipelineButton({
         setRunning(false);
       }
     },
-    [onStarted],
+    [onStarted, router],
   );
 
   // 当前选中项目是否能在可运行列表里匹配上（用户项目按 id，demo 按 slug/目录名）

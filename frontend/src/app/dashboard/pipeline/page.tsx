@@ -550,7 +550,9 @@ export default function PipelinePage() {
     const params = new URLSearchParams(window.location.search);
     const pid = params.get("project");
     if (!pid) return;
-    const match = allProjects.find((p) => String(p.id) === pid);
+    const match = allProjects.find(
+      (p) => String(p.id) === pid || p.name === pid || p.path.endsWith("/" + pid) || p.path.endsWith(pid),
+    );
     if (match) setSelectedProject(match.path);
   }, [allProjects]);
 
