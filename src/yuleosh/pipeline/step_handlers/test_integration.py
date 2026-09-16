@@ -25,6 +25,17 @@ from yuleosh.pipeline.guardrail import TestResult
 
 log = logging.getLogger("pipeline.step_handlers.test_integration")
 
+
+def _is_project_root(d) -> bool:
+    """Heuristic: does ``d`` look like a project root we can run integration
+    tests from? Checks for common markers used by the runner branches below
+    (pytest/tests, CMake, Go, JS, Python)."""
+    d = Path(d)
+    return any((d / m).exists() for m in (
+        "tests", "CMakeLists.txt", "go.mod", "package.json", "pyproject.toml",
+    ))
+
+
 __all__ = ["step_integration_test"]
 
 
@@ -41,11 +52,34 @@ def step_integration_test(session: PipelineSession) -> str:
         print("  📋 [小克] 接口集成测试开始...")
         log.info("Running integration test step")
 
-        # 2026-08-13 (e2e 修复): 用 session 解析的 project_dir, 不用环境变量 —
-        # 与 codegen/test_c_unit 分支同源: 嵌套/测试调用时环境变量可能已变,
-        # 退化到错误目录 → 门禁假失败。
-        project_dir = Path(getattr(session, "project_dir", None)
-                           or os.environ.get("OSH_HOME", ".")).resolve()
+        # 2026-09-16: 优先用 session.spec_path 解析项目目录, 与
+        # c_coverage_gate._resolve_coverage_project_dir 保持一致。完整链路下
+        # session.project_dir 常为 None, 若只退化到 OSH_HOME 会落在父目录
+        # (如 /tmp/yuleosh_local_demo), 而子项目 (gpio-led-chaser) 在其子目录,
+        # 导致 tests/ / CMakeLists.txt 都找不到 → C 模板 ctest 兜底完全不触发
+        # (status=unknown)。spec_path (<project>/docs/spec.md -> <project>) 是
+        # authoritative, 稳健不受 OSH_HOME / session_dir 位置影响。
+        # 2026-09-16: 项目目录解析优先级
+        #   1) session.project_dir (仅当它真的是项目根: 含 tests/CMakeLists/go.mod
+        #      等标记) — 保留历史语义与单测契约 ("project_dir 即项目根")。
+        #   2) session.spec_path (<project>/docs/spec.md -> <project>) — 与
+        #      c_coverage_gate 一致, 是 authoritative。完整链路下 session.project_dir
+        #      默认 = OSH_HOME (orchestrator 传入), 在子项目布局里落在父目录而非
+        #      具体项目根 → 被 _is_project_root 判否 → 回退到这里, 正确定位到子项目,
+        #      使 C 模板 ctest 兜底真正触发 (不再 status=unknown)。
+        #   3) OSH_HOME — 最后兜底。
+        # 用 isinstance(str/Path) 守卫, 避免 MagicMock 的 getattr 返回子 Mock 被误判
+        # 为有效路径。
+        proj_dir = getattr(session, "project_dir", None)
+        spec_path = getattr(session, "spec_path", None)
+        if isinstance(proj_dir, (str, Path)) and str(proj_dir).strip() \
+                and _is_project_root(proj_dir):
+            project_dir = Path(proj_dir).resolve()
+        elif isinstance(spec_path, (str, Path)) and str(spec_path).strip():
+            # spec_path 形如 <project>/docs/spec.md -> 取两级父得到 <project>
+            project_dir = Path(spec_path).resolve().parent.parent
+        else:
+            project_dir = Path(os.environ.get("OSH_HOME", ".")).resolve()
 
         # ── Mock mode: skip real review ──────────────────────────
         # In --mock runs the LLM emits placeholder code; scanning the real
