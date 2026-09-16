@@ -131,6 +131,16 @@ def _no_real_audit_log(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _ollama_unavailable_in_chain_tests(monkeypatch):
+    """本地 Ollama 不应干扰云端→mock 降级链的单元测试：默认置为不可用，
+    使 ollama 在链中被跳过（与引入本地降级前的行为一致）。本地降级行为由
+    tests/test_llm_local_fallback.py 专门覆盖（其中用 mock 控制 is_available）。"""
+    from yuleosh.llm.providers.ollama import OllamaProvider
+
+    monkeypatch.setattr(OllamaProvider, "is_available", lambda self: False)
+
+
+@pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     """Remove fallback-related env vars by default (tests opt in via setenv)."""
     for var in (
@@ -218,14 +228,18 @@ class TestDegradationChain:
         assert calls == ["deepseek", "openai", "mock"]
 
     def test_4xx_business_error_does_not_degrade(self, monkeypatch):
-        """B1.3: HTTP 4xx (e.g. invalid key) never triggers degradation."""
+        """B1.3: 请求级 HTTP 4xx（如 400 Bad Request）不触发降级。
+
+        注：账户级 4xx（401/402/403）现已可降级到本地 Ollama（无账户概念），
+        故此处改用请求级 400 验证「换个 provider 也救不了」的非降级语义。
+        """
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
         calls: list = []
         factory = make_factory(
             {
                 "deepseek": RuntimeError(
                     "DeepSeek provider (deepseek): LLM 请求在 3 次重试后失败: "
-                    "HTTP Error 401: Unauthorized"
+                    "HTTP Error 400: Bad Request"
                 ),
                 "mock": None,
             },
@@ -239,7 +253,7 @@ class TestDegradationChain:
             )
         )
         assert resp.error is not None
-        assert "401" in resp.error
+        assert "400" in resp.error
         # No degrade: mock never called.
         assert calls == ["deepseek"]
 
@@ -426,8 +440,8 @@ class TestConfigParsing:
         monkeypatch.setenv("YULEOSH_LLM_PROVIDER", "anthropic")
         chain = resolve_fallback_order()
         assert chain[0] == "anthropic"
-        # anthropic deduped from the fixed-order tail.
-        assert chain == ["anthropic", "deepseek", "openai", "mock"]
+        # anthropic deduped from the fixed-order tail; ollama 在 mock 之前。
+        assert chain == ["anthropic", "deepseek", "openai", "ollama", "mock"]
 
     def test_mock_appended_when_order_omits_it(self, monkeypatch):
         """mock is always the final safety net, even if the order omits it."""
@@ -546,11 +560,22 @@ class TestAuditLogging:
 
 class TestClassification:
     def test_http_4xx_not_eligible(self):
-        assert not is_fallback_eligible(
+        # 账户级 4xx（401/402/403）现在可降级到本地 Ollama（无账户概念）→ eligible
+        assert is_fallback_eligible(
             RuntimeError("... HTTP Error 401: Unauthorized")
         )
-        assert not is_fallback_eligible(
+        assert is_fallback_eligible(
+            urllib.error.HTTPError("url", 402, "Payment Required", None, None)
+        )
+        assert is_fallback_eligible(
             urllib.error.HTTPError("url", 403, "Forbidden", None, None)
+        )
+        # 请求级 4xx（400/404/422）不是账户问题，换 provider 也救不了 → 不降级
+        assert not is_fallback_eligible(
+            urllib.error.HTTPError("url", 400, "Bad Request", None, None)
+        )
+        assert not is_fallback_eligible(
+            urllib.error.HTTPError("url", 404, "Not Found", None, None)
         )
 
     def test_http_5xx_and_429_eligible(self):
@@ -634,7 +659,11 @@ class TestClientIntegration:
         assert _no_real_audit_log["fallback"]
 
     def test_call_4xx_no_degrade(self, monkeypatch, _no_real_audit_log):
-        """End-to-end: 4xx business error returns error, no degrade."""
+        """End-to-end: 请求级 4xx (400) returns error, no degrade.
+
+        账户级 4xx（401/402/403）现已可降级到本地 Ollama，故此处用请求级 400
+        验证「非账户级错误不降级」语义。
+        """
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
         calls: list = []
         LLMClient.configure_providers(
@@ -643,7 +672,7 @@ class TestClientIntegration:
                     "deepseek",
                     fail_with=RuntimeError(
                         "DeepSeek provider (deepseek): LLM 请求在 3 次重试后失败: "
-                        "HTTP Error 401: Unauthorized"
+                        "HTTP Error 400: Bad Request"
                     ),
                     calls=calls,
                 ),

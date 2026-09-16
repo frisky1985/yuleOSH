@@ -26,10 +26,13 @@ separated) or ``LLMConfig.fallback_order``.
 
 Degradation rules:
     - Degrade on:  connection errors, timeouts, HTTP 5xx, HTTP 429
-      (rate limit), budget overrun.
-    - Do NOT degrade on: HTTP 4xx business errors (e.g. invalid API key —
-      a fallback provider would fail the same way), or when the caller
-      explicitly disables fallback (``fallback_enabled=False``).
+      (rate limit), HTTP 401/402/403 (account-level auth/balance/quota —
+      switching to a different provider, especially the local Ollama model
+      with no account concept, usually succeeds), budget overrun.
+    - Do NOT degrade on: *request-level* HTTP 4xx business errors (e.g. 400
+      bad request / 404 not found — a fallback provider would fail the same
+      way), or when the caller explicitly disables fallback
+      (``fallback_enabled=False``).
     - Skeleton providers (``is_skeleton = True``, e.g. anthropic/openai
       reservation stubs) are skipped WITHOUT being called; providers with
       no API key configured are skipped; ``mock`` is always available and
@@ -59,9 +62,9 @@ log = logging.getLogger("llm.provider_fallback")
 # Constants
 # ═══════════════════════════════════════════════════════════════════════
 
-VALID_PROVIDERS: tuple = ("deepseek", "anthropic", "openai", "mock")
+VALID_PROVIDERS: tuple = ("deepseek", "anthropic", "openai", "ollama", "mock")
 
-DEFAULT_FALLBACK_ORDER: tuple = ("deepseek", "anthropic", "openai", "mock")
+DEFAULT_FALLBACK_ORDER: tuple = ("deepseek", "anthropic", "openai", "ollama", "mock")
 
 # Provider → env var(s) that indicate an API key is configured.
 PROVIDER_KEY_ENVS: dict[str, tuple] = {
@@ -70,11 +73,15 @@ PROVIDER_KEY_ENVS: dict[str, tuple] = {
     # openai 也接受 LLM_API_KEY：自建 OpenAI 兼容端点（如本机 Ollama）通常
     # 填 LLM_API_KEY=任意非空串（见 PROVIDER_DEFAULT_MODELS / OpenAIProvider）。
     "openai": ("OPENAI_API_KEY", "LLM_API_KEY"),
+    # ollama：本机本地模型，无需 API key（按可达性判断是否可用）。
+    "ollama": (),
     "mock": (),
 }
 
 # HTTP status codes that mean "retry a different provider".
-_DEGRADE_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
+# 401/402/403 为账户级失败（鉴权/余额/配额），换一个不同的 provider（尤其
+# 本机 Ollama 本地模型，无账户概念）通常可成功，故一并纳入可降级码。
+_DEGRADE_HTTP_CODES = frozenset({401, 402, 403, 429, 500, 502, 503, 504})
 
 # Messages that indicate a budget-related failure (degrade to cheaper).
 _BUDGET_MARKERS = ("budget", "超预算", "预算")
@@ -192,6 +199,15 @@ def provider_available(provider_name: str, provider: Any) -> bool:
     name = provider_name.strip().lower()
     if name == "mock":
         return True
+    if name == "ollama":
+        # 本机 Ollama：按实际可达性判断（无需 API key）。不可达时跳过，
+        # 让链继续到下一个 provider（通常是 mock 兜底）。
+        try:
+            from yuleosh.llm.providers.ollama import OllamaProvider
+
+            return OllamaProvider().is_available()
+        except Exception:  # noqa: BLE001 — 任何异常都视为不可用
+            return False
     if getattr(provider, "is_skeleton", False):
         return False
     key_envs = PROVIDER_KEY_ENVS.get(name, ())
@@ -245,9 +261,10 @@ def is_fallback_eligible(exc: BaseException) -> bool:
     """Whether an exception should trigger provider degradation.
 
     Degrade:  connection errors, timeouts, HTTP 5xx, HTTP 429 (rate limit),
-    budget overrun, missing key / transport-level RuntimeError.
-    Do NOT degrade: HTTP 4xx business errors (invalid key etc. — a fallback
-    provider would fail the same way), ValueError (config error).
+    HTTP 401/402/403 (account-level auth/balance/quota), budget overrun,
+    missing key / transport-level RuntimeError.
+    Do NOT degrade: *request-level* HTTP 4xx business errors (400/404 etc. —
+    a fallback provider would fail the same way), ValueError (config error).
     """
     # HTTP status first — most precise signal.
     code = _http_code(exc)

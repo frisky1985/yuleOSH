@@ -1326,6 +1326,7 @@ class TestFallbackAvailability:
         assert _reason_for_code(400) == "http_4xx"
 
     def test_is_fallback_eligible_http_codes(self):
+        # 账户级失败码 → 可降级（换 provider，尤其本机 Ollama 本地模型可成功）
         assert is_fallback_eligible(
             urllib.error.HTTPError("http://x", 429, "r", {}, None)
         ) is True
@@ -1334,6 +1335,19 @@ class TestFallbackAvailability:
         ) is True
         assert is_fallback_eligible(
             urllib.error.HTTPError("http://x", 401, "r", {}, None)
+        ) is True
+        assert is_fallback_eligible(
+            urllib.error.HTTPError("http://x", 402, "r", {}, None)
+        ) is True
+        assert is_fallback_eligible(
+            urllib.error.HTTPError("http://x", 403, "r", {}, None)
+        ) is True
+        # 请求级 4xx 业务错误（400/404）→ 不可降级（换 provider 也会同样失败）
+        assert is_fallback_eligible(
+            urllib.error.HTTPError("http://x", 400, "r", {}, None)
+        ) is False
+        assert is_fallback_eligible(
+            urllib.error.HTTPError("http://x", 404, "r", {}, None)
         ) is False
 
     def test_is_fallback_eligible_network_errors(self):
@@ -1535,10 +1549,11 @@ class TestCallWithFallback:
         assert lfe.call_args.kwargs["reason"] == "non_degradable"
 
     def test_http_4xx_aborts_chain(self):
+        # 请求级 4xx（400 bad request）→ 不可降级，链中止（账户级 401/402/403 现可降级）
         cfg = LLMConfig(provider="deepseek")
         ds = _FakeProvider(
             "deepseek",
-            fail_with=urllib.error.HTTPError("http://x", 401, "unauth", {}, None),
+            fail_with=urllib.error.HTTPError("http://x", 400, "bad request", {}, None),
         )
         mk = _FakeProvider("mock")
         with _key_env(), mock.patch(
@@ -1550,7 +1565,7 @@ class TestCallWithFallback:
                 _make_factory({"deepseek": ds, "mock": mk}),
             )
         assert mk.calls == []
-        assert "401" in resp.error
+        assert "400" in resp.error
         assert lfe.call_args.kwargs["reason"] == "non_degradable"
 
     def test_chain_exhausted_returns_last_error(self):

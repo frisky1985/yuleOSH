@@ -223,6 +223,9 @@ def _get_provider(provider_name: str) -> AbstractProvider:
         elif provider_name == "openai":
             from yuleosh.llm.providers.openai import OpenAIProvider
             _PROVIDER_REGISTRY[provider_name] = OpenAIProvider()
+        elif provider_name == "ollama":
+            from yuleosh.llm.providers.ollama import OllamaProvider
+            _PROVIDER_REGISTRY[provider_name] = OllamaProvider()
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
     return _PROVIDER_REGISTRY[provider_name]
@@ -766,6 +769,59 @@ def _adapt_token_usage(token_usage: dict[str, int]) -> dict[str, int]:
     return dict(tu)
 
 
+def _local_llm_fallback_enabled() -> bool:
+    """是否启用「外部 LLM 不可用 → 本地 Ollama」自动降级。
+
+    默认开启（``YULEOSH_LLM_LOCAL_FALLBACK`` 未设置 = 开启）。设
+    ``0/false/no/off`` 可关闭，恢复「外部挂即跳过」的旧行为。
+    """
+    raw = os.environ.get("YULEOSH_LLM_LOCAL_FALLBACK")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
+def _call_local_ollama(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    max_tokens: int = 4096,
+    temperature: float = 0.3,
+    timeout: int = 1800,
+) -> dict:
+    """外部 LLM 不可用时的本地 Ollama 降级调用（同步）。
+
+    返回 legacy dict 形态（``{"content", "model", "usage"}``），与
+    ``chat_completion`` 调用方兼容。本地 Ollama 不可用时抛 RuntimeError，
+    由调用方决定是 re-raise（handler 仍跳过）还是忽略。
+
+    超时独立为 ``YULEOSH_LLM_LOCAL_TIMEOUT``（默认 1800s），**不继承外部调用
+    的短超时**——本地 14B 模型首调需加载权重 + 分配大 context，远端 30s 级
+    超时会误杀；本地调用允许更久。
+    """
+    from yuleosh.llm.providers.ollama import OllamaProvider
+
+    local_timeout = int(os.environ.get("YULEOSH_LLM_LOCAL_TIMEOUT", os.environ.get("YULEOSH_LLM_TIMEOUT", "1800")))
+    provider = OllamaProvider()
+    if not provider.is_available():
+        raise RuntimeError("本地 Ollama 不可用（未运行或无模型）— 跳过本地降级")
+    cfg = LLMConfig(
+        model=os.environ.get("YULEOSH_LLM_LOCAL_MODEL", "qwen2.5-coder:14b"),
+        max_tokens=max_tokens,
+        temperature=temperature,
+        timeout_s=local_timeout,
+        context_window=int(os.environ.get("YULEOSH_LLM_LOCAL_CONTEXT_WINDOW", "16384")),
+    )
+    log.warning("外部 LLM 不可用 → 降级到本地 Ollama (%s), timeout=%ss", provider._base_url, local_timeout)
+    return provider.chat_sync(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        cfg,
+    )
+
+
 def chat_completion(
     system_prompt: str,
     user_prompt: str,
@@ -880,7 +936,22 @@ def chat_completion(
                 backoff = 1.0 * (2 ** (attempt - 1))
                 _time.sleep(backoff)
             else:
-                raise RuntimeError(f"LLM request failed after {retries} retries: {last_error}")
+                exc = RuntimeError(f"LLM request failed after {retries} retries: {last_error}")
+                # 外部 LLM 不可用（余额/鉴权/网络）→ 自动降级到本地 Ollama，
+                # 让 pipeline 用本地模型产出真实结果（经 Option B checkpoint 实时
+                # 同步到 UI）。本地也不可用则保留原始异常，handler 仍按
+                # is_provider_unavailable 跳过（行为不变）。
+                if _local_llm_fallback_enabled() and is_provider_unavailable(exc):
+                    try:
+                        return _call_local_ollama(
+                            system_prompt,
+                            user_prompt,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                        )
+                    except Exception as local_exc:  # noqa: BLE001 — 本地也失败则回退原始错误
+                        log.warning("本地 Ollama 降级也失败，回退原始外部错误: %s", local_exc)
+                raise exc
 
     raise RuntimeError(f"LLM request failed after {retries} retries")
 
