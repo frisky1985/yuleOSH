@@ -288,10 +288,8 @@ def run_c_test_suite(project_dir: str | Path,
     if test_runner == "none" and c_test_files:
         try:
             log.info("Attempting GCC compile test of %d test file(s)", len(c_test_files))
-            src_files = [str(f) for f in c_test_files]
             unity_src = unity_dir / "src" / "unity.c"
             if unity_src.exists():
-                src_files.append(str(unity_src))
                 inc_flags = ["-I", str(unity_dir / "src")]
                 link_flags = ["-lunity"]
             else:
@@ -306,37 +304,41 @@ def run_c_test_suite(project_dir: str | Path,
                 if f"-I{inc_dir}" not in inc_flags:
                     inc_flags.append(f"-I{inc_dir}")
 
-            # 2026-09-16: 与 CMake test target 约定保持一致 — 模板测试经
-            # #include "../src/main.c" 复用实现, 其 int main 由 LED_CHASER_UNIT_TEST
-            # 守卫。gcc 回退路径此前未定义该宏 → 测试二进制与 main.c 的 main 重复
-            # 定义 (redefinition of 'main') → G6 假失败。检测测试源码引用该宏时
-            # 自动加 -D, 排除 app 入口。
-            unit_def_flags = _unit_test_compile_defs(c_test_files)
-
-            tmp_runner = os.path.join(
-                tempfile.gettempdir(),
-                f"c_test_runner_{os.getpid()}_{id(project_dir)}"
-            )
-            result = subprocess.run(
-                ["gcc", "-o", tmp_runner]
-                + src_files
-                + inc_flags
-                + unit_def_flags
-                + link_flags
-                + ["-lm", "-Wall", "-Wextra"],
-                capture_output=True, text=True, timeout=60,
-            )
-            test_output = (result.stdout or "") + "\n" + (result.stderr or "")
-            result_returncode = result.returncode
+            # 2026-09-16: 多测试文件各自 #include "../src/main.c" 复用实现时,
+            # 若把所有测试文件 + 实现链进「同一个」二进制, 实现函数在多个 .o
+            # 中重复定义 (duplicate symbol)。CMake 是每测试独立可执行故无此问题。
+            # gcc 回退改为「每测试文件独立编译链接」, 镜像 CMake 每测试 target,
+            # 彻底避免跨测试重复符号; 单测试文件项目行为不变。
+            compiled_ok = True
+            per_test_log = []
+            for tf in c_test_files:
+                stem = Path(tf).stem
+                tmp_bin = os.path.join(
+                    tempfile.gettempdir(),
+                    f"c_test_{os.getpid()}_{stem}_{id(project_dir)}"
+                )
+                tf_defs = _unit_test_compile_defs([tf])
+                compile_cmd = ["gcc", "-o", tmp_bin, str(tf)]
+                if unity_src.exists():
+                    compile_cmd.append(str(unity_src))
+                compile_cmd += inc_flags + tf_defs + link_flags + ["-lm", "-Wall", "-Wextra"]
+                cr = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=60)
+                per_test_log.append(
+                    f"[{stem}] rc={cr.returncode}\n{(cr.stdout or '')}\n{(cr.stderr or '')}"
+                )
+                if cr.returncode != 0:
+                    compiled_ok = False
+                try:
+                    if os.path.exists(tmp_bin):
+                        os.unlink(tmp_bin)
+                except OSError:
+                    pass
+            test_output = "\n".join(per_test_log)
+            result_returncode = 0 if compiled_ok else 1
             test_runner = "gcc-compile-check"
             passed = 0
-            failed = 0 if result.returncode == 0 else len(c_test_files)
-            log.info("GCC compile check: returncode=%d", result.returncode)
-            try:
-                if os.path.exists(tmp_runner):
-                    os.unlink(tmp_runner)
-            except OSError:
-                pass
+            failed = 0 if compiled_ok else len(c_test_files)
+            log.info("GCC compile check (per-test): compiled_ok=%s", compiled_ok)
         except FileNotFoundError:
             log.info("gcc not found, cannot compile test")
         except subprocess.TimeoutExpired:
