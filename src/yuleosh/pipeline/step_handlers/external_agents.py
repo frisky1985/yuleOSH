@@ -468,6 +468,15 @@ def step_codex_verify(session: PipelineSession) -> str:
             or "unexpected argument" in _combined or "unknown flag" in _combined
             or "unrecognized arguments" in _combined or "usage:" in _combined
             or "error: unexpected" in _combined
+            # 2026-09-16: 鉴权 / 账单 / 配额类错误（401 未鉴权 / 402 余额不足 /
+            # 403 封禁 / api key / authentication / quota / billing / payment）
+            # 属于「外部验证服务不可用」而非真实缺陷 → 跳过而非中断 pipeline,
+            # 与 claude-review 的同类降级一致。
+            or "unauthorized" in _combined or "401" in _combined
+            or "402" in _combined or "403" in _combined
+            or "api key" in _combined or "authentication" in _combined
+            or "quota" in _combined or "billing" in _combined
+            or "payment" in _combined
         )
         if _unavailable:
             _msg = ("codex CLI unavailable/incompatible — external verification "
@@ -595,9 +604,16 @@ def step_claude_review(session: PipelineSession) -> str:
         if ("not logged in" in _combined or "run /login" in _combined
                 or "claude login" in _combined or "api key" in _combined
                 or "authentication" in _combined or "unauthorized" in _combined
-                or "401" in _combined or "no auth" in _combined):
-            _msg = ("claude CLI not authenticated — external review skipped "
-                    "(run `claude login` or set ANTHROPIC_API_KEY)")
+                or "401" in _combined or "no auth" in _combined
+                # 2026-09-16: 外部 LLM CLI 的账单/配额类错误（402 余额不足 /
+                # 403 封禁 / quota / billing / payment）属于「服务不可用」而非
+                # 真实评审结论, 与 401 同语义 → 跳过而非中断整条 pipeline。
+                or "402" in _combined or "insufficient" in _combined
+                or "403" in _combined or "quota" in _combined
+                or "billing" in _combined or "payment" in _combined):
+            _msg = ("claude CLI not authenticated / service unavailable — "
+                    "external review skipped (run `claude login`, top up "
+                    "balance, or set ANTHROPIC_API_KEY)")
             log.warning(_msg)
             return write_mock_skip(session, step_key, _msg)
         # 2026-08-17 r20f: 'Reached max turns' 等真实错误在 stdout, stderr 空

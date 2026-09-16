@@ -120,6 +120,23 @@ class TestCodexVerify:
         assert report["status"] == "skipped"
         assert "not installed" in report["reason"]
 
+    def test_402_insufficient_balance_skips(self, session, tmp_path):
+        """外部 LLM CLI 账单/配额类错误 (402 余额不足) 属服务不可用 → 跳过。
+
+        2026-09-16: 之前只判 401/unauthorized, 402 漏过 → 硬失败中断整条
+        pipeline。与 claude-review 同类降级一致; 真实缺陷 (passed=False) 仍阻断。
+        """
+        with mock.patch("yuleosh.pipeline.step_handlers.external_agents._find_cli",
+                        return_value="/usr/bin/codex"), \
+             mock.patch("yuleosh.pipeline.step_handlers.external_agents._run_cli",
+                        return_value=_make_result(
+                            stderr="API Error: 402 Insufficient Balance",
+                            returncode=1)):
+            path = step_codex_verify(session)
+        report = json.loads(Path(path).read_text(encoding="utf-8"))
+        assert report["status"] == "skipped"
+        assert "unavailable" in report["reason"].lower()
+
     def test_pass_writes_report(self, session, tmp_path):
         stdout = json.dumps({
             "passed": True,
@@ -224,6 +241,24 @@ class TestClaudeReview:
         report = json.loads(Path(path).read_text(encoding="utf-8"))
         assert report["status"] == "skipped"
         assert "not installed" in report["reason"]
+
+    def test_402_insufficient_balance_skips(self, session, tmp_path):
+        """外部 claude CLI 账单类错误 (402 余额不足) 属服务不可用 → 跳过。
+
+        2026-09-16: 之前只判 401/unauthorized, 402 漏过 → 硬失败中断整条
+        pipeline (gpio 本地 demo 实测踩中: 'API Error: 402 Insufficient
+        Balance')。与 codex-verify 同类降级一致; 真实 disagree / 缺陷仍阻断。
+        """
+        with mock.patch("yuleosh.pipeline.step_handlers.external_agents._find_cli",
+                        return_value="/usr/bin/claude"), \
+             mock.patch("yuleosh.pipeline.step_handlers.external_agents._run_cli",
+                        return_value=_make_result(
+                            stderr="API Error: 402 Insufficient Balance",
+                            returncode=1)):
+            path = step_claude_review(session)
+        report = json.loads(Path(path).read_text(encoding="utf-8"))
+        assert report["status"] == "skipped"
+        assert "unavailable" in report["reason"].lower()
 
     def test_agree_passes(self, session, tmp_path):
         stdout = json.dumps({
