@@ -34,6 +34,24 @@ from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 log = logging.getLogger("pipeline.step_handlers.c_coverage_gate")
 
 
+def _resolve_coverage_project_dir(session: PipelineSession) -> str:
+    """Resolve the C project directory for the coverage gate.
+
+    Prefers deriving it from ``session.spec_path`` (``<project>/docs/spec.md``
+    → ``<project>``), which is robust regardless of where the ``.osh`` session
+    directory lives. ``spec_path`` is authoritative, so no existence check is
+    applied. Falls back to the legacy heuristic (``session_dir/../..`` = project)
+    for sessions without a spec path.
+    """
+    spec = getattr(session, "spec_path", None)
+    if spec:
+        return str(Path(spec).resolve().parent.parent)
+    sd = getattr(session, "session_dir", None)
+    if sd:
+        return str(Path(sd).parent.parent.parent)
+    return os.getcwd()
+
+
 def _git_commit_short(project_dir: str) -> str:
     """Return the short git commit hash of the project (fallback 'unknown')."""
     try:
@@ -95,7 +113,7 @@ def coverage_gate_step(session: PipelineSession) -> str:
     PipelineStepError
         If coverage gate blocks the pipeline (line rate < c_fail_under).
     """
-    project_dir = str(session.session_dir.parent.parent.parent)
+    project_dir = _resolve_coverage_project_dir(session)
     log.info("C Coverage Gate: project_dir=%s", project_dir)
 
     # ── Mock mode: skip real gate ──────────────────────────────────

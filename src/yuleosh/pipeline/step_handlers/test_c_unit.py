@@ -306,6 +306,13 @@ def run_c_test_suite(project_dir: str | Path,
                 if f"-I{inc_dir}" not in inc_flags:
                     inc_flags.append(f"-I{inc_dir}")
 
+            # 2026-09-16: 与 CMake test target 约定保持一致 — 模板测试经
+            # #include "../src/main.c" 复用实现, 其 int main 由 LED_CHASER_UNIT_TEST
+            # 守卫。gcc 回退路径此前未定义该宏 → 测试二进制与 main.c 的 main 重复
+            # 定义 (redefinition of 'main') → G6 假失败。检测测试源码引用该宏时
+            # 自动加 -D, 排除 app 入口。
+            unit_def_flags = _unit_test_compile_defs(c_test_files)
+
             tmp_runner = os.path.join(
                 tempfile.gettempdir(),
                 f"c_test_runner_{os.getpid()}_{id(project_dir)}"
@@ -314,6 +321,7 @@ def run_c_test_suite(project_dir: str | Path,
                 ["gcc", "-o", tmp_runner]
                 + src_files
                 + inc_flags
+                + unit_def_flags
                 + link_flags
                 + ["-lm", "-Wall", "-Wextra"],
                 capture_output=True, text=True, timeout=60,
@@ -634,6 +642,27 @@ def _collect_include_dirs(project_dir: Path) -> list[str]:
     except OSError:
         pass
     return include_dirs
+
+
+def _unit_test_compile_defs(c_test_files: list) -> list[str]:
+    """Return -D flags so the gcc fallback builds unit tests without the app's
+    ``main`` colliding with the test's ``main``.
+
+    gpio-led-chaser's tests ``#include "../src/main.c"`` to reuse the reference
+    implementation; ``src/main.c`` shields its ``int main`` with
+    ``#ifndef LED_CHASER_UNIT_TEST`` (the CMake ``test_runner`` target defines
+    that macro). The gcc compile-check fallback must mirror the CMake contract,
+    otherwise both ``main`` symbols are emitted → ``redefinition of 'main'``.
+    """
+    defs: list[str] = []
+    for tf in c_test_files:
+        try:
+            text = Path(tf).read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if "LED_CHASER_UNIT_TEST" in text and "-DLED_CHASER_UNIT_TEST" not in defs:
+            defs.append("-DLED_CHASER_UNIT_TEST")
+    return defs
 
 
 def _parse_ctest_counts(output: str) -> tuple[int, int]:
