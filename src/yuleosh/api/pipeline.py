@@ -221,7 +221,7 @@ _RUN_JOBS_LOCK = threading.Lock()
 
 def _publish_orchestrator_checkpoint(project_dir: str, run_id: str, name: str,
                                      status: str, started_at: str, finished_at: str,
-                                     session) -> None:
+                                     session, emit_run_done: bool = True) -> None:
     """把编排器一次运行的结果回写为 CheckpointEngine 看板状态（打通两条链路）。
 
     编排器路径天然不写 checkpoint_state 表，看板读不到 24 步进度。本函数把
@@ -264,39 +264,69 @@ def _publish_orchestrator_checkpoint(project_dir: str, run_id: str, name: str,
                 step_id=_key, name=_sname, agent=_agent, status=_enum,
                 completed_at=finished_at,
             ))
+        # 实时进度: 已终态 (completed/failed/skipped/cached) 步数 / 总步数。
+        # 终态 run 直接 100%, 运行中按已完成比例 (每步回写看板用)。
+        _total = len(_steps) or 0
+        _done = 0
+        if session is not None:
+            _done = sum(1 for _s in (getattr(session, "steps", None) or [])
+                        if (_s.get("status") or "") in
+                        ("completed", "failed", "skipped", "cached"))
+        if status in ("completed", "failed", "stopped"):
+            _progress = 100.0
+        else:
+            _progress = round(_done / _total * 100, 1) if _total else 0.0
         _state = CheckpointState(
             pipeline_name="agent-pipeline",
             profile="default",
             steps=_steps,
             created_at=started_at,
             updated_at=finished_at,
-            status=status if status in ("completed", "failed", "stopped") else "completed",
+            status=status if status in ("completed", "failed", "stopped", "running") else "completed",
         )
         _engine = CheckpointEngine("agent-pipeline", project_dir, state_backend="sqlite")
         _engine.publish_state(run_id, "run", "full", _state.status, started_at, finished_at, _state)
         # Realtime: 编排器 checkpoint 已落, 广播 (前端左栏徽标 + 看板数字联动)
         try:
             from yuleosh.realtime import emit_pipeline_checkpoint
-            _ok_pct = {"completed": 100.0, "failed": 100.0, "stopped": 100.0}.get(
-                _state.status, 0.0
-            )
             emit_pipeline_checkpoint(
                 run_id=run_id, project_dir=project_dir,
-                status=_state.status, progress_pct=_ok_pct,
+                status=_state.status, progress_pct=_progress,
             )
-            # run_done: 编排器一跑完推一帧, 给「阶段看板 + 证据包」驱动刷新
-            from yuleosh.realtime import emit_pipeline_run_done
-            emit_pipeline_run_done(
-                run_id=run_id, project_dir=project_dir,
-                status=_state.status,
-                summary={"step_count": len(_steps), "name": name},
-            )
+            # run_done: 仅在 run 终态推一帧, 给「阶段看板 + 证据包」驱动刷新。
+            # 每步实时回写 (emit_run_done=False) 不推 run_done, 避免前端重复触发
+            # 证据包刷新; 看板步状态已由上方 publish_state + checkpoint 事件驱动。
+            if emit_run_done:
+                from yuleosh.realtime import emit_pipeline_run_done
+                emit_pipeline_run_done(
+                    run_id=run_id, project_dir=project_dir,
+                    status=_state.status,
+                    summary={"step_count": len(_steps), "name": name},
+                )
         except Exception as _re:  # noqa: BLE001
             import logging
             logging.getLogger(__name__).debug("realtime emit failed: %s", _re)
     except Exception as _e:  # noqa: BLE001 — 看板回写失败绝不影响主流程
         import logging
         logging.getLogger(__name__).warning("orchestrator checkpoint publish failed: %s", _e)
+
+
+def _make_orchestrator_step_callback(project_dir: str, run_id: str, name: str,
+                                     rec: dict) -> "Callable[[object], None]":
+    """每步完成回调工厂: 实时把当前 session 步状态回写为看板 (不推 run_done)。
+
+    ``rec`` 是后台 job 记录 (含 ``started_at``), 闭包在每步调用时读取, 故能拿到
+    run 的真实开始时间; 每步 publish 用 ``status="running"`` 使看板头部呈「进行中」,
+    卡片随各步完成逐格变色。run 结束的 ``_publish_orchestrator_checkpoint`` 仍会
+    以终态 + emit_run_done=True 推一帧收尾。
+    """
+    def _on_step(session) -> None:
+        _publish_orchestrator_checkpoint(
+            project_dir, run_id, name,
+            "running", rec.get("started_at", ""), datetime.now().isoformat(),
+            session, emit_run_done=False,
+        )
+    return _on_step
 
 
 def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: str) -> None:
@@ -316,7 +346,12 @@ def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: st
             # Stage-6 (2026-09-05): 把 API 侧 run_id 透传给编排器 ——
             # 使 session 目录 (.osh/sessions/<run_id>) 与 SSE 事件的 run_id
             # 与 API 记账三者一致（此前编排器自生成 uuid，目录对不上）。
-            _session = run_pipeline(spec_abs, name=name, run_id=run_id)
+            _session = run_pipeline(
+                spec_abs, name=name, run_id=run_id,
+                step_callback=_make_orchestrator_step_callback(
+                    prev_home or project_dir, run_id, name, rec,
+                ),
+            )
             rec["status"] = "completed"
         except SystemExit as _e:  # run_pipeline 缺 key 会 sys.exit(1)
             rec["status"] = "failed"

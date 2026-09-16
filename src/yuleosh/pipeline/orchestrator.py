@@ -365,7 +365,8 @@ def _print_step_timings(session) -> None:
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
                 mock: bool = False, profile: Optional[str] = None, org_id: int = 0,
                 user_id: int | None = None, user_email: str | None = None,
-                from_step: int = 0, run_id: Optional[str] = None):
+                from_step: int = 0, run_id: Optional[str] = None,
+                step_callback: Optional[Callable] = None):
     """Run the full OSH pipeline for a given spec.
 
     Args:
@@ -397,6 +398,8 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
     # Deferred import from run shim so that test mocks on
     # yuleosh.pipeline.run.PIPELINE_STEPS and run._check_llm_key take effect.
     from yuleosh.pipeline.run import PIPELINE_STEPS as _steps, _check_llm_key as _check_key
+    # 每步完成钩子: 由调用方注入 (如 API 一键跑的看板实时回写); None 时不触发。
+    _step_callback = step_callback
 
     # When --mock is used, create a fake LLM client and inject it
     if mock:
@@ -620,7 +623,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                         for _m in _members:
                             _st = _execute_step(
                                 session, _m[0], _m[1], _m[2], _m[3], _m[4],
-                                spec_path, project_dir, from_step,
+                                spec_path, project_dir, from_step, _step_callback,
                             )
                             _executed.add(_m[1])
                             if _st == "block":
@@ -636,6 +639,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
                         print(f"\n  ⚡ [D2] 并行组 {_gid+1} 并发: {_gkeys}")
                         _blocked, _failed = _run_parallel_group(
                             session, _members, from_step, project_dir, spec_path,
+                            _step_callback,
                         )
                         for _m in _members:
                             _executed.add(_m[1])
@@ -647,7 +651,7 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             # 串行步骤
             _status = _execute_step(
                 session, step_idx, step_key, agent, step_name, handler,
-                spec_path, project_dir, from_step,
+                spec_path, project_dir, from_step, _step_callback,
             )
             _executed.add(step_key)
             if _status == "block":
@@ -1049,6 +1053,22 @@ def _emit_realtime_file_produced(output_path, step_key: str, session,
         log.debug("realtime file_produced swallowed: %s", _e)
 
 
+def _invoke_step_callback(step_callback, session) -> None:
+    """编排器每步完成后的 best-effort 钩子 (→ API 层看板实时回写)。
+
+    绝不抛错: 看板回写失败绝不影响主链路。``step_callback`` 由 ``run_pipeline``
+    的调用方注入 (如 POST /api/v1/pipeline/run 的每步 checkpoint 回写闭包);
+    None 时为空操作。在 ``_execute_step`` 每个 return 前调用, 保证串行 / 串行组 /
+    并行组一切路径每步仅触发一次, 且此时 ``session.steps[step_idx]`` 已是最终状态。
+    """
+    if step_callback is None:
+        return
+    try:
+        step_callback(session)
+    except Exception as _ce:  # noqa: BLE001
+        log.debug("step_callback swallowed: %s", _ce)
+
+
 def _execute_step(
     session: "PipelineSession",
     step_idx: int,
@@ -1059,6 +1079,7 @@ def _execute_step(
     spec_path: str,
     project_dir: str,
     from_step: int,
+    step_callback=None,
 ) -> str:
     """Execute a single pipeline step (serial or D2 parallel worker).
 
@@ -1083,6 +1104,7 @@ def _execute_step(
             session, step_idx, step_key, step_name, agent,
             project_dir=project_dir,
         )
+        _invoke_step_callback(step_callback, session)
         return "ok"
 
     # ── B1 缓存 (2026-08-12): 确定性步骤内容寻址缓存 ──
@@ -1128,6 +1150,7 @@ def _execute_step(
                 _emit_realtime_file_produced(
                     _restored, step_key, session, project_dir=project_dir,
                 )
+                _invoke_step_callback(step_callback, session)
                 return "ok"
 
     _rt_started_at = datetime.now()
@@ -1205,11 +1228,13 @@ def _execute_step(
         if _propagate_step_verdict(session, step_idx, step_key, output_path) == "block":
             print(f"  ⛔ Block gate failed: {step_key} — pipeline interrupted")
             print()
+            _invoke_step_callback(step_callback, session)
             return "block"
         if step_key == "final-report":
             session._save()
         log.info(f"Step {step_idx+1} completed: {step_key}")
         print()
+        _invoke_step_callback(step_callback, session)
         return "ok"
     except (PipelineStepError, RuntimeError) as e:
         log.error(f"Step {step_idx+1} [{agent}] {step_name} failed: {e}")
@@ -1224,6 +1249,7 @@ def _execute_step(
         )
         print(f"  ❌ Step failed: {e}")
         print()
+        _invoke_step_callback(step_callback, session)
         return "failed"
     finally:
         _clear_tl_key()
@@ -1243,6 +1269,7 @@ def _run_parallel_group(
     from_step: int,
     project_dir: str,
     spec_path: str,
+    step_callback=None,
 ) -> tuple[bool, bool]:
     """Run a D2 parallel group's steps concurrently (ThreadPoolExecutor).
 
@@ -1270,7 +1297,7 @@ def _run_parallel_group(
         try:
             _status = _execute_step(
                 session, _idx, _key, _agent, _name, _handler,
-                spec_path, project_dir, from_step,
+                spec_path, project_dir, from_step, step_callback,
             )
             return _key, _status
         finally:
