@@ -888,6 +888,20 @@ def chat_completion(
     model = _os.environ.get("LLM_MODEL", "deepseek-chat")
 
     if not api_key:
+        # 外部无 key：若启用本地降级且本机 Ollama 可用，直接用本地模型产出真实
+        # 结果（与下方重试失败分支的降级同源），避免一切走 LLM 的步骤（如架构设计）
+        # 因「无 key」在服务进程里直接失败。Ollama 不可用则保留原始错误，handler
+        # 仍按 is_provider_unavailable 跳过（行为不变）。
+        if _local_llm_fallback_enabled():
+            try:
+                return _call_local_ollama(
+                    system_prompt,
+                    user_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+            except Exception as local_exc:  # noqa: BLE001 — 本地不可用则回退原始错误
+                log.warning("无外部 key 且本地 Ollama 降级失败，回退无 key 错误: %s", local_exc)
         raise RuntimeError("No LLM API key found in environment")
 
     url = f"{base_url}/v1/chat/completions"

@@ -231,11 +231,26 @@ class TestChatCompletion:
         with pytest.raises(TypeError):
             chat_completion()
 
-    def test_no_key_raises(self):
-        """Without an API key, chat_completion raises RuntimeError."""
-        with mock.patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(RuntimeError):
+    def test_no_key_raises_when_local_disabled(self):
+        """无外部 key 且本地 Ollama 降级关闭 → 仍抛 'No LLM API key found'。"""
+        with mock.patch.dict(
+            os.environ, {"YULEOSH_LLM_LOCAL_FALLBACK": "0"}, clear=True
+        ):
+            with pytest.raises(RuntimeError, match="No LLM API key found"):
                 chat_completion("Be helpful", "Hello")
+
+    def test_no_key_falls_back_to_local(self):
+        """无外部 key 但本地 Ollama 可用 → 自动返回本地结果（不再直接抛错）。
+
+        这是座椅控制器项目『总在架构设计步失败』的根因修复：dashboard 跑
+        pipeline 的服务进程若未带外部 key，原来直接 raise；现在优先用本地
+        Ollama 产出真实结果。
+        """
+        local_out = {"content": "LOCAL", "model": "qwen2.5-coder:14b", "usage": {}}
+        with mock.patch.dict(os.environ, {}, clear=True), \
+             mock.patch("yuleosh.llm.client._call_local_ollama", return_value=local_out):
+            out = chat_completion("Be helpful", "Hello")
+        assert out["content"] == "LOCAL"
 
     def test_returns_dict_with_mocked_http(self):
         """chat_completion returns a dict with content/model/usage."""

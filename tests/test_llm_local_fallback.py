@@ -224,3 +224,43 @@ class TestChatCompletionLocalFallback:
     def test_local_fallback_enabled_default_true(self):
         # 清掉 env（模块顶部已 pop），默认开启
         assert _local_llm_fallback_enabled() is True
+
+    def test_no_api_key_falls_back_to_local(self, monkeypatch):
+        """服务进程无外部 key（如未 source ~/.hermes/.env）→ 自动走本地 Ollama，
+        而非直接抛 'No LLM API key found' 让架构设计等 LLM 步骤失败。
+
+        这正是座椅控制器项目「总在架构设计步失败」的根因：dashboard 跑 pipeline
+        的服务进程没带 key，而原降级代码位于重试循环内、密钥解析阶段的 raise 在
+        循环之前，故 '无 key' 错误永远走不到降级。本测试锁定新位置补丁。
+        """
+        for _v in ("LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "YULEOSH_LLM_UNIFIED"):
+            monkeypatch.delenv(_v, raising=False)
+        # vault 也解析不到 key
+        monkeypatch.setattr(
+            "yuleosh.secret_vault.resolve_api_key", lambda *a, **k: None
+        )
+        local_out = {
+            "content": "NOKEY_LOCAL",
+            "model": "qwen2.5-coder:14b",
+            "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+        }
+        monkeypatch.setattr(
+            "yuleosh.llm.client._call_local_ollama", lambda *a, **k: local_out
+        )
+        out = chat_completion("sys", "user", max_tokens=32, timeout=10)
+        assert out["content"] == "NOKEY_LOCAL"
+        assert out["model"] == "qwen2.5-coder:14b"
+
+    def test_no_key_and_local_unavailable_raises(self, monkeypatch):
+        """无 key 且本地 Ollama 也不可用 → 回退原始无 key 错误（handler 仍 skipped）。"""
+        for _v in ("LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "YULEOSH_LLM_UNIFIED"):
+            monkeypatch.delenv(_v, raising=False)
+        monkeypatch.setattr(
+            "yuleosh.secret_vault.resolve_api_key", lambda *a, **k: None
+        )
+        monkeypatch.setattr(
+            "yuleosh.llm.client._call_local_ollama",
+            MagicMock(side_effect=RuntimeError("本地 Ollama 不可用")),
+        )
+        with pytest.raises(RuntimeError, match="No LLM API key found"):
+            chat_completion("sys", "user", max_tokens=32, timeout=10)
