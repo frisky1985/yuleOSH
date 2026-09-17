@@ -792,6 +792,14 @@ export default function PipelinePage() {
       setOpMsg("项目不存在");
       return;
     }
+    // 期望行为：一键运行 = 自动全选所有阶段，再运行整条流水线（编排器本就跑全 24 步，
+    // 这里把勾选态同步为「全选」以匹配用户心智，并让看板进度条以 24 步为分母）。
+    if (steps.length > 0) {
+      const allSet = new Set<string>(steps.map((s) => s.key));
+      setSelected(allSet);
+      setAllChecked(true);
+      persistSelected(allSet);
+    }
     setOpRunning(true);
     setOpMsg("");
     try {
@@ -801,6 +809,14 @@ export default function PipelinePage() {
       );
       setCurrentRun({ run_id: res.run_id, name: res.name, status: res.status, session_dir: res.session_dir });
       setOpMsg(`已启动：${res.name}（${res.run_id}）`);
+      // 启动「运行过程看板」实时推送（与「运行选中」同源）：编排器每步回写
+      // <project_dir>/.yuleosh/checkpoint-state.db，这里按 selectedProject 读取，
+      // G1–G24 进度随各步完成逐格变色。
+      hasRunRef.current = true;
+      setActiveRunId(null); // 新运行即最新
+      void loadRuns();
+      void loadEvidence();
+      startStream();
       void loadRunArtifacts();
       // 运行中每 3s 刷新产出物总览（产物按步落盘）
       stopRunPoll();
@@ -812,7 +828,7 @@ export default function PipelinePage() {
     } finally {
       setOpRunning(false);
     }
-  }, [selectedProject, allProjects, loadRunArtifacts, stopRunPoll]);
+  }, [selectedProject, allProjects, steps, loadRunArtifacts, stopRunPoll, startStream, loadRuns, loadEvidence]);
 
   useEffect(() => {
     return () => stopRunPoll();
