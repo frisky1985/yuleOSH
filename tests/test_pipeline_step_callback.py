@@ -149,5 +149,42 @@ class TestMakeStepCallback(unittest.TestCase):
             self.assertFalse(m.call_args.kwargs["emit_run_done"])
 
 
+class TestOrchestratorCheckpointLocation(unittest.TestCase):
+    """回归: 编排器 checkpoint 必须落在给定 project_dir 下（而非 OSH_HOME 仓库根）。
+
+    一键跑时前端看板按 selectedProject=project_dir 读取 checkpoint-state.db，
+    若写到了仓库根，看板会读不到 24 步进度（表现为「进度不刷新」）。
+    """
+
+    def test_writes_under_given_project_dir(self):
+        import shutil
+
+        from yuleosh.engine.checkpoint import CheckpointEngine
+
+        d = tempfile.mkdtemp()
+        try:
+            sess = _FakeSession()
+            sess.add_step("step-a", "a", "A")
+            sess.add_step("step-b", "b", "B")
+            sess.steps[0]["status"] = "completed"
+            sess.steps[1]["status"] = "completed"
+            with patch("yuleosh.realtime.emit_pipeline_checkpoint"), \
+                 patch("yuleosh.realtime.emit_pipeline_run_done"):
+                _publish_orchestrator_checkpoint(
+                    d, "run-x", "demo", "completed",
+                    "2026-01-01T00:00:00", "2026-01-01T00:00:01", sess,
+                    emit_run_done=False,
+                )
+            db = Path(d) / ".yuleosh" / "checkpoint-state.db"
+            self.assertTrue(db.exists(), "checkpoint DB 必须写在 project_dir 下")
+            eng = CheckpointEngine("agent-pipeline", d, state_backend="sqlite")
+            st = eng.status()
+            self.assertIsNotNone(st)
+            # 真实 24 步快照已落盘（证明 checkpoint 写入的是给定 project_dir）
+            self.assertGreaterEqual(len(st.get("steps", [])), 2)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

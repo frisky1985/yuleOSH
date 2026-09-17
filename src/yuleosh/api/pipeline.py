@@ -349,7 +349,7 @@ def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: st
             _session = run_pipeline(
                 spec_abs, name=name, run_id=run_id,
                 step_callback=_make_orchestrator_step_callback(
-                    prev_home or project_dir, run_id, name, rec,
+                    project_dir, run_id, name, rec,
                 ),
             )
             rec["status"] = "completed"
@@ -367,9 +367,10 @@ def _run_orchestrator_job(run_id: str, spec_abs: str, project_dir: str, name: st
             rec["finished_at"] = datetime.now().isoformat()
         # 打通「运行过程」看板：把编排器本次运行结果回写为 checkpoint 状态，
         # 否则一键跑只在 .osh/sessions 落产物、看板读不到 24 步进度。
-        # 写到看板读取的位置（prev_home = 看板侧 OSH_HOME = repo 根）。
+        # 写到 <project_dir>/.yuleosh/checkpoint-state.db（与「运行选中」rerun/retry
+        # 路径同源，且前端看板按 selectedProject=project_dir 读取，保证进度一致）。
         _publish_orchestrator_checkpoint(
-            prev_home or project_dir, run_id, name,
+            project_dir, run_id, name,
             rec["status"], rec["started_at"], rec["finished_at"], _session,
         )
     except Exception as _e:  # noqa: BLE001
