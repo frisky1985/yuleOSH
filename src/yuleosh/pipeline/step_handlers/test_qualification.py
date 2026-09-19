@@ -216,6 +216,12 @@ def _check_scenario_coverage(
     }
 
     if not scenarios:
+        # 提前返回也必须补齐 count 字段, 否则 _build_qualification_report
+        # 访问 coverage["covered_count"/"uncovered_count"] 会 KeyError
+        # (2026-09-18 座椅控制器占位 spec 实测: 空场景 + 无测试文件 →
+        # 步骤抛异常 → test-qualification=failed → G10 误判红)。
+        coverage["covered_count"] = 0
+        coverage["uncovered_count"] = 0
         return coverage
 
     # Build keyword index from test file contents

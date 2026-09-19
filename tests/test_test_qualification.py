@@ -143,11 +143,15 @@ class TestDiscoverTestFiles:
 
 class TestCheckScenarioCoverage:
     def test_no_scenarios(self):
-        """GIVEN no scenarios WHEN checking coverage THEN returns zeros."""
+        """GIVEN no scenarios WHEN checking coverage THEN returns zeros + count fields."""
         from yuleosh.pipeline.step_handlers.test_qualification import _check_scenario_coverage
         result = _check_scenario_coverage([], [])
         assert result["total_scenarios"] == 0
         assert result["coverage_pct"] == 0.0
+        # 2026-09-18 回归锁: 提前返回也必须带 count 字段, 否则
+        # _build_qualification_report 会 KeyError -> G10 崩溃判红。
+        assert result["covered_count"] == 0
+        assert result["uncovered_count"] == 0
 
     def test_some_covered(self, tmp_path):
         """GIVEN scenarios and matching test files WHEN checking THEN marks some covered."""
@@ -330,3 +334,32 @@ class TestStepTestQualification:
         ):
             with pytest.raises(PipelineStepError):
                 step_test_qualification(session)
+
+    def test_placeholder_spec_no_crash(self, tmp_path, monkeypatch):
+        """GIVEN placeholder spec with NO GIVEN/WHEN/THEN (like projects/21)
+        WHEN step runs THEN does not raise and verdict is not-applicable.
+
+        2026-09-18 回归: 旧实现空场景 + 无测试文件时 coverage 缺 count 字段,
+        _build_qualification_report 抛 KeyError -> step failed -> G10 误判红。
+        """
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        from yuleosh.pipeline.session import PipelineSession
+        from yuleosh.pipeline.step_handlers.test_qualification import step_test_qualification
+
+        # 占位 spec: 仅占位文本, 无 GIVEN/WHEN/THEN, 也无系统级测试文件
+        spec_file = tmp_path / "spec.md"
+        spec_file.write_text(
+            "# project\nrequirements:\n  - id: REQ-001\n    title: 需求占位\n"
+        )
+        session = PipelineSession("test-qual-placeholder", str(spec_file))
+        session.session_dir = tmp_path / "sessions" / "test-qual-placeholder"
+        session.session_dir.mkdir(parents=True, exist_ok=True)
+
+        # 不应抛异常 (旧实现会抛 KeyError)
+        result = step_test_qualification(session)
+        assert result is not None
+        review_path = session.session_dir / "qualification-test.json"
+        assert review_path.exists()
+        data = json.loads(review_path.read_text())
+        # 空场景合法判定应为 not-applicable, 而非崩溃
+        assert data["verdict"] == "not-applicable"
