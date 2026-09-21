@@ -28,6 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+from yuleosh.pipeline.safe_run import run_captured
 from yuleosh.pipeline.stages import timed_step, _call_llm, _parse_spec
 
 log = logging.getLogger("pipeline.step_handlers.test_qualification")
@@ -393,14 +394,19 @@ def _try_compile_c_test(test_file: Path, project_dir: Path) -> Path | None:
         "-O0", "-g", *inc_flags, "-o", str(out_bin), str(test_file),
     ]
     try:
-        proc = subprocess.run(cmd, cwd=project_dir, capture_output=True,
-                              text=True, timeout=120)
-    except (subprocess.TimeoutExpired, OSError) as e:
+        _res = run_captured(cmd, cwd=str(project_dir), timeout=120,
+                            label="qualif-compile")
+        rc = _res.returncode
+        out = _res.stdout
+    except OSError as e:
         log.warning(f"  host-sim compile error for {test_file.name}: {e}")
         return None
-    if proc.returncode != 0:
+    if rc is None:
+        log.warning(f"  host-sim compile timed out for {test_file.name}")
+        return None
+    if rc != 0:
         log.warning(f"  host-sim compile failed for {test_file.name}: "
-                    f"{(proc.stderr or '').strip()[:300]}")
+                    f"{out.strip()[:300]}")
         return None
     if not out_bin.is_file() or not os.access(out_bin, os.X_OK):
         return None
@@ -443,15 +449,33 @@ def _run_system_tests(
                 # 带 testcase name (test_scenario_qualified[场景名]), 供
                 # review_selftest 解析与最终报告引用。
                 junit_path = _junit_report_path(project_dir, tf)
-                proc = subprocess.run(
+                _res = run_captured(
                     [sys.executable, "-m", "pytest", str(tf), "-v", "--tb=short",
                      "--junit-xml", str(junit_path)],
-                    cwd=project_dir,
-                    capture_output=True,
-                    text=True,
+                    cwd=str(project_dir),
                     timeout=timeout_s,
+                    label="qualif-pytest",
                 )
-                succeeded = proc.returncode == 0
+                rc = _res.returncode
+                out = _res.stdout
+                if rc is None:
+                    results["executed"] += 1
+                    results["failed"] += 1
+                    results["errors"].append({
+                        "file": str(tf),
+                        "exit_code": -1,
+                        "stdout_tail": "(timeout)",
+                        "stderr_tail": f"Test exceeded {timeout_s}s timeout",
+                    })
+                    results["details"].append({
+                        "file": str(tf),
+                        "succeeded": False,
+                        "returncode": -1,
+                        "stdout_len": 0,
+                        "stderr_len": 0,
+                    })
+                    continue
+                succeeded = rc == 0
                 results["executed"] += 1
                 if succeeded:
                     results["passed"] += 1
@@ -459,46 +483,33 @@ def _run_system_tests(
                     results["failed"] += 1
                     results["errors"].append({
                         "file": str(tf),
-                        "exit_code": proc.returncode,
-                        "stdout_tail": proc.stdout[-500:] if proc.stdout else "",
-                        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+                        "exit_code": rc,
+                        "stdout_tail": out[-500:] if out else "",
+                        "stderr_tail": out[-500:] if out else "",
                     })
 
                 results["details"].append({
                     "file": str(tf),
                     "succeeded": succeeded,
-                    "returncode": proc.returncode,
-                    "stdout_len": len(proc.stdout or ""),
-                    "stderr_len": len(proc.stderr or ""),
+                    "returncode": rc,
+                    "stdout_len": len(out or ""),
+                    "stderr_len": len(out or ""),
                     "junit_xml": str(junit_path) if succeeded else "",
                 })
-            except subprocess.TimeoutExpired:
-                results["executed"] += 1
-                results["failed"] += 1
-                results["errors"].append({
-                    "file": str(tf),
-                    "exit_code": -1,
-                    "stdout_tail": "(timeout)",
-                    "stderr_tail": f"Test exceeded {timeout_s}s timeout",
-                })
-                results["details"].append({
-                    "file": str(tf),
-                    "succeeded": False,
-                    "returncode": -1,
-                    "stdout_len": 0,
-                    "stderr_len": 0,
-                })
+            except FileNotFoundError as e:
+                log.warning(f"pytest path error for {tf.name}: {e}")
             except FileNotFoundError:
                 log.warning(f"pytest not found — trying python unittest for {tf.name}")
                 try:
-                    proc = subprocess.run(
+                    _res = run_captured(
                         [sys.executable, str(tf)],
-                        cwd=project_dir,
-                        capture_output=True,
-                        text=True,
+                        cwd=str(project_dir),
                         timeout=timeout_s,
+                        label="qualif-python",
                     )
-                    succeeded = proc.returncode == 0
+                    rc = _res.returncode
+                    out = _res.stdout
+                    succeeded = rc == 0
                     results["executed"] += 1
                     if succeeded:
                         results["passed"] += 1
@@ -506,8 +517,8 @@ def _run_system_tests(
                         results["failed"] += 1
                         results["errors"].append({
                             "file": str(tf),
-                            "exit_code": proc.returncode,
-                            "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+                            "exit_code": rc if rc is not None else -1,
+                            "stderr_tail": out[-500:] if out else "",
                         })
                 except Exception as e2:
                     log.error(f"Cannot run {tf.name}: {e2}")
@@ -534,14 +545,31 @@ def _run_system_tests(
                 continue
             try:
                 log.info(f"  Running system test binary: {binary}")
-                proc = subprocess.run(
+                _res = run_captured(
                     [str(binary)],
-                    cwd=project_dir,
-                    capture_output=True,
-                    text=True,
+                    cwd=str(project_dir),
                     timeout=timeout_s,
+                    label="qualif-cbinary",
                 )
-                succeeded = proc.returncode == 0
+                rc = _res.returncode
+                out = _res.stdout
+                if rc is None:
+                    results["executed"] += 1
+                    results["failed"] += 1
+                    results["errors"].append({
+                        "file": str(tf),
+                        "exit_code": -1,
+                        "stdout_tail": "(timeout)",
+                        "stderr_tail": f"Test exceeded {timeout_s}s timeout",
+                    })
+                    results["details"].append({
+                        "file": str(tf),
+                        "binary": str(binary),
+                        "succeeded": False,
+                        "returncode": -1,
+                    })
+                    continue
+                succeeded = rc == 0
                 results["executed"] += 1
                 if succeeded:
                     results["passed"] += 1
@@ -549,15 +577,15 @@ def _run_system_tests(
                     results["failed"] += 1
                     results["errors"].append({
                         "file": str(tf),
-                        "exit_code": proc.returncode,
-                        "stdout_tail": proc.stdout[-500:] if proc.stdout else "",
-                        "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+                        "exit_code": rc,
+                        "stdout_tail": out[-500:] if out else "",
+                        "stderr_tail": out[-500:] if out else "",
                     })
                 results["details"].append({
                     "file": str(tf),
                     "binary": str(binary),
                     "succeeded": succeeded,
-                    "returncode": proc.returncode,
+                    "returncode": rc,
                 })
             except subprocess.TimeoutExpired:
                 results["executed"] += 1

@@ -24,6 +24,7 @@ import logging
 import os
 import shutil
 import subprocess
+from yuleosh.pipeline.safe_run import safe_subprocess_run
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -55,7 +56,7 @@ def _resolve_coverage_project_dir(session: PipelineSession) -> str:
 def _git_commit_short(project_dir: str) -> str:
     """Return the short git commit hash of the project (fallback 'unknown')."""
     try:
-        proc = subprocess.run(
+        proc = safe_subprocess_run(
             ["git", "rev-parse", "--short", "HEAD"],
             capture_output=True, text=True, timeout=10,
             cwd=project_dir,
@@ -318,7 +319,7 @@ def _phase_build_coverage(project_dir: str, results: dict) -> dict:
             "-DENABLE_COVERAGE=ON",
             "-DCMAKE_BUILD_TYPE=Debug",
         ]
-        cmake_result = subprocess.run(cmake_cmd, capture_output=True, text=True,
+        cmake_result = safe_subprocess_run(cmake_cmd, capture_output=True, text=True,
                                       timeout=120, cwd=project_dir, check=False)
 
         # 2026-08-14 (headlamp dogfood #3): cmake configure 失败 (如 CMakeLists
@@ -335,7 +336,7 @@ def _phase_build_coverage(project_dir: str, results: dict) -> dict:
 
         # Build
         build_cmd = ["cmake", "--build", cd, "-j4"]
-        build_result = subprocess.run(build_cmd, capture_output=True, text=True,
+        build_result = safe_subprocess_run(build_cmd, capture_output=True, text=True,
                                        timeout=300, cwd=project_dir, check=False)
 
         if build_result.returncode != 0:
@@ -376,7 +377,7 @@ def _phase_run_tests(project_dir: str, results: dict) -> dict:
     # Try ctest first
     try:
         log.info("Running ctest in %s...", build_dir)
-        ctest_result = subprocess.run(
+        ctest_result = safe_subprocess_run(
             ["ctest", "--output-on-failure", "-j4"],
             capture_output=True, text=True,
             timeout=300, cwd=build_dir, check=False,
@@ -412,7 +413,7 @@ def _phase_run_tests(project_dir: str, results: dict) -> dict:
         # No ctest found — fall back to pytest
         log.info("ctest not found, trying pytest...")
         try:
-            pytest_result = subprocess.run(
+            pytest_result = safe_subprocess_run(
                 [sys.executable, "-m", "pytest", "-x", "--tb=short", "-q"],
                 capture_output=True, text=True,
                 timeout=120, cwd=project_dir,
@@ -450,7 +451,7 @@ def _phase_run_gcovr(project_dir: str, results: dict) -> dict:
             if script_path.exists():
                 try:
                     log.info("Running %s...", script_name)
-                    result = subprocess.run(
+                    result = safe_subprocess_run(
                         ["bash", str(script_path)],
                         capture_output=True, text=True,
                         timeout=600, cwd=project_dir,
@@ -495,7 +496,7 @@ def _phase_run_gcovr(project_dir: str, results: dict) -> dict:
         ]
 
         log.info("Running gcovr...")
-        gcovr_result = subprocess.run(
+        gcovr_result = safe_subprocess_run(
             gcovr_cmd, capture_output=True, text=True,
             timeout=120, cwd=project_dir, check=False,
         )
@@ -513,7 +514,7 @@ def _phase_run_gcovr(project_dir: str, results: dict) -> dict:
         gcovr_cmd.remove("src/.*")
         gcovr_cmd.extend(["--filter", ".*"])
 
-        gcovr_result2 = subprocess.run(
+        gcovr_result2 = safe_subprocess_run(
             gcovr_cmd, capture_output=True, text=True,
             timeout=120, cwd=project_dir, check=False,
         )
@@ -551,7 +552,7 @@ def _phase_check_gate(project_dir: str, results: dict) -> dict:
         if gate_path.exists():
             try:
                 log.info("Running %s...", gate_path)
-                result = subprocess.run(
+                result = safe_subprocess_run(
                     [sys.executable, str(gate_path)],
                     capture_output=True, text=True,
                     timeout=60, cwd=project_dir, check=False,

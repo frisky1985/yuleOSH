@@ -23,6 +23,7 @@ from pathlib import Path
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.stages import timed_step, _parse_scenarios, _parse_spec
 from yuleosh.pipeline.guardrail import TestResult
+from yuleosh.pipeline.safe_run import run_captured
 
 log = logging.getLogger("pipeline.step_handlers.test_integration")
 
@@ -231,9 +232,12 @@ def step_integration_test(session: PipelineSession) -> str:
             _remove_stale_build_dirs(project_dir)
             # 只保留含 CTestTestfile.cmake 的 build 目录参与; 没有 CTestTestfile
             # 的残留目录(如 coverage 步生成的 cmake-build-coverage)不参与。
+            # 用独立的 build-integration 目录, 绝不复用通用 build/ —— 避免
+            # 模板拷贝带来的陈旧 CMakeCache (SOURCE_DIR 指向 templates) 被
+            # 误用, 也避免子进程管道死锁(见 safe_run.run_captured)。
             cmake_build_dirs = [
                 d for d in (
-                    list(project_dir.glob("build")) +
+                    list(project_dir.glob("build-integration")) +
                     list(project_dir.glob("cmake-build*"))
                 )
                 if (d / "CTestTestfile.cmake").exists()
@@ -242,57 +246,62 @@ def step_integration_test(session: PipelineSession) -> str:
             # build 目录 (例如 c-unit-test 走了 gcc 编译兜底, 或只残留无
             # CTestTestfile 的 coverage 目录), integration-test 永远 skipped。
             # 这里在 CMakeLists.txt 存在时自动 cmake -S -B 配置一个干净的
-            # build 目录, 使本步骤对纯 C/CMake 子项目也能真正执行
+            # build-integration 目录, 使本步骤对纯 C/CMake 子项目也能真正执行
             # ctest -L integration (而非 skipped)。
             if not cmake_build_dirs and (project_dir / "CMakeLists.txt").exists():
-                _cfg_dir = project_dir / "build"
+                _cfg_dir = project_dir / "build-integration"
                 try:
-                    cfg = subprocess.run(
+                    cfg = run_captured(
                         ["cmake", "-S", str(project_dir), "-B", str(_cfg_dir)],
-                        capture_output=True, text=True, timeout=180,
+                        cwd=str(project_dir), timeout=180, label="cmake-configure",
                     )
-                    if cfg.returncode == 0 and (_cfg_dir / "CTestTestfile.cmake").exists():
+                    rc = cfg.returncode
+                    cfg_out = cfg.stdout
+                    if rc == 0 and (_cfg_dir / "CTestTestfile.cmake").exists():
                         cmake_build_dirs = [_cfg_dir]
                         log.info("Configured build dir %s for integration-test", _cfg_dir)
                     else:
-                        log.warning(
-                            "cmake configure failed for integration-test: %s",
-                            (cfg.stderr or cfg.stdout)[-500:],
-                        )
+                        if rc is None:
+                            log.warning("cmake configure timed out for integration-test")
+                        else:
+                            log.warning(
+                                "cmake configure failed for integration-test: %s",
+                                (cfg_out or "")[-500:],
+                            )
                         cmake_configure_failed = True
                 except FileNotFoundError:
                     log.info("cmake not found — cannot configure build for integration-test")
-                except subprocess.TimeoutExpired:
-                    log.warning("cmake configure timed out for integration-test")
             for build_dir in cmake_build_dirs:
                 ctest_cfg = build_dir / "CTestTestfile.cmake"
                 if not ctest_cfg.exists():
                     continue
                 try:
                     log.info("Rebuilding %s before ctest -L integration", build_dir)
-                    build_result = subprocess.run(
+                    bld = run_captured(
                         ["cmake", "--build", str(build_dir), "-j4"],
-                        capture_output=True, text=True,
-                        timeout=180, cwd=build_dir,
+                        cwd=str(build_dir), timeout=180, label="cmake-build",
                     )
-                    if build_result.returncode != 0:
-                        test_output = (build_result.stderr or build_result.stdout)[-1000:]
-                        result_returncode = build_result.returncode
+                    rc = bld.returncode
+                    build_out = bld.stdout
+                    if rc != 0:
+                        test_output = (build_out or "")[-1000:]
+                        result_returncode = rc if rc is not None else 1
                         test_runner = "ctest-integration-build-failed"
                         passed, failed = 0, 0
                         break
-                    result = subprocess.run(
+                    ct = run_captured(
                         ["ctest", "-L", "integration", "--output-on-failure"],
-                        capture_output=True, text=True,
-                        timeout=180, cwd=build_dir,
+                        cwd=str(build_dir), timeout=180, label="ctest-integration",
                     )
-                    test_output = (result.stdout or "") + "\n" + (result.stderr or "")
-                    result_returncode = result.returncode
+                    rc = ct.returncode
+                    ctest_out = ct.stdout
+                    test_output = ctest_out or ""
+                    result_returncode = rc if rc is not None else 1
                     test_runner = "ctest-integration"
                     passed, failed = _parse_test_counts(test_output, "ctest-integration")
                     log.info(
                         "ctest -L integration: returncode=%d, passed=%d, failed=%d",
-                        result.returncode, passed, failed,
+                        result_returncode, passed, failed,
                     )
                     break
                 except FileNotFoundError:

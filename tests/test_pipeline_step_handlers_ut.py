@@ -92,7 +92,7 @@ class TestStepCUnitTest:
 
     # ── Unity runner — all pass ─────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_unity_runner_passed(self, mock_environ, mock_subproc,
                                   mock_session, tmp_path):
@@ -116,7 +116,7 @@ class TestStepCUnitTest:
 
     # ── Unity runner — failures ─────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_unity_runner_failed(self, mock_environ, mock_subproc,
                                   mock_session, tmp_path):
@@ -140,7 +140,7 @@ class TestStepCUnitTest:
 
     # ── Ceedling runner ─────────────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_ceedling_runner(self, mock_environ, mock_subproc,
                               mock_session, tmp_path):
@@ -166,7 +166,7 @@ class TestStepCUnitTest:
 
     # ── GCC fallback — pass ─────────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_gcc_fallback_passed(self, mock_environ, mock_subproc,
                                   mock_session, tmp_path):
@@ -191,7 +191,7 @@ class TestStepCUnitTest:
 
     # ── GCC fallback without Unity — no -lunity flag (dogfood #5) ─────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_gcc_fallback_without_unity_skips_lunity(
             self, mock_environ, mock_subproc, mock_session, tmp_path):
@@ -222,7 +222,7 @@ class TestStepCUnitTest:
 
     # ── GCC fallback — fail ─────────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_gcc_fallback_failed(self, mock_environ, mock_subproc,
                                   mock_session, tmp_path):
@@ -246,7 +246,7 @@ class TestStepCUnitTest:
 
     # ── All runners unavailable — unknown status ────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_no_runner_available(self, mock_environ, mock_subproc,
                                   mock_session, tmp_path):
@@ -267,7 +267,7 @@ class TestStepCUnitTest:
 
     # ── Unity timeout ──────────────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_unity_timeout(self, mock_environ, mock_subproc,
                             mock_session, tmp_path):
@@ -286,7 +286,7 @@ class TestStepCUnitTest:
 
     # ── C headers found ────────────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_c_headers_reported(self, mock_environ, mock_subproc,
                                  mock_session, tmp_path):
@@ -317,7 +317,7 @@ class TestStepCUnitTest:
 
     # ── Artifacts / generated-code 排除 (headlamp dogfood #3) ───────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_artifacts_dir_excluded_from_source_discovery(
             self, mock_environ, mock_subproc, mock_session, tmp_path):
@@ -353,7 +353,7 @@ class TestStepCUnitTest:
 
     # ── Write report error ─────────────────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     @patch("builtins.open", side_effect=OSError("Disk full"))
     def test_report_write_error(self, mock_open, mock_environ, mock_subproc,
@@ -380,7 +380,7 @@ class TestStepCUnitTest:
 
     # ── Multiple C test file patterns ──────────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_multiple_test_patterns_discovered(self, mock_environ, mock_subproc,
                                                 mock_session, tmp_path):
@@ -404,7 +404,7 @@ class TestStepCUnitTest:
 
     # ── GCC compile check with unity source ─────────────────────────────────
 
-    @patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run")
+    @patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run")
     @patch("yuleosh.pipeline.step_handlers.test_c_unit.os.environ")
     def test_gcc_fallback_with_unity_src(self, mock_environ, mock_subproc,
                                           mock_session, tmp_path):

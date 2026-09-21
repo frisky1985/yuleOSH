@@ -17,6 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from yuleosh.pipeline.session import PipelineSession
+from yuleosh.pipeline.step_handlers import test_integration
 from yuleosh.pipeline.step_handlers.test_integration import step_integration_test
 
 
@@ -63,7 +64,7 @@ def test_integration_test_configures_cmake_when_no_build_dir(monkeypatch, tmp_pa
             calls.append(("pytest", list(cmd)))
         return r
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(test_integration, "run_captured", fake_run)
 
     s = PipelineSession(name="t", spec_path=proj / "docs" / "spec.md", run_id="rt")
     out = step_integration_test(s)
@@ -99,7 +100,7 @@ def test_integration_test_skips_without_cmake_and_no_build(monkeypatch, tmp_path
             cmake_called.append(list(cmd))
         return r
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(test_integration, "run_captured", fake_run)
 
     s = PipelineSession(name="t", spec_path=proj / "docs" / "spec.md", run_id="rt")
     out = step_integration_test(s)

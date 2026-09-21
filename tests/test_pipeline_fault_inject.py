@@ -73,7 +73,7 @@ class TestFaultInjectBuildFirmware:
         stage = FaultInjectStage()
         with tempfile.TemporaryDirectory() as td:
             Path(td, "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.16)\n")
-            with patch("subprocess.run") as mock_run:
+            with patch("yuleosh.pipeline.step_handlers.fault_inject.safe_subprocess_run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
                 result = stage.build_test_firmware(td)
                 assert result is True
@@ -84,7 +84,7 @@ class TestFaultInjectBuildFirmware:
         import tempfile
         stage = FaultInjectStage()
         with tempfile.TemporaryDirectory() as td:
-            with patch("subprocess.run") as mock_run:
+            with patch("yuleosh.pipeline.step_handlers.fault_inject.safe_subprocess_run") as mock_run:
                 result = stage.build_test_firmware(td)
                 assert result is False
                 mock_run.assert_not_called()

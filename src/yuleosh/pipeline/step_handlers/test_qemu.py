@@ -22,6 +22,7 @@ import logging
 import os
 import re
 import subprocess
+from yuleosh.pipeline.safe_run import safe_subprocess_run
 import time
 from datetime import datetime
 from pathlib import Path
@@ -189,7 +190,7 @@ class QemuTestHandler(BaseHandler):
         """Find a QEMU binary in PATH."""
         for binary in self.QEMU_BINARIES:
             try:
-                result = subprocess.run(
+                result = safe_subprocess_run(
                     ["which", binary],
                     capture_output=True, text=True, timeout=5,
                 )
@@ -315,7 +316,7 @@ class QemuTestHandler(BaseHandler):
         log.debug("QEMU command: %s", " ".join(cmd))
 
         try:
-            result = subprocess.run(
+            result = safe_subprocess_run(
                 cmd,
                 capture_output=True, text=True,
                 timeout=timeout,

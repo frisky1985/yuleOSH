@@ -146,7 +146,7 @@ class TestRunSystemTests:
         with tempfile.TemporaryDirectory() as td:
             test_file = Path(td) / "test_pass.py"
             test_file.write_text("def test_pass(): pass")
-            with patch("subprocess.run") as mock_run:
+            with patch("yuleosh.pipeline.step_handlers.test_qualification.run_captured") as mock_run:
                 mock_run.return_value.returncode = 0
                 mock_run.return_value.stdout = ""
                 mock_run.return_value.stderr = ""
@@ -157,7 +157,7 @@ class TestRunSystemTests:
         with tempfile.TemporaryDirectory() as td:
             test_file = Path(td) / "test_fail.py"
             test_file.write_text("def test_fail(): assert False")
-            with patch("subprocess.run") as mock_run:
+            with patch("yuleosh.pipeline.step_handlers.test_qualification.run_captured") as mock_run:
                 mock_run.return_value.returncode = 1
                 mock_run.return_value.stdout = "FAIL"
                 mock_run.return_value.stderr = ""
@@ -165,11 +165,16 @@ class TestRunSystemTests:
                 assert results["failed"] >= 1
 
     def test_timeout(self):
-        import subprocess
+        # run_captured 在超时时不抛异常, 而是返回 RunResult(returncode=None, ...)
+        # (stdout 含 "(timeout)" 由调用方填充) — 与 safe_subprocess_run 的
+        # "抛 TimeoutExpired" 语义不同。这里按 run_captured 真实语义返回 rc=None。
         with tempfile.TemporaryDirectory() as td:
             test_file = Path(td) / "test_slow.py"
             test_file.write_text("def test_slow(): pass")
-            with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("pytest", 30)):
+            with patch("yuleosh.pipeline.step_handlers.test_qualification.run_captured",
+                       return_value=MagicMock(returncode=None,
+                                              stdout="(timeout)",
+                                              stderr="(timeout)")):
                 results = _run_system_tests([test_file], Path(td))
                 assert results["executed"] >= 1
                 assert results["failed"] >= 1
@@ -190,7 +195,7 @@ class TestRunSystemTests:
             binary.write_text("#!/bin/sh\necho ok\n")
             binary.chmod(0o755)
 
-            with patch("subprocess.run") as mock_run:
+            with patch("yuleosh.pipeline.step_handlers.test_qualification.run_captured") as mock_run:
                 mock_run.return_value.returncode = 0
                 mock_run.return_value.stdout = "ok"
                 mock_run.return_value.stderr = ""
@@ -218,7 +223,7 @@ class TestRunSystemTests:
             binary.write_text("#!/bin/sh\necho ok\n")
             binary.chmod(0o755)
 
-            with patch("subprocess.run") as mock_run:
+            with patch("yuleosh.pipeline.step_handlers.test_qualification.run_captured") as mock_run:
                 mock_run.return_value.returncode = 0
                 mock_run.return_value.stdout = "ok"
                 mock_run.return_value.stderr = ""
@@ -242,7 +247,7 @@ class TestRunSystemTests:
             fake_bin.chmod(0o755)
             with patch("yuleosh.pipeline.step_handlers.test_qualification._try_compile_c_test",
                        return_value=fake_bin) as mock_compile:
-                with patch("subprocess.run") as mock_run:
+                with patch("yuleosh.pipeline.step_handlers.test_qualification.run_captured") as mock_run:
                     mock_run.return_value.returncode = 0
                     mock_run.return_value.stdout = "ok"
                     mock_run.return_value.stderr = ""

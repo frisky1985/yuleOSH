@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import subprocess
+from yuleosh.pipeline.safe_run import safe_subprocess_run
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -376,7 +377,7 @@ def _step_claude_dev_planning(session: PipelineSession) -> str:
         git_log = ""
         git_commits = 0
         try:
-            result = subprocess.run(
+            result = safe_subprocess_run(
                 ["git", "log", "--oneline", "-10", "--format=%h %s (%ar)"],
                 capture_output=True, text=True, timeout=10, cwd=project_dir
             )
@@ -1020,18 +1021,18 @@ def step_claude_test(session: PipelineSession) -> str:
                 ]
                 if not build_dirs:
                     build_dir = project_dir / "cmake-build-coverage"
-                    subprocess.run(
+                    safe_subprocess_run(
                         ["cmake", "-S", str(project_dir), "-B", str(build_dir),
                          "-DENABLE_COVERAGE=ON", "-DCMAKE_BUILD_TYPE=Debug"],
                         capture_output=True, text=True, timeout=120, cwd=project_dir,
                     )
                     build_dirs = [build_dir]
                 for build_dir in build_dirs:
-                    result = subprocess.run(
+                    result = safe_subprocess_run(
                         ["cmake", "--build", str(build_dir), "-j4"],
                         capture_output=True, text=True, timeout=300, cwd=project_dir,
                     )
-                    result = subprocess.run(
+                    result = safe_subprocess_run(
                         ["ctest", "--output-on-failure", "-j4",
                          "--output-junit", str(session.session_dir / "ctest-junit.xml")],
                         capture_output=True, text=True, timeout=300, cwd=build_dir,
@@ -1058,7 +1059,7 @@ def step_claude_test(session: PipelineSession) -> str:
             is_python = False
             test_runner_name = "go test"
             try:
-                result = subprocess.run(
+                result = safe_subprocess_run(
                     ["go", "test", "./...", "-count=1"],
                     capture_output=True, text=True, timeout=120, cwd=project_dir
                 )
@@ -1093,7 +1094,7 @@ def step_claude_test(session: PipelineSession) -> str:
                 test_output = ""
             else:
                 try:
-                    result = subprocess.run(
+                    result = safe_subprocess_run(
                         [sys.executable, "-m", "pytest", "tests/", "-q", "--ignore=tests/test_e2e.py"],
                         capture_output=True, text=True, timeout=120, cwd=project_dir
                     )

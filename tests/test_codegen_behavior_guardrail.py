@@ -23,8 +23,10 @@ from unittest import mock
 import pytest
 
 from yuleosh.pipeline.session import PipelineSession
+from yuleosh.pipeline.step_handlers import test_c_unit
 from yuleosh.pipeline.step_handlers.execution import step_codegen_deploy
 from yuleosh.pipeline.step_handlers.test_c_unit import run_c_test_suite
+from yuleosh.pipeline.safe_run import safe_subprocess_run as _real_safe_run
 
 pytestmark = pytest.mark.skipif(
     not (shutil.which("gcc") and shutil.which("cmake") and shutil.which("ctest")),
@@ -137,18 +139,17 @@ class TestRunCTestSuite:
         future = 2_000_000_000  # 远大于当前 epoch
         os.utime(cmake_lists, (future, future))
 
-        # 记录 configure 调用 (cmake -S ... -B ...)
-        real_run = subprocess.run
+        # 记录 configure 调用 (cmake -S ... -B ...) — 注意 test_c_unit 现已经
+        # safe_subprocess_run (而非 subprocess.run) 跑 cmake, 这里拦截它。
         configure_calls = []
 
-        def spy(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get("args", [])
+        def spy(cmd, *args, **kwargs):
             if isinstance(cmd, list) and len(cmd) >= 3 \
                     and cmd[0] == "cmake" and cmd[1] == "-S":
                 configure_calls.append(cmd)
-            return real_run(*args, **kwargs)
+            return _real_safe_run(cmd, *args, **kwargs)
 
-        monkeypatch.setattr(subprocess, "run", spy)
+        monkeypatch.setattr(test_c_unit, "safe_subprocess_run", spy)
 
         result = run_c_test_suite(proj)
 

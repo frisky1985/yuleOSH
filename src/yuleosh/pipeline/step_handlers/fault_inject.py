@@ -35,6 +35,7 @@ import logging
 import os
 import re
 import subprocess
+from yuleosh.pipeline.safe_run import safe_subprocess_run
 import time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -200,7 +201,7 @@ class FaultInjectStage:
             # W-7 (SEC-W6 / Fix 10): build steps get generous timeouts
             # (cmake configure 120s; build 300s) so a hung toolchain fails
             # explicitly instead of blocking the pipeline forever.
-            subprocess.run(
+            safe_subprocess_run(
                 ["cmake", "-B", str(self.build_dir),
                  "-DFAULT_INJECT_TESTS=ON",
                  "-DFAULT_INJECT_BUILD_TEST=ON",
@@ -211,7 +212,7 @@ class FaultInjectStage:
             # (shell interpolation of `$(nproc)` is both a shell-injection
             # surface and unnecessary).
             cpus = os.cpu_count() or 1
-            subprocess.run(
+            safe_subprocess_run(
                 ["cmake", "--build", str(self.build_dir), "-j", str(cpus)],
                 check=True, capture_output=True, text=True, timeout=300,
             )

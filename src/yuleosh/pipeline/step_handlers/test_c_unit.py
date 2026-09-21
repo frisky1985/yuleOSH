@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import subprocess
+from yuleosh.pipeline.safe_run import safe_subprocess_run
 import sys
 import tempfile
 from pathlib import Path
@@ -168,7 +169,7 @@ def run_c_test_suite(project_dir: str | Path,
                             "CMakeCache.txt — reconfiguring before ctest",
                             build_dir,
                         )
-                        subprocess.run(
+                        safe_subprocess_run(
                             ["cmake", "-S", str(project_dir), "-B", str(build_dir)],
                             capture_output=True, text=True, timeout=timeout_build,
                         )
@@ -184,7 +185,7 @@ def run_c_test_suite(project_dir: str | Path,
                     if _btmp.exists():
                         shutil.rmtree(_btmp)
                     build_dir.rename(_btmp)
-                    subprocess.run(
+                    safe_subprocess_run(
                         ["cmake", "-S", str(project_dir), "-B", str(build_dir)],
                         capture_output=True, text=True, timeout=timeout_build,
                     )
@@ -193,7 +194,7 @@ def run_c_test_suite(project_dir: str | Path,
                     log.warning("force rebuild: cmake reconfigure failed: %s", e)
             log.info("Rebuilding %s before ctest%s", build_dir,
                      " (forced)" if force_rebuild else "")
-            build_result = subprocess.run(
+            build_result = safe_subprocess_run(
                 ["cmake", "--build", str(build_dir), "-j4"],
                 capture_output=True, text=True,
                 timeout=timeout_build, cwd=build_dir,
@@ -214,7 +215,7 @@ def run_c_test_suite(project_dir: str | Path,
             # -LE integration: unit step runs unit tests only; integration
             # tests (LABELS "integration") belong to the integration-test
             # step (2026-08-15, three-layer test separation).
-            result = subprocess.run(
+            result = safe_subprocess_run(
                 ["ctest", "--output-on-failure", "-j4", "-LE", "integration"],
                 capture_output=True, text=True,
                 timeout=timeout_ctest, cwd=build_dir,
@@ -241,7 +242,7 @@ def run_c_test_suite(project_dir: str | Path,
     if unity_dir.exists() and (unity_dir / "Makefile").exists():
         try:
             log.info("Attempting Unity test runner at %s", unity_dir)
-            result = subprocess.run(
+            result = safe_subprocess_run(
                 ["make", "-C", str(unity_dir)],
                 capture_output=True, text=True, timeout=120,
             )
@@ -264,7 +265,7 @@ def run_c_test_suite(project_dir: str | Path,
     if test_runner == "none" and (project_dir / "project.yml").exists():
         try:
             log.info("Attempting Ceedling test runner")
-            result = subprocess.run(
+            result = safe_subprocess_run(
                 ["ceedling", "test:all"],
                 capture_output=True, text=True, timeout=180,
                 cwd=project_dir,
@@ -322,7 +323,7 @@ def run_c_test_suite(project_dir: str | Path,
                 if unity_src.exists():
                     compile_cmd.append(str(unity_src))
                 compile_cmd += inc_flags + tf_defs + link_flags + ["-lm", "-Wall", "-Wextra"]
-                cr = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=60)
+                cr = safe_subprocess_run(compile_cmd, capture_output=True, text=True, timeout=60)
                 per_test_log.append(
                     f"[{stem}] rc={cr.returncode}\n{(cr.stdout or '')}\n{(cr.stderr or '')}"
                 )
