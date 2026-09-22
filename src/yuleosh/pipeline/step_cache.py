@@ -5,23 +5,32 @@
 # SPDX-License-Identifier: Elastic-2.0
 
 """
-Step Cache — 确定性步骤内容寻址缓存 (B1, 2026-08-12).
+Step Cache — 步骤产物缓存 (B1, 2026-08-12; 分级策略 2026-09-22).
 
 背景 (老板确认方案 C 分级 B1): 修一个 bug 重跑 pipeline 时, 确定性步骤
 (编译/测试/静态扫描) 的输入没变却要重跑 20-30 分钟。内容寻址缓存按
 「输入指纹」复用这些步骤的产物, 重跑时间从分钟级降到秒级。
 
 设计原则:
-  - 只缓存确定性步骤 (verdict 由确定性逻辑决定, 无 LLM 主调用):
-    相同输入 → 相同输出, 缓存零风险。
+  - **只复用「输入/生成物」类步骤** (spec / 代码 / 规则, REUSABLE_STEPS):
+    相同输入 → 相同输出, 复用零风险。
+  - **测试与验证结果类步骤 (VOLATILE_STEPS) 永不跨 run 复用**, 且每轮
+    pipeline 启动时清空其历史缓存 (``purge_verification_cache``)。
+    理由 (2026-09-22 复盘): 验证证据的价值在于「本轮真实执行」。复用会把
+    上一轮的 RED/GREEN 固化成假象 —— integration-test / misra-review 曾命中
+    09-21 缓存 (status=skipped), 导致 G7 (SWE.5 集成) 被判 skipped、而 run
+    仍报 completed: 表面完成, 实际本轮零集成验证证据。
   - LLM 步骤永不缓存 (B2 opt-in 留接口): LLM 有随机性, 缓存会固化
     上次输出, 与「测试即契约」(让 LLM 迭代改进) 冲突。
   - 统一保守指纹 (隐式 DAG): spec + 全部 artifacts + src 树 +
     generated-code 树 + build 树 + ci-config + KG db。任何前置变化
     自然失效, 无需显式依赖传播。
-  - 显式不静默: cached 步骤在 session.json 标记 + 打印 ♻️。
+  - 显式不静默: cached 步骤在 session.json 标记 + 打印 ♻️; 每轮清理
+    验证缓存也打印条数。
 
-禁用: OSH_NO_CACHE=1
+开关:
+  - ``OSH_NO_CACHE=1``         —— 全局禁用复用 (所有步骤重跑)
+  - ``OSH_KEEP_VERIFICATION_CACHE=1`` —— 跳过每轮的验证缓存清理 (仅调试用)
 """
 
 from __future__ import annotations
@@ -38,28 +47,44 @@ from typing import Optional
 log = logging.getLogger("pipeline.step_cache")
 
 # ---------------------------------------------------------------------------
-# 步骤分类
+# 步骤分类 (2026-09-22 政策调整: 验证证据每轮重跑)
 # ---------------------------------------------------------------------------
+#
+# 分两类, 语义与「跨 run 复用」严格对齐:
+#
+#   REUSABLE_STEPS —— 输入/生成物类 (spec / 代码 / 规则): 输入未变时跨 run
+#     复用产物, 避免重复生成与重复部署。这是缓存存在的意义。
+#
+#   VOLATILE_STEPS —— 测试与验证结果类 (SWE.4/5/6 证据): 永不跨 run 复用,
+#     且每轮 pipeline 启动时清空历史缓存。见模块 docstring 的复盘说明。
+#
+# 2026-08-19 (八轮决策, 24 步重构) 的旧口径是「确定性步骤可缓存」, 把
+# c-unit-test / integration-test / misra-review / qemu-verify /
+# test-qualification 等都算了进去 —— 那是按「输出是否确定」分类, 与审计
+# 语义冲突 (确定的 RED 也是 RED)。现改为按「是否属于本轮验证证据」分类。
 
-# 可缓存: verdict 由确定性逻辑决定 (无 LLM 主调用)。
-# 注意: review-* 嵌入式审查含 LLM 附加字段 (llm_review), 但 status 由
-# 静态扫描决定 → 产物 verdict 确定性成立; 缓存命中时提示附加字段为旧值。
-# 2026-08-19 (八轮决策, 24 步重构): 合并后的步骤 key 替换旧 key —
-#   qemu-verify 替代 qemu-run + c-coverage-gate（确定性）；
-#   verify-loop / code-review 含外部 agent + LLM → 不可缓存 (LLM_STEPS)。
-CACHEABLE_STEPS = frozenset({
-    "spec-check",
-    "codegen-deploy",
-    "c-unit-test",
-    "misra-review",
-    "coverage-review",
-    "integration-test",
-    "qemu-verify",
-    "review-critical-safety",
-    "fault-injection",
-    "merge-gate",
-    "test-qualification",
+# 可跨 run 复用: 输入/生成物类。
+REUSABLE_STEPS = frozenset({
+    "spec-check",       # OpenSpec 合规检查 (输入 = spec, 规则类)
+    "codegen-deploy",   # 代码产物部署 (输入 = 生成代码)
 })
+
+# 每轮必须真实执行的验证结果类 (SWE.4/5/6 证据)。
+VOLATILE_STEPS = frozenset({
+    "c-unit-test",             # SWE.4 单元验证
+    "misra-review",            # 静态规则合规扫描结果
+    "integration-test",        # SWE.5 集成验证
+    "qemu-verify",             # SWE.5 仿真验证 + 覆盖率门禁 (qemu-run + c-coverage-gate)
+    "coverage-review",         # 覆盖率审查结论
+    "review-critical-safety",  # P0 安全门禁扫描
+    "fault-injection",         # SWE.5/6 故障注入
+    "merge-gate",              # CM 门禁 (仓库现状 / KG 一致性)
+    "test-qualification",      # SWE.6 合格性测试 (G10)
+})
+
+# 向后兼容别名: 旧调用点/测试以 CACHEABLE_STEPS 表达「可缓存」。
+# 政策调整后只有 REUSABLE_STEPS 可跨 run 复用。
+CACHEABLE_STEPS = REUSABLE_STEPS
 
 # 失败产物 status 集合 (2026-08-17 r21c 复盘): 这些状态的输出不得入缓存,
 # 缓存命中时也视为 miss — 否则失败结果被后续 run 复用, 步骤永远不重跑。
@@ -96,8 +121,13 @@ LLM_STEPS = frozenset({
 
 
 def is_cacheable(step_key: str) -> bool:
-    """该步骤是否可缓存 (确定性)。"""
-    return step_key in CACHEABLE_STEPS
+    """该步骤是否可跨 run 复用 (输入/生成物类, REUSABLE_STEPS)。"""
+    return step_key in REUSABLE_STEPS
+
+
+def must_rerun(step_key: str) -> bool:
+    """该步骤是否每轮必须真实执行 (验证结果类, 不复用历史产物)。"""
+    return step_key in VOLATILE_STEPS
 
 
 def is_llm_step(step_key: str) -> bool:
@@ -321,6 +351,79 @@ def restore(
     shutil.copy2(src, dst)
     log.info("step-cache restored: %s → %s (%s)", src.name, dst, fingerprint[:10])
     return str(dst)
+
+
+# ── 验证缓存清理 (2026-09-22) ──────────────────────────────────────────────
+# 每轮 pipeline 启动时清空验证结果类 (VOLATILE_STEPS) 的历史缓存。
+# 与 lookup 的「未变则复用」策略互补: 复用只服务输入/生成物类步骤,
+# 验证证据必须每轮新生成, 否则上一轮的 RED/GREEN 被固化成本轮结论。
+
+
+def purge_step_cache(
+    project_dir: str | Path,
+    step_keys: "Optional[set[str] | frozenset[str]]" = None,
+    *,
+    dry_run: bool = False,
+) -> dict:
+    """删除指定步骤的全部历史缓存条目。
+
+    Parameters
+    ----------
+    project_dir : str | Path
+        项目根 (缓存位于 ``<project_dir>/.osh/cache/steps/``)。
+    step_keys : set[str], optional
+        要清理的步骤 key; 默认全部 ``VOLATILE_STEPS``。
+    dry_run : bool
+        只统计不删除 (供 CLI / 测试预演)。
+
+    Returns
+    -------
+    dict
+        ``{"steps": [...], "removed": <删除的缓存条目数>, "dry_run": bool}``
+    """
+    keys = sorted(VOLATILE_STEPS if step_keys is None else set(step_keys))
+    root = _cache_root(project_dir)
+    removed = 0
+    purged: list[str] = []
+    if not root.exists():
+        return {"steps": keys, "removed": 0, "purged": purged, "dry_run": dry_run}
+    for key in keys:
+        d = root / key
+        if not d.exists():
+            continue
+        # 条目 = <fingerprint> 目录; 单文件脏数据也一并计入。
+        entries = list(d.iterdir())
+        if not entries:
+            continue
+        purged.append(key)
+        removed += len(entries)
+        if dry_run:
+            continue
+        try:
+            shutil.rmtree(d)
+        except OSError as e:  # noqa: BLE001 — 清理失败不阻断 (best-effort)
+            log.warning("step-cache purge failed: %s (%s)", d, e)
+            purged.pop()
+            removed -= len(entries)
+    if purged and not dry_run:
+        log.info("step-cache purged: %d entr(ies) in %d step(s): %s",
+                 removed, len(purged), ", ".join(purged))
+    return {"steps": keys, "removed": removed, "purged": purged, "dry_run": dry_run}
+
+
+def purge_verification_cache(project_dir: str | Path) -> dict:
+    """每轮 pipeline 启动时调用: 清空全部验证结果类历史缓存。
+
+    ``OSH_KEEP_VERIFICATION_CACHE=1`` 可跳过 (仅调试用, 会退回旧行为)。
+    """
+    if os.environ.get("OSH_KEEP_VERIFICATION_CACHE", "") == "1":
+        log.warning("verification cache purge skipped "
+                    "(OSH_KEEP_VERIFICATION_CACHE=1)")
+        return {"steps": sorted(VOLATILE_STEPS), "removed": 0,
+                "purged": [], "dry_run": False, "skipped": True}
+    result = purge_step_cache(project_dir, VOLATILE_STEPS)
+    result["skipped"] = False
+    return result
 
 
 # ── Regression Baseline (基线快照, 2026-08-25) ─────────────────────────────

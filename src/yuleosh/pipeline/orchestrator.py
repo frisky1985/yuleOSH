@@ -538,6 +538,29 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         else:
             session.diff_skip_decisions = []
 
+        # ── 验证证据每轮重跑 (2026-09-22): 清空测试/验证结果类的历史缓存 ──
+        # 测试结果跨 run 复用会把上一轮的 RED/GREEN 固化成假象 —— G7 (SWE.5
+        # 集成) 曾因 integration-test / misra-review 命中 09-21 缓存
+        # (status=skipped) 被判 skipped, 而 run 仍报 completed。spec / 代码 /
+        # 规则类 (REUSABLE_STEPS) 不受影响, 仍按指纹复用。
+        # 关闭开关: OSH_KEEP_VERIFICATION_CACHE=1 (仅调试, 会退回旧行为)。
+        try:
+            from yuleosh.pipeline import step_cache as _sc
+
+            _purged = _sc.purge_verification_cache(project_dir)
+            if _purged.get("skipped"):
+                print("   ⚠️  验证结果缓存清理已跳过 "
+                      "(OSH_KEEP_VERIFICATION_CACHE=1)")
+            elif _purged.get("removed"):
+                print(f"   🧹 已清空验证结果缓存: {len(_purged['purged'])} 个步骤 / "
+                      f"{_purged['removed']} 条历史产物 "
+                      f"— 本轮验证步骤将全部真实重跑")
+            else:
+                print("   🧹 验证结果缓存: 无历史产物需清理")
+        except Exception as _purge_err:  # noqa: BLE001 — 清理失败绝不阻断 pipeline
+            log.warning("verification cache purge failed (non-fatal): %s",
+                        _purge_err)
+
         # ── 断点续跑 (2026-08-12): --from-step N ──
         # 从最近一次同 spec 的 session 恢复前序 artifacts, 步骤 1..N-1
         # 标记 skipped (不执行, 不烧 LLM token), 从第 N 步继续。

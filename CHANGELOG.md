@@ -2,6 +2,18 @@
 
 本文件记录 yuleOSH 的版本变更。版本号遵循语义化版本（SemVer）。
 
+## [Unreleased]
+
+### 变更
+
+- **步骤缓存分级：验证证据每轮重跑**（`pipeline/step_cache.py`、`pipeline/orchestrator.py`）
+  - 缓存语义由「确定性步骤可缓存」改为按「是否属于本轮验证证据」分级：
+    - `REUSABLE_STEPS`（`spec-check` / `codegen-deploy`）—— 输入/生成物类，输入未变时仍按指纹跨 run 复用；
+    - `VOLATILE_STEPS`（`c-unit-test`、`misra-review`、`integration-test`、`qemu-verify`、`coverage-review`、`review-critical-safety`、`fault-injection`、`merge-gate`、`test-qualification`）—— 测试与验证结果类，**不再跨 run 复用**。
+  - 每轮 pipeline 启动时自动清空验证结果类历史缓存（`purge_verification_cache`），并在控制台显式打印清理条数；调试可用 `OSH_KEEP_VERIFICATION_CACHE=1` 跳过。
+  - 动因：验证步骤复用上一轮产物会把 RED/GREEN 固化成假象 —— `integration-test` / `misra-review` 曾命中旧缓存（`status=skipped`）导致 G7（SWE.5 集成）被判 skipped，而 run 仍报 `completed`。
+  - 新增 `must_rerun()` / `purge_step_cache()` / `purge_verification_cache()`；`CACHEABLE_STEPS` 保留为 `REUSABLE_STEPS` 的兼容别名。
+
 ## [4.2.0] — 2026-09-02
 
 自 `v4.1.0` 以来的功能增量版本（82 笔提交）。主线：合规交付闭环、日志中心、双角色视图与实时化改造。

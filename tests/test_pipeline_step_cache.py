@@ -5,6 +5,7 @@
 import json
 import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -19,15 +20,32 @@ class FakeSession:
 
 
 class TestClassification:
-    def test_cacheable_steps(self):
+    def test_reusable_steps(self):
         from yuleosh.pipeline.step_cache import is_cacheable
-        # r22 重构 (2026-08-19): review-memory 已并入 code-review 超集 (LLM 不可缓存),
-        # 可缓存集为确定性步骤。
+        # 2026-09-22 政策调整: 只有「输入/生成物」类 (spec / 代码 / 规则)
+        # 可跨 run 复用; 验证结果类改为每轮必跑 (见 test_verification_* )。
+        for key in ["spec-check", "codegen-deploy"]:
+            assert is_cacheable(key), key
+
+    def test_verification_steps_never_reused(self):
+        """验证结果类 (SWE.4/5/6 证据) 不可跨 run 复用 — 2026-09-22 复盘。
+
+        回归: integration-test / misra-review 命中上一轮缓存 (status=skipped),
+        G7 (SWE.5 集成) 被判 skipped 而 run 仍报 completed —— 表面完成,
+        实际本轮零验证证据。
+        """
+        from yuleosh.pipeline.step_cache import is_cacheable, must_rerun
         for key in ["c-unit-test", "coverage-review", "misra-review",
                     "review-critical-safety", "test-qualification",
-                    "codegen-deploy", "merge-gate", "qemu-verify",
+                    "merge-gate", "qemu-verify",
                     "integration-test", "fault-injection"]:
-            assert is_cacheable(key), key
+            assert must_rerun(key), key
+            assert not is_cacheable(key), key
+
+    def test_reusable_steps_not_marked_rerun(self):
+        from yuleosh.pipeline.step_cache import must_rerun
+        for key in ["spec-check", "codegen-deploy"]:
+            assert not must_rerun(key), key
 
     def test_llm_steps_never_cacheable(self):
         from yuleosh.pipeline.step_cache import is_cacheable
@@ -207,6 +225,173 @@ class TestStoreLookupRestore:
         fp = compute_fingerprint(s, "codegen-deploy")
         store(tmp_path, "codegen-deploy", fp, out)
         assert lookup(tmp_path, "codegen-deploy", fp) is not None
+
+
+class TestPurgeVerificationCache:
+    """2026-09-22: 每轮 pipeline 启动清空验证结果类缓存。"""
+
+    def _seed(self, tmp_path, step_key, fingerprint="abc123"):
+        from yuleosh.pipeline.step_cache import _cache_root
+        d = _cache_root(tmp_path) / step_key / fingerprint / "output"
+        d.mkdir(parents=True)
+        (d / f"{step_key}.json").write_text(json.dumps({"status": "passed"}))
+        return d.parent
+
+    def test_purge_removes_verification_entries_keeps_reusable(self, tmp_path):
+        from yuleosh.pipeline.step_cache import purge_verification_cache
+        fresh = [self._seed(tmp_path, k) for k in ("integration-test", "misra-review")]
+        reusable = self._seed(tmp_path, "spec-check")
+        res = purge_verification_cache(tmp_path)
+        assert res["skipped"] is False
+        assert res["removed"] == 2
+        assert set(res["purged"]) == {"integration-test", "misra-review"}
+        assert not any(d.exists() for d in fresh)
+        assert reusable.exists(), "可复用类 (spec/代码) 缓存不得被清理"
+
+    def test_purge_dry_run_keeps_files(self, tmp_path):
+        from yuleosh.pipeline.step_cache import purge_step_cache
+        d = self._seed(tmp_path, "c-unit-test")
+        res = purge_step_cache(tmp_path, {"c-unit-test"}, dry_run=True)
+        assert res["removed"] == 1
+        assert res["dry_run"] is True
+        assert d.exists()
+
+    def test_purge_without_cache_root_is_noop(self, tmp_path):
+        from yuleosh.pipeline.step_cache import purge_verification_cache
+        res = purge_verification_cache(tmp_path)
+        assert res["removed"] == 0
+        assert res["purged"] == []
+
+    def test_env_switch_skips_purge(self, tmp_path, monkeypatch):
+        """OSH_KEEP_VERIFICATION_CACHE=1 → 跳过清理 (旧行为, 仅调试)。"""
+        from yuleosh.pipeline.step_cache import purge_verification_cache
+        d = self._seed(tmp_path, "qemu-verify")
+        monkeypatch.setenv("OSH_KEEP_VERIFICATION_CACHE", "1")
+        res = purge_verification_cache(tmp_path)
+        assert res["skipped"] is True
+        assert d.exists()
+
+    def test_purged_step_no_longer_hits_cache(self, tmp_path):
+        """清理后同指纹不再命中 → 验证步骤必然真实重跑。"""
+        from yuleosh.pipeline.step_cache import (
+            compute_fingerprint, lookup, purge_verification_cache, store,
+        )
+        (tmp_path / "spec.md").write_text("# spec")
+        sess_dir = tmp_path / ".osh" / "sessions" / "s1"
+        sess_dir.mkdir(parents=True)
+        s = FakeSession(tmp_path, sess_dir)
+        out = sess_dir / "integration-test.json"
+        out.write_text(json.dumps({"status": "passed"}))
+        fp = compute_fingerprint(s, "integration-test")
+        store(tmp_path, "integration-test", fp, out)
+        assert lookup(tmp_path, "integration-test", fp) is not None
+        purge_verification_cache(tmp_path)
+        assert lookup(tmp_path, "integration-test", fp) is None
+
+
+class TestRunStartPurgeIntegration:
+    """run_pipeline 启动即清空验证缓存 → 验证步骤必真实重跑 (2026-09-22)。
+
+    回归护栏: integration-test / misra-review 曾命中上一轮缓存 (status=skipped),
+    使 G7 (SWE.5 集成) 被判 skipped, 而 run 仍报 completed。
+    """
+
+    def _run(self, tmp_path, steps, spec_path, monkeypatch, name="purge-it"):
+        from contextlib import ExitStack
+        from yuleosh.pipeline.orchestrator import run_pipeline
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        monkeypatch.delenv("OSH_KEEP_VERIFICATION_CACHE", raising=False)
+        monkeypatch.delenv("OSH_NO_CACHE", raising=False)
+        with ExitStack() as stack:
+            stack.enter_context(
+                mock.patch("yuleosh.pipeline.run.PIPELINE_STEPS", steps))
+            stack.enter_context(
+                mock.patch("yuleosh.pipeline.run._check_llm_key",
+                           return_value="sk-test"))
+            stack.enter_context(mock.patch(
+                "yuleosh.pipeline.orchestrator._detect_and_bootstrap",
+                return_value=None))
+            stack.enter_context(mock.patch(
+                "yuleosh.pipeline.orchestrator.load_agent_constraints",
+                return_value=("", "builtin_fallback")))
+            stack.enter_context(mock.patch(
+                "yuleosh.pipeline.orchestrator.load_agent_constraints_by_role",
+                return_value={}))
+            stack.enter_context(mock.patch(
+                "yuleosh.ci.profile.validate_active_profile",
+                return_value=(True, "ok")))
+            stack.enter_context(mock.patch(
+                "yuleosh.ci.profile.get_current_profile",
+                return_value="safety"))
+            stack.enter_context(mock.patch(
+                "yuleosh.ci.profile.filter_steps_for_profile",
+                side_effect=lambda s, p, d: s))
+            return run_pipeline(str(spec_path), name=name)
+
+    def _seed_cache(self, tmp_path, step_key, status="skipped"):
+        """按真实指纹预置一条历史缓存 (模拟上一轮留下的验证产物)。"""
+        from yuleosh.pipeline.step_cache import compute_fingerprint, store
+        spec = tmp_path / "spec.md"
+        sess_dir = tmp_path / ".osh" / "sessions" / "prev"
+        sess_dir.mkdir(parents=True, exist_ok=True)
+        s = FakeSession(tmp_path, sess_dir)
+        fp = compute_fingerprint(s, step_key)
+        out = sess_dir / f"{step_key}.json"
+        out.write_text(json.dumps({"status": status, "step": step_key}))
+        store(tmp_path, step_key, fp, out)
+        return fp
+
+    def test_verification_step_reruns_despite_cached_artifact(
+            self, tmp_path, monkeypatch):
+        """integration-test 有历史缓存也必须真实重跑, 且缓存被清除。"""
+        from yuleosh.pipeline.step_cache import lookup
+        spec = tmp_path / "spec.md"
+        spec.write_text("# Spec\n\n## REQ-001\n\n- The system SHALL run\n")
+        fp = self._seed_cache(tmp_path, "integration-test", status="passed")
+        assert lookup(tmp_path, "integration-test", fp) is not None
+
+        calls = []
+
+        def _handler(session):
+            calls.append(1)
+            out = Path(session.session_dir) / "integration-test.json"
+            out.write_text(json.dumps(
+                {"status": "passed", "step": "integration-test"}))
+            return str(out)
+
+        session = self._run(
+            tmp_path,
+            [("integration-test", "小克", "接口集成测试", _handler)],
+            spec, monkeypatch,
+        )
+        assert calls == [1], "验证步骤必须真实执行, 不得复用缓存"
+        assert not session.steps[0].get("cached")
+        assert lookup(tmp_path, "integration-test", fp) is None, \
+            "历史验证缓存应已被清空"
+
+    def test_reusable_step_still_reuses_cache(self, tmp_path, monkeypatch):
+        """spec/代码类 (REUSABLE_STEPS) 仍按指纹复用, 不清、不重跑。"""
+        from yuleosh.pipeline.step_cache import lookup
+        spec = tmp_path / "spec.md"
+        spec.write_text("# Spec\n\n## REQ-001\n\n- The system SHALL run\n")
+        fp = self._seed_cache(tmp_path, "spec-check", status="passed")
+
+        calls = []
+
+        def _handler(session):  # pragma: no cover - 命中缓存时不应被调用
+            calls.append(1)
+            out = Path(session.session_dir) / "spec-check.json"
+            out.write_text(json.dumps({"status": "passed"}))
+            return str(out)
+
+        session = self._run(
+            tmp_path,
+            [("spec-check", "小明", "OpenSpec 合规检查", _handler)],
+            spec, monkeypatch,
+        )
+        assert calls == [], "可复用步骤应命中缓存"
+        assert session.steps[0].get("cached") is True
+        assert lookup(tmp_path, "spec-check", fp) is not None
 
 
 class TestOrchestratorIntegration:
