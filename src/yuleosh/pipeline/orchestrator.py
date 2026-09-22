@@ -407,10 +407,14 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             llm_client = _mock_llm_client()
         print("\n🧪 Pipeline running in MOCK mode — no real LLM will be called.\n")
     elif llm_client is None:
-        # Check for LLM API key before starting
-        key = _check_key()
-        if not key:
-            sys.exit(1)    
+        # Check for LLM API key before starting.
+        # 本地模型模式（YULEOSH_LLM_LOCAL_MODEL 已显式设置）下，LLM 客户端会
+        # 自动降级到本地 Ollama（_local_llm_fallback_enabled 默认开启），无需
+        # 外部 key，故跳过此门禁；其余情况仍强要求外部 key。
+        if not os.environ.get("YULEOSH_LLM_LOCAL_MODEL"):
+            key = _check_key()
+            if not key:
+                sys.exit(1)
     # ── Auto-detect project type and bootstrap ──
     project_root = os.path.dirname(os.path.abspath(spec_path))
     project_info = _detect_and_bootstrap(project_root)
