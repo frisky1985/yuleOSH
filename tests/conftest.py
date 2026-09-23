@@ -43,8 +43,142 @@ if not os.environ.get("OSH_SESSIONS_DIR", "").strip():
     Path(os.environ["OSH_SESSIONS_DIR"]).mkdir(parents=True, exist_ok=True)
 
 
+# ---------------------------------------------------------------------------
+# Mock-path tripwire (2026-09-23)
+# ---------------------------------------------------------------------------
+# 背景：``api/pipeline.py::_run_orchestrator_job`` 把 project_dir 导出为
+# **进程级** ``os.environ["OSH_HOME"]``。当 project_dir 来自被 patch 掉的
+# ``yuleosh.api.pipeline.Path``（测试里常见写法 ``return_value=MagicMock()``）
+# 时，它的 ``str()`` 就是 ``<MagicMock name='mock.resolve().parent.parent' id=...>``，
+# 随后 ``store.py`` 的 ``Path(db).parent.mkdir(parents=True, exist_ok=True)``
+# 会在 CWD 真建出同名目录。实测累计 **100+ 个**（仓库根 89 + projects/ 12），
+# 污染 ``projects/`` 的项目发现与磁盘扫描，且随每次跑测试再生。
+#
+# 这里不改变任何测试行为，只**记录**「往真实文件系统写 MagicMock 路径」的调用，
+# 并在会话末尾按测试归因打印，把静默污染变成可见信息。
+# 设 ``OSH_ALLOW_MOCK_PATHS=1`` 可完全关闭（不包装，无开销）。
+_MOCK_PATH_HITS: list = []
+_MOCK_PATH_SILENT = bool(os.environ.get("OSH_ALLOW_MOCK_PATHS"))
+_MOCK_PATH_ORIG: dict = {}
+
+
+def _install_mock_path_tripwire() -> None:
+    """Wrap FS-creating calls so a MagicMock-derived path is never silent."""
+    if _MOCK_PATH_SILENT:
+        return
+
+    import functools
+    import pathlib
+    import traceback
+
+    orig_mkdir = pathlib.Path.mkdir
+    if getattr(orig_mkdir, "_yuleosh_mock_guard", False):
+        return
+    orig_touch = pathlib.Path.touch
+    orig_makedirs = os.makedirs
+    _MOCK_PATH_ORIG.update(mkdir=orig_mkdir, touch=orig_touch, makedirs=orig_makedirs)
+
+    def _note(target, kind: str) -> None:
+        frames = [
+            f for f in traceback.format_stack()[:-3]
+            if "/tests/" in f or "/src/" in f
+        ]
+        _MOCK_PATH_HITS.append(
+            (
+                os.environ.get("PYTEST_CURRENT_TEST", "<no-test>").split(" (")[0],
+                f"[{kind}] {target}",
+                "".join(frames[-3:]),
+            )
+        )
+
+    @functools.wraps(orig_mkdir)
+    def _mkdir(self, *a, **k):
+        if "<MagicMock" in str(self):
+            _note(self, "Path.mkdir")
+        return orig_mkdir(self, *a, **k)
+
+    @functools.wraps(orig_touch)
+    def _touch(self, *a, **k):
+        if "<MagicMock" in str(self):
+            _note(self, "Path.touch")
+        return orig_touch(self, *a, **k)
+
+    @functools.wraps(orig_makedirs)
+    def _makedirs(name, *a, **k):
+        if "<MagicMock" in str(name):
+            _note(name, "os.makedirs")
+        return orig_makedirs(name, *a, **k)
+
+    _mkdir._yuleosh_mock_guard = True
+    pathlib.Path.mkdir = _mkdir
+    pathlib.Path.touch = _touch
+    os.makedirs = _makedirs
+
+
+def _report_mock_path_hits() -> None:
+    """Print (and warn about) MagicMock paths that reached the real FS."""
+    if _MOCK_PATH_ORIG.get("mkdir") is not None:
+        import pathlib
+
+        pathlib.Path.mkdir = _MOCK_PATH_ORIG["mkdir"]
+        pathlib.Path.touch = _MOCK_PATH_ORIG["touch"]
+        os.makedirs = _MOCK_PATH_ORIG["makedirs"]
+
+    if not _MOCK_PATH_HITS:
+        return
+    by_test: dict = {}
+    for tid, path, stack in _MOCK_PATH_HITS:
+        by_test.setdefault(tid, []).append((path, stack))
+
+    print("\n" + "=" * 78)
+    print(f"[mock-path] 检测到 {len(_MOCK_PATH_HITS)} 次「MagicMock 路径落盘」"
+          f"，来自 {len(by_test)} 个测试")
+    print("=" * 78)
+    for tid, entries in sorted(by_test.items()):
+        print(f"\n● {tid}  ({len(entries)} 次)")
+        seen = set()
+        for path, _ in entries:
+            if path in seen:
+                continue
+            seen.add(path)
+            print(f"    {path}")
+        print("    调用栈:")
+        for line in entries[0][1].strip().splitlines():
+            print("      " + line.strip())
+    print("\n修法见 tests/conftest.py 注释；确需静默：OSH_ALLOW_MOCK_PATHS=1")
+    print("=" * 78)
+
+
+_install_mock_path_tripwire()
+
+
+def _sweep_mock_path_pollution() -> int:
+    """删除本会话（及历史遗留）落在仓库里的 ``<MagicMock ...>`` 目录。
+
+    只匹配名字以 ``<MagicMock`` 开头的目录，且限定在仓库根与 ``projects/``
+    两处（实测只有这两处出现过）。这是**自愈**措施：即便某个测试仍然把
+    Mock 的 repr 当路径落盘，跑完也不会留在仓库里。
+    """
+    if _MOCK_PATH_SILENT:
+        return 0
+    repo_root = Path(__file__).resolve().parent.parent
+    removed = 0
+    for parent in (repo_root, repo_root / "projects"):
+        if not parent.is_dir():
+            continue
+        for child in parent.glob("<MagicMock*"):
+            if child.name.startswith("<MagicMock") and child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+                removed += 1
+    return removed
+
+
 def pytest_sessionfinish(session, exitstatus):
     """Drop the throwaway sessions root once the run is over."""
+    _report_mock_path_hits()
+    swept = _sweep_mock_path_pollution()
+    if swept:
+        print(f"[mock-path] 已自动清扫 {swept} 个 <MagicMock ...> 污染目录")
     if _SESSIONS_TMP:
         shutil.rmtree(_SESSIONS_TMP, ignore_errors=True)
 
