@@ -21,6 +21,8 @@ htmlcov/
 
 # Pytest
 .pytest_cache/
+# 手工 --basetemp 残留（曾被误置于仓库根，3.5MB/49 项）；忽略以防 `git add .` 误提交
+.pytest-tmp/
 
 # OS
 .DS_Store
