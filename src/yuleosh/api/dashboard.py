@@ -38,6 +38,22 @@ log = logging.getLogger("api.dashboard")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OSH_HOME = os.environ.get("OSH_HOME", str(PROJECT_ROOT))
 
+
+def _evidence_home() -> str:
+    """Effective ``OSH_HOME`` for the evidence paths — resolved **at call time**.
+
+    本模块的 ``OSH_HOME`` 是 import 期快照，测试用
+    ``monkeypatch.setattr(D, "OSH_HOME", tmp)`` 做隔离（另有若干测试改 env）。
+    凡是决定「证据包从哪读、往哪写」的位置都走这里，保证与本模块的
+    SEC-C1 守卫同源；跨模块调用（``evidence.snapshot_bundle``）必须把结果
+    显式传下去，否则两边各读自己的快照就会分叉 —— 那正是 2026-09-23 「生成
+    的证据包落进仓库 ``.osh/evidence/``」的成因。详见
+    ``yuleosh.api.resolve_osh_home``。
+    """
+    from . import resolve_osh_home
+
+    return resolve_osh_home(OSH_HOME)
+
 # ── In-memory task tracking for evidence pack generation ──
 _ev_tasks: dict[str, dict] = {}
 
@@ -444,10 +460,10 @@ def _load_gap_items() -> tuple[list[dict], Optional[str]]:
     Same source of truth used by list, detail and run endpoints.
     """
     manifest_candidates = [
-        Path(OSH_HOME) / ".yuleosh" / "evidence-bundle" / "audit-manifest.json",
-        Path(OSH_HOME) / ".osh" / "evidence" / "audit-manifest.json",
-        Path(OSH_HOME) / ".yuleosh" / "reports" / "audit-manifest.json",
-        Path(OSH_HOME) / "reports" / "audit-manifest.json",
+        Path(_evidence_home()) / ".yuleosh" / "evidence-bundle" / "audit-manifest.json",
+        Path(_evidence_home()) / ".osh" / "evidence" / "audit-manifest.json",
+        Path(_evidence_home()) / ".yuleosh" / "reports" / "audit-manifest.json",
+        Path(_evidence_home()) / "reports" / "audit-manifest.json",
     ]
 
     real_items: list[dict] = []
@@ -975,10 +991,11 @@ def _dashboard_evidence_generate(body: dict, query: dict) -> tuple[dict, int]:
     project_id = body.get("project_id") or _get_query_param(query, "project_id", "default")
 
     # Fail fast BEFORE creating the task record if project_dir escapes OSH_HOME.
-    raw_dir = body.get("project_dir") or OSH_HOME
+    home = _evidence_home()
+    raw_dir = body.get("project_dir") or home
     try:
         project_dir = str(Path(raw_dir).expanduser().resolve())
-        Path(project_dir).relative_to(Path(OSH_HOME).resolve())
+        Path(project_dir).relative_to(Path(home).resolve())
     except (ValueError, TypeError, OSError):
         return json_error("project_dir must be inside OSH_HOME", 403)
 
@@ -1047,8 +1064,14 @@ def _run_evidence_task(task_id: str, project_dir: str) -> None:
 
                 # Snapshot the bundle into the evidence history store so the
                 # dashboard generation is also retrievable/downloadable later.
+                #
+                # osh_home 必须**显式**传本模块解析出来的值：bundle_dir 由
+                # project_dir 推出（本模块的 OSH_HOME），而快照的写入目标此前
+                # 由 ``api.OSH_HOME`` 决定 —— 两个快照一旦分叉，隔离就失效，
+                # 包会落进仓库的 .osh/evidence/（2026-09-23 根因）。
                 from .evidence import snapshot_bundle
-                version = snapshot_bundle(str(bundle_dir))
+
+                version = snapshot_bundle(str(bundle_dir), osh_home=_evidence_home())
                 download_url = (
                     f"/api/v1/evidence/pack?version={version}"
                     if version
@@ -1379,9 +1402,9 @@ def _get_query_param(query: dict, key: str, default: str = "") -> str:
 def _find_latest_manifest(project_id: str = "") -> Optional[str]:
     """Find the latest audit-manifest.json in the evidence directory."""
     candidates = [
-        Path(OSH_HOME) / ".osh" / "evidence" / "audit-manifest.json",
-        Path(OSH_HOME) / ".yuleosh" / "reports" / "audit-manifest.json",
-        Path(OSH_HOME) / "reports" / "audit-manifest.json",
+        Path(_evidence_home()) / ".osh" / "evidence" / "audit-manifest.json",
+        Path(_evidence_home()) / ".yuleosh" / "reports" / "audit-manifest.json",
+        Path(_evidence_home()) / "reports" / "audit-manifest.json",
     ]
     for p in candidates:
         if p.exists():

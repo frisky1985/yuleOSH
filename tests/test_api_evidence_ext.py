@@ -2,6 +2,8 @@
 
 # @tests src/yuleosh/api/evidence.py
 
+import os
+
 import pytest
 from unittest.mock import patch, MagicMock
 from yuleosh.api.evidence import handle_evidence, _generate_evidence
@@ -16,38 +18,34 @@ class TestEvidence:
         assert code == 404
 
     @patch("yuleosh.api.evidence.subprocess.run")
-    @patch("yuleosh.api.evidence.os.environ.get")
-    def test_generate_evidence_ok(self, mock_env, mock_subproc, tmp_path):
+    def test_generate_evidence_ok(self, mock_subproc, tmp_path):
         """POST /evidence/generate runs pack."""
-        mock_env.return_value = str(tmp_path)
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "generated"
         mock_result.stderr = ""
         mock_subproc.return_value = mock_result
 
-        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+        # OSH_HOME 现在按调用时解析，所以隔离要真的改 env（而不是打桩
+        # os.environ.get / 只 patch 模块常量）。
+        with patch.dict(os.environ, {"OSH_HOME": str(tmp_path)}):
             result, code = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 200
         assert result["data"]["status"] == "completed"
 
     @patch("yuleosh.api.evidence.subprocess.run")
-    @patch("yuleosh.api.evidence.os.environ.get")
-    def test_generate_evidence_timeout(self, mock_env, mock_subproc, tmp_path):
+    def test_generate_evidence_timeout(self, mock_subproc, tmp_path):
         """Timeout returns 504."""
-        mock_env.return_value = str(tmp_path)
         mock_subproc.side_effect = __import__("subprocess").TimeoutExpired("cmd", 120)
-        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+        with patch.dict(os.environ, {"OSH_HOME": str(tmp_path)}):
             result, code = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 504
 
     @patch("yuleosh.api.evidence.subprocess.run")
-    @patch("yuleosh.api.evidence.os.environ.get")
-    def test_generate_evidence_error(self, mock_env, mock_subproc, tmp_path):
+    def test_generate_evidence_error(self, mock_subproc, tmp_path):
         """OSError returns 500 (masked, no internal details)."""
-        mock_env.return_value = str(tmp_path)
         mock_subproc.side_effect = OSError("No such file")
-        with patch("yuleosh.api.OSH_HOME", str(tmp_path)):
+        with patch.dict(os.environ, {"OSH_HOME": str(tmp_path)}):
             result, code = handle_evidence("POST", "generate", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 500
         assert "No such file" not in result.get("error", "")

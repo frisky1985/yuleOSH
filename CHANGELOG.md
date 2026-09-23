@@ -6,6 +6,16 @@
 
 ### 修复
 
+- **证据包不再漏进源码仓库（`OSH_HOME` 双真值收口）**
+  （`api/__init__.py`、`api/evidence.py`、`api/dashboard.py`、`tests/conftest.py`）
+  - **根因**：`OSH_HOME` 在各 API 模块里是 **import 期快照**（`api/__init__.py:23`、`dashboard.py:39`），而 `os.environ["OSH_HOME"]` 可以在运行时被改 —— 同一进程里存在**两份真值**。dashboard 的证据生成把 bundle 位置交给 `dashboard.OSH_HOME`、把写入目标交给 `evidence.snapshot_bundle` 内部的 `from . import OSH_HOME`（即 `api.OSH_HOME`）；两个快照一旦分叉，测试的隔离就失效，生成的证据包落进**仓库**。实测两处落点：`.osh/evidence/` 累积 46 个空壳包（33×174B + 13×~890B）外加 `compliance-pack.zip`；`src/.osh/evidence/` 同类空壳（`parent.parent.parent` 从 `api/` 往上三层，`api.PROJECT_ROOT` 实为 `src`），自 09-02 起漏了两周。空壳的形态特征即「只含 37 字节的 `audit-manifest.json`」，且删掉后每次跑测试还会再长。
+  - **修复**：新增 `api.resolve_osh_home(current)` 做**调用时**解析，优先级「本模块常量被显式覆盖 > 运行时 env > import 期快照」，把测试中长期并存的两套隔离手法（`monkeypatch.setenv` 232 处 / `monkeypatch.setattr` 82 处）都认下来。不能简单地「env 优先」：`tests/test_api.py` 在**收集期**就用 `os.environ.setdefault` 把 env 钉在仓库根，env 优先会反过来废掉 `setattr` 那一类隔离（实测 28 项失败）。
+  - `evidence.py` 的 6 处落盘 / 读取位置改走 `_ev_home()`；`snapshot_bundle(bundle_dir, osh_home=None)` 新增 `osh_home` 参数，**dashboard 显式传入自己的解析结果** —— 这是消除跨模块分叉的关键一步。`dashboard.py` 的证据路径（`_load_gap_items` / `_find_latest_manifest` / evidence generate 守卫 / worker 落盘）同源化；纯只读且自洽的 coverage / misra / projects 路径**未动**，控制爆炸半径。
+  - **自愈网**：`conftest.py` 在 `pytest_configure` 记录仓库两处 evidence 目录的包集合，`pytest_sessionfinish` 清掉**本会话新增**的包并逐条打印路径（`OSH_ALLOW_EVIDENCE_WRITES=1` 可关闭，零开销）。与既有的 MagicMock 落盘拦截同一模式。
+  - **验证（严格同序对照）**：68 个测试文件 / 1669 项 —— 改动前 `14 failed / 1651 passed`，改动后完全一致，**0 回归**（14 项为既存失败）。泄漏维度：同一批跑完，基线新增 3 个包（174B / 891B / 174B，与历史空壳同形），修复后 **0 个**。新增 `tests/test_osh_home_resolution.py`（13 项：判定规则 + 两处落点 + dashboard 跨模块同源）；撤掉修复后 12/13 变红，非空转。
+  - 顺带清理：`src/.osh/evidence/` 的 14 个空壳包已移除（移入回收站）。
+  - 顺带发现（**未修**，不属本缺陷）：`tests/test_v361_critical_fixes.py::TestErrorMasking::test_pipeline_run_masks_details` 是既存失败 —— 用例把 `spec.md` 直接放在 `OSH_HOME` 根，而 `_run_pipeline` 由 `resolved.parent.parent` 反推 `project_dir` 时会越出 `OSH_HOME`，守卫按设计返回 403，断言却期望 500（错误脱敏）。修法是把 spec 放到 `<proj>/docs/spec.md`。
+
 - **run 结论不再绕过门禁证据（根治「表面全绿」）**
   （`pipeline/gates.py`、`pipeline/orchestrator.py`、`pipeline/session.py`）
   - **证据时效性判定（新增 `stale` 状态）**：每个步骤产物自带 `session` 字段，记录产出它的 run。该字段与本轮 `session.name` 不符 → 门禁判 `stale`（复用了旧轮次的验证证据），而不是静默按 `passed` / `skipped` 计。`REUSABLE_STEPS`（`spec-check` / `codegen-deploy`）跨 run 复用是设计允许的，豁免此判定。

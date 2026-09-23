@@ -152,6 +152,62 @@ def _report_mock_path_hits() -> None:
 _install_mock_path_tripwire()
 
 
+# ---------------------------------------------------------------------------
+# Evidence-pack leak guard (2026-09-23)
+# ---------------------------------------------------------------------------
+# 背景：``OSH_HOME`` 在同一进程里有**两份真值** —— 模块级常量（import 期快照）
+# 与 ``os.environ["OSH_HOME"]``（运行时可改）。dashboard 的证据生成把 bundle
+# 位置交给 ``dashboard.OSH_HOME``、把写入目标交给 ``api.OSH_HOME``，两个快照
+# 一旦分叉，测试隔离就失效：生成的证据包落进**仓库**。实测两处落点：
+#
+#   - ``.osh/evidence/``      ：env 指向仓库根时（收集期 test_api.py 会这样钉）
+#   - ``src/.osh/evidence/``  ：env 未设时（``api.PROJECT_ROOT`` 实为 ``src``）
+#
+# 累计 46 个空壳包（174B / ~890B）外加 ``compliance-pack.zip``；``src`` 那处
+# 自 09-02 起漏了两周。根因已在 ``yuleosh.api.resolve_osh_home`` 修掉（隔离
+# 现在真正生效），这里只再加一道**自愈网**：会话开始记录两处目录的包集合，
+# 结束时把**本会话新增**的包清掉并逐条打印。
+#
+# 判据是「跑测试期间新出现在源码仓库里的 compliance-pack」—— 合法证据包只会
+# 落在项目目录或服务端 OSH_HOME，不可能在跑测试时落进源码树。设
+# ``OSH_ALLOW_EVIDENCE_WRITES=1`` 可关闭（不记录、不清扫，零开销）。
+_REPO_ROOT_DIR = Path(__file__).resolve().parent.parent
+_EVIDENCE_ROOTS = (
+    _REPO_ROOT_DIR / ".osh" / "evidence",
+    _REPO_ROOT_DIR / "src" / ".osh" / "evidence",
+)
+_EVIDENCE_GUARD_OFF = bool(os.environ.get("OSH_ALLOW_EVIDENCE_WRITES"))
+_EVIDENCE_BEFORE: dict = {}
+
+
+def _snapshot_repo_evidence() -> dict:
+    return {
+        root: ({p.name for p in root.glob("compliance-pack*.zip")} if root.is_dir() else set())
+        for root in _EVIDENCE_ROOTS
+    }
+
+
+def pytest_configure(config):
+    """Record the repo's evidence-pack inventory before any test runs."""
+    if not _EVIDENCE_GUARD_OFF:
+        _EVIDENCE_BEFORE.update(_snapshot_repo_evidence())
+
+
+def _sweep_evidence_leaks() -> list:
+    """Delete packs that *this session* wrote into the source tree."""
+    if _EVIDENCE_GUARD_OFF or not _EVIDENCE_BEFORE:
+        return []
+    removed = []
+    for root, before in _EVIDENCE_BEFORE.items():
+        for name in sorted(_snapshot_repo_evidence().get(root, set()) - before):
+            try:
+                (root / name).unlink()
+                removed.append(str((root / name).relative_to(_REPO_ROOT_DIR)))
+            except OSError:
+                pass
+    return removed
+
+
 def _sweep_mock_path_pollution() -> int:
     """删除本会话（及历史遗留）落在仓库里的 ``<MagicMock ...>`` 目录。
 
@@ -179,6 +235,9 @@ def pytest_sessionfinish(session, exitstatus):
     swept = _sweep_mock_path_pollution()
     if swept:
         print(f"[mock-path] 已自动清扫 {swept} 个 <MagicMock ...> 污染目录")
+    leaked = _sweep_evidence_leaks()
+    if leaked:
+        print(f"[evidence-leak] 已自动清扫 {len(leaked)} 个漏进仓库的证据包：" + ", ".join(leaked))
     if _SESSIONS_TMP:
         shutil.rmtree(_SESSIONS_TMP, ignore_errors=True)
 

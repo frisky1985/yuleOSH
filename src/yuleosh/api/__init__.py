@@ -22,6 +22,54 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 OSH_HOME = os.environ.get("OSH_HOME", str(PROJECT_ROOT))
 
+# Import-time snapshot of the effective OSH_HOME — the "second truth" whose
+# divergence from a runtime env change caused the evidence-pack leak
+# (2026-09-23).  See resolve_osh_home() for the full explanation.
+_OSH_HOME_AT_IMPORT = OSH_HOME
+
+
+def resolve_osh_home(current: str | None = None) -> str:
+    """Resolve the effective ``OSH_HOME`` **at call time**.
+
+    根因（2026-09-23）: ``OSH_HOME`` 是模块级常量，import 那一刻快照后永不
+    变化；而 ``os.environ["OSH_HOME"]`` 可以在运行时被改。同一进程里于是有
+    **两份真值**，测试里两套隔离手法各自只命中一份：
+
+    - ``monkeypatch.setenv("OSH_HOME", tmp)``（全仓 232 处）→ 改 env；
+    - ``monkeypatch.setattr(mod, "OSH_HOME", tmp)``（全仓 82 处）→ 改常量。
+
+    写入目标若读常量、隔离却改 env（或反之），隔离就形同虚设。实证后果：
+    dashboard 的证据生成把包写进了**仓库** ``.osh/evidence/``，累积 46 个空壳
+    包外加一个 ``compliance-pack.zip`` —— 删掉还会再长。
+
+    本函数把两类手法都认下来，供**所有决定落盘位置**的调用点使用：
+
+    1. 传入的本模块常量**被显式覆盖过**（``monkeypatch.setattr``）→ 以它为准；
+    2. 否则运行时设了 ``OSH_HOME`` env → 以 env 为准；
+    3. 都没有 → import 时的取值（与旧行为完全一致）。
+
+    为什么「显式覆盖的常量」优先于 env：``tests/test_api.py`` 在**收集期**就用
+    ``os.environ.setdefault("OSH_HOME", <仓库根>)`` 把 env 钉死，此后一律存在，
+    所以不能简单地「env 优先」（那会反过来废掉 setattr 那一类隔离，实测 28 项
+    失败）。判定用 ``current != _OSH_HOME_AT_IMPORT`` 即可 —— 本模块常量除被
+    patch 外恒等于 import 快照，不会误判。
+
+    ``current`` 应由调用方传入**自己模块**的 ``OSH_HOME`` 常量：各个模块的
+    常量可以被独立 patch，传自己的才能在跨模块调用时保持与该模块的守卫、
+    清单、目录三者同源。
+
+    纯只读且只读自己常量的路径无需迁移（本身自洽）；**跨模块传递**（如
+    ``dashboard`` 决定 bundle 位置、``evidence`` 决定写入目标）必须用它。
+    """
+    if current and current != _OSH_HOME_AT_IMPORT:
+        return current
+    env_now = os.environ.get("OSH_HOME", "")
+    # 防御：个别测试用 ``patch("....os.environ.get")`` 整体打桩，返回值不是
+    # 字符串；此时退回旧行为，绝不把 Mock 当路径用。
+    if isinstance(env_now, str) and env_now.strip():
+        return env_now.strip()
+    return current or _OSH_HOME_AT_IMPORT
+
 
 class BadRequest(Exception):
     """Raised when a request body cannot be parsed."""

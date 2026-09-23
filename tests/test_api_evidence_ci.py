@@ -114,16 +114,16 @@ class TestGenerateEvidence:
         assert result[1] == 403
         assert "inside OSH_HOME" in result[0]["error"]
 
-    @mock.patch("yuleosh.api.evidence.os.environ.get")
     @mock.patch("yuleosh.api.evidence.subprocess.run")
-    def test_default_project_dir(self, mock_run, mock_env_get, monkeypatch, tmp_path):
+    def test_default_project_dir(self, mock_run, monkeypatch, tmp_path):
         proc = mock.Mock()
         proc.returncode = 0
         proc.stdout = "ok"
         proc.stderr = ""
         mock_run.return_value = proc
-        mock_env_get.return_value = str(tmp_path)  # OSH_HOME env points at tmp
-        monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
+        # OSH_HOME env points at tmp — set it for real (call-time resolution
+        # reads the env, so the isolation actually takes effect).
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
 
         result = _generate_evidence({})
         assert result[1] == 200

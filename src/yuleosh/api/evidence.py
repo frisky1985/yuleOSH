@@ -5,7 +5,6 @@
 
 """Evidence endpoints — generate, list files, download compliance pack."""
 
-import os
 import shutil
 import sys
 import subprocess
@@ -25,6 +24,20 @@ def _qp(query: dict, key: str, default: str = "") -> str:
     if isinstance(val, list):
         return val[0] if val else default
     return str(val) if val is not None else default
+
+
+def _ev_home() -> str:
+    """Effective ``OSH_HOME`` for evidence paths — resolved **at call time**.
+
+    此前这里写 ``from . import OSH_HOME``，取的是 import 期快照：测试用
+    ``monkeypatch.setenv("OSH_HOME", tmp)`` 隔离时，包仍然落进仓库的
+    ``.osh/evidence/``（删除后还会再生）。改走 ``resolve_osh_home``，两类
+    隔离手法（env / 模块常量）都能真正生效。详见
+    ``yuleosh.api.resolve_osh_home`` 的说明。
+    """
+    from . import OSH_HOME, resolve_osh_home
+
+    return resolve_osh_home(OSH_HOME)
 
 
 @require_auth
@@ -49,9 +62,7 @@ def _snapshot_pack() -> str | None:
 
     Returns the versioned file name, or None if no pack exists yet.
     """
-    from . import OSH_HOME
-
-    ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
+    ev_dir = Path(_ev_home()) / ".osh" / "evidence"
     src = ev_dir / "compliance-pack.zip"
     if not src.exists():
         return None
@@ -68,7 +79,7 @@ def _snapshot_pack() -> str | None:
     return version
 
 
-def snapshot_bundle(bundle_dir: str) -> str | None:
+def snapshot_bundle(bundle_dir: str, osh_home: str | None = None) -> str | None:
     """Zip an evidence *bundle directory* (e.g. `.yuleosh/evidence-bundle`)
     into a versioned `.osh/evidence/compliance-pack-<ts>.zip` and overwrite the
     latest `compliance-pack.zip`.  Returns the versioned name, or None when the
@@ -77,13 +88,18 @@ def snapshot_bundle(bundle_dir: str) -> str | None:
     Used by the dashboard generate flow so its real generations also land in
     the evidence history list (the dashboard produces a bundle dir + manifest,
     whereas the evidence-page path produces compliance-pack.zip directly).
-    """
-    from . import OSH_HOME
 
+    ``osh_home`` lets the caller pin the destination root.  The dashboard
+    **must** pass its own (``dashboard.OSH_HOME``) because the bundle dir is
+    derived from the same value: previously the write target came from
+    ``api.OSH_HOME`` while the bundle came from ``dashboard.OSH_HOME``, and the
+    two snapshots diverging is exactly how generated packs escaped into the
+    repository's ``.osh/evidence/`` during tests (2026-09-23).
+    """
     src = Path(bundle_dir)
     if not src.exists() or not src.is_dir():
         return None
-    ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
+    ev_dir = Path(osh_home or _ev_home()) / ".osh" / "evidence"
     ev_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     version = f"compliance-pack-{ts}.zip"
@@ -109,16 +125,13 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
     run the pack script with an arbitrary cwd (e.g. /etc) and probe/write
     anywhere on the server.
     """
-    from . import OSH_HOME as _api_osh_home
-    raw_dir = body.get("project_dir") or os.environ.get(
-        "OSH_HOME", str(Path(__file__).resolve().parent.parent.parent)
-    )
+    home = _ev_home()
+    raw_dir = body.get("project_dir") or home
     try:
         project_dir = str(Path(raw_dir).expanduser().resolve())
-        Path(project_dir).relative_to(Path(_api_osh_home).resolve())
+        Path(project_dir).relative_to(Path(home).resolve())
     except (ValueError, TypeError, OSError):
         return json_error("project_dir must be inside OSH_HOME", 403)
-
     try:
         result = subprocess.run(
             [sys.executable, "src/evidence/pack.py", "pack"],
@@ -145,9 +158,7 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
 
 def _list_evidence_files() -> tuple[dict, int]:
     """GET /api/v1/evidence/files — list generated evidence files."""
-    from . import OSH_HOME
-
-    ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
+    ev_dir = Path(_ev_home()) / ".osh" / "evidence"
     files = []
     if ev_dir.exists():
         for f in sorted(ev_dir.iterdir()):
@@ -168,9 +179,7 @@ def _list_evidence_history() -> tuple[dict, int]:
     Each generation snapshots compliance-pack.zip to compliance-pack-<ts>.zip,
     so this returns a chronological (newest-first) list of downloadable versions.
     """
-    from . import OSH_HOME
-
-    ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
+    ev_dir = Path(_ev_home()) / ".osh" / "evidence"
     versions = []
     if ev_dir.exists():
         # Sort by mtime (newest first) — not by name, because same-second
@@ -202,9 +211,7 @@ def _download_pack(handler, query: dict | None = None) -> tuple[dict, int]:
     latest compliance-pack.zip.  version must be a bare filename (path-traversal
     guarded) and resolve inside the evidence dir.
     """
-    from . import OSH_HOME
-
-    ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
+    ev_dir = Path(_ev_home()) / ".osh" / "evidence"
     version = _qp(query or {}, "version").strip() if query else ""
 
     # Only treat ?version= as a real snapshot when it looks like one
@@ -274,9 +281,7 @@ def _download_file(handler, query: dict | None = None) -> tuple[dict, int] | Non
     and the resolved path must stay inside .osh/evidence (also blocks symlink
     escapes).  Missing file → 404, bad name → 400.
     """
-    from . import OSH_HOME
-
-    ev_dir = Path(OSH_HOME).resolve() / ".osh" / "evidence"
+    ev_dir = Path(_ev_home()).resolve() / ".osh" / "evidence"
     name = (_qp(query or {}, "name") or "").strip()
 
     if (
