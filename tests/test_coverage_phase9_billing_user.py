@@ -31,7 +31,12 @@ def osh_env(tmp_path):
     """Isolated OSH_HOME + Store per test."""
     old = os.environ.get("OSH_HOME")
     old_db = os.environ.get("YULEOSH_DB")
+    old_sessions = os.environ.get("OSH_SESSIONS_DIR")
     os.environ["OSH_HOME"] = str(tmp_path)
+    # OSH_SESSIONS_DIR（conftest 全局设的泄漏隔离）优先级高于 OSH_HOME：
+    # 不一起指到 tmp_path 的话，PipelineSession 会落到临时根，而测试按
+    # <OSH_HOME>/.osh/sessions 去扫 → 目录不存在。
+    os.environ["OSH_SESSIONS_DIR"] = str(tmp_path / ".osh" / "sessions")
     # 不设置 YULEOSH_JWT_SECRET：auth_extended.JWT_SECRET 是模块导入时快照，
     # 改 env 会污染同进程后跑的 auth 测试（v380_a1_auth_unify 断言快照==env）。
     # conftest 已提供 ≥16 的 CI 值，billing 路由认证全部 mock，不依赖具体值。
@@ -42,6 +47,10 @@ def osh_env(tmp_path):
         os.environ.pop("OSH_HOME", None)
     else:
         os.environ["OSH_HOME"] = old
+    if old_sessions is None:
+        os.environ.pop("OSH_SESSIONS_DIR", None)
+    else:
+        os.environ["OSH_SESSIONS_DIR"] = old_sessions
     if old_db is None:
         os.environ.pop("YULEOSH_DB", None)
     else:

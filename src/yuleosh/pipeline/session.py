@@ -58,6 +58,32 @@ class PipelineStepError(RuntimeError):
 
 
 # ------------------------------------------------------------------
+# Sessions root resolution
+# ------------------------------------------------------------------
+
+def resolve_sessions_root() -> Path:
+    """Return the root directory that holds one folder per run.
+
+    Precedence:
+
+      1. ``OSH_SESSIONS_DIR`` — explicit override, independent of
+         ``OSH_HOME``.  Two uses: keep run evidence on a separate volume
+         from the code (storage sizing), and keep the test suite from
+         writing into the repository's own ``.osh/sessions``.
+      2. ``<OSH_HOME>/.osh/sessions`` — the historical default.  ``OSH_HOME``
+         falls back to ``"."`` (cwd).
+
+    Callers must keep ``<root>/<run_id>`` two levels below a project
+    directory, because ``to_dict`` reverse-derives ``project_dir`` by
+    walking up three parents.
+    """
+    explicit = os.environ.get("OSH_SESSIONS_DIR", "").strip()
+    if explicit:
+        return Path(explicit)
+    return Path(os.environ.get("OSH_HOME", ".")) / ".osh" / "sessions"
+
+
+# ------------------------------------------------------------------
 # Session
 # ------------------------------------------------------------------
 
@@ -168,9 +194,11 @@ class PipelineSession:
         Phase 9 (2026-08-10): directory is named by run_id (unique per run)
         instead of pipeline name — two runs of the same pipeline (or by two
         users) no longer overwrite each other's session.json.
+
+        Root resolution lives in ``resolve_sessions_root`` so this and
+        ``engine.subprocess_executor._resolve_session_dir`` cannot drift.
         """
-        base = Path(os.environ.get("OSH_HOME", "."))
-        sdir = base / ".osh" / "sessions" / self.run_id
+        sdir = resolve_sessions_root() / self.run_id
         sdir.mkdir(parents=True, exist_ok=True)
         return sdir
 

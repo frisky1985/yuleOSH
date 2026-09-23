@@ -17,6 +17,14 @@
 
 ### 变更
 
+- **sessions 根独立可配 + 分层保留（`OSH_SESSIONS_DIR`）**
+  （`pipeline/session.py`、`engine/subprocess_executor.py`、`api/{artifacts,logs,tests}.py`、`pipeline/session_prune.py`、`tests/conftest.py`）
+  - **新增 `OSH_SESSIONS_DIR`**：把 sessions 根从 `<OSH_HOME>/.osh/sessions` 解耦出来。优先级 `OSH_SESSIONS_DIR` > `OSH_HOME` > cwd；写入侧（`PipelineSession` / `subprocess_executor._resolve_session_dir`）与读取侧（三个 API 模块）共用 `resolve_sessions_root()`，不再各写一份而漂移。用途一：把 run 证据放到独立卷；用途二：测试隔离（见下）。**未设置时行为与原先完全一致**。
+  - **修复测试泄漏**：`test_api.py` 在模块导入期把 `OSH_HOME` 钉到仓库根（进程级），于是每个构造过 `PipelineSession` 的测试都往仓库自己的 `.osh/sessions` 漏一个目录 —— 实测累积 **3611 个**，占历史上出现过的全部 session 的 **99.6%**。`conftest.py` 现在把 `OSH_SESSIONS_DIR` 指向一个临时根并在 `pytest_sessionfinish` 回收，**不动 `OSH_HOME`**，因此 `test_api.py` 依赖的相对路径解析不受影响（早期直接抢占 `OSH_HOME` 的做法曾坏掉 11 个测试）。临时根保持 `<project>/.osh/sessions` 层级，因为 `to_dict` 靠向上三层反推 `project_dir`。
+  - **新增 `pipeline/session_prune.py`**：按「可再生性」而非体积做分层保留 —— T0 运行态（空目录 / `created` 中止）整体回收；T1 汇总层（`session.json` / `gate-summary.json`）与 T2 LLM 产物（本地 4B 跑一轮 1.5–2 小时，不可再生）永久保留；T3 确定性证据（`VOLATILE_STEPS` 产物，分钟级可重跑）只保留在最近 `keep_last` 个 run 里。默认 `dry_run=True`，可用 `python -m yuleosh.pipeline.session_prune <project> --keep-last N [--apply]`。
+  - 动因：单次 24 步真实 run 只写 51 个文件 / 89 KB（字节维度十年内都不构成风险），真正的代价是**目录数** —— `api/artifacts.py` 每次请求都要 `os.walk(OSH_HOME)` + 全量 `iterdir` + 逐个读 `session.json`，随历史线性退化。
+  - 顺带记录一个**未修**的相邻缺陷：`gates._ARTIFACT_CANDIDATES` 漏了 `qualification-test.json`（G10 步骤的实际产物名）与 `c-coverage-gate.json`，因此这些门禁读不到产物里的真实 verdict、只能退回 `session.steps` 的状态。本模块用一份显式补集兜住了清理场景，但门禁本身仍待修。
+
 - **步骤缓存分级：验证证据每轮重跑**（`pipeline/step_cache.py`、`pipeline/orchestrator.py`）
   - 缓存语义由「确定性步骤可缓存」改为按「是否属于本轮验证证据」分级：
     - `REUSABLE_STEPS`（`spec-check` / `codegen-deploy`）—— 输入/生成物类，输入未变时仍按指纹跨 run 复用；

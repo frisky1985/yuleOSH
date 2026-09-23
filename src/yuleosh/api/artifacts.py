@@ -24,11 +24,14 @@ Security (preview): the requested file is resolved with
 import json
 import logging
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
 from . import json_ok, json_error
 from .middleware import require_auth
+from yuleosh.pipeline.session import resolve_sessions_root
 
 log = logging.getLogger("api.artifacts")
 
@@ -97,45 +100,116 @@ class _PathTraversal(Exception):
     """Raised when a requested artifact path escapes its session directory."""
 
 
+# ``_sessions_roots()`` runs more than once per request and re-walks the
+# workspace every time, so its cost grows with the directory count.  Memoise
+# the walk for a short window; the entry is dropped as soon as one of its
+# roots stops existing, so a deleted session tree shows up immediately.
+# ``OSH_NO_ROOTS_CACHE=1`` bypasses the cache entirely.
+_ROOTS_CACHE: dict[tuple[str, str], tuple[float, tuple[Path, ...]]] = {}
+_ROOTS_CACHE_LOCK = threading.Lock()
+_ROOTS_CACHE_TTL = 5.0
+_ROOTS_CACHE_MAX = 64
+
+
 def _sessions_root() -> Path:
-    """Primary root directory holding per-run session folders."""
-    return Path(OSH_HOME) / ".osh" / "sessions"
+    """Primary root directory holding per-run session folders.
+
+    Delegates to ``yuleosh.pipeline.session.resolve_sessions_root`` so the
+    reader and the writers (``PipelineSession``,
+    ``engine.subprocess_executor._resolve_session_dir``) cannot disagree:
+    ``OSH_SESSIONS_DIR`` wins when set, else ``<OSH_HOME>/.osh/sessions``.
+    """
+    return resolve_sessions_root()
+
+
+def _discover_nested_session_roots(home: Path) -> list[Path]:
+    """Every ``<dir>/.osh/sessions`` under ``home`` (bounded to depth 5).
+
+    Prunes known-uninteresting trees so the walk stays cheap.
+    """
+    found: list[Path] = []
+    if not home.is_dir():
+        return found
+    skip = {".git", "node_modules", "__pycache__", ".venv", "venv",
+            ".tox", "dist", "build", ".yuleosh", "frontend", ".osh"}
+    try:
+        for root, dirs, _files in os.walk(home):
+            root_path = Path(root)
+            rel_depth = (
+                len(root_path.relative_to(home).parts)
+                if root_path != home else 0
+            )
+            # 剪枝：无关大目录不进入；深度 > 5 不再下钻
+            dirs[:] = [d for d in dirs if d not in skip]
+            if rel_depth > 5:
+                dirs[:] = []
+                continue
+            cand = root_path / ".osh" / "sessions"
+            if cand.is_dir():
+                found.append(cand)
+    except OSError:
+        pass
+    return found
+
+
+def _ordered_unique(paths) -> list[Path]:
+    """De-duplicate paths, keeping first-seen order.
+
+    The walk hits ``home/.osh/sessions`` — which is already the primary — so a
+    naive concatenation returns it twice.  ``_iter_sessions`` additionally
+    de-dups by resolved path; this keeps the returned list honest on its own.
+    """
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in paths:
+        if path not in seen:
+            seen.add(path)
+            unique.append(path)
+    return unique
 
 
 def _sessions_roots() -> list[Path]:
     """All roots that may contain per-run session dirs.
 
-    Primary: ``OSH_HOME/.osh/sessions``.  PLUS every ``.osh/sessions`` found
-    by recursively walking OSH_HOME (bounded depth) so pipeline runs scoped
-    to a sub-project directory (``OSH_HOME=<project>``) remain discoverable
-    from the backend's ``OSH_HOME`` — e.g. a GPIO demo run under
-    ``templates/gpio-led-chaser/.osh/sessions`` (depth-2) shows up when the
-    server's ``OSH_HOME`` is the repo root.  ``_iter_sessions`` de-dups by
-    resolved path, so overlapping roots are harmless.
+    Primary: ``resolve_sessions_root()`` (``OSH_SESSIONS_DIR`` when set, else
+    ``OSH_HOME/.osh/sessions``).  PLUS every ``.osh/sessions`` found by walking
+    OSH_HOME (bounded depth) so pipeline runs scoped to a sub-project directory
+    remain discoverable from the backend's ``OSH_HOME`` — e.g. a GPIO demo run
+    under ``templates/gpio-led-chaser/.osh/sessions`` (depth-2) shows up when
+    the server's ``OSH_HOME`` is the repo root.
+
+    The walk is memoised for a short window (``_ROOTS_CACHE_TTL``) because this
+    function is called more than once per request and walking the workspace
+    degrades linearly with its directory count.  The cache entry is discarded
+    as soon as any of its roots stops existing, so a deleted session tree is
+    reflected immediately.  ``OSH_NO_ROOTS_CACHE=1`` forces a fresh walk.
     """
-    roots: list[Path] = [_sessions_root()]
     home = Path(OSH_HOME)
-    if home.is_dir():
-        skip = {".git", "node_modules", "__pycache__", ".venv", "venv",
-                ".tox", "dist", "build", ".yuleosh", "frontend", ".osh"}
-        try:
-            for root, dirs, _files in os.walk(home):
-                root_path = Path(root)
-                rel_depth = (
-                    len(root_path.relative_to(home).parts)
-                    if root_path != home else 0
-                )
-                # 剪枝：无关大目录不进入；深度 > 5 不再下钻
-                dirs[:] = [d for d in dirs if d not in skip]
-                if rel_depth > 5:
-                    dirs[:] = []
-                    continue
-                cand = root_path / ".osh" / "sessions"
-                if cand.is_dir():
-                    roots.append(cand)
-        except OSError:
-            pass
-    return roots
+    primary = _sessions_root()
+
+    def _fresh() -> list[Path]:
+        return _ordered_unique(
+            (primary, *_discover_nested_session_roots(home)))
+
+    if os.environ.get("OSH_NO_ROOTS_CACHE", "") == "1":
+        return _fresh()
+
+    key = (str(home), str(primary))
+    now = time.monotonic()
+    with _ROOTS_CACHE_LOCK:
+        hit = _ROOTS_CACHE.get(key)
+    if hit is not None:
+        stamp, cached = hit
+        if (now - stamp) < _ROOTS_CACHE_TTL and all(p.is_dir() for p in cached):
+            return list(cached)
+
+    fresh = _fresh()
+    with _ROOTS_CACHE_LOCK:
+        # 测试会给每个 tmp_path 一个不同的 key；不设上限会持续增长。
+        if len(_ROOTS_CACHE) >= _ROOTS_CACHE_MAX:
+            _ROOTS_CACHE.clear()
+        _ROOTS_CACHE[key] = (now, tuple(fresh))
+    return fresh
 
 
 def _q(query: dict, key: str, default: str = "") -> str:

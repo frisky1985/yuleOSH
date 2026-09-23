@@ -99,16 +99,18 @@ class TestPipelineSession:
             assert d["status"] == "created"
             assert len(d["steps"]) == 1
 
-    def test_session_dir_creation(self, tmp_path):
+    def test_session_dir_creation(self, tmp_path, monkeypatch):
         """Session directory is created (Phase 9: run_id 命名)."""
-        with patch("yuleosh.pipeline.session.os.environ.get") as mock_env:
-            mock_env.return_value = str(tmp_path)
-            session = PipelineSession("test-dir", "/spec.md")
-            # Phase 9: 目录按 run_id 命名（同 name 不碰撞）
-            assert session.run_id
-            expected_dir = tmp_path / ".osh" / "sessions" / session.run_id
-            assert session.session_dir == expected_dir
-            assert expected_dir.exists()
+        # 用 monkeypatch 显式声明两个根，而不是 blanket mock os.environ.get
+        # —— 后者会让 OSH_SESSIONS_DIR 也拿到同一个值，优先于 OSH_HOME。
+        monkeypatch.delenv("OSH_SESSIONS_DIR", raising=False)
+        monkeypatch.setenv("OSH_HOME", str(tmp_path))
+        session = PipelineSession("test-dir", "/spec.md")
+        # Phase 9: 目录按 run_id 命名（同 name 不碰撞）
+        assert session.run_id
+        expected_dir = tmp_path / ".osh" / "sessions" / session.run_id
+        assert session.session_dir == expected_dir
+        assert expected_dir.exists()
 
     def test_save_to_disk(self, tmp_path):
         """_save writes session.json to disk."""

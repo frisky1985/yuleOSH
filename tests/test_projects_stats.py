@@ -48,6 +48,9 @@ def _isolate(monkeypatch, tmp_path):
     monkeypatch.setattr(P, "OSH_HOME", str(tmp_path))
     monkeypatch.setattr(R, "OSH_HOME", str(tmp_path))
     monkeypatch.setattr(T, "OSH_HOME", str(tmp_path))
+    # OSH_SESSIONS_DIR（conftest 全局设的泄漏隔离）优先级高于补丁过的
+    # OSH_HOME，不一起指过去的话 sessions 读到的会是空根。
+    monkeypatch.setenv("OSH_SESSIONS_DIR", str(tmp_path / ".osh" / "sessions"))
     # Rebind _handle to the freshly reloaded wrapped fn (so it sees
     # the new OSH_HOME).
     globals()["_handle"] = P.handle_projects_stats.__wrapped__

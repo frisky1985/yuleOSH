@@ -52,6 +52,9 @@ def _hermetic(monkeypatch):
 def osh_home(tmp_path, monkeypatch):
     """隔离 OSH_HOME；清掉可能影响 _check_llm_key 的 key 环境变量。"""
     monkeypatch.setenv("OSH_HOME", str(tmp_path))
+    # sessions 根有独立开关，且优先于 OSH_HOME：不一起指到 tmp_path 的话
+    # 断言 <tmp_path>/.osh/sessions/<run_id>/session.json 会落空。
+    monkeypatch.setenv("OSH_SESSIONS_DIR", str(tmp_path / ".osh" / "sessions"))
     monkeypatch.delenv("OSH_DEVELOPMENT_MODE", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)

@@ -58,12 +58,20 @@ def _resolve_session_dir(project_dir: str,
 
     Phase 9 (2026-08-10): 目录按 run_id 命名（与 PipelineSession 一致）。
     未传 run_id 时回退旧 name 规则（向后兼容）。
+
+    Root resolution mirrors ``PipelineSession.resolve_sessions_root``:
+    ``OSH_SESSIONS_DIR`` wins when set (explicit sessions root, independent
+    of ``OSH_HOME``), otherwise ``<OSH_HOME or project_dir>/.osh/sessions``.
     """
-    base = Path(os.environ.get("OSH_HOME", project_dir))
+    explicit = os.environ.get("OSH_SESSIONS_DIR", "").strip()
+    if explicit:
+        root = Path(explicit)
+    else:
+        root = Path(os.environ.get("OSH_HOME", project_dir)) / ".osh" / "sessions"
     if run_id:
-        return base / ".osh" / "sessions" / run_id
+        return root / run_id
     name = session_name or f"agent-pipeline-{time.strftime('%Y%m%d-%H%M%S')}"
-    return base / ".osh" / "sessions" / name
+    return root / name
 
 
 def _find_step(step_id: str) -> tuple[str, str, Any]:

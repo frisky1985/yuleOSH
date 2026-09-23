@@ -1,6 +1,9 @@
 """pytest configuration for yuleOSH tests."""
 
 import os
+import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +18,35 @@ os.environ.setdefault("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for
 # /tmp 污染的真正根因已在 loop_engine/event_bus.py 修复：
 # EventQueuePersistence 默认路径改为 _default_persistence_path()
 # （OSH_HOME 优先，否则 tempfile 隔离目录），不再裸写 /tmp/.yuleosh。
+
+
+# ---------------------------------------------------------------------------
+# Sessions-root isolation (2026-09-23)
+# ---------------------------------------------------------------------------
+# 每次 pipeline run 会在 sessions 根下建一个目录。该根原为
+# ``<OSH_HOME>/.osh/sessions``，而 test_api.py 在模块导入期就用 setdefault
+# 把 OSH_HOME 钉到仓库根（进程级）—— 于是每个构造过 PipelineSession 的测试
+# 都往仓库自己的 ``.osh/sessions`` 里漏一个目录。实测代价：3611 个残留目录，
+# 占历史上出现过的全部 session 的 99.6%（字节数可忽略，但拖慢
+# api/artifacts.py 的 O(N) 扫描）。
+#
+# 这里用 ``OSH_SESSIONS_DIR`` 单独重定向 sessions 根，**不动 OSH_HOME**，
+# 所以 test_api.py 依赖的相对路径解析不受影响（上次直接抢占 OSH_HOME 的
+# 尝试坏掉了 11 个测试）。临时根保持 ``<project>/.osh/sessions`` 的层级形态，
+# 因为 PipelineSession.to_dict 会向上追溯三层反推 project_dir。
+_SESSIONS_TMP: str | None = None
+if not os.environ.get("OSH_SESSIONS_DIR", "").strip():
+    _SESSIONS_TMP = tempfile.mkdtemp(prefix="yuleosh-pytest-sessions-")
+    os.environ["OSH_SESSIONS_DIR"] = str(
+        Path(_SESSIONS_TMP) / "project" / ".osh" / "sessions"
+    )
+    Path(os.environ["OSH_SESSIONS_DIR"]).mkdir(parents=True, exist_ok=True)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Drop the throwaway sessions root once the run is over."""
+    if _SESSIONS_TMP:
+        shutil.rmtree(_SESSIONS_TMP, ignore_errors=True)
 
 
 @pytest.fixture(autouse=True)

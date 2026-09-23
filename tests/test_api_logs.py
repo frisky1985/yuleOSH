@@ -32,8 +32,13 @@ def _call(method, path, query=None, body=None, user=None):
 
 @pytest.fixture
 def sessions(tmp_path, monkeypatch):
-    """Point OSH_HOME at tmp_path and build a two-run sessions tree."""
+    """Point OSH_HOME at tmp_path and build a two-run sessions tree.
+
+    ``OSH_SESSIONS_DIR`` (set process-wide by conftest) outranks the patched
+    ``OSH_HOME``, so pin it at the same tree or the API reads an empty root.
+    """
     monkeypatch.setattr(L, "OSH_HOME", str(tmp_path))
+    monkeypatch.setenv("OSH_SESSIONS_DIR", str(tmp_path / ".osh" / "sessions"))
     root = tmp_path / ".osh" / "sessions"
 
     run_a = root / "run-aaaa"
@@ -144,6 +149,9 @@ class TestSearch:
 
     def test_search_empty_root(self, tmp_path, monkeypatch):
         monkeypatch.setattr(L, "OSH_HOME", str(tmp_path))  # 无 .osh/sessions
+        # OSH_SESSIONS_DIR 优先级更高，也要指到一个不存在的根才算「空」
+        monkeypatch.setenv("OSH_SESSIONS_DIR",
+                           str(tmp_path / ".osh" / "sessions"))
         payload, status = _call("GET", "", query={})
         assert status == 200
         assert payload["data"]["logs"] == []
@@ -237,6 +245,8 @@ class TestSummary:
 
     def test_summary_no_data_note(self, tmp_path, monkeypatch):
         monkeypatch.setattr(L, "OSH_HOME", str(tmp_path))
+        monkeypatch.setenv("OSH_SESSIONS_DIR",
+                           str(tmp_path / ".osh" / "sessions"))
         payload, status = _call("GET", "summary", query={})
         assert status == 200
         assert payload["data"]["runs"] == []

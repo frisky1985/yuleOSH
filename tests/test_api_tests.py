@@ -36,8 +36,13 @@ def _req(method="GET", path="", body=None, query=None):
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch, tmp_path):
-    """Point OSH_HOME at tmp_path so sessions are scanned there."""
+    """Point OSH_HOME at tmp_path so sessions are scanned there.
+
+    ``OSH_SESSIONS_DIR`` (set process-wide by conftest) outranks the patched
+    ``OSH_HOME``, so pin it at the same tree.
+    """
     monkeypatch.setattr(T, "OSH_HOME", str(tmp_path))
+    monkeypatch.setenv("OSH_SESSIONS_DIR", str(tmp_path / ".osh" / "sessions"))
     return tmp_path
 
 

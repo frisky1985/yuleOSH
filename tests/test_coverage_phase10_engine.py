@@ -735,15 +735,28 @@ class TestFallbackChainStartLevel:
 
 class TestSubprocessExecutorUnits:
     def test_resolve_session_dir_with_run_id(self, tmp_path, monkeypatch):
+        # OSH_SESSIONS_DIR 优先级高于 OSH_HOME（conftest 全局设了它做测试隔离），
+        # 本用例专测 OSH_HOME 回退分支 → 先清掉。
+        monkeypatch.delenv("OSH_SESSIONS_DIR", raising=False)
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
         p = _resolve_session_dir(str(tmp_path), run_id="rid123")
         assert p == tmp_path / ".osh" / "sessions" / "rid123"
 
     def test_resolve_session_dir_default_name(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("OSH_SESSIONS_DIR", raising=False)
         monkeypatch.setenv("OSH_HOME", str(tmp_path))
         p = _resolve_session_dir(str(tmp_path))
         assert p.parent == tmp_path / ".osh" / "sessions"
         assert p.name.startswith("agent-pipeline-")
+
+    def test_resolve_session_dir_explicit_sessions_dir_wins(self, tmp_path,
+                                                            monkeypatch):
+        """OSH_SESSIONS_DIR 显式设置 → 覆盖 OSH_HOME 与 project_dir。"""
+        explicit = tmp_path / "separate-volume"
+        monkeypatch.setenv("OSH_SESSIONS_DIR", str(explicit))
+        monkeypatch.setenv("OSH_HOME", str(tmp_path / "home"))
+        p = _resolve_session_dir(str(tmp_path / "proj"), run_id="rid9")
+        assert p == explicit / "rid9"
 
     def test_find_step_loop_branch(self):
         """查找非首个 step → 覆盖循环 continue 分支。"""
@@ -947,7 +960,9 @@ class TestRunStepInSubprocess:
 
         # 防御 test_api.py 模块级 setdefault("OSH_HOME", repo根) 的存量泄漏：
         # _resolve_session_dir 优先读 OSH_HOME，泄漏时 artifacts.json 会写到别处。
+        # 同时清掉 conftest 的 OSH_SESSIONS_DIR（它优先级更高，会把目录指到临时根）。
         monkeypatch.delenv("OSH_HOME", raising=False)
+        monkeypatch.delenv("OSH_SESSIONS_DIR", raising=False)
         monkeypatch.setattr(spe.subprocess, "run", lambda *a, **kw: self._fake_proc())
         _run_step_in_subprocess(
             {"step_id": "s1"}, str(tmp_path), False, None,
@@ -960,6 +975,8 @@ class TestRunStepInSubprocess:
         import yuleosh.engine.subprocess_executor as spe
 
         # 用文件占位 session 目录 → mkdir 抛 FileExistsError(OSError)
+        # OSH_SESSIONS_DIR 优先级更高，须清掉才能让占位路径生效。
+        monkeypatch.delenv("OSH_SESSIONS_DIR", raising=False)
         blocker = tmp_path / ".osh" / "sessions" / "ridB"
         blocker.parent.mkdir(parents=True)
         blocker.write_text("file", encoding="utf-8")

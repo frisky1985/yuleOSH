@@ -33,6 +33,7 @@ from typing import Any, Optional
 
 from . import json_ok, json_error
 from .middleware import require_auth
+from yuleosh.pipeline.session import resolve_sessions_root
 
 log = logging.getLogger("api.logs")
 
@@ -50,8 +51,12 @@ _LEVEL_TOKENS = ("ERROR", "FATAL", "WARN", "WARNING", "DEBUG", "TRACE", "INFO")
 
 
 def _sessions_root() -> Path:
-    """Session 根目录：OSH_HOME/.osh/sessions（OSH_HOME 支持测试 monkeypatch）。"""
-    return Path(OSH_HOME) / ".osh" / "sessions"
+    """Session 根目录：``OSH_SESSIONS_DIR`` 优先，否则 ``OSH_HOME/.osh/sessions``。
+
+    与写入侧（``PipelineSession`` / ``subprocess_executor``）共用同一解析，
+    避免「测试写进临时根、读取还在仓库根」这类读写不一致。
+    """
+    return resolve_sessions_root()
 
 
 def _qp(query: dict, key: str, default: str = "") -> str:

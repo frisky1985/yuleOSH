@@ -36,8 +36,15 @@ def _req(method="GET", path="list", body=None, query=None):
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch, tmp_path):
-    """Point OSH_HOME at tmp_path so sessions are scanned there."""
+    """Point OSH_HOME at tmp_path so sessions are scanned there.
+
+    ``OSH_SESSIONS_DIR`` (set process-wide by conftest for leak isolation)
+    would otherwise win over the patched ``OSH_HOME`` — pin it at the same
+    tree.  The ``sub/<proj>/.osh/sessions`` discovery walk stays active, so
+    the multi-project tests keep working.
+    """
     monkeypatch.setattr(A, "OSH_HOME", str(tmp_path))
+    monkeypatch.setenv("OSH_SESSIONS_DIR", str(tmp_path / ".osh" / "sessions"))
     return tmp_path
 
 

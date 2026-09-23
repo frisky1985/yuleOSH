@@ -36,6 +36,7 @@ from typing import Any, Iterator, Optional
 
 from . import json_ok, json_error
 from .middleware import require_auth
+from yuleosh.pipeline.session import resolve_sessions_root
 
 log = logging.getLogger("api.tests")
 
@@ -67,8 +68,13 @@ _CASE_NAME_KEYS = ("name", "test_name", "tc_name", "case", "title", "id")
 
 
 def _sessions_root() -> Path:
-    """Root directory holding per-run session folders."""
-    return Path(OSH_HOME) / ".osh" / "sessions"
+    """Root directory holding per-run session folders.
+
+    Shares ``resolve_sessions_root`` with the writers so reads and writes
+    always target the same place: ``OSH_SESSIONS_DIR`` when set, else
+    ``<OSH_HOME>/.osh/sessions``.
+    """
+    return resolve_sessions_root()
 
 
 def _q(query: dict, key: str, default: str = "") -> str:
