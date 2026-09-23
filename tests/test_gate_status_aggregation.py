@@ -3,7 +3,7 @@
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
-"""Gate status aggregation + evidence provenance (2026-09-03).
+"""Gate status aggregation + evidence provenance (2026-09-03, extended 2026-09-23).
 
 Guards four defects found while running ``pipeline run --mock`` end-to-end:
 
@@ -19,6 +19,17 @@ Guards four defects found while running ``pipeline run --mock`` end-to-end:
 4. ``worst_gate_status`` required *all* steps to be skipped before
    reporting ``skipped``, contradicting ``GATE_STATUS_ORDER`` and letting
    a summary list skipped gates while claiming ``passed``.
+
+Added 2026-09-23 (run ``57fa80e754ed`` — 24/24 steps ``completed``, G7 fully
+skipped, console still printed "GREEN — all gates passed"):
+
+5. **Evidence freshness.** Each artifact records the ``session`` that wrote
+   it.  A mismatch means leftover evidence from an earlier run and must be
+   reported as ``stale``, not silently accepted.  ``REUSABLE_STEPS``
+   (spec-check / codegen-deploy) are exempt because reuse is by design.
+6. **No evidence ⇒ no green.** A gate with no recorded steps is ``not-run``
+   (it used to claim ``passed``), and ``classify_run_outcome`` only grants
+   GREEN when every non-advisory gate actually passed.
 """
 
 import json
@@ -27,12 +38,33 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuleosh.pipeline.gates import write_gate_summary, _artifact_verdict
+from yuleosh.pipeline.gates import (
+    _artifact_verdict,
+    classify_run_outcome,
+    write_gate_summary,
+)
 from yuleosh.pipeline.session import PipelineSession
 
 
 def _session(tmp_path, steps):
     return SimpleNamespace(name="test-sess", session_dir=tmp_path, steps=steps)
+
+
+def _all_steps_completed(**override):
+    """Build a *complete* step list (every pipeline step ``completed``).
+
+    A full list matters since 2026-09-23: gates with no recorded steps now
+    report ``not-run`` rather than ``passed``, so a partial list would make
+    ``worst_gate_status`` reflect the *missing* gates instead of the gate
+    under test.  ``override`` maps step_key -> status.
+    """
+    from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+
+    steps = []
+    for entry in PIPELINE_STEPS:
+        key = entry[0] if isinstance(entry, (tuple, list)) else entry
+        steps.append({"name": key, "status": override.get(key, "completed")})
+    return steps
 
 
 def _summary(tmp_path, steps, **kwargs):
@@ -59,9 +91,15 @@ class TestStepKeyResolution:
         assert _gate(summary, "G1")["status"] == "failed"
 
     def test_ordinal_only_entry_is_ignored_not_treated_as_green(self, tmp_path):
-        """An entry without a usable step key contributes nothing."""
+        """An entry without a usable step key contributes nothing.
+
+        Since 2026-09-23 that means the gate has **no evidence** and reports
+        ``not-run`` — it must never read as ``passed`` merely because no
+        matching step key was found.
+        """
         summary = _summary(tmp_path, [{"step": 7, "status": "failed"}])
-        assert _gate(summary, "G1")["status"] == "passed"
+        assert _gate(summary, "G1")["status"] == "not-run"
+        assert summary["worst_gate_status"] != "passed"
 
     def test_step_key_field_still_honoured(self, tmp_path):
         """Callers using ``step_key`` keep working."""
@@ -160,27 +198,239 @@ class TestWorstGateStatus:
             json.dumps({"skipped": True}), encoding="utf-8")
         (tmp_path / "fault-injection-report.md").write_text(
             "SKIPPED\n", encoding="utf-8")
-        summary = _summary(tmp_path, [
-            {"name": "spec-check", "status": "completed"},
-            {"name": "review-critical-safety", "status": "completed"},
-            {"name": "fault-injection", "status": "completed"},
-        ])
+        summary = _summary(tmp_path, _all_steps_completed())
         assert _gate(summary, "G8")["status"] == "skipped"
         assert summary["worst_gate_status"] == "skipped"
 
     def test_failed_outranks_skipped(self, tmp_path):
-        summary = _summary(tmp_path, [
-            {"name": "spec-check", "status": "failed"},
-            {"name": "prd-review", "status": "skipped"},
-        ])
+        summary = _summary(tmp_path, _all_steps_completed(**{
+            "spec-check": "failed", "prd-review": "skipped"}))
         assert summary["worst_gate_status"] == "failed"
 
     def test_all_passed_stays_passed(self, tmp_path):
+        summary = _summary(tmp_path, _all_steps_completed())
+        assert summary["worst_gate_status"] == "passed"
+        assert summary["not_run_gates"] == []
+        assert summary["stale_gates"] == []
+
+
+class TestNoEvidenceIsNotGreen:
+    """Defect 6 — a gate with no recorded steps used to claim ``passed``."""
+
+    def test_empty_gate_reports_not_run(self, tmp_path):
+        """Only G1 has steps; every other gate has no evidence at all."""
         summary = _summary(tmp_path, [
             {"name": "spec-check", "status": "completed"},
-            {"name": "prd", "status": "completed"},
         ])
-        assert summary["worst_gate_status"] == "passed"
+        assert _gate(summary, "G1")["status"] == "passed"
+        assert _gate(summary, "G7")["status"] == "not-run"
+        assert summary["worst_gate_status"] == "not-run"
+
+    def test_not_run_gates_are_listed_explicitly(self, tmp_path):
+        summary = _summary(tmp_path, [
+            {"name": "spec-check", "status": "completed"},
+        ])
+        assert "G1" not in summary["not_run_gates"]
+        assert "G7" in summary["not_run_gates"]
+        assert "G10" in summary["not_run_gates"]
+
+    def test_pending_step_is_not_run_not_passed(self, tmp_path):
+        """``pending`` is written by add_step before a step runs."""
+        summary = _summary(tmp_path, _all_steps_completed(**{
+            "integration-test": "pending"}))
+        assert _gate(summary, "G7")["status"] == "not-run"
+
+
+class TestEvidenceFreshness:
+    """Defect 5 — artifacts left over from an earlier run must read stale."""
+
+    def test_foreign_session_artifact_is_stale(self, tmp_path):
+        (tmp_path / "integration-test.json").write_text(json.dumps({
+            "session": "some-earlier-run", "step": "integration-test",
+            "status": "passed",
+        }), encoding="utf-8")
+        summary = _summary(tmp_path, _all_steps_completed())
+        assert _gate(summary, "G7")["status"] == "stale"
+        assert summary["stale_gates"] == ["G7"]
+        assert summary["worst_gate_status"] == "stale"
+
+    def test_matching_session_artifact_is_current(self, tmp_path):
+        (tmp_path / "integration-test.json").write_text(json.dumps({
+            "session": "test-sess", "step": "integration-test",
+            "status": "passed",
+        }), encoding="utf-8")
+        summary = _summary(tmp_path, _all_steps_completed())
+        assert _gate(summary, "G7")["status"] == "passed"
+        assert summary["stale_gates"] == []
+
+    def test_artifact_without_session_field_is_not_stale(self, tmp_path):
+        """Legacy/unknown schemas must not gain a verdict they did not earn."""
+        (tmp_path / "integration-test.json").write_text(
+            json.dumps({"tests_passed": 3}), encoding="utf-8")
+        summary = _summary(tmp_path, _all_steps_completed())
+        assert _gate(summary, "G7")["status"] == "passed"
+
+    def test_reusable_step_reuse_is_not_stale(self, tmp_path):
+        """spec-check is in REUSABLE_STEPS — an older session is by design."""
+        (tmp_path / "spec-check.json").write_text(json.dumps({
+            "session": "some-earlier-run", "coverage": {"score": 100.0},
+        }), encoding="utf-8")
+        summary = _summary(tmp_path, _all_steps_completed())
+        assert _gate(summary, "G1")["status"] == "passed"
+        assert summary["stale_gates"] == []
+
+    def test_stale_outranks_skipped_and_not_run(self, tmp_path):
+        (tmp_path / "integration-test.json").write_text(json.dumps({
+            "session": "old-run", "status": "skipped",
+        }), encoding="utf-8")
+        (tmp_path / "misra-review.json").write_text(json.dumps({
+            "session": "old-run", "status": "skipped",
+        }), encoding="utf-8")
+        summary = _summary(tmp_path, _all_steps_completed())
+        assert _gate(summary, "G7")["status"] == "stale"
+        assert summary["worst_gate_status"] == "stale"
+
+    def test_verdict_helper_honours_expected_session(self, tmp_path):
+        (tmp_path / "integration-test.json").write_text(json.dumps({
+            "session": "old-run", "status": "passed",
+        }), encoding="utf-8")
+        assert _artifact_verdict(tmp_path, "integration-test", "new-run") == "stale"
+        assert _artifact_verdict(tmp_path, "integration-test", "old-run") == ""
+        assert _artifact_verdict(tmp_path, "integration-test") == ""
+
+
+class TestClassifyRunOutcome:
+    """Defect 5/6 consumer — GREEN requires gate evidence, not just completion."""
+
+    @pytest.fixture(autouse=True)
+    def _no_env_na(self, monkeypatch):
+        """Keep an ambient OSH_NA_GATES out of every case but the env one."""
+        monkeypatch.delenv("OSH_NA_GATES", raising=False)
+
+    def _summary_dict(self, worst, gates):
+        return {"worst_gate_status": worst, "gates": gates}
+
+    def test_green_requires_every_gate_passed(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "passed", [{"gate": "G1", "status": "passed"}]))
+        assert v["outcome"] == "green"
+
+    def test_stale_gate_is_unverified(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "stale", [{"gate": "G1", "status": "passed"},
+                      {"gate": "G7", "status": "stale"}]))
+        assert v["outcome"] == "unverified"
+        assert "G7=stale" in v["reason"]
+        assert v["blocking_gates"] == [{"gate": "G7", "status": "stale"}]
+
+    def test_skipped_gate_is_unverified_not_green(self):
+        """The exact run 57fa80e754ed shape: no failure, but not verified."""
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "skipped", [{"gate": "G7", "status": "skipped"}]))
+        assert v["outcome"] == "unverified"
+
+    def test_advisory_gate_does_not_block_green(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "passed", [{"gate": "G1", "status": "passed"},
+                       {"gate": "G4", "status": "skipped", "advisory": True}]))
+        assert v["outcome"] == "green"
+
+    def test_missing_gate_summary_is_unverified(self):
+        assert classify_run_outcome("completed", [], {})["outcome"] == "unverified"
+        assert classify_run_outcome("completed", [], None)["outcome"] == "unverified"
+
+    def test_failed_session_is_red(self):
+        v = classify_run_outcome("failed", ["boom"],
+                                 self._summary_dict("failed", []))
+        assert v["outcome"] == "red"
+
+    def test_step_errors_are_unverified(self):
+        v = classify_run_outcome("completed", ["verdict failed"],
+                                 self._summary_dict(
+                                     "passed", [{"gate": "G1", "status": "passed"}]))
+        assert v["outcome"] == "unverified"
+        assert "verdict failure" in v["reason"]
+
+
+class TestDeclaredNotApplicable:
+    """A run must *state* which gates don't apply — never infer it.
+
+    Planning mode never generates code (G3 n/a), a board with no emulator has
+    nothing to emulate (G7 n/a).  Both look identical to "nobody ran it" at
+    the evidence level, so the caller declares it and the declaration is
+    recorded.  The exemption is deliberately narrow: it never covers stale
+    evidence or a real failure.
+    """
+
+    def _summary_dict(self, worst, gates):
+        return {"worst_gate_status": worst, "gates": gates}
+
+    @pytest.fixture(autouse=True)
+    def _no_env_na(self, monkeypatch):
+        monkeypatch.delenv("OSH_NA_GATES", raising=False)
+
+    def test_declared_na_gate_does_not_block_green(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "skipped", [{"gate": "G1", "status": "passed"},
+                        {"gate": "G3", "status": "skipped"}]),
+            na_gates=["G3"])
+        assert v["outcome"] == "green"
+        assert v["declared_na"] == ["G3"]
+        assert v["blocking_gates"] == []
+
+    def test_not_run_gate_can_also_be_declared_na(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "not-run", [{"gate": "G1", "status": "passed"},
+                        {"gate": "G7", "status": "not-run"}]),
+            na_gates=["G7"])
+        assert v["outcome"] == "green"
+
+    def test_declared_na_never_excuses_stale_evidence(self):
+        """The exact failure this module exists to catch, declared away."""
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "stale", [{"gate": "G7", "status": "stale"}]),
+            na_gates=["G7"])
+        assert v["outcome"] == "unverified"
+        assert v["blocking_gates"] == [{"gate": "G7", "status": "stale"}]
+
+    def test_declared_na_never_excuses_failure(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "failed", [{"gate": "G7", "status": "failed"}]),
+            na_gates=["G7"])
+        assert v["outcome"] == "unverified"
+
+    def test_undeclared_skipped_gate_still_blocks(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "skipped", [{"gate": "G3", "status": "skipped"}]))
+        assert v["outcome"] == "unverified"
+        assert v["declared_na"] == []
+
+    def test_na_gates_read_from_environment(self, monkeypatch):
+        monkeypatch.setenv("OSH_NA_GATES", "g3, G5")
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "skipped", [{"gate": "G3", "status": "skipped"},
+                        {"gate": "G5", "status": "not-run"}]))
+        assert v["outcome"] == "green"
+        assert v["declared_na"] == ["G3", "G5"]
+
+    def test_na_gates_read_from_session_config(self):
+        v = classify_run_outcome("completed", [], self._summary_dict(
+            "skipped", [{"gate": "G3", "status": "skipped"}]),
+            config={"na_gates": ["G3"]})
+        assert v["outcome"] == "green"
+
+    def test_declared_na_gates_helper(self, monkeypatch):
+        from yuleosh.pipeline.gates import declared_na_gates
+
+        monkeypatch.delenv("OSH_NA_GATES", raising=False)
+        assert declared_na_gates(None) == set()
+        assert declared_na_gates({"na_gates": "g3, g4"}) == {"G3", "G4"}
+        assert declared_na_gates({"na_gates": ["G1"]}) == {"G1"}
+        assert declared_na_gates({"na_gates": []}) == set()
+        monkeypatch.setenv("OSH_NA_GATES", "G9")
+        assert declared_na_gates({}) == {"G9"}
+        # session.config 优先于环境变量
+        assert declared_na_gates({"na_gates": ["G2"]}) == {"G2"}
 
 
 class TestSessionMockProvenance:

@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **run 结论不再绕过门禁证据（根治「表面全绿」）**
+  （`pipeline/gates.py`、`pipeline/orchestrator.py`、`pipeline/session.py`）
+  - **证据时效性判定（新增 `stale` 状态）**：每个步骤产物自带 `session` 字段，记录产出它的 run。该字段与本轮 `session.name` 不符 → 门禁判 `stale`（复用了旧轮次的验证证据），而不是静默按 `passed` / `skipped` 计。`REUSABLE_STEPS`（`spec-check` / `codegen-deploy`）跨 run 复用是设计允许的，豁免此判定。
+  - **无证据不再等于通过**：`_worst_status([])` 由 `passed` 改为 `not-run` —— 本轮没有该门禁的任何步骤记录时，如实报告「未执行」，不再 fail-open。
+  - **run 级结论由门禁证据决定**：新增 `classify_run_outcome()`，GREEN 需同时满足「session completed + 有可读的门禁汇总 + 全部非咨询门禁 passed + 无步骤错误」。此前只校验前两项，导致 `G7` 整门 skipped 的 run 仍打印 `GREEN — all gates passed`。三色分级相应改为 GREEN / **UNVERIFIED** / RED，并列出未被验证的门禁。
+  - **显式声明「不适用」**：部分门禁在特定配置下确实不适用（planning 模式没有代码生成类验证），但「步骤跳过了」不足以证明这一点 —— 同一个信号也覆盖「没人跑它」。因此由调用方显式声明（`session.config["na_gates"]` 或环境变量 `OSH_NA_GATES=G3,G8`），声明只豁免 `skipped` / `not-run`，**不豁免 `stale` / `failed`**。
+  - 门禁汇总新增 `not_run_gates` / `stale_gates` 字段；`session.json` 新增 `gate_verdict`（`outcome` / `reason` / `worst_gate_status` / `blocking_gates` / `declared_na`），API 与 dashboard 可直接读取，无需解析控制台输出。
+  - 动因：run `57fa80e754ed` 24/24 步 `completed`、`G7` 全 skipped、其中三个产物还是两天前 run 的，却打印 `GREEN — all gates passed`。
+
 ### 变更
 
 - **步骤缓存分级：验证证据每轮重跑**（`pipeline/step_cache.py`、`pipeline/orchestrator.py`）

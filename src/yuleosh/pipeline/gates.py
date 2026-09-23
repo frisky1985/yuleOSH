@@ -11,7 +11,14 @@ Pipeline 编排层 — 10 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍�
 step_cache 全保留）；编排层新增 GATES 视图，对外稳定契约（对齐 ASPICE
 过程域），一旦约定不再变动（分层原则 R1-R4，见 RULES.md §12）。
 
-gate status = 内部子步骤最差状态（failed > retry > skipped > passed）。
+gate status = 内部子步骤最差状态（见 GATE_STATUS_ORDER, worst-wins）。
+
+证据时效性 (2026-09-23): 每个步骤产物 JSON 自带 ``session`` 字段记录产出
+它的 run 名。若该字段与本轮 session.name 不符 → 该产物是**旧轮次遗留的证据**,
+门禁判 ``stale`` 而非 ``passed``/``skipped``。这堵住了 run 57fa80e754ed 的失效:
+integration-test / misra-review 复用了两天前 run 的产物 (status=skipped),
+门禁汇总仍报 worst=skipped、run 报 completed、控制台打 "all gates passed"。
+REUSABLE_STEPS (spec-check / codegen-deploy) 复用是设计允许的, 豁免此判定。
 
 GATES ↔ PIPELINE_STEPS 契约（R3 守护，由 tests/test_step_handlers_init_deep.py
 的 GATES 契约测试断言）:
@@ -36,6 +43,9 @@ __all__ = [
     "GATES",
     "GATE_STATUS_ORDER",
     "aggregate_gate_status",
+    "classify_run_outcome",
+    "declared_na_gates",
+    "load_gate_summary",
     "validate_gates_contract",
     "write_gate_summary",
 ]
@@ -107,8 +117,25 @@ GATES: list[dict] = [
     },
 ]
 
-# gate status 聚合优先级: failed > retry > skipped > passed
-GATE_STATUS_ORDER = ["failed", "retry", "skipped", "passed"]
+# gate status 聚合优先级 (worst-wins, 越靠前越严重):
+#   failed  — 有步骤明确失败 (含 incomplete/error)
+#   stale   — 产物来自旧 run: 证据过期, 复用了不该复用的验证结果
+#   not-run — 本轮无该门禁任何步骤记录 (无证据: 未执行/部分执行/漏跑)
+#   retry   — 步骤要求重试
+#   warning — 有告警级 verdict
+#   skipped — 本轮确实执行过, 但因环境不适用而跳过 (n-a)
+#   passed  — 门禁内全部步骤真实执行且通过
+GATE_STATUS_ORDER = [
+    "failed", "stale", "not-run", "retry", "warning", "skipped", "passed",
+]
+
+# 门禁状态语义三分类 (供 run 结论分级使用):
+#   verified   — 全部硬门禁 passed, 本轮证据完整 → 可放行
+#   unverified — 无失败, 但存在 stale / not-run / skipped / retry / warning
+#                → 证据链不完整, 不可当 GREEN 放行
+#   failed     — 至少一个硬门禁 failed → 不可放行
+_OUTCOME_BLOCKING = ("failed",)
+_OUTCOME_UNVERIFIED = ("stale", "not-run", "retry", "warning", "skipped")
 
 
 def gate_for_step(step_key: str) -> dict | None:
@@ -145,17 +172,25 @@ def aggregate_gate_status(step_statuses: dict[str, str]) -> dict[str, str]:
 
 
 def _worst_status(statuses: list[str]) -> str:
-    """Worst-wins merge of statuses (failed > retry > skipped > passed).
+    """Worst-wins merge of statuses (see ``GATE_STATUS_ORDER``).
 
-    Unknown statuses (e.g. "completed", "running") are treated as non-failed
-    and fall to the lowest severity bucket; empty list → "passed" (gate has
-    no executed steps in this run).
+    Fail-closed semantics (2026-09-23): an empty status list means the gate
+    has **no evidence at all** in this run and returns ``"not-run"`` — it no
+    longer claims ``"passed"``.  A gate is green only when every one of its
+    steps actually ran and passed; a partially executed run therefore shows
+    its untouched gates as ``not-run`` instead of silently green.
     """
     if not statuses:
-        return "passed"
+        return "not-run"
     # failed/incomplete → failed (fail-closed: 无法完成判定按失败)
     if any(s in ("failed", "incomplete", "error") for s in statuses):
         return "failed"
+    # 证据过期 (复用了旧轮次产物) outranks not-run/skipped: 它伪装成"已执行"。
+    if any(s == "stale" for s in statuses):
+        return "stale"
+    # pending 由 session.add_step 初始写入, 同样意味着该步骤没跑。
+    if any(s in ("not-run", "pending") for s in statuses):
+        return "not-run"
     if any(s == "retry" for s in statuses):
         return "retry"
     if any(s == "warning" for s in statuses):
@@ -167,6 +202,21 @@ def _worst_status(statuses: list[str]) -> str:
     if any(s == "skipped" for s in statuses):
         return "skipped"
     return "passed"
+
+
+def _is_freshness_exempt(step_key: str) -> bool:
+    """Whether ``step_key`` may legitimately carry an older session's artifact.
+
+    ``REUSABLE_STEPS`` (spec / 代码 / 生成物类) are *designed* to be reused
+    across runs when their input fingerprint is unchanged, so their artifact
+    recording an older ``session`` name is expected — not evidence of a
+    stale verification result.  Verification artifacts are never exempt.
+    """
+    try:
+        from yuleosh.pipeline.step_cache import REUSABLE_STEPS
+    except Exception:  # pragma: no cover - step_cache is a sibling module
+        return False
+    return step_key in REUSABLE_STEPS
 
 
 def _sha256_file(path: Path) -> str:
@@ -228,11 +278,12 @@ def _artifact_paths(sdir: Path | None, step_key: str) -> list[Path]:
     return [p for p in paths if p.exists()]
 
 
-def _artifact_verdict(sdir: Path | None, step_key: str) -> str:
+def _artifact_verdict(sdir: Path | None, step_key: str,
+                      expected_session: str = "") -> str:
     """Derive a gate verdict from a step's own artifact JSON.
 
-    Returns ``"skipped"``, ``"failed"``, or ``""`` (unknown — the caller
-    then keeps the status recorded in ``session.steps``).
+    Returns ``"stale"``, ``"skipped"``, ``"failed"``, or ``""`` (unknown —
+    the caller then keeps the status recorded in ``session.steps``).
 
     Why this exists
     ---------------
@@ -243,12 +294,20 @@ def _artifact_verdict(sdir: Path | None, step_key: str) -> str:
     therefore reports every gate as ``passed`` for work that never ran.
     Reading the artifact restores the real verdict.
 
-    Only explicit skip / explicit-false signals are honoured; anything
-    else returns ``""`` so unknown schemas never flip a passing step.
+    Freshness (2026-09-23): a *leftover* artifact from an earlier run looks
+    exactly like fresh evidence.  ``expected_session`` (the current session
+    name) is compared against the ``session`` field the producing run wrote
+    into the artifact; a mismatch yields ``"stale"``.  Steps in
+    ``REUSABLE_STEPS`` are exempt — their reuse is by design.
+
+    Only explicit skip / stale / explicit-false signals are honoured;
+    anything else returns ``""`` so unknown schemas never flip a passing step.
     """
+    freshness_checked = expected_session and not _is_freshness_exempt(step_key)
     for path in _artifact_paths(sdir, step_key):
         if path.suffix == ".json":
-            verdict = _verdict_from_json(path)
+            verdict = _verdict_from_json(
+                path, expected_session if freshness_checked else "")
         else:
             # Markdown artifacts (e.g. the fault-injection report) carry no
             # status field; an explicit skip banner is the only signal.
@@ -258,14 +317,21 @@ def _artifact_verdict(sdir: Path | None, step_key: str) -> str:
     return ""
 
 
-def _verdict_from_json(path: Path) -> str:
-    """Read a JSON artifact and return ``skipped`` / ``failed`` / ``""``."""
+def _verdict_from_json(path: Path, expected_session: str = "") -> str:
+    """Read a JSON artifact and return ``stale``/``skipped``/``failed``/``""``."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return ""
     if not isinstance(data, dict):
         return ""
+    # Freshness first: a stale artifact can look perfectly green, which is
+    # exactly how run 57fa80e754ed reported a skipped gate as evidence.
+    # An artifact with no ``session`` field is left to the checks below so
+    # unknown/legacy schemas never gain a verdict they did not earn.
+    recorded = str(data.get("session", "")).strip()
+    if expected_session and recorded and recorded != expected_session:
+        return "stale"
     if data.get("skipped") is True or str(data.get("status", "")).strip().lower() == "skipped":
         return "skipped"
     # Explicit failure verdicts (e.g. merge-gate "passed": false,
@@ -314,8 +380,9 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         # argument (tests / callers that already know better) is never
         # overridden.
         if sdir is not None:
+            _expected = str(getattr(session, "name", "") or "")
             for key in list(step_statuses):
-                verdict = _artifact_verdict(Path(sdir), key)
+                verdict = _artifact_verdict(Path(sdir), key, _expected)
                 if verdict:
                     step_statuses[key] = verdict
 
@@ -357,6 +424,20 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
             gate_entry["artifact_hashes"] = artifact_hashes
         summary["gates"].append(gate_entry)
 
+    # 未验证门禁显式列出 (2026-09-23, 显式不静默): worst_gate_status 是一个
+    # 标量, 消费方容易只看它是否 == "failed" 而漏掉"没验证"。这两个列表让
+    # "本轮哪些门禁没有有效证据" 一眼可见。
+    summary["not_run_gates"] = [
+        g["gate"] for g in GATES
+        if not g.get("advisory", False)
+        and gate_statuses.get(g["gate"], "not-run") == "not-run"
+    ]
+    summary["stale_gates"] = [
+        g["gate"] for g in GATES
+        if not g.get("advisory", False)
+        and gate_statuses.get(g["gate"], "") == "stale"
+    ]
+
     if output_path is None:
         if sdir is None:
             raise ValueError("session has no session_dir — pass output_path explicitly")
@@ -368,6 +449,135 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
                    encoding="utf-8")
     log.info("gate-summary written: %s (worst=%s)", out, summary["worst_gate_status"])
     return str(out)
+
+
+def load_gate_summary(path: str | Path) -> dict:
+    """Read back a ``gate-summary.json`` written by :func:`write_gate_summary`.
+
+    Returns ``{}`` when the file is missing or unparsable, so callers can
+    treat "no readable summary" as "no gate evidence" rather than crashing.
+    """
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def declared_na_gates(config: dict | None = None) -> set[str]:
+    """Return gate keys the caller explicitly declared *not applicable*.
+
+    Why this is explicit rather than inferred (2026-09-23)
+    -----------------------------------------------------
+    Some gates legitimately do not apply to a given run: planning mode never
+    generates code (so G3's codegen gates are n/a), a project without a
+    QEMU target has nothing to emulate, and so on.  But "the step skipped"
+    is *not* sufficient evidence of that — the very same signal also covers
+    "nobody ran it".  Inferring would put us back where we started.
+
+    So the caller states it, and the statement becomes part of the record:
+
+      1. ``session.config["na_gates"]`` — list[str] or comma-separated str
+      2. ``OSH_NA_GATES`` environment variable — comma-separated, e.g. "G3,G4"
+
+    Declaring a gate n/a exempts it from blocking GREEN **only while it is
+    ``skipped`` or ``not-run``**.  ``failed``, ``stale``, ``retry`` and
+    ``warning`` always block — a declared-n/a gate caught reusing stale
+    evidence is exactly the failure this module exists to surface.
+    """
+    raw = None
+    if isinstance(config, dict):
+        raw = config.get("na_gates")
+    if raw is None:
+        raw = os.environ.get("OSH_NA_GATES", "")
+    if not raw:
+        return set()
+    if isinstance(raw, str):
+        items = raw.split(",")
+    else:
+        try:
+            items = [str(x) for x in raw]
+        except TypeError:
+            return set()
+    return {s.strip().upper() for s in items if s and s.strip()}
+
+
+# 声明为 n/a 时可以被豁免的门禁状态 (见 declared_na_gates)。
+_NA_EXEMPT_STATUSES = ("skipped", "not-run")
+
+
+def classify_run_outcome(session_status: str, errors=None,
+                         gate_summary: dict | None = None,
+                         na_gates=None, config: dict | None = None) -> dict:
+    """Decide the run-level verdict — the single place GREEN is granted.
+
+    Returns::
+
+        {"outcome": "green" | "unverified" | "red",
+         "reason": str,
+         "worst_gate_status": str,
+         "blocking_gates": [{"gate": "G7", "status": "stale"}, ...],
+         "declared_na": ["G3", ...]}
+
+    ``green`` requires *all* of:
+
+      1. ``session_status == "completed"``
+      2. a readable gate summary (no evidence ⇒ no GREEN)
+      3. no blocking gate: every non-advisory gate is ``passed``, or is
+         skipped/not-run **and** explicitly declared n/a
+      4. no step errors
+
+    Why (3) exists (2026-09-23): the orchestrator previously granted GREEN on
+    (1) + (4) alone, so run 57fa80e754ed printed "GREEN — all gates passed"
+    while G7 was entirely ``skipped`` and three of its artifacts were two
+    days old.  A run is green only when its gates actually verified it.
+    """
+    gate_summary = gate_summary if isinstance(gate_summary, dict) else {}
+    worst = str(gate_summary.get("worst_gate_status", "") or "")
+    na = declared_na_gates(config) if na_gates is None else {
+        str(s).strip().upper() for s in (na_gates or [])}
+
+    gates = [g for g in (gate_summary.get("gates") or []) if isinstance(g, dict)]
+    blocking: list[dict] = []
+    declared_hits: list[str] = []
+    for g in gates:
+        if g.get("advisory", False):
+            continue
+        status = str(g.get("status", ""))
+        if status == "passed":
+            continue
+        gate_key = str(g.get("gate", "")).upper()
+        if gate_key in na and status in _NA_EXEMPT_STATUSES:
+            declared_hits.append(gate_key)
+            continue
+        blocking.append({"gate": str(g.get("gate", "")), "status": status})
+
+    def _result(outcome: str, reason: str) -> dict:
+        return {
+            "outcome": outcome,
+            "reason": reason,
+            "worst_gate_status": worst,
+            "blocking_gates": blocking,
+            "declared_na": sorted(set(declared_hits)),
+        }
+
+    if str(session_status) != "completed":
+        return _result("red", f"session status = {session_status}")
+    if not gates:
+        return _result("unverified", "gate summary unavailable — no gate evidence")
+    if blocking:
+        detail = ", ".join(f"{b['gate']}={b['status']}" for b in blocking)
+        return _result("unverified", f"gate evidence incomplete ({detail})")
+    if errors:
+        return _result("unverified", f"{len(errors)} step verdict failure(s)")
+    if worst != "passed" and not declared_hits:
+        # 理论上到不了这里 (worst != passed 必有非 passed 门禁); 防御性兜底。
+        return _result("unverified", f"worst gate status = {worst or 'unknown'}")
+    if declared_hits:
+        return _result("green",
+                       "all applicable gates passed "
+                       f"(declared n/a: {', '.join(sorted(set(declared_hits)))})")
+    return _result("green", "all gates passed")
 
 
 def validate_gates_contract(step_keys: list[str]) -> list[str]:

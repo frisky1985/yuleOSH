@@ -128,6 +128,13 @@ class PipelineSession:
         # When True, LLM outputs are placeholders and code-quality gates
         # (coverage, critical safety) SHALL skip real scanning.
         self.mock_mode: bool = False
+        # 门禁结论 (2026-09-23): run 级判定 —
+        #   {outcome: green|unverified|red, reason, worst_gate_status,
+        #    blocking_gates}
+        # 由 orchestrator 在 gate-summary 写盘后调用
+        # gates.classify_run_outcome 写入。落盘后 API/dashboard 可读, 避免
+        # "步骤全 completed 即视为全绿" (run 57fa80e754ed 的失效模式)。
+        self.gate_verdict: dict | None = None
         # 方向2 (2026-08-11): diff 裁剪决策（OSH_DIFF_SKIP=1 时由 orchestrator 写入）
         # G2: skip 显式报告 —— 每个决策 {step, reason} 进 session，禁止静默消失。
         self.diff_skip_decisions: list[dict] = []
@@ -295,6 +302,10 @@ class PipelineSession:
             # placeholder artifacts.  Without this flag a consumer of the
             # evidence pack cannot tell mock output from a real LLM run.
             "mock_mode": bool(getattr(self, "mock_mode", False)),
+            # Gate verdict (2026-09-23): the run-level conclusion derived from
+            # gate evidence, not from "every step finished".  None means the
+            # pipeline has not reached the gate-summary stage yet.
+            "gate_verdict": getattr(self, "gate_verdict", None),
         }
 
 

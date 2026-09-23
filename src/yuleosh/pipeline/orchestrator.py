@@ -709,30 +709,59 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         # 编排层 10 Gate 报告聚合 (2026-08-19 方案 B):
         # gate status = 内部子步骤最差状态; 写 .osh/sessions/<id>/gate-summary.json。
         # 失败不阻断 pipeline 收尾（证据产物, 只记录）。
+        _gate_summary: dict = {}
         try:
-            from yuleosh.pipeline.gates import write_gate_summary
+            from yuleosh.pipeline.gates import load_gate_summary, write_gate_summary
             _gate_path = write_gate_summary(session)
-            log.info("Gate summary written: %s", _gate_path)
+            _gate_summary = load_gate_summary(_gate_path)
+            log.info("Gate summary written: %s (worst=%s)", _gate_path,
+                     _gate_summary.get("worst_gate_status", "?"))
         except Exception as _gate_err:  # pragma: no cover - defensive  # noqa: BLE001
             log.warning("gate-summary write failed (non-fatal): %s", _gate_err)
-        
+
+        # 门禁结论回写 session (2026-09-23): run 结论由门禁证据决定, 不能只看
+        # 步骤是否"跑完"。动因: run 57fa80e754ed 24 步全 completed、G7 全
+        # skipped、其中三个产物还是两天前 run 的, 却打印 "GREEN — all gates
+        # passed"。结论落盘后 dashboard / API 也能读到, 不静默。
+        try:
+            from yuleosh.pipeline.gates import classify_run_outcome
+            session.gate_verdict = classify_run_outcome(
+                session.status, session.errors, _gate_summary,
+                config=getattr(session, "config", None))
+            if session.status != "failed":
+                session._save()
+        except Exception as _verdict_err:  # pragma: no cover - defensive  # noqa: BLE001
+            log.warning("gate verdict classification failed: %s", _verdict_err)
+
         print(f"\n{'='*50}")
-        # 三色结果分级 (2026-08-12):
-        #   🟢 GREEN  — completed, 0 errors        → 可放行
-        #   🟡 YELLOW — completed, errors>0        → 有 verdict 失败, 需人工复核
-        #   🔴 RED    — failed (block gate/异常)   → 不可放行
-        if session.status == "completed" and not session.errors:
+        # 三色结果分级 (2026-08-12; 2026-09-23 纳入门禁证据):
+        #   🟢 GREEN      — 全部硬门禁 passed                  → 可放行
+        #   🟡 UNVERIFIED — 无失败但证据不完整 (stale/not-run/
+        #                   skipped/retry/warning 或步骤 verdict 失败) → 需人工复核
+        #   🔴 RED        — session failed (block gate/异常)    → 不可放行
+        _verdict = getattr(session, "gate_verdict", None) or {}
+        _outcome = _verdict.get("outcome", "")
+        _reason = _verdict.get("reason", "")
+        if _outcome == "green":
             print(f"Pipeline: {session.status} 🎉 (GREEN — all gates passed)")
-        elif session.status == "completed":
-            print(f"Pipeline: {session.status} ⚠️  (YELLOW — completed with "
-                  f"{len(session.errors)} step verdict failure(s))")
+        elif _outcome == "unverified":
+            print(f"Pipeline: {session.status} ⚠️  (UNVERIFIED — {_reason})")
+        elif _outcome == "red":
+            print(f"Pipeline: {session.status} ❌ (RED — {_reason})")
         else:
-            print(f"Pipeline: {session.status} ❌ (RED)")
+            print(f"Pipeline: {session.status}")
         print(f"Session: {session.session_dir}")
         print(f"Errors: {len(session.errors)}")
-        if session.status == "completed" and session.errors:
-            print("⚠️  Completed with step verdict failures — review session.errors "
-                  "before treating this run as passing.")
+        _declared_na = _verdict.get("declared_na") or []
+        if _declared_na:
+            print("已声明不适用 (n/a): " + ", ".join(_declared_na))
+        if _outcome == "unverified":
+            _blocking = _verdict.get("blocking_gates") or []
+            if _blocking:
+                print("未验证的门禁: " + ", ".join(
+                    f"{b.get('gate', '?')}={b.get('status', '?')}" for b in _blocking))
+            print("⚠️  证据链不完整 — 先处理 session.errors 与门禁明细, "
+                  "再考虑把本次运行视为通过。")
         print()
         
         log.info(f"Pipeline finished: {session.status}, errors={len(session.errors)}")

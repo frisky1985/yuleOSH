@@ -381,14 +381,21 @@ def test_pipeline_without_final_report_status_completed(osh_home, tmp_path, caps
 
     修复前 (2026-08-11): status 只在 final-report 步骤前置位，白名单档
     永远停在 created → CLI exit(1) 误判失败。修复后: 未失败且未跑
-    final-report 时，循环结束统一置 completed，走 🎉 打印。
+    final-report 时，循环结束统一置 completed。
+
+    2026-09-23 语义收紧: GREEN 现在要求全部硬门禁 passed。本用例只跑了
+    spec-check 一步，其余门禁是 not-run（无证据），因此不再打印 🎉 ——
+    run 结论由门禁证据决定，而非「步骤跑完了」。核心契约仍是 status 被
+    置为 completed。
     """
     spec = _make_spec(tmp_path)
     out = tmp_path / "a.md"
     out.write_text("x", encoding="utf-8")
     session = _run(spec, steps=[("spec-check", "小明", "合规检查", _ok_handler(out))])
     assert session.status == "completed"
-    assert "Pipeline: completed 🎉" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert "Pipeline: completed" in printed
+    assert session.gate_verdict["outcome"] == "unverified"
 
 
 def test_completed_with_verdict_errors(osh_home, tmp_path, capsys):
@@ -407,7 +414,11 @@ def test_completed_with_verdict_errors(osh_home, tmp_path, capsys):
     session = _run(spec, steps=steps)
     assert session.status == "completed"
     assert session.errors
-    assert "Completed with step verdict failures" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    # 2026-09-23: completed + errors 不再打印旧的 "Completed with step verdict
+    # failures"，统一归入 UNVERIFIED —— 既有 verdict 失败，门禁证据也不完整。
+    assert "UNVERIFIED" in printed
+    assert session.gate_verdict["outcome"] == "unverified"
 
 
 def test_completed_final_report_info_verdict_no_errors(osh_home, tmp_path, capsys):
