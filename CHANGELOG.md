@@ -14,7 +14,7 @@
   - **自愈网**：`conftest.py` 在 `pytest_configure` 记录仓库两处 evidence 目录的包集合，`pytest_sessionfinish` 清掉**本会话新增**的包并逐条打印路径（`OSH_ALLOW_EVIDENCE_WRITES=1` 可关闭，零开销）。与既有的 MagicMock 落盘拦截同一模式。
   - **验证（严格同序对照）**：68 个测试文件 / 1669 项 —— 改动前 `14 failed / 1651 passed`，改动后完全一致，**0 回归**（14 项为既存失败）。泄漏维度：同一批跑完，基线新增 3 个包（174B / 891B / 174B，与历史空壳同形），修复后 **0 个**。新增 `tests/test_osh_home_resolution.py`（13 项：判定规则 + 两处落点 + dashboard 跨模块同源）；撤掉修复后 12/13 变红，非空转。
   - 顺带清理：`src/.osh/evidence/` 的 14 个空壳包已移除（移入回收站）。
-  - 顺带发现（**未修**，不属本缺陷）：`tests/test_v361_critical_fixes.py::TestErrorMasking::test_pipeline_run_masks_details` 是既存失败 —— 用例把 `spec.md` 直接放在 `OSH_HOME` 根，而 `_run_pipeline` 由 `resolved.parent.parent` 反推 `project_dir` 时会越出 `OSH_HOME`，守卫按设计返回 403，断言却期望 500（错误脱敏）。修法是把 spec 放到 `<proj>/docs/spec.md`。
+  - 顺带修正：`tests/test_v361_critical_fixes.py::TestErrorMasking::test_pipeline_run_masks_details` 的**断言契约**。该用例长期处于既存失败，原因是它断言 `_run_pipeline` 返回 `500 + "Internal server error"`，而 `_run_pipeline` 自编排器改为后台执行后就是**异步**接口 —— 同步阶段只做校验与排队并立即返回 `run_id`，编排器内的异常由 `_run_orchestrator_job` 兜底、经 `_errors.internal_error` 记录，**不经过本函数的返回值**，故该 500 断言不可能成立（原先它只是碰巧从别处拿到 403 而“看起来接近”）。现改为验证真实存在的同步契约：`spec` 与 `project_dir` 越出 `OSH_HOME` 时返回 **403 + 静态文案**，不回显任何内部路径。生产代码未改动。
 
 - **run 结论不再绕过门禁证据（根治「表面全绿」）**
   （`pipeline/gates.py`、`pipeline/orchestrator.py`、`pipeline/session.py`）
@@ -26,6 +26,9 @@
   - 动因：run `57fa80e754ed` 24/24 步 `completed`、`G7` 全 skipped、其中三个产物还是两天前 run 的，却打印 `GREEN — all gates passed`。
 
 ### 变更
+
+- **移除误跟踪的 CI 产物 `src/.osh/ci/layer1-91df2f15.json`**（`git rm --cached`）
+  - 该文件是 2026-07-10 一次**失败**的 layer1 运行记录（内容里还留着他人机器的路径 `.../stefan/.openclaw/workspace/...`），08-22 `ceb3e494` 误提交入仓库。`git rm --cached` 从索引移除后，路径重新落入 `.gitignore:136` 的 `.osh/` 规则覆盖范围（`git check-ignore --no-index` 已验证），不会再被误提交。
 
 - **sessions 根独立可配 + 分层保留（`OSH_SESSIONS_DIR`）**
   （`pipeline/session.py`、`engine/subprocess_executor.py`、`api/{artifacts,logs,tests}.py`、`pipeline/session_prune.py`、`tests/conftest.py`）

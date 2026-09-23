@@ -90,17 +90,35 @@ class TestErrorMasking:
         self._assert_masked(result, 500, secret)
 
     def test_pipeline_run_masks_details(self, monkeypatch, tmp_path):
+        """SEC-C2: _run_pipeline 的同步校验错误不回显内部路径。
+
+        注：本用例原断言 ``500 + "Internal server error"``。自编排器改为
+        **后台执行**后该契约已不成立 —— ``_run_pipeline`` 是异步接口（同步
+        阶段只做校验与排队，立即返回 run_id），编排器内的异常由
+        ``_run_orchestrator_job`` 兜底并经 ``_errors.internal_error`` 脱敏，
+        不经本函数的返回值。此处改为验证真实存在的同步契约：越界入参返回
+        403 + 静态文案，不泄漏任何内部路径。
+        """
         from yuleosh.api.pipeline import _run_pipeline
         secret = "/etc/passwd-leak"
-        spec = tmp_path / "spec.md"
-        spec.write_text("# spec")
+        proj = tmp_path / "proj"
+        (proj / "docs").mkdir(parents=True)
+        (proj / "docs" / "spec.md").write_text("# spec", encoding="utf-8")
         monkeypatch.setattr("yuleosh.api.OSH_HOME", str(tmp_path))
-        monkeypatch.setattr(
-            "yuleosh.api.pipeline.subprocess.run",
-            mock.Mock(side_effect=RuntimeError(secret)),
-        )
-        result = _run_pipeline({"spec": "spec.md"})
-        self._assert_masked(result, 500, secret)
+
+        # ① spec 越出 OSH_HOME → 403，文案为静态提示（不回显真实路径）
+        escaped = f"../{secret.strip('/').replace('/', '_')}.md"
+        result, status = _run_pipeline({"spec": escaped})
+        assert status == 403
+        assert result["error"] == "Spec path must be within OSH_HOME"
+        assert secret not in json.dumps(result)
+
+        # ② project_dir 越出 OSH_HOME → 403，同为静态文案
+        result, status = _run_pipeline(
+            {"spec": "proj/docs/spec.md", "project_dir": "../outside"})
+        assert status == 403
+        assert result["error"] == "project_dir must be within OSH_HOME"
+        assert secret not in json.dumps(result)
 
     def test_pipeline_trigger_masks_details(self, monkeypatch, tmp_path):
         from yuleosh.api.pipeline import _trigger_pipeline
