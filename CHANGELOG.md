@@ -6,6 +6,16 @@
 
 ### 修复
 
+- **门禁证据可达性与完整性指纹补全（P0-A/B/C）**
+  （`pipeline/gates.py`、`cli/commands/consistency.py`、`pipeline/session_prune.py`）
+  - **P0-A 门禁读不到自己的产物**：`_ARTIFACT_CANDIDATES` 只列了 4/11 个「产物名 ≠ `<step_key>.json`」的步骤，另外 7 步（`super-analysis`→`startup-analysis.md`、`prd`→`prd.md`、`architecture`→`architecture.md`、`development`→`development-plan.md`、`test-planning`→`test-plan.md`、`test-qualification`→`qualification-test.json`、`final-report`→`final-report.md`）的产物**从未被门禁打开**。最尖锐的是 G10：`ci/gate_policy.py` 把 `test-qualification` 列为 `GATE_BLOCK`，而它的唯一证据 `qualification-test.json` 门禁根本没读过 —— 判罚所依据的裁决，门禁自己没看。实测 run `57fa80e754ed`：门禁可达的步骤 **17/24 → 24/24**。
+  - 同时新增 `_scan_artifact_step_map()`：按产物自报的 `step` 字段归属证据，覆盖「名字与 step_key 无关」的子产物（`c-coverage-gate.json`、`review-*.json`、`embedded-*.json`）。实测该兜底在本 run 上未带来候选表之外的额外证据，属**冗余保险**；**候选表对 Markdown 产物仍是唯一通路**（md 无 `step` 字段可扫）。这一区分由变异注入确认：删 `prd` / `final-report` 条目测试转红，删 `test-qualification` 条目**不**转红（被 step 兜底接住）。
+  - **P0-B 完整性指纹残缺**：`artifact_hashes` 只对 `<step_key>.json` 取哈希、从不查候选表，且门禁层没有会话级索引 —— 实测同一 run 的指纹只覆盖 **14/50** 个产物，**35 个**（含 GATE_BLOCK 的 `c-coverage-gate.json`、12 个 `review-*.json`、`embedded-*.json`、`ctest-junit.xml`）无任何防篡改保护，G5/G8/G9/G10 四个门禁的 `artifact_hashes` **全为空**。现补三处：门禁哈希改走 `_artifact_paths()`；新增 `artifact_index()` 会话级索引（递归、排除 `gate-summary.json` 自身与每轮必变的 `session.json`、跳过点文件）→ 覆盖 **49** 个。
+  - 同族第二个缺口一并修掉：`cli/commands/consistency.py` 的指纹读的是 `gate-summary.json` 里**冻结**的哈希 —— 两次快照比对只能发现「重新跑过」，发现不了「跑完之后就地改过文件」，而后者恰是「完整性指纹」要防的（实测：改 `c-coverage-gate.json` 后指纹不动）。现改为**现场重扫目录**优先（`artifact_source=live_scan`），冻结快照退为兜底（旧格式 `gate-summary.json` 仍可读，`artifact_source=gate_artifact_hashes`）。
+  - **P0-C 产物缺失与产物通过不可区分**：步骤自报 `completed` 而找不到任何产物时，状态被原样保留 → **删掉产物，门禁照样绿**。现降级为 `not-run`（无证据），`REUSABLE_STEPS`（`spec-check` / `codegen-deploy`）因复用是设计允许而豁免。run `57fa80e754ed` 上实测：24 步证据齐备，**0 步降级**，run 结论仍为 `unverified`（阻塞 G3/G7/G8/G9）—— 即本修复**不改变历史 run 的结论**，堵的是将来的误判。
+  - 用新逻辑重算同一 run，还检出旧逻辑漏掉的两处：`G6` `passed`→`stale`、`G7` `skipped`→`stale`，原因是 `c-unit-test.json` / `misra-review.json` / `integration-test.json` 的 `session` 字段仍是旧 run `gpio-verify-4b-deadlockfix` —— 与上面的步骤缓存分级指向同一事实（`gate-summary.json` 写于 09-22，早于 `stale` 判定引入）。
+  - 新增 `tests/test_gate_artifact_coverage.py`（26 项）；`test_gate_status_aggregation.py` 增加 `_write_all_artifacts()`，使「全部步骤完成」这一前提包含真实证据；`test_consistency_cli.py` 的「产物变化」类断言改为改真实产物字节（改 summary 里的冻结哈希已不再有意义）。**变异注入**：撤 P0-A（md 条目）/ P0-B（哈希回退旧写法）/ P0-C（去掉降级）分别转红。
+
 - **证据包不再漏进源码仓库（`OSH_HOME` 双真值收口）**
   （`api/__init__.py`、`api/evidence.py`、`api/dashboard.py`、`tests/conftest.py`）
   - **根因**：`OSH_HOME` 在各 API 模块里是 **import 期快照**（`api/__init__.py:23`、`dashboard.py:39`），而 `os.environ["OSH_HOME"]` 可以在运行时被改 —— 同一进程里存在**两份真值**。dashboard 的证据生成把 bundle 位置交给 `dashboard.OSH_HOME`、把写入目标交给 `evidence.snapshot_bundle` 内部的 `from . import OSH_HOME`（即 `api.OSH_HOME`）；两个快照一旦分叉，测试的隔离就失效，生成的证据包落进**仓库**。实测两处落点：`.osh/evidence/` 累积 46 个空壳包（33×174B + 13×~890B）外加 `compliance-pack.zip`；`src/.osh/evidence/` 同类空壳（`parent.parent.parent` 从 `api/` 往上三层，`api.PROJECT_ROOT` 实为 `src`），自 09-02 起漏了两周。空壳的形态特征即「只含 37 字节的 `audit-manifest.json`」，且删掉后每次跑测试还会再长。
@@ -36,7 +46,7 @@
   - **修复测试泄漏**：`test_api.py` 在模块导入期把 `OSH_HOME` 钉到仓库根（进程级），于是每个构造过 `PipelineSession` 的测试都往仓库自己的 `.osh/sessions` 漏一个目录 —— 实测累积 **3611 个**，占历史上出现过的全部 session 的 **99.6%**。`conftest.py` 现在把 `OSH_SESSIONS_DIR` 指向一个临时根并在 `pytest_sessionfinish` 回收，**不动 `OSH_HOME`**，因此 `test_api.py` 依赖的相对路径解析不受影响（早期直接抢占 `OSH_HOME` 的做法曾坏掉 11 个测试）。临时根保持 `<project>/.osh/sessions` 层级，因为 `to_dict` 靠向上三层反推 `project_dir`。
   - **新增 `pipeline/session_prune.py`**：按「可再生性」而非体积做分层保留 —— T0 运行态（空目录 / `created` 中止）整体回收；T1 汇总层（`session.json` / `gate-summary.json`）与 T2 LLM 产物（本地 4B 跑一轮 1.5–2 小时，不可再生）永久保留；T3 确定性证据（`VOLATILE_STEPS` 产物，分钟级可重跑）只保留在最近 `keep_last` 个 run 里。默认 `dry_run=True`，可用 `python -m yuleosh.pipeline.session_prune <project> --keep-last N [--apply]`。
   - 动因：单次 24 步真实 run 只写 51 个文件 / 89 KB（字节维度十年内都不构成风险），真正的代价是**目录数** —— `api/artifacts.py` 每次请求都要 `os.walk(OSH_HOME)` + 全量 `iterdir` + 逐个读 `session.json`，随历史线性退化。
-  - 顺带记录一个**未修**的相邻缺陷：`gates._ARTIFACT_CANDIDATES` 漏了 `qualification-test.json`（G10 步骤的实际产物名）与 `c-coverage-gate.json`，因此这些门禁读不到产物里的真实 verdict、只能退回 `session.steps` 的状态。本模块用一份显式补集兜住了清理场景，但门禁本身仍待修。
+  - 顺带记录一个相邻缺陷（**已于 2026-09-23 修复**，见本节末的「门禁证据可达性与完整性指纹补全」）：`gates._ARTIFACT_CANDIDATES` 曾漏了 `qualification-test.json`（G10 步骤的实际产物名）等 7 项，因此这些门禁读不到产物里的真实 verdict、只能退回 `session.steps` 的状态。本模块当时用一份显式补集兜住了清理场景。
 
 - **步骤缓存分级：验证证据每轮重跑**（`pipeline/step_cache.py`、`pipeline/orchestrator.py`）
   - 缓存语义由「确定性步骤可缓存」改为按「是否属于本轮验证证据」分级：

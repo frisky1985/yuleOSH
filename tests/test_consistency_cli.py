@@ -64,21 +64,47 @@ def mock_session(tmp_path):
         json.dumps(test_cases), encoding="utf-8"
     )
 
+    # Real artifacts on disk.  Since 2026-09-23 the fingerprint is computed by
+    # scanning the session directory — a hash frozen inside gate-summary.json
+    # cannot notice a file edited afterwards, which is the tampering an
+    # integrity fingerprint exists to catch.  Tests must therefore change real
+    # bytes, not the digests recorded in the summary.
+    (session_dir / "extract-reqs.json").write_text(
+        json.dumps({"session": "test-session", "step": "extract-reqs",
+                    "status": "passed"}), encoding="utf-8")
+    (session_dir / "codegen.json").write_text(
+        json.dumps({"session": "test-session", "step": "codegen",
+                    "status": "passed"}), encoding="utf-8")
+
     return tmp_path, session_dir
 
 
 class TestLoadSessionSummary:
     """Tests for _load_session_summary()."""
 
-    def test_loads_gate_summary(self, mock_session):
-        """_load_session_summary extracts artifact hashes from gate-summary.json."""
+    def test_live_scan_outranks_archived_hashes(self, mock_session):
+        """Artifacts present on disk are fingerprinted by their real digests."""
         tmp_path, session_dir = mock_session
 
         summary = _load_session_summary(session_dir)
 
-        assert "extract-reqs" in summary["artifact_hashes"]
-        assert "codegen" in summary["artifact_hashes"]
-        assert summary["artifact_hashes"]["extract-reqs"] == "abc123def456"
+        assert summary["artifact_source"] == "live_scan"
+        assert "extract-reqs.json" in summary["artifact_hashes"]
+        assert "codegen.json" in summary["artifact_hashes"]
+
+    def test_gate_summary_hashes_used_when_no_artifacts(self, tmp_path):
+        """Legacy summaries (no scannable artifacts) keep working."""
+        session_dir = tmp_path / "legacy-session"
+        session_dir.mkdir()
+        (session_dir / "gate-summary.json").write_text(json.dumps({
+            "gates": [{"gate": "G1",
+                       "artifact_hashes": {"extract-reqs": "abc123def456"}}],
+        }), encoding="utf-8")
+
+        summary = _load_session_summary(session_dir)
+
+        assert summary["artifact_source"] == "gate_artifact_hashes"
+        assert summary["artifact_hashes"] == {"extract-reqs": "abc123def456"}
 
     def test_loads_test_cases(self, mock_session):
         """_load_session_summary loads test case IDs."""
@@ -113,15 +139,15 @@ class TestComputeSessionFingerprint:
         assert fp1["fingerprint"] == fp2["fingerprint"]
 
     def test_fingerprint_changes_on_artifact_change(self, mock_session):
-        """Different artifact hashes produce different fingerprints."""
+        """Editing an artifact's bytes on disk changes the fingerprint."""
         tmp_path, session_dir = mock_session
 
         fp1 = _compute_session_fingerprint(session_dir)
 
-        # Modify gate-summary.json
-        gate_summary = json.loads((session_dir / "gate-summary.json").read_text())
-        gate_summary["gates"][0]["artifact_hashes"]["extract-reqs"] = "different_hash"
-        (session_dir / "gate-summary.json").write_text(json.dumps(gate_summary))
+        # Modify a real artifact — not the digest recorded in the summary.
+        (session_dir / "extract-reqs.json").write_text(
+            json.dumps({"session": "test-session", "step": "extract-reqs",
+                        "status": "failed"}), encoding="utf-8")
 
         fp2 = _compute_session_fingerprint(session_dir)
 
@@ -143,12 +169,13 @@ class TestComputeSessionFingerprint:
         assert fp1["fingerprint"] != fp2["fingerprint"]
 
     def test_fingerprint_includes_counts(self, mock_session):
-        """Fingerprint includes artifact and test case counts."""
+        """Fingerprint counts every artifact on disk (summary itself excluded)."""
         tmp_path, session_dir = mock_session
 
         fp = _compute_session_fingerprint(session_dir)
 
-        assert fp["artifact_count"] == 2
+        # extract-reqs.json + codegen.json + test-cases.json
+        assert fp["artifact_count"] == 3
         assert fp["test_case_count"] == 2
 
 
@@ -215,10 +242,12 @@ class TestBaselineCommands:
             args = type("Args", (), {"session": "test-session", "name": "golden"})()
             cmd_baseline_save(args)
 
-            # Modify session
-            gate_summary = json.loads((session_dir / "gate-summary.json").read_text())
-            gate_summary["gates"][0]["artifact_hashes"]["extract-reqs"] = "changed_hash"
-            (session_dir / "gate-summary.json").write_text(json.dumps(gate_summary))
+            # Modify the session — a real artifact, since the fingerprint is a
+            # live scan (mutating gate-summary.json's frozen hashes would no
+            # longer be noticed, and that is by design).
+            (session_dir / "extract-reqs.json").write_text(
+                json.dumps({"session": "test-session", "step": "extract-reqs",
+                            "status": "tampered"}), encoding="utf-8")
 
             # Check consistency (modified session)
             args = type("Args", (), {"session": "test-session", "baseline": "golden"})()

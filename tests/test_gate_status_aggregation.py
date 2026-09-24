@@ -30,6 +30,14 @@ skipped, console still printed "GREEN — all gates passed"):
 6. **No evidence ⇒ no green.** A gate with no recorded steps is ``not-run``
    (it used to claim ``passed``), and ``classify_run_outcome`` only grants
    GREEN when every non-advisory gate actually passed.
+7. **A green claim needs evidence, not just bookkeeping** (P0-C,
+   2026-09-23).  A step that reports ``completed`` while producing *no*
+   artifact is recorded as ``not-run``: "the artifact is missing" and "the
+   artifact passed" used to be the same observation, so deleting evidence
+   left the gate green.  Tests below therefore materialise artifacts via
+   ``_write_all_artifacts`` before asserting that a full run is green — the
+   later cases in ``test_gate_artifact_coverage.py`` assert the downgrade
+   itself.
 """
 
 import json
@@ -70,6 +78,25 @@ def _all_steps_completed(**override):
 def _summary(tmp_path, steps, **kwargs):
     out = write_gate_summary(_session(tmp_path, steps), **kwargs)
     return json.loads(Path(out).read_text())
+
+
+def _write_all_artifacts(tmp_path, session="test-sess", **override):
+    """Materialise an artifact for *every* pipeline step.
+
+    Since P0-C (2026-09-23) a step claiming ``completed`` without producing an
+    artifact is recorded as ``not-run``, so "all steps completed" is only a
+    meaningful precondition once the evidence exists — that is what this
+    helper makes true.  ``override`` maps step_key -> JSON text for cases that
+    need a specific verdict in one step's artifact.
+    """
+    from yuleosh.pipeline.gates import _ARTIFACT_CANDIDATES
+    from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+
+    default = json.dumps({"session": session, "status": "passed"})
+    for entry in PIPELINE_STEPS:
+        key = entry[0] if isinstance(entry, (tuple, list)) else entry
+        name = _ARTIFACT_CANDIDATES.get(key, (f"{key}.json",))[0]
+        (tmp_path / name).write_text(override.get(key, default), encoding="utf-8")
 
 
 def _gate(summary, key):
@@ -194,10 +221,10 @@ class TestWorstGateStatus:
     """Defect 4 — the summary must not contradict its own gate list."""
 
     def test_skipped_gate_makes_worst_skipped(self, tmp_path):
-        (tmp_path / "critical-safety-report.json").write_text(
-            json.dumps({"skipped": True}), encoding="utf-8")
-        (tmp_path / "fault-injection-report.md").write_text(
-            "SKIPPED\n", encoding="utf-8")
+        _write_all_artifacts(tmp_path, **{
+            "review-critical-safety": json.dumps({"skipped": True}),
+            "fault-injection": "SKIPPED\n",
+        })
         summary = _summary(tmp_path, _all_steps_completed())
         assert _gate(summary, "G8")["status"] == "skipped"
         assert summary["worst_gate_status"] == "skipped"
@@ -208,6 +235,7 @@ class TestWorstGateStatus:
         assert summary["worst_gate_status"] == "failed"
 
     def test_all_passed_stays_passed(self, tmp_path):
+        _write_all_artifacts(tmp_path)
         summary = _summary(tmp_path, _all_steps_completed())
         assert summary["worst_gate_status"] == "passed"
         assert summary["not_run_gates"] == []
@@ -255,26 +283,26 @@ class TestEvidenceFreshness:
         assert summary["worst_gate_status"] == "stale"
 
     def test_matching_session_artifact_is_current(self, tmp_path):
-        (tmp_path / "integration-test.json").write_text(json.dumps({
+        _write_all_artifacts(tmp_path, **{"integration-test": json.dumps({
             "session": "test-sess", "step": "integration-test",
             "status": "passed",
-        }), encoding="utf-8")
+        })})
         summary = _summary(tmp_path, _all_steps_completed())
         assert _gate(summary, "G7")["status"] == "passed"
         assert summary["stale_gates"] == []
 
     def test_artifact_without_session_field_is_not_stale(self, tmp_path):
         """Legacy/unknown schemas must not gain a verdict they did not earn."""
-        (tmp_path / "integration-test.json").write_text(
-            json.dumps({"tests_passed": 3}), encoding="utf-8")
+        _write_all_artifacts(tmp_path, **{
+            "integration-test": json.dumps({"tests_passed": 3})})
         summary = _summary(tmp_path, _all_steps_completed())
         assert _gate(summary, "G7")["status"] == "passed"
 
     def test_reusable_step_reuse_is_not_stale(self, tmp_path):
         """spec-check is in REUSABLE_STEPS — an older session is by design."""
-        (tmp_path / "spec-check.json").write_text(json.dumps({
+        _write_all_artifacts(tmp_path, **{"spec-check": json.dumps({
             "session": "some-earlier-run", "coverage": {"score": 100.0},
-        }), encoding="utf-8")
+        })})
         summary = _summary(tmp_path, _all_steps_completed())
         assert _gate(summary, "G1")["status"] == "passed"
         assert summary["stale_gates"] == []

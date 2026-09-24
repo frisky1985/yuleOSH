@@ -52,6 +52,7 @@ def _load_session_summary(session_dir: Path) -> dict:
         "gate_summary": {},
         "integrity_hash": None,
         "artifact_hashes": {},
+        "artifact_source": None,
         "test_cases": [],
     }
 
@@ -61,12 +62,47 @@ def _load_session_summary(session_dir: Path) -> dict:
         try:
             data = json.loads(gate_summary_path.read_text(encoding="utf-8"))
             summary["gate_summary"] = data
-            # Extract artifact hashes from gates
-            for gate in data.get("gates", []):
-                for step_key, hash_val in gate.get("artifact_hashes", {}).items():
-                    summary["artifact_hashes"][step_key] = hash_val
+            # Integrity digests.  Prefer the session-wide ``artifact_index``
+            # (2026-09-23): the per-gate ``artifact_hashes`` only cover
+            # artifacts that resolve to a gate step key, so 35 of the 50 files
+            # in run 57fa80e754ed — `c-coverage-gate.json` (a GATE_BLOCK
+            # step), the twelve `review-*.json` sub-reports, `embedded-*.json`,
+            # `ctest-junit.xml` — could be rewritten without this fingerprint
+            # changing.  The per-gate digests remain the fallback for
+            # summaries written before the index existed.
+            index = data.get("artifact_index")
+            if isinstance(index, dict) and index:
+                summary["artifact_source"] = "artifact_index"
+                summary["artifact_hashes"] = {
+                    str(k): str(v) for k, v in index.items()}
+            else:
+                summary["artifact_source"] = "gate_artifact_hashes"
+                for gate in data.get("gates", []):
+                    for step_key, hash_val in gate.get("artifact_hashes", {}).items():
+                        summary["artifact_hashes"][step_key] = hash_val
         except Exception as e:
             log.warning("Failed to load gate-summary.json: %s", e)
+
+    # A live re-scan outranks the archived snapshot (2026-09-23).
+    #
+    # Both ``artifact_index`` and the per-gate digests are hashes recorded *at
+    # the moment the summary was written*.  Comparing two such snapshots only
+    # detects drift between runs — never a file edited in place afterwards,
+    # which is exactly the tampering an "integrity fingerprint" is supposed to
+    # expose: rewriting ``c-coverage-gate.json`` after the run left the
+    # fingerprint unmoved.  Scanning now makes the fingerprint mean "these
+    # bytes, today".  Falls back to the snapshot when the directory yields
+    # nothing (missing session dir, unreadable, empty).
+    try:
+        from yuleosh.pipeline.gates import artifact_index as _live_index
+
+        live = _live_index(Path(session_dir))
+    except Exception as e:  # pragma: no cover - import/IO failure
+        log.warning("live artifact scan unavailable: %s", e)
+        live = {}
+    if live:
+        summary["artifact_source"] = "live_scan"
+        summary["artifact_hashes"] = live
 
     # Load test-cases.json if present
     test_cases_path = session_dir / "test-cases.json"
@@ -98,6 +134,7 @@ def _compute_session_fingerprint(session_dir: Path) -> dict:
     return {
         "fingerprint": fingerprint,
         "artifact_count": len(summary["artifact_hashes"]),
+        "artifact_source": summary["artifact_source"],
         "test_case_count": len(summary["test_cases"]),
         "artifact_hashes": summary["artifact_hashes"],
         "test_case_ids": fingerprint_data["test_case_ids"],
@@ -129,6 +166,7 @@ def cmd_baseline_save(args):
         "created_at": datetime.now().isoformat(),
         "fingerprint": fingerprint["fingerprint"],
         "artifact_count": fingerprint["artifact_count"],
+        "artifact_source": fingerprint["artifact_source"],
         "test_case_count": fingerprint["test_case_count"],
         "artifact_hashes": fingerprint["artifact_hashes"],
         "test_case_ids": fingerprint["test_case_ids"],

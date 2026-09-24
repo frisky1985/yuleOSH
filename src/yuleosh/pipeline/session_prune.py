@@ -66,10 +66,13 @@ _ALWAYS_KEEP = frozenset({"session.json", "gate-summary.json"})
 #: 这是对 ``gates._artifact_paths`` 的**补集**，不是第二份完整清单 ——
 #: 主体仍由映射产生，这里只补它漏掉的。
 #:
-#: 顺带记录一个未修的缺陷（不在本次改动范围）：``gates._ARTIFACT_CANDIDATES``
-#: 漏了 ``qualification-test.json``（G10 步骤的实际产物名）与
-#: ``c-coverage-gate.json``，导致对应门禁读不到产物里的真实 verdict、
-#: 只能退回 ``session.steps`` 的状态。
+#: 顺带记录一个缺陷（2026-09-23 已修）：``gates._ARTIFACT_CANDIDATES``
+#: 曾漏了 ``qualification-test.json``（G10 步骤的实际产物名）等 7 项，
+#: 导致对应门禁读不到产物里的真实 verdict、只能退回 ``session.steps``
+#: 的自报状态。P0-A 已补齐候选表并增加 ``gates._scan_artifact_step_map``
+#: 兜底（按产物自报的 ``step`` 字段归属），两条路径对产物名的认知已一致。
+#: ``c-coverage-gate.json`` 不映射任何 step_key，由 ``gates.artifact_index``
+#: 的会话级完整性指纹覆盖（P0-B）。
 _EXTRA_DETERMINISTIC_EVIDENCE = (
     "ctest-junit.xml",           # integration-test 的 ctest JUnit 报告
     "qualification-test.json",   # test-qualification 的实际产物名

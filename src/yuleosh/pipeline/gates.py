@@ -43,6 +43,7 @@ __all__ = [
     "GATES",
     "GATE_STATUS_ORDER",
     "aggregate_gate_status",
+    "artifact_index",
     "classify_run_outcome",
     "declared_na_gates",
     "load_gate_summary",
@@ -231,6 +232,52 @@ def _sha256_file(path: Path) -> str:
         return ""
 
 
+#: Artifacts excluded from the session-wide integrity index: the summary
+#: itself (a file cannot contain its own digest) and ``session.json`` (the
+#: orchestrator rewrites it on every step transition, so including it would
+#: make two identical runs produce different fingerprints).
+_ARTIFACT_INDEX_EXCLUDED = frozenset({"gate-summary.json", "session.json"})
+
+
+def artifact_index(sdir: Path,
+                   exclude: frozenset[str] = _ARTIFACT_INDEX_EXCLUDED,
+                   ) -> dict[str, str]:
+    """SHA-256 of **every** artifact file under ``sdir`` (P0-B, 2026-09-23).
+
+    Why the whole directory rather than the gate-mapped steps: per-gate
+    digests only cover artifacts that resolve to a gate's step key.  In run
+    ``57fa80e754ed`` that left **35 of 50** artifacts without tamper evidence
+    — ``c-coverage-gate.json`` (a GATE_BLOCK step), the twelve ``review-*.json``
+    sub-reports, ``embedded-*.json``, ``ctest-junit.xml`` — and
+    ``cli/commands/consistency.py``, which replays these digests into a
+    baseline fingerprint, could not detect any of them being rewritten.
+
+    Public because ``cli/commands/consistency.py`` scans the same directory:
+    one implementation keeps the archived snapshot (``gate-summary.json``'s
+    ``artifact_index``) and the live re-scan from drifting apart — the very
+    divergence that produced this defect.
+
+    Keys are paths relative to ``sdir``, so nested artifacts stay distinct.
+    Dot-files are skipped (editor/OS noise such as ``.DS_Store``); never
+    raises — an unreadable directory yields an empty index.
+    """
+    index: dict[str, str] = {}
+    try:
+        paths = sorted(p for p in Path(sdir).rglob("*") if p.is_file())
+    except OSError:  # pragma: no cover - unreadable session dir
+        return index
+    for path in paths:
+        if path.name in exclude or path.name.startswith("."):
+            continue
+        digest = _sha256_file(path)
+        if digest:
+            try:
+                index[str(path.relative_to(sdir))] = digest
+            except ValueError:  # pragma: no cover - defensive
+                index[path.name] = digest
+    return index
+
+
 def _statuses_from_session_steps(steps) -> dict[str, str]:
     """Build ``{step_key: status}`` from ``session.steps`` entries.
 
@@ -261,11 +308,34 @@ def _statuses_from_session_steps(steps) -> dict[str, str]:
 # Artifact filenames that do not follow the "<step_key>.json" convention.
 # Without these, the corresponding gate never sees its step's real verdict
 # and silently stays "passed" (2026-09-03).
+#
+# 2026-09-23 (P0-A): the table only covered 4 of 11 such steps, so the other
+# 7 gates read **no artifact at all** and their status rested entirely on the
+# orchestrator's own ``session.steps`` bookkeeping.  Worst case was G10:
+# ``ci/gate_policy.py`` lists ``test-qualification`` as a GATE_BLOCK step, yet
+# its only evidence (``qualification-test.json``) was never opened by the gate
+# — a run could block on a verdict the gate had not read.  ``session_prune``
+# had already recorded this gap in a comment; the divergence is now closed.
+#
+# Relationship to ``_scan_artifact_step_map`` (measured, not assumed): for a
+# JSON artifact that records its producer in a ``step`` field the scan is a
+# redundant second path, so deleting e.g. the ``test-qualification`` entry
+# does *not* break G10.  The Markdown entries are load-bearing — a ``.md``
+# file has no ``step`` field to scan, so removing ``prd``/``final-report``
+# makes the gate read nothing at all again (verified by mutation).
 _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "code-review": ("code-review-unified.json",),
     "review-critical-safety": ("critical-safety-report.json",),
     "merge-gate": ("merge-gate-report.json",),
     "fault-injection": ("fault-injection-report.md", "fault-injection.json"),
+    # P0-A additions (2026-09-23):
+    "super-analysis": ("startup-analysis.md",),
+    "prd": ("prd.md",),
+    "architecture": ("architecture.md",),
+    "development": ("development-plan.md",),
+    "test-planning": ("test-plan.md",),
+    "test-qualification": ("qualification-test.json", "qualification-test.md"),
+    "final-report": ("final-report.md",),
 }
 
 
@@ -351,6 +421,99 @@ def _verdict_from_text(path: Path) -> str:
     return "skipped" if "skipped" in head.lower() else ""
 
 
+def _scan_artifact_step_map(sdir: Path) -> dict[str, list[Path]]:
+    """Index artifacts by the ``step`` field they record about themselves.
+
+    ``_ARTIFACT_CANDIDATES`` is a *name* table: it can only cover artifact
+    names somebody remembered to list.  Some steps also emit auxiliary files
+    whose name maps to no step key at all (``c-coverage-gate.json``,
+    ``review-*.json``, ``embedded-*.json``) but which do carry their producer
+    in a ``step`` field.  Scanning that field lets a gate reach evidence the
+    name table cannot express, and lets the P0-C completeness check avoid
+    declaring a step artifact-less when it in fact produced one.
+
+    Returns an empty map for an unreadable/missing directory (never raises).
+    """
+    index: dict[str, list[Path]] = {}
+    try:
+        candidates = sorted(Path(sdir).glob("*.json"))
+    except OSError:  # pragma: no cover - unreadable session dir
+        return index
+    for path in candidates:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        key = str(data.get("step", "")).strip()
+        if key:
+            index.setdefault(key, []).append(path)
+    return index
+
+
+#: Statuses the orchestrator writes when it believes a step succeeded.  They
+#: are *self-reported*: nothing in them proves an artifact was produced.
+_SELF_REPORTED_SUCCESS = ("completed", "passed")
+
+
+def _self_reported_success(status: str) -> bool:
+    """Whether ``status`` is the orchestrator claiming a step succeeded."""
+    return str(status).strip().lower() in _SELF_REPORTED_SUCCESS
+
+
+def _apply_artifact_overlay(step_statuses: dict[str, str], sdir: Path,
+                            expected_session: str = "") -> list[str]:
+    """Let each step's own artifact correct — or refute — its recorded status.
+
+    Two defects are repaired here:
+
+    1. **The artifact verdict wins** (2026-09-03).  A step handler that
+       skipped real work writes ``skipped`` / ``passed:false`` into its own
+       artifact while the orchestrator still records ``completed``;
+       aggregating ``session.steps`` alone therefore reported green gates
+       for work that never ran.
+    2. **No artifact ⇒ no evidence** (P0-C, 2026-09-23).  When a step claims
+       success but *no* artifact can be found for it, that claim is
+       indistinguishable from "the step never ran", so it is downgraded to
+       ``not-run`` rather than counting as ``passed``.  Before this,
+       *deleting* a step's artifact left its gate green: missing evidence
+       and passing evidence were the same observation.
+
+    ``REUSABLE_STEPS`` are exempt from the downgrade — their artifacts are
+    legitimately reused from an earlier run (see ``_is_freshness_exempt``).
+
+    Returns the step keys downgraded to ``not-run`` (logging + tests);
+    ``step_statuses`` is mutated in place.
+    """
+    downgraded: list[str] = []
+    step_map = _scan_artifact_step_map(sdir)
+    for key in list(step_statuses):
+        verdict = _artifact_verdict(sdir, key, expected_session)
+        if not verdict:
+            # The name table cannot express every artifact (c-coverage-gate,
+            # review-*/embedded-*); fall back to the ``step`` each file records.
+            fresh = expected_session if not _is_freshness_exempt(key) else ""
+            for path in step_map.get(key, []):
+                verdict = (_verdict_from_json(path, fresh) if path.suffix == ".json"
+                           else _verdict_from_text(path))
+                if verdict:
+                    break
+        if verdict:
+            step_statuses[key] = verdict
+            continue
+        if (_self_reported_success(step_statuses[key])
+                and not _is_freshness_exempt(key)
+                and not _artifact_paths(sdir, key)
+                and not step_map.get(key)):
+            log.warning(
+                "step %r claimed %r but produced no artifact — recorded as "
+                "not-run (no evidence)", key, step_statuses[key])
+            step_statuses[key] = "not-run"
+            downgraded.append(key)
+    return downgraded
+
+
 def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
                        output_path: str | None = None) -> str:
     """Aggregate the session's step statuses into gate-summary.json.
@@ -381,10 +544,7 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         # overridden.
         if sdir is not None:
             _expected = str(getattr(session, "name", "") or "")
-            for key in list(step_statuses):
-                verdict = _artifact_verdict(Path(sdir), key, _expected)
-                if verdict:
-                    step_statuses[key] = verdict
+            _apply_artifact_overlay(step_statuses, Path(sdir), _expected)
 
     gate_statuses = aggregate_gate_status(step_statuses)
 
@@ -405,14 +565,22 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         "worst_gate_status": _worst_status(hard_statuses),
     }
     for g in GATES:
-        # Q3: compute SHA-256 of each step's artifact file for tamper-evidence.
+        # Q3: per-step artifact digests for tamper evidence.
+        #
+        # P0-B (2026-09-23): the digest was computed from ``<step_key>.json``
+        # only and never consulted ``_ARTIFACT_CANDIDATES``, so every gate
+        # whose step writes a differently-named file ended up with an EMPTY
+        # artifact_hashes — G5, G8, G9 and G10, i.e. precisely the gates
+        # ``ci/gate_policy.py`` blocks on.  Resolve through
+        # ``_artifact_paths`` so the candidate table applies here too.
         artifact_hashes: dict[str, str] = {}
         if sdir is not None:
             for step_key in g["step_keys"]:
-                artifact_path = Path(sdir) / f"{step_key}.json"
-                digest = _sha256_file(artifact_path)
-                if digest:
-                    artifact_hashes[step_key] = digest
+                for path in _artifact_paths(Path(sdir), step_key):
+                    digest = _sha256_file(path)
+                    if digest:
+                        artifact_hashes[step_key] = digest
+                        break
         gate_entry = {
             "gate": g["gate"],
             "name": g["name"],
@@ -423,6 +591,16 @@ def write_gate_summary(session, step_statuses: dict[str, str] | None = None,
         if artifact_hashes:
             gate_entry["artifact_hashes"] = artifact_hashes
         summary["gates"].append(gate_entry)
+
+    # P0-B (2026-09-23): per-gate digests only reach artifacts that map to a
+    # gate step.  Everything else — ``c-coverage-gate.json`` (a GATE_BLOCK
+    # step), the twelve ``review-*.json`` sub-reports, ``embedded-*.json``,
+    # ``ctest-junit.xml`` — had no tamper evidence at all.  ``artifact_index``
+    # closes that hole for the whole session directory; consumers that build a
+    # baseline fingerprint (cli/commands/consistency.py) prefer it and fall
+    # back to the per-gate digests for older summaries.
+    summary["artifact_index"] = artifact_index(Path(sdir)) if sdir is not None else {}
+    summary["artifact_index_count"] = len(summary["artifact_index"])
 
     # 未验证门禁显式列出 (2026-09-23, 显式不静默): worst_gate_status 是一个
     # 标量, 消费方容易只看它是否 == "failed" 而漏掉"没验证"。这两个列表让
