@@ -203,3 +203,11 @@ phase10
 frontend/incr_test
 frontend/test
 frontend/test_cs
+
+# docs/reports/ is a *tracked* documentation directory (verification/benchmark
+# reports, cf. docs/compliance/misra-e2e-verification-07-13.md).  The bare
+# `reports/` rule in the 2026-08-05 trade-secret block is unanchored, so it
+# matches at any depth and silently swallowed docs/reports/ — negations must
+# come after it, and the directory must be re-included before its contents.
+!docs/reports/
+!docs/reports/**
