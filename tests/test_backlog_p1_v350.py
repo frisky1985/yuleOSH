@@ -450,7 +450,7 @@ class TestFaultInjectNoShell:
             encoding="utf-8",
         )
         stage = FaultInjectStage(build_dir="/tmp/fi-build")
-        with mock.patch("yuleosh.pipeline.step_handlers.fault_inject.subprocess.run") as m_run:
+        with mock.patch("yuleosh.pipeline.step_handlers.fault_inject.safe_subprocess_run") as m_run:
             ok = stage.build_test_firmware(project_root=str(proj))
         assert ok is True
         calls = [c for c in m_run.call_args_list]

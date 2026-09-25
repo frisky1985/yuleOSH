@@ -298,7 +298,7 @@ class TestStepCUnitTest:
         unity_dir.mkdir(parents=True)
         (unity_dir / "Makefile").write_text("all:\n\techo ok\n")
 
-        with patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run") as mock_run:
+        with patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run") as mock_run:
             mock_run.return_value = MagicMock(
                 stdout="OK (1 test, 1 assertion, 0 failed, 0 ignored)\n",
                 stderr="",
@@ -322,7 +322,7 @@ class TestStepCUnitTest:
         unity_dir.mkdir(parents=True)
         (unity_dir / "Makefile").write_text("all:\n\techo fail\n")
 
-        with patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run") as mock_run:
+        with patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run") as mock_run:
             mock_run.return_value = MagicMock(
                 stdout="FAIL (1 test, 1 assertion, 1 failed, 0 ignored)\n",
                 stderr="",
@@ -345,7 +345,7 @@ class TestStepCUnitTest:
         unity_dir.mkdir(parents=True)
         (unity_dir / "Makefile").write_text("all:\n\techo\n")
 
-        with patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run") as mock_run:
+        with patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run") as mock_run:
             mock_run.side_effect = FileNotFoundError("make not found")
             result = step_c_unit_test(mock_session)
             with open(result) as f:
@@ -365,7 +365,7 @@ class TestStepCUnitTest:
         unity_dir.mkdir(parents=True)
         (unity_dir / "Makefile").write_text("all:\n\techo\n")
 
-        with patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run") as mock_run:
+        with patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run") as mock_run:
             import subprocess
             mock_run.side_effect = subprocess.TimeoutExpired("make", 120)
             result = step_c_unit_test(mock_session)
@@ -385,7 +385,7 @@ class TestStepCUnitTest:
         unity_dir.mkdir(parents=True)
         (unity_dir / "Makefile").write_text("all:\n\techo\n")
 
-        with patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run") as mock_run:
+        with patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run") as mock_run:
             mock_run.return_value = MagicMock(
                 stdout="OK (1 test, 1 assertion, 0 failed, 0 ignored)\nOK (1 test, 1 assertion, 0 failed, 0 ignored)\n",
                 stderr="",
@@ -537,18 +537,23 @@ class TestStepIntegrationTest:
             with patch("yuleosh.pipeline.step_handlers.test_integration._parse_spec") as mock_spec:
                 mock_spec.return_value = {}
                 with patch("yuleosh.pipeline.step_handlers.test_integration.subprocess.run") as mock_run:
-                    # 1: pytest --help probe; 2: pytest -m integration (no match, rc 5);
-                    # 3: cmake --build; 4: ctest -L integration (1 passed)
+                    # 1: pytest --help probe; 2: pytest -m integration (no match, rc 5)
                     mock_run.side_effect = [
                         MagicMock(stdout="", stderr="", returncode=0),
                         MagicMock(stdout="no tests ran", stderr="", returncode=5),
-                        MagicMock(stdout="", stderr="", returncode=0),
-                        MagicMock(
-                            stdout="100% tests passed, 0 tests failed out of 1\n",
-                            stderr="", returncode=0,
-                        ),
                     ]
-                    result = step_integration_test(mock_session)
+                    # 3: cmake --build; 4: ctest -L integration (1 passed)
+                    # 注意: 这两步已改走 safe_run.run_captured (非 subprocess.run),
+                    # 必须单独打桩, 否则 mock 打空 → 真跑子进程 (07cc1dfb 迁移遗留)。
+                    with patch("yuleosh.pipeline.step_handlers.test_integration.run_captured") as mock_cap:
+                        mock_cap.side_effect = [
+                            MagicMock(stdout="", stderr="", returncode=0),
+                            MagicMock(
+                                stdout="100% tests passed, 0 tests failed out of 1\n",
+                                stderr="", returncode=0,
+                            ),
+                        ]
+                        result = step_integration_test(mock_session)
                     with open(result) as f:
                         report = json.load(f)
                     assert report["test_runner"] == "ctest-integration"
@@ -581,10 +586,14 @@ class TestStepIntegrationTest:
                     mock_run.side_effect = [
                         MagicMock(stdout="", stderr="", returncode=0),
                         MagicMock(stdout="no tests ran", stderr="", returncode=5),
-                        MagicMock(stdout="", stderr="", returncode=0),
-                        MagicMock(stdout="No tests were found!!!", stderr="", returncode=0),
                     ]
-                    result = step_integration_test(mock_session)
+                    # 后两步 (cmake --build / ctest) 走 safe_run.run_captured。
+                    with patch("yuleosh.pipeline.step_handlers.test_integration.run_captured") as mock_cap:
+                        mock_cap.side_effect = [
+                            MagicMock(stdout="", stderr="", returncode=0),
+                            MagicMock(stdout="No tests were found!!!", stderr="", returncode=0),
+                        ]
+                        result = step_integration_test(mock_session)
                     with open(result) as f:
                         report = json.load(f)
                     assert report["test_runner"] == "ctest-integration"
@@ -601,7 +610,7 @@ class TestStepIntegrationTest:
         (build_dir / "CTestTestfile.cmake").write_text("add_test(NAME u COMMAND true)\n")
         mock_session.project_dir = proj_dir
 
-        with patch("yuleosh.pipeline.step_handlers.test_c_unit.subprocess.run") as mock_run:
+        with patch("yuleosh.pipeline.step_handlers.test_c_unit.safe_subprocess_run") as mock_run:
             mock_run.side_effect = [
                 MagicMock(stdout="", stderr="", returncode=0),   # cmake --build
                 MagicMock(

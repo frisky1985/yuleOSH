@@ -215,7 +215,7 @@ class TestClaudeDevGitException:
         session = PipelineSession("dev-git-err", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=FileNotFoundError("git not found"),
         ):
             result = step_claude_dev(session)
@@ -331,7 +331,7 @@ class TestClaudeDevCProjectMetrics:
 
         session.llm_client = _capture_prompt
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=FileNotFoundError("git not found"),
         ):
             result = step_claude_dev(session)
@@ -361,7 +361,7 @@ class TestClaudeDevGitLogNonzeroReturncode:
         session = PipelineSession("dev-git-nonzero", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=1, stdout="", stderr=""),
         ):
             result = step_claude_dev(session)
@@ -477,7 +477,7 @@ class TestClaudeTestGoProject:
 
         go_stdout = "ok  github.com/test/pkg1\nok  github.com/test/pkg2\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout=go_stdout),
         ):
             result = step_claude_test(session)
@@ -498,7 +498,7 @@ class TestClaudeTestGoProject:
         (tmp_path / "go.mod").write_text("module test\n")
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=subprocess.TimeoutExpired(cmd="go test", timeout=120),
         ):
             result = step_claude_test(session)
@@ -518,7 +518,7 @@ class TestClaudeTestGoProject:
         (tmp_path / "go.mod").write_text("module test\n")
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=FileNotFoundError("go not installed"),
         ):
             result = step_claude_test(session)
@@ -538,7 +538,7 @@ class TestClaudeTestGoProject:
         (tmp_path / "go.mod").write_text("module test\n")
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=RuntimeError("Something broke"),
         ):
             result = step_claude_test(session)
@@ -558,7 +558,7 @@ class TestClaudeTestGoProject:
 
         go_stdout = "ok  github.com/test/pkg1\nFAIL github.com/test/pkg2\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=1, stdout=go_stdout),
         ):
             result = step_claude_test(session)
@@ -578,7 +578,7 @@ class TestClaudeTestGoProject:
 
         go_stdout = "FAIL github.com/test/pkg1\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=1, stdout=go_stdout),
         ):
             result = step_claude_test(session)
@@ -602,7 +602,7 @@ class TestClaudeTestPytest:
 
         pytest_stdout = "tests/test_a.py ..   [ 50%]\ntests/test_b.py ..   [100%]\n\n2 passed in 0.1s\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout=pytest_stdout),
         ):
             result = step_claude_test(session)
@@ -621,7 +621,7 @@ class TestClaudeTestPytest:
         session = PipelineSession("test-pytest-timeout", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=120),
         ):
             result = step_claude_test(session)
@@ -640,7 +640,7 @@ class TestClaudeTestPytest:
         session = PipelineSession("test-pytest-noexe", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=FileNotFoundError("pytest not found"),
         ):
             result = step_claude_test(session)
@@ -659,7 +659,7 @@ class TestClaudeTestPytest:
         session = PipelineSession("test-pytest-err", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=RuntimeError("Something broke"),
         ):
             result = step_claude_test(session)
@@ -678,7 +678,7 @@ class TestClaudeTestPytest:
 
         pytest_stdout = "test session starts\ncollected 5 items\n\nall tests done\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout=pytest_stdout),
         ):
             result = step_claude_test(session)
@@ -698,7 +698,7 @@ class TestClaudeTestPytest:
 
         pytest_stdout = "1 failed in 0.1s\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=1, stdout=pytest_stdout),
         ):
             result = step_claude_test(session)
@@ -715,7 +715,7 @@ class TestClaudeTestPytest:
         session = PipelineSession("test-pytest-write", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout="2 passed in 0.1s\n"),
         ):
             with mock.patch.object(Path, "write_text", side_effect=OSError("Disk full")):
@@ -875,7 +875,7 @@ class TestClaudeDevGitSuccess:
 
         git_output = "abc123 feat: init (2 days ago)\ndef456 fix: bug (3 days ago)\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout=git_output),
         ):
             result = step_claude_dev(session)
@@ -908,7 +908,7 @@ class TestClaudeDevFileReadExceptions:
 
         # Mock subprocess.run for git call (return success with no commits)
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout=""),
         ):
             # Mock Path.read_text to fail on one src file read
@@ -963,7 +963,7 @@ class TestClaudeTestGoFailBranches:
 
         go_stdout = "FAIL github.com/test/pkg1\n"
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=1, stdout=go_stdout),
         ):
             result = step_claude_test(session)
@@ -986,7 +986,7 @@ class TestClaudeTestPytestTimeoutHandler:
         session = PipelineSession("test-pytest-timeout2", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=120),
         ):
             result = step_claude_test(session)
@@ -1011,7 +1011,7 @@ class TestClaudeTestPytestExceptionHandler:
         session = PipelineSession("test-pytest-exc2", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=RuntimeError("Something went wrong"),
         ):
             result = step_claude_test(session)
@@ -1042,7 +1042,7 @@ class TestClaudeTestSpecScenarios:
         session = PipelineSession("test-scenarios", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout="2 passed in 0.1s\n"),
         ):
             result = step_claude_test(session)
@@ -1068,7 +1068,7 @@ class TestClaudeTestNestedGuard:
         session = PipelineSession("test-nested-guard", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             side_effect=AssertionError("subprocess.run must not be called"),
         ) as mrun:
             result = step_claude_test(session)
@@ -1089,7 +1089,7 @@ class TestClaudeTestNestedGuard:
         session = PipelineSession("test-normal-pytest", str(spec_file), llm_client=_mock_llm())
 
         with mock.patch(
-            "yuleosh.pipeline.step_handlers.execution.subprocess.run",
+            "yuleosh.pipeline.step_handlers.execution.safe_subprocess_run",
             return_value=MockProc(returncode=0, stdout="2 passed in 0.1s\n"),
         ) as mrun:
             result = step_claude_test(session)

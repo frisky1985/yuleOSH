@@ -168,7 +168,7 @@ class TestQemuHelpers:
         from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
         h = QemuTestHandler()
         proc = mock.MagicMock(returncode=0, stdout="/usr/bin/qemu-system-arm\n")
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         return_value=proc):
             assert h._find_qemu() == "/usr/bin/qemu-system-arm"
 
@@ -176,7 +176,7 @@ class TestQemuHelpers:
         from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
         h = QemuTestHandler()
         proc = mock.MagicMock(returncode=1, stdout="")
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         return_value=proc), \
              mock.patch("shutil.which",
                         return_value="/opt/qemu/qemu-system-arm"):
@@ -186,7 +186,7 @@ class TestQemuHelpers:
         from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
         h = QemuTestHandler()
         proc = mock.MagicMock(returncode=1, stdout="")
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         return_value=proc), \
              mock.patch("shutil.which",
                         return_value=None):
@@ -195,7 +195,7 @@ class TestQemuHelpers:
     def test_find_qemu_which_exception(self, tmp_path):
         from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
         h = QemuTestHandler()
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         side_effect=FileNotFoundError), \
              mock.patch("shutil.which",
                         return_value=None):
@@ -290,7 +290,7 @@ class TestQemuSingleTest:
         elf = tmp_path / "app.elf"
         elf.write_bytes(b"\x7fELF")
         proc = mock.MagicMock(returncode=0, stdout="TEST PASS", stderr="")
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         return_value=proc):
             r = h._run_single_test("qemu", elf, "pc", "max", 10)
         assert r["passed"] is True
@@ -303,7 +303,7 @@ class TestQemuSingleTest:
         elf = tmp_path / "app.elf"
         elf.write_bytes(b"\x7fELF")
         proc = mock.MagicMock(returncode=1, stdout="TEST FAIL", stderr="")
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         return_value=proc):
             r = h._run_single_test("qemu", elf, "pc", "max", 10)
         assert r["passed"] is False
@@ -313,7 +313,7 @@ class TestQemuSingleTest:
         h = self._handler()
         elf = tmp_path / "app.elf"
         elf.write_bytes(b"\x7fELF")
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         side_effect=subprocess.TimeoutExpired("qemu", 10)):
             r = h._run_single_test("qemu", elf, "pc", "max", 10)
         assert r["passed"] is False
@@ -324,7 +324,7 @@ class TestQemuSingleTest:
         h = self._handler()
         elf = tmp_path / "app.elf"
         elf.write_bytes(b"\x7fELF")
-        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.subprocess.run",
+        with mock.patch("yuleosh.pipeline.step_handlers.test_qemu.safe_subprocess_run",
                         side_effect=FileNotFoundError("no qemu")):
             r = h._run_single_test("qemu", elf, "pc", "max", 10)
         assert r["passed"] is False
@@ -569,7 +569,7 @@ class TestPhaseCheckGateFallback:
         results = {}
         cmake = mock.MagicMock(returncode=0)
         build = mock.MagicMock(returncode=0)
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=[cmake, build]):
             r = ccg._phase_build_coverage(str(tmp_path), results)
         assert r["success"] is True
@@ -580,7 +580,7 @@ class TestPhaseCheckGateFallback:
         results = {}
         cmake = mock.MagicMock(returncode=0)
         build = mock.MagicMock(returncode=1, stdout="err", stderr="")
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=[cmake, build]):
             r = ccg._phase_build_coverage(str(tmp_path), results)
         assert r["success"] is False
@@ -589,7 +589,7 @@ class TestPhaseCheckGateFallback:
     def test_cmake_timeout(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         results = {}
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=subprocess.TimeoutExpired("cmake", 120)):
             r = ccg._phase_build_coverage(str(tmp_path), results)
         assert r["success"] is False
@@ -598,7 +598,7 @@ class TestPhaseCheckGateFallback:
     def test_cmake_not_found(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         results = {}
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=FileNotFoundError("cmake")):
             r = ccg._phase_build_coverage(str(tmp_path), results)
         assert r["success"] is False
@@ -607,7 +607,7 @@ class TestPhaseCheckGateFallback:
     def test_cmake_generic_exception(self, tmp_path):
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         results = {}
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=PermissionError("denied")):
             r = ccg._phase_build_coverage(str(tmp_path), results)
         assert r["success"] is False
@@ -624,7 +624,7 @@ class TestPhaseRunTests:
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         (tmp_path / "build").mkdir()
         proc = mock.MagicMock(returncode=0, stdout="ok")
-        with mock.patch.object(ccg.subprocess, "run", return_value=proc):
+        with mock.patch.object(ccg, "safe_subprocess_run", return_value=proc):
             r = ccg._phase_run_tests(str(tmp_path),
                                      {"phases": {"build": {"build_dir": str(tmp_path / "build")}}})
         assert r["success"] is True
@@ -636,7 +636,7 @@ class TestPhaseRunTests:
         build.mkdir()
         (build / "t.gcda").write_bytes(b"x")
         proc = mock.MagicMock(returncode=2, stdout="some failed")
-        with mock.patch.object(ccg.subprocess, "run", return_value=proc):
+        with mock.patch.object(ccg, "safe_subprocess_run", return_value=proc):
             r = ccg._phase_run_tests(str(tmp_path),
                                      {"phases": {"build": {"build_dir": str(build)}}})
         assert r["success"] is True
@@ -647,7 +647,7 @@ class TestPhaseRunTests:
         build = tmp_path / "build"
         build.mkdir()
         proc = mock.MagicMock(returncode=2, stdout="", stderr="fail")
-        with mock.patch.object(ccg.subprocess, "run", return_value=proc):
+        with mock.patch.object(ccg, "safe_subprocess_run", return_value=proc):
             r = ccg._phase_run_tests(str(tmp_path),
                                      {"phases": {"build": {"build_dir": str(build)}}})
         assert r["success"] is False
@@ -658,7 +658,7 @@ class TestPhaseRunTests:
         build = tmp_path / "build"
         build.mkdir()
         pytest_ok = mock.MagicMock(returncode=0, stdout="passed")
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=[FileNotFoundError("ctest"), pytest_ok]):
             r = ccg._phase_run_tests(str(tmp_path),
                                      {"phases": {"build": {"build_dir": str(build)}}})
@@ -669,7 +669,7 @@ class TestPhaseRunTests:
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         build = tmp_path / "build"
         build.mkdir()
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=[FileNotFoundError("ctest"),
                                             RuntimeError("py broke")]):
             r = ccg._phase_run_tests(str(tmp_path),
@@ -681,7 +681,7 @@ class TestPhaseRunTests:
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         build = tmp_path / "build"
         build.mkdir()
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=subprocess.TimeoutExpired("ctest", 300)):
             r = ccg._phase_run_tests(str(tmp_path),
                                      {"phases": {"build": {"build_dir": str(build)}}})
@@ -692,7 +692,7 @@ class TestPhaseRunTests:
         from yuleosh.pipeline.step_handlers import c_coverage_gate as ccg
         build = tmp_path / "build"
         build.mkdir()
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=OSError("nope")):
             r = ccg._phase_run_tests(str(tmp_path),
                                      {"phases": {"build": {"build_dir": str(build)}}})
@@ -712,7 +712,7 @@ class TestPhaseRunGcovr:
         reports.mkdir(parents=True)
         (reports / "c-coverage.json").write_text("{}")
         proc = mock.MagicMock(returncode=0, stdout="done")
-        with mock.patch.object(ccg.subprocess, "run", return_value=proc):
+        with mock.patch.object(ccg, "safe_subprocess_run", return_value=proc):
             r = ccg._phase_run_gcovr(str(tmp_path), self._results(""))
         assert r["success"] is True
         assert r["method"].endswith("run_c_coverage.sh")
@@ -722,7 +722,7 @@ class TestPhaseRunGcovr:
         tools = tmp_path / "tools"
         tools.mkdir()
         (tools / "run_c_coverage.sh").write_text("#!/bin/bash\n")
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=subprocess.TimeoutExpired("bash", 600)):
             r = ccg._phase_run_gcovr(str(tmp_path), self._results(""))
         assert r["success"] is False
@@ -745,7 +745,7 @@ class TestPhaseRunGcovr:
         build.mkdir()
         # 模拟 yuleosh.ci.gcov_coverage 导入失败 → 走 gcovr 分支
         with mock.patch.dict("sys.modules", {"yuleosh.ci.gcov_coverage": None}), \
-             mock.patch.object(ccg.subprocess, "run",
+             mock.patch.object(ccg, "safe_subprocess_run",
                                return_value=mock.MagicMock(returncode=0, stdout="")):
             r = ccg._phase_run_gcovr(str(tmp_path), self._results(str(build)))
         assert r["success"] is False  # gcovr 无输出文件
@@ -759,7 +759,7 @@ class TestPhaseRunGcovr:
         (reports / "c-coverage.json").write_text("x" * 100)  # >50 bytes
         with mock.patch("yuleosh.ci.gcov_coverage.generate_c_coverage_report",
                         return_value=None), \
-             mock.patch.object(ccg.subprocess, "run",
+             mock.patch.object(ccg, "safe_subprocess_run",
                                return_value=mock.MagicMock(returncode=0, stdout="")):
             r = ccg._phase_run_gcovr(str(tmp_path), self._results(str(build)))
         assert r["success"] is True
@@ -774,7 +774,7 @@ class TestPhaseRunGcovr:
         (reports / "c-coverage.json").write_text("{}")  # 第一次 <50 bytes
         with mock.patch("yuleosh.ci.gcov_coverage.generate_c_coverage_report",
                         return_value=None), \
-             mock.patch.object(ccg.subprocess, "run",
+             mock.patch.object(ccg, "safe_subprocess_run",
                                return_value=mock.MagicMock(returncode=0, stdout="")):
             r = ccg._phase_run_gcovr(str(tmp_path), self._results(str(build)))
         assert r["success"] is True
@@ -786,7 +786,7 @@ class TestPhaseRunGcovr:
         build.mkdir()
         with mock.patch("yuleosh.ci.gcov_coverage.generate_c_coverage_report",
                         return_value=None), \
-             mock.patch.object(ccg.subprocess, "run",
+             mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=FileNotFoundError("gcovr")):
             r = ccg._phase_run_gcovr(str(tmp_path), self._results(str(build)))
         assert r["success"] is False
@@ -803,7 +803,7 @@ class TestPhaseCheckGate:
                               stdout="Lines: 88.5%\nBranches: 70%\n",
                               stderr="")
         results = {}
-        with mock.patch.object(ccg.subprocess, "run", return_value=proc):
+        with mock.patch.object(ccg, "safe_subprocess_run", return_value=proc):
             r = ccg._phase_check_gate(str(tmp_path), results)
         assert r["success"] is True
         assert results["line_rate"] == 88.5
@@ -816,7 +816,7 @@ class TestPhaseCheckGate:
         (tools / "check_coverage_gate.py").write_text("bad")
         proc = mock.MagicMock(returncode=1, stdout="Lines: 50%", stderr="boom")
         results = {}
-        with mock.patch.object(ccg.subprocess, "run", return_value=proc):
+        with mock.patch.object(ccg, "safe_subprocess_run", return_value=proc):
             r = ccg._phase_check_gate(str(tmp_path), results)
         assert r["success"] is False
         assert results["line_rate"] == 50.0
@@ -827,7 +827,7 @@ class TestPhaseCheckGate:
         tools.mkdir()
         (tools / "check_coverage_gate.py").write_text("x")
         results = {}
-        with mock.patch.object(ccg.subprocess, "run",
+        with mock.patch.object(ccg, "safe_subprocess_run",
                                side_effect=OSError("denied")), \
              mock.patch("yuleosh.ci.stages.run_c_coverage_check",
                         return_value=True), \
