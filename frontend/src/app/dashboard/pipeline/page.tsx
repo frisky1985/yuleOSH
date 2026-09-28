@@ -6,6 +6,8 @@ import { marked } from "marked";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRealtimeFeed, type RealtimeFrame } from "@/lib/use-realtime-feed";
+import { pushDelta, type LlmDeltaPayload } from "@/lib/llm-stream-bus";
+import { LLMLiveOutputPanel } from "@/components/dashboard/llm-live-output-panel";
 import {
   AlertCircle,
   BookMarked,
@@ -840,7 +842,13 @@ export default function PipelinePage() {
   // artifactlist; file_produced 立刻重新拉 list (单点过滤, 有新文件就出现)。
   const handleRealtime = useCallback((frame: RealtimeFrame) => {
     if (frame.topic !== "pipeline") return;
-    const kind = (frame.payload as Record<string, unknown>).kind as string;
+    const payload = frame.payload as Record<string, unknown>;
+    const kind = payload.kind as string;
+    if (kind === "llm_delta") {
+      // 高频 token 增量 → 面板专属总线，不进全局 store（避免整页重渲染）
+      pushDelta(payload as unknown as LlmDeltaPayload);
+      return;
+    }
     if (kind === "run_done" || kind === "checkpoint") {
       // 一键运行/编排器完成 → 重拉历史 + 产出物列表
       void loadRuns();
@@ -1052,6 +1060,9 @@ export default function PipelinePage() {
           activeRunId={activeRunId}
           onSelectRun={viewRun}
         />
+
+        {/* Token 级 LLM 实时输出（流式总线，不进全局 store） */}
+        <LLMLiveOutputPanel stepDefs={steps} />
 
         {/* T9：证据包历史 + 下载 */}
         <EvidencePanel
