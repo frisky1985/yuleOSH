@@ -32,7 +32,7 @@ import json
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -47,6 +47,7 @@ from yuleosh.llm.token_budget import TokenBudgetChecker
 from yuleosh.llm.cost import CostLogger, LLMCallLog
 from yuleosh.llm.provider_fallback import call_with_fallback, fallback_enabled
 from yuleosh.llm.rag.engine import RAGEngine, get_default_engine
+from yuleosh.llm.streaming import emitter_for_current_step
 
 log = logging.getLogger("llm.client")
 
@@ -511,12 +512,42 @@ class LLMClient:
         # (provider_fallback.py). Transport failures degrade to the next
         # provider; business errors (4xx) and disabled fallback return an
         # error response as before.
-        start_time = time.time()
-        response = await call_with_fallback(
-            msgs,
-            resolved_config,
-            skip_primary_reason=budget_skip_primary,
-        )
+        #
+        # Token-level streaming (opt-in)：pipeline run 内（orchestrator 已设置
+        # LLMCallContext）自动给本次 provider 调用接上 StepStreamEmitter，
+        # delta 直推 SSE 前端；显式提供 on_chunk 的调用方接管控制权；
+        # CLI/单测直调（无 ContextVar）保持纯非流式。
+        stream_emitter = None
+        if resolved_config.on_chunk is None:
+            stream_emitter = emitter_for_current_step(
+                model=resolved_config.model,
+                provider=resolved_config.provider,
+            )
+        # 传给 provider 链的配置：自动接流时用 ``dataclasses.replace`` 复制一份
+        # 带回调的副本，**绝不原地改写调用方的实例**。
+        # 原地改写有两个后果：① ``finally`` 里还原的是硬编码的
+        # ``stream=False/on_chunk=None``，而非原值（调用方显式传
+        # ``stream=True`` 会被静默降级）；② 并发复用同一 ``LLMConfig`` 实例时
+        # 相互踩踏 —— 先返回者清空 ``on_chunk``，后者剩余 delta 全丢。
+        # 副本方案两个问题一并消除：原实例全程只读，``finally`` 只需关 emitter。
+        call_config = resolved_config
+        if stream_emitter is not None:
+            call_config = replace(
+                resolved_config,
+                stream=True,
+                on_chunk=stream_emitter.on_chunk,
+                on_stream_start=stream_emitter.on_stream_start,
+            )
+        try:
+            start_time = time.time()
+            response = await call_with_fallback(
+                msgs,
+                call_config,
+                skip_primary_reason=budget_skip_primary,
+            )
+        finally:
+            if stream_emitter is not None:
+                stream_emitter.close()
         duration = time.time() - start_time
         response.duration_s = duration
 
@@ -822,6 +853,100 @@ def _call_local_ollama(
     )
 
 
+def _pipeline_emitter() -> "StepStreamEmitter | None":
+    """返回当前 pipeline step 的流式发射器；不在 pipeline run 内返回 None。
+
+    流式为 opt-in：只有 orchestrator 设置了 ``LLMCallContext`` 的调用才发
+    ``llm_delta`` 事件；CLI/测试直调保持纯非流式（零行为变化）。
+    """
+    try:
+        return emitter_for_current_step(
+            model=os.environ.get("LLM_MODEL", ""),
+            provider=os.environ.get("YULEOSH_LLM_PROVIDER", ""),
+        )
+    except Exception as exc:  # noqa: BLE001 — 事件层问题绝不影响 LLM 调用
+        log.debug("pipeline stream emitter unavailable: %s", exc)
+        return None
+
+
+def _stream_legacy_chat(
+    *,
+    url: str,
+    headers: dict,
+    body: dict,
+    timeout: int,
+    retries: int,
+    model: str,
+    emitter: "StepStreamEmitter",
+) -> dict | None:
+    """``chat_completion`` 旧 urllib 路径的流式实现。
+
+    返回 legacy dict；以下两种情况返回 None 让调用方**降级非流式重试一次**
+    （此时 emitter 保持打开，成功后由调用方把整段内容一次性补发，避免面板
+    只收到空的 reset/done 帧）：
+      * 首个 delta 之前请求失败（端点可能不支持 SSE / 网络问题）；
+      * 请求成功但零 delta（端点忽略了 ``stream: true``）。
+
+    已收到 delta 后失败 → 抛 RuntimeError：半截输出绝不静默当成功。
+    """
+    from yuleosh.llm.streaming import (
+        estimate_token_usage,
+        is_local_endpoint,
+        parse_openai_chunk,
+        stream_request,
+    )
+
+    stream_body = dict(body)
+    stream_body["stream"] = True
+    if not is_local_endpoint(url):
+        stream_body["stream_options"] = {"include_usage": True}
+
+    messages = stream_body.get("messages") or []
+    parts: list[str] = []
+    usage: dict | None = None
+    received_any = False
+
+    def _on_data(payload: str) -> None:
+        nonlocal usage, received_any
+        received_any = True
+        text, chunk_usage = parse_openai_chunk(payload)
+        if chunk_usage is not None:
+            usage = chunk_usage
+        if text:
+            parts.append(text)
+            emitter.on_chunk(text)
+
+    emitter.on_stream_start()
+    try:
+        stream_request(
+            url,
+            headers,
+            stream_body,
+            timeout_s=timeout,
+            on_data=_on_data,
+            max_retries=retries,
+            provider="chat_completion",
+        )
+    except RuntimeError:
+        if received_any:
+            emitter.close()
+            raise
+        log.warning("流式首帧前失败（端点可能不支持 SSE），降级非流式重试一次")
+        return None
+
+    content = "".join(parts)
+    if not content:
+        log.warning("流式零 delta（端点忽略 stream=true），降级非流式重试一次")
+        return None
+
+    emitter.close()
+    return {
+        "content": content,
+        "model": model,
+        "usage": usage or estimate_token_usage(messages, content),
+    }
+
+
 def chat_completion(
     system_prompt: str,
     user_prompt: str,
@@ -916,58 +1041,107 @@ def chat_completion(
         "stream": False,
     }
 
-    last_error = None
-    for attempt in range(1, retries + 1):
-        try:
-            # Create a new Request for each attempt (CQ-P1-02: don't reuse consumed Request)
-            req = _ur.Request(
-                url,
-                data=_json.dumps(body).encode("utf-8"),
+    # Token-level streaming：pipeline run 内（有 LLMCallContext）自动开启，
+    # delta 直推前端 SSE；直调/单测（无 ContextVar）emitter 为 None，
+    # 保持纯非流式，行为与旧实现一致。
+    emitter = _pipeline_emitter()
+    try:
+        if emitter is not None:
+            # emitter 默认只读 env（服务端进程常未设置），这里用本次调用实际
+            # 解析出的 model/base_url 回填，让前端 reset 帧显示真实模型/提供方。
+            emitter.model = model
+            if not emitter.provider:
+                emitter.provider = (
+                    "deepseek" if "deepseek" in base_url else "openai-compatible"
+                )
+            streamed = _stream_legacy_chat(
+                url=url,
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {api_key}",
                 },
-                method="POST",
+                body=body,
+                timeout=timeout,
+                retries=retries,
+                model=model,
+                emitter=emitter,
             )
-            with _ur.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read().decode("utf-8")
-                data = _json.loads(raw)
+            if streamed is not None:
+                return streamed
 
-            choice = data["choices"][0]
-            content = choice.get("message", {}).get("content", "")
-            if content is None:
-                content = f"[LLM refused, finish_reason={choice.get('finish_reason', 'unknown')}]"
+        last_error = None
+        for attempt in range(1, retries + 1):
+            try:
+                # Create a new Request for each attempt (CQ-P1-02: don't reuse consumed Request)
+                req = _ur.Request(
+                    url,
+                    data=_json.dumps(body).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                    method="POST",
+                )
+                with _ur.urlopen(req, timeout=timeout) as resp:
+                    raw = resp.read().decode("utf-8")
+                    data = _json.loads(raw)
 
-            return {
-                "content": content,
-                "model": data.get("model", model),
-                "usage": data.get("usage", {}),
-            }
+                choice = data["choices"][0]
+                content = choice.get("message", {}).get("content", "")
+                if content is None:
+                    content = f"[LLM refused, finish_reason={choice.get('finish_reason', 'unknown')}]"
 
-        except (_ue.HTTPError, _ue.URLError, _json.JSONDecodeError, RuntimeError) as e:
-            last_error = e
-            if attempt < retries:
-                backoff = 1.0 * (2 ** (attempt - 1))
-                _time.sleep(backoff)
-            else:
-                exc = RuntimeError(f"LLM request failed after {retries} retries: {last_error}")
-                # 外部 LLM 不可用（余额/鉴权/网络）→ 自动降级到本地 Ollama，
-                # 让 pipeline 用本地模型产出真实结果（经 Option B checkpoint 实时
-                # 同步到 UI）。本地也不可用则保留原始异常，handler 仍按
-                # is_provider_unavailable 跳过（行为不变）。
-                if _local_llm_fallback_enabled() and is_provider_unavailable(exc):
-                    try:
-                        return _call_local_ollama(
-                            system_prompt,
-                            user_prompt,
-                            max_tokens=max_tokens,
-                            temperature=temperature,
-                        )
-                    except Exception as local_exc:  # noqa: BLE001 — 本地也失败则回退原始错误
-                        log.warning("本地 Ollama 降级也失败，回退原始外部错误: %s", local_exc)
-                raise exc
+                if emitter is not None and content and not emitter.is_closed:
+                    # 流式降级场景（端点不支持 SSE）：把整段结果一次性补发，
+                    # 面板不至于只收到空的 reset/done 帧。
+                    emitter.on_chunk(content)
+                    emitter.close()
 
-    raise RuntimeError(f"LLM request failed after {retries} retries")
+                return {
+                    "content": content,
+                    "model": data.get("model", model),
+                    "usage": data.get("usage", {}),
+                }
+
+            except (_ue.HTTPError, _ue.URLError, _json.JSONDecodeError, RuntimeError) as e:
+                last_error = e
+                if attempt < retries:
+                    backoff = 1.0 * (2 ** (attempt - 1))
+                    _time.sleep(backoff)
+                else:
+                    exc = RuntimeError(f"LLM request failed after {retries} retries: {last_error}")
+                    # 外部 LLM 不可用（余额/鉴权/网络）→ 自动降级到本地 Ollama，
+                    # 让 pipeline 用本地模型产出真实结果（经 Option B checkpoint 实时
+                    # 同步到 UI）。本地也不可用则保留原始异常，handler 仍按
+                    # is_provider_unavailable 跳过（行为不变）。
+                    if _local_llm_fallback_enabled() and is_provider_unavailable(exc):
+                        try:
+                            local_result = _call_local_ollama(
+                                system_prompt,
+                                user_prompt,
+                                max_tokens=max_tokens,
+                                temperature=temperature,
+                            )
+                            if (
+                                emitter is not None
+                                and local_result.get("content")
+                                and not emitter.is_closed
+                            ):
+                                # 与上方非流式降级同理：本地兜底结果一次性补发。
+                                emitter.on_chunk(local_result["content"])
+                                emitter.close()
+                            return local_result
+                        except Exception as local_exc:  # noqa: BLE001 — 本地也失败则回退原始错误
+                            log.warning("本地 Ollama 降级也失败，回退原始外部错误: %s", local_exc)
+                    raise exc
+
+        raise RuntimeError(f"LLM request failed after {retries} retries")
+    finally:
+        # 失败路径兜底：emitter 未关闭时在此补 close（前端收到 done 帧，
+        # 「流式输出中」不残留转圈）。正常/补发分支内部已自行 close，
+        # is_closed 守卫保证不重复发 done 帧。
+        if emitter is not None and not emitter.is_closed:
+            emitter.close()
 
 
 def is_provider_unavailable(exc: Exception) -> bool:

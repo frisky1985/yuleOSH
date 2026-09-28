@@ -83,18 +83,21 @@ class OllamaProvider(AbstractProvider):
         """异步 chat（供 provider_fallback 链 / LLMClient 统一入口使用）。"""
         model = self._resolve_model(config.model)
         url = f"{self._base_url}/api/chat"
-        options: dict[str, Any] = {
-            "temperature": config.temperature,
-            "num_predict": config.max_tokens,
-        }
-        if config.context_window and config.context_window > 0:
-            options["num_ctx"] = config.context_window
-        body = {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-            "options": options,
-        }
+        streaming = bool(
+            getattr(config, "stream", False) and getattr(config, "on_chunk", None)
+        )
+        body = self._build_body(model, messages, config, streaming=streaming)
+        if streaming:
+            return await asyncio.to_thread(
+                self._stream_chat,
+                url,
+                body,
+                timeout_s=config.timeout_s,
+                max_retries=config.max_retries,
+                model=model,
+                on_chunk=config.on_chunk,
+                on_stream_start=getattr(config, "on_stream_start", None),
+            )
         data = await asyncio.to_thread(
             self._post_json, url, body, config.timeout_s, config.max_retries
         )
@@ -108,20 +111,53 @@ class OllamaProvider(AbstractProvider):
         """同步 chat（供遗留 chat_completion 默认路径直接调用，返回 legacy dict）。"""
         model = self._resolve_model(config.model)
         url = f"{self._base_url}/api/chat"
+        streaming = bool(
+            getattr(config, "stream", False) and getattr(config, "on_chunk", None)
+        )
+        body = self._build_body(model, messages, config, streaming=streaming)
+        if streaming:
+            resp = self._stream_chat(
+                url,
+                body,
+                timeout_s=config.timeout_s,
+                max_retries=config.max_retries,
+                model=model,
+                on_chunk=config.on_chunk,
+                on_stream_start=getattr(config, "on_stream_start", None),
+            )
+            return self._to_legacy_dict(resp)
+        data = self._post_json(url, body, config.timeout_s, config.max_retries)
+        return self._to_legacy_dict(self._to_response(data, model))
+
+    def estimate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        """本地模型零费用。"""
+        return 0.0
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+    def _build_body(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        config: LLMConfig,
+        *,
+        streaming: bool,
+    ) -> dict[str, Any]:
         options: dict[str, Any] = {
             "temperature": config.temperature,
             "num_predict": config.max_tokens,
         }
         if config.context_window and config.context_window > 0:
             options["num_ctx"] = config.context_window
-        body = {
+        return {
             "model": model,
             "messages": messages,
-            "stream": False,
+            "stream": streaming,
             "options": options,
         }
-        data = self._post_json(url, body, config.timeout_s, config.max_retries)
-        resp = self._to_response(data, model)
+
+    def _to_legacy_dict(self, resp: LLMResponse) -> dict:
         return {
             "content": resp.content,
             "model": resp.model,
@@ -132,13 +168,99 @@ class OllamaProvider(AbstractProvider):
             },
         }
 
-    def estimate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
-        """本地模型零费用。"""
-        return 0.0
+    def _stream_chat(
+        self,
+        url: str,
+        body: dict[str, Any],
+        *,
+        timeout_s: int,
+        max_retries: int,
+        model: str,
+        on_chunk: Any,
+        on_stream_start: Any = None,
+    ) -> LLMResponse:
+        """POST /api/chat（body 须已含 ``stream: True``），NDJSON 逐行解析。
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
+        重试语义与 ``streaming.stream_request`` 一致：首个 delta 前失败按
+        ``max_retries`` 指数退避重试；已收 delta 后失败抛 ``RuntimeError``
+        （半截输出绝不静默当成功）；零内容同样抛错，由 provider_fallback
+        链降级到下一个 provider。末帧 ``done: true`` 携带的
+        ``prompt_eval_count`` / ``eval_count`` 作为 usage。
+        """
+        if on_stream_start is not None:
+            on_stream_start()
+        payload = json.dumps(body).encode("utf-8")
+        parts: list[str] = []
+        received_any = False
+        done_frame: dict[str, Any] | None = None
+        last_error: Exception | None = None
+
+        for attempt in range(1, max(1, int(max_retries)) + 1):
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+                    for raw in resp:
+                        line = raw.decode("utf-8", errors="replace").strip()
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if not isinstance(obj, dict):
+                            continue
+                        text = (obj.get("message") or {}).get("content")
+                        if isinstance(text, str) and text:
+                            received_any = True
+                            parts.append(text)
+                            on_chunk(text)
+                        if obj.get("done"):
+                            done_frame = obj
+                            break
+            except Exception as exc:  # noqa: BLE001 — 分类后重抛
+                if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                    raise
+                last_error = exc
+                log.warning(
+                    "Ollama provider (ollama): stream attempt %d/%d failed: %s",
+                    attempt,
+                    max_retries,
+                    exc,
+                )
+                if received_any or attempt >= max(1, int(max_retries)):
+                    break
+                time.sleep(1.0 * (2 ** (attempt - 1)))
+                continue
+            if done_frame is None:
+                # 连接干净关闭但没有 done 帧 → 视为截断
+                last_error = RuntimeError("stream ended without done frame")
+            break
+
+        if done_frame is None or not received_any:
+            detail = last_error if last_error is not None else "未返回任何内容"
+            raise RuntimeError(
+                f"Ollama provider (ollama): 流式请求失败: {detail}"
+            ) from last_error
+
+        prompt_tokens = int(done_frame.get("prompt_eval_count", 0) or 0)
+        completion_tokens = int(done_frame.get("eval_count", 0) or 0)
+        return LLMResponse(
+            content="".join(parts),
+            model=model,
+            provider=self.provider_name,
+            token_usage={
+                "prompt": prompt_tokens,
+                "completion": completion_tokens,
+                "total": prompt_tokens + completion_tokens,
+            },
+            cost=0.0,
+        )
+
     def _to_response(self, data: dict[str, Any], model: str) -> LLMResponse:
         content = (data.get("message") or {}).get("content")
         if content is None:

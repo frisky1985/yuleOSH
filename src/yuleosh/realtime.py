@@ -103,15 +103,21 @@ class EventBus:
 
     # ── publish 路径（业务侧调用） ──────────────────────────────
 
-    def publish(self, topic: str, payload: dict | None = None) -> int | None:
+    def publish(self, topic: str, payload: dict | None = None, *,
+                ephemeral: bool = False) -> int | None:
         """发布事件到所有匹配订阅者（best-effort，失败仅 debug）。
+
+        Args:
+            ephemeral: True 时不写入 replay 历史 —— 供高频 token 级事件
+                （llm_delta）使用，避免挤出历史里 stage_start 等关键事件。
 
         Returns:
             新事件的 ``id``，无人订阅时仍返回 id（保证 since_id 可用）。
         """
         evt = self._make_event(topic, payload or {})
         with self._lock:
-            self._history.append(evt)
+            if not ephemeral:
+                self._history.append(evt)
             subs = list(self._subs)
         # 在锁外派发，避免慢订阅阻塞 publisher。
         for sub in subs:
@@ -328,6 +334,42 @@ def emit_pipeline_llm_call(*, run_id: str, project_dir: str,
     })
 
 
+def emit_pipeline_llm_delta(*, run_id: str, project_dir: str,
+                            step_key: str, step_index: int,
+                            text: str, seq: int, total_chars: int = 0,
+                            attempt: int = 1, reset: bool = False,
+                            done: bool = False,
+                            model: str = "", provider: str = "") -> int | None:
+    """``topic=pipeline`` + ``kind=llm_delta`` —— LLM 流式输出增量（token 级）。
+
+    ``ephemeral=True``：高频事件不进 replay 历史，仅活体投递。整帧语义：
+      * ``reset=True``（text=""）：provider 重试/回退，前端应清空该 step 缓冲；
+      * ``done=True``：本次调用输出结束（正常或异常终止）；
+      * ``seq``：同一 step 内单调递增，前端据此去重/丢弃乱序帧。
+
+    事件层是 best-effort 装饰层 —— 任何失败必须被吞掉，绝不打断 LLM 调用。
+    """
+    try:
+        return EVENT_BUS.publish("pipeline", {
+            "kind": "llm_delta",
+            "run_id": run_id,
+            "project_dir": project_dir,
+            "step_key": step_key,
+            "step_index": step_index,
+            "text": text,
+            "seq": seq,
+            "total_chars": total_chars,
+            "attempt": attempt,
+            "reset": reset,
+            "done": done,
+            "model": model,
+            "provider": provider,
+        }, ephemeral=True)
+    except Exception as _e:  # noqa: BLE001 — 事件层不得影响 LLM 主流程
+        log.debug("emit_pipeline_llm_delta swallowed: %s", _e)
+        return None
+
+
 __all__ = [
     "RealtimeEvent",
     "EventBus",
@@ -338,4 +380,5 @@ __all__ = [
     "emit_pipeline_run_done",
     "emit_pipeline_checkpoint",
     "emit_pipeline_llm_call",
+    "emit_pipeline_llm_delta",
 ]

@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **LLM token 级流式输出（dashboard「LLM 实时输出」面板）**
+  （`llm/streaming.py`、`llm/client.py`、`llm/providers/{base,deepseek,openai,ollama}.py`、`realtime.py`、前端 `llm-stream-bus.ts` / `llm-live-output-panel.tsx`）
+  - pipeline run 内（`LLMCallContext`）自动开启：provider 逐 token delta 经 `StepStreamEmitter` 合并节流后以 ephemeral `llm_delta` 事件直推 SSE，前端面板逐字增长；不进 replay 历史，不会挤出 `stage_start` 等关键事件。CLI/单测直调（无 ContextVar）与默认 `stream=False` 路径行为字节级不变。
+  - DeepSeek / OpenAI provider 走 OpenAI 兼容 SSE（`stream_options.include_usage` 末帧补 usage，本地端点自动省略）；**Ollama provider 采用原生 `/api/chat` NDJSON 流式（方案 A），保留 `options.num_ctx` 透传** —— 方案 B（改走 `/v1/chat/completions` 复用 SSE 解析器）会丢失 num_ctx，长输入撞 `exceed_context_size_error` 的坑是前人刻意修过的，不拿稳定性换演示效果。实测本地 `qwen2.5-coder:14b`：请求体 `stream=true` + `num_ctx=32768`，首 delta 前触发 `on_stream_start`，逐 delta 回调，usage 取 `done` 帧 `prompt_eval_count/eval_count`。
+  - 降级语义诚实：首个 delta 前失败可指数退避重试；已收 delta 后失败/零内容一律抛 `RuntimeError`（半截输出绝不静默当成功），由 `provider_fallback` 链或 legacy `chat_completion` 非流式重试兜底；端点不支持 SSE 时整段结果一次性补发，面板不只收到空帧。
+  - 评审修复（详见 `docs/planning/llm-streaming-review-handoff-09-26.md`）：**P0-1** `OpenAIProvider.chat()` 补上流式分流分支（此前 body 带 `stream=true` 却走整段 `json.loads`，必现解析失败并白耗重试）；**P0-2** `OllamaProvider` 解除 `stream: False` 写死（此前本地 4B 路径拿不到任何 delta，面板永远空转）；**P1-3** `chat_completion` emitter 生命周期包 `try/finally`（此前失败路径不 close，前端「流式输出中」永久转圈）。P2：本地端点判定收口 `streaming.is_local_endpoint`、`stream_chat_response` docstring 写明降级责任方、`LLMConfig` 流式 Callable 字段 `field(compare=False, repr=False)` 隔离。
+  - 复评后修复（R1/R2，2026-09-27）：`LLMClient.call` 曾**原地改写调用方传入的 `LLMConfig` 实例**（写入 `stream=True` + 两个回调），`finally` 里又**硬编码**还原成 `stream=False / on_chunk=None / on_stream_start=None`。两个后果：① 调用方显式传入的 `stream=True` 被静默降级（既有用例的 config 原值恰为 `False`，**无法区分**「还原原值」与「强制置假」两种语义）；② 并发复用同一 config 实例时相互踩踏 —— 先返回者的 `finally` 把后返回者的 `on_chunk` 清空，后者剩余 delta 全丢。现改为 `dataclasses.replace(...)` 生成**带回调的副本**交给 provider 链，调用方实例全程只读，`finally` 只需关闭 emitter。可达性核查：②在当前代码库不可达（`llm_gateway.py` / `anchoring.py` 均每次新建 config），按防御性修复处理。
+  - 新增 `tests/test_llm_streaming.py`（49 项，全部 mock 网络；P0-1/P0-2/P1-3 与 R1/R2 各带 RED→GREEN 回归用例）与前端 `llm-stream-bus.test.ts`。
+
 ### 修复
 
 - **门禁证据可达性与完整性指纹补全（P0-A/B/C）**

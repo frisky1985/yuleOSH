@@ -40,6 +40,7 @@ from yuleosh.llm.providers.base import (
     LLMConfig,
     LLMResponse,
 )
+from yuleosh.llm.streaming import is_local_endpoint, stream_chat_response
 
 log = logging.getLogger("llm.providers.openai")
 
@@ -107,14 +108,23 @@ class OpenAIProvider(AbstractProvider):
         api_model = config.model or compat.get("model") or DEFAULT_API_MODEL
         base_url = self._base_url_override or compat.get("base_url") or DEFAULT_BASE_URL
         url = f"{base_url}/v1/chat/completions"
+        # 流式为 opt-in：需同时满足 config.stream=True 且已提供 on_chunk 消费者，
+        # 否则保持原非流式路径（请求体与旧实现字面一致）。
+        streaming = bool(
+            getattr(config, "stream", False) and getattr(config, "on_chunk", None)
+        )
         body: dict[str, Any] = {
             "model": api_model,
             "messages": messages,
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
             "top_p": config.top_p,
-            "stream": False,
+            "stream": streaming,
         }
+        if streaming and not is_local_endpoint(base_url):
+            # 末帧补 usage（stream_options.include_usage）；自建端点未必支持，
+            # 缺 usage 时由 streaming.stream_chat_response 估算兜底。
+            body["stream_options"] = {"include_usage": True}
         if config.seed is not None:
             body["seed"] = config.seed
         if config.frequency_penalty:
@@ -125,6 +135,24 @@ class OpenAIProvider(AbstractProvider):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
+
+        if streaming:
+            # 阻塞式 urllib 流读放进线程池，事件循环不被逐 token 阻塞
+            # （与 deepseek.py 同语义）。
+            return await asyncio.to_thread(
+                stream_chat_response,
+                url=url,
+                headers=headers,
+                body=body,
+                messages=messages,
+                timeout_s=config.timeout_s,
+                max_retries=config.max_retries,
+                provider=self.provider_name,
+                api_model=api_model,
+                on_chunk=config.on_chunk,
+                on_stream_start=getattr(config, "on_stream_start", None),
+                estimate_cost=self.estimate_cost,
+            )
 
         data = await asyncio.to_thread(
             self._post_json,

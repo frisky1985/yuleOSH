@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -89,6 +89,21 @@ class LLMConfig:
     ])
     voting_n_variants: int = 3
     voting_consensus_threshold: float = 0.7
+
+    # Token-level streaming (opt-in). 只有 ``stream=True`` 且显式提供
+    # ``on_chunk`` 时 provider 才切到 SSE 流式分支；默认 False 时请求体与
+    # 旧实现保持字面一致（既有测试断言 ``body["stream"] is False``）。
+    # ``on_stream_start`` 在首个 delta 之前回调一次 —— pipeline 侧用它发
+    # ``reset`` 帧，provider 重试/回退后前端据此清屏重放。
+    # Callable 字段不参与 == 比较与 repr（compare=False, repr=False），
+    # 避免函数字段在配置比对/日志里产生噪声。
+    stream: bool = False
+    on_chunk: Optional[Callable[[str], None]] = field(
+        default=None, compare=False, repr=False
+    )
+    on_stream_start: Optional[Callable[[], None]] = field(
+        default=None, compare=False, repr=False
+    )
 
 
 @dataclass

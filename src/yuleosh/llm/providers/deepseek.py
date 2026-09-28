@@ -39,6 +39,7 @@ from yuleosh.llm.providers.base import (
     LLMConfig,
     LLMResponse,
 )
+from yuleosh.llm.streaming import is_local_endpoint, stream_chat_response
 
 log = logging.getLogger("llm.providers.deepseek")
 
@@ -93,14 +94,23 @@ class DeepSeekProvider(AbstractProvider):
         api_model = MODEL_ALIASES.get(config.model, config.model) or DEFAULT_API_MODEL
         base_url = self._resolve_base_url()
         url = f"{base_url}/v1/chat/completions"
+        # 流式为 opt-in：需同时满足 config.stream=True 且已提供 on_chunk 消费者，
+        # 否则保持原非流式路径（请求体与旧实现字面一致）。
+        streaming = bool(
+            getattr(config, "stream", False) and getattr(config, "on_chunk", None)
+        )
         body: dict[str, Any] = {
             "model": api_model,
             "messages": messages,
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
             "top_p": config.top_p,
-            "stream": False,
+            "stream": streaming,
         }
+        if streaming and not self._is_local_ollama(base_url):
+            # 末帧补 usage（stream_options.include_usage）；自建端点未必支持，
+            # 缺 usage 时由 streaming.stream_chat_response 估算兜底。
+            body["stream_options"] = {"include_usage": True}
         # 本地 ollama 透传 num_ctx：ollama 服务默认 context=4096，真实 step 输入
         # 常超限触发 400 exceed_context_size_error。仅在目标为本地端点时注入，
         # 避免把 num_ctx 这种 ollama 专有参数发给真实 DeepSeek/OpenAI 云端。
@@ -116,6 +126,23 @@ class DeepSeekProvider(AbstractProvider):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
+
+        if streaming:
+            # 阻塞式 urllib 流读放进线程池，事件循环不被逐 token 阻塞。
+            return await asyncio.to_thread(
+                stream_chat_response,
+                url=url,
+                headers=headers,
+                body=body,
+                messages=messages,
+                timeout_s=config.timeout_s,
+                max_retries=config.max_retries,
+                provider=self.provider_name,
+                api_model=api_model,
+                on_chunk=config.on_chunk,
+                on_stream_start=getattr(config, "on_stream_start", None),
+                estimate_cost=self.estimate_cost,
+            )
 
         data = await asyncio.to_thread(
             self._post_json,
@@ -176,12 +203,9 @@ class DeepSeekProvider(AbstractProvider):
         """True 当请求目标是本机 ollama（OpenAI 兼容端点）。
 
         仅在此时才透传 num_ctx 等 ollama 专有参数，避免污染云端 API。
+        判定逻辑单一实现在 ``streaming.is_local_endpoint``。
         """
-        low = base_url.lower()
-        return any(
-            tok in low
-            for tok in ("localhost", "127.0.0.1", "0.0.0.0", "ollama", "[::1]")
-        )
+        return is_local_endpoint(base_url)
 
     def _post_json(
         self,
