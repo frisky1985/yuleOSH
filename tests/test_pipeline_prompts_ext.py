@@ -142,13 +142,20 @@ class TestPromptBuilders:
             git_log="abc123 Fix bug",
         )
         assert "Development Plan" in system
-        assert "Source lines" in user
+        # 上下文式契约 (2026-09-13): 不再内联 Source lines / Test functions 等原始
+        # 数字（避免 LLM 转述为文档指标表）；改为 CONTEXT ONLY 注记 + repo_facts 块。
+        assert "CONTEXT ONLY" in user
+        assert "15 recent commits available" in user  # git 分支按 vault 路径注入
+        assert "Source lines" not in user
 
     def test_build_development_prompt_minimal(self):
         system, user = build_development_prompt(
             spec_content="# Spec", spec_name="s.md",
         )
-        assert "Test-to-source ratio" in user
+        # 上下文式契约: 不再内联 "Test-to-source ratio" 等原始指标。
+        assert "Test-to-source ratio" not in user
+        assert "CONTEXT ONLY" in user
+        assert "0 recent commits" in user  # git 不可用分支：明确禁止声称 "0 最近提交"
 
     def test_build_test_planning_prompt(self):
         system, user = build_test_planning_prompt(

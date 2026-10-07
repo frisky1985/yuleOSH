@@ -337,11 +337,13 @@ class TestClaudeDevCProjectMetrics:
             result = step_claude_dev(session)
         assert Path(result).exists()
         user = captured.get("user", "")
-        # C 源码被统计 (1 行内容 * 20 次 = 20 行)
-        assert "Source lines: 20" in user
-        # C 测试文件被统计 (2 个测试函数)
-        assert "Test functions: 2" in user
-        assert "Test lines: 2" in user
+        # 上下文式契约 (2026-09-13): 原始行数/函数数不再内联为 "Source lines: 20" /
+        # "Test functions: 2"，改由机器收集的 repo_facts 注入 "Repository Facts" 块。
+        assert "Repository Facts" in user
+        assert "Source files: 1 (20 lines)" in user      # 20 行 C 源码被统计
+        assert "Tests: 2 test functions" in user         # 2 个 C 测试函数被统计
+        assert "Source lines: 20" not in user            # 旧内联格式已移除
+        assert "Test functions: 2" not in user
         assert "Test file count" not in user  # 字段名是 Test lines across N files
 
 
