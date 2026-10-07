@@ -414,12 +414,14 @@ class TestStepCUnitTest:
         mock_environ.get.return_value = str(tmp_path)
         _setup_c_project(tmp_path, with_unity=True, with_test_files=True)
 
-        # First call (Unity make) fails
-        # Second call (GCC) succeeds
-        mock_subproc.side_effect = [
-            FileNotFoundError("make not found"),       # Unity make
-            MagicMock(returncode=0, stdout="", stderr=""),  # GCC compile
-        ]
+        # 3a Unity make 失败（首个调用），其余（gcc 回退，每测试文件一次）成功。
+        # c_test_files 数量不固定，用副作用函数覆盖任意次数调用，避免 StopIteration。
+        def _c_unit_subproc(*a, **k):
+            cmd = a[0] if a else []
+            if cmd and cmd[0] == "make":
+                raise FileNotFoundError("make not found")
+            return MagicMock(returncode=0, stdout="", stderr="")
+        mock_subproc.side_effect = _c_unit_subproc
 
         result = step_c_unit_test(mock_session)
         report = json.loads(Path(result).read_text())

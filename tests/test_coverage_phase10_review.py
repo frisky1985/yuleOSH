@@ -1065,7 +1065,13 @@ class TestCriticalSafetyScannerEdges:
 
     def test_stack_overflow_uint16_array(self):
         s = self._scanner()
-        s._scan_stack_overflow(Path("a.c"), ["uint16_t arr[600];"])
+        # 栈数组须位于函数体内（depth>0）才计入栈占用；文件作用域数组（如全局/
+        # 结构体成员）落在 .bss，不占栈（2026-09-13 修复对 McuConfig.reserved 的误报）。
+        s._scan_stack_overflow(Path("a.c"), [
+            "void demo_task(void) {",
+            "  uint16_t arr[600];",
+            "}",
+        ])
         assert any(v.rule_id == "CRIT-STK-001" for v in s.violations)
 
     def test_memory_leak_freed_ok(self):

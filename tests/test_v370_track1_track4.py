@@ -837,16 +837,8 @@ class TestW7SubprocessTimeout:
         hung child never blocks the pipeline."""
         import yuleosh.pipeline.step_handlers.fault_inject as fi
 
-        class _FakeSP:
-            TimeoutExpired = subprocess.TimeoutExpired
-            CalledProcessError = subprocess.CalledProcessError
-
-            def run(self, *a, **kw):
-                raise subprocess.TimeoutExpired(a[0], timeout=kw.get("timeout", 300))
-
-        # Project root must contain CMakeLists.txt so the build path runs
-        # (otherwise fault_inject skips to SIMULATED mode and the timeout
-        # termination path this test verifies is never exercised).
+        # build_test_firmware 经 safe_subprocess_run（非 fi.subprocess）调 cmake；
+        # 注入 TimeoutExpired 模拟构建挂死被看门狗终止。
         proj = tmp_path / "fi-proj"
         proj.mkdir()
         (proj / "CMakeLists.txt").write_text(
@@ -856,7 +848,10 @@ class TestW7SubprocessTimeout:
 
         inst = fi.FaultInjectStage("build")
         inst.build_dir = Path(tempfile.mkdtemp())
-        with patch.object(fi, "subprocess", _FakeSP()):
+        with patch(
+            "yuleosh.pipeline.step_handlers.fault_inject.safe_subprocess_run",
+            side_effect=subprocess.TimeoutExpired("cmake", 300),
+        ):
             ok = inst.build_test_firmware(str(proj))
         assert ok is False
         assert "已终止" in capsys.readouterr().out
