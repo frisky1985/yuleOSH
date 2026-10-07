@@ -21,11 +21,6 @@ Usage:
     user_info = get_session_user(token)
     if not check_role(user_info, "developer"):
         return 403 error
-
-    # Or as a decorator for route handlers:
-    @require_role("admin")
-    def handle_sensitive_op(handler, path):
-        ...
 """
 
 import functools
@@ -178,37 +173,6 @@ class Role:
         return f"Role({self.name})"
 
 
-# ── PermissionSet ───────────────────────────────────────────────────────────
-
-class PermissionSet:
-    """Holds all permissions for a given role."""
-
-    def __init__(self, role_name: str):
-        self.role = Role(role_name)
-
-    def can(self, resource: str, action: str = "view") -> bool:
-        return self.role.can(resource, action)
-
-    def resources(self) -> list[str]:
-        """List all resources this role can access."""
-        accessible = []
-        for resource, actions in PERMISSION_MATRIX.items():
-            for action, roles in actions.items():
-                if self.role.name in roles:
-                    accessible.append(resource)
-                    break
-        return accessible
-
-    def to_dict(self) -> dict:
-        """Return a human-readable permission dict."""
-        perms = {}
-        for resource, actions in PERMISSION_MATRIX.items():
-            for action, roles in actions.items():
-                if self.role.name in roles:
-                    perms.setdefault(resource, []).append(action)
-        return perms
-
-
 # ── API Middleware ──────────────────────────────────────────────────────────
 
 def get_role_from_user_info(user_info: Optional[dict]) -> str:
@@ -248,40 +212,3 @@ def check_role(user_info: Optional[dict], required_resource: str,
             user_info.get("email", "?") if user_info else "?",
         )
     return has_perm
-
-
-def require_role(required_resource: str, required_action: str = "view"):
-    """Decorator: require permission to access a route handler.
-
-    Usage:
-        @require_role("pipeline", "run")
-        def handle_run_pipeline(handler, path):
-            ...
-    """
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(handler, *args, **kwargs):
-            # Cookie-aware session resolution (SHALL-T1.4): Bearer OR
-            # yuleosh_at access cookie — mirror auth_extended.resolve_session.
-            from yuleosh.ui.auth_extended import resolve_session
-            user_info = resolve_session(handler)
-
-            if not check_role(user_info, required_resource, required_action):
-                from yuleosh.ui.routes.http_response import _add_cors_header, _send_security_headers
-
-                handler.send_response(403)
-                handler.send_header("Content-Type", "application/json; charset=utf-8")
-                body = json.dumps({
-                    "ok": False,
-                    "error": f"Insufficient permissions. Required: {required_resource}/{required_action}",
-                }).encode()
-                handler.send_header("Content-Length", str(len(body)))
-                _add_cors_header(handler)
-                _send_security_headers(handler)
-                handler.end_headers()
-                handler.wfile.write(body)
-                return
-
-            return func(handler, *args, **kwargs)
-        return wrapper
-    return decorator

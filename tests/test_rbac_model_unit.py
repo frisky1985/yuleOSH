@@ -1,17 +1,13 @@
-"""Unit tests for yuleosh.rbac.model — Role / PermissionSet / middleware (v3.4.2 Wave 0).
+"""Unit tests for yuleosh.rbac.model — Role / middleware (v3.4.2 Wave 0).
 
 Covers:
   - Role: valid/invalid names, labels, can() permission matrix lookups
-  - PermissionSet: can(), resources(), to_dict()
   - get_role_from_user_info(): None/unknown/legacy role mapping
   - check_role(): allow/deny paths + denial logging
-  - require_role(): decorator success path, 403 denial path (token/no token)
 """
 
 # @tests src/yuleosh/rbac/model.py
 
-import io
-import json
 import os
 import sys
 from unittest import mock
@@ -31,10 +27,8 @@ from yuleosh.rbac.model import (
     ROLE_LABELS,
     PERMISSION_MATRIX,
     Role,
-    PermissionSet,
     get_role_from_user_info,
     check_role,
-    require_role,
 )
 
 
@@ -117,42 +111,6 @@ class TestRole:
         assert "admin" in repr(Role(ROLE_ADMIN))
 
 
-# ── PermissionSet ─────────────────────────────────────────────────────
-
-class TestPermissionSet:
-    def test_can_delegates(self):
-        """GIVEN permission set WHEN can THEN delegates to role matrix."""
-        ps = PermissionSet(ROLE_ADMIN)
-        assert ps.can("billing", "upgrade") is True
-        ps2 = PermissionSet(ROLE_DEVELOPER)
-        assert ps2.can("billing", "upgrade") is False
-
-    def test_resources_admin_wide(self):
-        """GIVEN admin WHEN resources THEN covers all matrix resources."""
-        ps = PermissionSet(ROLE_ADMIN)
-        resources = set(ps.resources())
-        assert resources == set(PERMISSION_MATRIX.keys())
-
-    def test_resources_auditor_limited(self):
-        """GIVEN auditor WHEN resources THEN view-only subset."""
-        ps = PermissionSet(ROLE_AUDITOR)
-        resources = set(ps.resources())
-        assert "audit" in resources
-        assert "billing" in resources  # view only
-        assert "tenant" in resources
-        # auditor must NOT get pipeline run
-        assert not ps.can("pipeline", "run")
-
-    def test_to_dict(self):
-        """GIVEN developer WHEN to_dict THEN actions grouped by resource."""
-        ps = PermissionSet(ROLE_DEVELOPER)
-        d = ps.to_dict()
-        assert "project" in d
-        assert "create" in d["project"]
-        assert "delete" not in d["project"]  # admin-only
-        assert "pipeline" in d and "run" in d["pipeline"]
-
-
 # ── get_role_from_user_info ───────────────────────────────────────────
 
 class TestGetRoleFromUserInfo:
@@ -197,64 +155,4 @@ class TestCheckRole:
         assert check_role(None, "tenant", "edit") is False
 
 
-# ── require_role decorator ────────────────────────────────────────────
-
-class _FakeHandler:
-    """Minimal stand-in for an HTTP request handler."""
-
-    def __init__(self, headers=None, token=None):
-        self.headers = headers or {}
-        if token:
-            self.headers["Authorization"] = f"Bearer {token}"
-        self.wfile = io.BytesIO()
-        self.sent = []
-
-    def send_response(self, code):
-        self.sent.append(("response", code))
-
-    def send_header(self, name, value):
-        self.sent.append(("header", name, value))
-
-    def end_headers(self):
-        self.sent.append(("end_headers",))
-
-
-class TestRequireRole:
-    def test_allowed_calls_through(self):
-        """GIVEN token with sufficient role WHEN decorator THEN handler runs."""
-        with mock.patch("yuleosh.ui.auth_extended.resolve_session",
-                        return_value={"role": ROLE_ADMIN, "email": "a@x.io"}):
-            @require_role("tenant", "delete")
-            def handle(handler, *args, **kwargs):
-                return "ok"
-
-            handler = _FakeHandler(token="tok")
-            assert handle(handler, "/path") == "ok"
-            assert handler.sent == []
-
-    def test_denied_returns_403(self):
-        """GIVEN token with insufficient role WHEN decorator THEN 403 body."""
-        with mock.patch("yuleosh.ui.auth_extended.resolve_session",
-                        return_value={"role": ROLE_DEVELOPER, "email": "d@x.io"}):
-            @require_role("billing", "upgrade")
-            def handle(handler, *args, **kwargs):
-                return "should-not-run"
-
-            handler = _FakeHandler(token="tok")
-            result = handle(handler, "/path")
-            assert result is None
-            assert ("response", 403) in handler.sent
-            body = json.loads(handler.wfile.getvalue().decode())
-            assert body["ok"] is False
-
-    def test_no_token_denied(self):
-        """GIVEN no Authorization header WHEN decorator THEN 403 after session resolve."""
-        with mock.patch("yuleosh.ui.auth_extended.resolve_session") as m_get:
-            @require_role("tenant", "delete")
-            def handle(handler, *args, **kwargs):
-                return "should-not-run"
-
-            handler = _FakeHandler(token=None)
-            assert handle(handler, "/x") is None
-            m_get.assert_called()  # require_role 始终通过 resolve_session 解析会话
-            assert ("response", 403) in handler.sent
+# ── (require_role decorator removed: dead code, superseded by api/members.py matrix) ──
