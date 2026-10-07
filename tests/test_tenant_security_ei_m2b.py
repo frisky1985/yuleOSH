@@ -27,11 +27,36 @@ def tenant_dir(tmp_path):
     return d
 
 
-# ── EI-M2B.2: 凭据注入 ────────────────────────────────────────────────
+# ── EI-M2B.2: 凭据注入（SEC-PK：API key 走加密保险库，非机密走明文 0o600） ──
+
+@pytest.fixture
+def mock_vault(monkeypatch):
+    """确定性内存保险库，使 write/load_credentials 在 vault 路径下可断言。
+
+    真实 secret_vault 在本环境可用且跨用例持久化，会导致 load 读到上一次写入
+    的残留值（非确定性）；此处替换为进程内字典，保证 write→load 严格成对。
+    """
+    import yuleosh.secret_vault  # 确保属性已绑定，便于 monkeypatch 替换
+
+    store: dict[str, tuple[str, str]] = {}
+
+    class FakeVault:
+        def set_provider_secret(self, provider: str, key: str, val: str) -> None:
+            store[provider] = (key, val)
+
+        def resolve_provider_api_key(self, provider: str) -> str | None:
+            item = store.get(provider)
+            return item[1] if item else None
+
+    fake = FakeVault()
+    monkeypatch.setattr(yuleosh, "secret_vault", fake)
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+    return fake
+
 
 class TestCredentials:
-    def test_write_load_roundtrip(self, tenant_dir):
-        """GIVEN 写凭据 WHEN load THEN 白名单键往返一致。"""
+    def test_write_load_roundtrip(self, tenant_dir, mock_vault):
+        """GIVEN 写 API key 到保险库 WHEN load THEN 白名单键往返一致。"""
         write_credentials(tenant_dir, {
             "DEEPSEEK_API_KEY": "sk-123",
             "OPENAI_API_KEY": "sk-456",
@@ -42,24 +67,33 @@ class TestCredentials:
         assert creds["OPENAI_API_KEY"] == "sk-456"
         assert "SOME_OTHER_SECRET" not in creds
 
-    def test_credentials_file_mode_0600(self, tenant_dir):
-        """GIVEN 写凭据 THEN 文件权限 0o600（防泄露）。"""
+    def test_api_key_written_to_vault_not_plaintext(self, tenant_dir, mock_vault):
+        """GIVEN 写 API key WHEN 落盘 THEN 绝不生成明文 credentials.json（SEC-PK）。"""
         write_credentials(tenant_dir, {"DEEPSEEK_API_KEY": "sk-123"})
+        # 保险库收到写入（API key 的真实落盘路径）
+        assert mock_vault.resolve_provider_api_key("deepseek") == "sk-123"
+        # 明文凭据文件不应存在
+        assert not (tenant_dir / "config" / "credentials.json").exists()
+
+    def test_ollama_host_legacy_credentials_mode_0600(self, tenant_dir, mock_vault):
+        """GIVEN 写非机密 OLLAMA_HOST THEN 遗留明文文件权限 0o600（防泄露）。"""
+        write_credentials(tenant_dir, {"OLLAMA_HOST": "http://localhost:11434"})
         path = tenant_dir / "config" / "credentials.json"
+        assert path.exists()
         mode = stat.S_IMODE(os.stat(path).st_mode)
         assert mode == 0o600
 
-    def test_load_missing_returns_empty(self, tenant_dir):
-        """GIVEN 无凭据文件 WHEN load THEN 空 dict。"""
+    def test_load_missing_returns_empty(self, tenant_dir, mock_vault):
+        """GIVEN 无凭据（保险库空、无明文文件）WHEN load THEN 空 dict。"""
         assert load_credentials(tenant_dir) == {}
 
-    def test_load_corrupt_returns_empty(self, tenant_dir):
-        """GIVEN 损坏凭据文件 WHEN load THEN 空 dict（不 crash）。"""
+    def test_load_corrupt_returns_empty(self, tenant_dir, mock_vault):
+        """GIVEN 损坏明文文件（保险库空）WHEN load THEN 空 dict（不 crash）。"""
         (tenant_dir / "config" / "credentials.json").write_text("{not json")
         assert load_credentials(tenant_dir) == {}
 
-    def test_container_env_injects_credentials(self, tenant_dir):
-        """GIVEN tenant_dir 含凭据 WHEN _build_env THEN 注入 env 白名单键。"""
+    def test_container_env_injects_credentials(self, tenant_dir, mock_vault):
+        """GIVEN 保险库含 API key WHEN _build_env THEN 注入 env 白名单键。"""
         write_credentials(tenant_dir, {"DEEPSEEK_API_KEY": "sk-123"})
         ex = ContainerExecutor(project_dir="/proj", tenant_dir=str(tenant_dir))
         env = ex._build_env()
