@@ -695,6 +695,13 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         if _failed:
             print("  ❌ Step failed — pipeline interrupted")
             print()
+        # A1 修复: block/failed 中断时, run 终态必须标 failed, 不能让收尾的
+        # `if session.status != "failed"` 误判为 completed。此前主循环只置局部
+        # _blocked/_failed 并 break, 未更新 session.status, 导致中断的 run 在
+        # Dashboard 显示「成功」, 违反交付可信红线(可信四层/可证伪)。
+        if _blocked or _failed:
+            session.status = "failed"
+            session.updated_at = datetime.now().isoformat()
         
         # E2E 修复 (2026-08-11): minimal 等白名单档不含 final-report —
         # 循环正常跑完即视为 completed（避免 status 停在 created 导致
@@ -703,8 +710,10 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             session.status = "completed"
             session.updated_at = datetime.now().isoformat()
 
-        if session.status != "failed":
-            session._save()
+        # A2 修复: 终态无论成败都必须落盘。原 `if session.status != "failed"`
+        # 会让 failed run 的 session.json 停在初始 "created"(不写盘), 看板/历史
+        # 永远读到 created。改为无条件 save, 让 failed/completed 都正确回写。
+        session._save()
 
         # 编排层 10 Gate 报告聚合 (2026-08-19 方案 B):
         # gate status = 内部子步骤最差状态; 写 .osh/sessions/<id>/gate-summary.json。
