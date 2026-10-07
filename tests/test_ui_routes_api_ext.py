@@ -316,7 +316,7 @@ class TestHandleUsage:
         with mock.patch("yuleosh.ui.auth_extended.get_session_user", return_value=None):
             result = handle_usage(handler)
             assert isinstance(result, tuple)
-            assert result[0]["error"] == "Invalid session"
+            assert result[0]["error"] == "Unauthorized"
             assert result[1] == 401
 
     def test_returns_usage_summary(self):

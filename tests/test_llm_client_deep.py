@@ -50,10 +50,12 @@ def _api_key():
 
 class TestChatCompletion:
     def test_no_api_key(self):
-        """GIVEN no API key WHEN chat_completion THEN RuntimeError."""
+        """GIVEN no external API key AND no local Ollama WHEN chat_completion THEN RuntimeError."""
+        from urllib.error import URLError
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(RuntimeError):
-                chat_completion("sys", "user")
+            with patch("urllib.request.urlopen", side_effect=URLError("conn refused")):
+                with pytest.raises(RuntimeError):
+                    chat_completion("sys", "user")
 
     def test_retry_exhaustion(self):
         """GIVEN persistent HTTPError WHEN chat_completion THEN RuntimeError."""

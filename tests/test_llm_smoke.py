@@ -22,10 +22,11 @@ class TestLlmClient:
         assert config.model
 
     def test_chat_completion_requires_key(self):
-        """Without an API key, chat_completion raises RuntimeError."""
+        """Without an external API key AND no local Ollama, chat_completion raises RuntimeError."""
         from yuleosh.llm.client import chat_completion
+        from urllib.error import URLError
         with patch.dict(os.environ, {}, clear=True):
-            with patch.dict(os.environ, {"YULEOSH_JWT_SECRET": "x"}, clear=False):
+            with patch("urllib.request.urlopen", side_effect=URLError("conn refused")):
                 with pytest.raises(RuntimeError):
                     chat_completion("sys", "user")
 

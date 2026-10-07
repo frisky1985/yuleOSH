@@ -153,7 +153,9 @@ class TestGatesContract:
             "spec-check": "passed", "super-analysis": "passed",
             "prd": "passed", "prd-review": "skipped",
         })
-        assert statuses2["G1"] == "passed"
+        # worst-wins 顺序 failed > retry > skipped > passed：混入 skipped 时
+        # 聚合结果应为 skipped（与测试注释的语义一致），非 passed
+        assert statuses2["G1"] == "skipped"
 
     def test_gate_status_all_skipped(self):
         from yuleosh.pipeline.gates import aggregate_gate_status

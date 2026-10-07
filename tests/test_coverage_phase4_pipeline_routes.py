@@ -459,7 +459,7 @@ class TestApiPipelineDelegation:
 
     def test_run_post_without_spec(self):
         result = self._call("run", "POST", {}, {})
-        assert result[0]["error"] == "'spec' is required"
+        assert result[0]["error"] == "'spec' or 'project_dir' is required"
 
     def test_run_get_method_not_allowed(self):
         result = self._call("run", "GET", {}, {})
