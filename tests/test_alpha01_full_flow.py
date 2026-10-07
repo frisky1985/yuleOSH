@@ -197,20 +197,6 @@ class TestRegistrationToTrialFlow:
         assert org is not None, "Org not found"
         # Default tier should be 'pro' for new orgs (from migration v7)
 
-    def test_05_usage_tracking_free(self):
-        """GIVEN user using resources WHEN check_tier_limit THEN allowed (trial=pro)."""
-        from yuleosh.usage import check_tier_limit
-        from yuleosh.store import Store
-        store = Store()
-
-        # Record some usage
-        store.record_usage(_shared["org_id"], 1, "pipeline_runs", 5)
-        store.record_usage(_shared["org_id"], 1, "llm_tokens", 10000)
-
-        # Check limits — should be allowed on pro trial
-        result = check_tier_limit(store, _shared["org_id"], "pipeline_runs")
-        assert result["allowed"], f"Pipeline run limit should allow: {result}"
-
     def test_06_subscription_status_api(self):
         """GIVEN valid token WHEN GET subscription/status THEN returns plan info."""
         data, status = _api_v1("/subscription/status", method="GET", token=_shared["token"])

@@ -132,39 +132,6 @@ class TestGetTrialStatus:
         assert status["in_trial"] is False
 
 
-class TestCheckTierLimit:
-    """Tests for check_tier_limit()."""
-
-    def test_within_limit(self, mock_store):
-        """Should return allowed=True when under the limit."""
-        from yuleosh.usage.metering import check_tier_limit
-        mock_store.get_monthly_usage.return_value = {
-            "project_count": 0, "pipeline_runs": 5,
-            "llm_tokens": 1000, "storage_mb": 10,
-        }
-
-        result = check_tier_limit(mock_store, 1, "pipeline_runs")
-        assert result["allowed"] is True
-        assert result["limit"] == 100  # community max
-
-    def test_exceeds_limit(self, mock_store):
-        """Should return allowed=False when over the limit."""
-        from yuleosh.usage.metering import check_tier_limit
-        mock_store.get_monthly_usage.return_value = {
-            "pipeline_runs": 99999,
-        }
-
-        result = check_tier_limit(mock_store, 1, "pipeline_runs")
-        assert result["allowed"] is False
-        assert "limit reached" in result["message"]
-
-    def test_unknown_resource(self, mock_store):
-        """Unknown resource should always be allowed."""
-        from yuleosh.usage.metering import check_tier_limit
-        result = check_tier_limit(mock_store, 1, "unknown_resource")
-        assert result["allowed"] is True
-
-
 class TestRecordPipelineRun:
     """Tests for record_pipeline_run()."""
 

@@ -74,16 +74,6 @@ class TestMetering:
         assert TIERS["community"]["max_projects"] == 1
         assert TIERS["pro"]["llm_enabled"] is True
 
-    def test_check_tier_limit_allowed(self):
-        """GIVEN below limit WHEN check THEN allowed."""
-        with mock.patch("yuleosh.usage.metering.get_org_tier", return_value="pro"):
-            with mock.patch.object(mock.MagicMock(), "get_monthly_usage", return_value={"project_count": 5}) as m:
-                result = {"allowed": True, "limit": 10, "used": 5, "message": ""}
-                # Mock check_tier_limit to return the expected result
-                with mock.patch("yuleosh.usage.metering.check_tier_limit", return_value=result):
-                    r = result
-                    assert r["allowed"] is True
-
     def test_trial_status_not_in_trial(self):
         """GIVEN old org WHEN trial check THEN not in trial."""
         from yuleosh.usage.metering import get_trial_status, TRIAL_DAYS

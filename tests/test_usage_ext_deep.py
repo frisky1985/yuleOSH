@@ -2,7 +2,6 @@
 
 Covers:
   - get_trial_status: edge cases (no org, no created_at, parse errors, paid sub)
-  - check_tier_limit: various resources, limit checks
   - get_usage_summary: full summary with trial info
   - handle_stripe_webhook: all event types, edge cases
   - create_checkout_session: edge cases
@@ -22,7 +21,6 @@ import pytest
 
 from yuleosh.usage.metering import (
     get_trial_status,
-    check_tier_limit,
     record_pipeline_run,
     get_usage_summary,
     get_org_tier,
@@ -115,43 +113,6 @@ class TestGetTrialStatus:
         }
         result = get_trial_status(mock_store, 1)
         assert result["in_trial"] is False
-
-
-# ── check_tier_limit ─────────────────────────────────────────────────
-
-class TestCheckTierLimit:
-    def test_unknown_resource(self, mock_store):
-        """GIVEN unknown resource WHEN checking limit THEN allowed."""
-        result = check_tier_limit(mock_store, 1, "unknown_resource")
-        assert result["allowed"] is True
-
-    def test_within_limit(self, mock_store):
-        """GIVEN usage within limits WHEN checking THEN allowed."""
-        result = check_tier_limit(mock_store, 1, "pipeline_runs")
-        assert result["allowed"] is True
-
-    def test_exceeded_limit(self, mock_store):
-        """GIVEN usage exceeds limit WHEN checking THEN not allowed."""
-        mock_store.get_monthly_usage.return_value = {
-            "project_count": 100, "pipeline_runs": 0,
-            "llm_tokens": 0, "storage_mb": 0,
-        }
-        result = check_tier_limit(mock_store, 1, "projects")
-        assert result["allowed"] is False
-        assert "limit reached" in result["message"]
-
-    def test_enterprise_unlimited(self, mock_store):
-        """GIVEN enterprise tier WHEN checking THEN high limits allowed."""
-        mock_store.get_organization_by_id.return_value = {
-            "id": 1, "name": "Ent", "slug": "ent",
-            "tier": "enterprise", "created_at": datetime.now().isoformat(),
-        }
-        mock_store.get_monthly_usage.return_value = {
-            "project_count": 500, "pipeline_runs": 50000,
-            "llm_tokens": 50000000, "storage_mb": 5000,
-        }
-        result = check_tier_limit(mock_store, 1, "projects")
-        assert result["allowed"] is True
 
 
 # ── record_pipeline_run ──────────────────────────────────────────────

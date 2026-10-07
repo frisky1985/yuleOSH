@@ -358,8 +358,7 @@ class TestAdapterModules:
 
 class TestUsageModules:
     def test_metering_import(self):
-        from yuleosh.usage.metering import check_tier_limit, get_org_tier
-        assert callable(check_tier_limit)
+        from yuleosh.usage.metering import get_org_tier
         assert callable(get_org_tier)
 
     def test_stripe_gateway(self):
@@ -629,8 +628,7 @@ class TestAdditionalCoverage:
         assert VectorCANoeAdapter is not None
 
     def test_usage_imports(self):
-        from yuleosh.usage.metering import check_tier_limit, get_org_tier, get_trial_status, record_pipeline_run
-        assert callable(check_tier_limit)
+        from yuleosh.usage.metering import get_org_tier, get_trial_status, record_pipeline_run
         assert callable(get_org_tier)
         assert callable(get_trial_status)
         assert callable(record_pipeline_run)

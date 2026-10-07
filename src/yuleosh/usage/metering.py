@@ -105,32 +105,6 @@ def get_trial_status(store, org_id: int) -> dict:
     return {"in_trial": False, "days_left": 0}
 
 
-def check_tier_limit(store, org_id: int, resource: str) -> dict:
-    """Check if an org has exceeded a resource limit. Returns {allowed, limit, used, message}."""
-    tier = get_org_tier(store, org_id)
-    config = TIERS.get(tier, TIERS["community"])
-    usage = store.get_monthly_usage(org_id)
-
-    limits = {
-        "projects": ("max_projects", usage.get("project_count", 0)),
-        "pipeline_runs": ("max_pipeline_runs", usage.get("pipeline_runs", 0)),
-        "llm_tokens": ("max_llm_tokens", usage.get("llm_tokens", 0)),
-        "storage_mb": ("max_storage_mb", usage.get("storage_mb", 0)),
-    }
-
-    if resource not in limits:
-        return {"allowed": True, "limit": 0, "used": 0, "message": ""}
-
-    limit_key, used = limits[resource]
-    limit = config.get(limit_key, 0)
-
-    if used >= limit > 0:
-        return {"allowed": False, "limit": limit, "used": used,
-                "message": f"{resource} limit reached ({used}/{limit}). Upgrade to continue."}
-
-    return {"allowed": True, "limit": limit, "used": used, "message": ""}
-
-
 def record_pipeline_run(store, org_id: int, project_id: int, llm_tokens: int = 0,
                         user_id: int | None = None, run_id: str | None = None,
                         user_email: str | None = None):

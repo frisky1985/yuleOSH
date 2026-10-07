@@ -14,11 +14,10 @@ class TestUsage:
 
     def test_metering_functions(self):
         from yuleosh.usage.metering import (
-            record_pipeline_run, check_tier_limit,
+            record_pipeline_run,
             get_usage_summary, get_org_tier
         )
         assert callable(record_pipeline_run)
-        assert callable(check_tier_limit)
 
     def test_stripe_functions(self):
         from yuleosh.usage.stripe_gateway import (

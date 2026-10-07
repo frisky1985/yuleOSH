@@ -73,14 +73,6 @@ class TestExecuteBodies:
             result = get_usage_summary(store, 1)
             assert result is not None or result is None
 
-    def test_usage_tier_check(self):
-        from yuleosh.usage.metering import check_tier_limit
-        with patch("yuleosh.store.Store") as mock_store:
-            store = MagicMock()
-            mock_store.return_value = store
-            result = check_tier_limit(store, 1, "free")
-            assert isinstance(result, dict) or result is not None
-
     def test_spec_validate_diff(self):
         from yuleosh.spec.validate import diff_specs
         old_text = "# Old Spec\n## REQ-001: Login\n"
