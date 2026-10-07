@@ -447,6 +447,13 @@ def _run_pipeline(body: dict) -> tuple[dict, int]:
         except ValueError:
             return json_error("project_dir must be within OSH_HOME", 403)
 
+    # D1 修复：惰性起步 spec 仅对「已存在」的 project_dir 生效。不存在的目录
+    # 不应被下方 candidate.parent.mkdir(parents=True) 凭空创建（否则 typo/非法
+    # project_dir 被静默 materialize 并回 200）。仅当 project_dir 真实存在时才
+    # 推断/创建起步 spec（兼容「历史自创项目缺 spec」场景）。
+    if project_dir is not None and not project_dir.is_dir():
+        return json_error(f"project_dir is not a directory: {project_dir}", 400)
+
     # spec 缺失 → 从 project_dir 推断 / 惰性创建起步 spec（兼容历史自创项目）
     if not spec_path and project_dir is not None:
         candidate = project_dir / "docs" / "spec.md"

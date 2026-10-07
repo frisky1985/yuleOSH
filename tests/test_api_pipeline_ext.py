@@ -36,6 +36,23 @@ class TestApiPipeline:
         result, code = handle_pipeline("POST", "run", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert code == 400
 
+    def test_run_pipeline_missing_project_dir_400(self, tmp_path):
+        """D1: non-existent project_dir within OSH_HOME must 400, not silently mkdir + 200.
+
+        Regression for the bug where ``candidate.parent.mkdir(parents=True)`` in
+        the lazy-starter-spec path materialized a non-existent project_dir and
+        the run returned 200.
+        """
+        osh_home = tmp_path / "oshome"
+        osh_home.mkdir()
+        project_dir = osh_home / "newproj"  # intentionally does NOT exist
+        with patch("yuleosh.api.OSH_HOME", str(osh_home)):
+            result, code = _run_pipeline({"project_dir": str(project_dir), "name": "x"})
+        assert code == 400
+        # 关键回归点：不得凭空创建不存在的 project_dir
+        assert not project_dir.exists()
+        assert not (osh_home / "newproj").exists()
+
     def test_run_pipeline_not_found(self):
         """POST with non-existent spec returns 400."""
         mock_path = MagicMock()
