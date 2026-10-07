@@ -67,7 +67,13 @@ class TestApiPipeline:
     @patch("yuleosh.api.pipeline.subprocess.run")
     @patch("yuleosh.api.pipeline.os.environ.get")
     def test_run_pipeline_timeout(self, mock_env, mock_subproc):
-        """Timeout returns 504."""
+        """Async submit: pipeline run accepts spec and returns run_id (200).
+
+        NOTE: _run_pipeline is async (starts a daemon thread, returns run_id
+        immediately). A subprocess TimeoutExpired is handled inside the background
+        job thread, NOT in the synchronous HTTP response — so the contract is
+        200 + run_id, not a synchronous 504.
+        """
         mock_env.return_value = "/tmp"
         mock_subproc.side_effect = __import__("subprocess").TimeoutExpired("cmd", 300)
 
@@ -78,12 +84,19 @@ class TestApiPipeline:
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
             result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
-            assert code == 504
+            assert code == 200
+            assert "run_id" in result.get("data", {})
 
     @patch("yuleosh.api.pipeline.subprocess.run")
     @patch("yuleosh.api.pipeline.os.environ.get")
     def test_run_pipeline_exception(self, mock_env, mock_subproc):
-        """Exception returns 500."""
+        """Async submit: pipeline run accepts spec and returns run_id (200).
+
+        NOTE: _run_pipeline is async (starts a daemon thread, returns run_id
+        immediately). An unhandled Exception is handled inside the background job
+        thread, NOT in the synchronous HTTP response — so the contract is 200 +
+        run_id, not a synchronous 500.
+        """
         mock_env.return_value = "/tmp"
         mock_subproc.side_effect = Exception("Something broke")
 
@@ -94,7 +107,8 @@ class TestApiPipeline:
 
         with patch("yuleosh.api.pipeline.Path", return_value=mock_path):
             result, code = handle_pipeline("POST", "run", {"spec": "/tmp/test.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
-            assert code == 500
+            assert code == 200
+            assert "run_id" in result.get("data", {})
 
     def test_get_pipeline_no_post(self):
         """GET on pipeline/run returns 405."""

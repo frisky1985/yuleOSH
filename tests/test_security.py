@@ -138,7 +138,12 @@ class TestPathTraversal:
 
     @patch.dict(os.environ, {"OSH_HOME": "/tmp/test-osh-home"})
     def test_pipeline_run_path_traversal(self):
-        """SEC-PATH-01: pipeline run validates spec_path is within project root."""
+        """SEC-PATH-01: pipeline run validates spec_path is within OSH_HOME.
+
+        NOTE: the traversal constraint root is OSH_HOME (all projects live under
+        it), so the error message reads "Spec path must be within OSH_HOME". The
+        403 status is the security contract; the OSH_HOME-scoped message is asserted.
+        """
         from yuleosh.api.pipeline import _run_pipeline
 
         # Attempt path traversal
@@ -146,8 +151,8 @@ class TestPathTraversal:
         status = result[1]
         data = result[0]
         assert status == 403, f"Expected 403, got {status}: {data}"
-        assert "within project directory" in data.get("error", "").lower() or \
-               "project directory" in data.get("error", "")
+        assert "osh_home" in data.get("error", "").lower() or \
+               "project directory" in data.get("error", "").lower()
 
     @patch.dict(os.environ, {"OSH_HOME": "/tmp/test-osh-home"})
     def test_pipeline_run_path_traversal_encoded(self):
