@@ -28,7 +28,7 @@ class TestRouter:
         expected = {
             "health", "wizard", "spec", "pipeline", "ci", "review",
             "evidence", "project", "stats", "notify", "apikeys",
-            "webhooks", "audit", "auth", "demo", "subscription",
+            "webhooks", "audit", "auth", "compliance", "demo", "subscription",
             "preview", "dashboard", "kb",
             "tenant", "tenants", "billing", "projects",
             # Dashboard v2 modules (2026-08-16, D1-D7)

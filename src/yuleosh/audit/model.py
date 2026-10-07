@@ -34,6 +34,7 @@ import hashlib
 import json
 import logging
 import os
+import fcntl
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -263,32 +264,68 @@ class AuditLog:
         if reviewed_at is not None:
             event_dict["reviewed_at"] = reviewed_at
 
-        # Chain anchor: hash of the last event already on disk (or "" for a
-        # fresh file). Legacy rows written before the hash-chain feature have
-        # no "hash" field — they are still usable as chain anchors via
-        # compute_event_hash (their own hash is computed on the fly).
-        prev_hash = self._last_hash(tenant=tenant)
-        event_hash = compute_event_hash(event_dict, prev_hash)
-        event_dict["hash"] = event_hash
-        event_dict["prev_hash"] = prev_hash
-
-        event = AuditEvent.from_dict(event_dict)
-
         file_path = self._get_file_path(tenant=tenant)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
+        self._append_locked(file_path, event_dict, tenant=tenant)
 
-        # Write atomically — append to file
-        with open(file_path, "a") as f:
-            f.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
-
-        # Also write global log
+        # Also write global log (mirror). Historically the global copy carries
+        # the *tenant-chain* hash (preserved here); making the global chain
+        # self-consistent is a separate concern out of scope for this fix.
         global_path = self._get_file_path(tenant="")
         if global_path != file_path:
-            global_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(global_path, "a") as f:
-                f.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
+            self._append_locked_raw(global_path, event_dict)
 
-        return event
+        return AuditEvent.from_dict(event_dict)
+
+    # ------------------------------------------------------------------
+    # Atomic append helpers (fix: docstring promised temp+rename atomicity,
+    # but the old code used a bare open(...,"a").write() with the prev_hash
+    # read happening OUTSIDE the write critical section — concurrent
+    # record() calls could read the same chain anchor and break the hash
+    # chain). We now take an exclusive flock for the whole
+    # read-anchor + append + fsync transaction so the chain stays consistent
+    # under concurrency and a crash cannot leave a torn line.
+    # ------------------------------------------------------------------
+
+    def _append_locked(self, file_path: Path, event_dict: dict, tenant: str = "") -> None:
+        """Append *event_dict* to *file_path* as one JSONL line, atomically.
+
+        The chain ``prev_hash`` is resolved via :meth:`_last_hash` (which scans
+        the audit directory for the most recent daily file, preserving the
+        original cross-day chain continuity) *inside* the exclusive lock, then
+        the line is written + ``fsync``'d. Holding the lock across the
+        read-anchor + append transaction prevents two concurrent ``record()``
+        calls from reading the same anchor and producing a broken hash chain.
+        """
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, "a") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                prev_hash = self._last_hash(tenant=tenant)
+                event_dict["hash"] = compute_event_hash(event_dict, prev_hash)
+                event_dict["prev_hash"] = prev_hash
+                f.seek(0, os.SEEK_END)
+                f.write(json.dumps(event_dict, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+    def _append_locked_raw(self, file_path: Path, event_dict: dict) -> None:
+        """Append an already-hashed *event_dict* to *file_path* under lock+fsync.
+
+        Used for the global mirror, which historically carries the tenant-chain
+        hash (preserves prior behavior; global-chain verify is out of scope).
+        """
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, "a") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                f.seek(0, os.SEEK_END)
+                f.write(json.dumps(event_dict, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     # ------------------------------------------------------------------
     # AI 生成溯源（合规专家 P1：AI 输出是「草稿」不是「证据」）

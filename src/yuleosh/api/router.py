@@ -35,6 +35,7 @@ from .wizard import handle_wizard
 from .audit import handle_audit
 from .auth import handle_auth
 from .usage import handle_me, handle_org
+from .compliance import handle_compliance
 
 # Lazy-loaded modules (AR-P2-01): only imported when their route is hit
 # These are loaded lazily to avoid importing optional/seldom-used modules.
@@ -98,6 +99,7 @@ ROUTES: dict[str, object] = {
     "audit": handle_audit,
     "auth": handle_auth,
     "kb": handle_kb,
+    "compliance": handle_compliance,
     "me": handle_me,
     "org": handle_org,
 }
