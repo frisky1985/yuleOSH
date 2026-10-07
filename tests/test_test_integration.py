@@ -9,12 +9,9 @@ These mock subprocess.run so they don't require a real cmake/ctest toolchain.
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from yuleosh.pipeline.session import PipelineSession
 from yuleosh.pipeline.step_handlers import test_integration

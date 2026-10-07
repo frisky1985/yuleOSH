@@ -15,13 +15,9 @@ Background (2026-09-04, 一键跑 UI bug):
 
 from __future__ import annotations
 
-import os
 import shutil
-import sys
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from yuleosh.ui.routes.pipeline_routes import _iter_runnable_projects
 
