@@ -593,6 +593,7 @@ class TestPipeline:
         from yuleosh.api.pipeline import handle_pipeline
 
         handler = _mock.MagicMock()
+        handler.path = None  # _request_path 回退到 "/api/v1/pipeline/list"（MagicMock 无 .path 属性）
         handler.headers = {"Authorization": "Bearer x"}
         with patch("yuleosh.api.OSH_HOME", str(tmp_path)), \
              patch("yuleosh.api.middleware.verify_token",
