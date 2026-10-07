@@ -133,7 +133,7 @@ class TestBuildSuperAnalysisPrompt:
         )
         assert "OAuth2" in user
         assert "Requirements found: 2" in user
-        assert "SHALL statements: 4" in user
+        # builder 不再单独输出 "SHALL statements: N" 行(SHALL 经 Requirements Summary 体现)
 
     def test_handles_empty_requirements(self, sample_spec_content):
         from yuleosh.pipeline.prompts import build_super_analysis_prompt
@@ -238,13 +238,11 @@ class TestBuildPrdPrompt:
         )
         # Out-of-Scope 纪律段存在
         assert "Out of Scope 不得声明 spec 未限制的功能" in system
-        assert "Anti-pinch in manual mode" in system  # 反例明确列出
         # 计数口径纪律
         assert "头部计数口径" in system
         assert "FRs: N (P0 x + P1 y)" in system
         # 接口权威源纪律
         assert "接口契约权威源" in system
-        assert "src/app/include" in system
 
     def test_project_asil_injected_when_configured(self, sample_spec_content, sample_requirements, sample_scenarios):
         """r21b (claude-review minor): PRD 自封 ASIL-B/C 而 spec 未分级 —
@@ -512,10 +510,10 @@ class TestBuildDevelopmentPrompt:
             git_commits=42,
             git_log="abc123 Initial commit (2 days ago)",
         )
-        assert "Source lines: 500" in user
-        assert "Test lines: 200" in user
-        assert "40.0%" in user  # test-to-source ratio
-        assert "42" in user  # git commits
+        # 2026-09-13 修正: 原始指标(Source lines/Test lines/ratio)不再内联为文档指标表
+        # (context-only 纪律, 防 LLM 转述为 codegen 未落地的仓库事实)
+        assert "Project Baseline" in user
+        assert "CONTEXT ONLY" in user
 
     def test_includes_test_func_count_and_coverage(self, sample_spec_content):
         """r21d 复盘: 行数统计会误导 LLM (把 42 个测试函数说成 1 文件 108 行) —
@@ -531,8 +529,11 @@ class TestBuildDevelopmentPrompt:
             test_func_count=42,
             coverage_summary="line_rate=0.9285 branch_rate=0.8107 functions=54/54",
         )
-        assert "Test functions: 42" in user
-        assert "Coverage (latest report): line_rate=0.9285" in user
+        # 测试函数数/覆盖率不再以 "Test functions: 42" / "Coverage (latest report):"
+        # 形式内联(改为 repo_facts 块注入, 防 LLM 转述为指标表)
+        assert "CONTEXT ONLY" in user
+        assert "Test functions: 42" not in user
+        assert "Coverage (latest report): line_rate=0.9285" not in user
 
     def test_coverage_empty_no_report(self, sample_spec_content):
         from yuleosh.pipeline.prompts import build_development_prompt
@@ -543,8 +544,11 @@ class TestBuildDevelopmentPrompt:
             test_func_count=0,
             coverage_summary="",
         )
-        assert "Test functions: 0" in user
-        assert "no report" in user
+        # 空覆盖率: 纪律注记显式禁止写出 "Test functions: 0" 反模式(指令本身含该串,
+        # 故校验指令存在 + 旧 "no report" 内联格式不再出现)
+        assert "CONTEXT ONLY" in user
+        assert "do NOT write 'Test functions: 0'" in user
+        assert "no report" not in user
 
 
 # ===================================================================
@@ -639,10 +643,8 @@ class TestBuildTestPlanningPrompt:
             spec_content=sample_spec_content,
             requirements=sample_requirements,
         )
-        # Should mention the total SHALL count
-        assert "4 SHALL statements" in user
-        # Should instruct to cover ALL
-        assert "ALL 4 SHALL" in user
+        # Should instruct to cover ALL SHALL statements (不写固定计数 "4 SHALL statements"/"ALL 4 SHALL")
+        assert "ALL SHALL statements" in user
 
 
 # ===================================================================
