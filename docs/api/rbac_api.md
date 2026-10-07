@@ -52,12 +52,26 @@ _(未发现 `os.environ` / `getenv` 引用)_
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.rbac`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.rbac import <公共符号>
-# 详见 docs/modules/rbac.md(若存在)
+# src/yuleosh/ui/routes/billing_routes.py:82
+from yuleosh.rbac import check_role
+
+# src/yuleosh/ui/routes/project_routes.py:165
+from yuleosh.rbac import check_role
+
+# src/yuleosh/api/audit.py:72
+from yuleosh.rbac import check_role
+
+# src/yuleosh/api/members.py:29
+from yuleosh.rbac.role_contract import INVITABLE_ROLES
+
 ```
+
+> 共 4 个文件引用本子系统；完整调用图见 `docs/modules/rbac.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

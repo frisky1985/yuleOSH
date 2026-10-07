@@ -1,5 +1,7 @@
 # `hardware` 模块设计速写
 
+> ⚠️ **状态：未接入 Pipeline（保留为参考库）**——`src/` 生产代码无任何 `import yuleosh.hardware`，仅 tests 引用；Step 6（`hardware/integration.py:147`）当前未经运行时可达。
+
 > 本篇为「模块设计速写」（speed-write），基于 2026-10-07 实读 `src/yuleosh/hardware/`。
 > 与代码冲突时以代码为准。
 

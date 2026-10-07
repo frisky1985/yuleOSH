@@ -672,12 +672,56 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.pipeline`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.pipeline import <公共符号>
-# 详见 docs/modules/pipeline.md(若存在)
+# src/yuleosh/ui/routes/handler_helpers.py:235
+from yuleosh.pipeline.config_validator import validate_pipeline_config
+
+# src/yuleosh/ui/routes/pipeline_routes.py:88
+from yuleosh.pipeline.async_runner import submit_pipeline, submit_full_pipeline
+
+# src/yuleosh/ui/routes/api_routes.py:126
+from yuleosh.pipeline.async_runner import get_job_status
+
+# src/yuleosh/knowledge_graph/merge_gate.py:940
+from yuleosh.pipeline.session import PipelineStepError
+
+# src/yuleosh/agent_registry.py:18
+``yuleosh.pipeline.step_handlers`` (the ``pipeline/run.py`` shim only
+
+# src/yuleosh/ci/__init__.py:14
+from yuleosh.pipeline.step_handlers.review_prd import step_review_prd
+
+# src/yuleosh/ci/review_helpers.py:8
+Extracted from ``yuleosh.pipeline.step_handlers.review_selftest`` so that
+
+# src/yuleosh/plan/context.py:238
+from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+
+# src/yuleosh/cli/commands/misc.py:650
+from yuleosh.pipeline.orchestrator import run_pipeline
+
+# src/yuleosh/cli/commands/consistency.py:97
+from yuleosh.pipeline.gates import artifact_index as _live_index
+
+# src/yuleosh/codegen/prompts.py:17
+from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
+
+# src/yuleosh/codegen/engine.py:37
+from yuleosh.pipeline.session import PipelineSession, PipelineStepError
+
+# src/yuleosh/api/demo_quick.py:73
+from yuleosh.pipeline.session import PipelineSession
+
+# src/yuleosh/api/pipeline_steps.py:11
+from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
+
 ```
+
+> 共 14 个文件引用本子系统；完整调用图见 `docs/modules/pipeline.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

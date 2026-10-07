@@ -105,12 +105,23 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.alm`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.alm import <公共符号>
-# 详见 docs/modules/alm.md(若存在)
+# src/yuleosh/cli/commands/traceability.py:47
+from yuleosh.alm.traceability import generate_traceability_report
+
+# src/yuleosh/cli/commands/swe6.py:44
+from yuleosh.alm.traceability import generate_lrt
+
+# src/yuleosh/api/matrix.py:12
+``yuleosh.alm.traceability.generate_lrt`` — this module reuses it and
+
 ```
+
+> 共 3 个文件引用本子系统；完整调用图见 `docs/modules/alm.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

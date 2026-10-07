@@ -64,12 +64,29 @@ _(未发现 `os.environ` / `getenv` 引用)_
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.compliance`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.compliance import <公共符号>
-# 详见 docs/modules/compliance.md(若存在)
+# src/yuleosh/evidence/aspice_check.py:25
+from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+# src/yuleosh/cli/onboard.py:318
+from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+# src/yuleosh/cli/stats.py:193
+from yuleosh.compliance.compliance_checker import _extract_req_ids
+
+# src/yuleosh/cli/commands/compliance.py:24
+from yuleosh.compliance.compliance_checker import ComplianceChecker
+
+# src/yuleosh/api/router.py:38
+from .compliance import handle_compliance
+
 ```
+
+> 共 5 个文件引用本子系统；完整调用图见 `docs/modules/compliance.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

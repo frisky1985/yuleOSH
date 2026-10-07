@@ -1,5 +1,7 @@
 # `cross` 模块设计速写
 
+> ⚠️ **状态：未接入 Pipeline（保留为参考库）**——`src/` 生产代码无任何 `import yuleosh.cross`，仅 tests 引用（真实投产的 SIL/Flash 在 `ci/stages/test.py:243` → `cross.sil_runner`，但经 `cross.` 子模块相对 import 而非 `yuleosh.cross`）。
+
 > 本篇为「模块设计速写」（speed-write），基于 2026-10-07 实读 `src/yuleosh/cross/`。
 > 与代码冲突时以代码为准。
 

@@ -55,12 +55,35 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.knowledge`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.knowledge import <公共符号>
-# 详见 docs/modules/knowledge.md(若存在)
+# src/yuleosh/pipeline/knowledge_injection.py:238
+from yuleosh.knowledge.indexer import KnowledgeIndexer
+
+# src/yuleosh/memory/cli.py:146
+from yuleosh.knowledge.indexer import KnowledgeIndexer
+
+# src/yuleosh/kb/cli.py:330
+from yuleosh.knowledge.indexer import KnowledgeIndexer
+
+# src/yuleosh/cli/main.py:510
+from yuleosh.knowledge.cli import build_knowledge_subparser
+
+# src/yuleosh/hooks/pre_commit.py:293
+from yuleosh.knowledge.indexer import KnowledgeIndexer
+
+# src/yuleosh/hooks/post_merge.py:130
+from yuleosh.knowledge.indexer import KnowledgeIndexer
+
+# src/yuleosh/skills/registry.py:67
+from yuleosh.knowledge.indexer import KnowledgeIndexer
+
 ```
+
+> 共 7 个文件引用本子系统；完整调用图见 `docs/modules/knowledge.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

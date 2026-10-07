@@ -1,5 +1,7 @@
 # 模块设计速写：sil（Software-In-the-Loop 仿真）
 
+> ⚠️ **状态：未接入 Pipeline（保留为参考库 / ORPHAN）**——`src/yuleosh/` 无任何 `import yuleosh.sil`，仅 tests 引用；真实 SIL 已由 `cross/` 取代投产。
+
 > 包：`src/yuleosh/sil/` ｜ 规模：2 .py ≈ 571 行
 > 定位：**未被任何生产代码调用的孤儿 mock**——真实 SIL 在 `cross/`
 

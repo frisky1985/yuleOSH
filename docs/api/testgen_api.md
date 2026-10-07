@@ -60,12 +60,14 @@ _(未发现 `os.environ` / `getenv` 引用)_
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> ⚠️ 本子系统**无生产调用方**（ORPHAN，已 grep 全仓 `yuleosh.%s` 验证）。以下为基于公共 API 签名的自包含用法骨架，**参数以源码 `文件:行` 为准，请勿臆造**。
 
 ```python
-# from yuleosh.testgen import <公共符号>
-# 详见 docs/modules/testgen.md(若存在)
+from yuleosh.testgen import TestCase  # 主类，定义见 src/yuleosh/testgen/generator.py:35
+# obj = TestCase(...)  # 必填参数见 src/yuleosh/testgen/generator.py:35
 ```
+
+> 整治建议：若计划保留本子系统，应将其接入对应 Pipeline Step 或路由；否则归档/删除（删除前需先移除其测试引用，避免破坏 CI）。
 
 ## 6. 偏差 / 备注
 

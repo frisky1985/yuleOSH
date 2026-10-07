@@ -1,5 +1,7 @@
 # `adapter` 模块设计速写
 
+> ⚠️ **状态：未接入 Pipeline（保留为参考库）**——`src/` 生产代码无任何 `import yuleosh.adapter`，仅 tests 引用；它是纯输出格式生成器（dSPACE/CANoe），非直连硬件。
+
 > 本篇为「模块设计速写」（speed-write），基于 2026-10-07 实读 `src/yuleosh/adapter/`。
 > 与代码冲突时以代码为准。定位：输出格式化库，非详设。
 

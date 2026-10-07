@@ -65,12 +65,26 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.codegen`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.codegen import <公共符号>
-# 详见 docs/modules/codegen.md(若存在)
+# src/yuleosh/pipeline/step_handlers/execution.py:38
+from yuleosh.codegen.prompts import collect_existing_headers, collect_seed_sources
+
+# src/yuleosh/pipeline/step_handlers/analysis.py:267
+from yuleosh.codegen.prompts import collect_existing_headers
+
+# src/yuleosh/pipeline/step_classes.py:10
+from yuleosh.codegen.prompts import collect_existing_headers
+
+# src/yuleosh/kb/codegen_failures.py:36
+from yuleosh.codegen.engine import CodegenResult
+
 ```
+
+> 共 4 个文件引用本子系统；完整调用图见 `docs/modules/codegen.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

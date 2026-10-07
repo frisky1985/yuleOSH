@@ -66,12 +66,17 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.knowledge_management`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.knowledge_management import <公共符号>
-# 详见 docs/modules/knowledge_management.md(若存在)
+# src/yuleosh/loop_engine/cli.py:65
+from yuleosh.knowledge_management.store import KBStore
+
 ```
+
+> 共 1 个文件引用本子系统；完整调用图见 `docs/modules/knowledge_management.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

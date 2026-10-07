@@ -403,12 +403,41 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.api`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.api import <公共符号>
-# 详见 docs/modules/api.md(若存在)
+# src/yuleosh/ui/auth_cookies.py:43
+from yuleosh.api.cors import is_development
+
+# src/yuleosh/ui/auth_extended.py:467
+from yuleosh.api.middleware import _resolve_local_dev_user
+
+# src/yuleosh/ui/http_security.py:170
+from yuleosh.api.ratelimit_shared import RateLimitStore, default_db_path
+
+# src/yuleosh/ui/api_dispatch.py:33
+from yuleosh.api.router import dispatch
+
+# src/yuleosh/ui/routes/handler_helpers.py:246
+from yuleosh.api.loops import get_all_loops_data
+
+# src/yuleosh/ui/routes/http_response.py:61
+Uses yuleosh.api.cors to determine the correct CORS origin.
+
+# src/yuleosh/ui/routes/pipeline_routes.py:777
+from yuleosh.api import pipeline as api_pipeline
+
+# src/yuleosh/ui/routes/auth_routes.py:198
+Delegates to yuleosh.api.read_body which clamps Content-Length to 10 MB
+
+# src/yuleosh/cli/main.py:690
+from yuleosh.api.demo_wow import main as demo_wow_main
+
 ```
+
+> 共 9 个文件引用本子系统；完整调用图见 `docs/modules/api.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

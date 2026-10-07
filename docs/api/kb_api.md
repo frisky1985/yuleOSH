@@ -147,12 +147,35 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.kb`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.kb import <公共符号>
-# 详见 docs/modules/kb.md(若存在)
+# src/yuleosh/cli/commands/traceability.py:307
+from yuleosh.kb.store import KbStore
+
+# src/yuleosh/cli/main.py:327
+from yuleosh.kb.cli import build_kb_subparser, build_lesson_subparser
+
+# src/yuleosh/hooks/pre_commit.py:24
+from yuleosh.kb.store import KbStore
+
+# src/yuleosh/hooks/post_merge.py:19
+from yuleosh.kb.store import KbStore
+
+# src/yuleosh/api/dashboard.py:1502
+from yuleosh.kb.store import KbStore
+
+# src/yuleosh/api/router.py:23
+from .kb import handle_kb
+
+# src/yuleosh/api/kb.py:15
+from yuleosh.kb.store import KbStore
+
 ```
+
+> 共 7 个文件引用本子系统；完整调用图见 `docs/modules/kb.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

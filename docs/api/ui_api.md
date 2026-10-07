@@ -254,12 +254,47 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.ui`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.ui import <公共符号>
-# 详见 docs/modules/ui.md(若存在)
+# src/yuleosh/rbac/model.py:37
+from yuleosh.ui.auth_extended import get_session_user
+
+# src/yuleosh/cli/main.py:1013
+from yuleosh.ui.server import main as ui_main
+
+# src/yuleosh/api/auth.py:29
+from yuleosh.ui.auth_extended import (  # A1: unified implementations
+
+# src/yuleosh/api/preview.py:498
+from yuleosh.ui.auth_extended import get_session_user
+
+# src/yuleosh/api/me.py:23
+from yuleosh.ui.auth_extended import _verify_password
+
+# src/yuleosh/api/subscription.py:28
+from yuleosh.ui.auth_extended import JWT_SECRET, JWT_ALGORITHM  # A1/F1: unified source
+
+# src/yuleosh/api/health.py:126
+from yuleosh.ui.auth import AUTH_ENABLED
+
+# src/yuleosh/api/wizard.py:8
+from yuleosh.ui.auth_extended import JWT_SECRET, JWT_ALGORITHM  # A1/F1: unified source
+
+# src/yuleosh/api/pipeline.py:97
+from yuleosh.ui.routes.pipeline_routes import handle_pipeline_runs
+
+# src/yuleosh/api/router.py:112
+"tenant": ("yuleosh.ui.routes.tenant_routes", "handle_tenant"),
+
+# src/yuleosh/api/middleware.py:15
+from yuleosh.ui.auth import AUTH_ENABLED  # 与 server._check_auth 同步：本地免登录开关
+
 ```
+
+> 共 11 个文件引用本子系统；完整调用图见 `docs/modules/ui.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

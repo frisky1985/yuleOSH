@@ -305,12 +305,56 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.knowledge_graph`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.knowledge_graph import <公共符号>
-# 详见 docs/modules/knowledge_graph.md(若存在)
+# src/yuleosh/pipeline/step_handlers/__init__.py:89
+from yuleosh.knowledge_graph.merge_gate import step_merge_gate
+
+# src/yuleosh/llm/anchoring.py:136
+from yuleosh.knowledge_graph.store import KGStore
+
+# src/yuleosh/evidence/oem_templates.py:702
+>>> from yuleosh.knowledge_graph import get_store
+
+# src/yuleosh/kb/hybrid_search.py:239
+from yuleosh.knowledge_graph.store import KGStore
+
+# src/yuleosh/ci/dashboard_writer.py:38
+from yuleosh import knowledge_graph  # noqa: F401
+
+# src/yuleosh/ci/kpi/kg_source.py:27
+from yuleosh.knowledge_graph.store import KGStore
+
+# src/yuleosh/plan/context.py:99
+from yuleosh.knowledge_graph import get_store
+
+# src/yuleosh/cli/onboard.py:256
+from yuleosh.knowledge_graph import get_store
+
+# src/yuleosh/cli/commands/reverse.py:27
+from yuleosh.knowledge_graph.store import KGStore
+
+# src/yuleosh/cli/commands/traceability.py:102
+from yuleosh.knowledge_graph import get_store
+
+# src/yuleosh/cli/main.py:947
+from yuleosh.knowledge_graph.kg_cli import (
+
+# src/yuleosh/compliance/compliance_checker.py:759
+from yuleosh.knowledge_graph import get_store
+
+# src/yuleosh/api/kg.py:18
+log = logging.getLogger("yuleosh.knowledge_graph.api.kg")
+
+# src/yuleosh/api/kg_impact.py:38
+from yuleosh.knowledge_graph import get_store
+
 ```
+
+> 共 14 个文件引用本子系统；完整调用图见 `docs/modules/knowledge_graph.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

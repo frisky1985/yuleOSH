@@ -190,12 +190,20 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.cli`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.cli import <公共符号>
-# 详见 docs/modules/cli.md(若存在)
+# src/yuleosh/_entry.py:6
+directly from the yuleosh package (yuleosh.cli.main), which works in both
+
+# src/yuleosh/__main__.py:11
+from yuleosh.cli.main import main as cli_main
+
 ```
+
+> 共 2 个文件引用本子系统；完整调用图见 `docs/modules/cli.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

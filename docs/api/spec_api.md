@@ -117,12 +117,41 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.spec`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.spec import <公共符号>
-# 详见 docs/modules/spec.md(若存在)
+# src/yuleosh/pipeline/step_handlers/spec_cp_review.py:29
+from yuleosh.spec.changes import list_changes, load_proposal
+
+# src/yuleosh/pipeline/step_handlers/spec.py:53
+[sys.executable, "-m", "yuleosh.spec.validate", spec_target, "--json"],
+
+# src/yuleosh/evidence/collection.py:162
+from yuleosh.spec.validate import parse_spec
+
+# src/yuleosh/spec_contracts.py:323
+from yuleosh.spec.validate import find_spec_files
+
+# src/yuleosh/cli/stats.py:157
+# unsafe: any earlier ``yuleosh.spec.diff`` import caches a
+
+# src/yuleosh/cli/commands/misc.py:508
+from yuleosh.spec.merge import cmd_spec_merge as _merge_cmd
+
+# src/yuleosh/cli/commands/swe6.py:121
+# yuleosh.spec.validate.parse_spec), and the env-config check verifies
+
+# src/yuleosh/api/spec.py:53
+from yuleosh.spec.validate import parse_spec, validate_spec, _compute_coverage
+
+# src/yuleosh/api/router.py:24
+from .spec import handle_spec
+
 ```
+
+> 共 9 个文件引用本子系统；完整调用图见 `docs/modules/spec.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

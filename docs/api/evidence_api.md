@@ -154,12 +154,50 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.evidence`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.evidence import <公共符号>
-# 详见 docs/modules/evidence.md(若存在)
+# src/yuleosh/ui/routes/api_routes.py:100
+from yuleosh.evidence.collection import _validate_review_session_json
+
+# src/yuleosh/pipeline/step_handlers/review_selftest/core.py:1460
+from yuleosh.evidence.excel_writer import ExcelReportWriter
+
+# src/yuleosh/ci/misra_report/cli.py:134
+from yuleosh.evidence.excel_writer import ExcelReportWriter
+
+# src/yuleosh/cli/onboard.py:382
+from yuleosh.evidence.pack import generate_evidence
+
+# src/yuleosh/cli/commands/misc.py:761
+from yuleosh.evidence.pack import generate_evidence
+
+# src/yuleosh/cli/commands/gap.py:51
+from yuleosh.evidence.aspice_check import aspice_gap_check  # 延迟 import 便于测试 mock
+
+# src/yuleosh/cli/commands/traceability.py:101
+from yuleosh.evidence.oem_templates import export_traceability_matrix
+
+# src/yuleosh/cli/main.py:710
+from yuleosh.evidence.aspice_check import aspice_gap_check
+
+# src/yuleosh/api/demo_wow.py:546
+from yuleosh.evidence.generator import EvidenceCollector
+
+# src/yuleosh/api/demo_quick.py:174
+from yuleosh.evidence.generator import EvidenceCollector
+
+# src/yuleosh/api/dashboard.py:1072
+from .evidence import snapshot_bundle
+
+# src/yuleosh/api/router.py:28
+from .evidence import handle_evidence
+
 ```
+
+> 共 12 个文件引用本子系统；完整调用图见 `docs/modules/evidence.md`（若存在）。
 
 ## 6. 偏差 / 备注
 

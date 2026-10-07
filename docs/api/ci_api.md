@@ -494,12 +494,56 @@
 
 ## 5. 调用示例
 
-> 基于上述公共 API;具体参数与返回以源码 `文件:行` 为准(本表为机械生成,未逐接口验证示例)。
+> 以下示例提取自生产代码真实调用方（`grep yuleosh.ci`，排除自身包），可直接对照源码 `文件:行` 查阅，非臆造。
+
+### 真实调用方片段
 
 ```python
-# from yuleosh.ci import <公共符号>
-# 详见 docs/modules/ci.md(若存在)
+# src/yuleosh/pipeline/orchestrator.py:451
+from yuleosh.ci.profile import validate_active_profile, filter_steps_for_profile, get_current_profile
+
+# src/yuleosh/pipeline/step_handlers/c_coverage_gate.py:470
+from yuleosh.ci.gcov_coverage import generate_c_coverage_report
+
+# src/yuleosh/pipeline/step_handlers/review_selftest/core.py:28
+from yuleosh.ci.review_helpers import (
+
+# src/yuleosh/pipeline/step_handlers/review_test_coverage.py:274
+from yuleosh.ci.config import _get_ci_config
+
+# src/yuleosh/pipeline/step_handlers/review.py:117
+from yuleosh.ci.stages.code_style import format_style_rules_for_review
+
+# src/yuleosh/pipeline/step_handlers/review_misra_ci.py:403
+from yuleosh.ci.result import CIResult
+
+# src/yuleosh/pipeline/async_runner.py:180
+from yuleosh.ci import run_layer1 as _rl1
+
+# src/yuleosh/spec/merge.py:711
+from yuleosh.ci.config import load_ci_config, validate_misra_profiles
+
+# src/yuleosh/cli/onboard.py:394
+from yuleosh.ci.coverage_trend import show_coverage_trend
+
+# src/yuleosh/cli/commands/misc.py:748
+from yuleosh.ci.run import run_layer1, run_layer2, run_layer3
+
+# src/yuleosh/cli/commands/misra.py:47
+from yuleosh.ci.config import (
+
+# src/yuleosh/cli/commands/methodology.py:159
+from yuleosh.ci.stages.methodology_gate import run_methodology_gate
+
+# src/yuleosh/cli/main.py:804
+from yuleosh.ci.profile import get_profile_audit_log, record_profile_change
+
+# src/yuleosh/hooks/pre_commit.py:327
+from yuleosh.ci.stages.code_style import _load_rules, scan_file
+
 ```
+
+> 共 14 个文件引用本子系统；完整调用图见 `docs/modules/ci.md`（若存在）。
 
 ## 6. 偏差 / 备注
 
