@@ -1,8 +1,19 @@
+> ## ⚠️ 本文档已废弃（DEPRECATED）
+>
+> 本文档标注 `v1.0.0 / ✅ Approved / 2026-07-13`，但其采用的 11 层分层模型与当前主干已严重偏离：
+> 文中多处子系统（`loop_engine` / `knowledge_graph` / `tenant` / `rbac` / `billing` / `sil` / `adapter` / `plan` / `audit` 等）
+> 在现行代码库中已存在且承担核心职责，本文档却未覆盖。**请勿据此文档做架构决策。**
+>
+> **现行权威架构文档**：[`system-architecture.md`](./system-architecture.md)（`v3.12.x`，与代码高度一致，28 个关键引用全部命中）。
+> 需求规格见 [`docs/spec.md`](../../spec.md)；子系统详细设计见 [`docs/modules/`](./modules/)。
+
+---
+
 # yuleOSH 系统架构文档
 
 > **版本**: 1.0.0  
-> **状态**: ✅ Approved  
-> **ASPICE SWE.2 合规**: ✅ 满足所有 BP  
+> **状态**: ✅ Approved（**已废弃，仅供参考**）  
+> **ASPICE SWE.2 合规**: ✅ 满足所有 BP（**仅针对文档撰写时的旧模型**）  
 > **最后更新**: 2026-07-13
 
 ---
