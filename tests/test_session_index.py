@@ -67,7 +67,8 @@ def test_latest_wins_and_active_flag():
     _write_session(proj, "new", "running", "2026-09-13T12:00:00")
 
     idx = discover_project_sessions(root)
-    assert idx["project_count"] == 1
+    # discover_project_sessions 返回 {projects, sessions}，项目数由 len(projects) 推导
+    assert len(idx["projects"]) == 1
     p = idx["projects"][0]
     assert p["latest_run_id"] == "new", p
     assert p["latest_status"] == "running"

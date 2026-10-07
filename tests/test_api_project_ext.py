@@ -67,6 +67,15 @@ class TestApiProject:
             "description": "desc",
             "spec_path": "",
         }
+        # _create_project 返回 org 作用域项目（get_org_project/create_org_project），
+        # 旧测试只 mock 了 get_project，导致 result["data"] 落到未 mock 的 MagicMock。
+        mock_store.get_org_project.return_value = {
+            "name": "newproj", "id": 1, "description": "desc", "spec_path": "",
+        }
+        mock_store.create_org_project.return_value = {
+            "name": "newproj", "id": 1, "description": "desc", "spec_path": "",
+        }
+        mock_store.list_org_projects.return_value = []
         mock_store_cls.return_value = mock_store
 
         result, code = handle_project(

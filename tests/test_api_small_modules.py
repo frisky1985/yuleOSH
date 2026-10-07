@@ -223,6 +223,7 @@ class TestApiPipeline:
 
         handler = mock.MagicMock()
         handler.headers = {"Authorization": "Bearer x"}
+        handler.path = None  # _request_path 回退到 "/api/v1/pipeline/list"
         with tempfile.TemporaryDirectory() as tmpdir:
             monkeypatch.setattr("yuleosh.api.OSH_HOME", tmpdir)
             with mock.patch("yuleosh.api.middleware.verify_token",
@@ -242,6 +243,7 @@ class TestApiPipeline:
 
         handler = mock.MagicMock()
         handler.headers = {"Authorization": "Bearer x"}
+        handler.path = None  # _request_path 回退到 "/api/v1/pipeline/list"
         with mock.patch("yuleosh.api.middleware.verify_token",
                         return_value={"user_id": 1, "org_id": 1}), \
              mock.patch("yuleosh.ui.routes.tenant_routes._require_auth",
