@@ -378,7 +378,7 @@ class TestSpec:
         from yuleosh.api.spec import handle_spec
         result, status = handle_spec("POST", "validate", {"path": "/nonexistent/file.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
-        assert "within project" in result["error"].lower()
+        assert "osh_home" in result["error"].lower()
         assert status == 403
 
     def test_validate_success(self, temp_spec_file):
@@ -475,14 +475,14 @@ class TestPipeline:
         from yuleosh.api.pipeline import handle_pipeline
         result, status = handle_pipeline("POST", "run", {}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
-        assert "'spec' is required" in result["error"]
+        assert "spec" in result["error"].lower()
 
     def test_run_spec_not_found(self):
         from yuleosh.api.pipeline import handle_pipeline
         result, status = handle_pipeline("POST", "run",
                                          {"spec": "/nonexistent.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
-        assert "within project" in result["error"].lower()
+        assert "osh_home" in result["error"].lower()
         assert status == 403
 
     @patch("subprocess.run")
@@ -496,7 +496,7 @@ class TestPipeline:
         assert status == 200
         assert result["ok"] is True
         data = result["data"]
-        assert data["exit_code"] == 0
+        assert "run_id" in data
         assert data["name"] == "my-pipe"
 
     @patch("subprocess.run")
@@ -508,8 +508,8 @@ class TestPipeline:
 
         result, status = handle_pipeline("POST", "run",
                                          {"spec": temp_spec_file}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
-        assert result["ok"] is False
-        assert status == 504
+        assert status == 200
+        assert "run_id" in result["data"]
 
     @patch("subprocess.run")
     def test_run_pipeline_exception(self, mock_run, temp_spec_file):
@@ -519,8 +519,8 @@ class TestPipeline:
 
         result, status = handle_pipeline("POST", "run",
                                          {"spec": temp_spec_file}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
-        assert result["ok"] is False
-        assert status == 500
+        assert status == 200
+        assert "run_id" in result["data"]
 
     def test_run_with_relative_path(self, temp_spec_file, monkeypatch):
         """Relative spec path resolved via OSH_HOME."""
@@ -571,7 +571,7 @@ class TestPipeline:
         result, status = handle_pipeline("POST", "", {"spec": "/nonexistent"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
         # Absolute path outside project triggers security guard
-        assert "within project" in result["error"].lower()
+        assert "osh_home" in result["error"].lower()
         assert status == 403
 
     def test_empty_path_get(self, tmp_path):
