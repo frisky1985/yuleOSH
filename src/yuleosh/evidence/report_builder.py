@@ -15,6 +15,7 @@ from pathlib import Path
 # @req RS-005
 
 from yuleosh.evidence.analysis import categorize_uncovered
+from yuleosh.alm.traceability import load_sys_swe_trace
 
 log = logging.getLogger("evidence.report_builder")
 
@@ -98,6 +99,15 @@ class ReportBuilderMixin:
             f"- CI Runs: {len(self.ci_results)}",
         ])
 
+        # M1.5 链路A: 系统层追溯 (SYS.1 → SWE.1) 并入主矩阵
+        sys_trace = load_sys_swe_trace(self.project_dir)
+        if sys_trace.get("sys_to_swe"):
+            lines.append("")
+            lines.append("## System Layer Traceability (SYS.1 → SWE.1)")
+            lines.append("> 系统需求向上追溯至软件需求 (SWE.1, spec 派生)")
+            for rid, target in sys_trace["sys_to_swe"].items():
+                lines.append(f"- {rid} → {target}")
+
         content = "\n".join(lines)
         output_path = self.evidence_dir / "traceability-matrix.md"
         output_path.write_text(content)
@@ -125,6 +135,7 @@ class ReportBuilderMixin:
                 "total_ci_runs": len(self.ci_results),
             },
             "requirements": [],
+            "sys_trace": load_sys_swe_trace(self.project_dir),
         }
         for req in self.requirements:
             req_name = req.get("name", "Unknown")
