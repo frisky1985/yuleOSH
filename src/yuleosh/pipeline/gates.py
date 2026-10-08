@@ -5,11 +5,12 @@
 # SPDX-License-Identifier: Elastic-2.0
 
 """
-Pipeline 编排层 — 10 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板).
+Pipeline 编排层 — 11 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0).
 
-执行层保持 24 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
-step_cache 全保留）；编排层新增 GATES 视图，对外稳定契约（对齐 ASPICE
-过程域），一旦约定不再变动（分层原则 R1-R4，见 RULES.md §12）。
+执行层保持 30 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
+step_cache 全保留；M1 头部插入 SYS 系统层 6 步）；编排层新增 GATES 视图，
+对外稳定契约（对齐 ASPICE 过程域，含 SYS 系统层 G0），一旦约定不再变动
+（分层原则 R1-R4，见 RULES.md §12）。
 
 gate status = 内部子步骤最差状态（见 GATE_STATUS_ORDER, worst-wins）。
 
@@ -52,10 +53,20 @@ __all__ = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════
-# 编排层 10 Gate（对外稳定契约 — 变更须老板/架构评审拍板, R2）
+# 编排层 11 Gate（对外稳定契约 — 变更须老板/架构评审拍板, R2）
 # ═══════════════════════════════════════════════════════════════════════
 
 GATES: list[dict] = [
+    {
+        # M1 / Phase A: V 模型左半（系统层）门禁，插入管道头部。
+        # 确定性步骤（SYS 文档生成 + 结构评审），非 LLM 判绿。
+        "gate": "G0",
+        "name": "SYS 系统层 Gate",
+        "step_keys": [
+            "sys-requirements", "sys-architecture", "sys-verification",
+            "sys-integration", "sys-validation", "sys-req-review",
+        ],
+    },
     {
         "gate": "G1",
         "name": "SWE.1 需求 Gate",

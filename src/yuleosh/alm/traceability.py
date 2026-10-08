@@ -1050,6 +1050,9 @@ def generate_lrt(project_dir: str, spec_path: Optional[str] = None) -> dict:
 
     return {
         "lrm": lrm,
+        # M1.5 链路A: SYS 系统层追溯映射 (SYS-REQ → SWE.1) 并入主 LRT 矩阵。
+        # 独立段，不污染 SWE 层 requirements/summary/gaps；文件不存在时返回空映射。
+        "sys_trace": load_sys_swe_trace(project_dir),
         "reviews_available": len(reviews),
         "test_reports_available": len(test_reports),
         "ci_results_available": len(ci_results),
@@ -1549,6 +1552,45 @@ def compute_trace_integrity(project_dir: str,
     return record
 
 
+# ── SYS → SWE 追溯链（M1 / Phase A）──────────────────────────────────────
+#
+# 系统层步骤（step_handlers/sys_layer.py）在生成 docs/system-requirements.md
+# 时写入 `.osh/evidence/sys-to-swe-trace.json`，建立 SYS-REQ-xxx → SWE.1 的
+# 确定性追溯。以下读取 API 供追溯引擎/报告复用，使 V 模型左半（SYS）与
+# 软件工程层（SWE.1）在矩阵中连续可追溯。
+
+_SYS_SWE_TRACE_REL = ".osh/evidence/sys-to-swe-trace.json"
+
+
+def sys_swe_trace_path(project_dir: Path | str) -> Path:
+    """返回 SYS→SWE 追溯 sidecar 的绝对路径。"""
+    return Path(project_dir) / _SYS_SWE_TRACE_REL
+
+
+def load_sys_swe_trace(project_dir: Path | str) -> dict:
+    """读取 SYS-REQ → SWE.1 追溯映射。
+
+    Returns:
+        dict: ``{"sys_to_swe": {req_id: "SWE.1", ...}, "note": str}``；
+        文件不存在时返回空映射 ``{"sys_to_swe": {}}``（非错误）。
+    """
+    p = sys_swe_trace_path(project_dir)
+    if not p.exists():
+        return {"sys_to_swe": {}}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8") or "{}")
+    except (OSError, json.JSONDecodeError):
+        return {"sys_to_swe": {}}
+    mapping = data.get("sys_to_swe", {}) or {}
+    if not isinstance(mapping, dict):
+        return {"sys_to_swe": {}}
+    # 归一化为大写键，便于与需求 ID 比对
+    return {
+        "sys_to_swe": {str(k).upper(): str(v) for k, v in mapping.items()},
+        "note": data.get("note", ""),
+    }
+
+
 __all__ = [
     "extract_shall_statements",
     "extract_shall_from_text",
@@ -1559,4 +1601,6 @@ __all__ = [
     "generate_lrt",
     "generate_traceability_report",
     "compute_trace_integrity",
+    "sys_swe_trace_path",
+    "load_sys_swe_trace",
 ]

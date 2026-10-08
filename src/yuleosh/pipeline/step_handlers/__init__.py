@@ -14,8 +14,8 @@ Import paths preserved:
   from yuleosh.pipeline.step_handlers import PIPELINE_STEPS    (works)
   from yuleosh.pipeline.step_handlers import _check_llm_key    (works)
 
-24 子步骤执行层 + 10 Gate 编排层（2026-08-19 老板八轮拍板, checkpoint v9）:
-  - 执行层 PIPELINE_STEPS = 24 个子步骤（合并后）; checkpoint/resume /
+30 子步骤执行层（含 SYS 系统层 6 步）+ 11 Gate 编排层（2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0）:
+  - 执行层 PIPELINE_STEPS = 30 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
     step_cache / --from-step 全按 24 步
   - 编排层 GATES（yuleosh.pipeline.gates）: 10 Gate 对外稳定契约,
     gate status = 内部子步骤最差状态; 报告聚合 gate-summary.json
@@ -76,6 +76,16 @@ from yuleosh.pipeline.step_handlers.review_embedded_peripheral import step_revie
 from yuleosh.pipeline.step_handlers.review_embedded_realtime import step_review_embedded_realtime
 from yuleosh.pipeline.step_handlers.qemu_verify import step_qemu_verify
 
+# System-layer (SYS.1~SYS.5) step handlers — M1 / Phase A (V 模型左半)
+from yuleosh.pipeline.step_handlers.sys_layer import (
+    step_sys_requirements,
+    step_sys_architecture,
+    step_sys_verification,
+    step_sys_integration,
+    step_sys_validation,
+    step_review_sys,
+)
+
 # QEMU firmware emulation test (L2)
 from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
 
@@ -102,6 +112,12 @@ _have_step_classes = False
 __all__ = [
     "step_spec_check",
     "step_super_analysis",
+    "step_sys_requirements",
+    "step_sys_architecture",
+    "step_sys_verification",
+    "step_sys_integration",
+    "step_sys_validation",
+    "step_review_sys",
     "step_hermes_prd",
     "step_internal_review",
     "step_claude_arch",
@@ -164,16 +180,28 @@ qemu_run = QemuTestHandler()
 
 
 # ═══════════════════════════════════════════════════════════════
-# yuleOSH Pipeline — ASPICE V-Model 对齐（24 子步骤执行层）
+# yuleOSH Pipeline — ASPICE V-Model 对齐（30 子步骤执行层）
 #
 # 2026-08-19 老板八轮拍板（checkpoint v9）: 合理下限合并，不牺牲能力。
 # 36 → 24 步；旧 handler 文件保留不删（子逻辑复用）；外部 agent 独立
 # 超时/重试保留（verify-loop 内部 codex-verify 仍独立调用）；
-# P0 门禁（review-critical-safety）独立步骤；--from-step 按 24 步编号。
+# P0 门禁（review-critical-safety）独立步骤；--from-step 按 30 步编号。
+# M1（2026-10-08）: 头部插入 SYS 系统层 6 步（G0），补齐 V 模型左半
+# （SYS.1~SYS.5 系统需求/架构/验证/集成/确认），贯通需求→开发→测试。
 #
-# 编排层 10 Gate 视图见 yuleosh.pipeline.gates.GATES（对外稳定契约）。
+# 编排层 11 Gate 视图见 yuleosh.pipeline.gates.GATES（对外稳定契约）。
 # ═══════════════════════════════════════════════════════════════
 PIPELINE_STEPS = [
+    # ── G0 系统层 (SYS.1~SYS.5, V 模型左半) — M1 / Phase A ──
+    # 确定性生成 + 确定性评审（非 LLM 判绿）；产物 docs/system-*.md 与
+    # aspice_sys_v3.1.yaml evidence 路径对齐。sys-req-review 为确定性门禁。
+    ("sys-requirements", "小明", "系统需求获取 (SYS.1)", step_sys_requirements),
+    ("sys-architecture", "Claude", "系统架构设计 (SYS.2)", step_sys_architecture),
+    ("sys-verification", "小克", "系统验证规划 (SYS.3)", step_sys_verification),
+    ("sys-integration", "小克", "系统集成测试规划 (SYS.4)", step_sys_integration),
+    ("sys-validation", "小明", "系统确认 (SYS.5)", step_sys_validation),
+    ("sys-req-review", "小克", "系统需求/架构评审 (确定性门禁)", step_review_sys),
+
     # ── G1 SWE.1 Requirements ──────────────────────────────
     ("spec-check", "小明", "OpenSpec 合规检查", step_spec_check),
     ("super-analysis", "小明", "S.U.P.E.R 启动分析",
