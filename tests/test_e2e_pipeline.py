@@ -118,6 +118,7 @@ class TestE2ENormal:
     def test_e2e_valid_spec_to_evidence(self, tmp_path, mock_all_deps, mock_subprocess_run):
         """GIVEN valid OpenSpec WHEN pipeline runs THEN steps complete."""
         from yuleosh.pipeline.run import run_pipeline
+        from yuleosh.pipeline.step_handlers import PIPELINE_STEPS, _step_keys
 
         spec = tmp_path / "spec.md"
         spec.write_text(SPEC_CONTENT_VALID)
@@ -137,15 +138,13 @@ class TestE2ENormal:
         for step in session.steps:
             assert step["status"] == "completed", f"Step {step['name']} not completed: {step['status']}"
 
-        # All 10 pipeline steps executed
-        assert len(session.steps) == 10, f"Expected 10 steps, got {len(session.steps)}"
+        # All pipeline steps executed (count tracks the active step registry)
+        assert len(session.steps) == len(PIPELINE_STEPS), (
+            f"Expected {len(PIPELINE_STEPS)} steps, got {len(session.steps)}"
+        )
 
-        # Artifacts set for all step keys (AC-01-03: step coverage 10/10 = 100%)
-        expected_keys = {
-            "spec-check", "super-analysis", "prd", "internal-review",
-            "architecture", "development", "test-planning", "self-test",
-            "code-review", "final-report",
-        }
+        # Artifacts set for all step keys (AC-01-03: full step coverage)
+        expected_keys = set(_step_keys())
         assert session.artifacts.keys() >= expected_keys, (
             f"Missing artifacts: {expected_keys - session.artifacts.keys()}"
         )
