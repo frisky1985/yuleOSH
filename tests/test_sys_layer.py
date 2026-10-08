@@ -27,6 +27,23 @@ from yuleosh.pipeline.step_handlers import (
 from yuleosh.alm.traceability import load_sys_swe_trace
 
 
+@pytest.fixture(autouse=True)
+def _restore_osh_home():
+    """每个用例后还原 OSH_HOME。
+
+    本文件的 _make_session 直接写 os.environ["OSH_HOME"] 而不还原，会把
+    tmp 目录泄漏给后续用例 —— 曾导致 test_pipeline_extended.py 的
+    test_pipeline_orchestrator_main_status 报
+    ``FileNotFoundError: .osh/sessions``。此处统一兜底还原。
+    """
+    before = os.environ.get("OSH_HOME")
+    yield
+    if before is None:
+        os.environ.pop("OSH_HOME", None)
+    else:
+        os.environ["OSH_HOME"] = before
+
+
 def _make_session(tmp_path, spec_text="# 车窗防夹\n\n## 概述\n\n防夹功能。\n\n## 需求\n\n系统应防夹。\n"):
     """构造隔离的 PipelineSession（OSH_HOME=tmp，无网络/LLM）。"""
     os.environ["OSH_HOME"] = str(tmp_path)

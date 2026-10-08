@@ -15,7 +15,6 @@ SWE 区同名词但语义不同，却共用同一套 SWE 取向启发式。
 """
 
 import json
-import os
 
 from yuleosh.compliance.compliance_checker import ComplianceChecker
 from yuleosh.compliance.profile import load_profile
@@ -28,8 +27,9 @@ from yuleosh.pipeline.step_handlers import (
 )
 
 
-def _make_session(tmp_path):
-    os.environ["OSH_HOME"] = str(tmp_path)
+def _make_session(tmp_path, monkeypatch):
+    # monkeypatch 而非 os.environ 直接赋值: 后者不还原会污染后续测试
+    monkeypatch.setenv("OSH_HOME", str(tmp_path))
     spec = tmp_path / "spec.md"
     spec.write_text("# 车窗防夹\n\n## GPIO 控制\n\n系统应驱动 LED。\n\n"
                     "## 传感器通信\n\n系统应读取传感器。\n", encoding="utf-8")
@@ -40,8 +40,8 @@ def _make_session(tmp_path):
     return sess
 
 
-def _gen_all_sys_docs(tmp_path):
-    sess = _make_session(tmp_path)
+def _gen_all_sys_docs(tmp_path, monkeypatch):
+    sess = _make_session(tmp_path, monkeypatch)
     for fn in (step_sys_requirements, step_sys_architecture,
                step_sys_verification, step_sys_integration,
                step_sys_validation):
@@ -62,17 +62,17 @@ def _all_details(report):
 
 # ── 1. 验收: unknown 归零 ────────────────────────────────────────────────
 
-def test_no_unknown_check_type_for_sys_profile(tmp_path):
-    _gen_all_sys_docs(tmp_path)
+def test_no_unknown_check_type_for_sys_profile(tmp_path, monkeypatch):
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     details = _all_details(_sys_report(tmp_path))
 
     unknown = [d for d in details if "unknown check type" in d]
     assert unknown == [], f"仍有判不了的检查项: {unknown}"
 
 
-def test_sys3_and_sys5_items_are_recognized_with_concrete_reasons(tmp_path):
+def test_sys3_and_sys5_items_are_recognized_with_concrete_reasons(tmp_path, monkeypatch):
     """SYS.3/5 检查项须给出具体理由，而非 'unknown'。"""
-    _gen_all_sys_docs(tmp_path)
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     report = _sys_report(tmp_path)
 
     for area in ("sys.3", "sys.5"):
@@ -88,8 +88,8 @@ def test_sys3_and_sys5_items_are_recognized_with_concrete_reasons(tmp_path):
 
 # ── 2. 范围类判定（真实覆盖）────────────────────────────────────────────
 
-def test_scope_check_passes_when_doc_covers_all_sys_req(tmp_path):
-    _gen_all_sys_docs(tmp_path)
+def test_scope_check_passes_when_doc_covers_all_sys_req(tmp_path, monkeypatch):
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     docs = tmp_path / "docs"
     req_ids = {"SYS-REQ-001", "SYS-REQ-002"}
     (docs / "system-requirements.md").write_text(
@@ -107,9 +107,9 @@ def test_scope_check_passes_when_doc_covers_all_sys_req(tmp_path):
     assert any("covers 2/2 system requirements" in d for d in details), details
 
 
-def test_scope_check_fails_on_partial_coverage(tmp_path):
+def test_scope_check_fails_on_partial_coverage(tmp_path, monkeypatch):
     """覆盖不全必须判红 —— 不得因文件存在就放行。"""
-    _gen_all_sys_docs(tmp_path)
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     docs = tmp_path / "docs"
     (docs / "system-requirements.md").write_text(
         "- **SYS-REQ-001** — A。\n- **SYS-REQ-002** — B。\n", encoding="utf-8")
@@ -124,16 +124,16 @@ def test_scope_check_fails_on_partial_coverage(tmp_path):
 
 # ── 3. 执行类判定（反假绿核心）──────────────────────────────────────────
 
-def test_execution_check_fails_without_system_level_record(tmp_path):
-    _gen_all_sys_docs(tmp_path)
+def test_execution_check_fails_without_system_level_record(tmp_path, monkeypatch):
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     details = [d for bp in _sys_report(tmp_path)["swe_sections"]["sys.3"]["base_practices"]
                for d in bp["details"]]
     assert any("no system-level execution record" in d for d in details), details
 
 
-def test_execution_check_not_satisfied_by_pytest_or_ci(tmp_path):
+def test_execution_check_not_satisfied_by_pytest_or_ci(tmp_path, monkeypatch):
     """反假绿: 仅有 pytest/CI 通过证据，不得算系统级执行。"""
-    _gen_all_sys_docs(tmp_path)
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     ci = tmp_path / ".osh" / "ci"
     ci.mkdir(parents=True, exist_ok=True)
     (ci / "layer1-ok.json").write_text(
@@ -145,9 +145,9 @@ def test_execution_check_not_satisfied_by_pytest_or_ci(tmp_path):
     assert any("no system-level execution record" in d for d in details), details
 
 
-def test_execution_check_passes_with_real_system_record(tmp_path):
+def test_execution_check_passes_with_real_system_record(tmp_path, monkeypatch):
     """有系统级执行记录（含用例与 passed 状态）时才放行。"""
-    _gen_all_sys_docs(tmp_path)
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     ev = tmp_path / ".osh" / "evidence"
     ev.mkdir(parents=True, exist_ok=True)
     (ev / "system-verification-results.json").write_text(
@@ -161,9 +161,9 @@ def test_execution_check_passes_with_real_system_record(tmp_path):
                for d in details), details
 
 
-def test_execution_record_requires_cases_not_just_status(tmp_path):
+def test_execution_record_requires_cases_not_just_status(tmp_path, monkeypatch):
     """只有 status=passed 但无用例列表 → 不算执行证据。"""
-    _gen_all_sys_docs(tmp_path)
+    _gen_all_sys_docs(tmp_path, monkeypatch)
     ev = tmp_path / ".osh" / "evidence"
     ev.mkdir(parents=True, exist_ok=True)
     (ev / "system-verification-results.json").write_text(
@@ -175,7 +175,7 @@ def test_execution_record_requires_cases_not_just_status(tmp_path):
 
 # ── 4. 过程域隔离 ───────────────────────────────────────────────────────
 
-def test_sys_helpers_are_area_scoped(tmp_path):
+def test_sys_helpers_are_area_scoped(tmp_path, monkeypatch):
     """无需求源时 helper 如实返回空，不得当作全覆盖。"""
     checker = ComplianceChecker(str(tmp_path))
     assert checker._sys_requirements_ids() == set()

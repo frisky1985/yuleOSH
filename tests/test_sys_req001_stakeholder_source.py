@@ -15,14 +15,14 @@
 """
 
 import json
-import os
 
 from yuleosh.alm.traceability import load_sys_swe_trace
 from yuleosh.pipeline.step_handlers.sys_layer import step_sys_requirements
 
 
-def _make_session(tmp_path):
-    os.environ["OSH_HOME"] = str(tmp_path)
+def _make_session(tmp_path, monkeypatch):
+    # monkeypatch 而非 os.environ 直接赋值: 后者不还原会污染后续测试
+    monkeypatch.setenv("OSH_HOME", str(tmp_path))
     (tmp_path / "docs").mkdir(parents=True, exist_ok=True)
     spec = tmp_path / "docs" / "spec.md"
     spec.write_text("# 车窗防夹\n\n## GPIO 控制\n\n系统应驱动 LED。\n",
@@ -42,8 +42,8 @@ def _sidecar(tmp_path):
 
 # ── ① 有涉众需求 → 正位派生 ─────────────────────────────────────────────
 
-def test_stakeholder_source_derives_sys_req_with_stake_mapping(tmp_path):
-    sess = _make_session(tmp_path)
+def test_stakeholder_source_derives_sys_req_with_stake_mapping(tmp_path, monkeypatch):
+    sess = _make_session(tmp_path, monkeypatch)
     (tmp_path / "docs" / "stakeholder-requirements.md").write_text(
         "# 涉众需求\n\n"
         "- **STAKE-001**: 车辆应防止车窗夹伤乘客。\n"
@@ -66,8 +66,8 @@ def test_stakeholder_source_derives_sys_req_with_stake_mapping(tmp_path):
 
 # ── ② 缺失 → 显式降级标注 ───────────────────────────────────────────────
 
-def test_missing_stakeholder_marks_degraded_source(tmp_path):
-    sess = _make_session(tmp_path)  # 无 stakeholder-requirements.md
+def test_missing_stakeholder_marks_degraded_source(tmp_path, monkeypatch):
+    sess = _make_session(tmp_path, monkeypatch)  # 无 stakeholder-requirements.md
 
     step_sys_requirements(sess)
     doc = (tmp_path / "docs" / "system-requirements.md").read_text(encoding="utf-8")
@@ -83,9 +83,9 @@ def test_missing_stakeholder_marks_degraded_source(tmp_path):
 
 # ── ③ 反假绿 ────────────────────────────────────────────────────────────
 
-def test_stakeholder_file_without_ids_falls_back_honestly(tmp_path):
+def test_stakeholder_file_without_ids_falls_back_honestly(tmp_path, monkeypatch):
     """文件在但无 STAKE-xxx → 不得宣称涉众来源。"""
-    sess = _make_session(tmp_path)
+    sess = _make_session(tmp_path, monkeypatch)
     (tmp_path / "docs" / "stakeholder-requirements.md").write_text(
         "# 涉众需求\n\n（待补充，暂无编号需求）\n", encoding="utf-8")
 
@@ -96,9 +96,9 @@ def test_stakeholder_file_without_ids_falls_back_honestly(tmp_path):
     assert "sys_to_stake" not in sc
 
 
-def test_no_fabricated_stakeholder_ids(tmp_path):
+def test_no_fabricated_stakeholder_ids(tmp_path, monkeypatch):
     """无涉众需求时文档不得出现任何 STAKE- 编号。"""
-    sess = _make_session(tmp_path)
+    sess = _make_session(tmp_path, monkeypatch)
     step_sys_requirements(sess)
     doc = (tmp_path / "docs" / "system-requirements.md").read_text(encoding="utf-8")
     assert "STAKE-" not in doc
@@ -106,8 +106,8 @@ def test_no_fabricated_stakeholder_ids(tmp_path):
 
 # ── ④ 向后兼容 ──────────────────────────────────────────────────────────
 
-def test_sidecar_stays_compatible_with_load_sys_swe_trace(tmp_path):
-    sess = _make_session(tmp_path)
+def test_sidecar_stays_compatible_with_load_sys_swe_trace(tmp_path, monkeypatch):
+    sess = _make_session(tmp_path, monkeypatch)
     (tmp_path / "docs" / "stakeholder-requirements.md").write_text(
         "- **STAKE-001**: 防夹。\n", encoding="utf-8")
     step_sys_requirements(sess)
