@@ -100,15 +100,19 @@
 | 阶段 | 动作 | 关键体验 |
 |---|---|---|
 | Day 0 | `pip install yuleosh && yuleosh init demo` | 2 分钟上手 |
-| Day 1 | `yuleosh pipeline run docs/spec.md` | 36 步全自动，看到代码+测试+证据包 |
+| Day 1 | `yuleosh pipeline run docs/spec.md` | 30 步全自动，看到代码+测试+证据包 |
 | Day 7 | 跑通自己项目的第一个 spec | 真实价值开始显现 |
 | Day 30 | 对比手工流程，量化 ROI | 决定是否付费 |
+
+> 注：流水线步数一律以 `src/yuleosh/pipeline/step_handlers/__init__.py` 中的
+> `PIPELINE_STEPS` **实测值为准**（2026-10-08 实测 **30 步** = 头部 SYS 系统层 6 步
+> + 既有软件层 24 步）。若实现变更，须同步更新本文，避免文档与代码漂移。
 
 ### 3.3 北极星场景（演示脚本）
 
 > **客户演示 15 分钟闭环**：
-> 1. 打开 window-anti-pinch 真实项目（2 分钟）：展示 34/34 pipeline 全绿
-> 2. 跑一条新 spec（5 分钟）：`yuleosh pipeline run` → 36 步自动完成
+> 1. 打开 window-anti-pinch 真实项目（2 分钟）：展示 pipeline 全链路产物与各级门禁状态
+> 2. 跑一条新 spec（5 分钟）：`yuleosh pipeline run` → 30 步自动完成
 > 3. 展示三层测试结果（3 分钟）：109+14+88 断言、覆盖率 80%
 > 4. 生成证据包（2 分钟）：`yuleosh ev pack` → ZIP + SHA-256
 > 5. 打开 Dashboard 看趋势（3 分钟）：覆盖率趋势、MISRA 违规趋势
@@ -125,7 +129,7 @@
 ├──────────────────────────────────────────────────────────┤
 │ 🧠 需求层    OpenSpec 引擎（SHALL/场景/追溯/状态机）       │
 ├──────────────────────────────────────────────────────────┤
-│ 🤖 流水线层  36 步 AI Agent Pipeline                       │
+│ 🤖 流水线层  30 步 AI Agent Pipeline                       │
 │    spec→分析→PRD→架构→计划→codegen→部署→审查→测试→证据    │
 │    双外部 Agent：Codex 验证 + Claude 评审                  │
 ├──────────────────────────────────────────────────────────┤
