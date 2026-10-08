@@ -245,7 +245,8 @@ class ComplianceChecker:
         """
         ev = self.project_dir / ".osh" / "evidence"
         if ev.is_dir():
-            for name in ("system-validation-results.json",
+            for name in ("system-integration-results.json",
+                         "system-validation-results.json",
                          "system-verification-results.json"):
                 f = ev / name
                 if not f.is_file():
@@ -803,6 +804,22 @@ class ComplianceChecker:
             return False
         return any(k in content for k in ("stub", "driver", "桩", "驱动"))
 
+    def _sys_doc_has_stubs(self) -> bool:
+        """SYS 区 stub/driver 检测 —— 查系统级集成策略文档。
+
+        反假绿: SYS.4.BP1「Stubs/drivers are identified」原复用 SWE 的
+        ``_integration_strategy_has_stubs``（查 docs/integration-strategy.md），
+        属跨域误用 → SYS 区恒假阴性。此处改查 docs/system-integration.md。
+        """
+        target = self.project_dir / "docs" / "system-integration.md"
+        if not target.exists():
+            return False
+        try:
+            content = target.read_text(errors="replace").lower()
+        except Exception:
+            return False
+        return any(k in content for k in ("stub", "driver", "桩", "驱动"))
+
     def _evidence_archived(self) -> bool:
         """True if test evidence has been archived under .osh/evidence/."""
         if not self._evidence_dir_exists():
@@ -1123,7 +1140,15 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no priority/status attributes found)")
             elif "stub" in check_item.lower() or "driver" in check_item.lower():
-                if self._integration_strategy_has_stubs():
+                if _is_sys_area:
+                    # SYS.4.BP1: 查系统级集成策略文档，而非 SWE 的 integration-strategy.md
+                    if self._sys_doc_has_stubs():
+                        passed += 1
+                        details.append(f"  ✅ Check: {check_item} (system integration strategy identifies stubs/drivers)")
+                    else:
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} (no stubs/drivers in system integration strategy)")
+                elif self._integration_strategy_has_stubs():
                     passed += 1
                     details.append(f"  ✅ Check: {check_item}")
                 else:
@@ -1169,20 +1194,34 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no substantive traceability matrix)")
             elif "test" in check_item.lower() or "unit test" in check_item.lower():
-                # Unit tests: files must exist AND there must be evidence they
-                # actually ran and passed — a test file that never runs is not
-                # unit verification (SWE.4).
-                ntests = self._count_unit_tests()
-                suite_passes = self._test_suite_passes()
-                if ntests > 0 and suite_passes:
-                    passed += 1
-                    details.append(f"  ✅ Check: {check_item} ({ntests} test files, suite passed)")
-                elif ntests > 0:
-                    failed += 1
-                    details.append(f"  ❌ Check: {check_item} ({ntests} test files but no passing-run evidence)")
+                if _is_sys_area:
+                    # 反假绿(SYS.4.BP3): 系统级集成/验证测试只认系统级执行记录或真
+                    # SIL/HIL，禁用 _test_suite_passes()（仓库单测顶替 → 假绿，
+                    # 与 SWE.6.BP2 同源）。
+                    record = self._sys_execution_record("docs/system-integration.md")
+                    if record:
+                        passed += 1
+                        details.append(f"  ✅ Check: {check_item} (system-level test execution evidence: {record})")
+                    else:
+                        failed += 1
+                        details.append(
+                            f"  ❌ Check: {check_item} (no system-level test execution record "
+                            f"— SIL/HIL or system integration test results required)")
                 else:
-                    failed += 1
-                    details.append(f"  ❌ Check: {check_item} (no test files found)")
+                    # Unit tests: files must exist AND there must be evidence they
+                    # actually ran and passed — a test file that never runs is not
+                    # unit verification (SWE.4).
+                    ntests = self._count_unit_tests()
+                    suite_passes = self._test_suite_passes()
+                    if ntests > 0 and suite_passes:
+                        passed += 1
+                        details.append(f"  ✅ Check: {check_item} ({ntests} test files, suite passed)")
+                    elif ntests > 0:
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} ({ntests} test files but no passing-run evidence)")
+                    else:
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} (no test files found)")
             elif "architecture" in check_item.lower():
                 if self._has_arch_document(swe_id):
                     passed += 1
@@ -1244,18 +1283,46 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             elif "integration" in check_item.lower():
-                if self._test_suite_passes():
-                    passed += 1
-                    details.append(f"  ✅ Check: {check_item} (integration suite passed)")
-                elif self._dir_has_files("tests", "integration"):
-                    failed += 1
-                    details.append(f"  ❌ Check: {check_item} (integration tests exist but no passing-run evidence)")
-                elif self._ci_results_exist():
-                    failed += 1
-                    details.append(f"  ❌ Check: {check_item} (CI results exist but no integration pass evidence)")
+                if _is_sys_area:
+                    # 反假绿(SYS.4): 系统级集成按"执行 vs 策略"分流 ——
+                    #  * 执行类(builds succeed / tests verify / pass / data flow /
+                    #    executed / performed / run): 只认系统级集成执行记录或真
+                    #    SIL/HIL，禁用 _test_suite_passes()（单测顶替 → 假绿）。
+                    #  * 策略类(sequence / defined / justified / follows / strategy):
+                    #    只认 docs/system-integration.md 实质性内容。
+                    item_low = check_item.lower()
+                    is_execution = any(k in item_low for k in (
+                        "succeed", "pass", "verify", "executed", "data flow",
+                        "performed", "run", "tests pass"))
+                    if is_execution:
+                        record = self._sys_execution_record("docs/system-integration.md")
+                        if record:
+                            passed += 1
+                            details.append(f"  ✅ Check: {check_item} (system integration execution evidence: {record})")
+                        else:
+                            failed += 1
+                            details.append(
+                                f"  ❌ Check: {check_item} (no system-level integration execution "
+                                f"record — SIL/HIL or system integration test results required)")
+                    elif self._file_has_content("docs", "system-integration.md", min_chars=100):
+                        passed += 1
+                        details.append(f"  ✅ Check: {check_item} (system integration strategy document substantive)")
+                    else:
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} (no substantive system integration strategy document)")
                 else:
-                    failed += 1
-                    details.append(f"  ❌ Check: {check_item}")
+                    if self._test_suite_passes():
+                        passed += 1
+                        details.append(f"  ✅ Check: {check_item} (integration suite passed)")
+                    elif self._dir_has_files("tests", "integration"):
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} (integration tests exist but no passing-run evidence)")
+                    elif self._ci_results_exist():
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} (CI results exist but no integration pass evidence)")
+                    else:
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item}")
             elif "qualification" in check_item.lower() or "acceptance" in check_item.lower():
                 if self._acceptance_matrix_covered():
                     passed += 1
@@ -1267,7 +1334,17 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no substantive acceptance matrix)")
             elif "regression" in check_item.lower():
-                if self._test_suite_passes():
+                if _is_sys_area:
+                    # 反假绿: 系统级回归同样只认系统级执行记录（SYS 当前无 regression
+                    # 检查项，此分支仅为防御性对齐）。
+                    record = self._sys_execution_record("docs/system-integration.md")
+                    if record:
+                        passed += 1
+                        details.append(f"  ✅ Check: {check_item} (system-level execution evidence: {record})")
+                    else:
+                        failed += 1
+                        details.append(f"  ❌ Check: {check_item} (no system-level execution record)")
+                elif self._test_suite_passes():
                     passed += 1
                     details.append(f"  ✅ Check: {check_item} (regression suite passed)")
                 elif self._ci_results_exist():
