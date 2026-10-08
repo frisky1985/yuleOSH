@@ -95,6 +95,7 @@ import {
 } from "@/lib/evidence-history";
 import { MiniCoverageBar } from "@/components/dashboard/mini-coverage-bar";
 import { SWECard } from "@/components/dashboard/swe-card";
+import { SysLayerSection } from "@/components/dashboard/sys-layer";
 import { EvidenceModal } from "@/components/dashboard/evidence-modal";
 import { TaskStageProgress } from "@/components/dashboard/task-stage-progress";
 import { GapDetailModal } from "@/components/dashboard/gap-detail-modal";
@@ -1925,6 +1926,9 @@ export default function DashboardPage() {
                           <SWECard key={key} swe={swe} />
                         ))}
                       </div>
+
+                      {/* M1.5 链路D: 系统层 (SYS.1–SYS.5) + G0 门禁 */}
+                      <SysLayerSection sysStatus={sweData.sys_status} gates={sweData.gates} />
                     </>
                   )}
                   {sweLoading && (

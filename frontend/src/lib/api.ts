@@ -574,8 +574,24 @@ interface SWEStatus {
   last_updated: string;
 }
 
+interface SysLayerStatus {
+  status: string;
+  note: string;
+}
+
+interface GateStatus {
+  gate: string;
+  name: string;
+  status: string;
+  step_keys?: string[];
+  advisory?: boolean;
+}
+
 interface SWEStatusResponse {
   swe: Record<string, SWEStatus>;
+  // M1.5 链路D: 系统层 (SYS.1–5) 状态 + 门禁 (含 G0)
+  sys_status?: Record<string, SysLayerStatus>;
+  gates?: GateStatus[];
   overall_pct: number;
   completed_count: number;
   total_count: number;
