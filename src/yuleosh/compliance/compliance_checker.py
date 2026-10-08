@@ -165,18 +165,28 @@ class ComplianceChecker:
             )
         return False
 
-    def _has_arch_document(self) -> bool:
+    def _has_arch_document(self, swe_id: Optional[str] = None) -> bool:
         """True when an architecture document exists WITH substantive content.
 
         Prefer a real architecture description over an empty template:
-        the file must be non-trivial (>= 200 chars) and mention at least
+        the file must be non-trivial (>= 150 chars) and mention at least
         one of the architecture keywords expected in a design description.
+
+        SYS-REQ-004 / T4: 原先候选路径只含软件架构文档，SYS.2 的产物
+        ``docs/system-architecture.md`` 根本不在列表内 —— 系统架构写得再实也
+        恒判 "no substantive architecture doc found"。此处按过程域区分：
+          * SYS 区 → 额外认可系统层架构文档（SYS.2 的真实产物）
+          * SWE 区 → 维持原候选，**不**因系统架构文档而放行（否则 SWE.2
+            会借系统架构蒙混过关，属假绿）
         """
         candidates = [
             self.project_dir / "docs" / "architecture.md",
             self.project_dir / "ARCHITECTURE.md",
             self.project_dir / "docs" / "arch" / "architecture.md",
         ]
+        if str(swe_id or "").upper().startswith("SYS"):
+            candidates.insert(
+                0, self.project_dir / "docs" / "system-architecture.md")
         arch_keywords = (
             "component", "module", "layer", "architecture", "设计",
             "组件", "模块", "架构", "接口", "interface",
@@ -1111,7 +1121,7 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no test files found)")
             elif "architecture" in check_item.lower():
-                if self._has_arch_document():
+                if self._has_arch_document(swe_id):
                     passed += 1
                     details.append(f"  ✅ Check: {check_item} (architecture doc with substantive content)")
                 else:

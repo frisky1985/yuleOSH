@@ -163,30 +163,108 @@ def step_sys_requirements(session: PipelineSession) -> str:
     return str(out)
 
 
-def step_sys_architecture(session: PipelineSession) -> str:
-    """SYS.2 — 系统架构设计（确定性，由系统需求派生）。"""
-    req_doc = Path(session.project_dir) / SYS_REQUIREMENTS
-    req_count = 0
-    if req_doc.exists():
+def _parse_sys_requirements(req_doc: Path) -> list[tuple[str, str]]:
+    """从 ``docs/system-requirements.md`` 解析 ``[(SYS-REQ-ID, 能力描述)]``。
+
+    确定性解析（无 LLM），供 SYS.2 架构派生真实的元素边界与覆盖矩阵。
+    解析不到时返回空列表 —— 调用方须如实标注，不得凭空造需求。
+    """
+    if not req_doc.exists():
+        return []
+    try:
         text = req_doc.read_text(encoding="utf-8", errors="replace")
-        req_count = text.count("SYS-REQ-")
+    except OSError:
+        return []
+    parsed: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for line in text.splitlines():
+        m = re.search(r"(SYS-REQ-\d+)", line)
+        if not m:
+            continue
+        rid = m.group(1)
+        if rid in seen:
+            continue
+        seen.add(rid)
+        desc = re.sub(r"^[-*+]\s*", "", line.strip())
+        desc = re.sub(r"\*\*|\(SHALL[^)]*\)", "", desc)
+        desc = re.sub(r"^SYS-REQ-\d+\s*[—–-]*\s*", "", desc).strip(" —–-")
+        desc = re.sub(r"^系统应提供「|」能力.*$", "", desc).strip()
+        parsed.append((rid, desc or "（未命名能力）"))
+    return parsed
+
+
+def step_sys_architecture(session: PipelineSession) -> str:
+    """SYS.2 — 系统架构设计（确定性，由系统需求派生）。
+
+    SYS-REQ-004: 原实现只输出泛化散文（约 595B，无元素边界、无接口定义、
+    无覆盖矩阵），架构内容不可验证。此处改为自 SYS.1 需求文档真实派生：
+      * 系统元素与职责边界（1 元素 ← 1 条系统需求，边界可核）
+      * 需求覆盖矩阵（SYS-REQ → 元素，逐条可核）
+      * 接口定义（**仅在有来源时列出**；无来源如实标注未定义，绝不凭空
+        生成类型/取值范围 —— 那是假绿）
+    """
+    parsed = _parse_sys_requirements(Path(session.project_dir) / SYS_REQUIREMENTS)
+    req_count = len(parsed)
+
+    if parsed:
+        elem_rows = "\n".join(
+            f"| SE-{i:02d} | {rid} | 承载「{desc}」能力；对外仅通过已定义接口交互，"
+            f"不越界承担其他元素职责 |"
+            for i, (rid, desc) in enumerate(parsed, start=1)
+        )
+        cov_rows = "\n".join(
+            f"| {rid} | SE-{i:02d} | ✅ Covered |"
+            for i, (rid, _d) in enumerate(parsed, start=1)
+        )
+        elements_section = (
+            "## 系统元素与边界\n\n"
+            "| 系统元素 | 覆盖的系统需求 | 职责边界 |\n"
+            "|:---------|:---------------|:---------|\n"
+            f"{elem_rows}\n\n"
+            "## 需求覆盖矩阵\n\n"
+            "| 系统需求 | 系统元素 | 覆盖状态 |\n"
+            "|:---------|:---------|:---------|\n"
+            f"{cov_rows}\n"
+        )
+    else:
+        # 无需求来源 → 如实标注，绝不伪造元素
+        elements_section = (
+            "## 系统元素与边界\n\n"
+            "> ⚠️ 未解析到任何 SYS-REQ（`docs/system-requirements.md` 缺失或为空），"
+            "本步骤不凭空生成系统元素。\n\n"
+            "## 需求覆盖矩阵\n\n"
+            "| 系统需求 | 系统元素 | 覆盖状态 |\n"
+            "|:---------|:---------|:---------|\n"
+            "| — | — | ❌ Not Covered |\n"
+        )
+
+    # 接口定义: 仅在能从需求来源识别接口信息时列出；否则显式标注未定义。
+    # SYS.2.BP2 要求类型与取值范围，spec 未提供时不得臆造。
+    interfaces_section = (
+        "## 接口定义\n\n"
+        "> 接口状态: **未定义** —— 上游 spec 未提供接口的类型/取值范围信息，\n"
+        "> 本步骤不臆造接口表（否则为假绿）。接口须由系统架构师补充后重新生成。\n\n"
+        "| 接口 | 方向 | 数据类型 | 取值范围 | 定义来源 |\n"
+        "|:-----|:-----|:---------|:---------|:---------|\n"
+        "| — | — | — | — | 待补充 |\n"
+    )
 
     content = (
         "# 系统架构设计 (SYS.2)\n\n"
-        "## 系统组件\n\n"
-        f"- 系统由 {max(req_count, 1)} 个功能域映射而来的系统元素构成。\n"
-        "- 每个系统元素对应一组软件组件（SWE.2 细化）。\n\n"
-        "## 接口\n\n"
-        "- 系统元素间通过明确定义的接口交互（数据/控制流）。\n"
-        "- 外部接口在接口规范中定义类型与取值范围。\n\n"
+        "## 概述\n\n"
+        f"本架构自 `docs/system-requirements.md` 的 {req_count} 条系统需求确定性派生，"
+        "每个系统元素对应一条系统需求，边界与覆盖关系逐条可核。\n\n"
+        f"{elements_section}\n"
+        f"{interfaces_section}\n"
         "## 数据流\n\n"
         "- 数据流自涉众/系统需求向下贯通至软件组件，保持单向可追溯。\n\n"
         "## 可追溯性\n\n"
         f"- 架构覆盖 `docs/system-requirements.md` 中的 {req_count} 条系统需求。\n"
         "- 系统元素 → 软件组件映射在 SWE.2 软件架构中细化。\n"
+        "- 需求 → 元素覆盖矩阵见本文「需求覆盖矩阵」章节。\n"
     )
     out = _write_doc(session, SYS_ARCHITECTURE, content)
-    log.info(f"[SYS.2] 生成系统架构: {out}")
+    log.info(f"[SYS.2] 生成系统架构: {out} ({req_count} 条需求派生)")
     return str(out)
 
 
