@@ -39,6 +39,11 @@ SYS_VERIFICATION = "docs/system-verification.md"
 SYS_INTEGRATION = "docs/system-integration.md"
 SYS_VALIDATION = "docs/system-validation.md"
 
+# SYS-REQ-001 / T6: 涉众需求是系统需求的**上游**（V 模型正位 STAKE→SYS→SWE）。
+# 存在该文件时 SYS.1 自其派生并保留 STAKE 映射；不存在时退化为 spec 派生，
+# 但必须显式标注 source=spec-derived（禁止静默伪装成已做涉众需求分析）。
+STAKEHOLDER_REQUIREMENTS = "docs/stakeholder-requirements.md"
+
 # 5 份 SYS 交付物 → 对应过程域
 SYS_DOC_TO_AREA = {
     SYS_REQUIREMENTS: "SYS.1",
@@ -112,8 +117,46 @@ def _write_doc(session: PipelineSession, rel_path: str, content: str) -> Path:
     return target
 
 
-def _record_sys_swe_trace(session: PipelineSession, sys_req_ids: list[str]) -> Path:
-    """写入 SYS.x → SWE.1 追溯 sidecar（复用 .osh/evidence 约定）。
+def _parse_stakeholder_requirements(project_dir: str) -> list[tuple[str, str]]:
+    """解析 ``docs/stakeholder-requirements.md`` 的 ``[(STAKE-xxx, 描述)]``。
+
+    确定性解析（无 LLM）。文件不存在/无 STAKE-xxx 时返回空列表 ——
+    调用方据此降级并显式标注，不得静默伪造涉众需求。
+    """
+    p = Path(project_dir) / STAKEHOLDER_REQUIREMENTS
+    if not p.is_file():
+        return []
+    try:
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for line in text.splitlines():
+        m = re.search(r"(STAKE-\d+)", line)
+        if not m:
+            continue
+        sid = m.group(1)
+        if sid in seen:
+            continue
+        seen.add(sid)
+        desc = re.sub(r"^[-*+]\s*", "", line.strip())
+        desc = re.sub(r"\*\*", "", desc)
+        desc = re.sub(r"^STAKE-\d+\s*[—–\-:]*\s*", "", desc).strip(" —–-:")
+        out.append((sid, desc or "（未命名涉众需求）"))
+    return out
+
+
+def _record_sys_swe_trace(session: PipelineSession,
+                          sys_req_ids: list[str],
+                          source: str = "spec-derived",
+                          sys_to_stake: dict | None = None) -> Path:
+    """写入 SYS.x → 下游/上游追溯 sidecar（复用 .osh/evidence 约定）。
+
+    SYS-REQ-001 / T6: ``source`` 标明派生来源（机读字段），
+      * ``stakeholder``  —— 自涉众需求派生（V 模型正位 STAKE→SYS→SWE）
+      * ``spec-derived`` —— **降级**：无涉众需求源，由 spec 反推（方向倒置），
+        必须显式记录，供审计/合规引擎识别，禁止静默伪装。
 
     返回 sidecar 路径。该记录是 SYS 层与软件工程层（SWE.1 由 spec 驱动）
     的可审计追溯链，供 alm/traceability.py 读取复用。
@@ -121,11 +164,20 @@ def _record_sys_swe_trace(session: PipelineSession, sys_req_ids: list[str]) -> P
     ev_dir = _evidence_dir(session)
     ev_dir.mkdir(parents=True, exist_ok=True)
     mapping = {rid: "SWE.1" for rid in sys_req_ids}
+    if source == "stakeholder":
+        note = ("SYS 系统需求自涉众需求派生（STAKE→SYS→SWE，V 模型正位）；"
+                "SWE.1 由 spec.md 驱动，形成左半连续追溯。")
+    else:
+        note = ("降级: 未找到 docs/stakeholder-requirements.md，SYS 需求由 spec "
+                "反推（方向倒置 SYS←SWE.1）。已显式标注 source=spec-derived，"
+                "不得视为已开展涉众需求分析。")
     trace = {
         "sys_to_swe": mapping,
-        "note": "SYS 系统需求向上追溯至 SWE.1 软件需求（spec 派生）；"
-                "SWE.1 由 spec.md 驱动，形成 V 模型左半连续追溯。",
+        "source": source,
+        "note": note,
     }
+    if sys_to_stake:
+        trace["sys_to_stake"] = dict(sys_to_stake)
     trace_path = ev_dir / "sys-to-swe-trace.json"
     trace_path.write_text(
         json.dumps(trace, ensure_ascii=False, indent=2),
@@ -135,31 +187,61 @@ def _record_sys_swe_trace(session: PipelineSession, sys_req_ids: list[str]) -> P
 
 
 def step_sys_requirements(session: PipelineSession) -> str:
-    """SYS.1 — 系统需求获取（确定性，由 spec 派生）。"""
-    areas = _extract_functional_areas(_read_spec_text(session))
-    req_lines = []
+    """SYS.1 — 系统需求获取（确定性）。
+
+    SYS-REQ-001 / T6（V 模型左半语义正位）: 涉众需求才是系统需求的上游。
+      * 存在 ``docs/stakeholder-requirements.md`` → 自涉众需求派生，保留
+        ``SYS-REQ → STAKE-xxx`` 映射（正位方向 STAKE → SYS → SWE）。
+      * 不存在 → 退化为自 spec 派生（**方向倒置**：SYS 由 SWE.1 的输入反推），
+        必须在文档与 sidecar 中显式标注 ``source: spec-derived``，
+        禁止静默伪装成"已开展涉众需求分析"。
+    """
+    stakeholders = _parse_stakeholder_requirements(session.project_dir)
+    req_lines: list[str] = []
     sys_req_ids: list[str] = []
-    for i, area in enumerate(areas, start=1):
-        rid = f"SYS-REQ-{i:03d}"
-        sys_req_ids.append(rid)
-        req_lines.append(
-            f"- **{rid}** — 系统应提供「{area}」能力（SHALL 满足该功能域需求）。"
-        )
+    sys_to_stake: dict[str, str] = {}
+
+    if stakeholders:
+        source = "stakeholder"
+        for i, (sid, desc) in enumerate(stakeholders, start=1):
+            rid = f"SYS-REQ-{i:03d}"
+            sys_req_ids.append(rid)
+            sys_to_stake[rid] = sid
+            req_lines.append(
+                f"- **{rid}** ← {sid} — 系统应满足「{desc}」（SHALL）。"
+            )
+        source_desc = "涉众需求（STAKE-xxx）"
+        trace_line = "- SYS-REQ → STAKE-xxx 映射见 `.osh/evidence/sys-to-swe-trace.json`。\n"
+    else:
+        source = "spec-derived"
+        areas = _extract_functional_areas(_read_spec_text(session))
+        for i, area in enumerate(areas, start=1):
+            rid = f"SYS-REQ-{i:03d}"
+            sys_req_ids.append(rid)
+            req_lines.append(
+                f"- **{rid}** — 系统应提供「{area}」能力（SHALL 满足该功能域需求）。"
+            )
+        source_desc = ("项目 spec —— **降级**：无涉众需求文件，SYS 需求由 spec "
+                       "反推，V 模型方向（STAKE→SYS→SWE）在此倒置")
+        trace_line = "- SYS-REQ → SWE.1 映射见 `.osh/evidence/sys-to-swe-trace.json`。\n"
+
     req_block = "\n".join(req_lines) if req_lines else "- （无派生需求）"
 
     content = (
         "# 系统需求规格 (SYS.1)\n\n"
         "## 概述\n\n"
-        "本文件由 yuleOSH 系统需求获取步骤自项目 spec 确定性派生，覆盖 V 模型"
-        "左半顶端（系统需求分析）。\n\n"
+        "本文件由 yuleOSH 系统需求获取步骤确定性派生，覆盖 V 模型左半顶端"
+        "（系统需求分析）。\n\n"
+        f"> 派生来源 (机读): `{source}`\n\n"
         f"## 系统需求\n\n{req_block}\n\n"
         "## 可追溯性\n\n"
-        "- 每条 SYS-REQ 向上追溯至软件需求 SWE.1（spec.md 驱动）。\n"
-        "- 追溯记录见 `.osh/evidence/sys-to-swe-trace.json`。\n"
+        f"- 每条 SYS-REQ 的上游来源: {source_desc}。\n"
+        f"{trace_line}"
     )
     out = _write_doc(session, SYS_REQUIREMENTS, content)
-    _record_sys_swe_trace(session, sys_req_ids)
-    log.info(f"[SYS.1] 生成系统需求: {out} ({len(sys_req_ids)} 条)")
+    _record_sys_swe_trace(session, sys_req_ids, source=source,
+                          sys_to_stake=sys_to_stake or None)
+    log.info(f"[SYS.1] 生成系统需求: {out} ({len(sys_req_ids)} 条, source={source})")
     return str(out)
 
 
