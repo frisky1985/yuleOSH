@@ -1068,6 +1068,128 @@ def generate_lrt(project_dir: str, spec_path: Optional[str] = None) -> dict:
     }
 
 
+# ── Authoritative artifact emission (SYS-REQ-005 / T5) ─────────────────
+
+
+def write_authoritative_traceability(project_dir: str,
+                                     spec_path: Optional[str] = None) -> dict:
+    """落盘权威追溯产物，供合规引擎直接消费。
+
+    背景（缺陷根因）: 能产出 ``.osh/evidence/traceability-matrix.{md,json}``
+    的 :meth:`EvidenceCollector.generate_traceability_matrix` 仅被 evidence
+    pack / demo 路径调用，真实 30 步流水线从不落盘 → 合规引擎
+    ``_has_traced_requirements`` / ``_traceability_metrics_met`` 读不到，
+    6 个 BP 一律报 ``no substantive traceability matrix``。
+
+    本函数让流水线默认产出同 schema 的产物，数据源复用 :func:`generate_lrt`
+    （权威需求→代码→测试双向追溯）。
+
+    反假绿约束: 覆盖率如实统计，需求数为 0 或覆盖 <60% 时产物照写但
+    summary 反映真实值 —— checker 仍判红。绝不伪造映射行或测试引用。
+
+    Returns:
+        ``{"md": path, "json": path, "summary": {...}}``
+    """
+    lrt = generate_lrt(project_dir, spec_path)
+    lrm = lrt.get("lrm") or {}
+    reqs = lrm.get("requirements") or []
+
+    ev_dir = Path(project_dir) / ".osh" / "evidence"
+    ev_dir.mkdir(parents=True, exist_ok=True)
+
+    rows: list[dict] = []
+    with_test = 0
+    with_code = 0
+    for r in reqs:
+        has_test = bool(r.get("has_test"))
+        has_code = bool(r.get("has_code"))
+        with_test += 1 if has_test else 0
+        with_code += 1 if has_code else 0
+        tests = [t for t in (r.get("test_reports") or []) if isinstance(t, dict)]
+        test_files = sorted({str(t.get("file", "")) for t in tests if t.get("file")})
+        code_files = [str(c) for c in (r.get("code_files") or [])]
+        rows.append({
+            "req_id": r.get("id", ""),
+            "statement": (r.get("statement") or "")[:160],
+            "section": r.get("section", ""),
+            "has_code": has_code,
+            "has_test": has_test,
+            "has_review": bool(r.get("has_review")),
+            "code_files": code_files,
+            "test_files": test_files,
+            "status": "Covered" if has_test else "Not Covered",
+        })
+
+    total = len(reqs)
+    pct = round(with_test / total * 100, 1) if total else 0.0
+    summary = {
+        "total_requirements": total,
+        "with_test_coverage": with_test,
+        "with_implementation": with_code,
+        "coverage_pct": pct,
+    }
+
+    json_data = {
+        "schema": "osh-traceability-v1",
+        "source": "alm.traceability.generate_lrt",
+        "generated": datetime.now().isoformat(),
+        "project_dir": str(project_dir),
+        "summary": summary,
+        "requirements": rows,
+        "sys_trace": lrt.get("sys_trace") or {},
+        "gap_analysis": lrt.get("gap_analysis") or {},
+    }
+    json_path = ev_dir / "traceability-matrix.json"
+    json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False),
+                         encoding="utf-8")
+
+    # ── Markdown（人类可读；同样满足 checker 的 mapping-row 判定）──
+    def _cell(text: str) -> str:
+        return (text or "—").replace("|", "/").replace("\n", " ")[:60]
+
+    lines = [
+        "# Traceability Matrix",
+        "",
+        f"> Generated: {json_data['generated']}",
+        "> Source: `alm.traceability.generate_lrt` (authoritative)",
+        f"> Total requirements: {total} | With test coverage: {with_test} ({pct}%)",
+        "",
+        "| Requirement | Statement | Code | Test | Status |",
+        "|:------------|:----------|:-----|:-----|:-------|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {_cell(row['req_id'])} | {_cell(row['statement'])} | "
+            f"{_cell(', '.join(row['code_files'][:2]))} | "
+            f"{_cell(', '.join(row['test_files'][:2]))} | "
+            f"{'✅ Covered' if row['has_test'] else '❌ Not Covered'} |"
+        )
+    lines.extend(["", "## Coverage status", ""])
+    if rows:
+        for row in rows:
+            mark = "✅ Covered" if row["has_test"] else "❌ Not Covered"
+            lines.append(f"- {row['req_id']}: Status: {mark}")
+    else:
+        lines.append("- (no requirements parsed from spec)")
+
+    sys_trace = lrt.get("sys_trace") or {}
+    if sys_trace.get("sys_to_swe"):
+        lines.extend([
+            "",
+            "## System Layer Traceability (SYS.1 → SWE.1)",
+            "> 系统需求向上追溯至软件需求 (SWE.1, spec 派生)",
+        ])
+        for rid, target in sys_trace["sys_to_swe"].items():
+            lines.append(f"- {rid} → {target}")
+
+    md_path = ev_dir / "traceability-matrix.md"
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    log.info("authoritative traceability written: %s (%d reqs, %s%% test coverage)",
+             json_path, total, pct)
+    return {"md": str(md_path), "json": str(json_path), "summary": summary}
+
+
 # ── Full traceability report ────────────────────────────────────────────
 
 

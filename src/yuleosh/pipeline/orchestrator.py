@@ -362,6 +362,42 @@ def _print_step_timings(session) -> None:
         print(f"   {flag} {key:<28} {el:>8.1f}s  ({status})")
 
 
+def _emit_traceability_artifacts(session) -> Optional[dict]:
+    """T5 / SYS-REQ-005: 流水线收尾默认落盘权威追溯产物。
+
+    背景（根因）: 能写 ``.osh/evidence/traceability-matrix.{md,json}`` 的
+    ``EvidenceCollector.generate_traceability_matrix`` 仅被 evidence pack /
+    demo 路径调用，真实 30 步流水线从不落盘 → 合规引擎
+    ``_has_traced_requirements`` / ``_traceability_metrics_met`` 读不到，
+    6 个 BP 一律报 ``no substantive traceability matrix``。
+
+    契约:
+      * 默认开启；``OSH_EMIT_TRACEABILITY=0/false/no/off`` 可关闭。
+      * 异常安全：任何失败只记 warning，绝不影响 run 结论（非致命证据产物）。
+      * 反假绿：覆盖率如实统计，不达标时产物照写但 checker 仍判红。
+
+    Returns:
+        落盘结果 dict，或 None（已关闭 / 无 project_dir）。
+    """
+    if os.environ.get("OSH_EMIT_TRACEABILITY", "1").strip().lower() in (
+            "0", "false", "no", "off"):
+        return None
+    project_dir = getattr(session, "project_dir", None)
+    if not project_dir:
+        return None
+    try:
+        from yuleosh.alm.traceability import write_authoritative_traceability
+        result = write_authoritative_traceability(str(project_dir))
+    except Exception as exc:  # noqa: BLE001 - defensive, 非致命
+        log.warning("traceability emission failed (non-fatal): %s", exc)
+        return None
+    summary = result.get("summary", {})
+    log.info("traceability artifacts written: %s (%s/%s reqs test-covered)",
+             result.get("json"), summary.get("with_test_coverage"),
+             summary.get("total_requirements"))
+    return result
+
+
 def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optional[Callable] = None,
                 mock: bool = False, profile: Optional[str] = None, org_id: int = 0,
                 user_id: int | None = None, user_email: str | None = None,
@@ -714,6 +750,9 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         # 会让 failed run 的 session.json 停在初始 "created"(不写盘), 看板/历史
         # 永远读到 created。改为无条件 save, 让 failed/completed 都正确回写。
         session._save()
+
+        # T5 / SYS-REQ-005: 权威追溯产物默认落盘 (详见 _emit_traceability_artifacts)。
+        _emit_traceability_artifacts(session)
 
         # 编排层 10 Gate 报告聚合 (2026-08-19 方案 B):
         # gate status = 内部子步骤最差状态; 写 .osh/sessions/<id>/gate-summary.json。
