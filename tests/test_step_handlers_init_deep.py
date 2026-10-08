@@ -72,6 +72,10 @@ class TestPipelineStepsStructure:
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         keys = [e[0] for e in PIPELINE_STEPS]
         expected = [
+            # ── G0 系统层 (SYS.1~SYS.5, M1 头部插入) ──
+            "sys-requirements", "sys-architecture", "sys-verification",
+            "sys-integration", "sys-validation", "sys-req-review",
+            # ── G1 SWE.1 Requirements ──
             "spec-check", "super-analysis", "prd", "prd-review",
             "architecture", "arch-review", "development", "development-review",
             "codegen-deploy",
@@ -131,12 +135,12 @@ class TestGatesContract:
         violations = validate_gates_contract(step_keys)
         assert violations == [], f"GATES contract violations: {violations}"
 
-    def test_gates_has_10_entries(self):
+    def test_gates_has_11_entries(self):
         from yuleosh.pipeline.gates import GATES
-        assert len(GATES) == 10
-        # 首尾 Gate 与 ASPICE 对齐
-        assert GATES[0]["gate"] == "G1"
-        assert GATES[0]["name"].startswith("SWE.1")
+        assert len(GATES) == 11
+        # 首尾 Gate 与 ASPICE 对齐（M1 新增 G0 系统层）
+        assert GATES[0]["gate"] == "G0"
+        assert GATES[0]["name"].startswith("SYS")
         assert GATES[-1]["gate"] == "G10"
         assert GATES[-1]["name"].startswith("SWE.6")
 
@@ -181,6 +185,12 @@ class TestModuleReExports:
             step_claude_test,
             step_hermes_review,
             step_final_report,
+            step_sys_requirements,
+            step_sys_architecture,
+            step_sys_verification,
+            step_sys_integration,
+            step_sys_validation,
+            step_review_sys,
             PIPELINE_STEPS,
             _check_llm_key,
             _resolve_handler,
@@ -195,6 +205,12 @@ class TestModuleReExports:
         assert callable(step_claude_test)
         assert callable(step_hermes_review)
         assert callable(step_final_report)
+        assert callable(step_sys_requirements)
+        assert callable(step_sys_architecture)
+        assert callable(step_sys_verification)
+        assert callable(step_sys_integration)
+        assert callable(step_sys_validation)
+        assert callable(step_review_sys)
         assert isinstance(PIPELINE_STEPS, list)
         assert callable(_check_llm_key) or _check_llm_key is None
         assert callable(_resolve_handler)

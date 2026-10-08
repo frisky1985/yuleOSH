@@ -552,14 +552,14 @@ class TestStepHandlersInit:
     def test_pipeline_steps_registry(self):
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         # 数量不写死（跟随单一事实源）；契约断言防丢关键结构：
-        # 首步 spec-check / 末步 final-report / 合理下限（编排层 10 Gate 的
-        # 24 执行单元合并后不应低于 20，防误删步骤导致能力退化）
+        # 首步 sys-requirements（M1 系统层头部）/ 末步 final-report /
+        # 合理下限（编排层 11 Gate 的 30 执行单元合并后不应低于 20，防误删步骤）
         assert len(PIPELINE_STEPS) >= 20
-        assert PIPELINE_STEPS[0][0] == "spec-check"
+        assert PIPELINE_STEPS[0][0] == "sys-requirements"
         assert PIPELINE_STEPS[-1][0] == "final-report"
         keys = {k for k, _, _, _ in PIPELINE_STEPS}
         # P0 门禁与关键编排步骤必须存在（丢了就是丢功能，数量不变也会红）
-        assert {"spec-check", "merge-gate", "final-report"} <= keys
+        assert {"sys-requirements", "spec-check", "merge-gate", "final-report"} <= keys
 
     def test_all_handlers_exported(self):
         from yuleosh.pipeline.step_handlers import (
