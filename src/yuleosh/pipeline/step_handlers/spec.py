@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import yuleosh
 
@@ -24,6 +25,23 @@ from yuleosh.spec_contracts import contracts_check, contracts_check_dir
 log = logging.getLogger("pipeline.step_handlers.spec")
 
 __all__ = ["step_spec_check"]
+
+
+# ── SYS-REQ-002: V 左半连续性可强制 ─────────────────────────────────────
+# M1.5 链路B 只把 SYS→SWE.1 对齐「记录」下来（缺失仅 WARNING）：V 两侧脱节
+# 时流水线仍全绿，审计无法证伪。本开关把该能力升级为「可强制」——开启后
+# 未对齐（含左半完全缺失）将使 SWE.1 步骤失败。默认关闭以保持向后兼容。
+_SYS_ALIGN_STRICT_ENV = "OSH_SYS_ALIGN_STRICT"
+
+
+def _sys_align_strict_enabled() -> bool:
+    """是否启用 SYS→SWE.1 对齐的严格阻断模式（默认关闭）。
+
+    显式设置 ``OSH_SYS_ALIGN_STRICT=1|true|yes|on`` 时启用。
+    """
+    return os.environ.get(_SYS_ALIGN_STRICT_ENV, "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
 
 
 def _spec_validator_env() -> dict:
@@ -135,8 +153,21 @@ def step_spec_check(session: PipelineSession) -> str:
             f"{len(gr.get('ids', []))} guardrails / {len(pm.get('names', []))} params PASS"
         )
 
-        # M1.5 链路B: SWE.1 消费 SYS 上游需求 (确定性校验, 不阻断主流程)
-        _check_sys_requirements_aligned(session)
+        # M1.5 链路B: SWE.1 消费 SYS 上游需求 (确定性校验)
+        # SYS-REQ-002: 默认放行(向后兼容); strict 开关下未对齐即阻断,
+        # 使 V 左半→右半链接由「被记录」升级为「被强制」。
+        align_report = _check_sys_requirements_aligned(session)
+        if align_report and _sys_align_strict_enabled():
+            status = align_report.get("status")
+            if status != "aligned":
+                missing = align_report.get("missing_in_spec", [])
+                total = align_report.get("total_sys_reqs", 0)
+                detail = (", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")) if missing else "左半缺失或未解析到 SYS-REQ"
+                raise PipelineStepError(
+                    f"[SYS→SWE.1 strict] V 左半链路断裂 (status={status}, "
+                    f"total={total}): {detail}. "
+                    f"请补齐 spec 对 SYS 需求的引用, 或关闭 {_SYS_ALIGN_STRICT_ENV} 放行。"
+                )
 
         return str(out_path)
     except subprocess.TimeoutExpired:
@@ -152,12 +183,21 @@ def step_spec_check(session: PipelineSession) -> str:
         raise PipelineStepError(f"Spec validation unexpected error: {e}")
 
 
-def _check_sys_requirements_aligned(session: PipelineSession) -> None:
-    """M1.5 链路B: SWE.1 消费 SYS 上游需求 (确定性校验, 不阻断主流程)。
+def _check_sys_requirements_aligned(session: PipelineSession) -> Optional[dict]:
+    """M1.5 链路B: SWE.1 消费 SYS 上游需求 (确定性校验)。
 
     读 ``docs/system-requirements.md`` 提取 SYS-REQ-NNN，检查 spec
     (SWE.1 输入) 是否显式引用，确保 V 模型左半「系统需求 → 软件需求」
-    链路连续。缺失仅记 WARNING + 写对齐报告，绝不 raise（语义评审属 LLM 范畴）。
+    链路连续。
+
+    **返回对齐报告 dict**（而非副作用式 None），使调用方可结合
+    :func:`_sys_align_strict_enabled` 决定是否升级为阻断；本函数自身
+    绝不 raise（内部异常被兜底，返回 None）。status 取值：
+
+    - ``aligned``     — spec 已引用全部系统需求
+    - ``partial``     — 部分未引用（左半链路有缺口）
+    - ``absent``      — 无 docs/system-requirements.md（左半未生成）
+    - ``none-parsed`` — 文档存在但解析不到 SYS-REQ-NNN
     """
     try:
         import re
@@ -165,11 +205,23 @@ def _check_sys_requirements_aligned(session: PipelineSession) -> None:
 
         sys_req_path = Path(session.project_dir) / "docs" / "system-requirements.md"
         if not sys_req_path.exists():
-            return
+            # 左半完全缺失: 不改变任何磁盘行为, 仅向调用方报告状态
+            # (供 strict 模式判定是否阻断)
+            return {
+                "total_sys_reqs": 0,
+                "aligned": [],
+                "missing_in_spec": [],
+                "status": "absent",
+            }
         text = sys_req_path.read_text(encoding="utf-8")
         sys_reqs = sorted(set(re.findall(r"SYS-REQ-\d+", text)))
         if not sys_reqs:
-            return
+            return {
+                "total_sys_reqs": 0,
+                "aligned": [],
+                "missing_in_spec": [],
+                "status": "none-parsed",
+            }
 
         spec_path = Path(session.spec_path)
         spec_text = spec_path.read_text(encoding="utf-8") if spec_path.exists() else ""
@@ -193,5 +245,7 @@ def _check_sys_requirements_aligned(session: PipelineSession) -> None:
             )
         else:
             log.info(f"[链路B] spec 已覆盖全部 {len(sys_reqs)} 条系统需求 (SYS→SWE.1 对齐)")
+        return report
     except Exception as e:  # 防御: 绝不阻断 SWE.1 主流程
         log.warning(f"[链路B] SYS 需求对齐检查跳过 (non-fatal): {e}")
+        return {"total_sys_reqs": 0, "aligned": [], "missing_in_spec": [], "status": "skipped"}
