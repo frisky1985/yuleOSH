@@ -205,6 +205,64 @@ class ComplianceChecker:
                 return True
         return False
 
+    def _sys_requirements_ids(self) -> set[str]:
+        """Parse ``SYS-REQ-xxx`` identifiers from ``docs/system-requirements.md``."""
+        cand = self.project_dir / "docs" / "system-requirements.md"
+        if not cand.is_file():
+            return set()
+        try:
+            text = cand.read_text(errors="replace")
+        except Exception:
+            return set()
+        return set(_re.findall(r"SYS-REQ-\d+", text))
+
+    def _sys_doc_covers_requirements(self, rel_path: str) -> tuple[bool, int, int]:
+        """``(全部覆盖?, 覆盖数, 总数)`` —— SYS 交付物对 SYS-REQ 的真实覆盖。
+
+        无 SYS-REQ 可解析时返回 ``(False, 0, 0)``，调用方须按"无来源"如实判红，
+        不得当作全覆盖。
+        """
+        ids = self._sys_requirements_ids()
+        if not ids:
+            return (False, 0, 0)
+        doc = self.project_dir / rel_path
+        if not doc.is_file():
+            return (False, 0, len(ids))
+        try:
+            text = doc.read_text(errors="replace")
+        except Exception:
+            return (False, 0, len(ids))
+        covered = sum(1 for rid in ids if rid in text)
+        return (covered == len(ids), covered, len(ids))
+
+    def _sys_execution_record(self, rel_doc: str) -> Optional[str]:
+        """系统级执行记录来源名（无则 None）。
+
+        反假绿: 只认系统层执行证据 —— ``.osh/evidence/system-*-results.json``
+        （须带 passed 状态与非空用例），或真实 SIL/HIL 结果。**不认**
+        pytest/CI 单元测试（SWE.6.BP2 曾因复用 ``_test_suite_passes`` 而以
+        仓库单测顶替"目标环境执行"，属典型假绿）。
+        """
+        ev = self.project_dir / ".osh" / "evidence"
+        if ev.is_dir():
+            for name in ("system-validation-results.json",
+                         "system-verification-results.json"):
+                f = ev / name
+                if not f.is_file():
+                    continue
+                try:
+                    data = json.loads(f.read_text(errors="replace"))
+                except Exception:
+                    continue
+                if (isinstance(data, dict)
+                        and str(data.get("status", "")).lower() in (
+                            "passed", "success", "ok")
+                        and data.get("cases")):
+                    return name
+        if self._has_sil_results():
+            return "SIL/HIL results"
+        return None
+
     def _review_file_substantive(self, path: Path) -> bool:
         """True when a review record has real substance (not a stub).
 
@@ -1022,6 +1080,11 @@ class ComplianceChecker:
             else:
                 details.append(f"  ❌ Missing evidence: {ev.get('description', ev_path)}")
 
+        # SYS-REQ-003 / T3: 过程域感知开关。SYS 区（SYS.1~SYS.5）与 SWE 区的
+        # 同名词（verification/validation/interface/architecture）语义不同，
+        # 必须按域区分，否则要么判不了（unknown），要么跨域假绿。
+        _is_sys_area = str(swe_id or "").upper().startswith("SYS")
+
         # Run specific check items
         for check_item in checks:
             # Try KG-aware check first
@@ -1227,6 +1290,49 @@ class ComplianceChecker:
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
+            elif _is_sys_area and ("verification" in check_item.lower()
+                                   or "validation" in check_item.lower()):
+                # SYS-REQ-003 / T3: SYS.3(系统验证) / SYS.5(系统确认) 的检查项
+                # 此前无任何分支匹配，一律落到 "unknown check type — not
+                # recognized"，即"有证据也判不了"。此处按语义分为两类:
+                #   * 范围/准则类 → 要求 SYS 交付物真实覆盖全部 SYS-REQ
+                #   * 执行类      → 要求系统级执行记录（见下方反假绿说明）
+                item_low = check_item.lower()
+                rel_doc = ("docs/system-validation.md" if "validation" in item_low
+                           else "docs/system-verification.md")
+                is_execution = ("executed" in item_low
+                                or "target or representative" in item_low)
+                if is_execution:
+                    # 反假绿: 系统级"在目标/等效环境执行"不得用 pytest/CI 单元
+                    # 测试顶替（SWE.6.BP2 曾因复用 _test_suite_passes 而假绿）。
+                    # 只认系统级执行记录或真实 SIL/HIL 结果。
+                    record = self._sys_execution_record(rel_doc)
+                    if record:
+                        passed += 1
+                        details.append(
+                            f"  ✅ Check: {check_item} (system execution record: {record})")
+                    else:
+                        failed += 1
+                        details.append(
+                            f"  ❌ Check: {check_item} (no system-level execution record "
+                            f"— SIL/HIL or system test results required)")
+                else:
+                    ok, covered, total = self._sys_doc_covers_requirements(rel_doc)
+                    if ok:
+                        passed += 1
+                        details.append(
+                            f"  ✅ Check: {check_item} ({rel_doc} covers {covered}/{total} "
+                            f"system requirements)")
+                    elif total:
+                        failed += 1
+                        details.append(
+                            f"  ❌ Check: {check_item} ({rel_doc} covers only "
+                            f"{covered}/{total} system requirements)")
+                    else:
+                        failed += 1
+                        details.append(
+                            f"  ❌ Check: {check_item} (no SYS-REQ parsed from "
+                            f"docs/system-requirements.md, or {rel_doc} missing)")
             else:
                 # SECURITY: No fallback pass — unknown/unmatched checks are marked failed
                 # to prevent false positives from inflated compliance scores.
