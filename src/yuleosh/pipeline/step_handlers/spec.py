@@ -135,6 +135,9 @@ def step_spec_check(session: PipelineSession) -> str:
             f"{len(gr.get('ids', []))} guardrails / {len(pm.get('names', []))} params PASS"
         )
 
+        # M1.5 链路B: SWE.1 消费 SYS 上游需求 (确定性校验, 不阻断主流程)
+        _check_sys_requirements_aligned(session)
+
         return str(out_path)
     except subprocess.TimeoutExpired:
         log.error("Spec validation timed out")
@@ -147,3 +150,48 @@ def step_spec_check(session: PipelineSession) -> str:
     except Exception as e:
         log.error(f"Spec validation unexpected error: {e}")
         raise PipelineStepError(f"Spec validation unexpected error: {e}")
+
+
+def _check_sys_requirements_aligned(session: PipelineSession) -> None:
+    """M1.5 链路B: SWE.1 消费 SYS 上游需求 (确定性校验, 不阻断主流程)。
+
+    读 ``docs/system-requirements.md`` 提取 SYS-REQ-NNN，检查 spec
+    (SWE.1 输入) 是否显式引用，确保 V 模型左半「系统需求 → 软件需求」
+    链路连续。缺失仅记 WARNING + 写对齐报告，绝不 raise（语义评审属 LLM 范畴）。
+    """
+    try:
+        import re
+        from pathlib import Path
+
+        sys_req_path = Path(session.project_dir) / "docs" / "system-requirements.md"
+        if not sys_req_path.exists():
+            return
+        text = sys_req_path.read_text(encoding="utf-8")
+        sys_reqs = sorted(set(re.findall(r"SYS-REQ-\d+", text)))
+        if not sys_reqs:
+            return
+
+        spec_path = Path(session.spec_path)
+        spec_text = spec_path.read_text(encoding="utf-8") if spec_path.exists() else ""
+        missing = [rid for rid in sys_reqs if rid not in spec_text]
+        aligned = [rid for rid in sys_reqs if rid in spec_text]
+
+        report = {
+            "total_sys_reqs": len(sys_reqs),
+            "aligned": aligned,
+            "missing_in_spec": missing,
+            "status": "aligned" if not missing else "partial",
+        }
+        out = session.session_dir / "sys-spec-alignment.json"
+        out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        session.set_artifact("sys_spec_alignment", str(out))
+
+        if missing:
+            log.warning(
+                f"[链路B] spec 未引用 {len(missing)} 条系统需求 (SYS→SWE.1 对齐缺口): "
+                f"{missing[:10]}{'...' if len(missing) > 10 else ''}"
+            )
+        else:
+            log.info(f"[链路B] spec 已覆盖全部 {len(sys_reqs)} 条系统需求 (SYS→SWE.1 对齐)")
+    except Exception as e:  # 防御: 绝不阻断 SWE.1 主流程
+        log.warning(f"[链路B] SYS 需求对齐检查跳过 (non-fatal): {e}")

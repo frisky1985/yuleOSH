@@ -232,7 +232,7 @@ def handle_matrix(method: str, path_tail: str, body: dict, query: dict,
 
 def _matrix(query: dict, gaps_only: bool = False) -> tuple[dict, int]:
     """GET /api/v1/matrix[?project=xxx] — build the traceability matrix."""
-    from yuleosh.alm.traceability import generate_lrt
+    from yuleosh.alm.traceability import generate_lrt, load_sys_swe_trace
 
     project = _q(query, "project")
     proj_dir, err = _resolve_project_dir(project)
@@ -296,5 +296,6 @@ def _matrix(query: dict, gaps_only: bool = False) -> tuple[dict, int]:
         "requirements": rows,
         "summary": summary,
         "gaps": gaps,
+        "sys_trace": lrt.get("sys_trace") or load_sys_swe_trace(str(proj_dir)),
         "note": None,
     })

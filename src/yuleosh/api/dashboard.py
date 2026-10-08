@@ -443,13 +443,69 @@ def _dashboard_swe_status(query: dict) -> tuple[dict, int]:
     completed = sum(1 for s in swe.values() if s["status"] == "completed")
     overall_pct = round(completed / len(swe) * 100, 1)
 
+    # M1.5 链路C: SYS 系统层状态 + 门禁 (含 G0)，附加字段不破坏既有 swe 结构
+    sys_status = _build_sys_status()
+    gates = _load_gates_summary()
     return json_ok({
         "swe": swe,
+        "sys_status": sys_status,
+        "gates": gates,
         "overall_pct": overall_pct,
         "completed_count": completed,
         "total_count": len(swe),
         "note": _mock_note(),
     })
+
+
+def _build_sys_status() -> dict:
+    """M1.5 链路C: 构建 SYS.1~5 系统层合规状态 (读 .osh/evidence 产物)。
+
+    优先级: sys-review.json (G0 评审通过) → sys-to-swe-trace.json (已生成)
+    → 未运行。仅文件读取, 异常安全返回空 dict。
+    """
+    try:
+        from pathlib import Path
+
+        home = Path(_evidence_home())
+        ev = home / ".osh" / "evidence"
+        areas = ["SYS.1", "SYS.2", "SYS.3", "SYS.4", "SYS.5"]
+        review = ev / "sys-review.json"
+        if review.exists():
+            data = json.loads(review.read_text(encoding="utf-8"))
+            passed = data.get("verdict") == "passed"
+            st = "completed" if passed else "failed"
+            note = "G0 系统层评审通过" if passed else "G0 评审未通过"
+            return {a: {"status": st, "note": note} for a in areas}
+        trace = ev / "sys-to-swe-trace.json"
+        if trace.exists():
+            return {a: {"status": "generated", "note": "SYS 交付物已生成 (待 G0 评审)"} for a in areas}
+        return {a: {"status": "not-run", "note": "SYS 层未运行"} for a in areas}
+    except Exception as e:  # noqa: BLE001 — 读不到则视为未运行, 不 500
+        log.debug("[链路C] sys_status 构建跳过: %s", e)
+        return {}
+
+
+def _load_gates_summary() -> list[dict]:
+    """M1.5 链路C: 读取最新 run 的 gate-summary.json 门禁列表 (含 G0)。
+
+    门禁引擎 (gates.py) 已遍历 GATES 把 G0 纳入, 此处仅透传供前端展示。
+    异常安全返回空列表。
+    """
+    try:
+        from pathlib import Path
+
+        home = Path(_evidence_home())
+        sess_dir = home / ".osh" / "sessions"
+        if not sess_dir.exists():
+            return []
+        summaries = sorted(sess_dir.glob("*/gate-summary.json"))
+        if not summaries:
+            return []
+        data = json.loads(summaries[-1].read_text(encoding="utf-8"))
+        return data.get("gates", [])
+    except Exception as e:  # noqa: BLE001
+        log.debug("[链路C] gates 读取跳过: %s", e)
+        return []
 
 
 def _load_gap_items() -> tuple[list[dict], Optional[str]]:

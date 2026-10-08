@@ -380,6 +380,12 @@ def pack_evidence_bundle(
             "color": "#10b981",
             "description": "Qualification testing",
         },
+        # M1.5 链路C: SYS 系统层过程域 (V 模型左半)
+        "SYS.1": {"name": "SYS.1 系统需求分析", "short": "SYS.1", "color": "#10b981", "description": "System requirements analysis"},
+        "SYS.2": {"name": "SYS.2 系统架构设计", "short": "SYS.2", "color": "#10b981", "description": "System architecture design"},
+        "SYS.3": {"name": "SYS.3 系统验证规划", "short": "SYS.3", "color": "#faad14", "description": "System verification planning"},
+        "SYS.4": {"name": "SYS.4 系统集成测试规划", "short": "SYS.4", "color": "#faad14", "description": "System integration test planning"},
+        "SYS.5": {"name": "SYS.5 系统确认", "short": "SYS.5", "color": "#ff4d4f", "description": "System validation"},
     }
 
     for swe_id, defn in swe_defs.items():

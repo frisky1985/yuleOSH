@@ -52,6 +52,8 @@ SWE_PHASES = [
     "SWE.1", "SWE.2", "SWE.3", "SWE.4",
     "SWE.5", "SWE.6", "SWE.7", "SWE.8",
     "SWE.9", "SWE.10",
+    # M1.5 链路C: SYS 系统层过程域 (V 模型左半)
+    "SYS.1", "SYS.2", "SYS.3", "SYS.4", "SYS.5",
 ]
 
 
