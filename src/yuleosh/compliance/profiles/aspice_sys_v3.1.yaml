@@ -1,0 +1,166 @@
+# ASPICE v3.1 System Engineering Compliance Checkpoints
+# Defines SYS.1~SYS.5 check templates for yuleOSH compliance checker (M1 / Phase A).
+#
+# 与 aspice_v3.1.yaml 同结构（顶层 meta + sys.1~sys.5 区域键）。
+# 通用 loader (compliance/profile.py) 零 dataclass 改动即可接入 —— 新增标准
+# 只需提供同样结构的 yaml。evidence 路径与 step_handlers/sys_layer.py 生成的
+# docs/system-*.md 严格对齐。
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "System Engineering Process Group — SYS.1~SYS.5 (V 模型左半)"
+
+sys.1:
+  id: "SYS.1"
+  title: "System Requirements Analysis"
+  description: |
+    Transform stakeholder requirements into a structured set of system
+    requirements, establishing the top of the V-model left branch.
+  base_practices:
+    - id: "SYS.1.BP1"
+      title: "Specify system requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-requirements.md"
+          description: "System Requirements Specification (SyRS)"
+      check:
+        - "Each system requirement has a unique identifier (SYS-REQ-xxx)"
+        - "Each system requirement contains SHALL statements"
+        - "System requirements are traced to stakeholder/source requirements"
+    - id: "SYS.1.BP2"
+      title: "Structure system requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-requirements.md"
+          description: "Structured system requirements document"
+      check:
+        - "Requirements are organized by functional area"
+        - "Requirements have defined attributes (priority, status)"
+    - id: "SYS.1.BP3"
+      title: "Evaluate impact of system requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-requirements.md"
+          description: "System requirement impact notes"
+      check:
+        - "Changes to system requirements trigger impact analysis"
+
+sys.2:
+  id: "SYS.2"
+  title: "System Architectural Design"
+  description: |
+    Establish a system architectural design that identifies system elements,
+    their interfaces, and data flow.
+  base_practices:
+    - id: "SYS.2.BP1"
+      title: "Develop system architecture"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-architecture.md"
+          description: "System architecture document"
+      check:
+        - "Architecture covers all system requirements"
+        - "Architecture defines system element boundaries and interfaces"
+    - id: "SYS.2.BP2"
+      title: "Define system interfaces"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-architecture.md"
+          description: "System interface specification"
+      check:
+        - "All external and internal interfaces are defined"
+        - "Interface specifications include data types and range"
+    - id: "SYS.2.BP3"
+      title: "Verify system architecture"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-architecture.md"
+          description: "System architecture review record"
+      check:
+        - "Architecture review is conducted and documented"
+
+sys.3:
+  id: "SYS.3"
+  title: "System Verification"
+  description: |
+    Verify the system design against system requirements (verification plan
+    and verification cases for the system element level).
+  base_practices:
+    - id: "SYS.3.BP1"
+      title: "Develop system verification strategy"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-verification.md"
+          description: "System verification strategy"
+      check:
+        - "Verification scope covers all system requirements"
+        - "Acceptance criteria are defined for each requirement"
+    - id: "SYS.3.BP2"
+      title: "Perform system verification"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-verification.md"
+          description: "System verification record"
+      check:
+        - "System verification cases are executed and documented"
+
+sys.4:
+  id: "SYS.4"
+  title: "System Integration"
+  description: |
+    Integrate system elements and verify the integrated system against the
+    system architecture and system requirements.
+  base_practices:
+    - id: "SYS.4.BP1"
+      title: "Develop system integration strategy"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-integration.md"
+          description: "System integration strategy"
+      check:
+        - "Integration sequence is defined and justified"
+        - "Stubs/drivers are identified"
+    - id: "SYS.4.BP2"
+      title: "Integrate system elements"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-integration.md"
+          description: "System integration record"
+      check:
+        - "Integration builds succeed"
+        - "Integration follows the defined strategy"
+    - id: "SYS.4.BP3"
+      title: "Perform system integration tests"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-integration.md"
+          description: "System integration test record"
+      check:
+        - "Integration tests verify data flow between system elements"
+
+sys.5:
+  id: "SYS.5"
+  title: "System Validation (Confirmation)"
+  description: |
+    Validate the integrated system in the target environment (or representative
+    environment) to confirm it satisfies stakeholder requirements.
+  base_practices:
+    - id: "SYS.5.BP1"
+      title: "Develop system validation strategy"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-validation.md"
+          description: "System validation strategy"
+      check:
+        - "Validation scope covers stakeholder requirements"
+        - "Acceptance criteria are defined"
+    - id: "SYS.5.BP2"
+      title: "Perform system validation"
+      output_evidence:
+        - type: "document"
+          path: "docs/system-validation.md"
+          description: "System validation record"
+      check:
+        - "System validation is executed in target or representative environment"
+        - "Validation results are documented and traced to requirements"
