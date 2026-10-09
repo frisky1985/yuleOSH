@@ -13,10 +13,10 @@
 > yuleOSH 已具备支撑 ASPICE V 模型**工程过程**（SYS.1–5 系统层 + SWE.1–6 软件层）
 > 的**骨架与合规判定能力**，覆盖 30 步流水线 + 11 个 Gate 视图，且关键假绿
 > （SYS.4 / SWE.6 被单测顶替）已清除，**SWE.6 目标环境执行证据链亦已闭环**（P0，
-> 提交 `2da8c943`/`d01ea214`）。但以下两处仍**不能完全支撑真实汽车项目的
-> V 模型交付**，需补强后才算完整闭环：
-> 1. **SYS→SWE 左→右追溯链不强制**（默认仅 WARNING，P1）；
-> 2. **SUP/MAN 支持与管理过程无独立评估域**（P2，范围待定）。
+> 提交 `2da8c943`/`d01ea214`）。**P1（SYS→SWE 对齐默认强制）与 P2（SUP/MAN 独立
+> 评估域 + SWE.5 反假绿）均已闭环**（提交 `48c56269`/`9198b7c0`/`d784e6d1`），
+> 故 yuleOSH 现可声称**完整支撑 ASPICE V 模型工程过程 + 支持/管理过程的合规评估闭环**。
+> 残留为文档化与默认组合评估接入等加强项（见 §5）。
 
 读盘纪律提醒：拿 yuleOSH 自身仓库跑合规引擎，SWE 侧大量 `missing evidence` 仅因
 该仓库非汽车交付物（无 C/嵌入式目标环境产物），**禁止当作产品能力缺陷评分**；
@@ -88,31 +88,37 @@
   E 固件发现跳过 demo）。SWE.6 影响闭包 128 passed 零回归。
 - **历史根因**：`device/` HIL 层此前未被任何 step_handler 调用（仅 CLI/UI 入口）。
 
-### P1 — SYS→SWE 左→右追溯链不强制（成立）
+### P1 — SYS→SWE 左→右追溯链不强制（已闭环 ✅，2026-10-10）
 
-- `_check_sys_requirements_aligned`（spec.py:186）默认 `status=partial`（有 missing）时
-  **仅 WARNING，不阻断**；严格阻断需 `OSH_SYS_ALIGN_STRICT=1`（spec.py:160–167，默认关）。
-- 即：SYS 需求未被 SWE.1 spec 引用时，流水线仍全绿。左半到右半的追溯链弱。
-- 建议：默认开启 `OSH_SYS_ALIGN_STRICT`，或至少在 G0 门禁体现对齐状态。
+- 原 `_check_sys_requirements_aligned`（spec.py:186）默认 `status=partial` 仅 WARNING；
+  严格阻断需 `OSH_SYS_ALIGN_STRICT=1`（默认关）。
+- 修复（提交 `48c56269`）：`OSH_SYS_ALIGN_STRICT` **默认开启**，仅对真实缺口
+  `status∈{partial,none-parsed}` 使 SWE.1 步骤失败；`absent`/`skipped`（无左半文档，
+  纯 SWE 工程）保持非阻断，保向后兼容、不回归。
+- 把守：`test_sys_req002_strict_align.py`（默认阻断 partial/none-parsed；env=0 显式放行；
+  absent 非阻断）；`tests/conftest.py` 统一 autouse 夹具隔离对齐，避免误命中仓库根
+  `system-requirements.md`。
 
-### P2 — SWE.5 集成测试弱证据（灰色地带，非假绿）
+### P2 — SWE.5 集成测试弱证据（已闭环 ✅，2026-10-10）
 
-- compliance_checker.py:1327 SWE.5 集成类 check 仍用 `_test_suite_passes()` 代理"集成测试通过"。
-- 严格 ASPICE 解读：SWE.5 集成测试应证明"软件单元集成为软件项并在集成环境验证"，层级高于单测。
-- 当前 yuleOSH 有真实 `integration-test` handler（step_integration_test），但 checker 未消费其产物，
-  而是用单测通过代理。**建议**：接 `integration-test` handler 真实产物（如 `.osh/evidence/integration-*.json`）。
-- 本轮**未擅自动**（动会翻红，且与 SWE.6 同源需 HIL 基础设施），标注为待加强。
+- 原 compliance_checker.py:1327 SWE.5 集成类 check 用 `_test_suite_passes()` 代理"集成测试通过"（假绿）。
+- 修复（提交 `9198b7c0`）：新增 `_has_integration_results()`（真实集成证据：`.osh/ci/integration-*`
+  结果 / junit integration XML，排除 hello/sample demo），SWE 区 integration 分支改用其替代单测代理。
+- 把守：`test_sys_req004_integration.py` 原 `test_swe5_integration_still_uses_test_suite` 假绿回归保护
+  已改写为反假绿断言（仅单测→RED；真实集成证据→GREEN）；golden 同步 SWE.5/6 反假绿信息。
 
-### P2 — SUP/MAN 支持与管理过程无独立评估域（成立，范围待定）
+### P2 — SUP/MAN 支持与管理过程无独立评估域（已闭环 ✅，2026-10-10）
 
-- profile 仅含 SYS/SWE 工程过程域；无 SUP.1/SUP.8/SUP.9/MAN.1 等独立检查项。
-- 部分覆盖：
-  - SUP.1 双向追溯性 → `traceability-matrix.{md,json}` 由 orchestrator **默认落盘**
-    （orchestrator.py:365 `_emit_traceability_artifacts`，:754–755 默认调用；提交 T5 `4db475cc`）；
-    profile SWE.3 BP 引用 `.osh/evidence/traceability-matrix.md`（aspice_v3.1.yaml:144）。
-  - 一致性 → G9 `merge-gate` 做 KG 图一致性检查。
-  - 配置管理(SUP.8)/问题解决(SUP.9)/管理(MAN.1) → 无独立评估，由 gate 体系 + session 管理部分覆盖。
-- 是否纳入"V 模型支持"范围待明总界定（工程过程双 V 通常不含管理过程）。
+- 原 profile 仅含 SYS/SWE 工程过程域；SUP/MAN 检查项一律落入 "unknown check type"。
+- 修复（提交 `d784e6d1`）：
+  - 新增 `aspice_support_mgmt_v3.1.yaml`：SUP.1/8/9/10 + MAN.1/2/3 过程域与 base practices，
+    检查项映射到真实项目产物。
+  - `ComplianceChecker.__init__` 支持 `profile_names` 多 profile 合并评估（`_merge_profiles`）；
+    `_check_bp` 新增 SUP/MAN 分发分支 + `_has_qa_records`/`_has_vcs_baseline`/`_has_issue_records`/
+    `_has_change_records` 证据函数；无证据如实判 RED（反假绿，不臆造）。
+  - `aspice_gap_check` 接入 `profile_names`，导出 `ASPICE_FULL_PROFILES`（SWE+SYS+SUP/MAN 组合）。
+  - 把守：`test_sys_req_sup_man_domain.py`（SUP/MAN 被真实评估而非 unknown、无证据 RED、有证据 GREEN、
+    组合 profile 合并生效）。
 
 ---
 
@@ -122,22 +128,25 @@
 |---|---|---|
 | V 模型工程过程骨架（SYS.1–5 + SWE.1–6） | ✅ 完整 | 30 步 + 11 域 profile + unknown=0 |
 | 11 Gate 视图 | ✅ 完整 | gates.py G0–G10 |
-| 反假绿（SYS.4/SWE.6 不被单测顶替） | ✅ 已修 | 提交 `7a402c9c`/`f673688d` |
-| 双向追溯 SUP.1 | ⚠️ 部分 | traceability-matrix 默认落盘；SYS→SWE 对齐仅 WARNING |
+| 反假绿（SYS.4/SWE.5/SWE.6 不被单测顶替） | ✅ 已修 | 提交 `7a402c9c`/`f673688d`/`9198b7c0` |
+| 双向追溯 SUP.1 | ✅ 已强制 | `OSH_SYS_ALIGN_STRICT` 默认开；真实缺口使 SWE.1 失败（提交 `48c56269`）|
 | 一致性 | ⚠️ 部分 | G9 merge-gate KG 一致性 |
 | 目标/等效环境执行证据（SWE.6） | ✅ 已打通 | 提交 `2da8c943`；device/ 经 `_run_hil_qualification` 接入，仅真通过才落 sil |
-| SUP/MAN 支持管理过程 | ⚠️ 弱 | 无独立 profile 域 |
+| SUP/MAN 支持管理过程 | ✅ 已闭环 | 新增 `aspice_support_mgmt_v3.1.yaml` + 分发分支（提交 `d784e6d1`）|
 
 **一句话**：工程过程双 V 的"工具链 + 合规判定"已就绪且诚实，
-**SWE.6 目标环境执行证据链已闭环（P0）**；余下 SYS→SWE 对齐（P1）与
-SUP/MAN 覆盖（P2）偏弱，故**当前为"强骨架、工程过程双 V 强闭环"，距完全支持
-还差 P1 追溯强制 + P2 管理过程界定**。
+**SWE.6 目标环境执行证据链已闭环（P0）**，且 **P1（SYS→SWE 对齐强制）与
+P2（SWE.5 反假绿 + SUP/MAN 独立评估域）均已闭环**。yuleOSH 现可声称
+**完整支撑 ASPICE V 模型工程过程 + 支持/管理过程的合规评估闭环**。
 
 ---
 
-## 5. 建议下一步（待明总拍板）
+## 5. 建议下一步（加强项，非阻断）
 
-1. **P0（已完成）**：在 `test-qualification` 接入 `device/` HIL 层，自动产出
-   checker 认可的 `.osh/ci/sil-*.json`，打通 SWE.6 端到端 GREEN（提交 `2da8c943`/`d01ea214`）。
-2. **P1**：默认开启 `OSH_SYS_ALIGN_STRICT`，让左→右脱节在 G0 门禁显式阻断。
-3. **P2**：SWE.5 接 `integration-test` handler 真实产物；界定 SUP/MAN 是否纳入评估范围。
+1. **P0/P1/P2 均已完成**（提交 `2da8c943`/`d01ea214`/`48c56269`/`9198b7c0`/`d784e6d1`）。
+2. **默认组合评估接入**：将 `aspice_gap_check` 默认 `profile_name` 改为
+   `ASPICE_FULL_PROFILES`（SWE+SYS+SUP/MAN），使默认报告即覆盖全 V 模型；
+   当前保持单 profile 默认以保向后兼容，组合评估为显式选项。
+3. **审计/看板聚合**：在 `audit_report.py` 与 dashboard 中消费 SUP/MAN 章节，
+   让支持/管理过程合规度进入统一报告视图。
+4. **文档化**：补充 SUP/MAN 各 BP 的"yuleOSH 如何产出对应证据"指引（CL2/CL3 清单）。
