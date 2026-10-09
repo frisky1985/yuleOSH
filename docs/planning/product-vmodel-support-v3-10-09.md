@@ -12,11 +12,11 @@
 
 > yuleOSH 已具备支撑 ASPICE V 模型**工程过程**（SYS.1–5 系统层 + SWE.1–6 软件层）
 > 的**骨架与合规判定能力**，覆盖 30 步流水线 + 11 个 Gate 视图，且关键假绿
-> （SYS.4 / SWE.6 被单测顶替）已清除。但在以下三处仍**不能完全支撑真实汽车项目的
-> V 模型交付**，需补强后才算闭环：
-> 1. **SWE.6 端到端"目标或等效环境执行"证据链断开**（P0）；
-> 2. **SYS→SWE 左→右追溯链不强制**（默认仅 WARNING，P1）；
-> 3. **SUP/MAN 支持与管理过程无独立评估域**（P2，范围待定）。
+> （SYS.4 / SWE.6 被单测顶替）已清除，**SWE.6 目标环境执行证据链亦已闭环**（P0，
+> 提交 `2da8c943`/`d01ea214`）。但以下两处仍**不能完全支撑真实汽车项目的
+> V 模型交付**，需补强后才算完整闭环：
+> 1. **SYS→SWE 左→右追溯链不强制**（默认仅 WARNING，P1）；
+> 2. **SUP/MAN 支持与管理过程无独立评估域**（P2，范围待定）。
 
 读盘纪律提醒：拿 yuleOSH 自身仓库跑合规引擎，SWE 侧大量 `missing evidence` 仅因
 该仓库非汽车交付物（无 C/嵌入式目标环境产物），**禁止当作产品能力缺陷评分**；
@@ -68,21 +68,25 @@
 
 ## 3. 残余硬缺口（按优先级）
 
-### P0 — SWE.6 端到端"目标或等效环境执行"证据链断开（存疑→确认）
+### P0 — SWE.6 端到端"目标或等效环境执行"证据链（已闭环 ✅，2026-10-09）
 
-- **现象**：`step_test_qualification`（SWE.6 handler，test_qualification.py:669）做的是
-  spec 场景的**主机仿真 / host-sim** 执行（注释明写 "host-sim compilation"，:356–414），
-  且**不产生** checker 所需的 `.osh/ci/sil-*.json`（`all_passed=True`）真 SIL/HIL 结果。
-- **后果**：即便 SWE.6 handler 跑通，checker 的 `SWE.6.BP2 "Tests are executed in target
-  or equivalent environment"` 仍判 **RED**（无真 SIL/HIL 结果文件）。即 yuleOSH 当前
-  **无法自动产出 SWE.6 的 GREEN 证据**——要 GREEN 必须由用户手动放置 SIL/HIL 结果文件，
-  或接入 HIL 台架自动产出。
-- **根因**：`device/` HIL 层（allocator/registry/pool/watchdog/cli，功能完整）**未被任何
-  step_handler 调用**（全仓 grep `from yuleosh.device` 仅出现在 `cli/main.py` 与
-  `api/device_ui.py` 的 CLI/UI 入口，无任何 pipeline step 接入）。
-- **判定**：这是"完全支持 V 模型"的**最大功能缺口**，真实汽车项目 SWE.6 必须在目标/等效
-  环境执行，host-sim 不能替代。需将 device/HIL 层接入 `test-qualification`（或新增 HIL step），
-  使其自动产出 checker 认可的 SIL/HIL 结果。
+- **历史现象**（已修复）：v3 评估时 `step_test_qualification`（SWE.6 handler）只做 host-sim，
+  不产生 checker 所需的 `.osh/ci/sil-*.json`，导致 SWE.6.BP2 永远 RED（证据链断）。
+- **修复**（提交 `2da8c943` / `d01ea214`）：
+  - 新增 `_discover_firmware_artifact` 在常见构建目录发现真实 `.elf` 固件
+    （排除 hello/sample demo 固件，与 `_has_sil_results` 口径一致）；
+  - 新增 `_run_hil_qualification`：探测 `device/` HIL 设备 → 申请设备 → 经
+    `cross.HilTestRunner` 在真实硬件执行 → **仅当 passed 才落盘**
+    `.osh/ci/sil-<产品>.json`（`all_passed=True` + 真实模块名）；
+  - `step_test_qualification` Phase 3.5 接入 HIL 子证据，report 记录
+    `target_environment_execution` / `target_environment_passed`；
+  - `device`/`cross` 均 lazy import，无 HIL 环境不影响 host-sim 主流程。
+- **反假绿纪律**：无设备 / 无固件 / 执行失败均**不写 sil 证据**，只如实降级
+  （attempted=False 或 passed=False），绝不伪造 GREEN。
+- **验证**：`tests/test_sys_req006_swe6_hil.py` 5 场景（A 无设备不造假 /
+  B 真跑通写真证据且 checker 判 GREEN / C 跑失败不造假 / D 无固件不造假 /
+  E 固件发现跳过 demo）。SWE.6 影响闭包 128 passed 零回归。
+- **历史根因**：`device/` HIL 层此前未被任何 step_handler 调用（仅 CLI/UI 入口）。
 
 ### P1 — SYS→SWE 左→右追溯链不强制（成立）
 
@@ -121,18 +125,19 @@
 | 反假绿（SYS.4/SWE.6 不被单测顶替） | ✅ 已修 | 提交 `7a402c9c`/`f673688d` |
 | 双向追溯 SUP.1 | ⚠️ 部分 | traceability-matrix 默认落盘；SYS→SWE 对齐仅 WARNING |
 | 一致性 | ⚠️ 部分 | G9 merge-gate KG 一致性 |
-| 目标/等效环境执行证据（SWE.6） | ❌ 断链 | test_qualification host-sim；device/ 未接入 SWE.6 |
+| 目标/等效环境执行证据（SWE.6） | ✅ 已打通 | 提交 `2da8c943`；device/ 经 `_run_hil_qualification` 接入，仅真通过才落 sil |
 | SUP/MAN 支持管理过程 | ⚠️ 弱 | 无独立 profile 域 |
 
-**一句话**：工程过程双 V 的"工具链 + 合规判定"已就绪且诚实，但
-**SWE.6 目标环境执行证据链未打通**是通向"完全支持"的最后一块硬骨头；
-加之 SYS→SWE 对齐与 SUP/MAN 覆盖偏弱，故**当前为"强骨架、弱闭环"，距完全支持差 P0 一项 + P1/P2 补强**。
+**一句话**：工程过程双 V 的"工具链 + 合规判定"已就绪且诚实，
+**SWE.6 目标环境执行证据链已闭环（P0）**；余下 SYS→SWE 对齐（P1）与
+SUP/MAN 覆盖（P2）偏弱，故**当前为"强骨架、工程过程双 V 强闭环"，距完全支持
+还差 P1 追溯强制 + P2 管理过程界定**。
 
 ---
 
 ## 5. 建议下一步（待明总拍板）
 
-1. **P0**：在 `test-qualification` 接入 `device/` HIL 层（或新增 `hil-qualification` step），
-   使其自动产出 checker 认可的 `.osh/ci/sil-*.json`，打通 SWE.6 端到端 GREEN。
+1. **P0（已完成）**：在 `test-qualification` 接入 `device/` HIL 层，自动产出
+   checker 认可的 `.osh/ci/sil-*.json`，打通 SWE.6 端到端 GREEN（提交 `2da8c943`/`d01ea214`）。
 2. **P1**：默认开启 `OSH_SYS_ALIGN_STRICT`，让左→右脱节在 G0 门禁显式阻断。
 3. **P2**：SWE.5 接 `integration-test` handler 真实产物；界定 SUP/MAN 是否纳入评估范围。
