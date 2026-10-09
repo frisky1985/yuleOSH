@@ -253,7 +253,7 @@
         {
           "details": [
             "  ❌ Missing evidence: Qualification test strategy",
-            "  ❌ Check: Qualification test scope covers all requirements (no test files found)",
+            "  ❌ Check: Qualification test scope covers all requirements (no SIL/HIL results — unit tests do not qualify as target/equivalent-environment execution)",
             "  ❌ Check: Acceptance criteria are defined for each requirement (no substantive acceptance matrix)"
           ],
           "failed_checks": 2,
@@ -267,8 +267,8 @@
           "details": [
             "  ❌ Missing evidence: Qualification test results",
             "  ❌ Missing evidence: SIL/HIL test results",
-            "  ❌ Check: All qualification tests pass (no test files found)",
-            "  ❌ Check: Tests are executed in target or equivalent environment (no test files found)",
+            "  ❌ Check: All qualification tests pass (no SIL/HIL results — unit tests do not qualify as target/equivalent-environment execution)",
+            "  ❌ Check: Tests are executed in target or equivalent environment (no SIL/HIL results — unit tests do not qualify as target/equivalent-environment execution)",
             "  ❌ Check: Resulting evidence is archived (no archived evidence found)"
           ],
           "failed_checks": 3,

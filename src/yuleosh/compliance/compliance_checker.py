@@ -51,7 +51,20 @@ class ComplianceChecker:
         project_dir: str,
         template_path: Optional[Path] = None,
         profile: Optional["StandardProfile"] = None,
+        profile_names: Optional[list] = None,
     ):
+        """构造合规检查器。
+
+        profile 优先级：``profile``(显式对象) > ``template_path``(yaml 文件)
+        > ``profile_names``(多 profile 合并) > 默认 ``aspice_v3.1``。
+
+        ``profile_names`` (P2): 传入多个 profile 名（如
+        ``["aspice_v3.1", "aspice_sys_v3.1", "aspice_support_mgmt_v3.1"]``）
+        时，将它们的 template dict **合并**为一个统一模板，使 ``run()`` 在
+        单次遍历中覆盖工程过程(SWE)、系统过程(SYS) 与 支持/管理过程(SUP/MAN)，
+        彻底消除「SUP/MAN 无独立评估域」的盲区。各 profile 顶层键（``swe.N``/
+        ``sys.N``/``sup.N``/``man.N``）互不冲突，合并安全。
+        """
         self.project_dir = Path(project_dir)
         self.template_path = template_path
         self.profile = profile
@@ -63,6 +76,10 @@ class ComplianceChecker:
             # 向后兼容：显式提供 yaml 路径时直接读文件（旧调用零改动）
             self.profile = None
             self.template = self._load_template()
+        elif profile_names:
+            # P2: 多 profile 合并评估（SUP/MAN 评估域接入点）
+            self.profile = None
+            self.template = _merge_profiles(profile_names)
         else:
             # 默认：经 profile loader 加载 aspice_v3.1，再还原为 template dict
             # （与直接读 yaml 在 checker 消费字段上字节级一致，A1-01 golden 安全网验证）
@@ -70,6 +87,7 @@ class ComplianceChecker:
             self.template = self.profile.to_template_dict()
         self.results: list[dict] = []
         self.generated_at = datetime.now().isoformat()
+
 
     def _load_template(self) -> dict:
         """Load the ASPICE checkpoint definition YAML."""
@@ -523,6 +541,123 @@ class ComplianceChecker:
                 if "all pass" in lowered or "passed" in lowered:
                     if "hello" not in lowered:
                         return True
+        return False
+
+    def _has_integration_results(self) -> bool:
+        """Check for REAL software-integration test/build pass evidence (P2).
+
+        反假绿(P2): SWE.5（软件集成与集成测试）曾被 ``_test_suite_passes()``
+        （仓库**单测**）顶替 —— 单测通过 ≠ 集成测试/集成构建通过。此处只认
+        真实集成证据, 与 SWE.6 的 ``_has_sil_results`` 同构:
+          * ``.osh/ci/`` 下名称含 ``integration`` 的结果 JSON, 且
+            ``all_passed is True`` 含至少一个真实模块（排除 hello/sample demo）;
+          * 或 junit integration XML（``failures="0"`` 且 ``tests>0``）;
+          * 或 ``tests/integration/`` 存在且有通过运行标记（legacy 文本）。
+        仅靠单测通过 / 无集成证据 → 返回 False（SWE.5 判 RED, 不假绿）。
+        """
+        ci_dir = self.project_dir / ".osh" / "ci"
+        if ci_dir.is_dir():
+            for f in sorted(ci_dir.iterdir()):
+                if "integration" not in f.name.lower():
+                    continue
+                if f.suffix == ".json":
+                    try:
+                        data = json.loads(f.read_text(errors="replace"))
+                    except Exception:
+                        continue
+                    if isinstance(data, dict):
+                        status = str(data.get("status", "")).lower()
+                        if status in ("passed", "success", "ok"):
+                            return True
+                        if data.get("all_passed") is True:
+                            results = data.get("results") or []
+                            real = [
+                                r for r in results
+                                if isinstance(r, dict)
+                                and "hello" not in str(r.get("elf", "")).lower()
+                                and "sample" not in str(r.get("elf", "")).lower()
+                            ]
+                            if real:
+                                return True
+                    elif isinstance(data, list) and data:
+                        if any(isinstance(r, dict) and r.get("passed") is True for r in data):
+                            return True
+                else:
+                    try:
+                        lowered = f.read_text(errors="replace").lower()
+                    except OSError:
+                        continue
+                    if "all pass" in lowered or "passed" in lowered:
+                        if "hello" not in lowered and "sample" not in lowered:
+                            return True
+        # 2. junit integration XML（failures=0 且 tests>0）
+        for pattern in ("**/junit*integration*.xml", "**/TEST-*integration*.xml"):
+            for f in self.project_dir.glob(pattern):
+                try:
+                    text = f.read_text(errors="replace")
+                except Exception:
+                    continue
+                if 'failures="0"' in text and 'tests="' in text:
+                    return True
+        return False
+
+    # ── P2: 支持/管理过程 (SUP/MAN) 证据函数 ────────────────────────────────
+    def _has_qa_records(self) -> bool:
+        """SUP.1: 真实 QA/审计证据。
+
+        仅认：``docs/qa-plan.md`` 实质性文档、``.osh/ci/qa-audit*.json``
+        审计记录、或工作产品评审记录（复用 ``_has_review_records``）。
+        无上述任一 → 返回 False（SUP.1 判 RED，不假绿）。
+        """
+        if self._file_has_content("docs", "qa-plan.md", min_chars=100):
+            return True
+        ci_dir = self.project_dir / ".osh" / "ci"
+        if ci_dir.is_dir():
+            for f in sorted(ci_dir.iterdir()):
+                if "qa" in f.name.lower() and f.suffix == ".json":
+                    return True
+        if self._has_review_records():
+            return True
+        return False
+
+    def _has_vcs_baseline(self) -> bool:
+        """SUP.8: 配置管理/版本控制基线。
+
+        真实判定：项目根存在版本控制元数据（``.git``）。这证明配置项已纳入
+        版本控制、可建立基线 —— 是配置管理存在的最低诚实证据。
+        """
+        return (self.project_dir / ".git").is_dir()
+
+    def _has_issue_records(self) -> bool:
+        """SUP.9: 问题/缺陷跟踪证据。
+
+        仅认：``docs/known-issues.md`` 实质性文档，或 ``.osh/ci/issue-*.json``
+        / ``docs/issues.md`` 记录。无 → 返回 False（SUP.9 判 RED，不假绿）。
+        """
+        if self._file_has_content("docs", "known-issues.md", min_chars=100):
+            return True
+        if self._file_has_content("docs", "issues.md", min_chars=100):
+            return True
+        ci_dir = self.project_dir / ".osh" / "ci"
+        if ci_dir.is_dir():
+            for f in sorted(ci_dir.iterdir()):
+                if "issue" in f.name.lower() and f.suffix == ".json":
+                    return True
+        return False
+
+    def _has_change_records(self) -> bool:
+        """SUP.10: 变更请求管理证据。
+
+        仅认：``docs/change-requests.md`` 实质性文档或 ``.osh/ci/change-*.json``
+        记录。无 → 返回 False（SUP.10 判 RED，不假绿）。
+        """
+        if self._file_has_content("docs", "change-requests.md", min_chars=100):
+            return True
+        ci_dir = self.project_dir / ".osh" / "ci"
+        if ci_dir.is_dir():
+            for f in sorted(ci_dir.iterdir()):
+                if "change" in f.name.lower() and f.suffix == ".json":
+                    return True
         return False
 
     def _acceptance_matrix_covered(self) -> bool:
@@ -1324,15 +1459,22 @@ class ComplianceChecker:
                         failed += 1
                         details.append(f"  ❌ Check: {check_item} (no substantive system integration strategy document)")
                 else:
-                    if self._test_suite_passes():
+                    # P2 反假绿: SWE.5（软件集成）只认真实集成证据, 禁用
+                    # _test_suite_passes()（仓库单测顶替 → 假绿）。集成构建/
+                    # 集成测试通过必须见 .osh/ci/integration-* 真实结果或
+                    # junit integration XML, 单测通过不算数。
+                    if self._has_integration_results():
                         passed += 1
-                        details.append(f"  ✅ Check: {check_item} (integration suite passed)")
+                        details.append(
+                            f"  ✅ Check: {check_item} (real integration test/build pass evidence)")
                     elif self._dir_has_files("tests", "integration"):
                         failed += 1
-                        details.append(f"  ❌ Check: {check_item} (integration tests exist but no passing-run evidence)")
+                        details.append(
+                            f"  ❌ Check: {check_item} (integration tests exist but no passing-run evidence)")
                     elif self._ci_results_exist():
                         failed += 1
-                        details.append(f"  ❌ Check: {check_item} (CI results exist but no integration pass evidence)")
+                        details.append(
+                            f"  ❌ Check: {check_item} (CI results exist but no integration pass evidence)")
                     else:
                         failed += 1
                         details.append(f"  ❌ Check: {check_item}")
@@ -1423,6 +1565,52 @@ class ComplianceChecker:
                         details.append(
                             f"  ❌ Check: {check_item} (no SYS-REQ parsed from "
                             f"docs/system-requirements.md, or {rel_doc} missing)")
+            # ── P2: 支持/管理过程 (SUP/MAN) 评估域 ───────────────────────────────
+            # 此前 SUP.1/8/9/10 与 MAN.1/2/3 的检查项无任何分支匹配，一律落入下方
+            # "unknown check type — not recognized" → 有评估动作也判不了。现按语义
+            # 分发到真实项目产物；无证据如实判 RED（反假绿，绝不臆造 GREEN）。
+            elif "quality assurance" in check_item.lower() or "audit" in check_item.lower():
+                if self._has_qa_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (QA plan / audit records found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no QA plan / audit records found)")
+            elif "configuration management" in check_item.lower() or "version control" in check_item.lower():
+                if self._has_vcs_baseline():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (version-controlled baseline present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no version-controlled baseline / .git found)")
+            elif "problem" in check_item.lower() or "defect" in check_item.lower() or "issue" in check_item.lower():
+                if self._has_issue_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (problem/issue tracking records found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no problem/issue tracking records found)")
+            elif "change request" in check_item.lower() or "change management" in check_item.lower():
+                if self._has_change_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (change-request records found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no change-request records found)")
+            elif "project plan" in check_item.lower() or "schedule" in check_item.lower() or "milestone" in check_item.lower():
+                if self._file_has_content("docs", "project-plan.md", min_chars=100):
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (project plan document present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no docs/project-plan.md found)")
+            elif "risk register" in check_item.lower() or "risk management" in check_item.lower() or "risk" in check_item.lower():
+                if self._file_has_content("docs", "risk-register.md", min_chars=100):
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (risk register present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no docs/risk-register.md found)")
             else:
                 # SECURITY: No fallback pass — unknown/unmatched checks are marked failed
                 # to prevent false positives from inflated compliance scores.
@@ -1602,3 +1790,21 @@ class ComplianceChecker:
         Path(output_path).write_text(markdown, encoding="utf-8")
         print(f"  ✅ Compliance report saved: {output_path}")
         return output_path
+
+def _merge_profiles(names: list[str]) -> dict:
+    """合并多个 profile 的 template dict 为统一评估模板（P2）。
+
+    以首个 profile 的 ``meta`` 为基准，其余 profile 的过程域(顶层键) 追加合并。
+    顶层键互不冲突(swe.N/sys.N/sup.N/man.N)，异常冲突以""后加载者覆盖。
+    """
+    merged: dict = {"meta": {}}
+    for i, name in enumerate(names):
+        prof = load_profile(name)
+        td = prof.to_template_dict()
+        if i == 0:
+            merged["meta"] = td.get("meta", {})
+        for k, v in td.items():
+            if k == "meta":
+                continue
+            merged[k] = v
+    return merged

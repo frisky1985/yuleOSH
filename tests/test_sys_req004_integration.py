@@ -1,6 +1,6 @@
-"""SYS.4 反假绿回归测试（SYS-REQ-004 / 系统集成）。
+"""SYS.4 / SWE.5 反假绿回归测试（SYS-REQ-004 / 系统集成）。
 
-守住三条硬规矩之一：系统级执行只认系统级执行记录或真 SIL/HIL，
+守住反假绿硬规矩：集成/系统级执行只认真实集成证据或真 SIL/HIL，
 禁用 ``_test_suite_passes()`` / pytest / CI 单测顶替。
 
 场景:
@@ -8,7 +8,10 @@
      → SYS.4 执行类("builds succeed" / "tests verify data flow")判 RED，非假绿。
 - B: 存在 ``.osh/evidence/system-integration-results.json``
      → SYS.4 执行类判 GREEN（诚实的 GREEN 路径）。
-- C: SWE.4 集成检查仍基于 ``_test_suite_passes()``，不被 SYS 区改动破坏（回归保护）。
+- C: 仅单测通过(``pytest.json``)但无真实软件集成证据
+     → SWE.5("Integration builds succeed")判 RED，不再被单测顶替（反假绿）。
+- C': 存在 ``.osh/ci/integration-*.json`` 真实集成证据
+     → SWE.5 判 GREEN（诚实 GREEN 路径）。
 """
 
 import json
@@ -100,14 +103,41 @@ def test_sys4_execution_green_with_system_evidence(tmp_path):
     assert _sys4_status(report, "Integration tests verify data flow") is True
 
 
-def test_swe5_integration_still_uses_test_suite(tmp_path):
-    """C: 回归保护 —— SWE.5 集成检查仍基于 _test_suite_passes()，未被 SYS 改动破坏。
+def _make_swe_project(tmp_path, with_integration_results=False, with_ci_pass=True):
+    """构造纯 SWE 项目（不含 SYS 文档），用于 SWE.5 反假绿断言。"""
+    osh = tmp_path / ".osh"
+    osh.mkdir(parents=True, exist_ok=True)
+    if with_ci_pass:
+        ci = osh / "ci"
+        ci.mkdir(exist_ok=True)
+        # 让 _test_suite_passes() 返回 True —— 用于证明 SWE.5 不再被它放行
+        (ci / "pytest.json").write_text(
+            json.dumps({"status": "passed", "passed": 12, "failed": 0}), encoding="utf-8")
+    if with_integration_results:
+        ci = osh / "ci"
+        ci.mkdir(exist_ok=True)
+        # 真实软件集成证据：.osh/ci/integration-*.json 且 status=passed
+        (ci / "integration-software.json").write_text(
+            json.dumps({"status": "passed", "suite": "software-integration"}),
+            encoding="utf-8")
+    return tmp_path
 
-    注: "Integration builds succeed" 属 SWE.5(软件集成)，非 SWE.4(组件集成)。
+
+def test_swe5_integration_red_without_real_evidence(tmp_path):
+    """C: 反假绿 —— SWE.5 集成检查不再被仓库单测顶替。
+
+    仅单测通过(``pytest.json``)但无真实集成证据 → SWE.5 判 RED（非假绿）。
+    注: "Integration builds succeed" 属 SWE.5(软件集成)。
     """
-    p = _make_sys_project(tmp_path, with_integration_results=False, with_ci_pass=True)
+    p = _make_swe_project(tmp_path, with_integration_results=False, with_ci_pass=True)
     checker = ComplianceChecker(project_dir=str(p), profile=load_profile("aspice_v3.1"))
     report = checker.run()
+    assert _swe5_status(report, "Integration builds succeed") is False
 
-    # SWE.5.BP2 "Integration builds succeed" 在 SWE 区应 GREEN（经由 _test_suite_passes）
+
+def test_swe5_integration_green_with_real_evidence(tmp_path):
+    """C': 真实集成证据存在 → SWE.5 判 GREEN（诚实 GREEN 路径）。"""
+    p = _make_swe_project(tmp_path, with_integration_results=True, with_ci_pass=True)
+    checker = ComplianceChecker(project_dir=str(p), profile=load_profile("aspice_v3.1"))
+    report = checker.run()
     assert _swe5_status(report, "Integration builds succeed") is True
