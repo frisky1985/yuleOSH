@@ -1207,6 +1207,19 @@ class ComplianceChecker:
                         details.append(
                             f"  ❌ Check: {check_item} (no system-level test execution record "
                             f"— SIL/HIL or system integration test results required)")
+                elif swe_id.upper() == "SWE.6":
+                    # 反假绿(SWE.6.BP2): 软件合格性测试须在"目标/等效环境"执行，
+                    # 只认真 SIL/HIL 结果，禁用 _test_suite_passes()（仓库单测顶替
+                    # → 假绿，与 SYS.4 同源）。无 SIL/HIL 结果则如实判 RED，不谎报。
+                    # 注: 与 SYS.4 对齐 —— 系统/软件级"在目标环境执行"不得由单测放行。
+                    if self._has_sil_results():
+                        passed += 1
+                        details.append(f"  ✅ Check: {check_item} (SIL/HIL qualification results)")
+                    else:
+                        failed += 1
+                        details.append(
+                            f"  ❌ Check: {check_item} (no SIL/HIL results — unit tests do "
+                            f"not qualify as target/equivalent-environment execution)")
                 else:
                     # Unit tests: files must exist AND there must be evidence they
                     # actually ran and passed — a test file that never runs is not
