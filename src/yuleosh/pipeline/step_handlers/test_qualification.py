@@ -600,6 +600,138 @@ def _run_system_tests(
     return results
 
 
+# ── HIL / target-environment execution ───────────────────────────────────────
+
+
+def _discover_firmware_artifact(project_dir: Path) -> str | None:
+    """查找可用于 HIL 刷写的真实固件产物 (.elf)。
+
+    在常见构建/产物目录查找 .elf；排除 demo 自检用的 hello/sample 固件
+    （与 ComplianceChecker._has_sil_results 口径一致，避免把示范固件当作
+    真实产品模块 evidence）。返回首个匹配路径，无则 None。
+    """
+    _skip_parts = (".yuleosh", ".osh", ".git", "__pycache__", "node_modules")
+    for elf in sorted(project_dir.glob("**/*.elf")):
+        rel = elf.relative_to(project_dir).parts
+        if any(p in _skip_parts for p in rel):
+            continue
+        low = elf.name.lower()
+        if "hello" in low or "sample" in low:
+            continue
+        return str(elf)
+    return None
+
+
+def _run_hil_qualification(
+    project_dir: Path,
+    firmware: str | None,
+    *,
+    job_id: str = "swe6-qualification",
+    hil_timeout: float = 120.0,
+) -> dict:
+    """在目标/等效环境 (HIL) 执行合格性测试并落盘 SIL 证据。
+
+    反假绿红线（每条都对应 checker ``SWE.6.BP2`` 的判定）：
+    - 无可用 HIL 设备 (device 层无 ONLINE+空闲) → attempted=False，**绝不写证据**。
+    - 有设备但无真实固件产物 → attempted=False，**绝不写证据**。
+    - 有设备+固件但真实执行失败 → 不写 all_passed=True 的证据（只记录诊断，
+      供人工排查），checker 据此判 RED 而非假绿。
+    - 仅当 HIL 真实执行 passed==True 才写 ``.osh/ci/sil-<product>.json``
+      (all_passed=True + 真实模块名)，使 SWE.6.BP2 判 GREEN。
+
+    Returns
+    -------
+    dict with keys: attempted, executed, passed, reason, sil_path
+    """
+    outcome = {
+        "attempted": False,
+        "executed": False,
+        "passed": False,
+        "reason": "not attempted",
+        "sil_path": None,
+    }
+
+    # 1. 探测 HIL 设备层（lazy import，避免无硬件环境强依赖硬件栈）
+    try:
+        from yuleosh.device import DeviceManager
+        mgr = DeviceManager()
+        devices = mgr.list_devices()
+        available = [d for d in devices if d.is_available()]
+    except Exception as e:  # 设备层不可用（无 db / 导入失败）→ 诚实降级
+        log.warning("HIL device layer unavailable: %s", e)
+        outcome["reason"] = f"device layer error: {e}"
+        return outcome
+
+    if not available:
+        outcome["reason"] = "no HIL device available (registered & online)"
+        return outcome
+
+    if not firmware or not Path(firmware).is_file():
+        outcome["reason"] = "no firmware artifact to flash on HIL"
+        return outcome
+
+    # 2. 申请设备并在真实硬件上执行
+    dev = None
+    try:
+        dev = mgr.allocator.acquire(
+            platform=available[0].platform, job_id=job_id, timeout=10.0,
+        )
+        if dev is None:
+            outcome["reason"] = "HIL device acquire timed out"
+            return outcome
+        from yuleosh.cross import HilTestRunner
+        runner = HilTestRunner(target=dev.platform)
+        result = runner.run(firmware, timeout=hil_timeout)
+    except Exception as e:
+        log.warning("HIL execution error: %s", e)
+        outcome["reason"] = f"HIL execution error: {e}"
+        return outcome
+    finally:
+        if dev is not None:
+            try:
+                mgr.allocator.release(dev.id, job_id=job_id)
+            except Exception:
+                pass
+
+    # 3. 仅真实通过才落盘证据；失败只记诊断，不造假绿
+    if not getattr(result, "passed", False):
+        outcome["attempted"] = True
+        outcome["executed"] = True
+        outcome["reason"] = getattr(result, "error", None) or "HIL test failed"
+        return outcome
+
+    ci_dir = project_dir / ".osh" / "ci"
+    ci_dir.mkdir(parents=True, exist_ok=True)
+    sil = {
+        "all_passed": True,
+        "results": [{
+            "elf": Path(firmware).name,
+            "passed": True,
+            "device": dev.name if dev else None,
+            "test_log": getattr(result, "test_log", "") or "",
+        }],
+        "generated_by": "yuleosh.swe6.hil",
+        "timestamp": datetime.now().isoformat(),
+    }
+    sil_path = ci_dir / f"sil-{Path(firmware).stem}.json"
+    try:
+        sil_path.write_text(json.dumps(sil, indent=2, ensure_ascii=False),
+                            encoding="utf-8")
+    except OSError as e:
+        log.error("Cannot write SIL evidence: %s", e)
+        outcome["reason"] = f"SIL evidence write error: {e}"
+        return outcome
+
+    outcome.update({
+        "attempted": True,
+        "executed": True,
+        "passed": True,
+        "reason": "HIL qualification passed",
+        "sil_path": str(sil_path),
+    })
+    return outcome
+
+
 def _build_qualification_report(
     spec_path: str,
     project_dir: Path,
@@ -764,11 +896,32 @@ def step_test_qualification(session: PipelineSession) -> str:
               f"{test_results['passed']} passed, "
               f"{test_results['failed']} failed")
 
+        # ── Phase 3.5: Target/equivalent environment (HIL) execution ──
+        # 独立子证据：仅在真实 HIL 设备可用且固件存在时才尝试；无 HIL 时
+        # 不影响 host-sim 主 verdict（诚实降级，不写假 evidence）。结果供
+        # ComplianceChecker SWE.6.BP2 (target/equivalent environment) 独立判定。
+        firmware = _discover_firmware_artifact(project_dir)
+        hil_result = _run_hil_qualification(
+            project_dir, firmware,
+            job_id=f"swe6-{session.name}",
+            hil_timeout=120.0,
+        )
+        print(f"  🔌 [小明] 目标环境(HIL)执行: attempted={hil_result['attempted']} "
+              f"passed={hil_result['passed']} — {hil_result['reason']}")
+        if hil_result["passed"]:
+            print(f"    ✅ SIL evidence: {hil_result['sil_path']}")
+        elif hil_result["attempted"]:
+            print("    ❌ HIL 执行未通过（未生成假绿证据）")
+        else:
+            print(f"    ⚠️  HIL 不可用：{hil_result['reason']}")
+
         # ── Phase 4: Acceptance verdict ──
         report = _build_qualification_report(
             spec_path, project_dir, scenarios, coverage, test_results,
         )
         report["session"] = session.name
+        report["target_environment_execution"] = hil_result["reason"]
+        report["target_environment_passed"] = hil_result["passed"]
 
         verdict = report["verdict"]
         verdict_icon = {
