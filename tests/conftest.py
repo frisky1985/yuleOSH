@@ -243,6 +243,25 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_sys_align_strict(monkeypatch):
+    """P1 收口后 SYS→SWE 对齐默认开启阻断 —— 测试集统一与对齐解耦。
+
+    背景: ``PipelineSession`` 默认 ``project_dir=cwd``（仓库根, 自带真实
+    ``docs/system-requirements.md`` 含 SYS-REQ-001..006）。P1 把对齐改为
+    默认强制后, 任何从仓库根跑 spec-check / 全管线的测试都会误命中仓库根
+    SYS 需求而失败（假绿→真阻断的测试环境副作用）。
+
+    对策: 除专属对齐测试 ``test_sys_req002_strict_align.py``（其用例用
+    ``monkeypatch.delenv`` 显式清除 env 以验证默认开启行为）外, 全测试集
+    统一置 ``OSH_SYS_ALIGN_STRICT=0`` 临时放行, 使对齐默认开启的真实行为
+    仅由该专属测试覆盖, 不污染其它功能测试。
+
+    注意: 这不改变产品默认（仍默认开启）; 仅隔离测试对仓库根文档的继承。
+    """
+    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "0")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_global_registries():
     """每个测试后恢复单例注册表，防跨测试污染（2026-08-19）。
 

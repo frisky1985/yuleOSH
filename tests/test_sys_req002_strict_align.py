@@ -3,9 +3,12 @@
 背景 (M1.5 前): _check_sys_requirements_aligned 只写对齐报告 + 记 WARNING,
 V 两侧脱节时 SWE.1 照样 completed —— 链接「被记录」但无法「被强制」。
 
-验收 (docs/planning/left-branch-fix-requirements.md SYS-REQ-002):
-  - OSH_SYS_ALIGN_STRICT 开启 → 未对齐(含左半缺失) 时 SWE.1 步骤失败
-  - 默认关闭 → 行为与改动前完全一致 (向后兼容)
+P1 收口 (docs/planning/product-vmodel-support-v3-10-09.md P1): 默认开启严格
+阻断, 使「有系统需求但 spec 未引用」这类 ASPICE 硬缺口显式失败而非全绿。
+语义:
+  - 默认开启 → status∈{partial, none-parsed}（真实缺口）时 SWE.1 步骤失败
+  - absent（无左半文档, 纯 SWE 项目）/ skipped 保持非阻断（保向后兼容）
+  - OSH_SYS_ALIGN_STRICT=0|false|no|off 显式关闭（临时放行用）
 """
 
 import json
@@ -102,10 +105,10 @@ def test_align_report_returns_aligned(tmp_path):
     assert rep["missing_in_spec"] == []
 
 
-# ── strict 开关 ───────────────────────────────────────────────────────────
-def test_strict_helper_default_off(monkeypatch):
+# ── strict 开关 (P1: 默认开启) ──────────────────────────────────────────
+def test_strict_helper_default_on(monkeypatch):
     monkeypatch.delenv("OSH_SYS_ALIGN_STRICT", raising=False)
-    assert spec_mod._sys_align_strict_enabled() is False
+    assert spec_mod._sys_align_strict_enabled() is True
 
 
 @pytest.mark.parametrize("val", ["1", "true", "YES", "on"])
@@ -114,25 +117,22 @@ def test_strict_helper_truthy_values(monkeypatch, val):
     assert spec_mod._sys_align_strict_enabled() is True
 
 
-def test_strict_helper_empty_value_disabled(monkeypatch):
-    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "")
+@pytest.mark.parametrize("val", ["0", "false", "NO", "off"])
+def test_strict_helper_explicit_disable(monkeypatch, val):
+    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", val)
     assert spec_mod._sys_align_strict_enabled() is False
 
 
-# ── strict 端到端: 未对齐必须阻断 ─────────────────────────────────────────
-def test_strict_blocks_when_left_branch_absent(tmp_path, monkeypatch):
-    """左半完全缺失 + strict → SWE.1 必须失败 (而非全绿放行)。"""
-    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "1")
-    sess, _ = _mk(tmp_path, sys_doc=None, spec_text="# Spec\n")
-    with pytest.raises(PipelineStepError) as ei:
-        _run_spec_check(sess)
-    assert "V 左半链路断裂" in str(ei.value)
-    assert "absent" in str(ei.value)
+def test_strict_helper_empty_value_default_on(monkeypatch):
+    # 空值视作「未显式设置」→ 默认开启（P1 收口）
+    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "")
+    assert spec_mod._sys_align_strict_enabled() is True
 
 
-def test_strict_blocks_when_partial(tmp_path, monkeypatch):
-    """部分未引用 + strict → SWE.1 失败。"""
-    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "1")
+# ── 默认态: 真实缺口必须阻断 ─────────────────────────────────────────────
+def test_default_blocks_when_partial(tmp_path, monkeypatch):
+    """P1: 默认（未设 env）+ 部分未引用 → SWE.1 必须失败 (脱节不再全绿)。"""
+    monkeypatch.delenv("OSH_SYS_ALIGN_STRICT", raising=False)
     sess, _ = _mk(
         tmp_path,
         sys_doc="# SYS\nSYS-REQ-001 alpha\nSYS-REQ-002 beta\n",
@@ -144,23 +144,33 @@ def test_strict_blocks_when_partial(tmp_path, monkeypatch):
     assert "SYS-REQ-002" in str(ei.value)
 
 
-def test_strict_passes_when_aligned(tmp_path, monkeypatch):
-    """完全对齐 + strict → 正常完成, 返回产物路径。"""
-    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "1")
-    sess, sdir = _mk(
-        tmp_path,
-        sys_doc="# SYS\nSYS-REQ-001 alpha\n",
-        spec_text="# Spec\nrefers SYS-REQ-001\n",
-    )
-    out = _run_spec_check(sess)
-    assert out == str(sdir / "spec-check.json")
-    assert sess._artifacts.get("sys_spec_alignment") is not None
-
-
-# ── 向后兼容: 默认必须放行 ────────────────────────────────────────────────
-def test_default_passes_despite_partial(tmp_path, monkeypatch):
-    """默认 (strict 关闭) + 部分未引用 → 不阻断, 仍写对齐报告 (与改动前一致)。"""
+def test_default_blocks_when_none_parsed(tmp_path, monkeypatch):
+    """P1: 默认 + 左半文档无 SYS-REQ 解析 → none-parsed 也算真实缺口, 阻断。"""
     monkeypatch.delenv("OSH_SYS_ALIGN_STRICT", raising=False)
+    sess, _ = _mk(
+        tmp_path,
+        sys_doc="# SYS\nno requirement ids here\n",
+        spec_text="# Spec\n",
+    )
+    with pytest.raises(PipelineStepError) as ei:
+        _run_spec_check(sess)
+    assert "V 左半链路断裂" in str(ei.value)
+    assert "none-parsed" in str(ei.value)
+
+
+# ── absent / 显式放行: 不得误伤 ───────────────────────────────────────────
+def test_absent_never_blocks(tmp_path, monkeypatch):
+    """absent（无左半文档, 纯 SWE 项目）无论 strict 与否都不阻断（保兼容）。"""
+    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "1")
+    sess, sdir = _mk(tmp_path, sys_doc=None, spec_text="# Spec\n")
+    out = _run_spec_check(sess)  # 不得抛异常
+    assert out == str(sdir / "spec-check.json")
+    assert not (sdir / "sys-spec-alignment.json").exists()
+
+
+def test_opt_out_passes_despite_partial(tmp_path, monkeypatch):
+    """显式关闭 (env=0) + 部分未引用 → 临时放行, 不阻断（仍写对齐报告）。"""
+    monkeypatch.setenv("OSH_SYS_ALIGN_STRICT", "0")
     sess, sdir = _mk(
         tmp_path,
         sys_doc="# SYS\nSYS-REQ-001 alpha\nSYS-REQ-002 beta\n",

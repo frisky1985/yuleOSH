@@ -29,19 +29,24 @@ __all__ = ["step_spec_check"]
 
 # ── SYS-REQ-002: V 左半连续性可强制 ─────────────────────────────────────
 # M1.5 链路B 只把 SYS→SWE.1 对齐「记录」下来（缺失仅 WARNING）：V 两侧脱节
-# 时流水线仍全绿，审计无法证伪。本开关把该能力升级为「可强制」——开启后
-# 未对齐（含左半完全缺失）将使 SWE.1 步骤失败。默认关闭以保持向后兼容。
+# 时流水线仍全绿，审计无法证伪。P1 收口：默认开启严格阻断（见 v3 评估
+# P1）—— V 左半→右半脱节（有系统需求但 spec 未引用）属 ASPICE 合规硬缺口,
+# 必须显式阻断而非全绿放行。仅 ``absent``（项目无左半文档，纯 SWE 项目）
+# 与 ``skipped``（防御兜底）保持非阻断, 以保向后兼容、不误伤纯 SWE 工程。
+# 显式设置 ``OSH_SYS_ALIGN_STRICT=0|false|no|off`` 可关闭（临时放行用）。
 _SYS_ALIGN_STRICT_ENV = "OSH_SYS_ALIGN_STRICT"
 
 
 def _sys_align_strict_enabled() -> bool:
-    """是否启用 SYS→SWE.1 对齐的严格阻断模式（默认关闭）。
+    """是否启用 SYS→SWE.1 对齐的严格阻断模式（**默认开启**, P1 收口）。
 
-    显式设置 ``OSH_SYS_ALIGN_STRICT=1|true|yes|on`` 时启用。
+    V 左半→右半脱节（有系统需求但 spec 未引用）属 ASPICE 合规硬缺口，必须
+    显式阻断。默认开启; 显式设置 ``OSH_SYS_ALIGN_STRICT=0|false|no|off`` 关闭。
     """
-    return os.environ.get(_SYS_ALIGN_STRICT_ENV, "").strip().lower() in {
-        "1", "true", "yes", "on",
-    }
+    val = os.environ.get(_SYS_ALIGN_STRICT_ENV, "").strip().lower()
+    if val in {"0", "false", "no", "off"}:
+        return False
+    return True  # P1: 默认开启
 
 
 def _spec_validator_env() -> dict:
@@ -153,20 +158,27 @@ def step_spec_check(session: PipelineSession) -> str:
             f"{len(gr.get('ids', []))} guardrails / {len(pm.get('names', []))} params PASS"
         )
 
-        # M1.5 链路B: SWE.1 消费 SYS 上游需求 (确定性校验)
-        # SYS-REQ-002: 默认放行(向后兼容); strict 开关下未对齐即阻断,
-        # 使 V 左半→右半链接由「被记录」升级为「被强制」。
+        # M1.5 链路B / P1: SWE.1 消费 SYS 上游需求 (确定性校验)
+        # SYS-REQ-002: 默认强制（_sys_align_strict_enabled 默认 True）。仅对
+        # 真实缺口 status∈{partial, none-parsed} 阻断; absent（无左半文档,
+        # 纯 SWE 项目）/ skipped（防御兜底）保持非阻断, 保向后兼容不误伤。
         align_report = _check_sys_requirements_aligned(session)
-        if align_report and _sys_align_strict_enabled():
+        if align_report:
             status = align_report.get("status")
-            if status != "aligned":
+            # P1: 仅真实缺口（有 SYS 需求但 spec 未引用 / 未解析到 SYS-REQ）
+            # 才阻断; absent 不阻断，避免纯 SWE 工程被误伤。
+            strict_gap = status in ("partial", "none-parsed")
+            if _sys_align_strict_enabled() and strict_gap:
                 missing = align_report.get("missing_in_spec", [])
                 total = align_report.get("total_sys_reqs", 0)
-                detail = (", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")) if missing else "左半缺失或未解析到 SYS-REQ"
+                detail = (
+                    ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
+                    if missing else "左半需求未解析到 SYS-REQ（none-parsed）"
+                )
                 raise PipelineStepError(
                     f"[SYS→SWE.1 strict] V 左半链路断裂 (status={status}, "
                     f"total={total}): {detail}. "
-                    f"请补齐 spec 对 SYS 需求的引用, 或关闭 {_SYS_ALIGN_STRICT_ENV} 放行。"
+                    f"请补齐 spec 对 SYS 需求的引用, 或设置 {_SYS_ALIGN_STRICT_ENV}=0 临时放行。"
                 )
 
         return str(out_path)
