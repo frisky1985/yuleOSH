@@ -1,0 +1,197 @@
+# ASPICE v3.1 — Supporting & Management Process Group
+# SUP.1/8/9/10 + MAN.1/2/3 评估域 (P2).
+#
+# 背景 (product-vmodel-support-v3): yuleOSH 此前仅评估 SWE.1~6（及 SYS.1~5），
+# 支持过程(SUP) 与管理过程(MAN) 完全无独立评估域 —— 其检查项一律落入
+# ComplianceChecker 的 "unknown check type — not recognized" 分支, 有证据也判不了。
+#
+# 本 profile 为 SUP/MAN 建立可评估过程域, 检查项语义映射到真实项目产物:
+#   * 无产物时如实判 RED（反假绿, 绝不臆造 GREEN）;
+#   * 各 BP 的 check 文本含特定关键词, 由 ComplianceChecker._check_bp 的
+#     P2 分支分发到对应证据函数。
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "Supporting & Management Process Group — SUP.1/8/9/10 + MAN.1/2/3"
+
+sup.1:
+  id: "SUP.1"
+  title: "Quality Assurance"
+  description: |
+    Provide assurance that work products and processes conform to requirements
+    and plans through independent quality assurance activities.
+  order: 20
+  base_practices:
+    - id: "SUP.1.BP1"
+      title: "Define quality assurance approach"
+      output_evidence:
+        - type: "document"
+          path: "docs/qa-plan.md"
+          description: "Quality assurance plan"
+      check:
+        - "A quality assurance plan is defined and approved"
+    - id: "SUP.1.BP2"
+      title: "Perform quality assurance audits"
+      output_evidence:
+        - type: "ci"
+          path: ".osh/ci/qa-audit.json"
+          description: "QA audit records"
+      check:
+        - "Quality assurance audits are performed and recorded"
+    - id: "SUP.1.BP3"
+      title: "Verify work products"
+      output_evidence:
+        - type: "document"
+          path: "docs/review-records.md"
+          description: "Work product review records"
+      check:
+        - "Work products are reviewed per the defined process"
+
+sup.8:
+  id: "SUP.8"
+  title: "Configuration Management"
+  description: |
+    Establish and apply configuration management for the identified
+    configuration items throughout the project lifecycle.
+  order: 21
+  base_practices:
+    - id: "SUP.8.BP1"
+      title: "Establish configuration management"
+      output_evidence:
+        - type: "source"
+          path: ".git"
+          description: "Version control system (git repository)"
+      check:
+        - "Configuration management is established with version control"
+    - id: "SUP.8.BP2"
+      title: "Baseline and release"
+      output_evidence:
+        - type: "source"
+          path: "releases/"
+          description: "Released baselines"
+      check:
+        - "Baselines and releases are controlled under version control"
+
+sup.9:
+  id: "SUP.9"
+  title: "Problem Resolution Management"
+  description: |
+    Identify, analyze, and resolve problems and defects systematically.
+  order: 22
+  base_practices:
+    - id: "SUP.9.BP1"
+      title: "Identify and analyze problems"
+      output_evidence:
+        - type: "document"
+          path: "docs/known-issues.md"
+          description: "Issue/defect tracking log"
+      check:
+        - "Problems and defects are identified and tracked"
+    - id: "SUP.9.BP2"
+      title: "Resolve problems"
+      output_evidence:
+        - type: "document"
+          path: "docs/known-issues.md"
+          description: "Issue closure records"
+      check:
+        - "Problem resolution is recorded with closure evidence"
+
+sup.10:
+  id: "SUP.10"
+  title: "Change Request Management"
+  description: |
+    Manage change requests from identification through analysis, decision,
+    and implementation.
+  order: 23
+  base_practices:
+    - id: "SUP.10.BP1"
+      title: "Identify change requests"
+      output_evidence:
+        - type: "document"
+          path: "docs/change-requests.md"
+          description: "Change request log"
+      check:
+        - "Change requests are identified and recorded"
+    - id: "SUP.10.BP2"
+      title: "Analyze and decide change requests"
+      output_evidence:
+        - type: "document"
+          path: "docs/change-requests.md"
+          description: "Change request analysis records"
+      check:
+        - "Change requests are analyzed and status tracked"
+
+man.1:
+  id: "MAN.1"
+  title: "Project Management"
+  description: |
+    Plan, monitor, and control the project to deliver the product within
+    budget, schedule, and quality constraints.
+  order: 24
+  base_practices:
+    - id: "MAN.1.BP1"
+      title: "Define project plan"
+      output_evidence:
+        - type: "document"
+          path: "docs/project-plan.md"
+          description: "Project plan with schedule"
+      check:
+        - "A project plan with schedule is defined"
+    - id: "MAN.1.BP2"
+      title: "Monitor project progress"
+      output_evidence:
+        - type: "document"
+          path: "docs/project-plan.md"
+          description: "Project status records"
+      check:
+        - "Project progress is monitored against the project plan"
+
+man.2:
+  id: "MAN.2"
+  title: "Requirements Management"
+  description: |
+    Elicit, document, and manage requirements and their changes under
+    configuration control.
+  order: 25
+  base_practices:
+    - id: "MAN.2.BP1"
+      title: "Manage requirements baseline"
+      output_evidence:
+        - type: "document"
+          path: "docs/requirements.md"
+          description: "Requirements baseline"
+      check:
+        - "Requirements baseline is established and under configuration management"
+    - id: "MAN.2.BP2"
+      title: "Manage requirement changes"
+      output_evidence:
+        - type: "document"
+          path: "docs/requirements.md"
+          description: "Requirement version records"
+      check:
+        - "Requirement changes are traced and versioned"
+
+man.3:
+  id: "MAN.3"
+  title: "Risk Management"
+  description: |
+    Identify, assess, and treat risks throughout the project lifecycle.
+  order: 26
+  base_practices:
+    - id: "MAN.3.BP1"
+      title: "Identify risks"
+      output_evidence:
+        - type: "document"
+          path: "docs/risk-register.md"
+          description: "Risk register"
+      check:
+        - "Risks are identified and recorded in a risk register"
+    - id: "MAN.3.BP2"
+      title: "Assess and treat risks"
+      output_evidence:
+        - type: "document"
+          path: "docs/risk-register.md"
+          description: "Risk treatment records"
+      check:
+        - "Risks are assessed and treatment tracked"

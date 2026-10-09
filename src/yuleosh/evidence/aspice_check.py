@@ -29,6 +29,15 @@ from yuleosh.compliance.profile import load_profile, ProfileNotFoundError, Profi
 # 默认合规标准 profile（A1-08：gap check 改读 profile）
 _DEFAULT_PROFILE = "aspice_v3.1"
 
+# P2: 完整 V 模型评估域组合 —— 工程过程(SWE) + 系统过程(SYS) + 支持/管理(SUP/MAN)。
+# 传入 ComplianceChecker(profile_names=...) 即可单次遍历覆盖全部过程域，
+# 消除「SUP/MAN 无独立评估域」盲区。
+ASPICE_FULL_PROFILES = [
+    "aspice_v3.1",
+    "aspice_sys_v3.1",
+    "aspice_support_mgmt_v3.1",
+]
+
 
 # ------------------------------------------------------------------ #
 # Gap-oriented messages for each BP: what to DO, not what you have
@@ -139,6 +148,7 @@ def aspice_gap_check(
     output_format: str = "markdown",
     template_path: Optional[str] = None,
     profile_name: str = _DEFAULT_PROFILE,
+    profile_names: Optional[list] = None,
 ) -> str:
     """Run ASPICE gap-oriented compliance check (A1-08: profile 驱动).
 
@@ -172,12 +182,15 @@ def aspice_gap_check(
     if project_dir is None:
         project_dir = os.environ.get("OSH_HOME", os.getcwd())
 
-    # 构造 ComplianceChecker：template_path 优先，否则走 profile 路径
+    # 构造 ComplianceChecker：template_path 优先，否则 profile_names（多 profile
+    # 合并评估，P2），再否则单 profile_name（默认 aspice_v3.1，向后兼容）。
     if template_path:
         checker = ComplianceChecker(
             project_dir=project_dir,
             template_path=Path(template_path),
         )
+    elif profile_names:
+        checker = ComplianceChecker(project_dir=project_dir, profile_names=profile_names)
     else:
         profile = load_profile(profile_name)
         checker = ComplianceChecker(project_dir=project_dir, profile=profile)
