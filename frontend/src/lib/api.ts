@@ -978,6 +978,68 @@ export async function getLLMHealth(live = false): Promise<LLMHealth> {
   return data && data.ok === true ? data.data : data;
 }
 
+// ── Dashboard v2: overview + ASPICE status ────────────────────────────────
+
+interface OverviewDimension {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  status: "good" | "warning" | "critical";
+  note: string | null;
+}
+
+interface DevicesSummary {
+  total?: number;
+  online?: number;
+  offline?: number;
+  [key: string]: unknown;
+}
+
+interface OverviewResponse {
+  compliance_score: number;
+  dimensions: OverviewDimension[];
+  coverage: number;
+  test_pass_rate: number;
+  misra_violations: number;
+  active_pipelines: number;
+  projects_count: number;
+  devices_summary: DevicesSummary | null;
+  generated_at: string;
+  note: string | null;
+}
+
+interface ASPICEDimension {
+  coverage_pct: number;
+  evidence_count?: number;
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface ASPICEFamily {
+  label: string;
+  dimensions: Record<string, ASPICEDimension>;
+  avg_coverage: number;
+  status: "good" | "warning" | "critical" | "unknown";
+}
+
+interface ASPICEStatusResponse {
+  families: Record<string, ASPICEFamily>;
+  note: string | null;
+}
+
+async function getDashboardOverview(): Promise<OverviewResponse> {
+  const data = await request<any>("/api/v1/dashboard-v2/overview", { method: "GET" });
+  if (data && data.ok === true) return data.data as OverviewResponse;
+  return data as OverviewResponse;
+}
+
+async function getASPICEStatus(): Promise<ASPICEStatusResponse> {
+  const data = await request<any>("/api/v1/dashboard-v2/aspice-status", { method: "GET" });
+  if (data && data.ok === true) return data.data as ASPICEStatusResponse;
+  return data as ASPICEStatusResponse;
+}
+
 export {
   getToken,
   setToken,
@@ -995,6 +1057,9 @@ export {
   generateEvidence,
   getEvidenceStatus,
   getCoverage,
+  // Dashboard v2
+  getDashboardOverview,
+  getASPICEStatus,
   // KB
   getKBArticles,
   getKBArticle,
@@ -1022,6 +1087,13 @@ export type {
   CoverageResponse,
   CoverageModule,
   CoverageTrendPoint,
+  // Dashboard v2
+  OverviewResponse,
+  OverviewDimension,
+  DevicesSummary,
+  ASPICEStatusResponse,
+  ASPICEFamily,
+  ASPICEDimension,
   // KB
   KbArticle,
   KbArticlesResponse,

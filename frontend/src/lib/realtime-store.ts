@@ -432,6 +432,8 @@ export function RealtimeProvider({
   const stepDefsRef = useRef<any>(null);
   const prevPollIdsRef = useRef<Set<string>>(new Set());
   const firstSeenRef = useRef<Map<string, number>>(new Map());
+  // 自适应轮询: 跟踪 activeRuns 数量, 有活跃 run 时 1s, 无活跃时 5s
+  const activeRunsCountRef = useRef<number>(0);
 
   // ── 全局 stats fetcher (Stage-5) ──────────────────────────────────────
   // 共享缓存: loadedRef (已成功加载) + inFlightRef (在飞请求) 双重去重,
@@ -523,8 +525,14 @@ export function RealtimeProvider({
   useRealtimeFeed({
     topics,
     onEvent,
-    onError: () => {
+    onConnect: () => {
+      dispatchRef.current({ type: "set_connected", connected: true });
+    },
+    onDisconnect: () => {
       dispatchRef.current({ type: "set_connected", connected: false });
+    },
+    onError: () => {
+      // onError 在重连期间会触发, 但不一定代表永久断开; onDisconnect 更准确
     },
   });
 
@@ -624,13 +632,25 @@ export function RealtimeProvider({
     };
 
     tick();
-    const iv = setInterval(tick, 1000);
+    // 自适应轮询: 有 activeRuns 时 1s, 无活跃时 5s (节省后端压力)
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = activeRunsCountRef.current > 0 ? 1000 : 5000;
+      setTimeout(() => {
+        tick().then(() => scheduleNext());
+      }, delay);
+    };
+    scheduleNext();
     return () => {
       cancelled = true;
-      clearInterval(iv);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 自适应轮询: 同步 activeRuns 数量到 ref (供 polling interval 读取)
+  useEffect(() => {
+    activeRunsCountRef.current = Object.keys(state.activeRuns).length;
+  }, [state.activeRuns]);
 
   // ── stats fetcher 主循环 ──────────────────────────────────────────────
   // 监听 activeRuns, 对每个出现过的 project_dir:
