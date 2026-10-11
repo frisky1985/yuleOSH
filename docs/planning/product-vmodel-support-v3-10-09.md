@@ -16,7 +16,7 @@
 > 提交 `2da8c943`/`d01ea214`）。**P1（SYS→SWE 对齐默认强制）与 P2（SUP/MAN 独立
 > 评估域 + SWE.5 反假绿）均已闭环**（提交 `48c56269`/`9198b7c0`/`d784e6d1`），
 > 故 yuleOSH 现可声称**完整支撑 ASPICE V 模型工程过程 + 支持/管理过程的合规评估闭环**。
-> 残留为文档化与默认组合评估接入等加强项（见 §5）。
+> **§5 加强项（默认组合评估、审计/看板聚合、SUP/MAN 文档化）均已闭环**（2026-10-11）。
 
 读盘纪律提醒：拿 yuleOSH 自身仓库跑合规引擎，SWE 侧大量 `missing evidence` 仅因
 该仓库非汽车交付物（无 C/嵌入式目标环境产物），**禁止当作产品能力缺陷评分**；
@@ -144,9 +144,9 @@ P2（SWE.5 反假绿 + SUP/MAN 独立评估域）均已闭环**。yuleOSH 现可
 ## 5. 建议下一步（加强项，非阻断）
 
 1. **P0/P1/P2 均已完成**（提交 `2da8c943`/`d01ea214`/`48c56269`/`9198b7c0`/`d784e6d1`）。
-2. **默认组合评估接入**：将 `aspice_gap_check` 默认 `profile_name` 改为
-   `ASPICE_FULL_PROFILES`（SWE+SYS+SUP/MAN），使默认报告即覆盖全 V 模型；
-   当前保持单 profile 默认以保向后兼容，组合评估为显式选项。
-3. **审计/看板聚合**：在 `audit_report.py` 与 dashboard 中消费 SUP/MAN 章节，
-   让支持/管理过程合规度进入统一报告视图。
-4. **文档化**：补充 SUP/MAN 各 BP 的"yuleOSH 如何产出对应证据"指引（CL2/CL3 清单）。
+2. **默认组合评估接入**（已闭环 ✅，2026-10-11）：`aspice_gap_check` 默认改为
+   `ASPICE_FULL_PROFILES`（SWE+SYS+SUP/MAN），默认报告即覆盖全 V 模型。
+3. **审计/看板聚合**（已闭环 ✅，2026-10-11）：`audit_report.py` 新增 SUP.8 维度 +
+   SUP/MAN 跨维度建议；dashboard_v2 新增 `/aspice-status` 端点，按过程族聚合合规状态。
+4. **文档化**（已闭环 ✅，2026-10-11）：新增 `docs/compliance/sup-man-evidence-guide.md`，
+   覆盖 SUP.1/8/9/10 + MAN.1/2/3 各 BP 的证据产出指引（CL2/CL3 清单）。
