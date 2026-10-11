@@ -135,6 +135,8 @@ sessions/
 project-docs/
 .osh/
 specs/
+!specs/modules/
+!specs/submodules/
 knowledge-graph/
 data/
 docs/pricing.md

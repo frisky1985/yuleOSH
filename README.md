@@ -308,6 +308,30 @@ yuleOSH/
 └── pyproject.toml     Python packaging
 ```
 
+### Specs Directory Structure
+
+```
+specs/
+├── modules/          # Large module specifications (40-105KB, RFC 2119 style)
+│   ├── spec-fta.md
+│   ├── spec-fault-injection.md
+│   ├── spec-knowledge-management.md
+│   ├── tech-fta.md
+│   ├── tech-fault-injection.md
+│   └── tech-knowledge-management.md
+│
+└── submodules/       # Lightweight submodule requirements (1-2KB, REQ-xxx format)
+    ├── compliance-engine.md
+    ├── evidence-module.md
+    └── pipeline-module.md
+```
+
+**Design rationale**: Unified `spec/` and `specs/` into a single `specs/` directory with subdirectories to eliminate naming confusion. Files are organized by scale:
+- `specs/modules/` — Full module specifications with complex data structures, multiple functional areas, and industry constraints
+- `specs/submodules/` — Simple requirement lists for core pipeline components and utility modules
+
+See [docs/specs-directory-structure.md](docs/specs-directory-structure.md) for migration guide and best practices.
+
 ---
 
 ## Production Deployment
@@ -560,6 +584,30 @@ yuleOSH/
 ├── install.sh      一键安装脚本
 └── pyproject.toml  Python 包配置
 ```
+
+### 需求规格目录结构
+
+```
+specs/
+├── modules/          # 大型模块规格说明（40-105KB，RFC 2119 文体）
+│   ├── spec-fta.md
+│   ├── spec-fault-injection.md
+│   ├── spec-knowledge-management.md
+│   ├── tech-fta.md
+│   ├── tech-fault-injection.md
+│   └── tech-knowledge-management.md
+│
+└── submodules/       # 轻量级子模块需求列表（1-2KB，REQ-xxx 格式）
+    ├── compliance-engine.md
+    ├── evidence-module.md
+    └── pipeline-module.md
+```
+
+**设计 rationale**：将 `spec/` 和 `specs/` 统一为单个 `specs/` 目录，通过子目录消除命名歧义。文件按规模分类：
+- `specs/modules/` — 完整模块规格，包含复杂数据结构、多个功能区域和行业约束
+- `specs/submodules/` — 核心流水线组件和工具模块的简单需求列表
+
+详见 [docs/specs-directory-structure.md](docs/specs-directory-structure.md) 了解迁移指南和最佳实践。
 
 ---
 

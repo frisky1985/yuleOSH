@@ -68,11 +68,12 @@ def _find_spec_files(project_dir: str) -> list[Path]:
     ])
     if found:
         return found
-    # 退路: specs/ 下文件名含 'spec' 的（排除 misra/requirements/matrix）
-    for p in _find_files(project_dir, ["specs/*.md"]):
-        name = p.name.lower()
-        if "spec" in name and "matrix" not in name and "requirement" not in name and "misra" not in name:
-            found.append(p)
+    # 退路：specs/ 下文件名含 'spec' 的（排除 misra/requirements/matrix）
+    for pattern in ["specs/modules/*.md", "specs/submodules/*.md", "specs/*.md"]:
+        for p in _find_files(project_dir, [pattern]):
+            name = p.name.lower()
+            if "spec" in name and "matrix" not in name and "requirement" not in name and "misra" not in name:
+                found.append(p)
     if found:
         return found
     # 第三退路: 项目根下 *spec*.md（如 spec-contract.md / spec.md）
