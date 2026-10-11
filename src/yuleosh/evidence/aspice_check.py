@@ -135,10 +135,83 @@ _FIX_GUIDANCE: dict[str, list[str]] = {
         "📊 运行 `yuleosh evidence pack` 生成需求覆盖率报告",
         "🔍 标识并记录覆盖缺口",
     ],
+    # SUP.1 — Quality Assurance
+    "SUP.1.BP1": [
+        "📄 创建 `docs/qa-plan.md`，定义质量保证计划（评审、审计、门禁）",
+        "🔖 明确 QA 角色、审计频率与出口准则",
+    ],
+    "SUP.1.BP2": [
+        "📋 在 `.osh/ci/qa-audit.json` 记录 QA 审计结果",
+        "🔄 每个里程碑至少执行一次独立 QA 审计",
+    ],
+    "SUP.1.BP3": [
+        "📝 在 `docs/review-records.md` 记录工作产品评审结果",
+        "✅ 评审发现项跟踪至闭环",
+    ],
+
+    # SUP.8 — Configuration Management
+    "SUP.8.BP1": [
+        "🔧 确保项目使用版本控制系统（git）管理全部配置项",
+        "📂 源代码、文档、构建脚本均纳入版本控制",
+    ],
+    "SUP.8.BP2": [
+        "🏷️ 在 `releases/` 目录管理发布基线",
+        "🔖 每次发布打 tag，基线可追溯",
+    ],
+
+    # SUP.9 — Problem Resolution
+    "SUP.9.BP1": [
+        "📄 创建 `docs/known-issues.md`，记录问题与缺陷",
+        "🔖 每个问题分配唯一 ID、描述、严重度与状态",
+    ],
+    "SUP.9.BP2": [
+        "✅ 在 `docs/known-issues.md` 记录问题修复与关闭证据",
+        "🔄 定期审查未关闭问题，推动闭环",
+    ],
+
+    # SUP.10 — Change Request Management
+    "SUP.10.BP1": [
+        "📄 创建 `docs/change-requests.md`，记录变更请求",
+        "🔖 每个 CR 分配唯一 ID、标题、状态",
+    ],
+    "SUP.10.BP2": [
+        "📊 在 `docs/change-requests.md` 记录 CR 分析与决策",
+        "✅ 变更实施后更新状态并追溯至受影响的工作产品",
+    ],
+
+    # MAN.1 — Project Management
+    "MAN.1.BP1": [
+        "📄 创建 `docs/project-plan.md`，含进度计划与里程碑",
+        "🔖 定义 WBS 分解、出口准则与负责人",
+    ],
+    "MAN.1.BP2": [
+        "📊 在 `docs/project-plan.md` 记录进度跟踪与偏差",
+        "🔄 定期更新项目状态，对比计划与实际",
+    ],
+
+    # MAN.2 — Requirements Management
+    "MAN.2.BP1": [
+        "📄 确保 `docs/requirements.md` 建立需求基线",
+        "🔖 需求纳入版本控制，变更可追溯",
+    ],
+    "MAN.2.BP2": [
+        "📊 记录需求变更历史与版本信息",
+        "🔗 需求变更追溯至受影响的设计、代码与测试",
+    ],
+
+    # MAN.3 — Risk Management
+    "MAN.3.BP1": [
+        "📄 创建 `docs/risk-register.md`，记录已识别风险",
+        "🔖 每个风险含 ID、描述、可能性、影响与缓解措施",
+    ],
+    "MAN.3.BP2": [
+        "📊 在 `docs/risk-register.md` 记录风险评估与处置进展",
+        "🔄 定期审查风险登记册，更新状态",
+    ],
 }
 
 _DEFAULT_FIX = [
-    "📋 查看 SWE 过程组文档，确认此 BP 的产出物",
+    "📋 查看过程组文档，确认此 BP 的产出物",
     "📎 检查 `.osh/evidence/` 中是否已有部分证据",
 ]
 
@@ -147,7 +220,7 @@ def aspice_gap_check(
     project_dir: str = None,
     output_format: str = "markdown",
     template_path: Optional[str] = None,
-    profile_name: str = _DEFAULT_PROFILE,
+    profile_name: Optional[str] = None,
     profile_names: Optional[list] = None,
 ) -> str:
     """Run ASPICE gap-oriented compliance check (A1-08: profile 驱动).
@@ -164,10 +237,12 @@ def aspice_gap_check(
         ``"markdown"`` (default) or ``"json"``.
     template_path : str, optional
         [向后兼容] 显式 yaml 模板路径；若提供则优先生效。
-    profile_name : str
-        [A1-08] 合规标准 profile 名（不含 .yaml），默认 ``aspice_v3.1``。
-        经 ``load_profile`` 加载后注入 ``ComplianceChecker``，与旧行为
-        在 checker 消费字段上一致（A-M1 golden 安全网保证零漂移）。
+    profile_name : str, optional
+        单 profile 名（不含 .yaml）。显式指定时经 ``load_profile`` 加载。
+        默认 ``None`` —— 使用 ``ASPICE_FULL_PROFILES`` 组合评估
+        （SWE + SYS + SUP/MAN），覆盖全 V 模型。
+    profile_names : list, optional
+        多 profile 合并评估（P2）。优先级高于 ``profile_name``。
 
     Returns
     -------
@@ -183,7 +258,8 @@ def aspice_gap_check(
         project_dir = os.environ.get("OSH_HOME", os.getcwd())
 
     # 构造 ComplianceChecker：template_path 优先，否则 profile_names（多 profile
-    # 合并评估，P2），再否则单 profile_name（默认 aspice_v3.1，向后兼容）。
+    # 合并评估，P2），再否则显式 profile_name（单 profile 向后兼容），
+    # 默认使用 ASPICE_FULL_PROFILES（SWE+SYS+SUP/MAN 组合评估）。
     if template_path:
         checker = ComplianceChecker(
             project_dir=project_dir,
@@ -191,9 +267,13 @@ def aspice_gap_check(
         )
     elif profile_names:
         checker = ComplianceChecker(project_dir=project_dir, profile_names=profile_names)
-    else:
+    elif profile_name is not None:
         profile = load_profile(profile_name)
         checker = ComplianceChecker(project_dir=project_dir, profile=profile)
+    else:
+        checker = ComplianceChecker(
+            project_dir=project_dir, profile_names=ASPICE_FULL_PROFILES,
+        )
     report = checker.run()
 
     if output_format == "json":

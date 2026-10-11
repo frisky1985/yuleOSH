@@ -181,6 +181,11 @@ class EvidenceScanner:
             "evidence_types": ["audit", "quality_check"],
             "description": "Quality assurance records, process compliance evidence",
         },
+        "SUP.8": {
+            "title": "Configuration Management",
+            "evidence_types": ["configuration", "baseline", "vcs"],
+            "description": "Version control, configuration baselines, release management",
+        },
         "SUP.9": {
             "title": "Problem Resolution Management",
             "evidence_types": ["issue", "defect"],
@@ -282,6 +287,10 @@ class EvidenceScanner:
         # SUP.1
         if etype in ("audit", "quality", "compliance"):
             return "SUP.1"
+
+        # SUP.8
+        if etype in ("configuration", "baseline", "vcs", "version_control"):
+            return "SUP.8"
 
         # SUP.9
         if etype in ("issue", "defect", "problem"):
@@ -645,6 +654,22 @@ class AuditReportGenerator:
                 f"⚠️ {len(ni_dims)} 个 SWE 维度无证据: {', '.join(ni_dims)} — "
                 f"建议优先补充以达成 CL1"
             )
+
+        sup_man_dims = [
+            d for d in dimensions
+            if d.process_id.startswith("SUP") or d.process_id.startswith("MAN")
+        ]
+        if sup_man_dims:
+            sup_ni = [d.process_id for d in sup_man_dims if d.score == "NI"]
+            if sup_ni:
+                recs.append(
+                    f"⚠️ {len(sup_ni)} 个 SUP/MAN 维度无证据: {', '.join(sup_ni)} — "
+                    f"建议补充以支撑完整 V 模型评估"
+                )
+            elif all(d.score != "NI" for d in sup_man_dims):
+                recs.append(
+                    "🏆 所有 SUP/MAN 维度均有证据覆盖 — 支持/管理过程评估闭环"
+                )
 
         if not recs:
             recs.append("✅ 无重大发现 — 建议持续维护证据链")

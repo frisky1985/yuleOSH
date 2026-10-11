@@ -309,7 +309,8 @@ def _find_previous_session(spec_path: str, project_dir: str):
 
     Returns ``(updated_at, session_dir, data)`` or None.
     """
-    base = Path(project_dir) / ".osh" / "sessions"
+    from yuleosh.pipeline.session import resolve_sessions_root
+    base = resolve_sessions_root()
     best = None
     if not base.exists():
         return None
