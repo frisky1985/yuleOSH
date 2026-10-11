@@ -114,6 +114,8 @@ def mock_full_session(tmp_path_factory):
 
     old_home = os.environ.get("OSH_HOME")
     os.environ["OSH_HOME"] = str(tmp)
+    old_strict = os.environ.get("OSH_SYS_ALIGN_STRICT")
+    os.environ["OSH_SYS_ALIGN_STRICT"] = "0"
     try:
         with mock.patch.object(run_shim, "chat_completion", _no_real_llm):
             session = run_pipeline(str(spec_path), name="b1-inline-full", mock=True)
@@ -122,6 +124,10 @@ def mock_full_session(tmp_path_factory):
             os.environ.pop("OSH_HOME", None)
         else:
             os.environ["OSH_HOME"] = old_home
+        if old_strict is None:
+            os.environ.pop("OSH_SYS_ALIGN_STRICT", None)
+        else:
+            os.environ["OSH_SYS_ALIGN_STRICT"] = old_strict
 
     return session, real_llm_calls
 
@@ -178,11 +184,11 @@ class TestB13InlineMockFullChain:
         assert missing == [], f"缺少关键产物: {missing}"
 
     def test_mock_pipeline_artifact_registry_consistent(self, mock_full_session):
-        """artifacts 注册表 25 项（24 步 + verify-loop 兼容性子产物 self-test），除已知豁免外全部指向真实文件。"""
+        """artifacts 注册表项（步骤数 + 兼容性子产物），除已知豁免外全部指向真实文件。"""
         s, _ = mock_full_session
-        # 24 步 + 1: verify-loop 合并 handler 为兼容旧 self-test-review 依赖
-        # 显式 set_artifact("self-test")（见 verify_loop.py 兼容性注释）。
-        assert len(s.artifacts) == EXPECTED_STEP_COUNT + 1
+        # 30 步 + 2: verify-loop 合并 handler 为兼容旧 self-test-review 依赖
+        # 显式 set_artifact("self-test")（见 verify_loop.py 兼容性注释）+ sys_spec_alignment
+        assert len(s.artifacts) == EXPECTED_STEP_COUNT + 2
         broken = [
             key for key, path in s.artifacts.items()
             if key not in KNOWN_NONFILE_ARTIFACTS

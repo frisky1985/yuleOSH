@@ -171,6 +171,90 @@ def test_sys_review_red_when_section_missing(tmp_path):
         step_review_sys(sess)
 
 
+# ── Phase 1: SYS.3/4/5 实质性内容验证（反假绿）─────────────────────────
+def test_sys_verification_generates_real_scenarios(tmp_path):
+    """SYS.3 必须自 SYS-REQ 真实派生验证用例（V-SYS-xxx），非 stub 散文。"""
+    sess = _make_session(tmp_path)
+    step_sys_requirements(sess)
+    step_sys_verification(sess)
+    text = (tmp_path / "docs" / "system-verification.md").read_text(encoding="utf-8")
+    assert "V-SYS-001" in text, "SYS.3 应生成 V-SYS-001 验证用例"
+    assert "SYS-REQ-001" in text, "SYS.3 验证用例应追溯至 SYS-REQ-001"
+    assert "## 验证覆盖矩阵" in text
+    assert "✅ Covered" in text
+
+
+def test_sys_verification_honest_when_no_requirements(tmp_path):
+    """SYS.3 无需求来源时如实标注 ❌ Not Covered，不凭空造验证用例。"""
+    sess = _make_session(tmp_path)
+    # 不生成 system-requirements.md，直接跑 SYS.3
+    step_sys_verification(sess)
+    text = (tmp_path / "docs" / "system-verification.md").read_text(encoding="utf-8")
+    assert "❌ Not Covered" in text
+    assert "V-SYS-001" not in text, "无需求时不应生成验证用例"
+
+
+def test_sys_integration_generates_real_sequences(tmp_path):
+    """SYS.4 必须自系统架构元素（SE-xx）真实派生集成步骤（INT-xxx）。"""
+    sess = _make_session(tmp_path)
+    step_sys_requirements(sess)
+    step_sys_architecture(sess)
+    step_sys_integration(sess)
+    text = (tmp_path / "docs" / "system-integration.md").read_text(encoding="utf-8")
+    assert "INT-001" in text, "SYS.4 应生成 INT-001 集成步骤"
+    assert "SE-01" in text, "SYS.4 集成步骤应追溯至 SE-01 系统元素"
+    assert "## 集成覆盖矩阵" in text
+    assert "✅ Covered" in text
+
+
+def test_sys_integration_honest_when_no_architecture(tmp_path):
+    """SYS.4 无架构元素时如实标注 ❌ Not Covered，不凭空造集成序列。"""
+    sess = _make_session(tmp_path)
+    # 不生成 system-architecture.md，直接跑 SYS.4
+    step_sys_integration(sess)
+    text = (tmp_path / "docs" / "system-integration.md").read_text(encoding="utf-8")
+    assert "❌ Not Covered" in text
+    assert "INT-001" not in text, "无架构元素时不应生成集成步骤"
+
+
+def test_sys_validation_generates_real_scenarios_from_stakeholder(tmp_path):
+    """SYS.5 有涉众需求时自 STAKE-xxx 派生确认场景（VAL-xxx）。"""
+    sess = _make_session(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "stakeholder-requirements.md").write_text(
+        "# 涉众需求\n\n- STAKE-001 — 车辆应防夹\n- STAKE-002 — 车辆应报警\n",
+        encoding="utf-8",
+    )
+    step_sys_requirements(sess)
+    step_sys_validation(sess)
+    text = (tmp_path / "docs" / "system-validation.md").read_text(encoding="utf-8")
+    assert "VAL-001" in text, "SYS.5 应生成 VAL-001 确认场景"
+    assert "STAKE-001" in text, "SYS.5 确认场景应追溯至 STAKE-001"
+    assert "来源" in text and "stakeholder" in text
+    assert "## 确认覆盖矩阵" in text
+
+
+def test_sys_validation_falls_back_to_sys_req(tmp_path):
+    """SYS.5 无涉众需求时降级至 SYS-REQ，显式标注 source=spec-derived。"""
+    sess = _make_session(tmp_path)
+    step_sys_requirements(sess)
+    step_sys_validation(sess)
+    text = (tmp_path / "docs" / "system-validation.md").read_text(encoding="utf-8")
+    assert "VAL-001" in text
+    assert "SYS-REQ-001" in text
+    assert "spec-derived" in text, "降级时应显式标注 source=spec-derived"
+
+
+def test_sys_validation_honest_when_no_requirements(tmp_path):
+    """SYS.5 无任何需求来源时如实标注 ❌ Not Covered。"""
+    sess = _make_session(tmp_path)
+    step_sys_validation(sess)
+    text = (tmp_path / "docs" / "system-validation.md").read_text(encoding="utf-8")
+    assert "❌ Not Covered" in text
+    assert "VAL-001" not in text
+
+
 # ── A1 + checker: SYS profile 驱动合规检查产出 SYS 区 ───────────────────
 def test_compliance_checker_uses_sys_profile(tmp_path):
     _write_all_sys_docs(tmp_path)

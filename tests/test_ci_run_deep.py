@@ -582,9 +582,10 @@ class TestRunClangTidy:
         from yuleosh.ci.run import run_clang_tidy, CIResult
         Path(tmp_proj, "src").mkdir()
         Path(tmp_proj, "src", "bad.c").write_text("int x=1;")
-        with mock.patch("subprocess.run") as mrun:
+        with mock.patch("yuleosh.ci.stages.validation.subprocess.run") as mrun:
             mrun.return_value.returncode = 1
             mrun.return_value.stdout = "issues found"
+            mrun.return_value.stderr = ""
             ci = CIResult(1, "abc")
             assert run_clang_tidy(tmp_proj, ci) is False
 

@@ -47,17 +47,16 @@ _REPORT = {
 
 
 @mock.patch("yuleosh.evidence.aspice_check.ComplianceChecker")
-@mock.patch("yuleosh.evidence.aspice_check.load_profile")
-def test_aspice_gap_check_default_uses_profile(mock_load, mock_checker_cls):
-    """GIVEN 默认调用 WHEN gap check THEN 走 load_profile 并注入 profile."""
-    fake_profile = SimpleNamespace(standard="ASPICE", version="3.1")
-    mock_load.return_value = fake_profile
+def test_aspice_gap_check_default_uses_full_profiles(mock_checker_cls):
+    """GIVEN 默认调用 WHEN gap check THEN 使用 ASPICE_FULL_PROFILES 组合评估."""
     mock_checker_cls.return_value.run.return_value = _REPORT
 
     result = aspice_check.aspice_gap_check(project_dir="/p")
 
-    mock_load.assert_called_once_with("aspice_v3.1")
-    mock_checker_cls.assert_called_once_with(project_dir="/p", profile=fake_profile)
+    from yuleosh.evidence.aspice_check import ASPICE_FULL_PROFILES
+    mock_checker_cls.assert_called_once_with(
+        project_dir="/p", profile_names=ASPICE_FULL_PROFILES,
+    )
     assert "SWE.1" in result
 
 

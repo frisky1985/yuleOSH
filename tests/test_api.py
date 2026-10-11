@@ -378,7 +378,7 @@ class TestSpec:
         from yuleosh.api.spec import handle_spec
         result, status = handle_spec("POST", "validate", {"path": "/nonexistent/file.md"}, {}, current_user={"user_id": 1, "org_id": 1, "email": "t@t.com", "role": "admin"})
         assert result["ok"] is False
-        assert "osh_home" in result["error"].lower()
+        assert "within project" in result["error"].lower()
         assert status == 403
 
     def test_validate_success(self, temp_spec_file):

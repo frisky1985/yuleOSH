@@ -31,13 +31,27 @@ from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 def _make_session(tmp_path, name="phase5-qemu", **attrs):
     # 关键：session 目录基于 OSH_HOME 生成，必须指向 tmp_path，
     # 否则多个测试会共用 CWD 下的 .osh/ 目录造成互相污染。
-    # 必须保存/恢复 OSH_HOME——直接覆盖且不恢复会泄漏到后续测试
+    # 必须保存/恢复 OSH_HOME 和 OSH_SESSIONS_DIR——直接覆盖且不恢复会泄漏到后续测试
     # （随机顺序暴露：test_api.py::temp_spec_file 拿到 tmp_path 后
     # 找不到 docs/spec.md → 11 errors；TestEvidence generate 403）。
+    #
+    # 2026-10-11 修复：spec_path 必须放在 docs/ 子目录下，因为
+    # _resolve_coverage_project_dir 对 spec_path 做 .parent.parent 来
+    # 获取项目根目录。如果 spec_path 直接在 tmp_path 下，.parent.parent
+    # 会返回 tmp_path 的父目录（pytest 临时目录根），导致 _has_c_sources
+    # 扫描到相邻测试创建的 C 文件，造成测试间状态泄漏。
+    #
+    # 2026-10-11 修复：必须同时设置 OSH_SESSIONS_DIR，因为 conftest.py
+    # 全局设置了 OSH_SESSIONS_DIR 指向共享临时目录，resolve_sessions_root()
+    # 优先返回 OSH_SESSIONS_DIR。不覆盖会导致 _find_elf_files 搜索到相邻
+    # 测试创建的 ELF 文件（session_dir.parent.parent 指向同一个共享项目目录）。
     _old_home = os.environ.get("OSH_HOME")
+    _old_sessions = os.environ.get("OSH_SESSIONS_DIR")
     os.environ["OSH_HOME"] = str(tmp_path)
+    os.environ["OSH_SESSIONS_DIR"] = str(tmp_path / ".osh" / "sessions")
+    (tmp_path / "docs").mkdir(exist_ok=True)
     try:
-        s = PipelineSession(name=name, spec_path=str(tmp_path / "spec.md"))
+        s = PipelineSession(name=name, spec_path=str(tmp_path / "docs" / "spec.md"))
         s.context = {}
         for k, v in attrs.items():
             setattr(s, k, v)
@@ -47,6 +61,10 @@ def _make_session(tmp_path, name="phase5-qemu", **attrs):
             os.environ["OSH_HOME"] = _old_home
         else:
             os.environ.pop("OSH_HOME", None)
+        if _old_sessions is not None:
+            os.environ["OSH_SESSIONS_DIR"] = _old_sessions
+        else:
+            os.environ.pop("OSH_SESSIONS_DIR", None)
 
 
 # =====================================================================

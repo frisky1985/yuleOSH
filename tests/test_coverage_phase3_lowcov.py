@@ -582,7 +582,7 @@ class TestProjectHelpers:
     def test_require_auth_with_token(self):
         from yuleosh.ui.routes.project_routes import _require_auth
         h = _make_handler(headers={"Authorization": "Bearer tok1"})
-        with mock.patch("yuleosh.ui.routes.project_routes.get_session_user",
+        with mock.patch("yuleosh.ui.auth_extended.resolve_session",
                         return_value={"user_id": 1, "org_slug": "acme"}):
             assert _require_auth(h) == {"user_id": 1, "org_slug": "acme"}
 

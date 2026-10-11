@@ -1544,7 +1544,7 @@ class TestBillingRoutes:
     def test_require_auth_ok(self):
         from yuleosh.ui.routes import billing_routes as mod
         from yuleosh.ui.routes.billing_routes import _require_auth
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()):
+        with mock.patch("yuleosh.ui.auth_extended.resolve_session", return_value=self._user()):
             assert _require_auth(self._handler())["org_slug"] == "acme"
 
     def test_auth_error_missing_token(self):
@@ -1571,7 +1571,7 @@ class TestBillingRoutes:
 
     def test_usage_forbidden(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=False):
             _, code = mod.handle_get_usage("GET", "usage", {}, {},
                                               handler=self._handler())
@@ -1579,7 +1579,7 @@ class TestBillingRoutes:
 
     def test_usage_no_org(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user",
+        with mock.patch.object(mod, "_require_auth",
                                return_value={"user_id": 1, "org_slug": ""}), \
              mock.patch("yuleosh.rbac.check_role", return_value=True):
             _, code = mod.handle_get_usage("GET", "usage", {}, {},
@@ -1588,7 +1588,7 @@ class TestBillingRoutes:
 
     def test_usage_ok(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=True), \
              mock.patch.object(mod, "UsageMeter") as meter_cls:
             # Phase 9: UsageMeter 返回完整 summary 结构（双源合流读 usage/limits）
@@ -1606,7 +1606,7 @@ class TestBillingRoutes:
     # -- plan ------------------------------------------------------------
     def test_plan_ok(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=True), \
              mock.patch.object(mod, "BillingManager") as billing_cls:
             billing_cls.return_value.get_subscription.return_value = {
@@ -1627,7 +1627,7 @@ class TestBillingRoutes:
 
     def test_upgrade_forbidden(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=False):
             _, code = mod.handle_upgrade_plan(
                 "POST", "upgrade", {"plan": "pro"}, {}, handler=self._handler())
@@ -1635,7 +1635,7 @@ class TestBillingRoutes:
 
     def test_upgrade_invalid_plan(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=True):
             _, code = mod.handle_upgrade_plan(
                 "POST", "upgrade", {"plan": "platinum"}, {}, handler=self._handler())
@@ -1643,7 +1643,7 @@ class TestBillingRoutes:
 
     def test_upgrade_checkout_error(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=True), \
              mock.patch.object(mod, "BillingManager") as billing_cls:
             billing_cls.return_value.create_checkout_session.return_value = {
@@ -1654,7 +1654,7 @@ class TestBillingRoutes:
 
     def test_upgrade_ok(self):
         from yuleosh.ui.routes import billing_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              mock.patch("yuleosh.rbac.check_role", return_value=True), \
              mock.patch.object(mod, "BillingManager") as billing_cls:
             billing_cls.return_value.create_checkout_session.return_value = {
@@ -1780,7 +1780,7 @@ class TestTenantRoutes:
     def test_require_auth_ok(self):
         from yuleosh.ui.routes import tenant_routes as mod
         from yuleosh.ui.routes.tenant_routes import _require_auth
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()):
+        with mock.patch("yuleosh.ui.auth_extended.resolve_session", return_value=self._user()):
             user = _require_auth(self._handler())
         assert user["org_slug"] == "acme"
 
@@ -1808,7 +1808,7 @@ class TestTenantRoutes:
 
     def test_info_no_slug(self):
         from yuleosh.ui.routes import tenant_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()):
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()):
             resp, code = mod.handle_tenant_info("GET", "", {}, {},
                                                 handler=self._handler())
         assert code == 400
@@ -1816,7 +1816,7 @@ class TestTenantRoutes:
 
     def test_info_not_found(self):
         from yuleosh.ui.routes import tenant_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, tenant=None)[0]:
             resp, code = mod.handle_tenant_info("GET", "acme", {}, {},
                                                 handler=self._handler())
@@ -1826,7 +1826,7 @@ class TestTenantRoutes:
     def test_info_ok(self):
         from yuleosh.ui.routes import tenant_routes as mod
         tenant = self._tenant()
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, tenant=tenant)[0]:
             resp, code = mod.handle_tenant_info("GET", "acme", {}, {},
                                                 handler=self._handler())
@@ -1847,7 +1847,7 @@ class TestTenantRoutes:
 
     def test_update_non_admin(self):
         from yuleosh.ui.routes import tenant_routes as mod
-        with mock.patch.object(mod, "get_session_user",
+        with mock.patch.object(mod, "_require_auth",
                                return_value=self._user(role="member")):
             resp, code = mod.handle_tenant_update(
                 "PUT", "acme", {"name": "X"}, {}, handler=self._handler())
@@ -1856,7 +1856,7 @@ class TestTenantRoutes:
 
     def test_update_value_error(self):
         from yuleosh.ui.routes import tenant_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()):
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()):
             store = mock.MagicMock()
             store.update.side_effect = ValueError("Tenant 'acme' not found.")
             with mock.patch.object(mod, "TenantStore", return_value=store):
@@ -1868,7 +1868,7 @@ class TestTenantRoutes:
     def test_update_ok(self):
         from yuleosh.ui.routes import tenant_routes as mod
         tenant = self._tenant()
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, updated=tenant)[0]:
             resp, code = mod.handle_tenant_update(
                 "PUT", "acme", {"name": "Acme2"}, {}, handler=self._handler())
@@ -1880,7 +1880,7 @@ class TestTenantRoutes:
     def test_list_admin(self):
         from yuleosh.ui.routes import tenant_routes as mod
         tenant = self._tenant()
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, listed=[tenant])[0]:
             resp, code = mod.handle_tenant_list("GET", "", {}, {},
                                                 handler=self._handler())
@@ -1894,7 +1894,7 @@ class TestTenantRoutes:
         store = mock.MagicMock()
         store.get.return_value = tenant
         store.list_tenants.return_value = []  # must NOT be called
-        with mock.patch.object(mod, "get_session_user",
+        with mock.patch.object(mod, "_require_auth",
                                return_value=self._user(role="member")), \
              mock.patch.object(mod, "TenantStore", return_value=store):
             resp, code = mod.handle_tenant_list("GET", "", {}, {},
@@ -1908,7 +1908,7 @@ class TestTenantRoutes:
         from yuleosh.ui.routes import tenant_routes as mod
         store = mock.MagicMock()
         store.get.return_value = None
-        with mock.patch.object(mod, "get_session_user",
+        with mock.patch.object(mod, "_require_auth",
                                return_value=self._user(role="member")), \
              mock.patch.object(mod, "TenantStore", return_value=store):
             resp, code = mod.handle_tenant_list("GET", "", {}, {},
@@ -1919,7 +1919,7 @@ class TestTenantRoutes:
     # -- handle_tenant_projects ------------------------------------------
     def test_projects_ok(self):
         from yuleosh.ui.routes import tenant_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, projects=[{"slug": "p1"}])[0]:
             resp, code = mod.handle_tenant_projects(
                 "GET", "acme/projects", {}, {}, handler=self._handler())
@@ -1930,7 +1930,7 @@ class TestTenantRoutes:
     def test_create_limit_reached(self):
         from yuleosh.ui.routes import tenant_routes as mod
         tenant = self._tenant(plan="free")  # max_projects = 1
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, tenant=tenant,
                                projects=[{"slug": "p1"}])[0]:
             resp, code = mod.handle_tenant_project_create(
@@ -1942,7 +1942,7 @@ class TestTenantRoutes:
     def test_create_ok(self):
         from yuleosh.ui.routes import tenant_routes as mod
         tenant = self._tenant(plan="pro")  # max_projects = 10
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, tenant=tenant, projects=[])[0]:
             resp, code = mod.handle_tenant_project_create(
                 "POST", "acme/projects", {"slug": "p1"}, {},
@@ -1953,7 +1953,7 @@ class TestTenantRoutes:
     # -- handle_usage_check ----------------------------------------------
     def test_usage_not_found(self):
         from yuleosh.ui.routes import tenant_routes as mod
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, tenant=None)[0]:
             resp, code = mod.handle_usage_check("GET", "acme/usage", {}, {},
                                                 handler=self._handler())
@@ -1963,7 +1963,7 @@ class TestTenantRoutes:
     def test_usage_ok(self):
         from yuleosh.ui.routes import tenant_routes as mod
         tenant = self._tenant(plan="pro")
-        with mock.patch.object(mod, "get_session_user", return_value=self._user()), \
+        with mock.patch.object(mod, "_require_auth", return_value=self._user()), \
              self._patch_store(mod, tenant=tenant,
                                projects=[{"slug": "p1"}, {"slug": "p2"}])[0]:
             resp, code = mod.handle_usage_check("GET", "acme/usage", {}, {},

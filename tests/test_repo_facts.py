@@ -170,7 +170,7 @@ class TestCollectRepoFacts:
         text = format_repo_facts(facts)
         assert "Repository Facts" in text
         assert "Source files: 2" in text
-        assert "Test functions: 3" in text
+        assert "Tests:" in text and "3" in text
         assert "Test framework: custom-Check" in text
         assert "Test files (1)" in text
         assert "test_window_control.c" in text

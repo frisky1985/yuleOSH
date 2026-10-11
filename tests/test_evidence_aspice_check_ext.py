@@ -157,10 +157,11 @@ def test_aspice_gap_check_markdown_default(mock_checker_cls, mock_checker_report
     assert "yuleosh evidence pack" in result
     assert "yuleosh --help" in result
 
-    # Verify ComplianceChecker was constructed with correct args (A1-08: profile 路径)
+    # Verify ComplianceChecker was constructed with correct args (default: full profiles)
+    from yuleosh.evidence.aspice_check import ASPICE_FULL_PROFILES
     mock_checker_cls.assert_called_once_with(
         project_dir="/fake/project",
-        profile=mock.ANY,
+        profile_names=ASPICE_FULL_PROFILES,
     )
 
 
@@ -262,9 +263,10 @@ def test_aspice_gap_check_default_project_dir(mock_checker_cls, mock_checker_rep
     # Simulate OSH_HOME set
     with mock.patch.dict(os.environ, {"OSH_HOME": "/env/osh"}):
         result = aspice_gap_check()
+        from yuleosh.evidence.aspice_check import ASPICE_FULL_PROFILES
         mock_checker_cls.assert_called_with(
             project_dir="/env/osh",
-            profile=mock.ANY,
+            profile_names=ASPICE_FULL_PROFILES,
         )
 
     # Without OSH_HOME — falls back to CWD
@@ -273,7 +275,7 @@ def test_aspice_gap_check_default_project_dir(mock_checker_cls, mock_checker_rep
             result = aspice_gap_check()
             mock_checker_cls.assert_called_with(
                 project_dir="/cwd",
-                profile=mock.ANY,
+                profile_names=ASPICE_FULL_PROFILES,
             )
 
 
