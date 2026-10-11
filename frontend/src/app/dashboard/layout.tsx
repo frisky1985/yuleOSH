@@ -17,6 +17,7 @@ import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
 import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
 import { DeleteAccountDialog } from "@/components/account/delete-account-dialog";
 import { RealtimeProvider } from "@/lib/realtime-store";
+import { RealtimeDegradationBanner } from "@/components/dashboard/realtime-degradation-banner";
 import { useDashboardTabPersistence } from "@/lib/sidebar-persistence";
 
 interface DashboardShellContextValue {
@@ -177,6 +178,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             {/* pt-14 让出窄屏顶栏（<768px 侧栏隐藏、改由顶栏承载导航），
                 md 及以上由侧栏占位 md:pl-60，无需顶部内边距。 */}
             <div className="min-h-screen bg-[#0a0e17] text-[#e2e8f0] pt-14 md:pt-0 md:pl-60">
+              <RealtimeDegradationBanner />
               {children}
             </div>
           </SidebarExtrasContext.Provider>

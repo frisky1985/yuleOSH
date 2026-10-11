@@ -85,6 +85,7 @@ def handle_dashboard_v2(method: str, path_tail: str, body: dict, query: dict,
         GET  /api/v1/dashboard-v2/recent-pipelines  — 最近流水线
         GET  /api/v1/dashboard-v2/device-status     — 设备状态汇总
         GET  /api/v1/dashboard-v2/tests-summary     — 三层测试汇总
+        GET  /api/v1/dashboard-v2/aspice-status     — ASPICE 过程域合规状态
     """
     current_user = kwargs.get("current_user") or {}
     org_id = current_user.get("org_id")
@@ -97,6 +98,8 @@ def handle_dashboard_v2(method: str, path_tail: str, body: dict, query: dict,
         return _device_status(query)
     if path_tail == "tests-summary" and method == "GET":
         return _tests_summary(query)
+    if path_tail == "aspice-status" and method == "GET":
+        return _aspice_status(query)
 
     return json_error(f"Unknown dashboard-v2 sub-path or method: {method} {path_tail}", 404)
 
@@ -455,3 +458,67 @@ def _tests_summary(query: dict) -> tuple[dict, int]:
 
     note = None if found else "无测试数据（ci_runs 无三层测试 stage 记录）"
     return json_ok({"layers": layers, "note": note})
+
+
+# ── GET /api/v1/dashboard-v2/aspice-status ────────────────────────────
+
+_PROCESS_FAMILY = {
+    "SWE": "工程过程（软件）",
+    "SYS": "工程过程（系统）",
+    "SUP": "支持过程",
+    "MAN": "管理过程",
+}
+
+
+def _aspice_status(query: dict) -> tuple[dict, int]:
+    """GET /api/v1/dashboard-v2/aspice-status — ASPICE 过程域合规状态。
+
+    从 audit-manifest.json 读取过程域评估结果，按过程族（SWE/SYS/SUP/MAN）
+    聚合返回。无数据时返回空结构 + note（数据真实优先，禁止造演示数据）。
+    """
+    manifest_path = _find_manifest()
+    if manifest_path is None:
+        return json_ok({
+            "families": {
+                k: {"label": v, "dimensions": {}, "status": "unknown"}
+                for k, v in _PROCESS_FAMILY.items()
+            },
+            "note": "无 ASPICE 评估数据（audit-manifest.json 缺失）",
+        })
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.debug("Failed to parse audit manifest for aspice-status: %s", e)
+        return json_ok({
+            "families": {},
+            "note": "audit-manifest.json 解析失败",
+        })
+
+    summary = manifest.get("summary_by_process") or manifest.get("aspice") or {}
+    families: dict[str, dict] = {}
+    for prefix, label in _PROCESS_FAMILY.items():
+        dims = {
+            k: v for k, v in summary.items()
+            if k.upper().startswith(prefix)
+        }
+        if dims:
+            scores = [
+                v.get("coverage_pct", 0) if isinstance(v, dict) else 0
+                for v in dims.values()
+            ]
+            avg = round(sum(scores) / len(scores), 1) if scores else 0.0
+            status = "good" if avg >= 70 else "warning" if avg >= 30 else "critical"
+        else:
+            avg = 0.0
+            status = "unknown"
+        families[prefix] = {
+            "label": label,
+            "dimensions": dims,
+            "avg_coverage": avg,
+            "status": status,
+        }
+
+    return json_ok({
+        "families": families,
+        "note": None,
+    })

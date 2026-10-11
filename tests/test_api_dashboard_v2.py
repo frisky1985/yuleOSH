@@ -108,9 +108,9 @@ class TestRouting:
         assert status == 404 and payload["ok"] is False
 
     def test_all_routes_ok(self):
-        """GIVEN the four dashboard-v2 routes WHEN GET THEN 200."""
+        """GIVEN the five dashboard-v2 routes WHEN GET THEN 200."""
         for path in ("overview", "recent-pipelines", "device-status",
-                     "tests-summary"):
+                     "tests-summary", "aspice-status"):
             payload, status = _req("GET", path)
             assert status == 200, path
             assert payload["ok"] is True, path
@@ -386,6 +386,75 @@ class TestTestsSummary:
         payload, status = _req("GET", "tests-summary")
         assert status == 200
         assert "加载失败" in payload["data"]["note"]
+
+
+# ── aspice-status ────────────────────────────────────────────────────
+
+class TestAspiceStatus:
+    def test_no_manifest(self, _isolate):
+        """GIVEN 无 audit-manifest.json WHEN aspice-status THEN 全 unknown + note。"""
+        payload, status = _req("GET", "aspice-status")
+        assert status == 200
+        data = payload["data"]
+        assert set(data["families"]) == {"SWE", "SYS", "SUP", "MAN"}
+        for fam in data["families"].values():
+            assert fam["status"] == "unknown"
+        assert data["note"] is not None
+
+    def test_with_manifest(self, _isolate):
+        """GIVEN audit-manifest 含 summary_by_process WHEN aspice-status
+        THEN 按过程族聚合 + avg_coverage + status 阈值。"""
+        _write(_isolate, ".yuleosh/evidence-bundle/audit-manifest.json", {
+            "summary_by_process": {
+                "SWE.1": {"coverage_pct": 80},
+                "SWE.2": {"coverage_pct": 60},
+                "SYS.1": {"coverage_pct": 90},
+                "SUP.1": {"coverage_pct": 40},
+                "SUP.8": {"coverage_pct": 20},
+                "MAN.3": {"coverage_pct": 75},
+            },
+        })
+        payload, status = _req("GET", "aspice-status")
+        assert status == 200
+        data = payload["data"]
+        assert data["note"] is None
+
+        swe = data["families"]["SWE"]
+        assert swe["avg_coverage"] == 70.0
+        assert swe["status"] == "good"
+
+        sys_fam = data["families"]["SYS"]
+        assert sys_fam["avg_coverage"] == 90.0
+        assert sys_fam["status"] == "good"
+
+        sup = data["families"]["SUP"]
+        assert sup["avg_coverage"] == 30.0
+        assert sup["status"] == "warning"
+
+        man = data["families"]["MAN"]
+        assert man["avg_coverage"] == 75.0
+        assert man["status"] == "good"
+
+    def test_critical_status(self, _isolate):
+        """GIVEN 低覆盖率 WHEN aspice-status THEN status=critical。"""
+        _write(_isolate, ".osh/evidence/audit-manifest.json", {
+            "summary_by_process": {
+                "SUP.9": {"coverage_pct": 10},
+            },
+        })
+        payload, _ = _req("GET", "aspice-status")
+        sup = payload["data"]["families"]["SUP"]
+        assert sup["status"] == "critical"
+
+    def test_malformed_manifest(self, _isolate):
+        """GIVEN 损坏的 audit-manifest.json WHEN aspice-status THEN 空 + note。"""
+        p = _isolate / ".yuleosh" / "evidence-bundle" / "audit-manifest.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{bad json", encoding="utf-8")
+        payload, status = _req("GET", "aspice-status")
+        assert status == 200
+        assert payload["data"]["families"] == {}
+        assert payload["data"]["note"] is not None
 
 
 # ── 指标加载器（真实数据源解析）──────────────────────────────────────
