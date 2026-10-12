@@ -41,6 +41,21 @@ _SHALL_RE = re.compile(
     re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 
+# Meta-statement markers: SHALL statements about documentation discipline
+# rather than system behavior. These inflate the uncovered count when counted
+# as functional requirements (spec §4c/§4d 文档纪律规则).
+_META_SUBJECTS = ("派生文档", "文档", "计数", "文档的", "计数口径")
+
+
+def _is_meta_statement(statement: str) -> bool:
+    """Check if a SHALL statement is a meta/documentation rule, not a functional requirement.
+
+    Meta-statements have subjects like '派生文档' or '计数' rather than 'system',
+    and describe documentation discipline rules (spec §4c/§4d) rather than
+    system behavior.
+    """
+    return any(marker in statement for marker in _META_SUBJECTS)
+
 
 def _extract_shalls(spec_content: str) -> list[dict]:
     """Extract all SHALL/SHOULD/MAY statements from spec content.
@@ -57,8 +72,8 @@ def _extract_shalls(spec_content: str) -> list[dict]:
     current_section = ""
     for idx, line in enumerate(lines, 1):
         stripped = line.strip()
-        # Track section context: `### SR-001: 硬件抽象` or `### SW-004: ...`
-        sec_m = re.match(r"^#{2,4}\s+([A-Z]{2}-\d+)", stripped)
+        # Track section context: `### SR-001: 硬件抽象` / `### SW-004: ...` / `### Req-001: ...`
+        sec_m = re.match(r"^#{2,4}\s+([A-Z]{2}-\d+|Req-\d+)", stripped, re.IGNORECASE)
         if sec_m:
             current_section = sec_m.group(1)
             continue
@@ -72,14 +87,13 @@ def _extract_shalls(spec_content: str) -> list[dict]:
             continue
         m = _SHALL_RE.match(stripped)
         if m:
+            stmt_text = m.group(2).strip()
             shalls.append({
                 "kind": m.group("kind").upper().strip(),
-                # _SHALL_RE 第 2 组为语句文本（无命名 group）；以 SHALL 开头的正文行
-                # （如风险段「SHALL 强制；…」）会命中此分支，必须用 m.group(2) 而非
-                # 不存在的 m.group("statement")，否则 IndexError: no such group。
-                "statement": m.group(2).strip(),
+                "statement": stmt_text,
                 "line": idx,
                 "section": current_section,
+                "is_meta": _is_meta_statement(stmt_text),
             })
         else:
             # Also catch inline shall statements after list markers
@@ -95,6 +109,7 @@ def _extract_shalls(spec_content: str) -> list[dict]:
                     "statement": stmt,
                     "line": idx,
                     "section": current_section,
+                    "is_meta": _is_meta_statement(stmt),
                 })
     # Deduplicate by (kind, statement, section)
     seen: set = set()
@@ -107,14 +122,14 @@ def _extract_shalls(spec_content: str) -> list[dict]:
     return unique
 
 
-# Markdown table row: `| FR-001 | 描述 | 优先级 | 实现说明 |`
+# Markdown table row: `| FR-001 | 描述 | 优先级 | 实现说明 |` or `| Req-001.1 | 描述 | ...`
 _TABLE_ROW_RE = re.compile(
-    r"^\s*\|\s*([A-Za-z]{1,4}-?\d+)\s*\|\s*(.+?)\s*\|",
+    r"^\s*\|\s*([A-Za-z]{1,4}-?\d+(?:\.\d+)?)\s*\|\s*(.+?)\s*\|",
     re.IGNORECASE,
 )
-# PRD section heading that carries a spec section ID: `### 4.1 硬件抽象层 (SR-001)`
+# PRD section heading that carries a spec section ID: `### 4.1 硬件抽象层 (SR-001)` or `### 4.1 (Req-001)`
 _PRD_SECTION_ID_RE = re.compile(
-    r"^#{2,4}\s+.*?\(?\b([A-Z]{2}-\d+)\b\)?\s*$",
+    r"^#{2,4}\s+.*?\(?\b([A-Z]{2}-\d+|Req-\d+)\b\)?\s*$",
     re.IGNORECASE,
 )
 # Generic requirement ID inside a heading: `### FR-001 ...`, `### REQ-12 ...`
@@ -235,18 +250,23 @@ def _check_shall_coverage(
     """Check each spec SHALL for corresponding coverage in the PRD.
 
     Matching strategy (first hit wins, strongest first):
-      1. Section ID alignment: spec SHALL belongs to `SR-001` and PRD has
-         requirements under the same `SR-001` section → covered (high).
+      0. Meta-statements: documentation discipline rules (spec §4c/§4d) are
+         marked ``is_meta`` and excluded from coverage counting.
+      1. Section ID alignment: spec SHALL belongs to ``SR-001`` / ``Req-001``
+         and PRD has requirements under the same section → covered (high).
+      1.5. Req-ID traceability: spec SHALL is under ``Req-001`` section and
+           PRD has ``Req-001.N`` sub-requirement entries → covered (high).
       2. English keyword overlap: >=80% ASCII keyword overlap → high,
          >=50% → low.
-      3. CJK bigram overlap: shared Chinese bigrams between the SHALL
+      3. CJK character overlap: shared Chinese characters between the SHALL
          statement and PRD requirement text → covered (low/high).
 
     Returns a list of finding dicts:
       - shall: the original SHALL statement
       - covered: bool
       - matched_prd: str or "" if not found
-      - confidence: "high" | "low" | "none"
+      - confidence: "high" | "low" | "none" | "meta"
+      - is_meta: bool (True for documentation discipline rules)
     """
     findings: list[dict] = []
     prd_text_combined = " ".join(r["text"] for r in prd_requirements)
@@ -256,6 +276,15 @@ def _check_shall_coverage(
     for r in prd_requirements:
         if r.get("section"):
             prd_by_section.setdefault(r["section"].upper(), []).append(r)
+
+    # Build Req-ID parent mapping from PRD: Req-001.1 → parent Req-001
+    prd_by_req_parent: dict[str, list[dict]] = {}
+    for r in prd_requirements:
+        rid = r.get("id", "")
+        m = re.match(r"^(REQ-\d+)\.(\d+)", rid, re.IGNORECASE)
+        if m:
+            parent = m.group(1).upper()
+            prd_by_req_parent.setdefault(parent, []).append(r)
 
     # Normative verbs and stop words — not meaningful for keyword overlap
     _NORMATIVE = {"shall", "should", "may", "must", "will", "not"}
@@ -268,6 +297,23 @@ def _check_shall_coverage(
             continue
 
         statement = shall["statement"].strip().rstrip("。.;")
+
+        # ── 0. Meta-statement: documentation discipline rule ─────────
+        if shall.get("is_meta"):
+            findings.append({
+                "shall": {
+                    "kind": shall["kind"],
+                    "statement": statement,
+                    "line": shall["line"],
+                    "section": shall.get("section", ""),
+                },
+                "covered": True,
+                "matched_prd": "(meta: documentation discipline rule, not functional requirement)",
+                "confidence": "meta",
+                "is_meta": True,
+            })
+            continue
+
         covered = False
         matched_prd = ""
         confidence = "none"
@@ -278,6 +324,17 @@ def _check_shall_coverage(
             covered = True
             confidence = "high"
             matched_prd = prd_by_section[shall_section][0]["text"][:120]
+
+        # ── 1.5. Req-ID traceability ──────────────────────────────
+        # spec SHALL under `### Req-001` → check PRD for Req-001.N entries
+        if not covered and shall_section:
+            req_m = re.match(r"^(REQ-\d+)$", shall_section, re.IGNORECASE)
+            if req_m:
+                parent_id = req_m.group(1).upper()
+                if parent_id in prd_by_req_parent:
+                    covered = True
+                    confidence = "high"
+                    matched_prd = prd_by_req_parent[parent_id][0]["text"][:120]
 
         # ── 2. English keyword overlap ─────────────────────────────
         if not covered:
@@ -333,6 +390,7 @@ def _check_shall_coverage(
             "covered": covered,
             "matched_prd": matched_prd,
             "confidence": confidence,
+            "is_meta": False,
         })
 
     return findings
@@ -566,6 +624,7 @@ def step_review_prd(session: PipelineSession) -> str:
         shall_count = sum(1 for s in spec_shalls if s["kind"] in ("SHALL", "SHALL NOT"))
         should_count = sum(1 for s in spec_shalls if s["kind"] in ("SHOULD", "SHOULD NOT"))
         may_count = sum(1 for s in spec_shalls if s["kind"] == "MAY")
+        meta_count = sum(1 for s in spec_shalls if s.get("is_meta"))
 
         # --- 2. Extract PRD requirements ---
         prd_reqs = _extract_prd_requirements(prd_content) if prd_content else []
@@ -573,9 +632,11 @@ def step_review_prd(session: PipelineSession) -> str:
         # --- 3. Check SHALL coverage in PRD ---
         coverage_findings = _check_shall_coverage(spec_shalls, prd_reqs)
 
-        covered = sum(1 for f in coverage_findings if f["covered"])
-        uncovered = sum(1 for f in coverage_findings if not f["covered"])
-        high_conf = sum(1 for f in coverage_findings if f["confidence"] == "high")
+        # Exclude meta-statements from functional coverage counting
+        functional_findings = [f for f in coverage_findings if not f.get("is_meta")]
+        covered = sum(1 for f in functional_findings if f["covered"])
+        uncovered = sum(1 for f in functional_findings if not f["covered"])
+        high_conf = sum(1 for f in functional_findings if f["confidence"] == "high")
 
         # --- 4. Assess testability ---
         testability = _assess_testability(prd_content) if prd_content else {"has_acceptance_criteria": False, "acceptance_indicators": [], "score": 0}
@@ -600,12 +661,13 @@ def step_review_prd(session: PipelineSession) -> str:
                 "spec_shalls": shall_count,
                 "spec_shoulds": should_count,
                 "spec_mays": may_count,
+                "spec_meta": meta_count,
                 "prd_requirements_extracted": len(prd_reqs),
                 "shall_coverage": {
                     "covered": covered,
                     "uncovered": uncovered,
                     "high_confidence": high_conf,
-                    "coverage_pct": round(covered / len(coverage_findings) * 100, 1) if coverage_findings else 0.0,
+                    "coverage_pct": round(covered / len(functional_findings) * 100, 1) if functional_findings else 0.0,
                 },
                 "testability_score": testability["score"],
                 "consistency_issues": len(consistency_findings),
@@ -614,7 +676,7 @@ def step_review_prd(session: PipelineSession) -> str:
             "testability": testability,
             "consistency_findings": consistency_findings,
             "uncovered_shalls": [
-                f["shall"] for f in coverage_findings if not f["covered"]
+                f["shall"] for f in functional_findings if not f["covered"]
             ],
             # 产品视角（建议性 suggestions, 不改变 fail/pass 语义）
             "product": product_view,
@@ -659,13 +721,13 @@ def step_review_prd(session: PipelineSession) -> str:
             raise PipelineStepError(f"Cannot write PRD review: {e}")
 
         print(f"  ✅ [小马] PRD/Super Analysis review completed:")
-        print(f"       SHALLs: {shall_count} | SHOULDs: {should_count} | MAYs: {may_count}")
-        print(f"       PRD coverage: {covered}/{len(coverage_findings)}"
+        print(f"       SHALLs: {shall_count} | SHOULDs: {should_count} | MAYs: {may_count} | Meta: {meta_count}")
+        print(f"       PRD coverage: {covered}/{len(functional_findings)}"
               f" ({review['summary']['shall_coverage']['coverage_pct']}%)")
         print(f"       Testability score: {testability['score']}/100")
         print(f"       Status: {review['status']}")
-        log.info("PRD review: covered=%d/%d, testability=%d, status=%s",
-                 covered, len(coverage_findings), testability["score"], review["status"])
+        log.info("PRD review: covered=%d/%d, meta=%d, testability=%d, status=%s",
+                 covered, len(functional_findings), meta_count, testability["score"], review["status"])
         record_step_verdict(session, "prd-review", review["status"], [str(out_path)])
         return str(out_path)
 
