@@ -110,6 +110,7 @@ from yuleosh.cli.commands.misc import (  # noqa: E402
     cmd_spec_merge,
     cmd_spec_validate,
     cmd_spec_diff,
+    cmd_spec_generate,
     cmd_spec_cp,
     cmd_pipeline_run,
     cmd_pipeline_status,
@@ -194,6 +195,21 @@ def _build_parser() -> argparse.ArgumentParser:
     p_spec_diff = ssub.add_parser("diff", help="Diff two OpenSpec files")
     p_spec_diff.add_argument("old", help="Old spec file")
     p_spec_diff.add_argument("new", help="New spec file")
+    p_spec_gen = ssub.add_parser(
+        "generate",
+        help="Generate an OpenSpec spec draft from natural language or a prompt",
+    )
+    p_spec_gen.add_argument("input", help="Input text or path to a text file")
+    p_spec_gen.add_argument(
+        "--mode", choices=["extract", "decompose"], default="extract",
+        help="extract: prompt→spec (default); decompose: existing spec→executable requirements",
+    )
+    p_spec_gen.add_argument(
+        "--auto", action="store_true",
+        help="Auto mode: write directly to spec.md (only if OpenSpec self-validation passes); no human confirmation needed",
+    )
+    p_spec_gen.add_argument("--project-dir", default=OSH_HOME, help="Project root (for knowledge injection)")
+    p_spec_gen.add_argument("--output", default=None, help="Output draft path (default: <project-dir>/spec.draft.md)")
     p_spec_merge = ssub.add_parser("merge", help="Merge a spec-delta file into the main spec")
     p_spec_merge.add_argument("delta_file", help="Spec-delta markdown file path")
     p_spec_merge.add_argument("--dry-run", action="store_true", help="Validate without writing")
@@ -642,6 +658,8 @@ def main():
             cmd_spec_validate(args.file)
         elif args.spec_sub == "diff":
             cmd_spec_diff(args.old, args.new)
+        elif args.spec_sub == "generate":
+            cmd_spec_generate(args)
         elif args.spec_sub == "merge":
             cmd_spec_merge(
                 args.delta_file,

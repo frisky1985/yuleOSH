@@ -541,6 +541,68 @@ def cmd_spec_diff(old: str, new: str):
         sys.exit(1)
 
 
+def cmd_spec_generate(args) -> None:
+    """Generate an OpenSpec spec draft from natural language or a prompt.
+
+    Reads ``args.input``: if it is an existing file path, its contents are
+    used; otherwise the literal string is treated as the input.
+    """
+    from pathlib import Path
+    from yuleosh.spec.generator import generate_spec, SpecGenerationError
+
+    input_arg = args.input
+    input_path = Path(input_arg)
+    if input_path.is_file():
+        input_text = input_path.read_text(encoding="utf-8")
+    else:
+        input_text = input_arg
+
+    project_dir = Path(getattr(args, "project_dir", ".")).resolve()
+    auto = bool(getattr(args, "auto", False))
+    if getattr(args, "output", None):
+        output = Path(args.output).resolve()
+    else:
+        output = project_dir / ("spec.md" if auto else "spec.draft.md")
+    mode = getattr(args, "mode", "extract")
+
+    try:
+        result = generate_spec(
+            input_text,
+            project_dir=project_dir,
+            output_path=output,
+            mode=mode,
+            auto=auto,
+        )
+    except SpecGenerationError as e:
+        print(f"❌ Spec generation failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    validation = result["validation"]
+    err_count = len(validation.get("errors", []))
+    req_count = validation.get("requirement_count", 0)
+    written = result.get("written", "draft")
+
+    target_label = "正式 spec" if written == "spec" else "草稿"
+    print(f"✅ {target_label}已生成: {result['output_path']}")
+    print(f"   mode={result['mode']}  written={written}  requirements={req_count}  errors={err_count}")
+    for err in validation.get("errors", []):
+        msg = err.get("message", err) if isinstance(err, dict) else err
+        print(f"   ⚠️  {msg}")
+    if err_count > 0:
+        if auto:
+            print(
+                "   自动模式下未通过 OpenSpec 自检，已降级写入草稿，正式 spec 未被覆盖。",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "   草稿未通过 OpenSpec 自检，请人工复核后再用 "
+                "`yuleosh spec validate` 检查。",
+                file=sys.stderr,
+            )
+        sys.exit(2)
+
+
 def cmd_spec_cp(args) -> None:
     """Dispatch `yuleosh spec cp <sub>` — Change Proposal management."""
     from yuleosh.spec.changes import (
