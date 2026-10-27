@@ -778,15 +778,17 @@ def handle_org_create(body: dict, session_token: str) -> dict:
         return {"error": "Project name and slug are required"}, 400
     if not SLUG_RE.match(project_slug):
         return {"error": "Project slug must be lowercase alphanumeric with hyphens"}, 400
-    if not email:
-        return {"error": "Email is required for org creation"}, 400
-
     # Security (P0): the org-setup token is bound to the email that requested
-    # it — refuse to create an account for a different email.
+    # it. If the client did not repeat the email (legacy pages such as
+    # /org/setup), fall back to the proven email in the token; if the client
+    # provided a different email, refuse to create an account for it.
     token_payload = _decode_token(session_token) if session_token else None
     token_email = (token_payload or {}).get("email", "")
-    if not token_email or token_email.lower() != email:
+    if not token_email:
+        return {"error": "Invalid or expired session"}, 401
+    if email and email != token_email.lower():
         return {"error": "Invalid or expired session for this email"}, 401
+    email = token_email.lower()
 
     store = Store()
 

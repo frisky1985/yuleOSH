@@ -39,10 +39,11 @@ body { font-family: 'Inter', sans-serif; background: #0a0e17; color: #e2e8f0; ma
       <span class="w-8 h-8 bg-[#10b981] rounded-full flex items-center justify-center font-bold text-black">1</span>
       <h2 class="text-xl font-bold">Create Your First Project</h2>
     </div>
+    <input id="ownerEmail" type="email" placeholder="Your account email (the one you signed in with)" class="w-full bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 mb-3 text-[#e2e8f0] focus:border-[#10b981] outline-none" />
     <div class="flex gap-3">
       <input id="orgName" placeholder="Organization name" class="flex-1 bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 text-[#e2e8f0] focus:border-[#10b981] outline-none" />
       <input id="projectName" placeholder="Project name" class="flex-1 bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 text-[#e2e8f0] focus:border-[#10b981] outline-none" />
-      <button onclick="createProject()" class="bg-[#10b981] text-black font-bold px-6 py-2 rounded hover:bg-[#059669] transition">Create</button>
+      <button id="btnCreate" class="bg-[#10b981] text-black font-bold px-6 py-2 rounded hover:bg-[#059669] transition">Create</button>
     </div>
     <p id="step1Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
   </div>
@@ -53,10 +54,10 @@ body { font-family: 'Inter', sans-serif; background: #0a0e17; color: #e2e8f0; ma
       <span class="w-8 h-8 bg-[#1e293b] rounded-full flex items-center justify-center font-bold text-[#94a3b8]">2</span>
       <h2 class="text-xl font-bold">Write Your Spec</h2>
     </div>
-    <textarea id="specContent" rows="6" placeholder="### RS-001: My Feature&#10;The system SHALL provide...&#10;&#10;#### Scenario: Basic Test&#10;GIVEN a connected device&#10;WHEN the system starts&#10;THEN the system SHALL respond with OK" class="w-full bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 text-[#e2e8f0] font-mono text-sm focus:border-[#3b82f6] outline-none"></textarea>
+    <textarea id="specContent" rows="6" placeholder="## RS-001: My Feature&#10;- The system SHALL provide...&#10;&#10;### Reason&#10;Why this requirement exists.&#10;&#10;### Scenario: Basic Test&#10;- GIVEN a connected device&#10;- WHEN the system starts&#10;- THEN the system SHALL respond with OK" class="w-full bg-[#0a0e17] border border-[#1e293b] rounded px-4 py-2 text-[#e2e8f0] font-mono text-sm focus:border-[#3b82f6] outline-none"></textarea>
     <div class="flex gap-3 mt-3">
-      <button onclick="saveSpec()" class="bg-[#3b82f6] text-white font-bold px-6 py-2 rounded hover:bg-[#2563eb] transition">Save Spec</button>
-      <button onclick="useTemplate()" class="border border-[#1e293b] text-[#94a3b8] font-bold px-4 py-2 rounded hover:border-[#3b82f6] transition">Use Template</button>
+      <button id="btnSaveSpec" class="bg-[#3b82f6] text-white font-bold px-6 py-2 rounded hover:bg-[#2563eb] transition">Save Spec</button>
+      <button id="btnTemplate" class="border border-[#1e293b] text-[#94a3b8] font-bold px-4 py-2 rounded hover:border-[#3b82f6] transition">Use Template</button>
     </div>
     <p id="step2Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
   </div>
@@ -68,8 +69,8 @@ body { font-family: 'Inter', sans-serif; background: #0a0e17; color: #e2e8f0; ma
       <h2 class="text-xl font-bold">Run Your First Pipeline</h2>
     </div>
     <div class="flex gap-3">
-      <button onclick="runPipeline()" class="bg-[#f59e0b] text-black font-bold px-6 py-2 rounded hover:bg-[#d97706] transition">Run CI Pipeline</button>
-      <button onclick="runFullPipeline()" class="border border-[#f59e0b] text-[#f59e0b] font-bold px-6 py-2 rounded hover:bg-[#f59e0b] hover:text-black transition">Run Full Pipeline</button>
+      <button id="btnRunCi" class="bg-[#f59e0b] text-black font-bold px-6 py-2 rounded hover:bg-[#d97706] transition">Run CI Pipeline</button>
+      <button id="btnRunFull" class="border border-[#f59e0b] text-[#f59e0b] font-bold px-6 py-2 rounded hover:bg-[#f59e0b] hover:text-black transition">Run Full Pipeline</button>
     </div>
     <div id="step3Status" class="mt-3 text-sm hidden"></div>
     <p id="step3Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
@@ -82,8 +83,8 @@ body { font-family: 'Inter', sans-serif; background: #0a0e17; color: #e2e8f0; ma
       <h2 class="text-xl font-bold">View Your Evidence</h2>
     </div>
     <div class="flex gap-3">
-      <button onclick="viewEvidence()" class="bg-[#8b5cf6] text-white font-bold px-6 py-2 rounded hover:bg-[#7c3aed] transition">Traceability Matrix</button>
-      <button onclick="viewDashboard()" class="border border-[#8b5cf6] text-[#8b5cf6] font-bold px-6 py-2 rounded hover:bg-[#8b5cf6] hover:text-white transition">Go to Dashboard</button>
+      <button id="btnEvidence" class="bg-[#8b5cf6] text-white font-bold px-6 py-2 rounded hover:bg-[#7c3aed] transition">Traceability Matrix</button>
+      <button id="btnDashboard" class="border border-[#8b5cf6] text-[#8b5cf6] font-bold px-6 py-2 rounded hover:bg-[#8b5cf6] hover:text-white transition">Go to Dashboard</button>
     </div>
     <p id="step4Result" class="mt-3 text-sm text-[#94a3b8] hidden"></p>
   </div>
@@ -95,6 +96,9 @@ body { font-family: 'Inter', sans-serif; background: #0a0e17; color: #e2e8f0; ma
 
 <script>
 let step = 1;
+// 项目目录：/api/org/create 只在 DB 建记录、不落盘目录，这里按
+// projects/<org_slug>/<project_slug> 约定推导，供 spec 保存与 pipeline 运行共用。
+let currentProjectDir = '';
 // P1-2 (v3.13): token 经 HttpOnly cookie (yuleosh_at) 由服务端设置并同源携带，前端零本地存储。
 
 function markDone(n) {
@@ -110,86 +114,140 @@ function markDone(n) {
   }
 }
 
-async function api(method, path, body) {
+async function api(method, path, body, opts) {
   const h = {'Content-Type':'application/json'};
   const r = await fetch(path, {method, headers:h, credentials:'same-origin', body: body ? JSON.stringify(body) : undefined});
-  if (r.status === 401) { window.location.href = '/login'; return {}; }
-  return r.json();
+  // 默认 401 回登录页；opts.keep401 时把 401 交给调用方自己展示（如邮箱不匹配）。
+  if (r.status === 401 && !(opts && opts.keep401)) { window.location.href = '/login'; return {}; }
+  let j = {};
+  try { j = await r.json(); } catch (e) { /* 非 JSON 响应 */ }
+  // 同时兼容 {ok,data}（v1 接口）与裸对象（/api/org/create）两种契约
+  j._status = r.status;
+  return j;
+}
+
+function showResult(id, text) {
+  const el = document.getElementById(id);
+  el.innerHTML = text;
+  el.classList.remove('hidden');
 }
 
 async function createProject() {
   const org = document.getElementById('orgName').value.trim();
   const proj = document.getElementById('projectName').value.trim();
+  // /api/org/create 会校验 body.email 与 org_setup token 绑定的邮箱一致，
+  // 因此这里的 email 必须是登录时用的那个（不能硬编码）。
+  const email = document.getElementById('ownerEmail').value.trim().toLowerCase();
   if (!org || !proj) { alert('Fill both fields'); return; }
-  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-');
+  if (!email) { alert('Enter the email you signed in with'); return; }
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  const orgSlug = slug(org);
+  const projSlug = slug(proj);
   const r = await api('POST', '/api/org/create', {
-    org_name: org, org_slug: slug(org),
-    project_name: proj, project_slug: slug(proj),
-    email: 'user@yuleosh.com'
-  });
-  if (r.error) { document.getElementById('step1Result').innerHTML = '❌ '+r.error; document.getElementById('step1Result').classList.remove('hidden'); return; }
-  document.getElementById('step1Result').innerHTML = '✅ Created! Org: '+r.org_slug;
-  document.getElementById('step1Result').classList.remove('hidden');
+    org_name: org, org_slug: orgSlug,
+    project_name: proj, project_slug: projSlug,
+    email: email
+  }, {keep401: true});
+  if (r.error) { showResult('step1Result', '❌ '+r.error); return; }
+  currentProjectDir = 'projects/' + orgSlug + '/' + projSlug;
+  showResult('step1Result', '✅ Created! Org: '+r.org_slug+
+    '<br>Project dir: <code>'+currentProjectDir+'</code>');
   markDone(1); step = 2;
 }
 
 async function saveSpec() {
   const content = document.getElementById('specContent').value.trim();
   if (!content) { alert('Write some spec content first'); return; }
-  const r = await api('POST', '/api/v1/spec', { content });
-  document.getElementById('step2Result').innerHTML = r.error ? '❌ '+r.error : '✅ Spec saved & validated!';
-  document.getElementById('step2Result').classList.remove('hidden');
-  if (!r.error) { markDone(2); step = 3; }
+  if (!currentProjectDir) { alert('Create the project in step 1 first'); return; }
+  const r = await api('POST', '/api/v1/spec/save', {
+    project_dir: currentProjectDir,
+    content: content,
+    target: 'spec',
+  });
+  const d = r.data || {};
+  if (r.ok) {
+    const warn = d.error_count > 0 ? '（'+d.error_count+' 个错误）' : '';
+    showResult('step2Result', '✅ Spec saved: '+d.requirements+' 需求 / '+d.scenarios+' 场景'+warn+
+      '<br><code>'+d.path+'</code>');
+    markDone(2); step = 3;
+  } else {
+    showResult('step2Result', '❌ '+(r.error || ('HTTP '+r._status)));
+  }
 }
 
 function useTemplate() {
-  document.getElementById('specContent').value = `### RS-001: LED Control\nStatus: PROPOSED\n\nThe system SHALL control an LED via GPIO.\n\n#### Scenario: LED Toggle\nGIVEN GPIO pin is configured as output\nWHEN the toggle command is sent\nTHEN the LED SHALL change state`;
+  // 模板必须严格匹配 validate.py 的解析规则，否则保存后校验报错：
+  //   - SHALL 写成 `- The system SHALL ...`（必须有 `- ` 前缀）
+  //   - 每个需求需要 `Reason` 段
+  //   - Scenario 下 GIVEN/WHEN/THEN 也必须带 `- ` 前缀
+  // Reason / Scenario 用三级标题，pipeline 的 _parse_requirements 才能正确
+  // 结束上一条需求的 SHALL 收集（否则 THEN 行会被算成本需求的 SHALL）。
+  document.getElementById('specContent').value = `# LED Controller Spec
+
+## RS-001: LED Control
+
+Status: PROPOSED
+
+- The system SHALL control an LED via GPIO
+- The system SHALL report the current LED state on request
+
+### Reason
+
+Minimal verifiable behaviour for the onboarding demo.
+
+### Scenario: LED Toggle
+
+- GIVEN the GPIO pin is configured as an output
+- WHEN the toggle command is sent
+- THEN the LED SHALL change state`;
 }
 
 async function runPipeline() {
+  if (!currentProjectDir) { alert('Create the project and save the spec first'); return; }
   const statusEl = document.getElementById('step3Status');
-  statusEl.innerHTML = '⏳ Running CI Layer 1...';
+  statusEl.innerHTML = '⏳ 启动完整编排器（24 步）...';
   statusEl.classList.remove('hidden');
-  const r = await api('POST', '/api/v1/pipeline/run', { layer: 1 });
-  if (r.job_id) {
-    let poll = setInterval(async () => {
-      const s = await api('GET', '/api/v1/pipeline/status/'+r.job_id);
-      if (s.status == 'running') statusEl.innerHTML = '⏳ Pipeline running...';
-      else {
-        clearInterval(poll);
-        if (s.status == 'passed') {
-          statusEl.innerHTML = '✅ Pipeline passed!';
-          document.getElementById('step3Result').innerHTML = '✅ All checks passed';
-          document.getElementById('step3Result').classList.remove('hidden');
-          markDone(3); step = 4;
-        } else {
-          statusEl.innerHTML = '❌ Pipeline failed: ' + (s.result||'');
-        }
-      }
-    }, 2000);
-  } else {
-    statusEl.innerHTML = '⚠️ API not available (local mode)';
+  // /api/v1/pipeline/run 走真实编排器，返回 run_id（不是 job_id）；
+  // 进度用 /api/v1/pipeline/jobs 按 run_id 匹配。
+  const r = await api('POST', '/api/v1/pipeline/run', {
+    spec: currentProjectDir + '/docs/spec.md',
+    project_dir: currentProjectDir,
+    name: 'onboarding',
+  });
+  const d = r.data || {};
+  if (!r.ok || !d.run_id) {
+    statusEl.innerHTML = '❌ '+(r.error || ('HTTP '+r._status));
+    return;
   }
+  statusEl.innerHTML = '⏳ Pipeline running... (run_id: '+d.run_id+')';
+  let ticks = 0;
+  const poll = setInterval(async () => {
+    ticks += 1;
+    const s = await api('GET', '/api/v1/pipeline/jobs');
+    const jobs = (s.data && s.data.jobs) || [];
+    const me = jobs.find(j => j.run_id === d.run_id);
+    if (!me) {
+      if (ticks > 10) { clearInterval(poll); statusEl.innerHTML = '⚠️ 任务记录已丢失（服务可能重启）'; }
+      return;
+    }
+    if (me.status === 'running' || me.status === 'queued') {
+      statusEl.innerHTML = '⏳ Pipeline running...';
+      return;
+    }
+    clearInterval(poll);
+    if (me.status === 'passed' || me.status === 'completed') {
+      statusEl.innerHTML = '✅ Pipeline passed!';
+      showResult('step3Result', '✅ 产物写入 '+me.session_dir);
+      markDone(3); step = 4;
+    } else {
+      statusEl.innerHTML = '❌ Pipeline failed: '+(me.error || me.status);
+    }
+  }, 3000);
 }
 
 async function runFullPipeline() {
-  const statusEl = document.getElementById('step3Status');
-  statusEl.innerHTML = '⏳ Running full pipeline (layers 1-3)...';
-  statusEl.classList.remove('hidden');
-  const r = await api('POST', '/api/v1/pipeline/run', { layer: 0 });
-  if (r.job_id) {
-    let poll = setInterval(async () => {
-      const s = await api('GET', '/api/v1/pipeline/status/'+r.job_id);
-      if (s.status == 'running') statusEl.innerHTML = '⏳ Pipeline running...';
-      else {
-        clearInterval(poll);
-        statusEl.innerHTML = '✅ Pipeline completed: ' + (s.result||s.status);
-        markDone(3); step = 4;
-      }
-    }, 3000);
-  } else {
-    statusEl.innerHTML = '⚠️ API not available (local mode)';
-  }
+  // 本项目只有一个真实编排器入口，不再区分 layer；两者等价。
+  return runPipeline();
 }
 
 function viewEvidence() {
@@ -198,6 +256,29 @@ function viewEvidence() {
 function viewDashboard() {
   window.location.href = '/dashboard';
 }
+
+// CSP 为 script-src 'self' 'nonce-…'，内联 onclick 会被拦截，统一走监听器。
+document.getElementById('btnCreate').addEventListener('click', createProject);
+document.getElementById('btnSaveSpec').addEventListener('click', saveSpec);
+document.getElementById('btnTemplate').addEventListener('click', useTemplate);
+document.getElementById('btnRunCi').addEventListener('click', runPipeline);
+document.getElementById('btnRunFull').addEventListener('click', runFullPipeline);
+document.getElementById('btnEvidence').addEventListener('click', viewEvidence);
+document.getElementById('btnDashboard').addEventListener('click', viewDashboard);
+
+// 尽力预填第 1 步的 email：已登录用户可直接用 /api/auth/session 的邮箱；
+// 首次注册（cookie 里是 org_setup token）拿不到 session，保持手填。
+(async () => {
+  try {
+    const r = await fetch('/api/auth/session', {
+      headers: {'Accept': 'application/json'}, credentials: 'same-origin',
+    });
+    if (r.ok) {
+      const j = await r.json();
+      if (j && j.email) document.getElementById('ownerEmail').value = j.email;
+    }
+  } catch (e) { /* 忽略：让用户手填 */ }
+})();
 </script>
 </body>
 </html>

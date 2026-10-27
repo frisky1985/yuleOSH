@@ -255,6 +255,33 @@ def handle_get(handler) -> None:
         else:
             handler._serve_static("/404.html")
         return
+    elif path == "/workspace":
+        # Project workspace: overview + live pipeline flow
+        ui_dir = Path(__file__).resolve().parent.parent
+        workspace_path = ui_dir / "pages" / "workspace.html"
+        if workspace_path.exists():
+            handler._serve_file(workspace_path, "text/html; charset=utf-8")
+        else:
+            handler._serve_static("/404.html")
+        return
+    elif path == "/workspace-demo":
+        # NAV DEMO: 左侧导航 API 驱动演示（正式页面接入前评估用）
+        ui_dir = Path(__file__).resolve().parent.parent
+        demo_path = ui_dir / "pages" / "workspace-demo.html"
+        if demo_path.exists():
+            handler._serve_file(demo_path, "text/html; charset=utf-8")
+        else:
+            handler._serve_static("/404.html")
+        return
+    elif path == "/spec-studio":
+        # 单轮生成 + 草稿编辑 demo（自然语言 → OpenSpec 草稿）
+        ui_dir = Path(__file__).resolve().parent.parent
+        studio_path = ui_dir / "pages" / "spec-studio.html"
+        if studio_path.exists():
+            handler._serve_file(studio_path, "text/html; charset=utf-8")
+        else:
+            handler._serve_static("/404.html")
+        return
     elif path.startswith("/api/loops/"):
         from yuleosh.api.loops import get_loop_data
         parts = path.split("/")

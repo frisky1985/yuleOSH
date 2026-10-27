@@ -319,6 +319,24 @@ class TestHandleOrgCreate:
         assert status == 200
         assert "token" in result
 
+    @mock.patch("yuleosh.ui.auth_extended.Store")
+    def test_missing_email_uses_token_email(self, mock_store):
+        """Legacy /org/setup page may omit email; fall back to token email."""
+        from yuleosh.ui.auth_extended import handle_org_create
+        mock_store_instance = mock_store.return_value
+        mock_store_instance.get_organization.return_value = None
+        mock_store_instance.create_organization.return_value = {"id": 1, "slug": "test"}
+        mock_store_instance.create_user.return_value = {"id": 1, "org_id": 1}
+        token = self._org_setup_token("fallback@example.com")
+        result, status = handle_org_create({
+            "org_name": "Test", "org_slug": "test",
+            "project_name": "Proj", "project_slug": "proj1",
+        }, token)
+        assert status == 200
+        mock_store_instance.create_user.assert_called_once()
+        call_args = mock_store_instance.create_user.call_args[0]
+        assert call_args[1] == "fallback@example.com"
+
 
 # =====================================================================
 # Session and project handlers

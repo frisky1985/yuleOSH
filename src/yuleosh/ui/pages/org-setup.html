@@ -77,7 +77,7 @@ body {
   <p class="subtitle">Create your organization</p>
   <div class="step">Step 1 of 2</div>
   <div class="msg" id="msg"></div>
-  <form id="orgForm" onsubmit="return handleOrgCreate(event)">
+  <form id="orgForm">
     <label for="org_name">Organization Name</label>
     <input type="text" id="org_name" name="org_name" placeholder="Acme Corp" autofocus required>
 
@@ -116,6 +116,7 @@ async function handleOrgCreate(e) {
   // 回退读取（middleware._get_bearer_token）。401 时回登录页。
 
   const data = {
+    // v3.9.x 服务端允许 body.email 缺省，自动回退到 org_setup token 绑定的邮箱。
     org_name: document.getElementById('org_name').value.trim(),
     org_slug: document.getElementById('org_slug').value.trim(),
     project_name: document.getElementById('project_name').value.trim(),
@@ -135,6 +136,7 @@ async function handleOrgCreate(e) {
     const result = await resp.json();
 
     if (resp.status === 401) {
+      // 服务端已自动从 org_setup token 回退邮箱，401 仅表示 session 过期，跳回登录页。
       window.location.href = '/login';
       return false;
     }
@@ -152,6 +154,10 @@ async function handleOrgCreate(e) {
   }
   return false;
 }
+
+// CSP 为 script-src 'self' 'nonce-…'，内联 onsubmit 会被浏览器拦截，
+// 因此改为监听器绑定（否则表单只会触发默认提交、从不创建组织）。
+document.getElementById('orgForm').addEventListener('submit', handleOrgCreate);
 </script>
 </body>
 </html>
