@@ -1,0 +1,12 @@
+{
+  "id": "485fbab0992a",
+  "name": "最终验证工程",
+  "description": "",
+  "created_at": "2026-10-28T01:13:42.698015",
+  "updated_at": "2026-10-28T01:13:43.199026",
+  "pipeline_runs": 1,
+  "last_pipeline_status": "running",
+  "cloud_synced": true,
+  "last_synced_at": null,
+  "synced_at": "2026-10-28T01:13:47.708046"
+}

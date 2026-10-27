@@ -1,0 +1,12 @@
+{
+  "id": "de0c7c4a9eb5",
+  "name": "智能车灯控制器 Demo",
+  "description": "夜间自动开灯 + 远近光切换",
+  "created_at": "2026-10-28T01:04:47.212326",
+  "updated_at": "2026-10-28T01:04:47.774788",
+  "pipeline_runs": 1,
+  "last_pipeline_status": "running",
+  "cloud_synced": true,
+  "last_synced_at": null,
+  "synced_at": "2026-10-28T01:04:48.273558"
+}

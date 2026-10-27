@@ -14,7 +14,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -98,6 +100,13 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
         rel = "/".join(parts[2:]) if len(parts) > 2 else ""
         if method == "GET":
             if not rel:
+                # Lazy collection: the pipeline runs async, so real output
+                # may have landed after the run request. Collect it now so
+                # the tree shows real generated files (not just templates).
+                try:
+                    _collect_real_artifacts(workspace._project_dir(project_id))
+                except Exception:  # noqa: BLE001 — collection must not break listing
+                    pass
                 return _json({"ok": True, "tree": workspace.list_artifacts(project_id)})
             try:
                 return _json({"ok": True, **workspace.read_artifact(project_id, rel)})
@@ -172,12 +181,14 @@ def _run_pipeline(project_id: str, body: Any) -> tuple:
         "config": config,
     })
 
-    # Ensure the project always has reviewable artifacts after a pipeline
-    # run. The real pipeline may write to OSH_HOME rather than the project's
-    # artifact folders; the desktop guarantees a baseline set of artifacts
-    # (requirements-derived design / code / tests / evidence) so users can
-    # immediately review output in the three-pane view. If the real pipeline
-    # produced files in the artifact folders already, those are preserved.
+    # 1. Collect REAL pipeline output into the artifact folders.
+    #    The pipeline writes generated code/tests/evidence under
+    #    .yuleosh/pipeline/{job_id}/ — surface those into code/ etc.
+    #    so users review actual pipeline output, not just templates.
+    collected = _collect_real_artifacts(proj_dir, job_id)
+
+    # 2. Baseline fallback: only writes files that don't already exist,
+    #    so real pipeline output is never overwritten.
     _ensure_artifact_baseline(proj_dir, config)
 
     return _json({
@@ -186,7 +197,79 @@ def _run_pipeline(project_id: str, body: Any) -> tuple:
         "status": "queued",
         "poll_url": f"/api/v1/pipeline/status/{job_id}",
         "run_dir": f"pipeline/runs/{job_id}",
+        "artifacts_collected": collected,
     }, 202)
+
+
+def _collect_real_artifacts(proj_dir, job_id: str = None) -> list:
+    """Collect real pipeline-generated files into the project's artifact folders.
+
+    The pipeline writes output under ``.yuleosh/pipeline/{job_id}/`` (e.g.
+    ``rte/Rte.c``, ``rte/Rte.h``). This function maps those files into the
+    project's standard artifact folders (``code/``, ``tests/``, ``evidence/``)
+    so they show up in the desktop three-pane view.
+
+    If ``job_id`` is None, scans ALL pipeline job directories and collects
+    from the newest one (lazy collection for async pipeline runs).
+
+    Returns the list of collected file paths (relative to proj_dir).
+    """
+    collected = []
+    pipeline_root = Path(proj_dir) / ".yuleosh" / "pipeline"
+    if not pipeline_root.exists():
+        return collected
+
+    # Determine which job dir(s) to scan.
+    if job_id:
+        job_dirs = [pipeline_root / job_id]
+    else:
+        # Scan all jobs, newest first.
+        job_dirs = sorted(
+            [d for d in pipeline_root.iterdir() if d.is_dir()],
+            key=lambda d: d.stat().st_mtime,
+            reverse=True,
+        )
+
+    # Mapping rules: (source_glob, target_subdir)
+    rules = [
+        ("rte/*.c", "code/rte"),
+        ("rte/*.h", "code/rte"),
+        ("rte/**/*.c", "code/rte"),
+        ("rte/**/*.h", "code/rte"),
+        ("**/*.c", "code"),
+        ("**/*.h", "code"),
+        ("**/report*.json", "tests"),
+        ("**/*coverage*.json", "evidence"),
+        ("**/*misra*.json", "evidence"),
+        ("**/*.md", "evidence"),
+    ]
+
+    for pipeline_dir in job_dirs:
+        if not pipeline_dir.exists():
+            continue
+        for pattern, target_sub in rules:
+            for src in sorted(pipeline_dir.glob(pattern)):
+                if not src.is_file():
+                    continue
+                dst_dir = Path(proj_dir) / target_sub
+                dst_dir.mkdir(parents=True, exist_ok=True)
+                dst = dst_dir / src.name
+                # Only copy if destination doesn't exist or source is newer.
+                if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
+                    shutil.copy2(src, dst)
+                rel_path = str((target_sub / src.name))
+                if rel_path not in collected:
+                    collected.append(rel_path)
+
+    # Record the collection manifest in the run folder of the newest job.
+    if job_dirs:
+        run_dir = Path(proj_dir) / "pipeline" / "runs" / job_dirs[0].name
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "collected_artifacts.json").write_text(
+            json.dumps({"collected": collected}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    return collected
 
 
 def _ensure_artifact_baseline(proj_dir, config: dict) -> None:

@@ -1,0 +1,137 @@
+{
+  "name": "485fbab0992a",
+  "path": ".",
+  "type": "dir",
+  "children": [
+    {
+      "name": "requirements",
+      "path": "requirements",
+      "type": "dir",
+      "children": [
+        {
+          "name": "requirements.json",
+          "path": "requirements/requirements.json",
+          "type": "file",
+          "size": 111
+        },
+        {
+          "name": "requirements.md",
+          "path": "requirements/requirements.md",
+          "type": "file",
+          "size": 52
+        }
+      ]
+    },
+    {
+      "name": "design",
+      "path": "design",
+      "type": "dir",
+      "children": [
+        {
+          "name": "architecture.md",
+          "path": "design/architecture.md",
+          "type": "file",
+          "size": 65
+        },
+        {
+          "name": "sdd.md",
+          "path": "design/sdd.md",
+          "type": "file",
+          "size": 164
+        }
+      ]
+    },
+    {
+      "name": "code",
+      "path": "code",
+      "type": "dir",
+      "children": [
+        {
+          "name": "rte",
+          "path": "code/rte",
+          "type": "dir",
+          "children": [
+            {
+              "name": "Rte.c",
+              "path": "code/rte/Rte.c",
+              "type": "file",
+              "size": 28
+            }
+          ]
+        },
+        {
+          "name": "src",
+          "path": "code/src",
+          "type": "dir",
+          "children": [
+            {
+              "name": "main.c",
+              "path": "code/src/main.c",
+              "type": "file",
+              "size": 560
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tests",
+      "path": "tests",
+      "type": "dir",
+      "children": [
+        {
+          "name": "report.json",
+          "path": "tests/report.json",
+          "type": "file",
+          "size": 262
+        },
+        {
+          "name": "test_main.c",
+          "path": "tests/test_main.c",
+          "type": "file",
+          "size": 367
+        }
+      ]
+    },
+    {
+      "name": "pipeline",
+      "path": "pipeline",
+      "type": "dir",
+      "children": [
+        {
+          "name": "runs",
+          "path": "pipeline/runs",
+          "type": "dir",
+          "children": [
+            {
+              "name": "4a86a48e01267750",
+              "path": "pipeline/runs/4a86a48e01267750",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "config.json",
+                  "path": "pipeline/runs/4a86a48e01267750/config.json",
+                  "type": "file",
+                  "size": 212
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "evidence",
+      "path": "evidence",
+      "type": "dir",
+      "children": [
+        {
+          "name": "traceability-matrix.md",
+          "path": "evidence/traceability-matrix.md",
+          "type": "file",
+          "size": 265
+        }
+      ]
+    }
+  ]
+}
