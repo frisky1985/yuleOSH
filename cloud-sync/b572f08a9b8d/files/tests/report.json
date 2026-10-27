@@ -1,0 +1,17 @@
+{
+  "project": "云端同步测试",
+  "passed": 2,
+  "failed": 0,
+  "skipped": 0,
+  "coverage": "87%",
+  "tests": [
+    {
+      "name": "test_toggle_beam",
+      "status": "passed"
+    },
+    {
+      "name": "test_is_night",
+      "status": "passed"
+    }
+  ]
+}

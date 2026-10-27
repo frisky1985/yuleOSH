@@ -238,6 +238,29 @@ function startLocalFileServer() {
       const parsedUrl = url.parse(req.url, true);
       let filePath = parsedUrl.pathname;
 
+      // Proxy /api/* and /api/v1/* to the Python backend (port 18788).
+      // The desktop UI uses relative API paths (apiFetch), so the static
+      // server must forward them to the backend instead of trying to serve
+      // them as files.
+      if (filePath.startsWith('/api/')) {
+        const proxyReq = http.request({
+          host: '127.0.0.1',
+          port: BACKEND_PORT,
+          path: req.url,
+          method: req.method,
+          headers: req.headers,
+        }, (proxyRes) => {
+          res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+          proxyRes.pipe(res);
+        });
+        proxyReq.on('error', () => {
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Backend unreachable' }));
+        });
+        req.pipe(proxyReq);
+        return;
+      }
+
       // 处理 assetPrefix: 将 /yuleOSH/* → 去掉前缀
       if (filePath.startsWith('/yuleOSH/')) {
         filePath = filePath.slice('/yuleOSH'.length);
@@ -260,6 +283,16 @@ function startLocalFileServer() {
       // 检查文件是否存在
       fs.stat(fullPath, (err, stats) => {
         if (err || !stats.isFile()) {
+          // If it's a directory, try serving its index.html (Next.js static
+          // export generates /desktop/index.html, /dashboard/index.html, etc.)
+          if (!err && stats.isDirectory()) {
+            const dirIndex = path.join(fullPath, 'index.html');
+            const resolvedDirIndex = path.resolve(dirIndex);
+            if (resolvedDirIndex.startsWith(path.resolve(FRONTEND_OUT_DIR)) && fs.existsSync(dirIndex)) {
+              serveFile(res, resolvedDirIndex);
+              return;
+            }
+          }
           // SPA fallback: 对 HTML 路由, 返回 index.html
           if (!filePath.includes('.')) {
             const indexPath = path.join(FRONTEND_OUT_DIR, 'index.html');
@@ -403,16 +436,16 @@ async function createWindow() {
 
 async function loadFrontend() {
   if (DEV_MODE) {
-    // 开发模式: 加载 Next.js dev server
-    const devUrl = `http://localhost:${DEV_SERVER_PORT}`;
+    // 开发模式: 加载 Next.js dev server 的桌面工作台
+    const devUrl = `http://localhost:${DEV_SERVER_PORT}/desktop`;
     console.log(`[Main] DEV mode — loading from ${devUrl}`);
     console.log(`[Main] Make sure to run 'cd frontend && npm run dev' first`);
     mainWindow.loadURL(devUrl);
   } else {
-    // 生产模式: 加载本地静态文件服务器
+    // 生产模式: 加载本地静态文件服务器的桌面工作台
     try {
       const port = await startLocalFileServer();
-      const url = `http://localhost:${port}/`;
+      const url = `http://localhost:${port}/desktop`;
       console.log(`[Main] PROD mode — loading from ${url}`);
       mainWindow.loadURL(url);
     } catch (err) {
@@ -607,6 +640,29 @@ function registerIpcHandlers() {
       properties: ['openDirectory'],
     });
     return result.canceled ? null : result.filePaths[0];
+  });
+
+  // 打开文件选择对话框（用于导入需求文档等）
+  ipcMain.handle('open-file', async (_event, options = {}) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: options.title || '选择文件',
+      properties: ['openFile'],
+      filters: options.filters || [
+        { name: '文档', extensions: ['md', 'txt', 'docx', 'pdf', 'json', 'yaml', 'yml'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  // 读取本地文件内容（供前端导入需求文本）
+  ipcMain.handle('read-file', async (_event, filePath) => {
+    try {
+      const fs = require('fs');
+      return { ok: true, content: fs.readFileSync(filePath, 'utf-8') };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
 
   // 获取应用版本
