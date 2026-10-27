@@ -70,6 +70,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   openDirectory: () => ipcRenderer.invoke('open-directory'),
 
+  /**
+   * 打开文件选择对话框（用于导入需求文档）
+   * @param {{title?: string, filters?: {name: string, extensions: string[]}[]}} [options]
+   * @returns {Promise<string|null>}
+   */
+  openFile: (options) => ipcRenderer.invoke('open-file', options),
+
+  /**
+   * 读取本地文件文本内容
+   * @param {string} filePath
+   * @returns {Promise<{ok:boolean, content?:string, error?:string}>}
+   */
+  readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+
+  /** 判断当前是否运行在 Electron 桌面环境 */
+  isDesktop: true,
+
   // ─── 应用信息 ─────────────────────────────────────
 
   /** @returns {Promise<string>} 应用版本号 */

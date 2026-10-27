@@ -113,6 +113,10 @@ _LAZY_HANDLERS.update({
     "tenants": ("yuleosh.ui.routes.tenant_routes", "handle_tenant_list"),
     "billing": ("yuleosh.ui.routes.billing_routes", "handle_billing"),
     "projects": ("yuleosh.ui.routes.project_routes", "handle_projects"),
+    # Desktop workspace (local project management + artifact folders).
+    "desktop": ("yuleosh.api.desktop", "handle_desktop"),
+    # Cloud-side receiver for desktop→cloud project sync.
+    "desktop-sync": ("yuleosh.api.desktop_sync", "handle_desktop_sync"),
 })
 
 

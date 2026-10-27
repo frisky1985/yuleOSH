@@ -140,11 +140,16 @@ class ServerManager extends EventEmitter {
 
     const oshHome = this._resolveOshHome();
 
+    // Desktop local mode: disable multi-tenant auth (the desktop app is a
+    // single-user local tool) and enable the desktop workspace API. The
+    // web SaaS stack keeps auth enabled when running outside the desktop.
     const env = {
       ...process.env,
       OSH_PORT: String(this.port),
       PYTHONUNBUFFERED: '1',
       OSH_HOME: oshHome,
+      YULEOSH_AUTH_DISABLED: '1',
+      YULEOSH_DESKTOP_MODE: '1',
     };
 
     // 在当前 shell 环境中检查是否有 yuleosh 命令
@@ -318,11 +323,16 @@ class ServerManager extends EventEmitter {
   async _restart() {
     const oshHome = this._resolveOshHome();
 
+    // Desktop local mode: disable multi-tenant auth (the desktop app is a
+    // single-user local tool) and enable the desktop workspace API. The
+    // web SaaS stack keeps auth enabled when running outside the desktop.
     const env = {
       ...process.env,
       OSH_PORT: String(this.port),
       PYTHONUNBUFFERED: '1',
       OSH_HOME: oshHome,
+      YULEOSH_AUTH_DISABLED: '1',
+      YULEOSH_DESKTOP_MODE: '1',
     };
 
     const args = ['-m', 'yuleosh.ui.server'];
