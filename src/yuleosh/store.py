@@ -53,8 +53,7 @@ class Store(AbstractStore):
                 )
                 Path(db).parent.mkdir(parents=True, exist_ok=True)
                 instance.db_path = db
-                instance.conn = sqlite3.connect(db, check_same_thread=False)
-                instance.conn.row_factory = sqlite3.Row
+                instance._local = threading.local()
                 instance._migrate()
                 cls._instances[key] = instance
             return cls._instances[key]
@@ -63,6 +62,17 @@ class Store(AbstractStore):
     def reset(cls):
         """Clear all instances (for testing)."""
         cls._instances = {}
+
+    @property
+    def conn(self):
+        """Per-thread SQLite connection (the HTTP server is thread-per-request)."""
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=30000")
+            self._local.conn = conn
+        return conn
 
     # Current migration version — bump to trigger new table creation
     _MIGRATION_VERSION = 11  # v0.11: role_permission_audit log; v0.10: users.status

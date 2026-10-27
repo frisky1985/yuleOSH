@@ -118,7 +118,7 @@ _PUBLIC_PATHS = frozenset({
     "/billing", "/pipeline-flow", "/apikeys", "/onboarding", "/demo",
     "/pricing", "/en", "/en/index.html", "/en/pricing",
 })
-_PUBLIC_PREFIXES = ("/static/", "/assets/", "/_next/")
+_PUBLIC_PREFIXES = ("/static/", "/assets/", "/_next/", "/yuleOSH/")
 
 # Repo root inferred from this file (src/yuleosh/ui/server.py -> repo root).
 # v3.12.x CI 真跑修复 (2026-08-07): the old default pointed at a hard-coded
