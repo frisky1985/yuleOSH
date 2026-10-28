@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   FolderOpen,
   FolderPlus,
@@ -19,11 +19,15 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Sparkles,
   Terminal,
   BookOpen,
   ShieldCheck,
+  Sparkles,
   Plus,
+  Search,
+  Filter,
+  ChevronsUpDown,
+  ChevronsDownUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +40,16 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api-fetch";
+import {
+  buildSections,
+  countFiles,
+  filterTree,
+  firstFile,
+  sectionMeta,
+  sectionOf,
+  type TreeNode,
+} from "@/lib/artifact-sections";
+import { CodeBlock } from "@/components/code-block";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -50,14 +64,6 @@ interface ProjectMeta {
   cloud_synced: boolean;
   last_synced_at: string | null;
   artifacts?: Record<string, { path: string; exists: boolean; file_count: number }>;
-}
-
-interface TreeNode {
-  name: string;
-  path: string;
-  type: "dir" | "file";
-  size?: number;
-  children?: TreeNode[];
 }
 
 interface PipelineRun {
@@ -95,14 +101,17 @@ export default function DesktopWorkspacePage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ProjectMeta | null>(null);
   const [tree, setTree] = useState<TreeNode | null>(null);
-  const [activeTab, setActiveTab] = useState<"requirements" | "code" | "tests">("requirements");
+  const [query, setQuery] = useState("");
+  const [onlyWithFiles, setOnlyWithFiles] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    requirements: true, design: false, code: false, tests: false, evidence: false,
+  });
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [reviewComment, setReviewComment] = useState("");
   const [reviews, setReviews] = useState<Array<{
     id: string; artifact: string; status: string; comment: string; author: string; created_at: string;
   }>>([]);
-  const [requirements, setRequirements] = useState<string>("");
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: "你好！我是 yuleOSH 助手。请输入需求（支持自然语言或 OpenSpec 格式），我会帮你导入并自动运行流水线。", timestamp: new Date().toISOString() },
@@ -137,7 +146,17 @@ export default function DesktopWorkspacePage() {
     loadProjects();
   }, [loadProjects]);
 
-  // ── Load active project details + tree + requirements ──────────────────
+  // ── Load active project details + tree + auto-select first file ────────
+  const findArtifactPath = useCallback((node: TreeNode | null | undefined, target: string): string | null => {
+    if (!node) return null;
+    if (node.type === "file" && node.path === target) return node.path;
+    for (const c of node.children || []) {
+      const hit = findArtifactPath(c, target);
+      if (hit) return hit;
+    }
+    return null;
+  }, []);
+
   useEffect(() => {
     if (!activeId) return;
     let cancelled = false;
@@ -151,9 +170,22 @@ export default function DesktopWorkspacePage() {
         if (cancelled) return;
         setTree(t.tree);
 
-        const req = await apiFetch<{ content: string }>(`/api/v1/desktop/projects/${activeId}/requirements`);
-        if (cancelled) return;
-        setRequirements(req.content || "");
+        // 需求只有一份数据源：requirements/requirements.md。加载后直接选中它。
+        // 若该文件还不存在（工程刚创建），则让右侧展示空态。
+        setSelectedFile(null);
+        setFileContent("");
+        const reqPath = findArtifactPath(t.tree, "requirements/requirements.md");
+        if (reqPath) {
+          try {
+            const f = await apiFetch<{ content: string }>(
+              `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(reqPath)}`,
+            );
+            if (cancelled) return;
+            setSelectedFile(reqPath);
+            setFileContent(f.content || "");
+            setOpenSections((s) => ({ ...s, requirements: true }));
+          } catch { /* 读不到内容也没关系，文件路径存在就够了 */ }
+        }
 
         const r = await apiFetch<{ runs: PipelineRun[] }>(`/api/v1/desktop/projects/${activeId}/pipeline/runs`);
         if (cancelled) return;
@@ -163,7 +195,7 @@ export default function DesktopWorkspacePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeId]);
+  }, [activeId, findArtifactPath]);
 
   // ── Auto-scroll chat ───────────────────────────────────────────────────
   useEffect(() => {
@@ -218,7 +250,12 @@ export default function DesktopWorkspacePage() {
         method: "POST",
         body: JSON.stringify({ content: text, source: "chatbot" }),
       });
-      setRequirements(text);
+      // 刷新产物树 + 直接打开刚落盘的 requirements.md
+      const t = await apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`);
+      setTree(t.tree);
+      setSelectedFile("requirements/requirements.md");
+      setFileContent(text);
+      setOpenSections((s) => ({ ...s, requirements: true }));
       setChatMessages((m) => [...m, {
         role: "assistant",
         content: "需求已导入到 requirements/requirements.md。点击「运行流水线」开始生成代码与测试。",
@@ -456,23 +493,21 @@ export default function DesktopWorkspacePage() {
   // ── Read artifact file ─────────────────────────────────────────────────
   const handleSelectFile = async (relPath: string) => {
     if (!activeId) return;
-    // Switch to the matching view tab so the clicked file is actually shown.
-    if (relPath.startsWith("code/")) setActiveTab("code");
-    else if (relPath.startsWith("tests/")) setActiveTab("tests");
-    else if (relPath.startsWith("requirements/")) setActiveTab("requirements");
     setSelectedFile(relPath);
+    // 展开该文件所属分区（若未展开）
+    const section = sectionOf(relPath);
+    if (section && !openSections[section]) {
+      setOpenSections((s) => ({ ...s, [section]: true }));
+    }
     try {
       const res = await apiFetch<{ content: string | null; binary: boolean; message?: string }>(
-        `/api/v1/desktop/projects/${activeId}/artifacts/${relPath}`,
+        `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(relPath)}`,
       );
       setFileContent(res.binary ? res.message || "(二进制文件)" : res.content || "");
     } catch (e) {
       setFileContent(`读取失败: ${(e as Error).message}`);
     }
   };
-
-  // ── Derive the active tab's root folder name ───────────────────────────
-  const tabRoot = activeTab; // requirements | code | tests
 
   return (
     <div className="flex flex-col h-screen bg-[#0a0e17] text-[#e2e8f0] overflow-hidden">
@@ -531,29 +566,110 @@ export default function DesktopWorkspacePage() {
 
       {/* ── Body ───────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: artifact tree */}
-        <aside className="w-60 border-r border-[#1e293b] bg-[#0d111f] overflow-y-auto shrink-0">
-          <div className="px-3 py-2 text-xs font-semibold text-[#64748b] uppercase tracking-wider flex items-center justify-between">
-            <span>产出物</span>
+        {/* Left: 5-section artifact tree */}
+        <aside className="w-64 border-r border-[#1e293b] bg-[#0d111f] overflow-y-auto shrink-0 flex flex-col">
+          <div className="px-3 py-2 text-xs font-semibold text-[#64748b] uppercase tracking-wider flex items-center justify-between shrink-0">
+            <span>产出物分区</span>
             <button onClick={() => activeId && apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`).then(d => setTree(d.tree))}
-              className="text-[#64748b] hover:text-white">
+              className="text-[#64748b] hover:text-white" title="刷新">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>
-          {tree ? (
-            <ArtifactTree node={tree} onSelect={handleSelectFile} selectedFile={selectedFile} />
-          ) : (
-            <div className="px-3 py-4 text-xs text-[#64748b]">选择一个工程以查看产出物</div>
-          )}
+
+          {/* 工具栏：搜索 + 展开/折叠 + 过滤 */}
+          <div className="px-3 pb-2 space-y-1.5 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#475569]" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索文件..."
+                className="bg-[#111827] border-[#1e293b] text-xs h-7 pl-7"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-[#64748b]">
+              <button
+                onClick={() => setOpenSections(Object.fromEntries(Object.keys(openSections).map(k => [k, true])))}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[#1e293b]"
+                title="全部展开">
+                <ChevronsDownUp className="w-3 h-3" /> 展开
+              </button>
+              <button
+                onClick={() => setOpenSections(Object.fromEntries(Object.keys(openSections).map(k => [k, false])))}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[#1e293b]"
+                title="全部折叠">
+                <ChevronsUpDown className="w-3 h-3" /> 折叠
+              </button>
+              <button
+                onClick={() => setOnlyWithFiles((v) => !v)}
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${onlyWithFiles ? "text-[#93c5fd] bg-[#1e293b]" : "hover:bg-[#1e293b]"}`}>
+                <Filter className="w-3 h-3" /> 有产物
+              </button>
+            </div>
+          </div>
+
+          {/* 5 大固定分区 */}
+          <div className="flex-1 overflow-y-auto px-1 pb-2">
+            {(() => {
+              const sections = buildSections(tree).map((sec) => {
+                const filtered = filterTree(sec, query);
+                return { sec, filtered, count: countFiles(filtered) };
+              }).filter(({ count }) => !onlyWithFiles || count > 0);
+              if (sections.length === 0) return <div className="px-2 py-4 text-xs text-[#475569] text-center">暂无产物</div>;
+
+              return sections.map(({ sec, filtered, count }) => {
+                const isOpen = query.trim() ? true : (openSections[sec.name] ?? true);
+                const meta = sectionMeta(sec.name);
+                const Icon = meta.icon;
+                return (
+                  <div key={sec.name} className="mb-1">
+                    <button
+                      onClick={() => {
+                        const willOpen = !isOpen;
+                        setOpenSections((s) => ({ ...s, [sec.name]: willOpen }));
+                        // 点击分区标题：若展开且当前文件不属于该分区，自动打开首个文件
+                        if (willOpen && (!selectedFile || sectionOf(selectedFile) !== sec.name)) {
+                          const first = firstFile(filtered);
+                          if (first) {
+                            handleSelectFile(first);
+                          } else {
+                            setSelectedFile(null);
+                            setFileContent("");
+                          }
+                        }
+                      }}
+                      className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded transition-colors ${
+                        selectedFile && sectionOf(selectedFile) === sec.name
+                          ? "bg-[#1e293b] text-white"
+                          : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]/60"
+                      }`}>
+                      {isOpen ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      <span className="flex-1 text-left">{meta.label}</span>
+                      <span className={`text-[10px] tabular-nums ${count === 0 ? "text-[#475569]" : "text-[#64748b]"}`}>{count}</span>
+                    </button>
+                    {isOpen && filtered && filtered.children && filtered.children.length > 0 && (
+                      <ArtifactTreeLite
+                        nodes={filtered.children}
+                        depth={0}
+                        onSelect={handleSelectFile}
+                        selectedFile={selectedFile}
+                      />
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </div>
 
           {/* Pipeline runs */}
-          <div className="px-3 py-2 mt-2 border-t border-[#1e293b]">
+          <div className="px-3 py-2 border-t border-[#1e293b] shrink-0">
             <div className="text-xs font-semibold text-[#64748b] uppercase tracking-wider mb-2">流水线记录</div>
             {runs.length === 0 ? (
               <div className="text-xs text-[#475569]">暂无运行记录</div>
             ) : (
               <ul className="space-y-1">
-                {runs.slice(0, 8).map((r) => (
+                {runs.slice(0, 6).map((r) => (
                   <li key={r.job_id} className="flex items-center gap-2 text-xs">
                     {r.status === "passed" ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981] shrink-0" />
@@ -571,121 +687,99 @@ export default function DesktopWorkspacePage() {
           </div>
         </aside>
 
-        {/* Center: three-pane view */}
+        {/* Center: unified code view */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Tabs */}
-          <div className="flex border-b border-[#1e293b] bg-[#0d111f] shrink-0">
-            {([
-              { key: "requirements", label: "需求", icon: BookOpen },
-              { key: "code", label: "代码", icon: Code2 },
-              { key: "tests", label: "测试用例", icon: TestTube2 },
-            ] as const).map((t) => (
-              <button
-                key={t.key}
-                onClick={() => { setActiveTab(t.key); setSelectedFile(null); setFileContent(""); }}
-                className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === t.key
-                    ? "border-[#1677ff] text-white"
-                    : "border-transparent text-[#94a3b8] hover:text-white"
-                }`}
-              >
-                <t.icon className="w-4 h-4" />
-                {t.label}
-              </button>
-            ))}
-            <div className="ml-auto flex items-center gap-3 px-4 text-xs text-[#64748b]">
-              {activeProject && (
+          {/* Breadcrumb */}
+          <div className="flex border-b border-[#1e293b] bg-[#0d111f] shrink-0 items-center justify-between px-4 py-2">
+            <div className="flex items-center gap-2 text-xs text-[#64748b]">
+              {selectedFile ? (
                 <>
-                  <span>运行: {activeProject.pipeline_runs || 0}</span>
-                  {activeProject.last_pipeline_status && (
-                    <Badge variant="outline" className={
-                      activeProject.last_pipeline_status === "passed"
-                        ? "border-[#10b981]/40 text-[#10b981]"
-                        : "border-[#ef4444]/40 text-[#ef4444]"
-                    }>
-                      {activeProject.last_pipeline_status}
-                    </Badge>
-                  )}
-                  {activeProject.cloud_synced ? (
-                    <span className="flex items-center gap-1 text-[#10b981]"><UploadCloud className="w-3 h-3" />已同步</span>
-                  ) : null}
+                  <span className="text-[#94a3b8]">{sectionOf(selectedFile)}</span>
+                  <span className="text-[#334155]">/</span>
+                  <span className="text-[#cbd5e1] truncate max-w-[360px]">{selectedFile}</span>
                 </>
+              ) : (
+                <span className="text-[#475569]">从左侧选择文件查看</span>
               )}
             </div>
+            {activeProject && (
+              <div className="flex items-center gap-3 text-xs text-[#64748b]">
+                <span>运行: {activeProject.pipeline_runs || 0}</span>
+                {activeProject.last_pipeline_status && (
+                  <Badge variant="outline" className={
+                    activeProject.last_pipeline_status === "passed"
+                      ? "border-[#10b981]/40 text-[#10b981]"
+                      : "border-[#ef4444]/40 text-[#ef4444]"
+                  }>
+                    {activeProject.last_pipeline_status}
+                  </Badge>
+                )}
+                {activeProject.cloud_synced ? (
+                  <span className="flex items-center gap-1 text-[#10b981]"><UploadCloud className="w-3 h-3" />已同步</span>
+                ) : null}
+              </div>
+            )}
           </div>
 
-          {/* Content pane */}
-          <div className="flex-1 overflow-hidden">
-            {activeTab === "requirements" ? (
-              <div className="h-full flex flex-col">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-[#1e293b]">
-                  <span className="text-xs text-[#64748b]">requirements/requirements.md</span>
-                  <span className="text-xs text-[#475569]">{requirements.length} 字符</span>
-                </div>
-                <pre className="flex-1 overflow-auto p-4 text-sm text-[#cbd5e1] font-mono whitespace-pre-wrap leading-relaxed">
-                  {requirements || "暂无需求。在下方对话框输入需求，或使用 /import 从文件导入。"}
-                </pre>
-              </div>
+          {/* Content pane — unified */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {selectedFile ? (
+              <CodeBlock content={fileContent} path={selectedFile} />
             ) : (
-              <div className="h-full flex flex-col">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-[#1e293b]">
-                  <span className="text-xs text-[#64748b]">{selectedFile || `从左侧选择 ${activeTab}/ 下的文件`}</span>
+              <div className="flex-1 flex items-center justify-center text-center px-8">
+                <div className="space-y-2">
+                  <div className="text-5xl">📂</div>
+                  <div className="text-[#64748b] text-sm">展开左侧「{(() => {
+                    const sections = buildSections(tree);
+                    return sections[0] ? sectionMeta(sections[0].name).label : "需求";
+                  })()}」分区，点击文件查看内容</div>
                 </div>
-                <pre className="flex-1 overflow-auto p-4 text-sm text-[#cbd5e1] font-mono whitespace-pre-wrap leading-relaxed">
-                  {fileContent || `展开左侧 ${activeTab}/ 文件夹，点击文件查看内容。`}
-                </pre>
+              </div>
+            )}
 
-                {/* Review panel — only when a specific artifact file is selected */}
-                {selectedFile && (
-                  <div className="border-t border-[#1e293b] bg-[#0d111f] shrink-0 px-4 py-3 space-y-2">
-                    {/* 该文件已有评审记录 */}
-                    {(() => {
-                      const mine = reviews.filter((r) => r.artifact === selectedFile).slice(0, 3);
-                      if (mine.length === 0) return null;
-                      return (
-                        <div className="flex flex-wrap gap-1.5">
-                          {mine.map((r) => (
-                            <span key={r.id} className={
-                              `inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
-                                r.status === "approved" ? "border-[#10b981]/40 text-[#10b981] bg-[#10b981]/10" :
-                                r.status === "rejected" ? "border-[#ef4444]/40 text-[#ef4444] bg-[#ef4444]/10" :
-                                "border-[#f59e0b]/40 text-[#fbbf24] bg-[#f59e0b]/10"
-                              }`}>
-                              {r.status === "approved" ? "✅ 通过" : r.status === "rejected" ? "❌ 退回" : "🔍 修改"}
-                              {r.comment && <span className="truncate max-w-[120px] text-[#94a3b8]">· {r.comment}</span>}
-                            </span>
-                          ))}
-                        </div>
-                      );
-                    })()}
-
-                    {/* 评审操作栏 */}
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={reviewComment}
-                        onChange={(e) => setReviewComment(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey)}
-                        placeholder="批注（可选，Ctrl+Enter 提交）"
-                        className="bg-[#111827] border-[#1e293b] text-xs flex-1 h-8"
-                      />
-                      <button
-                        onClick={() => submitReview("approved")}
-                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#10b981]/40 text-[#10b981] hover:bg-[#10b981]/15">
-                        ✅ 通过
-                      </button>
-                      <button
-                        onClick={() => submitReview("needs_revision")}
-                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#f59e0b]/40 text-[#fbbf24] hover:bg-[#f59e0b]/15">
-                        🔍 修改
-                      </button>
-                      <button
-                        onClick={() => submitReview("rejected")}
-                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#ef4444]/40 text-[#ef4444] hover:bg-[#ef4444]/15">
-                        ❌ 退回
-                      </button>
+            {/* Review panel —挂在底部，与文件内容解耦 */}
+            {selectedFile && (
+              <div className="border-t border-[#1e293b] bg-[#0d111f] shrink-0 px-4 py-3 space-y-2">
+                {(() => {
+                  const mine = reviews.filter((r) => r.artifact === selectedFile).slice(0, 4);
+                  if (mine.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      {mine.map((r) => (
+                        <span key={r.id} className={
+                          `inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
+                            r.status === "approved" ? "border-[#10b981]/40 text-[#10b981] bg-[#10b981]/10" :
+                            r.status === "rejected" ? "border-[#ef4444]/40 text-[#ef4444] bg-[#ef4444]/10" :
+                            "border-[#f59e0b]/40 text-[#fbbf24] bg-[#f59e0b]/10"
+                          }`}>
+                          {r.status === "approved" ? "✅ 通过" : r.status === "rejected" ? "❌ 退回" : "🔍 修改"}
+                          {r.comment && <span className="truncate max-w-[120px] text-[#94a3b8]">· {r.comment}</span>}
+                        </span>
+                      ))}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey)}
+                    placeholder="批注（可选，Ctrl+Enter 提交）"
+                    className="bg-[#111827] border-[#1e293b] text-xs flex-1 h-8"
+                  />
+                  <button onClick={() => submitReview("approved")}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#10b981]/40 text-[#10b981] hover:bg-[#10b981]/15">
+                    ✅ 通过
+                  </button>
+                  <button onClick={() => submitReview("needs_revision")}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#f59e0b]/40 text-[#fbbf24] hover:bg-[#f59e0b]/15">
+                    🔍 修改
+                  </button>
+                  <button onClick={() => submitReview("rejected")}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#ef4444]/40 text-[#ef4444] hover:bg-[#ef4444]/15">
+                    ❌ 退回
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -754,65 +848,66 @@ export default function DesktopWorkspacePage() {
   );
 }
 
-// ─── Artifact tree component ──────────────────────────────────────────────
+// ─── Lightweight artifact tree (used under each section) ────────────────
 
-function ArtifactTree({
-  node,
+function ArtifactTreeLite({
+  nodes,
+  depth = 0,
   onSelect,
   selectedFile,
-  depth = 0,
 }: {
-  node: TreeNode;
+  nodes: TreeNode[];
+  depth?: number;
   onSelect: (path: string) => void;
   selectedFile: string | null;
-  depth?: number;
 }) {
-  const [open, setOpen] = useState(depth < 2);
-  const isDir = node.type === "dir";
-  const hasChildren = isDir && node.children && node.children.length > 0;
-
-  // Hide empty top-level artifact dirs that have no files.
-  if (depth === 1 && isDir && (!node.children || node.children.length === 0)) {
-    return null;
-  }
+  // 目录默认不展开（分区已展开后，再逐层展开文件）
+  const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({});
 
   return (
     <div>
-      <div
-        className={`flex items-center gap-1 px-2 py-1 rounded cursor-pointer text-xs hover:bg-[#1e293b] ${
-          selectedFile === node.path ? "bg-[#1e293b] text-white" : "text-[#94a3b8]"
-        }`}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={() => {
-          if (isDir) setOpen(!open);
-          else onSelect(node.path);
-        }}
-      >
-        {isDir ? (
-          open ? <ChevronDown className="w-3.5 h-3.5 text-[#64748b]" /> : <ChevronRight className="w-3.5 h-3.5 text-[#64748b]" />
-        ) : (
-          <span className="w-3.5" />
-        )}
-        {isDir ? (
-          <Folder className="w-3.5 h-3.5 text-[#f59e0b]" />
-        ) : (
-          <FileIcon className="w-3.5 h-3.5 text-[#64748b]" />
-        )}
-        <span className="truncate">{node.name}</span>
-      </div>
-      {isDir && open && hasChildren && (
-        <div>
-          {node.children!.map((child) => (
-            <ArtifactTree
-              key={child.path}
-              node={child}
-              onSelect={onSelect}
-              selectedFile={selectedFile}
-              depth={depth + 1}
-            />
-          ))}
-        </div>
-      )}
+      {nodes.map((node) => {
+        const isDir = node.type === "dir";
+        const isOpen = openDirs[node.path] ?? false;
+        const hasChildren = isDir && (node.children?.length ?? 0) > 0;
+        return (
+          <div key={node.path}>
+            <div
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer text-[11px] hover:bg-[#1e293b] ${
+                selectedFile === node.path ? "bg-[#1e293b] text-white" : "text-[#94a3b8]"
+              }`}
+              style={{ paddingLeft: `${depth * 10 + 10}px` }}
+              onClick={() => {
+                if (isDir && hasChildren) {
+                  setOpenDirs((s) => ({ ...s, [node.path]: !s[node.path] }));
+                } else if (!isDir) {
+                  onSelect(node.path);
+                }
+              }}
+            >
+              {isDir && hasChildren ? (
+                isOpen ? <ChevronDown className="w-3 h-3 text-[#64748b]" /> : <ChevronRight className="w-3 h-3 text-[#64748b]" />
+              ) : (
+                <span className="w-3" />
+              )}
+              {isDir ? (
+                <Folder className="w-3 h-3 text-[#f59e0b]" />
+              ) : (
+                <FileIcon className="w-3 h-3 text-[#64748b]" />
+              )}
+              <span className="truncate">{node.name}</span>
+            </div>
+            {isDir && isOpen && hasChildren && (
+              <ArtifactTreeLite
+                nodes={node.children!}
+                depth={depth + 1}
+                onSelect={onSelect}
+                selectedFile={selectedFile}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
