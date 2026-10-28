@@ -346,6 +346,38 @@ export default function DesktopWorkspacePage() {
     }
   };
 
+  const bulkReview = async (scope: "section" | "all", section?: string,
+                            status: "approved" | "rejected" | "needs_revision" = "approved") => {
+    if (!activeId) return;
+    try {
+      const payload: any = { scope, status };
+      if (scope === "section" && section) payload.section = section;
+      const r = await apiFetch<{ created: number; updated: number }>(
+        `/api/v1/desktop/projects/${activeId}/review/bulk`,
+        { method: "POST", body: JSON.stringify(payload) },
+      );
+      await loadReviews();
+      pushAssistant(`✅ 批量评审完成：创建 ${r.created} 条，更新 ${r.updated} 条。`);
+    } catch (e) {
+      pushAssistant(`批量评审失败: ${(e as Error).message}`);
+    }
+  };
+
+  const exportReviews = async () => {
+    if (!activeId) return;
+    try {
+      const r = await apiFetch<{ content: string; path: string; total: number; summary: any }>(
+        `/api/v1/desktop/projects/${activeId}/review/export`,
+      );
+      pushAssistant(`📄 评审报告已导出到 \`${r.path}\`（${r.total} 条评审）。可在 evidence 分区查看。`);
+      // 刷新产物树，让 review-report.md 出现
+      const t = await apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`);
+      setTree(t.tree);
+    } catch (e) {
+      pushAssistant(`导出评审失败: ${(e as Error).message}`);
+    }
+  };
+
   // 切换工程时自动加载评审记录
   useEffect(() => {
     if (activeId) loadReviews();
@@ -759,6 +791,33 @@ export default function DesktopWorkspacePage() {
                     </div>
                   );
                 })()}
+
+                {/* 批量操作栏 */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#475569] uppercase tracking-wider mr-1">批量：</span>
+                  {(["requirements", "design", "code", "tests", "evidence"] as const).map((sec) => {
+                    const meta = sectionMeta(sec);
+                    const Icon = meta.icon;
+                    return (
+                      <button key={sec}
+                        onClick={() => bulkReview("section", sec, "approved")}
+                        className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-[#10b981]/30 text-[#6ee7b7] hover:bg-[#10b981]/15">
+                        <Icon className="w-3 h-3" /> 全过 {meta.label}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => bulkReview("all", undefined, "approved")}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-[#10b981]/30 text-[#6ee7b7] hover:bg-[#10b981]/15">
+                    ✅ 全过全部
+                  </button>
+                  <button
+                    onClick={exportReviews}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-[#64748b]/40 text-[#94a3b8] hover:bg-[#1e293b] ml-auto">
+                    📄 导出评审报告
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-2">
                   <Input
                     value={reviewComment}
