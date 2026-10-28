@@ -15,12 +15,13 @@ from __future__ import annotations
 import logging
 import os
 
-from yuleosh.ui import server as _server
-
 logger = logging.getLogger(__name__)
 
 
 def main(host: str | None = None, port: int | None = None) -> None:
+    # 延迟导入，避免 yuleosh.ui.http_app ↔ yuleosh.ui.server 循环导入
+    from yuleosh.ui import server as _server
+
     if not host:
         host = os.environ.get("YULEOSH_HOST") or os.environ.get("OSH_HOST") or "127.0.0.1"
     if not port:

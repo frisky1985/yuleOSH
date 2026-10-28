@@ -169,7 +169,8 @@ from yuleosh.ui.api_dispatch import (
 )
 
 #   HTTP 服务启动编排 → yuleosh/ui/http_app.py
-from yuleosh.ui.http_app import main
+#   注意：不能在此处顶层导入 main，否则与 http_app 形成循环导入。
+#   改为在 __main__ 块内延迟导入。
 
 # ── OSHHandler ─────────────────────────────────────────────────────────────
 
@@ -371,4 +372,7 @@ class OSHHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    main()
+    # 延迟导入，避免 yuleosh.ui.server ↔ yuleosh.ui.http_app 循环导入
+    from yuleosh.ui.http_app import main as _http_main
+
+    _http_main()

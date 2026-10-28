@@ -178,7 +178,7 @@ export default function DesktopWorkspacePage() {
         if (reqPath) {
           try {
             const f = await apiFetch<{ content: string }>(
-              `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(reqPath)}`,
+              `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(reqPath).replace(/%2F/g, "/")}`,
             );
             if (cancelled) return;
             setSelectedFile(reqPath);
@@ -533,7 +533,7 @@ export default function DesktopWorkspacePage() {
     }
     try {
       const res = await apiFetch<{ content: string | null; binary: boolean; message?: string }>(
-        `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(relPath)}`,
+        `/api/v1/desktop/projects/${activeId}/artifacts/${encodeURIComponent(relPath).replace(/%2F/g, "/")}`,
       );
       setFileContent(res.binary ? res.message || "(二进制文件)" : res.content || "");
     } catch (e) {
