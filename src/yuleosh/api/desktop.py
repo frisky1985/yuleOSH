@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -280,13 +281,101 @@ def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
     return _json({"ok": False, "error": f"Job {job_id} not found"}, 404)
 
 
+# ── Artifact classification contract ───────────────────────────────────
+# 五分区是产物的唯一权威归属。规则按顺序短路，命中即返回，避免
+# 「多个 glob 同时命中同一文件、后写覆盖前写」的歧义。
+# 无法归类的产物一律进 _unclassified/（并写入 artifact-manifest.json），
+# 由人工复核后归位，而不是猜一个分区塞进去。
+
+UNCLASSIFIED_DIR = "_unclassified"
+
+# 流水线内部文件，不是交付产物，不参与分区。
+_SKIP_NAMES = {
+    "config.json",
+    "collected_artifacts.json",
+    "artifact-manifest.json",
+    "project.json",
+    "session.json",
+}
+_SKIP_SUFFIXES = {".arxml", ".db", ".sqlite", ".sqlite3"}
+
+_CODE_SUFFIXES = {".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".rs", ".js", ".ts"}
+_TEST_DIRS = {"test", "tests", "unit_tests", "ctest", "testcases"}
+_TEST_NAME_RE = re.compile(r"^(test_.*|.*_tests?)$")
+_EVIDENCE_DIRS = {"evidence", "reports", "coverage", "results"}
+_EVIDENCE_HINTS = (
+    "coverage", "misra", "sarif", "report", "review", "audit", "trace", "certif", "evidence",
+)
+_DESIGN_HINTS = ("design", "sdd", "architecture", "interface", "uml", "hld", "lld")
+_REQ_HINTS = ("requirement", "spec", "stakeholder", "sys-req", "prd")
+
+
+def classify_artifact(rel_path) -> tuple[str, str, str] | None:
+    """把流水线产物映射到五分区之一。
+
+    判定顺序（先目录语义，后文件名语义，最后扩展名）：
+      1. 内部文件 → None（不收集）
+      2. RTE 生成代码 → code/rte
+      3. 目录命中 tests/evidence/design/requirements
+      4. 文件名命中 test_xxx / xxx_test → tests
+      5. 文件名含 coverage/misra/report/... → evidence
+      6. 文件名含 design/sdd/... → design
+      7. 文件名含 requirement/spec/... → requirements
+      8. 代码扩展名 → code
+      9. 兜底 → _unclassified（人工复核）
+
+    Returns ``(section, dest_subdir, rule)`` 或 ``None``。
+    """
+    rel = Path(rel_path)
+    parts = [p.lower() for p in rel.parts[:-1]]
+    stem = rel.stem.lower()
+    name = rel.name.lower()
+    suffix = rel.suffix.lower()
+
+    if name in _SKIP_NAMES or suffix in _SKIP_SUFFIXES:
+        return None
+
+    # 2) RTE 生成的胶水代码固定进 code/rte
+    if "rte" in parts or stem.startswith("rte"):
+        return ("code", "code/rte", "rte")
+
+    # 3) 目录语义优先
+    if any(p in _TEST_DIRS for p in parts):
+        return ("tests", "tests", "dir:tests")
+    if any(p in _EVIDENCE_DIRS for p in parts):
+        return ("evidence", "evidence", "dir:evidence")
+    if any(p in ("design", "architecture", "arch") for p in parts):
+        return ("design", "design", "dir:design")
+    if any(p in ("requirements", "spec") for p in parts):
+        return ("requirements", "requirements", "dir:requirements")
+
+    # 4) 文件名语义
+    if _TEST_NAME_RE.match(stem):
+        return ("tests", "tests", "name:test")
+    if any(h in name for h in _EVIDENCE_HINTS) or suffix in (".sarif", ".log"):
+        return ("evidence", "evidence", "name:evidence")
+    if any(h in stem for h in _DESIGN_HINTS):
+        return ("design", "design", "name:design")
+    if any(h in stem for h in _REQ_HINTS):
+        return ("requirements", "requirements", "name:requirements")
+
+    # 5) 扩展名兜底为代码
+    if suffix in _CODE_SUFFIXES:
+        return ("code", "code", "suffix:code")
+
+    # 6) 无法确定归属：显式暴露，不猜
+    return (UNCLASSIFIED_DIR, UNCLASSIFIED_DIR, "unclassified")
+
+
 def _collect_real_artifacts(proj_dir, job_id: str = None) -> list:
     """Collect real pipeline-generated files into the project's artifact folders.
 
     The pipeline writes output under ``.yuleosh/pipeline/{job_id}/`` (e.g.
     ``rte/Rte.c``, ``rte/Rte.h``). This function maps those files into the
-    project's standard artifact folders (``code/``, ``tests/``, ``evidence/``)
-    so they show up in the desktop three-pane view.
+    project's five artifact sections (``requirements/ design/ code/ tests/
+    evidence/``) via :func:`classify_artifact`, so they show up in the
+    desktop five-section sidebar. Files that cannot be classified go to
+    ``_unclassified/`` and are recorded in ``artifact-manifest.json``.
 
     If ``job_id`` is None, scans ALL pipeline job directories and collects
     from the newest one (lazy collection for async pipeline runs).
@@ -309,36 +398,36 @@ def _collect_real_artifacts(proj_dir, job_id: str = None) -> list:
             reverse=True,
         )
 
-    # Mapping rules: (source_glob, target_subdir)
-    rules = [
-        ("rte/*.c", "code/rte"),
-        ("rte/*.h", "code/rte"),
-        ("rte/**/*.c", "code/rte"),
-        ("rte/**/*.h", "code/rte"),
-        ("**/*.c", "code"),
-        ("**/*.h", "code"),
-        ("**/report*.json", "tests"),
-        ("**/*coverage*.json", "evidence"),
-        ("**/*misra*.json", "evidence"),
-        ("**/*.md", "evidence"),
-    ]
+    # 分区归属由 classify_artifact() 决定（确定性规则），不再用扩展名 glob 猜类型。
+    # 无法归类的文件落到 _unclassified/ 并记录在 manifest 里，不静默丢弃、
+    # 也不静默塞进错误分区。
+    manifest: list[dict] = []
 
     for pipeline_dir in job_dirs:
         if not pipeline_dir.exists():
             continue
-        for pattern, target_sub in rules:
-            for src in sorted(pipeline_dir.glob(pattern)):
-                if not src.is_file():
-                    continue
-                dst_dir = Path(proj_dir) / target_sub
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                dst = dst_dir / src.name
-                # Only copy if destination doesn't exist or source is newer.
-                if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
-                    shutil.copy2(src, dst)
-                rel_path = str((target_sub / src.name))
-                if rel_path not in collected:
-                    collected.append(rel_path)
+        sources = sorted(p for p in pipeline_dir.rglob("*") if p.is_file())
+        for src in sources:
+            rel_src = src.relative_to(pipeline_dir)
+            classified = classify_artifact(rel_src)
+            if classified is None:  # 内部文件（config.json / *.arxml 等），不属于产物
+                continue
+            section, target_sub, rule = classified
+            dst_dir = Path(proj_dir) / target_sub
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            dst = dst_dir / src.name
+            # Only copy if destination doesn't exist or source is newer.
+            if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
+                shutil.copy2(src, dst)
+            rel_path = str(Path(target_sub) / src.name)
+            if rel_path not in collected:
+                collected.append(rel_path)
+                manifest.append({
+                    "source": str(rel_src),
+                    "path": rel_path,
+                    "section": section,
+                    "rule": rule,
+                })
 
     # Record the collection manifest in the run folder of the newest job.
     if job_dirs:
@@ -348,6 +437,16 @@ def _collect_real_artifacts(proj_dir, job_id: str = None) -> list:
             json.dumps({"collected": collected}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        (run_dir / "artifact-manifest.json").write_text(
+            json.dumps({"artifacts": manifest}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        for item in manifest:
+            if item["section"] == UNCLASSIFIED_DIR:
+                log.warning(
+                    "unclassified pipeline artifact: %s (from %s)",
+                    item["path"], item["source"],
+                )
     return collected
 
 
