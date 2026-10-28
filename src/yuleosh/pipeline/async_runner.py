@@ -205,6 +205,7 @@ def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0,
     job["completed_at"] = datetime.now().isoformat()
     job["updated_at"] = datetime.now().isoformat()
     _record_pipeline_usage(org_id, user_id, user_email)
+    _persist_job_result(job)
 
 
 def _run_full_pipeline(
@@ -368,12 +369,36 @@ def _run_full_pipeline(
     job["completed_at"] = datetime.now().isoformat()
     job["updated_at"] = datetime.now().isoformat()
     _record_pipeline_usage(org_id, user_id, user_email)
+    _persist_job_result(job)
 
     # ── Notification on completion (for all autosar / full_pipeline types) ──
     _notify_pipeline_completion(job_id)
 
 
 # ── Status queries ────────────────────────────────────────────────────────
+
+def _persist_job_result(job: dict) -> None:
+    """Persist a finished job's snapshot to project_dir/pipeline/runs/{job_id}/result.json.
+
+    This lets the desktop poller show final status even after the Python
+    process restarts (in-memory _PIPELINE_JOBS is gone, but the disk record
+    survives). Called by both _run_ci_job and _run_full_pipeline on finish.
+    """
+    project_dir = job.get("project_dir")
+    job_id = job.get("job_id")
+    if not project_dir or not job_id:
+        return
+    try:
+        run_dir = Path(project_dir) / "pipeline" / "runs" / job_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        # Strip mutable fields that shouldn't outlive the process.
+        snapshot = {k: v for k, v in job.items() if k != "logs"}
+        (run_dir / "result.json").write_text(
+            json.dumps(snapshot, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+    except Exception as e:  # noqa: BLE001 — best-effort persistence, never fail the run
+        log.debug("Failed to persist job result for %s: %s", job_id, e)
 
 def get_job_status(job_id: str) -> Optional[dict]:
     """Get current status of a pipeline job."""

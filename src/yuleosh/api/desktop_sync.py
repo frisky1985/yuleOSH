@@ -97,7 +97,16 @@ def handle_desktop_sync(method: str, path_tail: str, body: Any, query: dict,
 # ── Handlers ──────────────────────────────────────────────────────────────
 
 def _receive_sync(body: Any) -> tuple:
-    """Receive a desktop project sync and persist it to cloud storage."""
+    """Receive a desktop project sync and persist it to cloud storage.
+
+    Supports both full and incremental modes:
+
+    - **Full mode** (default, backward-compatible): 接收整包 files，清空旧文件目录
+      后重写。legacy 客户端或首次同步走这里。
+    - **Incremental mode** (``mode: "incremental"``): ``files`` 只包含变化/新增
+      文件，``removed`` 是本地已删除文件的路径列表。云端只更新变化的文件、
+      删除 removed 列表，未提及的文件保留不动。适合频繁同步时节省带宽。
+    """
     data = body if isinstance(body, dict) else {}
     project_id = data.get("project_id")
     if not project_id:
@@ -127,28 +136,77 @@ def _receive_sync(body: Any) -> tuple:
 
     # Materialize files so the web UI can stream them directly.
     files_dir = proj_dir / "files"
-    if files_dir.exists():
-        shutil.rmtree(files_dir)
     files_dir.mkdir(parents=True, exist_ok=True)
-    file_count = 0
-    for f in data.get("files", []) or []:
-        rel = f.get("path")
-        if not rel or f.get("binary"):
-            continue
-        target = (files_dir / rel).resolve()
-        try:
-            target.relative_to(files_dir.resolve())
-        except ValueError:
-            continue  # skip path-traversal attempts
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(f.get("content", ""), encoding="utf-8")
-        file_count += 1
 
-    log.info("Desktop sync received: project=%s files=%d", project_id, file_count)
+    mode = data.get("mode", "full")
+    file_count = 0
+
+    if mode == "incremental":
+        # 增量：只写变化的、只删 removed 的
+        for f in data.get("files", []) or []:
+            rel = f.get("path")
+            if not rel or f.get("binary"):
+                continue
+            target = (files_dir / rel).resolve()
+            try:
+                target.relative_to(files_dir.resolve())
+            except ValueError:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f.get("content", ""), encoding="utf-8")
+            file_count += 1
+
+        for rel in data.get("removed", []) or []:
+            target = (files_dir / rel).resolve()
+            try:
+                target.relative_to(files_dir.resolve())
+            except ValueError:
+                continue
+            if target.exists() and target.is_file():
+                target.unlink()
+                # 清理空父目录（到 files_dir 为止）
+                parent = target.parent
+                while parent != files_dir:
+                    try:
+                        parent.rmdir()
+                    except OSError:
+                        break
+                    parent = parent.parent
+
+        log.info("Desktop sync (incremental): project=%s updated=%d removed=%d",
+                 project_id, file_count, len(data.get("removed", []) or []))
+    else:
+        # 全量：清掉旧 files_dir 后重写
+        if files_dir.exists():
+            shutil.rmtree(files_dir)
+        files_dir.mkdir(parents=True, exist_ok=True)
+        for f in data.get("files", []) or []:
+            rel = f.get("path")
+            if not rel or f.get("binary"):
+                continue
+            target = (files_dir / rel).resolve()
+            try:
+                target.relative_to(files_dir.resolve())
+            except ValueError:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f.get("content", ""), encoding="utf-8")
+            file_count += 1
+
+        log.info("Desktop sync (full): project=%s files=%d", project_id, file_count)
+
+    # 保存 manifest（如果客户端传了），方便云端后续做一致性校验
+    if data.get("manifest"):
+        (proj_dir / ".cloud_manifest.json").write_text(
+            json.dumps(data["manifest"], ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
     return _json({
         "ok": True,
         "project_id": project_id,
+        "mode": mode,
         "files_stored": file_count,
+        "removed_count": len(data.get("removed", []) or []),
         "url": f"/api/v1/desktop-sync/{project_id}",
     }, 201)
 
