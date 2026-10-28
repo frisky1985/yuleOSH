@@ -103,9 +103,16 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
 
     # 评审：对某个产物文件做通过/退回 + 批注，落到 evidence/review.json
     # /api/v1/desktop/projects/{id}/review                    (GET 列表 / POST 新增)
+    # /api/v1/desktop/projects/{id}/review/bulk               (POST 批量：按分区或按 glob 批量打标)
+    # /api/v1/desktop/projects/{id}/review/export             (GET 导出 evidence/review-report.md)
     # /api/v1/desktop/projects/{id}/review/{review_id}        (GET 详情 / DELETE 删除)
     if sub == "review":
         rev_id = parts[2] if len(parts) > 2 else ""
+        sub_action = parts[2] if len(parts) > 2 else ""
+        if sub_action == "bulk" and method == "POST":
+            return _bulk_reviews(project_id, body)
+        if sub_action == "export" and method == "GET":
+            return _export_reviews(project_id)
         if rev_id and method == "GET":
             return _get_review(project_id, rev_id)
         if rev_id and method == "DELETE":
@@ -783,3 +790,150 @@ def _delete_review(project_id: str, rev_id: str) -> tuple:
     store["index"] = [x for x in store.get("index", []) if x != rev_id]
     _save_reviews(project_id, store)
     return _json({"ok": True})
+
+
+def _bulk_reviews(project_id: str, body: Any) -> tuple:
+    """批量给多个产物打同一个评审标签。
+
+    body 字段:
+        scope        "artifact" | "section" | "all"
+        artifacts    list[str]   — scope="artifact" 时指定文件路径
+        section      str         — scope="section" 时指定分区名（如 code / tests）
+        status       str         — approved | rejected | needs_revision
+        comment      str         — 可选批注
+    """
+    data = body if isinstance(body, dict) else {}
+    scope = data.get("scope", "all").strip()
+    status = (data.get("status") or "").strip().lower()
+    comment = (data.get("comment") or "").strip()
+
+    if status not in _REVIEW_STATUS:
+        return _json({"ok": False, "error": f"status must be one of {_REVIEW_STATUS}"}, 400)
+
+    proj_dir = workspace._project_dir(project_id)
+    # 收集所有产物文件路径
+    all_files = []
+    for sub in ("requirements", "design", "code", "tests", "evidence"):
+        sub_path = proj_dir / sub
+        if sub_path.exists():
+            for fpath in sub_path.rglob("*"):
+                if fpath.is_file():
+                    all_files.append(str(fpath.relative_to(proj_dir)))
+
+    if scope == "artifact":
+        targets = [p for p in (data.get("artifacts") or []) if p in all_files]
+    elif scope == "section":
+        section = (data.get("section") or "").strip()
+        if not section:
+            return _json({"ok": False, "error": "section is required"}, 400)
+        targets = [p for p in all_files if p.startswith(section + "/")]
+    else:  # all
+        targets = all_files
+
+    if not targets:
+        return _json({"ok": True, "created": 0, "skipped": 0, "message": "no files matched"}, 200)
+
+    store = _load_reviews(project_id)
+    existing_by_artifact: dict[str, str] = {
+        r["artifact"]: rid for rid, r in store["reviews"].items()
+    }
+    created = 0
+    skipped = 0
+
+    for artifact in targets:
+        if artifact in existing_by_artifact:
+            # 同一文件已有评审记录 — 更新而非重复创建
+            existing = store["reviews"][existing_by_artifact[artifact]]
+            existing["status"] = status
+            if comment:
+                existing["comment"] = comment
+            existing["created_at"] = datetime.now().isoformat()
+            skipped += 1
+            continue
+        rid = _secrets.token_hex(6)
+        store["reviews"][rid] = {
+            "id": rid,
+            "artifact": artifact,
+            "status": status,
+            "comment": comment,
+            "author": "local",
+            "created_at": datetime.now().isoformat(),
+        }
+        store.setdefault("index", []).append(rid)
+        created += 1
+
+    _save_reviews(project_id, store)
+    return _json({"ok": True, "created": created, "updated": skipped})
+
+
+def _export_reviews(project_id: str) -> tuple:
+    """把 review.json 导出成 evidence/review-report.md 并返回其内容。"""
+    store = _load_reviews(project_id)
+    reviews = list(store["reviews"].values())
+    reviews.sort(key=lambda r: r.get("artifact", ""))
+
+    proj_dir = workspace._project_dir(project_id)
+    meta_path = proj_dir / "project.json"
+    proj_name = "unknown"
+    if meta_path.exists():
+        try:
+            proj_name = json.loads(meta_path.read_text(encoding="utf-8")).get("name", "unknown")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # 汇总
+    summary = {"approved": 0, "rejected": 0, "needs_revision": 0}
+    for r in reviews:
+        summary[r.get("status", "needs_revision")] = summary.get(r.get("status", "needs_revision"), 0) + 1
+
+    # 按分区分组
+    sections: dict[str, list[dict]] = {}
+    for r in reviews:
+        section = r["artifact"].split("/")[0] if "/" in r["artifact"] else "other"
+        sections.setdefault(section, []).append(r)
+
+    # 生成 Markdown
+    lines = [
+        f"# 评审报告 — {proj_name}",
+        "",
+        f"> 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ",
+        f"> 评审总数：{len(reviews)}  ✅ 通过 {summary['approved']}  ❌ 退回 {summary['rejected']}  🔍 修改 {summary['needs_revision']}",
+        "",
+        "## 概览",
+        "",
+        f"| 分区 | 通过 | 退回 | 修改 | 合计 |",
+        "|---|---|---|---|---|",
+    ]
+    for sec in sorted(sections.keys()):
+        sec_reviews = sections[sec]
+        s = {"approved": 0, "rejected": 0, "needs_revision": 0}
+        for r in sec_reviews:
+            s[r.get("status", "needs_revision")] = s.get(r.get("status", "needs_revision"), 0) + 1
+        lines.append(f"| {sec} | {s['approved']} | {s['rejected']} | {s['needs_revision']} | {len(sec_reviews)} |")
+    lines.append("")
+
+    for sec in sorted(sections.keys()):
+        sec_reviews = sections[sec]
+        lines.extend([f"## {sec}", ""])
+        for r in sec_reviews:
+            tag = {"approved": "✅ 通过", "rejected": "❌ 退回", "needs_revision": "🔍 修改"}.get(r.get("status"), r.get("status"))
+            lines.append(f"- **`{r['artifact']}`** — {tag}  ")
+            if r.get("comment"):
+                lines.append(f"  > {r['comment']}  ")
+            lines.append(f"  _by {r.get('author', 'local')} · {r.get('created_at', '').replace('T', ' ')}_  ")
+            lines.append("")
+
+    content = "\n".join(lines)
+
+    # 落盘到 evidence/review-report.md
+    report_path = proj_dir / "evidence" / "review-report.md"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(content, encoding="utf-8")
+
+    return _json({
+        "ok": True,
+        "path": "evidence/review-report.md",
+        "content": content,
+        "total": len(reviews),
+        "summary": summary,
+    })
