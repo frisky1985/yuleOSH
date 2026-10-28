@@ -729,6 +729,19 @@ export default function DesktopWorkspacePage() {
                   <span className="text-[#94a3b8]">{sectionOf(selectedFile)}</span>
                   <span className="text-[#334155]">/</span>
                   <span className="text-[#cbd5e1] truncate max-w-[360px]">{selectedFile}</span>
+                  {(() => {
+                    const rev = [...reviews].reverse().find((r) => r.artifact === selectedFile);
+                    if (!rev) return null;
+                    return (
+                      <Badge variant="outline" className={
+                        rev.status === "approved" ? "border-[#10b981]/40 text-[#10b981]"
+                          : rev.status === "rejected" ? "border-[#ef4444]/40 text-[#ef4444]"
+                          : "border-[#f59e0b]/40 text-[#fbbf24]"
+                      }>
+                        {rev.status === "approved" ? "已通过" : rev.status === "rejected" ? "已退回" : "待修改"}
+                      </Badge>
+                    );
+                  })()}
                 </>
               ) : (
                 <span className="text-[#475569]">从左侧选择文件查看</span>
@@ -773,11 +786,15 @@ export default function DesktopWorkspacePage() {
             {selectedFile && (
               <div className="border-t border-[#1e293b] bg-[#0d111f] shrink-0 px-4 py-3 space-y-2">
                 {(() => {
-                  const mine = reviews.filter((r) => r.artifact === selectedFile).slice(0, 4);
+                  const mine = reviews.filter((r) => r.artifact === selectedFile);
                   if (mine.length === 0) return null;
+                  const shown = mine.slice(-4);
                   return (
-                    <div className="flex flex-wrap gap-1.5">
-                      {mine.map((r) => (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {mine.length > shown.length && (
+                        <span className="text-[10px] text-[#475569]">共 {mine.length} 条 ·</span>
+                      )}
+                      {shown.map((r) => (
                         <span key={r.id} className={
                           `inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
                             r.status === "approved" ? "border-[#10b981]/40 text-[#10b981] bg-[#10b981]/10" :
