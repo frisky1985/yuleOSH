@@ -49,12 +49,40 @@ const RULES: Record<Lang, Array<{ pattern: string; cls: string }>> = {
 
 import React from "react";
 
+/**
+ * 把 pattern 里所有非转义的 `(` 转成 `(?:`，消除内部捕获组。
+ * 这样外层包裹的 `(${pattern})` 才能 1:1 对应 RULES 数组索引。
+ * 否则像 C 注释的 `(//...)|(/*...*\/)` 会把组号撑大，导致
+ * rules[hitIdx] 越界 → Cannot read properties of undefined (reading 'cls')。
+ */
+function flattenCaptures(pattern: string): string {
+  let out = "";
+  let i = 0;
+  while (i < pattern.length) {
+    const ch = pattern[i];
+    if (ch === "\\" && i + 1 < pattern.length) {
+      out += ch + pattern[i + 1];
+      i += 2;
+    } else if (ch === "(") {
+      // 已经是 (?: / (?= / (?! / (?<= / (?<! 的，保持原样，
+      // 否则会变成 (?:?: 导致 "Nothing to repeat" 语法错误
+      out += pattern[i + 1] === "?" ? "(" : "(?:";
+      i += 1;
+    } else {
+      out += ch;
+      i += 1;
+    }
+  }
+  return out;
+}
+
 export function highlight(code: string, lang: Lang): React.ReactNode[] {
   if (!code) return [];
   const rules = RULES[lang];
   if (!rules || rules.length === 0) return [code];
 
-  const combined = new RegExp(rules.map((r) => `(${r.pattern})`).join("|"), "gm");
+  const safePatterns = rules.map((r) => flattenCaptures(r.pattern));
+  const combined = new RegExp(safePatterns.map((p) => `(${p})`).join("|"), "gm");
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -62,12 +90,12 @@ export function highlight(code: string, lang: Lang): React.ReactNode[] {
   while ((m = combined.exec(code)) !== null) {
     // Push literal gap
     if (m.index > lastIndex) parts.push(code.slice(lastIndex, m.index));
-    // Find which group matched (skip group 0 which is the whole match)
+    // 外层 group 1..N 现在直接对应 rules[0..N-1]
     let hitIdx = -1;
-    for (let i = 1; i <= m.length; i++) {
+    for (let i = 1; i <= rules.length; i++) {
       if (m[i] !== undefined) { hitIdx = i - 1; break; }
     }
-    if (hitIdx >= 0) {
+    if (hitIdx >= 0 && rules[hitIdx]) {
       parts.push(React.createElement("span", { key: parts.length, className: rules[hitIdx].cls }, m[0]));
     } else {
       parts.push(m[0]);

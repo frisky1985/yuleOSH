@@ -9,10 +9,11 @@
   "scripts": {
     "start": "electron .",
     "dev": "ELECTRON_DEV=true electron .",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux",
-    "build:all": "electron-builder --mac --linux --win",
-    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac --publish never",
+    "build:linux": "electron-builder --linux --publish never",
+    "build:all": "electron-builder --mac --linux --win --publish never",
+    "build:win": "electron-builder --win --publish never",
+    "build:release": "electron-builder --mac --linux --win --publish always",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
