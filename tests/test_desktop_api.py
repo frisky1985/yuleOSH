@@ -10,6 +10,7 @@ pointed at a temp dir via YULEOSH_DESKTOP_HOME.
 import json
 import os
 import shutil
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -188,3 +189,107 @@ class TestSync:
             resp, status = d.handle_desktop("POST", f"projects/{pid}/sync", _body({}), {})
         assert status == 200
         assert resp["synced"] is True
+
+
+# ── Artifact classification ───────────────────────────────────────────────
+
+class TestClassifyArtifact:
+    """产物 → 五分区：目录语义 > 文件名语义 > 扩展名 > 待归类。"""
+
+    @pytest.mark.parametrize(
+        "rel_path,expected",
+        [
+            # RTE 生成代码固定进 code/rte
+            ("rte/Rte.c", ("code", "code/rte", "rte")),
+            ("rte/Rte.h", ("code", "code/rte", "rte")),
+            # 目录语义
+            ("design/sdd.md", ("design", "design", "dir:design")),
+            ("tests/report_lamp.json", ("tests", "tests", "dir:tests")),
+            ("reports/coverage.json", ("evidence", "evidence", "dir:evidence")),
+            ("requirements/requirements.md", ("requirements", "requirements", "dir:requirements")),
+            # 文件名语义
+            ("test_lamp.c", ("tests", "tests", "name:test")),
+            ("docs/system-requirements.md", ("requirements", "requirements", "name:requirements")),
+            ("docs/sdd.md", ("design", "design", "name:design")),
+            ("misra_result.json", ("evidence", "evidence", "name:evidence")),
+            # 扩展名
+            ("src/main.c", ("code", "code", "suffix:code")),
+            ("scripts/build.py", ("code", "code", "suffix:code")),
+            # 无法判定 → 不猜，进待归类
+            ("misc/board.png", ("_unclassified", "_unclassified", "unclassified")),
+            # 流水线内部文件不收集
+            ("config.json", None),
+            ("config.arxml", None),
+        ],
+    )
+    def test_classify(self, desktop_api, rel_path, expected):
+        assert desktop_api.classify_artifact(Path(rel_path)) == expected
+
+
+class TestCollectRealArtifacts:
+    def _make_job(self, tmp_path):
+        proj = tmp_path / "proj"
+        job = proj / ".yuleosh" / "pipeline" / "job-1"
+        files = {
+            "rte/Rte.c": "// rte",
+            "docs/sdd.md": "# design",
+            "docs/system-requirements.md": "# req",
+            "tests/test_lamp.c": "// test",
+            "reports/coverage.json": "{}",
+            "src/main.c": "int main(void){}",
+            "misc/board.png": "png",
+            "config.json": "{}",
+            "config.arxml": "<xml/>",
+        }
+        for rel, content in files.items():
+            p = job / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+        return proj
+
+    def test_collect_routes_files_to_sections(self, desktop_api, tmp_path):
+        proj = self._make_job(tmp_path)
+        collected = desktop_api._collect_real_artifacts(str(proj))
+
+        assert sorted(collected) == sorted([
+            "code/rte/Rte.c",
+            "design/sdd.md",
+            "requirements/system-requirements.md",
+            "tests/test_lamp.c",
+            "evidence/coverage.json",
+            "code/main.c",
+            "_unclassified/board.png",
+        ])
+        for rel in collected:
+            assert (proj / rel).is_file(), rel
+        # 内部文件不应被当成产物复制出来
+        assert not (proj / "code" / "config.json").exists()
+        assert not (proj / "config.json").exists()
+
+    def test_collect_writes_manifest_with_rule_and_section(self, desktop_api, tmp_path):
+        proj = self._make_job(tmp_path)
+        desktop_api._collect_real_artifacts(str(proj))
+
+        manifest_path = proj / "pipeline" / "runs" / "job-1" / "artifact-manifest.json"
+        assert manifest_path.is_file()
+        artifacts = json.loads(manifest_path.read_text(encoding="utf-8"))["artifacts"]
+        by_path = {a["path"]: a for a in artifacts}
+
+        assert by_path["design/sdd.md"]["section"] == "design"
+        assert by_path["design/sdd.md"]["source"] == "docs/sdd.md"
+        assert by_path["design/sdd.md"]["rule"] == "name:design"
+        assert by_path["tests/test_lamp.c"]["section"] == "tests"
+        assert by_path["code/rte/Rte.c"]["rule"] == "rte"
+        assert by_path["_unclassified/board.png"]["section"] == "_unclassified"
+
+    def test_collect_is_idempotent_and_keeps_newer_destination(self, desktop_api, tmp_path):
+        proj = self._make_job(tmp_path)
+        desktop_api._collect_real_artifacts(str(proj))
+        # 第二次收集不应重复登记
+        collected = desktop_api._collect_real_artifacts(str(proj))
+        assert collected.count("design/sdd.md") == 1
+
+    def test_collect_without_pipeline_dir_returns_empty(self, desktop_api, tmp_path):
+        proj = tmp_path / "empty"
+        proj.mkdir()
+        assert desktop_api._collect_real_artifacts(str(proj)) == []

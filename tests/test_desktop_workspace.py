@@ -116,6 +116,24 @@ class TestArtifacts:
         names = [c["name"] for c in tree["children"]]
         assert names == list(ws.ARTIFACT_DIRS)
 
+    def test_unclassified_dir_listed_only_when_files_exist(self, workspace_home):
+        ws = workspace_home
+        meta = ws.create_project("P")
+        proj_dir = ws._project_dir(meta["id"])
+
+        # 只有空目录时不出现
+        (proj_dir / ws.UNCLASSIFIED_DIR).mkdir()
+        names = [c["name"] for c in ws.list_artifacts(meta["id"])["children"]]
+        assert ws.UNCLASSIFIED_DIR not in names
+
+        # 有文件时追加到树末尾
+        (proj_dir / ws.UNCLASSIFIED_DIR / "pin_map.xml").write_text("<pinmap/>")
+        tree = ws.list_artifacts(meta["id"])
+        assert tree["children"][-1]["name"] == ws.UNCLASSIFIED_DIR
+        assert tree["children"][-1]["children"][0]["path"] == "_unclassified/pin_map.xml"
+        # 且不能混进正式五分区
+        assert ws.UNCLASSIFIED_DIR not in ws.ARTIFACT_DIRS
+
     def test_read_artifact_text_file(self, workspace_home):
         ws = workspace_home
         meta = ws.create_project("P")
