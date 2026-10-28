@@ -369,6 +369,10 @@ export default function DesktopWorkspacePage() {
   // ── Read artifact file ─────────────────────────────────────────────────
   const handleSelectFile = async (relPath: string) => {
     if (!activeId) return;
+    // Switch to the matching view tab so the clicked file is actually shown.
+    if (relPath.startsWith("code/")) setActiveTab("code");
+    else if (relPath.startsWith("tests/")) setActiveTab("tests");
+    else if (relPath.startsWith("requirements/")) setActiveTab("requirements");
     setSelectedFile(relPath);
     try {
       const res = await apiFetch<{ content: string | null; binary: boolean; message?: string }>(

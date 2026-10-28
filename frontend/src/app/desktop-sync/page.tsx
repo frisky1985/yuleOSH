@@ -43,7 +43,10 @@ export default function DesktopSyncPage() {
     setLoading(true);
     try {
       const data = await apiFetch<{ projects: SyncedProject[] }>("/api/v1/desktop-sync");
-      setProjects(data.projects || []);
+      const list = (data.projects || []).sort(
+        (a, b) => (b.synced_at || "").localeCompare(a.synced_at || ""),
+      );
+      setProjects(list);
     } catch (e) {
       console.error("Failed to load synced projects", e);
     } finally {
@@ -55,16 +58,29 @@ export default function DesktopSyncPage() {
     loadProjects();
   }, [loadProjects]);
 
+  // Auto-select the first project so the page shows real content on load.
+  useEffect(() => {
+    if (!activeId && projects.length > 0) setActiveId(projects[0].id);
+  }, [projects, activeId]);
+
   useEffect(() => {
     if (!activeId) return;
     let cancelled = false;
+    setTree(null);
+    setSelectedFile(null);
+    setFileContent("");
     (async () => {
       try {
         const data = await apiFetch<{ artifacts: TreeNode }>(
           `/api/v1/desktop-sync/${activeId}`,
         );
         if (cancelled) return;
-        setTree(data.artifacts || null);
+        const t = data.artifacts || null;
+        if (t) t.name = projects.find((p) => p.id === activeId)?.name || t.name;
+        setTree(t);
+        // Auto-open the first available text artifact for immediate review.
+        const first = firstFile(t);
+        if (first) await selectFile(activeId, first);
       } catch (e) {
         console.error("Failed to load synced project", e);
       }
@@ -72,19 +88,24 @@ export default function DesktopSyncPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
-  const handleSelectFile = async (relPath: string) => {
-    if (!activeId) return;
+  const selectFile = async (projectId: string, relPath: string) => {
     setSelectedFile(relPath);
     try {
       const res = await apiFetch<{ content: string | null; binary: boolean; message?: string }>(
-        `/api/v1/desktop-sync/${activeId}/files/${relPath}`,
+        `/api/v1/desktop-sync/${projectId}/files/${relPath}`,
       );
       setFileContent(res.binary ? res.message || "(二进制文件)" : res.content || "");
     } catch (e) {
       setFileContent(`读取失败: ${(e as Error).message}`);
     }
+  };
+
+  const handleSelectFile = async (relPath: string) => {
+    if (!activeId) return;
+    await selectFile(activeId, relPath);
   };
 
   return (
@@ -163,6 +184,16 @@ export default function DesktopSyncPage() {
       </div>
     </div>
   );
+}
+
+function firstFile(node: TreeNode | null): string | null {
+  if (!node) return null;
+  if (node.type === "file") return node.path;
+  for (const child of node.children || []) {
+    const found = firstFile(child);
+    if (found) return found;
+  }
+  return null;
 }
 
 function FileIconBadge({ path }: { path: string }) {
