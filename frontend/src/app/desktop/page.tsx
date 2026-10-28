@@ -98,6 +98,10 @@ export default function DesktopWorkspacePage() {
   const [activeTab, setActiveTab] = useState<"requirements" | "code" | "tests">("requirements");
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviews, setReviews] = useState<Array<{
+    id: string; artifact: string; status: string; comment: string; author: string; created_at: string;
+  }>>([]);
   const [requirements, setRequirements] = useState<string>("");
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -105,6 +109,8 @@ export default function DesktopWorkspacePage() {
   ]);
   const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [running, setRunning] = useState(false);
+  const [pollProgress, setPollProgress] = useState(0);
+  const [pollStage, setPollStage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [showNewProject, setShowNewProject] = useState(false);
@@ -187,6 +193,11 @@ export default function DesktopWorkspacePage() {
     }
   };
 
+  // ── Error feedback via chatbot (no alert() breaking the flow) ──────────
+  const pushAssistant = useCallback((content: string) => {
+    setChatMessages((m) => [...m, { role: "assistant", content, timestamp: new Date().toISOString() }]);
+  }, []);
+
   // ── Import requirements (chatbot / CLI) ────────────────────────────────
   const handleSendChat = async () => {
     const text = chatInput.trim();
@@ -266,56 +277,120 @@ export default function DesktopWorkspacePage() {
     }]);
   };
 
+  // ── Review helpers ──────────────────────────────────────────────────────
+  const loadReviews = useCallback(async () => {
+    if (!activeId) return;
+    try {
+      const r = await apiFetch<{ reviews: typeof reviews }>(
+        `/api/v1/desktop/projects/${activeId}/review`,
+      );
+      setReviews(r.reviews || []);
+    } catch { /* evidence/review.json 不存在时 404，正常 */ }
+  }, [activeId]);
+
+  const submitReview = async (status: "approved" | "rejected" | "needs_revision") => {
+    if (!activeId || !selectedFile) return;
+    try {
+      await apiFetch<{ review: typeof reviews[number] }>(
+        `/api/v1/desktop/projects/${activeId}/review`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            artifact: selectedFile,
+            status,
+            comment: reviewComment.trim() || undefined,
+          }),
+        },
+      );
+      setReviewComment("");
+      await loadReviews();
+    } catch (e) {
+      pushAssistant(`评审提交失败: ${(e as Error).message}`);
+    }
+  };
+
+  // 切换工程时自动加载评审记录
+  useEffect(() => {
+    if (activeId) loadReviews();
+  }, [activeId, loadReviews]);
+
   // ── Run pipeline ───────────────────────────────────────────────────────
   const handleRunPipeline = async () => {
     if (!activeId || running) return;
     setRunning(true);
+    setPollProgress(0);
+    setPollStage(null);
     setChatMessages((m) => [...m, {
       role: "assistant",
       content: "🚀 开始运行流水线，产出物将写入工程的 design/、code/、tests/、evidence/ 文件夹...",
       timestamp: new Date().toISOString(),
     }]);
     try {
-      const res = await apiFetch<{ job_id: string; status: string }>(
+      const res = await apiFetch<{ job_id: string; status: string; poll_url: string }>(
         `/api/v1/desktop/projects/${activeId}/pipeline/run`,
         { method: "POST", body: JSON.stringify({ type: "full" }) },
       );
-      // Poll for completion (stub job finishes immediately; real jobs poll status).
-      const poll = setInterval(async () => {
+
+      // 用 poll_url（来自后端）拿真实状态，不再用 /pipeline/runs 磁盘记录。
+      const pollUrl = res.poll_url || `/api/v1/desktop/projects/${activeId}/pipeline/status/${res.job_id}`;
+      const pollTimer = window.setInterval(async () => {
         try {
-          const r = await apiFetch<{ runs: PipelineRun[] }>(
-            `/api/v1/desktop/projects/${activeId}/pipeline/runs`,
-          );
-          setRuns(r.runs || []);
-          const latest = r.runs?.[0];
-          if (latest && latest.status === "passed") {
-            clearInterval(poll);
-            setRunning(false);
-            // Reload artifacts tree to show generated files.
-            const t = await apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`);
-            setTree(t.tree);
-            setChatMessages((m) => [...m, {
-              role: "assistant",
-              content: `✅ 流水线完成 (${res.job_id})。产出物已保存到工程文件夹，可在左侧文件树查看。`,
-              timestamp: new Date().toISOString(),
-            }]);
-          } else if (latest && latest.status === "failed") {
-            clearInterval(poll);
-            setRunning(false);
-            setChatMessages((m) => [...m, {
-              role: "assistant",
-              content: `❌ 流水线失败 (${res.job_id})。`,
-              timestamp: new Date().toISOString(),
-            }]);
+          const s = await apiFetch<{
+            status: string; progress: number; current_stage?: string;
+            stages?: Array<{ key: string; name?: string; status: string }>;
+            logs?: string[]; result?: any;
+          }>(pollUrl);
+          setPollProgress(s.progress ?? 0);
+          const currentStage = s.stages?.find((st) => st.status === "running");
+          setPollStage(currentStage?.name || currentStage?.key || s.current_stage || null);
+
+          // 把最新日志追加到对话里（每 3 秒最多一条，避免刷屏）
+          if (s.logs && s.logs.length > 0 && Math.random() < 0.3) {
+            const tail = s.logs[s.logs.length - 1];
+            setChatMessages((m) => m.length > 0 && m[m.length - 1].content.includes(tail)
+              ? m
+              : [...m, { role: "assistant", content: `📋 ${tail}`, timestamp: new Date().toISOString() }]);
           }
-        } catch {
-          // ignore poll errors
-        }
+
+          if (s.status === "passed" || s.status === "failed") {
+            window.clearInterval(pollTimer);
+            setRunning(false);
+            setPollProgress(0);
+            setPollStage(null);
+            // 刷新 runs 列表和产物树
+            const [, runList] = await Promise.all([
+              apiFetch<{ tree: TreeNode }>(`/api/v1/desktop/projects/${activeId}/artifacts`).then((t) => setTree(t.tree)).catch(() => {}),
+              apiFetch<{ runs: PipelineRun[] }>(`/api/v1/desktop/projects/${activeId}/pipeline/runs`).then((r) => setRuns(r.runs || [])).catch(() => {}),
+            ]);
+            if (s.status === "passed") {
+              setChatMessages((m) => [...m, {
+                role: "assistant",
+                content: `✅ 流水线完成 (${res.job_id})。产出物已保存到工程文件夹，可在左侧文件树查看。`,
+                timestamp: new Date().toISOString(),
+              }]);
+            } else {
+              const err = s.result?.error || s.result?.summary || "未知错误";
+              setChatMessages((m) => [...m, {
+                role: "assistant",
+                content: `❌ 流水线失败 (${res.job_id})：${err}`,
+                timestamp: new Date().toISOString(),
+              }]);
+            }
+          }
+        } catch { /* 轮询中途报错忽略，下一轮继续 */ }
       }, 1500);
-      // Safety timeout: stop polling after 120s.
-      setTimeout(() => { clearInterval(poll); setRunning(false); }, 120000);
+
+      // Safety timeout: stop polling after 5 min.
+      window.setTimeout(() => {
+        window.clearInterval(pollTimer);
+        setRunning(false);
+        setPollProgress(0);
+        setPollStage(null);
+      }, 300000);
     } catch (e) {
       setRunning(false);
+      setPollProgress(0);
+      setPollStage(null);
       setChatMessages((m) => [...m, {
         role: "assistant",
         content: `流水线启动失败: ${(e as Error).message}`,
@@ -329,15 +404,27 @@ export default function DesktopWorkspacePage() {
     if (!activeId || syncing) return;
     setSyncing(true);
     try {
-      const res = await apiFetch<{ ok: boolean; synced?: boolean; pending?: boolean; error?: string }>(
+      const res = await apiFetch<{
+        ok: boolean; synced?: boolean; pending?: boolean; error?: string;
+        changed_files?: number; removed_files?: number; total_files?: number; skipped?: boolean;
+      }>(
         `/api/v1/desktop/projects/${activeId}/sync`,
         { method: "POST", body: JSON.stringify({}) },
       );
       if (res.synced) {
+        const changed = res.changed_files ?? 0;
+        const removed = res.removed_files ?? 0;
+        const total = res.total_files ?? 0;
+        const skipped = res.skipped;
+        let msg = "☁️ 已同步到云端。";
+        if (skipped) {
+          msg += ` 产物无变化，跳过上传。`;
+        } else {
+          msg += ` 变更 ${changed} 个文件，删除 ${removed} 个，共 ${total} 个产物文件。`;
+        }
+        msg += ` 现在可以通过 Web UI 登录查看相同的产出物。`;
         setChatMessages((m) => [...m, {
-          role: "assistant",
-          content: "☁️ 已同步到云端。现在可以通过 Web UI 登录查看相同的产出物。",
-          timestamp: new Date().toISOString(),
+          role: "assistant", content: msg, timestamp: new Date().toISOString(),
         }]);
       } else if (res.pending) {
         setChatMessages((m) => [...m, {
@@ -428,6 +515,17 @@ export default function DesktopWorkspacePage() {
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
             运行流水线
           </Button>
+          {running && (
+            <div className="flex items-center gap-2 min-w-[180px]">
+              <div className="h-1.5 w-24 bg-[#1e293b] rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] transition-all duration-500"
+                  style={{ width: `${pollProgress}%` }} />
+              </div>
+              <span className="text-xs text-[#f59e0b] tabular-nums">
+                {pollProgress}% {pollStage ? `· ${pollStage}` : ""}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -536,6 +634,58 @@ export default function DesktopWorkspacePage() {
                 <pre className="flex-1 overflow-auto p-4 text-sm text-[#cbd5e1] font-mono whitespace-pre-wrap leading-relaxed">
                   {fileContent || `展开左侧 ${activeTab}/ 文件夹，点击文件查看内容。`}
                 </pre>
+
+                {/* Review panel — only when a specific artifact file is selected */}
+                {selectedFile && (
+                  <div className="border-t border-[#1e293b] bg-[#0d111f] shrink-0 px-4 py-3 space-y-2">
+                    {/* 该文件已有评审记录 */}
+                    {(() => {
+                      const mine = reviews.filter((r) => r.artifact === selectedFile).slice(0, 3);
+                      if (mine.length === 0) return null;
+                      return (
+                        <div className="flex flex-wrap gap-1.5">
+                          {mine.map((r) => (
+                            <span key={r.id} className={
+                              `inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
+                                r.status === "approved" ? "border-[#10b981]/40 text-[#10b981] bg-[#10b981]/10" :
+                                r.status === "rejected" ? "border-[#ef4444]/40 text-[#ef4444] bg-[#ef4444]/10" :
+                                "border-[#f59e0b]/40 text-[#fbbf24] bg-[#f59e0b]/10"
+                              }`}>
+                              {r.status === "approved" ? "✅ 通过" : r.status === "rejected" ? "❌ 退回" : "🔍 修改"}
+                              {r.comment && <span className="truncate max-w-[120px] text-[#94a3b8]">· {r.comment}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {/* 评审操作栏 */}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={reviewComment}
+                        onChange={(e) => setReviewComment(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey)}
+                        placeholder="批注（可选，Ctrl+Enter 提交）"
+                        className="bg-[#111827] border-[#1e293b] text-xs flex-1 h-8"
+                      />
+                      <button
+                        onClick={() => submitReview("approved")}
+                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#10b981]/40 text-[#10b981] hover:bg-[#10b981]/15">
+                        ✅ 通过
+                      </button>
+                      <button
+                        onClick={() => submitReview("needs_revision")}
+                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#f59e0b]/40 text-[#fbbf24] hover:bg-[#f59e0b]/15">
+                        🔍 修改
+                      </button>
+                      <button
+                        onClick={() => submitReview("rejected")}
+                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#ef4444]/40 text-[#ef4444] hover:bg-[#ef4444]/15">
+                        ❌ 退回
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

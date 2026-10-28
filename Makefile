@@ -270,3 +270,51 @@ c-coverage-gate:
 	@echo "=== C Coverage Gate (>=60%) ==="
 	cd $(CURDIR) && $(PYTHON) scripts/run_c_coverage.py --fail-under=60
 	@echo "  ✅ C coverage gate passed"
+
+# =============================================================================
+# Desktop packaging targets — yuleOSH Desktop AppImage / deb
+# =============================================================================
+
+DESKTOP_ARCH ?= x86_64          # x86_64 | aarch64（arm64 必须在 arm64 机器上先跑 bundle）
+
+.PHONY: desktop-bundle desktop-frontend desktop-release desktop-clean desktop-smoke
+
+# Step 1: 打包 Python 运行时 + yuleosh 后端进 desktop/bundled/
+desktop-bundle:
+	@echo "=== Desktop Step 1/3: Bundle backend (arch=$(DESKTOP_ARCH)) ==="
+	cd $(CURDIR)/desktop && ./bundle-backend.sh $(DESKTOP_ARCH)
+	@echo "  ✅ bundled/python + bundled/backend ready"
+
+# Step 2: 构建前端静态产物到 frontend/out/
+desktop-frontend:
+	@echo "=== Desktop Step 2/3: Build frontend ==="
+	cd $(CURDIR)/frontend && npm run build
+	@echo "  ✅ frontend/out ready"
+
+# Step 3: electron-builder 打 AppImage + deb（Linux x64 唯一目标）
+desktop-package: desktop-bundle desktop-frontend
+	@echo "=== Desktop Step 3/3: Package Electron (linux x64) ==="
+	cd $(CURDIR)/desktop && npm run build:linux -- --x64
+	@echo "  ✅ desktop/release/ ready"
+	@echo ""
+	@echo "产物清单:"
+	@ls -lh $(CURDIR)/desktop/release/*.AppImage $(CURDIR)/desktop/release/*.deb 2>/dev/null || true
+	@echo "  unpacked dir: $(CURDIR)/desktop/release/linux-unpacked/"
+
+# Full release: 一键从源码到可安装包
+desktop-release: desktop-package
+	@echo "=========================================="
+	@echo "✅ yuleOSH Desktop release complete"
+	@echo "   AppImage: $(CURDIR)/desktop/release/yuleOSH-*-x86_64.AppImage"
+	@echo "   deb:      $(CURDIR)/desktop/release/yuleOSH-*-amd64.deb"
+	@echo "=========================================="
+
+# 清理打包产物（不动 bundled/python 缓存，可快速重跑）
+desktop-clean:
+	rm -rf $(CURDIR)/desktop/release
+	@echo "  ✅ desktop/release removed (bundled/ cache kept)"
+
+# 完整清理（包括 bundled/python，重跑会重新下载解释器）
+desktop-clean-all: desktop-clean
+	rm -rf $(CURDIR)/desktop/bundled/python
+	@echo "  ✅ desktop/bundled/python removed (will re-download)"

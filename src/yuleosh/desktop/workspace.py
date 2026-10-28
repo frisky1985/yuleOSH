@@ -398,3 +398,93 @@ def collect_artifact_files(project_id: str, max_size: int = 512 * 1024) -> list[
                 entry["binary"] = True
             files.append(entry)
     return files
+
+
+def _file_hash(fpath: Path) -> str:
+    """Return MD5 hex digest of a file (chunks for large files)."""
+    import hashlib
+    h = hashlib.md5()
+    with open(fpath, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def collect_artifact_incremental(project_id: str, max_size: int = 512 * 1024) -> dict:
+    """Compute incremental sync payload: changed files + removed files.
+
+    Compares current artifact files against the previous sync manifest
+    (``.sync_manifest.json`` in the project dir). Returns a dict with::
+
+        {
+            "mode": "incremental",
+            "files":     [...],   # changed + new files (same shape as collect_artifact_files)
+            "removed":   [...],   # paths that were in the old manifest but are now absent
+            "manifest":  {...},   # current {path: md5} manifest for next sync
+            "changed_count": N,   # changed + new file count
+            "removed_count": M,
+        }
+
+    On first sync (no prior manifest), behaves like collect_artifact_files
+    with every file marked as changed.
+    """
+    _load_meta(project_id)
+    proj_dir = _project_dir(project_id)
+    manifest_path = proj_dir / ".sync_manifest.json"
+
+    # 读取上一次的 manifest（如果存在）
+    old_manifest: dict[str, str] = {}
+    if manifest_path.exists():
+        try:
+            old_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            old_manifest = {}
+
+    # 扫当前所有产物文件
+    current: dict[str, Path] = {}
+    for sub in ARTIFACT_DIRS:
+        sub_path = proj_dir / sub
+        if not sub_path.exists():
+            continue
+        for fpath in sorted(sub_path.rglob("*")):
+            if fpath.is_file():
+                current[str(fpath.relative_to(proj_dir))] = fpath
+
+    # 增量计算
+    changed_files: list[dict] = []
+    new_manifest: dict[str, str] = {}
+    for rel, fpath in current.items():
+        h = _file_hash(fpath)
+        new_manifest[rel] = h
+        if old_manifest.get(rel) != h:
+            # 新文件或 hash 变化 — 打包内容
+            size = fpath.stat().st_size
+            entry = {"path": rel, "size": size}
+            if fpath.suffix.lower() in _TEXT_EXTS and size < max_size:
+                try:
+                    entry["content"] = fpath.read_text(encoding="utf-8")
+                    entry["binary"] = False
+                except UnicodeDecodeError:
+                    entry["binary"] = True
+            else:
+                entry["binary"] = True
+            changed_files.append(entry)
+
+    removed = sorted(set(old_manifest.keys()) - set(new_manifest.keys()))
+
+    return {
+        "mode": "incremental",
+        "files": changed_files,
+        "removed": removed,
+        "manifest": new_manifest,
+        "changed_count": len(changed_files),
+        "removed_count": len(removed),
+        "total_current": len(current),
+    }
+
+
+def save_sync_manifest(project_id: str, manifest: dict[str, str]) -> None:
+    """Persist the sync manifest to the project dir for next incremental run."""
+    proj_dir = _project_dir(project_id)
+    manifest_path = proj_dir / ".sync_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

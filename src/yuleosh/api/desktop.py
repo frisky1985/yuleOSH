@@ -94,7 +94,27 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
             return _run_pipeline(project_id, body)
         if action == "runs" and method == "GET":
             return _json({"ok": True, "runs": workspace.list_pipeline_runs(project_id)})
+        # 单 job 状态（给前端轮询用，免鉴权）。
+        # /api/v1/desktop/projects/{id}/pipeline/status/{job_id}
+        if action == "status" and method == "GET" and len(parts) > 3:
+            job_id = parts[3]
+            return _pipeline_job_status(project_id, job_id)
         return _json({"ok": False, "error": "Unknown pipeline action"}, 404)
+
+    # 评审：对某个产物文件做通过/退回 + 批注，落到 evidence/review.json
+    # /api/v1/desktop/projects/{id}/review                    (GET 列表 / POST 新增)
+    # /api/v1/desktop/projects/{id}/review/{review_id}        (GET 详情 / DELETE 删除)
+    if sub == "review":
+        rev_id = parts[2] if len(parts) > 2 else ""
+        if rev_id and method == "GET":
+            return _get_review(project_id, rev_id)
+        if rev_id and method == "DELETE":
+            return _delete_review(project_id, rev_id)
+        if not rev_id and method == "GET":
+            return _list_reviews(project_id)
+        if not rev_id and method == "POST":
+            return _add_review(project_id, body)
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
 
     if sub == "artifacts":
         rel = "/".join(parts[2:]) if len(parts) > 2 else ""
@@ -195,10 +215,62 @@ def _run_pipeline(project_id: str, body: Any) -> tuple:
         "ok": True,
         "job_id": job_id,
         "status": "queued",
-        "poll_url": f"/api/v1/pipeline/status/{job_id}",
+        "poll_url": f"/api/v1/desktop/projects/{project_id}/pipeline/status/{job_id}",
         "run_dir": f"pipeline/runs/{job_id}",
         "artifacts_collected": collected,
     }, 202)
+
+
+def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
+    """Return real pipeline job status (progress, stages, logs) for the desktop poller.
+
+    Reads from async_runner's in-memory _PIPELINE_JOBS first (fast, live),
+    falls back to the persisted result.json in pipeline/runs/{job_id}/ for
+    jobs that completed before the server restarted.
+    """
+    # 1) Memory-first — async_runner 是同一进程，数据最鲜活。
+    try:
+        from yuleosh.pipeline.async_runner import get_job_status
+        job = get_job_status(job_id)
+        if job:
+            return _json({
+                "ok": True,
+                "job_id": job_id,
+                "status": job.get("status"),
+                "progress": job.get("progress", 0),
+                "current_stage": job.get("current_stage"),
+                "stages": job.get("stages", []),
+                "started_at": job.get("started_at"),
+                "completed_at": job.get("completed_at"),
+                "logs": job.get("logs", [])[-50:],  # 只留最近 50 条，省带宽
+                "result": job.get("result"),
+            })
+    except Exception:  # noqa: BLE001 — runner 模块不可用时走磁盘
+        pass
+
+    # 2) Disk fallback — result.json 由 runner 完成时写入，或 stub_job 预置。
+    run_dir = workspace._project_dir(project_id) / "pipeline" / "runs" / job_id
+    result_path = run_dir / "result.json"
+    if result_path.exists():
+        try:
+            data = json.loads(result_path.read_text(encoding="utf-8"))
+            return _json({
+                "ok": True,
+                "job_id": job_id,
+                "status": data.get("status", "unknown"),
+                "progress": 100 if data.get("status") in ("passed", "failed") else 0,
+                "current_stage": data.get("current_stage"),
+                "stages": data.get("stages", []),
+                "started_at": data.get("started_at"),
+                "completed_at": data.get("completed_at"),
+                "logs": [],
+                "result": data.get("result"),
+                "source": "disk",
+            })
+        except json.JSONDecodeError:
+            pass
+
+    return _json({"ok": False, "error": f"Job {job_id} not found"}, 404)
 
 
 def _collect_real_artifacts(proj_dir, job_id: str = None) -> list:
@@ -536,13 +608,26 @@ def _sync_to_cloud(project_id: str, body: Any) -> tuple:
     try:
         proj_dir = workspace._project_dir(project_id)
         import urllib.request
+
+        # 增量同步：只传变化/新增文件 + 被删文件列表
+        inc = workspace.collect_artifact_incremental(project_id)
+        files_to_send = inc["files"]
+        removed_list = inc["removed"]
+
+        # 首次同步或文件有变化才上传；完全不变时云端不用更新文件，只刷新 meta
+        has_changes = bool(files_to_send or removed_list or not Path(proj_dir / ".sync_manifest.json").exists())
+
         payload = json.dumps({
             "project_id": project_id,
             "project": meta,
             "artifacts": workspace.list_artifacts(project_id),
-            "files": workspace.collect_artifact_files(project_id),
+            "mode": "incremental",
+            "files": files_to_send,
+            "removed": removed_list,
+            "manifest": inc["manifest"],
             "synced_at": datetime.now().isoformat(),
         }, ensure_ascii=False, default=str).encode("utf-8")
+
         req = urllib.request.Request(
             cloud_url.rstrip("/") + "/api/v1/desktop-sync",
             data=payload,
@@ -552,13 +637,149 @@ def _sync_to_cloud(project_id: str, body: Any) -> tuple:
                 **({"Authorization": f"Bearer {cloud_token}"} if cloud_token else {}),
             },
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
             resp_body = resp.read().decode("utf-8", errors="replace")
+
+        # 成功后更新本地 manifest
+        workspace.save_sync_manifest(project_id, inc["manifest"])
         workspace.mark_synced(project_id, remote_url=cloud_url)
-        return _json({"ok": True, "synced": True, "response": resp_body[:500]})
+
+        return _json({
+            "ok": True,
+            "synced": True,
+            "changed_files": inc["changed_count"],
+            "removed_files": inc["removed_count"],
+            "total_files": inc["total_current"],
+            "skipped": not has_changes,
+            "response": resp_body[:500],
+        })
     except Exception as e:  # noqa: BLE001
         return _json({
             "ok": False,
             "error": f"Cloud sync failed: {e}",
             "synced": False,
         }, 502)
+
+
+# ── Review handlers (evidence/review.json) ──────────────────────────────────
+
+import secrets as _secrets
+
+_REVIEW_STATUS = {"approved", "rejected", "needs_revision"}
+
+
+def _review_path(project_id: str) -> Path:
+    """Return the evidence/review.json path, creating parent dirs if needed."""
+    proj_dir = workspace._project_dir(project_id)
+    rev_dir = proj_dir / "evidence"
+    rev_dir.mkdir(parents=True, exist_ok=True)
+    return rev_dir / "review.json"
+
+
+def _load_reviews(project_id: str) -> dict:
+    """Load review.json; return empty dict if missing or invalid."""
+    p = _review_path(project_id)
+    if not p.exists():
+        return {"reviews": {}, "index": []}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if "reviews" not in data:
+            return {"reviews": data if isinstance(data, list) else {}, "index": []}
+        return data
+    except (json.JSONDecodeError, OSError):
+        return {"reviews": {}, "index": []}
+
+
+def _save_reviews(project_id: str, data: dict) -> None:
+    p = _review_path(project_id)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _add_review(project_id: str, body: Any) -> tuple:
+    """Create a new review entry.
+
+    body fields:
+        artifact    str — 产物文件路径（如 code/src/main.c）
+        status      str — approved | rejected | needs_revision
+        comment     str — 批注（可选）
+        author      str — 评审人（可选，默认 "local"）
+        line_start  int — 行号范围（可选）
+        line_end    int
+    """
+    data = body if isinstance(body, dict) else {}
+    artifact = (data.get("artifact") or "").strip()
+    status = (data.get("status") or "").strip().lower()
+    comment = (data.get("comment") or "").strip()
+    author = (data.get("author") or "local").strip()
+
+    if not artifact:
+        return _json({"ok": False, "error": "artifact is required"}, 400)
+    if status not in _REVIEW_STATUS:
+        return _json({"ok": False, "error": f"status must be one of {_REVIEW_STATUS}"}, 400)
+
+    # 防路径穿越：artifact 必须在已知产物目录下
+    proj_dir = workspace._project_dir(project_id)
+    target = (proj_dir / artifact).resolve()
+    try:
+        target.relative_to(proj_dir.resolve())
+    except ValueError:
+        return _json({"ok": False, "error": "artifact path escapes project dir"}, 400)
+
+    entry = {
+        "id": _secrets.token_hex(6),
+        "artifact": artifact,
+        "status": status,
+        "comment": comment,
+        "author": author,
+        "created_at": datetime.now().isoformat(),
+        "line_start": data.get("line_start"),
+        "line_end": data.get("line_end"),
+    }
+
+    store = _load_reviews(project_id)
+    store["reviews"][entry["id"]] = entry
+    if entry["id"] not in store.get("index", []):
+        store.setdefault("index", []).append(entry["id"])
+    _save_reviews(project_id, store)
+
+    return _json({"ok": True, "review": entry}, 201)
+
+
+def _list_reviews(project_id: str) -> tuple:
+    """List all reviews for a project, newest first."""
+    store = _load_reviews(project_id)
+    reviews = list(store["reviews"].values())
+    reviews.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+
+    # 按 artifact 分组的汇总（给前端侧栏用）
+    by_artifact: dict[str, dict] = {}
+    for r in reviews:
+        art = r["artifact"]
+        agg = by_artifact.setdefault(art, {"artifact": art, "approved": 0, "rejected": 0, "needs_revision": 0, "total": 0})
+        agg[r["status"]] = agg.get(r["status"], 0) + 1
+        agg["total"] += 1
+
+    return _json({
+        "ok": True,
+        "reviews": reviews,
+        "summary_by_artifact": list(by_artifact.values()),
+        "total": len(reviews),
+    })
+
+
+def _get_review(project_id: str, rev_id: str) -> tuple:
+    store = _load_reviews(project_id)
+    rev = store["reviews"].get(rev_id)
+    if not rev:
+        return _json({"ok": False, "error": "Review not found"}, 404)
+    return _json({"ok": True, "review": rev})
+
+
+def _delete_review(project_id: str, rev_id: str) -> tuple:
+    store = _load_reviews(project_id)
+    if rev_id not in store["reviews"]:
+        return _json({"ok": False, "error": "Review not found"}, 404)
+    store["reviews"].pop(rev_id)
+    store["index"] = [x for x in store.get("index", []) if x != rev_id]
+    _save_reviews(project_id, store)
+    return _json({"ok": True})
