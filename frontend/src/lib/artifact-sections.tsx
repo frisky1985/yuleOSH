@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Sparkles, Code2, TestTube2, ShieldCheck, type LucideIcon } from "lucide-react";
+import { AlertTriangle, BookOpen, Sparkles, Code2, TestTube2, ShieldCheck, type LucideIcon } from "lucide-react";
 
 export interface TreeNode {
   name: string;
@@ -13,7 +13,12 @@ export interface TreeNode {
 export interface SectionMeta {
   label: string;
   icon: LucideIcon;
+  /** 需要人工处理的异常分区（如后端归不了类的产物）。 */
+  warn?: boolean;
+  hint?: string;
 }
+
+export const UNCLASSIFIED_SECTION = "_unclassified";
 
 const SECTION_META: Record<string, SectionMeta> = {
   requirements: { label: "需求", icon: BookOpen },
@@ -21,6 +26,12 @@ const SECTION_META: Record<string, SectionMeta> = {
   code: { label: "代码", icon: Code2 },
   tests: { label: "测试用例", icon: TestTube2 },
   evidence: { label: "证据", icon: ShieldCheck },
+  [UNCLASSIFIED_SECTION]: {
+    label: "待归类",
+    icon: AlertTriangle,
+    warn: true,
+    hint: "未能自动判定分区，需人工移入对应目录",
+  },
 };
 
 const SECTION_ORDER = ["requirements", "design", "code", "tests", "evidence"];

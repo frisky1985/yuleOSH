@@ -676,10 +676,13 @@ export default function DesktopWorkspacePage() {
                           : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]/60"
                       }`}>
                       {isOpen ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
-                      <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="flex-1 text-left">{meta.label}</span>
-                      <span className={`text-[10px] tabular-nums ${count === 0 ? "text-[#475569]" : "text-[#64748b]"}`}>{count}</span>
+                      <Icon className={`w-3.5 h-3.5 shrink-0 ${meta.warn ? "text-[#f59e0b]" : ""}`} />
+                      <span className={`flex-1 text-left ${meta.warn ? "text-[#fbbf24]" : ""}`}>{meta.label}</span>
+                      <span className={`text-[10px] tabular-nums ${count === 0 ? "text-[#475569]" : meta.warn ? "text-[#f59e0b]" : "text-[#64748b]"}`}>{count}</span>
                     </button>
+                    {meta.hint && isOpen && count > 0 && (
+                      <div className="px-2 pb-1 text-[10px] leading-relaxed text-[#f59e0b]/70">{meta.hint}</div>
+                    )}
                     {isOpen && filtered && filtered.children && filtered.children.length > 0 && (
                       <ArtifactTreeLite
                         nodes={filtered.children}

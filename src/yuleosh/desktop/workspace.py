@@ -58,6 +58,10 @@ def workspace_root() -> Path:
 
 ARTIFACT_DIRS = ("requirements", "design", "code", "tests", "pipeline", "evidence")
 
+# 无法自动归类的产物落在这里。不属于五分区，只在确实有文件时才出现在树上，
+# 由 UI 以"待归类"告警样式呈现，供人工归位。
+UNCLASSIFIED_DIR = "_unclassified"
+
 
 # ── Project model ─────────────────────────────────────────────────────────
 
@@ -251,6 +255,10 @@ def list_artifacts(project_id: str) -> dict:
         sub_path = proj_dir / sub
         if sub_path.exists():
             tree["children"].append(_build_tree(proj_dir, sub_path))
+    # 待归类目录不是正式分区，仅在有产物时附加到树末尾
+    unclassified = proj_dir / UNCLASSIFIED_DIR
+    if unclassified.exists() and any(p.is_file() for p in unclassified.rglob("*")):
+        tree["children"].append(_build_tree(proj_dir, unclassified))
     return tree
 
 
