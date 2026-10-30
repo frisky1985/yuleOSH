@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from yuleosh.desktop import baseline, change_control, templates, tracing, workspace
+from yuleosh.desktop import audit, baseline, change_control, templates, tracing, workspace
 
 log = logging.getLogger("api.desktop")
 
@@ -150,6 +150,12 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
         if not rev_id and method == "POST":
             return _add_review(project_id, body)
         return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+    # 合规包生成与审计报告（P5）
+    # /api/v1/desktop/projects/{id}/compliance      (GET 最近一次审计摘要)
+    # /api/v1/desktop/projects/{id}/compliance/run  (POST 触发完整合规审计)
+    if sub == "compliance":
+        return _dispatch_compliance(project_id, method, parts[2:], body)
 
     if sub == "artifacts":
         rel = "/".join(parts[2:]) if len(parts) > 2 else ""
@@ -826,6 +832,37 @@ def _dispatch_templates(project_id: str, method: str, body: Any) -> tuple:
         }, 201)
 
     return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+
+# ── Compliance audit handlers (P5) ─────────────────────────────────────────
+
+def _dispatch_compliance(project_id: str, method: str, parts: list, body: Any) -> tuple:
+    """Handle /projects/{id}/compliance[/run]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    action = parts[0] if parts else ""
+
+    if not action:
+        if method != "GET":
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        summary = audit.get_latest_summary(project_id)
+        if summary is None:
+            return _json({
+                "ok": False,
+                "error": "No audit summary yet. POST /compliance/run first.",
+            }, 404)
+        return _json({"ok": True, "summary": summary})
+
+    if action == "run":
+        if method != "POST":
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        summary = audit.run_compliance_audit(project_id, body)
+        return _json({"ok": summary["ok"], "summary": summary}, 200)
+
+    return _json({"ok": False, "error": f"Unknown compliance action: {action}"}, 404)
 
 
 # ── Traceability handlers (P3) ────────────────────────────────────────────
