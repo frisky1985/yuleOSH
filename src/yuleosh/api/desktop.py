@@ -862,6 +862,22 @@ def _dispatch_compliance(project_id: str, method: str, parts: list, body: Any) -
         summary = audit.run_compliance_audit(project_id, body)
         return _json({"ok": summary["ok"], "summary": summary}, 200)
 
+    if action == "dashboard":
+        if method != "GET":
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        from pathlib import Path as _Path
+        dash = _Path(audit._reports_dir(project_id)) / "aspice-dashboard.html"
+        if not dash.is_file():
+            return _json({
+                "ok": False,
+                "error": "No dashboard yet. POST /compliance/run first.",
+            }, 404)
+        return _json({
+            "ok": True,
+            "path": str(dash),
+            "html": dash.read_text(encoding="utf-8"),
+        })
+
     return _json({"ok": False, "error": f"Unknown compliance action: {action}"}, 404)
 
 

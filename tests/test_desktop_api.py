@@ -872,3 +872,120 @@ class TestComplianceAudit:
         # No fake-green: overall evidence-coverage should be NI.
         assert summary.get("overall_score") == "NI"
 
+
+# ── Audit visualisation (P6) ───────────────────────────────────────────────
+
+class TestAuditVisualization:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P6"}), {})[0]["project"]["id"]
+
+    def _write(self, pid, rel, content):
+        from yuleosh.desktop import workspace
+        p = workspace._project_dir(pid) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def _seed_evidence(self, pid):
+        self._write(pid, ".osh/evidence/swe1-req.json", json.dumps({
+            "type": "requirement", "status": "passed",
+            "title": "REQ-001", "details": "Parsed and validated.", "id": "REQ-001",
+        }))
+        self._write(pid, ".osh/evidence/swe4-unit.json", json.dumps({
+            "type": "unit_test", "status": "passed",
+            "title": "test_main", "details": "2/2 passed.", "id": "TC-001",
+        }))
+
+    def test_run_produces_dashboard_with_svg(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "docs/spec.md", "# Spec\n## REQ-001\n- SHALL do X.\n")
+        self._seed_evidence(pid)
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )
+        assert status == 200
+        summary = resp["summary"]
+        assert summary["dashboard_path"] is not None
+
+        from yuleosh.desktop import workspace
+        dash = workspace._project_dir(pid) / ".osh" / "reports" / "aspice-dashboard.html"
+        assert dash.is_file()
+        html = dash.read_text(encoding="utf-8")
+
+        # Self-contained SVG charts are embedded (no external CDN).
+        assert "<svg" in html
+        assert "coverage_bar" not in html  # function name must not leak
+        # Donut + coverage bar + gap heatmap present.
+        assert html.count("<svg") >= 3
+
+    def test_dashboard_disclaimer_preserved(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "docs/spec.md", "# Spec\n## REQ-001\n- SHALL do X.\n")
+        self._seed_evidence(pid)
+
+        d.handle_desktop("POST", f"projects/{pid}/compliance/run", _body({}), {})
+        from yuleosh.desktop import workspace
+        html = (workspace._project_dir(pid) / ".osh" / "reports" /
+                "aspice-dashboard.html").read_text(encoding="utf-8")
+        # E1–E3 ≠ ASPICE CL disclaimer must survive into the dashboard.
+        assert "非 ASPICE 能力等级" in html or "NOT Automotive SPICE" in html
+
+    def test_get_dashboard_endpoint(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "docs/spec.md", "# Spec\n## REQ-001\n- SHALL do X.\n")
+        self._seed_evidence(pid)
+
+        # Before run → 404.
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/compliance/dashboard", None, {},
+        )
+        assert status == 404
+
+        d.handle_desktop("POST", f"projects/{pid}/compliance/run", _body({}), {})
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/compliance/dashboard", None, {},
+        )
+        assert status == 200
+        assert resp["ok"] is True
+        assert "<svg" in resp["html"]
+        assert "非 ASPICE 能力等级" in resp["html"] or "NOT Automotive SPICE" in resp["html"]
+
+    def test_visualization_module_unit(self):
+        """Direct unit test of the SVG chart generators."""
+        from yuleosh.report.visualization import (
+            coverage_bar, bp_pass_donut, score_distribution, gap_heatmap,
+            render_dashboard,
+        )
+        domains = [
+            {"id": "SWE.1", "title": "Req Analysis", "score": "E3",
+             "coverage_pct": 95.0, "evidence_count": 4, "gap_count": 0},
+            {"id": "SWE.2", "title": "Arch Design", "score": "E1",
+             "coverage_pct": 40.0, "evidence_count": 2, "gap_count": 1},
+            {"id": "SWE.3", "title": "Detailed Design", "score": "NI",
+             "coverage_pct": 0.0, "evidence_count": 0, "gap_count": 1},
+        ]
+        assert "<svg" in coverage_bar(domains)
+        assert "SWE.1" in coverage_bar(domains)
+        assert "<svg" in bp_pass_donut(8, 10)
+        assert "80%" in bp_pass_donut(8, 10)
+        # Empty total → no donut (fail-closed, no fake 0%).
+        assert bp_pass_donut(0, 0) == ""
+        dist = score_distribution(["E3", "E1", "NI", "E3"])
+        for grade in ("E3", "E1", "NI"):
+            assert grade in dist
+        assert "<svg" in gap_heatmap(domains)
+
+        dash = render_dashboard(
+            project_name="P", version="1.0", generated_at="2026-01-01",
+            overall_score="E2", overall_coverage_pct=55.0, domains=domains,
+            bp_passed=8, bp_total=10,
+        )
+        assert "非 ASPICE 能力等级" in dash or "NOT Automotive SPICE" in dash
+        assert dash.count("<svg") >= 3
+
+
