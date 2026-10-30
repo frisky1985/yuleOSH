@@ -623,10 +623,22 @@ class ComplianceChecker:
     def _has_vcs_baseline(self) -> bool:
         """SUP.8: 配置管理/版本控制基线。
 
-        真实判定：项目根存在版本控制元数据（``.git``）。这证明配置项已纳入
-        版本控制、可建立基线 —— 是配置管理存在的最低诚实证据。
+        认可：项目根存在版本控制元数据（``.git``），或桌面端
+        ``desktop/baseline.py`` 生成的 ``baselines/*.json`` 快照（含 sha256 清单）。
+        两者都证明配置项已纳入版本控制/可建立基线。
         """
-        return (self.project_dir / ".git").is_dir()
+        if (self.project_dir / ".git").is_dir():
+            return True
+        baseline_dir = self.project_dir / "baselines"
+        if baseline_dir.is_dir():
+            for f in sorted(baseline_dir.glob("*.json")):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if isinstance(data, dict) and data.get("files") and data.get("manifest_sha256"):
+                    return True
+        return False
 
     def _has_issue_records(self) -> bool:
         """SUP.9: 问题/缺陷跟踪证据。
