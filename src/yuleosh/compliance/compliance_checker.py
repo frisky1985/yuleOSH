@@ -643,8 +643,9 @@ class ComplianceChecker:
     def _has_issue_records(self) -> bool:
         """SUP.9: 问题/缺陷跟踪证据。
 
-        仅认：``docs/known-issues.md`` 实质性文档，或 ``.osh/ci/issue-*.json``
-        / ``docs/issues.md`` 记录。无 → 返回 False（SUP.9 判 RED，不假绿）。
+        认可：``docs/known-issues.md`` 实质性文档、``docs/issues.md``、
+        ``.osh/ci/issue-*.json``，以及桌面端 ``desktop/issues.py`` 生成的
+        ``.osh/issues/*.json`` 实体。无 → 返回 False（SUP.9 判 RED，不假绿）。
         """
         if self._file_has_content("docs", "known-issues.md", min_chars=100):
             return True
@@ -655,6 +656,41 @@ class ComplianceChecker:
             for f in sorted(ci_dir.iterdir()):
                 if "issue" in f.name.lower() and f.suffix == ".json":
                     return True
+        # 桌面端 SUP.9 工作流产物。
+        issue_dir = self.project_dir / ".osh" / "issues"
+        if issue_dir.is_dir():
+            for f in sorted(issue_dir.glob("*.json")):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if isinstance(data, dict) and data.get("id") and data.get("status"):
+                    return True
+        return False
+
+    def _has_milestone_records(self) -> bool:
+        """MAN.3: 项目计划/里程碑证据（桌面端 project_mgmt.py 产物）。"""
+        path = self.project_dir / ".osh" / "project" / "milestones.json"
+        if not path.is_file():
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return isinstance(data, list) and len(data) > 0
+
+    def _has_risk_records(self) -> bool:
+        """MAN.3: 风险登记证据（桌面端 project_mgmt.py 产物）。"""
+        risk_dir = self.project_dir / ".osh" / "risks"
+        if not risk_dir.is_dir():
+            return False
+        for f in sorted(risk_dir.glob("*.json")):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict) and data.get("id") and data.get("status"):
+                return True
         return False
 
     def _has_change_records(self) -> bool:
@@ -1631,19 +1667,19 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no change-request records found)")
             elif "project plan" in check_item.lower() or "schedule" in check_item.lower() or "milestone" in check_item.lower():
-                if self._file_has_content("docs", "project-plan.md", min_chars=100):
+                if self._file_has_content("docs", "project-plan.md", min_chars=100) or self._has_milestone_records():
                     passed += 1
-                    details.append(f"  ✅ Check: {check_item} (project plan document present)")
+                    details.append(f"  ✅ Check: {check_item} (project plan / milestone records present)")
                 else:
                     failed += 1
-                    details.append(f"  ❌ Check: {check_item} (no docs/project-plan.md found)")
+                    details.append(f"  ❌ Check: {check_item} (no project plan / milestones found)")
             elif "risk register" in check_item.lower() or "risk management" in check_item.lower() or "risk" in check_item.lower():
-                if self._file_has_content("docs", "risk-register.md", min_chars=100):
+                if self._file_has_content("docs", "risk-register.md", min_chars=100) or self._has_risk_records():
                     passed += 1
                     details.append(f"  ✅ Check: {check_item} (risk register present)")
                 else:
                     failed += 1
-                    details.append(f"  ❌ Check: {check_item} (no docs/risk-register.md found)")
+                    details.append(f"  ❌ Check: {check_item} (no risk register found)")
             else:
                 # SECURITY: No fallback pass — unknown/unmatched checks are marked failed
                 # to prevent false positives from inflated compliance scores.

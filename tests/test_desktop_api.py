@@ -989,3 +989,315 @@ class TestAuditVisualization:
         assert dash.count("<svg") >= 3
 
 
+# ── QA audit workflow (SUP.1 / P7) ─────────────────────────────────────────
+
+class TestQAWorkflow:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P7"}), {})[0]["project"]["id"]
+
+    def test_create_list_get_audit(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/qa",
+            _body({"title": "SWE.1 requirements review", "auditor": "qa",
+                   "scope": "SWE.1"}), {},
+        )
+        assert status == 201
+        aid = resp["audit"]["id"]
+        assert resp["audit"]["status"] == "open"
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/qa", None, {})
+        assert status == 200
+        assert any(a["id"] == aid for a in resp["audits"])
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/qa/{aid}", None, {})
+        assert status == 200
+        assert resp["audit"]["title"] == "SWE.1 requirements review"
+
+    def test_finding_lifecycle_and_audit_closure(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        aid = d.handle_desktop(
+            "POST", f"projects/{pid}/qa",
+            _body({"title": "Audit"}), {},
+        )[0]["audit"]["id"]
+
+        # Add a finding.
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/findings",
+            _body({"description": "Missing traceability", "severity": "high"}), {},
+        )
+        assert status == 201
+        fid = resp["finding"]["id"]
+        assert resp["finding"]["status"] == "open"
+
+        # Audit stays open while finding is open (fail-closed).
+        audit = d.handle_desktop("GET", f"projects/{pid}/qa/{aid}", None, {})[0]["audit"]
+        assert audit["status"] == "open"
+
+        # Close the finding.
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/findings/{fid}/transition",
+            _body({"status": "closed", "resolution": "Fixed", "verifier": "qa"}), {},
+        )
+        assert status == 200
+        assert resp["finding"]["status"] == "closed"
+
+        # Now audit auto-closes.
+        audit = d.handle_desktop("GET", f"projects/{pid}/qa/{aid}", None, {})[0]["audit"]
+        assert audit["status"] == "closed"
+
+    def test_invalid_finding_transition_rejected(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        aid = d.handle_desktop(
+            "POST", f"projects/{pid}/qa", _body({"title": "A"}), {},
+        )[0]["audit"]["id"]
+        fid = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/findings",
+            _body({"description": "x"}), {},
+        )[0]["finding"]["id"]
+        # closed -> open is not allowed.
+        d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/findings/{fid}/transition",
+            _body({"status": "closed"}), {},
+        )
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/findings/{fid}/transition",
+            _body({"status": "open"}), {},
+        )
+        assert status == 400
+
+    def test_qa_records_satisfy_compliance_check(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        d.handle_desktop(
+            "POST", f"projects/{pid}/qa",
+            _body({"title": "Process audit"}), {},
+        )
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+        from yuleosh.desktop import workspace
+        cc = ComplianceChecker(str(workspace._project_dir(pid)))
+        assert cc._has_qa_records() is True
+
+    def test_export_report(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        aid = d.handle_desktop(
+            "POST", f"projects/{pid}/qa", _body({"title": "A"}), {},
+        )[0]["audit"]["id"]
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/qa/export", None, {})
+        assert status == 200
+        from yuleosh.desktop import workspace
+        assert Path(resp["path"]).is_file()
+        content = Path(resp["path"]).read_text(encoding="utf-8")
+        assert aid in content
+
+
+# ── Issue / problem-resolution workflow (SUP.9 / P8) ───────────────────────
+
+class TestIssues:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P8"}), {})[0]["project"]["id"]
+
+    def test_create_list_get_issue(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/issues",
+            _body({"title": "NULL pointer in init", "severity": "high",
+                   "owner": "dev"}), {},
+        )
+        assert status == 201
+        iid = resp["issue"]["id"]
+        assert resp["issue"]["status"] == "open"
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/issues", None, {})
+        assert status == 200
+        assert any(i["id"] == iid for i in resp["issues"])
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/issues/{iid}", None, {})
+        assert status == 200
+        assert resp["issue"]["severity"] == "high"
+
+    def test_full_lifecycle_with_rca_and_verification(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        iid = d.handle_desktop(
+            "POST", f"projects/{pid}/issues",
+            _body({"title": "Defect"}), {},
+        )[0]["issue"]["id"]
+
+        # open -> analyzed (root cause)
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{iid}/transition",
+            _body({"status": "analyzed", "root_cause": "Uninitialized pointer"}), {},
+        )
+        assert s == 200
+
+        # analyzed -> resolved
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{iid}/transition",
+            _body({"status": "resolved", "resolution": "Added init"}), {},
+        )
+        assert s == 200
+
+        # resolved -> verified
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{iid}/transition",
+            _body({"status": "verified", "verification": "Retest passed"}), {},
+        )
+        assert s == 200
+
+        # verified -> closed
+        resp, s = d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{iid}/transition",
+            _body({"status": "closed"}), {},
+        )
+        assert s == 200
+        assert resp["issue"]["status"] == "closed"
+        assert resp["issue"]["closed_at"] is not None
+
+    def test_close_without_verification_blocked(self, desktop_api):
+        """Fail-closed: an issue cannot close without verification."""
+        d = desktop_api
+        pid = self._project(d)
+        iid = d.handle_desktop(
+            "POST", f"projects/{pid}/issues", _body({"title": "D"}), {},
+        )[0]["issue"]["id"]
+        # Skip verified, try to close directly from resolved.
+        d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{iid}/transition",
+            _body({"status": "analyzed", "root_cause": "x"}), {},
+        )
+        d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{iid}/transition",
+            _body({"status": "resolved", "resolution": "y"}), {},
+        )
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{iid}/transition",
+            _body({"status": "closed"}), {},
+        )
+        assert status == 409
+
+    def test_issues_satisfy_compliance_check(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        d.handle_desktop(
+            "POST", f"projects/{pid}/issues", _body({"title": "Defect"}), {},
+        )
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+        from yuleosh.desktop import workspace
+        cc = ComplianceChecker(str(workspace._project_dir(pid)))
+        assert cc._has_issue_records() is True
+
+
+# ── Project management (MAN.3 / P9) ────────────────────────────────────────
+
+class TestProjectMgmt:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P9"}), {})[0]["project"]["id"]
+
+    def test_risk_lifecycle(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/risks",
+            _body({"description": "Schedule slip", "likelihood": "high",
+                   "impact": "high", "owner": "pm"}), {},
+        )
+        assert status == 201
+        rid = resp["risk"]["id"]
+        # high × high = critical
+        assert resp["risk"]["level"] == "critical"
+        assert resp["risk"]["status"] == "open"
+
+        # Mitigate requires a mitigation plan.
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/risks/{rid}/transition",
+            _body({"status": "mitigated", "mitigation": "Buffer added"}), {},
+        )
+        assert s == 200
+
+        # Close from mitigated.
+        resp, s = d.handle_desktop(
+            "POST", f"projects/{pid}/risks/{rid}/transition",
+            _body({"status": "closed"}), {},
+        )
+        assert s == 200
+        assert resp["risk"]["status"] == "closed"
+
+    def test_risk_close_without_mitigation_blocked(self, desktop_api):
+        """Fail-closed: a risk cannot close without mitigation."""
+        d = desktop_api
+        pid = self._project(d)
+        rid = d.handle_desktop(
+            "POST", f"projects/{pid}/risks",
+            _body({"description": "R"}), {},
+        )[0]["risk"]["id"]
+        # open -> mitigated without mitigation plan should fail.
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/risks/{rid}/transition",
+            _body({"status": "mitigated"}), {},
+        )
+        assert s == 400
+
+    def test_risk_level_matrix(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        # low × low = low
+        r = d.handle_desktop(
+            "POST", f"projects/{pid}/risks",
+            _body({"description": "r1", "likelihood": "low", "impact": "low"}), {},
+        )[0]["risk"]
+        assert r["level"] == "low"
+        # high × medium = high
+        r = d.handle_desktop(
+            "POST", f"projects/{pid}/risks",
+            _body({"description": "r2", "likelihood": "high", "impact": "medium"}), {},
+        )[0]["risk"]
+        assert r["level"] == "high"
+
+    def test_milestones_crud(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/milestones",
+            _body({"title": "M1", "target_date": "2026-12-01",
+                   "deliverable": "Spec"}), {},
+        )
+        assert status == 201
+        mid = resp["milestone"]["id"]
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/milestones", None, {})
+        assert status == 200
+        assert len(resp["milestones"]) == 1
+
+        # Update status to completed.
+        resp, status = d.handle_desktop(
+            "PATCH", f"projects/{pid}/milestones/{mid}",
+            _body({"status": "completed"}), {},
+        )
+        assert status == 200
+        assert resp["milestone"]["status"] == "completed"
+
+    def test_risk_and_milestones_satisfy_compliance(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        d.handle_desktop(
+            "POST", f"projects/{pid}/risks", _body({"description": "R"}), {},
+        )
+        d.handle_desktop(
+            "POST", f"projects/{pid}/milestones", _body({"title": "M"}), {},
+        )
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+        from yuleosh.desktop import workspace
+        cc = ComplianceChecker(str(workspace._project_dir(pid)))
+        assert cc._has_risk_records() is True
+        assert cc._has_milestone_records() is True
+
+
+
+
+

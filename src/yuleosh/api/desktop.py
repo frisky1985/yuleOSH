@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from yuleosh.desktop import audit, baseline, change_control, templates, tracing, workspace
+from yuleosh.desktop import audit, baseline, change_control, issues, project_mgmt, qa, templates, tracing, workspace
 
 log = logging.getLogger("api.desktop")
 
@@ -150,6 +150,39 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
         if not rev_id and method == "POST":
             return _add_review(project_id, body)
         return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+    # 质量保证审计（SUP.1 最小闭环）
+    # /api/v1/desktop/projects/{id}/qa                       (GET 列表 / POST 新建)
+    # /api/v1/desktop/projects/{id}/qa/{audit_id}            (GET 详情)
+    # /api/v1/desktop/projects/{id}/qa/{audit_id}/findings   (POST 新增不符合项)
+    # /api/v1/desktop/projects/{id}/qa/{audit_id}/findings/{fid}/transition (POST 状态迁移)
+    # /api/v1/desktop/projects/{id}/qa/export                (GET 导出报告)
+    if sub == "qa":
+        return _dispatch_qa(project_id, method, parts[2:], body)
+
+    # 问题解决管理（SUP.9 最小闭环）
+    # /api/v1/desktop/projects/{id}/issues              (GET 列表 / POST 新建)
+    # /api/v1/desktop/projects/{id}/issues/{id}         (GET 详情)
+    # /api/v1/desktop/projects/{id}/issues/{id}/transition (POST 状态迁移)
+    # /api/v1/desktop/projects/{id}/issues/export       (GET 导出报告)
+    if sub == "issues":
+        return _dispatch_issues(project_id, method, parts[2:], body)
+
+    # 项目管理（MAN.3 最小闭环）
+    # /api/v1/desktop/projects/{id}/risks              (GET 列表 / POST 新建)
+    # /api/v1/desktop/projects/{id}/risks/{id}         (GET 详情)
+    # /api/v1/desktop/projects/{id}/risks/{id}/transition (POST 状态迁移)
+    # /api/v1/desktop/projects/{id}/milestones         (GET 列表 / POST 新建)
+    # /api/v1/desktop/projects/{id}/milestones/{id}    (PATCH 更新)
+    # /api/v1/desktop/projects/{id}/project-mgmt/export (GET 导出报告)
+    if sub == "risks":
+        return _dispatch_risks(project_id, method, parts[2:], body)
+    if sub == "milestones":
+        return _dispatch_milestones(project_id, method, parts[2:], body)
+    if sub == "project-mgmt":
+        if method == "GET" and parts[2:3] == ["export"]:
+            return _json({"ok": True, "path": project_mgmt.export_report(project_id)})
+        return _json({"ok": False, "error": "Unknown project-mgmt action"}, 404)
 
     # 合规包生成与审计报告（P5）
     # /api/v1/desktop/projects/{id}/compliance      (GET 最近一次审计摘要)
@@ -832,6 +865,181 @@ def _dispatch_templates(project_id: str, method: str, body: Any) -> tuple:
         }, 201)
 
     return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+
+# ── Risk register & milestones handlers (MAN.3 / P9) ───────────────────────
+
+def _dispatch_risks(project_id: str, method: str, parts: list, body: Any) -> tuple:
+    """Handle /projects/{id}/risks[/{risk_id}[/transition]]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    risk_id = parts[0] if parts else ""
+    sub = parts[1] if len(parts) > 1 else ""
+    data = body if isinstance(body, dict) else {}
+
+    try:
+        if not risk_id:
+            if method == "GET":
+                return _json({"ok": True, "risks": project_mgmt.list_risks(project_id)})
+            if method == "POST":
+                return _json({"ok": True, "risk": project_mgmt.create_risk(project_id, data)}, 201)
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        if risk_id and (".." in risk_id or "/" in risk_id or "\\" in risk_id):
+            return _json({"ok": False, "error": f"Invalid risk id: {risk_id}"}, 400)
+        if not sub:
+            if method == "GET":
+                return _json({"ok": True, "risk": project_mgmt.get_risk(project_id, risk_id)})
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        if sub == "transition" and method == "POST":
+            return _json({
+                "ok": True, "risk": project_mgmt.transition_risk(project_id, risk_id, data),
+            })
+        return _json({"ok": False, "error": f"Unknown risks action: {sub}"}, 404)
+    except FileNotFoundError as e:
+        return _json({"ok": False, "error": str(e)}, 404)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
+
+
+def _dispatch_milestones(project_id: str, method: str, parts: list, body: Any) -> tuple:
+    """Handle /projects/{id}/milestones[/{ms_id}]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    ms_id = parts[0] if parts else ""
+    data = body if isinstance(body, dict) else {}
+
+    try:
+        if not ms_id:
+            if method == "GET":
+                return _json({"ok": True, "milestones": project_mgmt.list_milestones(project_id)})
+            if method == "POST":
+                return _json({"ok": True, "milestone": project_mgmt.add_milestone(project_id, data)}, 201)
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        if ms_id and (".." in ms_id or "/" in ms_id or "\\" in ms_id):
+            return _json({"ok": False, "error": f"Invalid milestone id: {ms_id}"}, 400)
+        if method in ("PUT", "PATCH", "POST"):
+            return _json({
+                "ok": True,
+                "milestone": project_mgmt.update_milestone(project_id, ms_id, data),
+            })
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
+    except FileNotFoundError as e:
+        return _json({"ok": False, "error": str(e)}, 404)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
+
+
+# ── Issue / problem-resolution handlers (SUP.9 / P8) ───────────────────────
+
+def _dispatch_issues(project_id: str, method: str, parts: list, body: Any) -> tuple:
+    """Handle /projects/{id}/issues[/{issue_id}[/transition]]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    issue_id = parts[0] if parts else ""
+    sub = parts[1] if len(parts) > 1 else ""
+    data = body if isinstance(body, dict) else {}
+
+    try:
+        if not issue_id:
+            if method == "GET":
+                return _json({"ok": True, "issues": issues.list_issues(project_id)})
+            if method == "POST":
+                return _json({"ok": True, "issue": issues.create_issue(project_id, data)}, 201)
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if issue_id == "export":
+            if method == "GET":
+                path = issues.export_report(project_id)
+                return _json({"ok": True, "path": path})
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if issue_id and (".." in issue_id or "/" in issue_id or "\\" in issue_id):
+            return _json({"ok": False, "error": f"Invalid issue id: {issue_id}"}, 400)
+
+        if not sub:
+            if method == "GET":
+                return _json({"ok": True, "issue": issues.get_issue(project_id, issue_id)})
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if sub == "transition" and method == "POST":
+            return _json({
+                "ok": True, "issue": issues.transition(project_id, issue_id, data),
+            })
+
+        return _json({"ok": False, "error": f"Unknown issues action: {sub}"}, 404)
+    except FileNotFoundError as e:
+        return _json({"ok": False, "error": str(e)}, 404)
+    except issues.InvalidTransition as e:
+        return _json({"ok": False, "error": str(e)}, 409)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
+
+
+# ── QA audit handlers (SUP.1 / P7) ─────────────────────────────────────────
+
+def _dispatch_qa(project_id: str, method: str, parts: list, body: Any) -> tuple:
+    """Handle /projects/{id}/qa[/{audit_id}[/findings[/{fid}/transition]]]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    audit_id = parts[0] if parts else ""
+    sub = parts[1] if len(parts) > 1 else ""
+    fid = parts[2] if len(parts) > 2 else ""
+    action = parts[3] if len(parts) > 3 else ""
+    data = body if isinstance(body, dict) else {}
+
+    try:
+        if not audit_id:
+            if method == "GET":
+                return _json({"ok": True, "audits": qa.list_audits(project_id)})
+            if method == "POST":
+                return _json({"ok": True, "audit": qa.create_audit(project_id, data)}, 201)
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if audit_id == "export":
+            if method == "GET":
+                path = qa.export_report(project_id)
+                return _json({"ok": True, "path": path})
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if audit_id and (".." in audit_id or "/" in audit_id or "\\" in audit_id):
+            return _json({"ok": False, "error": f"Invalid audit id: {audit_id}"}, 400)
+
+        if not sub:
+            if method == "GET":
+                return _json({"ok": True, "audit": qa.get_audit(project_id, audit_id)})
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if sub == "findings":
+            if not fid:
+                if method == "POST":
+                    return _json({
+                        "ok": True, "finding": qa.add_finding(project_id, audit_id, data),
+                    }, 201)
+                return _json({"ok": False, "error": "Method not allowed"}, 405)
+            if action == "transition" and method == "POST":
+                return _json({
+                    "ok": True,
+                    "finding": qa.transition_finding(project_id, audit_id, fid, data),
+                })
+            return _json({"ok": False, "error": "Unknown findings action"}, 404)
+
+        return _json({"ok": False, "error": f"Unknown qa action: {sub}"}, 404)
+    except FileNotFoundError as e:
+        return _json({"ok": False, "error": str(e)}, 404)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
 
 
 # ── Compliance audit handlers (P5) ─────────────────────────────────────────
