@@ -420,6 +420,131 @@ class TestChangeRequests:
         assert resp["ok"] is False
 
 
+# ── Traceability (P3) ─────────────────────────────────────────────────────
+
+class TestTraceability:
+    def _project_with_requirements(self, d):
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        content = (
+            "# Reqs\n\n## REQ-001\n- The system SHALL switch the lamp on request.\n\n"
+            "## REQ-002\n- The system SHALL report fault status.\n"
+        )
+        d.handle_desktop("POST", f"projects/{pid}/requirements",
+                         _body({"content": content}), {})
+        return pid
+
+    def _write(self, pid, rel, content):
+        from yuleosh.desktop import workspace
+        p = workspace._project_dir(pid) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def test_refresh_builds_matrix_and_gate(self, desktop_api):
+        d = desktop_api
+        pid = self._project_with_requirements(d)
+        self._write(pid, "code/src/main.c", "// @req REQ-001\nint main(void){return 0;}\n")
+        self._write(pid, "tests/test_main.c", "// REQ-001\nvoid test_lamp(void){}\n")
+
+        # 未刷新时读取 → 404
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/traceability", None, {})
+        assert status == 404
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/traceability/refresh", _body({}), {},
+        )
+        assert status == 201
+        summary = resp["summary"]
+        assert summary["total_requirements"] == 2
+        assert summary["with_test_coverage"] == 1
+        assert summary["coverage_pct"] == 50.0
+        # 50% < 60% 默认阈值 → 门禁失败
+        assert resp["gate"]["status"] == "failed"
+
+        # 阈值可显式放宽
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/traceability", None, {"threshold": ["50"]},
+        )
+        assert status == 200
+        assert resp["gate"]["status"] == "passed"
+
+    def test_refresh_bound_to_baseline(self, desktop_api):
+        d = desktop_api
+        pid = self._project_with_requirements(d)
+        assert d.handle_desktop(
+            "POST", f"projects/{pid}/baselines", _body({"name": "B1"}), {},
+        )[1] == 201
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/traceability/refresh",
+            _body({"baseline": "B1"}), {},
+        )
+        assert status == 201
+        assert resp["baseline"] == "B1"
+        assert resp["snapshot"] == ".osh/evidence/traceability-B1.json"
+
+        from yuleosh.desktop import workspace
+        assert (workspace._project_dir(pid) / resp["snapshot"]).is_file()
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/traceability/refresh",
+            _body({"baseline": "missing"}), {},
+        )
+        assert status == 404
+
+    def test_reverse_lookup_file_to_requirements(self, desktop_api):
+        d = desktop_api
+        pid = self._project_with_requirements(d)
+        self._write(pid, "code/src/main.c", "// @req REQ-001\nint main(void){return 0;}\n")
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/traceability/reverse",
+            None, {"file": ["code/src/main.c"]},
+        )
+        assert status == 200
+        assert resp["requirement_ids"] == ["REQ-001"]
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/traceability/reverse", None, {},
+        )
+        assert status == 400
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/traceability/reverse",
+            None, {"file": ["code/src/nope.c"]},
+        )
+        assert status == 404
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/traceability/reverse",
+            None, {"file": ["../project.json"]},
+        )
+        assert status == 400
+
+    def test_trace_gate_blocks_green(self):
+        from yuleosh.pipeline.gates import classify_run_outcome, traceability_gate
+
+        assert traceability_gate({
+            "summary": {"total_requirements": 4, "with_test_coverage": 2,
+                        "coverage_pct": 50.0},
+        })["status"] == "failed"
+        assert traceability_gate({
+            "summary": {"total_requirements": 0, "with_test_coverage": 0,
+                        "coverage_pct": 0.0},
+        })["status"] == "not-run"
+
+        summary = {"worst_gate_status": "passed",
+                   "gates": [{"gate": "G1", "status": "passed"}]}
+        verdict = classify_run_outcome(
+            "completed", [], summary,
+            traceability={"summary": {"total_requirements": 4,
+                                      "with_test_coverage": 2,
+                                      "coverage_pct": 50.0}},
+        )
+        assert verdict["outcome"] == "unverified"
+        assert {"gate": "TRACE", "status": "failed"} in verdict["blocking_gates"]
+
+
 # ── Baselines (SUP.8) ─────────────────────────────────────────────────────
 
 class TestBaselines:

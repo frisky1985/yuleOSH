@@ -695,9 +695,91 @@ def declared_na_gates(config: dict | None = None) -> set[str]:
 _NA_EXEMPT_STATUSES = ("skipped", "not-run")
 
 
+TRACE_GATE_KEY = "TRACE"
+_DEFAULT_TRACE_MIN_COVERAGE = 60.0
+
+
+def _trace_threshold(threshold: float | None) -> float:
+    if threshold is None:
+        raw = os.environ.get("OSH_TRACE_MIN_COVERAGE", str(_DEFAULT_TRACE_MIN_COVERAGE))
+        try:
+            threshold = float(raw)
+        except (TypeError, ValueError):
+            threshold = _DEFAULT_TRACE_MIN_COVERAGE
+    return max(0.0, min(100.0, float(threshold)))
+
+
+def traceability_gate(traceability: dict | None,
+                      threshold: float | None = None) -> dict:
+    """Evaluate traceability completeness as a quality gate (P3).
+
+    ``traceability`` accepts either the matrix itself or its ``summary`` dict.
+    A run with no parsed requirements cannot verify traceability, so it returns
+    ``not-run`` (never a silent pass). Coverage below ``threshold`` (default
+    ``OSH_TRACE_MIN_COVERAGE`` = 60, aligned with the compliance checker) or
+    orphaned tests fails the gate. ``OSH_TRACE_GATE=0/false/no/off`` disables it.
+    """
+    disabled = os.environ.get("OSH_TRACE_GATE", "1").strip().lower() in (
+        "0", "false", "no", "off")
+    if disabled:
+        return {
+            "gate": TRACE_GATE_KEY,
+            "status": "disabled",
+            "reason": "traceability gate disabled via OSH_TRACE_GATE",
+        }
+    if not isinstance(traceability, dict):
+        return {
+            "gate": TRACE_GATE_KEY,
+            "status": "not-run",
+            "reason": "no traceability summary available",
+        }
+
+    summary = traceability.get("summary")
+    if not isinstance(summary, dict):
+        summary = traceability
+    total = int(summary.get("total_requirements") or summary.get("total") or 0)
+    covered = int(summary.get("with_test_coverage") or summary.get("with_test") or 0)
+    coverage = float(
+        summary.get("coverage_pct")
+        if summary.get("coverage_pct") is not None
+        else (covered / total * 100.0 if total else 0.0)
+    )
+    threshold = _trace_threshold(threshold)
+    orphans = int(summary.get("orphaned_tests") or 0)
+
+    if total <= 0:
+        return {
+            "gate": TRACE_GATE_KEY,
+            "status": "not-run",
+            "threshold": threshold,
+            "total_requirements": 0,
+            "with_test_coverage": 0,
+            "coverage_pct": 0.0,
+            "reason": "no requirements parsed — traceability not verifiable",
+        }
+
+    passed = coverage >= threshold and orphans == 0
+    return {
+        "gate": TRACE_GATE_KEY,
+        "status": "passed" if passed else "failed",
+        "threshold": threshold,
+        "total_requirements": total,
+        "with_test_coverage": covered,
+        "coverage_pct": coverage,
+        "orphaned_tests": orphans,
+        "reason": (
+            f"coverage {coverage:.1f}% >= {threshold:.1f}%"
+            if passed else
+            f"coverage {coverage:.1f}% < {threshold:.1f}%"
+            + (f"; orphaned tests: {orphans}" if orphans else "")
+        ),
+    }
+
+
 def classify_run_outcome(session_status: str, errors=None,
                          gate_summary: dict | None = None,
-                         na_gates=None, config: dict | None = None) -> dict:
+                         na_gates=None, config: dict | None = None,
+                         traceability: dict | None = None) -> dict:
     """Decide the run-level verdict — the single place GREEN is granted.
 
     Returns::
@@ -741,14 +823,23 @@ def classify_run_outcome(session_status: str, errors=None,
             continue
         blocking.append({"gate": str(g.get("gate", "")), "status": status})
 
+    # P3: 追溯完整率纳入质量门。无需求可解析 → not-run（不静默通过）；
+    # 覆盖率不足或存在孤儿测试 → failed，结论降为 unverified（不授予 GREEN）。
+    trace = traceability_gate(traceability) if traceability is not None else None
+    if trace and trace.get("status") == "failed":
+        blocking.append({"gate": TRACE_GATE_KEY, "status": "failed"})
+
     def _result(outcome: str, reason: str) -> dict:
-        return {
+        result = {
             "outcome": outcome,
             "reason": reason,
             "worst_gate_status": worst,
             "blocking_gates": blocking,
             "declared_na": sorted(set(declared_hits)),
         }
+        if trace is not None:
+            result["traceability"] = trace
+        return result
 
     if str(session_status) != "completed":
         return _result("red", f"session status = {session_status}")
