@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from yuleosh.desktop import baseline, change_control, tracing, workspace
+from yuleosh.desktop import baseline, change_control, templates, tracing, workspace
 
 log = logging.getLogger("api.desktop")
 
@@ -101,6 +101,11 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
             job_id = parts[3]
             return _pipeline_job_status(project_id, job_id)
         return _json({"ok": False, "error": "Unknown pipeline action"}, 404)
+
+    # 文档模板生成（P4）
+    # /api/v1/desktop/projects/{id}/templates        (GET 可用模板列表 / POST 生成)
+    if sub == "templates":
+        return _dispatch_templates(project_id, method, body)
 
     # 追溯治理（P3）
     # /api/v1/desktop/projects/{id}/traceability                 (GET 当前矩阵 + 门禁判定)
@@ -787,6 +792,40 @@ def _sync_to_cloud(project_id: str, body: Any) -> tuple:
             "error": f"Cloud sync failed: {e}",
             "synced": False,
         }, 502)
+
+
+# ── Template handlers (P4) ────────────────────────────────────────────────
+
+def _dispatch_templates(project_id: str, method: str, body: Any) -> tuple:
+    """Handle /projects/{id}/templates (GET list / POST generate)."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    if method == "GET":
+        return _json({"ok": True, "templates": templates.list_templates()})
+
+    if method == "POST":
+        data = body if isinstance(body, dict) else {}
+        names = data.get("templates") or None
+        overwrite = bool(data.get("overwrite", False))
+        if names is not None and not isinstance(names, list):
+            return _json({"ok": False, "error": "templates must be a list"}, 400)
+        try:
+            results = templates.generate_doc_templates(project_id, names, overwrite=overwrite)
+        except ValueError as e:
+            return _json({"ok": False, "error": str(e)}, 400)
+        created = [r["path"] for r in results if r.get("created")]
+        skipped = [r["path"] for r in results if not r.get("created") and not r.get("error")]
+        return _json({
+            "ok": True,
+            "results": results,
+            "created": created,
+            "skipped": skipped,
+        }, 201)
+
+    return _json({"ok": False, "error": "Method not allowed"}, 405)
 
 
 # ── Traceability handlers (P3) ────────────────────────────────────────────

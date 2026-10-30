@@ -63,6 +63,14 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
     zip_path = collector.evidence_dir / "compliance-pack.zip"
     manifest_entries: list[dict] = []
 
+    # P4: 在打包前生成 BP→GP/RP 映射与能力等级声明，确保合规包显式声明
+    # 能力边界（CL1 支持 / CL2 部分 / CL3 不适用），并提供 BP→GP/RP 证据对应表。
+    try:
+        from yuleosh.compliance.bp_gp_mapping import write_process_capability_map
+        write_process_capability_map(collector.project_dir)
+    except Exception as exc:  # noqa: BLE001 - 证据产物生成失败不阻断打包
+        log.warning("process-capability-map generation failed (non-fatal): %s", exc)
+
     def _add_to_zip(file_path: Path, arcname: str):
         if file_path.exists():
             zf.write(file_path, arcname=arcname)

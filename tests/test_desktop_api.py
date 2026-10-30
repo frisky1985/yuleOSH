@@ -420,6 +420,84 @@ class TestChangeRequests:
         assert resp["ok"] is False
 
 
+# ── Document templates (P4) ──────────────────────────────────────────────
+
+class TestTemplates:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+
+    def test_list_and_generate(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/templates", None, {})
+        assert status == 200
+        assert "qa-plan" in resp["templates"]
+        assert "known-issues" in resp["templates"]
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/templates",
+            _body({"templates": ["qa-plan", "known-issues"]}), {},
+        )
+        assert status == 201
+        assert set(resp["created"]) == {"docs/qa-plan.md", "docs/known-issues.md"}
+
+    def test_existing_file_skipped_unless_overwrite(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        d.handle_desktop(
+            "POST", f"projects/{pid}/templates",
+            _body({"templates": ["risk-register"]}), {},
+        )
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/templates",
+            _body({"templates": ["risk-register"]}), {},
+        )
+        assert status == 201
+        assert resp["skipped"] == ["docs/risk-register.md"]
+        assert resp["created"] == []
+
+        from yuleosh.desktop import workspace
+        content = (workspace._project_dir(pid) / "docs" / "risk-register.md").read_text()
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/templates",
+            _body({"templates": ["risk-register"], "overwrite": True}), {},
+        )
+        assert status == 201
+        assert resp["created"] == ["docs/risk-register.md"]
+
+    def test_generates_compliance_recognized_docs(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        d.handle_desktop(
+            "POST", f"projects/{pid}/templates",
+            _body({"templates": ["qa-plan", "known-issues"]}), {},
+        )
+        from yuleosh.compliance.compliance_checker import ComplianceChecker
+        from yuleosh.desktop import workspace
+        cc = ComplianceChecker(str(workspace._project_dir(pid)))
+        assert cc._has_qa_records() is True
+        assert cc._has_issue_records() is True
+
+    def test_process_capability_map_generation(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        from yuleosh.compliance.bp_gp_mapping import write_process_capability_map
+        from yuleosh.desktop import workspace
+        proj = workspace._project_dir(pid)
+        out = write_process_capability_map(proj)
+        assert Path(out["capability_statement"]).is_file()
+        assert Path(out["json"]).is_file()
+
+        data = json.loads(Path(out["json"]).read_text(encoding="utf-8"))
+        assert data["capability_boundary"]["CL3"]["supported"] is False
+        assert data["capability_boundary"]["CL1"]["supported"] is True
+        # 每个 BP 至少有 CL1 的三个 GP
+        swe1 = next(a for a in data["areas"] if a["id"] == "SWE.1")
+        bp = swe1["bps"][0]
+        assert {"GP1.1", "GP1.2", "GP1.3"}.issubset(set(bp["gps"]))
+
+
 # ── Traceability (P3) ─────────────────────────────────────────────────────
 
 class TestTraceability:
