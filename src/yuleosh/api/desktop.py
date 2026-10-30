@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from yuleosh.desktop import change_control, workspace
+from yuleosh.desktop import baseline, change_control, workspace
 
 log = logging.getLogger("api.desktop")
 
@@ -101,6 +101,13 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
             job_id = parts[3]
             return _pipeline_job_status(project_id, job_id)
         return _json({"ok": False, "error": "Unknown pipeline action"}, 404)
+
+    # 基线快照与比对（SUP.8 最小闭环）
+    # /api/v1/desktop/projects/{id}/baselines                (GET 列表 / POST 新建快照)
+    # /api/v1/desktop/projects/{id}/baselines/diff           (GET ?from=&to= 比对并归档证据)
+    # /api/v1/desktop/projects/{id}/baselines/{name}         (GET 详情)
+    if sub == "baselines":
+        return _dispatch_baselines(project_id, method, parts[2:], body, query)
 
     # 变更请求（SUP.10 最小闭环）
     # /api/v1/desktop/projects/{id}/change-requests              (GET 列表 / POST 新建)
@@ -773,6 +780,57 @@ def _sync_to_cloud(project_id: str, body: Any) -> tuple:
             "error": f"Cloud sync failed: {e}",
             "synced": False,
         }, 502)
+
+
+# ── Baseline handlers (SUP.8) ─────────────────────────────────────────────
+
+def _query_one(query: dict, key: str) -> str:
+    """Read a single query-string value (parse_qs returns lists)."""
+    value = (query or {}).get(key)
+    if isinstance(value, list):
+        return (value[0] if value else "").strip()
+    return (value or "").strip()
+
+
+def _dispatch_baselines(project_id: str, method: str, parts: list,
+                        body: Any, query: dict) -> tuple:
+    """Handle /projects/{id}/baselines[/diff|/{name}]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    name = parts[0] if parts else ""
+    data = body if isinstance(body, dict) else {}
+
+    try:
+        if not name:
+            if method == "GET":
+                return _json({"ok": True, "baselines": baseline.list_baselines(project_id)})
+            if method == "POST":
+                snap = baseline.create_baseline(project_id, data)
+                return _json({"ok": True, "baseline": snap}, 201)
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if name == "diff":
+            if method != "GET":
+                return _json({"ok": False, "error": "Method not allowed"}, 405)
+            from_name = _query_one(query, "from")
+            to_name = _query_one(query, "to")
+            if not from_name or not to_name:
+                return _json({"ok": False, "error": "query params 'from' and 'to' are required"}, 400)
+            diff = baseline.diff_baselines(project_id, from_name, to_name)
+            return _json({"ok": True, "diff": diff})
+
+        if method == "GET":
+            return _json({"ok": True, "baseline": baseline.load_baseline(project_id, name)})
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
+    except FileNotFoundError as e:
+        return _json({"ok": False, "error": str(e)}, 404)
+    except baseline.BaselineConflict as e:
+        return _json({"ok": False, "error": str(e)}, 409)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
 
 
 # ── Change-request handlers (SUP.10) ───────────────────────────────────────

@@ -418,3 +418,119 @@ class TestChangeRequests:
         )
         assert status == 400
         assert resp["ok"] is False
+
+
+# ── Baselines (SUP.8) ─────────────────────────────────────────────────────
+
+class TestBaselines:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+
+    def test_snapshot_and_diff_archives_evidence(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        from yuleosh.desktop import workspace
+        proj_dir = workspace._project_dir(pid)
+
+        src = proj_dir / "code" / "src" / "main.c"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("int main(void){return 0;}\n", encoding="utf-8")
+        obsolete = proj_dir / "evidence" / "obsolete.txt"
+        obsolete.write_text("old evidence\n", encoding="utf-8")
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/baselines",
+            _body({"name": "B1", "label": "initial", "pipeline_run": "job-1"}), {},
+        )
+        assert status == 201
+        b1 = resp["baseline"]
+        assert b1["file_count"] >= 2
+        assert b1["pipeline_run"] == "job-1"
+        assert len(b1["manifest_sha256"]) == 64
+        main_entry = next(f for f in b1["files"] if f["path"] == "code/src/main.c")
+        assert len(main_entry["sha256"]) == 64
+
+        # 第二次基线前：修改、增加、删除文件
+        src.write_text("int main(void){return 1;}\n", encoding="utf-8")
+        (proj_dir / "tests" / "test_new.c").write_text("// new test\n", encoding="utf-8")
+        obsolete.unlink()
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/baselines", _body({"name": "B2"}), {},
+        )
+        assert status == 201
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/baselines/diff",
+            None, {"from": ["B1"], "to": ["B2"]},
+        )
+        assert status == 200
+        diff = resp["diff"]
+        assert "code/src/main.c" in [m["path"] for m in diff["modified"]]
+        assert "tests/test_new.c" in diff["added"]
+        assert "evidence/obsolete.txt" in diff["removed"]
+        assert diff["summary"]["total_changes"] == 3
+
+        evidence = proj_dir / ".osh" / "evidence" / "baseline-diff-B1--B2.json"
+        assert evidence.is_file()
+        assert diff["evidence_path"] == ".osh/evidence/baseline-diff-B1--B2.json"
+
+    def test_list_and_detail(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/baselines", _body({"name": "release-1.0"}), {},
+        )
+        assert status == 201
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/baselines", None, {})
+        assert status == 200
+        assert resp["baselines"][0]["name"] == "release-1.0"
+        assert "files" not in resp["baselines"][0]
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/baselines/release-1.0", None, {},
+        )
+        assert status == 200
+        assert "files" in resp["baseline"]
+
+    def test_auto_name_when_omitted(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/baselines", _body({}), {},
+        )
+        assert status == 201
+        assert resp["baseline"]["name"].startswith("BSL-")
+
+    def test_duplicate_name_conflict(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        payload = _body({"name": "B1"})
+        assert d.handle_desktop("POST", f"projects/{pid}/baselines", payload, {})[1] == 201
+        resp, status = d.handle_desktop("POST", f"projects/{pid}/baselines", payload, {})
+        assert status == 409
+
+    def test_diff_missing_params_and_baseline(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/baselines/diff", None, {"from": ["B1"]},
+        )
+        assert status == 400
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/baselines/diff", None,
+            {"from": ["nope"], "to": ["nope2"]},
+        )
+        assert status == 404
+
+    def test_invalid_baseline_name_rejected(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/baselines/../project.json", None, {},
+        )
+        assert status == 400
+        assert resp["ok"] is False
