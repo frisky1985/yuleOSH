@@ -737,3 +737,138 @@ class TestBaselines:
         )
         assert status == 400
         assert resp["ok"] is False
+
+
+# ── Compliance audit (P5) ──────────────────────────────────────────────────
+
+class TestComplianceAudit:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P5"}), {})[0]["project"]["id"]
+
+    def _write(self, pid, rel, content):
+        from yuleosh.desktop import workspace
+        p = workspace._project_dir(pid) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def _seed_evidence(self, pid):
+        """Drop a few substantive passed-evidence JSON files so the audit
+        report can compute non-NI evidence-coverage grades."""
+        ev = self._write(pid, ".osh/evidence/swe1-req.json", json.dumps({
+            "type": "requirement",
+            "status": "passed",
+            "title": "REQ-001 夜间自动开启车灯",
+            "details": "Requirements specification parsed and validated.",
+            "id": "REQ-001",
+        }))
+        self._write(pid, ".osh/evidence/swe3-code.json", json.dumps({
+            "type": "code",
+            "status": "passed",
+            "title": "main.c implementation",
+            "details": "Source code present with requirement references.",
+            "id": "CODE-001",
+        }))
+        self._write(pid, ".osh/evidence/swe4-unit-test.json", json.dumps({
+            "type": "unit_test",
+            "status": "passed",
+            "title": "test_main.c unit tests",
+            "details": "2/2 tests passed, 100% coverage.",
+            "id": "TC-001",
+        }))
+        return ev
+
+    def test_run_produces_pack_and_report(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+
+        # Seed project artifacts so evidence collection has something to scan.
+        self._write(pid, "docs/spec.md",
+                    "# Spec\n\n## REQ-001\n- The system SHALL switch the lamp on.\n")
+        self._write(pid, "code/src/main.c", "// @req REQ-001\nint main(void){return 0;}\n")
+        self._write(pid, "tests/test_main.c", "// REQ-001\nvoid test_lamp(void){}\n")
+        self._seed_evidence(pid)
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )
+        assert status == 200
+        summary = resp["summary"]
+        assert summary["pack_path"] is not None
+        assert summary["audit_report_path"] is not None
+        assert summary["bp_summary"]["total"] > 0
+
+        from yuleosh.desktop import workspace
+        proj = workspace._project_dir(pid)
+        assert (proj / ".osh" / "evidence" / "compliance-pack.zip").is_file()
+        assert (proj / ".osh" / "reports" / "aspice-report.html").is_file()
+        assert (proj / ".osh" / "reports" / "aspice-report.json").is_file()
+        assert (proj / ".osh" / "reports" / "aspice-report.txt").is_file()
+        # Compliance check report is also bundled into evidence.
+        assert (proj / ".osh" / "evidence" / "compliance-check-report.md").is_file()
+
+    def test_scores_are_evidence_coverage_not_cl(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "docs/spec.md", "# Spec\n## REQ-001\n- SHALL do X.\n")
+        self._seed_evidence(pid)
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )
+        assert status == 200
+        summary = resp["summary"]
+
+        # Scores keyed by process id; values carry a score token from the
+        # evidence-coverage set {E1,E2,E3,NI} — never "CL1"/"CL2".
+        assert isinstance(summary["scores"], dict)
+        valid = {"E1", "E2", "E3", "NI"}
+        for pid_dim, dim in summary["scores"].items():
+            assert dim["score"] in valid, f"{pid_dim} score {dim['score']} not in {valid}"
+            # No ASPICE capability-level leakage.
+            assert not dim["score"].startswith("CL")
+
+        # Disclaimer is always present in the response.
+        assert "E1" in summary["disclaimer"]
+        assert "NOT Automotive SPICE capability" in summary["disclaimer"]
+
+        # The generated HTML report also carries the disclaimer.
+        from yuleosh.desktop import workspace
+        html = (workspace._project_dir(pid) / ".osh" / "reports" /
+                "aspice-report.html").read_text(encoding="utf-8")
+        assert "非 ASPICE 能力等级" in html or "NOT Automotive SPICE" in html
+
+    def test_get_before_run_returns_404(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/compliance", None, {})
+        assert status == 404
+
+    def test_get_after_run_returns_summary(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "docs/spec.md", "# Spec\n## REQ-001\n- SHALL do X.\n")
+        self._seed_evidence(pid)
+
+        assert d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )[1] == 200
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/compliance", None, {})
+        assert status == 200
+        assert resp["summary"]["pack_path"] is not None
+
+    def test_empty_project_reports_not_run(self, desktop_api):
+        """Fail-closed: an empty project must NOT silently pass."""
+        d = desktop_api
+        pid = self._project(d)
+        # No requirements, no evidence.
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )
+        assert status == 200
+        summary = resp["summary"]
+        assert summary["status"] in ("not_run", "partial")
+        # No fake-green: overall evidence-coverage should be NI.
+        assert summary.get("overall_score") == "NI"
+
