@@ -648,8 +648,10 @@ class ComplianceChecker:
     def _has_change_records(self) -> bool:
         """SUP.10: 变更请求管理证据。
 
-        仅认：``docs/change-requests.md`` 实质性文档或 ``.osh/ci/change-*.json``
-        记录。无 → 返回 False（SUP.10 判 RED，不假绿）。
+        认可：``docs/change-requests.md`` / ``.osh/ci/change-*.json``，
+        以及桌面端由 ``desktop/change_control.py`` 生成的
+        ``change-requests/*.json`` 实体与 ``.osh/evidence/impact-analysis-*.json``。
+        无 → 返回 False（SUP.10 判 RED，不假绿）。
         """
         if self._file_has_content("docs", "change-requests.md", min_chars=100):
             return True
@@ -658,6 +660,18 @@ class ComplianceChecker:
             for f in sorted(ci_dir.iterdir()):
                 if "change" in f.name.lower() and f.suffix == ".json":
                     return True
+        cr_dir = self.project_dir / "change-requests"
+        if cr_dir.is_dir():
+            for f in sorted(cr_dir.glob("*.json")):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if isinstance(data, dict) and data.get("id") and data.get("status"):
+                    return True
+        evidence_dir = self.project_dir / ".osh" / "evidence"
+        if evidence_dir.is_dir() and any(evidence_dir.glob("impact-analysis-*.json")):
+            return True
         return False
 
     def _acceptance_matrix_covered(self) -> bool:
@@ -1509,9 +1523,16 @@ class ComplianceChecker:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item}")
             elif "impact" in check_item.lower():
+                evidence_dir = self.project_dir / ".osh" / "evidence"
+                cr_evidence = evidence_dir.is_dir() and any(
+                    evidence_dir.glob("impact-analysis-*.json")
+                )
                 if self._file_has_content("docs", "impact-analysis.md", min_chars=100):
                     passed += 1
                     details.append(f"  ✅ Check: {check_item} (impact analysis with substantive content)")
+                elif cr_evidence:
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (.osh/evidence/impact-analysis-*.json generated)")
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no substantive impact analysis found)")
