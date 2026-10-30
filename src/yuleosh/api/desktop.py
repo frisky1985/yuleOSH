@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from yuleosh.desktop import workspace
+from yuleosh.desktop import change_control, workspace
 
 log = logging.getLogger("api.desktop")
 
@@ -101,6 +101,14 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
             job_id = parts[3]
             return _pipeline_job_status(project_id, job_id)
         return _json({"ok": False, "error": "Unknown pipeline action"}, 404)
+
+    # 变更请求（SUP.10 最小闭环）
+    # /api/v1/desktop/projects/{id}/change-requests              (GET 列表 / POST 新建)
+    # /api/v1/desktop/projects/{id}/change-requests/{cr_id}      (GET 详情)
+    # /api/v1/desktop/projects/{id}/change-requests/{cr_id}/analyze     (POST 影响分析)
+    # /api/v1/desktop/projects/{id}/change-requests/{cr_id}/transition  (POST 状态迁移)
+    if sub == "change-requests":
+        return _dispatch_change_requests(project_id, method, parts[2:], body)
 
     # 评审：对某个产物文件做通过/退回 + 批注，落到 evidence/review.json
     # /api/v1/desktop/projects/{id}/review                    (GET 列表 / POST 新增)
@@ -765,6 +773,58 @@ def _sync_to_cloud(project_id: str, body: Any) -> tuple:
             "error": f"Cloud sync failed: {e}",
             "synced": False,
         }, 502)
+
+
+# ── Change-request handlers (SUP.10) ───────────────────────────────────────
+
+def _dispatch_change_requests(project_id: str, method: str, parts: list, body: Any) -> tuple:
+    """Handle /projects/{id}/change-requests[/{cr_id}[/{action}]]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    cr_id = parts[0] if parts else ""
+    action = parts[1] if len(parts) > 1 else ""
+    data = body if isinstance(body, dict) else {}
+
+    if cr_id and (".." in cr_id or "/" in cr_id or "\\" in cr_id):
+        return _json({"ok": False, "error": f"Invalid change request id: {cr_id}"}, 400)
+
+    try:
+        if not cr_id:
+            if method == "GET":
+                return _json({
+                    "ok": True,
+                    "change_requests": change_control.list_change_requests(project_id),
+                })
+            if method == "POST":
+                cr = change_control.create_change_request(project_id, data)
+                return _json({"ok": True, "change_request": cr}, 201)
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if not action:
+            if method == "GET":
+                cr = change_control.load_change_request(project_id, cr_id)
+                return _json({"ok": True, "change_request": cr})
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if action == "analyze" and method == "POST":
+            impact = change_control.analyze_impact(project_id, cr_id, data)
+            cr = change_control.load_change_request(project_id, cr_id)
+            return _json({"ok": True, "impact": impact, "change_request": cr})
+
+        if action == "transition" and method == "POST":
+            cr = change_control.transition(project_id, cr_id, data)
+            return _json({"ok": True, "change_request": cr})
+
+        return _json({"ok": False, "error": f"Unknown change-request action: {action}"}, 404)
+    except FileNotFoundError as e:
+        return _json({"ok": False, "error": str(e)}, 404)
+    except change_control.InvalidTransition as e:
+        return _json({"ok": False, "error": str(e)}, 409)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
 
 
 # ── Review handlers (evidence/review.json) ──────────────────────────────────

@@ -293,3 +293,128 @@ class TestCollectRealArtifacts:
         proj = tmp_path / "empty"
         proj.mkdir()
         assert desktop_api._collect_real_artifacts(str(proj)) == []
+
+
+# ── Change requests (SUP.10) ──────────────────────────────────────────────
+
+class TestChangeRequests:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+
+    def _create(self, d, pid, **overrides):
+        payload = {"title": "Add lamp control", "reason": "new requirement", "requirements": ["REQ-001"]}
+        payload.update(overrides)
+        return d.handle_desktop("POST", f"projects/{pid}/change-requests", _body(payload), {})
+
+    def test_full_lifecycle_with_impact_evidence(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+
+        # 准备带 @req 注解的代码与测试产物
+        from yuleosh.desktop import workspace
+        proj_dir = workspace._project_dir(pid)
+        src = proj_dir / "code" / "src" / "main.c"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("// @req REQ-001\nint main(void){return 0;}\n", encoding="utf-8")
+        test = proj_dir / "tests" / "test_main.c"
+        test.write_text("// REQ-001 covers lamp switching\n", encoding="utf-8")
+
+        resp, status = self._create(d, pid, author="alice")
+        assert status == 201
+        cr_id = resp["change_request"]["id"]
+        assert resp["change_request"]["status"] == "draft"
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/change-requests/{cr_id}/analyze", _body({}), {},
+        )
+        assert status == 200
+        impact = resp["impact"]
+        assert resp["change_request"]["status"] == "analyzed"
+        assert impact["summary"]["requirements"] == 1
+        assert impact["summary"]["code_files"] == 1
+        assert impact["summary"]["test_files"] == 1
+
+        evidence = proj_dir / ".osh" / "evidence" / f"impact-analysis-{cr_id}.json"
+        assert evidence.is_file()
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/change-requests/{cr_id}/transition",
+            _body({"status": "approved", "author": "ccb", "comment": "ok"}), {},
+        )
+        assert status == 200
+        assert resp["change_request"]["status"] == "approved"
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/change-requests/{cr_id}/transition",
+            _body({"status": "closed"}), {},
+        )
+        assert status == 200
+        assert resp["change_request"]["status"] == "closed"
+        assert [h["to"] for h in resp["change_request"]["history"]] == [
+            "draft", "analyzed", "approved", "closed",
+        ]
+
+        # 列表与详情
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/change-requests", None, {})
+        assert status == 200
+        assert [c["id"] for c in resp["change_requests"]] == [cr_id]
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/change-requests/{cr_id}", None, {},
+        )
+        assert status == 200
+        assert resp["change_request"]["impact"]["summary"]["requirements"] == 1
+
+    def test_illegal_transition_returns_409(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        cr_id = self._create(d, pid)[0]["change_request"]["id"]
+
+        # draft 不能直接 approved
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/change-requests/{cr_id}/transition",
+            _body({"status": "approved"}), {},
+        )
+        assert status == 409
+
+    def test_analyze_twice_returns_409(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        cr_id = self._create(d, pid)[0]["change_request"]["id"]
+
+        assert d.handle_desktop(
+            "POST", f"projects/{pid}/change-requests/{cr_id}/analyze", _body({}), {},
+        )[1] == 200
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/change-requests/{cr_id}/analyze", _body({}), {},
+        )
+        assert status == 409
+        assert resp["ok"] is False
+
+    def test_create_requires_title(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/change-requests", _body({"reason": "x"}), {},
+        )
+        assert status == 400
+
+    def test_missing_project_or_cr_404(self, desktop_api):
+        d = desktop_api
+        resp, status = d.handle_desktop("GET", "projects/nope/change-requests", None, {})
+        assert status == 404
+
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/change-requests/CR-20260101-abcdef", None, {},
+        )
+        assert status == 404
+
+    def test_cr_id_path_traversal_rejected(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/change-requests/../project.json", None, {},
+        )
+        assert status == 400
+        assert resp["ok"] is False
