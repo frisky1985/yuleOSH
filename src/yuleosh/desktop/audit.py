@@ -179,6 +179,7 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
     # 4) Audit report (HTML + JSON + text).
     audit_report_path: Optional[str] = None
     audit_report_json: Optional[str] = None
+    dashboard_path: Optional[str] = None
     scores: dict = {}
     gaps: list[dict] = []
     overall_score = "NI"
@@ -194,14 +195,16 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
         html_path = reports_dir / "aspice-report.html"
         json_path = reports_dir / "aspice-report.json"
         text_path = reports_dir / "aspice-report.txt"
+        dash_path = reports_dir / "aspice-dashboard.html"
         gen.export_html(rpt, str(html_path))
         gen.export_json(rpt, str(json_path))
         gen.export_text(rpt, str(text_path))
-        return rpt, str(html_path), str(json_path)
+        gen.export_dashboard(rpt, str(dash_path), bp_summary=bp_summary)
+        return rpt, str(html_path), str(json_path), str(dash_path)
 
     rpt_tuple = _safe_stage("audit-report", _stage_report, errors)
     if rpt_tuple is not None:
-        rpt, audit_report_path, audit_report_json = rpt_tuple
+        rpt, audit_report_path, audit_report_json, dashboard_path = rpt_tuple
         overall_score = rpt.overall_score
         for dim in rpt.dimensions:
             scores[dim.process_id] = {
@@ -217,6 +220,7 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
         "pack_path": pack_path,
         "audit_report_path": audit_report_path,
         "audit_report_json": audit_report_json,
+        "dashboard_path": dashboard_path,
         "compliance_report_path": compliance_report_path,
         "scores": scores,
         "gaps": gaps,
