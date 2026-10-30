@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from yuleosh.desktop import baseline, change_control, workspace
+from yuleosh.desktop import baseline, change_control, tracing, workspace
 
 log = logging.getLogger("api.desktop")
 
@@ -101,6 +101,13 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
             job_id = parts[3]
             return _pipeline_job_status(project_id, job_id)
         return _json({"ok": False, "error": "Unknown pipeline action"}, 404)
+
+    # 追溯治理（P3）
+    # /api/v1/desktop/projects/{id}/traceability                 (GET 当前矩阵 + 门禁判定)
+    # /api/v1/desktop/projects/{id}/traceability/refresh         (POST 刷新，可绑定基线)
+    # /api/v1/desktop/projects/{id}/traceability/reverse?file=   (GET 文件→需求反查)
+    if sub == "traceability":
+        return _dispatch_traceability(project_id, method, parts[2:], body, query)
 
     # 基线快照与比对（SUP.8 最小闭环）
     # /api/v1/desktop/projects/{id}/baselines                (GET 列表 / POST 新建快照)
@@ -780,6 +787,66 @@ def _sync_to_cloud(project_id: str, body: Any) -> tuple:
             "error": f"Cloud sync failed: {e}",
             "synced": False,
         }, 502)
+
+
+# ── Traceability handlers (P3) ────────────────────────────────────────────
+
+def _dispatch_traceability(project_id: str, method: str, parts: list,
+                           body: Any, query: dict) -> tuple:
+    """Handle /projects/{id}/traceability[/refresh|/reverse]."""
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    action = parts[0] if parts else ""
+    data = body if isinstance(body, dict) else {}
+    raw_threshold = _query_one(query, "threshold") if query else ""
+    try:
+        threshold = float(raw_threshold) if raw_threshold else None
+    except ValueError:
+        return _json({"ok": False, "error": "threshold must be a number"}, 400)
+
+    try:
+        if not action:
+            if method != "GET":
+                return _json({"ok": False, "error": "Method not allowed"}, 405)
+            matrix = tracing.load_matrix(project_id)
+            if matrix is None:
+                return _json({
+                    "ok": False,
+                    "error": "No traceability matrix. POST /traceability/refresh first.",
+                }, 404)
+            return _json({
+                "ok": True,
+                "summary": matrix.get("summary", {}),
+                "baseline": matrix.get("baseline"),
+                "generated": matrix.get("generated"),
+                "gate": tracing.gate_verdict(matrix, threshold=threshold),
+            })
+
+        if action == "refresh" and method == "POST":
+            result = tracing.refresh(project_id, data)
+            return _json({
+                "ok": True,
+                "summary": result["matrix"]["summary"],
+                "json": result["json"],
+                "snapshot": result["snapshot"],
+                "baseline": result["baseline"],
+                "gate": tracing.gate_verdict(result["matrix"], threshold=threshold),
+            }, 201)
+
+        if action == "reverse" and method == "GET":
+            file_path = _query_one(query, "file")
+            if not file_path:
+                return _json({"ok": False, "error": "query param 'file' is required"}, 400)
+            return _json({"ok": True, **tracing.reverse_lookup(project_id, file_path)})
+
+        return _json({"ok": False, "error": f"Unknown traceability action: {action}"}, 404)
+    except FileNotFoundError as e:
+        return _json({"ok": False, "error": str(e)}, 404)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
 
 
 # ── Baseline handlers (SUP.8) ─────────────────────────────────────────────

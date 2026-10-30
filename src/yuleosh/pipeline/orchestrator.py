@@ -753,7 +753,8 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         session._save()
 
         # T5 / SYS-REQ-005: 权威追溯产物默认落盘 (详见 _emit_traceability_artifacts)。
-        _emit_traceability_artifacts(session)
+        # P3: 追溯完整率同时纳入质量门（classify_run_outcome 的 traceability 参数）。
+        _trace_result = _emit_traceability_artifacts(session)
 
         # 编排层 10 Gate 报告聚合 (2026-08-19 方案 B):
         # gate status = 内部子步骤最差状态; 写 .osh/sessions/<id>/gate-summary.json。
@@ -776,7 +777,8 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
             from yuleosh.pipeline.gates import classify_run_outcome
             session.gate_verdict = classify_run_outcome(
                 session.status, session.errors, _gate_summary,
-                config=getattr(session, "config", None))
+                config=getattr(session, "config", None),
+                traceability=(_trace_result or {}).get("summary"))
             if session.status != "failed":
                 session._save()
         except Exception as _verdict_err:  # pragma: no cover - defensive  # noqa: BLE001
