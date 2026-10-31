@@ -129,6 +129,8 @@ def create_risk(project_id: str, body: dict[str, Any]) -> dict:
         "mitigation": "",
         "status": "open",
         "owner": (body.get("owner") or "unassigned").strip(),
+        "owner_role": (body.get("owner_role") or "risk_owner").strip(),
+        "acceptance": None,
         "created_at": _now(),
         "updated_at": _now(),
         "closed_at": None,
@@ -169,6 +171,17 @@ def transition_risk(project_id: str, risk_id: str, body: dict[str, Any]) -> dict
         # Fail-closed: must be mitigated first.
         if current != "mitigated":
             raise ValueError("Risk must be mitigated before closing")
+        # Management acceptance is part of the approval chain (MAN.3).
+        accepted_by = (body.get("accepted_by") or "").strip()
+        if not accepted_by:
+            raise ValueError(
+                "accepted_by (management acceptance) is required to close a risk"
+            )
+        risk["acceptance"] = {
+            "accepted_by": accepted_by,
+            "role": (body.get("acceptance_role") or "project_manager").strip(),
+            "accepted_at": _now(),
+        }
         risk["closed_at"] = _now()
 
     risk["status"] = target

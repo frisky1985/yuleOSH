@@ -114,6 +114,8 @@ def create_issue(project_id: str, body: dict[str, Any]) -> dict:
         "severity": severity,
         "status": "open",
         "owner": (body.get("owner") or "unassigned").strip(),
+        "reported_by": (body.get("reported_by") or "local").strip(),
+        "verified_by": "",
         "root_cause": "",
         "resolution": "",
         "verification": "",
@@ -165,6 +167,7 @@ def transition(project_id: str, issue_id: str, body: dict[str, Any]) -> dict:
         issue["resolution"] = (body.get("resolution") or issue.get("resolution") or "").strip()
     elif target == "verified":
         issue["verification"] = (body.get("verification") or issue.get("verification") or "").strip()
+        issue["verified_by"] = (body.get("verified_by") or "local").strip()
     elif target == "closed":
         # Fail-closed: must be verified before closing.
         if current != "verified":

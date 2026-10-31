@@ -336,6 +336,7 @@ def _normalize_finding(body: dict[str, Any]) -> dict:
         "description": desc,
         "severity": severity,
         "status": "open",
+        "assigned_to": (body.get("assigned_to") or "unassigned").strip(),
         "created_at": _now(),
         "updated_at": _now(),
     }
