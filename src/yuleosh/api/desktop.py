@@ -53,6 +53,11 @@ def handle_desktop(method: str, path_tail: str, body: Any, query: dict,
 
     if resource == "projects":
         return _dispatch_projects(method, parts[1:], body, query)
+    if resource == "openapi.json":
+        if method == "GET":
+            from yuleosh.api.openapi import build_openapi_spec
+            return _json(build_openapi_spec(), 200)
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
     return _json({"ok": False, "error": f"Unknown desktop resource: {resource}"}, 404)
 
 
@@ -1019,6 +1024,14 @@ def _dispatch_qa(project_id: str, method: str, parts: list, body: Any) -> tuple:
         if not sub:
             if method == "GET":
                 return _json({"ok": True, "audit": qa.get_audit(project_id, audit_id)})
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+        if sub == "approve":
+            if method == "POST":
+                return _json({
+                    "ok": True,
+                    "audit": qa.approve_audit(project_id, audit_id, data),
+                })
             return _json({"ok": False, "error": "Method not allowed"}, 405)
 
         if sub == "findings":

@@ -1044,9 +1044,25 @@ class TestQAWorkflow:
         assert status == 200
         assert resp["finding"]["status"] == "closed"
 
-        # Now audit auto-closes.
+        # All findings closed → audit awaits management approval (no fake-green).
         audit = d.handle_desktop("GET", f"projects/{pid}/qa/{aid}", None, {})[0]["audit"]
-        assert audit["status"] == "closed"
+        assert audit["status"] == "pending_approval"
+        assert audit["approval"] is None
+
+        # Approval without an approver is rejected.
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/approve", _body({}), {},
+        )
+        assert s == 400
+
+        # Explicit management sign-off closes the audit.
+        resp, s = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/approve",
+            _body({"approver": "qa-lead", "role": "qa_lead"}), {},
+        )
+        assert s == 200
+        assert resp["audit"]["status"] == "closed"
+        assert resp["audit"]["approval"]["approved_by"] == "qa-lead"
 
     def test_invalid_finding_transition_rejected(self, desktop_api):
         d = desktop_api
@@ -1220,13 +1236,20 @@ class TestProjectMgmt:
         )
         assert s == 200
 
-        # Close from mitigated.
-        resp, s = d.handle_desktop(
+        # Close from mitigated requires management acceptance.
+        _, s = d.handle_desktop(
             "POST", f"projects/{pid}/risks/{rid}/transition",
             _body({"status": "closed"}), {},
         )
+        assert s == 400
+
+        resp, s = d.handle_desktop(
+            "POST", f"projects/{pid}/risks/{rid}/transition",
+            _body({"status": "closed", "accepted_by": "pm"}), {},
+        )
         assert s == 200
         assert resp["risk"]["status"] == "closed"
+        assert resp["risk"]["acceptance"]["accepted_by"] == "pm"
 
     def test_risk_close_without_mitigation_blocked(self, desktop_api):
         """Fail-closed: a risk cannot close without mitigation."""
@@ -1392,6 +1415,129 @@ class TestComplianceWorkflowIntegration:
         html = (workspace._project_dir(pid) / ".osh" / "reports" /
                 "aspice-dashboard.html").read_text(encoding="utf-8")
         assert "Workflow Status" not in html
+
+
+# ── 角色字段与审批链 ──────────────────────────────────────────────────────
+
+class TestRolesAndApprovalChain:
+    def _project(self, d):
+        return d.handle_desktop(
+            "POST", "projects", _body({"name": "ROLE"}), {},
+        )[0]["project"]["id"]
+
+    def test_roles_recorded_on_records(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+
+        audit = d.handle_desktop(
+            "POST", f"projects/{pid}/qa",
+            _body({"title": "A", "auditor": "alice", "auditor_role": "qa_engineer"}),
+            {},
+        )[0]["audit"]
+        assert audit["auditor_role"] == "qa_engineer"
+
+        fid = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{audit['id']}/findings",
+            _body({"description": "x", "assigned_to": "bob"}), {},
+        )[0]["finding"]["id"]
+        full = d.handle_desktop(
+            "GET", f"projects/{pid}/qa/{audit['id']}", None, {},
+        )[0]["audit"]
+        finding = [f for f in full["findings"] if f["id"] == fid][0]
+        assert finding["assigned_to"] == "bob"
+
+        issue = d.handle_desktop(
+            "POST", f"projects/{pid}/issues",
+            _body({"title": "Defect", "reported_by": "alice"}), {},
+        )[0]["issue"]
+        assert issue["reported_by"] == "alice"
+        assert issue["verified_by"] == ""
+
+        d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{issue['id']}/transition",
+            _body({"status": "analyzed", "root_cause": "x"}), {},
+        )
+        d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{issue['id']}/transition",
+            _body({"status": "resolved", "resolution": "y"}), {},
+        )
+        ver = d.handle_desktop(
+            "POST", f"projects/{pid}/issues/{issue['id']}/transition",
+            _body({"status": "verified", "verification": "z",
+                   "verified_by": "carol"}), {},
+        )[0]["issue"]
+        assert ver["verified_by"] == "carol"
+
+        risk = d.handle_desktop(
+            "POST", f"projects/{pid}/risks",
+            _body({"description": "R", "owner_role": "risk_owner"}), {},
+        )[0]["risk"]
+        assert risk["owner_role"] == "risk_owner"
+        assert risk["acceptance"] is None
+
+    def test_audit_without_findings_requires_approval(self, desktop_api):
+        """Fail-closed: an empty audit is not evidence of quality."""
+        d = desktop_api
+        pid = self._project(d)
+        aid = d.handle_desktop(
+            "POST", f"projects/{pid}/qa", _body({"title": "A"}), {},
+        )[0]["audit"]["id"]
+        audit = d.handle_desktop("GET", f"projects/{pid}/qa/{aid}", None, {})[0]["audit"]
+        assert audit["status"] == "open"
+
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/approve", _body({}), {},
+        )
+        assert s == 400
+
+        resp, s = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/approve",
+            _body({"approver": "lead"}), {},
+        )
+        assert s == 200
+        assert resp["audit"]["status"] == "closed"
+
+    def test_approval_blocked_while_findings_open(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        aid = d.handle_desktop(
+            "POST", f"projects/{pid}/qa", _body({"title": "A"}), {},
+        )[0]["audit"]["id"]
+        d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/findings",
+            _body({"description": "open finding"}), {},
+        )
+        _, s = d.handle_desktop(
+            "POST", f"projects/{pid}/qa/{aid}/approve",
+            _body({"approver": "lead"}), {},
+        )
+        assert s == 400
+
+
+# ── OpenAPI 描述 ──────────────────────────────────────────────────────────
+
+class TestOpenAPISpec:
+    def test_spec_is_served(self, desktop_api):
+        spec, status = desktop_api.handle_desktop("GET", "openapi.json", None, {})
+        assert status == 200
+        assert spec["openapi"].startswith("3.0")
+        assert spec["servers"][0]["url"] == "/api/v1/desktop"
+        for path in (
+            "/projects",
+            "/projects/{project_id}/compliance/run",
+            "/projects/{project_id}/qa/{audit_id}/approve",
+            "/projects/{project_id}/risks/{risk_id}/transition",
+        ):
+            assert path in spec["paths"], path
+
+    def test_spec_carries_evidence_coverage_disclaimer(self, desktop_api):
+        spec, status = desktop_api.handle_desktop("GET", "openapi.json", None, {})
+        assert status == 200
+        assert "NOT Automotive SPICE" in spec["info"]["description"]
+
+    def test_non_get_method_rejected(self, desktop_api):
+        _, status = desktop_api.handle_desktop("POST", "openapi.json", _body({}), {})
+        assert status == 405
 
 
 
