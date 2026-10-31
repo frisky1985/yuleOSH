@@ -1298,6 +1298,102 @@ class TestProjectMgmt:
         assert cc._has_milestone_records() is True
 
 
+# ── Compliance audit ↔ workflow integration (优化项 1/2) ────────────────────
+
+class TestComplianceWorkflowIntegration:
+    def _project(self, d):
+        return d.handle_desktop(
+            "POST", "projects", _body({"name": "INT"}), {},
+        )[0]["project"]["id"]
+
+    def _write(self, pid, rel, content):
+        from yuleosh.desktop import workspace
+        p = workspace._project_dir(pid) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def _seed(self, pid):
+        self._write(pid, "docs/spec.md", "# Spec\n## REQ-001\n- SHALL do X.\n")
+        self._write(pid, ".osh/evidence/swe1-req.json", json.dumps({
+            "type": "requirement", "status": "passed",
+            "title": "REQ-001", "details": "Parsed.", "id": "REQ-001",
+        }))
+
+    def _seed_workflows(self, d, pid):
+        d.handle_desktop("POST", f"projects/{pid}/qa",
+                         _body({"title": "Process audit"}), {})
+        d.handle_desktop("POST", f"projects/{pid}/issues",
+                         _body({"title": "Defect"}), {})
+        d.handle_desktop("POST", f"projects/{pid}/risks",
+                         _body({"description": "Schedule slip",
+                                "likelihood": "high", "impact": "high"}), {})
+        d.handle_desktop("POST", f"projects/{pid}/milestones",
+                         _body({"title": "M1"}), {})
+
+    def test_workflow_exports_bundled_into_pack(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._seed(pid)
+        self._seed_workflows(d, pid)
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )
+        assert status == 200
+        summary = resp["summary"]
+
+        # Workflow counts surface in the summary.
+        assert summary["workflow"]["qa"]["total"] == 1
+        assert summary["workflow"]["issues"]["total"] == 1
+        assert summary["workflow"]["risks"]["total"] == 1
+        assert summary["workflow"]["risks"]["critical"] == 1
+        assert summary["workflow"]["milestones"]["total"] == 1
+
+        from yuleosh.desktop import workspace
+        import zipfile
+        proj = workspace._project_dir(pid)
+        for name in ("qa-audit-report.md", "issue-report.md", "project-mgmt-report.md"):
+            assert (proj / ".osh" / "evidence" / name).is_file(), name
+
+        with zipfile.ZipFile(proj / ".osh" / "evidence" / "compliance-pack.zip") as zf:
+            names = zf.namelist()
+            for name in ("qa-audit-report.md", "issue-report.md", "project-mgmt-report.md"):
+                assert name in names, f"{name} not bundled in pack"
+
+    def test_dashboard_shows_workflow_status(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._seed(pid)
+        self._seed_workflows(d, pid)
+
+        d.handle_desktop("POST", f"projects/{pid}/compliance/run", _body({}), {})
+        from yuleosh.desktop import workspace
+        html = (workspace._project_dir(pid) / ".osh" / "reports" /
+                "aspice-dashboard.html").read_text(encoding="utf-8")
+        assert "Workflow Status" in html
+        assert "SUP.1" in html and "SUP.9" in html and "MAN.3" in html
+        # Disclaimer must still be present (E1–E3 ≠ CL).
+        assert "非 ASPICE 能力等级" in html or "NOT Automotive SPICE" in html
+
+    def test_workflow_section_omitted_when_empty(self, desktop_api):
+        """Fail-closed: no workflow records → no status section at all."""
+        d = desktop_api
+        pid = self._project(d)
+        self._seed(pid)
+
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )
+        assert status == 200
+        assert resp["summary"]["workflow"] == {}
+
+        from yuleosh.desktop import workspace
+        html = (workspace._project_dir(pid) / ".osh" / "reports" /
+                "aspice-dashboard.html").read_text(encoding="utf-8")
+        assert "Workflow Status" not in html
+
+
 
 
 

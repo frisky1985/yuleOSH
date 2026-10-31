@@ -215,6 +215,52 @@ def gap_heatmap(domains: list[dict], width: int = 760) -> str:
     return "".join(parts)
 
 
+def workflow_status_html(workflow: Optional[dict]) -> str:
+    """Render the SUP.1 / SUP.9 / MAN.3 workflow-status section.
+
+    ``workflow`` is a dict with optional keys ``qa``, ``issues``, ``risks``,
+    ``milestones``; each value is a dict of counts.  Returns an empty
+    string when no workflow data is supplied (fail-closed: no empty
+    section implying "all good").
+    """
+    if not workflow:
+        return ""
+
+    qa = workflow.get("qa") or {}
+    iss = workflow.get("issues") or {}
+    rsk = workflow.get("risks") or {}
+    ms = workflow.get("milestones") or {}
+
+    rows = [
+        ("SUP.1 QA audits",
+         f"total {qa.get('total', 0)} · open {qa.get('open', 0)}"),
+        ("SUP.9 Issues",
+         f"total {iss.get('total', 0)} · open {iss.get('open', 0)}"),
+        ("MAN.3 Risks",
+         f"total {rsk.get('total', 0)} · open {rsk.get('open', 0)}"
+         f" · critical {rsk.get('critical', 0)}"),
+        ("MAN.3 Milestones",
+         f"completed {ms.get('completed', 0)} / {ms.get('total', 0)}"),
+    ]
+    body = "".join(
+        f'<tr><td><strong>{html.escape(name)}</strong></td>'
+        f'<td>{html.escape(detail)}</td></tr>'
+        for name, detail in rows
+    )
+    return f"""
+<div class="card">
+  <h2>Workflow Status (SUP.1 / SUP.9 / MAN.3)</h2>
+  <table>
+    <thead><tr><th>Workflow</th><th>Status</th></tr></thead>
+    <tbody>{body}</tbody>
+  </table>
+  <p style="color:#6b7280;font-size:0.85em;margin-bottom:0;">
+    以上为过程工作流的记录数量，不代表过程能力等级；证据覆盖度见上方图表。
+  </p>
+</div>
+"""
+
+
 def render_dashboard(
     project_name: str,
     version: str,
@@ -225,16 +271,19 @@ def render_dashboard(
     bp_passed: int = 0,
     bp_total: int = 0,
     extra_html: str = "",
+    workflow: Optional[dict] = None,
 ) -> str:
     """Render a self-contained HTML dashboard with all visualisations.
 
     ``domains`` is a list of dicts: ``{id, title, score, coverage_pct,
-    evidence_count, gap_count}``.
+    evidence_count, gap_count}``.  ``workflow`` optionally carries the
+    SUP.1/SUP.9/MAN.3 counts rendered as an extra status card.
     """
     cov_svg = coverage_bar(domains)
     donut_svg = bp_pass_donut(bp_passed, bp_total)
     dist_svg = score_distribution(d.get("score") for d in domains)
     gap_svg = gap_heatmap(domains)
+    workflow_html = workflow_status_html(workflow)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -309,6 +358,8 @@ def render_dashboard(
     </tbody>
   </table>
 </div>
+
+{workflow_html}
 
 {extra_html}
 

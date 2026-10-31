@@ -75,6 +75,72 @@ def _safe_stage(name: str, fn, errors: list[str]) -> Any:
         return None
 
 
+def _collect_workflow_summary(project_id: str) -> dict:
+    """Collect SUP.1 / SUP.9 / MAN.3 record counts for the dashboard.
+
+    Each source is isolated: a broken workflow store yields zeros for that
+    source instead of failing the whole audit.
+    """
+    workflow: dict = {}
+
+    try:
+        from yuleosh.desktop import qa
+        audits = qa.list_audits(project_id)
+        workflow["qa"] = {
+            "total": len(audits),
+            "open": sum(1 for a in audits if a.get("status") == "open"),
+            "closed": sum(1 for a in audits if a.get("status") == "closed"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.warning("workflow qa summary failed: %s", exc)
+        workflow["qa"] = {"total": 0, "open": 0, "closed": 0}
+
+    try:
+        from yuleosh.desktop import issues
+        items = issues.list_issues(project_id)
+        by_status: dict[str, int] = {}
+        for i in items:
+            s = i.get("status", "open")
+            by_status[s] = by_status.get(s, 0) + 1
+        workflow["issues"] = {
+            "total": len(items),
+            "open": sum(1 for i in items if i.get("status") != "closed"
+                        and i.get("status") != "rejected"),
+            "by_status": by_status,
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.warning("workflow issues summary failed: %s", exc)
+        workflow["issues"] = {"total": 0, "open": 0, "by_status": {}}
+
+    try:
+        from yuleosh.desktop import project_mgmt
+        risks = project_mgmt.list_risks(project_id)
+        workflow["risks"] = {
+            "total": len(risks),
+            "open": sum(1 for r in risks if r.get("status") == "open"),
+            "critical": sum(1 for r in risks if r.get("level") == "critical"),
+        }
+        milestones = project_mgmt.list_milestones(project_id)
+        workflow["milestones"] = {
+            "total": len(milestones),
+            "completed": sum(1 for m in milestones if m.get("status") == "completed"),
+            "in_progress": sum(1 for m in milestones if m.get("status") == "in_progress"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.warning("workflow project-mgmt summary failed: %s", exc)
+        workflow["risks"] = {"total": 0, "open": 0, "critical": 0}
+        workflow["milestones"] = {"total": 0, "completed": 0, "in_progress": 0}
+
+    # Fail-closed: no records at all → omit the section rather than
+    # rendering a misleading wall of zeros.
+    if all(
+        (workflow.get(k) or {}).get("total", 0) == 0
+        for k in ("qa", "issues", "risks", "milestones")
+    ):
+        return {}
+    return workflow
+
+
 def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
     """Run the full compliance audit for a desktop project.
 
@@ -165,6 +231,24 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
 
     _safe_stage("evidence-collection", _stage_evidence, errors)
 
+    # 2b) Workflow evidence export (SUP.1 / SUP.9 / MAN.3).
+    #     Runs before the pack stage so the exported reports are bundled.
+    workflow_summary: dict = {}
+
+    def _stage_workflow() -> None:
+        from yuleosh.desktop import issues
+        from yuleosh.desktop import project_mgmt
+        from yuleosh.desktop import qa
+        workflow_summary.update(_collect_workflow_summary(project_id))
+        if qa.list_audits(project_id):
+            qa.export_report(project_id)
+        if issues.list_issues(project_id):
+            issues.export_report(project_id)
+        if project_mgmt.list_milestones(project_id) or project_mgmt.list_risks(project_id):
+            project_mgmt.export_report(project_id)
+
+    _safe_stage("workflow-export", _stage_workflow, errors)
+
     # 3) Compliance pack ZIP.
     pack_path: Optional[str] = None
 
@@ -199,7 +283,9 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
         gen.export_html(rpt, str(html_path))
         gen.export_json(rpt, str(json_path))
         gen.export_text(rpt, str(text_path))
-        gen.export_dashboard(rpt, str(dash_path), bp_summary=bp_summary)
+        gen.export_dashboard(
+            rpt, str(dash_path), bp_summary=bp_summary, workflow=workflow_summary
+        )
         return rpt, str(html_path), str(json_path), str(dash_path)
 
     rpt_tuple = _safe_stage("audit-report", _stage_report, errors)
@@ -225,6 +311,7 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
         "scores": scores,
         "gaps": gaps,
         "overall_score": overall_score,
+        "workflow": workflow_summary,
     })
 
     # Determine overall run status (fail-closed).

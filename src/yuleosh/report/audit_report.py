@@ -959,13 +959,17 @@ class AuditReportGenerator:
     # ── Export: Visual dashboard (P6) ──────────────────────────────────
 
     def render_dashboard_html(
-        self, report: AspiceReport, bp_summary: Optional[dict] = None
+        self,
+        report: AspiceReport,
+        bp_summary: Optional[dict] = None,
+        workflow: Optional[dict] = None,
     ) -> str:
         """Render a self-contained HTML dashboard with inline SVG charts.
 
         ``bp_summary`` (optional) provides the base-practice pass counts
-        for the donut chart: ``{passed, total_bps}``.  E1–E3 are rendered
-        as evidence-coverage grades with the standard disclaimer.
+        for the donut chart: ``{passed, total_bps}``.  ``workflow``
+        (optional) carries SUP.1/SUP.9/MAN.3 record counts.  E1–E3 are
+        rendered as evidence-coverage grades with the standard disclaimer.
         """
         domains = [
             {
@@ -988,6 +992,7 @@ class AuditReportGenerator:
             domains=domains,
             bp_passed=int(bp.get("passed", 0) or 0),
             bp_total=int(bp.get("total", bp.get("total_bps", 0)) or 0),
+            workflow=workflow,
         )
 
     def export_dashboard(
@@ -995,6 +1000,7 @@ class AuditReportGenerator:
         report: AspiceReport,
         output_path: str,
         bp_summary: Optional[dict] = None,
+        workflow: Optional[dict] = None,
     ) -> str:
         """Export the visual dashboard HTML to ``output_path``.
 
@@ -1003,7 +1009,7 @@ class AuditReportGenerator:
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(
-            self.render_dashboard_html(report, bp_summary),
+            self.render_dashboard_html(report, bp_summary, workflow),
             encoding="utf-8",
         )
         log.info("ASPICE dashboard exported: %s", out)
