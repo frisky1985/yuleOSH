@@ -39,6 +39,9 @@ Thumbs.db
 # WorkBuddy 工作区元数据
 .workbuddy/
 
+# 浏览器/桌面端临时截图（自动生成，禁止入库）
+.screenshots/
+
 # Environment
 .env
 .venv/
