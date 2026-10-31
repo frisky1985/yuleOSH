@@ -45,6 +45,18 @@ def _baselines_dir() -> Path:
     return d
 
 
+def _sessions_dir() -> Path:
+    """Return the sessions directory.
+
+    The pipeline writes to ``<OSH_HOME>/.osh/sessions`` (canonical).
+    Reuse ``_osh_home`` so tests can patch the project root; historically
+    sessions also lived under ``.yuleosh/sessions``.
+    """
+    primary = Path(_osh_home()) / ".osh" / "sessions"
+    legacy = Path(_osh_home()) / ".yuleosh" / "sessions"
+    return primary if primary.exists() or not legacy.exists() else legacy
+
+
 def _load_session_summary(session_dir: Path) -> dict:
     """Load session summary from gate-summary.json and other artifacts."""
     summary = {
@@ -144,7 +156,7 @@ def _compute_session_fingerprint(session_dir: Path) -> dict:
 def cmd_baseline_save(args):
     """Save a session as a named baseline."""
     project_dir = _osh_home()
-    sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    sessions_dir = _sessions_dir()
 
     session_name = args.session
     session_dir = sessions_dir / session_name
@@ -213,7 +225,7 @@ def cmd_baseline_list(args):
 def cmd_consistency_check(args):
     """Check consistency between a session and a baseline."""
     project_dir = _osh_home()
-    sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
+    sessions_dir = _sessions_dir()
 
     session_name = args.session
     session_dir = sessions_dir / session_name

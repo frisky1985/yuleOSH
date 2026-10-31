@@ -1031,6 +1031,14 @@ def main():
         from yuleosh.ui.server import main as ui_main
         ui_main()
 
+    elif args.command in ("consistency", "baseline"):
+        # consistency / baseline 子命令通过 set_defaults(func=...) 绑定处理函数
+        func = getattr(args, "func", None)
+        if func is not None:
+            sys.exit(func(args))
+        parser.print_help()
+        sys.exit(1)
+
     elif args.command == "reverse":
         if getattr(args, "reverse_sub", None) == "scan":
             sys.exit(cmd_reverse_scan(args))
