@@ -34,15 +34,18 @@ _CI_CONFIG_SCHEMA = {
         "keys": {
             "layers": {"type": "list", "items": "int"},
             "layer_dependencies": {"type": "dict"},
+            "gate_policy": {"type": "dict"},
         },
     },
     "coverage": {
         "type": "dict",
         "keys": {
+            "enabled": {"type": "bool"},
             "threshold_line": {"type": "float"},
             "threshold_condition": {"type": "float"},
             "strict": {"type": "bool"},
             "c_fail_under": {"type": "int"},
+            "c_fail_under_branch": {"type": "float"},
             "module_thresholds": {"type": "dict"},
         },
     },
@@ -71,6 +74,7 @@ _CI_CONFIG_SCHEMA = {
             "fail_threshold": {"type": "int"},
             "violations_per_kloc": {"type": "float"},
             "cppcheck_std": {"type": "str"},
+            "enable": {"type": "str"},
             "active_profile": {"type": "str"},
             "rule_texts_path": {"type": "str"},
             "suppress_rules": {"type": "list"},
@@ -101,6 +105,9 @@ _CI_CONFIG_SCHEMA = {
             "exclude_paths": {"type": "list"},
         },
     },
+    # Optional default agent spec loaded by the pipeline orchestrator when no
+    # .yuleosh/agents/*.md files are present. May be a multi-line string.
+    "default_agent_spec": {"type": "str"},
 }
 
 _MISRA_RULE_SCHEMA = {
