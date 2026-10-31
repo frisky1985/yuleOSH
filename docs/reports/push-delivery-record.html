@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>代码推送与交付记录 · yuleOSH</title>
+<style>
+  :root{ --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f8fafc; --brand:#1d4ed8;
+         --ok:#15803d; --warn:#b45309; }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.7;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",Roboto,sans-serif;}
+  .page{max-width:1040px; margin:0 auto; padding:48px 24px 80px;}
+  header{border-bottom:3px solid var(--ink); padding-bottom:20px; margin-bottom:32px;}
+  h1{font-size:29px; margin:0 0 10px; letter-spacing:-.4px;}
+  .sub{color:var(--muted); font-size:14px;}
+  .kv{display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; font-size:13px; color:var(--muted);}
+  .kv strong{color:var(--ink);}
+  h2{font-size:19px; margin:40px 0 12px; padding-left:12px; border-left:4px solid var(--brand);}
+  table{width:100%; border-collapse:collapse; margin:14px 0; background:#fff;
+        border:1px solid var(--line); border-radius:8px; overflow:hidden; font-size:14px;}
+  th,td{padding:9px 12px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{background:#374151; color:#fff; font-weight:600; white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  code{background:#eef2f7; padding:1px 5px; border-radius:4px; font-size:.9em;
+       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .okbox{border-left:4px solid var(--ok); background:#f0fdf4; padding:13px 16px;
+         border-radius:0 6px 6px 0; margin:16px 0;}
+  .note{border-left:4px solid var(--warn); background:#fffbeb; padding:13px 16px;
+        border-radius:0 6px 6px 0; margin:16px 0;}
+  ul{margin:8px 0 8px 20px; padding:0;} li{margin:5px 0;}
+  .cmd{background:#111827; color:#e5e7eb; padding:14px 16px; border-radius:8px;
+       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; overflow-x:auto;}
+  .cmd span{color:#93c5fd;}
+  footer{margin-top:52px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>代码推送与交付记录</h1>
+  <div class="sub">分支 <code>trae/agent-Gm1m13</code> · 远端 <code>frisky1985/yuleOSH</code> · 2026-10-31</div>
+  <div class="kv">
+    <span>远端最新：<strong>269fcc7</strong></span>
+    <span>推送方式：<strong>force-with-lease</strong></span>
+    <span>内容差异：<strong>零</strong></span>
+    <span>前端测试：<strong>75 passed</strong></span>
+  </div>
+</header>
+
+<h2>1. 推送结果</h2>
+<table>
+  <thead><tr><th>项</th><th>值</th></tr></thead>
+  <tbody>
+    <tr><td>远端分支</td><td><code>trae/agent-Gm1m13</code></td></tr>
+    <tr><td>推送前远端 tip</td><td><code>6f57cbb</code>（改写前的旧提交）</td></tr>
+    <tr><td>推送后远端 tip</td><td><code>269fcc7</code></td></tr>
+    <tr><td>推送命令</td><td><code>git push --force-with-lease=trae/agent-Gm1m13:6f57cbb origin trae/agent-Gm1m13</code></td></tr>
+    <tr><td>跟踪关系</td><td>已建立（本地分支跟踪远端同名分支）</td></tr>
+  </tbody>
+</table>
+
+<div class="okbox">
+  <strong>为何需要强制推送：</strong>上一步按要求改写了两个本地提交的提交信息，
+  提交号由 <code>ee72b2e / 6f57cbb</code> 变为 <code>f234bfe / 269fcc7</code>，
+  远端旧历史因此不再包含新提交，普通推送被拒绝（non-fast-forward）。
+  使用 <code>--force-with-lease</code> 并显式指定期望的远端 tip，
+  若远端在此期间被他人更新，推送会被拒绝而不是覆盖。
+</div>
+
+<h2>2. 提交栈</h2>
+<table>
+  <thead><tr><th>提交</th><th>信息</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>269fcc7</code></td>
+      <td>docs: 新增 QA 审计批准操作前端交付报告</td>
+      <td>1 个文件 / 225 行</td>
+    </tr>
+    <tr>
+      <td><code>f234bfe</code></td>
+      <td>feat(desktop): QA 审计批准操作前端组件与单元测试</td>
+      <td>3 个文件 / 436 行</td>
+    </tr>
+    <tr>
+      <td><code>a324e3e</code></td>
+      <td>feat(compliance): 补齐角色字段与审批链并发布 OpenAPI 描述</td>
+      <td>后端审批链 + OpenAPI 描述</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. 推送前验证</h2>
+<table>
+  <thead><tr><th>验证项</th><th>方法</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>改写未改动文件内容</td>
+      <td><code>git diff 6f57cbb 269fcc7</code> / <code>git diff ee72b2e f234bfe</code></td>
+      <td>均无输出</td>
+    </tr>
+    <tr>
+      <td>远端旧提交归属</td>
+      <td><code>git merge-base</code> + 远端 tip 比对</td>
+      <td>merge-base 为 <code>a324e3e</code>，被覆盖的仅本次两条提交，无他人提交</td>
+    </tr>
+    <tr>
+      <td>前端单元测试</td>
+      <td><code>cd frontend &amp;&amp; npx jest --silent</code></td>
+      <td>8 suites / 75 tests 全部通过</td>
+    </tr>
+    <tr>
+      <td>工作区状态</td>
+      <td><code>git status</code></td>
+      <td>clean</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>4. 创建合并请求</h2>
+<p>分支已推送，可直接在 GitHub 发起对比：</p>
+<div class="cmd">https://github.com/frisky1985/yuleOSH/compare/main...trae/agent-Gm1m13?expand=1</div>
+<p>或使用命令行：</p>
+<div class="cmd">gh pr create --base main --head trae/agent-Gm1m13 --title "QA 审计批准链与前端组件" --body "..."</div>
+
+<h2>5. 备注</h2>
+<div class="note">
+  <strong>安全扫描提示：</strong>推送时 GitHub 返回 Dependabot 报告，默认分支存在
+  109 个漏洞告警（8 critical / 31 high / 50 moderate / 20 low）。该提示与本次推送内容无关，
+  但建议单独安排依赖升级评估，不应与合规交付混为一谈。
+</div>
+<div class="note">
+  <strong>未做的事：</strong>未向 <code>main</code> 推送，未创建 PR，未触发任何部署。
+  强制推送仅作用于特性分支 <code>trae/agent-Gm1m13</code>。
+</div>
+
+<footer>
+  本记录依据实际 git 输出与测试结果生成。E1–E3 为证据覆盖度分级，
+  不等同于 ASPICE 能力等级，也不构成正式评估结论。
+</footer>
+
+</div>
+</body>
+</html>
