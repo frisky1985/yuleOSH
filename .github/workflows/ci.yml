@@ -118,21 +118,13 @@ jobs:
         #   knowledge_graph/{store,store_pg}.py
         #   kb/store.py, memory/store.py, knowledge_management/store.py
         #   top-level store.py, store_pg.py, store_interface.py (multi-tenant)
-        ALLOWED=$(cat <<'WL'
-src/yuleosh/store.py
-src/yuleosh/store_pg.py
-src/yuleosh/store_interface.py
-src/yuleosh/knowledge_graph/store.py
-src/yuleosh/knowledge_graph/store_pg.py
-src/yuleosh/kb/store.py
-src/yuleosh/memory/store.py
-src/yuleosh/knowledge_management/store.py
-WL
-        )
+        # 注意: 该列表必须保持单行/同缩进。此前用 heredoc 写多行且顶格，
+        # 会在 YAML 块标量中提前结束 → workflow 解析失败（0 jobs startup failure）。
+        ALLOWED="src/yuleosh/store.py src/yuleosh/store_pg.py src/yuleosh/store_interface.py src/yuleosh/knowledge_graph/store.py src/yuleosh/knowledge_graph/store_pg.py src/yuleosh/kb/store.py src/yuleosh/memory/store.py src/yuleosh/knowledge_management/store.py"
         FOUND=$(find src/yuleosh -name 'store*.py' -type f)
         UNREGISTERED=""
         while IFS= read -r f; do
-          if ! echo "$ALLOWED" | grep -qxF "$f"; then
+          if ! echo "$ALLOWED" | grep -qwF "$f"; then
             UNREGISTERED="${UNREGISTERED}${f}"$'\n'
           fi
         done <<< "$FOUND"
