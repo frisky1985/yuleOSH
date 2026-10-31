@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASPICE 合规闭环总结报告 · yuleOSH</title>
+<style>
+  :root{
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f8fafc;
+    --brand:#1d4ed8; --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",Roboto,sans-serif;
+    line-height:1.7; font-size:15px;
+  }
+  .page{max-width:1100px; margin:0 auto; padding:48px 24px 80px;}
+  header{border-bottom:3px solid var(--ink); padding-bottom:20px; margin-bottom:32px;}
+  h1{font-size:32px; margin:0 0 10px; letter-spacing:-.5px;}
+  .sub{color:var(--muted); font-size:14px;}
+  .kv{display:flex; flex-wrap:wrap; gap:24px; margin-top:16px; font-size:13px; color:var(--muted);}
+  .kv strong{color:var(--ink);}
+  h2{font-size:21px; margin:44px 0 14px; padding-left:12px; border-left:4px solid var(--brand);}
+  h3{font-size:16px; margin:26px 0 8px;}
+  p{margin:10px 0;}
+  table{width:100%; border-collapse:collapse; margin:16px 0; background:#fff;
+        border:1px solid var(--line); border-radius:8px; overflow:hidden; font-size:14px;}
+  th,td{padding:10px 12px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{background:#374151; color:#fff; font-weight:600; white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  code{background:#eef2f7; padding:1px 5px; border-radius:4px; font-size:.9em;
+       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px; margin:18px 0;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px;}
+  .card .num{font-size:28px; font-weight:700; line-height:1.2;}
+  .card .lbl{color:var(--muted); font-size:13px; margin-top:4px;}
+  .note{border-left:4px solid var(--warn); background:#fffbeb; padding:14px 18px;
+        border-radius:0 6px 6px 0; margin:18px 0;}
+  .danger{border-left:4px solid var(--bad); background:#fef2f2; padding:14px 18px;
+          border-radius:0 6px 6px 0; margin:18px 0;}
+  .okbox{border-left:4px solid var(--ok); background:#f0fdf4; padding:14px 18px;
+         border-radius:0 6px 6px 0; margin:18px 0;}
+  ul{margin:8px 0 8px 20px; padding:0;}
+  li{margin:5px 0;}
+  .tag{display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px;
+       background:#e0e7ff; color:#3730a3; margin-right:6px; white-space:nowrap;}
+  .tag.gray{background:#f3f4f6; color:#374151;}
+  footer{margin-top:56px; padding-top:18px; border-top:1px solid var(--line);
+         color:var(--muted); font-size:12.5px;}
+  .flow{background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px; margin:20px 0; overflow-x:auto;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>ASPICE 合规闭环总结报告</h1>
+  <div class="sub">yuleOSH · P1–P9 桌面端合规能力补齐 · 2026-10-31</div>
+  <div class="kv">
+    <span>阶段：<strong>P1–P9（9 个）</strong></span>
+    <span>测试：<strong>87 passed</strong></span>
+    <span>提交：<strong>6 个功能提交</strong></span>
+    <span>工作区：<strong>clean</strong></span>
+  </div>
+</header>
+
+<h2>1. 目标与结论</h2>
+<p>
+  本轮工作的目标是把 ASPICE 所需的过程证据从「散落在 pipeline 里的隐式产物」,
+  收敛为「桌面端可执行、可落盘、可审计的工作流」, 并让一个项目能够一键产出完整的审计交付物。
+</p>
+<div class="okbox">
+  <strong>结论：</strong>P1–P9 全部完成并提交。支持过程域 SUP.1 / SUP.8 / SUP.9 / SUP.10
+  与管理过程域 MAN.3 已形成最小闭环；合规包、审计报告、可视化仪表盘均可由桌面 API 一键生成。
+  所有新增工作流均遵循 fail-closed（无证据即不通过），未引入「假绿」路径。
+</div>
+<div class="danger">
+  <strong>边界声明（必须保留）：</strong>
+  E1–E3 仅为<strong>证据覆盖度</strong>分级，由通过状态证据的占比计算得出，
+  <strong>不是 Automotive SPICE 能力等级（Capability Level）</strong>，
+  也不构成任何正式 ASPICE 评估结论。正式评估须由经认可的评估机构执行。
+</div>
+
+<h2>2. 交付总览</h2>
+<div class="grid">
+  <div class="card"><div class="num">9</div><div class="lbl">完成阶段 P1–P9</div></div>
+  <div class="card"><div class="num">6</div><div class="lbl">支持/管理过程域闭环</div></div>
+  <div class="card"><div class="num">87</div><div class="lbl">相关测试用例通过</div></div>
+  <div class="card"><div class="num">3 135</div><div class="lbl">新增模块代码行数</div></div>
+</div>
+
+<h3>2.1 阶段与过程域映射</h3>
+<table>
+  <thead>
+    <tr><th>阶段</th><th>ASPICE 过程域</th><th>核心模块</th><th>落盘证据</th><th>提交</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>P1</td><td>SUP.10 变更管理</td>
+      <td><code>desktop/change_control.py</code></td>
+      <td><code>change-requests/*.json</code><br><code>.osh/evidence/impact-analysis-*.json</code></td>
+      <td>dd63ee7</td>
+    </tr>
+    <tr>
+      <td>P2</td><td>SUP.8 配置管理 / 基线</td>
+      <td><code>desktop/baseline.py</code></td>
+      <td><code>baselines/{name}.json</code>（sha256 清单 + diff 归档）</td>
+      <td>b23639e</td>
+    </tr>
+    <tr>
+      <td>P3</td><td>可追溯性治理</td>
+      <td><code>desktop/tracing.py</code> + <code>gates.py</code></td>
+      <td>追溯矩阵 / 文件→需求反查 / <code>traceability_gate</code></td>
+      <td>0e7e597</td>
+    </tr>
+    <tr>
+      <td>P4</td><td>BP→GP/RP 映射与能力边界</td>
+      <td><code>compliance/bp_gp_mapping.py</code><br><code>desktop/templates.py</code></td>
+      <td><code>.osh/evidence/process-capability-map.{json,md}</code><br><code>capability-statement.md</code></td>
+      <td>da7b2d3</td>
+    </tr>
+    <tr>
+      <td>P5</td><td>合规包与审计报告</td>
+      <td><code>desktop/audit.py</code></td>
+      <td><code>compliance-pack.zip</code><br><code>.osh/reports/aspice-report.{html,json,txt}</code></td>
+      <td>2c15176</td>
+    </tr>
+    <tr>
+      <td>P6</td><td>审计结果可视化</td>
+      <td><code>report/visualization.py</code></td>
+      <td><code>.osh/reports/aspice-dashboard.html</code>（内联 SVG）</td>
+      <td>ed48211</td>
+    </tr>
+    <tr>
+      <td>P7</td><td>SUP.1 质量保证</td>
+      <td><code>desktop/qa.py</code></td>
+      <td><code>.osh/ci/qa-audit-*.json</code><br><code>.osh/evidence/qa-audit-report.md</code></td>
+      <td rowspan="3">d5e981b</td>
+    </tr>
+    <tr>
+      <td>P8</td><td>SUP.9 问题解决</td>
+      <td><code>desktop/issues.py</code></td>
+      <td><code>.osh/issues/*.json</code><br><code>.osh/evidence/issue-report.md</code></td>
+    </tr>
+    <tr>
+      <td>P9</td><td>MAN.3 项目管理</td>
+      <td><code>desktop/project_mgmt.py</code></td>
+      <td><code>.osh/risks/*.json</code><br><code>.osh/project/milestones.json</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. 桌面端编排链路</h2>
+<p>一次合规审计（P5）把各环节串成单一入口，任一阶段失败不阻断其余阶段，但会如实记入 <code>errors</code>。</p>
+<div class="flow">
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="120" viewBox="0 0 1000 120" style="font-family:inherit;font-size:12.5px;">
+  <defs>
+    <marker id="arw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9ca3af"/>
+    </marker>
+  </defs>
+  <g>
+    <rect x="10" y="38" width="150" height="44" rx="8" fill="#eef2ff" stroke="#6366f1"/>
+    <text x="85" y="58" text-anchor="middle" fill="#312e81">合规检查</text>
+    <text x="85" y="74" text-anchor="middle" fill="#6b7280" font-size="11">BP pass/fail</text>
+
+    <line x1="163" y1="60" x2="197" y2="60" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arw)"/>
+
+    <rect x="200" y="38" width="150" height="44" rx="8" fill="#ecfdf5" stroke="#10b981"/>
+    <text x="275" y="58" text-anchor="middle" fill="#065f46">证据收集</text>
+    <text x="275" y="74" text-anchor="middle" fill="#6b7280" font-size="11">collect + generate</text>
+
+    <line x1="353" y1="60" x2="387" y2="60" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arw)"/>
+
+    <rect x="390" y="38" width="150" height="44" rx="8" fill="#fff7ed" stroke="#f59e0b"/>
+    <text x="465" y="58" text-anchor="middle" fill="#92400e">合规包 ZIP</text>
+    <text x="465" y="74" text-anchor="middle" fill="#6b7280" font-size="11">manifest + sha256</text>
+
+    <line x1="543" y1="60" x2="577" y2="60" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arw)"/>
+
+    <rect x="580" y="38" width="150" height="44" rx="8" fill="#f5f3ff" stroke="#8b5cf6"/>
+    <text x="655" y="58" text-anchor="middle" fill="#4c1d95">审计报告</text>
+    <text x="655" y="74" text-anchor="middle" fill="#6b7280" font-size="11">html / json / txt</text>
+
+    <line x1="733" y1="60" x2="767" y2="60" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arw)"/>
+
+    <rect x="770" y="38" width="150" height="44" rx="8" fill="#f0f9ff" stroke="#0ea5e9"/>
+    <text x="845" y="58" text-anchor="middle" fill="#075985">可视化仪表盘</text>
+    <text x="845" y="74" text-anchor="middle" fill="#6b7280" font-size="11">inline SVG</text>
+
+    <line x1="923" y1="60" x2="957" y2="60" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arw)"/>
+
+    <rect x="960" y="38" width="30" height="44" rx="8" fill="#f3f4f6" stroke="#9ca3af"/>
+    <text x="975" y="64" text-anchor="middle" fill="#374151" font-size="11">API</text>
+  </g>
+</svg>
+</div>
+
+<h3>3.1 桌面 API 路由一览</h3>
+<table>
+  <thead><tr><th>方法</th><th>路径</th><th>作用</th></tr></thead>
+  <tbody>
+    <tr><td>POST</td><td><code>/projects/{id}/compliance/run</code></td><td>触发完整合规审计，返回 summary</td></tr>
+    <tr><td>GET</td><td><code>/projects/{id}/compliance</code></td><td>读取最近一次审计摘要（无则 404）</td></tr>
+    <tr><td>GET</td><td><code>/projects/{id}/compliance/dashboard</code></td><td>返回可视化仪表盘 HTML</td></tr>
+    <tr><td>GET / POST</td><td><code>/projects/{id}/qa</code></td><td>QA 审计列表 / 新建</td></tr>
+    <tr><td>POST</td><td><code>/projects/{id}/qa/{aid}/findings/{fid}/transition</code></td><td>不符合项状态迁移</td></tr>
+    <tr><td>GET / POST</td><td><code>/projects/{id}/issues</code></td><td>问题列表 / 新建</td></tr>
+    <tr><td>POST</td><td><code>/projects/{id}/issues/{iid}/transition</code></td><td>问题状态迁移（需 verified 才能 closed）</td></tr>
+    <tr><td>GET / POST</td><td><code>/projects/{id}/risks</code></td><td>风险登记列表 / 新建</td></tr>
+    <tr><td>GET / POST</td><td><code>/projects/{id}/milestones</code></td><td>里程碑列表 / 新建</td></tr>
+    <tr><td>GET</td><td><code>/projects/{id}/project-mgmt/export</code></td><td>导出项目管理报告</td></tr>
+  </tbody>
+</table>
+
+<h2>4. 设计原则落实情况</h2>
+<h3>4.1 反假绿（fail-closed）</h3>
+<table>
+  <thead><tr><th>场景</th><th>预期行为</th><th>验证</th></tr></thead>
+  <tbody>
+    <tr><td>空项目 / 无需求</td><td>审计状态 <code>not_run</code>、覆盖度 <code>NI</code>，不静默通过</td><td>TestComplianceAudit</td></tr>
+    <tr><td>问题未验证即关闭</td><td>返回 409 <code>InvalidTransition</code></td><td>TestIssues</td></tr>
+    <tr><td>QA 审计仍有未结不符合项</td><td>审计保持 <code>open</code>，不自动关闭</td><td>TestQAWorkflow</td></tr>
+    <tr><td>风险无缓解措施即标记已缓解</td><td>拒绝（400）</td><td>TestProjectMgmt</td></tr>
+    <tr><td>BP 总数为 0</td><td>环形图不渲染，避免伪造 0%</td><td>TestAuditVisualization</td></tr>
+    <tr><td>未识别的合规检查项</td><td>记 failed，无 fallback 通过</td><td>compliance_checker 既有逻辑</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 证据可被合规检查消费</h3>
+<p>
+  新增工作流的产物不是孤立文件：<code>ComplianceChecker</code> 已扩展为直接识别
+  <code>.osh/issues/*.json</code>、<code>.osh/risks/*.json</code> 与
+  <code>.osh/project/milestones.json</code>，对应 SUP.9 与 MAN.3 检查项由
+  「无证据 → RED」转为「有结构化证据 → 通过」。测试中通过
+  <code>_has_issue_records()</code> / <code>_has_risk_records()</code> /
+  <code>_has_milestone_records()</code> 直接断言。
+</p>
+
+<h3>4.3 零外部依赖的可视化</h3>
+<p>
+  仪表盘全部使用内联 SVG 生成（条形图、环形图、分布柱状图、gap 热力条形图），
+  不引入 matplotlib / plotly / CDN，产物为单文件 HTML，可离线交付给审计方。
+</p>
+
+<h3>4.4 能力边界声明</h3>
+<p>
+  P4 的 <code>CAPABILITY_BOUNDARY</code> 明确：CL1 supported、CL2 partial、CL3 不支持。
+  该声明与 E1–E3 免责声明贯穿 <code>process-capability-map.md</code>、审计报告与仪表盘，
+  避免把「证据覆盖度」误读为「能力等级」。
+</p>
+
+<h2>5. 测试与验证</h2>
+<table>
+  <thead><tr><th>测试范围</th><th>用例数</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td><code>tests/test_desktop_api.py</code>（含 P5–P9 新增用例）</td><td>75</td><td>passed</td></tr>
+    <tr><td><code>tests/test_compliance_profile_a104.py</code></td><td>7</td><td>passed</td></tr>
+    <tr><td><code>tests/test_audit_report_no_fake_green.py</code></td><td>5</td><td>passed</td></tr>
+    <tr><td><strong>合计</strong></td><td><strong>87</strong></td><td><strong>passed</strong></td></tr>
+  </tbody>
+</table>
+<p class="sub">运行方式：<code>PYTHONPATH=/workspace/src python3 -m pytest &lt;files&gt; -o addopts="" -q</code></p>
+
+<h2>6. 已知限制与后续建议</h2>
+<div class="note">
+  <strong>限制 1：</strong>本轮覆盖的是「证据是否存在、状态流转是否合规」，
+  不对证据本身的<em>技术正确性</em>做判定（例如测试是否真的覆盖了需求语义）。
+</div>
+<div class="note">
+  <strong>限制 2：</strong>SUP.1 / SUP.9 / MAN.3 为<em>最小闭环</em>，
+  未实现审批角色与权限体系；所有操作以 <code>local</code> 身份记录。
+</div>
+<div class="note">
+  <strong>限制 3：</strong>E1–E3 的计算基于 passed-evidence 比例，
+  对证据数量敏感；证据稀疏的项目容易落在 NI，这是刻意保留的保守行为。
+</div>
+
+<h3>建议的下一步</h3>
+<ul>
+  <li><span class="tag">高</span>为 QA / 风险 / 问题工作流补充角色字段与审批链，使 SUP.1 与 MAN.3 更接近完整过程。</li>
+  <li><span class="tag">中</span>把 P7–P9 的状态汇总接入 P6 仪表盘，形成「证据 + 流转」双视图。</li>
+  <li><span class="tag">中</span>在 <code>compliance/run</code> 中自动调用 QA/Issue/Milestone 导出，使合规包默认包含最新管理过程证据。</li>
+  <li><span class="tag gray">低</span>为桌面 API 增加 OpenAPI 描述，便于前端与外部工具对接。</li>
+</ul>
+
+<h2>7. 提交记录</h2>
+<table>
+  <thead><tr><th>提交</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>d5e981b</code></td><td>SUP.1 / SUP.9 / MAN.3 桌面端合规工作流（P7–P9）</td></tr>
+    <tr><td><code>ed48211</code></td><td>审计结果可视化仪表盘（P6）</td></tr>
+    <tr><td><code>2c15176</code></td><td>桌面端合规包生成与审计报告接口（P5）</td></tr>
+    <tr><td><code>da7b2d3</code></td><td>BP→GP/RP 映射、能力边界声明与文档模板生成器（P4）</td></tr>
+    <tr><td><code>0e7e597</code></td><td>追溯治理纳入质量门与反向查询（P3）</td></tr>
+    <tr><td><code>b23639e</code></td><td>增加基线快照与比对（SUP.8 / P2）</td></tr>
+    <tr><td><code>dd63ee7</code></td><td>P1 变更管理模块首次纳入仓库（提交信息为通用 backup）</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  本报告由仓库实际代码、提交记录与测试结果生成，未包含未经核实的量化宣称。
+  E1–E3 为证据覆盖度分级，不等同于 ASPICE 能力等级，亦不构成正式评估结论。
+</footer>
+
+</div>
+</body>
+</html>
