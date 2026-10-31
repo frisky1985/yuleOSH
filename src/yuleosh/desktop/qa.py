@@ -32,7 +32,7 @@ from yuleosh.desktop import workspace
 
 QA_DIR = Path(".osh") / "ci"
 
-AUDIT_STATUSES = ("open", "closed")
+AUDIT_STATUSES = ("open", "pending_approval", "closed")
 FINDING_STATUSES = ("open", "acknowledged", "resolved", "closed")
 
 _FINDING_TRANSITIONS = {
@@ -76,14 +76,25 @@ def _save(path: Path, data: dict) -> None:
 
 
 def _audit_status(audit: dict) -> str:
-    """An audit is closed only when all its findings are closed."""
+    """Derive audit status from findings and management approval.
+
+    Lifecycle::
+
+        open -> pending_approval (all findings closed, awaiting sign-off)
+             -> closed           (explicit approval recorded)
+
+    Fail-closed: an audit is never closed without an explicit ``approver``,
+    even when it has no findings (an empty audit is not evidence of quality).
+    """
     findings = audit.get("findings", [])
-    if not findings:
-        # No findings → closed only if explicitly marked; default open to
-        # avoid "empty audit = pass" fake-green.
-        return audit.get("status", "open")
-    if all(f.get("status") == "closed" for f in findings):
+    approval = audit.get("approval") or {}
+    findings_closed = (
+        all(f.get("status") == "closed" for f in findings) if findings else True
+    )
+    if approval.get("approved_by") and findings_closed:
         return "closed"
+    if findings and findings_closed:
+        return "pending_approval"
     return "open"
 
 
@@ -103,9 +114,11 @@ def list_audits(project_id: str) -> list[dict]:
                 "id": data["id"],
                 "title": data.get("title", ""),
                 "auditor": data.get("auditor", ""),
+                "auditor_role": data.get("auditor_role", ""),
                 "scope": data.get("scope", ""),
                 "date": data.get("date", ""),
                 "status": _audit_status(data),
+                "approved_by": (data.get("approval") or {}).get("approved_by", ""),
                 "finding_count": len(data.get("findings", [])),
                 "open_findings": sum(
                     1 for fn in data.get("findings", [])
@@ -136,9 +149,11 @@ def create_audit(project_id: str, body: dict[str, Any]) -> dict:
         "id": audit_id,
         "title": title,
         "auditor": (body.get("auditor") or "local").strip(),
+        "auditor_role": (body.get("auditor_role") or "qa_engineer").strip(),
         "scope": (body.get("scope") or "").strip(),
         "date": body.get("date") or _now(),
         "status": "open",
+        "approval": None,
         "findings": findings,
         "created_at": _now(),
         "updated_at": _now(),
@@ -217,6 +232,41 @@ def transition_finding(
     audit["updated_at"] = _now()
     _save(path, audit)
     return finding
+
+
+def approve_audit(
+    project_id: str, audit_id: str, body: dict[str, Any]
+) -> dict:
+    """Record management sign-off and close the audit.
+
+    body: ``approver`` (required), optional ``role`` / ``note``.
+
+    Fail-closed: approval is rejected while any finding is still open, and
+    an audit without findings still requires an explicit approver.
+    """
+    workspace._load_meta(project_id)
+    path = _audit_path(project_id, audit_id)
+    if not path.is_file():
+        raise FileNotFoundError(f"Audit not found: {audit_id}")
+    audit = _load(path)
+
+    approver = (body.get("approver") or "").strip()
+    if not approver:
+        raise ValueError("approver is required")
+    findings = audit.get("findings", [])
+    if findings and not all(f.get("status") == "closed" for f in findings):
+        raise ValueError("All findings must be closed before approval")
+
+    audit["approval"] = {
+        "approved_by": approver,
+        "role": (body.get("role") or "qa_lead").strip(),
+        "note": (body.get("note") or "").strip(),
+        "approved_at": _now(),
+    }
+    audit["status"] = _audit_status(audit)
+    audit["updated_at"] = _now()
+    _save(path, audit)
+    return audit
 
 
 def export_report(project_id: str) -> str:
