@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QA 审计批准操作前端交付报告 · yuleOSH</title>
+<style>
+  :root{ --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f8fafc; --brand:#1d4ed8;
+         --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.7;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",Roboto,sans-serif;}
+  .page{max-width:1080px; margin:0 auto; padding:48px 24px 80px;}
+  header{border-bottom:3px solid var(--ink); padding-bottom:20px; margin-bottom:32px;}
+  h1{font-size:30px; margin:0 0 10px; letter-spacing:-.4px;}
+  .sub{color:var(--muted); font-size:14px;}
+  .kv{display:flex; flex-wrap:wrap; gap:24px; margin-top:14px; font-size:13px; color:var(--muted);}
+  .kv strong{color:var(--ink);}
+  h2{font-size:20px; margin:42px 0 12px; padding-left:12px; border-left:4px solid var(--brand);}
+  h3{font-size:15.5px; margin:24px 0 8px;}
+  table{width:100%; border-collapse:collapse; margin:14px 0; background:#fff;
+        border:1px solid var(--line); border-radius:8px; overflow:hidden; font-size:14px;}
+  th,td{padding:9px 12px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{background:#374151; color:#fff; font-weight:600; white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  code{background:#eef2f7; padding:1px 5px; border-radius:4px; font-size:.9em;
+       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin:16px 0;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px 18px;}
+  .card .num{font-size:26px; font-weight:700; line-height:1.2;}
+  .card .lbl{color:var(--muted); font-size:13px; margin-top:3px;}
+  .okbox{border-left:4px solid var(--ok); background:#f0fdf4; padding:13px 16px;
+         border-radius:0 6px 6px 0; margin:16px 0;}
+  .note{border-left:4px solid var(--warn); background:#fffbeb; padding:13px 16px;
+        border-radius:0 6px 6px 0; margin:16px 0;}
+  ul{margin:8px 0 8px 20px; padding:0;} li{margin:5px 0;}
+  .flow{background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px; margin:18px 0; overflow-x:auto;}
+  footer{margin-top:52px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>QA 审计批准操作前端交付报告</h1>
+  <div class="sub">SUP.1 质量保证 · 审批链前端实现与单元测试 · 2026-10-31</div>
+  <div class="kv">
+    <span>新增文件：<strong>3</strong></span>
+    <span>代码行：<strong>436</strong></span>
+    <span>用例：<strong>7（全部通过）</strong></span>
+    <span>前端全量：<strong>75 passed</strong></span>
+  </div>
+</header>
+
+<h2>1. 交付内容</h2>
+<table>
+  <thead><tr><th>文件</th><th>行数</th><th>职责</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>frontend/src/lib/qa-api.ts</code></td><td>80</td>
+      <td>三个调用封装：列表、详情、批准；附带状态与记录类型</td>
+    </tr>
+    <tr>
+      <td><code>frontend/src/components/qa/qa-approval-panel.tsx</code></td><td>157</td>
+      <td>审计列表、详情、批准表单与状态展示</td>
+    </tr>
+    <tr>
+      <td><code>frontend/src/__tests__/qa-approval-panel.test.tsx</code></td><td>199</td>
+      <td>7 个单元测试，覆盖主路径与 fail-closed 分支</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="grid">
+  <div class="card"><div class="num">3</div><div class="lbl">API 方法（list / get / approve）</div></div>
+  <div class="card"><div class="num">3</div><div class="lbl">审计状态（open / pending_approval / closed）</div></div>
+  <div class="card"><div class="num">7</div><div class="lbl">单元测试，0 失败</div></div>
+  <div class="card"><div class="num">8</div><div class="lbl">前端测试套件全部通过</div></div>
+</div>
+
+<h2>2. 后端契约对齐</h2>
+<table>
+  <thead><tr><th>接口</th><th>返回信封</th><th>前端处理</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>GET /projects/{id}/qa</code></td><td><code>{ ok, audits[] }</code></td>
+      <td>取 <code>res.audits ?? []</code>，渲染摘要列表</td>
+    </tr>
+    <tr>
+      <td><code>GET /projects/{id}/qa/{audit_id}</code></td><td><code>{ ok, audit }</code></td>
+      <td>批准前先拉详情，复核不符合项状态</td>
+    </tr>
+    <tr>
+      <td><code>POST /projects/{id}/qa/{audit_id}/approve</code></td><td><code>{ ok, audit }</code></td>
+      <td>提交 <code>{ approver, role, note }</code>；直接用返回值更新视图</td>
+    </tr>
+    <tr>
+      <td>错误（400）</td><td><code>{ ok:false, error }</code></td>
+      <td><code>apiFetch</code> 抛出后端原文，组件原样展示</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="okbox">
+  <strong>状态流转与后端一致：</strong>所有不符合项关闭后审计进入 <code>pending_approval</code>；
+  只有显式提交 <code>approver</code> 才转为 <code>closed</code>。空审计同样必须批准，
+  不因「没有不符合项」而自动通过。
+</div>
+
+<div class="flow">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="120" viewBox="0 0 900 120"
+     style="font-family:inherit;font-size:12.5px;">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9ca3af"/>
+    </marker>
+  </defs>
+  <rect x="10" y="40" width="170" height="44" rx="8" fill="#fef2f2" stroke="#ef4444"/>
+  <text x="95" y="60" text-anchor="middle" fill="#991b1b">open</text>
+  <text x="95" y="76" text-anchor="middle" fill="#6b7280" font-size="11">存在未关闭不符合项</text>
+
+  <line x1="183" y1="62" x2="227" y2="62" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="205" y="52" text-anchor="middle" fill="#6b7280" font-size="10">全部关闭</text>
+
+  <rect x="230" y="40" width="200" height="44" rx="8" fill="#fffbeb" stroke="#f59e0b"/>
+  <text x="330" y="60" text-anchor="middle" fill="#92400e">pending_approval</text>
+  <text x="330" y="76" text-anchor="middle" fill="#6b7280" font-size="11">等待管理层签署</text>
+
+  <line x1="433" y1="62" x2="477" y2="62" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="455" y="52" text-anchor="middle" fill="#6b7280" font-size="10">approver</text>
+
+  <rect x="480" y="40" width="180" height="44" rx="8" fill="#f0fdf4" stroke="#22c55e"/>
+  <text x="570" y="60" text-anchor="middle" fill="#166534">closed</text>
+  <text x="570" y="76" text-anchor="middle" fill="#6b7280" font-size="11">记录批准人 / 时间</text>
+
+  <rect x="700" y="40" width="185" height="44" rx="8" fill="#eef2ff" stroke="#6366f1"/>
+  <text x="792" y="60" text-anchor="middle" fill="#312e81">审计证据</text>
+  <text x="792" y="76" text-anchor="middle" fill="#6b7280" font-size="11">qa-audit-report.md</text>
+
+  <line x1="663" y1="62" x2="697" y2="62" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#a)"/>
+</svg>
+</div>
+
+<h2>3. 交互与防护设计</h2>
+<table>
+  <thead><tr><th>场景</th><th>前端行为</th><th>依据</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>列表中存在 <code>open</code> 审计</td>
+      <td>不显示「批准」按钮，仅可查看详情</td>
+      <td>未完成审计不可批准</td>
+    </tr>
+    <tr>
+      <td>批准人输入为空</td>
+      <td>「确认批准并关闭」禁用</td>
+      <td>后端要求 <code>approver</code> 非空</td>
+    </tr>
+    <tr>
+      <td>仍有不符合项未关闭</td>
+      <td>即使填写批准人，按钮仍禁用</td>
+      <td>fail-closed 双重校验</td>
+    </tr>
+    <tr>
+      <td>空审计（无不符合项）</td>
+      <td>显示「不代表质量合格」，仍需显式批准人</td>
+      <td>空审计 ≠ 合格</td>
+    </tr>
+    <tr>
+      <td>后端返回 400</td>
+      <td>展示后端错误原文，状态保持不变</td>
+      <td>错误如实反映，不吞异常</td>
+    </tr>
+    <tr>
+      <td>批准成功</td>
+      <td>就地更新详情并刷新列表</td>
+      <td>避免二次请求造成的状态漂移</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>4. 测试结果</h2>
+<table>
+  <thead><tr><th>用例</th><th>验证点</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td>列表状态标注</td><td>pending / open 文案与「批准」入口数量</td><td>passed</td></tr>
+    <tr><td>打开详情</td><td>不符合项、责任人、调用参数</td><td>passed</td></tr>
+    <tr><td>批准人必填</td><td>空值禁用、输入后启用</td><td>passed</td></tr>
+    <tr><td>不符合项未全关闭</td><td>填写批准人仍禁用</td><td>passed</td></tr>
+    <tr><td>批准成功</td><td>参数 <code>{approver, role:"qa_lead", note}</code> 与关闭展示</td><td>passed</td></tr>
+    <tr><td>后端 400</td><td>错误原文透出、状态保持 pending</td><td>passed</td></tr>
+    <tr><td>空审计</td><td>「不代表质量合格」提示与强制批准人</td><td>passed</td></tr>
+  </tbody>
+</table>
+
+<p>执行命令：<code>cd frontend &amp;&amp; npx jest --silent</code></p>
+<p><strong>结果：</strong>8 个测试套件、75 个用例全部通过；新增套件 7/7 通过。</p>
+
+<h2>5. 环境与提交说明</h2>
+<div class="note">
+  <strong>依赖安装：</strong><code>frontend</code> 原本无 <code>node_modules</code>，
+  本次执行 <code>npm ci --ignore-scripts</code>（915 个包）。<code>node_modules</code>
+  已被版本控制忽略，未进入仓库。
+</div>
+<div class="note">
+  <strong>提交记录：</strong>本次 3 个新文件由环境自动提交至
+  <code>ee72b2e</code>（提交信息为通用的 <code>feat: update workspace</code>），
+  未再产生独立提交；后端审批链与 OpenAPI 对应提交为 <code>a324e3e</code>。
+</div>
+
+<h2>6. 后续建议</h2>
+<ul>
+  <li><strong>接入页面：</strong>将 <code>QaApprovalPanel</code> 挂载到 <code>/dashboard</code> 或 <code>/desktop</code> 的审计分区，传入当前 <code>projectId</code>。</li>
+  <li><strong>权限门槛：</strong>当前前端允许任意操作者填写批准人；建议结合 <code>use-session-role</code> 限制只有 QA 负责人角色可见批准入口。</li>
+  <li><strong>端到端验证：</strong>补一条 Playwright 用例，覆盖「关闭不符合项 → 待批准 → 批准 → 已关闭」真实后端链路。</li>
+  <li><strong>测试环境固化：</strong>在 CI 中缓存 <code>node_modules</code>，避免每次安装 915 个包。</li>
+</ul>
+
+<footer>
+  本报告依据实际代码与测试输出生成。E1–E3 为证据覆盖度分级，不等同于 ASPICE 能力等级，
+  也不构成正式评估结论。
+</footer>
+
+</div>
+</body>
+</html>
