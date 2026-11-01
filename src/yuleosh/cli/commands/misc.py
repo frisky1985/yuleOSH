@@ -846,12 +846,19 @@ def cmd_demo_uart(target_dir: str = None, do_build: bool = False, skip_cmake: bo
 
 
 def cmd_ci_run(layer: str):
-    from yuleosh.ci.run import run_layer1, run_layer2, run_layer3
+    from yuleosh.ci.run import run_layer1, run_layer2, run_layer_25, run_layer3
 
-    layers = {"1": run_layer1, "2": run_layer2, "3": run_layer3}
+    layers = {
+        "1": run_layer1,
+        "2": run_layer2,
+        "25": run_layer_25,
+        "2.5": run_layer_25,
+        "3": run_layer3,
+    }
     handler = layers.get(layer)
     if not handler:
         print(f"❌ Unknown CI layer: {layer}", file=sys.stderr)
+        print("   Supported layers: 1, 2, 2.5 (or 25), 3", file=sys.stderr)
         sys.exit(1)
 
     success = handler()

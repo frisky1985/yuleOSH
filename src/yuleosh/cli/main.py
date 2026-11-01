@@ -18,7 +18,7 @@ Usage:
     yuleosh pipeline status [name]           — Show pipeline status
     yuleosh review auto                      — Auto-review changes
     yuleosh review task <name> [kind]        — Review specific task
-    yuleosh ci run <layer>                   — Run CI layer (1/2/3)
+    yuleosh ci run <layer>                   — Run CI layer (1/2/2.5/3)
     yuleosh evidence pack                    — Generate ASPICE compliance pack
     yuleosh audit evidence [-o <dir>]        — Generate CL2 audit evidence bundle
     yuleosh stats [--json]                   — Show project statistics
@@ -271,7 +271,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ci = sub.add_parser("ci", help="CI pipeline management")
     csub = p_ci.add_subparsers(dest="ci_sub")
     p_ci_run = csub.add_parser("run", help="Run a CI layer")
-    p_ci_run.add_argument("layer", help="CI layer (1/2/3)")
+    p_ci_run.add_argument("layer", help="CI layer (1/2/2.5/3)")
 
     # evidence / ev — ASPICE compliance evidence
     p_ev = sub.add_parser("ev", help="ASPICE compliance evidence & gap check")
