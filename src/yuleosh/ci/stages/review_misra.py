@@ -786,11 +786,16 @@ def run_misra_check(project_dir: str, ci: CIResult,
                 f"{actual_vpkloc:.1f} business-code (profile-matching) violations/kloc > limit {violations_per_kloc}"
             )
 
-    # Advisory-blocking (separate flag) — 仅 business, profile-aware
-    if not profile_block_on or "advisory" in profile_block_on:
-        if fail_on_advisory and advisory_count > 0 and business_block_on:
-            should_block = True
-            block_reasons.append(f"{advisory_count} Advisory business-code violation(s) (fail_on_advisory=True)")
+    # Advisory-blocking (separate flag) — 仅 business.
+    # ``fail_on_advisory`` is an independent override of the profile's
+    # ``block_on``: when set, advisory violations block regardless of
+    # whether "advisory" is in the profile's ``block_on`` list. (Previously
+    # this was gated behind ``"advisory" in profile_block_on``, which
+    # defeated the flag for the default safety profile whose block_on is
+    # [mandatory, required].)
+    if fail_on_advisory and advisory_count > 0 and business_block_on:
+        should_block = True
+        block_reasons.append(f"{advisory_count} Advisory business-code violation(s) (fail_on_advisory=True)")
 
     detail = (
         f"{total_violations} MISRA violation(s) "

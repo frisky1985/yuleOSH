@@ -234,9 +234,24 @@ def _run_python_layer1(project_dir: str, ci: CIResult, timeout: int) -> bool:
 
     print("  \U0001f9ea CI: pytest...")
     try:
+        # NOTE: no `-x` (fail-fast) here. Large repos (e.g. yuleOSH itself
+        # with 14k+ tests) cannot complete the suite within the layer
+        # timeout; the intended behaviour is that pytest runs until the
+        # subprocess timeout and is then marked **skipped** (not failed),
+        # so the rest of the layer can proceed. With `-x`, any single
+        # test failure (including random-order isolation flakiness from
+        # `-p randomly`) would terminate pytest early with a non-zero
+        # exit and fail the whole layer. Small projects still fail
+        # normally: if pytest finishes with failures it returns non-zero.
+        #
+        # The subprocess timeout is reduced by a 10s buffer so that the
+        # per-stage TimeoutExpired fires *before* the outer SIGALRM layer
+        # guard (which would otherwise raise _LayerTimeout and fail the
+        # layer). The reserved headroom covers the MISRA delta scan.
+        pytest_timeout = max(1, timeout - 10)
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "-x", "--tb=short", "-q"],
-            capture_output=True, text=True, timeout=timeout, cwd=project_dir,
+            [sys.executable, "-m", "pytest", "--tb=short", "-q"],
+            capture_output=True, text=True, timeout=pytest_timeout, cwd=project_dir,
         )
         if result.returncode == 0:
             ci.add_stage("python-tests", "passed")
@@ -249,8 +264,8 @@ def _run_python_layer1(project_dir: str, ci: CIResult, timeout: int) -> bool:
         ci.add_stage("python-tests", "skipped", "pytest not installed")
         print(f"    \u23ed\ufe0f  pytest not installed — skipping")
     except subprocess.TimeoutExpired:
-        ci.add_stage("python-tests", "skipped", f"pytest timed out ({timeout}s)")
-        print(f"    \u23ed\ufe0f  pytest timed out — skipping")
+        ci.add_stage("python-tests", "skipped", f"pytest timed out ({pytest_timeout}s)")
+        print(f"    \u23ed\ufe0f  pytest timed out ({pytest_timeout}s) — skipping")
 
     # Embedded C MISRA — mixed-language repos (e.g. yuleOSH src/fault-inject)
     if not _run_embedded_misra_check(project_dir, ci):

@@ -21,6 +21,11 @@ def _categorize_file(filepath: str, categories: dict) -> tuple[str, dict]:
 
     匹配优先级: template > third_party > business。
     无匹配时默认返回 ("business", business_config).
+
+    Uses ``_matches_glob`` (true recursive ``**``) instead of ``fnmatch``
+    so patterns like ``src/yuleosh/templates/**`` correctly match nested
+    files — ``fnmatch`` treats ``*`` as non-separator-crossing and would
+    silently miss everything below the first path component.
     """
     basename = os.path.basename(filepath)
     # Priority order: template, third_party, business
@@ -28,8 +33,7 @@ def _categorize_file(filepath: str, categories: dict) -> tuple[str, dict]:
     for cat_name in priority_order:
         cat_cfg = categories.get(cat_name, {})
         for pattern in cat_cfg.get("paths", []):
-            if fnmatch.fnmatch(filepath, pattern) or \
-               fnmatch.fnmatch(basename, pattern):
+            if _matches_glob(filepath, pattern) or _matches_glob(basename, pattern):
                 return cat_name, cat_cfg
     # Fallback: business
     return "business", categories.get("business", {})

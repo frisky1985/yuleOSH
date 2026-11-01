@@ -205,6 +205,10 @@ class TestTryParseHermesJson:
         result = _try_parse_hermes_json(raw, "s1")
         assert result["summary"] == "OK"
 
-    def test_get_spec_mtime_missing(self):
-        mtime = _get_spec_mtime("/nonexistent")
+    def test_get_spec_mtime_missing(self, tmp_path):
+        # Use a path that is guaranteed not to exist (tmp_path is freshly
+        # created per test). Hardcoding "/nonexistent" is unsafe because that
+        # path may legitimately exist in some sandbox/CI environments.
+        missing = str(tmp_path / "definitely_missing_spec.md")
+        mtime = _get_spec_mtime(missing)
         assert mtime == 0.0

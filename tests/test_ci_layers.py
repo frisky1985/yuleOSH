@@ -108,12 +108,16 @@ def test_get_latest_layer_result_latest():
     with tempfile.TemporaryDirectory() as tmp:
         ci_dir = Path(tmp) / ".osh" / "ci"
         ci_dir.mkdir(parents=True)
-        (ci_dir / "layer1-old.json").write_text(
-            json.dumps({"layer": 1, "status": "failed"})
-        )
-        (ci_dir / "layer1-new.json").write_text(
-            json.dumps({"layer": 1, "status": "passed"})
-        )
+        old_f = ci_dir / "layer1-old.json"
+        new_f = ci_dir / "layer1-new.json"
+        old_f.write_text(json.dumps({"layer": 1, "status": "failed"}))
+        new_f.write_text(json.dumps({"layer": 1, "status": "passed"}))
+        # Force distinct mtimes so the test exercises the "newest wins" path
+        # rather than the nanosecond tiebreaker (which is fail-closed).
+        old_ts = 1_000_000_000
+        new_ts = old_ts + 10_000
+        os.utime(old_f, (old_ts, old_ts))
+        os.utime(new_f, (new_ts, new_ts))
         result = get_latest_layer_result(1, tmp)
         assert result is not None
         assert result["status"] == "passed", "Should return the newest file by mtime"
