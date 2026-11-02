@@ -116,6 +116,19 @@ class VectorStore:
                 emb = item["embedding"]
                 rid = item.get("rowid")
 
+                # 2026-11-02: 上游 embedding 数量不足时该条为 None —
+                # 跳过毒条目而非让 len(None) 抛 TypeError 毁掉整批
+                # (好条目全部回滚丢失)。
+                if emb is None:
+                    log.warning("Skipping item with no embedding (hash=%s)", ch)
+                    continue
+                if not isinstance(emb, (list, tuple)):
+                    log.warning(
+                        "Skipping item with non-sequence embedding (hash=%s, type=%s)",
+                        ch, type(emb).__name__,
+                    )
+                    continue
+
                 if len(emb) > MAX_DIM:
                     log.warning("Skipping embedding dim %d > MAX_DIM", len(emb))
                     continue
@@ -162,21 +175,26 @@ class VectorStore:
         """批量删除向量（清理过期索引，P1）。
 
         Returns:
-            int: 删除数量
+            int: 实际删除数量 (rowcount — 不存在的 hash 不计入)
         """
         if not self._available or not content_hashes:
             return 0
-        placeholders = ",".join("?" for _ in content_hashes)
-        try:
-            self.conn.execute(
-                f"DELETE FROM kb_embeddings WHERE content_hash IN ({placeholders})",
-                content_hashes,
-            )
-            self.conn.commit()
-            return len(content_hashes)
-        except Exception as e:  # noqa: BLE001
-            log.warning("remove_by_content_hashes failed: %s", e)
-            return 0
+        # SQLite 变量数上限 (老版本 999) — 分片防超限
+        deleted = 0
+        for i in range(0, len(content_hashes), 500):
+            chunk = content_hashes[i:i + 500]
+            placeholders = ",".join("?" for _ in chunk)
+            try:
+                cur = self.conn.execute(
+                    f"DELETE FROM kb_embeddings WHERE content_hash IN ({placeholders})",
+                    chunk,
+                )
+                self.conn.commit()
+                deleted += cur.rowcount or 0
+            except Exception as e:  # noqa: BLE001
+                log.warning("remove_by_content_hashes failed: %s", e)
+                return deleted
+        return deleted
 
     # ---- 查询 ----
 

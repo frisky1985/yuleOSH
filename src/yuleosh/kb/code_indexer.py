@@ -119,7 +119,9 @@ def _extract_c_signatures(filepath: Path) -> dict:
         log.debug("Failed to read %s: %s", filepath, e)
         return {"functions": []}
 
-    # C 函数定义正则（简化版，覆盖常见模式）
+    # C 函数定义/声明正则（简化版，覆盖常见模式）。
+    # 2026-11-02: 结尾接受 `;` — .h 头文件里的 API 声明以分号结尾,
+    # 只匹配 `{`/行尾会把整个头文件 API 契约漏提 (C 索引核心价值)。
     C_FUNC_RE = re.compile(
         r"^"
         r"(?:static\s+|extern\s+|inline\s+)?"
@@ -128,7 +130,7 @@ def _extract_c_signatures(filepath: Path) -> dict:
         r"\s+"
         r"(\w[\w\d_]*)"          # 函数名
         r"\s*\(([^;{}]*)\)"      # 参数列表
-        r"\s*(?:\{|$)",          # 函数体开始或行尾
+        r"\s*(?:\{|;|$)",        # 函数体开始 / 声明分号 / 行尾
         re.MULTILINE,
     )
 
@@ -297,15 +299,36 @@ def index_project_code(
             from yuleosh.kb.store import KbStore
             content_hash = KbStore._content_hash(content)
 
-            # 增量判定：已存在则跳过
+            # 增量判定 (2026-11-02, 反假陈旧): 按 (source, source_ref)
+            # 定位**该文件**的既有索引, 而非全局 content_hash 去重 —
+            # 内容未变 → 跳过; 已变 (函数改名/签名修改/文件移动) → 先删
+            # 旧条目 (文章 + 向量) 再插新的。全局 hash 去重会让旧签名
+            # 永驻 KB, RAG 回注给 LLM 的代码上下文包含已删除的 API。
             conn = store._get_conn()
             cur = conn.execute(
-                "SELECT 1 FROM kb_articles WHERE content_hash = ? LIMIT 1",
-                (content_hash,),
+                "SELECT id, content_hash FROM kb_articles "
+                "WHERE source = 'code_index' AND source_ref = ?",
+                (rel_path,),
             )
-            if cur.fetchone() is not None:
+            existing = cur.fetchall()
+            if any(row["content_hash"] == content_hash for row in existing):
                 report.files_skipped_unchanged += 1
                 continue
+            if existing:
+                stale_hashes = [row["content_hash"] for row in existing]
+                for row in existing:
+                    store.delete_article(row["id"])
+                if vector_store is not None:
+                    try:
+                        vector_store.remove_by_content_hashes(stale_hashes)
+                    except Exception as e:  # noqa: BLE001 — 清理失败不阻断索引
+                        log.warning(
+                            "Stale vector cleanup failed for %s: %s", rel_path, e
+                        )
+                log.info(
+                    "Re-indexing %s: removed %d stale article(s)",
+                    rel_path, len(existing),
+                )
 
             # 创建 KB 文章
             title = f"[code:{language}] {rel_path}"
