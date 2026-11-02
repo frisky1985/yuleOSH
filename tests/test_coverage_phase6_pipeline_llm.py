@@ -351,24 +351,40 @@ class TestKnowledgeInjectionSources:
         )
 
         cfg = PipelineKnowledgeConfig()
+        # 默认路径 (rag_engine=None): KB hybrid search — mock 该层,
+        # 避免依赖测试机的真实 KB 库内容 (回归修复 2026-11-02:
+        # 默认路径曾从 _sync_rag_context 切换到 _kb_hybrid_search_context
+        # 而测试未更新, 在 KB 非空的机器上假绿/偶发失败).
         with mock.patch(
-            "yuleosh.pipeline.knowledge_injection._sync_rag_context",
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
             return_value="plain ctx",
         ):
             assert _assemble_rag("p", cfg) == f"{RAG_HEADER}\nplain ctx"
 
         with mock.patch(
-            "yuleosh.pipeline.knowledge_injection._sync_rag_context",
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
             return_value="## Knowledge Context (RAG)\nnormalized body",
         ):
             assert _assemble_rag("p", cfg) == f"{RAG_HEADER}\nnormalized body"
 
         # 只有旧 header 没有正文 → 只剩我们的 header
         with mock.patch(
-            "yuleosh.pipeline.knowledge_injection._sync_rag_context",
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
             return_value="## Knowledge Context (RAG)",
         ):
             assert _assemble_rag("p", cfg) == RAG_HEADER
+
+        # legacy 路径 (显式 rag_engine): 仍走 _sync_rag_context
+        legacy_engine = mock.MagicMock()
+        with mock.patch(
+            "yuleosh.pipeline.knowledge_injection._sync_rag_context",
+            return_value="legacy ctx",
+        ) as m_sync:
+            assert (
+                _assemble_rag("p", cfg, rag_engine=legacy_engine)
+                == f"{RAG_HEADER}\nlegacy ctx"
+            )
+            m_sync.assert_called_once()
 
     def test_assemble_rag_empty_and_failure(self):
         from yuleosh.pipeline.knowledge_injection import (
@@ -378,12 +394,12 @@ class TestKnowledgeInjectionSources:
 
         cfg = PipelineKnowledgeConfig()
         with mock.patch(
-            "yuleosh.pipeline.knowledge_injection._sync_rag_context",
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
             return_value="",
         ):
             assert _assemble_rag("p", cfg) == ""
         with mock.patch(
-            "yuleosh.pipeline.knowledge_injection._sync_rag_context",
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
             side_effect=RuntimeError("rag broken"),
         ):
             assert _assemble_rag("p", cfg) == ""
@@ -606,7 +622,12 @@ class TestAssemblePipelineKnowledge:
             assemble_pipeline_knowledge,
         )
 
+        # RAG 默认路径必须显式 mock (回归修复 2026-11-02):
+        # 不 mock 时真实 KB 检索结果会进入输出, 测试随机器 KB 内容漂移.
         with mock.patch(
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
+            return_value="",
+        ), mock.patch(
             "yuleosh.pipeline.knowledge_injection._assemble_memory",
             return_value="m",
         ):
@@ -621,6 +642,9 @@ class TestAssemblePipelineKnowledge:
 
         cfg = PipelineKnowledgeConfig(max_chars=10, inject_active=False)
         with mock.patch(
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
+            return_value="",
+        ), mock.patch(
             "yuleosh.pipeline.knowledge_injection._assemble_memory",
             return_value="memory-section-long",
         ):
@@ -636,6 +660,9 @@ class TestAssemblePipelineKnowledge:
 
         cfg = PipelineKnowledgeConfig(max_chars=4000, inject_active=False)
         with mock.patch(
+            "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
+            return_value="",
+        ), mock.patch(
             "yuleosh.pipeline.knowledge_injection._assemble_memory",
             return_value="short",
         ):
