@@ -921,13 +921,6 @@ class CodegenEngine:
 #endif /* {guard} */
 """
 
-    _KNOWN_BSW_HEADERS = {
-        "Std_Types.h": {"types": True},
-        "Compiler.h": {},
-        "Platform_Types.h": {"types": True},
-        "PlatformTypes.h": {"types": True},
-    }
-
     _BSW_TYPES_CONTENT = """\
 #ifndef {guard}
 #define {guard}

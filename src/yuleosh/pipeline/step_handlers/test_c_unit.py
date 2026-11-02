@@ -83,7 +83,12 @@ def run_c_test_suite(project_dir: str | Path,
     2026-08-13 (行为护栏): 从 step_c_unit_test 提取的可复用核心 —
     codegen-deploy 用它在部署前后各跑一次, 对比测试结果检测行为回归。
     返回 dict: runner / returncode / passed / failed / output / status /
-    c_files / c_test_files / c_header_files。
+    c_files / c_test_files / c_header_files / skipped。
+
+    2026-11-02 (反假绿): gcc-compile-check 回退路径中, 因缺 CMock 被跳过的
+    测试记入 ``skipped``; 若**全部**测试都被跳过 (实际执行数 = 0),
+    status 必须是 ``skipped`` 而非 ``passed`` — 0 个测试执行过的"通过"
+    是假绿 (guardrail.TestResult 四态契约: 不得静默, guardrail.py:238-250)。
 
     force_rebuild (2026-08-13): 行为护栏场景传 True — 删除 build 里的
     .o/.a 强制全量重编。原因: 部署后立即测试时 cmake 增量构建可能因
@@ -123,7 +128,7 @@ def run_c_test_suite(project_dir: str | Path,
         return {
             "runner": "none", "returncode": None, "passed": 0, "failed": 0,
             "output": "", "status": "skipped", "reason": "No C source files found",
-            "c_files": 0, "c_test_files": 0, "c_header_files": 0,
+            "c_files": 0, "c_test_files": 0, "c_header_files": 0, "skipped": 0,
         }
 
     # 2. Find C test files
@@ -142,6 +147,9 @@ def run_c_test_suite(project_dir: str | Path,
     test_runner = "none"
     passed = 0
     failed = 0
+    # 2026-11-02 (反假绿): 被跳过的测试 (缺 CMock 等) — 全跳过时 status
+    # 不得为 passed。外层初始化, gcc fallback 路径填充。
+    skipped_tests: list[str] = []
 
     # 3a0. Try ctest first — CMake projects define real buildable tests.
     cmake_build_dirs = (
@@ -325,7 +333,6 @@ def run_c_test_suite(project_dir: str | Path,
             # 彻底避免跨测试重复符号; 单测试文件项目行为不变。
             compiled_ok = True
             per_test_log = []
-            skipped_tests = []
             for tf in c_test_files:
                 stem = Path(tf).stem
                 # Check if test requires CMock but CMock not available
@@ -386,6 +393,10 @@ def run_c_test_suite(project_dir: str | Path,
         status = "failed"
     elif failed > 0:
         status = "failed"
+    elif skipped_tests and len(skipped_tests) >= len(c_test_files):
+        # 2026-11-02 (反假绿): 全部测试因缺 CMock 等原因被跳过 —
+        # 0 个测试真实执行过, 不得判 passed (假绿)。
+        status = "skipped"
     else:
         status = "passed"
 
@@ -396,6 +407,8 @@ def run_c_test_suite(project_dir: str | Path,
         "passed": passed,
         "failed": failed,
         "status": status,
+        "skipped": len(skipped_tests),
+        "skipped_tests": list(skipped_tests),
         "c_files": len(c_files),
         "c_test_files": len(c_test_files),
         "c_header_files": len(c_header_files),
@@ -497,6 +510,8 @@ def step_c_unit_test(session: PipelineSession) -> str:
             "output": test_output[:3000],
             "passed": passed,
             "failed": failed,
+            "skipped": result.get("skipped", 0),
+            "skipped_tests": result.get("skipped_tests", []),
             "status": status,
         }
 

@@ -287,6 +287,9 @@ class CCTestRunner:
                 "c_files": raw.get("c_files", 0),
                 "c_test_files": raw.get("c_test_files", 0),
                 "c_header_files": raw.get("c_header_files", 0),
+                # 2026-11-02 (反假绿): 透传跳过数 — 缺 CMock 等被跳过的
+                # 测试不计入 passed/failed, 证据链必须可见。
+                "skipped": raw.get("skipped", 0),
             },
         )
 
