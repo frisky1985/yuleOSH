@@ -57,6 +57,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 yuleosh = [
     "ci/rulesets/misra-rules.yaml",
+    "llm/model_registry.yaml",
     "templates/ecus/*/template.yaml",
     "templates/ecus/*/*.j2",
     "templates/ecus/*/**/*.j2",

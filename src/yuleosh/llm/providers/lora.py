@@ -161,21 +161,26 @@ class LoraProvider(AbstractProvider):
 
         t0 = time.monotonic()
         try:
-            with urllib.request.urlopen(req, timeout=config.timeout_s) as resp:
-                result = _json_loads(resp.read().decode("utf-8"))
+            # 2026-11-02: urlopen 是同步阻塞调用 (timeout 默认 1800s) —
+            # async 方法内直连会卡死事件循环, 与 OllamaProvider 一致改用
+            # asyncio.to_thread。
+            import asyncio
+
+            def _post() -> bytes:
+                with urllib.request.urlopen(req, timeout=config.timeout_s) as resp:
+                    return resp.read()
+
+            raw = await asyncio.to_thread(_post)
+            result = _json_loads(raw.decode("utf-8"))
         except Exception as e:
-            return LLMResponse(
-                content="",
-                model=config.model,
-                provider=self.provider_name,
-                token_usage={"prompt": 0, "completion": 0, "total": 0},
-                cost=0.0,
-                duration_s=time.monotonic() - t0,
-                error=str(e),
-            )
+            # 2026-11-02: 传输失败改抛异常 — 返回带 error 的 LLMResponse
+            # 不会被 call_with_fallback 降级 (只对抛出的异常降级),
+            # 与 DeepSeek/Ollama provider 的失败语义保持一致。
+            raise RuntimeError(f"vLLM request failed: {e}") from e
 
         duration = time.monotonic() - t0
-        choice = result.get("choices", [{}])[0]
+        choices = result.get("choices") or [{}]
+        choice = choices[0]
         content = choice.get("message", {}).get("content", "")
         usage = result.get("usage", {})
 

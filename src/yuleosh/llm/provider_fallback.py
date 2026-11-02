@@ -62,7 +62,7 @@ log = logging.getLogger("llm.provider_fallback")
 # Constants
 # ═══════════════════════════════════════════════════════════════════════
 
-VALID_PROVIDERS: tuple = ("deepseek", "anthropic", "openai", "ollama", "mock")
+VALID_PROVIDERS: tuple = ("deepseek", "anthropic", "openai", "ollama", "mock", "lora")
 
 DEFAULT_FALLBACK_ORDER: tuple = ("deepseek", "anthropic", "openai", "ollama", "mock")
 
@@ -75,6 +75,8 @@ PROVIDER_KEY_ENVS: dict[str, tuple] = {
     "openai": ("OPENAI_API_KEY", "LLM_API_KEY"),
     # ollama：本机本地模型，无需 API key（按可达性判断是否可用）。
     "ollama": (),
+    # lora：本机/内网 LoRA 推理服务，无需 API key（按可达性判断）。
+    "lora": (),
     "mock": (),
 }
 

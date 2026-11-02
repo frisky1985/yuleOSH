@@ -63,7 +63,33 @@ class DataPrepReport:
     files_scanned: int = 0
     samples_extracted: int = 0
     samples_written: int = 0
+    # 2026-11-02 (隐私): 因疑似含密钥被跳过的文件数
+    files_skipped_secret: int = 0
     errors: list[str] = field(default_factory=list)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 密钥扫描 (2026-11-02, 隐私红线)
+# ═══════════════════════════════════════════════════════════════════════
+
+# 训练数据会落盘 JSONL 并进入模型权重 — 含硬编码密钥的源码必须剔除,
+# 否则推理时模型可能复述密钥。宁可漏杀 (误报跳过), 不可放过。
+_SECRET_PATTERNS = [
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),                       # OpenAI-style
+    re.compile(r"AKIA[0-9A-Z]{16}"),                           # AWS access key
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),        # PEM
+    re.compile(r"(?i)(api[_-]?key|secret|password|passwd|token)\s*[=:]\s*['\"][^'\"]{12,}['\"]"),
+    re.compile(r"ghp_[A-Za-z0-9]{36}"),                        # GitHub PAT
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),               # Slack
+]
+
+
+def _contains_secret(content: str) -> str | None:
+    """Return the matched pattern name if content looks like it holds a secret."""
+    for pat in _SECRET_PATTERNS:
+        if pat.search(content):
+            return pat.pattern[:40]
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -273,6 +299,15 @@ def prepare_training_data(
         report.files_scanned += 1
         try:
             content = filepath.read_text(encoding="utf-8")
+            # 2026-11-02 (隐私红线): 疑似含密钥的源码不进训练数据
+            hit = _contains_secret(content)
+            if hit:
+                report.files_skipped_secret += 1
+                report.errors.append(
+                    f"{filepath}: skipped — possible hardcoded secret ({hit}...)"
+                )
+                log.warning("Skipping %s — possible hardcoded secret", filepath)
+                continue
             if filepath.suffix == ".py":
                 samples = _extract_python_samples(filepath, content)
             elif filepath.suffix in (".c", ".h"):
@@ -280,9 +315,18 @@ def prepare_training_data(
             else:
                 continue
 
+            # source_file 统一相对化 — 不含本地用户名/绝对路径
+            try:
+                rel = filepath.resolve().relative_to(project_dir.resolve()).as_posix()
+            except ValueError:
+                rel = filepath.name
+            for s in samples:
+                s.source_file = rel
+
             all_samples.extend(samples)
             if len(all_samples) >= max_samples:
                 log.info("Reached max_samples=%d, stopping extraction", max_samples)
+                all_samples = all_samples[:max_samples]
                 break
 
         except Exception as e:

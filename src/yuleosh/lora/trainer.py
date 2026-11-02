@@ -73,7 +73,12 @@ class LoraConfig:
 
 @dataclass
 class TrainingReport:
-    """训练报告。"""
+    """训练报告。
+
+    2026-11-02 (反假阳): 新增 ``mode`` 与 ``metrics["trained"]`` —
+    ollama 后端只做 ``ollama create`` (复制基础模型, 不训练任何权重),
+    流程成功 ≠ 真训练。下游必须能区分, 不得把占位当训练成功。
+    """
 
     success: bool = False
     backend: str = ""
@@ -82,6 +87,8 @@ class TrainingReport:
     num_samples: int = 0
     num_epochs: int = 0
     training_time_s: float = 0.0
+    # "peft" (真训练) | "ollama-placeholder" (仅 ollama create 复制模型)
+    mode: str = ""
     metrics: dict = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
@@ -94,21 +101,19 @@ def _train_with_ollama(
     train_data: Path,
     config: LoraConfig,
 ) -> TrainingReport:
-    """使用 Ollama 训练 LoRA adapter（CPU 友好）。
+    """使用 Ollama 创建自定义模型（CPU 友好）。
 
-    Ollama 支持通过 Modelfile 创建自定义 LoRA 模型。
-    注意: Ollama 的 LoRA 支持有限，主要用于推理时加载 adapter。
-    真正的训练需要 Hugging Face PEFT 或 llama.cpp。
-    
-    这里我们创建一个简化的 "fine-tuning" 流程:
-    1. 将训练数据转换为 Ollama 可理解的格式
-    2. 创建 Modelfile 指定基础模型和 adapter
-    3. 使用 ollama create 构建自定义模型
-    
-    实际生产中，建议使用 PEFT 后端进行完整训练。
+    ⚠️ 诚实声明 (2026-11-02): Ollama **不支持真正的 LoRA 训练**。本函数
+    只执行 ``ollama create`` (从基础模型 + Modelfile 复制出一个模型),
+    不训练任何权重, 训练数据仅以注释形式写入 Modelfile。报告置
+    ``mode="ollama-placeholder"`` 且 ``metrics["trained"]=False`` —
+    下游不得把本结果当作"训练完成"。真训练请用 PEFT 后端。
     """
-    report = TrainingReport(backend="ollama", base_model=config.base_model)
-    
+    report = TrainingReport(
+        backend="ollama", base_model=config.base_model,
+        mode="ollama-placeholder",
+    )
+    modelfile_path: str | None = None
     try:
         # 检查 Ollama 是否可用
         result = subprocess.run(
@@ -120,8 +125,8 @@ def _train_with_ollama(
         if result.returncode != 0:
             report.errors.append("Ollama not available or not running")
             return report
-        
-        # 创建临时 Modelfile
+
+        # 创建临时 Modelfile (try/finally 保证清理, 含失败/超时路径)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".Modelfile", delete=False) as f:
             f.write(f"FROM {config.base_model}\n")
             f.write(f"# LoRA adapter training data: {train_data}\n")
@@ -130,10 +135,11 @@ def _train_with_ollama(
             f.write(f"PARAMETER temperature 0.3\n")
             f.write(f"PARAMETER top_p 0.95\n")
             modelfile_path = f.name
-        
-        # 构建自定义模型名
-        model_name = f"{config.base_model}-lora-custom"
-        
+
+        # 构建自定义模型名 (tag 规范化: 冒号会切分 model:tag, 先替换)
+        safe_base = config.base_model.replace(":", "-")
+        model_name = f"{safe_base}-lora-custom"
+
         # 创建模型（这会复制基础模型，实际 LoRA 需要 PEFT）
         log.info("Creating custom Ollama model: %s", model_name)
         result = subprocess.run(
@@ -142,25 +148,34 @@ def _train_with_ollama(
             text=True,
             timeout=300,
         )
-        
+
         if result.returncode != 0:
             report.errors.append(f"ollama create failed: {result.stderr}")
             return report
-        
-        # 清理临时文件
-        Path(modelfile_path).unlink()
-        
-        report.success = True
-        report.adapter_path = model_name
+
+        # 先取齐所有字段, 最后置 success — 避免 success=True 与 errors 并存
         report.num_samples = sum(1 for _ in train_data.open())
-        log.info("Ollama model created: %s (note: true LoRA requires PEFT backend)", model_name)
-        
+        report.adapter_path = model_name
+        report.metrics = {
+            "trained": False,
+            "reason": "ollama backend does not train weights — "
+                      "model copied from base; use backend='peft' for real training",
+        }
+        report.success = True
+        log.info(
+            "Ollama model created: %s (PLACEHOLDER — no weights trained; "
+            "true LoRA requires PEFT backend)", model_name,
+        )
+
     except subprocess.TimeoutExpired:
         report.errors.append("Ollama training timed out")
     except Exception as e:
         report.errors.append(f"Ollama training failed: {e}")
         log.exception("Ollama training error")
-    
+    finally:
+        if modelfile_path:
+            Path(modelfile_path).unlink(missing_ok=True)
+
     return report
 
 

@@ -95,6 +95,10 @@ class OllamaServiceManager:
                 capture_output=True,
                 text=True,
                 timeout=5,
+                # 2026-11-02: self.host 必须穿透到子进程 — ollama CLI 读
+                # 进程环境 OLLAMA_HOST, 不传则永远探测本机 127.0.0.1,
+                # host="http://gpu-box:11434" 的管理器会误报本地状态。
+                env={**os.environ, "OLLAMA_HOST": self.host},
             )
             return result.returncode == 0
         except Exception as e:
@@ -109,6 +113,7 @@ class OllamaServiceManager:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                env={**os.environ, "OLLAMA_HOST": self.host},
             )
             if result.returncode != 0:
                 return []
@@ -137,6 +142,7 @@ class OllamaServiceManager:
                 capture_output=True,
                 text=True,
                 timeout=600,  # 10 分钟超时
+                env={**os.environ, "OLLAMA_HOST": self.host},
             )
             return result.returncode == 0
         except Exception as e:

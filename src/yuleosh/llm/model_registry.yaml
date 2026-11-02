@@ -169,17 +169,7 @@ agent_routes:
     task_type: simple_summary
     risk_level: L1
 
-# ═══════════════════════════════════════════════════════════════════════
-# 任务风险等级（task_type → risk_level）
-# ═══════════════════════════════════════════════════════════════════════
-
-task_risk_levels:
-  architecture_design: L4
-  code_generation: L4
-  safety_code_generation: L4
-  test_generation: L2
-  misra_review: L3
-  misra_fix: L3
-  review_blocking: L4
-  review_selfcheck: L3
-  simple_summary: L1
+# 2026-11-02: 原 task_risk_levels 段已删除 — ModelRegistry._load_file 不解析
+# 该 key (只读 models/task_routes/agent_routes), 留着会造成"配置了却不
+# 生效"的假象。任务风险等级仍以 client.py 的 TASK_RISK_LEVELS 为真相;
+# 待 ModelRegistry 增加 get_task_risk_level() API 后再迁回此处。

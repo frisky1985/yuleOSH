@@ -233,15 +233,17 @@ class TestLoraProviderDegradation:
 
     @pytest.mark.asyncio
     async def test_chat_vllm_unreachable(self, lora_config):
-        """GIVEN vLLM 不可达 WHEN chat THEN 返回错误响应。"""
+        """GIVEN vLLM 不可达 WHEN chat THEN 抛 RuntimeError (可被 fallback 链降级).
+
+        2026-11-02: 旧行为返回带 error 的 LLMResponse — call_with_fallback
+        只对**抛出**的异常降级, error response 会被当作成功, 破坏降级
+        契约。与 DeepSeek/Ollama provider 失败语义对齐为抛异常。
+        """
         provider = LoraProvider(backend=LORA_BACKEND_VLLM)
         with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
             messages = [{"role": "user", "content": "test"}]
-            response = await provider.chat(messages, lora_config)
-            assert response.error is not None
-            assert "Connection refused" in response.error
-            assert response.content == ""
-            assert response.cost == 0.0
+            with pytest.raises(RuntimeError, match="vLLM request failed"):
+                await provider.chat(messages, lora_config)
 
     def test_list_models_vllm_unreachable(self):
         """GIVEN vLLM 不可达 WHEN list_lora_models THEN 返回空列表。"""

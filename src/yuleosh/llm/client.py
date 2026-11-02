@@ -93,7 +93,7 @@ TASK_RAG_SOURCES: Dict[str, List[str]] = {
 # LLM_MODEL env 覆盖模型名（保持既有 chat_completion 语义）；provider
 # 随 env 或模型名推断。LLM_BASE_URL / LLM_API_KEY 由 provider 层读取。
 
-VALID_PROVIDERS: tuple = ("deepseek", "anthropic", "openai", "mock")
+VALID_PROVIDERS: tuple = ("deepseek", "anthropic", "openai", "mock", "lora")
 
 # Provider env 覆盖时使用的默认模型（与 docs/llm-strategy.md 路由表一致）。
 PROVIDER_DEFAULT_MODELS: dict[str, str] = {
@@ -227,6 +227,11 @@ def _get_provider(provider_name: str) -> AbstractProvider:
         elif provider_name == "ollama":
             from yuleosh.llm.providers.ollama import OllamaProvider
             _PROVIDER_REGISTRY[provider_name] = OllamaProvider()
+        elif provider_name == "lora":
+            # 2026-11-02: LoRA provider 注册 — 此前 docstring 示例
+            # provider: lora 的用法会抛 "Unknown provider"。
+            from yuleosh.llm.providers.lora import LoraProvider
+            _PROVIDER_REGISTRY[provider_name] = LoraProvider()
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
     return _PROVIDER_REGISTRY[provider_name]
