@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   KeyRound,
+  Sparkles,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { resetSessionCache, useSessionRole } from "@/lib/use-session-role";
@@ -163,6 +164,7 @@ const NAV: {
   section?: string;
 }[] = [
   { href: "/dashboard", label: "概览", icon: LayoutDashboard, exact: true, section: "入口" },
+  { href: "/studio", label: "Studio", icon: Sparkles },
   // —— V-model 开发主线：需求驱动、测试设计并行、阶段看板为执行核心 ——
   { href: "/dashboard/requirements", label: "项目需求", icon: ListChecks, section: "V-model 开发主线" },
   { href: "/dashboard/tests", label: "测试用例", icon: FlaskConical },

@@ -404,22 +404,18 @@ async function createWindow() {
 async function loadFrontend() {
   if (DEV_MODE) {
     // 开发模式: 加载 Next.js dev server
-    const devUrl = `http://localhost:${DEV_SERVER_PORT}`;
+    const devUrl = `http://localhost:${DEV_SERVER_PORT}/studio/`;
     console.log(`[Main] DEV mode — loading from ${devUrl}`);
     console.log(`[Main] Make sure to run 'cd frontend && npm run dev' first`);
     mainWindow.loadURL(devUrl);
   } else {
-    // 生产模式: 加载本地静态文件服务器
-    try {
-      const port = await startLocalFileServer();
-      const url = `http://localhost:${port}/`;
-      console.log(`[Main] PROD mode — loading from ${url}`);
-      mainWindow.loadURL(url);
-    } catch (err) {
-      console.error(`[Main] Failed to start file server: ${err.message}`);
-      // 显示错误页面
-      showErrorPage(err.message);
-    }
+    // 生产模式: 直接加载 Python 后端同源的 Studio 工作台。
+    // 后端 (yuleosh.ui.server) 同时服务 frontend/out 静态导出与 /api/v1/*，
+    // 同源加载使页面内相对路径 API 调用（fetch /api/v1/...）直接可用，
+    // 不再需要在 Electron 内另起静态文件服务器 + 跨端口转发。
+    const url = `http://localhost:${BACKEND_PORT}/studio/`;
+    console.log(`[Main] PROD mode — loading Studio from ${url}`);
+    mainWindow.loadURL(url);
   }
 }
 

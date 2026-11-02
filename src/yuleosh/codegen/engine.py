@@ -41,6 +41,13 @@ log = logging.getLogger("yuleosh.codegen.engine")
 # Output base relative to the project root.
 DEFAULT_OUTPUT_REL = "artifacts/generated-code"
 
+# Local AUTOSAR BSW library — real headers with proper signatures/types/constants.
+# Override with AUTOSAR_BSW_PATH env var.
+_AUTOSAR_BSW_PATH = Path(os.environ.get(
+    "AUTOSAR_BSW_PATH",
+    Path.home() / "workspace" / "AUTOSAR",
+))
+
 # LLM response marker: "### FILE: path/to/file.py" followed by a fenced block.
 _FILE_RE = re.compile(
     r"^###\s*FILE:\s*(?P<path>[^\s]+)\s*$", re.IGNORECASE | re.MULTILINE
@@ -313,6 +320,7 @@ class CodegenEngine:
         # seed_contract 文件 + (行为失败时)上轮 LLM 输出文件。LLM 输出
         # 白名单外文件 → 引擎丢弃, 不写盘。
         allowlist: Optional[set[str]] = None
+        all_written_paths: set[str] = set()
         # 2026-08-16 (3 次失败头脑风暴): 失败历史 + 触发标记
         failure_history: list[RoundFailure] = []
         brainstorm_done = False
@@ -350,6 +358,7 @@ class CodegenEngine:
 
             written = self.write_files(files, out_dir)
             result.files = [str(p) for p in written]
+            all_written_paths.update(f.path for f in files)
 
             # ── 确定性修复 (2026-08-20, G-17) ────────────────────────
             # LLM 重写会丢掉 seed 基线的 (void)param; 未用参数抑制 →
@@ -362,7 +371,18 @@ class CodegenEngine:
                     sync_n,
                 )
 
-            # verify 整个输出目录 (seed 副本 + 本轮修改) — 跨文件引用可被捕获
+            # ── 自动修复缺失的 BSW 头文件 (2026-10-12, 2026-10-13 修复持久化) ─
+            # 前置于 verify: 扫描生成代码的 #include, 主动创建缺失的 BSW stub。
+            # 避免 "auto-fix 创建文件 → 下一轮 worse → rollback 到 best_state
+            # (不含 auto-fix 文件) → auto-fix 文件丢失" 的死循环。
+            auto_fixed = self._proactive_auto_fix_bsw_stubs(out_dir)
+            if auto_fixed:
+                log.info(
+                    "Codegen round %d: proactive auto-fix created %d BSW stub(s)",
+                    round_idx + 1, auto_fixed,
+                )
+
+            # verify 整个输出目录 (seed 副本 + 本轮修改 + auto-fix stubs) — 跨文件引用可被捕获
             verify_files = self._collect_code_files(out_dir)
             # 2026-08-12: 默认 verifier 透传项目根 → 生成的 app 代码可
             # 编译验证宿主项目 HAL API (src/hal/include 等)。自定义
@@ -509,6 +529,7 @@ class CodegenEngine:
                     )
                 allowlist = self._build_allowlist(
                     result.last_errors, files, self.seed_contract,
+                    all_written_paths=all_written_paths,
                 )
 
         result.finished_at = datetime.now().isoformat()
@@ -844,6 +865,7 @@ class CodegenEngine:
         errors: str,
         round_files: list[GeneratedFile],
         seed_contract: Optional[dict[str, set[str]]] = None,
+        all_written_paths: Optional[set[str]] = None,
     ) -> set[str]:
         """计算下一轮允许 LLM 修改的文件集合 (框住 LLM 的核心)。
 
@@ -851,7 +873,9 @@ class CodegenEngine:
         删除即回归 — 允许 LLM 恢复它们) + 本轮 LLM 输出文件 (它自己
         生成/修改过的文件, 修复编译错误时可能需连带修改配套文件 —
         如新 .c 依赖的头文件声明; 行为失败时 ctest FAIL 文本往往不
-        含 src 路径, 错误来源正是本轮改动的文件)。
+        含 src 路径, 错误来源正是本轮改动的文件) + 历史所有已写文件
+        (允许 LLM 修正路径错误, 如首轮把 src/bsw/Std_Types.h 写成
+        Std_Types.h → 修复轮可以正确路径重新生成)。
 
         白名单外的文件即使 LLM 输出了也会被引擎丢弃 — 不靠 prompt 自觉。
         新文件在第一轮 (无 allowlist) 可自由生成; 之后 LLM 想改某个
@@ -861,7 +885,9 @@ class CodegenEngine:
                  for p in CodegenEngine._extract_error_files(errors)}
         if seed_contract:
             allow |= {CodegenEngine._norm_path(p) for p in seed_contract}
-        allow |= {f.path for f in round_files}
+        allow |= {CodegenEngine._norm_path(f.path) for f in round_files}
+        if all_written_paths:
+            allow |= {CodegenEngine._norm_path(p) for p in all_written_paths}
         # 过滤掉测试文件路径 (行为失败文本提取的 test.c 之类)
         return {p for p in allow if not any(
             part == "tests" or part.endswith("_test") or part.startswith("test")
@@ -870,15 +896,433 @@ class CodegenEngine:
     def _filter_out_of_scope(
         self, files: list[GeneratedFile], allowlist: set[str],
     ) -> tuple[list[GeneratedFile], list[str]]:
-        """把白名单外的生成文件剔除 — 硬过滤, 不写盘。"""
+        """把白名单外的生成文件剔除 — 硬过滤, 不写盘。
+
+        BSW 头文件 (src/bsw/ 下) 始终放行 — 它们是依赖桩, 不是独立修改。
+        """
         kept: list[GeneratedFile] = []
         dropped: list[str] = []
         for f in files:
-            if self._norm_path(f.path) in allowlist:
+            norm = self._norm_path(f.path)
+            parts = Path(norm).parts
+            is_bsw = any(part == "bsw" for part in parts)
+            if norm in allowlist or is_bsw:
                 kept.append(f)
             else:
                 dropped.append(f.path)
         return kept, dropped
+
+    _BSW_STUB_TEMPLATE = """\
+#ifndef {guard}
+#define {guard}
+
+/* Auto-generated BSW stub by yuleOSH codegen engine */
+
+#endif /* {guard} */
+"""
+
+    _KNOWN_BSW_HEADERS = {
+        "Std_Types.h": {"types": True},
+        "Compiler.h": {},
+        "Platform_Types.h": {"types": True},
+        "PlatformTypes.h": {"types": True},
+    }
+
+    _BSW_TYPES_CONTENT = """\
+#ifndef {guard}
+#define {guard}
+
+/* Auto-generated BSW stub by yuleOSH codegen engine */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "Compiler.h"
+
+typedef unsigned char uint8;
+typedef unsigned short uint16;
+typedef unsigned long uint32;
+typedef signed char sint8;
+typedef signed short sint16;
+typedef signed long sint32;
+typedef float float32;
+typedef double float64;
+typedef unsigned char boolean;
+typedef char char_t;
+
+#ifndef TRUE
+#define TRUE 1u
+#endif
+#ifndef FALSE
+#define FALSE 0u
+#endif
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
+
+typedef uint8 Std_ReturnType;
+#define STD_OK     ((Std_ReturnType)0x00u)
+#define STD_NOT_OK ((Std_ReturnType)0x01u)
+
+#endif /* {guard} */
+"""
+
+    _BSW_COMPILER_CONTENT = """\
+#ifndef {guard}
+#define {guard}
+
+/* Auto-generated BSW Compiler.h stub by yuleOSH codegen engine */
+
+#define FUNC(rettype, memclass) rettype
+#define P2VAR(ptrtype, memclass, ptrclass) ptrtype *
+#define P2CONST(ptrtype, memclass, ptrclass) const ptrtype *
+#define CONST(consttype, memclass) const consttype
+#define VAR(vartype, memclass) vartype
+#define AUTOMATIC
+#define TYPEDEF
+#define STATIC static
+#define EXTERN extern
+#define INLINE __inline__
+#define LOCAL_INLINE static __inline__
+
+#endif /* {guard} */
+"""
+
+    _KNOWN_BSW_HEADERS = {
+        "Std_Types.h", "Compiler.h", "Platform_Types.h", "PlatformTypes.h",
+    }
+
+    _BSW_HEADER_TEMPLATES = {
+        "Std_Types.h": "_BSW_TYPES_CONTENT",
+        "Compiler.h": "_BSW_COMPILER_CONTENT",
+    }
+
+    @staticmethod
+    def _build_autosar_header_index() -> dict[str, Path]:
+        """Build basename -> filepath index from local AUTOSAR BSW library.
+
+        Scans the AUTOSAR project's include directories and BSW module
+        include dirs. Returns a dict mapping header basename to its full path.
+        """
+        autosar_root = _AUTOSAR_BSW_PATH
+        if not autosar_root.is_dir():
+            return {}
+        index: dict[str, Path] = {}
+        search_dirs = [
+            autosar_root / "include" / "autosar",
+            autosar_root / "include",
+            autosar_root / "config" / "generated",
+            autosar_root / "config" / "generated" / "rte",
+            autosar_root / "src" / "common" / "include",
+            autosar_root / "src" / "middleware" / "rte" / "include",
+        ]
+        for mcal_mod in (autosar_root / "src" / "bsw" / "mcal").iterdir() if (autosar_root / "src" / "bsw" / "mcal").is_dir() else []:
+            inc = mcal_mod / "include"
+            if inc.is_dir():
+                search_dirs.append(inc)
+        for svc in (autosar_root / "src" / "bsw" / "services").iterdir() if (autosar_root / "src" / "bsw" / "services").is_dir() else []:
+            inc = svc / "include"
+            if inc.is_dir():
+                search_dirs.append(inc)
+        for ecq in (autosar_root / "src" / "bsw" / "ecual").iterdir() if (autosar_root / "src" / "bsw" / "ecual").is_dir() else []:
+            inc = ecq / "include"
+            if inc.is_dir():
+                search_dirs.append(inc)
+        for cdd_inc in (autosar_root / "src" / "bsw" / "cdd" / "include",):
+            if cdd_inc.is_dir():
+                search_dirs.append(cdd_inc)
+        for d in search_dirs:
+            if not d.is_dir():
+                continue
+            for h in d.iterdir():
+                if h.suffix == ".h" and h.name not in index:
+                    index[h.name] = h
+        return index
+
+    def _copy_autosar_header_with_deps(
+        self, basename: str, target_dir: Path,
+        index: dict[str, Path], copied: set[str] | None = None,
+    ) -> int:
+        """Copy a BSW header from the AUTOSAR library, resolving #include deps.
+
+        Returns the number of files copied (including transitive deps).
+        """
+        if copied is None:
+            copied = set()
+        if basename in copied:
+            return 0
+        copied.add(basename)
+        if basename not in index:
+            return 0
+        src_path = index[basename]
+        target = target_dir / basename
+        if target.exists():
+            return 0
+        try:
+            content = src_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return 0
+        target.write_text(content, encoding="utf-8")
+        log.info(
+            "Codegen: copied AUTOSAR BSW header %s -> %s",
+            src_path, target,
+        )
+        generated = 1
+        include_re = re.compile(r'^\s*#\s*include\s+"([^"]+\.h)"', re.MULTILINE)
+        for m in include_re.finditer(content):
+            dep = m.group(1).rsplit("/", 1)[-1]
+            if dep in index and dep not in copied:
+                generated += self._copy_autosar_header_with_deps(
+                    dep, target_dir, index, copied,
+                )
+        return generated
+
+    def _auto_fix_missing_includes(self, out_dir: Path, errors: str) -> int:
+        """Detect 'file not found' errors and create minimal header stubs.
+
+        LLM 生成的 SWC 代码 #include 各种 BSW 头文件, 但又不输出这些头文件
+        本身 → 编译永远找不到。引擎优先从本地 AUTOSAR 库复制真实头文件,
+        回退到生成空 stub。返回生成的文件数。
+        """
+        generated = 0
+        bsw_dir = out_dir / "src" / "bsw"
+        autosar_index = self._build_autosar_header_index()
+        copied: set[str] = set()
+        for m in re.finditer(
+            r"fatal error:\s*'([\w./]+\.h)'\s+file not found", errors
+        ):
+            fname = m.group(1)
+            basename = fname.rsplit("/", 1)[-1]
+            target = bsw_dir / basename
+            if target.exists():
+                continue
+            bsw_dir.mkdir(parents=True, exist_ok=True)
+            if basename in autosar_index:
+                cnt = self._copy_autosar_header_with_deps(
+                    basename, bsw_dir, autosar_index, copied,
+                )
+                if cnt > 0:
+                    generated += cnt
+                    continue
+            guard = basename.replace(".", "_").replace("/", "_").upper() + "_"
+            if basename in self._BSW_HEADER_TEMPLATES:
+                template = getattr(self, self._BSW_HEADER_TEMPLATES[basename])
+                content = template.format(guard=guard)
+            else:
+                content = self._BSW_STUB_TEMPLATE.format(guard=guard)
+            target.write_text(content, encoding="utf-8")
+            log.info(
+                "Codegen auto-fix: created BSW stub %s (%d bytes)",
+                target, len(content),
+            )
+            generated += 1
+            if basename == "Std_Types.h":
+                compiler_target = bsw_dir / "Compiler.h"
+                if not compiler_target.exists():
+                    if "Compiler.h" in autosar_index:
+                        cnt = self._copy_autosar_header_with_deps(
+                            "Compiler.h", bsw_dir, autosar_index, copied,
+                        )
+                        generated += cnt
+                    else:
+                        compiler_guard = "COMPILER_H_"
+                        compiler_content = self._BSW_COMPILER_CONTENT.format(
+                            guard=compiler_guard
+                        )
+                        compiler_target.write_text(compiler_content, encoding="utf-8")
+                    log.info(
+                        "Codegen auto-fix: created BSW stub %s (%d bytes)",
+                        compiler_target, len(compiler_content),
+                    )
+                    generated += 1
+        return generated
+
+    def _proactive_auto_fix_bsw_stubs(self, out_dir: Path) -> int:
+        """Scan generated code for #include directives and create BSW stubs.
+
+        2026-10-13: 前置于 verify, 避免 auto-fix 文件在 rollback 时丢失。
+        2026-10-13: 优先从本地 AUTOSAR 工程复制真实 BSW 头 (含传递依赖),
+        而非生成通用 stub。真实头有正确的函数签名、类型定义和常量。
+        扫描所有 .c/.h 文件的 #include 和函数调用, 对缺失的 BSW 头:
+        1) 优先从 AUTOSAR 库复制 (含传递 #include 依赖)
+        2) 回退到 stub 生成 (从调用推断声明)
+        返回创建的文件数。
+        """
+        generated = 0
+        bsw_dir = out_dir / "src" / "bsw"
+        bsw_dir.mkdir(parents=True, exist_ok=True)
+
+        include_re = re.compile(r'^\s*#\s*include\s+"([^"]+\.h)"', re.MULTILINE)
+        func_call_re = re.compile(r'\b([A-Z][A-Za-z0-9_]*)\s*\(')
+
+        needed_headers: set[str] = set()
+        all_calls: list[str] = []
+        for code_file in self._collect_code_files(out_dir):
+            try:
+                content = code_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for m in include_re.finditer(content):
+                inc = m.group(1)
+                basename = inc.rsplit("/", 1)[-1]
+                needed_headers.add(basename)
+            all_calls.extend(m.group(1) for m in func_call_re.finditer(content))
+
+        bsw_prefixes = {
+            "Dio", "Pwm", "Adc", "Icu", "Mcu", "Dem", "Det",
+            "LinIf", "Lin", "Can", "Spi", "EcuM", "SchM", "Rte",
+        }
+        for call in all_calls:
+            for prefix in bsw_prefixes:
+                if call.startswith(prefix + "_"):
+                    needed_headers.add(f"{prefix}.h")
+                    break
+
+        autosar_index = self._build_autosar_header_index()
+        copied: set[str] = set()
+
+        existing_basenames: set[str] = {
+            f.name for f in self._collect_code_files(out_dir)
+        }
+        auto_fix_marker = "/* Auto-generated BSW stub by yuleOSH codegen engine */"
+
+        for basename in sorted(needed_headers):
+            target = bsw_dir / basename
+            if target.exists() or basename in existing_basenames:
+                continue
+
+            if basename in autosar_index:
+                cnt = self._copy_autosar_header_with_deps(
+                    basename, bsw_dir, autosar_index, copied,
+                )
+                if cnt > 0:
+                    generated += cnt
+                    continue
+
+            guard = basename.replace(".", "_").replace("/", "_").upper() + "_"
+            if basename in self._BSW_HEADER_TEMPLATES:
+                template = getattr(self, self._BSW_HEADER_TEMPLATES[basename])
+                content = template.format(guard=guard)
+            else:
+                decls = self._infer_bsw_declarations(basename, all_calls)
+                content = self._build_bsw_stub_with_decls(guard, decls)
+
+            target.write_text(content, encoding="utf-8")
+            log.info(
+                "Codegen proactive auto-fix: created BSW stub %s (%d bytes, %d decls)",
+                target, len(content), len(decls),
+            )
+            generated += 1
+            if basename == "Std_Types.h":
+                compiler_target = bsw_dir / "Compiler.h"
+                if not compiler_target.exists():
+                    if "Compiler.h" in autosar_index:
+                        cnt = self._copy_autosar_header_with_deps(
+                            "Compiler.h", bsw_dir, autosar_index, copied,
+                        )
+                        generated += cnt
+                    else:
+                        compiler_guard = "COMPILER_H_"
+                        compiler_content = self._BSW_COMPILER_CONTENT.format(
+                            guard=compiler_guard
+                        )
+                        compiler_target.write_text(compiler_content, encoding="utf-8")
+                        log.info(
+                            "Codegen proactive auto-fix: created BSW stub %s (%d bytes)",
+                            compiler_target, len(compiler_content),
+                        )
+                        generated += 1
+
+        return generated
+
+    @staticmethod
+    def _infer_bsw_declarations(
+        header: str, call_sites: list[str],
+    ) -> list[str]:
+        """从调用代码推断 BSW 函数声明。
+
+        扫描 call_sites 中的函数名, 按 AUTOSAR 命名惯例生成声明。
+        返回 C 声明字符串列表。
+        """
+        prefix = header.replace(".h", "")
+        func_prefix = prefix.split("_")[0] if "_" in prefix else prefix
+        skip_prefix_check = prefix in (
+            "Std_Types", "Compiler", "Platform_Types",
+            "PlatformTypes", "Bsw_Cfg",
+        )
+        seen: set[str] = set()
+        decls: list[str] = []
+
+        for func_name in call_sites:
+            if func_name in seen:
+                continue
+            if not skip_prefix_check and not func_name.startswith(prefix):
+                if not func_name.startswith(func_prefix + "_"):
+                    continue
+            seen.add(func_name)
+            decl = CodegenEngine._make_bsw_decl(func_name)
+            if decl:
+                decls.append(decl)
+        return decls
+
+    @staticmethod
+    def _make_bsw_decl(func_name: str) -> str:
+        """为单个 BSW/RTE 函数生成声明。"""
+        if func_name.startswith("Rte_Read_"):
+            return f"static inline uint8 {func_name}(void *dest) {{ (void)dest; return 0; }}"
+        if func_name.startswith("Rte_Write_"):
+            return f"static inline uint8 {func_name}(uint8 ch, uint8 val) {{ (void)ch; (void)val; return 0; }}"
+        if func_name.startswith("Rte_Call_"):
+            return f"static inline uint8 {func_name}(void) {{ return 0; }}"
+        if func_name == "Dio_WriteChannel":
+            return "static inline void Dio_WriteChannel(uint8 ch, uint8 val) { (void)ch; (void)val; }"
+        if func_name == "Dio_ReadChannel":
+            return "static inline uint8 Dio_ReadChannel(uint8 ch) { (void)ch; return 0; }"
+        if func_name.startswith("Dio_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        if func_name == "Pwm_Init":
+            return f"static inline void {func_name}(void *cfg) {{ (void)cfg; }}"
+        if func_name == "Pwm_SetOutputToIdle":
+            return f"static inline void {func_name}(uint8 ch) {{ (void)ch; }}"
+        if func_name.startswith("Pwm_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        if func_name.startswith("Adc_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        if func_name.startswith("Icu_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        if func_name.startswith("Mcu_"):
+            return f"static inline void {func_name}(void) {{ }}"
+        if func_name.startswith("Dem_"):
+            return f"static inline void {func_name}(uint8 a, uint8 b) {{ (void)a; (void)b; }}"
+        if func_name.startswith("LinIf_"):
+            return f"static inline uint8 {func_name}(uint8 a, uint8 b, uint8 c) {{ (void)a; (void)b; (void)c; return 0; }}"
+        if func_name.startswith("Lin_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        if func_name.startswith("Can_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        if func_name.startswith("Spi_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        if func_name.startswith("EcuM_") or func_name.startswith("SchM_"):
+            return f"static inline void {func_name}(void) {{ }}"
+        if func_name.startswith("Det_"):
+            return f"static inline uint8 {func_name}(uint8 a) {{ (void)a; return 0; }}"
+        return f"static inline uint8 {func_name}(void) {{ return 0; }}"
+
+    @staticmethod
+    def _build_bsw_stub_with_decls(guard: str, decls: list[str]) -> str:
+        """构建含函数声明的 BSW stub。"""
+        lines = [
+            f"#ifndef {guard}",
+            f"#define {guard}",
+            "",
+            "/* Auto-generated BSW stub by yuleOSH codegen engine */",
+            "",
+            '#include "Std_Types.h"',
+            "",
+        ]
+        for d in decls:
+            lines.append(d)
+        lines.extend(["", f"#endif /* {guard} */", ""])
+        return "\n".join(lines)
 
     @staticmethod
     def _brainstorm(failures: list[RoundFailure]) -> dict:
@@ -964,7 +1408,9 @@ class CodegenEngine:
             "minimal_fix": (
                 "你已连续多轮无法修复同一编译错误。停止整体重写文件。\n"
                 "要求: 逐条对照编译错误, **只修复报错的那几行**, 其余代码 "
-                "保持磁盘现状 (引擎已恢复 seed 基线)。一次只输出 1-2 个文件。"
+                "保持磁盘现状 (引擎已恢复 seed 基线)。一次只输出 1-2 个文件。\n"
+                "例外: 如果错误是 'file not found' (缺少头文件或依赖), "
+                "你必须**生成该缺失文件**到正确路径 — 这是最小修复, 不是重写。"
             ),
             "stop_worsening": (
                 "你的修改让错误数持续增加。引擎已把文件恢复为 seed 基线。\n"

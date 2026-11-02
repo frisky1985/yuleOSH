@@ -541,6 +541,66 @@ def cmd_spec_diff(old: str, new: str):
         sys.exit(1)
 
 
+def cmd_spec_gen(prompt_parts: list[str] | tuple, output: str | None = None,
+                 mock: bool = False, prefix: str = "REQ",
+                 title: str | None = None, force: bool = False,
+                 stdout: bool = False):
+    """Generate an OpenSpec spec from natural language (yuleosh spec gen).
+
+    The generated document is validated before writing; validation errors
+    abort with exit 1 so a bad spec never enters the pipeline.
+    """
+    from yuleosh.spec.gen import generate_spec
+
+    text = " ".join(prompt_parts).strip() if prompt_parts else ""
+    if not text and not sys.stdin.isatty():
+        text = sys.stdin.read().strip()
+    if not text:
+        print("❌ Requirement text required: yuleosh spec gen \"<需求描述>\" "
+              "(or pipe via stdin)", file=sys.stderr)
+        sys.exit(2)
+
+    out_path: Path | None = None
+    if not stdout:
+        out_path = Path(output) if output else Path("docs") / "spec.md"
+        if out_path.exists() and not force:
+            print(f"❌ {out_path} already exists — use --force to overwrite "
+                  f"or -o <path> for another target", file=sys.stderr)
+            sys.exit(2)
+
+    try:
+        result = generate_spec(text, prefix=prefix, title=title, mock=mock)
+    except Exception as e:
+        print(f"❌ Spec generation failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if result["error_count"] > 0:
+        print(f"❌ Generated spec failed validation "
+              f"({result['error_count']} error(s), {result['repairs']} repair round(s)):",
+              file=sys.stderr)
+        for i in result["issues"]:
+            if i.get("severity") == "ERROR":
+                print(f"  - {i.get('message', i)}", file=sys.stderr)
+        sys.exit(1)
+
+    stats = result["stats"]
+    mode = "mock (offline)" if result["mock"] else f"LLM: {result['model']}"
+    if stdout:
+        print(result["markdown"], end="")
+    else:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(result["markdown"], encoding="utf-8")
+        print(f"✅ Spec generated: {out_path}")
+        print(f"   Mode: {mode} · {stats['requirements']} requirements "
+              f"({stats['total_shall']} SHALL / {stats['total_should']} SHOULD / "
+              f"{stats['total_may']} MAY) · {stats['scenarios']} scenarios")
+        warn = sum(1 for i in result["issues"] if i.get("severity") == "WARN")
+        if warn:
+            print(f"   ⚠️  {warn} validator warning(s) — run "
+                  f"`yuleosh spec validate {out_path}` for details")
+        print(f"   Next: yuleosh pipeline run {out_path}")
+
+
 def cmd_spec_cp(args) -> None:
     """Dispatch `yuleosh spec cp <sub>` — Change Proposal management."""
     from yuleosh.spec.changes import (

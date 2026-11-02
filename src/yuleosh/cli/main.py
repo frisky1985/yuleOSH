@@ -110,6 +110,7 @@ from yuleosh.cli.commands.misc import (  # noqa: E402
     cmd_spec_merge,
     cmd_spec_validate,
     cmd_spec_diff,
+    cmd_spec_gen,
     cmd_spec_cp,
     cmd_pipeline_run,
     cmd_pipeline_status,
@@ -198,6 +199,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p_spec_merge.add_argument("delta_file", help="Spec-delta markdown file path")
     p_spec_merge.add_argument("--dry-run", action="store_true", help="Validate without writing")
     p_spec_merge.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_spec_gen = ssub.add_parser("gen", help="Generate an OpenSpec spec from natural language")
+    p_spec_gen.add_argument("prompt", nargs="*", help="Natural-language requirement text (or pipe via stdin)")
+    p_spec_gen.add_argument("-o", "--output", default=None,
+                            help="Output spec path (default: docs/spec.md)")
+    p_spec_gen.add_argument("--mock", action="store_true",
+                            help="Offline deterministic generation (no LLM)")
+    p_spec_gen.add_argument("--prefix", default="REQ",
+                            help="Requirement ID prefix (default: REQ)")
+    p_spec_gen.add_argument("--title", default=None, help="Spec document title")
+    p_spec_gen.add_argument("--force", action="store_true",
+                            help="Overwrite an existing output file")
+    p_spec_gen.add_argument("--stdout", action="store_true",
+                            help="Print markdown to stdout instead of writing a file")
     # Change Proposal (OpenSpec evolution) — RULES §13
     p_spec_cp = ssub.add_parser("cp", help="Change Proposal (OpenSpec spec evolution)")
     cpsub = p_spec_cp.add_subparsers(dest="cp_sub")
@@ -564,6 +578,15 @@ def _build_parser() -> argparse.ArgumentParser:
     # ui
     sub.add_parser("ui", help="Start the web dashboard")
 
+    # studio
+    p_studio = sub.add_parser("studio", help="Open yuleOSH Studio (spec workbench) in a window")
+    p_studio.add_argument("--port", type=int, default=None,
+                          help="UI server port (default: $OSH_PORT or 8080)")
+    p_studio.add_argument("--no-open", action="store_true",
+                          help="Start/verify the server and print the URL without opening a window")
+    p_studio.add_argument("--browser", action="store_true",
+                          help="Force the system browser instead of a native window")
+
     return parser
 
 
@@ -647,6 +670,16 @@ def main():
                 args.delta_file,
                 project_dir=getattr(args, "project_dir", None),
                 dry_run=getattr(args, "dry_run", False),
+            )
+        elif args.spec_sub == "gen":
+            cmd_spec_gen(
+                args.prompt,
+                output=args.output,
+                mock=args.mock,
+                prefix=args.prefix,
+                title=args.title,
+                force=args.force,
+                stdout=args.stdout,
             )
         elif args.spec_sub == "cp":
             cmd_spec_cp(args)
@@ -1012,6 +1045,10 @@ def main():
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main
         ui_main()
+
+    elif args.command == "studio":
+        from yuleosh.cli.commands.studio import cmd_studio
+        sys.exit(cmd_studio(port=args.port, no_open=args.no_open, force_browser=args.browser))
 
     elif args.command == "reverse":
         if getattr(args, "reverse_sub", None) == "scan":

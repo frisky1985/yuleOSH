@@ -290,9 +290,22 @@ def run_c_test_suite(project_dir: str | Path,
         try:
             log.info("Attempting GCC compile test of %d test file(s)", len(c_test_files))
             unity_src = unity_dir / "src" / "unity.c"
+            # AUTOSAR BSW library fallback: project may not bundle Unity —
+            # check the local AUTOSAR project's third_party directory.
+            _AUTOSAR_UNITY = (
+                Path.home() / "workspace" / "AUTOSAR"
+                / "third_party" / "test_frameworks" / "unity"
+            )
+            autosar_unity_h = _AUTOSAR_UNITY / "unity.h"
+            autosar_unity_c = _AUTOSAR_UNITY / "unity.c"
             if unity_src.exists():
                 inc_flags = ["-I", str(unity_dir / "src")]
                 link_flags = ["-lunity"]
+            elif autosar_unity_h.exists():
+                # Use AUTOSAR Unity sources directly (compile unity.c in-process)
+                unity_src = autosar_unity_c
+                inc_flags = ["-I", str(_AUTOSAR_UNITY)]
+                link_flags = []
             else:
                 # 2026-08-14 (headlamp dogfood #5): 项目不用 Unity 框架时
                 # 不能加 -lunity — 纯 main/自研 runner 测试会链接失败
@@ -312,8 +325,22 @@ def run_c_test_suite(project_dir: str | Path,
             # 彻底避免跨测试重复符号; 单测试文件项目行为不变。
             compiled_ok = True
             per_test_log = []
+            skipped_tests = []
             for tf in c_test_files:
                 stem = Path(tf).stem
+                # Check if test requires CMock but CMock not available
+                tf_text = Path(tf).read_text(encoding="utf-8", errors="replace")
+                if "Mock_" in tf_text:
+                    has_mock = any(
+                        list(Path(d).glob("Mock_*.h"))
+                        for d in _collect_include_dirs(project_dir)
+                    )
+                    if not has_mock:
+                        skipped_tests.append(stem)
+                        per_test_log.append(
+                            f"[{stem}] SKIPPED (requires CMock — Mock_*.h not found)"
+                        )
+                        continue
                 tmp_bin = os.path.join(
                     tempfile.gettempdir(),
                     f"c_test_{os.getpid()}_{stem}_{id(project_dir)}"
@@ -338,7 +365,12 @@ def run_c_test_suite(project_dir: str | Path,
             result_returncode = 0 if compiled_ok else 1
             test_runner = "gcc-compile-check"
             passed = 0
-            failed = 0 if compiled_ok else len(c_test_files)
+            actual_test_count = len(c_test_files) - len(skipped_tests)
+            failed = 0 if compiled_ok else actual_test_count
+            if skipped_tests:
+                log.info("Skipped %d test(s) requiring CMock: %s",
+                         len(skipped_tests), skipped_tests)
+                test_output += f"\n\n--- {len(skipped_tests)} test(s) skipped (CMock not available) ---"
             log.info("GCC compile check (per-test): compiled_ok=%s", compiled_ok)
         except FileNotFoundError:
             log.info("gcc not found, cannot compile test")
