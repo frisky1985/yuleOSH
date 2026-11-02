@@ -95,6 +95,89 @@ class VectorStore:
         self.conn.commit()
         return True
 
+    def batch_upsert(self, items: list[dict]) -> int:
+        """批量写入向量（单事务，P1 扩展性优化）。
+
+        Args:
+            items: [{"content_hash": str, "embedding": list[float],
+                     "rowid": int | None}]
+
+        Returns:
+            int: 成功写入数量
+        """
+        if not self._available or not items:
+            return 0
+
+        written = 0
+        try:
+            self.conn.execute("BEGIN TRANSACTION")
+            for item in items:
+                ch = item["content_hash"]
+                emb = item["embedding"]
+                rid = item.get("rowid")
+
+                if len(emb) > MAX_DIM:
+                    log.warning("Skipping embedding dim %d > MAX_DIM", len(emb))
+                    continue
+
+                self.conn.execute(
+                    "DELETE FROM kb_embeddings WHERE content_hash = ?",
+                    (ch,),
+                )
+                if rid is not None:
+                    self.conn.execute(
+                        "INSERT INTO kb_embeddings(rowid, embedding, content_hash) "
+                        "VALUES (?, ?, ?)",
+                        (rid, self._serialize(emb), ch),
+                    )
+                else:
+                    self.conn.execute(
+                        "INSERT INTO kb_embeddings(embedding, content_hash) "
+                        "VALUES (?, ?)",
+                        (self._serialize(emb), ch),
+                    )
+                written += 1
+            self.conn.commit()
+        except Exception as e:
+            log.warning("batch_upsert failed, rolling back: %s", e)
+            self.conn.rollback()
+            return 0
+
+        return written
+
+    def has_content_hash(self, content_hash: str) -> bool:
+        """检查向量是否已存在（增量索引判定，P1）。"""
+        if not self._available:
+            return False
+        try:
+            cur = self.conn.execute(
+                "SELECT 1 FROM kb_embeddings WHERE content_hash = ? LIMIT 1",
+                (content_hash,),
+            )
+            return cur.fetchone() is not None
+        except Exception:  # noqa: BLE001
+            return False
+
+    def remove_by_content_hashes(self, content_hashes: list[str]) -> int:
+        """批量删除向量（清理过期索引，P1）。
+
+        Returns:
+            int: 删除数量
+        """
+        if not self._available or not content_hashes:
+            return 0
+        placeholders = ",".join("?" for _ in content_hashes)
+        try:
+            self.conn.execute(
+                f"DELETE FROM kb_embeddings WHERE content_hash IN ({placeholders})",
+                content_hashes,
+            )
+            self.conn.commit()
+            return len(content_hashes)
+        except Exception as e:  # noqa: BLE001
+            log.warning("remove_by_content_hashes failed: %s", e)
+            return 0
+
     # ---- 查询 ----
 
     def search(self, query_embedding: list[float], k: int = 10,

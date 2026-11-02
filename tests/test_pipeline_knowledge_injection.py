@@ -333,3 +333,113 @@ def test_base_class_assemble_context_available():
 
     assert hasattr(PipelineStep, "_assemble_context")
     assert callable(PipelineStep._assemble_context)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# T8: P0 RAG 修复 — 默认路径使用 KB hybrid search（2026-10-21）
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def test_assemble_rag_uses_kb_hybrid_search_by_default(monkeypatch, tmp_path):
+    """T8.1: 不传 rag_engine 时，使用 KB hybrid search 生产路径。"""
+    from yuleosh.pipeline.knowledge_injection import _assemble_rag, PipelineKnowledgeConfig
+
+    # Mock KB hybrid search 返回固定内容
+    mock_called = {}
+
+    def fake_kb_hybrid_search(query, top_k=5, max_chars=1500):
+        mock_called["query"] = query
+        mock_called["top_k"] = top_k
+        mock_called["max_chars"] = max_chars
+        return "- [article] Test Article: This is test content from KB hybrid search"
+
+    monkeypatch.setattr(
+        "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
+        fake_kb_hybrid_search,
+    )
+
+    cfg = PipelineKnowledgeConfig(inject_rag=True, rag_max_chars=2000)
+    result = _assemble_rag("test query for RAG", cfg, rag_engine=None)
+
+    assert mock_called["query"] == "test query for RAG"
+    assert mock_called["max_chars"] == 2000
+    assert RAG_HEADER in result
+    assert "Test Article" in result
+    assert "KB hybrid search" in result
+
+
+def test_assemble_rag_legacy_path_when_engine_provided(monkeypatch, tmp_path):
+    """T8.2: 传入 rag_engine 时，仍使用旧路径（向后兼容）。"""
+    from yuleosh.pipeline.knowledge_injection import _assemble_rag, PipelineKnowledgeConfig
+
+    legacy_called = {}
+
+    class LegacyEngine:
+        async def retrieve_as_context(self, query, sources=None, top_k=8):
+            legacy_called["query"] = query
+            legacy_called["top_k"] = top_k
+            return "## Knowledge Context (RAG)\n\nLegacy RAG content"
+
+    cfg = PipelineKnowledgeConfig(inject_rag=True)
+    result = _assemble_rag("legacy query", cfg, rag_engine=LegacyEngine())
+
+    assert legacy_called["query"] == "legacy query"
+    assert RAG_HEADER in result
+    assert "Legacy RAG content" in result
+
+
+def test_kb_hybrid_search_context_graceful_degradation(monkeypatch, tmp_path):
+    """T8.3: KB hybrid search 失败时优雅降级为空字符串。"""
+    from yuleosh.pipeline.knowledge_injection import _kb_hybrid_search_context
+
+    # Mock KbStore 抛异常
+    def broken_store(*args, **kwargs):
+        raise RuntimeError("KB store unavailable")
+
+    monkeypatch.setattr("yuleosh.kb.store.KbStore", broken_store)
+
+    result = _kb_hybrid_search_context("test query", top_k=5, max_chars=1500)
+    assert result == ""  # 优雅降级，不抛异常
+
+
+def test_assemble_pipeline_knowledge_default_rag_path(monkeypatch, tmp_path):
+    """T8.4: assemble_pipeline_knowledge 默认使用 KB hybrid search。"""
+    from yuleosh.memory.store import MemoryStore
+    from yuleosh.pipeline.knowledge_injection import assemble_pipeline_knowledge, PipelineKnowledgeConfig
+
+    # Setup memory
+    db = tmp_path / "memory.db"
+    store = MemoryStore(db_path=str(db))
+    store.remember("Test fact for RAG path verification", entity="test", category="test")
+    store.close()
+    monkeypatch.setenv("YULEOSH_MEMORY_DB", str(db))
+
+    # Mock KB hybrid search
+    kb_called = {}
+
+    def fake_kb_hybrid_search(query, top_k=5, max_chars=1500):
+        kb_called["query"] = query
+        return "- [article] KB Search Result: Found relevant knowledge"
+
+    monkeypatch.setattr(
+        "yuleosh.pipeline.knowledge_injection._kb_hybrid_search_context",
+        fake_kb_hybrid_search,
+    )
+
+    cfg = PipelineKnowledgeConfig(
+        inject_memory=True,
+        inject_rag=True,
+        inject_skills=False,
+    )
+
+    ctx = assemble_pipeline_knowledge(
+        step_key="development",
+        prompt="test prompt for default RAG path",
+        config=cfg,
+        # 注意：不传 rag_engine，应走 KB hybrid search 默认路径
+    )
+
+    assert kb_called["query"] == "test prompt for default RAG path"
+    assert MEMORY_HEADER in ctx
+    assert RAG_HEADER in ctx
+    assert "KB Search Result" in ctx

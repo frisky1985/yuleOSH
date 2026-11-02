@@ -848,6 +848,26 @@ def step_codegen_deploy(session: PipelineSession) -> str:
         log.info("  deployed: %s", f)
     if skipped_empty:
         log.warning("codegen-deploy: skipped 0-byte files: %s", skipped_empty)
+
+    # ── P1: 代码级语义索引（部署后自动索引到 KB）──────────────────────
+    # 使后续 pipeline 步骤可通过 RAG 检索项目自身代码上下文
+    try:
+        from yuleosh.kb.code_indexer import index_project_code
+        from yuleosh.kb.store import KbStore
+        kb_store = KbStore()
+        idx_report = index_project_code(project_dir, kb_store)
+        if idx_report.files_indexed > 0:
+            print(f"  📚 [P1] code-index: {idx_report.files_indexed} files indexed "
+                  f"({idx_report.files_skipped_unchanged} unchanged)")
+            report["code_index"] = {
+                "files_scanned": idx_report.files_scanned,
+                "files_indexed": idx_report.files_indexed,
+                "vectors_written": idx_report.vectors_written,
+            }
+            report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception as e:
+        log.warning("Code indexing failed (non-fatal): %s", e)
+
     return str(report_path)
 
 

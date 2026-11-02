@@ -122,3 +122,78 @@ class TestVectorStore:
         assert vs.upsert("h", [0.1] * 768) is False
         assert vs.search([0.1] * 768) == []
         assert vs.count() == 0
+
+
+# ── P1: 批量操作 ────────────────────────────────────────────────────────
+
+
+class TestVectorStoreBatch:
+    """P1: 批量向量操作测试。"""
+
+    def test_batch_upsert(self, conn):
+        """GIVEN 批量写入 WHEN batch_upsert THEN 全部写入。"""
+        vs = VectorStore(conn)
+        items = [
+            {"content_hash": "hash-1", "embedding": [0.1] * 768, "rowid": 1},
+            {"content_hash": "hash-2", "embedding": [0.2] * 768, "rowid": 2},
+            {"content_hash": "hash-3", "embedding": [0.3] * 768, "rowid": 3},
+        ]
+        written = vs.batch_upsert(items)
+        assert written == 3
+        assert vs.count() == 3
+
+    def test_batch_upsert_empty(self, conn):
+        """GIVEN 空列表 WHEN batch_upsert THEN 返回 0。"""
+        vs = VectorStore(conn)
+        assert vs.batch_upsert([]) == 0
+
+    def test_batch_upsert_idempotent(self, conn):
+        """GIVEN 同 hash 批量写两次 WHEN count THEN 不重复。"""
+        vs = VectorStore(conn)
+        items = [
+            {"content_hash": "hash-1", "embedding": [0.1] * 768, "rowid": 1},
+        ]
+        vs.batch_upsert(items)
+        vs.batch_upsert(items)  # 重复
+        assert vs.count() == 1
+
+    def test_has_content_hash(self, conn):
+        """GIVEN 向量已存在 WHEN has_content_hash THEN True。"""
+        vs = VectorStore(conn)
+        vs.upsert("hash-a", [0.1] * 768)
+        assert vs.has_content_hash("hash-a") is True
+        assert vs.has_content_hash("hash-b") is False
+
+    def test_remove_by_content_hashes(self, conn):
+        """GIVEN 批量删除 WHEN remove_by_content_hashes THEN 删除成功。"""
+        vs = VectorStore(conn)
+        vs.upsert("hash-1", [0.1] * 768)
+        vs.upsert("hash-2", [0.2] * 768)
+        vs.upsert("hash-3", [0.3] * 768)
+        assert vs.count() == 3
+
+        removed = vs.remove_by_content_hashes(["hash-1", "hash-2"])
+        assert removed == 2
+        assert vs.count() == 1
+        assert vs.has_content_hash("hash-3") is True
+
+    def test_batch_upsert_unavailable(self, monkeypatch, conn):
+        """GIVEN 扩展不可用 WHEN batch_upsert THEN 返回 0。"""
+        monkeypatch.setattr(
+            "yuleosh.kb.vector_store.load_vector_extension",
+            lambda c: False,
+        )
+        vs = VectorStore(conn)
+        items = [
+            {"content_hash": "hash-1", "embedding": [0.1] * 768},
+        ]
+        assert vs.batch_upsert(items) == 0
+
+    def test_has_content_hash_unavailable(self, monkeypatch, conn):
+        """GIVEN 扩展不可用 WHEN has_content_hash THEN False。"""
+        monkeypatch.setattr(
+            "yuleosh.kb.vector_store.load_vector_extension",
+            lambda c: False,
+        )
+        vs = VectorStore(conn)
+        assert vs.has_content_hash("hash-a") is False

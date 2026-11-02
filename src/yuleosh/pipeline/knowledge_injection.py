@@ -135,6 +135,12 @@ def _sync_rag_context(
     computation (no real awaits inside ``retrieve``); ``asyncio.run`` is
     safe in the sync CLI pipeline. A running-loop RuntimeError degrades
     to "" (non-fatal).
+
+    .. deprecated:: 2026-10-21
+        Legacy prototype RAG engine (n-gram embeddings).  Default path is
+        now :func:`_kb_hybrid_search_context` (real embeddings + FTS5 + RRF).
+        This function is kept only for callers that pass an explicit
+        ``rag_engine`` for backward compatibility.
     """
     if rag_engine is None:
         from yuleosh.llm.rag.engine import get_default_engine
@@ -148,6 +154,73 @@ def _sync_rag_context(
         return ""
     except Exception as e:  # noqa: BLE001 — non-fatal by design
         log.warning("RAG injection failed (non-fatal): %s", e)
+        return ""
+
+
+def _kb_hybrid_search_context(
+    query: str,
+    top_k: int = 5,
+    max_chars: int = 1500,
+) -> str:
+    """Retrieve context via KB hybrid search (production RAG path).
+
+    Uses :class:`kb.hybrid_search.HybridSearch` with real embeddings
+    (Ollama nomic-embed-text or OpenAI fallback) + FTS5 keyword search
+    + RRF fusion.  Gracefully degrades to keyword-only when the vector
+    extension or embedding service is unavailable.
+
+    2026-10-21 (P0 fix): replaces the prototype n-gram RAG engine for
+    pipeline knowledge injection.  The kb/ module already had production-
+    quality hybrid search; the pipeline was just wired to the wrong one.
+    """
+    try:
+        from yuleosh.kb.store import KbStore
+        from yuleosh.kb.hybrid_search import HybridSearch
+
+        store = KbStore()
+        embedding_provider = None
+        vector_store = None
+
+        # Try to enable vector search path (graceful degradation)
+        try:
+            from yuleosh.kb.embedding import OllamaEmbeddingProvider
+            from yuleosh.kb.vector_store import VectorStore
+
+            embedding_provider = OllamaEmbeddingProvider()
+            if embedding_provider.available():
+                vector_store = VectorStore(store._get_conn())
+            else:
+                embedding_provider = None
+                log.debug("Ollama embedding unavailable — keyword-only RAG")
+        except Exception as e:
+            log.debug("Vector search setup failed (non-fatal): %s", e)
+
+        hybrid = HybridSearch(
+            store=store,
+            vector_store=vector_store,
+            embedding_provider=embedding_provider,
+            top_k=top_k,
+        )
+        hits = hybrid.unified_search(query, top_k=top_k)
+
+        if not hits:
+            return ""
+
+        # Format hits into context string
+        parts: list[str] = []
+        total = 0
+        for hit in hits:
+            source_tag = f"[{hit.hit_type}]" if hit.hit_type != "article" else ""
+            entry = f"- {source_tag} {hit.title}: {hit.content}".strip()
+            if total + len(entry) > max_chars:
+                break
+            parts.append(entry)
+            total += len(entry) + 1
+
+        return "\n".join(parts) if parts else ""
+
+    except Exception as e:  # noqa: BLE001 — RAG never blocks the pipeline
+        log.warning("KB hybrid search failed (non-fatal): %s", e)
         return ""
 
 
@@ -187,11 +260,24 @@ def _assemble_memory(prompt: str, config: PipelineKnowledgeConfig,
 
 
 def _assemble_rag(prompt: str, config: PipelineKnowledgeConfig, rag_engine=None) -> str:
-    """RAG rules section (non-fatal)."""
+    """RAG rules section (non-fatal).
+
+    Default path: KB hybrid search (real embeddings + FTS5 + RRF).
+    Legacy path: prototype RAG engine (only when ``rag_engine`` is explicit).
+    """
     if not config.inject_rag:
         return ""
     try:
-        ctx = _sync_rag_context(prompt, config.rag_sources, rag_engine=rag_engine)
+        if rag_engine is not None:
+            # Legacy path: explicit rag_engine passed (backward compat for tests)
+            ctx = _sync_rag_context(prompt, config.rag_sources, rag_engine=rag_engine)
+        else:
+            # Production path: KB hybrid search
+            ctx = _kb_hybrid_search_context(
+                prompt,
+                top_k=5,
+                max_chars=config.rag_max_chars,
+            )
         if not ctx:
             return ""
         # RAG already emits "## Knowledge Context (RAG)" — normalize to our header
