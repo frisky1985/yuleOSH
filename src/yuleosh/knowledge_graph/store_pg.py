@@ -39,6 +39,7 @@ import threading
 from datetime import datetime
 from typing import Optional
 
+from yuleosh.knowledge_graph._graph_traversal import build_trace_sql
 from yuleosh.knowledge_graph.models_pg import NodePG, EdgePG, SnapshotPG
 
 log = logging.getLogger("yuleosh.knowledge_graph.store_pg")
@@ -353,50 +354,13 @@ class KGStorePG:
 
         Uses WITH RECURSIVE for server-side graph traversal —
         dramatically more efficient than Python BFS for multi-hop queries.
+        SQL 模板与 SQLite 后端共享（_graph_traversal.py）。
         """
-        type_filter = ""
-        params: list = [start_node_id, max_depth]
-        if edge_types:
-            placeholders = ",".join("%s" for _ in edge_types)
-            type_filter = f"AND e.edge_type IN ({placeholders})"
-            params.extend(sorted(edge_types))
+        sql, type_params = build_trace_sql("pg", "downstream", edge_types)
+        params: list = [start_node_id, max_depth] + type_params
 
         with self.conn.cursor() as cur:
-            cur.execute(f"""
-                WITH RECURSIVE trace AS (
-                    -- Base case: start node
-                    SELECT
-                        n.id, n.entity_type, n.entity_id, n.label,
-                        n.properties, n.is_active, n.created_at, n.updated_at,
-                        NULL::uuid AS edge_id,
-                        NULL::uuid AS edge_source_id,
-                        NULL::uuid AS edge_target_id,
-                        NULL::varchar AS edge_type,
-                        NULL::jsonb AS edge_properties,
-                        NULL::timestamptz AS edge_verified_at,
-                        NULL::varchar AS edge_build_id,
-                        0 AS depth
-                    FROM kg_nodes n
-                    WHERE n.id = %s
-
-                    UNION ALL
-
-                    -- Recursive: follow outgoing edges
-                    SELECT
-                        n.id, n.entity_type, n.entity_id, n.label,
-                        n.properties, n.is_active, n.created_at, n.updated_at,
-                        e.id, e.source_id, e.target_id, e.edge_type,
-                        e.properties, e.verified_at, e.build_id,
-                        t.depth + 1
-                    FROM trace t
-                    JOIN kg_edges e ON e.source_id = t.id
-                    JOIN kg_nodes n ON n.id = e.target_id
-                    WHERE t.depth < %s
-                    {type_filter}
-                )
-                SELECT * FROM trace
-                ORDER BY depth, entity_type
-            """, params)
+            cur.execute(sql, params)
 
             node_map: dict[str, NodePG] = {}
             edges: list[EdgePG] = []
@@ -449,47 +413,11 @@ class KGStorePG:
     def trace_upstream(self, start_node_id: str, max_depth: int = 5,
                        edge_types: Optional[set[str]] = None) -> tuple[list[NodePG], list[EdgePG]]:
         """PostgreSQL RECURSIVE CTE: upstream trace from a node."""
-        type_filter = ""
-        params: list = [start_node_id, max_depth]
-        if edge_types:
-            placeholders = ",".join("%s" for _ in edge_types)
-            type_filter = f"AND e.edge_type IN ({placeholders})"
-            params.extend(sorted(edge_types))
+        sql, type_params = build_trace_sql("pg", "upstream", edge_types)
+        params: list = [start_node_id, max_depth] + type_params
 
         with self.conn.cursor() as cur:
-            cur.execute(f"""
-                WITH RECURSIVE trace AS (
-                    SELECT
-                        n.id, n.entity_type, n.entity_id, n.label,
-                        n.properties, n.is_active, n.created_at, n.updated_at,
-                        NULL::uuid AS edge_id,
-                        NULL::uuid AS edge_source_id,
-                        NULL::uuid AS edge_target_id,
-                        NULL::varchar AS edge_type,
-                        NULL::jsonb AS edge_properties,
-                        NULL::timestamptz AS edge_verified_at,
-                        NULL::varchar AS edge_build_id,
-                        0 AS depth
-                    FROM kg_nodes n
-                    WHERE n.id = %s
-
-                    UNION ALL
-
-                    SELECT
-                        n.id, n.entity_type, n.entity_id, n.label,
-                        n.properties, n.is_active, n.created_at, n.updated_at,
-                        e.id, e.source_id, e.target_id, e.edge_type,
-                        e.properties, e.verified_at, e.build_id,
-                        t.depth + 1
-                    FROM trace t
-                    JOIN kg_edges e ON e.target_id = t.id
-                    JOIN kg_nodes n ON n.id = e.source_id
-                    WHERE t.depth < %s
-                    {type_filter}
-                )
-                SELECT * FROM trace
-                ORDER BY depth, entity_type
-            """, params)
+            cur.execute(sql, params)
 
             node_map: dict[str, NodePG] = {}
             edges: list[EdgePG] = []

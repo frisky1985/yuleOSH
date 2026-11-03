@@ -13,8 +13,8 @@ Tables:
   kg_edges     — directed edge table
   kg_snapshots — CI build snapshots
 
-Note: BFS traversal is implemented in Python (not recursive CTE) since
-SQLite's recursive CTE support is limited for JSON deserialization.
+Note: traversal uses a recursive CTE (shared template in
+``_graph_traversal.py``) instead of Python BFS, for multi-hop scale.
 """
 import json
 import logging
@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from yuleosh.knowledge_graph._graph_traversal import build_trace_sql
 from yuleosh.knowledge_graph.models import Node, Edge, Snapshot
 
 log = logging.getLogger("yuleosh.knowledge_graph.store")
@@ -485,66 +486,48 @@ class KGStore:
         return [(self._row_to_node(r), r["edge_count"]) for r in cur.fetchall()]
 
     # ------------------------------------------------------------------
-    # Recursive trace (breadth-first, SQLite-compatible)
+    # Recursive trace (SQL-side WITH RECURSIVE, shared template)
     # ------------------------------------------------------------------
 
     def trace_downstream(self, start_node_id: int, max_depth: int = 5,
                          edge_types: Optional[set[str]] = None) -> tuple[list[Node], list[Edge]]:
-        """BFS downstream trace from a node, returning all reachable nodes and edges."""
-        visited_nodes: set[int] = {start_node_id}
-        all_nodes: dict[int, Node] = {}
-        all_edges: list[Edge] = []
-        current_level = {start_node_id}
-        depth = 0
-
-        start_node = self.get_node_by_id(start_node_id)
-        if start_node:
-            all_nodes[start_node_id] = start_node
-
-        while current_level and depth < max_depth:
-            next_level: set[int] = set()
-            for nid in current_level:
-                for edge, target in self.get_outgoing_edges(nid):
-                    if edge_types and edge.edge_type not in edge_types:
-                        continue
-                    all_edges.append(edge)
-                    if target.id not in visited_nodes:
-                        visited_nodes.add(target.id)
-                        all_nodes[target.id] = target
-                        next_level.add(target.id)
-            current_level = next_level
-            depth += 1
-
-        return list(all_nodes.values()), all_edges
+        """Recursive CTE downstream trace from a node."""
+        return self._trace("downstream", start_node_id, max_depth, edge_types)
 
     def trace_upstream(self, start_node_id: int, max_depth: int = 5,
                        edge_types: Optional[set[str]] = None) -> tuple[list[Node], list[Edge]]:
-        """BFS upstream trace from a node."""
-        visited_nodes: set[int] = {start_node_id}
-        all_nodes: dict[int, Node] = {}
-        all_edges: list[Edge] = []
-        current_level = {start_node_id}
-        depth = 0
+        """Recursive CTE upstream trace from a node."""
+        return self._trace("upstream", start_node_id, max_depth, edge_types)
 
-        start_node = self.get_node_by_id(start_node_id)
-        if start_node:
-            all_nodes[start_node_id] = start_node
+    def _trace(self, direction: str, start_node_id: int, max_depth: int,
+               edge_types: Optional[set[str]],
+               ) -> tuple[list[Node], list[Edge]]:
+        sql, type_params = build_trace_sql("sqlite", direction, edge_types)
+        rows = self.conn.execute(
+            sql, [start_node_id, max_depth] + type_params).fetchall()
+        node_ids = {row[0] for row in rows}
+        edge_ids = {row[1] for row in rows if row[1] is not None}
+        return self._nodes_by_ids(node_ids), self._edges_by_ids(edge_ids)
 
-        while current_level and depth < max_depth:
-            next_level: set[int] = set()
-            for nid in current_level:
-                for edge, source in self.get_incoming_edges(nid):
-                    if edge_types and edge.edge_type not in edge_types:
-                        continue
-                    all_edges.append(edge)
-                    if source.id not in visited_nodes:
-                        visited_nodes.add(source.id)
-                        all_nodes[source.id] = source
-                        next_level.add(source.id)
-            current_level = next_level
-            depth += 1
+    def _nodes_by_ids(self, ids: set[int]) -> list[Node]:
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        cur = self.conn.execute(
+            f"SELECT * FROM kg_nodes WHERE id IN ({placeholders})",
+            tuple(ids),
+        )
+        return [self._row_to_node(r) for r in cur.fetchall()]
 
-        return list(all_nodes.values()), all_edges
+    def _edges_by_ids(self, ids: set[int]) -> list[Edge]:
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        cur = self.conn.execute(
+            f"SELECT * FROM kg_edges WHERE id IN ({placeholders})",
+            tuple(ids),
+        )
+        return [self._row_to_edge(r) for r in cur.fetchall()]
 
     # ------------------------------------------------------------------
     # Helpers

@@ -295,23 +295,27 @@ class RAGEngine:
         self._embedding_provider = embedding_provider
         self._chunk_by_hash: Dict[str, RAGChunk] = {}
         self._vector_active = False
-        if backend == "sqlite-vec":
+        if backend and backend != "inmemory":
             self._init_vector_backend()
 
     def _init_vector_backend(self) -> None:
-        """初始化 sqlite-vec 后端；任何缺失都回退 inmemory（不抛错）。"""
+        """初始化可插拔向量后端；任何缺失都回退 inmemory（不抛错）。"""
         if self._vector_store is None:
             try:
-                import sqlite3
+                from yuleosh.llm.rag.backends import create_backend
 
-                from yuleosh.kb.vector_store import VectorStore
-
-                db_path = os.environ.get("YULEOSH_RAG_DB") or ":memory:"
-                conn = sqlite3.connect(db_path)
-                self._vector_store = VectorStore(conn)
+                backend, reason = create_backend(
+                    self.backend,
+                    db_path=os.environ.get("YULEOSH_RAG_DB") or None,
+                )
             except Exception as e:  # noqa: BLE001 — 后端构建失败即回退
-                self._degrade_to_inmemory(f"sqlite-vec 后端初始化失败: {e}")
+                self._degrade_to_inmemory(f"{self.backend} 后端初始化失败: {e}")
                 return
+            if backend is None:
+                self._degrade_to_inmemory(
+                    reason or f"{self.backend} 后端不可用")
+                return
+            self._vector_store = backend
         if self._embedding_provider is None:
             try:
                 from yuleosh.kb.embedding import get_provider
@@ -325,7 +329,7 @@ class RAGEngine:
         if not getattr(self._vector_store, "available", False):
             reason = getattr(self._vector_store, "unavailable_reason", None)
             self._degrade_to_inmemory(
-                f"sqlite-vec 扩展不可用: {reason}" if reason else "sqlite-vec 扩展不可用"
+                reason or f"{self.backend} 后端不可用"
             )
             return
         self._vector_active = True
