@@ -305,6 +305,122 @@ def fix_error_formulas(wb, cached_wb):
                     c.value = '=IFERROR(' + c.value[1:] + ',"")'
 
 
+# ---------------------------------------------------------------- 上游列补齐
+UPSTREAM_HEADER = '上游元素\nUpstream Element'
+_HEADER_KEYWORDS = (
+    'id', '标识', '编号', '编码', 'identifier', '下游', 'downstream',
+    '测试用例', 'testcase', '上游', 'upstream', '来源', 'source',
+    '标题', 'title', '需求', '描述', '类型', '状态', '备注', 'remark', '目标',
+)
+
+
+def _norm_header(value):
+    return re.sub(r'\s+', '', str(value)).lower() if value is not None else ''
+
+
+def _find_header_row(ws):
+    best_row, best_score = None, 0
+    for r in range(1, min(ws.max_row or 0, 20) + 1):
+        score = sum(
+            1 for c in range(1, ws.max_column + 1)
+            if any(k in _norm_header(ws.cell(row=r, column=c).value)
+                   for k in _HEADER_KEYWORDS)
+        )
+        if score >= 3 and score > best_score:
+            best_row, best_score = r, score
+    return best_row
+
+
+def _col_width(ws, index):
+    dim = ws.column_dimensions.get(get_column_letter(index))
+    return dim.width if dim is not None else None
+
+
+def add_upstream_column(wb):
+    """在「下游元素」左侧插入「上游元素」列，形成双向追溯结构。
+
+    同步处理列宽、合并单元格与数据验证范围；对已存在上游列的清单跳过。
+    返回处理的清单数量。
+    """
+    changed = 0
+    for ws in wb.worksheets:
+        if ws.sheet_state != 'visible':
+            continue
+        header_row = _find_header_row(ws)
+        if header_row is None:
+            continue
+        max_col = ws.max_column or 0
+        headers = [_norm_header(ws.cell(row=header_row, column=c).value)
+                   for c in range(1, max_col + 1)]
+        if any('上游' in h or 'upstream' in h for h in headers):
+            continue
+
+        downstream_col = next(
+            (i + 1 for i, h in enumerate(headers)
+             if '下游' in h or 'downstream' in h),
+            None,
+        )
+        if downstream_col is not None:
+            insert_at = downstream_col
+        elif '详设' in ws.title or '详细设计' in ws.title:
+            insert_at = min(4, max_col)
+        else:
+            insert_at = max_col + 1
+
+        old_widths = {i: _col_width(ws, i) for i in range(insert_at, max_col + 1)}
+        merges = [(m.min_row, m.min_col, m.max_row, m.max_col)
+                  for m in ws.merged_cells.ranges]
+        for min_row, min_col, max_row, max_col_ in merges:
+            ws.unmerge_cells(start_row=min_row, start_column=min_col,
+                             end_row=max_row, end_column=max_col_)
+
+        ws.insert_cols(insert_at)
+
+        # 列宽随插入列右移
+        for i in range(max_col, insert_at - 1, -1):
+            letter = get_column_letter(i + 1)
+            if old_widths[i] is None:
+                ws.column_dimensions.pop(letter, None)
+            else:
+                ws.column_dimensions[letter].width = old_widths[i]
+        if old_widths[insert_at] is None:
+            ws.column_dimensions.pop(get_column_letter(insert_at), None)
+        else:
+            ws.column_dimensions[get_column_letter(insert_at)].width = old_widths[insert_at]
+
+        # 合并范围随插入列扩展
+        for min_row, min_col, max_row, max_col_ in merges:
+            if min_col >= insert_at:
+                min_col += 1
+                max_col_ += 1
+            elif max_col_ >= insert_at:
+                max_col_ += 1
+            ws.merge_cells(start_row=min_row, start_column=min_col,
+                           end_row=max_row, end_column=max_col_)
+
+        # 数据验证范围随插入列右移
+        for dv in list(ws.data_validations.dataValidation):
+            parts = []
+            for rng in dv.sqref.ranges:
+                min_col = rng.min_col + 1 if rng.min_col >= insert_at else rng.min_col
+                max_col_ = rng.max_col + 1 if rng.max_col >= insert_at else rng.max_col
+                parts.append(
+                    f'{get_column_letter(min_col)}{rng.min_row}:'
+                    f'{get_column_letter(max_col_)}{rng.max_row}'
+                )
+            dv.sqref = ' '.join(parts)
+
+        # 表头与数据行样式沿用右侧原列
+        ref_col = insert_at + 1 if insert_at <= max_col else insert_at - 1
+        for r in range(header_row, (ws.max_row or 0) + 1):
+            src = ws.cell(row=r, column=ref_col)
+            dst = ws.cell(row=r, column=insert_at)
+            dst._style = copy(src._style)
+            dst.value = UPSTREAM_HEADER if r == header_row else None
+        changed += 1
+    return changed
+
+
 # ---------------------------------------------------------------- 主流程
 
 def clean_file(path, out_path):
@@ -378,6 +494,8 @@ def clean_file(path, out_path):
         fix_hwe1(wb, records)
     if rel == '亚远景_SWE4_TP_软件单元验证报告_V1.0.xlsx':
         fix_swe4_workload(wb)
+    if rel == '亚远景_ENG_TP_需求追踪表_V1.0.xlsx':
+        add_upstream_column(wb)
     fix_error_formulas(wb, cached)
 
     # 7) 隐藏示例页

@@ -27,6 +27,9 @@ python3 /workspace/aspice/tools/trace_check.py \
 
 # 4) 严格模式：WARN 也返回失败
 python3 /workspace/aspice/tools/trace_check.py --trace <xlsx> --strict
+
+# 5) 严格双向闭环：上下游引用必须互为回指
+python3 /workspace/aspice/tools/trace_check.py --trace <xlsx> --bidirectional
 ```
 
 ## 2. CLI 参数
@@ -38,6 +41,7 @@ python3 /workspace/aspice/tools/trace_check.py --trace <xlsx> --strict
 | `--out <report.md>` | Markdown 报告路径；目录不存在会自动创建。 |
 | `--json` | 输出 JSON。指定 `--out` 时写入同名 `.json`；未指定 `--out` 时向 stdout 输出**纯 JSON**，人读摘要改到 stderr，便于 CI 管道直接解析。 |
 | `--strict` | WARN 也视为失败（退出码 1）。 |
+| `--bidirectional` | 严格双向闭环：`A` 的“下游元素”引用 `B` 时，`B` 的“上游元素”必须回指 `A`；反向同理。不一致记 ERROR。 |
 | `--id-pattern <regex>` | ID 命名规范，默认 `^[A-Za-z][A-Za-z0-9_.\-]{2,}$`。 |
 | `--selftest` | 现场构造 3 张清单的小工作簿，跑完整分析并断言，退出码 0 表示通过。 |
 
@@ -55,7 +59,8 @@ python3 /workspace/aspice/tools/trace_check.py --trace <xlsx> --strict
 - 上游列：`上游 / Upstream`；来源列：`来源 / Source`（仅作为来源说明，不默认当作上游 ID）。
 
 识别结果会完整打印在报告第 2 节。未识别到表头、未识别到 ID 列、未识别到下游列分别给 WARN，
-并说明该 sheet 是“跳过”还是“按链尾处理”。
+并说明该 sheet 是“跳过”还是“按链尾处理”。隐藏工作表（如 `示例（勿删）`、说明页）不参与校验，
+自动跳过且不产生问题项。
 
 ### 3.2 ID 非空与唯一性
 - 整行全空的数据行视为占位行，直接忽略。
@@ -82,6 +87,9 @@ python3 /workspace/aspice/tools/trace_check.py --trace <xlsx> --strict
 - 仅有「来源 / Source」列时：只对“看起来像 ID”的来源值做存在性校验（WARN），
   自由文本来源（如“客户”“市场”）不参与闭环；同时仍给一条 INFO，建议补“上游元素”列。
 - 缺少上游列的清单各给 1 条 INFO，明确“建议补上游元素列以支持严格双向校验”。
+- 加 `--bidirectional` 时再执行**回指一致性**校验：对每条可解析的引用，
+  检查下游记录的“上游元素”是否回指来源、上游记录的“下游元素”是否回指目标；
+  任一方向缺失即记 ERROR，避免“只写下游、不写上游”的假追溯。
 
 ### 3.6 测试用例 ID 规范
 对每个非空「测试用例」单元格按同一组分隔符拆值，要求每个值满足
@@ -213,6 +221,27 @@ python3 trace_check.py \
 6. 加 `--strict` 时因 8 条 WARN 返回退出码 1；基线模式返回 0。CI 若要把“模板未填写”
    也拦住，应使用 `--strict`。
 
+### 6.1 清洗版追踪表与填写示例
+
+清洗版 `aspice/templates_clean/ENG_需求追踪表_V1.0.xlsx` 已为 8 张可分析清单补齐
+「上游元素 / Upstream Element」列（软件详设页补在“对应代码”之前），因此对清洗版运行
+校验时不再出现“缺少上游列”INFO，可直接加 `--bidirectional` 做回指一致性校验。
+
+`aspice/examples/` 下提供一套可运行的 BCM 氛围灯填写示例（SYS.2、追踪表、测试规范），
+追踪链覆盖 涉众 → 系统需求 → 系统架构 → 硬件/软件需求 → 架构 → 详设，并配套 5 条系统级用例：
+
+```bash
+python3 aspice/tools/trace_check.py \
+  --trace "aspice/examples/ENG_需求追踪表_BCM氛围灯示例_V1.0.xlsx" \
+  --cases "aspice/examples/ENG_测试规范_BCM氛围灯示例_V1.0.xlsx" \
+  --bidirectional \
+  --out "aspice/examples/trace_report_BCM氛围灯示例.md" --json
+```
+
+实测：有效行 27、下游引用 30、断链 0、孤儿 0、ERROR 0 / WARN 3 / INFO 0、用例覆盖率 5/5，
+基线模式退出码 0。3 条 WARN 均为示例文件的已知结构项：示例声明页无表头、网络安全需求页
+无 ID 列、软件详设页按链尾处理。
+
 自测回归结果（`--selftest`，退出码 0）：
 
 ```text
@@ -221,6 +250,7 @@ PASS: 列映射/表头偏移识别
 PASS: 空 ID、重复 ID、跨清单重复、非法命名
 PASS: 断链、孤儿节点、缺少上游列 INFO
 PASS: 测试用例自由文本不合规计数
+PASS: 严格双向闭环（缺失回指计 ERROR）
 PASS: 报告渲染
 SELFTEST OK
 ```

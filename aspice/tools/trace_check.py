@@ -179,6 +179,7 @@ class Analysis:
     unresolved_case_refs: int
     unresolved_case_samples: list[str]
     case_info: CaseSheetInfo | None
+    bidirectional: bool = False
 
     # 派生统计 -----------------------------------------------------------
     def counts(self) -> dict[str, int]:
@@ -499,13 +500,16 @@ def load_cases(path: Path) -> CaseSheetInfo:
 # ---------------------------------------------------------------------------
 
 def analyze(trace_path: Path, cases_path: Path | None = None,
-            id_pattern: str = DEFAULT_ID_PATTERN, strict: bool = False) -> Analysis:
+            id_pattern: str = DEFAULT_ID_PATTERN, strict: bool = False,
+            bidirectional: bool = False) -> Analysis:
     wb = load_workbook(trace_path)
     issues: list[Issue] = []
     sheet_infos: list[SheetInfo] = []
     records: list[Record] = []
 
     for index, ws in enumerate(wb.worksheets):
+        if ws.sheet_state != "visible":
+            continue
         info, recs = build_sheet_info(ws, index)
         sheet_infos.append(info)
         records.extend(recs)
@@ -703,6 +707,48 @@ def analyze(trace_path: Path, cases_path: Path | None = None,
                             "若“来源”列用于记录需求来源文档，请改为文档名；若作为上游链接，请补建条目",
                         ))
 
+    # 规则4c：严格双向闭环（可选 --bidirectional） -------------------------
+    if bidirectional:
+        first_record: dict[str, Record] = {}
+        for rec in valid_records:
+            first_record.setdefault(rec.ident, rec)
+        downstream_edges: dict[tuple[str, str], Record] = {}
+        for rec in valid_records:
+            for token in rec.refs:
+                if token in global_ids:
+                    downstream_edges.setdefault((rec.ident, token), rec)
+        upstream_edges: dict[tuple[str, str], Record] = {}
+        for rec in valid_records:
+            for token in split_refs(rec.upstream_raw):
+                if is_placeholder(token) or token not in global_ids:
+                    continue
+                upstream_edges.setdefault((token, rec.ident), rec)
+
+        for source, target in downstream_edges:
+            if (source, target) in upstream_edges:
+                continue
+            target_rec = first_record.get(target)
+            issues.append(make_issue(
+                "ERROR",
+                target_rec.sheet if target_rec else downstream_edges[(source, target)].sheet,
+                target_rec.row if target_rec else None, None, target,
+                f"双向不一致：`{source}` 的“下游元素”引用了 `{target}`，"
+                f"但 `{target}` 的“上游元素”未回指 `{source}`",
+                f"在 `{target}` 行补填上游 ID `{source}`，或删除 `{source}` 行中的该下游引用",
+            ))
+        for source, target in upstream_edges:
+            if (source, target) in downstream_edges:
+                continue
+            source_rec = first_record.get(source)
+            issues.append(make_issue(
+                "ERROR",
+                source_rec.sheet if source_rec else upstream_edges[(source, target)].sheet,
+                source_rec.row if source_rec else None, None, source,
+                f"双向不一致：`{target}` 的“上游元素”引用了 `{source}`，"
+                f"但 `{source}` 的“下游元素”未回指 `{target}`",
+                f"在 `{source}` 行补填下游 ID `{target}`，或删除 `{target}` 行中的该上游引用",
+            ))
+
     # 规则5：测试用例 ID 规范 ------------------------------------------------
     testcase_nonempty_cells = 0
     testcase_noncompliant_cells = 0
@@ -788,6 +834,7 @@ def analyze(trace_path: Path, cases_path: Path | None = None,
         unresolved_case_refs=unresolved_case_refs,
         unresolved_case_samples=unresolved_case_samples,
         case_info=case_info,
+        bidirectional=bidirectional,
     )
 
 
@@ -832,6 +879,8 @@ def render_markdown(analysis: Analysis) -> str:
     else:
         lines.append("- 测试用例表：未提供（跳过用例存在性与覆盖率校验）")
     lines.append(f"- 校验模式：{'--strict（WARN 也判失败）' if analysis.strict else '基线（仅 ERROR 判失败）'}")
+    if analysis.bidirectional:
+        lines.append("- 双向闭环：开启（下游→上游与上游→下游必须互为引用）")
     lines.append(
         f"- 判定：**{'✅ 通过' if passed else '❌ 不通过'}**"
         f"（ERROR {counts['ERROR']} / WARN {counts['WARN']} / INFO {counts['INFO']}）"
@@ -1032,6 +1081,7 @@ def analysis_to_dict(analysis: Analysis) -> dict[str, Any]:
         "trace_file": analysis.trace_file,
         "cases_file": analysis.cases_file,
         "strict": analysis.strict,
+        "bidirectional": analysis.bidirectional,
         "id_pattern": analysis.id_pattern,
         "passed": analysis.passed(),
         "counts": {
@@ -1117,6 +1167,7 @@ def render_console(analysis: Analysis, report_path: Path | None, limit: int = 20
         f" · 有效行 {totals['valid_rows']} · 断链 {analysis.broken_links}"
         f" · ERROR {counts['ERROR']} / WARN {counts['WARN']} / INFO {counts['INFO']}"
         f" · {'PASS' if analysis.passed() else 'FAIL'}"
+        + (" · 双向闭环" if analysis.bidirectional else "")
     )
     if analysis.case_info is not None:
         if analysis.case_info.warning:
@@ -1220,12 +1271,42 @@ def _write_fixture(path: Path) -> None:
     wb.save(path)
 
 
+def _write_bidir_fixture(path: Path) -> None:
+    """双向闭环自测用最小工作簿：含一处单向下游、一处单向上游。"""
+    wb = openpyxl.Workbook()
+
+    ws1 = wb.active
+    ws1.title = "系统需求清单"
+    headers = ["系统需求标识\nID", "标题\nTitle",
+               "上游元素\nUpstream Element", "下游元素\nDownstream Element"]
+    for col, value in enumerate(headers, start=2):
+        ws1.cell(row=1, column=col, value=value)
+    ws1.cell(row=2, column=2, value="REQ_001")
+    ws1.cell(row=2, column=5, value="ARCH_001")
+    ws1.cell(row=3, column=2, value="REQ_002")
+
+    ws2 = wb.create_sheet("系统架构元素清单")
+    headers2 = ["系统架构元素标识\nID", "标题\nTitle",
+                "上游元素\nUpstream Element", "下游元素\nDownstream Element"]
+    for col, value in enumerate(headers2, start=2):
+        ws2.cell(row=1, column=col, value=value)
+    ws2.cell(row=2, column=2, value="ARCH_001")
+    ws2.cell(row=3, column=2, value="ARCH_002")
+    ws2.cell(row=3, column=4, value="REQ_002")
+
+    wb.save(path)
+
+
 def run_selftest() -> int:
     print("== trace_check.py 自测 ==")
     with tempfile.TemporaryDirectory(prefix="trace_check_selftest_") as tmp:
         fixture = Path(tmp) / "fixture.xlsx"
         _write_fixture(fixture)
         analysis = analyze(fixture, cases_path=None, strict=False)
+        bidir_fixture = Path(tmp) / "bidir.xlsx"
+        _write_bidir_fixture(bidir_fixture)
+        baseline = analyze(bidir_fixture)
+        bidir = analyze(bidir_fixture, bidirectional=True)
         print(f"fixture analysis: ERROR={analysis.counts()['ERROR']} "
               f"WARN={analysis.counts()['WARN']} INFO={analysis.counts()['INFO']} "
               f"broken={analysis.broken_links} orphans={analysis.orphans} "
@@ -1276,10 +1357,21 @@ def run_selftest() -> int:
     report = render_markdown(analysis)
     assert "## 2. 列映射" in report and "## 3. 问题明细" in report
 
+    # 8) 严格双向模式：仅单向引用记 ERROR；默认模式不启用
+    assert not [i for i in baseline.issues if "双向不一致" in i.message], \
+        "默认模式不应产生双向不一致 ERROR"
+    bidir_errors = [i for i in bidir.issues if i.severity == "ERROR"]
+    assert len(bidir_errors) == 2, \
+        f"双向不一致 ERROR 应为 2，实际 {len(bidir_errors)}: {[e.message for e in bidir_errors]}"
+    assert all("双向不一致" in i.message for i in bidir_errors)
+    assert any("REQ_001" in i.message and "ARCH_001" in i.message for i in bidir_errors)
+    assert any("REQ_002" in i.message and "ARCH_002" in i.message for i in bidir_errors)
+
     print("PASS: 列映射/表头偏移识别")
     print("PASS: 空 ID、重复 ID、跨清单重复、非法命名")
     print("PASS: 断链、孤儿节点、缺少上游列 INFO")
     print("PASS: 测试用例自由文本不合规计数")
+    print("PASS: 严格双向闭环（缺失回指计 ERROR）")
     print("PASS: 报告渲染")
     print("SELFTEST OK")
     return 0
@@ -1309,6 +1401,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--strict", action="store_true", help="WARN 也视为失败（退出码 1）",
+    )
+    parser.add_argument(
+        "--bidirectional", action="store_true",
+        help="严格双向闭环：下游引用与上游回指必须互为一致（不一致计 ERROR）",
     )
     parser.add_argument(
         "--id-pattern", default=DEFAULT_ID_PATTERN,
@@ -1353,7 +1449,8 @@ def main(argv: list[str] | None = None) -> int:
             return _fail(f"--cases 指向的是目录而不是 .xlsx 文件：{cases_path}")
 
     try:
-        analysis = analyze(trace_path, cases_path, args.id_pattern, args.strict)
+        analysis = analyze(trace_path, cases_path, args.id_pattern, args.strict,
+                           args.bidirectional)
     except ValueError as exc:
         return _fail(str(exc))
     except PermissionError:
