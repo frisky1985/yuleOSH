@@ -52,6 +52,13 @@ class HybridResult:
     keyword_count: int = 0
     vector_count: int = 0
     vector_available: bool = False
+    # 语义路未生效的具体原因（None 表示向量路正常）。
+    degraded_reason: Optional[str] = None
+
+    @property
+    def degraded(self) -> bool:
+        """是否发生了降级（语义路未生效）。"""
+        return not self.vector_available
 
 
 class HybridSearch:
@@ -63,6 +70,8 @@ class HybridSearch:
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
         self.top_k = top_k
+        # unified_search 最近一次主源混合检索结果（供 API 读取降级信息）。
+        self.last_result: Optional[HybridResult] = None
 
     def _vector_ready(self) -> bool:
         return (
@@ -70,6 +79,16 @@ class HybridSearch:
             and self.embedding_provider is not None
             and self.vector_store.available
         )
+
+    def _unavailable_reason(self) -> str:
+        """语义路未生效的原因（可观测，避免静默降级）。"""
+        if self.vector_store is None:
+            return "vector_store 未配置（仅关键词检索）"
+        if self.embedding_provider is None:
+            return "embedding provider 未配置（仅关键词检索）"
+        reason = getattr(self.vector_store, "unavailable_reason", None)
+        return f"sqlite-vec 扩展不可用: {reason}" if reason else \
+            "sqlite-vec 扩展不可用（仅关键词检索）"
 
     def _tenant_content_hashes(self, tenant_org: str) -> list[str]:
         """该租户全部文章的 content_hash（向量候选集过滤，EI-M4A.1）。"""
@@ -137,6 +156,9 @@ class HybridSearch:
             except Exception as e:  # noqa: BLE001 — 向量路失败降级关键词
                 log.warning("vector search failed, fallback to keyword: %s", e)
                 result.vector_available = False
+                result.degraded_reason = f"vector search failed: {e}"
+        else:
+            result.degraded_reason = self._unavailable_reason()
         result.vector_count = len(vector_hits)
 
         # ── RRF 融合 ──
@@ -192,6 +214,7 @@ class HybridSearch:
 
         # 主源: 文章混合检索
         hybrid = self.search(query, top_k=k, tenant_org=tenant_org)
+        self.last_result = hybrid
         for h in hybrid.hits:
             h.hit_type = "article"
             hits.append(h)

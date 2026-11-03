@@ -300,6 +300,8 @@ def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict, **kwa
             "keyword_count": len(articles),
             "vector_count": 0,
             "vector_available": False,
+            "degraded": True,
+            "degraded_reason": str(e),
             "tenant_org": org_id,
             "fallback": str(e),
         })
@@ -320,6 +322,8 @@ def _handle_hybrid_search(method: str, tail: str, body: dict, query: dict, **kwa
         "keyword_count": result.keyword_count,
         "vector_count": result.vector_count,
         "vector_available": result.vector_available,
+        "degraded": result.degraded,
+        "degraded_reason": result.degraded_reason,
         "tenant_org": org_id,
     })
 
@@ -375,9 +379,13 @@ def _handle_unified_search(method: str, tail: str, body: dict, query: dict, **kw
                 "extra": None,
             } for i, a in enumerate(articles)],
             "tenant_org": org_id,
+            "vector_available": False,
+            "degraded": True,
+            "degraded_reason": str(e),
             "fallback": str(e),
         })
 
+    primary = searcher.last_result
     return json_ok({
         "query": q,
         "hits": [{
@@ -393,6 +401,9 @@ def _handle_unified_search(method: str, tail: str, body: dict, query: dict, **kw
             "hit_type": h.hit_type,
             "extra": h.extra,
         } for h in hits],
+        "vector_available": primary.vector_available if primary else False,
+        "degraded": primary.degraded if primary else True,
+        "degraded_reason": primary.degraded_reason if primary else None,
         "tenant_org": org_id,
     })
 

@@ -12,8 +12,8 @@ Vector store — sqlite-vec 向量存储（EI-M3C.2/.3）。
   ``vec0`` 虚拟表。
 - 表结构: kb_embeddings(vec0) — (embedding float[dim], content_hash, rowid)。
 - 写入按 content_hash 幂等（同内容不重复 embedding）。
-- 无 sqlite-vec 扩展时 ``vector_available()`` 返回 False，调用方降级
-  FTS5 仍可用（EI-M3C.4 优雅降级）。
+- 无 sqlite-vec 扩展时 ``available`` 为 False，``unavailable_reason`` 给出
+  具体原因；调用方降级 FTS5 仍可用（EI-M3C.4 优雅降级）。
 """
 from __future__ import annotations
 
@@ -32,15 +32,30 @@ class VectorStoreUnavailableError(Exception):
     """sqlite-vec 扩展不可用。"""
 
 
-def load_vector_extension(conn: sqlite3.Connection) -> bool:
-    """尝试加载 sqlite-vec 扩展，返回是否可用。"""
+# 最近一次扩展加载失败原因（供 VectorStore.unavailable_reason 使用）。
+_LAST_LOAD_ERROR: Optional[str] = None
+
+
+def _try_load_vector_extension(conn: sqlite3.Connection) -> tuple[bool, Optional[str]]:
+    """尝试加载 sqlite-vec，返回 (是否可用, 失败原因)。"""
     try:
         import sqlite_vec
+    except Exception as e:  # noqa: BLE001 — 依赖未安装
+        return False, f"sqlite_vec 未安装: {e}"
+    try:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
-        return True
-    except Exception:  # noqa: BLE001 — 扩展缺失时降级
-        return False
+        return True, None
+    except Exception as e:  # noqa: BLE001 — 扩展加载失败
+        return False, f"sqlite_vec 加载失败: {e}"
+
+
+def load_vector_extension(conn: sqlite3.Connection) -> bool:
+    """尝试加载 sqlite-vec 扩展，返回是否可用。"""
+    global _LAST_LOAD_ERROR
+    ok, reason = _try_load_vector_extension(conn)
+    _LAST_LOAD_ERROR = reason
+    return ok
 
 
 class VectorStore:
@@ -50,12 +65,32 @@ class VectorStore:
         self.conn = conn
         self.dim = dim
         self._available = load_vector_extension(conn)
+        self._unavailable_reason: Optional[str] = (
+            None if self._available
+            else (_LAST_LOAD_ERROR or "sqlite-vec 扩展不可用")
+        )
         if self._available:
             self._ensure_table()
 
     @property
     def available(self) -> bool:
         return self._available
+
+    @property
+    def unavailable_reason(self) -> Optional[str]:
+        """不可用原因（available 为 True 时为 None）。"""
+        return self._unavailable_reason
+
+    def require_available(self) -> None:
+        """断言向量能力可用；不可用时抛 VectorStoreUnavailableError。
+
+        供显式需要向量能力的调用方使用；默认检索路径仍走
+        ``available`` 检查后静默降级 FTS5。
+        """
+        if not self._available:
+            raise VectorStoreUnavailableError(
+                self._unavailable_reason or "sqlite-vec 扩展不可用"
+            )
 
     def _ensure_table(self) -> None:
         """建 vec0 虚拟表（幂等）。"""
@@ -141,6 +176,16 @@ class VectorStore:
             return cur.fetchone()[0]
         except Exception:  # noqa: BLE001
             return 0
+
+    def clear(self) -> None:
+        """清空向量表（扩展不可用时为空操作）。"""
+        if not self._available:
+            return
+        try:
+            self.conn.execute("DELETE FROM kb_embeddings")
+            self.conn.commit()
+        except Exception as e:  # noqa: BLE001
+            log.warning("clear vector table failed: %s", e)
 
     # ---- helpers ----
 

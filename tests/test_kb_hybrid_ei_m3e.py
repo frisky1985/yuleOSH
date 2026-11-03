@@ -104,6 +104,26 @@ class TestHybridSearch:
         scores = [h.score for h in result.hits]
         assert scores == sorted(scores, reverse=True)
 
+    def test_degraded_reason_when_no_vector(self, store):
+        """GIVEN 无向量配置 WHEN search THEN 降级原因可观测（P0-1）。"""
+        hs = HybridSearch(store)
+        result = hs.search("任意")
+        assert result.degraded is True
+        assert result.degraded_reason
+        assert "关键词" in result.degraded_reason
+
+    def test_degraded_reason_on_vector_failure(self, store):
+        """GIVEN 向量路抛异常 WHEN search THEN 异常写入 degraded_reason（P0-1）。"""
+        class BrokenVectorStore:
+            available = True
+            def search(self, *a, **k):
+                raise RuntimeError("vector broke")
+        hs = HybridSearch(store, BrokenVectorStore(), MockEmbedding())
+        result = hs.search("任意")
+        assert result.degraded is True
+        assert result.degraded_reason
+        assert "vector search failed" in result.degraded_reason
+
     def test_hit_dataclass_fields(self):
         """GIVEN SearchHit WHEN 构造 THEN 字段完整。"""
         h = SearchHit(article_id=1, title="t", content="c", source="s", source_ref="r",

@@ -361,6 +361,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kg_build.add_argument("--ci", action="store_true", help="CI mode (auto-detect + snapshot)")
     p_kg_build.add_argument("--files", type=str, default=None, help="Comma-separated file paths")
     p_kg_build.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_incremental = kgsub.add_parser(
+        "incremental", help="One-shot incremental chain (checkpoint→build→ci-hook→verify)")
+    p_kg_incremental.add_argument("--changed-files", type=str, default=None,
+                                  help="Comma-separated changed file paths")
+    p_kg_incremental.add_argument("--auto", action="store_true", help="Auto-detect changes from git diff")
+    p_kg_incremental.add_argument("--base-ref", default="HEAD~1", help="Git base ref for --auto")
+    p_kg_incremental.add_argument("--build-id", "-b", default=None, help="Build identifier")
+    p_kg_incremental.add_argument("--test-json", default=None, help="pytest JSON report path")
+    p_kg_incremental.add_argument("--junit", default=None, help="JUnit XML report path")
+    p_kg_incremental.add_argument("--no-verify", action="store_true",
+                                  help="Skip writing test results back to KG")
+    p_kg_incremental.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_kg_bootstrap = kgsub.add_parser("bootstrap", help="Full bootstrap from traceability data")
     p_kg_bootstrap.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_kg_snapshot = kgsub.add_parser("snapshot", help="Snapshot management")
@@ -965,10 +977,13 @@ def main():
         from yuleosh.knowledge_graph.kg_cli import (
             cmd_build, cmd_bootstrap, cmd_snapshot_list, cmd_snapshot_diff,
             cmd_query_impact, cmd_stats as kg_cmd_stats, cmd_report, cmd_events,
+            cmd_incremental,
         )
         from yuleosh.knowledge_graph.merge_gate import cmd_check_merge
         if args.kg_sub == "build":
             cmd_build(args)
+        elif args.kg_sub == "incremental":
+            cmd_incremental(args)
         elif args.kg_sub == "bootstrap":
             cmd_bootstrap(args)
         elif args.kg_sub == "snapshot":

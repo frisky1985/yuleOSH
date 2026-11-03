@@ -14,7 +14,11 @@ from yuleosh.kb.embedding import (
     OllamaEmbeddingProvider,
     get_provider,
 )
-from yuleosh.kb.vector_store import VectorStore, load_vector_extension
+from yuleosh.kb.vector_store import (
+    VectorStore,
+    VectorStoreUnavailableError,
+    load_vector_extension,
+)
 
 
 # ── EI-M3C.1: EmbeddingProvider 抽象 ──────────────────────────────────
@@ -122,3 +126,7 @@ class TestVectorStore:
         assert vs.upsert("h", [0.1] * 768) is False
         assert vs.search([0.1] * 768) == []
         assert vs.count() == 0
+        # 降级原因可观测，且 require_available 显式抛错（P0-1）
+        assert vs.unavailable_reason
+        with pytest.raises(VectorStoreUnavailableError):
+            vs.require_available()
