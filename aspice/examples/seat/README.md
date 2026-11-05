@@ -118,6 +118,25 @@ python3 tools/evidence_render.py \
 已验证：24 单元格回写 PASS → 幂等复渲染 0 写入 PASS → trace_check 回归 0 ERROR。
 完整闭环：pipeline 产物(md) → evidence_check 门禁 → evidence_render 回写 → xlsx 交付视图。
 
+**真实 stage 接入（SUP.1）**：`evidence_stage/` 演示了 yuleOSH 真实 pipeline 产物的接入——
+对 yuleOSH 仓库本体运行 `ComplianceChecker`（ASPICE v3.1，18 BP），原始输出存为
+`compliance_raw.json`，由 `adapter_compliance.py` 完成两件事：① 在 SUP.1_评审记录
+「2.评审检查单」按 BP 幂等建立 18 行检查项骨架；② 每个 BP 生成一份 frontmatter 产物
+（verdict 映射 ✅→通过，⚠️/❌→不通过，部分通过不算通过）。随后走同一套门禁与渲染：
+
+```bash
+python3 tools/evidence_check.py --cases "examples/seat/SUP.1_评审记录_座椅控制器示例_V1.0.xlsx" \
+  --evidence examples/seat/evidence_stage --slots examples/seat/slots.yaml \
+  --doc-alias SUP.1_评审记录 --write-manifest
+python3 tools/evidence_render.py --cases "examples/seat/SUP.1_评审记录_座椅控制器示例_V1.0.xlsx" \
+  --evidence examples/seat/evidence_stage --slots examples/seat/slots.yaml --doc-alias SUP.1_评审记录
+```
+
+已验证：36 槽位（18 BP × 2 列）全闭合 PASS，36 单元格回写 PASS，
+真实判定 4 通过 / 14 不通过 原样落表（不造假绿）。
+接入新 stage 的完整步骤：跑 stage 存原始输出 → 适配器生成 frontmatter 产物 →
+slots.yaml 加文档段 → check + render。
+
 ## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与

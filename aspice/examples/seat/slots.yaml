@@ -24,3 +24,19 @@ documents:
         field: verdict
         required: true
         vocabulary: [PASS, FAIL, BLOCKED]    # 受控词表：渲染与校验双层强制
+
+  - alias: SUP.1_评审记录                    # yuleOSH review/compliance stage 接入示例
+    xlsx: SUP.1_评审记录_座椅控制器示例_V1.0.xlsx
+    sheet: "2.评审检查单"
+    header_locator:
+      contains: 检查项ID                     # 双语表头按第一行（中文）规范化匹配
+    row_key:
+      column: 检查项ID
+    evidence_columns:
+      - name: 结果(通过·不通过·不适用)
+        field: result
+        required: true
+        vocabulary: [通过, 不通过, 不适用]
+      - name: 证据位置
+        field: evidence_loc
+        required: true

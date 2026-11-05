@@ -1,0 +1,186 @@
+{
+  "version": "0.1",
+  "doc_alias": "SUP.1_评审记录",
+  "artifacts": [
+    {
+      "path": "evidence_stage/CHK-SWE1BP1.md",
+      "sha256": "0ebcafe55a15465c061383bf3dd1905e8d980494cb7a694c3d97fc987779592c",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE1BP1::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE1BP1::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE1BP2.md",
+      "sha256": "f86ef152159b05158450144dbedad6c32eafaf2142c2e7986dc4278df8f091e6",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE1BP2::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE1BP2::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE1BP3.md",
+      "sha256": "491d3f8c5abd8d3105daeeb01314f8a82fabe2c35429c923c8f5892d819dcc20",
+      "stage": "review",
+      "verdict": "通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE1BP3::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE1BP3::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE2BP1.md",
+      "sha256": "4028abed77fae2083513e771da6e1e7f0115b833b4c15b37e45c13ae78c2608f",
+      "stage": "review",
+      "verdict": "通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE2BP1::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE2BP1::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE2BP2.md",
+      "sha256": "cf47794106671331f5db877ec6f90f784b99663740cb45fc0410db3be6daf947",
+      "stage": "review",
+      "verdict": "通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE2BP2::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE2BP2::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE2BP3.md",
+      "sha256": "f541f61be9d57cd0037fb01513fa25ae28de17672b9bbc65d5395db1b14f451d",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE2BP3::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE2BP3::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE3BP1.md",
+      "sha256": "1c0e75bfe2d2b2e707afafca1f047a76daa43fc10c867d2c599c03426b343a7f",
+      "stage": "review",
+      "verdict": "通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE3BP1::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE3BP1::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE3BP2.md",
+      "sha256": "421884485d9433ce80acc1ea187e40bd206c9f299de703f0c9432517be8eb8ed",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE3BP2::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE3BP2::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE3BP3.md",
+      "sha256": "2dc726509781f0c7a070e577e968e5a8f91235969ac6c42f4e4da0ce3806ade1",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE3BP3::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE3BP3::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE4BP1.md",
+      "sha256": "1c49f8631cb9a33f93ed688ae91cfd0d07d88922b5a00b043d4de993269fd8be",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE4BP1::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE4BP1::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE4BP2.md",
+      "sha256": "7deb31c0e97badb17d567eeb49706702a36f9d81fa0b5f055e64522294dec23e",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE4BP2::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE4BP2::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE4BP3.md",
+      "sha256": "220636ec0a849100fcb6f9df387ace39ba0df49703d8df6940a06727ca175859",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE4BP3::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE4BP3::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE5BP1.md",
+      "sha256": "729efcb97afb6ce07e6ad4de9165a5708361c9530494713d3731b709ac022057",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE5BP1::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE5BP1::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE5BP2.md",
+      "sha256": "3d81e593c68072f455a8374243596d292aea2d55476a90e24a6b19e5af4cb01c",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE5BP2::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE5BP2::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE5BP3.md",
+      "sha256": "91a4e4f65585840795a40042d394d16f900dd6f5dda82f7e2db9b41e72f0a49d",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE5BP3::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE5BP3::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE6BP1.md",
+      "sha256": "3c64bde41f4ac3b8734884eb27b31552ac3a103be0494f9f849e3bf03591078a",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE6BP1::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE6BP1::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE6BP2.md",
+      "sha256": "987fdf0f6ce84f658b9d1ff87beade1bcc06c5bf1bc74ea672c7d92edc4dd537",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE6BP2::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE6BP2::证据位置"
+      ]
+    },
+    {
+      "path": "evidence_stage/CHK-SWE6BP3.md",
+      "sha256": "a2bb2e7ff2bcbccd8fd8626463f7d83ea9e368360c830358fed8c5304e5a1119",
+      "stage": "review",
+      "verdict": "不通过",
+      "fills": [
+        "SUP.1_评审记录::CHK-SWE6BP3::结果(通过·不通过·不适用)",
+        "SUP.1_评审记录::CHK-SWE6BP3::证据位置"
+      ]
+    }
+  ]
+}

@@ -186,7 +186,8 @@ def discover_slots(cases_path: Path, sheet_name: str,
     header: list[str] | None = None
     header_row = 0
     for ridx, row in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), 1):
-        cells = [str(c).replace("\n", "").strip() if c else "" for c in row]
+        # 表头单元格常为「中文\n英文」双语：取第一行做规范化匹配
+        cells = [str(c).split("\n")[0].strip() if c else "" for c in row]
         if locator in cells:
             header = cells
             header_row = ridx
