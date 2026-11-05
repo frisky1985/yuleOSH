@@ -137,6 +137,22 @@ python3 tools/evidence_render.py --cases "examples/seat/SUP.1_评审记录_座�
 接入新 stage 的完整步骤：跑 stage 存原始输出 → 适配器生成 frontmatter 产物 →
 slots.yaml 加文档段 → check + render。
 
+**跨文档一致性（consistency_check）**：`consistency.yaml` 声明两类检查，由
+`tools/consistency_check.py` 执行（fail-closed）：
+- **实体名一致性**：同一 ID 在 SWE.2/HWE.2/SYS.3 与需求追踪表（名称真源）中的名称必须一致
+  （本 demo 14 个架构实体全部一致，机械化了原先的人工核对）；
+- **数值事实一致性**：欠压 8.5V、休眠电流 ≤1mA、PWM 10kHz、LIN 19.2kbps、3 组记忆、
+  单路 2A/5A、整机 8A/12A 等关键数值在所有文档中的取值必须一致。
+
+```bash
+python3 tools/consistency_check.py --spec examples/seat/consistency.yaml [--strict]
+```
+
+已验证：27 处数值 + 14 实体全绿；篡改 HWE.1 欠压 8.5V→8.0V 后精确报出
+`E-FACT-MISMATCH`（定位到文件/sheet/单元格/原文），恢复后回绿。
+实施中的一次真实裁决：检查器把 HWE.2 的「连续 8A/峰值 12A」判为与「单路 2A/5A」不一致——
+这是整机合计与单通道两类不同事实，已拆成独立事实条目（机器标记 → 人裁决 → 规格精化）。
+
 ## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与
