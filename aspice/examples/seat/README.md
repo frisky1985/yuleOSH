@@ -18,6 +18,8 @@
 | `ENG_需求追踪表_座椅控制器示例_V1.0.xlsx` | 8 张清单共 46 个节点，上下游双向回指 |
 | `ENG_测试规范_座椅控制器示例_V1.0.xlsx` | 8 条系统级测试用例（`SYS-SEAT-xxx-TC-01`） |
 | `trace_report_座椅控制器示例.md` / `.json` | `trace_check.py --bidirectional` 的校验报告 |
+| `evidence/`（8 份 md + `evidence_manifest.json`） | pipeline 产物原型：每份产物 frontmatter 自声明填充的模板槽位，清单记录 sha256 基线 |
+| `HWE.2_原理图占位说明_座椅控制器示例_V1.0.docx` | HWE.2 第 3 章三处原理图占位框的规格化说明（分块清单/器件选型/接口信号/EDA 注意事项） |
 
 ## 2. 追溯链
 
@@ -73,7 +75,31 @@ python3 tools/trace_check.py \
 
 启用 `--strict` 时上述 WARN 会使退出码变为 1，建议模板层面补齐后再用于门禁。
 
-## 5. 范围边界
+## 5. 证据链原型（pipeline 产物 ↔ 模板槽位）
+
+`evidence/` 演示了「yuleOSH pipeline 产物按 ASPICE 模板槽位填写」的最小闭环：
+
+- **槽位**：`文档别名::用例ID::列名`，由模板枚举（测试规范第 1 轮 实际结果/测试日志链接/判定结论 × 8 用例 = 24 槽位）；
+- **产物自声明**：每份 pipeline 产物（md）在 frontmatter 声明 `stage` 与 `fills` 槽位列表；
+- **清单基线**：`evidence_manifest.json` 记录每份产物 sha256，作为 SUP.8 配置项基线；
+- **双向闭合 + 防篡改校验**：
+
+```bash
+cd /workspace/aspice
+python3 tools/evidence_check.py \
+  --cases "examples/seat/ENG_测试规范_座椅控制器示例_V1.0.xlsx" \
+  --evidence examples/seat/evidence --write-manifest   # 建/更新基线
+python3 tools/evidence_check.py \
+  --cases "examples/seat/ENG_测试规范_座椅控制器示例_V1.0.xlsx" \
+  --evidence examples/seat/evidence                    # 日常校验（CI 门禁）
+```
+
+fail-closed 规则：槽位未填充（E-SLOT-UNFILLED）、产物孤儿（E-SLOT-UNKNOWN）、
+空壳产物（E-ARTIFACT-EMPTY）、哈希不符（E-HASH-MISMATCH）、产物消失（E-MANIFEST-STALE）
+均为 ERROR，退出码 1。已验证：24/24 槽位填充 PASS → 篡改单文件 FAIL → 删除单文件
+FAIL（3 槽位悬空 + 清单残留）→ 恢复 PASS。
+
+## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与
   **系统级验证用例**；SWE.2/SWE.3/HWE.2 三份设计文档已补齐，模块/函数/硬件元素 ID
