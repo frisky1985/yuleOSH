@@ -153,6 +153,23 @@ python3 tools/consistency_check.py --spec examples/seat/consistency.yaml [--stri
 实施中的一次真实裁决：检查器把 HWE.2 的「连续 8A/峰值 12A」判为与「单路 2A/5A」不一致——
 这是整机合计与单通道两类不同事实，已拆成独立事实条目（机器标记 → 人裁决 → 规格精化）。
 
+**SUP.8 配置管理（cm_registry）**：`cm_registry.yaml` 是本目录的配置项注册表（真源），
+`SUP.8_项目配置项清单及状态报告_座椅控制器示例_V1.0.xlsx` 是从注册表渲染的视图，
+由 `tools/cm_registry.py` 驱动（fail-closed）：
+
+```bash
+python3 tools/cm_registry.py --root examples/seat --verify    # 哈希/覆盖性校验
+python3 tools/cm_registry.py --root examples/seat --update    # 变更后刷新基线
+python3 tools/cm_registry.py --root examples/seat --render    # 重新生成 SUP.8 清单
+```
+
+- 三条门禁规则：`E-HASH-MISMATCH`（文件与基线哈希不符）/ `E-ITEM-MISSING`（已注册文件丢失）/
+  `E-FILE-UNREGISTERED`（工作产品未受控，SUP.8 要求 100% 覆盖）；
+- 已验证：47 个配置项（10+ 文档、规格 yaml、证据目录、工具脚本、SUP.8 清单自身）基线
+  SEAT-DEMO-BL1 全绿；篡改 consistency.yaml 后精确报出哈希不符（注册值 ≠ 实际值），恢复回绿；
+- 与 evidence manifest 的分工：manifest 管「pipeline 产物 ↔ 模板槽位」，
+  cm_registry 管「工作产品文档本身」的受控与防篡改，两者共同构成 SUP.8 证据。
+
 ## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与
