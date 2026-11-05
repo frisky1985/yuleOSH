@@ -69,6 +69,7 @@ class Artifact:
     verdict: str
     fills: list[str]
     body_chars: int
+    meta: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -143,33 +144,59 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return meta, body
 
 
+# ---------------------------------------------------------------- 槽位规格
+
+def load_slots(slots_path: Path, doc_alias: str) -> dict:
+    """读取 slots.yaml，返回指定文档别名的规格（dict）。
+
+    规格即 L0 护栏：sheet/表头定位/行键列/证据列/字段映射/受控词表全部数据化。
+    """
+    try:
+        import yaml
+    except ImportError as exc:
+        raise ValueError("--slots 需要 pyyaml：python3 -m pip install pyyaml") from exc
+    data = yaml.safe_load(slots_path.read_text(encoding="utf-8"))
+    docs = (data or {}).get("documents", [])
+    for doc in docs:
+        if doc.get("alias") == doc_alias:
+            for key in ("sheet", "header_locator", "row_key", "evidence_columns"):
+                if key not in doc:
+                    raise ValueError(f"slots.yaml 中「{doc_alias}」缺少 {key}")
+            return doc
+    aliases = [d.get("alias") for d in docs]
+    raise ValueError(f"slots.yaml 中找不到文档别名「{doc_alias}」（现有：{aliases}）")
+
+
 # ---------------------------------------------------------------- 槽位发现
 
 def discover_slots(cases_path: Path, sheet_name: str,
-                   columns: tuple[str, ...], doc_alias: str) -> list[str]:
+                   columns: tuple[str, ...], doc_alias: str,
+                   row_key: str = TC_ID_HEADER,
+                   locator: str | None = None) -> list[str]:
     """从测试规范 xlsx 枚举证据槽位（第 1 轮结果列组 × 全部用例 ID）。"""
     from openpyxl import load_workbook
 
+    locator = locator or row_key
     wb = load_workbook(cases_path, read_only=True)
     if sheet_name not in wb.sheetnames:
         raise ValueError(f"{cases_path.name} 中找不到工作表「{sheet_name}」")
     ws = wb[sheet_name]
 
-    # 动态定位表头行：前若干行中包含「测试用例ID」的那一行
+    # 动态定位表头行：前若干行中包含定位串的那一行
     header: list[str] | None = None
     header_row = 0
     for ridx, row in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), 1):
         cells = [str(c).replace("\n", "").strip() if c else "" for c in row]
-        if TC_ID_HEADER in cells:
+        if locator in cells:
             header = cells
             header_row = ridx
             break
     if header is None:
-        raise ValueError(f"「{sheet_name}」前 10 行内找不到含「{TC_ID_HEADER}」的表头行")
+        raise ValueError(f"「{sheet_name}」前 10 行内找不到含「{locator}」的表头行")
 
-    tc_col = header.index(TC_ID_HEADER) if TC_ID_HEADER in header else None
+    tc_col = header.index(row_key) if row_key in header else None
     if tc_col is None:
-        raise ValueError(f"表头缺少「{TC_ID_HEADER}」列")
+        raise ValueError(f"表头缺少行键列「{row_key}」")
     # 每类证据列只取第一次出现（第 1 轮列组）
     col_names: list[str] = []
     for want in columns:
@@ -213,6 +240,7 @@ def scan_artifacts(evidence_dir: Path, doc_alias: str) -> tuple[list[Artifact], 
             verdict=str(meta.get("verdict", "")).strip(),
             fills=fills,
             body_chars=len(body),
+            meta=meta,
         ))
     return artifacts, errors
 
@@ -221,9 +249,13 @@ def scan_artifacts(evidence_dir: Path, doc_alias: str) -> tuple[list[Artifact], 
 
 def analyze(cases_path: Path, evidence_dir: Path, doc_alias: str,
             columns: tuple[str, ...], sheet_name: str,
-            manifest_path: Path | None, write_manifest: bool) -> EvidenceAnalysis:
+            manifest_path: Path | None, write_manifest: bool,
+            row_key: str = TC_ID_HEADER, locator: str | None = None,
+            fields: dict[str, str] | None = None,
+            vocab: dict[str, list[str]] | None = None) -> EvidenceAnalysis:
     result = EvidenceAnalysis()
-    result.slots_expected = discover_slots(cases_path, sheet_name, columns, doc_alias)
+    result.slots_expected = discover_slots(cases_path, sheet_name, columns, doc_alias,
+                                           row_key=row_key, locator=locator)
 
     artifacts, scan_errors = scan_artifacts(evidence_dir, doc_alias)
     result.artifacts = artifacts
@@ -245,6 +277,19 @@ def analyze(cases_path: Path, evidence_dir: Path, doc_alias: str,
         if a.body_chars < MIN_BODY_CHARS:
             result.errors.append(
                 f"E-ARTIFACT-EMPTY: {a.rel_path} 正文不足 {MIN_BODY_CHARS} 字符（疑似空壳占位）")
+        # 字段与受控词表校验（规格驱动）：产物声明填充某列，就必须带对应字段且值合法
+        for slot in a.fills:
+            col = slot.rsplit("::", 1)[-1]
+            if fields and col in fields:
+                value = str(a.meta.get(fields[col], "")).strip()
+                if not value:
+                    result.errors.append(
+                        f"E-FIELD-MISSING: {a.rel_path} 声明填充「{col}」"
+                        f"但 frontmatter 缺少字段 {fields[col]}")
+                elif vocab and col in vocab and value not in vocab[col]:
+                    result.errors.append(
+                        f"E-VOCAB: {a.rel_path} 字段 {fields[col]}={value!r}"
+                        f" 不在受控词表 {vocab[col]}")
 
     for slot in result.slots_expected:
         if slot not in filled:
@@ -427,6 +472,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"证据清单路径（默认 <evidence>/{MANIFEST_NAME}）")
     p.add_argument("--write-manifest", action="store_true",
                    help="以当前产物重建证据清单（建立/更新基线）")
+    p.add_argument("--slots", type=Path, default=None,
+                   help="slots.yaml 模板槽位规格（提供后以此为准，覆盖 --sheet/--columns）")
     p.add_argument("--doc-alias", default=DEFAULT_DOC_ALIAS,
                    help=f"槽位文档别名（默认 {DEFAULT_DOC_ALIAS}）")
     p.add_argument("--sheet", default=DEFAULT_CASES_SHEET,
@@ -464,9 +511,29 @@ def main(argv: list[str] | None = None) -> int:
         return _fail(f"找不到 --evidence 指定的目录：{evidence_dir}")
 
     columns = tuple(c.strip() for c in args.columns.split(",") if c.strip())
+    sheet_name = args.sheet
+    row_key, locator = TC_ID_HEADER, None
+    fields: dict[str, str] | None = None
+    vocab: dict[str, list[str]] | None = None
+    if args.slots is not None:
+        slots_path = Path(args.slots).expanduser()
+        if not slots_path.is_file():
+            return _fail(f"找不到 --slots 指定的规格文件：{slots_path}")
+        try:
+            spec = load_slots(slots_path, args.doc_alias)
+        except ValueError as exc:
+            return _fail(str(exc))
+        sheet_name = spec["sheet"]
+        row_key = spec["row_key"]["column"]
+        locator = spec["header_locator"]["contains"]
+        columns = tuple(c["name"] for c in spec["evidence_columns"])
+        fields = {c["name"]: c["field"] for c in spec["evidence_columns"] if c.get("field")}
+        vocab = {c["name"]: list(c["vocabulary"])
+                 for c in spec["evidence_columns"] if c.get("vocabulary")}
     try:
         result = analyze(cases_path, evidence_dir, args.doc_alias, columns,
-                         args.sheet, args.manifest, args.write_manifest)
+                         sheet_name, args.manifest, args.write_manifest,
+                         row_key=row_key, locator=locator, fields=fields, vocab=vocab)
     except ValueError as exc:
         return _fail(str(exc))
     except Exception as exc:

@@ -19,6 +19,7 @@
 | `ENG_测试规范_座椅控制器示例_V1.0.xlsx` | 8 条系统级测试用例（`SYS-SEAT-xxx-TC-01`） |
 | `trace_report_座椅控制器示例.md` / `.json` | `trace_check.py --bidirectional` 的校验报告 |
 | `evidence/`（8 份 md + `evidence_manifest.json`） | pipeline 产物原型：每份产物 frontmatter 自声明填充的模板槽位，清单记录 sha256 基线 |
+| `slots.yaml` | 模板槽位规格：sheet/表头定位/行键列/证据列/字段映射/受控词表，check 与 render 共用 |
 | `HWE.2_原理图占位说明_座椅控制器示例_V1.0.docx` | HWE.2 第 3 章三处原理图占位框的规格化说明（分块清单/器件选型/接口信号/EDA 注意事项） |
 
 ## 2. 追溯链
@@ -95,9 +96,27 @@ python3 tools/evidence_check.py \
 ```
 
 fail-closed 规则：槽位未填充（E-SLOT-UNFILLED）、产物孤儿（E-SLOT-UNKNOWN）、
-空壳产物（E-ARTIFACT-EMPTY）、哈希不符（E-HASH-MISMATCH）、产物消失（E-MANIFEST-STALE）
-均为 ERROR，退出码 1。已验证：24/24 槽位填充 PASS → 篡改单文件 FAIL → 删除单文件
-FAIL（3 槽位悬空 + 清单残留）→ 恢复 PASS。
+空壳产物（E-ARTIFACT-EMPTY）、哈希不符（E-HASH-MISMATCH）、产物消失（E-MANIFEST-STALE）、
+缺字段（E-FIELD-MISSING）、越受控词表（E-VOCAB）均为 ERROR，退出码 1。
+已验证：24/24 槽位填充 PASS → 篡改单文件 FAIL → 删除单文件 FAIL → `verdict: PASSED`
+越词表 FAIL → 恢复 PASS。
+
+**槽位规格化（slots.yaml）**：`slots.yaml` 把模板的 sheet/表头定位/行键列/证据列/
+frontmatter 字段映射/受控词表全部数据化，evidence_check 与 evidence_render 共用此
+唯一依据；新增模板只需新增一段 yaml，工具零改动。
+
+**渲染回写（evidence_render.py）**：manifest 是真源，xlsx 是渲染视图。渲染器先过
+evidence_check 门禁（有 ERROR 即中止），再按槽位把 frontmatter 字段写回单元格，
+写后自动重读校验；目标格已有不同内容即冲突 ERROR（`--force` 可覆盖）。
+
+```bash
+python3 tools/evidence_render.py \
+  --cases "examples/seat/ENG_测试规范_座椅控制器示例_V1.0.xlsx" \
+  --evidence examples/seat/evidence --slots examples/seat/slots.yaml [--dry-run]
+```
+
+已验证：24 单元格回写 PASS → 幂等复渲染 0 写入 PASS → trace_check 回归 0 ERROR。
+完整闭环：pipeline 产物(md) → evidence_check 门禁 → evidence_render 回写 → xlsx 交付视图。
 
 ## 6. 范围边界
 

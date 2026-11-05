@@ -2,6 +2,8 @@
 artifact: SYS-SEAT-005-TC-01__round1
 stage: test
 verdict: PASS
+actual_result: 滑轨/靠背触发停止时间 142/138ms，反向退出正常
+log_link: logs/SYS-SEAT-005-TC-01.log（示例占位）
 fills:
   - ENG_测试规范::SYS-SEAT-005-TC-01::实际结果
   - ENG_测试规范::SYS-SEAT-005-TC-01::测试日志链接
@@ -19,4 +21,4 @@ fills:
 - 判定结论：PASS
 
 > 本文件模拟 pipeline test 阶段输出：stage 自声明 fills 槽位，
-> 由 evidence_check.py 校验闭合与哈希。
+> 由 evidence_check.py 校验闭合与哈希，evidence_render.py 回写 xlsx。
