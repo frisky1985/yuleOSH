@@ -1,4 +1,4 @@
-baseline: SEAT-DEMO-BL1
+baseline: SEAT-DEMO-BL2
 tool: cm_registry.py
 scope:
   include:
@@ -63,9 +63,9 @@ items:
   management: 版本管理
   version: V1.0
   status: 正式发布
-  baseline: SEAT-DEMO-BL1
-  sha256: fe1d886a647de3c83593cca89eeeb6796eadf23da9ee3bd259b4e4693d49b8fc
-  size: 10575
+  baseline: SEAT-DEMO-BL2
+  sha256: 6b7b228c14e3b70ca9698667fce9d9b3b0bb42729853290c292d690da56b7c38
+  size: 13465
 - id: CI-SEAT-007
   path: SUP.1_评审记录_座椅控制器示例_V1.0.xlsx
   name: SUP.1_评审记录_座椅控制器示例_V1.0
@@ -435,3 +435,76 @@ items:
   baseline: SEAT-DEMO-BL1
   sha256: d63b0871bf8376d07c5c2b4d48e6b656e0038d3bb49460a3071eb11dee7a20f6
   size: 62954
+- id: CI-SEAT-048
+  path: gate_registry.yaml
+  name: gate_registry
+  management: 版本管理（活文档）
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: 3bf47a2b9dad1409653f6e2c7448f2ce368fa32e0f177040fe5bb288d8d3075f
+  size: 3983
+  live: true
+- id: CI-SEAT-049
+  path: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx
+  name: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0
+  management: 版本管理（活文档）
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: 003df53340b39e017b4c2d1cf76b402cdee11e224f5dcbe6ccf4dddb40f3091b
+  size: 38104
+  live: true
+- id: CI-SEAT-050
+  path: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx
+  name: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0
+  management: 版本管理（活文档）
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: 1e71e9531675a2cf1cb83400f31e8eaa4e65a58f0cec87fc8e2e4d010235c780
+  size: 34842
+  live: true
+changelog:
+- date: '2026-11-06'
+  path: README.md
+  old: fe1d886a647d
+  new: aff71aebd8c7
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: gate_registry.yaml
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: gate_registry.yaml
+  old: d8ee562b948b
+  new: f18e64a2715f
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx
+  old: 53418ea7f340
+  new: 18c4c09f547a
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx
+  old: 39601e7bd7d6
+  new: 0db8b14ddf06
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: gate_registry.yaml
+  old: f18e64a2715f
+  new: 9811e6f124a7
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: README.md
+  old: aff71aebd8c7
+  new: 6b7b228c14e3
+  baseline: SEAT-DEMO-BL2

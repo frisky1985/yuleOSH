@@ -1,0 +1,114 @@
+problems:
+- id: PR-SEAT-001
+  key: d40df94f1688
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-006 README.md 哈希与基线 SEAT-DEMO-BL1 不符（注册 fe1d886a647d… ≠ 实际 7d28e7948402…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-002
+  key: a42b99e9ea19
+  source: consistency_check
+  rule: E-FACT-MISMATCH
+  summary: 欠压保护阈值不一致：期望 8.5V，HWE.1_硬件需求规格说明书_座椅控制器示例_V1.0.xlsx「3.硬件需求」W6 出现 8.0V（原文：9–16
+    V 全范围输出稳定；-14 V 反接 1 min 无损坏；欠压 8.0 V 时执行器停止。）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-003
+  key: 302342390a20
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-003 HWE.1_硬件需求规格说明书_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL1 不符（注册
+    1587f1a64e41… ≠ 实际 340c82664fc8…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-004
+  key: bfc4f903a1c5
+  source: cm_registry
+  rule: E-FILE-UNREGISTERED
+  summary: 工作产品未纳入配置管理：gate_registry.yaml（SUP.8 要求 100% 受控）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-005
+  key: 876116e6264f
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-048 gate_registry.yaml 哈希与基线 SEAT-DEMO-BL2 不符（注册 f18e64a2715f…
+    ≠ 实际 53a9bc5adab9…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-006
+  key: 12be7f1e5d0c
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-049 SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL2 不符（注册
+    53418ea7f340… ≠ 实际 18c4c09f547a…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-007
+  key: 88f08944b082
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-050 SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL2 不符（注册 39601e7bd7d6…
+    ≠ 实际 0db8b14ddf06…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-008
+  key: 43b42426e3dc
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-048 gate_registry.yaml 哈希与基线 SEAT-DEMO-BL2 不符（注册 9811e6f124a7…
+    ≠ 实际 f19dedc2a826…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-009
+  key: c9fb312dc91e
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-049 SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL2 不符（注册
+    18c4c09f547a… ≠ 实际 a710124d8afb…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-010
+  key: d87a612e75cb
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-050 SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL2 不符（注册 0db8b14ddf06…
+    ≠ 实际 a276d96b8cdd…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+changes:
+- id: CR-SEAT-001
+  key: README.md|fe1d886a647d|aff71aebd8c7
+  date: '2026-11-06'
+  object: README.md
+  request: README.md 内容变更（fe1d886a647d… → aff71aebd8c7…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-002
+  key: README.md|aff71aebd8c7|6b7b228c14e3
+  date: '2026-11-06'
+  object: README.md
+  request: README.md 内容变更（aff71aebd8c7… → 6b7b228c14e3…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）

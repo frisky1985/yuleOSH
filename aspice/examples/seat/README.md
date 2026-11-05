@@ -170,6 +170,27 @@ python3 tools/cm_registry.py --root examples/seat --render    # 重新生成 SUP
 - 与 evidence manifest 的分工：manifest 管「pipeline 产物 ↔ 模板槽位」，
   cm_registry 管「工作产品文档本身」的受控与防篡改，两者共同构成 SUP.8 证据。
 
+**SUP.9/10 自动闭环（gate_sync）**：`gate_registry.yaml` 是问题单/变更请求的真源，
+SUP.9_缺陷问题管理表 与 SUP.10_项目变更跟踪表 是渲染视图，由 `tools/gate_sync.py` 驱动：
+
+```bash
+python3 tools/gate_sync.py --root examples/seat --sync-problems   # 五校验器 → 问题单
+python3 tools/gate_sync.py --root examples/seat --sync-changes    # cm changelog → 变更请求
+python3 tools/gate_sync.py --root examples/seat --render          # 渲染 SUP.9/SUP.10
+```
+
+- **问题单（SUP.9）**：每次同步运行 trace/evidence×2/consistency/cm_registry 五个校验器，
+  每条 ERROR 按内容哈希开立 PR-SEAT-xxx（去重）；不再出现的 ERROR 自动关闭并记「门禁自动复测」；
+- **变更请求（SUP.10）**：cm_registry --update 会把每次哈希刷新/新增写入 changelog，
+  gate_sync 据此登记 CR-SEAT-xxx（去重），变更原因 = 哈希前后值；
+- 实测闭环：注入欠压 8.0V → 自动开立 PR（consistency + cm_registry 双视角各一条）→
+  恢复后自动关闭；基线过期、新文件未受控也会被自动开立（本系统上线首日即抓到
+  README 基线过期与 gate_registry.yaml 未注册两个真实问题）；
+- **活文档建模**（解决自引用振荡）：gate_registry.yaml 与 SUP.9/SUP.10 视图既是受控项、
+  内容又随登记行为自身变化，若按普通文件做哈希基线会永远振荡。建模为「活文档」：
+  必须注册受控（存在性强制），哈希仅信息记录，其自身变化不产生变更请求——
+  登记表记录自身不是「变更」。修复后两轮循环即收敛到不动点（第二轮零变化）。
+
 ## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与

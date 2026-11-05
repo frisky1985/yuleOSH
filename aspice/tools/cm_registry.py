@@ -33,6 +33,12 @@ REGISTRY_NAME = "cm_registry.yaml"
 RENDER_NAME = "SUP.8_项目配置项清单及状态报告_座椅控制器示例_V1.0.xlsx"
 DEMO_BANNER = "示例数据 · 不得作为项目证据"
 
+# 活文档：内容随流程演进的登记表（问题/变更登记册及其渲染视图）。
+# 它们必须注册受控（存在性强制），但哈希仅作信息记录，不做基线比对，
+# 其变更也不产生变更请求——登记表记录自身不是「变更」。
+def is_live(rel: str) -> bool:
+    return rel == "gate_registry.yaml" or rel.startswith(("SUP.9_", "SUP.10_"))
+
 DEFAULT_SCOPE = {
     "include": ["**/*.xlsx", "**/*.yaml", "**/*.md", "**/*.json", "**/*.docx", "**/*.py"],
     "exclude": [REGISTRY_NAME, "**/__pycache__/**"],
@@ -72,10 +78,15 @@ def save_registry(path: Path, reg: dict) -> None:
 
 def make_item(cid: str, rel: str, root: Path, baseline: str) -> dict:
     p = root / rel
-    return {"id": cid, "path": rel, "name": Path(rel).stem,
-            "management": "版本管理" if rel.endswith((".yaml", ".py", ".md")) else "存储管理",
+    live = is_live(rel)
+    item = {"id": cid, "path": rel, "name": Path(rel).stem,
+            "management": "版本管理（活文档）" if live else
+                          ("版本管理" if rel.endswith((".yaml", ".py", ".md")) else "存储管理"),
             "version": "V1.0", "status": "正式发布", "baseline": baseline,
             "sha256": sha256_of(p), "size": p.stat().st_size}
+    if live:
+        item["live"] = True
+    return item
 
 
 def cmd_init(root: Path, baseline: str) -> int:
@@ -99,15 +110,21 @@ def cmd_update(root: Path, baseline: str | None) -> int:
     next_id = max((int(it["id"].rsplit("-", 1)[1]) for it in reg["items"]), default=0) + 1
     files = scan_files(root, reg["scope"])
     added = refreshed = 0
+    today = date.today().isoformat()
+    changelog = reg.setdefault("changelog", [])
     for rel in files:
         if rel in by_path:
             it = by_path[rel]
             digest = sha256_of(root / rel)
             if it["sha256"] != digest:
+                if not it.get("live"):
+                    changelog.append({"date": today, "path": rel,
+                                      "old": it["sha256"][:12], "new": digest[:12], "baseline": bl})
+                    refreshed += 1
                 it["sha256"], it["size"], it["baseline"] = digest, (root / rel).stat().st_size, bl
-                refreshed += 1
         else:
             reg["items"].append(make_item(f"CI-SEAT-{next_id:03d}", rel, root, bl))
+            changelog.append({"date": today, "path": rel, "added": True, "baseline": bl})
             next_id += 1
             added += 1
     reg["baseline"] = bl
@@ -128,6 +145,8 @@ def verify(root: Path) -> dict:
         if not p.exists():
             errors.append({"rule": "E-ITEM-MISSING", "msg": f"{it['id']} 文件丢失：{it['path']}"})
             continue
+        if it.get("live"):
+            continue  # 活文档：哈希仅信息记录，不做基线比对
         digest = sha256_of(p)
         if digest != it["sha256"]:
             errors.append({"rule": "E-HASH-MISMATCH",
