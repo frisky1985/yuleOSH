@@ -1,0 +1,121 @@
+# MAN.1 度量定义（真源）。机器只判定数值规则；目标语义由责任人签字背书（示例数据）。
+# extract: 点路径，支持 list 过滤 [k=v] 与 .count 收尾；expr: 以源 JSON 顶层标量为变量的表达式。二者取一。
+metrics:
+  - id: M-SEAT-01
+    name: 追溯校验ERROR数
+    pa: ENG
+    source: trace_check
+    extract: counts.error
+    rule: lte
+    target: 0
+    target_text: "0"
+    warn_text: ">0"
+    action: 阻断合入，修复追溯后重跑
+    owner: 示例
+    direction: 逆向↓
+    formula: trace_check 输出 counts.error
+  - id: M-SEAT-02
+    name: 双向追溯有效行数
+    pa: ENG
+    source: trace_check
+    extract: totals.data_rows
+    rule: gte
+    target: 46
+    target_text: "≥46"
+    warn_text: "<46"
+    action: 检查追踪表清单行是否被误删
+    owner: 示例
+    direction: 正向↑
+    formula: 追踪表有效数据行
+  - id: M-SEAT-03
+    name: 证据槽位闭合率
+    pa: SUP.1
+    source: evidence_check(测试规范)
+    expr: slots_filled / slots_expected
+    rule: gte
+    target: 1.0
+    target_text: "100%"
+    warn_text: "<100%"
+    action: 补齐缺失产物或解除声明，重跑 evidence_check
+    owner: 示例
+    direction: 正向↑
+    formula: slots_filled ÷ slots_expected
+  - id: M-SEAT-04
+    name: 跨文档事实核验数
+    pa: ENG
+    source: consistency_check
+    extract: facts_checked
+    rule: gte
+    target: 27
+    target_text: "≥27"
+    warn_text: "<27"
+    action: 检查 consistency.yaml 与文档改动
+    owner: 示例
+    direction: 正向↑
+    formula: 一致性核验的事实总数
+  - id: M-SEAT-05
+    name: 跨文档一致性ERROR数
+    pa: ENG
+    source: consistency_check
+    extract: errors.count
+    rule: lte
+    target: 0
+    target_text: "0"
+    warn_text: ">0"
+    action: 修复不一致取值后重跑
+    owner: 示例
+    direction: 逆向↓
+    formula: consistency_check errors 数
+  - id: M-SEAT-06
+    name: 受控配置项数
+    pa: SUP.8
+    source: cm_registry
+    extract: items
+    rule: gte
+    target: 50
+    target_text: "≥50"
+    warn_text: "<50"
+    action: 核查是否有受控文件被移出库
+    owner: 示例
+    direction: 正向↑
+    formula: cm_registry 注册配置项总数
+  - id: M-SEAT-07
+    name: 配置库ERROR数
+    pa: SUP.8
+    source: cm_registry
+    extract: errors.count
+    rule: lte
+    target: 0
+    target_text: "0"
+    warn_text: ">0"
+    action: 修复篡改/丢失/未受控后 update
+    owner: 示例
+    direction: 逆向↓
+    formula: cm_registry verify errors 数
+  - id: M-SEAT-08
+    name: 打开问题数
+    pa: SUP.9
+    source: file:gate_registry.yaml
+    extract: problems[status=打开].count
+    rule: info   # 不进门禁：该度量镜像门禁自身状态，设 lte 0 会形成自锁环
+                 # （度量红→自动开单→打开数≥1→度量恒红）。升级动作由人按趋势执行。
+    target: null
+    target_text: "—"
+    warn_text: ">3 建议冻结新功能合入（人工裁决）"
+    action: 趋势观察，超阈值由项目经理裁决
+    owner: 示例
+    direction: 信息
+    formula: 状态为打开的问题单数
+  - id: M-SEAT-09
+    name: 变更请求累计
+    pa: SUP.10
+    source: file:gate_registry.yaml
+    extract: changes.count
+    rule: info
+    target: null
+    target_text: "—"
+    warn_text: "—"
+    action: 仅记录趋势
+    owner: 示例
+    direction: 信息
+    formula: 变更请求登记总数

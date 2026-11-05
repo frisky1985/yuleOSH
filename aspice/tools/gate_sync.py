@@ -154,7 +154,13 @@ def harvest_changes(root: Path) -> int:
 
 def cmd_sync_problems(root: Path) -> int:
     outputs: dict[str, dict] = {}
-    for name, cmd in checker_commands(root):
+    checkers = checker_commands(root)
+    # 第六校验器：MAN.1 度量（对最近一次 collect 快照判定，不重跑校验器组，避免递归）
+    metrics_json = root / "metrics.yaml"
+    if metrics_json.exists():
+        checkers = checkers + [("metrics", [sys.executable, str(TOOLS_DIR / "metrics_collect.py"),
+                                            "--root", ".", "--verify", "--json"])]
+    for name, cmd in checkers:
         proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
         try:
             outputs[name] = json.loads(proc.stdout)

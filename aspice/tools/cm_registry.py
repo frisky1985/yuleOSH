@@ -37,7 +37,8 @@ DEMO_BANNER = "示例数据 · 不得作为项目证据"
 # 它们必须注册受控（存在性强制），但哈希仅作信息记录，不做基线比对，
 # 其变更也不产生变更请求——登记表记录自身不是「变更」。
 def is_live(rel: str) -> bool:
-    return rel == "gate_registry.yaml" or rel.startswith(("SUP.9_", "SUP.10_"))
+    return rel in ("gate_registry.yaml", "metrics_history.jsonl") or \
+        rel.startswith(("SUP.9_", "SUP.10_", "横切_过程度量与目标定义_座椅"))
 
 DEFAULT_SCOPE = {
     "include": ["**/*.xlsx", "**/*.yaml", "**/*.md", "**/*.json", "**/*.docx", "**/*.py"],

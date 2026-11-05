@@ -64,8 +64,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 6b7b228c14e3b70ca9698667fce9d9b3b0bb42729853290c292d690da56b7c38
-  size: 13465
+  sha256: 985e9ad986930f36d3263e4d3b32d16da4af6d5858702927698333f2a93a5391
+  size: 14666
 - id: CI-SEAT-007
   path: SUP.1_评审记录_座椅控制器示例_V1.0.xlsx
   name: SUP.1_评审记录_座椅控制器示例_V1.0
@@ -442,8 +442,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 3bf47a2b9dad1409653f6e2c7448f2ce368fa32e0f177040fe5bb288d8d3075f
-  size: 3983
+  sha256: 30b91f227f8aaa143e0609e005451a8ab2b6fdd6fb1e73ac4150955eb9c95e41
+  size: 6942
   live: true
 - id: CI-SEAT-049
   path: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx
@@ -452,8 +452,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 003df53340b39e017b4c2d1cf76b402cdee11e224f5dcbe6ccf4dddb40f3091b
-  size: 38104
+  sha256: 8c3f99481983776720181b428ce628cca433c04c4c5c81e570ea64e5630e2525
+  size: 38418
   live: true
 - id: CI-SEAT-050
   path: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx
@@ -462,8 +462,27 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 1e71e9531675a2cf1cb83400f31e8eaa4e65a58f0cec87fc8e2e4d010235c780
-  size: 34842
+  sha256: 3209c9514d00f3f6dc28f60b874999600407f888722b72db88f6a121e7a06246
+  size: 35572
+  live: true
+- id: CI-SEAT-051
+  path: metrics.yaml
+  name: metrics
+  management: 版本管理
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: f033e07830e21e9428eb2f6ab12497a9c50f2a9a5c2867478826cfbafea79079
+  size: 3498
+- id: CI-SEAT-052
+  path: 横切_过程度量与目标定义_座椅控制器示例_V1.0.xlsx
+  name: 横切_过程度量与目标定义_座椅控制器示例_V1.0
+  management: 版本管理（活文档）
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: 28eeac67da820cd4ed57b532453271731040d1cbed8e744c6c6018b0fd83f289
+  size: 20397
   live: true
 changelog:
 - date: '2026-11-06'
@@ -507,4 +526,22 @@ changelog:
   path: README.md
   old: aff71aebd8c7
   new: 6b7b228c14e3
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: metrics.yaml
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: 横切_过程度量与目标定义_座椅控制器示例_V1.0.xlsx
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: metrics.yaml
+  old: 2c217175764b
+  new: f033e07830e2
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: README.md
+  old: 6b7b228c14e3
+  new: 985e9ad98693
   baseline: SEAT-DEMO-BL2

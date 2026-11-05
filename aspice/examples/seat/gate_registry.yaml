@@ -97,6 +97,79 @@ problems:
   last_seen: '2026-11-06'
   status: 已关闭
   closed: '2026-11-06'
+- id: PR-SEAT-011
+  key: 8290c3b8069d
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-003 HWE.1_硬件需求规格说明书_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL1 不符（注册
+    1587f1a64e41… ≠ 实际 06936606afd1…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-012
+  key: 28e8af7f7068
+  source: cm_registry
+  rule: E-FILE-UNREGISTERED
+  summary: 工作产品未纳入配置管理：横切_过程度量与目标定义_座椅控制器示例_V1.0.xlsx（SUP.8 要求 100% 受控）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-013
+  key: 4222f3c5d828
+  source: metrics
+  rule: E-METRIC-OUT
+  summary: M-SEAT-05 跨文档一致性ERROR数 = 1，违反 lte 0（2026-11-06 采集）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-014
+  key: bdfd0fd8a410
+  source: metrics
+  rule: E-METRIC-OUT
+  summary: M-SEAT-07 配置库ERROR数 = 2，违反 lte 0（2026-11-06 采集）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-015
+  key: b4917a5517d7
+  source: metrics
+  rule: E-METRIC-OUT
+  summary: M-SEAT-07 配置库ERROR数 = 1，违反 lte 0（2026-11-06 采集）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-016
+  key: 950be3f453b7
+  source: metrics
+  rule: E-METRIC-OUT
+  summary: M-SEAT-08 打开问题数 = 5，违反 lte 0（2026-11-06 采集）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-017
+  key: 3d6e4c62210d
+  source: metrics
+  rule: E-METRIC-OUT
+  summary: M-SEAT-08 打开问题数 = 3，违反 lte 0（2026-11-06 采集）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-018
+  key: 9a9f57aaec12
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-051 metrics.yaml 哈希与基线 SEAT-DEMO-BL2 不符（注册 2c217175764b… ≠ 实际 f033e07830e2…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
 changes:
 - id: CR-SEAT-001
   key: README.md|fe1d886a647d|aff71aebd8c7
@@ -110,5 +183,26 @@ changes:
   date: '2026-11-06'
   object: README.md
   request: README.md 内容变更（aff71aebd8c7… → 6b7b228c14e3…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-003
+  key: added|metrics.yaml
+  date: '2026-11-06'
+  object: metrics.yaml
+  request: 新增配置项 metrics.yaml
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-004
+  key: metrics.yaml|2c217175764b|f033e07830e2
+  date: '2026-11-06'
+  object: metrics.yaml
+  request: metrics.yaml 内容变更（2c217175764b… → f033e07830e2…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-005
+  key: README.md|6b7b228c14e3|985e9ad98693
+  date: '2026-11-06'
+  object: README.md
+  request: README.md 内容变更（6b7b228c14e3… → 985e9ad98693…）
   baseline: SEAT-DEMO-BL2
   status: 已实施（自动登记）

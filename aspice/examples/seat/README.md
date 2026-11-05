@@ -191,6 +191,24 @@ python3 tools/gate_sync.py --root examples/seat --render          # 渲染 SUP.9
   必须注册受控（存在性强制），哈希仅信息记录，其自身变化不产生变更请求——
   登记表记录自身不是「变更」。修复后两轮循环即收敛到不动点（第二轮零变化）。
 
+**MAN.1 度量（metrics_collect）**：`metrics.yaml` 定义 9 个度量项（M-SEAT-01..09，
+数据源即五个校验器的 JSON 输出 + gate_registry），`metrics_history.jsonl` 为时间序列
+（活文档），`横切_过程度量与目标定义_座椅控制器示例_V1.0.xlsx` 为渲染视图：
+
+```bash
+python3 tools/metrics_collect.py --root examples/seat --collect   # 采集+判定（FAIL 退出码 1）
+python3 tools/metrics_collect.py --root examples/seat --render    # 渲染度量文档
+```
+
+- 度量定义含 extract 点路径（支持 `[k=v]` 过滤与 `.count`）或 expr 表达式，
+  规则 eq/gte/lte/info；**metrics_collect --verify 已作为第六校验器接入 gate_sync**：
+  度量红 → 自动开 PR，复采回绿 → 自动关闭；
+- 实测：首次采集即抓到 M-SEAT-07 FAIL（metrics.yaml 未注册）；注入欠压 8.0V →
+  M-SEAT-05 红 + 自动开单；恢复 → 自动关闭；
+- **设计教训（自锁环）**：M-SEAT-08「打开问题数」初设 `lte 0`，度量红会自动开单、
+  打开数恒 ≥1、度量恒红——度量若镜像门禁自身状态，只能做 info 趋势项，
+  升级动作留人裁决。已修正并留注释。
+
 ## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与
