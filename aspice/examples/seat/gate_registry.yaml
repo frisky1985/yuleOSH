@@ -170,6 +170,61 @@ problems:
   last_seen: '2026-11-06'
   status: 已关闭
   closed: '2026-11-06'
+- id: PR-SEAT-019
+  key: 9ef9cb6cb40f
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-055 plan.yaml 哈希与基线 SEAT-DEMO-BL2 不符（注册 f6e5684e9661… ≠ 实际 1b01922249a2…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-020
+  key: 8b03c9ee1e4a
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-056 risk_registry.yaml 哈希与基线 SEAT-DEMO-BL2 不符（注册 680296638f63…
+    ≠ 实际 04c7bc06928d…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-021
+  key: f01f927b538d
+  source: man_check
+  rule: E-RISK-EXPIRED
+  summary: R-SEAT-002 复审日期 2026-10-01 已逾期，状态仍为「缓解中」
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-022
+  key: 93b402f82327
+  source: man_check
+  rule: E-CI-NO-WP
+  summary: 顶层文档无 WBS 认领：MAN.3_项目进度计划_座椅控制器示例_V1.0.xlsx（CI-SEAT-053）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-023
+  key: 75f971a225ac
+  source: man_check
+  rule: E-CI-NO-WP
+  summary: 顶层文档无 WBS 认领：MAN.5_风险登记册_座椅控制器示例_V1.0.xlsx（CI-SEAT-054）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-024
+  key: 37c3e46f3d69
+  source: man_check
+  rule: E-MILESTONE-SLIP
+  summary: MS-SEAT-4 系统测试完成 计划 2026-11-01 已逾期，实际完成日期为空
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
 changes:
 - id: CR-SEAT-001
   key: README.md|fe1d886a647d|aff71aebd8c7
@@ -204,5 +259,33 @@ changes:
   date: '2026-11-06'
   object: README.md
   request: README.md 内容变更（6b7b228c14e3… → 985e9ad98693…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-006
+  key: added|plan.yaml
+  date: '2026-11-06'
+  object: plan.yaml
+  request: 新增配置项 plan.yaml
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-007
+  key: added|risk_registry.yaml
+  date: '2026-11-06'
+  object: risk_registry.yaml
+  request: 新增配置项 risk_registry.yaml
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-008
+  key: plan.yaml|f6e5684e9661|da79eccabe94
+  date: '2026-11-06'
+  object: plan.yaml
+  request: plan.yaml 内容变更（f6e5684e9661… → da79eccabe94…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-009
+  key: README.md|985e9ad98693|c5c2bb0e29ea
+  date: '2026-11-06'
+  object: README.md
+  request: README.md 内容变更（985e9ad98693… → c5c2bb0e29ea…）
   baseline: SEAT-DEMO-BL2
   status: 已实施（自动登记）

@@ -64,8 +64,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 985e9ad986930f36d3263e4d3b32d16da4af6d5858702927698333f2a93a5391
-  size: 14666
+  sha256: c5c2bb0e29ea99f1794a243e858a971e952cff994e18f5cefa457d726b5333ce
+  size: 15684
 - id: CI-SEAT-007
   path: SUP.1_评审记录_座椅控制器示例_V1.0.xlsx
   name: SUP.1_评审记录_座椅控制器示例_V1.0
@@ -442,8 +442,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 30b91f227f8aaa143e0609e005451a8ab2b6fdd6fb1e73ac4150955eb9c95e41
-  size: 6942
+  sha256: dd2d629f4a9da4fefb6e03de44e44d2b4e5f7611233d540c7c58b19985fd9c6a
+  size: 9548
   live: true
 - id: CI-SEAT-049
   path: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx
@@ -452,8 +452,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 8c3f99481983776720181b428ce628cca433c04c4c5c81e570ea64e5630e2525
-  size: 38418
+  sha256: e6d5a383127c1ae6e78302eb1db78cfbd4dcfef2fd0145c99513e0707b9d8329
+  size: 38802
   live: true
 - id: CI-SEAT-050
   path: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx
@@ -462,8 +462,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 3209c9514d00f3f6dc28f60b874999600407f888722b72db88f6a121e7a06246
-  size: 35572
+  sha256: 94cb8ab6c028fd2ce438899649526e31d6164bb0aac834d79c02ae5b735c21f2
+  size: 36275
   live: true
 - id: CI-SEAT-051
   path: metrics.yaml
@@ -484,6 +484,44 @@ items:
   sha256: 28eeac67da820cd4ed57b532453271731040d1cbed8e744c6c6018b0fd83f289
   size: 20397
   live: true
+- id: CI-SEAT-053
+  path: MAN.3_项目进度计划_座椅控制器示例_V1.0.xlsx
+  name: MAN.3_项目进度计划_座椅控制器示例_V1.0
+  management: 版本管理（活文档）
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: f7cc024bcbd59932a3d11eb7b3f331b18671b64875b1d80d5eb6e027d4054d58
+  size: 36897
+  live: true
+- id: CI-SEAT-054
+  path: MAN.5_风险登记册_座椅控制器示例_V1.0.xlsx
+  name: MAN.5_风险登记册_座椅控制器示例_V1.0
+  management: 版本管理（活文档）
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: 31542faaf2f238824d48f211046cd018d54828444acc11dd869a8608a86cddae
+  size: 20119
+  live: true
+- id: CI-SEAT-055
+  path: plan.yaml
+  name: plan
+  management: 版本管理
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: da79eccabe94196a78c5b4e0b435ec54794774a4638b8e6576c3bde280138172
+  size: 3672
+- id: CI-SEAT-056
+  path: risk_registry.yaml
+  name: risk_registry
+  management: 版本管理
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: 680296638f63eabfd5b4e03921fe3cdc41fa25d95545aa0198f62784e00a8a4c
+  size: 2215
 changelog:
 - date: '2026-11-06'
   path: README.md
@@ -544,4 +582,30 @@ changelog:
   path: README.md
   old: 6b7b228c14e3
   new: 985e9ad98693
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: MAN.3_项目进度计划_座椅控制器示例_V1.0.xlsx
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: MAN.5_风险登记册_座椅控制器示例_V1.0.xlsx
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: plan.yaml
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: risk_registry.yaml
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: plan.yaml
+  old: f6e5684e9661
+  new: da79eccabe94
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: README.md
+  old: 985e9ad98693
+  new: c5c2bb0e29ea
   baseline: SEAT-DEMO-BL2

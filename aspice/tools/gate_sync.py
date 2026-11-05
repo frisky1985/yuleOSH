@@ -160,6 +160,9 @@ def cmd_sync_problems(root: Path) -> int:
     if metrics_json.exists():
         checkers = checkers + [("metrics", [sys.executable, str(TOOLS_DIR / "metrics_collect.py"),
                                             "--root", ".", "--verify", "--json"])]
+    if (root / "risk_registry.yaml").exists():
+        checkers = checkers + [("man_check", [sys.executable, str(TOOLS_DIR / "man_check.py"),
+                                              "--root", ".", "--verify", "--json"])]
     for name, cmd in checkers:
         proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
         try:

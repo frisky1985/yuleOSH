@@ -70,3 +70,12 @@
 {"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-07", "name": "配置库ERROR数", "value": 0, "rule": "lte", "target": 0, "status": "PASS"}
 {"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-08", "name": "打开问题数", "value": 0, "rule": "info", "target": null, "status": "INFO"}
 {"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-09", "name": "变更请求累计", "value": 5, "rule": "info", "target": null, "status": "INFO"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-01", "name": "追溯校验ERROR数", "value": 0, "rule": "lte", "target": 0, "status": "PASS"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-02", "name": "双向追溯有效行数", "value": 46, "rule": "gte", "target": 46, "status": "PASS"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-03", "name": "证据槽位闭合率", "value": 1.0, "rule": "gte", "target": 1.0, "status": "PASS"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-04", "name": "跨文档事实核验数", "value": 27, "rule": "gte", "target": 27, "status": "PASS"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-05", "name": "跨文档一致性ERROR数", "value": 0, "rule": "lte", "target": 0, "status": "PASS"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-06", "name": "受控配置项数", "value": 56, "rule": "gte", "target": 50, "status": "PASS"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-07", "name": "配置库ERROR数", "value": 0, "rule": "lte", "target": 0, "status": "PASS"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-08", "name": "打开问题数", "value": 0, "rule": "info", "target": null, "status": "INFO"}
+{"date": "2026-11-06", "period": "2026-11", "id": "M-SEAT-09", "name": "变更请求累计", "value": 8, "rule": "info", "target": null, "status": "INFO"}

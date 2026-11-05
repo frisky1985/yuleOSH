@@ -209,6 +209,18 @@ python3 tools/metrics_collect.py --root examples/seat --render    # 渲染度量
   打开数恒 ≥1、度量恒红——度量若镜像门禁自身状态，只能做 info 趋势项，
   升级动作留人裁决。已修正并留注释。
 
+**MAN.5 风险 + MAN.3 计划（man_check）**：`risk_registry.yaml`（5 风险）与
+`plan.yaml`（5 里程碑 + 8 WBS）为真源，MAN.5_风险登记册 / MAN.3_项目进度计划
+为渲染视图，`tools/man_check.py --verify` 已作为第七校验器接入 gate_sync：
+
+- 风险门禁：`E-RISK-VOCAB`（P/I∈1-5、状态/策略词表）/ `E-RISK-EXPOSURE`（登记值≠P×I）/
+  `E-RISK-NO-MITIGATION`（exposure≥6 缺应对或复审日期）/ `E-RISK-EXPIRED`（复审逾期）；
+- 计划门禁：`E-PLAN-DATE` / `E-PLAN-PRED` / `E-MILESTONE-SLIP`（里程碑逾期无实际日期）/
+  `E-WP-NO-CI`（WBS 产出物不在配置库）/ `E-CI-NO-WP`（顶层文档无 WBS 认领）；
+- 实测：注入复审逾期 + 里程碑滑期 → 门禁精确报红并自动开单；**未注入也被抓到
+  两条真问题**——MAN.3/MAN.5 渲染视图自身是顶层文档却无 WBS 认领
+  （E-CI-NO-WP），已在 WP-SEAT-08 补登记。计划↔配置库双向闭合是 MAN.3 机械化的核心价值。
+
 ## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与
