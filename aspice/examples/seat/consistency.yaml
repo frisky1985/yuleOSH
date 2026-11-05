@@ -65,3 +65,14 @@ facts:                                 # 数值事实：正则捕获组(1)为数
     pattern: '峰值\s*(\d+(?:\.\d+)?)\s*A\s*/'
     expect: '12'
     unit: A
+  # --- 资源使用事实（4.0.1 扩展清单：资源使用证据）---
+  # 注：7.软件控制策略 的模块 CPU 均值（8+6+6+5+3+4=32%）与峰值 62% 是不同口径，
+  #     求和校验不适用，故只对同口径标称值做一致性核验。
+  - { name: CPU 峰值占用,   pattern: 'CPU\s*(\d+(?:\.\d+)?)\s*%',       expect: '62',  unit: '%' }
+  - { name: CPU 目标上限,   pattern: '目标\s*≤\s*(\d+(?:\.\d+)?)\s*%',  expect: '70',  unit: '%' }
+  - { name: Flash 预算,     pattern: 'Flash\s*(\d+(?:\.\d+)?)\s*KB',    expect: '62',  unit: KB }
+  - { name: RAM 预算,       pattern: 'RAM\s*(\d+(?:\.\d+)?)\s*KB',      expect: '7',   unit: KB }
+  - { name: MCU 主频,       pattern: 'Cortex[-\w+]{0,8}[，,]?\s*(\d+(?:\.\d+)?)\s*MHz', expect: '48', unit: MHz }
+  - { name: 晶振频率,       pattern: '(\d+(?:\.\d+)?)\s*MHz\s*晶振',    expect: '8',   unit: MHz }
+  - { name: Flash 总量,     pattern: '(\d+(?:\.\d+)?)\s*KB\s*Flash',    expect: '128', unit: KB }
+  - { name: RAM 总量,       pattern: '(\d+(?:\.\d+)?)\s*KB\s*RAM',      expect: '16',  unit: KB }

@@ -36,6 +36,30 @@ DEMO_BANNER = "示例数据 · 不得作为项目证据"
 HISTORY = "metrics_history.jsonl"
 
 _SEG = re.compile(r"^(\w+)(?:\[(\w+)=([^\]]+)\])?$")
+RULES = {"eq", "gte", "lte", "info"}
+STREAK_LIMIT = 2  # 同一度量连续 ≥2 次采集 FAIL → E-METRIC-STREAK 升级
+
+
+def load_spec(root: Path) -> tuple[list[dict], list[dict]]:
+    """加载 metrics.yaml 并做定义级 schema 校验（E-METRIC-DEF）。"""
+    data = yaml.safe_load((root / "metrics.yaml").read_text(encoding="utf-8"))
+    metrics = data.get("metrics") or []
+    errors, ids = [], set()
+    for m in metrics:
+        mid = m.get("id", "<missing>")
+        if mid in ids:
+            errors.append({"rule": "E-METRIC-DEF", "msg": f"度量 ID 重复：{mid}"})
+        ids.add(mid)
+        rule = m.get("rule")
+        if rule not in RULES:
+            errors.append({"rule": "E-METRIC-DEF", "msg": f"{mid} 非法 rule：{rule!r}（须 ∈ {sorted(RULES)}）"})
+        elif rule != "info" and m.get("target") is None:
+            errors.append({"rule": "E-METRIC-DEF", "msg": f"{mid} rule={rule} 但缺 target"})
+        if ("extract" in m) == ("expr" in m):
+            errors.append({"rule": "E-METRIC-DEF", "msg": f"{mid} extract 与 expr 必须且仅能有其一"})
+        if not m.get("source"):
+            errors.append({"rule": "E-METRIC-DEF", "msg": f"{mid} 缺 source"})
+    return metrics, errors
 
 
 def extract(data, path: str):
@@ -63,7 +87,11 @@ def evaluate(value, rule: str, target) -> str:
 
 
 def collect(root: Path) -> list[dict]:
-    spec = yaml.safe_load((root / "metrics.yaml").read_text(encoding="utf-8"))
+    spec, def_errors = load_spec(root)
+    if def_errors:
+        for e in def_errors:
+            print(f"[ERROR][{e['rule']}] {e['msg']}", file=sys.stderr)
+        raise SystemExit(1)
     outputs: dict[str, dict] = {}
     for name, cmd in checker_commands(root):
         proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
@@ -71,7 +99,7 @@ def collect(root: Path) -> list[dict]:
     today = date.today().isoformat()
     period = date.today().strftime("%Y-%m")
     records = []
-    for m in spec["metrics"]:
+    for m in spec:
         src = m["source"]
         if src.startswith("file:"):
             data = yaml.safe_load((root / src[5:]).read_text(encoding="utf-8"))
@@ -104,11 +132,29 @@ def latest_snapshot(root: Path) -> dict[str, dict]:
 
 
 def verify_result(root: Path) -> dict:
+    _, def_errors = load_spec(root)
     snap = latest_snapshot(root)
-    errors = [{"rule": "E-METRIC-OUT",
-               "msg": f"{r['id']} {r['name']} = {r['value']}，"
-                      f"违反 {r['rule']} {r['target']}（{r['date']} 采集）"}
-              for r in snap.values() if r["status"] == "FAIL"]
+    errors = list(def_errors)
+    errors += [{"rule": "E-METRIC-OUT",
+                "msg": f"{r['id']} {r['name']} = {r['value']}，"
+                       f"违反 {r['rule']} {r['target']}（{r['date']} 采集）"}
+               for r in snap.values() if r["status"] == "FAIL"]
+    # 趋势升级：同一度量连续 ≥STREAK_LIMIT 次采集 FAIL → 持续恶化，区别于单次抖动
+    hist: list[dict] = []
+    hp = root / HISTORY
+    if hp.exists():
+        hist = [json.loads(x) for x in hp.read_text(encoding="utf-8").splitlines()]
+    for mid in dict.fromkeys(r["id"] for r in hist):
+        streak = 0
+        for r in reversed([x for x in hist if x["id"] == mid]):
+            if r["status"] == "FAIL":
+                streak += 1
+            else:
+                break
+        if streak >= STREAK_LIMIT:
+            name = next((x["name"] for x in reversed(hist) if x["id"] == mid), mid)
+            errors.append({"rule": "E-METRIC-STREAK",
+                           "msg": f"{mid} {name} 连续 {streak} 次采集超限（趋势恶化，须升级纠正措施）"})
     return {"metrics": list(snap.values()), "errors": errors, "passed": not errors}
 
 
@@ -210,6 +256,9 @@ def cmd_render(root: Path) -> int:
 
 def selftest() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="metrics_selftest_"))
+    (tmp / "metrics.yaml").write_text(yaml.safe_dump({"metrics": [
+        {"id": "M-1", "name": "t", "source": "s", "extract": "x", "rule": "lte", "target": 0}]},
+        allow_unicode=True), encoding="utf-8")
     # extract / evaluate 单元断言
     d = {"a": {"b": 3}, "problems": [{"status": "打开"}, {"status": "已关闭"}, {"status": "打开"}]}
     assert extract(d, "a.b") == 3
@@ -224,7 +273,35 @@ def selftest() -> int:
                    ensure_ascii=False) + "\n", encoding="utf-8")
     r = verify_result(tmp)
     assert not r["passed"] and r["errors"][0]["rule"] == "E-METRIC-OUT"
-    print("[SELFTEST PASS] 7 组断言全部通过（路径/过滤/计数/判定/info/快照门禁）")
+    # ① 定义 schema 校验
+    (tmp / "metrics.yaml").write_text(yaml.safe_dump({"metrics": [
+        {"id": "M-1", "name": "a", "source": "s", "extract": "x", "rule": "bad", "target": 0},
+        {"id": "M-1", "name": "b", "source": "s", "extract": "x", "rule": "gte"},
+        {"id": "M-2", "name": "c", "source": "s", "rule": "info"},
+    ]}, allow_unicode=True), encoding="utf-8")
+    _, def_errors = load_spec(tmp)
+    msgs = " ".join(e["msg"] for e in def_errors)
+    assert "重复" in msgs and "非法 rule" in msgs and "缺 target" in msgs and "仅能有其一" in msgs, msgs
+    # 恢复合法定义（verify_result 会带 def_errors）
+    (tmp / "metrics.yaml").write_text(yaml.safe_dump({"metrics": [
+        {"id": "M-9", "name": "t", "source": "s", "extract": "x", "rule": "lte", "target": 0}]},
+        allow_unicode=True), encoding="utf-8")
+    # ② 连续超限升级：尾部两次 FAIL → E-METRIC-STREAK
+    (tmp / HISTORY).write_text(
+        "\n".join(json.dumps({"date": "d", "period": "p", "id": "M-9", "name": "t",
+                              "value": v, "rule": "lte", "target": 0, "status": s},
+                             ensure_ascii=False)
+                  for v, s in [(1, "FAIL"), (0, "PASS"), (2, "FAIL"), (3, "FAIL")]) + "\n",
+        encoding="utf-8")
+    r = verify_result(tmp)
+    assert any(e["rule"] == "E-METRIC-STREAK" and "连续 2 次" in e["msg"] for e in r["errors"]), r
+    # 最新一条 PASS → 无升级
+    (tmp / HISTORY).write_text(
+        json.dumps({"date": "d", "period": "p", "id": "M-9", "name": "t",
+                    "value": 0, "rule": "lte", "target": 0, "status": "PASS"},
+                   ensure_ascii=False) + "\n", encoding="utf-8")
+    assert verify_result(tmp)["passed"]
+    print("[SELFTEST PASS] 12 组断言全部通过（路径/过滤/计数/判定/info/快照/定义校验/趋势升级）")
     return 0
 
 

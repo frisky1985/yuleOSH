@@ -225,6 +225,54 @@ problems:
   last_seen: '2026-11-06'
   status: 已关闭
   closed: '2026-11-06'
+- id: PR-SEAT-025
+  key: 9df0af1c7aee
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-003 HWE.1_硬件需求规格说明书_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL1 不符（注册
+    1587f1a64e41… ≠ 实际 9c206b05c441…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-026
+  key: f9c2a424f7c2
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-003 HWE.1_硬件需求规格说明书_座椅控制器示例_V1.0.xlsx 哈希与基线 SEAT-DEMO-BL1 不符（注册
+    1587f1a64e41… ≠ 实际 e27f72a88fcb…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-027
+  key: 181fc3f6c4d9
+  source: metrics
+  rule: E-METRIC-STREAK
+  summary: M-SEAT-05 跨文档一致性ERROR数 连续 2 次采集超限（趋势恶化，须升级纠正措施）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-028
+  key: 4aa759343124
+  source: metrics
+  rule: E-METRIC-STREAK
+  summary: M-SEAT-07 配置库ERROR数 连续 2 次采集超限（趋势恶化，须升级纠正措施）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-029
+  key: 9cdf2edb3850
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-013 consistency.yaml 哈希与基线 SEAT-DEMO-BL2 不符（注册 0e60c8d1649f… ≠
+    实际 78575efce339…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
 changes:
 - id: CR-SEAT-001
   key: README.md|fe1d886a647d|aff71aebd8c7
@@ -287,5 +335,33 @@ changes:
   date: '2026-11-06'
   object: README.md
   request: README.md 内容变更（985e9ad98693… → c5c2bb0e29ea…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-010
+  key: README.md|c5c2bb0e29ea|20f74dacab15
+  date: '2026-11-06'
+  object: README.md
+  request: README.md 内容变更（c5c2bb0e29ea… → 20f74dacab15…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-011
+  key: consistency.yaml|391b606f3313|0e60c8d1649f
+  date: '2026-11-06'
+  object: consistency.yaml
+  request: consistency.yaml 内容变更（391b606f3313… → 0e60c8d1649f…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-012
+  key: consistency.yaml|0e60c8d1649f|78575efce339
+  date: '2026-11-06'
+  object: consistency.yaml
+  request: consistency.yaml 内容变更（0e60c8d1649f… → 78575efce339…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-013
+  key: README.md|20f74dacab15|fd266b12f7cf
+  date: '2026-11-06'
+  object: README.md
+  request: README.md 内容变更（20f74dacab15… → fd266b12f7cf…）
   baseline: SEAT-DEMO-BL2
   status: 已实施（自动登记）

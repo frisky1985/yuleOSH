@@ -64,8 +64,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: c5c2bb0e29ea99f1794a243e858a971e952cff994e18f5cefa457d726b5333ce
-  size: 15684
+  sha256: fd266b12f7cf02968e8334f7b414c2720d58e8582e4d6cc91a681a4dd98d47e2
+  size: 16431
 - id: CI-SEAT-007
   path: SUP.1_评审记录_座椅控制器示例_V1.0.xlsx
   name: SUP.1_评审记录_座椅控制器示例_V1.0
@@ -126,9 +126,9 @@ items:
   management: 版本管理
   version: V1.0
   status: 正式发布
-  baseline: SEAT-DEMO-BL1
-  sha256: 391b606f331330da30e457a2e5428025c7461cb921f57bb892be5242c6001591
-  size: 3559
+  baseline: SEAT-DEMO-BL2
+  sha256: 78575efce339482e0927aaf103c4a72db19adf9279b7a1597636f6791bd16f0e
+  size: 4652
 - id: CI-SEAT-014
   path: evidence/SYS-SEAT-001-TC-01.md
   name: SYS-SEAT-001-TC-01
@@ -442,8 +442,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: dd2d629f4a9da4fefb6e03de44e44d2b4e5f7611233d540c7c58b19985fd9c6a
-  size: 9548
+  sha256: 0a550f386b282b27fac891bc9db1811dbfc191c1e3ea80232b05a815eff97738
+  size: 12173
   live: true
 - id: CI-SEAT-049
   path: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx
@@ -452,8 +452,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: e6d5a383127c1ae6e78302eb1db78cfbd4dcfef2fd0145c99513e0707b9d8329
-  size: 38802
+  sha256: f9532f72d18527bb93402448ba48936022c56b1659a5ced7484e848ea8db684d
+  size: 39195
   live: true
 - id: CI-SEAT-050
   path: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx
@@ -462,8 +462,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 94cb8ab6c028fd2ce438899649526e31d6164bb0aac834d79c02ae5b735c21f2
-  size: 36275
+  sha256: 0c42e45d40c3c0c556ed82c8a910b813ee153c08bb42c73c14a339c5c4ba5a56
+  size: 36754
   live: true
 - id: CI-SEAT-051
   path: metrics.yaml
@@ -608,4 +608,24 @@ changelog:
   path: README.md
   old: 985e9ad98693
   new: c5c2bb0e29ea
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: README.md
+  old: c5c2bb0e29ea
+  new: 20f74dacab15
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: consistency.yaml
+  old: 391b606f3313
+  new: 0e60c8d1649f
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: consistency.yaml
+  old: 0e60c8d1649f
+  new: 78575efce339
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-06'
+  path: README.md
+  old: 20f74dacab15
+  new: fd266b12f7cf
   baseline: SEAT-DEMO-BL2

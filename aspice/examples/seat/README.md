@@ -153,6 +153,11 @@ python3 tools/consistency_check.py --spec examples/seat/consistency.yaml [--stri
 实施中的一次真实裁决：检查器把 HWE.2 的「连续 8A/峰值 12A」判为与「单路 2A/5A」不一致——
 这是整机合计与单通道两类不同事实，已拆成独立事实条目（机器标记 → 人裁决 → 规格精化）。
 
+**资源使用事实（4.0.1 扩展清单）**：consistency.yaml 另有 7 条资源事实
+（CPU 峰值 62%/目标 ≤70%、Flash 62/128KB、RAM 7/16KB、主频 48MHz、晶振 8MHz），
+模块 CPU 均值与峰值是不同口径、不求和（规格注释已记）；数值比较按 float 等价（7.0==7），
+晶振与主频是两个事实（模式精化的又一实例）。
+
 **SUP.8 配置管理（cm_registry）**：`cm_registry.yaml` 是本目录的配置项注册表（真源），
 `SUP.8_项目配置项清单及状态报告_座椅控制器示例_V1.0.xlsx` 是从注册表渲染的视图，
 由 `tools/cm_registry.py` 驱动（fail-closed）：
@@ -207,7 +212,11 @@ python3 tools/metrics_collect.py --root examples/seat --render    # 渲染度量
   M-SEAT-05 红 + 自动开单；恢复 → 自动关闭；
 - **设计教训（自锁环）**：M-SEAT-08「打开问题数」初设 `lte 0`，度量红会自动开单、
   打开数恒 ≥1、度量恒红——度量若镜像门禁自身状态，只能做 info 趋势项，
-  升级动作留人裁决。已修正并留注释。
+  升级动作留人裁决。已修正并留注释；
+- **深化 ①**：metrics.yaml 定义本身进门禁（`E-METRIC-DEF`：重复 ID / 非法 rule /
+  非 info 缺 target / extract 与 expr 互斥）；
+- **深化 ②**：同一度量连续 ≥2 次采集 FAIL 触发 `E-METRIC-STREAK` 趋势升级
+  （区分单次抖动与持续恶化），实测 M-SEAT-05/07 双 streak 开火 → 6 单齐开 → 恢复齐关。
 
 **MAN.5 风险 + MAN.3 计划（man_check）**：`risk_registry.yaml`（5 风险）与
 `plan.yaml`（5 里程碑 + 8 WBS）为真源，MAN.5_风险登记册 / MAN.3_项目进度计划

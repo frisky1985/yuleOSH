@@ -24,6 +24,14 @@ from openpyxl import load_workbook
 TOOLS_DIR = Path(__file__).resolve().parent
 
 
+def _num_eq(a: str, b: str) -> bool:
+    """数值等价比较：7.0 == 7；非数值退化为字符串比较。"""
+    try:
+        return float(a) == float(b)
+    except (TypeError, ValueError):
+        return str(a) == str(b)
+
+
 def norm(v: object) -> str:
     return re.sub(r"\s+", "", str(v)) if v is not None else ""
 
@@ -116,7 +124,7 @@ def check_facts(spec: dict, root: Path) -> tuple[list[dict], list[dict], int]:
                 for m in pat.finditer(text):
                     hits += 1
                     checked += 1
-                    if m.group(1) != fact["expect"]:
+                    if not _num_eq(m.group(1), fact["expect"]):
                         errors.append({"rule": "E-FACT-MISMATCH",
                                        "msg": f"{fact['name']}不一致：期望 {fact['expect']}{fact['unit']}，"
                                               f"{fname}「{sheet}」{coord} 出现 {m.group(1)}{fact['unit']}"
