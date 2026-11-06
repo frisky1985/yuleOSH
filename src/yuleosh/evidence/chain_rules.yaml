@@ -16,7 +16,8 @@ truth_sources:
   requirements:
     - .osh/evidence/traceability-matrix.json      # schema: osh-traceability-v1
   fallback:
-    - alm.traceability.generate_lrt               # 仅当矩阵缺失时实时生成
+    - alm.traceability.write_authoritative_traceability   # 矩阵缺失时重建真源
+    - alm.traceability.generate_lrt               # 重建失败时的只读回退
   tests:
     - .osh/sessions/*/*test*.json
   reviews:
@@ -52,6 +53,13 @@ edge_kinds:
   review: "requirement → review：评审覆盖该需求"
   derive: "requirement → requirement：系统需求派生软件需求（SYS.1 → SWE.1）"
 
+# 边置信度：exact（@req/注释直连）> declared（矩阵声明的测试文件）> inferred（关键词推断）
+edge_confidence:
+  exact: "注释或矩阵直接声明，可用于正式追溯"
+  declared: "矩阵声明的测试关联，可信但需抽查"
+  inferred: "关键词推断，HTML 中以虚线显示，可被“仅精确追溯”过滤"
+  truth_discipline: "统计覆盖率时不得把 inferred 边当作精确证据；P0 应优先消除 inferred 边。"
+
 # ── ID 纪律 ────────────────────────────────────────────────────────────
 id_rules:
   requirement_pattern: "^[A-Z][A-Za-z0-9_.\\-]{2,}$"
@@ -76,6 +84,12 @@ gates:
   - id: E-CHAIN-ID
     severity: ERROR
     rule: "所有节点 ID 匹配 id_rules 的 pattern"
+  - id: E-CHAIN-SRC-DUP
+    severity: ERROR
+    rule: "真源矩阵中不得出现重复需求 ID；重复行不得静默合并"
+  - id: E-CHAIN-SRC-DROP
+    severity: ERROR
+    rule: "真源行不得因空 ID 或不可解析而被静默丢弃"
   - id: E-CHAIN-DUP
     severity: ERROR
     rule: "不存在重复节点 ID"

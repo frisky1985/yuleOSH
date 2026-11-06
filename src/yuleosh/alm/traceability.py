@@ -1117,6 +1117,7 @@ def write_authoritative_traceability(project_dir: str,
             "has_review": bool(r.get("has_review")),
             "code_files": code_files,
             "test_files": test_files,
+            "match_method": r.get("match_method", ""),
             "status": "Covered" if has_test else "Not Covered",
         })
 

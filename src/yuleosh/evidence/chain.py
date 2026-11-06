@@ -7,11 +7,13 @@
 设计约束（见 ``chain_rules.yaml``）：
 
 * **真源优先**：只消费 ``.osh/evidence/traceability-matrix.json`` 与
-  ``.osh/`` 下的 CI / 测试 / 评审产物；矩阵缺失时才调用
-  :func:`yuleosh.alm.traceability.generate_lrt`。
-* **fail-closed**：结构门禁（schema / ID / 重复 / 悬空边 / 孤儿需求 /
-  必需产物缺失 / 过程门禁）任一 ERROR → ``chain.summary.status=FAIL``，
+  ``.osh/`` 下的 CI / 测试 / 评审产物；矩阵缺失或缺少匹配方法时用
+  :func:`yuleosh.alm.traceability.write_authoritative_traceability` 重建。
+* **fail-closed**：结构门禁（schema / ID / 源级重复与丢弃 / 悬空边 /
+  孤儿需求 / 必需产物缺失 / 过程门禁）任一 ERROR → ``chain.summary.status=FAIL``，
   CLI 退出码非 0。
+* **追溯精度**：边携带 ``confidence``（exact / declared / inferred）与
+  ``method``；关键词推断边在 HTML 中显示为虚线并可过滤。
 * **HTML 只是视图**：``chain.json`` 是权威产物；HTML 单文件、离线、
   含数据内嵌、深链与抽屉，但不允许把 FAIL 渲染成通过。
 
@@ -32,6 +34,7 @@ import json
 import logging
 import os
 import re
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -67,6 +70,7 @@ EDGE_COLORS = {
     "review": "#f59e0b",
     "derive": "#64748b",
 }
+CONFIDENCE_RANK = {"exact": 3, "declared": 2, "inferred": 1}
 STATUS_COLORS = {
     "covered": "#22c55e",
     "partial": "#f59e0b",
@@ -146,7 +150,8 @@ def _load_requirement_rows(project_dir: Path, ev_dir: Path) -> tuple[list[dict],
 
     if matrix_path.exists():
         rows = _read_matrix()
-        if rows is not None:
+        if rows is not None and not any(
+                isinstance(row, dict) and "match_method" not in row for row in rows):
             return rows, "traceability-matrix.json"
 
     # 缺失或被破坏：以权威生成器重建矩阵，确保证据链有真源且产物可归档。
@@ -247,8 +252,28 @@ def collect_chain(
     ev_dir = _evidence_dir(str(project), evidence_dir)
     rows, source = _load_requirement_rows(project, ev_dir)
 
+    source_ids: list[str] = []
+    dropped: list[dict] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            dropped.append({"row": index, "req_id": "", "reason": "row is not an object"})
+            continue
+        rid = str(row.get("req_id") or "").strip()
+        if not rid:
+            dropped.append({"row": index, "req_id": "", "reason": "empty req_id"})
+            continue
+        source_ids.append(rid)
+    counts = Counter(source_ids)
+    duplicates = {rid: n for rid, n in counts.items() if n > 1}
+    source_stats = {
+        "rows": len(rows),
+        "unique": len(counts),
+        "duplicates": duplicates,
+        "dropped": dropped,
+    }
+
     nodes: dict[str, dict] = {}
-    edges: list[dict] = []
+    edges: dict[tuple[str, str, str], dict] = {}
 
     def add_node(node: dict) -> None:
         existing = nodes.get(node["id"])
@@ -260,14 +285,26 @@ def collect_chain(
                 if ref not in existing["refs"]:
                     existing["refs"].append(ref)
 
-    def add_edge(source_id: str, target_id: str, kind: str) -> None:
-        edges.append({"from": source_id, "to": target_id, "kind": kind})
+    def add_edge(source_id: str, target_id: str, kind: str,
+                 confidence: str = "exact", method: str = "") -> None:
+        key = (source_id, target_id, kind)
+        previous = edges.get(key)
+        if previous is None or CONFIDENCE_RANK.get(confidence, 0) > CONFIDENCE_RANK.get(
+                previous.get("confidence"), 0):
+            edges[key] = {"from": source_id, "to": target_id, "kind": kind,
+                          "confidence": confidence, "method": method}
 
     tests = _test_status_map(project)
+    seen: set[str] = set()
+    canonical_rows: list[dict] = []
     for row in rows:
-        rid = str(row.get("req_id") or "").strip()
-        if not rid:
+        if not isinstance(row, dict):
             continue
+        rid = str(row.get("req_id") or "").strip()
+        if not rid or rid in seen:
+            continue
+        seen.add(rid)
+        canonical_rows.append(row)
         statement = str(row.get("statement") or "")
         add_node({
             "id": rid,
@@ -279,6 +316,8 @@ def collect_chain(
             "has_test": bool(row.get("has_test")),
             "has_review": bool(row.get("has_review")),
         })
+        code_method = str(row.get("match_method") or "matrix")
+        code_confidence = "exact" if code_method in ("annotation", "comment") else "inferred"
         for code_file in row.get("code_files") or []:
             code_id = f"code:{str(code_file).replace(os.sep, '/')}"
             add_node({
@@ -288,7 +327,7 @@ def collect_chain(
                 "status": "evidence",
                 "refs": [str(code_file)],
             })
-            add_edge(rid, code_id, "implement")
+            add_edge(rid, code_id, "implement", code_confidence, code_method)
         for test_file in row.get("test_files") or []:
             test_id = f"test:{str(test_file).replace(os.sep, '/')}"
             add_node({
@@ -298,7 +337,7 @@ def collect_chain(
                 "status": tests.get(Path(str(test_file)).name, "unknown"),
                 "refs": [str(test_file)],
             })
-            add_edge(rid, test_id, "verify")
+            add_edge(rid, test_id, "verify", "declared", "matrix.test_files")
 
     reviews = scan_review_artifacts(str(project))
     for review in reviews:
@@ -312,7 +351,7 @@ def collect_chain(
         })
     for edge in _review_edges(rows, reviews):
         if edge["from"] in nodes and edge["to"] in nodes:
-            add_edge(edge["from"], edge["to"], "review")
+            add_edge(edge["from"], edge["to"], "review", "exact", "review.artifact")
 
     # SYS.1 → SWE.1 derivation edges (only when both endpoints exist).
     try:
@@ -323,16 +362,16 @@ def collect_chain(
     for sys_id, swe_id in (sys_trace.get("sys_to_swe") or {}).items():
         swe_target = swe_id if isinstance(swe_id, str) else ", ".join(map(str, swe_id or []))
         if str(sys_id) in nodes and swe_target in nodes:
-            add_edge(str(sys_id), swe_target, "derive")
+            add_edge(str(sys_id), swe_target, "derive", "exact", "matrix.sys_trace")
 
     ci_results = scan_ci_results(str(project))
     test_reports = scan_test_reports(str(project))
     artifacts = _collect_artifacts(project, ev_dir)
 
-    total = len(rows)
-    with_code = sum(1 for r in rows if r.get("has_code"))
-    with_test = sum(1 for r in rows if r.get("has_test"))
-    with_review = sum(1 for r in rows if r.get("has_review"))
+    total = len(canonical_rows)
+    with_code = sum(1 for r in canonical_rows if r.get("has_code"))
+    with_test = sum(1 for r in canonical_rows if r.get("has_test"))
+    with_review = sum(1 for r in canonical_rows if r.get("has_review"))
     ci_failed = [c for c in ci_results if str(c.get("status", "")).lower() in ("failed", "fail", "error")]
     tests_failed = sum(int(t.get("failed", 0) or 0) for t in test_reports)
 
@@ -370,20 +409,19 @@ def collect_chain(
         "generated_at": datetime.now().isoformat(),
         "project_dir": str(project),
         "source": source,
+        "source_stats": source_stats,
         "nodes": sorted(nodes.values(), key=lambda n: (n["type"], n["id"])),
-        "edges": [
-            {"from": src, "to": dst, "kind": kind}
-            for src, dst, kind in sorted(
-                {(e["from"], e["to"], e["kind"]) for e in edges},
-                key=lambda item: (item[2], item[0], item[1]),
-            )
-        ],
+        "edges": sorted(
+            edges.values(),
+            key=lambda e: (e["kind"], e["from"], e["to"]),
+        ),
         "artifacts": artifacts,
         "ci_results": ci_results,
         "gates": process_gates,
         "problems": [],
         "metrics": {
             "requirements": total,
+            "source_rows": len(rows),
             "with_code": with_code,
             "with_test": with_test,
             "with_review": with_review,
@@ -498,6 +536,39 @@ def validate_chain(chain: dict, rules: Optional[dict] = None) -> list[dict]:
     for key in REQUIRED_TOP_KEYS:
         if key not in chain:
             problems.append(_problem("E-CHAIN-SCHEMA", "ERROR", f"missing top-level key: {key}"))
+
+    stats = chain.get("source_stats")
+    if isinstance(stats, dict):
+        duplicates = stats.get("duplicates") or {}
+        if isinstance(duplicates, dict) and duplicates:
+            pairs = ", ".join(f"{k}×{v}" for k, v in list(duplicates.items())[:8])
+            problems.append(_problem(
+                "E-CHAIN-SRC-DUP", "ERROR",
+                f"{sum(duplicates.values())} source row(s) share duplicate requirement IDs: {pairs}",
+                duplicates=dict(list(duplicates.items())[:20]),
+            ))
+        dropped = stats.get("dropped") or []
+        if isinstance(dropped, list) and dropped:
+            problems.append(_problem(
+                "E-CHAIN-SRC-DROP", "ERROR",
+                f"{len(dropped)} source row(s) dropped without a requirement ID "
+                f"({dropped[0].get('reason', 'unknown')})",
+                dropped=dropped[:20],
+            ))
+        rows, unique = stats.get("rows"), stats.get("unique")
+        if isinstance(rows, int) and isinstance(unique, int) and rows != unique \
+                and not duplicates and not dropped:
+            problems.append(_problem(
+                "E-CHAIN-SRC-DUP", "ERROR",
+                f"source rows ({rows}) != unique requirement IDs ({unique})",
+            ))
+        metrics = chain.get("metrics") or {}
+        declared = metrics.get("requirements")
+        if isinstance(unique, int) and isinstance(declared, int) and unique != declared:
+            problems.append(_problem(
+                "E-CHAIN-SRC-DROP", "ERROR",
+                f"metrics.requirements ({declared}) != unique source IDs ({unique})",
+            ))
 
     nodes = chain.get("nodes") if isinstance(chain.get("nodes"), list) else []
     seen: set[str] = set()
@@ -681,10 +752,13 @@ def _trace_svg(chain: dict, positions: dict[str, dict], width: int, height: int)
             x2 = dst["x"] + dst["w"]
         mid = (x1 + x2) / 2
         color = EDGE_COLORS.get(str(edge.get("kind")), "#94a3b8")
+        confidence = str(edge.get("confidence") or "exact")
+        dash = ' stroke-dasharray="5 4" opacity="0.72"' if confidence == "inferred" else ""
         parts.append(
             f'<path class="edge edge-{_esc(edge.get("kind"))}" '
             f'd="M {x1} {y1} C {mid} {y1}, {mid} {y2}, {x2} {y2}" '
-            f'stroke="{color}" fill="none" marker-end="url(#arrow-{_esc(edge.get("kind"))})" '
+            f'stroke="{color}" fill="none" marker-end="url(#arrow-{_esc(edge.get("kind"))})"'
+            f'{dash} data-confidence="{_esc(confidence)}" '
             f'data-source="{_esc(edge.get("from"))}" data-target="{_esc(edge.get("to"))}"/>'
         )
     parts.append("</svg>")
@@ -792,6 +866,14 @@ def _kpi_cards(chain: dict) -> str:
         ("问题", f'{summary.get("problems_error", 0)} ERROR / {summary.get("problems_warning", 0)} WARN',
          "bad" if summary.get("problems_error") else "ok"),
     ]
+    stats = chain.get("source_stats") or {}
+    duplicates = stats.get("duplicates") or {}
+    if duplicates:
+        cards.insert(1, (
+            "源重复 ID",
+            f'{sum(duplicates.values())} 行 / {len(duplicates)} 个 ID',
+            "bad",
+        ))
     return "".join(
         f'<div class="kpi {cls}"><div class="kpi-value">{_esc(value)}</div>'
         f'<div class="kpi-label">{_esc(label)}</div></div>'
@@ -901,9 +983,11 @@ def render_html(chain: dict) -> str:
   .tabs button {{ border:1px solid var(--line); background:#fff; border-radius:8px;
                   padding:8px 16px; cursor:pointer; font-size:13px; color:var(--ink); }}
   .tabs button.active {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
-  .toolbar {{ display:flex; gap:10px; align-items:center; margin-bottom:10px; }}
-  .toolbar input {{ flex:1; max-width:420px; padding:8px 12px; border:1px solid var(--line);
+  .toolbar {{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }}
+  .toolbar input[type=search] {{ flex:1; max-width:420px; padding:8px 12px; border:1px solid var(--line);
                     border-radius:8px; font-size:13px; }}
+  .toolbar label {{ font-size:12px; color:var(--muted); display:inline-flex; gap:5px; align-items:center; }}
+  .trace-canvas.exact-only .edge[data-confidence="inferred"] {{ display:none; }}
   .view {{ display:none; }}
   .view.active {{ display:block; }}
   .trace-wrap {{ overflow:auto; border:1px solid var(--line); border-radius:10px; background:#fff; }}
@@ -977,7 +1061,8 @@ def render_html(chain: dict) -> str:
   <section id="view-trace" class="view active">
     <div class="toolbar">
       <input id="search" type="search" placeholder="搜索节点 ID / 标题 / 文件…">
-      <span class="muted">点击节点打开详情抽屉；边表示 implement / verify / review。</span>
+      <label><input id="exact-only" type="checkbox"> 仅精确追溯（隐藏关键词推断边）</label>
+      <span class="muted">点击节点打开详情抽屉；虚线为低置信度边。</span>
     </div>
     <div class="trace-wrap">
       <div class="trace-canvas" style="width:{width}px;height:{height}px;">
@@ -1073,6 +1158,11 @@ def render_html(chain: dict) -> str:
     return '<a class="chip" href="#/node/' + encodeURIComponent(id) + '">' + esc(id) + '</a>';
   }}
 
+  function edgeTag(e) {{
+    var c = e.confidence || 'exact';
+    return '<span class="muted">[' + esc(c) + (e.method ? ' · ' + esc(e.method) : '') + ']</span>';
+  }}
+
   function openNode(id) {{
     var node = nodes[id];
     if (!node) {{ return false; }}
@@ -1090,11 +1180,11 @@ def render_html(chain: dict) -> str:
     }}
     html += '<h3>出边 (' + outgoing.length + ')</h3>';
     html += outgoing.length ? outgoing.map(function (e) {{
-      return '<div>' + esc(e.kind) + ' → ' + linkFor(e.to) + '</div>';
+      return '<div>' + esc(e.kind) + ' ' + edgeTag(e) + ' → ' + linkFor(e.to) + '</div>';
     }}).join('') : '<div class="muted">无</div>';
     html += '<h3>入边 (' + incoming.length + ')</h3>';
     html += incoming.length ? incoming.map(function (e) {{
-      return '<div>' + linkFor(e.from) + ' → ' + esc(e.kind) + '</div>';
+      return '<div>' + linkFor(e.from) + ' → ' + esc(e.kind) + ' ' + edgeTag(e) + '</div>';
     }}).join('') : '<div class="muted">无</div>';
     drawerBody.innerHTML = html;
     drawer.classList.add('open');
@@ -1183,6 +1273,14 @@ def render_html(chain: dict) -> str:
         var hit = !q || (el.getAttribute('data-search') || '').indexOf(q) >= 0;
         el.classList.toggle('dim', !hit);
       }});
+    }});
+  }}
+
+  var exactOnly = document.getElementById('exact-only');
+  if (exactOnly) {{
+    exactOnly.addEventListener('change', function () {{
+      var canvas = document.querySelector('.trace-canvas');
+      if (canvas) {{ canvas.classList.toggle('exact-only', exactOnly.checked); }}
     }});
   }}
 

@@ -37,7 +37,8 @@ def _make_matrix_project(tmp_path: Path, requirements: list[dict]) -> Path:
     return tmp_path
 
 
-def _req(req_id: str, code: list[str], tests: list[str], review: bool = False) -> dict:
+def _req(req_id: str, code: list[str], tests: list[str], review: bool = False,
+         match_method: str = "annotation") -> dict:
     return {
         "req_id": req_id,
         "statement": f"{req_id} shall provide behaviour",
@@ -47,6 +48,7 @@ def _req(req_id: str, code: list[str], tests: list[str], review: bool = False) -
         "has_review": review,
         "code_files": code,
         "test_files": tests,
+        "match_method": match_method,
         "status": "Covered" if tests else "Not Covered",
     }
 
@@ -88,6 +90,61 @@ class TestCollectChain:
         assert chain["summary"]["status"] == "FAIL"
         assert chain["metrics"]["requirements"] == 0
         assert any(p["code"] == "E-CHAIN-GATE" for p in chain["problems"])
+
+    def test_duplicate_source_requirement_ids_fail_closed(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+            _req("SHALL-001", ["src/b.c"], ["tests/test_b.py"]),
+        ])
+        chain = collect_chain(str(project))
+        assert chain["summary"]["status"] == "FAIL"
+        assert chain["metrics"]["requirements"] == 1
+        assert chain["metrics"]["source_rows"] == 2
+        assert chain["source_stats"]["duplicates"] == {"SHALL-001": 2}
+        codes = {p["code"] for p in chain["problems"]}
+        assert "E-CHAIN-SRC-DUP" in codes
+        page = render_html(chain)
+        assert "源重复 ID" in page
+
+    def test_empty_source_req_id_is_reported_not_silently_dropped(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+            _req("", ["src/b.c"], ["tests/test_b.py"]),
+        ])
+        chain = collect_chain(str(project))
+        assert chain["summary"]["status"] == "FAIL"
+        assert chain["metrics"]["requirements"] == 1
+        assert chain["source_stats"]["dropped"]
+        codes = {p["code"] for p in chain["problems"]}
+        assert "E-CHAIN-SRC-DROP" in codes
+
+
+class TestTraceConfidence:
+    def test_keyword_code_edge_is_inferred(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        implement = [e for e in chain["edges"] if e["kind"] == "implement"]
+        assert implement and implement[0]["confidence"] == "inferred"
+        assert implement[0]["method"] == "keyword"
+
+    def test_annotation_code_edge_is_exact(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], [], match_method="annotation"),
+        ])
+        chain = collect_chain(str(project))
+        implement = [e for e in chain["edges"] if e["kind"] == "implement"]
+        assert implement and implement[0]["confidence"] == "exact"
+
+    def test_html_exposes_confidence_filter(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        page = render_html(chain)
+        assert 'data-confidence="inferred"' in page
+        assert 'id="exact-only"' in page
 
 
 class TestValidateChain:
