@@ -273,6 +273,42 @@ problems:
   last_seen: '2026-11-06'
   status: 已关闭
   closed: '2026-11-06'
+- id: PR-SEAT-030
+  key: 41c16e5cd92b
+  source: cm_registry
+  rule: E-HASH-MISMATCH
+  summary: CI-SEAT-057 variant.yaml 哈希与基线 SEAT-DEMO-BL2 不符（注册 d1970626c2d3… ≠ 实际 6825c952a01f…）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-031
+  key: 83f2ace013a1
+  source: man_check
+  rule: E-CI-NO-WP
+  summary: 顶层文档无 WBS 认领：产品配置_变体需求矩阵_座椅控制器示例_V1.0.xlsx（CI-SEAT-058）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-032
+  key: 7b3347b8eb58
+  source: variant_check
+  rule: E-VAR-ORPHAN-REQ
+  summary: SYS 需求无任何变体承接：SYS-SEAT-003（存在即须属于至少一个产品配置）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
+- id: PR-SEAT-033
+  key: 74502c85c5df
+  source: variant_check
+  rule: E-VAR-ORPHAN-REQ
+  summary: SYS 需求无任何变体承接：SYS-SEAT-004（存在即须属于至少一个产品配置）
+  first_seen: '2026-11-06'
+  last_seen: '2026-11-06'
+  status: 已关闭
+  closed: '2026-11-06'
 changes:
 - id: CR-SEAT-001
   key: README.md|fe1d886a647d|aff71aebd8c7
@@ -363,5 +399,26 @@ changes:
   date: '2026-11-06'
   object: README.md
   request: README.md 内容变更（20f74dacab15… → fd266b12f7cf…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-014
+  key: added|variant.yaml
+  date: '2026-11-06'
+  object: variant.yaml
+  request: 新增配置项 variant.yaml
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-015
+  key: plan.yaml|da79eccabe94|d58104431bbf
+  date: '2026-11-06'
+  object: plan.yaml
+  request: plan.yaml 内容变更（da79eccabe94… → d58104431bbf…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-016
+  key: README.md|fd266b12f7cf|0f523aa20bd7
+  date: '2026-11-06'
+  object: README.md
+  request: README.md 内容变更（fd266b12f7cf… → 0f523aa20bd7…）
   baseline: SEAT-DEMO-BL2
   status: 已实施（自动登记）

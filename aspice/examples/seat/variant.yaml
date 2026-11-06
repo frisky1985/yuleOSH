@@ -1,0 +1,23 @@
+# 产品配置（变体）真源：特性 ↔ SYS 需求 ↔ 变体 三段映射。
+# 机器管：特性/需求引用存在、需求全覆盖（E-VAR-ORPHAN-REQ）、ID 唯一；配置选型语义由产品负责人签字（示例数据）。
+meta:
+  product: 主驾座椅控制器（SCM）示例
+features:
+  - { id: F-ADJUST,  name: 六向电动调节,   reqs: [SYS-SEAT-001] }
+  - { id: F-MEMORY,  name: 位置记忆与调用, reqs: [SYS-SEAT-002] }
+  - { id: F-HEAT,    name: 座椅加热,       reqs: [SYS-SEAT-003] }
+  - { id: F-VENT,    name: 座椅通风,       reqs: [SYS-SEAT-004] }
+  - { id: F-ANTIPINCH, name: 防夹保护,     reqs: [SYS-SEAT-005] }
+  - { id: F-DIAG,    name: 故障诊断,       reqs: [SYS-SEAT-006] }
+  - { id: F-POWER,   name: 电源环境适应,   reqs: [SYS-SEAT-007] }
+  - { id: F-LIN,     name: LIN 通信,       reqs: [SYS-SEAT-008] }
+variants:
+  - id: SC-BASE
+    name: 基础款
+    features: [F-ADJUST, F-ANTIPINCH, F-DIAG, F-POWER, F-LIN]
+  - id: SC-MEM
+    name: 记忆款
+    features: [F-ADJUST, F-MEMORY, F-ANTIPINCH, F-DIAG, F-POWER, F-LIN]
+  - id: SC-COMFORT
+    name: 舒适旗舰款
+    features: [F-ADJUST, F-MEMORY, F-HEAT, F-VENT, F-ANTIPINCH, F-DIAG, F-POWER, F-LIN]
