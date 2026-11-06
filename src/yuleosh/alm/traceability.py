@@ -389,8 +389,25 @@ def extract_shall_statements(spec_path: str, start_index: int = 0) -> list[dict]
                         "statement": shall_statement,
                         "line": idx,
                         "section": current_section,
+                        "explicit_id": True,
                     })
             continue
+
+        # Declared upstream trace line, e.g. ``- **追溯**: SYS-REQ-003``.
+        # Attach it to the most recent SHALL statement in the same block.
+        if stripped.startswith("-") and shall_statements and not in_shall_table:
+            trace_match = re.match(
+                r"-\s*\*\*(?:追溯|上游|派生自|traces?\s+(?:to|from))\*\*\s*[:：]\s*(.+)",
+                stripped, re.IGNORECASE,
+            )
+            if trace_match:
+                ids = re.findall(
+                    r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+(?:\.\d+)?",
+                    trace_match.group(1),
+                )
+                if ids:
+                    shall_statements[-1].setdefault("upstream", []).extend(ids)
+                continue
 
         # ── Legacy: bullet-point format SHALLs ──
         if shall_keyword_pattern.search(stripped):
@@ -411,9 +428,11 @@ def extract_shall_statements(spec_path: str, start_index: int = 0) -> list[dict]
 
             # Parse spec-defined ID from **ID**: prefix or [REQ-xxx] marker
             req_id = None
+            explicit_id = False
             spec_id_match = spec_id_pattern.match(statement)
             if spec_id_match:
                 req_id = spec_id_match.group(1) or spec_id_match.group(2)
+                explicit_id = True
 
             # If no inline req_id, use the section-level req_id
             if not req_id:
@@ -425,6 +444,7 @@ def extract_shall_statements(spec_path: str, start_index: int = 0) -> list[dict]
                 "statement": statement,
                 "line": idx,
                 "section": current_section,
+                "explicit_id": explicit_id,
             })
 
     log.info("Extracted %d SHALL statements from %s", len(shall_statements), spec_path)
@@ -785,6 +805,133 @@ def load_swr_mapping_table(project_dir: str) -> list[dict]:
     return []
 
 
+def _final_requirement_id(req: dict) -> str:
+    """Return the ID used in the authoritative matrix for a requirement row.
+
+    Section-level IDs (e.g. ``RS-001`` shared by several bullets) are not
+    unique, so they must not become node IDs. Only inline, per-requirement
+    IDs (``explicit_id=True``) are stable enough to use as node IDs.
+    """
+    if req.get("explicit_id"):
+        return str(req.get("req_id") or req.get("id") or "")
+    return str(req.get("id") or req.get("req_id") or "")
+
+
+def load_vmodel_trace_policy(project_dir: str) -> list[dict]:
+    """Read ``docs/requirements/v-model-traceability.md`` declared policy.
+
+    Table columns are matched by substring:
+      - 下游章节 / downstream section prefix
+      - 上游需求 / upstream requirement ID (comma-separated allowed)
+      - 关系 / relation label
+
+    The policy is an authored trace declaration, not an inference: every
+    row explicitly says which upstream requirement a downstream section
+    derives from. Rows are matched longest-prefix first.
+    """
+    path = Path(project_dir) / "docs" / "requirements" / "v-model-traceability.md"
+    if not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        log.warning("Cannot read V-model trace policy %s: %s", path, exc)
+        return []
+
+    def _cell(cells: list[str], keys: tuple[str, ...]) -> str:
+        for idx, name in enumerate(header or []):
+            if any(key in name or key in name.lower() for key in keys):
+                if idx < len(cells):
+                    return cells[idx].strip().strip("`* ")
+        return ""
+
+    rules: list[dict] = []
+    header: list[str] | None = None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            header = None
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if header is None:
+            if any("下游" in c or "downstream" in c.lower() for c in cells) \
+                    and any("上游" in c or "upstream" in c.lower() for c in cells):
+                header = cells
+            continue
+        if _is_table_separator(stripped):
+            continue
+        downstream = _cell(cells, ("下游", "downstream"))
+        upstream_raw = _cell(cells, ("上游", "upstream"))
+        relation = _cell(cells, ("关系", "relation")) or "derive"
+        if not downstream or not upstream_raw:
+            continue
+        upstream = [
+            v.strip().strip("`* ")
+            for v in re.split(r"[,，;；、]+", upstream_raw)
+            if v.strip()
+        ]
+        if upstream:
+            rules.append({
+                "downstream": downstream,
+                "upstream": upstream,
+                "relation": relation,
+            })
+    rules.sort(key=lambda r: -len(r["downstream"]))
+    if rules:
+        log.info("Loaded %d V-model trace policy rules from %s", len(rules), path)
+    return rules
+
+
+def _resolve_policy_ids(raw_values: list[str], requirements: list[dict]) -> list[str]:
+    """Resolve policy references to unique matrix node IDs.
+
+    An exact requirement ID wins; otherwise a section prefix resolves to the
+    first requirement in that section. References that resolve to nothing are
+    dropped so the chain cannot invent dangling edges.
+    """
+    resolved: list[str] = []
+    for raw in raw_values:
+        value = raw.strip()
+        if not value:
+            continue
+        exact = next(
+            (r for r in requirements
+             if value.upper() in {
+                 str(r.get("req_id") or "").upper(),
+                 str(r.get("id") or "").upper(),
+             }),
+            None,
+        )
+        target = _final_requirement_id(exact) if exact else ""
+        if not target:
+            section_match = next(
+                (r for r in requirements
+                 if str(r.get("section") or "").upper().startswith(value.upper())),
+                None,
+            )
+            target = _final_requirement_id(section_match) if section_match else ""
+        if target and target not in resolved:
+            resolved.append(target)
+    return resolved
+
+
+def _apply_vmodel_trace_policy(requirements: list[dict], policy: list[dict]) -> None:
+    """Attach declared upstream IDs to rows matching the policy."""
+    for req in requirements:
+        section = str(req.get("section") or "")
+        for rule in policy:
+            if not section.startswith(rule["downstream"]):
+                continue
+            upstream = _resolve_policy_ids(rule["upstream"], requirements)
+            if upstream:
+                existing = req.setdefault("upstream", [])
+                for target in upstream:
+                    if target not in existing:
+                        existing.append(target)
+                req["upstream_method"] = "declared_policy"
+            break
+
+
 def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     """Generate LRM (Lateral Requirements Matrix).
 
@@ -813,6 +960,16 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     docs_swr = Path(project_dir) / "docs" / "software-requirements.md"
     if str(docs_swr) not in spec_files and docs_swr.exists():
         spec_files.append(str(docs_swr))
+
+    # Controlled requirement baselines (SYS.1 / SYS.3 / SWE.2 / SWE.3)
+    requirements_dir = Path(project_dir) / "docs" / "requirements"
+    if requirements_dir.exists():
+        for rf in sorted(requirements_dir.glob("*.md")):
+            if rf.name == "v-model-traceability.md":
+                continue
+            s = str(rf)
+            if s not in spec_files:
+                spec_files.append(s)
 
     # Auto-discover ALL specs/*.md files
     specs_dir = Path(project_dir) / "specs"
@@ -920,6 +1077,9 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         requirements.append({
             "id": req_id,
             "req_id": shall.get("req_id"),
+            "explicit_id": bool(shall.get("explicit_id")),
+            "upstream": list(shall.get("upstream") or []),
+            "upstream_method": "declared" if shall.get("upstream") else "",
             "statement": shall["statement"],
             "section": shall.get("section", ""),
             "source_file": shall.get("source_file", ""),
@@ -995,7 +1155,14 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
                 "has_review": False,
                 "step_handlers": [],
                 "swr_mapping": True,
+                "explicit_id": True,
+                "upstream": [],
             })
+
+    # Apply authored V-model trace policy (section prefix → upstream ID).
+    # Existing ``追溯`` lines remain authoritative; policy adds the missing
+    # architecture allocation links without guessing.
+    _apply_vmodel_trace_policy(requirements, load_vmodel_trace_policy(project_dir))
 
     # Summary
     total = len(requirements)
@@ -1121,10 +1288,12 @@ def write_authoritative_traceability(project_dir: str,
         test_files = sorted({str(t.get("file", "")) for t in tests if t.get("file")})
         code_files = [str(c) for c in (r.get("code_files") or [])]
         rows.append({
-            "req_id": r.get("id", ""),
+            "req_id": _final_requirement_id(r),
             "statement": (r.get("statement") or "")[:160],
             "section": r.get("section", ""),
             "source_file": r.get("source_file", ""),
+            "upstream": list(r.get("upstream") or []),
+            "upstream_method": r.get("upstream_method", ""),
             "has_code": has_code,
             "has_test": has_test,
             "has_review": bool(r.get("has_review")),

@@ -149,6 +149,8 @@ _ASPICE_EVIDENCE_CHAIN_CONTENT = """\
 - **V 模型**：`chain.v_model` 记录 SYS.1→SYS.2→SYS.3→SWE.1→SWE.2→SWE.3
   成对覆盖；required 过程对缺失或未达标 → `E-VMODEL-PAIR`；
   项目未声明过程域时仅 `W-CHAIN-VMODEL-NA`，不判红。
+- V 模型 `derive` 边只能来自需求内 `追溯` 行或
+  `docs/requirements/v-model-traceability.md` 受控策略表；禁止关键词猜测补齐。
 - 过程门禁：`G-REQ` `G-CODE` `G-TEST` `G-REVIEW` `G-CI`；阈值见
   `src/yuleosh/evidence/chain_rules.yaml`。
 - 任一 ERROR → `summary.status=FAIL`。修复真源（spec/代码/测试/评审），
@@ -198,7 +200,7 @@ def builtin_skills() -> list[Skill]:
             description="证据链生成、fail-closed 门禁与引用纪律：真源优先、不臆造、HTML 仅作视图。",
             content=_ASPICE_EVIDENCE_CHAIN_CONTENT,
             tags=["aspice", "evidence", "traceability", "audit", "html"],
-            version="1.2.0",
+            version="1.3.0",
         ),
     ]
 

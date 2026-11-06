@@ -218,3 +218,60 @@ def test_generate_lrm_includes_swr_mapping(tmp_path):
     swr_req = next(r for r in swr if r["req_id"] == "SWR-001.1-01")
     assert swr_req["has_test"] is True
     assert swr_req["test_reports"][0]["file"] == "tests/unit/autosar/test_dcm.c"
+
+
+def test_explicit_requirement_id_preserved_in_matrix(tmp_path):
+    """Inline requirement IDs must survive into the authoritative matrix."""
+    from yuleosh.alm.traceability import write_authoritative_traceability
+
+    (tmp_path / "docs").mkdir(parents=True)
+    (tmp_path / "docs" / "spec.md").write_text(
+        "# Spec\n\n## SYS-REQ-001: Platform\n"
+        "- **SYS-REQ-001**: The system SHALL provide a pipeline.\n",
+        encoding="utf-8",
+    )
+    write_authoritative_traceability(str(tmp_path))
+    matrix = json.loads(
+        (tmp_path / ".osh" / "evidence" / "traceability-matrix.json").read_text(encoding="utf-8")
+    )
+    assert any(r["req_id"] == "SYS-REQ-001" for r in matrix["requirements"])
+
+
+def test_vmodel_policy_resolves_section_upstream(tmp_path):
+    """Authored policy must attach a stable upstream ID to a downstream section."""
+    (tmp_path / "docs").mkdir(parents=True)
+    (tmp_path / "docs" / "spec.md").write_text(
+        "# Spec\n\n## RS-001: System\n- The system SHALL provide a platform.\n"
+        "\n## SWR-001: Software\n- The software SHALL orchestrate stages.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "requirements").mkdir(parents=True)
+    (tmp_path / "docs" / "requirements" / "v-model-traceability.md").write_text(
+        "| 下游章节前缀 | 上游需求 | 关系 |\n"
+        "|:-------------|:---------|:-----|\n"
+        "| SWR-001 | RS-001 | derive |\n",
+        encoding="utf-8",
+    )
+    result = generate_lrm(str(tmp_path))
+    rs = next(r for r in result["requirements"] if r["section"].startswith("RS-001"))
+    sw = next(r for r in result["requirements"] if r["section"].startswith("SWR-001"))
+    assert sw["upstream"] == [rs["id"]]
+
+
+def test_declared_trace_line_sets_upstream(tmp_path):
+    """A ``追溯`` line in a software requirement must become an upstream edge."""
+    (tmp_path / "docs").mkdir(parents=True)
+    (tmp_path / "docs" / "software-requirements.md").write_text(
+        "# SRS\n\n### REQ-001: Pipeline\n- **SHALL** support pipeline stages\n"
+        "- **追溯**: SYS-REQ-003\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "requirements").mkdir(parents=True)
+    (tmp_path / "docs" / "requirements" / "system-requirements.md").write_text(
+        "# SYS\n\n## SYS-REQ-003: Pipeline\n"
+        "- **SYS-REQ-003**: The system SHALL execute the pipeline.\n",
+        encoding="utf-8",
+    )
+    result = generate_lrm(str(tmp_path))
+    req = next(r for r in result["requirements"] if r["section"].startswith("REQ-001"))
+    assert req["upstream"] == ["SYS-REQ-003"]
