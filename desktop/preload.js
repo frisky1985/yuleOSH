@@ -1,6 +1,8 @@
 /**
  * preload.js — yuleOSH 安全上下文桥接
  *
+ * @req REQ-006
+ *
  * 使用 contextBridge 安全暴露有限 API 给渲染进程。
  * 绝不暴露 Node.js 原生 API (require, process, fs 等)
  * 遵循 Electron 安全最佳实践 (contextIsolation + nodeIntegration=false)
@@ -50,6 +52,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, exitCode) => callback(exitCode);
     ipcRenderer.on('backend-crashed', handler);
     return () => ipcRenderer.removeListener('backend-crashed', handler);
+  },
+
+  /**
+   * 后端自动重启中
+   * @param {Function} callback - ({attempt, max}) => void
+   */
+  onBackendRestarting: (callback) => {
+    const handler = (_event, info) => callback(info);
+    ipcRenderer.on('backend-restarting', handler);
+    return () => ipcRenderer.removeListener('backend-restarting', handler);
+  },
+
+  /**
+   * 后端达到最大重启次数
+   * @param {Function} callback - (message: string) => void
+   */
+  onBackendFatal: (callback) => {
+    const handler = (_event, message) => callback(message);
+    ipcRenderer.on('backend-fatal', handler);
+    return () => ipcRenderer.removeListener('backend-fatal', handler);
   },
 
   /**

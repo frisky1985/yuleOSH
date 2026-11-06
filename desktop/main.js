@@ -1,6 +1,8 @@
 /**
  * main.js — yuleOSH Desktop 主进程入口
  *
+ * @req REQ-001, REQ-006
+ *
  * 职责:
  *   - Electron 应用生命周期管理
  *   - BrowserWindow 创建/管理
@@ -15,6 +17,7 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
+const { pathToFileURL } = url;
 
 const ServerManager = require('./server-manager');
 const TrayManager = require('./tray');
@@ -22,10 +25,12 @@ const TrayManager = require('./tray');
 // ─── 常量 ────────────────────────────────────────────
 
 const DEV_MODE = process.env.ELECTRON_DEV === 'true';
+const IS_TEST = process.env.NODE_ENV === 'test';
 const DEV_SERVER_PORT = 3000;
 const BACKEND_PORT = 18788;
 const LOCAL_SERVER_PORT = 18789; // 用于生产模式静态文件服务
 const FRONTEND_OUT_DIR = path.resolve(__dirname, '..', 'frontend', 'out');
+const FRONTEND_FILE_URL = pathToFileURL(FRONTEND_OUT_DIR).href;
 
 // ─── 状态 ────────────────────────────────────────────
 
@@ -40,6 +45,23 @@ let trayManager = null;
 
 /** @type {http.Server|null} */
 let localFileServer = null;
+
+/** 防止 before-quit 重复执行清理 */
+let shutdownStarted = false;
+
+// ─── 单实例锁 ─────────────────────────────────────────
+// 多实例会同时争抢后端端口与本地静态服务端口，导致启动竞态。
+if (!IS_TEST && app.requestSingleInstanceLock && !app.requestSingleInstanceLock()) {
+  app.quit();
+} else if (!IS_TEST) {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
 
 // ─── 应用菜单 ────────────────────────────────────────
 
@@ -243,9 +265,10 @@ function startLocalFileServer() {
       // server must forward them to the backend instead of trying to serve
       // them as files.
       if (filePath.startsWith('/api/')) {
+        const proxyPort = serverManager ? serverManager.port : BACKEND_PORT;
         const proxyReq = http.request({
           host: '127.0.0.1',
-          port: BACKEND_PORT,
+          port: proxyPort,
           path: req.url,
           method: req.method,
           headers: req.headers,
@@ -316,23 +339,29 @@ function startLocalFileServer() {
     });
 
     server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        // 端口被占用，尝试下一个
-        console.warn(`[FileServer] Port ${LOCAL_SERVER_PORT} in use, trying ${LOCAL_SERVER_PORT + 1}`);
-        server.listen(LOCAL_SERVER_PORT + 1);
+      if (ended) return;
+      if (err.code === 'EADDRINUSE' && port < LOCAL_SERVER_PORT + 10) {
+        port += 1;
+        console.warn(`[FileServer] Port in use, trying ${port}`);
+        server.listen(port);
       } else {
+        ended = true;
         reject(err);
       }
     });
 
     server.on('listening', () => {
+      if (ended) return;
+      ended = true;
       const addr = server.address();
       localFileServer = server;
       console.log(`[FileServer] Serving frontend on http://localhost:${addr.port}`);
       resolve(addr.port);
     });
 
-    server.listen(LOCAL_SERVER_PORT);
+    let port = LOCAL_SERVER_PORT;
+    let ended = false;
+    server.listen(port);
   });
 }
 
@@ -393,6 +422,28 @@ async function createWindow() {
       nodeIntegration: false,
       sandbox: false, // 需要 preload 使用 Node.js API
     },
+  });
+
+  // 只允许应用内部导航；外部链接交给系统浏览器，禁止窗口内跳转
+  mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (target.startsWith('http://') || target.startsWith('https://')) {
+      shell.openExternal(target);
+    }
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    const currentUrl = mainWindow.webContents.getURL();
+    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1):\d+(\/|$)/.test(targetUrl);
+    const isLocal = targetUrl === currentUrl
+      || targetUrl.startsWith(FRONTEND_FILE_URL)
+      || isLocalhost;
+    if (!isLocal) {
+      event.preventDefault();
+      if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+        shell.openExternal(targetUrl);
+      }
+    }
   });
 
   // 窗口可见后显示 (防止白闪)
@@ -671,43 +722,6 @@ function registerIpcHandlers() {
   });
 }
 
-// ─── 后端健康检查 ────────────────────────────────────
-
-/**
- * 轮询后端健康检查端点直到就绪 (AR-P1-03)。
- * @param {string} url - 健康检查 URL
- * @param {number} timeoutMs - 超时毫秒
- * @param {number} intervalMs - 轮询间隔毫秒
- * @returns {Promise<void>}
- */
-function waitForBackend(url, timeoutMs = 15000, intervalMs = 500) {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    function poll() {
-      if (Date.now() - start > timeoutMs) {
-        reject(new Error('Backend health check timed out'));
-        return;
-      }
-      const req = http.get(url, (res) => {
-        if (res.statusCode === 200) {
-          resolve();
-        } else {
-          setTimeout(poll, intervalMs);
-        }
-      });
-      req.on('error', () => {
-        // Backend not ready yet — retry
-        setTimeout(poll, intervalMs);
-      });
-      req.setTimeout(2000, () => {
-        req.destroy();
-        setTimeout(poll, intervalMs);
-      });
-    }
-    poll();
-  });
-}
-
 // ─── 信号转发 ────────────────────────────────────────
 
 /**
@@ -744,6 +758,13 @@ function wireBackendEvents() {
     }
   });
 
+  serverManager.on('crashed', (code, signal) => {
+    console.warn(`[Main] Backend crashed (code=${code}, signal=${signal})`);
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('backend-crashed', code);
+    }
+  });
+
   serverManager.on('stopped', (code) => {
     console.log(`[Main] Backend stopped with code ${code}`);
     if (mainWindow && mainWindow.webContents) {
@@ -766,15 +787,20 @@ async function startBackend() {
     console.log('[Main] Python backend started successfully');
   } catch (err) {
     console.error('[Main] Failed to start backend:', err.message);
-
-    // 健康检查超时或启动失败时由主进程直接加载错误页
+    // 清理可能残留的子进程，避免重试时出现多个后端
+    try {
+      await serverManager.destroy();
+    } catch (cleanupErr) {
+      console.error('[Main] Backend cleanup failed:', cleanupErr.message);
+    }
     showBackendErrorPage(err.message);
+    throw err;
   }
 }
 
 // ─── 应用生命周期 ────────────────────────────────────
 
-app.whenReady().then(async () => {
+async function bootstrap() {
   console.log(`[Main] yuleOSH Desktop v${app.getVersion()}`);
   console.log(`[Main] Platform: ${process.platform}`);
   console.log(`[Main] Dev mode: ${DEV_MODE}`);
@@ -782,24 +808,13 @@ app.whenReady().then(async () => {
   // 1. 创建窗口
   await createWindow();
 
-  // 2. AR-P1-03: 先启动后端，等待健康检查通过后再加载 UI
-  //    注意：路径须与 server-manager.js 的 HEALTH_CHECK_PATH (/api/v1/health) 一致，
-  //    否则轮询到 404 会空等 15s 才「勉强加载 UI」。
-  const healthCheckUrl = `http://localhost:${BACKEND_PORT}/api/v1/health`;
-
-  // Start backend (fires healthy event on success)
-  startBackend();
-
-  // Wait for backend health before UI loads
+  // 2. AR-P1-03: 启动后端并通过 ServerManager 内置健康检查后再加载 UI。
+  //    失败时 startBackend 已展示错误页，不再重复轮询。
   try {
-    await waitForBackend(healthCheckUrl, 15000, 500);
-    console.log('[Main] Backend health check passed — loading UI');
-    // Re-load the frontend now that backend is healthy
+    await startBackend();
     await loadFrontend();
   } catch (err) {
-    console.warn('[Main] Backend not ready in time — loading UI anyway');
-    // Show backend-loading page or just load the frontend
-    await loadFrontend();
+    console.warn(`[Main] Backend unavailable — keeping error page: ${err.message}`);
   }
 
   // macOS: 点击 Dock 图标重新显示窗口
@@ -814,7 +829,11 @@ app.whenReady().then(async () => {
       createWindow();
     }
   });
-});
+}
+
+if (!IS_TEST) {
+  app.whenReady().then(bootstrap);
+}
 
 // 所有窗口关闭时 (macOS 除外)
 app.on('window-all-closed', () => {
@@ -826,10 +845,13 @@ app.on('window-all-closed', () => {
 
 // 退出前清理
 app.on('before-quit', async (event) => {
-  if (!app.isQuitting) {
-    app.isQuitting = true;
+  // 清理期间重复触发 before-quit 时保持阻止退出，避免中断清理
+  if (shutdownStarted) {
+    event.preventDefault();
+    return;
   }
-
+  shutdownStarted = true;
+  app.isQuitting = true;
   event.preventDefault();
 
   console.log('[Main] Shutting down...');

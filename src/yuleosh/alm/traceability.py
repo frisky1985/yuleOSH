@@ -29,7 +29,7 @@ from typing import Optional
 log = logging.getLogger("yuleosh.alm.traceability")
 
 # Source file extensions to scan for requirement annotations and code
-_SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp")
+_SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp", ".js", ".ts", ".jsx", ".tsx")
 
 # Regex for @req annotation: matches @req RS-001, @req(RS-001), @req RS-001, RS-002
 _REQ_ANNOTATION_RE = re.compile(
@@ -1019,6 +1019,20 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     # Scan for @req annotations (authoritative, language-agnostic)
     annotation_map = scan_req_annotations(src_dir)
 
+    # Desktop (Electron) sources are part of the delivered product but live
+    # outside src/. Scan annotations there too so desktop evidence is traceable
+    # without relying on keyword inference.
+    desktop_dir = Path(project_dir) / "desktop"
+    if desktop_dir.exists():
+        desktop_annotations = scan_req_annotations(desktop_dir)
+        node_modules = "node_modules"
+        for req_id, paths in desktop_annotations.items():
+            cleaned = [p for p in paths if node_modules not in Path(p).parts]
+            if not cleaned:
+                continue
+            existing = annotation_map.setdefault(req_id, [])
+            annotation_map[req_id] = list(dict.fromkeys(cleaned + existing))
+
     # Scan for @tests annotations (test → code direct links)
     test_code_links = scan_test_code_links(Path(project_dir))
 
@@ -1037,6 +1051,9 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
 
         # Find code that references this requirement
         matching_code = code_map.get(req_id, [])
+        if not matching_code:
+            # Authoritative annotations may use the spec-level ID (REQ-xxx)
+            matching_code = annotation_map.get(spec_req_id, [])
         if not matching_code:
             # Fallback: search by keyword
             keywords = _extract_keywords(shall["statement"])

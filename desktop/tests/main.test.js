@@ -30,6 +30,8 @@ jest.mock('electron', () => {
       this.webContents = Object.assign(new events.EventEmitter(), {
         send: jest.fn(),
         toggleDevTools: jest.fn(),
+        setWindowOpenHandler: jest.fn(),
+        getURL: jest.fn(() => ''),
       });
       this._options = options;
       this._visible = true;
@@ -57,6 +59,7 @@ jest.mock('electron', () => {
       on: jest.fn(),
       whenReady: jest.fn(() => Promise.resolve()),
       getPath: jest.fn((name) => `/mock/userData/${name}`),
+      requestSingleInstanceLock: jest.fn(() => true),
       quit: jest.fn(),
       exit: jest.fn(),
     },
@@ -93,7 +96,7 @@ jest.mock('electron', () => {
       openExternal: jest.fn(),
     },
   };
-});
+}, { virtual: true });
 
 const main = require('../main');
 const { Menu } = require('electron');
@@ -126,11 +129,16 @@ describe('AC-1.x — 窗口管理', () => {
     expect(opts.webPreferences.nodeIntegration).toBe(false);
   });
 
-  test('AC-1.3.1: frontend/out/ 目录存在', () => {
+  test('AC-1.3.1: 前端构建目录存在或给出明确构建提示', async () => {
     const desktopDir = path.resolve(__dirname, '..');
     const expectedOutDir = path.resolve(desktopDir, '..', 'frontend', 'out');
     const fs = require('fs');
-    expect(fs.existsSync(expectedOutDir)).toBe(true);
+    if (fs.existsSync(expectedOutDir)) {
+      expect(fs.existsSync(path.join(expectedOutDir, 'index.html'))).toBe(true);
+      return;
+    }
+    // 仓库源码目录通常不含构建产物：应 fail-fast 并提示构建命令
+    await expect(main.startLocalFileServer()).rejects.toThrow('Frontend build not found');
   });
 });
 

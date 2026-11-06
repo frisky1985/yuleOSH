@@ -1,6 +1,8 @@
 /**
  * server-manager.js — yuleOSH Python 后端子进程生命周期管理
  *
+ * @req REQ-001, REQ-006
+ *
  * 职责:
  *   - 启动 Python 后端子进程 (yuleosh UI server)
  *   - 健康检查轮询 (GET /api/v1/health)
@@ -8,7 +10,7 @@
  *   - 异常处理与通知
  */
 
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -62,7 +64,10 @@ class ServerManager extends EventEmitter {
     }
 
     // ── 生产模式 ──────────────────────────────────────────────
-    const resourcesDir = process.resourcesPath;
+    // process.resourcesPath is only defined in a packaged Electron runtime.
+    // Fall back to the project root so the module remains loadable in tests
+    // and in `electron .` runs before packaging.
+    const resourcesDir = process.resourcesPath || path.resolve(__dirname, '..');
 
     // 第一步：检查 extraResources 中是否包含后端源码（预留扩展）
     const bundledBackend = path.join(resourcesDir, 'backend-src');
@@ -124,6 +129,24 @@ class ServerManager extends EventEmitter {
   }
 
   /**
+   * 解析后端启动命令。
+   *
+   * 优先使用已安装的 `yuleosh` CLI（子命令 `ui`），
+   * 未安装时回退到 `python3 -m yuleosh.ui.server`。
+   *
+   * @returns {{command: string, args: string[]}}
+   */
+  _resolveCommand() {
+    const probe = process.platform === 'win32' ? 'where yuleosh' : 'command -v yuleosh';
+    try {
+      execSync(probe, { stdio: 'ignore' });
+      return { command: 'yuleosh', args: ['ui'] };
+    } catch {
+      return { command: this.pythonCmd, args: ['-m', 'yuleosh.ui.server'] };
+    }
+  }
+
+  /**
    * 启动 Python 后端子进程
    * @returns {Promise<void>}
    */
@@ -134,6 +157,8 @@ class ServerManager extends EventEmitter {
     }
 
     this.restartCount = 0;
+    this._startupFailed = false;
+    this._isShuttingDown = false;
 
     // 检查 Python 版本
     await this._checkPythonVersion();
@@ -152,17 +177,15 @@ class ServerManager extends EventEmitter {
       YULEOSH_DESKTOP_MODE: '1',
     };
 
-    // 在当前 shell 环境中检查是否有 yuleosh 命令
-    // 如果没有，使用 python -m yuleosh.ui.server
-    const args = ['-m', 'yuleosh.ui.server'];
+    const { command, args } = this._resolveCommand();
 
     console.log(`[ServerManager] Starting Python backend...`);
-    console.log(`[ServerManager]   Command: ${this.pythonCmd} ${args.join(' ')}`);
+    console.log(`[ServerManager]   Command: ${command} ${args.join(' ')}`);
     console.log(`[ServerManager]   Port:    ${this.port}`);
     console.log(`[ServerManager]   CWD:     ${this.backendDir}`);
     console.log(`[ServerManager]   OSH_HOME: ${oshHome}`);
 
-    this.process = spawn(this.pythonCmd, args, {
+    this.process = spawn(command, args, {
       cwd: this.backendDir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -187,12 +210,16 @@ class ServerManager extends EventEmitter {
     // 进程意外退出处理 — 自动重启逻辑
     this.process.on('close', (code, signal) => {
       console.log(`[ServerManager] Process exited: code=${code} signal=${signal}`);
-      if (!this._isShuttingDown) {
+      if (!this._isShuttingDown && !this._startupFailed) {
+        this.emit('crashed', code, signal);
         if (this.restartCount < this.maxRestartAttempts) {
           this.restartCount++;
           console.log(`[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
           this.emit('restarting', this.restartCount, this.maxRestartAttempts);
-          this._restart();
+          this._restart().catch((err) => {
+            console.error(`[ServerManager] Restart failed: ${err.message}`);
+            this.emit('fatal', code, signal);
+          });
         } else {
           this.emit('fatal', code, signal);
         }
@@ -202,12 +229,22 @@ class ServerManager extends EventEmitter {
 
     this.process.on('error', (err) => {
       console.error(`[ServerManager] Process error: ${err.message}`);
+      this._startupFailed = true;
       this.emit('error', err);
       this.process = null;
     });
 
-    // 开始健康检查轮询
-    await this._waitForHealthy();
+    // 开始健康检查轮询；失败时终止子进程，避免留下孤儿后端
+    try {
+      await this._waitForHealthy();
+    } catch (err) {
+      this._startupFailed = true;
+      if (this.process && this.process.exitCode === null) {
+        this.process.kill('SIGTERM');
+      }
+      this.process = null;
+      throw err;
+    }
   }
 
   /**
@@ -288,7 +325,7 @@ class ServerManager extends EventEmitter {
    */
   _checkPythonVersion() {
     return new Promise((resolve, reject) => {
-      const proc = spawn('python3', ['--version']);
+      const proc = spawn(this.pythonCmd, ['--version']);
       let output = '';
       proc.stdout.on('data', (d) => { output += d.toString(); });
       proc.stderr.on('data', (d) => { output += d.toString(); });
@@ -321,6 +358,7 @@ class ServerManager extends EventEmitter {
    * 重启 Python 后端（跳过初始检查，复用 spawn 逻辑）
    */
   async _restart() {
+    this._startupFailed = false;
     const oshHome = this._resolveOshHome();
 
     // Desktop local mode: disable multi-tenant auth (the desktop app is a
@@ -335,11 +373,11 @@ class ServerManager extends EventEmitter {
       YULEOSH_DESKTOP_MODE: '1',
     };
 
-    const args = ['-m', 'yuleosh.ui.server'];
+    const { command, args } = this._resolveCommand();
 
     console.log(`[ServerManager] Restarting Python backend (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
 
-    this.process = spawn(this.pythonCmd, args, {
+    this.process = spawn(command, args, {
       cwd: this.backendDir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
