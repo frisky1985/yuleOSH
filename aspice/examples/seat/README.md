@@ -158,12 +158,6 @@ python3 tools/consistency_check.py --spec examples/seat/consistency.yaml [--stri
 模块 CPU 均值与峰值是不同口径、不求和（规格注释已记）；数值比较按 float 等价（7.0==7），
 晶振与主频是两个事实（模式精化的又一实例）。
 
-**产品配置（variant_check）**：`variant.yaml` 定义 8 特性 ↔ 8 SYS 需求 ↔ 3 变体
-（SC-BASE/SC-MEM/SC-COMFORT），`产品配置_变体需求矩阵_座椅控制器示例_V1.0.xlsx` 为渲染矩阵，
-已接入 gate_sync 第八校验器。门禁：`E-VAR-DUP` / `E-VAR-FEATURE` / `E-VAR-REQ`（映射需求在
-SYS.2 不存在）/ `E-VAR-ORPHAN-REQ`（需求无变体承接）/ `E-VAR-EMPTY`。
-实测：删除加热/通风特性 → 精确报出 SYS-SEAT-003/004 孤儿需求 → 自动开单 → 恢复关闭。
-
 **SUP.8 配置管理（cm_registry）**：`cm_registry.yaml` 是本目录的配置项注册表（真源），
 `SUP.8_项目配置项清单及状态报告_座椅控制器示例_V1.0.xlsx` 是从注册表渲染的视图，
 由 `tools/cm_registry.py` 驱动（fail-closed）：

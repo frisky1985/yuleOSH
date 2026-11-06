@@ -12,7 +12,7 @@ wbs:
     name: 系统需求与架构
     category: ENG
     pred: null
-    deliverables: [SYS.2_系统需求规格说明书_座椅控制器示例_V1.0.xlsx, SYS.3_系统架构设计说明书_座椅控制器示例_V1.0.xlsx, 产品配置_变体需求矩阵_座椅控制器示例_V1.0.xlsx]
+    deliverables: [SYS.2_系统需求规格说明书_座椅控制器示例_V1.0.xlsx, SYS.3_系统架构设计说明书_座椅控制器示例_V1.0.xlsx]
     owner: 示例
     plan_start: 2026-10-08
     plan_end: 2026-10-15
