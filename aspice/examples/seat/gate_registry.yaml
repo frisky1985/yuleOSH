@@ -436,3 +436,17 @@ changes:
   request: README.md 内容变更（3827ca212c2f… → 95bb1c69e8e1…）
   baseline: SEAT-DEMO-BL2
   status: 已实施（自动登记）
+- id: CR-SEAT-019
+  key: README.md|95bb1c69e8e1|3952307d1830
+  date: '2026-11-07'
+  object: README.md
+  request: README.md 内容变更（95bb1c69e8e1… → 3952307d1830…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
+- id: CR-SEAT-020
+  key: README.md|3952307d1830|96c7859d4926
+  date: '2026-11-07'
+  object: README.md
+  request: README.md 内容变更（3952307d1830… → 96c7859d4926…）
+  baseline: SEAT-DEMO-BL2
+  status: 已实施（自动登记）
