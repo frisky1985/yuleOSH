@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import html as _html
 import json
+import logging
 import os
 import re
 from datetime import datetime
@@ -42,8 +43,11 @@ from yuleosh.alm.traceability import (
     scan_ci_results,
     scan_review_artifacts,
     scan_test_reports,
+    write_authoritative_traceability,
 )
 from yuleosh.report import visualization
+
+log = logging.getLogger("evidence.chain")
 
 RULES_PATH = Path(__file__).with_name("chain_rules.yaml")
 CHAIN_JSON = "chain.json"
@@ -127,15 +131,32 @@ def _coverage(part: int, total: int) -> float:
 
 
 def _load_requirement_rows(project_dir: Path, ev_dir: Path) -> tuple[list[dict], str]:
-    """Load requirements from the authoritative matrix, else generate LRT."""
+    """Load requirements from the authoritative matrix, else generate it."""
     matrix_path = ev_dir / "traceability-matrix.json"
-    if matrix_path.exists():
+
+    def _read_matrix() -> Optional[list[dict]]:
         try:
             data = json.loads(matrix_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            data = {}
-        if data.get("schema") == "osh-traceability-v1" and isinstance(data.get("requirements"), list):
-            return data["requirements"], "traceability-matrix.json"
+            return None
+        if data.get("schema") != "osh-traceability-v1":
+            return None
+        rows = data.get("requirements")
+        return rows if isinstance(rows, list) else None
+
+    if matrix_path.exists():
+        rows = _read_matrix()
+        if rows is not None:
+            return rows, "traceability-matrix.json"
+
+    # 缺失或被破坏：以权威生成器重建矩阵，确保证据链有真源且产物可归档。
+    try:
+        write_authoritative_traceability(str(project_dir))
+        rows = _read_matrix()
+        if rows is not None:
+            return rows, "alm.traceability.write_authoritative_traceability"
+    except (OSError, ValueError) as exc:
+        log.warning("authoritative traceability generation failed: %s", exc)
 
     lrt = generate_lrt(str(project_dir))
     rows = []

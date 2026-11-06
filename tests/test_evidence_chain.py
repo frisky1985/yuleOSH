@@ -68,18 +68,20 @@ class TestCollectChain:
         assert chain["summary"]["status"] == "PASS"
         assert chain["metrics"]["test_coverage_pct"] == 100.0
 
-    def test_falls_back_to_lrt_when_matrix_missing(self, tmp_path):
+    def test_rebuilds_matrix_when_missing(self, tmp_path):
         (tmp_path / "docs").mkdir()
         (tmp_path / "docs" / "spec.md").write_text(
             "# Spec\n\n## Requirements\n\n- **SHALL-001**: The system SHALL start.\n",
             encoding="utf-8",
         )
         chain = collect_chain(str(tmp_path))
-        assert chain["source"] == "alm.traceability.generate_lrt"
-        # No matrix artifact was written by collect_chain → fail-closed on artifact.
-        assert chain["summary"]["status"] == "FAIL"
+        assert chain["source"] == "alm.traceability.write_authoritative_traceability"
+        # Matrix is rebuilt so the required evidence artifact exists.
+        assert (tmp_path / ".osh" / "evidence" / "traceability-matrix.json").exists()
+        assert chain["summary"]["status"] == "FAIL"  # coverage gates fail-closed
         codes = {p["code"] for p in chain["problems"]}
-        assert "E-CHAIN-ARTIFACT-MISSING" in codes
+        assert "E-CHAIN-GATE" in codes
+        assert "E-CHAIN-ARTIFACT-MISSING" not in codes
 
     def test_missing_evidence_dir_is_fail_closed(self, tmp_path):
         chain = collect_chain(str(tmp_path))
