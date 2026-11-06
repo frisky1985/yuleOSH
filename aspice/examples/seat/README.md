@@ -230,6 +230,20 @@ python3 tools/metrics_collect.py --root examples/seat --render    # 渲染度量
   两条真问题**——MAN.3/MAN.5 渲染视图自身是顶层文档却无 WBS 认领
   （E-CI-NO-WP），已在 WP-SEAT-08 补登记。计划↔配置库双向闭合是 MAN.3 机械化的核心价值。
 
+**证据链总览 HTML（evidence_explorer）**：把上述所有真源汇总为单文件、离线可打开的
+交互式总览 `证据链总览_座椅控制器示例.html`（V 模型追溯链 / 证据库 / 过程闭环三视图）：
+
+```bash
+python3 tools/evidence_explorer.py --root examples/seat
+```
+
+- HTML 只是**导航层**，xlsx 仍是权威产物：节点详情抽屉给出「文档 + 工作表 + ID」，
+  配置项可直接点开对应文件；浏览器无法深链到 xlsx 单元格，这是刻意的降级而非缺陷。
+- 生成时实时运行全部校验器（当前 7 个：trace / evidence×2 / consistency / cm_registry /
+  metrics / man_check；若存在 variant.yaml 则自动追加为第 8 个），任一失败则页面顶部标红
+  并返回退出码 1（fail-closed）。
+- 实测：54 节点 / 69 边 / 57 配置项 / 三视图渲染与节点抽屉经浏览器验收通过。
+
 ## 6. 范围边界
 
 - 本次 Demo 已覆盖 **V 模型左半（需求 → 架构 → 软硬件需求 → 软件架构 → 详设）** 与

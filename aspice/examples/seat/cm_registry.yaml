@@ -8,6 +8,7 @@ scope:
   - '**/*.json'
   - '**/*.docx'
   - '**/*.py'
+  - '**/*.html'
   exclude:
   - cm_registry.yaml
   - '**/__pycache__/**'
@@ -64,8 +65,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: fd266b12f7cf02968e8334f7b414c2720d58e8582e4d6cc91a681a4dd98d47e2
-  size: 16431
+  sha256: 3827ca212c2fc020901544a58e3236d86b60d8d432792ef08248031757b991f9
+  size: 17336
 - id: CI-SEAT-007
   path: SUP.1_评审记录_座椅控制器示例_V1.0.xlsx
   name: SUP.1_评审记录_座椅控制器示例_V1.0
@@ -442,8 +443,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 0a550f386b282b27fac891bc9db1811dbfc191c1e3ea80232b05a815eff97738
-  size: 12173
+  sha256: a9cd2333a7ccf587001df8d8e0e1d95585162715799472c91d6199f16f244ef9
+  size: 12655
   live: true
 - id: CI-SEAT-049
   path: SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx
@@ -452,8 +453,8 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: f9532f72d18527bb93402448ba48936022c56b1659a5ced7484e848ea8db684d
-  size: 39195
+  sha256: 2b8d7456d7b7094778593555bf91b240adc7e401b9291ce015cfea24ab25521b
+  size: 39299
   live: true
 - id: CI-SEAT-050
   path: SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx
@@ -462,7 +463,7 @@ items:
   version: V1.0
   status: 正式发布
   baseline: SEAT-DEMO-BL2
-  sha256: 0c42e45d40c3c0c556ed82c8a910b813ee153c08bb42c73c14a339c5c4ba5a56
+  sha256: b3c423ce200af0a0274f282a3f200a5c46a310114505447a0cb228ea2c38c038
   size: 36754
   live: true
 - id: CI-SEAT-051
@@ -522,6 +523,16 @@ items:
   baseline: SEAT-DEMO-BL2
   sha256: 680296638f63eabfd5b4e03921fe3cdc41fa25d95545aa0198f62784e00a8a4c
   size: 2215
+- id: CI-SEAT-057
+  path: 证据链总览_座椅控制器示例.html
+  name: 证据链总览_座椅控制器示例
+  management: 版本管理（活文档）
+  version: V1.0
+  status: 正式发布
+  baseline: SEAT-DEMO-BL2
+  sha256: c95f6730db0651130536d9a59aadcb3555e9fa268803334bcf89cd0dd76d1337
+  size: 86178
+  live: true
 changelog:
 - date: '2026-11-06'
   path: README.md
@@ -628,4 +639,18 @@ changelog:
   path: README.md
   old: 20f74dacab15
   new: fd266b12f7cf
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-07'
+  path: README.md
+  old: fd266b12f7cf
+  new: cf517e9b6fea
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-07'
+  path: 证据链总览_座椅控制器示例.html
+  added: true
+  baseline: SEAT-DEMO-BL2
+- date: '2026-11-07'
+  path: README.md
+  old: cf517e9b6fea
+  new: 3827ca212c2f
   baseline: SEAT-DEMO-BL2
