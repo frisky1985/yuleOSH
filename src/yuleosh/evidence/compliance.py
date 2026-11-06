@@ -79,7 +79,7 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # Add all generated evidence files
         for f in collector.evidence_dir.iterdir():
-            if f.suffix in (".md", ".json") and f.name != "compliance-pack.zip":
+            if f.suffix in (".md", ".json", ".html") and f.name != "compliance-pack.zip":
                 _add_to_zip(f, f.name)
 
         # Add spec file
@@ -207,6 +207,21 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     artifacts.append(collector.generate_code_coverage_report())
     artifacts.append(collector.generate_acceptance_matrix())
     artifacts.append(collector.aggregate_review_logs())
+
+    # 证据链：在打包前生成 chain.json + 单文件 HTML 总览（fail-closed 状态如实输出）
+    try:
+        from yuleosh.evidence.chain import collect_chain, write_chain
+        chain = collect_chain(project_dir, evidence_dir=str(collector.evidence_dir))
+        written = write_chain(chain, evidence_dir=str(collector.evidence_dir))
+        artifacts.append(written["json"])
+        if written.get("html"):
+            artifacts.append(written["html"])
+        status = (chain.get("summary") or {}).get("status", "FAIL")
+        print(f"  🔗 Evidence chain: {status} "
+              f"({(chain.get('summary') or {}).get('problems_error', 0)} ERROR)")
+    except Exception as exc:  # noqa: BLE001 - 证据链失败不阻断打包，但状态不隐藏
+        log.warning("evidence chain generation failed (non-fatal): %s", exc)
+
     artifacts.append(pack_compliance_zip(collector))
 
     # Generate standalone manifest.json for the evidence directory
@@ -215,7 +230,7 @@ def generate_evidence(project_dir: str = None, spec_path: str = None):
     for f in sorted(collector.evidence_dir.iterdir()):
         if f.name == "compliance-pack.zip":
             continue
-        if f.suffix in (".md", ".json", ".zip"):
+        if f.suffix in (".md", ".json", ".zip", ".html"):
             ev_manifest_entries.append(_build_manifest_entry(f, f.name))
     try:
         with open(manifest_path, "w", encoding="utf-8") as f:

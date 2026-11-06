@@ -1,0 +1,142 @@
+# yuleOSH 证据链规则（LLM 可读 + 机器可校验）
+#
+# 本文件是「证据链」的唯一规则来源。pipeline / evidence 生成器 / CLI
+# / skill 均从这里读取门禁语义；任何规则变更必须先改本文件，再改代码。
+# 第一准则：只做证据的搬运与关联，绝不臆造节点、边或通过结论。
+
+schema:
+  name: osh-evidence-chain-v1
+  version: "1.0.0"
+  artifact: chain.json
+  html: 证据链总览.html
+
+# ── 真源（truth sources）───────────────────────────────────────────────
+# 证据链只允许消费以下产物；不得从 LLM 记忆或推测补充数据。
+truth_sources:
+  requirements:
+    - .osh/evidence/traceability-matrix.json      # schema: osh-traceability-v1
+  fallback:
+    - alm.traceability.generate_lrt               # 仅当矩阵缺失时实时生成
+  tests:
+    - .osh/sessions/*/*test*.json
+  reviews:
+    - .osh/sessions/*/code-review.json
+    - .osh/evidence/reviews/*.json
+  ci:
+    - .osh/ci/layer*.json
+  artifacts:
+    - .osh/evidence/**/*
+
+# ── 节点与边 ───────────────────────────────────────────────────────────
+node_types:
+  requirement:
+    id: "<需求ID，如 SHALL-001 / SWR-001>"
+    title: 需求陈述（截断 120 字）
+    required: true
+  code:
+    id: "code:<项目相对路径>"
+    title: 文件名
+    required: false
+  test:
+    id: "test:<项目相对路径>"
+    title: 文件名
+    required: false
+  review:
+    id: "review:<会话名>"
+    title: 会话名
+    required: false
+
+edge_kinds:
+  implement: "requirement → code：代码实现该需求"
+  verify: "requirement → test：测试验证该需求"
+  review: "requirement → review：评审覆盖该需求"
+  derive: "requirement → requirement：系统需求派生软件需求（SYS.1 → SWE.1）"
+
+# ── ID 纪律 ────────────────────────────────────────────────────────────
+id_rules:
+  requirement_pattern: "^[A-Z][A-Za-z0-9_.\\-]{2,}$"
+  linked_pattern: "^[a-z]+:[^\\s]+$"
+  uniqueness: "节点 ID 全局唯一；重复即 E-CHAIN-DUP"
+  discipline:
+    - 需求 ID SHALL 与 spec 中原文一致，不得改写、缩写或翻译。
+    - 代码/测试/评审 ID SHALL 使用 <类型>:<项目相对路径或会话名> 形式。
+    - 需求节点 SHALL 至少有一条 implement 或 verify 出边；否则视为孤儿证据（ORPHAN）。
+    - 不允许手工编造节点来“补齐”覆盖率。
+
+# ── 必需证据物 ─────────────────────────────────────────────────────────
+required_evidence:
+  - traceability-matrix.json
+
+# ── 门禁（fail-closed）────────────────────────────────────────────────
+# severity=ERROR 的任意一条未通过 → chain.status=FAIL，CLI 退出码非 0。
+gates:
+  - id: E-CHAIN-SCHEMA
+    severity: ERROR
+    rule: "schema 名称/版本与规则一致，顶层 nodes/edges/artifacts/gates/problems 齐全"
+  - id: E-CHAIN-ID
+    severity: ERROR
+    rule: "所有节点 ID 匹配 id_rules 的 pattern"
+  - id: E-CHAIN-DUP
+    severity: ERROR
+    rule: "不存在重复节点 ID"
+  - id: E-CHAIN-DANGLING
+    severity: ERROR
+    rule: "每条边的 from/to 都指向已存在的节点"
+  - id: E-CHAIN-ORPHAN
+    severity: ERROR
+    rule: "每个需求节点至少有 implement 或 verify 出边（无代码无测试即孤儿）"
+  - id: E-CHAIN-ARTIFACT-MISSING
+    severity: ERROR
+    rule: "required_evidence 中的产物必须存在且 SHA256 非空"
+  - id: E-CHAIN-GATE
+    severity: ERROR
+    rule: "任一 severity=ERROR 的过程门禁为 FAIL"
+  - id: W-CHAIN-REVIEW
+    severity: WARNING
+    rule: "需求缺少评审覆盖时告警，但不单独判红（由 G-REVIEW 决定是否 ERROR）"
+
+# ── 过程门禁阈值 ───────────────────────────────────────────────────────
+thresholds:
+  min_test_coverage_pct: 60
+  min_code_coverage_pct: 60
+  review_required: false      # true 时 G-REVIEW 缺失判 ERROR
+
+process_gates:
+  - id: G-REQ
+    severity: ERROR
+    rule: "需求总数 > 0；解析不到需求即红"
+  - id: G-CODE
+    severity: ERROR
+    rule: "实现覆盖率 >= thresholds.min_code_coverage_pct"
+  - id: G-TEST
+    severity: ERROR
+    rule: "测试覆盖率 >= thresholds.min_test_coverage_pct"
+  - id: G-REVIEW
+    severity: WARNING
+    rule: "至少存在一次评审；review_required=true 时升为 ERROR"
+  - id: G-CI
+    severity: ERROR
+    rule: "CI 结果存在且无 failed；完全没有 CI 结果时记 WARNING"
+
+# ── HTML 契约 ─────────────────────────────────────────────────────────
+html_contract:
+  single_file: true
+  offline: true               # 无 CDN / 无外部字体 / 无网络请求
+  data_embedding: "<script id='chain-data' type='application/json'>"
+  views:
+    - trace        # V 模型列布局 + SVG 边 + 节点抽屉
+    - artifacts    # 证据库：文件 + SHA256 + 自动关联链接
+    - closure      # 过程闭环：门禁 / 问题 / CI / 度量
+  deep_links:
+    - "#/node/<node-id>"
+    - "#/artifact/<artifact-id>"
+    - "#/gate/<gate-id>"
+    - "#/view/<trace|artifacts|closure>"
+  fail_closed: "HTML 顶部 SHALL 显示真实 chain.status；不得把 FAIL 渲染成通过"
+
+# ── 给后续 LLM 的填写纪律 ────────────────────────────────────────────
+llm_instructions:
+  - "先读 chain.json 与 traceability-matrix.json，再读 HTML；HTML 只是导航视图，不是真源。"
+  - "引用证据时 SHALL 使用节点 ID 或产物相对路径，并提供 SHA256，禁止只说“有测试”。"
+  - "发现 E-CHAIN-* 红灯时 SHALL 修复真源（spec/代码/测试/评审），不得改 chain.json 绕过。"
+  - "只有证据物缺失才允许新增采集逻辑；不得为了变绿而伪造节点、边或哈希。"

@@ -116,6 +116,37 @@ _PYTHON_TESTING_CONTENT = """\
 """
 
 
+_ASPICE_EVIDENCE_CHAIN_CONTENT = """\
+### ASPICE 证据链：生成、校验与引用纪律
+
+**命令**
+- `yuleosh evidence chain` — 生成 `.osh/evidence/chain.json` + `证据链总览.html`
+- `yuleosh evidence chain --check` — 只校验，不渲染；FAIL 时退出码 1（可做流水线门禁）
+- `yuleosh evidence chain --json` — 输出完整链数据供程序消费
+
+**真源优先级**
+1. `.osh/evidence/traceability-matrix.json`（schema `osh-traceability-v1`）
+2. 缺失时调用 `alm.traceability.generate_lrt`
+3. CI / 测试 / 评审分别来自 `.osh/ci/`、`.osh/sessions/*test*.json`、`code-review.json`
+4. 不得从 LLM 记忆补充需求、测试或评审结论。
+
+**结构与门禁（fail-closed）**
+- 节点：需求 `SHALL-xxx`；代码 `code:<路径>`；测试 `test:<路径>`；评审 `review:<会话>`。
+- 边：`implement` / `verify` / `review` / `derive`。
+- ERROR 门禁：`E-CHAIN-SCHEMA` `E-CHAIN-ID` `E-CHAIN-DUP` `E-CHAIN-DANGLING`
+  `E-CHAIN-ORPHAN` `E-CHAIN-ARTIFACT-MISSING` `E-CHAIN-GATE`。
+- 过程门禁：`G-REQ` `G-CODE` `G-TEST` `G-REVIEW` `G-CI`；阈值见
+  `src/yuleosh/evidence/chain_rules.yaml`。
+- 任一 ERROR → `summary.status=FAIL`。修复真源（spec/代码/测试/评审），
+  不得改 `chain.json` 绕过。
+
+**引用纪律**
+- 引用证据时给出节点 ID 或产物相对路径，并附 SHA256。
+- `chain.json` 是权威产物；HTML 只是导航视图，不能作为通过依据。
+- 深链格式：`#/node/<id>`、`#/artifact/<id>`、`#/gate/<id>`、`#/view/<trace|artifacts|closure>`。
+"""
+
+
 def builtin_skills() -> list[Skill]:
     """Return the bundled skills (fresh instances each call)."""
     return [
@@ -143,7 +174,17 @@ def builtin_skills() -> list[Skill]:
             tags=["python", "pytest", "testing", "quality"],
             version="1.0.0",
         ),
+        Skill(
+            name="aspice-evidence-chain",
+            title="ASPICE 证据链规则",
+            description="证据链生成、fail-closed 门禁与引用纪律：真源优先、不臆造、HTML 仅作视图。",
+            content=_ASPICE_EVIDENCE_CHAIN_CONTENT,
+            tags=["aspice", "evidence", "traceability", "audit", "html"],
+            version="1.0.0",
+        ),
     ]
 
 
-BUILTIN_SKILL_NAMES: list[str] = ["autosar-coding", "misra-fix", "python-testing"]
+BUILTIN_SKILL_NAMES: list[str] = [
+    "autosar-coding", "misra-fix", "python-testing", "aspice-evidence-chain",
+]

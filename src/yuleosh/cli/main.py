@@ -20,6 +20,7 @@ Usage:
     yuleosh review task <name> [kind]        — Review specific task
     yuleosh ci run <layer>                   — Run CI layer (1/2/2.5/3)
     yuleosh evidence pack                    — Generate ASPICE compliance pack
+    yuleosh evidence chain [--check|--json]  — Generate/validate evidence chain (chain.json + HTML)
     yuleosh audit evidence [-o <dir>]        — Generate CL2 audit evidence bundle
     yuleosh stats [--json]                   — Show project statistics
     yuleosh gap close [--yes|--no|--list]    — ASPICE 差距 → 改进工单 (受控生成)
@@ -290,6 +291,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ev_check = evisub.add_parser("check", help="Check evidence bundle integrity")
     p_ev_check.add_argument("bundle_dir", help="Path to evidence bundle directory")
     p_ev_check.add_argument("--json", action="store_true")
+    p_ev_chain = evisub.add_parser(
+        "chain", help="Generate/validate ASPICE evidence chain (chain.json + HTML overview)")
+    p_ev_chain.add_argument("--project-dir", default=OSH_HOME)
+    p_ev_chain.add_argument("--evidence-dir", default=None, help="Evidence output dir (default: .osh/evidence)")
+    p_ev_chain.add_argument("--check", action="store_true", help="Validate only, do not render HTML")
+    p_ev_chain.add_argument("--render", action="store_true", help="Render HTML overview (default)")
+    p_ev_chain.add_argument("--json", action="store_true", help="Print chain JSON")
 
     # config — Profile 变更审计 (Sprint E)
     p_config = sub.add_parser("config", help="Configuration management (Sprint E)")
@@ -783,6 +791,15 @@ def main():
                 print()
             if not result.get("valid", True):
                 sys.exit(1)
+        elif args.evidence_sub == "chain":
+            from yuleosh.evidence.chain import cmd_evidence_chain
+            sys.exit(cmd_evidence_chain(
+                project_dir=args.project_dir,
+                evidence_dir=args.evidence_dir,
+                check_only=args.check,
+                render=args.render or not args.check,
+                as_json=args.json,
+            ))
         else:
             # Legacy — show brief status
             print("📦 Generate ASPICE compliance evidence")
