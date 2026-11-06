@@ -276,12 +276,15 @@ def _parse_req_trace_links(project_dir: str) -> list[dict]:
     return links
 
 
-def extract_shall_statements(spec_path: str) -> list[dict]:
+def extract_shall_statements(spec_path: str, start_index: int = 0) -> list[dict]:
     """Extract SHALL statements from a specification file (markdown).
 
     Supports two formats:
       1. List format: ``- The system SHALL ...`` under a requirement heading.
       2. Table format: ``| ID | 描述 | ASIL | 端 |`` rows where ID contains "-SHALL".
+
+    ``start_index`` continues auto-generated ``SHALL-{n}`` numbering across
+    multiple spec files so IDs stay globally unique.
 
     Returns list of dicts with keys:
       - id:          Requirement ID (e.g. KL-SHALL-01) or auto-generated SHALL-{n}
@@ -417,7 +420,7 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
                 req_id = current_req_id
 
             shall_statements.append({
-                "id": f"SHALL-{len(shall_statements) + 1}",
+                "id": f"SHALL-{start_index + len(shall_statements) + 1}",
                 "req_id": req_id,
                 "statement": statement,
                 "line": idx,
@@ -823,10 +826,13 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         log.warning("No spec files found for LRM generation")
         return {"requirements": [], "summary": {"total": 0, "no_code": 0, "no_test": 0}}
 
-    # Extract requirements from ALL spec files
+    # Extract requirements from ALL spec files.  Auto-generated SHALL IDs
+    # continue across files so two spec files cannot both produce SHALL-1.
     shalls = []
+    next_index = 0
     for sf in spec_files:
-        sf_shalls = extract_shall_statements(sf)
+        sf_shalls = extract_shall_statements(sf, start_index=next_index)
+        next_index += len(sf_shalls)
         log.info("Extracted %d SHALLs from %s", len(sf_shalls), sf)
         shalls.extend(sf_shalls)
     reviews = scan_review_artifacts(project_dir)

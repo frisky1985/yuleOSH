@@ -100,6 +100,31 @@ def test_generate_lrm_with_spec(tmp_path):
     assert isinstance(result, dict)
 
 
+def test_extract_shall_start_index_continues_numbering(tmp_path):
+    """Auto-generated SHALL IDs continue from start_index."""
+    spec = tmp_path / "spec.md"
+    spec.write_text("# Spec\n\n- The system SHALL boot.\n- The system SHALL log.\n")
+    results = extract_shall_statements(str(spec), start_index=2)
+    assert [r["id"] for r in results] == ["SHALL-3", "SHALL-4"]
+
+
+def test_generate_lrm_multifile_ids_are_globally_unique(tmp_path):
+    """Two spec files must not both restart auto numbering at SHALL-1."""
+    docs = tmp_path / "docs"
+    specs = tmp_path / "specs"
+    docs.mkdir()
+    specs.mkdir()
+    (docs / "spec.md").write_text("# Spec\n\n- The system SHALL boot.\n")
+    (specs / "module-a.md").write_text("# Module A\n\n- The module SHALL log.\n")
+
+    result = generate_lrm(str(tmp_path))
+    ids = [r["id"] for r in result["requirements"]]
+    assert len(ids) == 2
+    assert ids[0] == "SHALL-1"
+    assert ids[1] == "SHALL-2"
+    assert len(set(ids)) == len(ids)
+
+
 # ------------------------------------------------------------------
 # generate_lrt (requirements -> test mapping)
 # ------------------------------------------------------------------
