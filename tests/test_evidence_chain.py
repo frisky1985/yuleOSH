@@ -38,8 +38,8 @@ def _make_matrix_project(tmp_path: Path, requirements: list[dict]) -> Path:
 
 
 def _req(req_id: str, code: list[str], tests: list[str], review: bool = False,
-         match_method: str = "annotation") -> dict:
-    return {
+         match_method: str = "annotation", **extra) -> dict:
+    row = {
         "req_id": req_id,
         "statement": f"{req_id} shall provide behaviour",
         "section": "2",
@@ -51,6 +51,8 @@ def _req(req_id: str, code: list[str], tests: list[str], review: bool = False,
         "match_method": match_method,
         "status": "Covered" if tests else "Not Covered",
     }
+    row.update(extra)
+    return row
 
 
 class TestCollectChain:
@@ -145,6 +147,82 @@ class TestTraceConfidence:
         page = render_html(chain)
         assert 'data-confidence="inferred"' in page
         assert 'id="exact-only"' in page
+
+
+class TestAspiceVModel:
+    def _full_v_model_project(self, tmp_path):
+        return _make_matrix_project(tmp_path, [
+            _req("SYS.1-001", ["src/a.c"], ["tests/unit/test_a.py"]),
+            _req("SYS.2-001", ["src/b.c"], ["tests/unit/test_b.py"], upstream="SYS.1-001"),
+            _req("SYS.3-001", ["src/c.c"], ["tests/unit/test_c.py"], upstream="SYS.2-001"),
+            _req("SWE.1-001", ["src/d.c"], ["tests/unit/test_d.py"], upstream="SYS.3-001"),
+            _req("SWE.2-001", ["src/e.c"], ["tests/unit/test_e.py"], upstream="SWE.1-001"),
+            _req("SWE.3-001", ["src/f.c"], ["tests/unit/test_f.py"], upstream="SWE.2-001"),
+        ])
+
+    def test_links_have_semantics_and_accepted_status(self, tmp_path):
+        chain = collect_chain(str(self._full_v_model_project(tmp_path)))
+        assert all(e["status"] in ("accepted", "proposed") for e in chain["edges"])
+        derives = [e for e in chain["edges"] if e["kind"] == "derive"]
+        assert derives and all(e["status"] == "accepted" for e in derives)
+
+    def test_v_model_pairs_all_pass(self, tmp_path):
+        chain = collect_chain(str(self._full_v_model_project(tmp_path)))
+        v_model = chain["v_model"]
+        required = [p for p in v_model["pairs"] if p["required"]]
+        assert len(required) == 5
+        assert all(p["status"] == "PASS" for p in required)
+        assert chain["metrics"]["v_model_required_passed"] == 5
+        assert chain["summary"]["status"] == "PASS"
+
+    def test_missing_process_area_fails_required_pair(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SWE.1-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        chain = collect_chain(str(project))
+        codes = {p["code"] for p in chain["problems"]}
+        assert "E-VMODEL-PAIR" in codes
+        assert chain["summary"]["status"] == "FAIL"
+
+    def test_source_file_classification(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"],
+                 source_file="docs/system-requirements.md"),
+        ])
+        chain = collect_chain(str(project))
+        req = next(n for n in chain["nodes"] if n["id"] == "SHALL-001")
+        assert req["process_area"] == "SYS.2"
+        assert req["process_method"] == "source_file"
+
+    def test_unclassified_project_does_not_fail_v_model(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [_req("SHALL-001", ["src/a.c"], [])])
+        chain = collect_chain(str(project))
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-VMODEL-NA" in codes
+        assert "E-VMODEL-PAIR" not in codes
+
+    def test_html_exposes_vmodel_and_edge_status(self, tmp_path):
+        chain = collect_chain(str(self._full_v_model_project(tmp_path)))
+        page = render_html(chain)
+        assert 'id="vmodel-table"' in page
+        assert 'data-vmodel-pair="V-SYS1-SYS2"' in page
+        assert 'data-status="accepted"' in page
+        assert 'id="accepted-only"' in page
+
+
+class TestAcceptedCoverage:
+    def test_inferred_implementation_edge_does_not_count(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], [], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        implement = next(e for e in chain["edges"] if e["kind"] == "implement")
+        assert implement["status"] == "proposed"
+        assert chain["metrics"]["with_code"] == 1
+        assert chain["metrics"]["with_code_accepted"] == 0
+        assert chain["metrics"]["code_coverage_pct"] == 0.0
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-LINK-UNAPPROVED" in codes
 
 
 class TestValidateChain:

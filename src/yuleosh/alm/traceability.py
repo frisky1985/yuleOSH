@@ -833,6 +833,11 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     for sf in spec_files:
         sf_shalls = extract_shall_statements(sf, start_index=next_index)
         next_index += len(sf_shalls)
+        for shall in sf_shalls:
+            try:
+                shall["source_file"] = os.path.relpath(sf, project_dir)
+            except (ValueError, OSError):
+                shall["source_file"] = sf
         log.info("Extracted %d SHALLs from %s", len(sf_shalls), sf)
         shalls.extend(sf_shalls)
     reviews = scan_review_artifacts(project_dir)
@@ -917,6 +922,7 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
             "req_id": shall.get("req_id"),
             "statement": shall["statement"],
             "section": shall.get("section", ""),
+            "source_file": shall.get("source_file", ""),
             "code_files": matching_code,
             "test_reports": matching_tests,
             "reviews": matching_reviews,
@@ -1118,6 +1124,7 @@ def write_authoritative_traceability(project_dir: str,
             "req_id": r.get("id", ""),
             "statement": (r.get("statement") or "")[:160],
             "section": r.get("section", ""),
+            "source_file": r.get("source_file", ""),
             "has_code": has_code,
             "has_test": has_test,
             "has_review": bool(r.get("has_review")),

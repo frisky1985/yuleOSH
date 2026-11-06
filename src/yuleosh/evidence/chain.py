@@ -241,6 +241,163 @@ def _review_edges(rows: list[dict], reviews: list[dict]) -> list[dict]:
     return edges
 
 
+UNCLASSIFIED = "UNCLASSIFIED"
+_PROCESS_RE = re.compile(r"(SYS|SWE|HWE|SUP|MAN)\s*[.]?\s*([0-9]+)", re.I)
+
+
+def _norm_process_area(value: Any) -> str:
+    """Normalise ``sys.2`` / ``SYS2`` / ``SWE.1.BP1`` to ``SYS.2`` / ``SWE.1``."""
+    text = str(value or "").strip().upper().replace(" ", "")
+    if not text:
+        return ""
+    if text == UNCLASSIFIED:
+        return UNCLASSIFIED
+    match = _PROCESS_RE.search(text)
+    if match:
+        return f"{match.group(1).upper()}.{match.group(2)}"
+    return text
+
+
+def _process_area_for_row(row: dict, rules: dict, project: Path) -> tuple[str, str]:
+    """Classify a requirement into an ASPICE process area without guessing.
+
+    Priority: explicit field → ID/section marker → ID prefix → source filename.
+    """
+    aspice = rules.get("aspice") or {}
+    allowed = {str(a) for a in aspice.get("process_areas") or []}
+
+    explicit = _norm_process_area(row.get("process_area"))
+    if explicit in allowed:
+        return explicit, "explicit"
+
+    for field in ("req_id", "section"):
+        area = _norm_process_area(row.get(field))
+        if area in allowed:
+            return area, "id"
+
+    prefixes = sorted(
+        (p for p in (aspice.get("id_prefixes") or []) if isinstance(p, dict)),
+        key=lambda p: -len(str(p.get("prefix", ""))),
+    )
+    for item in prefixes:
+        prefix = str(item.get("prefix", "")).upper()
+        area = _norm_process_area(item.get("process_area"))
+        if not prefix or area not in allowed:
+            continue
+        for field in ("req_id", "section"):
+            if str(row.get(field) or "").strip().upper().startswith(prefix):
+                return area, f"prefix:{prefix}"
+
+    source = str(row.get("source_file") or row.get("file") or "")
+    if source:
+        try:
+            rel = Path(source).resolve().relative_to(project.resolve()).as_posix()
+        except (ValueError, OSError):
+            rel = source.replace(os.sep, "/").lstrip("./")
+        for mapping in aspice.get("source_mapping") or []:
+            if not isinstance(mapping, dict):
+                continue
+            pattern = str(mapping.get("pattern") or "")
+            area = _norm_process_area(mapping.get("process_area"))
+            if pattern and area in allowed and re.search(pattern, rel, re.I):
+                return area, "source_file"
+    return UNCLASSIFIED, "unknown"
+
+
+def _test_process_area(path: str, rules: dict) -> tuple[str, str]:
+    """Classify a test artifact by ASPICE test level (SWE.4/5/6) when path says so."""
+    aspice = rules.get("aspice") or {}
+    rel = str(path).replace(os.sep, "/")
+    for mapping in aspice.get("test_level_mapping") or []:
+        if not isinstance(mapping, dict):
+            continue
+        pattern = str(mapping.get("pattern") or "")
+        area = _norm_process_area(mapping.get("process_area"))
+        if pattern and area and re.search(pattern, rel, re.I):
+            return area, "test_level"
+    return UNCLASSIFIED, "unknown"
+
+
+def _build_v_model(nodes: list[dict], edges: list[dict], rules: dict) -> dict:
+    """Compute process-pair coverage for the ASPICE V model."""
+    aspice = rules.get("aspice") or {}
+    allowed = {str(a) for a in aspice.get("process_areas") or []}
+    thresholds = rules.get("thresholds") or {}
+    default_target = float(thresholds.get("min_vmodel_pair_coverage_pct", 100))
+
+    classified = [n for n in nodes
+                  if n.get("type") == "requirement" and n.get("process_area") in allowed]
+    by_area: dict[str, list[dict]] = {}
+    for node in nodes:
+        area = node.get("process_area")
+        if area in allowed:
+            by_area.setdefault(str(area), []).append(node)
+
+    rows: list[dict] = []
+    for spec in aspice.get("v_model_pairs") or []:
+        if not isinstance(spec, dict):
+            continue
+        pair_id = str(spec.get("id") or "")
+        upstream = _norm_process_area(spec.get("upstream"))
+        downstream = _norm_process_area(spec.get("downstream"))
+        link_kinds = {str(k) for k in (spec.get("link_kinds") or ["derive"])}
+        target_type = str(spec.get("target_type") or "requirement")
+        required = bool(spec.get("required", False))
+        target = float(spec.get("target_coverage_pct", default_target))
+
+        up_nodes = [n for n in by_area.get(upstream, [])
+                    if n.get("type") == "requirement"]
+        down_nodes = [n for n in by_area.get(downstream, [])
+                      if n.get("type") == target_type]
+        down_ids = {str(n.get("id")) for n in down_nodes}
+        up_ids = {str(n.get("id")) for n in up_nodes}
+        accepted_targets = {
+            str(e.get("to")) for e in edges
+            if e.get("status") == "accepted"
+            and str(e.get("kind")) in link_kinds
+            and str(e.get("from")) in up_ids
+        }
+        covered = len(down_ids & accepted_targets)
+        pct = round(covered / len(down_ids) * 100, 1) if down_ids else 0.0
+
+        if not classified:
+            status, reason = "N/A", "project declares no ASPICE process area"
+        elif not up_nodes:
+            status = "FAIL" if required else "WARNING"
+            reason = f"upstream process {upstream} has no requirement"
+        elif not down_nodes:
+            status = "FAIL" if required else "WARNING"
+            reason = f"downstream process {downstream} has no {target_type}"
+        elif pct >= target:
+            status, reason = "PASS", f"{covered}/{len(down_ids)} downstream traced"
+        else:
+            status = "FAIL" if required else "WARNING"
+            reason = f"{covered}/{len(down_ids)} downstream traced (target {target:g}%)"
+
+        rows.append({
+            "id": pair_id,
+            "upstream": upstream,
+            "downstream": downstream,
+            "required": required,
+            "link_kinds": sorted(link_kinds),
+            "upstream_count": len(up_nodes),
+            "downstream_count": len(down_nodes),
+            "covered": covered,
+            "coverage_pct": pct,
+            "target_coverage_pct": target,
+            "status": status,
+            "detail": reason,
+        })
+
+    required_rows = [r for r in rows if r["required"]]
+    return {
+        "classified_requirements": len(classified),
+        "pairs": rows,
+        "required_pairs": len(required_rows),
+        "required_passed": sum(1 for r in required_rows if r["status"] == "PASS"),
+    }
+
+
 def collect_chain(
     project_dir: str,
     evidence_dir: Optional[str] = None,
@@ -291,8 +448,11 @@ def collect_chain(
         previous = edges.get(key)
         if previous is None or CONFIDENCE_RANK.get(confidence, 0) > CONFIDENCE_RANK.get(
                 previous.get("confidence"), 0):
+            status_map = (rules.get("edge_semantics") or {}).get("default_status") or {}
+            status = str(status_map.get(confidence, "accepted"))
             edges[key] = {"from": source_id, "to": target_id, "kind": kind,
-                          "confidence": confidence, "method": method}
+                          "confidence": confidence, "method": method,
+                          "status": status}
 
     tests = _test_status_map(project)
     seen: set[str] = set()
@@ -306,12 +466,16 @@ def collect_chain(
         seen.add(rid)
         canonical_rows.append(row)
         statement = str(row.get("statement") or "")
+        process_area, process_method = _process_area_for_row(row, rules, project)
         add_node({
             "id": rid,
             "type": "requirement",
             "title": statement[:120] or rid,
             "status": "covered" if row.get("has_test") else ("partial" if row.get("has_code") else "gap"),
             "refs": [str(row.get("section") or "")] if row.get("section") else [],
+            "process_area": process_area,
+            "process_method": process_method,
+            "source_file": str(row.get("source_file") or ""),
             "has_code": bool(row.get("has_code")),
             "has_test": bool(row.get("has_test")),
             "has_review": bool(row.get("has_review")),
@@ -330,12 +494,15 @@ def collect_chain(
             add_edge(rid, code_id, "implement", code_confidence, code_method)
         for test_file in row.get("test_files") or []:
             test_id = f"test:{str(test_file).replace(os.sep, '/')}"
+            test_area, test_method = _test_process_area(str(test_file), rules)
             add_node({
                 "id": test_id,
                 "type": "test",
                 "title": Path(str(test_file)).name,
                 "status": tests.get(Path(str(test_file)).name, "unknown"),
                 "refs": [str(test_file)],
+                "process_area": test_area,
+                "process_method": test_method,
             })
             add_edge(rid, test_id, "verify", "declared", "matrix.test_files")
 
@@ -359,10 +526,24 @@ def collect_chain(
         sys_trace = matrix.get("sys_trace") or {}
     except (json.JSONDecodeError, OSError):
         sys_trace = {}
-    for sys_id, swe_id in (sys_trace.get("sys_to_swe") or {}).items():
-        swe_target = swe_id if isinstance(swe_id, str) else ", ".join(map(str, swe_id or []))
-        if str(sys_id) in nodes and swe_target in nodes:
-            add_edge(str(sys_id), swe_target, "derive", "exact", "matrix.sys_trace")
+    for sys_id, swe_ids in (sys_trace.get("sys_to_swe") or {}).items():
+        targets = swe_ids if isinstance(swe_ids, list) else [swe_ids]
+        for swe_id in targets:
+            swe_target = str(swe_id or "").strip()
+            if str(sys_id) in nodes and swe_target in nodes:
+                add_edge(str(sys_id), swe_target, "derive", "exact", "matrix.sys_trace")
+
+    # Explicit upstream fields declared by the truth source.
+    for row in canonical_rows:
+        rid = str(row.get("req_id") or "").strip()
+        for field in ("upstream", "upstream_ids", "derives_from", "traces_to"):
+            raw = row.get(field)
+            if not raw:
+                continue
+            values = raw if isinstance(raw, list) else re.split(r"[,;、\s]+", str(raw))
+            for parent in (str(v).strip() for v in values):
+                if parent and parent in nodes and rid in nodes:
+                    add_edge(parent, rid, "derive", "exact", f"matrix.{field}")
 
     ci_results = scan_ci_results(str(project))
     test_reports = scan_test_reports(str(project))
@@ -380,9 +561,34 @@ def collect_chain(
     min_code = float(thresholds.get("min_code_coverage_pct", 60))
     review_required = bool(thresholds.get("review_required", False))
 
-    code_pct = _coverage(with_code, total)
-    test_pct = _coverage(with_test, total)
-    review_pct = _coverage(with_review, total)
+    req_ids = {str(r.get("req_id")) for r in canonical_rows}
+
+    def _accepted_sources(kind: str) -> set[str]:
+        return {
+            str(e.get("from")) for e in edges.values()
+            if str(e.get("kind")) == kind and e.get("status") == "accepted"
+        }
+
+    accepted_code = _accepted_sources("implement") & req_ids
+    accepted_test = _accepted_sources("verify") & req_ids
+    accepted_review = _accepted_sources("review") & req_ids
+    with_code_accepted = len(accepted_code)
+    with_test_accepted = len(accepted_test)
+    with_review_accepted = len(accepted_review)
+
+    for node in nodes.values():
+        if node.get("type") != "requirement":
+            continue
+        node["accepted_code"] = str(node.get("id")) in accepted_code
+        node["accepted_test"] = str(node.get("id")) in accepted_test
+        node["accepted_review"] = str(node.get("id")) in accepted_review
+
+    code_pct = _coverage(with_code_accepted, total)
+    test_pct = _coverage(with_test_accepted, total)
+    review_pct = _coverage(with_review_accepted, total)
+    code_raw_pct = _coverage(with_code, total)
+    test_raw_pct = _coverage(with_test, total)
+    review_raw_pct = _coverage(with_review, total)
 
     def gate(gid: str, severity: str, passed: Optional[bool], detail: str) -> dict:
         if passed is None:
@@ -394,14 +600,29 @@ def collect_chain(
     process_gates = [
         gate("G-REQ", "ERROR", total > 0, f"{total} requirement(s) parsed"),
         gate("G-CODE", "ERROR", code_pct >= min_code,
-             f"implementation coverage {code_pct}% (threshold {min_code:g}%)"),
+             f"accepted implementation coverage {code_pct}% "
+             f"(raw {code_raw_pct}%, threshold {min_code:g}%)"),
         gate("G-TEST", "ERROR", test_pct >= min_test,
-             f"test coverage {test_pct}% (threshold {min_test:g}%)"),
-        gate("G-REVIEW", "ERROR" if review_required else "WARNING", True if with_review else None,
-             f"{with_review}/{total} requirement(s) reviewed"),
+             f"accepted test coverage {test_pct}% "
+             f"(raw {test_raw_pct}%, threshold {min_test:g}%)"),
+        gate("G-REVIEW", "ERROR" if review_required else "WARNING",
+             True if with_review_accepted else None,
+             f"{with_review_accepted}/{total} requirement(s) have accepted review links"),
         gate("G-CI", "ERROR", None if not ci_results else not ci_failed,
              "no CI results" if not ci_results else f"{len(ci_results)} run(s), {len(ci_failed)} failed"),
     ]
+
+    node_list = sorted(nodes.values(), key=lambda n: (n["type"], n["id"]))
+    edge_list = sorted(
+        edges.values(),
+        key=lambda e: (e["kind"], e["from"], e["to"]),
+    )
+    v_model = _build_v_model(node_list, edge_list, rules)
+    process_counts = Counter(
+        str(n.get("process_area")) for n in node_list
+        if n.get("type") == "requirement"
+        and str(n.get("process_area")) != UNCLASSIFIED
+    )
 
     chain = {
         "schema": (rules.get("schema") or {}).get("name", "osh-evidence-chain-v1"),
@@ -410,11 +631,9 @@ def collect_chain(
         "project_dir": str(project),
         "source": source,
         "source_stats": source_stats,
-        "nodes": sorted(nodes.values(), key=lambda n: (n["type"], n["id"])),
-        "edges": sorted(
-            edges.values(),
-            key=lambda e: (e["kind"], e["from"], e["to"]),
-        ),
+        "nodes": node_list,
+        "edges": edge_list,
+        "v_model": v_model,
         "artifacts": artifacts,
         "ci_results": ci_results,
         "gates": process_gates,
@@ -423,17 +642,31 @@ def collect_chain(
             "requirements": total,
             "source_rows": len(rows),
             "with_code": with_code,
+            "with_code_accepted": with_code_accepted,
             "with_test": with_test,
+            "with_test_accepted": with_test_accepted,
             "with_review": with_review,
+            "with_review_accepted": with_review_accepted,
             "code_coverage_pct": code_pct,
+            "code_coverage_raw_pct": code_raw_pct,
             "test_coverage_pct": test_pct,
+            "test_coverage_raw_pct": test_raw_pct,
             "review_coverage_pct": review_pct,
+            "review_coverage_raw_pct": review_raw_pct,
             "tests": len(test_reports),
             "tests_failed": tests_failed,
             "ci_runs": len(ci_results),
             "ci_failed": len(ci_failed),
             "reviews": len(reviews),
             "artifacts": len(artifacts),
+            "process_areas": dict(sorted(process_counts.items())),
+            "classified_requirements": len([
+                n for n in node_list
+                if n.get("type") == "requirement"
+                and str(n.get("process_area")) != UNCLASSIFIED
+            ]),
+            "v_model_required_pairs": v_model.get("required_pairs", 0),
+            "v_model_required_passed": v_model.get("required_passed", 0),
         },
         "summary": {},
     }
@@ -485,6 +718,7 @@ def _summarize(chain: dict) -> dict:
     errors = [p for p in problems if p.get("severity") == "ERROR"]
     warnings = [p for p in problems if p.get("severity") != "ERROR"]
     gates_fail = [g for g in gates if g.get("status") == "FAIL"]
+    v_model = chain.get("v_model") or {}
     return {
         "status": "FAIL" if errors or gates_fail else "PASS",
         "nodes": len(nodes),
@@ -497,6 +731,11 @@ def _summarize(chain: dict) -> dict:
         "gates_fail": len(gates_fail),
         "problems_error": len(errors),
         "problems_warning": len(warnings),
+        "v_model_pairs": len(v_model.get("pairs") or []),
+        "v_model_pairs_passed": sum(
+            1 for p in (v_model.get("pairs") or [])
+            if isinstance(p, dict) and p.get("status") == "PASS"
+        ),
     }
 
 
@@ -652,6 +891,35 @@ def validate_chain(chain: dict, rules: Optional[dict] = None) -> list[dict]:
                 f"artifact recorded but not found: {path_text}",
             ))
 
+    proposed_edges = [e for e in edges if isinstance(e, dict)
+                      and e.get("status") == "proposed"]
+    if proposed_edges:
+        problems.append(_problem(
+            "W-CHAIN-LINK-UNAPPROVED", "WARNING",
+            f"{len(proposed_edges)} proposed trace link(s) are excluded from "
+            f"ASPICE coverage until accepted",
+            edges=len(proposed_edges),
+        ))
+
+    v_model = chain.get("v_model")
+    if isinstance(v_model, dict):
+        if not int(v_model.get("classified_requirements") or 0):
+            problems.append(_problem(
+                "W-CHAIN-VMODEL-NA", "WARNING",
+                "no requirement declares an ASPICE process area; V-model coverage is not assessed",
+            ))
+        else:
+            for pair in v_model.get("pairs") or []:
+                if not isinstance(pair, dict) or not pair.get("required"):
+                    continue
+                if pair.get("status") != "PASS":
+                    problems.append(_problem(
+                        "E-VMODEL-PAIR", "ERROR",
+                        f"{pair.get('id')}: {pair.get('upstream')} -> {pair.get('downstream')} "
+                        f"{pair.get('detail')}",
+                        pair=str(pair.get("id")),
+                    ))
+
     failed_gates = [g for g in (chain.get("gates") or [])
                     if isinstance(g, dict)
                     and g.get("status") == "FAIL" and g.get("severity") == "ERROR"]
@@ -753,12 +1021,13 @@ def _trace_svg(chain: dict, positions: dict[str, dict], width: int, height: int)
         mid = (x1 + x2) / 2
         color = EDGE_COLORS.get(str(edge.get("kind")), "#94a3b8")
         confidence = str(edge.get("confidence") or "exact")
-        dash = ' stroke-dasharray="5 4" opacity="0.72"' if confidence == "inferred" else ""
+        edge_status = str(edge.get("status") or "accepted")
+        dash = ' stroke-dasharray="5 4" opacity="0.72"' if edge_status == "proposed" else ""
         parts.append(
             f'<path class="edge edge-{_esc(edge.get("kind"))}" '
             f'd="M {x1} {y1} C {mid} {y1}, {mid} {y2}, {x2} {y2}" '
             f'stroke="{color}" fill="none" marker-end="url(#arrow-{_esc(edge.get("kind"))})"'
-            f'{dash} data-confidence="{_esc(confidence)}" '
+            f'{dash} data-confidence="{_esc(confidence)}" data-status="{_esc(edge_status)}" '
             f'data-source="{_esc(edge.get("from"))}" data-target="{_esc(edge.get("to"))}"/>'
         )
     parts.append("</svg>")
@@ -776,12 +1045,15 @@ def _node_cards(chain: dict, positions: dict[str, dict]) -> str:
         color = NODE_COLORS.get(node_type, "#64748b")
         status_color = STATUS_COLORS.get(str(node.get("status")), "#6b7280")
         refs = " · ".join(str(r) for r in (node.get("refs") or []) if r)
+        process_area = str(node.get("process_area") or "")
+        type_label = node_type if process_area in ("", UNCLASSIFIED) else f"{node_type} · {process_area}"
         cards.append(
             f'<div class="node" data-node-id="{_esc(node_id)}" '
-            f'data-search="{_esc((node_id + " " + str(node.get("title", "")) + " " + refs).lower())}" '
+            f'data-process="{_esc(process_area)}" '
+            f'data-search="{_esc((node_id + " " + str(node.get("title", "")) + " " + refs + " " + process_area).lower())}" '
             f'tabindex="0" style="left:{pos["x"]}px;top:{pos["y"]}px;width:{pos["w"]}px;height:{pos["h"]}px;'
             f'border-left:4px solid {color};">'
-            f'<div class="node-top"><span class="node-type" style="color:{color}">{_esc(node_type)}</span>'
+            f'<div class="node-top"><span class="node-type" style="color:{color}">{_esc(type_label)}</span>'
             f'<span class="dot" style="background:{status_color}" title="{_esc(node.get("status"))}"></span></div>'
             f'<div class="node-title">{_esc(node.get("title"))}</div>'
             f'<div class="node-id">{_esc(node_id)}</div>'
@@ -852,6 +1124,30 @@ def _problem_rows(chain: dict) -> str:
     return "".join(rows)
 
 
+def _vmodel_rows(chain: dict) -> str:
+    v_model = chain.get("v_model") or {}
+    pairs = [p for p in (v_model.get("pairs") or []) if isinstance(p, dict)]
+    if not pairs:
+        return '<tr><td colspan="6" class="muted">未配置 V 模型过程对</td></tr>'
+    rows = []
+    for pair in pairs:
+        status = str(pair.get("status"))
+        cls = {"PASS": "ok", "FAIL": "bad", "WARNING": "warn"}.get(status, "muted")
+        gate_link = (f'<a class="chip" href="#/gate/E-VMODEL-PAIR">门禁</a>'
+                     if status == "FAIL" else "")
+        rows.append(
+            f'<tr data-vmodel-pair="{_esc(pair.get("id"))}">'
+            f'<td>{_esc(pair.get("id"))} {gate_link}</td>'
+            f'<td>{_esc(pair.get("upstream"))} → {_esc(pair.get("downstream"))}</td>'
+            f'<td>{_esc(", ".join(pair.get("link_kinds") or []))}</td>'
+            f'<td>{int(pair.get("upstream_count", 0))} / {int(pair.get("downstream_count", 0))}</td>'
+            f'<td>{float(pair.get("coverage_pct", 0)):.1f}%</td>'
+            f'<td><span class="pill {cls}">{_esc(status)}</span> '
+            f'<span class="muted">{_esc(pair.get("detail"))}</span></td></tr>'
+        )
+    return "".join(rows)
+
+
 def _kpi_cards(chain: dict) -> str:
     summary = chain.get("summary") or {}
     metrics = chain.get("metrics") or {}
@@ -860,6 +1156,9 @@ def _kpi_cards(chain: dict) -> str:
         ("链状态", status, "bad" if status == "FAIL" else "ok"),
         ("需求", str(metrics.get("requirements", 0)), ""),
         ("测试覆盖", f'{float(metrics.get("test_coverage_pct", 0)):.0f}%', ""),
+        ("V 模型对",
+         f'{metrics.get("v_model_required_passed", 0)} / {metrics.get("v_model_required_pairs", 0)}',
+         "bad" if metrics.get("v_model_required_pairs", 0) > metrics.get("v_model_required_passed", 0) else "ok"),
         ("节点 / 边", f'{summary.get("nodes", 0)} / {summary.get("edges", 0)}', ""),
         ("门禁", f'{summary.get("gates_pass", 0)} 通过 / {summary.get("gates_fail", 0)} 失败',
          "bad" if summary.get("gates_fail") else "ok"),
@@ -887,13 +1186,13 @@ def _chart_domains(chain: dict) -> list[dict]:
     return [
         {"id": "REQ→CODE", "title": "实现覆盖", "coverage_pct": metrics.get("code_coverage_pct", 0),
          "score": _grade(float(metrics.get("code_coverage_pct", 0))),
-         "gap_count": max(total - int(metrics.get("with_code", 0)), 0)},
+         "gap_count": max(total - int(metrics.get("with_code_accepted", 0)), 0)},
         {"id": "REQ→TEST", "title": "测试覆盖", "coverage_pct": metrics.get("test_coverage_pct", 0),
          "score": _grade(float(metrics.get("test_coverage_pct", 0))),
-         "gap_count": max(total - int(metrics.get("with_test", 0)), 0)},
+         "gap_count": max(total - int(metrics.get("with_test_accepted", 0)), 0)},
         {"id": "REQ→REVIEW", "title": "评审覆盖", "coverage_pct": metrics.get("review_coverage_pct", 0),
          "score": _grade(float(metrics.get("review_coverage_pct", 0))),
-         "gap_count": max(total - int(metrics.get("with_review", 0)), 0)},
+         "gap_count": max(total - int(metrics.get("with_review_accepted", 0)), 0)},
     ]
 
 
@@ -902,11 +1201,14 @@ def _requirement_grades(chain: dict) -> list[str]:
     for node in chain.get("nodes") or []:
         if node.get("type") != "requirement":
             continue
-        if node.get("has_code") and node.get("has_test") and node.get("has_review"):
+        has_code = node.get("accepted_code", node.get("has_code"))
+        has_test = node.get("accepted_test", node.get("has_test"))
+        has_review = node.get("accepted_review", node.get("has_review"))
+        if has_code and has_test and has_review:
             grades.append("E3")
-        elif node.get("has_code") and node.get("has_test"):
+        elif has_code and has_test:
             grades.append("E2")
-        elif node.get("has_code") or node.get("has_test"):
+        elif has_code or has_test:
             grades.append("E1")
         else:
             grades.append("NI")
@@ -928,6 +1230,7 @@ def render_html(chain: dict) -> str:
     artifact_rows, artifact_count = _artifact_rows(chain)
     gate_rows = _gate_rows(chain)
     problem_rows = _problem_rows(chain)
+    vmodel_rows = _vmodel_rows(chain)
     kpi_cards = _kpi_cards(chain)
 
     domains = _chart_domains(chain)
@@ -988,6 +1291,7 @@ def render_html(chain: dict) -> str:
                     border-radius:8px; font-size:13px; }}
   .toolbar label {{ font-size:12px; color:var(--muted); display:inline-flex; gap:5px; align-items:center; }}
   .trace-canvas.exact-only .edge[data-confidence="inferred"] {{ display:none; }}
+  .trace-canvas.accepted-only .edge[data-status="proposed"] {{ display:none; }}
   .view {{ display:none; }}
   .view.active {{ display:block; }}
   .trace-wrap {{ overflow:auto; border:1px solid var(--line); border-radius:10px; background:#fff; }}
@@ -1062,7 +1366,8 @@ def render_html(chain: dict) -> str:
     <div class="toolbar">
       <input id="search" type="search" placeholder="搜索节点 ID / 标题 / 文件…">
       <label><input id="exact-only" type="checkbox"> 仅精确追溯（隐藏关键词推断边）</label>
-      <span class="muted">点击节点打开详情抽屉；虚线为低置信度边。</span>
+      <label><input id="accepted-only" type="checkbox"> 仅 accepted 边（proposed 不计覆盖）</label>
+      <span class="muted">点击节点打开详情抽屉；虚线为 proposed 边。</span>
     </div>
     <div class="trace-wrap">
       <div class="trace-canvas" style="width:{width}px;height:{height}px;">
@@ -1087,6 +1392,13 @@ def render_html(chain: dict) -> str:
   </section>
 
   <section id="view-closure" class="view">
+    <div class="card" style="margin-bottom:12px;">
+      <h2>ASPICE V 模型成对覆盖</h2>
+      <table id="vmodel-table">
+        <thead><tr><th>过程对</th><th>链路</th><th>边类型</th><th>上游/下游节点</th><th>覆盖</th><th>结论</th></tr></thead>
+        <tbody>{vmodel_rows}</tbody>
+      </table>
+    </div>
     <div class="card" style="margin-bottom:12px;">
       <h2>过程门禁（fail-closed）</h2>
       <table>
@@ -1160,7 +1472,8 @@ def render_html(chain: dict) -> str:
 
   function edgeTag(e) {{
     var c = e.confidence || 'exact';
-    return '<span class="muted">[' + esc(c) + (e.method ? ' · ' + esc(e.method) : '') + ']</span>';
+    var st = e.status || 'accepted';
+    return '<span class="muted">[' + esc(st) + ' · ' + esc(c) + (e.method ? ' · ' + esc(e.method) : '') + ']</span>';
   }}
 
   function openNode(id) {{
@@ -1171,12 +1484,21 @@ def render_html(chain: dict) -> str:
     var outgoing = edges.filter(function (e) {{ return e.from === id; }});
     var html = '<div class="kv"><strong>状态</strong>' + esc(node.status) + '</div>'
       + '<div class="kv"><strong>标题</strong>' + esc(node.title) + '</div>';
+    if (node.process_area) {{
+      html += '<div class="kv"><strong>过程域</strong>' + esc(node.process_area)
+        + (node.process_method ? ' <span class="muted">(' + esc(node.process_method) + ')</span>' : '') + '</div>';
+    }}
+    if (node.source_file) {{
+      html += '<div class="kv"><strong>来源</strong>' + esc(node.source_file) + '</div>';
+    }}
     if (node.refs && node.refs.length) {{
       html += '<div class="kv"><strong>关联</strong>' + node.refs.map(esc).join(' · ') + '</div>';
     }}
     if (node.has_code !== undefined) {{
       html += '<div class="kv"><strong>覆盖</strong>code=' + esc(node.has_code)
         + ' · test=' + esc(node.has_test) + ' · review=' + esc(node.has_review) + '</div>';
+      html += '<div class="kv"><strong>已确认</strong>code=' + esc(node.accepted_code)
+        + ' · test=' + esc(node.accepted_test) + ' · review=' + esc(node.accepted_review) + '</div>';
     }}
     html += '<h3>出边 (' + outgoing.length + ')</h3>';
     html += outgoing.length ? outgoing.map(function (e) {{
@@ -1281,6 +1603,14 @@ def render_html(chain: dict) -> str:
     exactOnly.addEventListener('change', function () {{
       var canvas = document.querySelector('.trace-canvas');
       if (canvas) {{ canvas.classList.toggle('exact-only', exactOnly.checked); }}
+    }});
+  }}
+
+  var acceptedOnly = document.getElementById('accepted-only');
+  if (acceptedOnly) {{
+    acceptedOnly.addEventListener('change', function () {{
+      var canvas = document.querySelector('.trace-canvas');
+      if (canvas) {{ canvas.classList.toggle('accepted-only', acceptedOnly.checked); }}
     }});
   }}
 

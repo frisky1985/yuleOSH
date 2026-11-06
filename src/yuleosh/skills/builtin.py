@@ -134,13 +134,21 @@ _ASPICE_EVIDENCE_CHAIN_CONTENT = """\
 
 **结构与门禁（fail-closed）**
 - 节点：需求 `SHALL-xxx`；代码 `code:<路径>`；测试 `test:<路径>`；评审 `review:<会话>`。
-- 边：`implement` / `verify` / `review` / `derive`，并携带
-  `confidence`（`exact` / `declared` / `inferred`）与 `method`。
+- 边：`implement` / `verify` / `review` / `derive` / `allocate`，并携带
+  `confidence`（`exact` / `declared` / `inferred`）、`status`
+  （`accepted` / `proposed`）与 `method`。
+- **只有 `status=accepted` 的边计入覆盖率与 V 模型覆盖**；`inferred` 默认
+  `proposed`，只能作为线索。
 - ERROR 门禁：`E-CHAIN-SCHEMA` `E-CHAIN-ID` `E-CHAIN-SRC-DUP` `E-CHAIN-SRC-DROP`
   `E-CHAIN-DUP` `E-CHAIN-DANGLING` `E-CHAIN-ORPHAN`
-  `E-CHAIN-ARTIFACT-MISSING` `E-CHAIN-GATE`。
+  `E-CHAIN-ARTIFACT-MISSING` `E-CHAIN-GATE` `E-VMODEL-PAIR`。
 - `E-CHAIN-SRC-DUP`：真源矩阵重复需求 ID 不得静默合并；
   `E-CHAIN-SRC-DROP`：空 ID 行不得静默丢弃。
+- **过程域纪律**：按显式 `process_area` → ID 标识 → 前缀 → `source_file`
+  归类；无法判定记 `UNCLASSIFIED`，不得臆测。
+- **V 模型**：`chain.v_model` 记录 SYS.1→SYS.2→SYS.3→SWE.1→SWE.2→SWE.3
+  成对覆盖；required 过程对缺失或未达标 → `E-VMODEL-PAIR`；
+  项目未声明过程域时仅 `W-CHAIN-VMODEL-NA`，不判红。
 - 过程门禁：`G-REQ` `G-CODE` `G-TEST` `G-REVIEW` `G-CI`；阈值见
   `src/yuleosh/evidence/chain_rules.yaml`。
 - 任一 ERROR → `summary.status=FAIL`。修复真源（spec/代码/测试/评审），
@@ -148,10 +156,12 @@ _ASPICE_EVIDENCE_CHAIN_CONTENT = """\
 
 **引用纪律**
 - 引用证据时给出节点 ID 或产物相对路径，并附 SHA256。
-- 引用追溯边时 SHALL 说明置信度；`inferred` 只作线索，不得当作正式证据。
+- 引用追溯边时 SHALL 说明 `status` 与 `confidence`；`proposed` 只作线索，
+  不得当作正式证据。
 - `chain.json` 是权威产物；HTML 只是导航视图，不能作为通过依据。
 - 深链格式：`#/node/<id>`、`#/artifact/<id>`、`#/gate/<id>`、`#/view/<trace|artifacts|closure>`。
-- HTML 的“仅精确追溯”开关只隐藏 `inferred` 边，不改变 `chain.json` 真源。
+- HTML 的“仅精确追溯”隐藏 `inferred` 边；“仅 accepted 边”隐藏 `proposed` 边，
+  两者都不改变 `chain.json` 真源。
 """
 
 
@@ -188,7 +198,7 @@ def builtin_skills() -> list[Skill]:
             description="证据链生成、fail-closed 门禁与引用纪律：真源优先、不臆造、HTML 仅作视图。",
             content=_ASPICE_EVIDENCE_CHAIN_CONTENT,
             tags=["aspice", "evidence", "traceability", "audit", "html"],
-            version="1.1.0",
+            version="1.2.0",
         ),
     ]
 
