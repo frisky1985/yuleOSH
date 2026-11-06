@@ -220,7 +220,7 @@ python3 tools/metrics_collect.py --root examples/seat --render    # 渲染度量
 
 **MAN.5 风险 + MAN.3 计划（man_check）**：`risk_registry.yaml`（5 风险）与
 `plan.yaml`（5 里程碑 + 8 WBS）为真源，MAN.5_风险登记册 / MAN.3_项目进度计划
-为渲染视图，`tools/man_check.py --verify` 已作为第七校验器接入 gate_sync：
+为渲染视图，`tools/man_check.py --verify` 已接入 gate_sync 校验器组：
 
 - 风险门禁：`E-RISK-VOCAB`（P/I∈1-5、状态/策略词表）/ `E-RISK-EXPOSURE`（登记值≠P×I）/
   `E-RISK-NO-MITIGATION`（exposure≥6 缺应对或复审日期）/ `E-RISK-EXPIRED`（复审逾期）；
@@ -229,6 +229,16 @@ python3 tools/metrics_collect.py --root examples/seat --render    # 渲染度量
 - 实测：注入复审逾期 + 里程碑滑期 → 门禁精确报红并自动开单；**未注入也被抓到
   两条真问题**——MAN.3/MAN.5 渲染视图自身是顶层文档却无 WBS 认领
   （E-CI-NO-WP），已在 WP-SEAT-08 补登记。计划↔配置库双向闭合是 MAN.3 机械化的核心价值。
+
+**产品配置（variant_check）**：`variant.yaml` 定义 8 特性 ↔ 8 条 SYS 需求 ↔ 3 个变体
+（SC-BASE 基础调节 / SC-MEM 记忆 / SC-COMFORT 舒适），需求 ID 权威源是 **SYS.2 文档扫描**
+而非映射表自述；`产品配置_变体需求矩阵_座椅控制器示例_V1.0.xlsx` 为渲染视图（变体清单 /
+特性清单 / 覆盖矩阵 / 核验摘要）：
+
+- 门禁：`E-VAR-DUP` / `E-VAR-FEATURE`（引用未定义特性）/ `E-VAR-REQ`（映射需求在 SYS.2 不存在）/
+  `E-VAR-ORPHAN-REQ`（SYS 需求无任何变体承接）/ `E-VAR-EMPTY`；
+- 实测：删除加热/通风特性并追加未定义特性 F-GHOST → 精确报出 3 ERROR（1 未定义特性 +
+  SYS-SEAT-003/004 孤儿）→ 4 单齐开（含配置项哈希）→ 恢复后齐关。
 
 **证据链总览 HTML（evidence_explorer）**：把上述所有真源汇总为单文件、离线可打开的
 交互式总览 `证据链总览_座椅控制器示例.html`（V 模型追溯链 / 证据库 / 过程闭环三视图）：
@@ -239,10 +249,9 @@ python3 tools/evidence_explorer.py --root examples/seat
 
 - HTML 只是**导航层**，xlsx 仍是权威产物：节点详情抽屉给出「文档 + 工作表 + ID」，
   配置项可直接点开对应文件；浏览器无法深链到 xlsx 单元格，这是刻意的降级而非缺陷。
-- 生成时实时运行全部校验器（当前 7 个：trace / evidence×2 / consistency / cm_registry /
-  metrics / man_check；若存在 variant.yaml 则自动追加为第 8 个），任一失败则页面顶部标红
-  并返回退出码 1（fail-closed）。
-- 实测：54 节点 / 69 边 / 57 配置项 / 三视图渲染与节点抽屉经浏览器验收通过。
+- 生成时实时运行全部校验器（8 个：trace / evidence×2 / consistency / cm_registry /
+  variant_check / metrics / man_check），任一失败则页面顶部标红并返回退出码 1（fail-closed）。
+- 实测：54 节点 / 69 边 / 59 配置项 / 三视图渲染与节点抽屉经浏览器验收通过。
 
 ## 6. 范围边界
 

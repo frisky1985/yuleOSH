@@ -39,7 +39,8 @@ DEMO_BANNER = "示例数据 · 不得作为项目证据"
 def is_live(rel: str) -> bool:
     return rel in ("gate_registry.yaml", "metrics_history.jsonl") or \
         rel.startswith(("SUP.9_", "SUP.10_", "横切_过程度量与目标定义_座椅",
-                        "MAN.5_风险登记册_座椅", "MAN.3_项目进度计划_座椅", "证据链总览_"))
+                        "MAN.5_风险登记册_座椅", "MAN.3_项目进度计划_座椅", "证据链总览_",
+                        "产品配置_变体需求矩阵_座椅"))
 
 DEFAULT_SCOPE = {
     "include": ["**/*.xlsx", "**/*.yaml", "**/*.md", "**/*.json", "**/*.docx", "**/*.py",

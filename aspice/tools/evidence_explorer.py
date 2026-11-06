@@ -27,7 +27,7 @@ from openpyxl import load_workbook
 
 TOOLS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS_DIR))
-from gate_sync import checker_commands  # noqa: E402
+from gate_sync import all_checkers  # noqa: E402
 
 DEMO_BANNER = "示例数据 · 不得作为项目证据"
 OUT_NAME = "证据链总览_座椅控制器示例.html"
@@ -155,7 +155,7 @@ def parse_cases(path: Path) -> list[dict]:
 
 def run_checkers(root: Path) -> list[dict]:
     results = []
-    for name, cmd in checker_commands(root):
+    for name, cmd in all_checkers(root):
         proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
         try:
             data = json.loads(proc.stdout)
@@ -168,13 +168,6 @@ def run_checkers(root: Path) -> list[dict]:
             errs = [i for i in data.get("issues", []) if str(i.get("severity", "")).upper() == "ERROR"]
         results.append({"name": name, "passed": bool(data.get("passed", not errs)),
                         "errors": len(errs)})
-    if (root / "variant.yaml").exists():
-        proc = subprocess.run([sys.executable, str(TOOLS_DIR / "variant_check.py"),
-                               "--root", ".", "--verify", "--json"],
-                              cwd=root, capture_output=True, text=True)
-        d = json.loads(proc.stdout) if proc.stdout.strip() else {"errors": [{"msg": "no json"}]}
-        results.append({"name": "variant_check", "passed": bool(d.get("passed")),
-                        "errors": len(d.get("errors", []))})
     return results
 
 

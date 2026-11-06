@@ -1,0 +1,52 @@
+# 产品配置（真源）— 特性 ↔ 系统需求 ↔ 变体。示例数据，不得作为项目证据。
+# 机器只校验结构闭合（覆盖/引用/唯一性）；变体划分属产品决策，由责任人签字背书。
+meta:
+  project: 主驾座椅控制器（SCM）示例
+
+features:
+  - id: F-ADJUST
+    name: 八向电动调节
+    reqs: [SYS-SEAT-001]
+    desc: 前后/高低/靠背/头枕四轴八向，含软启动与位置闭环
+  - id: F-MEM
+    name: 位置记忆与调用
+    reqs: [SYS-SEAT-002]
+    desc: 3 组记忆位，支持按键调用与上电恢复
+  - id: F-HEAT
+    name: 座椅加热
+    reqs: [SYS-SEAT-003]
+    desc: 三档加热，NTC 闭环控温与过温保护
+  - id: F-VENT
+    name: 座椅通风
+    reqs: [SYS-SEAT-004]
+    desc: 三档通风，风扇 PWM 调速与堵转检测
+  - id: F-ANTIPINCH
+    name: 防夹与堵转保护
+    reqs: [SYS-SEAT-005]
+    desc: 堵转电流 + 位置双判据，触发反转与故障记录
+  - id: F-DIAG
+    name: 故障诊断与 DTC 上报
+    reqs: [SYS-SEAT-006]
+    desc: 过压/欠压/过温/堵转 DTC，支持 UDS 读取与清除
+  - id: F-PWR
+    name: 电源与环境适应性
+    reqs: [SYS-SEAT-007]
+    desc: 9~16V 工作、欠压降额、反接与浪涌保护
+  - id: F-LIN
+    name: LIN 通信与信号超时
+    reqs: [SYS-SEAT-008]
+    desc: LIN 2.1 从节点，报文超时进入安全状态
+
+variants:
+  - id: SC-BASE
+    name: 基础调节型
+    desc: 仅电动调节 + 防夹 + 电源 + LIN，无记忆与热舒适
+    features: [F-ADJUST, F-ANTIPINCH, F-PWR, F-LIN]
+  - id: SC-MEM
+    name: 记忆型
+    desc: 基础型 + 位置记忆 + 故障诊断
+    features: [F-ADJUST, F-ANTIPINCH, F-PWR, F-LIN, F-MEM, F-DIAG]
+  - id: SC-COMFORT
+    name: 舒适型
+    desc: 记忆型 + 加热 + 通风
+    features: [F-ADJUST, F-ANTIPINCH, F-PWR, F-LIN, F-MEM, F-DIAG, F-HEAT, F-VENT]

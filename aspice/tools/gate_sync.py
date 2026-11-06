@@ -55,7 +55,24 @@ def checker_commands(root: Path) -> list[tuple[str, list[str]]]:
                          "--spec", "consistency.yaml", "--json"]),
         ("cm_registry", [py, str(TOOLS_DIR / "cm_registry.py"),
                          "--root", ".", "--verify", "--json"]),
-    ]
+    ] + ([("variant_check", [py, str(TOOLS_DIR / "variant_check.py"),
+                            "--root", ".", "--verify", "--json"])]
+         if (root / "variant.yaml").exists() else [])
+
+
+def all_checkers(root: Path) -> list[tuple[str, list[str]]]:
+    """完整校验器组：基础 6 项 + 度量是否达标 + 管理域（计划/风险）。
+
+    metrics_collect 只复用 checker_commands（基础组），避免 metrics 调到自己造成递归。
+    """
+    checkers = list(checker_commands(root))
+    if (root / "metrics.yaml").exists():
+        checkers.append(("metrics", [sys.executable, str(TOOLS_DIR / "metrics_collect.py"),
+                                     "--root", ".", "--verify", "--json"]))
+    if (root / "risk_registry.yaml").exists():
+        checkers.append(("man_check", [sys.executable, str(TOOLS_DIR / "man_check.py"),
+                                       "--root", ".", "--verify", "--json"]))
+    return checkers
 
 
 def norm_issues(source: str, data: dict) -> list[dict]:
@@ -154,15 +171,7 @@ def harvest_changes(root: Path) -> int:
 
 def cmd_sync_problems(root: Path) -> int:
     outputs: dict[str, dict] = {}
-    checkers = checker_commands(root)
-    # 第六校验器：MAN.1 度量（对最近一次 collect 快照判定，不重跑校验器组，避免递归）
-    metrics_json = root / "metrics.yaml"
-    if metrics_json.exists():
-        checkers = checkers + [("metrics", [sys.executable, str(TOOLS_DIR / "metrics_collect.py"),
-                                            "--root", ".", "--verify", "--json"])]
-    if (root / "risk_registry.yaml").exists():
-        checkers = checkers + [("man_check", [sys.executable, str(TOOLS_DIR / "man_check.py"),
-                                              "--root", ".", "--verify", "--json"])]
+    checkers = all_checkers(root)
     for name, cmd in checkers:
         proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
         try:
