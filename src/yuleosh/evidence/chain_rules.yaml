@@ -80,6 +80,13 @@ edge_semantics:
     declared: accepted
     inferred: proposed
   counting: "只有 status=accepted 的边计入 ASPICE 覆盖率与 V 模型覆盖；proposed 边必须在 HTML 中可见但不得用于判绿。"
+  # 推断边的分诊账本：inferred / 存疑边必须逐条给出 accepted 或 rejected 决策。
+  link_decisions_glob: "docs/evidence/trace-decisions/*.json"
+  link_decisions: >-
+    机器推断边（inferred）不得长期停留在 proposed；分诊结果写入决策账本，
+    rejected 边保留在 chain.json 供审计但不计入覆盖。exact（@req/注释）边是
+    权威证据，不得被 rejected 决策降级。未进入账本的 proposed 边触发
+    W-CHAIN-LINK-UNAPPROVED。
 
 # ── ID 纪律 ────────────────────────────────────────────────────────────
 id_rules:
@@ -131,7 +138,7 @@ gates:
     rule: "aspice.v_model_pairs 中 required=true 的过程对覆盖率达到 target_coverage_pct；缺失过程域同样判红"
   - id: W-CHAIN-LINK-UNAPPROVED
     severity: WARNING
-    rule: "存在 proposed 追溯边时告警；proposed 边不计入审计覆盖"
+    rule: "存在未分诊的 proposed 追溯边时告警；proposed 边不计入审计覆盖，须经 link_decisions_glob 决策"
   - id: W-CHAIN-VMODEL-NA
     severity: WARNING
     rule: "项目未声明任何 ASPICE 过程域时，V 模型只提示不判红"

@@ -188,6 +188,62 @@ class TestTraceConfidence:
         assert 'id="exact-only"' in page
 
 
+class TestLinkDecisions:
+    def _write_decision(self, project: Path, decision: str) -> None:
+        decisions_dir = project / "docs" / "evidence" / "trace-decisions"
+        decisions_dir.mkdir(parents=True, exist_ok=True)
+        (decisions_dir / "inferred-implement.json").write_text(
+            json.dumps({
+                "schema": "osh-trace-decisions-v1",
+                "decisions": [{
+                    "from": "SHALL-001",
+                    "to": "code:src/a.c",
+                    "kind": "implement",
+                    "decision": decision,
+                    "reason": "no_requirement_annotation",
+                }],
+            }),
+            encoding="utf-8",
+        )
+
+    def test_proposed_edge_is_reported_without_decision(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-LINK-UNAPPROVED" in codes
+
+    def test_rejected_decision_clears_warning_but_not_coverage(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        self._write_decision(project, "rejected")
+        chain = collect_chain(str(project))
+
+        edge = next(e for e in chain["edges"] if e["to"] == "code:src/a.c")
+        assert edge["status"] == "rejected"
+        assert edge["method"] == "link-decision:rejected"
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-LINK-UNAPPROVED" not in codes
+        assert chain["metrics"]["code_coverage_pct"] == 0.0
+        assert chain["metrics"]["link_decisions_rejected"] == 1
+        assert chain["metrics"]["proposed_edges"] == 0
+
+    def test_rejected_decision_never_downgrades_exact_edge(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="annotation"),
+        ])
+        self._write_decision(project, "rejected")
+        chain = collect_chain(str(project))
+
+        edge = next(e for e in chain["edges"] if e["to"] == "code:src/a.c")
+        assert edge["confidence"] == "exact"
+        assert edge["status"] == "accepted"
+        assert chain["metrics"]["link_decisions_protected_exact"] == 1
+        assert chain["metrics"]["code_coverage_pct"] == 100.0
+
+
 class TestAspiceVModel:
     def _full_v_model_project(self, tmp_path):
         project = _make_matrix_project(tmp_path, [

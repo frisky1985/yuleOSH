@@ -283,6 +283,100 @@ def _review_edges(rows: list[dict], reviews: list[dict]) -> list[dict]:
     return edges
 
 
+TRACE_DECISIONS_SCHEMA = "osh-trace-decisions-v1"
+DEFAULT_LINK_DECISIONS_GLOB = "docs/evidence/trace-decisions/*.json"
+
+
+def _load_link_decisions(
+    project: Path, rules: dict
+) -> tuple[dict[tuple[str, str, str], dict], list[str]]:
+    """Load triage decisions for inferred/proposed trace links.
+
+    The ledger is the audited answer to "what happened to this inferred edge?".
+    Files live under ``docs/evidence/trace-decisions/`` (version controlled) and
+    each entry carries ``from`` / ``to`` / ``kind`` + ``decision``.
+    """
+    pattern = str(
+        (rules.get("edge_semantics") or {}).get("link_decisions_glob")
+        or DEFAULT_LINK_DECISIONS_GLOB
+    )
+    decisions: dict[tuple[str, str, str], dict] = {}
+    sources: list[str] = []
+    for path in sorted(project.glob(pattern)):
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            log.warning("trace decision ledger ignored (%s): %s", path, exc)
+            continue
+        if not isinstance(data, dict):
+            continue
+        schema = str(data.get("schema") or "")
+        if schema and schema != TRACE_DECISIONS_SCHEMA:
+            log.warning("trace decision ledger has unknown schema %r: %s", schema, path)
+            continue
+        entries = data.get("decisions")
+        if not isinstance(entries, list):
+            continue
+        sources.append(_rel_posix(path, project))
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            key = (
+                str(entry.get("from") or ""),
+                str(entry.get("to") or ""),
+                str(entry.get("kind") or "implement"),
+            )
+            decision = str(entry.get("decision") or "").lower()
+            if not all(key) or decision not in ("accepted", "rejected"):
+                continue
+            decisions[key] = {
+                "decision": decision,
+                "reason": str(entry.get("reason") or ""),
+                "decided_by": str(entry.get("decided_by") or "trace-decisions"),
+                "source": _rel_posix(path, project),
+            }
+    return decisions, sources
+
+
+def _apply_link_decisions(edges: dict, project: Path, rules: dict) -> dict:
+    """Apply the decision ledger to collected edges (before coverage math).
+
+    ``rejected`` never downgrades an ``exact`` edge: an ``@req`` annotation is
+    authoritative evidence, so a stale ledger cannot erase it.
+    """
+    decisions, sources = _load_link_decisions(project, rules)
+    applied = accepted = rejected = protected = stale = 0
+    for key, decision in decisions.items():
+        edge = edges.get(key)
+        if edge is None:
+            stale += 1
+            continue
+        if decision["decision"] == "rejected" and edge.get("confidence") == "exact":
+            protected += 1
+            continue
+        edge["status"] = decision["decision"]
+        edge["method"] = f"link-decision:{decision['decision']}"
+        edge["decision_reason"] = decision["reason"]
+        edge["decision_source"] = decision["source"]
+        edge["decided_by"] = decision["decided_by"]
+        applied += 1
+        if decision["decision"] == "accepted":
+            accepted += 1
+        else:
+            rejected += 1
+    return {
+        "sources": sources,
+        "decisions": len(decisions),
+        "applied": applied,
+        "accepted": accepted,
+        "rejected": rejected,
+        "protected_exact": protected,
+        "stale": stale,
+    }
+
+
 UNCLASSIFIED = "UNCLASSIFIED"
 _PROCESS_RE = re.compile(r"(SYS|SWE|HWE|SUP|MAN)\s*[.]?\s*([0-9]+)", re.I)
 
@@ -589,6 +683,9 @@ def collect_chain(
                 if parent and parent in nodes and rid in nodes:
                     add_edge(parent, rid, "derive", "exact", f"matrix.{field}")
 
+    # Triage decisions for inferred links must land before coverage is computed.
+    link_decisions = _apply_link_decisions(edges, project, rules)
+
     ci_results = scan_ci_results(str(project))
     test_reports = scan_test_reports(str(project))
     artifacts = _collect_artifacts(project, ev_dir)
@@ -701,6 +798,7 @@ def collect_chain(
         "artifacts": artifacts,
         "ci_results": ci_results,
         "requirement_drift": drift,
+        "link_decisions": link_decisions,
         "gates": process_gates,
         "problems": [],
         "metrics": {
@@ -727,6 +825,13 @@ def collect_chain(
             "requirement_drift_changed": len(drift["changed"]),
             "requirement_drift_added": len(drift["added"]),
             "requirement_drift_removed": len(drift["removed"]),
+            "link_decisions_applied": link_decisions["applied"],
+            "link_decisions_accepted": link_decisions["accepted"],
+            "link_decisions_rejected": link_decisions["rejected"],
+            "link_decisions_protected_exact": link_decisions["protected_exact"],
+            "proposed_edges": sum(
+                1 for e in edges.values() if e.get("status") == "proposed"
+            ),
             "process_areas": dict(sorted(process_counts.items())),
             "classified_requirements": len([
                 n for n in node_list
@@ -1369,6 +1474,7 @@ def render_html(chain: dict) -> str:
   .toolbar label {{ font-size:12px; color:var(--muted); display:inline-flex; gap:5px; align-items:center; }}
   .trace-canvas.exact-only .edge[data-confidence="inferred"] {{ display:none; }}
   .trace-canvas.accepted-only .edge[data-status="proposed"] {{ display:none; }}
+  .trace-canvas .edge[data-status="rejected"] {{ display:none; }}
   .view {{ display:none; }}
   .view.active {{ display:block; }}
   .trace-wrap {{ overflow:auto; border:1px solid var(--line); border-radius:10px; background:#fff; }}
