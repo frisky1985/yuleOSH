@@ -1,7 +1,7 @@
 /**
  * preload.js — yuleOSH 安全上下文桥接
  *
- * @req REQ-006
+ * @req SHALL-253
  *
  * 使用 contextBridge 安全暴露有限 API 给渲染进程。
  * 绝不暴露 Node.js 原生 API (require, process, fs 等)
@@ -15,6 +15,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   /** @returns {string} Python 后端 URL */
   getBackendUrl: () => ipcRenderer.sendSync('get-backend-url'),
+
+  /**
+   * 重启后端并重新加载前端（错误页重试）
+   * @returns {Promise<{ok:boolean, error?:string}>}
+   */
+  retryStartup: () => ipcRenderer.invoke('retry-startup'),
+
+  /**
+   * 查询后端运行状态
+   * @returns {Promise<{running:boolean, url:string|null}>}
+   */
+  getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
 
   // ─── 运行平台 ─────────────────────────────────────
 

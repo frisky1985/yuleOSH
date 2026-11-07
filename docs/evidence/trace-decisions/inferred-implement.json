@@ -1,15 +1,16 @@
 {
   "schema": "osh-trace-decisions-v1",
-  "generated_at": "2026-11-08T00:34:03",
+  "generated_at": "2026-11-08T01:13:53",
   "source_chain": ".osh/evidence/chain.json",
   "policy": "rejected 边保留在 chain.json 供审计，但不计入 ASPICE 覆盖；补齐 @req 注解后 exact 边自动恢复为 accepted，旧决策不会降级 exact 边。",
   "summary": {
-    "decisions": 1760,
+    "decisions": 1780,
     "added": 0,
-    "preserved": 1760,
+    "preserved": 1780,
     "reasons": {
       "no_requirement_annotation": 420,
-      "non_code_requirement": 1340
+      "non_code_requirement": 1340,
+      "keyword_false_positive": 20
     },
     "code_requirements_missing_annotation": 21,
     "non_code_requirements": 67
@@ -19374,6 +19375,226 @@
       "note": "文档级需求由设计/架构产物满足，代码文件不是其实现证据",
       "decided_by": "triage-inferred-edges",
       "decided_at": "2026-11-08T00:33:58"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/ci/fi_cmd.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/__init__.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/_entry.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/adapter/__init__.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/adapter/dspace_adapter.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/adapter/vector_adapter.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/agent_registry.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/alm/__init__.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/alm/base.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/alm/jira.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/alm/polarion.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/alm/traceability.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/alm/traceability_config.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/api/__init__.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/api/apikeys.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/api/artifacts.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/api/audit.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/api/auth.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/api/ci.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
+    },
+    {
+      "from": "SHALL-248",
+      "to": "code:src/yuleosh/api/compliance.py",
+      "kind": "implement",
+      "confidence": "inferred",
+      "decision": "rejected",
+      "reason": "keyword_false_positive",
+      "note": "宽泛需求关键词命中的无关模块，非该需求的实现证据",
+      "decided_by": "triage-inferred-edges",
+      "decided_at": "2026-11-08T01:13:53"
     }
   ]
 }

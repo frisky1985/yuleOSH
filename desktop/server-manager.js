@@ -1,7 +1,7 @@
 /**
  * server-manager.js — yuleOSH Python 后端子进程生命周期管理
  *
- * @req REQ-001, REQ-006
+ * @req SHALL-253
  *
  * 职责:
  *   - 启动 Python 后端子进程 (yuleosh UI server)
@@ -34,8 +34,11 @@ class ServerManager extends EventEmitter {
     this.pythonCmd = options.pythonCmd || 'python3';
     this.backendDir = options.backendDir || this._resolveBackendDir();
     this.process = null;
+    this.logger = options.logger || null;
     this._healthTimer = null;
     this._isShuttingDown = false;
+    this._restarting = false;
+    this._starting = false;
     this.maxRestartAttempts = 2;
     this.restartCount = 0;
   }
@@ -185,64 +188,28 @@ class ServerManager extends EventEmitter {
     console.log(`[ServerManager]   CWD:     ${this.backendDir}`);
     console.log(`[ServerManager]   OSH_HOME: ${oshHome}`);
 
-    this.process = spawn(command, args, {
+    const proc = spawn(command, args, {
       cwd: this.backendDir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-
-    // 流式记录 stdout
-    this.process.stdout.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.log(`[Python stdout] ${lines}`);
-      }
-    });
-
-    // 流式记录 stderr
-    this.process.stderr.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.error(`[Python stderr] ${lines}`);
-      }
-    });
-
-    // 进程意外退出处理 — 自动重启逻辑
-    this.process.on('close', (code, signal) => {
-      console.log(`[ServerManager] Process exited: code=${code} signal=${signal}`);
-      if (!this._isShuttingDown && !this._startupFailed) {
-        this.emit('crashed', code, signal);
-        if (this.restartCount < this.maxRestartAttempts) {
-          this.restartCount++;
-          console.log(`[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
-          this.emit('restarting', this.restartCount, this.maxRestartAttempts);
-          this._restart().catch((err) => {
-            console.error(`[ServerManager] Restart failed: ${err.message}`);
-            this.emit('fatal', code, signal);
-          });
-        } else {
-          this.emit('fatal', code, signal);
-        }
-      }
-      this.process = null;
-    });
-
-    this.process.on('error', (err) => {
-      console.error(`[ServerManager] Process error: ${err.message}`);
-      this._startupFailed = true;
-      this.emit('error', err);
-      this.process = null;
-    });
+    this.process = proc;
+    this._starting = true;
+    this._attachProcessHandlers(proc, 'start');
 
     // 开始健康检查轮询；失败时终止子进程，避免留下孤儿后端
     try {
       await this._waitForHealthy();
+      this._starting = false;
     } catch (err) {
       this._startupFailed = true;
-      if (this.process && this.process.exitCode === null) {
-        this.process.kill('SIGTERM');
+      this._starting = false;
+      if (this.process === proc && proc.exitCode === null) {
+        proc.kill('SIGTERM');
       }
-      this.process = null;
+      if (this.process === proc) {
+        this.process = null;
+      }
       throw err;
     }
   }
@@ -355,6 +322,102 @@ class ServerManager extends EventEmitter {
   }
 
   /**
+   * 写入文件日志（可选）。未注入 logger 时保持纯 console 行为。
+   * @param {'info'|'warn'|'error'} level
+   * @param {string} message
+   */
+  _writeLog(level, message) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message);
+    }
+  }
+
+  /**
+   * 绑定子进程生命周期。start() 与 _restart() 共用，避免两套重复逻辑漂移。
+   * @param {import('child_process').ChildProcess} proc
+   * @param {'start'|'restart'} phase
+   */
+  _attachProcessHandlers(proc, phase) {
+    proc.stdout.on('data', (data) => {
+      const lines = data.toString().trim();
+      if (lines) {
+        console.log(`[Python stdout] ${lines}`);
+        this._writeLog('info', `[Python stdout] ${lines}`);
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      const lines = data.toString().trim();
+      if (lines) {
+        console.error(`[Python stderr] ${lines}`);
+        this._writeLog('error', `[Python stderr] ${lines}`);
+      }
+    });
+
+    proc.on('close', (code, signal) => {
+      console.log(`[ServerManager] (${phase}) Process exited: code=${code} signal=${signal}`);
+      this._writeLog('warn', `[ServerManager] (${phase}) Process exited: code=${code} signal=${signal}`);
+      // 先清引用再重启：_restart() 会在首个 await 前同步 spawn 新进程并写入
+      // this.process；若此处无条件置 null，会把新进程引用覆盖掉，导致
+      // stop() 失去对后端的控制并留下孤儿进程。
+      if (this.process === proc) {
+        this.process = null;
+      }
+      if (this._isShuttingDown || this._startupFailed) {
+        return;
+      }
+      // 首次启动阶段由 start() 的健康检查负责报错，不在这里抢跑重启。
+      if (this._starting) {
+        return;
+      }
+      this.emit('crashed', code, signal);
+      this._scheduleRestart(code, signal);
+    });
+
+    proc.on('error', (err) => {
+      console.error(`[ServerManager] (${phase}) Process error: ${err.message}`);
+      this._writeLog('error', `[ServerManager] (${phase}) Process error: ${err.message}`);
+      this._startupFailed = true;
+      if (this.process === proc) {
+        this.process = null;
+      }
+      this.emit('error', err);
+    });
+  }
+
+  /**
+   * 触发一次自动重启。restartCount 表示“连续失败次数”，重启成功后归零。
+   */
+  _scheduleRestart(code, signal) {
+    if (this._restarting) {
+      return;
+    }
+    if (this.restartCount >= this.maxRestartAttempts) {
+      this._writeLog('error', '[ServerManager] Restart attempts exhausted; backend fatal');
+      this.emit('fatal', code, signal);
+      return;
+    }
+    this.restartCount += 1;
+    console.log(`[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
+    this._writeLog('warn', `[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})`);
+    this.emit('restarting', this.restartCount, this.maxRestartAttempts);
+
+    // _restart() 在首个 await 前同步完成 spawn，因此这里立即清除标记是安全的；
+    // 若重启后的进程在健康检查期间再次崩溃，close 处理器仍能进入下一轮。
+    this._restarting = true;
+    let pending;
+    try {
+      pending = this._restart();
+    } finally {
+      this._restarting = false;
+    }
+    pending.catch((err) => {
+      console.error(`[ServerManager] Restart failed: ${err.message}`);
+      this.emit('fatal', code, signal);
+    });
+  }
+
+  /**
    * 重启 Python 后端（跳过初始检查，复用 spawn 逻辑）
    */
   async _restart() {
@@ -377,59 +440,24 @@ class ServerManager extends EventEmitter {
 
     console.log(`[ServerManager] Restarting Python backend (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
 
-    this.process = spawn(command, args, {
+    const proc = spawn(command, args, {
       cwd: this.backendDir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    this.process = proc;
+    this._attachProcessHandlers(proc, 'restart');
 
-    // 重新挂载 stdout/stderr 监听
-    this.process.stdout.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.log(`[Python stdout] ${lines}`);
-      }
-    });
-
-    this.process.stderr.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.error(`[Python stderr] ${lines}`);
-      }
-    });
-
-    // 重启进程的意外退出处理（与 start() 相同的自动重启逻辑）
-    this.process.on('close', (code, signal) => {
-      console.log(`[ServerManager] (restart) Process exited: code=${code} signal=${signal}`);
-      if (!this._isShuttingDown) {
-        if (this.restartCount < this.maxRestartAttempts) {
-          this.restartCount++;
-          console.log(`[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
-          this.emit('restarting', this.restartCount, this.maxRestartAttempts);
-          this._restart();
-        } else {
-          this.emit('fatal', code, signal);
-        }
-      }
-      this.process = null;
-    });
-
-    this.process.on('error', (err) => {
-      console.error(`[ServerManager] (restart) Process error: ${err.message}`);
-      this.emit('error', err);
-      this.process = null;
-    });
-
-    // 执行健康检查
+    // 执行健康检查（_waitForHealthy 成功时已 emit('healthy')，此处不重复发）
     try {
       await this._waitForHealthy();
       console.log(`[ServerManager] Restart succeeded`);
-      this.emit('healthy');
+      this.restartCount = 0;
     } catch (err) {
       console.error(`[ServerManager] Restart unhealthy: ${err.message}`);
       // 健康检查失败时终止进程，让 close 处理器管理重试计数
-      if (this.process && this.process.exitCode === null) {
-        this.process.kill('SIGTERM');
+      if (this.process === proc && proc.exitCode === null) {
+        proc.kill('SIGTERM');
       }
     }
   }

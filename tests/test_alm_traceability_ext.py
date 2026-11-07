@@ -572,3 +572,28 @@ class TestCodeTestLinks:
 
         assert req["has_test"] is True
         assert req["test_reports"][0]["source"] == "code-test-link"
+
+
+class TestDesktopTestAnnotationLink:
+    def test_spec_level_req_id_links_shall_annotated_desktop_test(self, tmp_project):
+        """GIVEN desktop test annotates the SHALL ID WHEN spec uses REQ-xxx THEN linked."""
+        spec_req_id = "REQ-" + "999"
+        shall_id = "SHALL-" + "1"
+        docs_dir = Path(tmp_project) / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "software-requirements.md").write_text(
+            f"### {spec_req_id}: 多端接入\n"
+            "- **SHALL** 支持 CLI / Web UI / API 三种接入方式\n"
+        )
+        desktop_tests = Path(tmp_project) / "desktop" / "tests"
+        desktop_tests.mkdir(parents=True)
+        (desktop_tests / "desktop.test.js").write_text(
+            f"/**\n * @req {shall_id}\n */\n"
+        )
+
+        lrm = generate_lrm(tmp_project)
+        req = next(r for r in lrm["requirements"] if r["id"] == shall_id)
+
+        assert req["req_id"] == spec_req_id
+        files = [t["file"] for t in req["test_reports"] if isinstance(t, dict)]
+        assert "desktop/tests/desktop.test.js" in files

@@ -1,7 +1,7 @@
 /**
  * main.js — yuleOSH Desktop 主进程入口
  *
- * @req REQ-001, REQ-006
+ * @req SHALL-253
  *
  * 职责:
  *   - Electron 应用生命周期管理
@@ -12,7 +12,7 @@
  *   - 协调 ServerManager + TrayManager
  */
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -21,6 +21,7 @@ const { pathToFileURL } = url;
 
 const ServerManager = require('./server-manager');
 const TrayManager = require('./tray');
+const { createLogger } = require('./logger');
 
 // ─── 常量 ────────────────────────────────────────────
 
@@ -29,7 +30,12 @@ const IS_TEST = process.env.NODE_ENV === 'test';
 const DEV_SERVER_PORT = 3000;
 const BACKEND_PORT = 18788;
 const LOCAL_SERVER_PORT = 18789; // 用于生产模式静态文件服务
-const FRONTEND_OUT_DIR = path.resolve(__dirname, '..', 'frontend', 'out');
+
+// 打包后前端静态资源位于 resources/frontend-out (见 electron-builder.yml
+// extraResources)；未打包时使用仓库内 frontend/out。
+const FRONTEND_OUT_DIR = app && app.isPackaged
+  ? path.join(process.resourcesPath, 'frontend-out')
+  : path.resolve(__dirname, '..', 'frontend', 'out');
 const FRONTEND_FILE_URL = pathToFileURL(FRONTEND_OUT_DIR).href;
 
 // ─── 状态 ────────────────────────────────────────────
@@ -48,6 +54,48 @@ let localFileServer = null;
 
 /** 防止 before-quit 重复执行清理 */
 let shutdownStarted = false;
+
+/** IPC 处理器只能注册一次，重复 createWindow 会抛 "second handler" 错误 */
+let ipcRegistered = false;
+
+/** 主进程文件日志；bootstrap 中初始化，测试环境保持 null */
+let appLogger = null;
+
+/** 渲染进程崩溃重载次数上限，避免崩溃循环 */
+let rendererCrashCount = 0;
+
+/** 静态资源安全响应头 */
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY',
+};
+
+/** HTML 页面 CSP：Next.js 静态导出包含内联 hydration 脚本，故保留 unsafe-inline */
+const HTML_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:*",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+].join('; ');
+
+function logMain(level, message) {
+  if (appLogger && typeof appLogger[level] === 'function') {
+    appLogger[level](message);
+    return;
+  }
+  if (level === 'error') {
+    console.error(message);
+  } else if (level === 'warn') {
+    console.warn(message);
+  } else {
+    console.log(message);
+  }
+}
 
 // ─── 单实例锁 ─────────────────────────────────────────
 // 多实例会同时争抢后端端口与本地静态服务端口，导致启动竞态。
@@ -366,6 +414,23 @@ function startLocalFileServer() {
 }
 
 /**
+ * 关闭本地静态文件服务器（退出流程与测试共用）
+ * @returns {Promise<void>}
+ */
+function stopLocalFileServer() {
+  return new Promise((resolve) => {
+    if (!localFileServer) {
+      resolve();
+      return;
+    }
+    localFileServer.close(() => {
+      localFileServer = null;
+      resolve();
+    });
+  });
+}
+
+/**
  * 发送文件内容
  */
 function serveFile(res, fullPath) {
@@ -396,10 +461,15 @@ function serveFile(res, fullPath) {
       res.end('Internal Server Error');
       return;
     }
-    res.writeHead(200, {
+    const headers = {
+      ...SECURITY_HEADERS,
       'Content-Type': contentType,
       'Cache-Control': ext === '.html' ? 'no-cache' : 'max-age=31536000',
-    });
+    };
+    if (ext === '.html') {
+      headers['Content-Security-Policy'] = HTML_CSP;
+    }
+    res.writeHead(200, headers);
     res.end(data);
   });
 }
@@ -451,6 +521,24 @@ async function createWindow() {
     mainWindow.show();
   });
 
+  // 渲染进程崩溃恢复：自动 reload，连续崩溃超过阈值则展示错误页
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    rendererCrashCount += 1;
+    const reason = details && details.reason ? details.reason : 'unknown';
+    const exitCode = details && details.exitCode !== undefined ? details.exitCode : '?';
+    logMain('error', `[Main] Renderer gone: reason=${reason} exitCode=${exitCode} (${rendererCrashCount}/3)`);
+    if (rendererCrashCount > 3) {
+      const logHint = appLogger ? `，日志：${appLogger.path}` : '';
+      showErrorPage(`渲染进程连续崩溃（${reason}）${logHint}`);
+      return;
+    }
+    mainWindow.reload();
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    logMain('warn', '[Main] Renderer unresponsive');
+  });
+
   // 关闭按钮行为: 隐藏到托盘 (macOS 行为)
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
@@ -491,19 +579,35 @@ async function loadFrontend() {
     const devUrl = `http://localhost:${DEV_SERVER_PORT}/desktop`;
     console.log(`[Main] DEV mode — loading from ${devUrl}`);
     console.log(`[Main] Make sure to run 'cd frontend && npm run dev' first`);
-    mainWindow.loadURL(devUrl);
+    await mainWindow.loadURL(devUrl);
   } else {
     // 生产模式: 加载本地静态文件服务器的桌面工作台
     try {
       const port = await startLocalFileServer();
       const url = `http://localhost:${port}/desktop`;
       console.log(`[Main] PROD mode — loading from ${url}`);
-      mainWindow.loadURL(url);
+      await mainWindow.loadURL(url);
     } catch (err) {
       console.error(`[Main] Failed to start file server: ${err.message}`);
       // 显示错误页面
       showErrorPage(err.message);
+      throw err;
     }
+  }
+}
+
+/**
+ * 错误页“重试”：重新拉起后端并加载前端。
+ * 返回结构化结果，供渲染进程展示失败原因。
+ */
+async function retryStartup() {
+  try {
+    await startBackend();
+    await loadFrontend();
+    return { ok: true };
+  } catch (err) {
+    console.error(`[Main] Retry failed: ${err.message}`);
+    return { ok: false, error: err.message };
   }
 }
 
@@ -578,7 +682,27 @@ function showErrorPage(message) {
         <p>
           <code>cd frontend && npm install && npm run build</code>
         </p>
-        <button class="retry-btn" onclick="location.reload()">重试</button>
+        <button class="retry-btn" id="retry-btn" onclick="retryStartup()">重试</button>
+        <p id="retry-status" style="color:#f59e0b"></p>
+        <script>
+          async function retryStartup() {
+            var btn = document.getElementById('retry-btn');
+            var status = document.getElementById('retry-status');
+            btn.disabled = true;
+            btn.textContent = '正在重试...';
+            status.textContent = '';
+            try {
+              var result = await window.electronAPI.retryStartup();
+              if (!result || !result.ok) {
+                throw new Error((result && result.error) || '重试失败');
+              }
+            } catch (err) {
+              status.textContent = err.message;
+              btn.disabled = false;
+              btn.textContent = '重试';
+            }
+          }
+        </script>
       </div>
     </body>
     </html>
@@ -658,7 +782,27 @@ function showBackendErrorPage(message) {
           3. 端口 18788 未被占用
         </p>
         <p><code>${escaped}</code></p>
-        <button class="retry-btn" onclick="location.reload()">重试</button>
+        <button class="retry-btn" id="retry-btn" onclick="retryStartup()">重试</button>
+        <p id="retry-status" style="color:#f59e0b"></p>
+        <script>
+          async function retryStartup() {
+            var btn = document.getElementById('retry-btn');
+            var status = document.getElementById('retry-status');
+            btn.disabled = true;
+            btn.textContent = '正在重试...';
+            status.textContent = '';
+            try {
+              var result = await window.electronAPI.retryStartup();
+              if (!result || !result.ok) {
+                throw new Error((result && result.error) || '重试失败');
+              }
+            } catch (err) {
+              status.textContent = err.message;
+              btn.disabled = false;
+              btn.textContent = '重试';
+            }
+          }
+        </script>
       </div>
     </body>
     </html>
@@ -678,6 +822,11 @@ function createTray() {
 // ─── IPC 处理器 ──────────────────────────────────────
 
 function registerIpcHandlers() {
+  if (ipcRegistered) {
+    return;
+  }
+  ipcRegistered = true;
+
   // 获取后端 URL (同步)
   ipcMain.on('get-backend-url', (event) => {
     const url = serverManager ? serverManager.getBackendUrl() : `http://localhost:${BACKEND_PORT}`;
@@ -720,6 +869,17 @@ function registerIpcHandlers() {
   ipcMain.handle('get-app-version', () => {
     return app.getVersion();
   });
+
+  // 错误页重试：重新拉起后端并加载前端
+  ipcMain.handle('retry-startup', async () => {
+    return retryStartup();
+  });
+
+  // 后端运行状态（供诊断/错误页使用）
+  ipcMain.handle('get-backend-status', () => ({
+    running: Boolean(serverManager && serverManager.isRunning()),
+    url: serverManager ? serverManager.getBackendUrl() : null,
+  }));
 }
 
 // ─── 信号转发 ────────────────────────────────────────
@@ -776,8 +936,22 @@ function wireBackendEvents() {
 // ─── 启动 Python 后端 ────────────────────────────────
 
 async function startBackend() {
+  // 错误页重试时可能已有健康后端，避免重复 spawn 造成端口冲突。
+  if (serverManager && serverManager.isRunning()) {
+    return;
+  }
+  if (serverManager) {
+    try {
+      await serverManager.destroy();
+    } catch (cleanupErr) {
+      console.error('[Main] Stale backend cleanup failed:', cleanupErr.message);
+    }
+    serverManager = null;
+  }
+
   serverManager = new ServerManager({
     port: BACKEND_PORT,
+    logger: appLogger,
   });
 
   wireBackendEvents();
@@ -801,9 +975,33 @@ async function startBackend() {
 // ─── 应用生命周期 ────────────────────────────────────
 
 async function bootstrap() {
-  console.log(`[Main] yuleOSH Desktop v${app.getVersion()}`);
-  console.log(`[Main] Platform: ${process.platform}`);
-  console.log(`[Main] Dev mode: ${DEV_MODE}`);
+  // 0. 初始化文件日志（Electron logs 目录）
+  try {
+    appLogger = createLogger({ logDir: app.getPath('logs') });
+    logMain('info', `[Main] Log file: ${appLogger.path}`);
+  } catch (err) {
+    console.error(`[Main] Logger init failed: ${err.message}`);
+    appLogger = null;
+  }
+
+  // 0.1 权限硬化：桌面端不需要摄像头/麦克风/定位等权限
+  try {
+    if (session && session.defaultSession) {
+      session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+        logMain('warn', `[Main] Denied permission request: ${permission}`);
+        callback(false);
+      });
+      if (typeof session.defaultSession.setPermissionCheckHandler === 'function') {
+        session.defaultSession.setPermissionCheckHandler(() => false);
+      }
+    }
+  } catch (err) {
+    logMain('warn', `[Main] Permission hardening unavailable: ${err.message}`);
+  }
+
+  logMain('info', `[Main] yuleOSH Desktop v${app.getVersion()}`);
+  logMain('info', `[Main] Platform: ${process.platform}`);
+  logMain('info', `[Main] Dev mode: ${DEV_MODE}`);
 
   // 1. 创建窗口
   await createWindow();
@@ -887,6 +1085,11 @@ app.on('before-quit', async (event) => {
 module.exports = {
   createWindow,
   startBackend,
+  retryStartup,
   buildAppMenu,
   startLocalFileServer,
+  stopLocalFileServer,
+  SECURITY_HEADERS,
+  HTML_CSP,
+  FRONTEND_OUT_DIR,
 };

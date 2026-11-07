@@ -1,7 +1,7 @@
 /**
  * tray.js — yuleOSH 系统托盘
  *
- * @req REQ-006
+ * @req SHALL-253
  *
  * 职责:
  *   - 创建/更新系统托盘图标

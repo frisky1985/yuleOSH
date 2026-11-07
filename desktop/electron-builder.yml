@@ -15,6 +15,7 @@ files:
   - preload.js
   - server-manager.js
   - tray.js
+  - logger.js
   - package.json
   - assets/**/*
 

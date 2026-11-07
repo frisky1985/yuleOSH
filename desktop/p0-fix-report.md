@@ -127,3 +127,35 @@
 | 代码质量 | 健康检查 URL 错误、竞态条件 | 所有已知 Bug 已修复 | 启动流程重构为顺序 await |
 | 安全基线 | contextIsolation + nodeIntegration | 通过 UT 验证 | 新增 IPC handler 不绕过安全模型 |
 | **综合评分** | **62/100** | **88/100** ✅ | 达到 85+ 目标 |
+
+---
+
+## 迭代验证结果（2026-11-08）
+
+| 迭代 | 内容 | 验证 |
+|---|---|---|
+| 迭代 1 | 自动重启进程引用竞态、连续失败计数归零、首启不抢跑重启、错误页重试 IPC | `tests/server-lifecycle.test.js` 5 用例 + 全量 Jest 回归 |
+| 迭代 2 | 文件日志轮转、CSP/安全响应头、权限请求拒绝、渲染进程崩溃恢复（≤3 次 reload） | `tests/logger.test.js`、`tests/main.test.js` AC-2.5 |
+| 迭代 3 | 生产静态服务器集成、打包资源路径、asar 依赖白名单 | `tests/static-server.test.js` 4 用例、`tests/packaging.test.js` 3 用例；`electron-builder --dir --linux --x64` 成功 |
+| 迭代 4 | 桌面 `@req/@tests` 对齐 `SHALL-253`，修复 spec 级 ID 与 SHALL 级 ID 的桌面测试关联缺口 | 证据链 ACCEPTED 边：5 条 exact implement + 6 条 verify |
+
+### 自动化验证命令与结果
+
+| 命令 | 结果 |
+|---|---|
+| `cd desktop && npx jest --runInBand --ci` | 6 suites / **33 tests passed** |
+| `PYTHONPATH=src python3 -m pytest -o addopts="" tests/test_alm_traceability_ext.py -q` | **44 passed** |
+| `cd desktop && npx electron-builder --dir --linux --x64` | 成功；`app.asar` 含 main/preload/server-manager/tray/logger；`resources/frontend-out/index.html` 存在 |
+| `PYTHONPATH=src python3 -m yuleosh.cli.main evidence chain --check` | **PASS**，22 gates pass / 0 fail，SHALL-253 追溯边全部 accepted |
+
+### 打包修复项
+
+| 问题 | 修复 |
+|---|---|
+| `electron-builder.yml` files 白名单遗漏 `logger.js`，打包后 `require('./logger')` 失败 | 白名单加入 `logger.js` |
+| 打包后前端路径解析为 `resources/frontend/out`，与 `extraResources.to=frontend-out` 不一致 | `main.js` 在 `app.isPackaged` 时使用 `resources/frontend-out` |
+| 生产矩阵重建后桌面测试丢失（spec 级 `REQ-006` 与 SHALL 级 `SHALL-253` 查找不一致） | `traceability.py` 同时按两个 ID 查找桌面 `@req` 注解；新增回归测试 |
+
+### 环境限制
+
+沙箱缺少 `libatk-1.0.so.0` 等 Electron 运行时库且无 `DISPLAY`，GUI 启动冒烟未在本环境执行；需在目标桌面环境按 `self-check.md` 完成 1.1/1.2 节人工检查。

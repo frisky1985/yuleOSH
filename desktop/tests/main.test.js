@@ -8,7 +8,8 @@
  *   - AC-1.3.1: 加载 frontend/out/ 静态文件路径正确
  *   - AC-4.1.1: 应用菜单构造
  *
- * @req REQ-006
+ * @tests desktop/main.js
+ * @req SHALL-253
  */
 /* eslint-disable */
 
@@ -16,6 +17,7 @@ const path = require('path');
 
 // Mock BrowserWindow 构造参数存储
 const mockBrowserWindowCalls = [];
+const mockWindows = [];
 
 // jest.mock 工厂函数不能引用外部作用域变量，
 // 但可以引用 mock- 前缀的变量
@@ -29,6 +31,7 @@ jest.mock('electron', () => {
     constructor(options) {
       super();
       mockBrowserWindowCalls.push(options);
+      mockWindows.push(this);
       this.webContents = Object.assign(new events.EventEmitter(), {
         send: jest.fn(),
         toggleDevTools: jest.fn(),
@@ -154,3 +157,62 @@ describe('AC-4.x — 应用菜单', () => {
     expect(Menu.setApplicationMenu).toHaveBeenCalled();
   });
 });
+
+// ── AC-2.x 错误恢复 IPC ─────────────────────────────
+
+describe('AC-2.x — 后端错误恢复 IPC', () => {
+  const { ipcMain } = require('electron');
+
+  test('AC-2.1.5: 注册错误页重试与状态查询通道', async () => {
+    await main.createWindow();
+    const channels = ipcMain.handle.mock.calls.map((call) => call[0]);
+    expect(channels).toContain('retry-startup');
+    expect(channels).toContain('get-backend-status');
+  });
+
+  test('AC-2.1.5: IPC 处理器只注册一次（重复 createWindow 不抛异常）', async () => {
+    await main.createWindow();
+    const before = ipcMain.handle.mock.calls.filter((call) => call[0] === 'open-directory').length;
+    await main.createWindow();
+    const after = ipcMain.handle.mock.calls.filter((call) => call[0] === 'open-directory').length;
+    expect(after).toBe(before);
+  });
+
+  test('AC-2.1.5: 重试失败时返回结构化错误而非抛异常', async () => {
+    await main.createWindow();
+    const ServerManager = require('../server-manager');
+    const startSpy = jest.spyOn(ServerManager.prototype, 'start')
+      .mockRejectedValue(new Error('python missing'));
+    const destroySpy = jest.spyOn(ServerManager.prototype, 'destroy')
+      .mockResolvedValue();
+
+    const result = await main.retryStartup();
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('python missing');
+    startSpy.mockRestore();
+    destroySpy.mockRestore();
+  });
+});
+
+// ── AC-2.5 渲染进程恢复 & 安全响应头 ────────────────
+
+describe('AC-2.5 — 渲染进程恢复与安全响应头', () => {
+  test('渲染进程崩溃后自动 reload', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+
+    win.webContents.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 1 });
+
+    expect(win.reload).toHaveBeenCalled();
+  });
+
+  test('静态资源带安全响应头，HTML 额外带 CSP', () => {
+    expect(main.SECURITY_HEADERS['X-Content-Type-Options']).toBe('nosniff');
+    expect(main.SECURITY_HEADERS['X-Frame-Options']).toBe('DENY');
+    expect(main.HTML_CSP).toContain("default-src 'self'");
+    expect(main.HTML_CSP).toContain("frame-ancestors 'none'");
+  });
+});
+

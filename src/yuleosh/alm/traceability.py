@@ -1374,17 +1374,20 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
             ]
 
         # Desktop Jest suites are outside tests/ and declare coverage via @req.
-        for test_file in desktop_test_links.get(spec_req_id, []):
-            if any(
-                isinstance(t, dict) and t.get("file") == test_file
-                for t in matching_tests
-            ):
-                continue
-            matching_tests.append({
-                "file": test_file,
-                "status": "linked",
-                "source": "desktop-test-annotation",
-            })
+        # Annotations may use either the SHALL-level ID or the spec-level ID,
+        # so look up both.
+        for lookup_id in dict.fromkeys([spec_req_id, req_id]):
+            for test_file in desktop_test_links.get(lookup_id, []):
+                if any(
+                    isinstance(t, dict) and t.get("file") == test_file
+                    for t in matching_tests
+                ):
+                    continue
+                matching_tests.append({
+                    "file": test_file,
+                    "status": "linked",
+                    "source": "desktop-test-annotation",
+                })
 
         # Enrich test entries with @tests annotation links (test → code direct traceability)
         for test_entry in matching_tests:
