@@ -273,7 +273,8 @@ def _review_edges(rows: list[dict], reviews: list[dict]) -> list[dict]:
         for review in reviews:
             reviewed = {Path(str(p)).name for p in (review.get("reviewed_files") or [])}
             findings_text = " ".join(str(x) for x in (review.get("findings") or []))
-            if (names & reviewed) or (rid and rid in findings_text):
+            declared = {str(x) for x in (review.get("requirements") or [])}
+            if (names & reviewed) or (rid and rid in findings_text) or (rid in declared):
                 edges.append({
                     "from": rid,
                     "to": f"review:{review.get('session', 'unknown')}",

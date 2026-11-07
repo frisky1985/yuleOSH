@@ -846,6 +846,12 @@ def validate_review_records(project_dir: str | Path) -> list[dict]:
                 f"verdict=pass 但仍有 {len(open_findings)} 条 open 缺陷",
             )
 
+        if str(reviewer.get("type") or "").lower() == "ai":
+            _add(
+                "W-CHAIN-REVIEW-AI", "WARNING",
+                "独立评审由 AI 代理执行，外部 ASPICE 审计前需人工会签",
+            )
+
         if not review.get("requirements"):
             _add(
                 "W-CHAIN-REVIEW-RECORD", "WARNING",
@@ -1391,9 +1397,12 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
                         "functions": link["functions"],
                     }
 
-        # Find reviews that reference this requirement
+        # Find reviews that reference this requirement. Both the spec-level ID
+        # (RS-001) and the SHALL-level ID must be honoured: review records and
+        # the serialized matrix use different identifiers for the same row.
         matching_reviews = _find_reviews_for_requirement(
-            reviews, spec_req_id, shall["statement"], code_files=matching_code
+            reviews, spec_req_id, shall["statement"], code_files=matching_code,
+            aliases=[req_id],
         )
 
         # Determine match method for traceability audit
@@ -1986,7 +1995,8 @@ def _find_code_by_keywords_for_id(src_dir: Path, req_id: str) -> list[str]:
 
 def _find_reviews_for_requirement(reviews: list[dict], req_id: str,
                                    statement: str,
-                                   code_files: Optional[list[str]] = None) -> list[dict]:
+                                   code_files: Optional[list[str]] = None,
+                                   aliases: Optional[list[str]] = None) -> list[dict]:
     """Find reviews covering a specific requirement.
 
     Coverage requires concrete evidence: the review declares the requirement ID,
@@ -1996,11 +2006,13 @@ def _find_reviews_for_requirement(reviews: list[dict], req_id: str,
     """
     matching = []
     code_names = {Path(str(p)).name for p in (code_files or []) if str(p)}
-    req_lower = req_id.lower()
+    req_ids = {str(req_id).lower()} | {
+        str(a).lower() for a in (aliases or []) if str(a)
+    }
 
     for review in reviews:
         declared = {str(x).lower() for x in (review.get("requirements") or [])}
-        if req_lower in declared:
+        if req_ids & declared:
             matching.append(review)
             continue
 
@@ -2010,7 +2022,7 @@ def _find_reviews_for_requirement(reviews: list[dict], req_id: str,
             continue
 
         review_text = json.dumps(review).lower()
-        if req_lower and req_lower in review_text:
+        if any(rid and rid in review_text for rid in req_ids):
             matching.append(review)
 
     return matching
