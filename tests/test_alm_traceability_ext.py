@@ -36,6 +36,7 @@ from yuleosh.alm.traceability import (
     generate_lrm,
     generate_lrt,
     generate_traceability_report,
+    scan_code_test_links,
     _extract_keywords,
     _find_code_by_keywords,
     _find_step_handlers_for_requirement,
@@ -432,3 +433,44 @@ class TestGenerateLRT:
         assert "lrm" in result
         assert "gap_analysis" in result
         assert "orphaned_test_files" in result
+
+
+# ── code → test import links ──────────────────────────────────────────
+
+class TestCodeTestLinks:
+    """Requirement → test coverage must use real import-level evidence."""
+
+    def test_scan_code_test_links_maps_imports(self, tmp_project):
+        """GIVEN a test importing a module WHEN scanning THEN the source is linked."""
+        src_file = Path(tmp_project) / "src" / "yuleosh" / "demo.py"
+        src_file.write_text("def boot():\n    return True\n")
+        tests_dir = Path(tmp_project) / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_demo.py").write_text(
+            "from yuleosh.demo import boot\n\n"
+            "def test_boot():\n    assert boot() is True\n"
+        )
+
+        links = scan_code_test_links(tmp_project)
+
+        assert links["src/yuleosh/demo.py"] == ["tests/test_demo.py"]
+
+    def test_generate_lrm_links_requirement_to_importing_test(self, tmp_project):
+        """GIVEN no test mentions the req ID WHEN generating LRM THEN import link counts."""
+        docs_dir = Path(tmp_project) / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "spec.md").write_text("# Requirements\n- The system SHALL boot.\n")
+        src_file = Path(tmp_project) / "src" / "yuleosh" / "demo.py"
+        src_file.write_text("# @req SHALL-1\ndef boot():\n    return True\n")
+        tests_dir = Path(tmp_project) / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_demo.py").write_text(
+            "from yuleosh.demo import boot\n\n"
+            "def test_boot():\n    assert boot() is True\n"
+        )
+
+        lrm = generate_lrm(tmp_project)
+        req = lrm["requirements"][0]
+
+        assert req["has_test"] is True
+        assert req["test_reports"][0]["source"] == "code-test-link"

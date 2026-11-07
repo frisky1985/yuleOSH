@@ -17,6 +17,7 @@ Sources:
   4. CI results (.osh/ci/layer1-*.json)
 """
 
+import ast
 import hashlib
 import json
 import logging
@@ -30,6 +31,9 @@ log = logging.getLogger("yuleosh.alm.traceability")
 
 # Source file extensions to scan for requirement annotations and code
 _SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp", ".js", ".ts", ".jsx", ".tsx")
+
+# Cap import-derived requirement → test links so coverage stays precise.
+MAX_DERIVED_TESTS = 5
 
 # Regex for @req annotation: matches @req RS-001, @req(RS-001), @req RS-001, RS-002
 _REQ_ANNOTATION_RE = re.compile(
@@ -223,6 +227,75 @@ def scan_test_code_links(project_dir: Path) -> dict[str, dict]:
                         entry["functions"].append(fn)
 
     return test_links
+
+
+def _test_import_modules(text: str) -> set[str]:
+    """Return Python module names imported by ``text`` (AST first, regex fallback)."""
+    modules: set[str] = set()
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        tree = None
+
+    if tree is not None:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                modules.add(node.module)
+                for alias in node.names:
+                    modules.add(f"{node.module}.{alias.name}")
+        return modules
+
+    # Fallback for files the active Python cannot parse (e.g. newer syntax)
+    for match in re.finditer(
+            r"^\s*(?:from\s+([A-Za-z_][\w.]*)\s+import|import\s+([A-Za-z_][\w.]*))",
+            text, re.MULTILINE):
+        modules.add(match.group(1) or match.group(2))
+    return modules
+
+
+def scan_code_test_links(project_dir: str | Path) -> dict[str, list[str]]:
+    """Map source files to pytest files that import them.
+
+    Complements :func:`scan_test_code_links` (explicit ``@tests`` annotations).
+    Many tests exercise a module without spelling out its requirement ID, which
+    makes requirement → test coverage look lower than the real verification
+    evidence. Import-based links are declared, auditable evidence: the test file
+    names the production module it executes.
+
+    Returns dict mapping relative source path (``src/yuleosh/x.py``) to a
+    sorted list of relative test paths.
+    """
+    project = Path(project_dir)
+    tests_dir = project / "tests"
+    src_dir = project / "src"
+    if not tests_dir.exists() or not src_dir.exists():
+        return {}
+
+    links: dict[str, list[str]] = {}
+    for test_file in sorted(tests_dir.rglob("test_*.py")):
+        if not test_file.is_file():
+            continue
+        try:
+            text = test_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        try:
+            rel_test = test_file.relative_to(project).as_posix()
+        except ValueError:
+            rel_test = str(test_file)
+
+        for module in sorted(_test_import_modules(text)):
+            parts = module.split(".")
+            # Resolve the longest importable prefix to a real source file.
+            for end in range(len(parts), 0, -1):
+                candidate = "src/" + "/".join(parts[:end]) + ".py"
+                if (project / candidate).is_file():
+                    links.setdefault(candidate, []).append(rel_test)
+                    break
+
+    return {path: sorted(set(files)) for path, files in links.items()}
 
 
 # ── SHALL statement extraction ──────────────────────────────────────────
@@ -1035,6 +1108,8 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
 
     # Scan for @tests annotations (test → code direct links)
     test_code_links = scan_test_code_links(Path(project_dir))
+    # Import-level links: test file → production module it exercises
+    code_test_links = scan_code_test_links(project_dir)
 
     # Scan for SHALL-N / REQ-ID comments
     code_map = _scan_comments_for_requirements(src_dir, shalls)
@@ -1066,6 +1141,34 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         matching_tests = _find_tests_for_requirement(
             test_reports, spec_req_id, shall["statement"], project_dir=str(project_dir)
         )
+
+        # Fallback: a requirement is verified when the code implementing it is
+        # exercised by a pytest file. Links are derived from real imports and
+        # recorded as declared evidence (source=code-test-link). Keep at most
+        # MAX_DERIVED_TESTS links, preferring tests named after the module,
+        # so the trace stays precise instead of listing every importing test.
+        if not matching_tests and matching_code:
+            candidates: list[tuple[int, str, str]] = []
+            seen_test_files: set[str] = set()
+            for code_file in matching_code:
+                code_key = str(code_file).replace(os.sep, "/").lstrip("./")
+                module_stem = Path(code_key).stem
+                for test_file in code_test_links.get(code_key, []):
+                    if test_file in seen_test_files:
+                        continue
+                    seen_test_files.add(test_file)
+                    score = 2 if module_stem and module_stem in Path(test_file).stem else 0
+                    candidates.append((score, test_file, code_key))
+            candidates.sort(key=lambda item: (-item[0], item[1]))
+            matching_tests = [
+                {
+                    "file": test_file,
+                    "status": "linked",
+                    "source": "code-test-link",
+                    "via_code": code_key,
+                }
+                for _score, test_file, code_key in candidates[:MAX_DERIVED_TESTS]
+            ]
 
         # Enrich test entries with @tests annotation links (test → code direct traceability)
         for test_entry in matching_tests:
