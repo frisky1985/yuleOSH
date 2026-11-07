@@ -1,0 +1,74 @@
+{
+  "_template": {
+    "purpose": "ASPICE GP1.2 / GP1.3 独立评审记录模板",
+    "usage": "复制到 docs/evidence/reviews/<REVIEW-ID>.json 并替换所有尖括号占位符；未填写完整的记录不应提交。",
+    "consumed_by": "src/yuleosh/alm/traceability.py::scan_review_artifacts",
+    "required_for_chain": ["agent", "requirements", "reviewed_files", "findings"],
+    "notes": [
+      "reviewer_independence 必须为 independent 才满足独立评审要求；self 仅表示自评审。",
+      "reviewed_files 需使用仓库相对路径，且应属于被评审需求的实现/测试文件，否则无法与需求建立 review 边。",
+      "findings[].status 为 open 时 verdict 不应为 pass。",
+      "签名与日期缺失时，本记录不应进入 docs/evidence/reviews/。"
+    ]
+  },
+  "session": "REVIEW-<YYYYMMDD>-<scope>",
+  "artifact_type": "independent-review",
+  "reviewed_artifact_type": "<software-code | requirements | architecture | test-report | evidence-report>",
+  "agent": "<评审执行者或工具名，例如 independent-reviewer-01>",
+  "reviewer": {
+    "name": "<独立评审人姓名>",
+    "role": "<角色，例如 QA / 独立评审员 / 安全评审员>",
+    "organization": "<组织或部门>",
+    "email": "<联系邮箱>"
+  },
+  "reviewer_independence": "<independent | self>",
+  "independence_declaration": {
+    "not_author_of_artifact": true,
+    "not_contributor_to_change": true,
+    "no_conflict_of_interest": true,
+    "declared_at": "<ISO8601 时间戳>"
+  },
+  "timestamp": "<ISO8601 时间戳>",
+  "method": "<peer-review | walkthrough | formal-inspection>",
+  "scope": {
+    "baseline": "<被评审基线/提交号>",
+    "process_area": "<SYS.1 | SYS.2 | SYS.3 | SWE.1 | SWE.2 | SWE.3 | SUP.1 | SUP.8 | SUP.10>",
+    "criteria": "<评审依据，例如 docs/requirements/software-architecture.md>"
+  },
+  "checklist": [
+    {
+      "item": "<检查项，例如 需求是否可验证、无歧义>",
+      "result": "<pass | fail | na>",
+      "note": "<证据或说明>"
+    }
+  ],
+  "requirements": [
+    "<REQ-001 或其他受控需求 ID；必须与 @req 注解一致>"
+  ],
+  "reviewed_files": [
+    "<仓库相对路径，例如 desktop/server-manager.js>"
+  ],
+  "findings": [
+    {
+      "id": "RV-01",
+      "severity": "<major | minor | observation>",
+      "status": "<open | fixed | accepted>",
+      "file": "<仓库相对路径>",
+      "line": 0,
+      "description": "<问题描述：现象 + 影响>",
+      "resolution": "<处置措施；status=fixed 时必填>",
+      "verified_by": "<复验人>"
+    }
+  ],
+  "metrics": {
+    "files_reviewed": 0,
+    "defects_found": 0,
+    "defects_closed": 0
+  },
+  "verdict": "<pass | pass-with-findings | fail>",
+  "signoff": {
+    "reviewer_signature": "<签名或电子签标识>",
+    "signed_at": "<ISO8601 时间戳>",
+    "approved_by": "<批准人>"
+  }
+}
