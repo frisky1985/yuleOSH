@@ -8,7 +8,8 @@
       "reviewer_independence 必须为 independent 才满足独立评审要求；self 仅表示自评审。",
       "reviewed_files 需使用仓库相对路径，且应属于被评审需求的实现/测试文件，否则无法与需求建立 review 边。",
       "findings[].status 为 open 时 verdict 不应为 pass。",
-      "签名与日期缺失时，本记录不应进入 docs/evidence/reviews/。"
+      "签名与日期缺失时，本记录不应进入 docs/evidence/reviews/。",
+      "该记录由 E-CHAIN-REVIEW-RECORD / W-CHAIN-REVIEW-RECORD / W-CHAIN-REVIEW-INDEPENDENCE 门禁校验；不完整记录会使证据链 FAIL。"
     ]
   },
   "session": "REVIEW-<YYYYMMDD>-<scope>",

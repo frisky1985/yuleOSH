@@ -37,6 +37,8 @@ from yuleosh.alm.traceability import (
     generate_lrt,
     generate_traceability_report,
     scan_code_test_links,
+    scan_desktop_test_links,
+    validate_review_records,
     _extract_keywords,
     _find_code_by_keywords,
     _find_step_handlers_for_requirement,
@@ -257,6 +259,79 @@ class TestScanReviewArtifacts:
         (session_dir / "code-review.json").write_text("not json")
         results = scan_review_artifacts(tmp_project)
         assert len(results) == 0
+
+
+# ── validate_review_records ───────────────────────────────────────────
+
+def _write_review(project_dir, record, name="review-001"):
+    reviews_dir = Path(project_dir) / "docs" / "evidence" / "reviews"
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+    path = reviews_dir / f"{name}.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    return path
+
+
+def _independent_review(**overrides):
+    record = {
+        "artifact_type": "independent-review",
+        "reviewer_independence": "independent",
+        "reviewer": {"name": "Alice", "role": "QA"},
+        "independence_declaration": {
+            "not_author_of_artifact": True,
+            "not_contributor_to_change": True,
+            "no_conflict_of_interest": True,
+        },
+        "signoff": {"reviewer_signature": "ALICE-2026", "signed_at": "2026-11-08T09:00:00+08:00"},
+        "requirements": ["REQ-001"],
+        "reviewed_files": ["desktop/main.js"],
+        "findings": [{"id": "RV-01", "status": "fixed", "description": "x"}],
+        "verdict": "pass",
+    }
+    record.update(overrides)
+    return record
+
+
+class TestValidateReviewRecords:
+    def test_complete_independent_record_passes(self, tmp_project):
+        _write_review(tmp_project, _independent_review())
+        assert validate_review_records(tmp_project) == []
+
+    def test_missing_signature_and_declaration_fail(self, tmp_project):
+        _write_review(tmp_project, _independent_review(
+            signoff={"reviewer_signature": "", "signed_at": ""},
+            independence_declaration={"not_author_of_artifact": True},
+        ))
+        codes = [p["code"] for p in validate_review_records(tmp_project)]
+        messages = " | ".join(p["message"] for p in validate_review_records(tmp_project))
+        assert "E-CHAIN-REVIEW-RECORD" in codes
+        assert "reviewer_signature" in messages
+        assert "not_contributor_to_change" in messages
+
+    def test_pass_verdict_with_open_finding_fails(self, tmp_project):
+        _write_review(tmp_project, _independent_review(
+            findings=[{"id": "RV-01", "status": "open", "description": "x"}],
+            verdict="pass",
+        ))
+        problems = validate_review_records(tmp_project)
+        assert any(p["code"] == "E-CHAIN-REVIEW-RECORD" and "open" in p["message"] for p in problems)
+
+    def test_self_review_only_warns_on_independence(self, tmp_project):
+        _write_review(tmp_project, {
+            "artifact_type": "code-review",
+            "reviewer_independence": "self",
+            "reviewed_files": ["desktop/main.js"],
+            "findings": [],
+        })
+        problems = validate_review_records(tmp_project)
+        assert [p["code"] for p in problems] == ["W-CHAIN-REVIEW-INDEPENDENCE"]
+        assert problems[0]["severity"] == "WARNING"
+
+    def test_missing_requirements_and_files_warns(self, tmp_project):
+        record = _independent_review(requirements=[], reviewed_files=[])
+        _write_review(tmp_project, record)
+        codes = {p["code"] for p in validate_review_records(tmp_project)}
+        assert "W-CHAIN-REVIEW-RECORD" in codes
+        assert "E-CHAIN-REVIEW-RECORD" not in codes
 
 
 # ── scan_test_reports ─────────────────────────────────────────────────

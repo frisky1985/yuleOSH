@@ -47,6 +47,7 @@ from yuleosh.alm.traceability import (
     scan_ci_results,
     scan_review_artifacts,
     scan_test_reports,
+    validate_review_records,
     write_authoritative_traceability,
 )
 from yuleosh.report import visualization
@@ -711,6 +712,7 @@ def collect_chain(
     }
 
     problems = validate_chain(chain, rules)
+    problems.extend(validate_review_records(project))
     chain["problems"] = problems
     chain["gates"] = _structural_gates(rules, problems, process_gates)
     chain["summary"] = _summarize(chain)

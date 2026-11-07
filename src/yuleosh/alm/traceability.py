@@ -735,6 +735,8 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
             "reviewed_files": reviewed_files,
             "requirements": data.get("requirements", []) if isinstance(data, dict) else [],
             "findings": findings,
+            "path": str(path),
+            "record": data if isinstance(data, dict) else {},
         })
 
     for reviews_dir in _evidence_subdirs(project_dir, "evidence/reviews"):
@@ -751,6 +753,123 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
 
     log.info("Found %d review artifacts", len(reviews))
     return reviews
+
+
+REVIEW_RECORD_INDEPENDENCE_KEYS = (
+    "not_author_of_artifact",
+    "not_contributor_to_change",
+    "no_conflict_of_interest",
+)
+REVIEW_RECORD_VERDICTS = ("pass", "pass-with-findings", "fail")
+
+
+def validate_review_records(project_dir: str | Path) -> list[dict]:
+    """Validate independent review records against ASPICE GP1.2 conventions.
+
+    Only records declaring ``artifact_type: independent-review`` or
+    ``reviewer_independence: independent`` are validated; self reviews are
+    legal evidence but cannot claim independent sign-off.
+
+    Returns problem dicts compatible with ``evidence.chain`` (code/severity/message).
+    """
+    problems: list[dict] = []
+    independent_seen = 0
+    reviews = scan_review_artifacts(str(project_dir))
+
+    for review in reviews:
+        record = review.get("record") or {}
+        if not record:
+            continue
+        label = str(review.get("session") or review.get("path") or "unknown")
+
+        def _add(code: str, severity: str, message: str) -> None:
+            problems.append({
+                "code": code,
+                "severity": severity,
+                "message": f"{label}: {message}",
+                "artifact": label,
+            })
+
+        if str(record.get("reviewer_independence")) == "independent":
+            independent_seen += 1
+
+        is_independent = (
+            str(record.get("artifact_type")) == "independent-review"
+            or str(record.get("reviewer_independence")) == "independent"
+        )
+        if not is_independent:
+            continue
+
+        reviewer = record.get("reviewer") or {}
+        if not str(reviewer.get("name") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 reviewer.name")
+        if not str(reviewer.get("role") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 reviewer.role")
+        if str(record.get("reviewer_independence")) != "independent":
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                "artifact_type=independent-review 但 reviewer_independence 不是 independent",
+            )
+
+        declaration = record.get("independence_declaration") or {}
+        missing = [
+            key for key in REVIEW_RECORD_INDEPENDENCE_KEYS
+            if declaration.get(key) is not True
+        ]
+        if missing:
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                f"独立性声明未全部确认: {', '.join(missing)}",
+            )
+
+        signoff = record.get("signoff") or {}
+        if not str(signoff.get("reviewer_signature") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 signoff.reviewer_signature")
+        if not str(signoff.get("signed_at") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 signoff.signed_at")
+
+        verdict = str(record.get("verdict") or "").lower()
+        if verdict not in REVIEW_RECORD_VERDICTS:
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                f"verdict 非法或缺失: {verdict or '<empty>'}",
+            )
+
+        findings = record.get("findings") or []
+        open_findings = [
+            f for f in findings
+            if isinstance(f, dict) and str(f.get("status") or "").lower() == "open"
+        ]
+        if verdict == "pass" and open_findings:
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                f"verdict=pass 但仍有 {len(open_findings)} 条 open 缺陷",
+            )
+
+        if not review.get("requirements"):
+            _add(
+                "W-CHAIN-REVIEW-RECORD", "WARNING",
+                "未声明 requirements，无法与需求建立 review 边",
+            )
+        if not review.get("reviewed_files"):
+            _add(
+                "W-CHAIN-REVIEW-RECORD", "WARNING",
+                "未声明 reviewed_files，无法与工件建立关联",
+            )
+
+    reviews = scan_review_artifacts(str(project_dir))
+    if reviews and independent_seen == 0:
+        problems.append({
+            "code": "W-CHAIN-REVIEW-INDEPENDENCE",
+            "severity": "WARNING",
+            "message": (
+                f"{len(reviews)} 份评审记录均非独立评审；"
+                "ASPICE GP1.2 独立签署要求尚未满足"
+            ),
+            "artifact": "reviews",
+        })
+
+    return problems
 
 
 # ── Test report scan ────────────────────────────────────────────────────

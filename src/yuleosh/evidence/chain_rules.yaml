@@ -138,6 +138,18 @@ gates:
   - id: W-CHAIN-REVIEW
     severity: WARNING
     rule: "需求缺少评审覆盖时告警，但不单独判红（由 G-REVIEW 决定是否 ERROR）"
+  - id: E-CHAIN-REVIEW-RECORD
+    severity: ERROR
+    rule: >-
+      独立评审记录（artifact_type=independent-review 或 reviewer_independence=independent）
+      必须包含 reviewer.name/role、三项独立性声明、reviewer_signature、signed_at 与合法 verdict；
+      verdict=pass 时不得存在 status=open 的缺陷。任一项不满足即判红。
+  - id: W-CHAIN-REVIEW-RECORD
+    severity: WARNING
+    rule: "独立评审记录缺少 requirements 或 reviewed_files 时告警，此时无法建立 review 边"
+  - id: W-CHAIN-REVIEW-INDEPENDENCE
+    severity: WARNING
+    rule: "存在评审记录但无任何独立评审时告警，提示 ASPICE GP1.2 独立签署尚未满足"
 
 # ── ASPICE V 模型与过程域 ─────────────────────────────────────────────
 # 过程域口径遵循 ASPICE v3.1。分类优先级：
