@@ -22,7 +22,14 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from tree_sitter import Language, Parser
+try:  # 解析器为可选依赖：未安装时模块仍可导入，仅 C 解析入口返回错误
+    from tree_sitter import Language, Parser
+except ImportError as _err:  # pragma: no cover - 仅依赖缺失路径
+    Language = None  # type: ignore[assignment]
+    Parser = None  # type: ignore[assignment]
+    _TREE_SITTER_ERR = _err
+else:
+    _TREE_SITTER_ERR = None
 
 try:  # grammar 包可能未安装（依赖未就位时给出清晰报错而非崩溃）
     import tree_sitter_c
@@ -38,6 +45,12 @@ _C_LANGUAGE = None
 def _get_c_language() -> Language:
     """惰性加载 C grammar；首次调用后缓存。"""
     global _C_LANGUAGE
+    if _TREE_SITTER_ERR is not None:
+        raise RuntimeError(
+            "tree-sitter 未安装，无法解析 C 源码："
+            f"{_TREE_SITTER_ERR}。请先 `pip install tree-sitter tree-sitter-c`"
+            "（见 pyproject 依赖）。"
+        )
     if _GRAMMAR_ERR is not None:
         raise RuntimeError(
             "tree-sitter-c 未安装或导入失败，无法解析 C 源码："
