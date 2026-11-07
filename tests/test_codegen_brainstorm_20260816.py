@@ -37,7 +37,8 @@ def _session(tmp_path, name="brainstorm-test"):
 
 def _marker_output(path: str = "src/foo.py", lang: str = "python",
                    body: str = "def foo():\n    return 1\n"):
-    return f"### FILE: {path}\n```{lang}\n{body}```\n"
+    prefix = "#" if lang in ("python", "py", "sh", "") else "//"
+    return f"### FILE: {path}\n```{lang}\n{prefix} @req SHALL-001\n{body}```\n"
 
 
 # ==================================================================

@@ -153,6 +153,11 @@ _ASPICE_EVIDENCE_CHAIN_CONTENT = """\
   `docs/requirements/v-model-traceability.md` 受控策略表；禁止关键词猜测补齐。
 - 过程门禁：`G-REQ` `G-CODE` `G-TEST` `G-REVIEW` `G-CI`；阈值见
   `src/yuleosh/evidence/chain_rules.yaml`。
+- 评审门禁：`review_required=true` 且 `min_review_coverage_pct=100`，
+  自评审不计入覆盖；独立评审记录须满足 `E-CHAIN-REVIEW-RECORD`。
+- 代码生成硬规则：pipeline codegen 产出的每个源文件首行 SHALL 带
+  `@req <需求ID>` 注解（C/C++/JS 用 `//`，Python 用 `#`）；缺注解或
+  引用 spec 中不存在的 ID 时拒绝写盘并判定 codegen 失败。
 - 任一 ERROR → `summary.status=FAIL`。修复真源（spec/代码/测试/评审），
   不得改 `chain.json` 绕过。
 
@@ -200,7 +205,7 @@ def builtin_skills() -> list[Skill]:
             description="证据链生成、fail-closed 门禁与引用纪律：真源优先、不臆造、HTML 仅作视图。",
             content=_ASPICE_EVIDENCE_CHAIN_CONTENT,
             tags=["aspice", "evidence", "traceability", "audit", "html"],
-            version="1.3.0",
+            version="1.4.0",
         ),
     ]
 

@@ -168,6 +168,17 @@ def build_codegen_prompt(
         "5. When a project code baseline (seed) is injected: it already "
         "exists on disk. **Incrementally modify** — only emit files you "
         "created or changed. Never re-emit unchanged baseline files.\n"
+        "6. TRACEABILITY HARD RULE (mandatory): the **first line** of every "
+        "generated source file MUST be a requirement annotation:\n"
+        "   - Python/shell: `# @req SHALL-001`\n"
+        "   - C/C++/JS/TS/Java/Rust/Go: `// @req SHALL-001`\n"
+        "   Use `@req SHALL-001, SHALL-002` when one file implements multiple "
+        "requirements. The IDs must be requirement IDs that appear in the "
+        "injected specification. Files without a valid `@req` annotation are "
+        "**rejected before writing** and the codegen step fails.\n"
+        "7. JSON output format: every file object MUST include a "
+        "`requirements` array (e.g. `[\"SHALL-001\"]`) consistent with the "
+        "`@req` annotation in the file content.\n"
     )
 
     context_parts = [

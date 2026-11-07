@@ -228,6 +228,7 @@ class TestGenerateCarriesSuppression:
         def llm(system, user, **kwargs):
             return {"content": (
                 "### FILE: src/app/src/window_modes.c\n```c\n"
+                + "// @req SHALL-001\n"
                 + GENERATED_BROKEN
                 + "```\n"
             )}

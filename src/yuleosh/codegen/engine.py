@@ -47,6 +47,49 @@ _FILE_RE = re.compile(
 )
 _FENCE_RE = re.compile(r"^```(?P<lang>[A-Za-z0-9_+-]*)\s*$", re.MULTILINE)
 
+# Traceability hard rule: every generated source file must declare @req.
+_REQ_ANNOTATION_RE = re.compile(
+    r"@req\s*[\(\s]\s*([A-Z][A-Z0-9_.\-]+(?:\s*,\s*[A-Z][A-Z0-9_.\-]+)*)",
+    re.IGNORECASE,
+)
+_SOURCE_SUFFIXES = {
+    ".py", ".c", ".h", ".cpp", ".hpp", ".cc", ".js", ".ts", ".jsx", ".tsx",
+    ".java", ".rs", ".go",
+}
+_COMMENT_PREFIX = {
+    ".py": "#", ".sh": "#",
+    ".c": "//", ".h": "//", ".cpp": "//", ".hpp": "//", ".cc": "//",
+    ".js": "//", ".ts": "//", ".jsx": "//", ".tsx": "//",
+    ".java": "//", ".rs": "//", ".go": "//",
+}
+
+
+class CodegenTraceabilityError(PipelineStepError):
+    """Raised when generated source files lack requirement annotations."""
+
+
+def extract_requirement_ids(text: str) -> list[str]:
+    """Return requirement IDs declared via ``@req`` annotations, deduplicated."""
+    seen: list[str] = []
+    for match in _REQ_ANNOTATION_RE.finditer(text or ""):
+        for rid in match.group(1).split(","):
+            rid = rid.strip().upper()
+            if rid and rid not in seen:
+                seen.append(rid)
+    return seen
+
+
+def requirement_annotation_header(path: str, req_ids: list[str]) -> str:
+    prefix = _COMMENT_PREFIX.get(Path(path).suffix.lower(), "#")
+    return f"{prefix} @req {', '.join(req_ids)}\n"
+
+
+def inject_requirement_annotations(content: str, path: str, req_ids: list[str]) -> str:
+    """Prepend the ``@req`` header when the content has no annotation yet."""
+    if not req_ids or extract_requirement_ids(content):
+        return content
+    return requirement_annotation_header(path, req_ids) + content
+
 
 @dataclass
 class GeneratedFile:
@@ -55,6 +98,7 @@ class GeneratedFile:
     path: str
     content: str
     language: str = ""
+    requirements: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -161,9 +205,11 @@ def parse_generated_files(llm_output: str) -> list[GeneratedFile]:
                 path = entry.get("path") or entry.get("file")
                 content = entry.get("content")
                 if path and content is not None:
+                    reqs = entry.get("requirements") or []
                     files.append(
                         GeneratedFile(path=str(path), content=str(content),
-                                      language=entry.get("language", ""))
+                                      language=entry.get("language", ""),
+                                      requirements=[str(r).strip().upper() for r in reqs if str(r).strip()])
                     )
             if files:
                 return files
@@ -194,7 +240,8 @@ def parse_generated_files(llm_output: str) -> list[GeneratedFile]:
                 idx = content.rstrip().rfind("```")
                 content = content[:idx]
         files.append(GeneratedFile(path=path, content=content.strip("\n"),
-                                   language=lang))
+                                   language=lang,
+                                   requirements=extract_requirement_ids(content)))
     return files
 
 
@@ -231,6 +278,7 @@ class CodegenEngine:
         brainstorm_after_failures: int = 3,
         structural_features: Optional[dict[str, list[str]]] = None,
         forbidden_features: Optional[dict[str, list[str]]] = None,
+        requirement_ids: Optional[list[str] | set[str]] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
@@ -262,6 +310,11 @@ class CodegenEngine:
         # 链接器输出, 不指代码行)。禁止特征在链接前直接说"这里不能出现
         # (int64_t)", 修复指令明确可执行。
         self.forbidden_features = forbidden_features or {}
+        # 可追溯性硬规则 (2026-11-08): spec 中的受控需求 ID 集合。
+        # 生成源文件必须带 @req 注解；提供集合时还会校验 ID 是否在 spec 范围内。
+        self.requirement_ids = {
+            str(r).strip().upper() for r in (requirement_ids or []) if str(r).strip()
+        }
         # seed 基线内存快照 (rel_path -> content), _sync_seed 后立即抓取,
         # 供头脑风暴强制恢复 — 不依赖 seed_dir 磁盘 (测试里 seed_dir 可能
         # 指向 out_dir, 磁盘已被 LLM 污染)。
@@ -561,19 +614,61 @@ class CodegenEngine:
             return str(response.get("content", ""))
         return str(response)
 
-    def write_files(self, files: list[GeneratedFile], out_dir: Path) -> list[Path]:
-        """Write generated files under ``out_dir`` (path-traversal safe)."""
-        written: list[Path] = []
+    def write_files(
+        self,
+        files: list[GeneratedFile],
+        out_dir: Path,
+        enforce_requirements: bool = True,
+    ) -> list[Path]:
+        """Write generated files under ``out_dir`` (path-traversal safe).
+
+        Traceability hard rule: every generated source file must declare an
+        ``@req`` annotation linking it to controlled requirements. Missing or
+        out-of-scope annotations abort the write (nothing is written), so a
+        pipeline can never produce untraceable code.
+        """
+        prepared: list[tuple[Path, str]] = []
+        violations: list[str] = []
+
         for f in files:
             rel = _safe_relative_path(f.path)
             target = (out_dir / rel).resolve()
             if not str(target).startswith(str(out_dir.resolve())):
                 log.warning("Blocked path escaping output dir: %s", f.path)
                 continue
+
+            content = f.content
+            is_source = target.suffix.lower() in _SOURCE_SUFFIXES
+            if enforce_requirements and is_source:
+                declared = [r.upper() for r in (f.requirements or [])]
+                annotated = extract_requirement_ids(content)
+                req_ids = annotated or declared
+                if not req_ids:
+                    violations.append(f"{rel}: 缺少 @req 需求注解")
+                    continue
+                if self.requirement_ids:
+                    unknown = [r for r in req_ids if r not in self.requirement_ids]
+                    if unknown:
+                        violations.append(
+                            f"{rel}: @req 引用了 spec 中不存在的需求 "
+                            f"{', '.join(unknown)}"
+                        )
+                        continue
+                content = inject_requirement_annotations(content, rel, declared)
+
+            prepared.append((target, content))
+
+        if violations:
+            raise CodegenTraceabilityError(
+                "可追溯性硬规则校验失败（未写入任何文件）：" + "；".join(violations)
+            )
+
+        written: list[Path] = []
+        for target, content in prepared:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f.content, encoding="utf-8")
+            target.write_text(content, encoding="utf-8")
             written.append(target)
-            log.debug("Wrote generated file %s (%d bytes)", target, len(f.content))
+            log.debug("Wrote generated file %s (%d bytes)", target, len(content))
         return written
 
     # ---- 确定性 void 抑制同步 (2026-08-20, G-17) ----------------------

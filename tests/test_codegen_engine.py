@@ -46,7 +46,8 @@ def _session(tmp_path, name="codegen-test", dev_mode=None):
 
 def _marker_output(path: str = "src/foo.py", lang: str = "python",
                    body: str = "def foo():\n    return 1\n"):
-    return f"### FILE: {path}\n```{lang}\n{body}```\n"
+    prefix = "#" if lang in ("python", "py", "sh", "") else "//"
+    return f"### FILE: {path}\n```{lang}\n{prefix} @req SHALL-001\n{body}```\n"
 
 
 # ==================================================================
@@ -223,21 +224,63 @@ class TestCompileVerification:
 class TestEngineWrite:
     def test_write_files(self, tmp_path):
         engine = CodegenEngine(output_dir=tmp_path / "out")
-        files = [GeneratedFile("src/a.py", "x = 1", "python"),
-                 GeneratedFile("nested/dir/b.c", "int main(void){return 0;}", "c")]
+        files = [GeneratedFile("src/a.py", "# @req SHALL-001\nx = 1", "python"),
+                 GeneratedFile("nested/dir/b.c", "// @req SHALL-001\nint main(void){return 0;}", "c")]
         written = engine.write_files(files, tmp_path / "out")
         assert len(written) == 2
-        assert (tmp_path / "out" / "src" / "a.py").read_text() == "x = 1"
+        assert (tmp_path / "out" / "src" / "a.py").read_text() == "# @req SHALL-001\nx = 1"
         assert (tmp_path / "out" / "nested" / "dir" / "b.c").exists()
 
     def test_write_files_blocks_path_traversal(self, tmp_path):
         engine = CodegenEngine(output_dir=tmp_path / "out")
-        files = [GeneratedFile("../../evil.py", "x = 1", "python")]
+        files = [GeneratedFile("../../evil.py", "# @req SHALL-001\nx = 1", "python")]
         written = engine.write_files(files, tmp_path / "out")
         # Sanitized: written INSIDE the output dir, never escaping it.
         assert len(written) == 1
         assert written[0].resolve() == (tmp_path / "out" / "evil.py").resolve()
         assert not (tmp_path / "evil.py").exists()
+
+    def test_write_files_rejects_missing_req_annotation(self, tmp_path):
+        """TRACEABILITY HARD RULE: 无 @req 的源文件整体拒绝写入。"""
+        from yuleosh.codegen.engine import CodegenTraceabilityError
+
+        engine = CodegenEngine(output_dir=tmp_path / "out")
+        files = [
+            GeneratedFile("src/ok.py", "# @req SHALL-001\nx = 1", "python"),
+            GeneratedFile("src/bad.py", "y = 2", "python"),
+        ]
+        with pytest.raises(CodegenTraceabilityError, match="bad.py"):
+            engine.write_files(files, tmp_path / "out")
+        # fail-closed: 违规时一个文件都不写
+        assert not (tmp_path / "out" / "src" / "ok.py").exists()
+        assert not (tmp_path / "out" / "src" / "bad.py").exists()
+
+    def test_write_files_rejects_unknown_requirement_id(self, tmp_path):
+        from yuleosh.codegen.engine import CodegenTraceabilityError
+
+        engine = CodegenEngine(output_dir=tmp_path / "out",
+                               requirement_ids=["SHALL-001"])
+        files = [GeneratedFile("src/a.py", "# @req SHALL-999\nx = 1", "python")]
+        with pytest.raises(CodegenTraceabilityError, match="SHALL-999"):
+            engine.write_files(files, tmp_path / "out")
+
+    def test_write_files_injects_declared_requirements(self, tmp_path):
+        """JSON 输出声明 requirements 但正文漏注解 → 自动补注释头。"""
+        engine = CodegenEngine(output_dir=tmp_path / "out",
+                               requirement_ids=["SHALL-001"])
+        files = [GeneratedFile("src/a.py", "x = 1", "python",
+                               requirements=["SHALL-001"])]
+        engine.write_files(files, tmp_path / "out")
+        assert (tmp_path / "out" / "src" / "a.py").read_text().startswith(
+            "# @req SHALL-001\n"
+        )
+
+    def test_non_source_files_exempt(self, tmp_path):
+        engine = CodegenEngine(output_dir=tmp_path / "out")
+        files = [GeneratedFile("docs/notes.md", "# notes", "") ]
+        written = engine.write_files(files, tmp_path / "out")
+        assert len(written) == 1
+        assert written[0].name == "notes.md"
 
     def test_default_output_dir_layout(self, tmp_path):
         with mock.patch.dict(os.environ, {"OSH_HOME": str(tmp_path)}):
