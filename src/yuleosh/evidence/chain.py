@@ -42,6 +42,7 @@ from typing import Any, Optional
 import yaml
 
 from yuleosh.alm.traceability import (
+    PERSISTED_EVIDENCE_DIR,
     generate_lrt,
     scan_ci_results,
     scan_review_artifacts,
@@ -183,25 +184,38 @@ def _load_requirement_rows(project_dir: Path, ev_dir: Path) -> tuple[list[dict],
 
 
 def _collect_artifacts(project_dir: Path, ev_dir: Path) -> list[dict]:
+    """Collect evidence artifacts from runtime and persisted ledgers.
+
+    ``.osh/evidence`` holds runtime output and ``docs/evidence`` holds the
+    version-controlled audit ledger. Both are registered with SHA256 so the
+    chain can point at evidence that survives workspace restores.
+    """
     artifacts: list[dict] = []
-    if not ev_dir.exists():
-        return artifacts
-    for path in sorted(ev_dir.rglob("*")):
-        if not path.is_file():
+    roots: list[tuple[Path, bool]] = [(ev_dir, True)]
+    persisted = project_dir / PERSISTED_EVIDENCE_DIR
+    if persisted.exists():
+        roots.append((persisted, False))
+
+    for root, is_runtime in roots:
+        if not root.exists():
             continue
-        if path.name in (CHAIN_JSON, CHAIN_HTML):
-            continue
-        if path.suffix.lower() not in (".md", ".json", ".html", ".zip", ".yaml", ".yml", ".csv"):
-            continue
-        artifacts.append({
-            "id": f"artifact:{_rel_posix(path, ev_dir)}",
-            "path": _rel_posix(path, project_dir),
-            "href": os.path.relpath(str(path), str(ev_dir)).replace(os.sep, "/"),
-            "name": path.name,
-            "kind": path.suffix.lstrip(".").lower(),
-            "size_bytes": path.stat().st_size,
-            "sha256": _sha256_file(path),
-        })
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            if is_runtime and path.name in (CHAIN_JSON, CHAIN_HTML):
+                continue
+            if path.suffix.lower() not in (".md", ".json", ".html", ".zip", ".yaml", ".yml", ".csv"):
+                continue
+            rel_project = _rel_posix(path, project_dir)
+            artifacts.append({
+                "id": f"artifact:{rel_project if not is_runtime else _rel_posix(path, ev_dir)}",
+                "path": rel_project,
+                "href": os.path.relpath(str(path), str(ev_dir)).replace(os.sep, "/"),
+                "name": path.name,
+                "kind": path.suffix.lstrip(".").lower(),
+                "size_bytes": path.stat().st_size,
+                "sha256": _sha256_file(path),
+            })
     return artifacts
 
 

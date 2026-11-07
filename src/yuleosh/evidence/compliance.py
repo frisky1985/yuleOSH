@@ -106,6 +106,16 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
                     arcname = f"session-steps/{session_folder.name}/{step_file.name}"
                     _add_to_zip(step_file, arcname)
 
+        # Include the persisted audit ledger (survives workspace restores;
+        # .osh/ itself is git-ignored and may be empty on a fresh checkout).
+        from yuleosh.alm.traceability import PERSISTED_EVIDENCE_DIR
+        ledger_dir = Path(collector.project_dir) / PERSISTED_EVIDENCE_DIR
+        if ledger_dir.exists():
+            for ledger_file in sorted(ledger_dir.rglob("*")):
+                if ledger_file.is_file():
+                    rel = ledger_file.relative_to(ledger_dir).as_posix()
+                    _add_to_zip(ledger_file, f"evidence-ledger/{rel}")
+
         # Generate manifest.json
         manifest = {
             "manifest_version": "1.0",

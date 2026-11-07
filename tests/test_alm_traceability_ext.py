@@ -313,6 +313,29 @@ class TestScanCiResults:
         results = scan_ci_results(tmp_project)
         assert len(results) == 1
 
+    def test_reads_persisted_docs_evidence(self, tmp_project):
+        """GIVEN evidence only in docs/evidence WHEN scanning THEN it is found.
+
+        .osh/ is git-ignored, so audit records must survive in docs/evidence/.
+        """
+        session_dir = Path(tmp_project) / "docs" / "evidence" / "sessions" / "desk"
+        session_dir.mkdir(parents=True)
+        (session_dir / "desktop-test.json").write_text(json.dumps({
+            "step": "desktop-unit-tests", "status": "passed", "passed": 14, "failed": 0,
+        }))
+        ci_dir = Path(tmp_project) / "docs" / "evidence" / "ci"
+        ci_dir.mkdir(parents=True)
+        (ci_dir / "layer-desktop.json").write_text(json.dumps({
+            "layer": "desktop", "status": "passed", "timestamp": "2026-11-07",
+        }))
+
+        reports = scan_test_reports(tmp_project)
+        ci_results = scan_ci_results(tmp_project)
+
+        assert len(reports) == 1
+        assert reports[0]["passed"] == 14
+        assert [c["layer"] for c in ci_results] == ["desktop"]
+
 
 # ── _extract_keywords ─────────────────────────────────────────────────
 

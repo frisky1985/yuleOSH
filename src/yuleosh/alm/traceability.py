@@ -29,6 +29,12 @@ from typing import Optional
 
 log = logging.getLogger("yuleosh.alm.traceability")
 
+# Persisted evidence ledger. ``.osh/`` is git-ignored (runtime workspace) and is
+# recreated empty whenever the workspace snapshot is restored, which used to
+# erase real test/CI records. ``docs/evidence/`` is version-controlled, so
+# audit evidence survives and stays traceable.
+PERSISTED_EVIDENCE_DIR = "docs/evidence"
+
 # Source file extensions to scan for requirement annotations and code
 _SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp", ".js", ".ts", ".jsx", ".tsx")
 
@@ -616,8 +622,27 @@ def extract_shall_from_text(text: str) -> list[dict]:
 # ── Review artifact scan ────────────────────────────────────────────────
 
 
+def _evidence_subdirs(project_dir: str | Path, name: str) -> list[Path]:
+    """Return existing evidence sub-directories, runtime roots first.
+
+    ``name`` is relative to each evidence root, e.g. ``"sessions"`` or
+    ``"ci"``. Persisted ``docs/evidence/`` is scanned last so runtime data keeps
+    precedence while committed audit records remain discoverable.
+    """
+    project = Path(project_dir)
+    roots = (
+        project / ".osh",
+        project / ".yuleosh",
+        project / PERSISTED_EVIDENCE_DIR,
+    )
+    return [root / name for root in roots if (root / name).exists()]
+
+
 def scan_review_artifacts(project_dir: str) -> list[dict]:
-    """Scan .yuleosh/sessions/ for code-review.json artifacts.
+    """Scan runtime and persisted evidence roots for review artifacts.
+
+    Looks at ``sessions/*/code-review.json`` plus ``evidence/reviews/*.json``
+    under ``.osh/``, ``.yuleosh/`` and ``docs/evidence/``.
 
     Returns list of dicts with keys:
       - session: Session name
@@ -625,53 +650,19 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
       - reviewed_files: List of file paths reviewed
       - findings: List of finding descriptions
     """
-    # Try .osh/sessions/ first (primary), fall back to .yuleosh/sessions/
-    sessions_dir = Path(project_dir) / ".osh" / "sessions"
-    if not sessions_dir.exists():
-        sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
-    if not sessions_dir.exists():
-        log.info("No sessions directory found (tried .osh/sessions/ and .yuleosh/sessions/)")
-        return []
+    reviews: list[dict] = []
+    seen: set[str] = set()
 
-    reviews = []
-    for session_dir in sorted(sessions_dir.iterdir()):
-        if not session_dir.is_dir():
-            continue
-        review_file = session_dir / "code-review.json"
-        if not review_file.exists():
-            # Also check for .osh/evidence/reviews/ files
-            evidence_reviews = (Path(project_dir) / ".osh" / "evidence" / "reviews").glob("*.json")
-            for evf in evidence_reviews:
-                try:
-                    data = json.loads(evf.read_text(encoding="utf-8"))
-                    reviewed_files = []
-                    findings = []
-                    if isinstance(data, dict):
-                        reviewed_files = data.get("reviewed_files", data.get("files", []))
-                        if isinstance(reviewed_files, dict):
-                            reviewed_files = list(reviewed_files.keys())
-                        findings_text = data.get("findings", data.get("issues", []))
-                        if isinstance(findings_text, list):
-                            for f in findings_text:
-                                if isinstance(f, dict):
-                                    findings.append(f.get("description", str(f)))
-                                elif isinstance(f, str):
-                                    findings.append(f)
-                    reviews.append({
-                        "session": evf.stem,
-                        "agent": data.get("agent", "unknown") if isinstance(data, dict) else "unknown",
-                        "reviewed_files": reviewed_files,
-                        "findings": findings,
-                    })
-                except (json.JSONDecodeError, OSError) as e:
-                    log.warning("Cannot parse %s: %s", evf, e)
-            continue
-
+    def _add_review(path: Path, session_label: str) -> None:
+        key = str(path.resolve())
+        if key in seen:
+            return
+        seen.add(key)
         try:
-            data = json.loads(review_file.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
-            log.warning("Cannot parse %s: %s", review_file, e)
-            continue
+            log.warning("Cannot parse %s: %s", path, e)
+            return
 
         reviewed_files = []
         findings = []
@@ -688,11 +679,23 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
                         findings.append(f)
 
         reviews.append({
-            "session": session_dir.name,
+            "session": session_label,
             "agent": data.get("agent", "unknown") if isinstance(data, dict) else "unknown",
             "reviewed_files": reviewed_files,
             "findings": findings,
         })
+
+    for reviews_dir in _evidence_subdirs(project_dir, "evidence/reviews"):
+        for review_file in sorted(reviews_dir.glob("*.json")):
+            _add_review(review_file, review_file.stem)
+
+    for sessions_dir in _evidence_subdirs(project_dir, "sessions"):
+        for session_dir in sorted(sessions_dir.iterdir()):
+            if not session_dir.is_dir():
+                continue
+            review_file = session_dir / "code-review.json"
+            if review_file.exists():
+                _add_review(review_file, session_dir.name)
 
     log.info("Found %d review artifacts", len(reviews))
     return reviews
@@ -712,18 +715,27 @@ def scan_test_reports(project_dir: str) -> list[dict]:
       - failed:   Number of failed tests
       - output:   Test output (truncated)
     """
-    sessions_dir = Path(project_dir) / ".osh" / "sessions"
-    if not sessions_dir.exists():
-        sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
-    if not sessions_dir.exists():
-        log.info("No sessions directory found (tried .osh/sessions/ and .yuleosh/sessions/)")
+    session_dirs = [
+        d
+        for sessions_dir in _evidence_subdirs(project_dir, "sessions")
+        for d in sorted(sessions_dir.iterdir())
+        if d.is_dir()
+    ]
+    if not session_dirs:
+        log.info(
+            "No sessions directory found (tried .osh, .yuleosh, %s)",
+            PERSISTED_EVIDENCE_DIR,
+        )
         return []
 
     reports = []
-    for session_dir in sorted(sessions_dir.iterdir()):
-        if not session_dir.is_dir():
-            continue
+    seen_records: set[tuple[str, str]] = set()
+    for session_dir in session_dirs:
         for test_file in session_dir.glob("*test*.json"):
+            record_key = (session_dir.name, test_file.name)
+            if record_key in seen_records:
+                continue
+            seen_records.add(record_key)
             try:
                 data = json.loads(test_file.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError) as e:
@@ -762,26 +774,34 @@ def scan_ci_results(project_dir: str) -> list[dict]:
       - status: Layer status
       - timestamp: Run timestamp
     """
-    ci_dir = Path(project_dir) / ".osh" / "ci"
-    if not ci_dir.exists():
-        log.info("No CI results directory at %s", ci_dir)
+    ci_dirs = _evidence_subdirs(project_dir, "ci")
+    if not ci_dirs:
+        log.info(
+            "No CI results directory (tried .osh/ci, .yuleosh/ci, %s/ci)",
+            PERSISTED_EVIDENCE_DIR,
+        )
         return []
 
     results = []
-    for result_file in sorted(ci_dir.glob("layer*.json")):
-        try:
-            data = json.loads(result_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as e:
-            log.warning("Cannot parse %s: %s", result_file, e)
-            continue
+    seen_layers: set[str] = set()
+    for ci_dir in ci_dirs:
+        for result_file in sorted(ci_dir.glob("layer*.json")):
+            if result_file.stem in seen_layers:
+                continue
+            try:
+                data = json.loads(result_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as e:
+                log.warning("Cannot parse %s: %s", result_file, e)
+                continue
 
-        if isinstance(data, dict):
-            results.append({
-                "layer": data.get("layer", result_file.stem),
-                "status": data.get("status", "unknown"),
-                "timestamp": data.get("timestamp", ""),
-                "file": str(result_file),
-            })
+            if isinstance(data, dict):
+                seen_layers.add(result_file.stem)
+                results.append({
+                    "layer": data.get("layer", result_file.stem),
+                    "status": data.get("status", "unknown"),
+                    "timestamp": data.get("timestamp", ""),
+                    "file": str(result_file),
+                })
 
     log.info("Found %d CI results", len(results))
     return results
