@@ -128,7 +128,7 @@ artifacts/generated-code/<session-name>/
 
 | 文件类型 | 标注要求 | 引擎行为 |
 |---|---|---|
-| 实现 spec / 需求目录中的需求 | 首行 `@req <需求ID>`（Python/shell 用 `#`，C/C++/JS/TS/Java/Rust/Go 用 `//`；多个需求用逗号分隔） | 声明了 `requirements` 但正文漏写 → 自动补注解；引用受控需求目录之外的 ID → **整批拒绝写入**，codegen 失败 |
+| 实现 spec / 需求目录中的需求 | 首行 `@req <需求ID>`（Python/shell 用 `#`，C/C++/JS/TS/Java/Rust/Go 用 `//`；多个需求用逗号分隔）；若文件有 shebang 或 PEP 263 编码声明，注解紧随其后 | 声明了 `requirements` 但正文漏写 → 自动补注解；引用受控需求目录之外的 ID → **整批拒绝写入**，codegen 失败 |
 | 辅助 / 脚手架代码 | 不需要注解，JSON 输出中声明 `requirements: []` | 允许直接写入 |
 
 注解示例：

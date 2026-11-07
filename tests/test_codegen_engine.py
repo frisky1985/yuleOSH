@@ -284,6 +284,53 @@ class TestEngineWrite:
         assert out == (tmp_path / "artifacts" / "generated-code" / "sess-1").resolve()
 
 
+class TestAnnotationInjection:
+    """@req 注入必须避开 shebang / PEP 263 编码声明 / BOM。"""
+
+    def _inject(self, content, path="src/a.py"):
+        from yuleosh.codegen.engine import inject_requirement_annotations
+
+        return inject_requirement_annotations(content, path, ["SHALL-001"])
+
+    def test_shebang_stays_first(self):
+        src = "#!/usr/bin/env python3\nprint(1)\n"
+        assert self._inject(src) == (
+            "#!/usr/bin/env python3\n# @req SHALL-001\nprint(1)\n"
+        )
+
+    def test_coding_cookie_stays_within_first_two_lines(self):
+        src = "#!/usr/bin/env python3\n# -*- coding: latin-1 -*-\nx = 1\n"
+        assert self._inject(src) == (
+            "#!/usr/bin/env python3\n"
+            "# -*- coding: latin-1 -*-\n"
+            "# @req SHALL-001\n"
+            "x = 1\n"
+        )
+
+    def test_bom_stays_first(self):
+        src = "\ufeff#!/usr/bin/env python3\nx = 1\n"
+        assert self._inject(src) == (
+            "\ufeff#!/usr/bin/env python3\n# @req SHALL-001\nx = 1\n"
+        )
+
+    def test_shebang_without_trailing_newline(self):
+        assert self._inject("#!/usr/bin/env python3") == (
+            "#!/usr/bin/env python3\n# @req SHALL-001\n"
+        )
+
+    def test_plain_source_gets_header_first(self):
+        assert self._inject("x = 1\n") == "# @req SHALL-001\nx = 1\n"
+
+    def test_existing_annotation_untouched(self):
+        src = "# @req SHALL-001\nx = 1\n"
+        assert self._inject(src) == src
+
+    def test_c_uses_line_comment(self):
+        assert self._inject("int main(void){return 0;}\n", "src/a.c") == (
+            "// @req SHALL-001\nint main(void){return 0;}\n"
+        )
+
+
 class TestEngineLoop:
     def _ok_llm(self, system, user, **kw):
         return {"content": _marker_output("src/ok.py", "python",

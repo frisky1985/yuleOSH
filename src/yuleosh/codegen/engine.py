@@ -85,11 +85,41 @@ def requirement_annotation_header(path: str, req_ids: list[str]) -> str:
     return f"{prefix} @req {', '.join(req_ids)}\n"
 
 
+_PY_CODING_RE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*[-\w.]+")
+
+
 def inject_requirement_annotations(content: str, path: str, req_ids: list[str]) -> str:
-    """Prepend the ``@req`` header when the content has no annotation yet."""
+    """Insert the ``@req`` header at a position that preserves file semantics.
+
+    The header must not displace constructs that are position-sensitive:
+    a UTF-8 BOM, a shebang line, or a PEP 263 coding cookie (valid only on
+    lines 1-2). Without this, injecting at offset 0 would break executables
+    and Python source encodings.
+    """
     if not req_ids or extract_requirement_ids(content):
         return content
-    return requirement_annotation_header(path, req_ids) + content
+
+    header = requirement_annotation_header(path, req_ids)
+    bom = ""
+    body = content
+    if body.startswith("\ufeff"):
+        bom, body = "\ufeff", body[1:]
+
+    lines = body.splitlines(keepends=True)
+    idx = 0
+    if lines and lines[0].startswith("#!"):
+        idx = 1
+    if (
+        Path(path).suffix.lower() == ".py"
+        and len(lines) > idx
+        and _PY_CODING_RE.match(lines[idx])
+    ):
+        idx += 1
+
+    head = "".join(lines[:idx])
+    if head and not head.endswith("\n"):
+        head += "\n"
+    return bom + head + header + "".join(lines[idx:])
 
 
 @dataclass
