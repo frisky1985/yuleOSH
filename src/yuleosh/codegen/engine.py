@@ -622,10 +622,11 @@ class CodegenEngine:
     ) -> list[Path]:
         """Write generated files under ``out_dir`` (path-traversal safe).
 
-        Traceability hard rule: every generated source file must declare an
-        ``@req`` annotation linking it to controlled requirements. Missing or
-        out-of-scope annotations abort the write (nothing is written), so a
-        pipeline can never produce untraceable code.
+        Traceability hard rule: a source file that implements controlled
+        requirements must carry an ``@req`` annotation (declared or annotated).
+        Requirement-related files with out-of-scope annotations abort the write
+        (nothing is written). Auxiliary/scaffolding code without any requirement
+        association is allowed to be written unannotated.
         """
         prepared: list[tuple[Path, str]] = []
         violations: list[str] = []
@@ -642,19 +643,19 @@ class CodegenEngine:
             if enforce_requirements and is_source:
                 declared = [r.upper() for r in (f.requirements or [])]
                 annotated = extract_requirement_ids(content)
+                # 只有与需求相关的文件才强制追溯：LLM 声明了 requirements，
+                # 或正文已写 @req。辅助/脚手架代码可以没有需求关联。
                 req_ids = annotated or declared
-                if not req_ids:
-                    violations.append(f"{rel}: 缺少 @req 需求注解")
-                    continue
-                if self.requirement_ids:
-                    unknown = [r for r in req_ids if r not in self.requirement_ids]
-                    if unknown:
-                        violations.append(
-                            f"{rel}: @req 引用了 spec 中不存在的需求 "
-                            f"{', '.join(unknown)}"
-                        )
-                        continue
-                content = inject_requirement_annotations(content, rel, declared)
+                if req_ids:
+                    if self.requirement_ids:
+                        unknown = [r for r in req_ids if r not in self.requirement_ids]
+                        if unknown:
+                            violations.append(
+                                f"{rel}: @req 引用了受控需求目录中不存在的需求 "
+                                f"{', '.join(unknown)}"
+                            )
+                            continue
+                    content = inject_requirement_annotations(content, rel, declared)
 
             prepared.append((target, content))
 

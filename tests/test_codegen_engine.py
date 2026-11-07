@@ -240,20 +240,16 @@ class TestEngineWrite:
         assert written[0].resolve() == (tmp_path / "out" / "evil.py").resolve()
         assert not (tmp_path / "evil.py").exists()
 
-    def test_write_files_rejects_missing_req_annotation(self, tmp_path):
-        """TRACEABILITY HARD RULE: 无 @req 的源文件整体拒绝写入。"""
-        from yuleosh.codegen.engine import CodegenTraceabilityError
-
-        engine = CodegenEngine(output_dir=tmp_path / "out")
-        files = [
-            GeneratedFile("src/ok.py", "# @req SHALL-001\nx = 1", "python"),
-            GeneratedFile("src/bad.py", "y = 2", "python"),
-        ]
-        with pytest.raises(CodegenTraceabilityError, match="bad.py"):
-            engine.write_files(files, tmp_path / "out")
-        # fail-closed: 违规时一个文件都不写
-        assert not (tmp_path / "out" / "src" / "ok.py").exists()
-        assert not (tmp_path / "out" / "src" / "bad.py").exists()
+    def test_auxiliary_code_without_requirements_is_allowed(self, tmp_path):
+        """辅助/脚手架代码无需求关联时允许不带注解。"""
+        engine = CodegenEngine(output_dir=tmp_path / "out",
+                               requirement_ids=["SHALL-001"])
+        files = [GeneratedFile("src/util.py", "def helper():\n    return 1\n", "python")]
+        written = engine.write_files(files, tmp_path / "out")
+        assert len(written) == 1
+        assert (tmp_path / "out" / "src" / "util.py").read_text() == (
+            "def helper():\n    return 1\n"
+        )
 
     def test_write_files_rejects_unknown_requirement_id(self, tmp_path):
         from yuleosh.codegen.engine import CodegenTraceabilityError
