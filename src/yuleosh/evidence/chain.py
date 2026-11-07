@@ -50,6 +50,7 @@ from yuleosh.alm.traceability import (
     validate_review_records,
     write_authoritative_traceability,
 )
+from yuleosh.evidence.drift import detect_drift
 from yuleosh.report import visualization
 
 log = logging.getLogger("evidence.chain")
@@ -684,6 +685,8 @@ def collect_chain(
         and str(n.get("process_area")) != UNCLASSIFIED
     )
 
+    drift = detect_drift(project, rows)
+
     chain = {
         "schema": (rules.get("schema") or {}).get("name", "osh-evidence-chain-v1"),
         "schema_version": (rules.get("schema") or {}).get("version", "1.0.0"),
@@ -696,6 +699,7 @@ def collect_chain(
         "v_model": v_model,
         "artifacts": artifacts,
         "ci_results": ci_results,
+        "requirement_drift": drift,
         "gates": process_gates,
         "problems": [],
         "metrics": {
@@ -719,6 +723,9 @@ def collect_chain(
             "ci_failed": len(ci_failed),
             "reviews": len(reviews),
             "artifacts": len(artifacts),
+            "requirement_drift_changed": len(drift["changed"]),
+            "requirement_drift_added": len(drift["added"]),
+            "requirement_drift_removed": len(drift["removed"]),
             "process_areas": dict(sorted(process_counts.items())),
             "classified_requirements": len([
                 n for n in node_list
@@ -988,6 +995,14 @@ def validate_chain(chain: dict, rules: Optional[dict] = None) -> list[dict]:
         problems.append(_problem(
             "E-CHAIN-GATE", "ERROR",
             "ERROR gates failed: " + ", ".join(str(g.get("id")) for g in failed_gates),
+        ))
+
+    drift = chain.get("requirement_drift") or {}
+    for rid in drift.get("changed") or []:
+        problems.append(_problem(
+            "W-CHAIN-REQ-DRIFT", "WARNING",
+            f"{rid}: 需求正文相对基线已变化，关联代码/测试/评审需复核",
+            req_id=rid,
         ))
 
     return problems

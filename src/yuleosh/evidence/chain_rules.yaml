@@ -150,6 +150,9 @@ gates:
   - id: W-CHAIN-REVIEW-INDEPENDENCE
     severity: WARNING
     rule: "存在评审记录但无任何独立评审时告警，提示 ASPICE GP1.2 独立签署尚未满足"
+  - id: W-CHAIN-REQ-DRIFT
+    severity: WARNING
+    rule: "需求正文哈希相对已接受基线发生变化时告警，关联实现/测试/评审需复核；基线通过 YULEOSH_ACCEPT_REQ_BASELINE=1 显式更新"
 
 # ── ASPICE V 模型与过程域 ─────────────────────────────────────────────
 # 过程域口径遵循 ASPICE v3.1。分类优先级：

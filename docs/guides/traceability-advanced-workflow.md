@@ -87,3 +87,28 @@ pipeline codegen 的强制边界：
 
 漏标需求相关代码不会静默通过：对应需求会在证据链中缺少 `implement` 边，
 由 `G-CODE` 覆盖率门禁暴露。
+
+## 八、漂移检测与语义抽检
+
+覆盖率只能证明链接**存在**，不能证明链接**正确**。为此增加两道检查：
+
+**1. 需求漂移检测**
+
+- 基线：`docs/evidence/baselines/requirement-hashes.json`（持久化，不随 `.osh/` 清空丢失）
+- 每次 `evidence chain` 比较需求正文哈希（空白归一化），正文变化的 ID 产生 `W-CHAIN-REQ-DRIFT`
+- 基线首次运行自动创建；确需接受新基线时显式执行：
+
+```bash
+YULEOSH_ACCEPT_REQ_BASELINE=1 PYTHONPATH=src python3 -m yuleosh.cli.main evidence chain --check
+```
+
+**2. 语义抽检**
+
+```bash
+python3 scripts/gen_semantic_spotcheck.py --count 20
+```
+
+- 按 `sha256(req_id)` 排序取前 N 条，样本可复现
+- 输出 `docs/evidence/pending-reviews/semantic-spotcheck.md`
+- 每条列出需求正文、关联实现文件、`@req` 是否存在，供评审人核对语义一致性
+- 抽检发现写入独立评审记录的 `findings`，不要直接改清单
