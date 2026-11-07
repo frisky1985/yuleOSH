@@ -304,6 +304,46 @@ def scan_code_test_links(project_dir: str | Path) -> dict[str, list[str]]:
     return {path: sorted(set(files)) for path, files in links.items()}
 
 
+def scan_desktop_test_links(project_dir: str | Path) -> dict[str, list[str]]:
+    """Map ``@req`` annotations in ``desktop/tests/*.test.js`` to requirements.
+
+    Jest tests live outside ``tests/`` and are not Python modules, so the
+    generic scanners never see them. Their annotations are declared evidence
+    that a requirement is verified by the desktop suite.
+
+    Returns dict mapping requirement ID (uppercased) to test file paths.
+    """
+    project = Path(project_dir)
+    desktop_tests = project / "desktop" / "tests"
+    if not desktop_tests.exists():
+        return {}
+
+    links: dict[str, list[str]] = {}
+    for test_file in sorted(desktop_tests.rglob("*.test.js")):
+        try:
+            text = test_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = _rel_posix_safe(test_file, project)
+        for match in _REQ_ANNOTATION_RE.finditer(text):
+            for req_id in match.group(1).split(","):
+                req_id = req_id.strip().upper()
+                if not req_id:
+                    continue
+                bucket = links.setdefault(req_id, [])
+                if rel not in bucket:
+                    bucket.append(rel)
+    return links
+
+
+def _rel_posix_safe(path: Path, root: Path) -> str:
+    """Return a POSIX relative path, falling back to the full path."""
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
 # ── SHALL statement extraction ──────────────────────────────────────────
 
 
@@ -635,7 +675,18 @@ def _evidence_subdirs(project_dir: str | Path, name: str) -> list[Path]:
         project / ".yuleosh",
         project / PERSISTED_EVIDENCE_DIR,
     )
-    return [root / name for root in roots if (root / name).exists()]
+    subdirs: list[Path] = []
+    persisted_root = project / PERSISTED_EVIDENCE_DIR
+    for root in roots:
+        rel = name
+        # ``docs/evidence`` is itself the evidence root, so "evidence/reviews"
+        # must not become "docs/evidence/evidence/reviews".
+        if root == persisted_root and name.startswith("evidence/"):
+            rel = name.split("/", 1)[1]
+        candidate = root / rel
+        if candidate.exists():
+            subdirs.append(candidate)
+    return subdirs
 
 
 def scan_review_artifacts(project_dir: str) -> list[dict]:
@@ -682,6 +733,7 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
             "session": session_label,
             "agent": data.get("agent", "unknown") if isinstance(data, dict) else "unknown",
             "reviewed_files": reviewed_files,
+            "requirements": data.get("requirements", []) if isinstance(data, dict) else [],
             "findings": findings,
         })
 
@@ -1120,7 +1172,12 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         desktop_annotations = scan_req_annotations(desktop_dir)
         node_modules = "node_modules"
         for req_id, paths in desktop_annotations.items():
-            cleaned = [p for p in paths if node_modules not in Path(p).parts]
+            # Test files annotate coverage, not implementation; they are linked
+            # through scan_desktop_test_links() instead of as code artifacts.
+            cleaned = [
+                p for p in paths
+                if node_modules not in Path(p).parts and "tests" not in Path(p).parts
+            ]
             if not cleaned:
                 continue
             existing = annotation_map.setdefault(req_id, [])
@@ -1130,6 +1187,7 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     test_code_links = scan_test_code_links(Path(project_dir))
     # Import-level links: test file → production module it exercises
     code_test_links = scan_code_test_links(project_dir)
+    desktop_test_links = scan_desktop_test_links(project_dir)
 
     # Scan for SHALL-N / REQ-ID comments
     code_map = _scan_comments_for_requirements(src_dir, shalls)
@@ -1190,6 +1248,19 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
                 for _score, test_file, code_key in candidates[:MAX_DERIVED_TESTS]
             ]
 
+        # Desktop Jest suites are outside tests/ and declare coverage via @req.
+        for test_file in desktop_test_links.get(spec_req_id, []):
+            if any(
+                isinstance(t, dict) and t.get("file") == test_file
+                for t in matching_tests
+            ):
+                continue
+            matching_tests.append({
+                "file": test_file,
+                "status": "linked",
+                "source": "desktop-test-annotation",
+            })
+
         # Enrich test entries with @tests annotation links (test → code direct traceability)
         for test_entry in matching_tests:
             if isinstance(test_entry, dict) and "file" in test_entry:
@@ -1202,7 +1273,9 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
                     }
 
         # Find reviews that reference this requirement
-        matching_reviews = _find_reviews_for_requirement(reviews, spec_req_id, shall["statement"])
+        matching_reviews = _find_reviews_for_requirement(
+            reviews, spec_req_id, shall["statement"], code_files=matching_code
+        )
 
         # Determine match method for traceability audit
         if req_id in annotation_map or spec_req_id in annotation_map:
@@ -1793,20 +1866,32 @@ def _find_code_by_keywords_for_id(src_dir: Path, req_id: str) -> list[str]:
 
 
 def _find_reviews_for_requirement(reviews: list[dict], req_id: str,
-                                   statement: str) -> list[dict]:
-    """Find reviews referencing a specific requirement."""
+                                   statement: str,
+                                   code_files: Optional[list[str]] = None) -> list[dict]:
+    """Find reviews covering a specific requirement.
+
+    Coverage requires concrete evidence: the review declares the requirement ID,
+    names a file implementing it, or mentions the ID in its findings. Statement
+    keywords are intentionally not used — a desktop review must not count as
+    review evidence for unrelated requirements.
+    """
     matching = []
-    keywords = _extract_keywords(statement)
+    code_names = {Path(str(p)).name for p in (code_files or []) if str(p)}
+    req_lower = req_id.lower()
 
     for review in reviews:
-        review_text = json.dumps(review).lower()
-
-        if req_id.lower() in review_text:
+        declared = {str(x).lower() for x in (review.get("requirements") or [])}
+        if req_lower in declared:
             matching.append(review)
             continue
 
-        kw_matches = sum(1 for kw in keywords if kw in review_text)
-        if len(keywords) > 0 and kw_matches >= max(2, len(keywords) // 3):
+        reviewed_names = {Path(str(p)).name for p in (review.get("reviewed_files") or [])}
+        if code_names & reviewed_names:
+            matching.append(review)
+            continue
+
+        review_text = json.dumps(review).lower()
+        if req_lower and req_lower in review_text:
             matching.append(review)
 
     return matching

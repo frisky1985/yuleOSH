@@ -4,6 +4,8 @@
  * 测试策略：
  *   同步测试：命令解析、URL 构造、状态查询 — 纯逻辑验证
  *   异步测试：使用简单 mock 验证 spawn 调用和健康检查 URL
+ *
+ * @req REQ-001, REQ-006
  */
 /* eslint-disable */
 

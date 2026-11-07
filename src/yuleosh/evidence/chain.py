@@ -231,6 +231,31 @@ def _test_status_map(project_dir: Path) -> dict[str, str]:
             mapping[file_key] = "passed"
         else:
             mapping.setdefault(file_key, "unknown")
+
+    # Jest reports hold per-suite results; map each suite file to its status.
+    for sessions_root in (
+        project_dir / ".osh" / "sessions",
+        project_dir / ".yuleosh" / "sessions",
+        project_dir / PERSISTED_EVIDENCE_DIR / "sessions",
+    ):
+        if not sessions_root.exists():
+            continue
+        for report_file in sorted(sessions_root.glob("*/jest-report.json")):
+            try:
+                data = json.loads(report_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            for suite in data.get("testResults") or []:
+                name = Path(str(suite.get("name") or suite.get("testFilePath") or "")).name
+                if not name:
+                    continue
+                status = str(suite.get("status") or "")
+                if status == "passed":
+                    mapping[name] = "passed"
+                elif status == "failed":
+                    mapping[name] = "failed"
+                else:
+                    mapping.setdefault(name, "unknown")
     return mapping
 
 

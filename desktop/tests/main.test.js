@@ -7,6 +7,8 @@
  *   - AC-1.2.2: contextIsolation=true, nodeIntegration=false
  *   - AC-1.3.1: 加载 frontend/out/ 静态文件路径正确
  *   - AC-4.1.1: 应用菜单构造
+ *
+ * @req REQ-006
  */
 /* eslint-disable */
 
