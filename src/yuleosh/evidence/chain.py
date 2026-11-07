@@ -549,11 +549,13 @@ def collect_chain(
     reviews = scan_review_artifacts(str(project))
     for review in reviews:
         session = str(review.get("session") or "unknown")
+        record = review.get("record") or {}
         add_node({
             "id": f"review:{session}",
             "type": "review",
             "title": session,
             "status": "findings" if review.get("findings") else "clean",
+            "independence": str(record.get("reviewer_independence") or "unknown"),
             "refs": [str(p) for p in (review.get("reviewed_files") or [])],
         })
     for edge in _review_edges(rows, reviews):
@@ -599,7 +601,9 @@ def collect_chain(
     thresholds = rules.get("thresholds") or {}
     min_test = float(thresholds.get("min_test_coverage_pct", 60))
     min_code = float(thresholds.get("min_code_coverage_pct", 60))
+    min_review = float(thresholds.get("min_review_coverage_pct", 60))
     review_required = bool(thresholds.get("review_required", False))
+    independent_review_required = bool(thresholds.get("independent_review_required", False))
 
     req_ids = {str(r.get("req_id")) for r in canonical_rows}
 
@@ -611,7 +615,20 @@ def collect_chain(
 
     accepted_code = _accepted_sources("implement") & req_ids
     accepted_test = _accepted_sources("verify") & req_ids
-    accepted_review = _accepted_sources("review") & req_ids
+    if independent_review_required:
+        # ASPICE GP1.2: only independent reviews count towards review coverage.
+        independent_review_ids = {
+            str(n.get("id")) for n in nodes.values()
+            if n.get("type") == "review" and str(n.get("independence")) == "independent"
+        }
+        accepted_review = {
+            str(e.get("from")) for e in edges.values()
+            if str(e.get("kind")) == "review"
+            and e.get("status") == "accepted"
+            and str(e.get("to")) in independent_review_ids
+        } & req_ids
+    else:
+        accepted_review = _accepted_sources("review") & req_ids
     with_code_accepted = len(accepted_code)
     with_test_accepted = len(accepted_test)
     with_review_accepted = len(accepted_review)
@@ -646,8 +663,11 @@ def collect_chain(
              f"accepted test coverage {test_pct}% "
              f"(raw {test_raw_pct}%, threshold {min_test:g}%)"),
         gate("G-REVIEW", "ERROR" if review_required else "WARNING",
-             True if with_review_accepted else None,
-             f"{with_review_accepted}/{total} requirement(s) have accepted review links"),
+             None if not review_required and not with_review_accepted
+             else review_pct >= min_review,
+             f"accepted {'independent ' if independent_review_required else ''}review coverage "
+             f"{review_pct}% ({with_review_accepted}/{total} requirement(s), "
+             f"raw {review_raw_pct}%, threshold {min_review:g}%)"),
         gate("G-CI", "ERROR", None if not ci_results else not ci_failed,
              "no CI results" if not ci_results else f"{len(ci_results)} run(s), {len(ci_failed)} failed"),
     ]

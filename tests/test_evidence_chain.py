@@ -20,6 +20,44 @@ from yuleosh.evidence.chain import (
 from yuleosh.skills.builtin import builtin_skills
 
 
+def _add_independent_review(project: Path) -> None:
+    """Add a complete independent review record covering every matrix row."""
+    matrix_path = project / ".osh" / "evidence" / "traceability-matrix.json"
+    matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+    rows = matrix.get("requirements") or []
+    for row in rows:
+        row["has_review"] = True
+    matrix_path.write_text(json.dumps(matrix), encoding="utf-8")
+
+    review = {
+        "artifact_type": "independent-review",
+        "reviewer_independence": "independent",
+        "reviewer": {"name": "QA Reviewer", "role": "independent reviewer"},
+        "independence_declaration": {
+            "not_author_of_artifact": True,
+            "not_contributor_to_change": True,
+            "no_conflict_of_interest": True,
+        },
+        "signoff": {
+            "reviewer_signature": "QA-2026",
+            "signed_at": "2026-11-08T10:00:00+08:00",
+        },
+        "requirements": [str(r.get("req_id")) for r in rows],
+        "reviewed_files": sorted({
+            str(f)
+            for r in rows
+            for f in (r.get("code_files") or []) + (r.get("test_files") or [])
+        }),
+        "findings": [],
+        "verdict": "pass",
+    }
+    reviews_dir = project / "docs" / "evidence" / "reviews"
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+    (reviews_dir / "independent-review-001.json").write_text(
+        json.dumps(review), encoding="utf-8"
+    )
+
+
 def _make_matrix_project(tmp_path: Path, requirements: list[dict]) -> Path:
     ev = tmp_path / ".osh" / "evidence"
     ev.mkdir(parents=True, exist_ok=True)
@@ -61,6 +99,7 @@ class TestCollectChain:
             _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
             _req("SHALL-002", ["src/b.c"], ["tests/test_b.py"]),
         ])
+        _add_independent_review(project)
         chain = collect_chain(str(project))
 
         assert chain["schema"] == "osh-evidence-chain-v1"
@@ -151,7 +190,7 @@ class TestTraceConfidence:
 
 class TestAspiceVModel:
     def _full_v_model_project(self, tmp_path):
-        return _make_matrix_project(tmp_path, [
+        project = _make_matrix_project(tmp_path, [
             _req("SYS.1-001", ["src/a.c"], ["tests/unit/test_a.py"]),
             _req("SYS.2-001", ["src/b.c"], ["tests/unit/test_b.py"], upstream="SYS.1-001"),
             _req("SYS.3-001", ["src/c.c"], ["tests/unit/test_c.py"], upstream="SYS.2-001"),
@@ -159,6 +198,18 @@ class TestAspiceVModel:
             _req("SWE.2-001", ["src/e.c"], ["tests/unit/test_e.py"], upstream="SWE.1-001"),
             _req("SWE.3-001", ["src/f.c"], ["tests/unit/test_f.py"], upstream="SWE.2-001"),
         ])
+        _add_independent_review(project)
+        return project
+
+    def test_review_policy_fails_without_independent_review(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        chain = collect_chain(str(project))
+        gate = next(g for g in chain["gates"] if g["id"] == "G-REVIEW")
+        assert gate["status"] == "FAIL"
+        assert gate["severity"] == "ERROR"
+        assert chain["summary"]["status"] == "FAIL"
 
     def test_links_have_semantics_and_accepted_status(self, tmp_path):
         chain = collect_chain(str(self._full_v_model_project(tmp_path)))
@@ -315,6 +366,7 @@ class TestCli:
         project = _make_matrix_project(tmp_path, [
             _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
         ])
+        _add_independent_review(project)
         code = cmd_evidence_chain(str(project), check_only=True)
         assert code == 0
         assert "PASS" in capsys.readouterr().out

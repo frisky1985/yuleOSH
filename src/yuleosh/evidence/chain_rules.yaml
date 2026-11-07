@@ -300,7 +300,10 @@ aspice:
 thresholds:
   min_test_coverage_pct: 60
   min_code_coverage_pct: 60
-  review_required: false      # true 时 G-REVIEW 缺失判 ERROR
+  # ASPICE GP1.2: 所有工作产物 SHALL 经独立评审；自评审不计入覆盖。
+  review_required: true
+  min_review_coverage_pct: 100
+  independent_review_required: true
   min_vmodel_pair_coverage_pct: 100
 
 process_gates:
@@ -314,8 +317,8 @@ process_gates:
     severity: ERROR
     rule: "测试覆盖率 >= thresholds.min_test_coverage_pct"
   - id: G-REVIEW
-    severity: WARNING
-    rule: "至少存在一次评审；review_required=true 时升为 ERROR"
+    severity: ERROR
+    rule: "独立评审覆盖率 >= thresholds.min_review_coverage_pct；review_required=true 时缺失即 ERROR"
   - id: G-CI
     severity: ERROR
     rule: "CI 结果存在且无 failed；完全没有 CI 结果时记 WARNING"
