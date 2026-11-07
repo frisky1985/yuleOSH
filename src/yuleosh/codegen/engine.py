@@ -47,7 +47,8 @@ _FILE_RE = re.compile(
 )
 _FENCE_RE = re.compile(r"^```(?P<lang>[A-Za-z0-9_+-]*)\s*$", re.MULTILINE)
 
-# Traceability hard rule: every generated source file must declare @req.
+# Traceability hard rule: requirement-related source files must declare @req.
+# Auxiliary code with no requirement association may omit the annotation.
 _REQ_ANNOTATION_RE = re.compile(
     r"@req\s*[\(\s]\s*([A-Z][A-Z0-9_.\-]+(?:\s*,\s*[A-Z][A-Z0-9_.\-]+)*)",
     re.IGNORECASE,

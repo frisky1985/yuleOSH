@@ -121,7 +121,36 @@ artifacts/generated-code/<session-name>/
 
 路径会做安全清洗（剥离 `../`、前导 `/`），防止逃逸输出目录。
 
-## 6. 程序化使用
+## 6. 需求注解与可追溯性（硬规则）
+
+只有**实现受控需求**的源文件必须带 `@req` 注解；辅助代码（构建脚手架、工具脚本、
+生成的 helper）不需要注解。
+
+| 文件类型 | 标注要求 | 引擎行为 |
+|---|---|---|
+| 实现 spec / 需求目录中的需求 | 首行 `@req <需求ID>`（Python/shell 用 `#`，C/C++/JS/TS/Java/Rust/Go 用 `//`；多个需求用逗号分隔） | 声明了 `requirements` 但正文漏写 → 自动补注解；引用受控需求目录之外的 ID → **整批拒绝写入**，codegen 失败 |
+| 辅助 / 脚手架代码 | 不需要注解，JSON 输出中声明 `requirements: []` | 允许直接写入 |
+
+注解示例：
+
+```c
+// @req REQ-001, REQ-006
+int main(void) { ... }
+```
+
+```python
+# @req SHALL-248
+def start_backend(): ...
+```
+
+pipeline 会把 `.osh/evidence/traceability-matrix.json` 中的 `req_id` 作为权威
+需求目录注入 prompt，LLM 只能使用其中存在的 ID；矩阵尚不存在时只校验注解语法，
+不校验成员，避免编造需求号。
+
+漏标不会被静默放过：文件若实际实现需求但没有声明，该需求在证据链中会缺少
+`implement` 边，由 `G-CODE` 门禁暴露为覆盖率缺口。
+
+## 7. 程序化使用
 
 ```python
 from yuleosh.codegen import CodegenEngine, parse_generated_files, build_codegen_prompt
@@ -137,7 +166,7 @@ result = engine.generate(session, sys_prompt, user_prompt)
 print(result.status, result.files, result.report_path)
 ```
 
-## 7. 范围外
+## 8. 范围外
 
 - 不改动 pipeline 其他步骤行为（默认模式仍输出 planning）
 - 不做多语言编译器沙箱（仅本机工具链）
