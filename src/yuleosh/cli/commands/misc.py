@@ -522,6 +522,18 @@ def cmd_init(dir_path: str = "."):
             encoding="utf-8",
         )
 
+    # Starter spec — without it the documented quick start
+    # (``yuleosh init p && cd p && yuleosh pipeline run docs/spec.md``)
+    # fails at spec-check with "No such file or directory".
+    spec_path = target / "docs" / "spec.md"
+    if not spec_path.exists():
+        from yuleosh.cli.template import STARTER_SPEC
+
+        spec_path.write_text(
+            STARTER_SPEC.format(name=target.resolve().name or "project"),
+            encoding="utf-8",
+        )
+
     # Available CI stages
     available_stages = []
     if shutil.which("cppcheck"):
@@ -537,8 +549,9 @@ def cmd_init(dir_path: str = "."):
         print(f"     • {stage_name}")
     print()
     print(f"   Next steps:")
-    print(f"   1. Add your source code to src/")
-    print(f"   2. Run: yuleosh ci run 1    # Verify L1 CI")
+    print(f"   1. Edit docs/spec.md (SHALL / GIVEN-WHEN-THEN)")
+    print(f"   2. Set LLM_API_KEY (real LLM) or use --mock")
+    print(f"   3. Run: yuleosh pipeline run docs/spec.md")
     print()
 
 

@@ -189,3 +189,38 @@ def test_default_passes_when_left_branch_absent(tmp_path, monkeypatch):
     out = _run_spec_check(sess)  # 不得抛异常
     assert out == str(sdir / "spec-check.json")
     assert not (sdir / "sys-spec-alignment.json").exists()
+
+
+# ── spec-derived (方向倒置): 不得阻断 ─────────────────────────────────────
+def test_align_report_status_spec_derived(tmp_path):
+    """SYS 文档由 spec 反推 (机读标记 spec-derived) → 不做引用校验。"""
+    sess, sdir = _mk(
+        tmp_path,
+        sys_doc="# SYS\n> 派生来源 (机读): `spec-derived`\n\nSYS-REQ-001 alpha\n",
+        spec_text="# Spec\nno refs\n",
+    )
+    rep = spec_mod._check_sys_requirements_aligned(sess)
+    assert rep["status"] == "spec-derived"
+    assert rep["missing_in_spec"] == []
+    align = json.loads((sdir / "sys-spec-alignment.json").read_text(encoding="utf-8"))
+    assert align["status"] == "spec-derived"
+
+
+def test_default_passes_when_sys_doc_spec_derived(tmp_path, monkeypatch):
+    """默认 strict + 新建项目 (SYS 由 spec 反推) → 不得在 spec-check RED。
+
+    这正是 ``yuleosh init`` 后直接 ``pipeline run`` 的默认路径: 要求 spec
+    引用随后才生成的 SYS-REQ 在逻辑上不可能。
+    """
+    monkeypatch.delenv("OSH_SYS_ALIGN_STRICT", raising=False)
+    sess, sdir = _mk(
+        tmp_path,
+        sys_doc=(
+            "# 系统需求规格 (SYS.1)\n"
+            "> 派生来源 (机读): `spec-derived`\n\n"
+            "- **SYS-REQ-001** — 系统应提供「核心功能」能力\n"
+        ),
+        spec_text="# Spec\nno SYS references\n",
+    )
+    out = _run_spec_check(sess)  # 不得抛异常
+    assert out == str(sdir / "spec-check.json")

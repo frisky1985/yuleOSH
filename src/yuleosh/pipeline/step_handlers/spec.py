@@ -235,6 +235,27 @@ def _check_sys_requirements_aligned(session: PipelineSession) -> Optional[dict]:
                 "status": "none-parsed",
             }
 
+        # 方向倒置豁免: 无涉众需求时 SYS 文档由 spec 反推生成
+        # (``> 派生来源 (机读): `spec-derived```, 见 sys_layer.step_sys_requirements)。
+        # 此时要求 spec 引用这些 SYS-REQ 在逻辑上不可能做到 —— 而恰恰是
+        # ``yuleosh init`` 新建项目 + pipeline 跑 SYS.1 的默认路径, 若不放行
+        # 每个新项目都会在 spec-check 直接 RED。
+        if re.search(r"派生来源\s*\(机读\)\s*:\s*`?spec-derived", text):
+            report = {
+                "total_sys_reqs": len(sys_reqs),
+                "aligned": [],
+                "missing_in_spec": [],
+                "status": "spec-derived",
+                "note": "SYS 需求由 spec 反推（V 模型方向倒置），不做 SYS→spec 引用校验",
+            }
+            out = session.session_dir / "sys-spec-alignment.json"
+            out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            session.set_artifact("sys_spec_alignment", str(out))
+            log.info(
+                "[链路B] SYS 需求为 spec 反推 (source=spec-derived)，跳过引用对齐校验"
+            )
+            return report
+
         spec_path = Path(session.spec_path)
         spec_text = spec_path.read_text(encoding="utf-8") if spec_path.exists() else ""
         missing = [rid for rid in sys_reqs if rid not in spec_text]
