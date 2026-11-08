@@ -46,6 +46,10 @@ Thumbs.db
 .env
 .venv/
 venv/
+.venv312/
+
+# 本地示例工程（todo-app 演练产物，不入库）
+/todo-app/
 
 # Secrets / certificates
 *.key
