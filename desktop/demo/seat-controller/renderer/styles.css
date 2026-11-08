@@ -1,0 +1,549 @@
+/* 座椅控制器 — 深色车载 HMI 风格 */
+
+:root {
+  --bg: #0a1017;
+  --card: #121d29;
+  --card-2: #0f1923;
+  --line: #22303f;
+  --text: #e8f1f8;
+  --muted: #8aa0b4;
+  --accent: #38e1c6;
+  --warm: #ff9f43;
+  --cool: #5ad2ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background:
+    radial-gradient(1100px 620px at 18% -12%, #16293b 0%, transparent 58%),
+    radial-gradient(900px 520px at 108% 112%, #142430 0%, transparent 55%),
+    var(--bg);
+  user-select: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100vh;
+  padding: 16px 20px 12px;
+}
+
+/* ─── 顶栏 ─────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #04201d;
+  background: linear-gradient(135deg, var(--accent), #1f9f8d);
+  box-shadow: 0 6px 18px rgba(56, 225, 198, 0.25);
+}
+
+.brandText h1 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: 1px;
+}
+
+.brandText p {
+  margin: 3px 0 0;
+  font-size: 10px;
+  letter-spacing: 2.4px;
+  color: var(--muted);
+}
+
+.topStatus {
+  display: flex;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(18, 29, 41, 0.72);
+}
+
+.chip b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ─── 布局 ─────────────────────────────────────── */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(430px, 1fr) 434px;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--card), var(--card-2));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.cardHead h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+}
+
+.tag {
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  color: #5b7488;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 16px 8px;
+}
+
+#seatSvg {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+/* 姿态过渡 */
+#seatRoot,
+#backrestGroup,
+#headrestGroup,
+#legRestGroup {
+  transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+#heatBack,
+#heatSeat,
+#heatLeg {
+  transition: opacity 0.45s ease;
+}
+
+#ventBack,
+#ventSeat {
+  transition: opacity 0.35s ease;
+}
+
+#ventBack path,
+#ventSeat path {
+  stroke-dasharray: 4 9;
+}
+
+.venting path {
+  animation: airflow 0.85s linear infinite;
+}
+
+@keyframes airflow {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+#massageBack {
+  transition: opacity 0.3s ease;
+}
+
+#massageBack circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: massPulse 1.3s ease-in-out infinite;
+}
+
+#seatSvg[data-massage="wave"] #massageBack circle:nth-child(2) {
+  animation-delay: 0.22s;
+}
+
+#seatSvg[data-massage="wave"] #massageBack circle:nth-child(3) {
+  animation-delay: 0.44s;
+}
+
+#seatSvg[data-massage="lumbar"] #massageBack circle:first-child {
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes massPulse {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+.telemetry {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 8px 0 2px;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.telemetry li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: center;
+}
+
+.telemetry span {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.telemetry b {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── 控制面板 ─────────────────────────────────── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #26394a;
+}
+
+.panel .card {
+  padding: 11px 14px 13px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 70px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.rowCompact {
+  margin-top: 9px;
+}
+
+.rowLabel {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rowValue {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #2c4257, #22303f);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 2px solid #06201c;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(56, 225, 198, 0.55);
+  -webkit-appearance: none;
+}
+
+input[type="range"]:focus-visible {
+  outline: none;
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(56, 225, 198, 0.22);
+}
+
+input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.func + .func {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #1e2c3a;
+}
+
+.funcHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.funcVal {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.seg {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0c151e;
+}
+
+.seg button {
+  padding: 5px 0;
+  border: 0;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.seg button:hover {
+  color: var(--text);
+  background: #17242f;
+}
+
+.seg button:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.seg button.active {
+  color: #04201d;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--accent), #22b8a1);
+}
+
+/* 记忆位置 */
+
+.memGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.mem {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d1721;
+  text-align: center;
+}
+
+.memName {
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+
+.mem.saved {
+  border-color: rgba(56, 225, 198, 0.38);
+}
+
+.mem.saved .memName::after {
+  content: "已存储";
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.memActions button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.memActions {
+  display: flex;
+  gap: 5px;
+}
+
+.memActions button {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  background: #14202c;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+
+.memActions button:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.memActions button:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+/* ─── 底栏 ─────────────────────────────────────── */
+
+.footbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.primary {
+  padding: 9px 22px;
+  border: 1px solid rgba(56, 225, 198, 0.4);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(56, 225, 198, 0.08);
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.primary:hover {
+  background: rgba(56, 225, 198, 0.16);
+  box-shadow: 0 0 16px rgba(56, 225, 198, 0.18);
+}
+
+.primary:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.footHint {
+  font-size: 11px;
+  color: #5b7488;
+}
+
+.ver {
+  margin-left: auto;
+  font-size: 11px;
+  color: #4d6478;
+}
+
+/* ─── Toast ────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 58px;
+  left: 50%;
+  padding: 9px 20px;
+  border: 1px solid rgba(56, 225, 198, 0.35);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(14, 26, 36, 0.94);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  pointer-events: none;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
