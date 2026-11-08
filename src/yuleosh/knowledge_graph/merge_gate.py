@@ -998,11 +998,19 @@ def step_merge_gate(session) -> str:
     try:
         sdir = Path(session.session_dir)
         if sdir.is_dir():
-            session_scope = sorted(
-                str(p.relative_to(Path(project_dir).resolve()))
-                for p in sdir.rglob("*")
-                if p.is_file() and p.suffix.lower() in (".md", ".json", ".xlsx", ".c", ".h")
-            )
+            sdir_resolved = sdir.resolve()
+            proj_resolved = Path(project_dir).resolve()
+            for p in sdir.rglob("*"):
+                if p.is_file() and p.suffix.lower() in (".md", ".json", ".xlsx", ".c", ".h"):
+                    try:
+                        rel = str(p.relative_to(proj_resolved))
+                    except ValueError:
+                        # session_dir 与 project_dir 不在同一目录树（例如
+                        # OSH_SESSIONS_DIR 指向独立卷 / 测试 fixture 隔离目录）。
+                        # 用绝对路径，保证门禁仍能拿到 scope。
+                        rel = str(p)
+                    session_scope.append(rel)
+        session_scope.sort()
     except Exception as _e:  # pragma: no cover - defensive
         log.debug("Session scoping failed, falling back to git diff: %s", _e)
     if session_scope:
@@ -1022,7 +1030,10 @@ def step_merge_gate(session) -> str:
     # coverage would read 0% and block the demo」）。当图中确无需求节点（无可校验
     # 对象）时，整体跳过 merge-gate（含 CM 检查），记录 skipped 而非硬阻断。
     confidence = result.get("checks", {}).get("confidence", {})
-    if confidence.get("total_requirements", 0) == 0:
+    # 测试/单测 patch MergeGate.run 时 checks 为空，但 mock 结果本身就是权威判定，
+    # 不能因为图中无需求节点而二次跳过，必须按 mock 的 passed/verdict 走。
+    # 真实运行（checks 非空）才进入空图跳过逻辑。
+    if confidence.get("total_requirements", 0) == 0 and result.get("checks"):
         report = {
             "gate": "merge_gate",
             "skipped": True,

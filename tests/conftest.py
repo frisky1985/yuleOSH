@@ -321,6 +321,17 @@ def _isolate_process_state():
             os.chdir(saved_cwd)
         except OSError:  # 目录在测试中被删除时忽略
             pass
+        # 清理测试内新建的 KG store / PipelineSession 缓存（OSH_HOME 变化后
+        # 模块级单例仍指向旧临时目录，导致 step_merge_gate 等拿到脏路径）。
+        from yuleosh.knowledge_graph import store as _kg_store
+        from yuleosh.pipeline import session as _pl_session
+        for holder in (_kg_store, _pl_session):
+            for attr in ("_store", "_session", "_instance", "_current_session"):
+                if hasattr(holder, attr):
+                    try:
+                        delattr(holder, attr)
+                    except Exception:
+                        pass
 
 
 @pytest.fixture(autouse=True)

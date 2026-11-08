@@ -74,6 +74,17 @@ class Store(AbstractStore):
             self._local.conn = conn
         return conn
 
+    @conn.setter
+    def conn(self, value):
+        """Allow tests to inject a mock connection (patch.object(store, "conn", ...))."""
+        self._local.conn = value
+
+    @conn.deleter
+    def conn(self):
+        """Allow tests to drop the per-thread connection cache."""
+        if hasattr(self._local, "conn"):
+            del self._local.conn
+
     # Current migration version — bump to trigger new table creation
     _MIGRATION_VERSION = 11  # v0.11: role_permission_audit log; v0.10: users.status
 
