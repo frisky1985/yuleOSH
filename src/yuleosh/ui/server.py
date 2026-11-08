@@ -371,6 +371,19 @@ class OSHHandler(BaseHTTPRequestHandler):
         logging.info("%s - %s", self.client_address[0], msg)
 
 
+def main(host: str | None = None, port: int | None = None) -> None:
+    """Re-export of :func:`yuleosh.ui.http_app.main`.
+
+    ``http_app`` imports this module at call time, so the import must stay
+    lazy to avoid a circular import.  The CLI entry point
+    (``yuleosh ui``) imports ``main`` from here; this wrapper keeps that
+    import working while preserving the split module boundaries.
+    """
+    from yuleosh.ui.http_app import main as _http_main
+
+    _http_main(host, port)
+
+
 if __name__ == "__main__":
     # 延迟导入，避免 yuleosh.ui.server ↔ yuleosh.ui.http_app 循环导入
     from yuleosh.ui.http_app import main as _http_main

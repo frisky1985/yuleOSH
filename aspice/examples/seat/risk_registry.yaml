@@ -1,0 +1,75 @@
+# MAN.5 风险登记册（真源）。exposure 由机器按 P×I 复算；P/I 定级是人判断，签字背书（示例数据）。
+meta:
+  project: 主驾座椅控制器（SCM）示例
+  exposure_threshold: 6        # exposure ≥ 阈值必须有趣应对 + 复审日期
+risks:
+  - id: R-SEAT-001
+    category: 供应链
+    desc: LIN 收发器 TJA1021 单源供货，缺货导致停产
+    trigger: 供应商交期 > 8 周
+    p: 2
+    i: 4
+    strategy: 减轻
+    mitigation: 第二供应商评估（兼容料），安全库存 4 周
+    owner: 示例
+    plan_close: 2027-01-15
+    actual_close: null
+    status: 缓解中
+    review: 2026-12-01
+    linked_pr: null
+  - id: R-SEAT-002
+    category: 技术
+    desc: 防夹算法误检率超标，导致误反转或不反转
+    trigger: 台架用例误检率 > 1%
+    p: 2
+    i: 5
+    strategy: 减轻
+    mitigation: 堵转电流 + 位置双判据；边界用例纳入 ENG_测试规范
+    owner: 示例
+    plan_close: 2026-12-20
+    actual_close: null
+    status: 缓解中
+    review: 2026-11-20
+    linked_pr: null
+  - id: R-SEAT-003
+    category: 技术
+    desc: LIN 总线电磁兼容（EMC）测试不达标
+    trigger: 摸底测试辐射超标
+    p: 2
+    i: 3
+    strategy: 减轻
+    mitigation: 原理图已含 TVS/共模电感；Layout 后 SI 评审
+    owner: 示例
+    plan_close: 2027-02-28
+    actual_close: null
+    status: 缓解中
+    review: 2026-12-10
+    linked_pr: null
+  - id: R-SEAT-004
+    category: 管理
+    desc: 需求变更导致追溯链返工
+    trigger: 基线后 SYS 需求变更
+    p: 3
+    i: 2
+    strategy: 接受
+    mitigation: 变更走 SUP.10 自动登记；trace_check 门禁兜底
+    owner: 示例
+    plan_close: 2026-12-05
+    actual_close: null
+    status: 缓解中
+    review: 2026-11-30
+    linked_pr: null
+  - id: R-SEAT-005
+    category: 合规
+    desc: 示例数据被误用为真实项目证据
+    trigger: 审计时无法区分示例与真实
+    p: 1
+    i: 4
+    strategy: 规避
+    mitigation: 全部产物红色示例声明 + README 范围边界
+    owner: 示例
+    plan_close: 2026-11-06
+    actual_close: 2026-11-06
+    status: 已关闭
+    review: 2026-12-31
+    linked_pr: null

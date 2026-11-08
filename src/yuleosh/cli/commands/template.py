@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from jinja2 import Template
 
 OSH_HOME = os.environ.get("OSH_HOME", os.path.expanduser("~/.openclaw"))
 

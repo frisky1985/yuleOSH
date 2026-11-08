@@ -1,0 +1,94 @@
+{
+  "version": "0.1",
+  "doc_alias": "ENG_测试规范",
+  "artifacts": [
+    {
+      "path": "evidence/SYS-SEAT-001-TC-01.md",
+      "sha256": "9c62462ef59f7919fd46bb4b447a88b4cc52753a069d88c9333af2d6802ee7f2",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-001-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-001-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-001-TC-01::判定结论"
+      ]
+    },
+    {
+      "path": "evidence/SYS-SEAT-002-TC-01.md",
+      "sha256": "6c00aedc0e6ca0ecf75413c10f49426226cba94076206b4a7bc8cb3ae74cc701",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-002-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-002-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-002-TC-01::判定结论"
+      ]
+    },
+    {
+      "path": "evidence/SYS-SEAT-003-TC-01.md",
+      "sha256": "4f499f7b44eb524fc7240be812491a4c4cfd2ebfd856e1f1bdabb4651df2a844",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-003-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-003-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-003-TC-01::判定结论"
+      ]
+    },
+    {
+      "path": "evidence/SYS-SEAT-004-TC-01.md",
+      "sha256": "244f0a166c1a3c4f15ac5602dd9e53b70896625a1b324920244ca83d7d4a3fd3",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-004-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-004-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-004-TC-01::判定结论"
+      ]
+    },
+    {
+      "path": "evidence/SYS-SEAT-005-TC-01.md",
+      "sha256": "e6b5cf6940e25264ac543461b75d21f3392f438a4d0381cfefac10f31a3c9081",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-005-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-005-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-005-TC-01::判定结论"
+      ]
+    },
+    {
+      "path": "evidence/SYS-SEAT-006-TC-01.md",
+      "sha256": "7490977244dbd29b2aae67242ce73728958141973eb73c4d13b5f71d471bf754",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-006-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-006-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-006-TC-01::判定结论"
+      ]
+    },
+    {
+      "path": "evidence/SYS-SEAT-007-TC-01.md",
+      "sha256": "df4e36a2830feed42308bf04b6be19fbf075bebee7fdce1e6dd4e6659d26736b",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-007-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-007-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-007-TC-01::判定结论"
+      ]
+    },
+    {
+      "path": "evidence/SYS-SEAT-008-TC-01.md",
+      "sha256": "710ff77bfac9e6d7ecebf7d096f7296a82f7633ee96a461f0b1ebc136fb652ae",
+      "stage": "test",
+      "verdict": "PASS",
+      "fills": [
+        "ENG_测试规范::SYS-SEAT-008-TC-01::实际结果",
+        "ENG_测试规范::SYS-SEAT-008-TC-01::测试日志链接",
+        "ENG_测试规范::SYS-SEAT-008-TC-01::判定结论"
+      ]
+    }
+  ]
+}

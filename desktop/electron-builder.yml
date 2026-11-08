@@ -15,6 +15,7 @@ files:
   - preload.js
   - server-manager.js
   - tray.js
+  - logger.js
   - package.json
   - assets/**/*
 
@@ -22,6 +23,11 @@ files:
 extraResources:
   - from: ../frontend/out
     to: frontend-out
+    filter:
+      - "**/*"
+  # 内置 Python 运行时（PyInstaller onedir 产物），由 npm run build:backend 生成
+  - from: build/backend/yuleosh-server
+    to: backend
     filter:
       - "**/*"
 

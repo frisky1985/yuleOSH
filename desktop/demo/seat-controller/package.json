@@ -1,0 +1,17 @@
+{
+  "name": "seat-controller",
+  "productName": "座椅控制器",
+  "version": "0.1.0",
+  "description": "座椅控制器 Demo — 基于 yuleOSH Desktop 的 Electron 桌面演示程序",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "author": "frisky1985",
+  "license": "Elastic-2.0",
+  "devDependencies": {
+    "electron": "^43.2.0"
+  }
+}

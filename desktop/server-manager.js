@@ -1,6 +1,8 @@
 /**
  * server-manager.js — yuleOSH Python 后端子进程生命周期管理
  *
+ * @req SHALL-253
+ *
  * 职责:
  *   - 启动 Python 后端子进程 (yuleosh UI server)
  *   - 健康检查轮询 (GET /api/v1/health)
@@ -8,7 +10,7 @@
  *   - 异常处理与通知
  */
 
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -32,10 +34,42 @@ class ServerManager extends EventEmitter {
     this.pythonCmd = options.pythonCmd || 'python3';
     this.backendDir = options.backendDir || this._resolveBackendDir();
     this.process = null;
+    this.logger = options.logger || null;
     this._healthTimer = null;
     this._isShuttingDown = false;
+    this._restarting = false;
+    this._starting = false;
     this.maxRestartAttempts = 2;
     this.restartCount = 0;
+  }
+
+  /**
+   * 解析内置后端可执行文件（PyInstaller 产物）。
+   *
+   * - 打包态：resources/backend/yuleosh-server[.exe] 始终优先
+   * - 开发态：仅在 ELECTRON_USE_BUNDLED_BACKEND=true 时使用
+   *   desktop/build/backend/yuleosh-server/yuleosh-server，避免构建产物
+   *   遮蔽正在修改的 Python 源码
+   *
+   * @returns {string|null}
+   */
+  _resolveBundledBackend() {
+    const exeName = process.platform === 'win32' ? 'yuleosh-server.exe' : 'yuleosh-server';
+    const candidates = [];
+
+    if (process.resourcesPath) {
+      candidates.push(path.join(process.resourcesPath, 'backend', exeName));
+    }
+    if (process.env.ELECTRON_USE_BUNDLED_BACKEND === 'true') {
+      candidates.push(path.resolve(__dirname, 'build', 'backend', 'yuleosh-server', exeName));
+    }
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   /**
@@ -45,10 +79,8 @@ class ServerManager extends EventEmitter {
    *   从 desktop/ → ../src/ （项目源码目录）
    *
    * 生产模式 (Electron 打包):
-   *   Python 后端不以 asar 形式打包（electron-builder.yml 无 backend extraResources），
-   *   必须通过 pip install yuleosh 提前安装。
-   *   此处返回 process.resourcesPath 作为 fallback 工作目录，
-   *   同时使用 Electron userData 目录作为 OSH_HOME 持久化路径。
+   *   优先使用内置 PyInstaller 可执行文件，工作目录取其所在目录；
+   *   未内置时回退到 resources/backend-src 或用户数据目录。
    */
   _resolveBackendDir() {
     const isDev = process.env.ELECTRON_DEV === 'true';
@@ -62,15 +94,24 @@ class ServerManager extends EventEmitter {
     }
 
     // ── 生产模式 ──────────────────────────────────────────────
-    const resourcesDir = process.resourcesPath;
+    // process.resourcesPath is only defined in a packaged Electron runtime.
+    // Fall back to the project root so the module remains loadable in tests
+    // and in `electron .` runs before packaging.
+    const resourcesDir = process.resourcesPath || path.resolve(__dirname, '..');
 
-    // 第一步：检查 extraResources 中是否包含后端源码（预留扩展）
+    // 第一步：内置后端可执行文件（推荐路径，用户无需安装 Python）
+    const bundledBinary = this._resolveBundledBackend();
+    if (bundledBinary) {
+      return path.dirname(bundledBinary);
+    }
+
+    // 第二步：检查 extraResources 中是否包含后端源码（预留扩展）
     const bundledBackend = path.join(resourcesDir, 'backend-src');
     if (fs.existsSync(bundledBackend)) {
       return bundledBackend;
     }
 
-    // 第二步：后端未打包，发出清晰警告
+    // 第三步：后端未打包，发出清晰警告
     console.warn(
       '[ServerManager] ⚠ WARNING: Python backend source not found in production bundle.\n' +
       `  Expected bundled path: ${bundledBackend}\n` +
@@ -78,7 +119,7 @@ class ServerManager extends EventEmitter {
       '  For development, set ELECTRON_DEV=true and ensure src/ exists.'
     );
 
-    // 第三步：fallback — 使用用户数据目录让 OSH_HOME 指向合理的持久化位置
+    // 第四步：fallback — 使用用户数据目录让 OSH_HOME 指向合理的持久化位置
     try {
       const userDataPath = this._getUserDataPath();
       fs.mkdirSync(userDataPath, { recursive: true });
@@ -124,6 +165,31 @@ class ServerManager extends EventEmitter {
   }
 
   /**
+   * 解析后端启动命令。
+   *
+   * 优先级：
+   *   1. 内置 PyInstaller 可执行文件（打包产物，无需用户安装 Python）
+   *   2. 已安装的 `yuleosh` CLI（子命令 `ui`）
+   *   3. 回退到 `python3 -m yuleosh.ui.server`
+   *
+   * @returns {{command: string, args: string[], bundled: boolean}}
+   */
+  _resolveCommand() {
+    const bundled = this._resolveBundledBackend();
+    if (bundled) {
+      return { command: bundled, args: [], bundled: true };
+    }
+
+    const probe = process.platform === 'win32' ? 'where yuleosh' : 'command -v yuleosh';
+    try {
+      execSync(probe, { stdio: 'ignore' });
+      return { command: 'yuleosh', args: ['ui'], bundled: false };
+    } catch {
+      return { command: this.pythonCmd, args: ['-m', 'yuleosh.ui.server'], bundled: false };
+    }
+  }
+
+  /**
    * 启动 Python 后端子进程
    * @returns {Promise<void>}
    */
@@ -134,9 +200,15 @@ class ServerManager extends EventEmitter {
     }
 
     this.restartCount = 0;
+    this._startupFailed = false;
+    this._isShuttingDown = false;
 
-    // 检查 Python 版本
-    await this._checkPythonVersion();
+    const { command, args, bundled } = this._resolveCommand();
+
+    // 内置运行时自带 Python 解释器，无需探测系统 Python 版本
+    if (!bundled) {
+      await this._checkPythonVersion();
+    }
 
     const oshHome = this._resolveOshHome();
 
@@ -152,62 +224,37 @@ class ServerManager extends EventEmitter {
       YULEOSH_DESKTOP_MODE: '1',
     };
 
-    // 在当前 shell 环境中检查是否有 yuleosh 命令
-    // 如果没有，使用 python -m yuleosh.ui.server
-    const args = ['-m', 'yuleosh.ui.server'];
-
     console.log(`[ServerManager] Starting Python backend...`);
-    console.log(`[ServerManager]   Command: ${this.pythonCmd} ${args.join(' ')}`);
+    console.log(`[ServerManager]   Command: ${command} ${args.join(' ')}`);
+    console.log(`[ServerManager]   Runtime: ${bundled ? 'bundled (PyInstaller)' : 'system Python'}`);
     console.log(`[ServerManager]   Port:    ${this.port}`);
     console.log(`[ServerManager]   CWD:     ${this.backendDir}`);
     console.log(`[ServerManager]   OSH_HOME: ${oshHome}`);
 
-    this.process = spawn(this.pythonCmd, args, {
+    const proc = spawn(command, args, {
       cwd: this.backendDir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    this.process = proc;
+    this._starting = true;
+    this._attachProcessHandlers(proc, 'start');
 
-    // 流式记录 stdout
-    this.process.stdout.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.log(`[Python stdout] ${lines}`);
+    // 开始健康检查轮询；失败时终止子进程，避免留下孤儿后端
+    try {
+      await this._waitForHealthy();
+      this._starting = false;
+    } catch (err) {
+      this._startupFailed = true;
+      this._starting = false;
+      if (this.process === proc && proc.exitCode === null) {
+        proc.kill('SIGTERM');
       }
-    });
-
-    // 流式记录 stderr
-    this.process.stderr.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.error(`[Python stderr] ${lines}`);
+      if (this.process === proc) {
+        this.process = null;
       }
-    });
-
-    // 进程意外退出处理 — 自动重启逻辑
-    this.process.on('close', (code, signal) => {
-      console.log(`[ServerManager] Process exited: code=${code} signal=${signal}`);
-      if (!this._isShuttingDown) {
-        if (this.restartCount < this.maxRestartAttempts) {
-          this.restartCount++;
-          console.log(`[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
-          this.emit('restarting', this.restartCount, this.maxRestartAttempts);
-          this._restart();
-        } else {
-          this.emit('fatal', code, signal);
-        }
-      }
-      this.process = null;
-    });
-
-    this.process.on('error', (err) => {
-      console.error(`[ServerManager] Process error: ${err.message}`);
-      this.emit('error', err);
-      this.process = null;
-    });
-
-    // 开始健康检查轮询
-    await this._waitForHealthy();
+      throw err;
+    }
   }
 
   /**
@@ -288,7 +335,7 @@ class ServerManager extends EventEmitter {
    */
   _checkPythonVersion() {
     return new Promise((resolve, reject) => {
-      const proc = spawn('python3', ['--version']);
+      const proc = spawn(this.pythonCmd, ['--version']);
       let output = '';
       proc.stdout.on('data', (d) => { output += d.toString(); });
       proc.stderr.on('data', (d) => { output += d.toString(); });
@@ -318,9 +365,106 @@ class ServerManager extends EventEmitter {
   }
 
   /**
+   * 写入文件日志（可选）。未注入 logger 时保持纯 console 行为。
+   * @param {'info'|'warn'|'error'} level
+   * @param {string} message
+   */
+  _writeLog(level, message) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](message);
+    }
+  }
+
+  /**
+   * 绑定子进程生命周期。start() 与 _restart() 共用，避免两套重复逻辑漂移。
+   * @param {import('child_process').ChildProcess} proc
+   * @param {'start'|'restart'} phase
+   */
+  _attachProcessHandlers(proc, phase) {
+    proc.stdout.on('data', (data) => {
+      const lines = data.toString().trim();
+      if (lines) {
+        console.log(`[Python stdout] ${lines}`);
+        this._writeLog('info', `[Python stdout] ${lines}`);
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      const lines = data.toString().trim();
+      if (lines) {
+        console.error(`[Python stderr] ${lines}`);
+        this._writeLog('error', `[Python stderr] ${lines}`);
+      }
+    });
+
+    proc.on('close', (code, signal) => {
+      console.log(`[ServerManager] (${phase}) Process exited: code=${code} signal=${signal}`);
+      this._writeLog('warn', `[ServerManager] (${phase}) Process exited: code=${code} signal=${signal}`);
+      // 先清引用再重启：_restart() 会在首个 await 前同步 spawn 新进程并写入
+      // this.process；若此处无条件置 null，会把新进程引用覆盖掉，导致
+      // stop() 失去对后端的控制并留下孤儿进程。
+      if (this.process === proc) {
+        this.process = null;
+      }
+      if (this._isShuttingDown || this._startupFailed) {
+        return;
+      }
+      // 首次启动阶段由 start() 的健康检查负责报错，不在这里抢跑重启。
+      if (this._starting) {
+        return;
+      }
+      this.emit('crashed', code, signal);
+      this._scheduleRestart(code, signal);
+    });
+
+    proc.on('error', (err) => {
+      console.error(`[ServerManager] (${phase}) Process error: ${err.message}`);
+      this._writeLog('error', `[ServerManager] (${phase}) Process error: ${err.message}`);
+      this._startupFailed = true;
+      if (this.process === proc) {
+        this.process = null;
+      }
+      this.emit('error', err);
+    });
+  }
+
+  /**
+   * 触发一次自动重启。restartCount 表示“连续失败次数”，重启成功后归零。
+   */
+  _scheduleRestart(code, signal) {
+    if (this._restarting) {
+      return;
+    }
+    if (this.restartCount >= this.maxRestartAttempts) {
+      this._writeLog('error', '[ServerManager] Restart attempts exhausted; backend fatal');
+      this.emit('fatal', code, signal);
+      return;
+    }
+    this.restartCount += 1;
+    console.log(`[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
+    this._writeLog('warn', `[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})`);
+    this.emit('restarting', this.restartCount, this.maxRestartAttempts);
+
+    // _restart() 在首个 await 前同步完成 spawn，因此这里立即清除标记是安全的；
+    // 若重启后的进程在健康检查期间再次崩溃，close 处理器仍能进入下一轮。
+    this._restarting = true;
+    let pending;
+    try {
+      pending = this._restart();
+    } finally {
+      this._restarting = false;
+    }
+    pending.catch((err) => {
+      console.error(`[ServerManager] Restart failed: ${err.message}`);
+      this.emit('fatal', code, signal);
+    });
+  }
+
+  /**
    * 重启 Python 后端（跳过初始检查，复用 spawn 逻辑）
    */
   async _restart() {
+    this._startupFailed = false;
     const oshHome = this._resolveOshHome();
 
     // Desktop local mode: disable multi-tenant auth (the desktop app is a
@@ -335,63 +479,28 @@ class ServerManager extends EventEmitter {
       YULEOSH_DESKTOP_MODE: '1',
     };
 
-    const args = ['-m', 'yuleosh.ui.server'];
+    const { command, args } = this._resolveCommand();
 
     console.log(`[ServerManager] Restarting Python backend (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
 
-    this.process = spawn(this.pythonCmd, args, {
+    const proc = spawn(command, args, {
       cwd: this.backendDir,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    this.process = proc;
+    this._attachProcessHandlers(proc, 'restart');
 
-    // 重新挂载 stdout/stderr 监听
-    this.process.stdout.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.log(`[Python stdout] ${lines}`);
-      }
-    });
-
-    this.process.stderr.on('data', (data) => {
-      const lines = data.toString().trim();
-      if (lines) {
-        console.error(`[Python stderr] ${lines}`);
-      }
-    });
-
-    // 重启进程的意外退出处理（与 start() 相同的自动重启逻辑）
-    this.process.on('close', (code, signal) => {
-      console.log(`[ServerManager] (restart) Process exited: code=${code} signal=${signal}`);
-      if (!this._isShuttingDown) {
-        if (this.restartCount < this.maxRestartAttempts) {
-          this.restartCount++;
-          console.log(`[ServerManager] Auto-restarting (attempt ${this.restartCount}/${this.maxRestartAttempts})...`);
-          this.emit('restarting', this.restartCount, this.maxRestartAttempts);
-          this._restart();
-        } else {
-          this.emit('fatal', code, signal);
-        }
-      }
-      this.process = null;
-    });
-
-    this.process.on('error', (err) => {
-      console.error(`[ServerManager] (restart) Process error: ${err.message}`);
-      this.emit('error', err);
-      this.process = null;
-    });
-
-    // 执行健康检查
+    // 执行健康检查（_waitForHealthy 成功时已 emit('healthy')，此处不重复发）
     try {
       await this._waitForHealthy();
       console.log(`[ServerManager] Restart succeeded`);
-      this.emit('healthy');
+      this.restartCount = 0;
     } catch (err) {
       console.error(`[ServerManager] Restart unhealthy: ${err.message}`);
       // 健康检查失败时终止进程，让 close 处理器管理重试计数
-      if (this.process && this.process.exitCode === null) {
-        this.process.kill('SIGTERM');
+      if (this.process === proc && proc.exitCode === null) {
+        proc.kill('SIGTERM');
       }
     }
   }

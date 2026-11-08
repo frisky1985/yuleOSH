@@ -361,10 +361,11 @@ class TestExports:
     def test_export_pdf_fallback_html(self, tmp_path):
         """GIVEN no weasyprint WHEN export_pdf THEN html fallback."""
         gen = AuditReportGenerator(evidence_dir=str(tmp_path / "e"))
+        # sys.modules["weasyprint"] = None already makes `import weasyprint`
+        # raise ImportError — no builtins.__import__ patch needed (that patch
+        # also breaks pathlib's lazy `import ntpath` on Python 3.12).
         with mock.patch.dict(sys.modules, {"weasyprint": None}):
-            # force ImportError by removing the module
-            with mock.patch("builtins.__import__", side_effect=ImportError("no weasyprint")):
-                out = gen.export_pdf(_make_report(), str(tmp_path / "r.pdf"))
+            out = gen.export_pdf(_make_report(), str(tmp_path / "r.pdf"))
         assert out.endswith(".html")
 
     def test_export_pdf_success(self, tmp_path):

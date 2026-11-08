@@ -17,6 +17,7 @@ Sources:
   4. CI results (.osh/ci/layer1-*.json)
 """
 
+import ast
 import hashlib
 import json
 import logging
@@ -28,8 +29,24 @@ from typing import Optional
 
 log = logging.getLogger("yuleosh.alm.traceability")
 
+# Persisted evidence ledger. ``.osh/`` is git-ignored (runtime workspace) and is
+# recreated empty whenever the workspace snapshot is restored, which used to
+# erase real test/CI records. ``docs/evidence/`` is version-controlled, so
+# audit evidence survives and stays traceable.
+PERSISTED_EVIDENCE_DIR = "docs/evidence"
+
 # Source file extensions to scan for requirement annotations and code
-_SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp")
+_SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp", ".js", ".ts", ".jsx", ".tsx")
+
+# 依赖目录、构建产物与虚拟环境不参与注解扫描，否则会拖慢扫描并被第三方
+# 代码中的注释污染追溯链。
+_SKIP_SCAN_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", "build", "dist", "release",
+    ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache",
+})
+
+# Cap import-derived requirement → test links so coverage stays precise.
+MAX_DERIVED_TESTS = 5
 
 # Regex for @req annotation: matches @req RS-001, @req(RS-001), @req RS-001, RS-002
 _REQ_ANNOTATION_RE = re.compile(
@@ -109,6 +126,8 @@ def scan_req_annotations(src_dir: Path) -> dict[str, list[str]]:
     for ext in _SOURCE_EXTENSIONS:
         for source_file in sorted(src_dir.rglob(f"*{ext}")):
             if not source_file.is_file():
+                continue
+            if any(part in _SKIP_SCAN_DIRS for part in source_file.relative_to(src_dir).parts):
                 continue
             try:
                 text = source_file.read_text(encoding="utf-8", errors="replace")
@@ -225,6 +244,115 @@ def scan_test_code_links(project_dir: Path) -> dict[str, dict]:
     return test_links
 
 
+def _test_import_modules(text: str) -> set[str]:
+    """Return Python module names imported by ``text`` (AST first, regex fallback)."""
+    modules: set[str] = set()
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        tree = None
+
+    if tree is not None:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                modules.add(node.module)
+                for alias in node.names:
+                    modules.add(f"{node.module}.{alias.name}")
+        return modules
+
+    # Fallback for files the active Python cannot parse (e.g. newer syntax)
+    for match in re.finditer(
+            r"^\s*(?:from\s+([A-Za-z_][\w.]*)\s+import|import\s+([A-Za-z_][\w.]*))",
+            text, re.MULTILINE):
+        modules.add(match.group(1) or match.group(2))
+    return modules
+
+
+def scan_code_test_links(project_dir: str | Path) -> dict[str, list[str]]:
+    """Map source files to pytest files that import them.
+
+    Complements :func:`scan_test_code_links` (explicit ``@tests`` annotations).
+    Many tests exercise a module without spelling out its requirement ID, which
+    makes requirement → test coverage look lower than the real verification
+    evidence. Import-based links are declared, auditable evidence: the test file
+    names the production module it executes.
+
+    Returns dict mapping relative source path (``src/yuleosh/x.py``) to a
+    sorted list of relative test paths.
+    """
+    project = Path(project_dir)
+    tests_dir = project / "tests"
+    src_dir = project / "src"
+    if not tests_dir.exists() or not src_dir.exists():
+        return {}
+
+    links: dict[str, list[str]] = {}
+    for test_file in sorted(tests_dir.rglob("test_*.py")):
+        if not test_file.is_file():
+            continue
+        try:
+            text = test_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        try:
+            rel_test = test_file.relative_to(project).as_posix()
+        except ValueError:
+            rel_test = str(test_file)
+
+        for module in sorted(_test_import_modules(text)):
+            parts = module.split(".")
+            # Resolve the longest importable prefix to a real source file.
+            for end in range(len(parts), 0, -1):
+                candidate = "src/" + "/".join(parts[:end]) + ".py"
+                if (project / candidate).is_file():
+                    links.setdefault(candidate, []).append(rel_test)
+                    break
+
+    return {path: sorted(set(files)) for path, files in links.items()}
+
+
+def scan_desktop_test_links(project_dir: str | Path) -> dict[str, list[str]]:
+    """Map ``@req`` annotations in ``desktop/tests/*.test.js`` to requirements.
+
+    Jest tests live outside ``tests/`` and are not Python modules, so the
+    generic scanners never see them. Their annotations are declared evidence
+    that a requirement is verified by the desktop suite.
+
+    Returns dict mapping requirement ID (uppercased) to test file paths.
+    """
+    project = Path(project_dir)
+    desktop_tests = project / "desktop" / "tests"
+    if not desktop_tests.exists():
+        return {}
+
+    links: dict[str, list[str]] = {}
+    for test_file in sorted(desktop_tests.rglob("*.test.js")):
+        try:
+            text = test_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = _rel_posix_safe(test_file, project)
+        for match in _REQ_ANNOTATION_RE.finditer(text):
+            for req_id in match.group(1).split(","):
+                req_id = req_id.strip().upper()
+                if not req_id:
+                    continue
+                bucket = links.setdefault(req_id, [])
+                if rel not in bucket:
+                    bucket.append(rel)
+    return links
+
+
+def _rel_posix_safe(path: Path, root: Path) -> str:
+    """Return a POSIX relative path, falling back to the full path."""
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
 # ── SHALL statement extraction ──────────────────────────────────────────
 
 
@@ -276,12 +404,15 @@ def _parse_req_trace_links(project_dir: str) -> list[dict]:
     return links
 
 
-def extract_shall_statements(spec_path: str) -> list[dict]:
+def extract_shall_statements(spec_path: str, start_index: int = 0) -> list[dict]:
     """Extract SHALL statements from a specification file (markdown).
 
     Supports two formats:
       1. List format: ``- The system SHALL ...`` under a requirement heading.
       2. Table format: ``| ID | 描述 | ASIL | 端 |`` rows where ID contains "-SHALL".
+
+    ``start_index`` continues auto-generated ``SHALL-{n}`` numbering across
+    multiple spec files so IDs stay globally unique.
 
     Returns list of dicts with keys:
       - id:          Requirement ID (e.g. KL-SHALL-01) or auto-generated SHALL-{n}
@@ -386,8 +517,25 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
                         "statement": shall_statement,
                         "line": idx,
                         "section": current_section,
+                        "explicit_id": True,
                     })
             continue
+
+        # Declared upstream trace line, e.g. ``- **追溯**: SYS-REQ-003``.
+        # Attach it to the most recent SHALL statement in the same block.
+        if stripped.startswith("-") and shall_statements and not in_shall_table:
+            trace_match = re.match(
+                r"-\s*\*\*(?:追溯|上游|派生自|traces?\s+(?:to|from))\*\*\s*[:：]\s*(.+)",
+                stripped, re.IGNORECASE,
+            )
+            if trace_match:
+                ids = re.findall(
+                    r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+(?:\.\d+)?",
+                    trace_match.group(1),
+                )
+                if ids:
+                    shall_statements[-1].setdefault("upstream", []).extend(ids)
+                continue
 
         # ── Legacy: bullet-point format SHALLs ──
         if shall_keyword_pattern.search(stripped):
@@ -408,20 +556,23 @@ def extract_shall_statements(spec_path: str) -> list[dict]:
 
             # Parse spec-defined ID from **ID**: prefix or [REQ-xxx] marker
             req_id = None
+            explicit_id = False
             spec_id_match = spec_id_pattern.match(statement)
             if spec_id_match:
                 req_id = spec_id_match.group(1) or spec_id_match.group(2)
+                explicit_id = True
 
             # If no inline req_id, use the section-level req_id
             if not req_id:
                 req_id = current_req_id
 
             shall_statements.append({
-                "id": f"SHALL-{len(shall_statements) + 1}",
+                "id": f"SHALL-{start_index + len(shall_statements) + 1}",
                 "req_id": req_id,
                 "statement": statement,
                 "line": idx,
                 "section": current_section,
+                "explicit_id": explicit_id,
             })
 
     log.info("Extracted %d SHALL statements from %s", len(shall_statements), spec_path)
@@ -520,8 +671,38 @@ def extract_shall_from_text(text: str) -> list[dict]:
 # ── Review artifact scan ────────────────────────────────────────────────
 
 
+def _evidence_subdirs(project_dir: str | Path, name: str) -> list[Path]:
+    """Return existing evidence sub-directories, runtime roots first.
+
+    ``name`` is relative to each evidence root, e.g. ``"sessions"`` or
+    ``"ci"``. Persisted ``docs/evidence/`` is scanned last so runtime data keeps
+    precedence while committed audit records remain discoverable.
+    """
+    project = Path(project_dir)
+    roots = (
+        project / ".osh",
+        project / ".yuleosh",
+        project / PERSISTED_EVIDENCE_DIR,
+    )
+    subdirs: list[Path] = []
+    persisted_root = project / PERSISTED_EVIDENCE_DIR
+    for root in roots:
+        rel = name
+        # ``docs/evidence`` is itself the evidence root, so "evidence/reviews"
+        # must not become "docs/evidence/evidence/reviews".
+        if root == persisted_root and name.startswith("evidence/"):
+            rel = name.split("/", 1)[1]
+        candidate = root / rel
+        if candidate.exists():
+            subdirs.append(candidate)
+    return subdirs
+
+
 def scan_review_artifacts(project_dir: str) -> list[dict]:
-    """Scan .yuleosh/sessions/ for code-review.json artifacts.
+    """Scan runtime and persisted evidence roots for review artifacts.
+
+    Looks at ``sessions/*/code-review.json`` plus ``evidence/reviews/*.json``
+    under ``.osh/``, ``.yuleosh/`` and ``docs/evidence/``.
 
     Returns list of dicts with keys:
       - session: Session name
@@ -529,53 +710,19 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
       - reviewed_files: List of file paths reviewed
       - findings: List of finding descriptions
     """
-    # Try .osh/sessions/ first (primary), fall back to .yuleosh/sessions/
-    sessions_dir = Path(project_dir) / ".osh" / "sessions"
-    if not sessions_dir.exists():
-        sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
-    if not sessions_dir.exists():
-        log.info("No sessions directory found (tried .osh/sessions/ and .yuleosh/sessions/)")
-        return []
+    reviews: list[dict] = []
+    seen: set[str] = set()
 
-    reviews = []
-    for session_dir in sorted(sessions_dir.iterdir()):
-        if not session_dir.is_dir():
-            continue
-        review_file = session_dir / "code-review.json"
-        if not review_file.exists():
-            # Also check for .osh/evidence/reviews/ files
-            evidence_reviews = (Path(project_dir) / ".osh" / "evidence" / "reviews").glob("*.json")
-            for evf in evidence_reviews:
-                try:
-                    data = json.loads(evf.read_text(encoding="utf-8"))
-                    reviewed_files = []
-                    findings = []
-                    if isinstance(data, dict):
-                        reviewed_files = data.get("reviewed_files", data.get("files", []))
-                        if isinstance(reviewed_files, dict):
-                            reviewed_files = list(reviewed_files.keys())
-                        findings_text = data.get("findings", data.get("issues", []))
-                        if isinstance(findings_text, list):
-                            for f in findings_text:
-                                if isinstance(f, dict):
-                                    findings.append(f.get("description", str(f)))
-                                elif isinstance(f, str):
-                                    findings.append(f)
-                    reviews.append({
-                        "session": evf.stem,
-                        "agent": data.get("agent", "unknown") if isinstance(data, dict) else "unknown",
-                        "reviewed_files": reviewed_files,
-                        "findings": findings,
-                    })
-                except (json.JSONDecodeError, OSError) as e:
-                    log.warning("Cannot parse %s: %s", evf, e)
-            continue
-
+    def _add_review(path: Path, session_label: str) -> None:
+        key = str(path.resolve())
+        if key in seen:
+            return
+        seen.add(key)
         try:
-            data = json.loads(review_file.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
-            log.warning("Cannot parse %s: %s", review_file, e)
-            continue
+            log.warning("Cannot parse %s: %s", path, e)
+            return
 
         reviewed_files = []
         findings = []
@@ -592,14 +739,152 @@ def scan_review_artifacts(project_dir: str) -> list[dict]:
                         findings.append(f)
 
         reviews.append({
-            "session": session_dir.name,
+            "session": session_label,
             "agent": data.get("agent", "unknown") if isinstance(data, dict) else "unknown",
             "reviewed_files": reviewed_files,
+            "requirements": data.get("requirements", []) if isinstance(data, dict) else [],
             "findings": findings,
+            "path": str(path),
+            "record": data if isinstance(data, dict) else {},
         })
+
+    for reviews_dir in _evidence_subdirs(project_dir, "evidence/reviews"):
+        for review_file in sorted(reviews_dir.glob("*.json")):
+            _add_review(review_file, review_file.stem)
+
+    for sessions_dir in _evidence_subdirs(project_dir, "sessions"):
+        for session_dir in sorted(sessions_dir.iterdir()):
+            if not session_dir.is_dir():
+                continue
+            review_file = session_dir / "code-review.json"
+            if review_file.exists():
+                _add_review(review_file, session_dir.name)
 
     log.info("Found %d review artifacts", len(reviews))
     return reviews
+
+
+REVIEW_RECORD_INDEPENDENCE_KEYS = (
+    "not_author_of_artifact",
+    "not_contributor_to_change",
+    "no_conflict_of_interest",
+)
+REVIEW_RECORD_VERDICTS = ("pass", "pass-with-findings", "fail")
+
+
+def validate_review_records(project_dir: str | Path) -> list[dict]:
+    """Validate independent review records against ASPICE GP1.2 conventions.
+
+    Only records declaring ``artifact_type: independent-review`` or
+    ``reviewer_independence: independent`` are validated; self reviews are
+    legal evidence but cannot claim independent sign-off.
+
+    Returns problem dicts compatible with ``evidence.chain`` (code/severity/message).
+    """
+    problems: list[dict] = []
+    independent_seen = 0
+    reviews = scan_review_artifacts(str(project_dir))
+
+    for review in reviews:
+        record = review.get("record") or {}
+        if not record:
+            continue
+        label = str(review.get("session") or review.get("path") or "unknown")
+
+        def _add(code: str, severity: str, message: str) -> None:
+            problems.append({
+                "code": code,
+                "severity": severity,
+                "message": f"{label}: {message}",
+                "artifact": label,
+            })
+
+        if str(record.get("reviewer_independence")) == "independent":
+            independent_seen += 1
+
+        is_independent = (
+            str(record.get("artifact_type")) == "independent-review"
+            or str(record.get("reviewer_independence")) == "independent"
+        )
+        if not is_independent:
+            continue
+
+        reviewer = record.get("reviewer") or {}
+        if not str(reviewer.get("name") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 reviewer.name")
+        if not str(reviewer.get("role") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 reviewer.role")
+        if str(record.get("reviewer_independence")) != "independent":
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                "artifact_type=independent-review 但 reviewer_independence 不是 independent",
+            )
+
+        declaration = record.get("independence_declaration") or {}
+        missing = [
+            key for key in REVIEW_RECORD_INDEPENDENCE_KEYS
+            if declaration.get(key) is not True
+        ]
+        if missing:
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                f"独立性声明未全部确认: {', '.join(missing)}",
+            )
+
+        signoff = record.get("signoff") or {}
+        if not str(signoff.get("reviewer_signature") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 signoff.reviewer_signature")
+        if not str(signoff.get("signed_at") or "").strip():
+            _add("E-CHAIN-REVIEW-RECORD", "ERROR", "缺少 signoff.signed_at")
+
+        verdict = str(record.get("verdict") or "").lower()
+        if verdict not in REVIEW_RECORD_VERDICTS:
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                f"verdict 非法或缺失: {verdict or '<empty>'}",
+            )
+
+        findings = record.get("findings") or []
+        open_findings = [
+            f for f in findings
+            if isinstance(f, dict) and str(f.get("status") or "").lower() == "open"
+        ]
+        if verdict == "pass" and open_findings:
+            _add(
+                "E-CHAIN-REVIEW-RECORD", "ERROR",
+                f"verdict=pass 但仍有 {len(open_findings)} 条 open 缺陷",
+            )
+
+        if str(reviewer.get("type") or "").lower() == "ai":
+            _add(
+                "W-CHAIN-REVIEW-AI", "WARNING",
+                "独立评审由 AI 代理执行，外部 ASPICE 审计前需人工会签",
+            )
+
+        if not review.get("requirements"):
+            _add(
+                "W-CHAIN-REVIEW-RECORD", "WARNING",
+                "未声明 requirements，无法与需求建立 review 边",
+            )
+        if not review.get("reviewed_files"):
+            _add(
+                "W-CHAIN-REVIEW-RECORD", "WARNING",
+                "未声明 reviewed_files，无法与工件建立关联",
+            )
+
+    reviews = scan_review_artifacts(str(project_dir))
+    if reviews and independent_seen == 0:
+        problems.append({
+            "code": "W-CHAIN-REVIEW-INDEPENDENCE",
+            "severity": "WARNING",
+            "message": (
+                f"{len(reviews)} 份评审记录均非独立评审；"
+                "ASPICE GP1.2 独立签署要求尚未满足"
+            ),
+            "artifact": "reviews",
+        })
+
+    return problems
 
 
 # ── Test report scan ────────────────────────────────────────────────────
@@ -616,18 +901,27 @@ def scan_test_reports(project_dir: str) -> list[dict]:
       - failed:   Number of failed tests
       - output:   Test output (truncated)
     """
-    sessions_dir = Path(project_dir) / ".osh" / "sessions"
-    if not sessions_dir.exists():
-        sessions_dir = Path(project_dir) / ".yuleosh" / "sessions"
-    if not sessions_dir.exists():
-        log.info("No sessions directory found (tried .osh/sessions/ and .yuleosh/sessions/)")
+    session_dirs = [
+        d
+        for sessions_dir in _evidence_subdirs(project_dir, "sessions")
+        for d in sorted(sessions_dir.iterdir())
+        if d.is_dir()
+    ]
+    if not session_dirs:
+        log.info(
+            "No sessions directory found (tried .osh, .yuleosh, %s)",
+            PERSISTED_EVIDENCE_DIR,
+        )
         return []
 
     reports = []
-    for session_dir in sorted(sessions_dir.iterdir()):
-        if not session_dir.is_dir():
-            continue
+    seen_records: set[tuple[str, str]] = set()
+    for session_dir in session_dirs:
         for test_file in session_dir.glob("*test*.json"):
+            record_key = (session_dir.name, test_file.name)
+            if record_key in seen_records:
+                continue
+            seen_records.add(record_key)
             try:
                 data = json.loads(test_file.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError) as e:
@@ -666,26 +960,34 @@ def scan_ci_results(project_dir: str) -> list[dict]:
       - status: Layer status
       - timestamp: Run timestamp
     """
-    ci_dir = Path(project_dir) / ".osh" / "ci"
-    if not ci_dir.exists():
-        log.info("No CI results directory at %s", ci_dir)
+    ci_dirs = _evidence_subdirs(project_dir, "ci")
+    if not ci_dirs:
+        log.info(
+            "No CI results directory (tried .osh/ci, .yuleosh/ci, %s/ci)",
+            PERSISTED_EVIDENCE_DIR,
+        )
         return []
 
     results = []
-    for result_file in sorted(ci_dir.glob("layer*.json")):
-        try:
-            data = json.loads(result_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as e:
-            log.warning("Cannot parse %s: %s", result_file, e)
-            continue
+    seen_layers: set[str] = set()
+    for ci_dir in ci_dirs:
+        for result_file in sorted(ci_dir.glob("layer*.json")):
+            if result_file.stem in seen_layers:
+                continue
+            try:
+                data = json.loads(result_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as e:
+                log.warning("Cannot parse %s: %s", result_file, e)
+                continue
 
-        if isinstance(data, dict):
-            results.append({
-                "layer": data.get("layer", result_file.stem),
-                "status": data.get("status", "unknown"),
-                "timestamp": data.get("timestamp", ""),
-                "file": str(result_file),
-            })
+            if isinstance(data, dict):
+                seen_layers.add(result_file.stem)
+                results.append({
+                    "layer": data.get("layer", result_file.stem),
+                    "status": data.get("status", "unknown"),
+                    "timestamp": data.get("timestamp", ""),
+                    "file": str(result_file),
+                })
 
     log.info("Found %d CI results", len(results))
     return results
@@ -782,6 +1084,133 @@ def load_swr_mapping_table(project_dir: str) -> list[dict]:
     return []
 
 
+def _final_requirement_id(req: dict) -> str:
+    """Return the ID used in the authoritative matrix for a requirement row.
+
+    Section-level IDs (e.g. ``RS-001`` shared by several bullets) are not
+    unique, so they must not become node IDs. Only inline, per-requirement
+    IDs (``explicit_id=True``) are stable enough to use as node IDs.
+    """
+    if req.get("explicit_id"):
+        return str(req.get("req_id") or req.get("id") or "")
+    return str(req.get("id") or req.get("req_id") or "")
+
+
+def load_vmodel_trace_policy(project_dir: str) -> list[dict]:
+    """Read ``docs/requirements/v-model-traceability.md`` declared policy.
+
+    Table columns are matched by substring:
+      - 下游章节 / downstream section prefix
+      - 上游需求 / upstream requirement ID (comma-separated allowed)
+      - 关系 / relation label
+
+    The policy is an authored trace declaration, not an inference: every
+    row explicitly says which upstream requirement a downstream section
+    derives from. Rows are matched longest-prefix first.
+    """
+    path = Path(project_dir) / "docs" / "requirements" / "v-model-traceability.md"
+    if not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        log.warning("Cannot read V-model trace policy %s: %s", path, exc)
+        return []
+
+    def _cell(cells: list[str], keys: tuple[str, ...]) -> str:
+        for idx, name in enumerate(header or []):
+            if any(key in name or key in name.lower() for key in keys):
+                if idx < len(cells):
+                    return cells[idx].strip().strip("`* ")
+        return ""
+
+    rules: list[dict] = []
+    header: list[str] | None = None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            header = None
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if header is None:
+            if any("下游" in c or "downstream" in c.lower() for c in cells) \
+                    and any("上游" in c or "upstream" in c.lower() for c in cells):
+                header = cells
+            continue
+        if _is_table_separator(stripped):
+            continue
+        downstream = _cell(cells, ("下游", "downstream"))
+        upstream_raw = _cell(cells, ("上游", "upstream"))
+        relation = _cell(cells, ("关系", "relation")) or "derive"
+        if not downstream or not upstream_raw:
+            continue
+        upstream = [
+            v.strip().strip("`* ")
+            for v in re.split(r"[,，;；、]+", upstream_raw)
+            if v.strip()
+        ]
+        if upstream:
+            rules.append({
+                "downstream": downstream,
+                "upstream": upstream,
+                "relation": relation,
+            })
+    rules.sort(key=lambda r: -len(r["downstream"]))
+    if rules:
+        log.info("Loaded %d V-model trace policy rules from %s", len(rules), path)
+    return rules
+
+
+def _resolve_policy_ids(raw_values: list[str], requirements: list[dict]) -> list[str]:
+    """Resolve policy references to unique matrix node IDs.
+
+    An exact requirement ID wins; otherwise a section prefix resolves to the
+    first requirement in that section. References that resolve to nothing are
+    dropped so the chain cannot invent dangling edges.
+    """
+    resolved: list[str] = []
+    for raw in raw_values:
+        value = raw.strip()
+        if not value:
+            continue
+        exact = next(
+            (r for r in requirements
+             if value.upper() in {
+                 str(r.get("req_id") or "").upper(),
+                 str(r.get("id") or "").upper(),
+             }),
+            None,
+        )
+        target = _final_requirement_id(exact) if exact else ""
+        if not target:
+            section_match = next(
+                (r for r in requirements
+                 if str(r.get("section") or "").upper().startswith(value.upper())),
+                None,
+            )
+            target = _final_requirement_id(section_match) if section_match else ""
+        if target and target not in resolved:
+            resolved.append(target)
+    return resolved
+
+
+def _apply_vmodel_trace_policy(requirements: list[dict], policy: list[dict]) -> None:
+    """Attach declared upstream IDs to rows matching the policy."""
+    for req in requirements:
+        section = str(req.get("section") or "")
+        for rule in policy:
+            if not section.startswith(rule["downstream"]):
+                continue
+            upstream = _resolve_policy_ids(rule["upstream"], requirements)
+            if upstream:
+                existing = req.setdefault("upstream", [])
+                for target in upstream:
+                    if target not in existing:
+                        existing.append(target)
+                req["upstream_method"] = "declared_policy"
+            break
+
+
 def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     """Generate LRM (Lateral Requirements Matrix).
 
@@ -811,6 +1240,16 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     if str(docs_swr) not in spec_files and docs_swr.exists():
         spec_files.append(str(docs_swr))
 
+    # Controlled requirement baselines (SYS.1 / SYS.3 / SWE.2 / SWE.3)
+    requirements_dir = Path(project_dir) / "docs" / "requirements"
+    if requirements_dir.exists():
+        for rf in sorted(requirements_dir.glob("*.md")):
+            if rf.name == "v-model-traceability.md":
+                continue
+            s = str(rf)
+            if s not in spec_files:
+                spec_files.append(s)
+
     # Auto-discover ALL specs/*.md files
     specs_dir = Path(project_dir) / "specs"
     if specs_dir.exists():
@@ -823,10 +1262,18 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         log.warning("No spec files found for LRM generation")
         return {"requirements": [], "summary": {"total": 0, "no_code": 0, "no_test": 0}}
 
-    # Extract requirements from ALL spec files
+    # Extract requirements from ALL spec files.  Auto-generated SHALL IDs
+    # continue across files so two spec files cannot both produce SHALL-1.
     shalls = []
+    next_index = 0
     for sf in spec_files:
-        sf_shalls = extract_shall_statements(sf)
+        sf_shalls = extract_shall_statements(sf, start_index=next_index)
+        next_index += len(sf_shalls)
+        for shall in sf_shalls:
+            try:
+                shall["source_file"] = os.path.relpath(sf, project_dir)
+            except (ValueError, OSError):
+                shall["source_file"] = sf
         log.info("Extracted %d SHALLs from %s", len(sf_shalls), sf)
         shalls.extend(sf_shalls)
     reviews = scan_review_artifacts(project_dir)
@@ -851,8 +1298,30 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
     # Scan for @req annotations (authoritative, language-agnostic)
     annotation_map = scan_req_annotations(src_dir)
 
+    # Desktop (Electron) sources are part of the delivered product but live
+    # outside src/. Scan annotations there too so desktop evidence is traceable
+    # without relying on keyword inference.
+    desktop_dir = Path(project_dir) / "desktop"
+    if desktop_dir.exists():
+        desktop_annotations = scan_req_annotations(desktop_dir)
+        node_modules = "node_modules"
+        for req_id, paths in desktop_annotations.items():
+            # Test files annotate coverage, not implementation; they are linked
+            # through scan_desktop_test_links() instead of as code artifacts.
+            cleaned = [
+                p for p in paths
+                if node_modules not in Path(p).parts and "tests" not in Path(p).parts
+            ]
+            if not cleaned:
+                continue
+            existing = annotation_map.setdefault(req_id, [])
+            annotation_map[req_id] = list(dict.fromkeys(cleaned + existing))
+
     # Scan for @tests annotations (test → code direct links)
     test_code_links = scan_test_code_links(Path(project_dir))
+    # Import-level links: test file → production module it exercises
+    code_test_links = scan_code_test_links(project_dir)
+    desktop_test_links = scan_desktop_test_links(project_dir)
 
     # Scan for SHALL-N / REQ-ID comments
     code_map = _scan_comments_for_requirements(src_dir, shalls)
@@ -870,6 +1339,9 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         # Find code that references this requirement
         matching_code = code_map.get(req_id, [])
         if not matching_code:
+            # Authoritative annotations may use the spec-level ID (REQ-xxx)
+            matching_code = annotation_map.get(spec_req_id, [])
+        if not matching_code:
             # Fallback: search by keyword
             keywords = _extract_keywords(shall["statement"])
             matching_code = _find_code_by_keywords(src_dir, keywords)
@@ -882,6 +1354,50 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
             test_reports, spec_req_id, shall["statement"], project_dir=str(project_dir)
         )
 
+        # Fallback: a requirement is verified when the code implementing it is
+        # exercised by a pytest file. Links are derived from real imports and
+        # recorded as declared evidence (source=code-test-link). Keep at most
+        # MAX_DERIVED_TESTS links, preferring tests named after the module,
+        # so the trace stays precise instead of listing every importing test.
+        if not matching_tests and matching_code:
+            candidates: list[tuple[int, str, str]] = []
+            seen_test_files: set[str] = set()
+            for code_file in matching_code:
+                code_key = str(code_file).replace(os.sep, "/").lstrip("./")
+                module_stem = Path(code_key).stem
+                for test_file in code_test_links.get(code_key, []):
+                    if test_file in seen_test_files:
+                        continue
+                    seen_test_files.add(test_file)
+                    score = 2 if module_stem and module_stem in Path(test_file).stem else 0
+                    candidates.append((score, test_file, code_key))
+            candidates.sort(key=lambda item: (-item[0], item[1]))
+            matching_tests = [
+                {
+                    "file": test_file,
+                    "status": "linked",
+                    "source": "code-test-link",
+                    "via_code": code_key,
+                }
+                for _score, test_file, code_key in candidates[:MAX_DERIVED_TESTS]
+            ]
+
+        # Desktop Jest suites are outside tests/ and declare coverage via @req.
+        # Annotations may use either the SHALL-level ID or the spec-level ID,
+        # so look up both.
+        for lookup_id in dict.fromkeys([spec_req_id, req_id]):
+            for test_file in desktop_test_links.get(lookup_id, []):
+                if any(
+                    isinstance(t, dict) and t.get("file") == test_file
+                    for t in matching_tests
+                ):
+                    continue
+                matching_tests.append({
+                    "file": test_file,
+                    "status": "linked",
+                    "source": "desktop-test-annotation",
+                })
+
         # Enrich test entries with @tests annotation links (test → code direct traceability)
         for test_entry in matching_tests:
             if isinstance(test_entry, dict) and "file" in test_entry:
@@ -893,8 +1409,13 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
                         "functions": link["functions"],
                     }
 
-        # Find reviews that reference this requirement
-        matching_reviews = _find_reviews_for_requirement(reviews, spec_req_id, shall["statement"])
+        # Find reviews that reference this requirement. Both the spec-level ID
+        # (RS-001) and the SHALL-level ID must be honoured: review records and
+        # the serialized matrix use different identifiers for the same row.
+        matching_reviews = _find_reviews_for_requirement(
+            reviews, spec_req_id, shall["statement"], code_files=matching_code,
+            aliases=[req_id],
+        )
 
         # Determine match method for traceability audit
         if req_id in annotation_map or spec_req_id in annotation_map:
@@ -909,8 +1430,12 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
         requirements.append({
             "id": req_id,
             "req_id": shall.get("req_id"),
+            "explicit_id": bool(shall.get("explicit_id")),
+            "upstream": list(shall.get("upstream") or []),
+            "upstream_method": "declared" if shall.get("upstream") else "",
             "statement": shall["statement"],
             "section": shall.get("section", ""),
+            "source_file": shall.get("source_file", ""),
             "code_files": matching_code,
             "test_reports": matching_tests,
             "reviews": matching_reviews,
@@ -983,7 +1508,14 @@ def generate_lrm(project_dir: str, spec_path: Optional[str] = None) -> dict:
                 "has_review": False,
                 "step_handlers": [],
                 "swr_mapping": True,
+                "explicit_id": True,
+                "upstream": [],
             })
+
+    # Apply authored V-model trace policy (section prefix → upstream ID).
+    # Existing ``追溯`` lines remain authoritative; policy adds the missing
+    # architecture allocation links without guessing.
+    _apply_vmodel_trace_policy(requirements, load_vmodel_trace_policy(project_dir))
 
     # Summary
     total = len(requirements)
@@ -1109,14 +1641,18 @@ def write_authoritative_traceability(project_dir: str,
         test_files = sorted({str(t.get("file", "")) for t in tests if t.get("file")})
         code_files = [str(c) for c in (r.get("code_files") or [])]
         rows.append({
-            "req_id": r.get("id", ""),
+            "req_id": _final_requirement_id(r),
             "statement": (r.get("statement") or "")[:160],
             "section": r.get("section", ""),
+            "source_file": r.get("source_file", ""),
+            "upstream": list(r.get("upstream") or []),
+            "upstream_method": r.get("upstream_method", ""),
             "has_code": has_code,
             "has_test": has_test,
             "has_review": bool(r.get("has_review")),
             "code_files": code_files,
             "test_files": test_files,
+            "match_method": r.get("match_method", ""),
             "status": "Covered" if has_test else "Not Covered",
         })
 
@@ -1470,20 +2006,35 @@ def _find_code_by_keywords_for_id(src_dir: Path, req_id: str) -> list[str]:
 
 
 def _find_reviews_for_requirement(reviews: list[dict], req_id: str,
-                                   statement: str) -> list[dict]:
-    """Find reviews referencing a specific requirement."""
+                                   statement: str,
+                                   code_files: Optional[list[str]] = None,
+                                   aliases: Optional[list[str]] = None) -> list[dict]:
+    """Find reviews covering a specific requirement.
+
+    Coverage requires concrete evidence: the review declares the requirement ID,
+    names a file implementing it, or mentions the ID in its findings. Statement
+    keywords are intentionally not used — a desktop review must not count as
+    review evidence for unrelated requirements.
+    """
     matching = []
-    keywords = _extract_keywords(statement)
+    code_names = {Path(str(p)).name for p in (code_files or []) if str(p)}
+    req_ids = {str(req_id).lower()} | {
+        str(a).lower() for a in (aliases or []) if str(a)
+    }
 
     for review in reviews:
-        review_text = json.dumps(review).lower()
-
-        if req_id.lower() in review_text:
+        declared = {str(x).lower() for x in (review.get("requirements") or [])}
+        if req_ids & declared:
             matching.append(review)
             continue
 
-        kw_matches = sum(1 for kw in keywords if kw in review_text)
-        if len(keywords) > 0 and kw_matches >= max(2, len(keywords) // 3):
+        reviewed_names = {Path(str(p)).name for p in (review.get("reviewed_files") or [])}
+        if code_names & reviewed_names:
+            matching.append(review)
+            continue
+
+        review_text = json.dumps(review).lower()
+        if any(rid and rid in review_text for rid in req_ids):
             matching.append(review)
 
     return matching

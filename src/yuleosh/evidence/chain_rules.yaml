@@ -1,0 +1,366 @@
+# yuleOSH 证据链规则（LLM 可读 + 机器可校验）
+#
+# 本文件是「证据链」的唯一规则来源。pipeline / evidence 生成器 / CLI
+# / skill 均从这里读取门禁语义；任何规则变更必须先改本文件，再改代码。
+# 第一准则：只做证据的搬运与关联，绝不臆造节点、边或通过结论。
+
+schema:
+  name: osh-evidence-chain-v1
+  version: "1.0.0"
+  artifact: chain.json
+  html: 证据链总览.html
+
+# ── 真源（truth sources）───────────────────────────────────────────────
+# 证据链只允许消费以下产物；不得从 LLM 记忆或推测补充数据。
+truth_sources:
+  requirements:
+    - .osh/evidence/traceability-matrix.json      # schema: osh-traceability-v1
+  fallback:
+    - alm.traceability.write_authoritative_traceability   # 矩阵缺失时重建真源
+    - alm.traceability.generate_lrt               # 重建失败时的只读回退
+  tests:
+    - .osh/sessions/*/*test*.json
+  reviews:
+    - .osh/sessions/*/code-review.json
+    - .osh/evidence/reviews/*.json
+  ci:
+    - .osh/ci/layer*.json
+  artifacts:
+    - .osh/evidence/**/*
+
+# ── 节点与边 ───────────────────────────────────────────────────────────
+node_types:
+  requirement:
+    id: "<需求ID，如 SHALL-001 / SWR-001>"
+    title: 需求陈述（截断 120 字）
+    required: true
+  code:
+    id: "code:<项目相对路径>"
+    title: 文件名
+    required: false
+  test:
+    id: "test:<项目相对路径>"
+    title: 文件名
+    required: false
+  review:
+    id: "review:<会话名>"
+    title: 会话名
+    required: false
+
+edge_kinds:
+  implement: "requirement → code：代码实现该需求"
+  verify: "requirement → test：测试验证该需求"
+  review: "requirement → review：评审覆盖该需求"
+  derive: "requirement → requirement：系统需求派生软件需求（SYS.1 → SWE.1）"
+  allocate: "requirement → requirement：上层需求分配到下层设计元素"
+
+# 边置信度：exact（@req/注释直连）> declared（矩阵声明的测试文件）> inferred（关键词推断）
+edge_confidence:
+  exact: "注释或矩阵直接声明，可用于正式追溯"
+  declared: "矩阵声明的测试关联，可信但需抽查"
+  inferred: "关键词推断，HTML 中以虚线显示，可被“仅精确追溯”过滤"
+  truth_discipline: "统计覆盖率时不得把 inferred 边当作精确证据；P0 应优先消除 inferred 边。"
+
+# ── 追溯语义（ASPICE GP1.2 / GP1.3）───────────────────────────────────
+edge_semantics:
+  relations:
+    - derive        # 派生
+    - allocate      # 分配
+    - satisfy       # 满足
+    - implement     # 实现
+    - verify        # 验证
+    - review        # 评审
+    - change        # 变更影响
+  statuses:
+    accepted: "已确认，可计入审计覆盖"
+    proposed: "机器推断或待确认，只作为线索，不计入审计覆盖"
+    rejected: "已拒绝，不计入覆盖"
+  default_status:
+    exact: accepted
+    declared: accepted
+    inferred: proposed
+  counting: "只有 status=accepted 的边计入 ASPICE 覆盖率与 V 模型覆盖；proposed 边必须在 HTML 中可见但不得用于判绿。"
+  # 推断边的分诊账本：inferred / 存疑边必须逐条给出 accepted 或 rejected 决策。
+  link_decisions_glob: "docs/evidence/trace-decisions/*.json"
+  link_decisions: >-
+    机器推断边（inferred）不得长期停留在 proposed；分诊结果写入决策账本，
+    rejected 边保留在 chain.json 供审计但不计入覆盖。exact（@req/注释）边是
+    权威证据，不得被 rejected 决策降级。未进入账本的 proposed 边触发
+    W-CHAIN-LINK-UNAPPROVED。
+
+# ── ID 纪律 ────────────────────────────────────────────────────────────
+id_rules:
+  requirement_pattern: "^[A-Z][A-Za-z0-9_.\\-]{2,}$"
+  linked_pattern: "^[a-z]+:[^\\s]+$"
+  uniqueness: "节点 ID 全局唯一；重复即 E-CHAIN-DUP"
+  discipline:
+    - 需求 ID SHALL 与 spec 中原文一致，不得改写、缩写或翻译。
+    - 代码/测试/评审 ID SHALL 使用 <类型>:<项目相对路径或会话名> 形式。
+    - 需求节点 SHALL 至少有一条 implement 或 verify 出边；否则视为孤儿证据（ORPHAN）。
+    - 不允许手工编造节点来“补齐”覆盖率。
+
+# ── 必需证据物 ─────────────────────────────────────────────────────────
+required_evidence:
+  - traceability-matrix.json
+
+# ── 门禁（fail-closed）────────────────────────────────────────────────
+# severity=ERROR 的任意一条未通过 → chain.status=FAIL，CLI 退出码非 0。
+gates:
+  - id: E-CHAIN-SCHEMA
+    severity: ERROR
+    rule: "schema 名称/版本与规则一致，顶层 nodes/edges/artifacts/gates/problems 齐全"
+  - id: E-CHAIN-ID
+    severity: ERROR
+    rule: "所有节点 ID 匹配 id_rules 的 pattern"
+  - id: E-CHAIN-SRC-DUP
+    severity: ERROR
+    rule: "真源矩阵中不得出现重复需求 ID；重复行不得静默合并"
+  - id: E-CHAIN-SRC-DROP
+    severity: ERROR
+    rule: "真源行不得因空 ID 或不可解析而被静默丢弃"
+  - id: E-CHAIN-DUP
+    severity: ERROR
+    rule: "不存在重复节点 ID"
+  - id: E-CHAIN-DANGLING
+    severity: ERROR
+    rule: "每条边的 from/to 都指向已存在的节点"
+  - id: E-CHAIN-ORPHAN
+    severity: ERROR
+    rule: "每个需求节点至少有 implement 或 verify 出边（无代码无测试即孤儿）"
+  - id: E-CHAIN-ARTIFACT-MISSING
+    severity: ERROR
+    rule: "required_evidence 中的产物必须存在且 SHA256 非空"
+  - id: E-CHAIN-GATE
+    severity: ERROR
+    rule: "任一 severity=ERROR 的过程门禁为 FAIL"
+  - id: E-VMODEL-PAIR
+    severity: ERROR
+    rule: "aspice.v_model_pairs 中 required=true 的过程对覆盖率达到 target_coverage_pct；缺失过程域同样判红"
+  - id: W-CHAIN-LINK-UNAPPROVED
+    severity: WARNING
+    rule: "存在未分诊的 proposed 追溯边时告警；proposed 边不计入审计覆盖，须经 link_decisions_glob 决策"
+  - id: W-CHAIN-VMODEL-NA
+    severity: WARNING
+    rule: "项目未声明任何 ASPICE 过程域时，V 模型只提示不判红"
+  - id: W-CHAIN-REVIEW
+    severity: WARNING
+    rule: "需求缺少评审覆盖时告警，但不单独判红（由 G-REVIEW 决定是否 ERROR）"
+  - id: E-CHAIN-REVIEW-RECORD
+    severity: ERROR
+    rule: >-
+      独立评审记录（artifact_type=independent-review 或 reviewer_independence=independent）
+      必须包含 reviewer.name/role、三项独立性声明、reviewer_signature、signed_at 与合法 verdict；
+      verdict=pass 时不得存在 status=open 的缺陷。任一项不满足即判红。
+  - id: W-CHAIN-REVIEW-RECORD
+    severity: WARNING
+    rule: "独立评审记录缺少 requirements 或 reviewed_files 时告警，此时无法建立 review 边"
+  - id: W-CHAIN-REVIEW-INDEPENDENCE
+    severity: WARNING
+    rule: "存在评审记录但无任何独立评审时告警，提示 ASPICE GP1.2 独立签署尚未满足"
+  - id: W-CHAIN-REQ-DRIFT
+    severity: WARNING
+    rule: "需求正文哈希相对已接受基线发生变化时告警，关联实现/测试/评审需复核；基线通过 YULEOSH_ACCEPT_REQ_BASELINE=1 显式更新"
+  - id: W-CHAIN-REVIEW-AI
+    severity: WARNING
+    rule: "独立评审由 AI 代理执行时告警，提示外部 ASPICE 审计前仍需人工会签"
+
+# ── ASPICE V 模型与过程域 ─────────────────────────────────────────────
+# 过程域口径遵循 ASPICE v3.1。分类优先级：
+#   1) 矩阵行显式 process_area
+#   2) req_id / section 中的 ASPICE 过程域标识（如 SYS.2、SWE.1）
+#   3) source_file 文件名约定
+#   4) 无法判定 → UNCLASSIFIED（不得臆测归类）
+aspice:
+  process_areas:
+    - SYS.1
+    - SYS.2
+    - SYS.3
+    - SWE.1
+    - SWE.2
+    - SWE.3
+    - SWE.4
+    - SWE.5
+    - SWE.6
+    - HWE.1
+    - HWE.2
+    - SUP.1
+    - SUP.8
+    - SUP.9
+    - SUP.10
+    - MAN.3
+    - MAN.5
+  source_mapping:
+    - pattern: "^docs/(spec|requirements|software-requirements)\\.md$"
+      process_area: SWE.1
+    - pattern: "^docs/system-requirements\\.md$"
+      process_area: SYS.2
+    - pattern: "^docs/system-architecture\\.md$"
+      process_area: SYS.3
+    - pattern: "^docs/(architecture|software-architecture)\\.md$"
+      process_area: SWE.2
+    - pattern: "^docs/(detailed-design|design)\\.md$"
+      process_area: SWE.3
+  id_prefixes:
+    - prefix: "STAKE"
+      process_area: SYS.1
+    - prefix: "STK"
+      process_area: SYS.1
+    - prefix: "SG"
+      process_area: SYS.1
+    - prefix: "SYSARCH"
+      process_area: SYS.3
+    - prefix: "SYS"
+      process_area: SYS.2
+    - prefix: "RS"
+      process_area: SYS.2
+    - prefix: "NFR"
+      process_area: SYS.2
+    - prefix: "CR"
+      process_area: SYS.2
+    - prefix: "FSR"
+      process_area: SYS.2
+    - prefix: "SWARCH"
+      process_area: SWE.2
+    - prefix: "SWR"
+      process_area: SWE.1
+    - prefix: "SWE"
+      process_area: SWE.1
+    - prefix: "KG"
+      process_area: SWE.1
+    - prefix: "TG"
+      process_area: SWE.1
+    - prefix: "REQ"
+      process_area: SWE.1
+    - prefix: "DD"
+      process_area: SWE.3
+    - prefix: "HWR"
+      process_area: HWE.1
+    - prefix: "HWD"
+      process_area: HWE.2
+  test_level_mapping:
+    - pattern: "(^|/)(unit|ut)(/|_)|test_unit"
+      process_area: SWE.4
+    - pattern: "(^|/)(integration|it)(/|_)|test_integration"
+      process_area: SWE.5
+    - pattern: "(^|/)(system|e2e|acceptance|qualification)(/|_)|test_system"
+      process_area: SWE.6
+  # 上游过程 → 下游过程。required=true 时覆盖不足即 E-VMODEL-PAIR。
+  v_model_pairs:
+    - id: V-SYS1-SYS2
+      upstream: SYS.1
+      downstream: SYS.2
+      link_kinds: [derive]
+      target_type: requirement
+      required: true
+      target_coverage_pct: 100
+    - id: V-SYS2-SYS3
+      upstream: SYS.2
+      downstream: SYS.3
+      link_kinds: [derive, allocate]
+      target_type: requirement
+      required: true
+      target_coverage_pct: 100
+    - id: V-SYS3-SWE1
+      upstream: SYS.3
+      downstream: SWE.1
+      link_kinds: [derive, allocate]
+      target_type: requirement
+      required: true
+      target_coverage_pct: 100
+    - id: V-SWE1-SWE2
+      upstream: SWE.1
+      downstream: SWE.2
+      link_kinds: [derive]
+      target_type: requirement
+      required: true
+      target_coverage_pct: 100
+    - id: V-SWE2-SWE3
+      upstream: SWE.2
+      downstream: SWE.3
+      link_kinds: [derive, allocate]
+      target_type: requirement
+      required: true
+      target_coverage_pct: 100
+    - id: V-SWE3-SWE4
+      upstream: SWE.3
+      downstream: SWE.4
+      link_kinds: [verify]
+      target_type: test
+      required: false
+      target_coverage_pct: 100
+    - id: V-SWE2-SWE5
+      upstream: SWE.2
+      downstream: SWE.5
+      link_kinds: [verify]
+      target_type: test
+      required: false
+      target_coverage_pct: 100
+    - id: V-SWE1-SWE6
+      upstream: SWE.1
+      downstream: SWE.6
+      link_kinds: [verify]
+      target_type: test
+      required: false
+      target_coverage_pct: 100
+
+  # V 模型上游只能来自受控追溯声明，不得由关键词推断。
+  v_model_policy:
+    file: "docs/requirements/v-model-traceability.md"
+    rule: "按下游章节前缀最长匹配；上游可写需求 ID 或章节前缀；未匹配即不生成 derive 边"
+    precedence: "需求内 `追溯` 行优先，其次为策略表"
+
+# ── 过程门禁阈值 ───────────────────────────────────────────────────────
+thresholds:
+  min_test_coverage_pct: 60
+  min_code_coverage_pct: 60
+  # ASPICE GP1.2: 所有工作产物 SHALL 经独立评审；自评审不计入覆盖。
+  review_required: true
+  min_review_coverage_pct: 100
+  independent_review_required: true
+  min_vmodel_pair_coverage_pct: 100
+
+process_gates:
+  - id: G-REQ
+    severity: ERROR
+    rule: "需求总数 > 0；解析不到需求即红"
+  - id: G-CODE
+    severity: ERROR
+    rule: "实现覆盖率 >= thresholds.min_code_coverage_pct"
+  - id: G-TEST
+    severity: ERROR
+    rule: "测试覆盖率 >= thresholds.min_test_coverage_pct"
+  - id: G-REVIEW
+    severity: ERROR
+    rule: "独立评审覆盖率 >= thresholds.min_review_coverage_pct；review_required=true 时缺失即 ERROR"
+  - id: G-CI
+    severity: ERROR
+    rule: "CI 结果存在且无 failed；完全没有 CI 结果时记 WARNING"
+
+# ── HTML 契约 ─────────────────────────────────────────────────────────
+html_contract:
+  single_file: true
+  offline: true               # 无 CDN / 无外部字体 / 无网络请求
+  data_embedding: "<script id='chain-data' type='application/json'>"
+  views:
+    - trace        # V 模型列布局 + SVG 边 + 节点抽屉
+    - artifacts    # 证据库：文件 + SHA256 + 自动关联链接
+    - closure      # 过程闭环：门禁 / 问题 / CI / 度量
+  deep_links:
+    - "#/node/<node-id>"
+    - "#/artifact/<artifact-id>"
+    - "#/gate/<gate-id>"
+    - "#/view/<trace|artifacts|closure>"
+  edge_rendering: "proposed 边 SHALL 以虚线显示；HTML SHALL 提供“仅 accepted 边”过滤"
+  v_model_table: "过程闭环视图 SHALL 显示 ASPICE V 模型成对覆盖表与过程域缺失原因"
+  fail_closed: "HTML 顶部 SHALL 显示真实 chain.status；不得把 FAIL 渲染成通过"
+
+# ── 给后续 LLM 的填写纪律 ────────────────────────────────────────────
+llm_instructions:
+  - "先读 chain.json 与 traceability-matrix.json，再读 HTML；HTML 只是导航视图，不是真源。"
+  - "引用证据时 SHALL 使用节点 ID 或产物相对路径，并提供 SHA256，禁止只说“有测试”。"
+  - "引用追溯边时 SHALL 同时给出 status 与 confidence；proposed / inferred 只能作为线索，不得当作审计证据。"
+  - "过程域归类必须来自显式字段、ID 标识、前缀或 source_file；无法判定就写 UNCLASSIFIED，禁止臆测。"
+  - "V 模型 required 过程对缺失时 SHALL 报告缺哪个过程域，不得用总覆盖率掩盖局部断链。"
+  - "V 模型 derive 边只能来自需求内 `追溯` 行或 docs/requirements/v-model-traceability.md 策略表；禁止用关键词猜测补齐。"
+  - "发现 E-CHAIN-* 或 E-VMODEL-PAIR 红灯时 SHALL 修复真源（spec/代码/测试/评审），不得改 chain.json 绕过。"
+  - "只有证据物缺失才允许新增采集逻辑；不得为了变绿而伪造节点、边或哈希。"

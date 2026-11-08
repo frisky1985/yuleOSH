@@ -1,0 +1,98 @@
+# MAN.3 项目计划（真源）。机器管计划↔配置库闭合与日期逻辑；进度百分比为人填（示例数据）。
+meta:
+  project: 主驾座椅控制器（SCM）示例
+milestones:
+  - {id: MS-SEAT-1, name: 需求冻结, plan: 2026-10-15, actual: 2026-10-15}
+  - {id: MS-SEAT-2, name: 架构评审通过, plan: 2026-10-28, actual: 2026-10-29}
+  - {id: MS-SEAT-3, name: 软硬件详设完成, plan: 2026-11-04, actual: 2026-11-04}
+  - {id: MS-SEAT-4, name: 系统测试完成, plan: 2026-11-20, actual: null}
+  - {id: MS-SEAT-5, name: 基线发布, plan: 2026-12-05, actual: null}
+wbs:
+  - id: WP-SEAT-01
+    name: 系统需求与架构
+    category: ENG
+    pred: null
+    deliverables: [SYS.2_系统需求规格说明书_座椅控制器示例_V1.0.xlsx, SYS.3_系统架构设计说明书_座椅控制器示例_V1.0.xlsx, 产品配置_变体需求矩阵_座椅控制器示例_V1.0.xlsx]
+    owner: 示例
+    plan_start: 2026-10-08
+    plan_end: 2026-10-15
+    actual_start: 2026-10-08
+    actual_end: 2026-10-15
+    progress: 100
+  - id: WP-SEAT-02
+    name: 软件需求与架构
+    category: ENG
+    pred: WP-SEAT-01
+    deliverables: [SWE.1_软件需求规格说明书_座椅控制器示例_V1.0.xlsx, SWE.2_软件架构设计说明书_座椅控制器示例_V1.0.xlsx]
+    owner: 示例
+    plan_start: 2026-10-16
+    plan_end: 2026-10-24
+    actual_start: 2026-10-16
+    actual_end: 2026-10-25
+    progress: 100
+  - id: WP-SEAT-03
+    name: 软件详细设计
+    category: ENG
+    pred: WP-SEAT-02
+    deliverables: [SWE.3_软件详细设计说明书_座椅控制器示例_V1.0.xlsx]
+    owner: 示例
+    plan_start: 2026-10-27
+    plan_end: 2026-10-31
+    actual_start: 2026-10-27
+    actual_end: 2026-10-31
+    progress: 100
+  - id: WP-SEAT-04
+    name: 硬件需求与设计
+    category: ENG
+    pred: WP-SEAT-01
+    deliverables: [HWE.1_硬件需求规格说明书_座椅控制器示例_V1.0.xlsx, HWE.2_硬件设计说明书_座椅控制器示例_V1.0.xlsx, HWE.2_原理图占位说明_座椅控制器示例_V1.0.docx]
+    owner: 示例
+    plan_start: 2026-10-16
+    plan_end: 2026-10-31
+    actual_start: 2026-10-16
+    actual_end: 2026-11-01
+    progress: 100
+  - id: WP-SEAT-05
+    name: 需求追溯与系统测试
+    category: ENG
+    pred: WP-SEAT-03
+    deliverables: [ENG_需求追踪表_座椅控制器示例_V1.0.xlsx, ENG_测试规范_座椅控制器示例_V1.0.xlsx]
+    owner: 示例
+    plan_start: 2026-11-02
+    plan_end: 2026-11-20
+    actual_start: 2026-11-02
+    actual_end: null
+    progress: 60
+  - id: WP-SEAT-06
+    name: 质量保证（评审）
+    category: SUP
+    pred: WP-SEAT-02
+    deliverables: [SUP.1_评审记录_座椅控制器示例_V1.0.xlsx]
+    owner: 示例
+    plan_start: 2026-10-27
+    plan_end: 2026-11-06
+    actual_start: 2026-10-27
+    actual_end: 2026-11-06
+    progress: 100
+  - id: WP-SEAT-07
+    name: 配置/问题/变更管理
+    category: SUP
+    pred: WP-SEAT-05
+    deliverables: [SUP.8_项目配置项清单及状态报告_座椅控制器示例_V1.0.xlsx, SUP.9_缺陷问题管理表_座椅控制器示例_V1.0.xlsx, SUP.10_项目变更跟踪表_座椅控制器示例_V1.0.xlsx]
+    owner: 示例
+    plan_start: 2026-11-09
+    plan_end: 2026-11-27
+    actual_start: null
+    actual_end: null
+    progress: 0
+  - id: WP-SEAT-08
+    name: 项目管理（计划/风险/度量）
+    category: MAN
+    pred: WP-SEAT-06
+    deliverables: [横切_过程度量与目标定义_座椅控制器示例_V1.0.xlsx, MAN.3_项目进度计划_座椅控制器示例_V1.0.xlsx, MAN.5_风险登记册_座椅控制器示例_V1.0.xlsx]
+    owner: 示例
+    plan_start: 2026-11-09
+    plan_end: 2026-11-13
+    actual_start: null
+    actual_end: null
+    progress: 0

@@ -1,0 +1,329 @@
+{
+  "tool": "trace_check.py",
+  "version": "1.0",
+  "generated_at": "2026-11-03T23:04:50+08:00",
+  "trace_file": "examples/ENG_需求追踪表_BCM氛围灯示例_V1.0.xlsx",
+  "cases_file": "examples/ENG_测试规范_BCM氛围灯示例_V1.0.xlsx",
+  "strict": false,
+  "bidirectional": true,
+  "id_pattern": "^[A-Za-z][A-Za-z0-9_.\\-]{2,}$",
+  "passed": true,
+  "counts": {
+    "error": 0,
+    "warn": 3,
+    "info": 0
+  },
+  "totals": {
+    "sheets": 10,
+    "analyzed_sheets": 8,
+    "skipped_sheets": 2,
+    "data_rows": 27,
+    "valid_rows": 27,
+    "rows_with_downstream": 21
+  },
+  "global_unique_ids": 27,
+  "broken_links": 0,
+  "total_downstream_refs": 30,
+  "orphans": 0,
+  "invalid_ids": 0,
+  "duplicate_groups": 0,
+  "cross_sheet_duplicates": 0,
+  "testcase": {
+    "nonempty_cells": 5,
+    "noncompliant_cells": 0,
+    "noncompliance_ratio": 0.0,
+    "unresolved_refs": 0
+  },
+  "case_stats": {
+    "sheet": "2.测试用例",
+    "header_row": 3,
+    "id_col": "E",
+    "total_cases": 5,
+    "referenced_cases": 5,
+    "coverage": 1.0,
+    "warning": null
+  },
+  "sheets": [
+    {
+      "title": "0.示例声明",
+      "index": 0,
+      "status": "skipped_no_header",
+      "header_row": null,
+      "id_column": null,
+      "downstream_column": null,
+      "testcase_column": null,
+      "upstream_column": null,
+      "source_column": null,
+      "data_rows": 0,
+      "valid_rows": 0,
+      "rows_with_downstream": 0,
+      "coverage": null
+    },
+    {
+      "title": "涉众需求清单",
+      "index": 1,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "涉众需求标识\nStakeholder Requirement ID"
+      },
+      "downstream_column": {
+        "letter": "H",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": null,
+      "upstream_column": {
+        "letter": "G",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": {
+        "letter": "D",
+        "header": "来源\nSource"
+      },
+      "data_rows": 2,
+      "valid_rows": 2,
+      "rows_with_downstream": 2,
+      "coverage": 1.0
+    },
+    {
+      "title": "网络安全需求",
+      "index": 2,
+      "status": "skipped_no_id",
+      "header_row": 4,
+      "id_column": null,
+      "downstream_column": {
+        "letter": "H",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": null,
+      "upstream_column": {
+        "letter": "G",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": {
+        "letter": "F",
+        "header": "来源\nSource"
+      },
+      "data_rows": 0,
+      "valid_rows": 0,
+      "rows_with_downstream": 0,
+      "coverage": null
+    },
+    {
+      "title": "系统需求清单",
+      "index": 3,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "系统需求标识\nSystem Requirement ID"
+      },
+      "downstream_column": {
+        "letter": "H",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": {
+        "letter": "I",
+        "header": "测试用例\nTest Case"
+      },
+      "upstream_column": {
+        "letter": "G",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": null,
+      "data_rows": 5,
+      "valid_rows": 5,
+      "rows_with_downstream": 5,
+      "coverage": 1.0
+    },
+    {
+      "title": "系统架构元素清单",
+      "index": 4,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "系统架构元素标识\nSystem Architectural Element ID"
+      },
+      "downstream_column": {
+        "letter": "G",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": {
+        "letter": "H",
+        "header": "测试用例\nTest Case"
+      },
+      "upstream_column": {
+        "letter": "F",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": null,
+      "data_rows": 3,
+      "valid_rows": 3,
+      "rows_with_downstream": 3,
+      "coverage": 1.0
+    },
+    {
+      "title": "硬件需求清单",
+      "index": 5,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "硬件需求标识\nHW Requirement ID"
+      },
+      "downstream_column": {
+        "letter": "H",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": {
+        "letter": "I",
+        "header": "测试用例\nTest Case"
+      },
+      "upstream_column": {
+        "letter": "G",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": null,
+      "data_rows": 1,
+      "valid_rows": 1,
+      "rows_with_downstream": 1,
+      "coverage": 1.0
+    },
+    {
+      "title": "硬件设计元素清单",
+      "index": 6,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "硬件设计元素标识\nHW Element ID"
+      },
+      "downstream_column": {
+        "letter": "G",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": {
+        "letter": "H",
+        "header": "测试用例\nTest Case"
+      },
+      "upstream_column": {
+        "letter": "F",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": null,
+      "data_rows": 1,
+      "valid_rows": 1,
+      "rows_with_downstream": 0,
+      "coverage": 0.0
+    },
+    {
+      "title": "软件需求清单",
+      "index": 7,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "软件需求标识\nSW Requirement ID"
+      },
+      "downstream_column": {
+        "letter": "H",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": {
+        "letter": "I",
+        "header": "测试用例\nTest Case"
+      },
+      "upstream_column": {
+        "letter": "G",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": null,
+      "data_rows": 5,
+      "valid_rows": 5,
+      "rows_with_downstream": 5,
+      "coverage": 1.0
+    },
+    {
+      "title": "软件架构元素清单",
+      "index": 8,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "软件架构元素标识\nSW Architectural Element ID"
+      },
+      "downstream_column": {
+        "letter": "G",
+        "header": "下游元素\nDownstream Element"
+      },
+      "testcase_column": {
+        "letter": "H",
+        "header": "测试用例\nTest Case"
+      },
+      "upstream_column": {
+        "letter": "F",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": null,
+      "data_rows": 5,
+      "valid_rows": 5,
+      "rows_with_downstream": 5,
+      "coverage": 1.0
+    },
+    {
+      "title": "软件详设清单",
+      "index": 9,
+      "status": "analyzed",
+      "header_row": 4,
+      "id_column": {
+        "letter": "B",
+        "header": "软件详设标识\nSW Detailed Design ID"
+      },
+      "downstream_column": null,
+      "testcase_column": {
+        "letter": "G",
+        "header": "动态测试用例\nTest Case"
+      },
+      "upstream_column": {
+        "letter": "D",
+        "header": "上游元素\nUpstream Element"
+      },
+      "source_column": null,
+      "data_rows": 5,
+      "valid_rows": 5,
+      "rows_with_downstream": 0,
+      "coverage": 0.0
+    }
+  ],
+  "issues": [
+    {
+      "severity": "WARN",
+      "sheet": "0.示例声明",
+      "row": null,
+      "cell": "",
+      "id": "",
+      "message": "未识别到表头行（前 20 行缺少 ID/下游/测试用例等关键词），该清单已跳过",
+      "suggestion": "确认表头是否位于前 20 行，或手工检查列名是否含“ID/标识/下游元素”等关键词"
+    },
+    {
+      "severity": "WARN",
+      "sheet": "网络安全需求",
+      "row": 4,
+      "cell": "",
+      "id": "",
+      "message": "未识别到 ID 列（表头无 ID/标识/编号关键词），该清单无法建立索引，已跳过",
+      "suggestion": "补充明确的标识列（如“XXX标识 / XXX ID”），否则无法机械校验追溯"
+    },
+    {
+      "severity": "WARN",
+      "sheet": "软件详设清单",
+      "row": 4,
+      "cell": "",
+      "id": "",
+      "message": "未识别到“下游元素 / Downstream Element”列，无法校验其出边（按链尾处理）",
+      "suggestion": "若非链尾清单，请补充“下游元素”列并填写下游 ID"
+    }
+  ]
+}

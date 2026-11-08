@@ -67,3 +67,48 @@ software-requirements.md 没有 → 覆盖率虚低。yuleOSH `generate_lrm` 现
 ## 六、mock 文件约定
 
 tests/mock/ 是测试替身，其 @req 引用**不计入追溯**（审计/对齐/补文档时一律排除）。
+
+## 七、代码注解的适用范围（硬规则）
+
+注解不是全量要求，**只有实现受控需求的代码才必须标注**：
+
+| 代码类型 | 是否必须 `@req` | 说明 |
+|---|---|---|
+| 实现需求的功能代码 | **是** | 首行标注，多个需求用逗号分隔；ID 必须来自受控需求目录 |
+| 辅助/脚手架/工具代码 | 否 | 与需求无实现关系，无需注解 |
+| 测试代码 | 按项目约定 | 用 `@tests` 指向被测源文件，`@req` 可选 |
+
+pipeline codegen 的强制边界：
+
+- 声明了 `requirements` 或正文已带 `@req` 的文件 → 进入追溯校验
+- 声明了需求但漏写注解 → 自动补首行注解
+- 注解引用受控需求目录之外的 ID → 整批拒绝写入（fail-closed）
+- 无声明、无注解的辅助代码 → 正常写入
+
+漏标需求相关代码不会静默通过：对应需求会在证据链中缺少 `implement` 边，
+由 `G-CODE` 覆盖率门禁暴露。
+
+## 八、漂移检测与语义抽检
+
+覆盖率只能证明链接**存在**，不能证明链接**正确**。为此增加两道检查：
+
+**1. 需求漂移检测**
+
+- 基线：`docs/evidence/baselines/requirement-hashes.json`（持久化，不随 `.osh/` 清空丢失）
+- 每次 `evidence chain` 比较需求正文哈希（空白归一化），正文变化的 ID 产生 `W-CHAIN-REQ-DRIFT`
+- 基线首次运行自动创建；确需接受新基线时显式执行：
+
+```bash
+YULEOSH_ACCEPT_REQ_BASELINE=1 PYTHONPATH=src python3 -m yuleosh.cli.main evidence chain --check
+```
+
+**2. 语义抽检**
+
+```bash
+python3 scripts/gen_semantic_spotcheck.py --count 20
+```
+
+- 按 `sha256(req_id)` 排序取前 N 条，样本可复现
+- 输出 `docs/evidence/pending-reviews/semantic-spotcheck.md`
+- 每条列出需求正文、关联实现文件、`@req` 是否存在，供评审人核对语义一致性
+- 抽检发现写入独立评审记录的 `findings`，不要直接改清单

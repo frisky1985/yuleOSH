@@ -151,7 +151,7 @@ class TestEngineSeedSync:
         session = _session(tmp_path)
         engine = CodegenEngine(llm_client=lambda s, u, **k: {
             "content": "### FILE: src/app/src/window_control.c\n```c\n"
-                       "// modified\n#include \"window_control.h\"\n"
+                       "// @req SHALL-001\n// modified\n#include \"window_control.h\"\n"
                        "void window_control_init(void) {}\n"
                        "void window_control_step(void) {}\n```\n"},
             max_retries=0, seed_dir=proj, output_dir=tmp_path / "out")
@@ -173,7 +173,7 @@ class TestEngineSeedSync:
             # 只输出修改的 window_control.c — 依赖 seed 的 hal_motor.h
             return {"content": (
                 "### FILE: src/app/src/window_control.c\n```c\n"
-                "#include \"window_control.h\"\n"
+                "// @req SHALL-001\n#include \"window_control.h\"\n"
                 "#include \"hal_motor.h\"\n"
                 "void window_control_init(void) {}\n"
                 "void window_control_step(void) {\n"
@@ -190,7 +190,7 @@ class TestEngineSeedSync:
         session = _session(tmp_path)
 
         def llm(system, user, **kw):
-            return {"content": "### FILE: src/x.py\n```python\ndef f():\n    return 1\n```\n"}
+            return {"content": "### FILE: src/x.py\n```python\n# @req SHALL-001\ndef f():\n    return 1\n```\n"}
 
         engine = CodegenEngine(llm_client=llm, max_retries=0,
                                output_dir=tmp_path / "out")
@@ -231,7 +231,7 @@ class TestBestStateRollback:
                 )
             return {"content": (
                 "### FILE: src/app/src/window_control.c\n```c\n"
-                f"{body}\n```\n")}
+                f"// @req SHALL-001\n{body}\n```\n")}
 
         engine = CodegenEngine(llm_client=llm, max_retries=3,
                                seed_dir=proj, output_dir=tmp_path / "out")
@@ -253,7 +253,7 @@ class TestBestStateRollback:
             prompts.append(user)
             return {"content": (
                 "### FILE: src/app/src/window_control.c\n```c\n"
-                '#include "window_control.h"\n'
+                '// @req SHALL-001\n#include "window_control.h"\n'
                 "void window_control_init(void) {}\n"
                 "void window_control_step(void) {}\n```\n")}
 

@@ -7,6 +7,9 @@
  *   - AC-1.2.2: contextIsolation=true, nodeIntegration=false
  *   - AC-1.3.1: 加载 frontend/out/ 静态文件路径正确
  *   - AC-4.1.1: 应用菜单构造
+ *
+ * @tests desktop/main.js
+ * @req SHALL-253
  */
 /* eslint-disable */
 
@@ -14,6 +17,7 @@ const path = require('path');
 
 // Mock BrowserWindow 构造参数存储
 const mockBrowserWindowCalls = [];
+const mockWindows = [];
 
 // jest.mock 工厂函数不能引用外部作用域变量，
 // 但可以引用 mock- 前缀的变量
@@ -27,9 +31,12 @@ jest.mock('electron', () => {
     constructor(options) {
       super();
       mockBrowserWindowCalls.push(options);
+      mockWindows.push(this);
       this.webContents = Object.assign(new events.EventEmitter(), {
         send: jest.fn(),
         toggleDevTools: jest.fn(),
+        setWindowOpenHandler: jest.fn(),
+        getURL: jest.fn(() => ''),
       });
       this._options = options;
       this._visible = true;
@@ -57,6 +64,7 @@ jest.mock('electron', () => {
       on: jest.fn(),
       whenReady: jest.fn(() => Promise.resolve()),
       getPath: jest.fn((name) => `/mock/userData/${name}`),
+      requestSingleInstanceLock: jest.fn(() => true),
       quit: jest.fn(),
       exit: jest.fn(),
     },
@@ -93,7 +101,7 @@ jest.mock('electron', () => {
       openExternal: jest.fn(),
     },
   };
-});
+}, { virtual: true });
 
 const main = require('../main');
 const { Menu } = require('electron');
@@ -126,11 +134,16 @@ describe('AC-1.x — 窗口管理', () => {
     expect(opts.webPreferences.nodeIntegration).toBe(false);
   });
 
-  test('AC-1.3.1: frontend/out/ 目录存在', () => {
+  test('AC-1.3.1: 前端构建目录存在或给出明确构建提示', async () => {
     const desktopDir = path.resolve(__dirname, '..');
     const expectedOutDir = path.resolve(desktopDir, '..', 'frontend', 'out');
     const fs = require('fs');
-    expect(fs.existsSync(expectedOutDir)).toBe(true);
+    if (fs.existsSync(expectedOutDir)) {
+      expect(fs.existsSync(path.join(expectedOutDir, 'index.html'))).toBe(true);
+      return;
+    }
+    // 仓库源码目录通常不含构建产物：应 fail-fast 并提示构建命令
+    await expect(main.startLocalFileServer()).rejects.toThrow('Frontend build not found');
   });
 });
 
@@ -144,3 +157,142 @@ describe('AC-4.x — 应用菜单', () => {
     expect(Menu.setApplicationMenu).toHaveBeenCalled();
   });
 });
+
+// ── AC-4.1.2/4.1.3 打开项目对话框 ───────────────────
+
+describe('AC-4.1.2/4.1.3 — 打开项目对话框接线', () => {
+  const { dialog, ipcMain } = require('electron');
+
+  beforeEach(() => {
+    dialog.showOpenDialog.mockReset();
+    dialog.showSaveDialog.mockReset();
+  });
+
+  test('AC-4.1.2: 触发后调用 showOpenDialog 且仅允许选择目录', async () => {
+    await main.createWindow();
+    dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ['/tmp/yuleosh-project'],
+    });
+
+    const selected = await main.openProjectDialog();
+
+    expect(selected).toBe('/tmp/yuleosh-project');
+    const options = dialog.showOpenDialog.mock.calls.at(-1)[1];
+    expect(options.properties).toEqual(['openDirectory']);
+  });
+
+  test('AC-4.1.3: 选中目录后通过 IPC 发送 project-opened 路径', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+    dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ['/tmp/project-with-path'],
+    });
+
+    await main.openProjectDialog();
+
+    expect(win.webContents.send).toHaveBeenCalledWith(
+      'project-opened',
+      '/tmp/project-with-path'
+    );
+  });
+
+  test('AC-4.1.3: 取消选择时返回 null 且不发送事件', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+    win.webContents.send.mockClear();
+    dialog.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+
+    const selected = await main.openProjectDialog();
+
+    expect(selected).toBeNull();
+    expect(win.webContents.send).not.toHaveBeenCalledWith(
+      'project-opened',
+      expect.anything()
+    );
+  });
+
+  test('AC-4.1.3: 渲染进程可通过 IPC 调用同一对话框实现', async () => {
+    await main.createWindow();
+    const channels = ipcMain.handle.mock.calls.map((call) => call[0]);
+    expect(channels).toContain('open-project-dialog');
+    expect(channels).toContain('create-project-dialog');
+  });
+
+  test('创建项目对话框选中后发送 create-project 事件', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+    dialog.showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: '/tmp/new-project',
+    });
+
+    const created = await main.openCreateProject();
+
+    expect(created).toBe('/tmp/new-project');
+    expect(win.webContents.send).toHaveBeenCalledWith('create-project', '/tmp/new-project');
+  });
+});
+
+// ── AC-2.x 错误恢复 IPC ─────────────────────────────
+
+describe('AC-2.x — 后端错误恢复 IPC', () => {
+  const { ipcMain } = require('electron');
+
+  test('AC-2.1.5: 注册错误页重试与状态查询通道', async () => {
+    await main.createWindow();
+    const channels = ipcMain.handle.mock.calls.map((call) => call[0]);
+    expect(channels).toContain('retry-startup');
+    expect(channels).toContain('get-backend-status');
+  });
+
+  test('AC-2.1.5: IPC 处理器只注册一次（重复 createWindow 不抛异常）', async () => {
+    await main.createWindow();
+    const before = ipcMain.handle.mock.calls.filter((call) => call[0] === 'open-directory').length;
+    await main.createWindow();
+    const after = ipcMain.handle.mock.calls.filter((call) => call[0] === 'open-directory').length;
+    expect(after).toBe(before);
+  });
+
+  test('AC-2.1.5: 重试失败时返回结构化错误而非抛异常', async () => {
+    await main.createWindow();
+    const ServerManager = require('../server-manager');
+    const startSpy = jest.spyOn(ServerManager.prototype, 'start')
+      .mockRejectedValue(new Error('python missing'));
+    const destroySpy = jest.spyOn(ServerManager.prototype, 'destroy')
+      .mockResolvedValue();
+
+    const result = await main.retryStartup();
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('python missing');
+    startSpy.mockRestore();
+    destroySpy.mockRestore();
+  });
+});
+
+// ── AC-2.5 渲染进程恢复 & 安全响应头 ────────────────
+
+describe('AC-2.5 — 渲染进程恢复与安全响应头', () => {
+  test('渲染进程崩溃后自动 reload', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+
+    win.webContents.emit('render-process-gone', {}, { reason: 'crashed', exitCode: 1 });
+
+    expect(win.reload).toHaveBeenCalled();
+  });
+
+  test('静态资源带安全响应头，HTML 额外带 CSP', () => {
+    expect(main.SECURITY_HEADERS['X-Content-Type-Options']).toBe('nosniff');
+    expect(main.SECURITY_HEADERS['X-Frame-Options']).toBe('DENY');
+    expect(main.HTML_CSP).toContain("default-src 'self'");
+    expect(main.HTML_CSP).toContain("frame-ancestors 'none'");
+  });
+});
+

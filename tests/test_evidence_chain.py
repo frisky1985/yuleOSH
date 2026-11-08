@@ -1,0 +1,446 @@
+#!/usr/bin/env python3
+# Copyright (c) 2025 frisky1985
+# SPDX-License-Identifier: Elastic-2.0
+
+"""Tests for evidence/chain.py — fail-closed evidence chain + HTML overview."""
+
+import json
+from pathlib import Path
+
+from yuleosh.evidence.chain import (
+    CHAIN_HTML,
+    CHAIN_JSON,
+    cmd_evidence_chain,
+    collect_chain,
+    load_rules,
+    render_html,
+    validate_chain,
+    write_chain,
+)
+from yuleosh.skills.builtin import builtin_skills
+
+
+def _add_independent_review(project: Path) -> None:
+    """Add a complete independent review record covering every matrix row."""
+    matrix_path = project / ".osh" / "evidence" / "traceability-matrix.json"
+    matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+    rows = matrix.get("requirements") or []
+    for row in rows:
+        row["has_review"] = True
+    matrix_path.write_text(json.dumps(matrix), encoding="utf-8")
+
+    review = {
+        "artifact_type": "independent-review",
+        "reviewer_independence": "independent",
+        "reviewer": {"name": "QA Reviewer", "role": "independent reviewer"},
+        "independence_declaration": {
+            "not_author_of_artifact": True,
+            "not_contributor_to_change": True,
+            "no_conflict_of_interest": True,
+        },
+        "signoff": {
+            "reviewer_signature": "QA-2026",
+            "signed_at": "2026-11-08T10:00:00+08:00",
+        },
+        "requirements": [str(r.get("req_id")) for r in rows],
+        "reviewed_files": sorted({
+            str(f)
+            for r in rows
+            for f in (r.get("code_files") or []) + (r.get("test_files") or [])
+        }),
+        "findings": [],
+        "verdict": "pass",
+    }
+    reviews_dir = project / "docs" / "evidence" / "reviews"
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+    (reviews_dir / "independent-review-001.json").write_text(
+        json.dumps(review), encoding="utf-8"
+    )
+
+
+def _make_matrix_project(tmp_path: Path, requirements: list[dict]) -> Path:
+    ev = tmp_path / ".osh" / "evidence"
+    ev.mkdir(parents=True, exist_ok=True)
+    (ev / "traceability-matrix.json").write_text(
+        json.dumps({
+            "schema": "osh-traceability-v1",
+            "generated": "2026-11-07T00:00:00",
+            "summary": {},
+            "requirements": requirements,
+            "sys_trace": {},
+            "gap_analysis": {},
+        }),
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+def _req(req_id: str, code: list[str], tests: list[str], review: bool = False,
+         match_method: str = "annotation", **extra) -> dict:
+    row = {
+        "req_id": req_id,
+        "statement": f"{req_id} shall provide behaviour",
+        "section": "2",
+        "has_code": bool(code),
+        "has_test": bool(tests),
+        "has_review": review,
+        "code_files": code,
+        "test_files": tests,
+        "match_method": match_method,
+        "status": "Covered" if tests else "Not Covered",
+    }
+    row.update(extra)
+    return row
+
+
+class TestCollectChain:
+    def test_collects_nodes_edges_and_passes(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+            _req("SHALL-002", ["src/b.c"], ["tests/test_b.py"]),
+        ])
+        _add_independent_review(project)
+        chain = collect_chain(str(project))
+
+        assert chain["schema"] == "osh-evidence-chain-v1"
+        assert chain["source"] == "traceability-matrix.json"
+        ids = {n["id"] for n in chain["nodes"]}
+        assert {"SHALL-001", "SHALL-002", "code:src/a.c", "test:tests/test_a.py"} <= ids
+        kinds = {e["kind"] for e in chain["edges"]}
+        assert {"implement", "verify"} <= kinds
+        assert chain["summary"]["status"] == "PASS"
+        assert chain["metrics"]["test_coverage_pct"] == 100.0
+
+    def test_rebuilds_matrix_when_missing(self, tmp_path):
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "spec.md").write_text(
+            "# Spec\n\n## Requirements\n\n- **SHALL-001**: The system SHALL start.\n",
+            encoding="utf-8",
+        )
+        chain = collect_chain(str(tmp_path))
+        assert chain["source"] == "alm.traceability.write_authoritative_traceability"
+        # Matrix is rebuilt so the required evidence artifact exists.
+        assert (tmp_path / ".osh" / "evidence" / "traceability-matrix.json").exists()
+        assert chain["summary"]["status"] == "FAIL"  # coverage gates fail-closed
+        codes = {p["code"] for p in chain["problems"]}
+        assert "E-CHAIN-GATE" in codes
+        assert "E-CHAIN-ARTIFACT-MISSING" not in codes
+
+    def test_missing_evidence_dir_is_fail_closed(self, tmp_path):
+        chain = collect_chain(str(tmp_path))
+        assert chain["summary"]["status"] == "FAIL"
+        assert chain["metrics"]["requirements"] == 0
+        assert any(p["code"] == "E-CHAIN-GATE" for p in chain["problems"])
+
+    def test_duplicate_source_requirement_ids_fail_closed(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+            _req("SHALL-001", ["src/b.c"], ["tests/test_b.py"]),
+        ])
+        chain = collect_chain(str(project))
+        assert chain["summary"]["status"] == "FAIL"
+        assert chain["metrics"]["requirements"] == 1
+        assert chain["metrics"]["source_rows"] == 2
+        assert chain["source_stats"]["duplicates"] == {"SHALL-001": 2}
+        codes = {p["code"] for p in chain["problems"]}
+        assert "E-CHAIN-SRC-DUP" in codes
+        page = render_html(chain)
+        assert "源重复 ID" in page
+
+    def test_empty_source_req_id_is_reported_not_silently_dropped(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+            _req("", ["src/b.c"], ["tests/test_b.py"]),
+        ])
+        chain = collect_chain(str(project))
+        assert chain["summary"]["status"] == "FAIL"
+        assert chain["metrics"]["requirements"] == 1
+        assert chain["source_stats"]["dropped"]
+        codes = {p["code"] for p in chain["problems"]}
+        assert "E-CHAIN-SRC-DROP" in codes
+
+
+class TestTraceConfidence:
+    def test_keyword_code_edge_is_inferred(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        implement = [e for e in chain["edges"] if e["kind"] == "implement"]
+        assert implement and implement[0]["confidence"] == "inferred"
+        assert implement[0]["method"] == "keyword"
+
+    def test_annotation_code_edge_is_exact(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], [], match_method="annotation"),
+        ])
+        chain = collect_chain(str(project))
+        implement = [e for e in chain["edges"] if e["kind"] == "implement"]
+        assert implement and implement[0]["confidence"] == "exact"
+
+    def test_html_exposes_confidence_filter(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        page = render_html(chain)
+        assert 'data-confidence="inferred"' in page
+        assert 'id="exact-only"' in page
+
+
+class TestLinkDecisions:
+    def _write_decision(self, project: Path, decision: str) -> None:
+        decisions_dir = project / "docs" / "evidence" / "trace-decisions"
+        decisions_dir.mkdir(parents=True, exist_ok=True)
+        (decisions_dir / "inferred-implement.json").write_text(
+            json.dumps({
+                "schema": "osh-trace-decisions-v1",
+                "decisions": [{
+                    "from": "SHALL-001",
+                    "to": "code:src/a.c",
+                    "kind": "implement",
+                    "decision": decision,
+                    "reason": "no_requirement_annotation",
+                }],
+            }),
+            encoding="utf-8",
+        )
+
+    def test_proposed_edge_is_reported_without_decision(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-LINK-UNAPPROVED" in codes
+
+    def test_rejected_decision_clears_warning_but_not_coverage(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="keyword"),
+        ])
+        self._write_decision(project, "rejected")
+        chain = collect_chain(str(project))
+
+        edge = next(e for e in chain["edges"] if e["to"] == "code:src/a.c")
+        assert edge["status"] == "rejected"
+        assert edge["method"] == "link-decision:rejected"
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-LINK-UNAPPROVED" not in codes
+        assert chain["metrics"]["code_coverage_pct"] == 0.0
+        assert chain["metrics"]["link_decisions_rejected"] == 1
+        assert chain["metrics"]["proposed_edges"] == 0
+
+    def test_rejected_decision_never_downgrades_exact_edge(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"], match_method="annotation"),
+        ])
+        self._write_decision(project, "rejected")
+        chain = collect_chain(str(project))
+
+        edge = next(e for e in chain["edges"] if e["to"] == "code:src/a.c")
+        assert edge["confidence"] == "exact"
+        assert edge["status"] == "accepted"
+        assert chain["metrics"]["link_decisions_protected_exact"] == 1
+        assert chain["metrics"]["code_coverage_pct"] == 100.0
+
+
+class TestAspiceVModel:
+    def _full_v_model_project(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SYS.1-001", ["src/a.c"], ["tests/unit/test_a.py"]),
+            _req("SYS.2-001", ["src/b.c"], ["tests/unit/test_b.py"], upstream="SYS.1-001"),
+            _req("SYS.3-001", ["src/c.c"], ["tests/unit/test_c.py"], upstream="SYS.2-001"),
+            _req("SWE.1-001", ["src/d.c"], ["tests/unit/test_d.py"], upstream="SYS.3-001"),
+            _req("SWE.2-001", ["src/e.c"], ["tests/unit/test_e.py"], upstream="SWE.1-001"),
+            _req("SWE.3-001", ["src/f.c"], ["tests/unit/test_f.py"], upstream="SWE.2-001"),
+        ])
+        _add_independent_review(project)
+        return project
+
+    def test_review_policy_fails_without_independent_review(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        chain = collect_chain(str(project))
+        gate = next(g for g in chain["gates"] if g["id"] == "G-REVIEW")
+        assert gate["status"] == "FAIL"
+        assert gate["severity"] == "ERROR"
+        assert chain["summary"]["status"] == "FAIL"
+
+    def test_links_have_semantics_and_accepted_status(self, tmp_path):
+        chain = collect_chain(str(self._full_v_model_project(tmp_path)))
+        assert all(e["status"] in ("accepted", "proposed") for e in chain["edges"])
+        derives = [e for e in chain["edges"] if e["kind"] == "derive"]
+        assert derives and all(e["status"] == "accepted" for e in derives)
+
+    def test_v_model_pairs_all_pass(self, tmp_path):
+        chain = collect_chain(str(self._full_v_model_project(tmp_path)))
+        v_model = chain["v_model"]
+        required = [p for p in v_model["pairs"] if p["required"]]
+        assert len(required) == 5
+        assert all(p["status"] == "PASS" for p in required)
+        assert chain["metrics"]["v_model_required_passed"] == 5
+        assert chain["summary"]["status"] == "PASS"
+
+    def test_missing_process_area_fails_required_pair(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SWE.1-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        chain = collect_chain(str(project))
+        codes = {p["code"] for p in chain["problems"]}
+        assert "E-VMODEL-PAIR" in codes
+        assert chain["summary"]["status"] == "FAIL"
+
+    def test_source_file_classification(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"],
+                 source_file="docs/system-requirements.md"),
+        ])
+        chain = collect_chain(str(project))
+        req = next(n for n in chain["nodes"] if n["id"] == "SHALL-001")
+        assert req["process_area"] == "SYS.2"
+        assert req["process_method"] == "source_file"
+
+    def test_unclassified_project_does_not_fail_v_model(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [_req("SHALL-001", ["src/a.c"], [])])
+        chain = collect_chain(str(project))
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-VMODEL-NA" in codes
+        assert "E-VMODEL-PAIR" not in codes
+
+    def test_html_exposes_vmodel_and_edge_status(self, tmp_path):
+        chain = collect_chain(str(self._full_v_model_project(tmp_path)))
+        page = render_html(chain)
+        assert 'id="vmodel-table"' in page
+        assert 'data-vmodel-pair="V-SYS1-SYS2"' in page
+        assert 'data-status="accepted"' in page
+        assert 'id="accepted-only"' in page
+
+
+class TestAcceptedCoverage:
+    def test_inferred_implementation_edge_does_not_count(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], [], match_method="keyword"),
+        ])
+        chain = collect_chain(str(project))
+        implement = next(e for e in chain["edges"] if e["kind"] == "implement")
+        assert implement["status"] == "proposed"
+        assert chain["metrics"]["with_code"] == 1
+        assert chain["metrics"]["with_code_accepted"] == 0
+        assert chain["metrics"]["code_coverage_pct"] == 0.0
+        codes = {p["code"] for p in chain["problems"]}
+        assert "W-CHAIN-LINK-UNAPPROVED" in codes
+
+
+class TestValidateChain:
+    def _valid_chain(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        return collect_chain(str(project))
+
+    def test_duplicate_invalid_and_dangling(self, tmp_path):
+        chain = self._valid_chain(tmp_path)
+        chain["nodes"].append(dict(chain["nodes"][0]))  # duplicate SHALL-001
+        chain["nodes"].append({
+            "id": "bad id", "type": "code", "title": "bad", "status": "evidence", "refs": [],
+        })
+        chain["edges"].append({"from": "SHALL-001", "to": "ghost-node", "kind": "verify"})
+
+        codes = {p["code"] for p in validate_chain(chain)}
+        assert "E-CHAIN-DUP" in codes
+        assert "E-CHAIN-ID" in codes
+        assert "E-CHAIN-DANGLING" in codes
+
+    def test_orphan_requirement(self, tmp_path):
+        chain = self._valid_chain(tmp_path)
+        chain["nodes"].append({
+            "id": "SHALL-ORPHAN",
+            "type": "requirement",
+            "title": "orphan",
+            "status": "gap",
+            "refs": [],
+            "has_code": False,
+            "has_test": False,
+            "has_review": False,
+        })
+        codes = {p["code"] for p in validate_chain(chain)}
+        assert "E-CHAIN-ORPHAN" in codes
+
+    def test_missing_required_artifact(self, tmp_path):
+        chain = self._valid_chain(tmp_path)
+        chain["artifacts"] = [a for a in chain["artifacts"]
+                              if a["name"] != "traceability-matrix.json"]
+        codes = {p["code"] for p in validate_chain(chain)}
+        assert "E-CHAIN-ARTIFACT-MISSING" in codes
+
+    def test_empty_sha256_is_fail(self, tmp_path):
+        chain = self._valid_chain(tmp_path)
+        for artifact in chain["artifacts"]:
+            if artifact["name"] == "traceability-matrix.json":
+                artifact["sha256"] = ""
+        codes = {p["code"] for p in validate_chain(chain)}
+        assert "E-CHAIN-ARTIFACT-MISSING" in codes
+
+
+class TestRenderAndWrite:
+    def test_html_contains_data_views_and_deep_links(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        chain = collect_chain(str(project))
+        page = render_html(chain)
+
+        assert '<script id="chain-data" type="application/json">' in page
+        assert "#/node/" in page
+        assert "#/artifact/" in page
+        assert "#/gate/" in page
+        assert 'id="view-trace"' in page
+        assert 'id="view-artifacts"' in page
+        assert 'id="view-closure"' in page
+        assert "https://" not in page  # offline, no CDN
+
+    def test_html_shows_fail_status(self, tmp_path):
+        chain = collect_chain(str(tmp_path))  # empty project → FAIL
+        page = render_html(chain)
+        assert 'class="badge bad">FAIL' in page
+
+    def test_write_chain_outputs(self, tmp_path):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        chain = collect_chain(str(project))
+        written = write_chain(chain, evidence_dir=str(project / ".osh" / "evidence"))
+        assert Path(written["json"]).name == CHAIN_JSON
+        assert Path(written["html"]).name == CHAIN_HTML
+        saved = json.loads(Path(written["json"]).read_text(encoding="utf-8"))
+        assert saved["schema"] == "osh-evidence-chain-v1"
+
+
+class TestCli:
+    def test_exit_code_pass(self, tmp_path, capsys):
+        project = _make_matrix_project(tmp_path, [
+            _req("SHALL-001", ["src/a.c"], ["tests/test_a.py"]),
+        ])
+        _add_independent_review(project)
+        code = cmd_evidence_chain(str(project), check_only=True)
+        assert code == 0
+        assert "PASS" in capsys.readouterr().out
+
+    def test_exit_code_fail(self, tmp_path, capsys):
+        code = cmd_evidence_chain(str(tmp_path), check_only=True)
+        assert code == 1
+        assert "FAIL" in capsys.readouterr().out
+
+
+class TestRulesAndSkill:
+    def test_rules_expose_gates_and_thresholds(self):
+        rules = load_rules()
+        gate_ids = {g["id"] for g in rules["gates"]}
+        assert "E-CHAIN-DANGLING" in gate_ids
+        assert "min_test_coverage_pct" in rules["thresholds"]
+        assert rules["html_contract"]["offline"] is True
+
+    def test_skill_registered(self):
+        names = {s.name for s in builtin_skills()}
+        assert "aspice-evidence-chain" in names

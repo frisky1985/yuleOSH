@@ -36,6 +36,10 @@ from yuleosh.alm.traceability import (
     generate_lrm,
     generate_lrt,
     generate_traceability_report,
+    scan_code_test_links,
+    scan_desktop_test_links,
+    scan_req_annotations,
+    validate_review_records,
     _extract_keywords,
     _find_code_by_keywords,
     _find_step_handlers_for_requirement,
@@ -258,6 +262,79 @@ class TestScanReviewArtifacts:
         assert len(results) == 0
 
 
+# ── validate_review_records ───────────────────────────────────────────
+
+def _write_review(project_dir, record, name="review-001"):
+    reviews_dir = Path(project_dir) / "docs" / "evidence" / "reviews"
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+    path = reviews_dir / f"{name}.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    return path
+
+
+def _independent_review(**overrides):
+    record = {
+        "artifact_type": "independent-review",
+        "reviewer_independence": "independent",
+        "reviewer": {"name": "Alice", "role": "QA"},
+        "independence_declaration": {
+            "not_author_of_artifact": True,
+            "not_contributor_to_change": True,
+            "no_conflict_of_interest": True,
+        },
+        "signoff": {"reviewer_signature": "ALICE-2026", "signed_at": "2026-11-08T09:00:00+08:00"},
+        "requirements": ["REQ-001"],
+        "reviewed_files": ["desktop/main.js"],
+        "findings": [{"id": "RV-01", "status": "fixed", "description": "x"}],
+        "verdict": "pass",
+    }
+    record.update(overrides)
+    return record
+
+
+class TestValidateReviewRecords:
+    def test_complete_independent_record_passes(self, tmp_project):
+        _write_review(tmp_project, _independent_review())
+        assert validate_review_records(tmp_project) == []
+
+    def test_missing_signature_and_declaration_fail(self, tmp_project):
+        _write_review(tmp_project, _independent_review(
+            signoff={"reviewer_signature": "", "signed_at": ""},
+            independence_declaration={"not_author_of_artifact": True},
+        ))
+        codes = [p["code"] for p in validate_review_records(tmp_project)]
+        messages = " | ".join(p["message"] for p in validate_review_records(tmp_project))
+        assert "E-CHAIN-REVIEW-RECORD" in codes
+        assert "reviewer_signature" in messages
+        assert "not_contributor_to_change" in messages
+
+    def test_pass_verdict_with_open_finding_fails(self, tmp_project):
+        _write_review(tmp_project, _independent_review(
+            findings=[{"id": "RV-01", "status": "open", "description": "x"}],
+            verdict="pass",
+        ))
+        problems = validate_review_records(tmp_project)
+        assert any(p["code"] == "E-CHAIN-REVIEW-RECORD" and "open" in p["message"] for p in problems)
+
+    def test_self_review_only_warns_on_independence(self, tmp_project):
+        _write_review(tmp_project, {
+            "artifact_type": "code-review",
+            "reviewer_independence": "self",
+            "reviewed_files": ["desktop/main.js"],
+            "findings": [],
+        })
+        problems = validate_review_records(tmp_project)
+        assert [p["code"] for p in problems] == ["W-CHAIN-REVIEW-INDEPENDENCE"]
+        assert problems[0]["severity"] == "WARNING"
+
+    def test_missing_requirements_and_files_warns(self, tmp_project):
+        record = _independent_review(requirements=[], reviewed_files=[])
+        _write_review(tmp_project, record)
+        codes = {p["code"] for p in validate_review_records(tmp_project)}
+        assert "W-CHAIN-REVIEW-RECORD" in codes
+        assert "E-CHAIN-REVIEW-RECORD" not in codes
+
+
 # ── scan_test_reports ─────────────────────────────────────────────────
 
 class TestScanTestReports:
@@ -311,6 +388,29 @@ class TestScanCiResults:
         }))
         results = scan_ci_results(tmp_project)
         assert len(results) == 1
+
+    def test_reads_persisted_docs_evidence(self, tmp_project):
+        """GIVEN evidence only in docs/evidence WHEN scanning THEN it is found.
+
+        .osh/ is git-ignored, so audit records must survive in docs/evidence/.
+        """
+        session_dir = Path(tmp_project) / "docs" / "evidence" / "sessions" / "desk"
+        session_dir.mkdir(parents=True)
+        (session_dir / "desktop-test.json").write_text(json.dumps({
+            "step": "desktop-unit-tests", "status": "passed", "passed": 14, "failed": 0,
+        }))
+        ci_dir = Path(tmp_project) / "docs" / "evidence" / "ci"
+        ci_dir.mkdir(parents=True)
+        (ci_dir / "layer-desktop.json").write_text(json.dumps({
+            "layer": "desktop", "status": "passed", "timestamp": "2026-11-07",
+        }))
+
+        reports = scan_test_reports(tmp_project)
+        ci_results = scan_ci_results(tmp_project)
+
+        assert len(reports) == 1
+        assert reports[0]["passed"] == 14
+        assert [c["layer"] for c in ci_results] == ["desktop"]
 
 
 # ── _extract_keywords ─────────────────────────────────────────────────
@@ -432,3 +532,86 @@ class TestGenerateLRT:
         assert "lrm" in result
         assert "gap_analysis" in result
         assert "orphaned_test_files" in result
+
+
+# ── code → test import links ──────────────────────────────────────────
+
+class TestCodeTestLinks:
+    """Requirement → test coverage must use real import-level evidence."""
+
+    def test_scan_code_test_links_maps_imports(self, tmp_project):
+        """GIVEN a test importing a module WHEN scanning THEN the source is linked."""
+        src_file = Path(tmp_project) / "src" / "yuleosh" / "demo.py"
+        src_file.write_text("def boot():\n    return True\n")
+        tests_dir = Path(tmp_project) / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_demo.py").write_text(
+            "from yuleosh.demo import boot\n\n"
+            "def test_boot():\n    assert boot() is True\n"
+        )
+
+        links = scan_code_test_links(tmp_project)
+
+        assert links["src/yuleosh/demo.py"] == ["tests/test_demo.py"]
+
+    def test_generate_lrm_links_requirement_to_importing_test(self, tmp_project):
+        """GIVEN no test mentions the req ID WHEN generating LRM THEN import link counts."""
+        docs_dir = Path(tmp_project) / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "spec.md").write_text("# Requirements\n- The system SHALL boot.\n")
+        src_file = Path(tmp_project) / "src" / "yuleosh" / "demo.py"
+        src_file.write_text("# @req SHALL-1\ndef boot():\n    return True\n")
+        tests_dir = Path(tmp_project) / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_demo.py").write_text(
+            "from yuleosh.demo import boot\n\n"
+            "def test_boot():\n    assert boot() is True\n"
+        )
+
+        lrm = generate_lrm(tmp_project)
+        req = lrm["requirements"][0]
+
+        assert req["has_test"] is True
+        assert req["test_reports"][0]["source"] == "code-test-link"
+
+
+class TestDesktopTestAnnotationLink:
+    def test_spec_level_req_id_links_shall_annotated_desktop_test(self, tmp_project):
+        """GIVEN desktop test annotates the SHALL ID WHEN spec uses REQ-xxx THEN linked."""
+        spec_req_id = "REQ-" + "999"
+        shall_id = "SHALL-" + "1"
+        docs_dir = Path(tmp_project) / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "software-requirements.md").write_text(
+            f"### {spec_req_id}: 多端接入\n"
+            "- **SHALL** 支持 CLI / Web UI / API 三种接入方式\n"
+        )
+        desktop_tests = Path(tmp_project) / "desktop" / "tests"
+        desktop_tests.mkdir(parents=True)
+        (desktop_tests / "desktop.test.js").write_text(
+            f"/**\n * @req {shall_id}\n */\n"
+        )
+
+        lrm = generate_lrm(tmp_project)
+        req = next(r for r in lrm["requirements"] if r["id"] == shall_id)
+
+        assert req["req_id"] == spec_req_id
+        files = [t["file"] for t in req["test_reports"] if isinstance(t, dict)]
+        assert "desktop/tests/desktop.test.js" in files
+
+
+class TestAnnotationScanSkipDirs:
+    def test_node_modules_and_build_are_not_scanned(self, tmp_path):
+        """GIVEN deps/build dirs WHEN scanning @req THEN only real sources count."""
+        src = tmp_path / "src"
+        (src / "node_modules" / "pkg").mkdir(parents=True)
+        (src / "node_modules" / "pkg" / "dep.js").write_text("// @req FAKE-1\n")
+        (src / "build").mkdir()
+        (src / "build" / "generated.py").write_text("# @req FAKE-2\n")
+        (src / "ok.py").write_text("# @req REAL-1\n")
+
+        result = scan_req_annotations(src)
+
+        assert "REAL-1" in result
+        assert "FAKE-1" not in result
+        assert "FAKE-2" not in result

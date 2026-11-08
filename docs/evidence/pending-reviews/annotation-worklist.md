@@ -1,0 +1,301 @@
+# 需求注解补齐工作清单
+
+> 由 `scripts/triage_inferred_edges.py` 生成；推断边决策账本：`docs/evidence/trace-decisions/inferred-implement.json`。
+> 真源：`.osh/evidence/chain.json`。规则：只有实现/验证需求相关的代码才需要 `@req`，纯辅助代码不要求注解。
+
+## 代码级需求（需补 `@req`）
+
+共 21 条代码级需求只有关键词推断边，补齐注解后其实现边会转为 `exact` 并计入覆盖。
+
+### SWE.1（21 条）
+
+- [ ] **SHALL-249** — **SHALL** 提供需求管理功能，支持需求标识、结构化、影响分析与变更追溯
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+    - `src/yuleosh/api/demo_wow.py`
+    - `src/yuleosh/api/desktop.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-249`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-250** — **SHALL** 提供多 Agent 协作的代码审查能力，覆盖 MISRA/CERT/安全规则
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/base.py`
+    - `src/yuleosh/alm/jira.py`
+    - `src/yuleosh/alm/polarion.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/__init__.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-250`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-251** — **SHALL** 实现三层 CI/CD 流水线 — L1 单元验证 / L25 集成测试 / L3 合格性测试
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+    - `src/yuleosh/api/demo_wow.py`
+    - `src/yuleosh/api/desktop.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-251`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-252** — **SHALL** 自动生成需求→设计→代码→测试的双向追溯矩阵与合规证据链
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/compliance.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-252`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-254** — **SHALL** 支持多租户 SaaS 部署，租户间数据隔离
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/compliance.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+    - `src/yuleosh/api/demo.py`
+    - `src/yuleosh/api/demo_wow.py`
+    - `src/yuleosh/api/desktop.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-254`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-255** — **SHALL** 提供软件在环 (SIL) 仿真测试能力，支持 GCC/Clang 交叉编译与 QEMU 执行
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+    - `src/yuleosh/api/demo.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-255`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-256** — **SHALL** 提供 Flash 抽象层 (FAL) 与 HIL 硬件在环测试框架
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/alm/jira.py`
+    - `src/yuleosh/alm/polarion.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/alm/traceability_config.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-256`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-257** — **SHALL** 提供端到端全流程集成测试，覆盖 spec → pipeline → evidence 完整链路
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/__init__.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/jira.py`
+    - `src/yuleosh/alm/polarion.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/alm/traceability_config.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-257`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-258** — **SHALL** 提供模板市场，预置 ASPICE/ISO 26262/IEC 61508 等合规模板
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/jira.py`
+    - `src/yuleosh/alm/polarion.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/audit.py`
+    - `src/yuleosh/api/compliance.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-258`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-259** — **SHALL** 提供在线试用 Demo 环境，零配置体验核心功能
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+    - `src/yuleosh/api/demo.py`
+    - `src/yuleosh/api/demo_quick.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-259`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-260** — **SHALL** 提供 AI 驱动的合规预评估，快速识别合规缺口
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/compliance.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+    - `src/yuleosh/api/desktop.py`
+    - `src/yuleosh/api/device_ui.py`
+    - `src/yuleosh/api/logs.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-260`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-261** — **SHALL** 单次合规检查在 30 秒内完成（100 文件以内项目）
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/compliance.py`
+    - `src/yuleosh/api/dashboard.py`
+    - `src/yuleosh/api/dashboard_v2.py`
+    - `src/yuleosh/api/demo_wow.py`
+    - `src/yuleosh/api/desktop.py`
+    - `src/yuleosh/api/desktop_sync.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-261`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-262** — **SHALL** 支持通过 yaml profile 扩展新的合规标准，无需修改核心代码
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/alm/traceability_config.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/compliance.py`
+    - `src/yuleosh/api/dashboard.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-262`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-82** — The system SHALL store built-in templates under `yuleosh/templates/`
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/__init__.py`
+    - `src/yuleosh/__main__.py`
+    - `src/yuleosh/_entry.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/base.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-82`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-83** — Each template SHALL contain `template.yaml`, `specs/spec.md`, `pipeline/config.yaml`, `src/`
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/__init__.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/jira.py`
+    - `src/yuleosh/alm/polarion.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/alm/traceability_config.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-83`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-84** — The system SHALL search for templates in priority order: project-local → user-local → built-in
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/__main__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/base.py`
+    - `src/yuleosh/alm/jira.py`
+    - `src/yuleosh/alm/polarion.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/alm/traceability_config.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-84`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-85** — User-local templates SHALL supplement (not replace) built-in templates
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/polarion.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/alm/traceability_config.py`
+    - `src/yuleosh/api/__init__.py`
+    - `src/yuleosh/api/artifacts.py`
+    - `src/yuleosh/api/audit.py`
+    - `src/yuleosh/api/auth.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-85`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-86** — The system SHALL support CLI command `yuleosh project init --template <name> [project_dir]`
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/__init__.py`
+    - `src/yuleosh/__main__.py`
+    - `src/yuleosh/_entry.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/base.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-86`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-87** — `project init` SHALL create: docs/spec.md, pipeline/config.yaml, src/, yuleosh.yaml
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/__init__.py`
+    - `src/yuleosh/__main__.py`
+    - `src/yuleosh/_entry.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/base.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-87`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-88** — When `--template` is omitted, the system SHALL enter interactive mode
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/base.py`
+    - `src/yuleosh/alm/traceability.py`
+    - `src/yuleosh/alm/traceability_config.py`
+    - `src/yuleosh/api/__init__.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-88`（JS/TS 用 `// @req`）。
+- [ ] **SHALL-89** — The system SHALL support CLI command `yuleosh template list` to enumerate all templates
+  - 候选实现文件（关键词推断，仅供定位）：
+    - `src/ci/fi_cmd.py`
+    - `src/yuleosh/__init__.py`
+    - `src/yuleosh/__main__.py`
+    - `src/yuleosh/_entry.py`
+    - `src/yuleosh/adapter/__init__.py`
+    - `src/yuleosh/adapter/dspace_adapter.py`
+    - `src/yuleosh/adapter/vector_adapter.py`
+    - `src/yuleosh/agent_registry.py`
+    - `src/yuleosh/alm/__init__.py`
+    - `src/yuleosh/alm/base.py`
+  - 操作：确认实现该需求后，在文件顶部加 `# @req SHALL-89`（JS/TS 用 `// @req`）。
+
+## 文档级需求（不要求代码注解）
+
+以下过程域的需求由设计/架构文档满足，关键词命中的代码文件被判定为无效实现证据：
+
+| 过程域 | 需求数 |
+| --- | ---: |
+| SWE.2 | 8 |
+| SWE.3 | 8 |
+| SYS.1 | 43 |
+| SYS.3 | 8 |
+
+## 收尾验证
+
+1. 补注解后重建矩阵与证据链：
+   `PYTHONPATH=src python3 -m yuleosh.cli.main evidence chain --check`
+2. 重新运行本脚本：已转为 exact 的需求会自动从本清单消失。

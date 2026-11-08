@@ -18,8 +18,9 @@ Usage:
     yuleosh pipeline status [name]           — Show pipeline status
     yuleosh review auto                      — Auto-review changes
     yuleosh review task <name> [kind]        — Review specific task
-    yuleosh ci run <layer>                   — Run CI layer (1/2/3)
+    yuleosh ci run <layer>                   — Run CI layer (1/2/2.5/3)
     yuleosh evidence pack                    — Generate ASPICE compliance pack
+    yuleosh evidence chain [--check|--json]  — Generate/validate evidence chain (chain.json + HTML)
     yuleosh audit evidence [-o <dir>]        — Generate CL2 audit evidence bundle
     yuleosh stats [--json]                   — Show project statistics
     yuleosh gap close [--yes|--no|--list]    — ASPICE 差距 → 改进工单 (受控生成)
@@ -271,7 +272,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ci = sub.add_parser("ci", help="CI pipeline management")
     csub = p_ci.add_subparsers(dest="ci_sub")
     p_ci_run = csub.add_parser("run", help="Run a CI layer")
-    p_ci_run.add_argument("layer", help="CI layer (1/2/3)")
+    p_ci_run.add_argument("layer", help="CI layer (1/2/2.5/3)")
 
     # evidence / ev — ASPICE compliance evidence
     p_ev = sub.add_parser("ev", help="ASPICE compliance evidence & gap check")
@@ -290,6 +291,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ev_check = evisub.add_parser("check", help="Check evidence bundle integrity")
     p_ev_check.add_argument("bundle_dir", help="Path to evidence bundle directory")
     p_ev_check.add_argument("--json", action="store_true")
+    p_ev_chain = evisub.add_parser(
+        "chain", help="Generate/validate ASPICE evidence chain (chain.json + HTML overview)")
+    p_ev_chain.add_argument("--project-dir", default=OSH_HOME)
+    p_ev_chain.add_argument("--evidence-dir", default=None, help="Evidence output dir (default: .osh/evidence)")
+    p_ev_chain.add_argument("--check", action="store_true", help="Validate only, do not render HTML")
+    p_ev_chain.add_argument("--render", action="store_true", help="Render HTML overview (default)")
+    p_ev_chain.add_argument("--json", action="store_true", help="Print chain JSON")
 
     # config — Profile 变更审计 (Sprint E)
     p_config = sub.add_parser("config", help="Configuration management (Sprint E)")
@@ -361,6 +369,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p_kg_build.add_argument("--ci", action="store_true", help="CI mode (auto-detect + snapshot)")
     p_kg_build.add_argument("--files", type=str, default=None, help="Comma-separated file paths")
     p_kg_build.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
+    p_kg_incremental = kgsub.add_parser(
+        "incremental", help="One-shot incremental chain (checkpoint→build→ci-hook→verify)")
+    p_kg_incremental.add_argument("--changed-files", type=str, default=None,
+                                  help="Comma-separated changed file paths")
+    p_kg_incremental.add_argument("--auto", action="store_true", help="Auto-detect changes from git diff")
+    p_kg_incremental.add_argument("--base-ref", default="HEAD~1", help="Git base ref for --auto")
+    p_kg_incremental.add_argument("--build-id", "-b", default=None, help="Build identifier")
+    p_kg_incremental.add_argument("--test-json", default=None, help="pytest JSON report path")
+    p_kg_incremental.add_argument("--junit", default=None, help="JUnit XML report path")
+    p_kg_incremental.add_argument("--no-verify", action="store_true",
+                                  help="Skip writing test results back to KG")
+    p_kg_incremental.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_kg_bootstrap = kgsub.add_parser("bootstrap", help="Full bootstrap from traceability data")
     p_kg_bootstrap.add_argument("--project-dir", default=OSH_HOME, help="Project root directory")
     p_kg_snapshot = kgsub.add_parser("snapshot", help="Snapshot management")
@@ -771,6 +791,15 @@ def main():
                 print()
             if not result.get("valid", True):
                 sys.exit(1)
+        elif args.evidence_sub == "chain":
+            from yuleosh.evidence.chain import cmd_evidence_chain
+            sys.exit(cmd_evidence_chain(
+                project_dir=args.project_dir,
+                evidence_dir=args.evidence_dir,
+                check_only=args.check,
+                render=args.render or not args.check,
+                as_json=args.json,
+            ))
         else:
             # Legacy — show brief status
             print("📦 Generate ASPICE compliance evidence")
@@ -965,10 +994,13 @@ def main():
         from yuleosh.knowledge_graph.kg_cli import (
             cmd_build, cmd_bootstrap, cmd_snapshot_list, cmd_snapshot_diff,
             cmd_query_impact, cmd_stats as kg_cmd_stats, cmd_report, cmd_events,
+            cmd_incremental,
         )
         from yuleosh.knowledge_graph.merge_gate import cmd_check_merge
         if args.kg_sub == "build":
             cmd_build(args)
+        elif args.kg_sub == "incremental":
+            cmd_incremental(args)
         elif args.kg_sub == "bootstrap":
             cmd_bootstrap(args)
         elif args.kg_sub == "snapshot":
@@ -1030,6 +1062,14 @@ def main():
     elif args.command == "ui":
         from yuleosh.ui.server import main as ui_main
         ui_main()
+
+    elif args.command in ("consistency", "baseline"):
+        # consistency / baseline 子命令通过 set_defaults(func=...) 绑定处理函数
+        func = getattr(args, "func", None)
+        if func is not None:
+            sys.exit(func(args))
+        parser.print_help()
+        sys.exit(1)
 
     elif args.command == "reverse":
         if getattr(args, "reverse_sub", None) == "scan":

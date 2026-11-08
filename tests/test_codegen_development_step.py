@@ -38,7 +38,7 @@ def _ok_llm(system, user, **kw):
     return {
         "content": (
             "### FILE: src/hello.py\n"
-            "```python\ndef hello():\n    return 'hi'\n```\n"
+            "```python\n# @req SHALL-001\ndef hello():\n    return 'hi'\n```\n"
         ),
         "usage": {"total_tokens": 20, "prompt_tokens": 10, "completion_tokens": 10},
         "model": "test-model",
@@ -115,9 +115,9 @@ class TestStepClaudeDevCodegen:
         def flaky(system, user, **kw):
             calls["n"] += 1
             if calls["n"] == 1:
-                body = "def broken(:\n"
+                body = "# @req SHALL-001\ndef broken(:\n"
             else:
-                body = "def fixed():\n    return 42\n"
+                body = "# @req SHALL-001\ndef fixed():\n    return 42\n"
             return {"content": f"### FILE: src/x.py\n```python\n{body}```\n",
                     "usage": {"total_tokens": 5}}
 

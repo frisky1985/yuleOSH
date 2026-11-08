@@ -165,7 +165,11 @@ class MisraConfig:
     _deviation_raw: list[dict] = field(default_factory=list)  # preserve raw YAML order for writing
     alm: AlmConfig = field(default_factory=AlmConfig)
     active_profile: str = "safety"  # "safety" | "performance" | "testing"
-    profiles: dict[str, MisraProfile] = field(default_factory=dict)
+    # Default must include the active profile, otherwise validate_misra_profiles()
+    # fails on a fresh project that has no ci-config.yaml yet.
+    profiles: dict[str, MisraProfile] = field(
+        default_factory=lambda: {"safety": MisraProfile(name="safety")}
+    )
     exclude_paths: list[str] = field(default_factory=lambda: ["tests/**", "third_party/**", "build/**"])
     scan_dirs: list[str] = field(default_factory=lambda: ["src", "benchmark", "ref"])
     include_paths: list[str] = field(default_factory=list)  # extra -I dirs beyond auto-detect

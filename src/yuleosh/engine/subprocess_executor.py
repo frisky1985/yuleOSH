@@ -256,12 +256,23 @@ def _run_step_in_subprocess(step_def: dict, project_dir: str,
             log.warning("Failed to write artifacts.json: %s", e)
 
     try:
+        # Ensure the worker can import the `yuleosh` package even when the
+        # parent process found it via sys.path (e.g. pytest, `python -m`)
+        # without PYTHONPATH being set in the environment.
+        import yuleosh as _yuleosh_pkg
+        _yuleosh_root = str(Path(_yuleosh_pkg.__file__).resolve().parent.parent)
+        _worker_env = os.environ.copy()
+        _existing_pp = _worker_env.get("PYTHONPATH", "")
+        _worker_env["PYTHONPATH"] = (
+            _yuleosh_root + (os.pathsep + _existing_pp if _existing_pp else "")
+        )
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout_s,
             cwd=project_dir,
+            env=_worker_env,
             check=False,  # worker 失败通过 returncode + JSON 回传，不抛
         )
     except subprocess.TimeoutExpired:

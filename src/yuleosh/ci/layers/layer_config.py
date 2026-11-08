@@ -33,6 +33,32 @@ class _LayerTimeout(Exception):
     pass
 
 
+def _result_sort_key(f: Path) -> tuple:
+    """Sort key for CI result files.
+
+    Primary key is ``st_mtime_ns`` (descending via ``reverse=True``). On an
+    mtime tie (e.g. two results written within the same nanosecond, which
+    happens regularly under pytest), we apply a *fail-closed* tiebreaker: a
+    result whose status is not ``"passed"`` sorts ahead of a passed one.
+    This keeps dependency gating conservative — when in doubt, treat the
+    layer as not-passed rather than risk unblocking downstream layers on a
+    stale ``passed`` result.
+    """
+    try:
+        mtime_ns = f.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = 0
+    try:
+        data = json.loads(f.read_text())
+        status = data.get("status")
+    except (json.JSONDecodeError, OSError, ValueError):
+        status = None
+    # True (non-passed / unreadable) sorts before False (passed) under
+    # reverse=True, giving the fail-closed tiebreaker.
+    non_passed = status != "passed"
+    return (mtime_ns, non_passed)
+
+
 def get_latest_layer_result(layer: int, project_dir: str) -> Optional[dict]:
     """Read the most recent CI result for the given layer from .osh/ci/.
 
@@ -45,7 +71,7 @@ def get_latest_layer_result(layer: int, project_dir: str) -> Optional[dict]:
     prefix = f"layer{layer}-"
     result_files = sorted(
         [f for f in ci_dir.iterdir() if f.name.startswith(prefix) and f.suffix == ".json"],
-        key=lambda f: f.stat().st_mtime,
+        key=_result_sort_key,
         reverse=True,
     )
     if not result_files:

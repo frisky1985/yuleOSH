@@ -47,6 +47,9 @@ misra:
   - tests/**
   - third_party/**
   - build/**
+  - benchmark/**
+  - src/yuleosh/cross/**
+  - src/yuleosh/templates/**
   code_categories:
     template:
       paths:

@@ -1,0 +1,42 @@
+# slots.yaml — 模板槽位规格（L0 护栏：结构即约束）
+# 示例数据 · 不得作为项目证据
+#
+# 每份 ASPICE 模板一份规格。evidence_check / evidence_render 均以此为唯一依据，
+# 不再硬编码列名与位置；新增模板只需新增一份 yaml。
+
+version: "0.1"
+documents:
+  - alias: ENG_测试规范                      # 槽位地址第一段：文档别名
+    xlsx: ENG_测试规范_座椅控制器示例_V1.0.xlsx
+    sheet: "2.测试用例"
+    header_locator:
+      contains: 测试用例ID                   # 前 10 行内含此单元格的行为表头行
+    row_key:
+      column: 测试用例ID                     # 行键列：单元格值作为槽位第二段
+    evidence_columns:                        # 证据列（只取第 1 轮列组的首次出现）
+      - name: 实际结果
+        field: actual_result                 # 产物 frontmatter 中提供该值的字段
+        required: true
+      - name: 测试日志链接
+        field: log_link
+        required: true
+      - name: 判定结论
+        field: verdict
+        required: true
+        vocabulary: [PASS, FAIL, BLOCKED]    # 受控词表：渲染与校验双层强制
+
+  - alias: SUP.1_评审记录                    # yuleOSH review/compliance stage 接入示例
+    xlsx: SUP.1_评审记录_座椅控制器示例_V1.0.xlsx
+    sheet: "2.评审检查单"
+    header_locator:
+      contains: 检查项ID                     # 双语表头按第一行（中文）规范化匹配
+    row_key:
+      column: 检查项ID
+    evidence_columns:
+      - name: 结果(通过·不通过·不适用)
+        field: result
+        required: true
+        vocabulary: [通过, 不通过, 不适用]
+      - name: 证据位置
+        field: evidence_loc
+        required: true

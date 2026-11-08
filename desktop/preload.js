@@ -1,6 +1,8 @@
 /**
  * preload.js — yuleOSH 安全上下文桥接
  *
+ * @req SHALL-253
+ *
  * 使用 contextBridge 安全暴露有限 API 给渲染进程。
  * 绝不暴露 Node.js 原生 API (require, process, fs 等)
  * 遵循 Electron 安全最佳实践 (contextIsolation + nodeIntegration=false)
@@ -13,6 +15,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   /** @returns {string} Python 后端 URL */
   getBackendUrl: () => ipcRenderer.sendSync('get-backend-url'),
+
+  /**
+   * 重启后端并重新加载前端（错误页重试）
+   * @returns {Promise<{ok:boolean, error?:string}>}
+   */
+  retryStartup: () => ipcRenderer.invoke('retry-startup'),
+
+  /**
+   * 查询后端运行状态
+   * @returns {Promise<{running:boolean, url:string|null}>}
+   */
+  getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
 
   // ─── 运行平台 ─────────────────────────────────────
 
@@ -53,6 +67,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * 后端自动重启中
+   * @param {Function} callback - ({attempt, max}) => void
+   */
+  onBackendRestarting: (callback) => {
+    const handler = (_event, info) => callback(info);
+    ipcRenderer.on('backend-restarting', handler);
+    return () => ipcRenderer.removeListener('backend-restarting', handler);
+  },
+
+  /**
+   * 后端达到最大重启次数
+   * @param {Function} callback - (message: string) => void
+   */
+  onBackendFatal: (callback) => {
+    const handler = (_event, message) => callback(message);
+    ipcRenderer.on('backend-fatal', handler);
+    return () => ipcRenderer.removeListener('backend-fatal', handler);
+  },
+
+  /**
    * 后端已停止
    * @param {Function} callback - (exitCode: number) => void
    */
@@ -60,6 +94,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, exitCode) => callback(exitCode);
     ipcRenderer.on('backend-stopped', handler);
     return () => ipcRenderer.removeListener('backend-stopped', handler);
+  },
+
+  // ─── 项目对话框 ───────────────────────────────────
+
+  /**
+   * 打开项目目录选择对话框（与菜单“打开项目”同一实现）
+   * @returns {Promise<string|null>} 选中的目录；取消则 null
+   */
+  openProjectDialog: () => ipcRenderer.invoke('open-project-dialog'),
+
+  /**
+   * 新建项目目录对话框
+   * @returns {Promise<string|null>} 目标目录；取消则 null
+   */
+  createProjectDialog: () => ipcRenderer.invoke('create-project-dialog'),
+
+  /**
+   * 订阅菜单/对话框选中项目事件
+   * @param {(projectPath: string) => void} callback
+   * @returns {() => void} 取消订阅
+   */
+  onProjectOpened: (callback) => {
+    const handler = (_event, projectPath) => callback(projectPath);
+    ipcRenderer.on('project-opened', handler);
+    return () => ipcRenderer.removeListener('project-opened', handler);
+  },
+
+  /**
+   * 订阅新建项目事件
+   * @param {(projectPath: string) => void} callback
+   * @returns {() => void} 取消订阅
+   */
+  onCreateProject: (callback) => {
+    const handler = (_event, projectPath) => callback(projectPath);
+    ipcRenderer.on('create-project', handler);
+    return () => ipcRenderer.removeListener('create-project', handler);
   },
 
   // ─── 原生对话框 ───────────────────────────────────

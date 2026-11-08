@@ -243,6 +243,58 @@ def cmd_build(args):
     return result
 
 
+def cmd_incremental(args):
+    """yuleosh kg incremental — 一体化增量链。
+
+    checkpoint → incremental_bootstrap → ci_hook → verify_delta，
+    失败自动回滚（P2-7）。
+    """
+    from yuleosh.knowledge_graph.kg_incremental import kg_incremental_run
+
+    project_dir = getattr(args, "project_dir", os.environ.get("OSH_HOME", os.getcwd()))
+    store = _get_store(project_dir)
+
+    changed_files = []
+    raw = getattr(args, "changed_files", None)
+    if raw:
+        changed_files = [f.strip() for f in raw.split(",") if f.strip()]
+    elif getattr(args, "auto", False):
+        changed_files = _get_changed_files_from_git(
+            getattr(args, "base_ref", "HEAD~1"))
+    changed_files = sorted(set(changed_files))
+
+    result = kg_incremental_run(
+        store,
+        project_dir=project_dir,
+        changed_files=changed_files or None,
+        build_id=getattr(args, "build_id", None),
+        test_json=getattr(args, "test_json", None),
+        junit=getattr(args, "junit", None),
+        with_verify=not getattr(args, "no_verify", False),
+    )
+
+    log_path = _write_log(
+        project_dir, f"incremental-{result['build_id']}.json",
+        json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    result["log_path"] = log_path
+
+    inc = result.get("incremental", {})
+    print(f"\n  ⚡ KG Incremental: {result['build_id']}")
+    print(f"  {'=' * 50}")
+    print(f"  Mode:    {'incremental' if result['changed_files'] else 'full bootstrap'}")
+    print(f"  Files:   {result['changed_files']}")
+    if isinstance(inc, dict):
+        print(f"  Nodes:   {inc.get('summary', {}).get('total_nodes', '?')}")
+        print(f"  Edges:   {inc.get('summary', {}).get('total_edges', '?')}")
+    vd = result.get("verify_delta")
+    if vd:
+        print(f"  Tests:   {vd.get('passed', 0)} passed, {vd.get('failed', 0)} failed")
+        print(f"  Edges:   verifies +{vd.get('verifies_updated', 0)}, "
+              f"covers +{vd.get('covers_updated', 0)}")
+    print(f"  Log:     {log_path}\n")
+    return result
+
+
 def cmd_bootstrap(args):
     """yuleosh kg bootstrap — Full bootstrap from traceability data."""
     project_dir = getattr(args, "project_dir", os.environ.get("OSH_HOME", os.getcwd()))

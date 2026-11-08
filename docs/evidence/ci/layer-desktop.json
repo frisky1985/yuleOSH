@@ -1,0 +1,12 @@
+{
+  "layer": "desktop",
+  "status": "passed",
+  "passed": 14,
+  "failed": 0,
+  "total": 14,
+  "file": "desktop/tests",
+  "command": "npx jest@29 --runInBand --ci",
+  "timestamp": "2026-11-07T21:53:00+08:00",
+  "evidence": "docs/evidence/sessions/desktop-self-evolution-20261107/desktop-test.json",
+  "evidence_sha256": "f06a15f915b0a8d7caf5d845a3547338bfd4b959f9a67437d6cc0b82f1533b6c"
+}

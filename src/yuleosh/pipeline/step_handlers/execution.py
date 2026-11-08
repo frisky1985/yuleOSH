@@ -223,6 +223,26 @@ def _detect_project_language(project_dir: Path) -> Optional[str]:
     return None
 
 
+def _requirement_catalog(project_dir) -> dict[str, str]:
+    """Authoritative requirement IDs from the traceability matrix.
+
+    Uses the matrix (not ad-hoc spec parsing) so the IDs the LLM annotates
+    with are exactly the IDs the evidence chain will resolve.
+    """
+    matrix_path = Path(project_dir) / ".osh" / "evidence" / "traceability-matrix.json"
+    if not matrix_path.exists():
+        return {}
+    try:
+        rows = json.loads(matrix_path.read_text(encoding="utf-8")).get("requirements") or []
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        str(r.get("req_id")): str(r.get("statement") or "")
+        for r in rows
+        if r.get("req_id")
+    }
+
+
 def _step_claude_dev_codegen(session: PipelineSession) -> str:
     """D3 codegen branch: spec/arch/PRD → code → verify → auto-fix."""
     from yuleosh.codegen.engine import CodegenEngine, build_codegen_report
@@ -323,6 +343,20 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             contracts_json=contracts_json,
         )
 
+        # 可追溯性硬规则: 把权威需求 ID 目录注入 prompt, 让 LLM 用链可解析的 ID
+        # 作为 @req 注解; 同时供 engine 做成员校验 (矩阵缺失则仅校验注解存在)。
+        catalog = _requirement_catalog(project_dir)
+        if catalog:
+            catalog_lines = "\n".join(
+                f"- {rid}: {' '.join(stmt.split())[:120]}"
+                for rid, stmt in sorted(catalog.items())
+            )
+            user_prompt += (
+                "\n\n## Requirement ID Catalog (authoritative)\n"
+                "Use ONLY these IDs in `@req` annotations:\n"
+                f"{catalog_lines}\n"
+            )
+
         engine = CodegenEngine(
             output_dir=cfg.get("output_dir"),
             max_retries=int(cfg.get("max_retries", 3)),
@@ -333,6 +367,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             behavior_verify=_make_behavior_verify(project_dir),
             structural_features=structural_features,
             forbidden_features=forbidden_features,
+            requirement_ids=list(catalog),
         )
         result = engine.generate(
             session, system_prompt, user_prompt,

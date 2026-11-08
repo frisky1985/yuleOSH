@@ -9,11 +9,15 @@ Supports multiple knowledge sources (MISRA rules, embedded best practices,
 project review history) with in-memory vector search and keyword re-ranking.
 
 v1 uses in-memory dicts + simple cosine similarity.
+v1.5 adds an optional ``sqlite-vec`` backend (reusing ``kb.VectorStore`` +
+``kb.EmbeddingProvider``) for larger corpora; when the extension or the
+embedding service is unavailable it transparently falls back to v1.
 v2 will use ChromaDB / FAISS for production-scale retrieval.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -49,6 +53,75 @@ class RAGResult:
     chunk: RAGChunk
     score: float
     rank: int
+
+
+def chunk_content_hash(chunk: RAGChunk) -> str:
+    """Stable content hash used as the sqlite-vec primary key."""
+    raw = f"{chunk.id}|{chunk.source}|{chunk.content}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _default_rules_path() -> Path:
+    """定位仓库内 MISRA 规则集 YAML。"""
+    env = os.environ.get("YULEOSH_MISRA_RULES")
+    if env:
+        return Path(env)
+    # 包内路径：src/yuleosh/ci/rulesets/misra-rules.yaml（已配置 package-data）
+    packaged = Path(__file__).resolve().parents[2] / "ci" / "rulesets" / "misra-rules.yaml"
+    if packaged.exists():
+        return packaged
+    # 开发态仓库根路径
+    return Path(__file__).resolve().parents[4] / "misra-rules.yaml"
+
+
+def _rule_id_from_key(key: str) -> str:
+    """由 C:2023 规则 key 生成可读 rule_id（用于无 C:2012 对应项的新规则）。"""
+    suffix = key[len("misra-c2023-"):] if key.startswith("misra-c2023-") else key
+    if suffix.startswith("dir-"):
+        return f"Dir {suffix[len('dir-'):]}"
+    return f"Rule {suffix}"
+
+
+def load_misra_rules(path: Optional[Path] = None) -> List[Dict]:
+    """从规则集 YAML 加载完整 MISRA C:2023 规则（P1-4）。
+
+    规则集缺失/不可解析时回退到内置 ``MISRA_C_RULES_SAMPLE``。
+    原 sample 中的英文示例按 rule_id 合并，以保持既有检索效果。
+    """
+    rules_path = Path(path) if path else _default_rules_path()
+    try:
+        import yaml
+
+        with open(rules_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as e:  # noqa: BLE001 — 规则集不可用时回退 sample
+        log.warning("MISRA 规则集加载失败（%s），回退内置 sample: %s", rules_path, e)
+        return list(MISRA_C_RULES_SAMPLE)
+
+    rules: List[Dict] = []
+    for key, val in data.items():
+        if key == "meta" or not isinstance(val, dict):
+            continue
+        rule_id = str(val.get("c2012_ref") or "").strip()
+        if not rule_id or rule_id.upper() == "N/A":
+            rule_id = _rule_id_from_key(key)
+        sample = _SAMPLE_BY_ID.get(rule_id, {})
+        rules.append({
+            "rule_id": rule_id,
+            "category": val.get("category") or sample.get("category", ""),
+            "title": val.get("title") or sample.get("title", ""),
+            "summary": val.get("description") or sample.get("summary", ""),
+            "violation_examples": sample.get("violation_examples", []),
+            "fix_examples": sample.get("fix_examples", []),
+            "severity": val.get("severity") or sample.get("severity", ""),
+            "spec_ref": val.get("spec_ref", ""),
+            "check_method": val.get("check_method", ""),
+            "c2023_key": key,
+            "sample_title": sample.get("title", ""),
+            "sample_summary": sample.get("summary", ""),
+        })
+    log.info("Loaded %d MISRA rules from %s", len(rules), rules_path)
+    return rules or list(MISRA_C_RULES_SAMPLE)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -173,6 +246,11 @@ MISRA_C_RULES_SAMPLE: List[Dict[str, Any]] = [
     # ... more rules can be added in production
 ]
 
+# 按 rule_id 反查内置 sample，用于合并英文示例（P1-4）
+_SAMPLE_BY_ID: Dict[str, Dict] = {
+    r["rule_id"]: r for r in MISRA_C_RULES_SAMPLE
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # RAG Engine
@@ -197,10 +275,72 @@ class RAGEngine:
         )
     """
 
-    def __init__(self):
+    def __init__(self, backend: str = "inmemory", vector_store=None,
+                 embedding_provider=None):
+        """初始化检索引擎。
+
+        Args:
+            backend: ``"inmemory"``（默认，v1 行为不变）或 ``"sqlite-vec"``。
+                      sqlite-vec 不可用时自动回退 inmemory 并记录原因。
+            vector_store: 可选注入（需 ``available`` / ``search`` / ``upsert``）。
+            embedding_provider: 可选注入（需 ``embed(texts) -> list[list[float]]``）。
+        """
         self._chunks: List[RAGChunk] = []
         self._embeddings: Dict[str, Dict[str, float]] = {}  # chunk_id → ngram vector
         self._ready = False
+        # ── v1.5 sqlite-vec backend ──
+        self.backend = backend
+        self.degraded_reason: Optional[str] = None
+        self._vector_store = vector_store
+        self._embedding_provider = embedding_provider
+        self._chunk_by_hash: Dict[str, RAGChunk] = {}
+        self._vector_active = False
+        if backend and backend != "inmemory":
+            self._init_vector_backend()
+
+    def _init_vector_backend(self) -> None:
+        """初始化可插拔向量后端；任何缺失都回退 inmemory（不抛错）。"""
+        if self._vector_store is None:
+            try:
+                from yuleosh.llm.rag.backends import create_backend
+
+                backend, reason = create_backend(
+                    self.backend,
+                    db_path=os.environ.get("YULEOSH_RAG_DB") or None,
+                )
+            except Exception as e:  # noqa: BLE001 — 后端构建失败即回退
+                self._degrade_to_inmemory(f"{self.backend} 后端初始化失败: {e}")
+                return
+            if backend is None:
+                self._degrade_to_inmemory(
+                    reason or f"{self.backend} 后端不可用")
+                return
+            self._vector_store = backend
+        if self._embedding_provider is None:
+            try:
+                from yuleosh.kb.embedding import get_provider
+
+                self._embedding_provider = get_provider(
+                    os.environ.get("YULEOSH_EMBED_PROVIDER", "ollama")
+                )
+            except Exception as e:  # noqa: BLE001
+                self._degrade_to_inmemory(f"embedding provider 初始化失败: {e}")
+                return
+        if not getattr(self._vector_store, "available", False):
+            reason = getattr(self._vector_store, "unavailable_reason", None)
+            self._degrade_to_inmemory(
+                reason or f"{self.backend} 后端不可用"
+            )
+            return
+        self._vector_active = True
+
+    def _degrade_to_inmemory(self, reason: str) -> None:
+        """回退到 in-memory 后端（保留可观测原因）。"""
+        if self._vector_active:
+            log.warning("RAG 向量后端降级到 in-memory: %s", reason)
+        self._vector_active = False
+        self.backend = "inmemory"
+        self.degraded_reason = reason
 
     # ── Indexing ────────────────────────────────────────────────────
 
@@ -208,19 +348,28 @@ class RAGEngine:
         """Index MISRA C rules as retrievable chunks.
 
         Args:
-            rules: List of rule dicts (default: built-in sample).
+            rules: List of rule dicts (default: 仓库完整规则集，加载失败回退内置 sample).
 
         Returns:
             Number of chunks indexed.
         """
-        rules = rules or MISRA_C_RULES_SAMPLE
+        rules = rules or load_misra_rules()
         count = 0
         for rule in rules:
             # Compose rule text
             content = (
                 f"Rule {rule['rule_id']} ({rule['category']}): {rule['title']}\n\n"
-                f"{rule['summary']}\n\n"
-                f"Violation examples:\n"
+                f"{rule['summary']}\n"
+            )
+            # 合并内置 sample 的英文标题/摘要（规则集描述为中文时保证英文检索命中）
+            sample_title = rule.get("sample_title") or ""
+            if sample_title and sample_title != rule.get("title"):
+                content += f"\n{sample_title}\n"
+            sample_summary = rule.get("sample_summary") or ""
+            if sample_summary and sample_summary != rule.get("summary"):
+                content += f"\n{sample_summary}\n"
+            content += (
+                "\nViolation examples:\n"
                 + "\n".join(f"  • {ex}" for ex in rule.get("violation_examples", []))
                 + "\n\n"
                 f"Fix examples:\n"
@@ -266,9 +415,54 @@ class RAGEngine:
         return count
 
     def _add_chunk(self, chunk: RAGChunk):
-        """Add a single chunk and compute its embedding."""
+        """Add a single chunk and compute its embedding.
+
+        sqlite-vec 后端激活时写入向量表；嵌入失败则整体降级回 in-memory，
+        保证后续检索仍可用（不丢已索引 chunk）。
+        """
         self._chunks.append(chunk)
+        if self._vector_active:
+            try:
+                vectors = self._embedding_provider.embed([chunk.content])
+                if not vectors:
+                    raise RuntimeError("embedding provider 返回空向量")
+                content_hash = chunk_content_hash(chunk)
+                if self._vector_store.upsert(content_hash, vectors[0]):
+                    self._chunk_by_hash[content_hash] = chunk
+                    return
+                raise RuntimeError("vector_store.upsert 返回 False")
+            except Exception as e:  # noqa: BLE001 — 降级到 in-memory
+                self._degrade_to_inmemory(f"索引嵌入失败: {e}")
         self._embeddings[chunk.id] = _char_ngrams(chunk.content)
+
+    def _vector_retrieve(self, query: str, sources: Optional[List[str]],
+                         top_k: int, min_score: float,
+                         ) -> Optional[List[tuple[float, RAGChunk]]]:
+        """sqlite-vec 召回；失败时降级并返回 None（调用方走 in-memory）。"""
+        try:
+            vectors = self._embedding_provider.embed([query])
+            if not vectors:
+                raise RuntimeError("embedding provider 返回空向量")
+            # 多取候选，抵消 source 过滤与阈值损耗
+            matches = self._vector_store.search(
+                vectors[0], k=max(top_k * 5, 40))
+            scored: List[tuple[float, RAGChunk]] = []
+            for m in matches:
+                chunk = self._chunk_by_hash.get(m.get("content_hash", ""))
+                if chunk is None:
+                    continue
+                if sources and chunk.source not in sources:
+                    continue
+                distance = float(m.get("distance", 1.0))
+                sim = 1.0 / (1.0 + max(0.0, distance))
+                kw = _keyword_overlap(query, chunk.content)
+                combined = sim * 0.6 + kw * 0.4
+                if combined >= min_score:
+                    scored.append((combined, chunk))
+            return scored
+        except Exception as e:  # noqa: BLE001 — 降级到 in-memory
+            self._degrade_to_inmemory(f"检索嵌入失败: {e}")
+            return None
 
     # ── Retrieval ───────────────────────────────────────────────────
 
@@ -294,25 +488,31 @@ class RAGEngine:
         if not self._chunks:
             return []
 
-        query_vec = _char_ngrams(query)
-        scored: List[tuple[float, RAGChunk]] = []
+        scored: Optional[List[tuple[float, RAGChunk]]] = None
+        if self._vector_active:
+            scored = self._vector_retrieve(query, sources, top_k, min_score)
+        if scored is None:
+            # in-memory 回退（v1 行为）
+            query_vec = _char_ngrams(query)
+            scored = []
+            for chunk in self._chunks:
+                # Source filter
+                if sources and chunk.source not in sources:
+                    continue
 
-        for chunk in self._chunks:
-            # Source filter
-            if sources and chunk.source not in sources:
-                continue
+                embed = self._embeddings.get(chunk.id)
+                if embed is None:
+                    # chunk 可能由向量后端索引；按需补算并缓存
+                    embed = _char_ngrams(chunk.content)
+                    self._embeddings[chunk.id] = embed
 
-            embed = self._embeddings.get(chunk.id)
-            if embed is None:
-                continue
+                # Combine n-gram similarity + keyword overlap
+                vec_score = _cosine_similarity(query_vec, embed)
+                kw_score = _keyword_overlap(query, chunk.content)
+                combined = vec_score * 0.6 + kw_score * 0.4
 
-            # Combine n-gram similarity + keyword overlap
-            vec_score = _cosine_similarity(query_vec, embed)
-            kw_score = _keyword_overlap(query, chunk.content)
-            combined = vec_score * 0.6 + kw_score * 0.4
-
-            if combined >= min_score:
-                scored.append((combined, chunk))
+                if combined >= min_score:
+                    scored.append((combined, chunk))
 
         # Sort by score descending, take top-K
         scored.sort(key=lambda x: -x[0])
@@ -387,6 +587,11 @@ class RAGEngine:
         """Reset all indexed data."""
         self._chunks.clear()
         self._embeddings.clear()
+        self._chunk_by_hash.clear()
+        if self._vector_active and self._vector_store is not None:
+            clear = getattr(self._vector_store, "clear", None)
+            if callable(clear):
+                clear()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -397,9 +602,14 @@ _default_engine: Optional[RAGEngine] = None
 
 
 def get_default_engine() -> RAGEngine:
-    """Get or create the default RAG engine (lazy-initialized)."""
+    """Get or create the default RAG engine (lazy-initialized).
+
+    Backend selectable via ``YULEOSH_RAG_BACKEND`` = ``inmemory``（默认）|
+    ``sqlite-vec``；后者不可用时自动回退。
+    """
     global _default_engine
     if _default_engine is None:
-        _default_engine = RAGEngine()
+        backend = (os.environ.get("YULEOSH_RAG_BACKEND") or "inmemory").strip()
+        _default_engine = RAGEngine(backend=backend or "inmemory")
         _default_engine.index_misra_rules()
     return _default_engine
