@@ -139,6 +139,22 @@ class TestInitCommand:
             for d in ["specs", "tasks", "src", "docs", "evidence", ".osh"]:
                 assert (temp_project / "p" / d).exists()
 
+    def test_cmd_init_creates_valid_starter_spec(self, main_module, temp_project):
+        """Regression: the documented quick start runs `pipeline run docs/spec.md`.
+
+        ``init`` used to leave ``docs/`` empty, so step 3 of the quick start
+        failed immediately with "No such file or directory".  The scaffolded
+        spec must also pass OpenSpec validation on its own.
+        """
+        from yuleosh.spec.validate import parse_spec, validate_spec
+
+        with patch("yuleosh.cli.main.shutil.which", return_value=None):
+            main_module.cmd_init(str(temp_project / "specproj"))
+
+        spec = temp_project / "specproj" / "docs" / "spec.md"
+        assert spec.exists(), "init must scaffold docs/spec.md"
+        assert validate_spec(parse_spec(str(spec))) == []
+
     def test_cmd_init_default(self, main_module):
         with patch("os.getcwd", return_value="/tmp/yuleo-init"):
             with patch.object(Path, "mkdir"):

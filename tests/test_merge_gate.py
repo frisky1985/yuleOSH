@@ -954,3 +954,51 @@ class TestEdgeCases:
         result = gate.run()
         assert "change_summary" in result
         assert result["change_summary"]["detected_changes"] >= 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Tests: real store objects (regression, 2026-11-08)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestRealStoreObjects:
+    """``KnowledgeGraphStore`` returns ``Node``/``Edge`` dataclasses.
+
+    The gate used to call ``.get()`` on them, so every real
+    ``yuleosh kg check-merge`` run failed with
+    ``'Node' object has no attribute 'get'``.  It also compared integer
+    edge rowids against string entity ids, marking every node/edge as
+    orphaned.  These tests pin both behaviours down.
+    """
+
+    def _store(self):
+        from yuleosh.knowledge_graph.models import Edge, Node
+
+        store = MagicMock()
+        store.get_all_nodes.return_value = [
+            Node(entity_type="requirement", entity_id="REQ-001",
+                 label="Create todo", id=1),
+            Node(entity_type="function", entity_id="src/app.py",
+                 label="app", id=2),
+        ]
+        store.get_all_edges.return_value = [
+            Edge(source_id=1, target_id=2, edge_type="implements",
+                 properties={"confidence": 0.9}, id=1),
+        ]
+        return store
+
+    def test_consistency_checks_accept_dataclasses(self):
+        checker = GraphConsistencyChecker(self._store(), MergeGateConfig())
+        result = checker.check_all()
+        assert result["passed"] is True
+        # Integer rowids must be resolved to entity ids: no orphan edges,
+        # no orphan nodes, no "Failed to read" errors.
+        assert result["errors"] == []
+
+    def test_confidence_counts_dataclass_edges(self):
+        checker = ConfidenceChecker(self._store(), MergeGateConfig(min_coverage=0.5))
+        result = checker.check_all()
+        assert result["errors"] == []
+        assert result["total_requirements"] == 1
+        assert result["coverage"] == 1.0
+        assert result["overall_confidence"] == 0.9
