@@ -132,6 +132,67 @@ def _filter_edges_by_scope(edges: list[dict], scoped_ids: set) -> list[dict]:
     ]
 
 
+def _as_node_dict(node) -> dict:
+    """Normalize a store node (``Node`` dataclass or dict) to a plain dict.
+
+    ``KnowledgeGraphStore.get_all_nodes`` returns ``Node`` dataclasses, while
+    the gate's checks (and their tests) operate on dicts.  Without this
+    coercion every real ``yuleosh kg check-merge`` run failed with
+    ``'Node' object has no attribute 'get'``.
+    """
+    if isinstance(node, dict):
+        data = dict(node)
+    elif hasattr(node, "to_dict"):
+        data = node.to_dict()
+    else:  # pragma: no cover - defensive for duck-typed test doubles
+        data = {
+            key: getattr(node, key, None)
+            for key in ("id", "entity_type", "entity_id", "label",
+                        "properties", "is_active", "confidence")
+        }
+    data.setdefault("name", data.get("label") or data.get("entity_id", ""))
+    return data
+
+
+def _as_edge_dict(edge, node_id_map: dict) -> dict:
+    """Normalize a store edge to the gate's dict contract.
+
+    Two conversions are required:
+
+    * ``edge_type`` → ``relation_type`` (the checker's key name);
+    * integer ``source_id``/``target_id`` rowids → node ``entity_id`` strings,
+      otherwise every edge looks orphaned and cycles/coverage are wrong.
+    """
+    if isinstance(edge, dict):
+        data = dict(edge)
+    elif hasattr(edge, "to_dict"):
+        data = edge.to_dict()
+    else:  # pragma: no cover - defensive for duck-typed test doubles
+        data = {
+            key: getattr(edge, key, None)
+            for key in ("id", "source_id", "target_id", "edge_type",
+                        "properties", "layer", "confidence")
+        }
+    data.setdefault("relation_type", data.get("edge_type", ""))
+    for key in ("source_id", "target_id"):
+        value = data.get(key)
+        data[key] = node_id_map.get(value, value)
+    if data.get("confidence") is None:
+        props = data.get("properties") or {}
+        if isinstance(props, dict):
+            data["confidence"] = props.get("confidence")
+    return data
+
+
+def _node_id_map(nodes: list[dict]) -> dict:
+    """Map node rowids to entity ids (edges reference rowids)."""
+    return {
+        n["id"]: n["entity_id"]
+        for n in nodes
+        if n.get("id") is not None and n.get("entity_id")
+    }
+
+
 class GraphConsistencyChecker:
     """Performs graph consistency verification on the knowledge graph.
 
@@ -178,7 +239,10 @@ class GraphConsistencyChecker:
         file nodes; requirement ids are matched only via exact equality
         or when the changed file literally appears in the id.
         """
-        return _filter_nodes_by_scope(self.store.get_all_nodes(), self.scope_files)
+        return _filter_nodes_by_scope(
+            [_as_node_dict(n) for n in self.store.get_all_nodes()],
+            self.scope_files,
+        )
 
     def _scoped_edges(self) -> list[dict]:
         """Return edges, optionally filtered to scope_files' node ids.
@@ -186,10 +250,18 @@ class GraphConsistencyChecker:
         Edges touching a scoped node are kept so orphan/cycle checks see
         the same subgraph the node checks do.
         """
-        edges = self.store.get_all_edges()
+        all_nodes = [_as_node_dict(n) for n in self.store.get_all_nodes()]
+        edges = [
+            _as_edge_dict(e, _node_id_map(all_nodes))
+            for e in self.store.get_all_edges()
+        ]
         if not self.scope_files:
             return edges
-        scoped_ids = {n.get("entity_id") for n in self._scoped_nodes() if n.get("entity_id")}
+        scoped_ids = {
+            n.get("entity_id")
+            for n in _filter_nodes_by_scope(all_nodes, self.scope_files)
+            if n.get("entity_id")
+        }
         return _filter_edges_by_scope(edges, scoped_ids)
 
     def check_all(self) -> dict:
@@ -456,14 +528,25 @@ class ConfidenceChecker:
 
     def _scoped_nodes(self) -> list[dict]:
         """Nodes narrowed to scope_files (None/[] = full graph)."""
-        return _filter_nodes_by_scope(self.store.get_all_nodes(), self.scope_files)
+        return _filter_nodes_by_scope(
+            [_as_node_dict(n) for n in self.store.get_all_nodes()],
+            self.scope_files,
+        )
 
     def _scoped_edges(self) -> list[dict]:
         """Edges narrowed to scope_files' node ids (None/[] = full graph)."""
-        edges = self.store.get_all_edges()
+        all_nodes = [_as_node_dict(n) for n in self.store.get_all_nodes()]
+        edges = [
+            _as_edge_dict(e, _node_id_map(all_nodes))
+            for e in self.store.get_all_edges()
+        ]
         if not self.scope_files:
             return edges
-        scoped_ids = {n.get("entity_id") for n in self._scoped_nodes() if n.get("entity_id")}
+        scoped_ids = {
+            n.get("entity_id")
+            for n in _filter_nodes_by_scope(all_nodes, self.scope_files)
+            if n.get("entity_id")
+        }
         return _filter_edges_by_scope(edges, scoped_ids)
 
     def check_all(self) -> dict:
