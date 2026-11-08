@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -10,6 +11,25 @@ import pytest
 # Require a test JWT secret so auth modules don't raise at import time.
 # The exact value is irrelevant for tests; any non-empty string works.
 os.environ.setdefault("YULEOSH_JWT_SECRET", "test-jwt-secret-for-ci-only-not-for-production")
+
+# ---------------------------------------------------------------------------
+# Auth config must be frozen in its default (enabled) state (2026-11-08)
+# ---------------------------------------------------------------------------
+# ``yuleosh/ui/auth.py`` reads YULEOSH_AUTH_DISABLED once at import time and
+# exposes the boolean ``AUTH_ENABLED``; ``ui/server.py`` then copies it via
+# ``from ... import AUTH_ENABLED``.  test_ui_server.py sets
+# YULEOSH_AUTH_DISABLED=1 in an autouse fixture, so if that file happens to be
+# the first to import the server module (random order), AUTH_ENABLED stays
+# False for the whole session and every later "expect 401" test sees 200.
+# Import the module here — before any test module — with the env neutralised.
+os.environ.pop("YULEOSH_AUTH_DISABLED", None)
+_SRC_DIR = Path(__file__).resolve().parent.parent / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+import yuleosh.ui.auth  # noqa: E402,F401  — freeze AUTH_ENABLED=True baseline
+
+# 基线 API_KEY：autouse fixture 用它把 auth 模块恢复到会话初始值。
+_BASELINE_API_KEY = yuleosh.ui.auth.API_KEY
 
 # NOTE (v3.12.x CI 真跑修复): OSH_HOME 不在此全局设置。
 # 曾尝试 per-process 隔离 (yuleosh-pytest-<pid>) 防 event_bus 污染 /tmp，
@@ -240,6 +260,67 @@ def pytest_sessionfinish(session, exitstatus):
         print(f"[evidence-leak] 已自动清扫 {len(leaked)} 个漏进仓库的证据包：" + ", ".join(leaked))
     if _SESSIONS_TMP:
         shutil.rmtree(_SESSIONS_TMP, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_auth_module_state():
+    """每个测试前把鉴权模块恢复到默认（fail-closed）状态。
+
+    背景（2026-11-08 全量随机序）:
+    - test_v370_track1_track4 的 reload 用例在 YULEOSH_AUTH_DISABLED=1 下
+      ``importlib.reload(yuleosh.ui.auth/server)``，测试结束只由 monkeypatch
+      恢复 env，模块级 ``AUTH_ENABLED`` 仍是 False。
+    - 之后的 401 用例（test_coverage_phase2/3_lowcov、test_v380_a3_routes_unify
+      等）于是拿到 local-dev 用户，断言 404/200 == 401 失败。
+    这里在每个测试前重置模块级常量；测试内部若自行 reload/patch 不受影响。
+    """
+    import sys
+
+    from yuleosh.ui import auth as auth_mod
+
+    auth_mod.AUTH_ENABLED = True
+    auth_mod.API_KEY = _BASELINE_API_KEY
+    for module_name in ("yuleosh.ui.server", "yuleosh.api.middleware"):
+        module = sys.modules.get(module_name)
+        if module is not None:
+            module.AUTH_ENABLED = True
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_process_state():
+    """每个测试后恢复进程级状态（env / cwd），防止跨测试泄漏。
+
+    背景（2026-11-08 全量随机序）:
+    - 部分用例直接 ``os.environ["OSH_HOME"] = ...``，异常路径或提前返回时
+      未恢复 → 后续 test_api.py 把 docs/spec.md 解析到 /tmp（11 errors），
+      Store 单例指向残留临时库。
+    - 少数用例 ``os.chdir`` 后未恢复 → 相对路径解析错位。
+    这里统一快照/恢复，不改变单个测试内部行为。
+    """
+    keys = (
+        "OSH_HOME",
+        "OSH_SESSIONS_DIR",
+        "YULEOSH_DB",
+        "YULEOSH_AUTH_DISABLED",
+        "YULEOSH_API_KEY",
+        "YULEOSH_RATE_LIMIT",
+        "YULEOSH_JWT_SECRET",
+    )
+    saved_env = {k: os.environ.get(k) for k in keys}
+    saved_cwd = os.getcwd()
+    try:
+        yield
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        try:
+            os.chdir(saved_cwd)
+        except OSError:  # 目录在测试中被删除时忽略
+            pass
 
 
 @pytest.fixture(autouse=True)
