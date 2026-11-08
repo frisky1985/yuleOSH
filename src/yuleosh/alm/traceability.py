@@ -38,6 +38,13 @@ PERSISTED_EVIDENCE_DIR = "docs/evidence"
 # Source file extensions to scan for requirement annotations and code
 _SOURCE_EXTENSIONS = (".py", ".c", ".h", ".cpp", ".hpp", ".js", ".ts", ".jsx", ".tsx")
 
+# 依赖目录、构建产物与虚拟环境不参与注解扫描，否则会拖慢扫描并被第三方
+# 代码中的注释污染追溯链。
+_SKIP_SCAN_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", "build", "dist", "release",
+    ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache",
+})
+
 # Cap import-derived requirement → test links so coverage stays precise.
 MAX_DERIVED_TESTS = 5
 
@@ -119,6 +126,8 @@ def scan_req_annotations(src_dir: Path) -> dict[str, list[str]]:
     for ext in _SOURCE_EXTENSIONS:
         for source_file in sorted(src_dir.rglob(f"*{ext}")):
             if not source_file.is_file():
+                continue
+            if any(part in _SKIP_SCAN_DIRS for part in source_file.relative_to(src_dir).parts):
                 continue
             try:
                 text = source_file.read_text(encoding="utf-8", errors="replace")

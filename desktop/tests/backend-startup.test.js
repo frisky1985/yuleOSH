@@ -21,8 +21,25 @@ jest.mock('child_process', () => ({
 // 不 mock http — 使用一个简单的占位
 const { EventEmitter } = require('events');
 const http = require('http');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const ServerManager = require('../server-manager');
+
+/**
+ * 构造一个包含内置 yuleosh-server 的临时 resources 目录
+ * @returns {{root: string, exe: string}}
+ */
+function makeBundledRuntime() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yuleosh-bundle-'));
+  const backendDir = path.join(root, 'backend');
+  fs.mkdirSync(backendDir);
+  const exeName = process.platform === 'win32' ? 'yuleosh-server.exe' : 'yuleosh-server';
+  const exe = path.join(backendDir, exeName);
+  fs.writeFileSync(exe, '');
+  return { root, exe };
+}
 
 function makeMockProc() {
   const proc = new EventEmitter();
@@ -197,4 +214,61 @@ describe('ServerManager — AC-2.x 后端管理', () => {
     expect(typeof sm._restart).toBe('function');
     expect(typeof sm.start).toBe('function');
   });
+
+  // ── AC-5.1.4: 内置 Python 运行时 ─────────────────
+
+  test('AC-5.1.4: 打包内置 yuleosh-server 优先于系统 Python', () => {
+    const { root, exe } = makeBundledRuntime();
+    const prevResourcesPath = process.resourcesPath;
+    process.resourcesPath = root;
+
+    try {
+      const sm = new ServerManager();
+      expect(sm._resolveCommand()).toEqual({ command: exe, args: [], bundled: true });
+      expect(sm.backendDir).toBe(path.dirname(exe));
+    } finally {
+      process.resourcesPath = prevResourcesPath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('AC-5.1.4: 使用内置运行时不探测系统 Python 版本', async () => {
+    const { root, exe } = makeBundledRuntime();
+    const prevResourcesPath = process.resourcesPath;
+    process.resourcesPath = root;
+
+    mockSpawn.mockImplementation(() => makeMockProc());
+
+    const mockReq = new EventEmitter();
+    mockReq.setTimeout = jest.fn();
+    mockReq.destroy = jest.fn();
+    const mockHttpGet = jest.spyOn(http, 'get').mockImplementation((_url, _opts, cb) => {
+      if (typeof _opts === 'function') { cb = _opts; }
+      const res = new EventEmitter();
+      res.statusCode = 200;
+      process.nextTick(() => {
+        res.emit('data', '{"ok":true,"status":"healthy"}');
+        res.emit('end');
+      });
+      cb(res);
+      return mockReq;
+    });
+
+    try {
+      const sm = new ServerManager({ port: 18788 });
+      await sm.start();
+
+      const firstCall = mockSpawn.mock.calls[0];
+      expect(firstCall[0]).toBe(exe);
+      expect(firstCall[1]).toEqual([]);
+      const versionProbes = mockSpawn.mock.calls.filter(
+        (call) => Array.isArray(call[1]) && call[1].includes('--version')
+      );
+      expect(versionProbes).toHaveLength(0);
+    } finally {
+      mockHttpGet.mockRestore();
+      process.resourcesPath = prevResourcesPath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }, 10000);
 });

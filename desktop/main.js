@@ -151,12 +151,12 @@ function buildAppMenu() {
         {
           label: '新建项目...',
           accelerator: isMac ? 'Cmd+N' : 'Ctrl+N',
-          click: () => openCreateProject(),
+          click: () => openCreateProject().catch((err) => logMain('error', `[Menu] create project failed: ${err.message}`)),
         },
         {
           label: '打开项目...',
           accelerator: isMac ? 'Cmd+O' : 'Ctrl+O',
-          click: () => openProjectDialog(),
+          click: () => openProjectDialog().catch((err) => logMain('error', `[Menu] open project failed: ${err.message}`)),
         },
         { type: 'separator' },
         {
@@ -256,34 +256,46 @@ function buildAppMenu() {
 
 // ─── 原生对话框 ──────────────────────────────────────
 
-function openProjectDialog() {
-  dialog.showOpenDialog(mainWindow, {
+/**
+ * 打开项目目录选择对话框。
+ * 选中后通过 `project-opened` 事件把路径推给渲染进程（AC-4.1.3）。
+ * @returns {Promise<string|null>} 选中的目录；取消时返回 null
+ */
+async function openProjectDialog() {
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: '打开 yuleOSH 项目',
     properties: ['openDirectory'],
     buttonLabel: '选择项目目录',
-  }).then((result) => {
-    if (!result.canceled && result.filePaths.length > 0) {
-      const projectPath = result.filePaths[0];
-      if (mainWindow) {
-        mainWindow.webContents.send('project-opened', projectPath);
-      }
-    }
   });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  const projectPath = result.filePaths[0];
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('project-opened', projectPath);
+  }
+  return projectPath;
 }
 
-function openCreateProject() {
-  dialog.showSaveDialog(mainWindow, {
+/**
+ * 创建项目目录对话框。
+ * 选中后通过 `create-project` 事件把路径推给渲染进程。
+ * @returns {Promise<string|null>} 目标目录；取消时返回 null
+ */
+async function openCreateProject() {
+  const result = await dialog.showSaveDialog(mainWindow, {
     title: '创建新项目',
     defaultPath: 'my-yuleosh-project',
     buttonLabel: '创建',
     properties: ['createDirectory'],
-  }).then((result) => {
-    if (!result.canceled && result.filePath) {
-      if (mainWindow) {
-        mainWindow.webContents.send('create-project', result.filePath);
-      }
-    }
   });
+  if (result.canceled || !result.filePath) {
+    return null;
+  }
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('create-project', result.filePath);
+  }
+  return result.filePath;
 }
 
 // ─── 静态文件服务器 (生产模式) ────────────────────────
@@ -842,6 +854,12 @@ function registerIpcHandlers() {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  // 打开项目对话框（菜单与渲染进程共用同一实现，AC-4.1.2/4.1.3）
+  ipcMain.handle('open-project-dialog', () => openProjectDialog());
+
+  // 新建项目对话框
+  ipcMain.handle('create-project-dialog', () => openCreateProject());
+
   // 打开文件选择对话框（用于导入需求文档等）
   ipcMain.handle('open-file', async (_event, options = {}) => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -1087,6 +1105,8 @@ module.exports = {
   startBackend,
   retryStartup,
   buildAppMenu,
+  openProjectDialog,
+  openCreateProject,
   startLocalFileServer,
   stopLocalFileServer,
   SECURITY_HEADERS,

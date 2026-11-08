@@ -38,6 +38,7 @@ from yuleosh.alm.traceability import (
     generate_traceability_report,
     scan_code_test_links,
     scan_desktop_test_links,
+    scan_req_annotations,
     validate_review_records,
     _extract_keywords,
     _find_code_by_keywords,
@@ -597,3 +598,20 @@ class TestDesktopTestAnnotationLink:
         assert req["req_id"] == spec_req_id
         files = [t["file"] for t in req["test_reports"] if isinstance(t, dict)]
         assert "desktop/tests/desktop.test.js" in files
+
+
+class TestAnnotationScanSkipDirs:
+    def test_node_modules_and_build_are_not_scanned(self, tmp_path):
+        """GIVEN deps/build dirs WHEN scanning @req THEN only real sources count."""
+        src = tmp_path / "src"
+        (src / "node_modules" / "pkg").mkdir(parents=True)
+        (src / "node_modules" / "pkg" / "dep.js").write_text("// @req FAKE-1\n")
+        (src / "build").mkdir()
+        (src / "build" / "generated.py").write_text("# @req FAKE-2\n")
+        (src / "ok.py").write_text("# @req REAL-1\n")
+
+        result = scan_req_annotations(src)
+
+        assert "REAL-1" in result
+        assert "FAKE-1" not in result
+        assert "FAKE-2" not in result

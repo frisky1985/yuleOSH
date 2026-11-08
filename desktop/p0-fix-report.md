@@ -110,9 +110,9 @@
 
 | 类型 | 内容 | 优先级 |
 |---|---|---|
-| P1 | AC-4.1.2 "打开项目" 对话框 | 下一个迭代 |
-| P1 | AC-4.1.3 项目路径 IPC 通知 | 下一个迭代 |
-| P1 | AC-5.1.4 内置 Python 运行时（PyInstaller） | 下一个迭代 |
+| P1 | AC-4.1.2 "打开项目" 对话框 | **已修复（2026-11-08）**：菜单与渲染进程共用 `openProjectDialog()`，`showOpenDialog` 限制 `openDirectory` |
+| P1 | AC-4.1.3 项目路径 IPC 通知 | **已修复（2026-11-08）**：新增 `open-project-dialog` / `create-project-dialog` IPC 与 `project-opened` / `create-project` 事件订阅 |
+| P1 | AC-5.1.4 内置 Python 运行时（PyInstaller） | **已修复（2026-11-08）**：`npm run build:backend` 产出 `resources/backend/yuleosh-server`，启动时优先使用内置运行时 |
 | P2 | 错误页可自定义样式 | 体验优化 |
 | P2 | 启动动画/闪屏 | 体验优化 |
 
@@ -143,10 +143,10 @@
 
 | 命令 | 结果 |
 |---|---|
-| `cd desktop && npx jest --runInBand --ci` | 6 suites / **33 tests passed** |
-| `PYTHONPATH=src python3 -m pytest -o addopts="" tests/test_alm_traceability_ext.py -q` | **44 passed** |
-| `cd desktop && npx electron-builder --dir --linux --x64` | 成功；`app.asar` 含 main/preload/server-manager/tray/logger；`resources/frontend-out/index.html` 存在 |
-| `PYTHONPATH=src python3 -m yuleosh.cli.main evidence chain --check` | **PASS**，22 gates pass / 0 fail，SHALL-253 追溯边全部 accepted |
+| `cd desktop && npx jest --runInBand --ci` | 6 suites / **41 tests passed** |
+| `PYTHONPATH=src python3 -m pytest -o addopts="" tests/test_alm_traceability_ext.py -q` | **45 passed** |
+| `cd desktop && npx electron-builder --dir --linux --x64` | 成功；`app.asar` 含 main/preload/server-manager/tray/logger；`resources/backend/yuleosh-server` 与 `resources/frontend-out/index.html` 均存在 |
+| `PYTHONPATH=src python3 -m yuleosh.cli.main evidence chain --check` | G-REVIEW FAIL（0/290 评审记录，既有缺口）；其余 22 门禁 PASS；SHALL-253 追溯边全部 accepted |
 
 ### 打包修复项
 
@@ -159,3 +159,13 @@
 ### 环境限制
 
 沙箱缺少 `libatk-1.0.so.0` 等 Electron 运行时库且无 `DISPLAY`，GUI 启动冒烟未在本环境执行；需在目标桌面环境按 `self-check.md` 完成 1.1/1.2 节人工检查。
+
+### P1 修复验证（2026-11-08）
+
+| 项 | 实现 | 证据 |
+|---|---|---|
+| AC-4.1.2 打开项目对话框 | [main.js](file:///workspace/desktop/main.js) `openProjectDialog()` 统一菜单与 IPC，`properties: ['openDirectory']` | `tests/main.test.js` 5 用例：目录限制、选中返回、取消、事件、IPC 通道 |
+| AC-4.1.3 项目路径 IPC | `open-project-dialog` / `create-project-dialog` + `project-opened` / `create-project` 事件；preload 暴露 `openProjectDialog()`、`onProjectOpened()`、`onCreateProject()` | 同上 |
+| AC-5.1.4 内置 Python 运行时 | `scripts/build-backend.js`（PyInstaller onedir）→ `build/backend/yuleosh-server` → `extraResources` 复制为 `resources/backend`；`ServerManager._resolveBundledBackend()` 优先使用内置二进制并跳过系统 Python 探测 | `tests/backend-startup.test.js` AC-5.1.4 2 用例；`tests/packaging.test.js` 资源/脚本断言；实机健康检查 `{"status":"healthy","version":"4.2.0"}` |
+
+构建命令：`cd desktop && npm run build:backend`。PyInstaller 产物与操作系统绑定，macOS / Linux / Windows 需分别在对应平台执行构建后再打包。

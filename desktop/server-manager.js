@@ -44,16 +44,43 @@ class ServerManager extends EventEmitter {
   }
 
   /**
+   * 解析内置后端可执行文件（PyInstaller 产物）。
+   *
+   * - 打包态：resources/backend/yuleosh-server[.exe] 始终优先
+   * - 开发态：仅在 ELECTRON_USE_BUNDLED_BACKEND=true 时使用
+   *   desktop/build/backend/yuleosh-server/yuleosh-server，避免构建产物
+   *   遮蔽正在修改的 Python 源码
+   *
+   * @returns {string|null}
+   */
+  _resolveBundledBackend() {
+    const exeName = process.platform === 'win32' ? 'yuleosh-server.exe' : 'yuleosh-server';
+    const candidates = [];
+
+    if (process.resourcesPath) {
+      candidates.push(path.join(process.resourcesPath, 'backend', exeName));
+    }
+    if (process.env.ELECTRON_USE_BUNDLED_BACKEND === 'true') {
+      candidates.push(path.resolve(__dirname, 'build', 'backend', 'yuleosh-server', exeName));
+    }
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  /**
    * 解析后端 Python 项目目录
    *
    * 开发模式 (ELECTRON_DEV=true):
    *   从 desktop/ → ../src/ （项目源码目录）
    *
    * 生产模式 (Electron 打包):
-   *   Python 后端不以 asar 形式打包（electron-builder.yml 无 backend extraResources），
-   *   必须通过 pip install yuleosh 提前安装。
-   *   此处返回 process.resourcesPath 作为 fallback 工作目录，
-   *   同时使用 Electron userData 目录作为 OSH_HOME 持久化路径。
+   *   优先使用内置 PyInstaller 可执行文件，工作目录取其所在目录；
+   *   未内置时回退到 resources/backend-src 或用户数据目录。
    */
   _resolveBackendDir() {
     const isDev = process.env.ELECTRON_DEV === 'true';
@@ -72,13 +99,19 @@ class ServerManager extends EventEmitter {
     // and in `electron .` runs before packaging.
     const resourcesDir = process.resourcesPath || path.resolve(__dirname, '..');
 
-    // 第一步：检查 extraResources 中是否包含后端源码（预留扩展）
+    // 第一步：内置后端可执行文件（推荐路径，用户无需安装 Python）
+    const bundledBinary = this._resolveBundledBackend();
+    if (bundledBinary) {
+      return path.dirname(bundledBinary);
+    }
+
+    // 第二步：检查 extraResources 中是否包含后端源码（预留扩展）
     const bundledBackend = path.join(resourcesDir, 'backend-src');
     if (fs.existsSync(bundledBackend)) {
       return bundledBackend;
     }
 
-    // 第二步：后端未打包，发出清晰警告
+    // 第三步：后端未打包，发出清晰警告
     console.warn(
       '[ServerManager] ⚠ WARNING: Python backend source not found in production bundle.\n' +
       `  Expected bundled path: ${bundledBackend}\n` +
@@ -86,7 +119,7 @@ class ServerManager extends EventEmitter {
       '  For development, set ELECTRON_DEV=true and ensure src/ exists.'
     );
 
-    // 第三步：fallback — 使用用户数据目录让 OSH_HOME 指向合理的持久化位置
+    // 第四步：fallback — 使用用户数据目录让 OSH_HOME 指向合理的持久化位置
     try {
       const userDataPath = this._getUserDataPath();
       fs.mkdirSync(userDataPath, { recursive: true });
@@ -134,18 +167,25 @@ class ServerManager extends EventEmitter {
   /**
    * 解析后端启动命令。
    *
-   * 优先使用已安装的 `yuleosh` CLI（子命令 `ui`），
-   * 未安装时回退到 `python3 -m yuleosh.ui.server`。
+   * 优先级：
+   *   1. 内置 PyInstaller 可执行文件（打包产物，无需用户安装 Python）
+   *   2. 已安装的 `yuleosh` CLI（子命令 `ui`）
+   *   3. 回退到 `python3 -m yuleosh.ui.server`
    *
-   * @returns {{command: string, args: string[]}}
+   * @returns {{command: string, args: string[], bundled: boolean}}
    */
   _resolveCommand() {
+    const bundled = this._resolveBundledBackend();
+    if (bundled) {
+      return { command: bundled, args: [], bundled: true };
+    }
+
     const probe = process.platform === 'win32' ? 'where yuleosh' : 'command -v yuleosh';
     try {
       execSync(probe, { stdio: 'ignore' });
-      return { command: 'yuleosh', args: ['ui'] };
+      return { command: 'yuleosh', args: ['ui'], bundled: false };
     } catch {
-      return { command: this.pythonCmd, args: ['-m', 'yuleosh.ui.server'] };
+      return { command: this.pythonCmd, args: ['-m', 'yuleosh.ui.server'], bundled: false };
     }
   }
 
@@ -163,8 +203,12 @@ class ServerManager extends EventEmitter {
     this._startupFailed = false;
     this._isShuttingDown = false;
 
-    // 检查 Python 版本
-    await this._checkPythonVersion();
+    const { command, args, bundled } = this._resolveCommand();
+
+    // 内置运行时自带 Python 解释器，无需探测系统 Python 版本
+    if (!bundled) {
+      await this._checkPythonVersion();
+    }
 
     const oshHome = this._resolveOshHome();
 
@@ -180,10 +224,9 @@ class ServerManager extends EventEmitter {
       YULEOSH_DESKTOP_MODE: '1',
     };
 
-    const { command, args } = this._resolveCommand();
-
     console.log(`[ServerManager] Starting Python backend...`);
     console.log(`[ServerManager]   Command: ${command} ${args.join(' ')}`);
+    console.log(`[ServerManager]   Runtime: ${bundled ? 'bundled (PyInstaller)' : 'system Python'}`);
     console.log(`[ServerManager]   Port:    ${this.port}`);
     console.log(`[ServerManager]   CWD:     ${this.backendDir}`);
     console.log(`[ServerManager]   OSH_HOME: ${oshHome}`);

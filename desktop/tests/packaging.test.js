@@ -13,7 +13,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 
 jest.mock('electron', () => {
   const events = require('events');
@@ -46,8 +45,9 @@ const originalResourcesPath = process.resourcesPath;
 process.resourcesPath = '/mock/resources';
 
 const main = require('../main');
-const builderConfig = yaml.load(
-  fs.readFileSync(path.resolve(__dirname, '..', 'electron-builder.yml'), 'utf8')
+const builderConfigText = fs.readFileSync(
+  path.resolve(__dirname, '..', 'electron-builder.yml'),
+  'utf8'
 );
 
 afterAll(() => {
@@ -60,14 +60,24 @@ describe('AC-1.3.2 — 生产打包资源路径', () => {
   });
 
   test('extraResources 目标与运行时路径一致', () => {
-    const target = builderConfig.extraResources.map((item) => item.to);
-    expect(target).toContain('frontend-out');
+    expect(builderConfigText).toMatch(/to:\s*frontend-out/);
+    expect(builderConfigText).toMatch(/to:\s*backend/);
+  });
+
+  test('AC-5.1.4: 构建脚本包含内置 Python 运行时产物', () => {
+    expect(builderConfigText).toMatch(/from:\s*build\/backend\/yuleosh-server/);
+
+    const pkg = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf8')
+    );
+    expect(pkg.scripts['build:backend']).toBe('node scripts/build-backend.js');
+    expect(pkg.scripts['build:linux']).toContain('npm run build:backend');
+    expect(pkg.scripts['build:mac']).toContain('npm run build:backend');
   });
 
   test('asar files 白名单包含全部本地依赖模块', () => {
-    const files = builderConfig.files;
     for (const module of ['main.js', 'preload.js', 'server-manager.js', 'tray.js', 'logger.js']) {
-      expect(files).toContain(module);
+      expect(builderConfigText).toMatch(new RegExp(`-\\s*${module.replace('.', '\\.')}`));
     }
   });
 });

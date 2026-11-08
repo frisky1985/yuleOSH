@@ -96,6 +96,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('backend-stopped', handler);
   },
 
+  // ─── 项目对话框 ───────────────────────────────────
+
+  /**
+   * 打开项目目录选择对话框（与菜单“打开项目”同一实现）
+   * @returns {Promise<string|null>} 选中的目录；取消则 null
+   */
+  openProjectDialog: () => ipcRenderer.invoke('open-project-dialog'),
+
+  /**
+   * 新建项目目录对话框
+   * @returns {Promise<string|null>} 目标目录；取消则 null
+   */
+  createProjectDialog: () => ipcRenderer.invoke('create-project-dialog'),
+
+  /**
+   * 订阅菜单/对话框选中项目事件
+   * @param {(projectPath: string) => void} callback
+   * @returns {() => void} 取消订阅
+   */
+  onProjectOpened: (callback) => {
+    const handler = (_event, projectPath) => callback(projectPath);
+    ipcRenderer.on('project-opened', handler);
+    return () => ipcRenderer.removeListener('project-opened', handler);
+  },
+
+  /**
+   * 订阅新建项目事件
+   * @param {(projectPath: string) => void} callback
+   * @returns {() => void} 取消订阅
+   */
+  onCreateProject: (callback) => {
+    const handler = (_event, projectPath) => callback(projectPath);
+    ipcRenderer.on('create-project', handler);
+    return () => ipcRenderer.removeListener('create-project', handler);
+  },
+
   // ─── 原生对话框 ───────────────────────────────────
 
   /**

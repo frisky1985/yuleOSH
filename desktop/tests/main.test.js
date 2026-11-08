@@ -158,6 +158,86 @@ describe('AC-4.x — 应用菜单', () => {
   });
 });
 
+// ── AC-4.1.2/4.1.3 打开项目对话框 ───────────────────
+
+describe('AC-4.1.2/4.1.3 — 打开项目对话框接线', () => {
+  const { dialog, ipcMain } = require('electron');
+
+  beforeEach(() => {
+    dialog.showOpenDialog.mockReset();
+    dialog.showSaveDialog.mockReset();
+  });
+
+  test('AC-4.1.2: 触发后调用 showOpenDialog 且仅允许选择目录', async () => {
+    await main.createWindow();
+    dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ['/tmp/yuleosh-project'],
+    });
+
+    const selected = await main.openProjectDialog();
+
+    expect(selected).toBe('/tmp/yuleosh-project');
+    const options = dialog.showOpenDialog.mock.calls.at(-1)[1];
+    expect(options.properties).toEqual(['openDirectory']);
+  });
+
+  test('AC-4.1.3: 选中目录后通过 IPC 发送 project-opened 路径', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+    dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ['/tmp/project-with-path'],
+    });
+
+    await main.openProjectDialog();
+
+    expect(win.webContents.send).toHaveBeenCalledWith(
+      'project-opened',
+      '/tmp/project-with-path'
+    );
+  });
+
+  test('AC-4.1.3: 取消选择时返回 null 且不发送事件', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+    win.webContents.send.mockClear();
+    dialog.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+
+    const selected = await main.openProjectDialog();
+
+    expect(selected).toBeNull();
+    expect(win.webContents.send).not.toHaveBeenCalledWith(
+      'project-opened',
+      expect.anything()
+    );
+  });
+
+  test('AC-4.1.3: 渲染进程可通过 IPC 调用同一对话框实现', async () => {
+    await main.createWindow();
+    const channels = ipcMain.handle.mock.calls.map((call) => call[0]);
+    expect(channels).toContain('open-project-dialog');
+    expect(channels).toContain('create-project-dialog');
+  });
+
+  test('创建项目对话框选中后发送 create-project 事件', async () => {
+    mockWindows.length = 0;
+    await main.createWindow();
+    const win = mockWindows[mockWindows.length - 1];
+    dialog.showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: '/tmp/new-project',
+    });
+
+    const created = await main.openCreateProject();
+
+    expect(created).toBe('/tmp/new-project');
+    expect(win.webContents.send).toHaveBeenCalledWith('create-project', '/tmp/new-project');
+  });
+});
+
 // ── AC-2.x 错误恢复 IPC ─────────────────────────────
 
 describe('AC-2.x — 后端错误恢复 IPC', () => {

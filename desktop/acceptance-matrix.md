@@ -76,7 +76,7 @@
 |---|---|---|---|---|
 | **AC-5.1.1** | macOS .dmg 构建成功 | `electron-builder --mac` 正常运行，输出 `.dmg` 文件，安装后应用可启动 | **P0** | CI 流水线 + MT（安装测试） |
 | **AC-5.1.2** | Linux .AppImage 构建成功 | `electron-builder --linux` 正常运行，输出 `.AppImage` 文件，运行后应用可启动 | **P0** | CI 流水线 + MT（安装测试） |
-| **AC-5.1.4** | 构建产物含 Python 运行时 | 构建产物中应包含 Python 运行时或 PyInstaller 打包。当前 MVP 版本用户需自行安装 Python 3.10+ | **P1** | MT（验收时确认版本检测逻辑正常工作） |
+| **AC-5.1.4** | 构建产物含 Python 运行时 | 构建产物包含 `resources/backend/yuleosh-server`（PyInstaller onedir），启动时优先使用内置运行时；仅在缺失时回退系统 Python，用户无需预装 Python 3.10+ | **P1** | MT（`npm run build:backend` + 冒烟测试 `/api/v1/health`） |
 | **AC-5.2.1** | 构建产物 <= 300MB | 安装后 `.app`（macOS）或解压后目录（Linux）的磁盘占用 <= 300MB | **P0** | CI（构建后 `du -sh` 验证） |
 | **AC-5.2.2** | 启动时间 <= 5s | 从双击图标到界面可交互（登录页可见）的总时间 <= 5 秒（基准：MacBook Pro M3 / 等效硬件） | **P0** | MT（秒表测量，重复 3 次取均值）+ CI（如 headless 可测启动时间） |
 
