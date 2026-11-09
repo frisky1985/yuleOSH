@@ -915,7 +915,11 @@ def status_pipeline(name: Optional[str] = None) -> None:
                 if data.get("name") == name:
                     sessions.append(d.name)
     else:
-        sessions = sorted([d.name for d in base.iterdir() if d.is_dir()])
+        sessions = (
+            sorted([d.name for d in base.iterdir() if d.is_dir()])
+            if base.exists()
+            else []
+        )
 
     if not sessions:
         print("No pipeline sessions found.")

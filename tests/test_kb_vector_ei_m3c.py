@@ -21,6 +21,28 @@ from yuleosh.kb.vector_store import (
 )
 
 
+def _sqlite_vec_available() -> bool:
+    """sqlite-vec 是可选依赖，CI 默认未安装。
+
+    仅检查 import 不够（纯 Python 包在、二进制扩展缺失时 load 仍失败），
+    因此真正往临时连接加载一次再判定。
+    """
+    try:
+        import sqlite_vec  # noqa: F401
+    except ImportError:
+        return False
+    conn = sqlite3.connect(":memory:")
+    try:
+        return load_vector_extension(conn)
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
+_HAS_SQLITE_VEC = _sqlite_vec_available()
+
+
 # ── EI-M3C.1: EmbeddingProvider 抽象 ──────────────────────────────────
 
 class TestEmbeddingProviders:
@@ -70,6 +92,10 @@ def conn():
     os.unlink(db_path)
 
 
+@pytest.mark.skipif(
+    not _HAS_SQLITE_VEC,
+    reason="sqlite-vec 扩展不可用（可选依赖，CI 默认不安装）",
+)
 class TestVectorStore:
     def test_load_extension(self, conn):
         """GIVEN sqlite-vec 已装 WHEN load THEN True。"""
