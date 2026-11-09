@@ -1,0 +1,62 @@
+# ASPICE v3.1 Validation Process Compliance Checkpoints
+# Defines VAL.1 check templates for yuleOSH compliance checker.
+#
+# 与 aspice_sys_v3.1.yaml 同结构（顶层 meta + val.1 区域键）；通用 loader
+# (compliance/profile.py) 零改动即可接入。evidence 路径与
+# step_handlers/validation.py 生成的 docs/validation-*.md 严格对齐。
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "Validation Process Group — VAL.1 产品确认（预期使用场景）"
+
+val.1:
+  id: "VAL.1"
+  title: "Product Validation"
+  description: |
+    Confirm that the product fulfils its intended use in its intended
+    environment. Validation differs from verification: it answers
+    "did we build the right product", based on stakeholder needs rather
+    than on the specification alone.
+  base_practices:
+    - id: "VAL.1.BP1"
+      title: "Develop validation measures and criteria"
+      output_evidence:
+        - type: "document"
+          path: "docs/validation-plan.md"
+          description: "Validation plan with measures, environment and pass criteria"
+      check:
+        - "Each validation scenario has a unique identifier (VAL-xxx)"
+        - "Each scenario declares target/equivalent environment and method"
+        - "Pass criteria are measurable and reviewable"
+    - id: "VAL.1.BP2"
+      title: "Validate product"
+      output_evidence:
+        - type: "document"
+          path: "docs/validation-report.md"
+          description: "Validation report aggregated from real execution records"
+        - type: "evidence"
+          path: "docs/validation-results.yaml"
+          description: "Raw validation execution records (result + evidence path)"
+      check:
+        - "Report only reflects recorded executions, no inferred pass"
+        - "Every PASS entry carries a verifiable evidence path"
+        - "Scenarios without records are reported as not executed"
+    - id: "VAL.1.BP3"
+      title: "Establish bidirectional traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/validation-plan.md"
+          description: "Requirement <-> validation scenario traceability matrix"
+      check:
+        - "Every requirement maps to at least one validation scenario"
+        - "Every scenario maps back to a requirement (no orphan scenario)"
+    - id: "VAL.1.BP4"
+      title: "Ensure consistency"
+      output_evidence:
+        - type: "document"
+          path: "docs/validation-plan.md"
+          description: "Consistency between validation criteria and requirements"
+      check:
+        - "Criteria are derived from the linked requirement"
+        - "SYS.5 and SWE.6 evidence are referenced, not substituted"

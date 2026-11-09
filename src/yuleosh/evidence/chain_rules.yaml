@@ -187,6 +187,7 @@ aspice:
     - SUP.8
     - SUP.9
     - SUP.10
+    - VAL.1
     - MAN.3
     - MAN.5
   source_mapping:
@@ -200,7 +201,13 @@ aspice:
       process_area: SWE.2
     - pattern: "^docs/(detailed-design|design)\\.md$"
       process_area: SWE.3
+    - pattern: "^docs/validation-(plan|report)\\.md$"
+      process_area: VAL.1
+    - pattern: "^docs/validation-results\\.yaml$"
+      process_area: VAL.1
   id_prefixes:
+    - prefix: "VAL"
+      process_area: VAL.1
     - prefix: "STAKE"
       process_area: SYS.1
     - prefix: "STK"

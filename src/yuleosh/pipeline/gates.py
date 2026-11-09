@@ -125,7 +125,15 @@ GATES: list[dict] = [
     {
         "gate": "G10",
         "name": "SWE.6 合格性 Gate",
-        "step_keys": ["test-qualification", "final-report"],
+        "step_keys": ["test-qualification"],
+    },
+    {
+        # VAL.1：产品级确认（预期使用场景 + 目标环境），与 SYS.5 系统确认互补。
+        # 门禁只校验证据结构；"未执行"不会被判绿（见 validation.py）。
+        # final-report 归入本 Gate，使最终报告收录确认结论。
+        "gate": "G11",
+        "name": "VAL.1 确认 Gate",
+        "step_keys": ["val-validation", "val-review", "final-report"],
     },
 ]
 
@@ -346,6 +354,8 @@ _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "development": ("development-plan.md",),
     "test-planning": ("test-plan.md",),
     "test-qualification": ("qualification-test.json", "qualification-test.md"),
+    "val-validation": ("validation-plan.md", "validation-report.md"),
+    "val-review": ("validation-report.md",),
     "final-report": ("final-report.md",),
 }
 
