@@ -135,23 +135,23 @@ class TestCandidateTableIsReachable:
                            [{"name": "test-qualification", "status": "completed"}])
         assert _gate(summary, "G10")["status"] == "skipped"
 
-    def test_final_report_markdown_is_read_by_g12(self, tmp_path):
+    def test_final_report_markdown_is_read_by_g13(self, tmp_path):
         """撤销修复（删除 final-report 候选）→ 实测本用例转红。
 
         ``final-report.md`` 无 ``step`` 字段可扫，候选表是唯一通路。
-        MAN.6 落地后 final-report 归入 G12 测量 Gate。
+        MAN.5 落地后 final-report 归入 G13 风险管理 Gate。
         """
         (tmp_path / "qualification-test.json").write_text(
             json.dumps({"session": "test-sess", "step": "test-qualification",
                         "status": "passed"}), encoding="utf-8")
         (tmp_path / "final-report.md").write_text(
             "# Final report — SKIPPED (no qualification run)\n", encoding="utf-8")
-        for key in ("measurement", "measurement-review"):
+        for key in ("risk-assessment", "risk-review"):
             (tmp_path / f"{key}.json").write_text(
                 json.dumps({"session": "test-sess", "step": key,
                             "status": "completed"}), encoding="utf-8")
         summary = _summary(tmp_path, _all_completed())
-        assert _gate(summary, "G12")["status"] == "skipped"
+        assert _gate(summary, "G13")["status"] == "skipped"
 
 
 # ── P0-B ────────────────────────────────────────────────────────────────

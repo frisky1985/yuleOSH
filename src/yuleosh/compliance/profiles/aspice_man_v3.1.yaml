@@ -65,3 +65,55 @@ man.6:
       check:
         - "Report states the collection timestamp"
         - "Report is traceable to the measurement plan"
+
+man.5:
+  id: "MAN.5"
+  title: "Risk Management"
+  description: |
+    Identify, analyze, prioritize and monitor risks continuously. Risks are
+    sourced from objective signals (failing measures, failed pipeline steps)
+    and human-maintained entries; risk status is never inferred automatically.
+  base_practices:
+    - id: "MAN.5.BP1"
+      title: "Establish risk management scope"
+      output_evidence:
+        - type: "document"
+          path: "docs/risk-management-plan.md"
+          description: "Risk management scope, responsibilities and escalation path"
+      check:
+        - "Scope covers the engineering activities before product release"
+        - "Risk sources are named: MAN.6 failures, pipeline failures, manual entries"
+        - "Accountability for the risk register is assigned"
+    - id: "MAN.5.BP2"
+      title: "Identify and analyze risks"
+      output_evidence:
+        - type: "document"
+          path: "docs/risk-register.yaml"
+          description: "Risk register with likelihood, impact and score per risk"
+      check:
+        - "Every risk has a unique identifier (RISK-xxx)"
+        - "Likelihood and impact are rated 1-5 and score equals L×I"
+        - "Each risk records its source (measurement, pipeline, manual)"
+        - "Scan sources are recorded; an empty register must state what was scanned"
+    - id: "MAN.5.BP3"
+      title: "Define risk response measures"
+      output_evidence:
+        - type: "document"
+          path: "docs/risk-register.yaml"
+          description: "Response strategy, mitigation and owner per risk"
+      check:
+        - "Response is one of avoid/mitigate/transfer/accept"
+        - "Accepting a risk requires a documented rationale"
+        - "Open high risks triaged by a human carry an owner and a mitigation measure"
+    - id: "MAN.5.BP4"
+      title: "Monitor and escalate risks"
+      output_evidence:
+        - type: "document"
+          path: "docs/risk-report.md"
+          description: "Risk status, open high risks and escalation items"
+      check:
+        - "Report lists every registered risk with its current status"
+        - "Triaged open high risks carry a review due date (YYYY-MM-DD)"
+        - "Auto-detected risks without an owner are reported as pending triage"
+        - "Status is changed by people only; the pipeline never marks a risk mitigated"
+        - "Escalation path is followed for open high risks"

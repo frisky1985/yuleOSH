@@ -208,9 +208,17 @@ aspice:
       process_area: VAL.1
     - pattern: "^docs/measurement-(plan|report)\\.md$"
       process_area: MAN.6
+    - pattern: "^docs/risk-management-plan\\.md$"
+      process_area: MAN.5
+    - pattern: "^docs/risk-register\\.yaml$"
+      process_area: MAN.5
+    - pattern: "^docs/risk-report\\.md$"
+      process_area: MAN.5
   id_prefixes:
     - prefix: "METRIC"
       process_area: MAN.6
+    - prefix: "RISK"
+      process_area: MAN.5
     - prefix: "VAL"
       process_area: VAL.1
     - prefix: "STAKE"

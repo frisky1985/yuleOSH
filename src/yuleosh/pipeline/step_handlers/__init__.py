@@ -93,6 +93,10 @@ from yuleosh.pipeline.step_handlers.measurement import (
     step_measurement,
     step_review_measurement,
 )
+from yuleosh.pipeline.step_handlers.risk import (
+    step_risk_assessment,
+    step_review_risk,
+)
 
 # QEMU firmware emulation test (L2)
 from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
@@ -283,6 +287,10 @@ PIPELINE_STEPS = [
     # ── G12 MAN.6 Measurement ──────────────────────────────
     ("measurement", "小仓", "测量计划/报告 (MAN.6)", step_measurement),
     ("measurement-review", "小克", "测量评审 (确定性门禁)", step_review_measurement),
+
+    # ── G13 MAN.5 Risk Management ──────────────────────────
+    ("risk-assessment", "小仓", "风险评估与登记 (MAN.5)", step_risk_assessment),
+    ("risk-review", "小克", "风险评审 (确定性门禁)", step_review_risk),
     ("final-report", "小明", "最终报告", step_final_report),
 ]
 

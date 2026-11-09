@@ -137,10 +137,19 @@ GATES: list[dict] = [
     {
         # MAN.6：度量项定义、真实数据采集与阈值判定。
         # 无数据项不会被推断为通过（见 measurement.py）。
-        # final-report 归入本 Gate，使最终报告收录测量结论。
         "gate": "G12",
         "name": "MAN.6 测量 Gate",
-        "step_keys": ["measurement", "measurement-review", "final-report"],
+        "step_keys": ["measurement", "measurement-review"],
+    },
+    {
+        # MAN.5：风险识别、评估、应对与监控。自动风险来自 MAN.6 FAIL
+        # 度量项与流水线失败记录，人工条目在登记文件中维护。
+        # 自动识别的高风险在人工分级前列为「待分级」，不阻断自动化流水线；
+        # 人工登记的高风险缺责任人/缓解措施/评审日 → 门禁 RED（见 risk.py）。
+        # final-report 归入本 Gate，使最终报告收录风险结论。
+        "gate": "G13",
+        "name": "MAN.5 风险管理 Gate",
+        "step_keys": ["risk-assessment", "risk-review", "final-report"],
     },
 ]
 

@@ -553,7 +553,7 @@ class TestStepHandlersInit:
         from yuleosh.pipeline.step_handlers import PIPELINE_STEPS
         # 数量不写死（跟随单一事实源）；契约断言防丢关键结构：
         # 首步 sys-requirements（M1 系统层头部）/ 末步 final-report /
-        # 合理下限（编排层 11 Gate 的 30 执行单元合并后不应低于 20，防误删步骤）
+        # 合理下限（编排层 14 Gate 的执行单元合并后不应低于 20，防误删步骤）
         assert len(PIPELINE_STEPS) >= 20
         assert PIPELINE_STEPS[0][0] == "sys-requirements"
         assert PIPELINE_STEPS[-1][0] == "final-report"

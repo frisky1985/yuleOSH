@@ -87,7 +87,9 @@ class TestPipelineStepsStructure:
             # ── G11 VAL.1 产品确认 ──
             "val-validation", "val-review",
             # ── G12 MAN.6 测量 ──
-            "measurement", "measurement-review", "final-report",
+            "measurement", "measurement-review",
+            # ── G13 MAN.5 风险管理 ──
+            "risk-assessment", "risk-review", "final-report",
         ]
         assert keys == expected
 
@@ -139,14 +141,14 @@ class TestGatesContract:
         violations = validate_gates_contract(step_keys)
         assert violations == [], f"GATES contract violations: {violations}"
 
-    def test_gates_has_13_entries(self):
+    def test_gates_has_14_entries(self):
         from yuleosh.pipeline.gates import GATES
-        assert len(GATES) == 13
-        # 首尾 Gate 与 ASPICE 对齐（G0 系统层、VAL.1 确认、MAN.6 测量）
+        assert len(GATES) == 14
+        # 首尾 Gate 与 ASPICE 对齐（G0 系统层、MAN.6 测量、MAN.5 风险管理）
         assert GATES[0]["gate"] == "G0"
         assert GATES[0]["name"].startswith("SYS")
-        assert GATES[-1]["gate"] == "G12"
-        assert GATES[-1]["name"].startswith("MAN.6")
+        assert GATES[-1]["gate"] == "G13"
+        assert GATES[-1]["name"].startswith("MAN.5")
 
     def test_gate_status_worst_wins(self):
         from yuleosh.pipeline.gates import aggregate_gate_status
