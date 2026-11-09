@@ -1,0 +1,67 @@
+# ASPICE v3.1 Measurement Process Compliance Checkpoints
+# Defines MAN.6 check templates for yuleOSH compliance checker.
+#
+# 与 aspice_sys_v3.1.yaml 同结构（顶层 meta + man.6 区域键）；通用 loader
+# (compliance/profile.py) 零改动即可接入。evidence 路径与
+# step_handlers/measurement.py 生成的 docs/measurement-*.md 严格对齐。
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "Management Process Group — MAN.6 测量"
+
+man.6:
+  id: "MAN.6"
+  title: "Measurement"
+  description: |
+    Collect, store, analyze and report measurement data to support
+    management decisions. Measures shall be traceable to their data
+    sources; absent data must be reported as absent rather than inferred.
+  base_practices:
+    - id: "MAN.6.BP1"
+      title: "Establish measurement objectives"
+      output_evidence:
+        - type: "document"
+          path: "docs/measurement-plan.md"
+          description: "Measurement objectives aligned with project goals"
+      check:
+        - "Objectives state what decision each measure supports"
+        - "Objectives cover process and product quality"
+    - id: "MAN.6.BP2"
+      title: "Define measures"
+      output_evidence:
+        - type: "document"
+          path: "docs/measurement-plan.md"
+          description: "Measure definitions with data source, frequency, threshold"
+      check:
+        - "Each measure has a unique identifier (M-xxx)"
+        - "Each measure declares its data source and collection frequency"
+        - "Thresholds come from a single source of truth (ci.kpi)"
+    - id: "MAN.6.BP3"
+      title: "Collect and store measurement data"
+      output_evidence:
+        - type: "evidence"
+          path: ".yuleosh/reports"
+          description: "Raw measurement records produced by the pipeline"
+      check:
+        - "Data is produced by pipeline steps, not entered by hand"
+        - "Raw records remain available for audit"
+    - id: "MAN.6.BP4"
+      title: "Analyze measurement data"
+      output_evidence:
+        - type: "document"
+          path: "docs/measurement-report.md"
+          description: "Threshold verdicts, trend analysis and corrective actions"
+      check:
+        - "Every measure is marked PASS, FAIL or no-data"
+        - "No-data measures are never inferred as passing"
+        - "FAIL measures carry corrective actions"
+    - id: "MAN.6.BP5"
+      title: "Report measurement results"
+      output_evidence:
+        - type: "document"
+          path: "docs/measurement-report.md"
+          description: "Measurement report shared with management"
+      check:
+        - "Report states the collection timestamp"
+        - "Report is traceable to the measurement plan"

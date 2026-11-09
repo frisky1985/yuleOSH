@@ -175,7 +175,7 @@ class TestRegistration:
 
     def test_gate_g11_registered(self):
         gate = next(g for g in GATES if g["gate"] == "G11")
-        assert gate["step_keys"] == ["val-validation", "val-review", "final-report"]
+        assert gate["step_keys"] == ["val-validation", "val-review"]
 
     def test_steps_registered_before_final_report(self):
         keys = [s[0] for s in PIPELINE_STEPS]

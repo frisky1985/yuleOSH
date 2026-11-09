@@ -190,6 +190,7 @@ aspice:
     - VAL.1
     - MAN.3
     - MAN.5
+    - MAN.6
   source_mapping:
     - pattern: "^docs/(spec|requirements|software-requirements)\\.md$"
       process_area: SWE.1
@@ -205,7 +206,11 @@ aspice:
       process_area: VAL.1
     - pattern: "^docs/validation-results\\.yaml$"
       process_area: VAL.1
+    - pattern: "^docs/measurement-(plan|report)\\.md$"
+      process_area: MAN.6
   id_prefixes:
+    - prefix: "METRIC"
+      process_area: MAN.6
     - prefix: "VAL"
       process_area: VAL.1
     - prefix: "STAKE"

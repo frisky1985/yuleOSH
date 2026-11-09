@@ -130,10 +130,17 @@ GATES: list[dict] = [
     {
         # VAL.1：产品级确认（预期使用场景 + 目标环境），与 SYS.5 系统确认互补。
         # 门禁只校验证据结构；"未执行"不会被判绿（见 validation.py）。
-        # final-report 归入本 Gate，使最终报告收录确认结论。
         "gate": "G11",
         "name": "VAL.1 确认 Gate",
-        "step_keys": ["val-validation", "val-review", "final-report"],
+        "step_keys": ["val-validation", "val-review"],
+    },
+    {
+        # MAN.6：度量项定义、真实数据采集与阈值判定。
+        # 无数据项不会被推断为通过（见 measurement.py）。
+        # final-report 归入本 Gate，使最终报告收录测量结论。
+        "gate": "G12",
+        "name": "MAN.6 测量 Gate",
+        "step_keys": ["measurement", "measurement-review", "final-report"],
     },
 ]
 
@@ -356,6 +363,8 @@ _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "test-qualification": ("qualification-test.json", "qualification-test.md"),
     "val-validation": ("validation-plan.md", "validation-report.md"),
     "val-review": ("validation-report.md",),
+    "measurement": ("measurement-plan.md", "measurement-report.md"),
+    "measurement-review": ("measurement-report.md",),
     "final-report": ("final-report.md",),
 }
 

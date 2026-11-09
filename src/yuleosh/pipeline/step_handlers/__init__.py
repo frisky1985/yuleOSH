@@ -89,6 +89,10 @@ from yuleosh.pipeline.step_handlers.validation import (
     step_val_validation,
     step_review_val,
 )
+from yuleosh.pipeline.step_handlers.measurement import (
+    step_measurement,
+    step_review_measurement,
+)
 
 # QEMU firmware emulation test (L2)
 from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
@@ -275,6 +279,10 @@ PIPELINE_STEPS = [
     # ── G11 VAL.1 Product Validation ───────────────────────
     ("val-validation", "小明", "产品确认计划/报告 (VAL.1)", step_val_validation),
     ("val-review", "小克", "产品确认评审 (确定性门禁)", step_review_val),
+
+    # ── G12 MAN.6 Measurement ──────────────────────────────
+    ("measurement", "小仓", "测量计划/报告 (MAN.6)", step_measurement),
+    ("measurement-review", "小克", "测量评审 (确定性门禁)", step_review_measurement),
     ("final-report", "小明", "最终报告", step_final_report),
 ]
 
