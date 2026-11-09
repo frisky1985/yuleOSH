@@ -39,6 +39,10 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
+# psycopg2 属于 [saas] 额外依赖（pyproject: saas = [... psycopg2-binary ...]）。
+# 只装 [dev] 的开发环境应整体跳过本模块，而不是 88 条 setup error。
+pytest.importorskip("psycopg2", reason="需要 saas 额外依赖 psycopg2-binary")
+
 # A5 (v3.8.0): path bootstrap removed — pytest.ini pythonpath=src
 
 
