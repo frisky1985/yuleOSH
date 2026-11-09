@@ -150,6 +150,17 @@ def _report_mock_path_hits() -> None:
     for tid, path, stack in _MOCK_PATH_HITS:
         by_test.setdefault(tid, []).append((path, stack))
 
+    # 收尾阶段 stdout 的 fd 可能已被 capture 插件关闭，print 会抛
+    # OSError: Bad file descriptor。诊断输出绝不能让整个 pytest 会话崩溃
+    # （CI 上表现为 exit code 120 且丢失全部汇总）。
+    try:
+        _emit_mock_path_report(by_test)
+    except (OSError, ValueError):
+        pass
+
+
+def _emit_mock_path_report(by_test: dict) -> None:
+    """打印 mock-path 命中报告；调用方负责兜住 stdout 不可写的异常。"""
     print("\n" + "=" * 78)
     print(f"[mock-path] 检测到 {len(_MOCK_PATH_HITS)} 次「MagicMock 路径落盘」"
           f"，来自 {len(by_test)} 个测试")
