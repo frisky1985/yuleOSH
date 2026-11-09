@@ -89,7 +89,23 @@ class TestPipelineStepsStructure:
             # ── G12 MAN.6 测量 ──
             "measurement", "measurement-review",
             # ── G13 MAN.5 风险管理 ──
-            "risk-assessment", "risk-review", "final-report",
+            "risk-assessment", "risk-review",
+            # ── G14 ACQ.4 / G15 REU.2 / G16 PIM.3 ──
+            "acq4-monitoring", "acq4-review",
+            "reu2-reuse", "reu2-review",
+            "pim3-improvement", "pim3-review",
+            # ── G17 HWE.1~HWE.4 硬件工程 ──
+            "hwe1-requirements", "hwe1-review",
+            "hwe2-design", "hwe2-review",
+            "hwe3-implementation", "hwe3-review",
+            "hwe4-verification", "hwe4-review",
+            # ── G18 MLE.1~MLE.4 机器学习工程 ──
+            "mle1-requirements", "mle1-review",
+            "mle2-approach", "mle2-review",
+            "mle3-training", "mle3-review",
+            "mle4-evaluation", "mle4-review",
+            # ── G19 SPL.2 产品发布 ──
+            "spl2-release", "spl2-review", "final-report",
         ]
         assert keys == expected
 
@@ -141,14 +157,14 @@ class TestGatesContract:
         violations = validate_gates_contract(step_keys)
         assert violations == [], f"GATES contract violations: {violations}"
 
-    def test_gates_has_14_entries(self):
+    def test_gates_has_20_entries(self):
         from yuleosh.pipeline.gates import GATES
-        assert len(GATES) == 14
-        # 首尾 Gate 与 ASPICE 对齐（G0 系统层、MAN.6 测量、MAN.5 风险管理）
+        assert len(GATES) == 20
+        # 首尾 Gate 与 ASPICE 对齐（G0 系统层、SPL.2 产品发布）
         assert GATES[0]["gate"] == "G0"
         assert GATES[0]["name"].startswith("SYS")
-        assert GATES[-1]["gate"] == "G13"
-        assert GATES[-1]["name"].startswith("MAN.5")
+        assert GATES[-1]["gate"] == "G19"
+        assert GATES[-1]["name"].startswith("SPL.2")
 
     def test_gate_status_worst_wins(self):
         from yuleosh.pipeline.gates import aggregate_gate_status

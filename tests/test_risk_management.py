@@ -320,9 +320,7 @@ class TestRegistration:
 
     def test_gate_g13_registered(self):
         gate = next(g for g in GATES if g["gate"] == "G13")
-        assert gate["step_keys"] == [
-            "risk-assessment", "risk-review", "final-report"
-        ]
+        assert gate["step_keys"] == ["risk-assessment", "risk-review"]
 
     def test_steps_registered_before_final_report(self):
         keys = [s[0] for s in PIPELINE_STEPS]

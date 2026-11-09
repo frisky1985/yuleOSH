@@ -1,0 +1,368 @@
+# ASPICE v3.1 — Hardware & Machine Learning Engineering Process Group
+# HWE.1~HWE.4 / MLE.1~MLE.4 评估域。
+#
+# 与 aspice_man_v3.1.yaml / aspice_mgmt_support_v3.1.yaml 同结构（顶层 meta +
+# 每个过程域一个区域键）；通用 loader (compliance/profile.py) 零改动接入。
+# evidence 路径与 step_handlers/hwe_mle.py 生成的 docs/* 产物严格对齐。
+#
+# 检查项关键词由 ComplianceChecker._check_bp 的 P4 分支分发到
+# _has_hw_requirement_records / _has_hw_verification_records /
+# _has_ml_requirement_records / _has_ml_evaluation_records 及对应文档检查
+# （与 P2 SUP/MAN、P3 管理支撑分支同一模式）。
+#
+# 反假绿: 无产物如实判 RED；范围扫描留有 scan_sources；「已验证/已评估」
+# 必须引用真实存在的证据文件，门禁复核逐条重校验。
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "Hardware & Machine Learning Engineering — HWE.1~4 / MLE.1~4"
+
+hwe.1:
+  id: "HWE.1"
+  title: "Hardware Requirements Analysis"
+  description: |
+    Identify the hardware scope and specify hardware requirements for every
+    item in it. Scope is detected from objective file signals (linker scripts,
+    CubeMX configs, board directories, CAN matrices, startup code); an empty
+    result is recorded as such, never silently filled in.
+  order: 34
+  base_practices:
+    - id: "HWE.1.BP1"
+      title: "Identify hardware scope"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-item-register.yaml"
+          description: "Hardware item register with unique identifiers and scan sources"
+      check:
+        - "Every hardware item is uniquely identified by a HWE-xxx ID"
+        - "The hardware register records which sources were scanned"
+    - id: "HWE.1.BP2"
+      title: "Specify hardware requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-requirements.md"
+          description: "Hardware requirements covering every registered item"
+      check:
+        - "Hardware requirements are documented for every registered hardware item"
+        - "Hardware scope absence is recorded explicitly, never inferred"
+    - id: "HWE.1.BP3"
+      title: "Classify hardware items"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-item-register.yaml"
+          description: "Kind and status from controlled vocabularies per item"
+      check:
+        - "Hardware item kind and status come from controlled vocabularies"
+        - "Auto-detected hardware items stay pending until a human analyzes them"
+    - id: "HWE.1.BP4"
+      title: "Maintain hardware traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-requirements.md"
+          description: "Links from hardware items to design and verification records"
+      check:
+        - "Hardware items are linked to downstream hardware records"
+
+hwe.2:
+  id: "HWE.2"
+  title: "Hardware Design"
+  description: |
+    Develop a hardware design that covers every registered hardware item and
+    records constraints, resource allocation and hardware-software partitioning.
+  order: 35
+  base_practices:
+    - id: "HWE.2.BP1"
+      title: "Develop hardware design"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-design.md"
+          description: "Hardware design covering every registered item"
+      check:
+        - "The hardware design covers every registered hardware item"
+        - "Hardware design constraints are recorded"
+    - id: "HWE.2.BP2"
+      title: "Allocate hardware resources"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-design.md"
+          description: "Resource allocation and hardware-software partitioning"
+      check:
+        - "Hardware design records resource allocation and hardware-software partitioning"
+    - id: "HWE.2.BP3"
+      title: "Keep design consistent with scope"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-design.md"
+          description: "Design coverage per register item, or explicit empty-scope statement"
+      check:
+        - "The hardware design names each registered hardware item by ID"
+        - "A hardware design with empty scope states it explicitly"
+    - id: "HWE.2.BP4"
+      title: "Maintain design traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-design.md"
+          description: "Links from design to register and implementation records"
+      check:
+        - "The hardware design points to the register and implementation records"
+
+hwe.3:
+  id: "HWE.3"
+  title: "Hardware Implementation"
+  description: |
+    Track hardware implementation against the design: build outputs are listed
+    with path, size and digest, and every listed output must exist on disk.
+  order: 36
+  base_practices:
+    - id: "HWE.3.BP1"
+      title: "Record build outputs"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-implementation-report.md"
+          description: "Build outputs with path, size and digest"
+      check:
+        - "Hardware build outputs are listed with path and digest"
+        - "Every listed hardware build output exists on disk"
+    - id: "HWE.3.BP2"
+      title: "Track implementation per item"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-implementation-report.md"
+          description: "Implementation status per registered hardware item"
+      check:
+        - "Hardware implementation status is tracked per registered item"
+    - id: "HWE.3.BP3"
+      title: "Detect build outputs objectively"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-implementation-report.md"
+          description: "Build outputs found by filesystem scan, not declared from memory"
+      check:
+        - "Hardware build outputs come from a filesystem scan with recorded patterns"
+    - id: "HWE.3.BP4"
+      title: "Maintain implementation traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-implementation-report.md"
+          description: "Links from implementation to design and verification records"
+      check:
+        - "The hardware implementation report maintains links to related hardware records"
+
+hwe.4:
+  id: "HWE.4"
+  title: "Hardware Verification"
+  description: |
+    Record hardware verification per registered item. An item may only be
+    marked verified with a cited evidence file that exists on disk and names
+    the item; the pipeline never marks anything verified on its own.
+  order: 37
+  base_practices:
+    - id: "HWE.4.BP1"
+      title: "Record verification status"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-verification-report.md"
+          description: "Verification status per registered hardware item"
+      check:
+        - "Hardware verification status is recorded per registered item"
+        - "Hardware verification reports absence of scope explicitly"
+    - id: "HWE.4.BP2"
+      title: "Require verification evidence"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-verification-report.md"
+          description: "Cited evidence file per verified item"
+      check:
+        - "A hardware item verification claim requires cited evidence on disk"
+        - "Hardware verification evidence is re-opened and re-checked by the gate"
+    - id: "HWE.4.BP3"
+      title: "No self-assigned verdicts"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-verification-report.md"
+          description: "Unverified items are reported as unverified"
+      check:
+        - "Hardware verification marks items without evidence as unverified"
+    - id: "HWE.4.BP4"
+      title: "Maintain verification traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/hw-verification-report.md"
+          description: "Links from verification to register and implementation records"
+      check:
+        - "The hardware verification report maintains links to related hardware records"
+
+mle.1:
+  id: "MLE.1"
+  title: "Machine Learning Requirements Analysis"
+  description: |
+    Identify the machine learning scope (models, training scripts, datasets)
+    from objective file signals and specify ML requirements for every item.
+    An empty result is recorded as such, never silently filled in.
+  order: 38
+  base_practices:
+    - id: "MLE.1.BP1"
+      title: "Identify machine learning scope"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-item-register.yaml"
+          description: "ML item register with unique identifiers and scan sources"
+      check:
+        - "Every machine learning item is uniquely identified by an MLE-xxx ID"
+        - "The machine learning register records which sources were scanned"
+    - id: "MLE.1.BP2"
+      title: "Specify machine learning requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-requirements.md"
+          description: "ML requirements covering every registered item"
+      check:
+        - "Machine learning requirements are documented per registered item"
+        - "Absence of machine learning scope is recorded explicitly"
+    - id: "MLE.1.BP3"
+      title: "Classify machine learning items"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-item-register.yaml"
+          description: "Kind and status from controlled vocabularies per item"
+      check:
+        - "Machine learning item kind and status come from controlled vocabularies"
+    - id: "MLE.1.BP4"
+      title: "Maintain machine learning traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-requirements.md"
+          description: "Links from ML items to approach, training and evaluation records"
+      check:
+        - "The machine learning register maintains links to downstream records"
+
+mle.2:
+  id: "MLE.2"
+  title: "Machine Learning Approach"
+  description: |
+    Define the machine learning approach: model selection with rationale,
+    data strategy, and metric targets with resource budgets — covering every
+    registered ML item.
+  order: 39
+  base_practices:
+    - id: "MLE.2.BP1"
+      title: "Define machine learning approach"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-approach.md"
+          description: "Model selection, data strategy and metric budgets"
+      check:
+        - "The machine learning approach records model selection, data strategy and metric budgets"
+    - id: "MLE.2.BP2"
+      title: "Cover every registered item"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-approach.md"
+          description: "Approach coverage per register item, or explicit empty-scope statement"
+      check:
+        - "The machine learning approach covers every registered item"
+        - "A machine learning approach with empty scope states it explicitly"
+    - id: "MLE.2.BP3"
+      title: "State metric targets and budgets"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-approach.md"
+          description: "Metric targets and resource budgets section"
+      check:
+        - "The machine learning approach states metric targets and resource budgets"
+    - id: "MLE.2.BP4"
+      title: "Maintain approach traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-approach.md"
+          description: "Links from approach to register and training records"
+      check:
+        - "The machine learning approach points to the register and training records"
+
+mle.3:
+  id: "MLE.3"
+  title: "Machine Learning Training"
+  description: |
+    Record training runs. Training sources come from a filesystem scan;
+    metrics are written by humans from real training output and are preserved
+    across runs — the report never generates metric values on its own.
+  order: 40
+  base_practices:
+    - id: "MLE.3.BP1"
+      title: "List training sources"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-training-report.md"
+          description: "Training scripts found by filesystem scan"
+      check:
+        - "Training sources are listed with paths that exist on disk"
+        - "Training sources come from a filesystem scan, not from memory"
+    - id: "MLE.3.BP2"
+      title: "Record training outcomes"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-training-report.md"
+          description: "Human-recorded training records preserved across runs"
+      check:
+        - "Training metrics are recorded by humans, never fabricated"
+    - id: "MLE.3.BP3"
+      title: "Preserve training records"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-training-report.md"
+          description: "Training records section survives regeneration"
+      check:
+        - "Training records are preserved when the training report regenerates"
+    - id: "MLE.3.BP4"
+      title: "Maintain training traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-training-report.md"
+          description: "Links from training to approach and evaluation records"
+      check:
+        - "The training report maintains links to related machine learning records"
+
+mle.4:
+  id: "MLE.4"
+  title: "Machine Learning Testing"
+  description: |
+    Record model evaluation per registered model. A model may only be marked
+    evaluated when docs/ml-eval-<id>.yaml exists with non-empty metrics; the
+    review re-parses every cited file.
+  order: 41
+  base_practices:
+    - id: "MLE.4.BP1"
+      title: "Record evaluation status"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-evaluation-report.md"
+          description: "Evaluation status per registered model"
+      check:
+        - "Model evaluation status is recorded per registered model"
+        - "Models without evaluation evidence are reported as not evaluated"
+    - id: "MLE.4.BP2"
+      title: "Require evaluation evidence"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-evaluation-report.md"
+          description: "Evaluation evidence file with non-empty metrics per evaluated model"
+      check:
+        - "A model is marked evaluated only with cited metric evidence on disk"
+        - "Model evaluation evidence is re-parsed and re-checked by the gate"
+    - id: "MLE.4.BP3"
+      title: "No self-assigned verdicts"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-evaluation-report.md"
+          description: "The pipeline never evaluates a model on its own"
+      check:
+        - "Model evaluation verdicts come from evidence files, never from inference"
+    - id: "MLE.4.BP4"
+      title: "Maintain evaluation traceability"
+      output_evidence:
+        - type: "document"
+          path: "docs/ml-evaluation-report.md"
+          description: "Links from evaluation to register and training records"
+      check:
+        - "The model evaluation report points to the register records"

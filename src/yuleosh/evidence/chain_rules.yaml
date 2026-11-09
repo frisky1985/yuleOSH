@@ -183,11 +183,21 @@ aspice:
     - SWE.6
     - HWE.1
     - HWE.2
+    - HWE.3
+    - HWE.4
+    - MLE.1
+    - MLE.2
+    - MLE.3
+    - MLE.4
     - SUP.1
     - SUP.8
     - SUP.9
     - SUP.10
     - VAL.1
+    - ACQ.4
+    - SPL.2
+    - REU.2
+    - PIM.3
     - MAN.3
     - MAN.5
     - MAN.6
@@ -214,11 +224,45 @@ aspice:
       process_area: MAN.5
     - pattern: "^docs/risk-report\\.md$"
       process_area: MAN.5
+    - pattern: "^docs/supplier-(register\\.yaml|monitoring-report\\.md)$"
+      process_area: ACQ.4
+    - pattern: "^docs/reuse-(register\\.yaml|report\\.md)$"
+      process_area: REU.2
+    - pattern: "^docs/process-improvement-(plan|report)\\.md$"
+      process_area: PIM.3
+    - pattern: "^docs/process-improvement-register\\.yaml$"
+      process_area: PIM.3
+    - pattern: "^docs/release-(plan\\.md|manifest\\.yaml)$"
+      process_area: SPL.2
+    - pattern: "^docs/hw-(requirements\\.md|item-register\\.yaml)$"
+      process_area: HWE.1
+    - pattern: "^docs/hw-design\\.md$"
+      process_area: HWE.2
+    - pattern: "^docs/hw-implementation-report\\.md$"
+      process_area: HWE.3
+    - pattern: "^docs/hw-verification-report\\.md$"
+      process_area: HWE.4
+    - pattern: "^docs/ml-(requirements\\.md|item-register\\.yaml)$"
+      process_area: MLE.1
+    - pattern: "^docs/ml-approach\\.md$"
+      process_area: MLE.2
+    - pattern: "^docs/ml-training-report\\.md$"
+      process_area: MLE.3
+    - pattern: "^docs/ml-(evaluation-report\\.md|eval-[A-Z0-9-]+\\.yaml)$"
+      process_area: MLE.4
   id_prefixes:
     - prefix: "METRIC"
       process_area: MAN.6
     - prefix: "RISK"
       process_area: MAN.5
+    - prefix: "ACQ"
+      process_area: ACQ.4
+    - prefix: "REU"
+      process_area: REU.2
+    - prefix: "PIM"
+      process_area: PIM.3
+    - prefix: "REL"
+      process_area: SPL.2
     - prefix: "VAL"
       process_area: VAL.1
     - prefix: "STAKE"
@@ -257,6 +301,10 @@ aspice:
       process_area: HWE.1
     - prefix: "HWD"
       process_area: HWE.2
+    - prefix: "HWE"
+      process_area: HWE.1
+    - prefix: "MLE"
+      process_area: MLE.1
   test_level_mapping:
     - pattern: "(^|/)(unit|ut)(/|_)|test_unit"
       process_area: SWE.4

@@ -14,10 +14,11 @@ Import paths preserved:
   from yuleosh.pipeline.step_handlers import PIPELINE_STEPS    (works)
   from yuleosh.pipeline.step_handlers import _check_llm_key    (works)
 
-30 子步骤执行层（含 SYS 系统层 6 步）+ 11 Gate 编排层（2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0）:
-  - 执行层 PIPELINE_STEPS = 30 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
-    step_cache / --from-step 全按 24 步
-  - 编排层 GATES（yuleosh.pipeline.gates）: 10 Gate 对外稳定契约,
+60 子步骤执行层（含 SYS 系统层 6 步与 ACQ.4/REU.2/PIM.3/SPL.2 8 步及 HWE/MLE 16 步）+ 20 Gate 编排层
+（2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0；后续补齐 MAN.5/MAN.6/VAL.1、管理支撑组与 HWE.1~4/MLE.1~4）:
+  - 执行层 PIPELINE_STEPS = 60 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
+    step_cache / --from-step 全按实际步骤数
+  - 编排层 GATES（yuleosh.pipeline.gates）: 20 Gate 对外稳定契约,
     gate status = 内部子步骤最差状态; 报告聚合 gate-summary.json
 """
 
@@ -97,6 +98,34 @@ from yuleosh.pipeline.step_handlers.risk import (
     step_risk_assessment,
     step_review_risk,
 )
+from yuleosh.pipeline.step_handlers.hwe_mle import (
+    step_hwe1_requirements,
+    step_review_hwe1,
+    step_hwe2_design,
+    step_review_hwe2,
+    step_hwe3_implementation,
+    step_review_hwe3,
+    step_hwe4_verification,
+    step_review_hwe4,
+    step_mle1_requirements,
+    step_review_mle1,
+    step_mle2_approach,
+    step_review_mle2,
+    step_mle3_training,
+    step_review_mle3,
+    step_mle4_evaluation,
+    step_review_mle4,
+)
+from yuleosh.pipeline.step_handlers.mgmt_support import (
+    step_acq4_monitoring,
+    step_review_acq4,
+    step_reu2_reuse,
+    step_review_reu2,
+    step_pim3_improvement,
+    step_review_pim3,
+    step_spl2_release,
+    step_review_spl2,
+)
 
 # QEMU firmware emulation test (L2)
 from yuleosh.pipeline.step_handlers.test_qemu import QemuTestHandler
@@ -112,7 +141,7 @@ from yuleosh.knowledge_graph.merge_gate import step_merge_gate
 
 from yuleosh.pipeline.stages import _check_llm_key
 
-# 编排层 10 Gate（方案 B, 2026-08-19）
+# 编排层 19 Gate（方案 B, 2026-08-19）
 from yuleosh.pipeline.gates import GATES, write_gate_summary, validate_gates_contract
 
 
@@ -170,6 +199,16 @@ __all__ = [
     "step_merge_gate",
     "step_test_qualification",
     "step_c_unit_test",
+    "step_risk_assessment",
+    "step_review_risk",
+    "step_acq4_monitoring",
+    "step_review_acq4",
+    "step_reu2_reuse",
+    "step_review_reu2",
+    "step_pim3_improvement",
+    "step_review_pim3",
+    "step_spl2_release",
+    "step_review_spl2",
     "QemuTestHandler",
     "qemu_run",
     "coverage_gate_step",
@@ -201,7 +240,7 @@ qemu_run = QemuTestHandler()
 # M1（2026-10-08）: 头部插入 SYS 系统层 6 步（G0），补齐 V 模型左半
 # （SYS.1~SYS.5 系统需求/架构/验证/集成/确认），贯通需求→开发→测试。
 #
-# 编排层 11 Gate 视图见 yuleosh.pipeline.gates.GATES（对外稳定契约）。
+# 编排层 20 Gate 视图见 yuleosh.pipeline.gates.GATES（对外稳定契约）。
 # ═══════════════════════════════════════════════════════════════
 PIPELINE_STEPS = [
     # ── G0 系统层 (SYS.1~SYS.5, V 模型左半) — M1 / Phase A ──
@@ -291,6 +330,46 @@ PIPELINE_STEPS = [
     # ── G13 MAN.5 Risk Management ──────────────────────────
     ("risk-assessment", "小仓", "风险评估与登记 (MAN.5)", step_risk_assessment),
     ("risk-review", "小克", "风险评审 (确定性门禁)", step_review_risk),
+
+    # ── G14 ACQ.4 Supplier Monitoring ──────────────────────
+    ("acq4-monitoring", "小仓", "供应商监控 (ACQ.4)", step_acq4_monitoring),
+    ("acq4-review", "小克", "供应商监控评审 (确定性门禁)", step_review_acq4),
+
+    # ── G15 REU.2 Reuse Management ─────────────────────────
+    ("reu2-reuse", "小仓", "复用识别与评估 (REU.2)", step_reu2_reuse),
+    ("reu2-review", "小克", "复用评审 (确定性门禁)", step_review_reu2),
+
+    # ── G16 PIM.3 Process Improvement ──────────────────────
+    ("pim3-improvement", "小仓", "过程改进 (PIM.3)", step_pim3_improvement),
+    ("pim3-review", "小克", "过程改进评审 (确定性门禁)", step_review_pim3),
+
+    # ── G17 HWE.1~HWE.4 硬件工程 ─────────────────────────
+    # 范围由客观文件信号识别（链接脚本/CubeMX/板级目录/CAN 矩阵/启动代码）；
+    # 无信号即如实记录「无硬件范围」，不臆造条目。验证结论须引用真实证据。
+    ("hwe1-requirements", "小仓", "硬件需求分析 (HWE.1)", step_hwe1_requirements),
+    ("hwe1-review", "小克", "硬件需求评审 (确定性门禁)", step_review_hwe1),
+    ("hwe2-design", "小仓", "硬件设计 (HWE.2)", step_hwe2_design),
+    ("hwe2-review", "小克", "硬件设计评审 (确定性门禁)", step_review_hwe2),
+    ("hwe3-implementation", "小仓", "硬件实现核对 (HWE.3)", step_hwe3_implementation),
+    ("hwe3-review", "小克", "硬件实现评审 (确定性门禁)", step_review_hwe3),
+    ("hwe4-verification", "小仓", "硬件验证 (HWE.4)", step_hwe4_verification),
+    ("hwe4-review", "小克", "硬件验证评审 (确定性门禁)", step_review_hwe4),
+
+    # ── G18 MLE.1~MLE.4 机器学习工程 ─────────────────────
+    # 范围由模型文件/训练脚本/数据集目录识别；「已评估」须引用含非空
+    # metrics 的评估证据文件，训练指标只由人工填写。
+    ("mle1-requirements", "小仓", "机器学习需求分析 (MLE.1)", step_mle1_requirements),
+    ("mle1-review", "小克", "机器学习需求评审 (确定性门禁)", step_review_mle1),
+    ("mle2-approach", "小仓", "机器学习方案 (MLE.2)", step_mle2_approach),
+    ("mle2-review", "小克", "机器学习方案评审 (确定性门禁)", step_review_mle2),
+    ("mle3-training", "小仓", "机器学习训练记录 (MLE.3)", step_mle3_training),
+    ("mle3-review", "小克", "机器学习训练评审 (确定性门禁)", step_review_mle3),
+    ("mle4-evaluation", "小仓", "机器学习评估 (MLE.4)", step_mle4_evaluation),
+    ("mle4-review", "小克", "机器学习评估评审 (确定性门禁)", step_review_mle4),
+
+    # ── G19 SPL.2 Product Release ──────────────────────────
+    ("spl2-release", "小仓", "产品发布清单 (SPL.2)", step_spl2_release),
+    ("spl2-review", "小克", "发布评审 (确定性门禁)", step_review_spl2),
     ("final-report", "小明", "最终报告", step_final_report),
 ]
 

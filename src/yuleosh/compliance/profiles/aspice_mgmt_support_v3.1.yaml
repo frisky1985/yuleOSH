@@ -1,0 +1,207 @@
+# ASPICE v3.1 — Management Support Process Group
+# ACQ.4 / REU.2 / PIM.3 / SPL.2 评估域。
+#
+# 与 aspice_man_v3.1.yaml 同结构（顶层 meta + 每个过程域一个区域键）；
+# 通用 loader (compliance/profile.py) 零改动即可接入。evidence 路径与
+# step_handlers/mgmt_support.py 生成的 docs/* 产物严格对齐。
+#
+# 检查项关键词由 ComplianceChecker._check_bp 的 P3 分支分发到
+# _has_supplier_records / _has_reuse_records / _has_improvement_records /
+# _has_release_records（与 P2 SUP/MAN 分支同一模式）。
+#
+# 反假绿: 无产物如实判 RED；自动条目在人工评估前标「待评估」，不会被
+# 检查器推断为已批准/已复用/已改进。
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "Management Support Process Group — ACQ.4 / REU.2 / PIM.3 / SPL.2"
+
+acq.4:
+  id: "ACQ.4"
+  title: "Supplier Monitoring"
+  description: |
+    Monitor suppliers against agreed requirements and take corrective action
+    when commitments are not met. The supplier inventory is seeded from the
+    project's declared third-party dependencies; assessments are human decisions.
+  order: 30
+  base_practices:
+    - id: "ACQ.4.BP1"
+      title: "Establish supplier monitoring"
+      output_evidence:
+        - type: "document"
+          path: "docs/supplier-register.yaml"
+          description: "Supplier register with unique identifiers and scan sources"
+      check:
+        - "Every supplier is uniquely identified by an ACQ-xxx ID"
+        - "The register records which sources were scanned for suppliers"
+    - id: "ACQ.4.BP2"
+      title: "Agree on supplier requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/supplier-register.yaml"
+          description: "Requirement, scope and assessment status per supplier"
+      check:
+        - "Each supplier records its version requirement and scope"
+        - "Supplier status comes from a controlled vocabulary"
+        - "Auto-detected suppliers stay pending until a human assesses them"
+    - id: "ACQ.4.BP3"
+      title: "Monitor suppliers"
+      output_evidence:
+        - type: "document"
+          path: "docs/supplier-monitoring-report.md"
+          description: "Current status and monitoring method per supplier"
+      check:
+        - "The report lists every registered supplier with its current status"
+        - "Pending suppliers are visible, not silently treated as approved"
+    - id: "ACQ.4.BP4"
+      title: "Take corrective actions"
+      output_evidence:
+        - type: "document"
+          path: "docs/supplier-monitoring-report.md"
+          description: "Corrective actions for suppliers that do not meet requirements"
+      check:
+        - "A rejected supplier carries a corrective action"
+        - "Corrective actions are tracked in the supplier report"
+
+reu.2:
+  id: "REU.2"
+  title: "Reuse Management"
+  description: |
+    Identify reuse opportunities and decide, with recorded rationale, which
+    components are reused. Automatic identification produces candidates only;
+    a human decides reuse.
+  order: 31
+  base_practices:
+    - id: "REU.2.BP1"
+      title: "Identify reuse opportunities"
+      output_evidence:
+        - type: "document"
+          path: "docs/reuse-register.yaml"
+          description: "Reuse register with unique identifiers and scan sources"
+      check:
+        - "Every reuse candidate is uniquely identified by a REU-xxx ID"
+        - "The register records which sources were scanned for reuse opportunities"
+    - id: "REU.2.BP2"
+      title: "Assess reuse candidates"
+      output_evidence:
+        - type: "document"
+          path: "docs/reuse-register.yaml"
+          description: "Kind, reuse status and rationale per component"
+      check:
+        - "Kind and reuse status come from controlled vocabularies"
+        - "Rejecting reuse requires a documented rationale"
+        - "Auto-detected reuse candidates stay pending until assessed"
+    - id: "REU.2.BP3"
+      title: "Integrate reused components"
+      output_evidence:
+        - type: "document"
+          path: "docs/reuse-report.md"
+          description: "Reuse decisions and status"
+      check:
+        - "Reuse decisions are recorded in the report"
+        - "The pipeline never marks a component reused on its own"
+    - id: "REU.2.BP4"
+      title: "Report reuse status"
+      output_evidence:
+        - type: "document"
+          path: "docs/reuse-report.md"
+          description: "Reuse status report"
+      check:
+        - "The report lists every registered reuse candidate"
+        - "Pending reuse candidates are reported as pending"
+
+pim.3:
+  id: "PIM.3"
+  title: "Process Improvement"
+  description: |
+    Identify and implement improvements to the processes used by the project.
+    Improvement items are derived only from objective inputs (failing measures
+    and open high-severity items); an empty input set is reported as such.
+  order: 32
+  base_practices:
+    - id: "PIM.3.BP1"
+      title: "Establish process improvement"
+      output_evidence:
+        - type: "document"
+          path: "docs/process-improvement-plan.md"
+          description: "Improvement scope, flow, roles and escalation"
+      check:
+        - "The plan states which objective inputs may raise improvements"
+        - "Roles and escalation path for process improvement are defined"
+    - id: "PIM.3.BP2"
+      title: "Evaluate processes"
+      output_evidence:
+        - type: "document"
+          path: "docs/process-improvement-report.md"
+          description: "Improvement inputs from measurement and high-severity records"
+      check:
+        - "Improvement inputs record which sources were read"
+        - "No improvement input means no improvement item; nothing is fabricated"
+    - id: "PIM.3.BP3"
+      title: "Plan improvements"
+      output_evidence:
+        - type: "document"
+          path: "docs/process-improvement-register.yaml"
+          description: "Improvement register with identifiers, source and objective"
+      check:
+        - "Every improvement is uniquely identified by a PIM-xxx ID"
+        - "Each improvement records its source and objective"
+        - "Improvement status comes from a controlled vocabulary"
+    - id: "PIM.3.BP4"
+      title: "Implement and monitor improvements"
+      output_evidence:
+        - type: "document"
+          path: "docs/process-improvement-report.md"
+          description: "Improvement status and owners"
+      check:
+        - "Triaged in-progress improvements carry an owner and a due date"
+        - "Auto-derived improvements without an owner are reported as pending"
+        - "Improvement status is changed by people only"
+
+spl.2:
+  id: "SPL.2"
+  title: "Product Release"
+  description: |
+    Assemble and approve a release from controlled work products. The release
+    manifest carries SHA-256 digests; approval is a human decision and defaults
+    to pending.
+  order: 33
+  base_practices:
+    - id: "SPL.2.BP1"
+      title: "Establish release plan"
+      output_evidence:
+        - type: "document"
+          path: "docs/release-plan.md"
+          description: "Release scope, criteria and approval process"
+      check:
+        - "The release plan states the release version and scope"
+        - "The release plan defines criteria including gate evidence and artifact digests"
+    - id: "SPL.2.BP2"
+      title: "Approve release"
+      output_evidence:
+        - type: "document"
+          path: "docs/release-manifest.yaml"
+          description: "Approval status recorded in the manifest"
+      check:
+        - "The release manifest approval status is one of pending/approved/rejected"
+        - "The release manifest defaults to pending; only a human approves"
+        - "A product release cannot be approved while hard gates failed or were not run"
+    - id: "SPL.2.BP3"
+      title: "Generate release package"
+      output_evidence:
+        - type: "document"
+          path: "docs/release-manifest.yaml"
+          description: "Artifact list with path and SHA-256 per file"
+      check:
+        - "Every release package artifact records a path and a SHA-256 digest"
+        - "The release package artifact list comes from real files, not from memory"
+    - id: "SPL.2.BP4"
+      title: "Verify release"
+      output_evidence:
+        - type: "document"
+          path: "docs/release-manifest.yaml"
+          description: "Digest verification and gate snapshot"
+      check:
+        - "Stored release manifest digests are re-verified against the files on disk"
+        - "The release manifest records the gate snapshot; missing evidence is not called green"

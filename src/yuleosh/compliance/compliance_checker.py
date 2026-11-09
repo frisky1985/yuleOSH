@@ -722,6 +722,110 @@ class ComplianceChecker:
             return True
         return False
 
+    # ── P3: 管理支撑过程 (ACQ.4/REU.2/PIM.3/SPL.2) 证据函数 ─────────────────
+    def _load_yaml_doc(self, *parts: str) -> dict:
+        """读取相对项目根的 YAML 文档；不可解析时返回空 dict。"""
+        target = self.project_dir.joinpath(*parts)
+        if not target.is_file():
+            return {}
+        try:
+            data = yaml.safe_load(target.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _has_supplier_records(self) -> bool:
+        """ACQ.4: 供应商监控证据。
+
+        要求登记含扫描来源（证明盘点确实发生）与 suppliers 列表，
+        且监控报告有实质内容。评估结论本身不参与判定——没有评估
+        不等于没有监控，但凭空写"已批准"也不会被本函数采信。
+        """
+        register = self._load_yaml_doc("docs", "supplier-register.yaml")
+        if not register.get("scan_sources"):
+            return False
+        if not isinstance(register.get("suppliers"), list):
+            return False
+        return self._file_has_content(
+            "docs", "supplier-monitoring-report.md", min_chars=100)
+
+    def _has_reuse_records(self) -> bool:
+        """REU.2: 复用管理证据（登记含扫描来源 + 复用报告）。"""
+        register = self._load_yaml_doc("docs", "reuse-register.yaml")
+        if not register.get("scan_sources"):
+            return False
+        if not isinstance(register.get("components"), list):
+            return False
+        return self._file_has_content("docs", "reuse-report.md", min_chars=100)
+
+    def _has_improvement_records(self) -> bool:
+        """PIM.3: 过程改进证据（计划 + 登记含扫描来源 + 报告）。"""
+        if not self._file_has_content(
+                "docs", "process-improvement-plan.md", min_chars=100):
+            return False
+        register = self._load_yaml_doc(
+            "docs", "process-improvement-register.yaml")
+        if not register.get("scan_sources"):
+            return False
+        if not isinstance(register.get("improvements"), list):
+            return False
+        return self._file_has_content(
+            "docs", "process-improvement-report.md", min_chars=100)
+
+    def _has_release_records(self) -> bool:
+        """SPL.2: 产品发布证据。
+
+        发布清单必须带非空产物列表，且每个产物记录 64 位 SHA256——
+        空清单/无摘要的"发布"不算证据（反假绿）。
+        """
+        if not self._file_has_content("docs", "release-plan.md", min_chars=100):
+            return False
+        manifest = self._load_yaml_doc("docs", "release-manifest.yaml")
+        if not str(manifest.get("release_version") or "").strip():
+            return False
+        artifacts = manifest.get("artifacts")
+        if not isinstance(artifacts, list) or not artifacts:
+            return False
+        return all(
+            isinstance(a, dict) and len(str(a.get("sha256") or "")) == 64
+            for a in artifacts
+        )
+
+    # ── P4: 硬件/机器学习工程 (HWE.1~4 / MLE.1~4) 证据函数 ───────────────
+    def _has_hw_requirement_records(self) -> bool:
+        """HWE.1: 硬件登记含扫描来源 + items 列表，且需求文档有实质内容。"""
+        register = self._load_yaml_doc("docs", "hw-item-register.yaml")
+        if not register.get("scan_sources"):
+            return False
+        if not isinstance(register.get("items"), list):
+            return False
+        return self._file_has_content("docs", "hw-requirements.md", min_chars=100)
+
+    def _has_hw_verification_records(self) -> bool:
+        """HWE.4: 硬件登记含扫描来源，且验证报告有实质内容。"""
+        register = self._load_yaml_doc("docs", "hw-item-register.yaml")
+        if not register.get("scan_sources"):
+            return False
+        return self._file_has_content(
+            "docs", "hw-verification-report.md", min_chars=100)
+
+    def _has_ml_requirement_records(self) -> bool:
+        """MLE.1: 机器学习登记含扫描来源 + items 列表，且需求文档有实质内容。"""
+        register = self._load_yaml_doc("docs", "ml-item-register.yaml")
+        if not register.get("scan_sources"):
+            return False
+        if not isinstance(register.get("items"), list):
+            return False
+        return self._file_has_content("docs", "ml-requirements.md", min_chars=100)
+
+    def _has_ml_evaluation_records(self) -> bool:
+        """MLE.4: 机器学习登记含扫描来源，且评估报告有实质内容。"""
+        register = self._load_yaml_doc("docs", "ml-item-register.yaml")
+        if not register.get("scan_sources"):
+            return False
+        return self._file_has_content(
+            "docs", "ml-evaluation-report.md", min_chars=100)
+
     def _acceptance_matrix_covered(self) -> bool:
         """True when the acceptance matrix reports coverage >= its threshold.
 
@@ -1680,6 +1784,86 @@ class ComplianceChecker:
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no risk register found)")
+            # ── P3: 管理支撑过程 (ACQ.4/REU.2/PIM.3/SPL.2) 评估域 ──────────────
+            # 检查项语义分发到 step_handlers/mgmt_support.py 的确定性产物；
+            # 无产物如实判 RED（反假绿）。
+            elif "supplier" in check_item.lower():
+                if self._has_supplier_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (supplier register / monitoring report present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no supplier register / monitoring report found)")
+            elif "reuse" in check_item.lower():
+                if self._has_reuse_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (reuse register / report present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no reuse register / report found)")
+            elif "improvement" in check_item.lower():
+                if self._has_improvement_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (process improvement plan / register / report present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no process improvement evidence found)")
+            elif ("release manifest" in check_item.lower()
+                  or "release package" in check_item.lower()
+                  or "release plan" in check_item.lower()
+                  or "product release" in check_item.lower()):
+                if self._has_release_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (release plan / manifest with digests present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no release plan / manifest with digests found)")
+            # ── P4: 硬件/机器学习工程 (HWE.1~4 / MLE.1~4) 评估域 ─────────────
+            # 关键词分发到 step_handlers/hwe_mle.py 的确定性产物；无产物如实判 RED。
+            elif "hardware" in check_item.lower():
+                hw_check = check_item.lower()
+                if "design" in hw_check:
+                    ok = self._file_has_content("docs", "hw-design.md", min_chars=100)
+                    found_desc = "hardware design document"
+                elif "implementation" in hw_check or "build" in hw_check:
+                    ok = self._file_has_content(
+                        "docs", "hw-implementation-report.md", min_chars=100)
+                    found_desc = "hardware implementation report"
+                elif "verification" in hw_check:
+                    ok = self._has_hw_verification_records()
+                    found_desc = "hardware verification report + register"
+                else:
+                    ok = self._has_hw_requirement_records()
+                    found_desc = "hardware register / requirements"
+                if ok:
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} ({found_desc} present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no {found_desc} found)")
+            elif ("machine learning" in check_item.lower()
+                  or "training" in check_item.lower()
+                  or "model" in check_item.lower()):
+                ml_check = check_item.lower()
+                if "approach" in ml_check or "selection" in ml_check or "budget" in ml_check:
+                    ok = self._file_has_content("docs", "ml-approach.md", min_chars=100)
+                    found_desc = "machine learning approach document"
+                elif "training" in ml_check:
+                    ok = self._file_has_content(
+                        "docs", "ml-training-report.md", min_chars=100)
+                    found_desc = "machine learning training report"
+                elif "evaluat" in ml_check:
+                    ok = self._has_ml_evaluation_records()
+                    found_desc = "machine learning evaluation report + register"
+                else:
+                    ok = self._has_ml_requirement_records()
+                    found_desc = "machine learning register / requirements"
+                if ok:
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} ({found_desc} present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no {found_desc} found)")
             else:
                 # SECURITY: No fallback pass — unknown/unmatched checks are marked failed
                 # to prevent false positives from inflated compliance scores.
