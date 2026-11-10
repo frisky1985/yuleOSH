@@ -6,7 +6,7 @@
 - REU.2：自动识别内部组件、拒绝复用需理由
 - PIM.3：改进项只从 MAN.6 FAIL / MAN.5 高风险派生，无输入不臆造
 - SPL.2：发布清单含真实 SHA256，摘要篡改 / 门禁未通过时批准 → RED
-- G14~G16 / G19 门禁注册与步骤顺序
+- G14~G16 / G21 门禁注册与步骤顺序
 """
 
 import json
@@ -398,7 +398,7 @@ class TestRegistration:
         ("G14", ["acq4-monitoring", "acq4-review"]),
         ("G15", ["reu2-reuse", "reu2-review"]),
         ("G16", ["pim3-improvement", "pim3-review"]),
-        ("G19", ["spl2-release", "spl2-review", "final-report"]),
+        ("G21", ["spl2-release", "spl2-review", "final-report"]),
     ])
     def test_gates_registered(self, gate, steps):
         registered = next(g for g in GATES if g["gate"] == gate)
@@ -410,6 +410,7 @@ class TestRegistration:
             "risk-review", "acq4-monitoring", "acq4-review",
             "reu2-reuse", "reu2-review", "pim3-improvement", "pim3-review",
             "hwe4-review", "mle4-review",
+            "sup10-review", "man3-review",
             "spl2-release", "spl2-review", "final-report",
         ]
         positions = [keys.index(k) for k in order]

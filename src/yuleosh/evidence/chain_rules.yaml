@@ -250,6 +250,20 @@ aspice:
       process_area: MLE.3
     - pattern: "^docs/ml-(evaluation-report\\.md|eval-[A-Z0-9-]+\\.yaml)$"
       process_area: MLE.4
+    - pattern: "^docs/qa-(plan\\.md|record-register\\.yaml)$"
+      process_area: SUP.1
+    - pattern: "^docs/configuration-(management\\.md|items\\.yaml)$"
+      process_area: SUP.8
+    - pattern: "^baselines/.*\\.json$"
+      process_area: SUP.8
+    - pattern: "^docs/(known-issues|issue-register)\\.(md|yaml)$"
+      process_area: SUP.9
+    - pattern: "^docs/(change-requests\\.md|change-request-register\\.yaml)$"
+      process_area: SUP.10
+    - pattern: "^docs/project-plan\\.md$"
+      process_area: MAN.3
+    - pattern: "^\\.osh/project/milestones\\.json$"
+      process_area: MAN.3
   id_prefixes:
     - prefix: "METRIC"
       process_area: MAN.6
@@ -305,6 +319,16 @@ aspice:
       process_area: HWE.1
     - prefix: "MLE"
       process_area: MLE.1
+    - prefix: "QA"
+      process_area: SUP.1
+    - prefix: "CM"
+      process_area: SUP.8
+    - prefix: "ISS"
+      process_area: SUP.9
+    - prefix: "CRQ"
+      process_area: SUP.10
+    - prefix: "MS"
+      process_area: MAN.3
   test_level_mapping:
     - pattern: "(^|/)(unit|ut)(/|_)|test_unit"
       process_area: SWE.4

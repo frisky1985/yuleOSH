@@ -104,7 +104,14 @@ class TestPipelineStepsStructure:
             "mle2-approach", "mle2-review",
             "mle3-training", "mle3-review",
             "mle4-evaluation", "mle4-review",
-            # ── G19 SPL.2 产品发布 ──
+            # ── G19 SUP.1/8/9/10 支持过程 ──
+            "sup1-quality", "sup1-review",
+            "sup8-config", "sup8-review",
+            "sup9-problem", "sup9-review",
+            "sup10-change", "sup10-review",
+            # ── G20 MAN.3 项目管理 ──
+            "man3-project", "man3-review",
+            # ── G21 SPL.2 产品发布 ──
             "spl2-release", "spl2-review", "final-report",
         ]
         assert keys == expected
@@ -157,13 +164,13 @@ class TestGatesContract:
         violations = validate_gates_contract(step_keys)
         assert violations == [], f"GATES contract violations: {violations}"
 
-    def test_gates_has_20_entries(self):
+    def test_gates_has_22_entries(self):
         from yuleosh.pipeline.gates import GATES
-        assert len(GATES) == 20
+        assert len(GATES) == 22
         # 首尾 Gate 与 ASPICE 对齐（G0 系统层、SPL.2 产品发布）
         assert GATES[0]["gate"] == "G0"
         assert GATES[0]["name"].startswith("SYS")
-        assert GATES[-1]["gate"] == "G19"
+        assert GATES[-1]["gate"] == "G21"
         assert GATES[-1]["name"].startswith("SPL.2")
 
     def test_gate_status_worst_wins(self):

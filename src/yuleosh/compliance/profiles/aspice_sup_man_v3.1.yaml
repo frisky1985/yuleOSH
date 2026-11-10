@@ -1,0 +1,227 @@
+# ASPICE v3.1 — Supporting & Project Management Process Group
+# SUP.1 / SUP.8 / SUP.9 / SUP.10 + MAN.3 评估域。
+#
+# 与 aspice_man_v3.1.yaml / aspice_mgmt_support_v3.1.yaml / aspice_hwe_mle_v3.1.yaml
+# 同结构（顶层 meta + 每个过程域一个区域键）；evidence 路径与
+# step_handlers/sup_man.py 生成的确定性产物严格对齐。
+#
+# 检查项关键词由 ComplianceChecker._check_bp 的 P2 分支分发到
+# _has_qa_records / _has_vcs_baseline / _has_issue_records /
+# _has_change_records / project-plan 文档检查（与 SUP/MAN 既有 P2 分支同一模式）。
+#
+# 反假绿: 无产物如实判 RED；问题/变更/里程碑只来自真实结构化记录，
+# 扫描不到即记录「无条目」，绝不臆造；已关闭/已批准/已完成必须有对应证据。
+
+meta:
+  standard: ASPICE
+  version: "3.1"
+  description: "Supporting & Project Management — SUP.1/8/9/10 + MAN.3"
+
+sup.1:
+  id: "SUP.1"
+  title: "Quality Assurance"
+  description: |
+    Provide assurance that work products and processes conform to requirements
+    and plans through independent quality assurance activities. Audit records
+    come from real review/CI artifacts; an empty scan is recorded as such.
+  order: 42
+  base_practices:
+    - id: "SUP.1.BP1"
+      title: "Define quality assurance approach"
+      output_evidence:
+        - type: "document"
+          path: "docs/qa-plan.md"
+          description: "Quality assurance plan"
+      check:
+        - "A quality assurance plan is defined and approved"
+    - id: "SUP.1.BP2"
+      title: "Perform quality assurance audits"
+      output_evidence:
+        - type: "document"
+          path: "docs/qa-record-register.yaml"
+          description: "Audit records scanned from review and CI artifacts"
+      check:
+        - "Quality assurance audits are performed and recorded"
+    - id: "SUP.1.BP3"
+      title: "Verify work products"
+      output_evidence:
+        - type: "document"
+          path: "docs/qa-plan.md"
+          description: "Work product quality criteria"
+      check:
+        - "Work products are checked against the quality assurance plan"
+    - id: "SUP.1.BP4"
+      title: "Track quality deviations"
+      output_evidence:
+        - type: "document"
+          path: "docs/qa-record-register.yaml"
+          description: "Audit findings and their tracking status"
+      check:
+        - "Quality assurance findings are recorded and tracked to closure"
+
+sup.8:
+  id: "SUP.8"
+  title: "Configuration Management"
+  description: |
+    Establish and apply configuration management for identified configuration
+    items. The baseline manifest records a SHA256 per item plus a manifest
+    digest that the review step recomputes.
+  order: 43
+  base_practices:
+    - id: "SUP.8.BP1"
+      title: "Establish configuration management"
+      output_evidence:
+        - type: "document"
+          path: "docs/configuration-management.md"
+          description: "Configuration management plan"
+      check:
+        - "Configuration management is established with version control"
+    - id: "SUP.8.BP2"
+      title: "Identify configuration items"
+      output_evidence:
+        - type: "document"
+          path: "docs/configuration-items.yaml"
+          description: "Configuration item list with per-item digests"
+      check:
+        - "Configuration items are identified and baselined under version control"
+    - id: "SUP.8.BP3"
+      title: "Baseline and release"
+      output_evidence:
+        - type: "document"
+          path: "baselines/pipeline-baseline.json"
+          description: "Baseline manifest with per-file and manifest SHA256"
+      check:
+        - "Baselines are controlled under configuration management"
+    - id: "SUP.8.BP4"
+      title: "Record configuration status"
+      output_evidence:
+        - type: "document"
+          path: "docs/configuration-management.md"
+          description: "Configuration status records"
+      check:
+        - "Configuration management status is recorded and reported"
+
+sup.9:
+  id: "SUP.9"
+  title: "Problem Resolution Management"
+  description: |
+    Identify, analyze, and resolve problems and defects systematically. Issue
+    records come only from real structured logs; closed issues must carry a
+    closure note, otherwise the gate is RED.
+  order: 44
+  base_practices:
+    - id: "SUP.9.BP1"
+      title: "Identify and analyze problems"
+      output_evidence:
+        - type: "document"
+          path: "docs/known-issues.md"
+          description: "Issue and defect tracking log"
+      check:
+        - "Problems and defects are identified and tracked"
+    - id: "SUP.9.BP2"
+      title: "Analyze problems"
+      output_evidence:
+        - type: "document"
+          path: "docs/issue-register.yaml"
+          description: "Structured issue register with scan sources"
+      check:
+        - "Problems are analyzed and resolved"
+    - id: "SUP.9.BP3"
+      title: "Track issue status"
+      output_evidence:
+        - type: "document"
+          path: "docs/known-issues.md"
+          description: "Issue status and closure records"
+      check:
+        - "Issue status and closure are recorded"
+    - id: "SUP.9.BP4"
+      title: "Resolve problems"
+      output_evidence:
+        - type: "document"
+          path: "docs/issue-register.yaml"
+          description: "Closure evidence per resolved issue"
+      check:
+        - "Problem resolution is recorded with closure evidence"
+
+sup.10:
+  id: "SUP.10"
+  title: "Change Request Management"
+  description: |
+    Manage change requests from identification through analysis, decision, and
+    implementation. Approved changes must carry a decision record; an empty
+    scan is recorded as such rather than filled with invented requests.
+  order: 45
+  base_practices:
+    - id: "SUP.10.BP1"
+      title: "Identify change requests"
+      output_evidence:
+        - type: "document"
+          path: "docs/change-requests.md"
+          description: "Change request log"
+      check:
+        - "Change requests are identified and recorded"
+    - id: "SUP.10.BP2"
+      title: "Analyze change requests"
+      output_evidence:
+        - type: "document"
+          path: "docs/change-request-register.yaml"
+          description: "Structured change request register with scan sources"
+      check:
+        - "Change requests are analyzed and decided"
+    - id: "SUP.10.BP3"
+      title: "Track change status"
+      output_evidence:
+        - type: "document"
+          path: "docs/change-requests.md"
+          description: "Change request status records"
+      check:
+        - "Change request status is tracked"
+    - id: "SUP.10.BP4"
+      title: "Implement approved changes"
+      output_evidence:
+        - type: "document"
+          path: "docs/change-request-register.yaml"
+          description: "Decision record per approved change"
+      check:
+        - "Approved change requests are implemented under change management"
+
+man.3:
+  id: "MAN.3"
+  title: "Project Management"
+  description: |
+    Plan, monitor, and control the project. Milestones come only from the real
+    milestone list; completed milestones must carry completion evidence.
+  order: 46
+  base_practices:
+    - id: "MAN.3.BP1"
+      title: "Define project plan"
+      output_evidence:
+        - type: "document"
+          path: "docs/project-plan.md"
+          description: "Project plan with scope and schedule"
+      check:
+        - "A project plan with schedule is defined"
+    - id: "MAN.3.BP2"
+      title: "Monitor project progress"
+      output_evidence:
+        - type: "document"
+          path: "docs/project-plan.md"
+          description: "Project progress against the plan"
+      check:
+        - "Project progress is monitored against the project plan"
+    - id: "MAN.3.BP3"
+      title: "Define and track milestones"
+      output_evidence:
+        - type: "document"
+          path: ".osh/project/milestones.json"
+          description: "Milestone list with identifiers and dates"
+      check:
+        - "Milestones are defined and tracked"
+    - id: "MAN.3.BP4"
+      title: "Manage schedule deviations"
+      output_evidence:
+        - type: "document"
+          path: "docs/project-plan.md"
+          description: "Corrective actions for schedule deviations"
+      check:
+        - "Project schedule deviations are managed with corrective actions"

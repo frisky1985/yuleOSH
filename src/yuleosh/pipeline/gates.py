@@ -5,11 +5,11 @@
 # SPDX-License-Identifier: Elastic-2.0
 
 """
-Pipeline 编排层 — 20 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
-后续补齐 VAL.1 / MAN.6 / MAN.5 / 管理支撑组 ACQ.4 / REU.2 / PIM.3 / SPL.2
-及 HWE.1~4 / MLE.1~4).
+Pipeline 编排层 — 22 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
+后续补齐 VAL.1 / MAN.6 / MAN.5 / 管理支撑组 ACQ.4 / REU.2 / PIM.3 / SPL.2、
+HWE.1~4 / MLE.1~4 及 SUP.1/8/9/10 / MAN.3).
 
-执行层保持 60 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
+执行层保持 70 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
 step_cache 全保留；M1 头部插入 SYS 系统层 6 步）；编排层新增 GATES 视图，
 对外稳定契约（对齐 ASPICE 过程域，含 SYS 系统层 G0），一旦约定不再变动
 （分层原则 R1-R4，见 RULES.md §12）。
@@ -197,9 +197,28 @@ GATES: list[dict] = [
         ],
     },
     {
+        # SUP.1/8/9/10：支持过程。问题、变更、审计记录只来自真实结构化记录；
+        # 配置基线记录逐项 SHA256 与清单摘要，评审步骤重算比对（见 sup_man.py）。
+        "gate": "G19",
+        "name": "SUP 支持过程 Gate",
+        "step_keys": [
+            "sup1-quality", "sup1-review",
+            "sup8-config", "sup8-review",
+            "sup9-problem", "sup9-review",
+            "sup10-change", "sup10-review",
+        ],
+    },
+    {
+        # MAN.3：项目计划与里程碑。里程碑只来自 .osh/project/milestones.json；
+        # 已完成里程碑必须提供完成证据，否则门禁 RED（见 sup_man.py）。
+        "gate": "G20",
+        "name": "MAN.3 项目管理 Gate",
+        "step_keys": ["man3-project", "man3-review"],
+    },
+    {
         # SPL.2：发布清单带 SHA256 摘要，批准状态默认「待批准」。
         # final-report 归入本 Gate，使最终报告收录发布结论。
-        "gate": "G19",
+        "gate": "G21",
         "name": "SPL.2 产品发布 Gate",
         "step_keys": ["spl2-release", "spl2-review", "final-report"],
     },
@@ -451,6 +470,17 @@ _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "mle3-review": ("ml-training-report.md",),
     "mle4-evaluation": ("ml-evaluation-report.md",),
     "mle4-review": ("ml-evaluation-report.md",),
+    "sup1-quality": ("qa-plan.md", "qa-record-register.yaml"),
+    "sup1-review": ("qa-plan.md",),
+    "sup8-config": ("configuration-management.md", "configuration-items.yaml",
+                    "pipeline-baseline.json"),
+    "sup8-review": ("configuration-management.md",),
+    "sup9-problem": ("known-issues.md", "issue-register.yaml"),
+    "sup9-review": ("known-issues.md",),
+    "sup10-change": ("change-requests.md", "change-request-register.yaml"),
+    "sup10-review": ("change-requests.md",),
+    "man3-project": ("project-plan.md",),
+    "man3-review": ("project-plan.md",),
     "spl2-release": ("release-plan.md", "release-manifest.yaml"),
     "spl2-review": ("release-plan.md",),
     "final-report": ("final-report.md",),

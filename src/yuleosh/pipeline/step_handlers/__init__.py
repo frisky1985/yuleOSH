@@ -14,11 +14,13 @@ Import paths preserved:
   from yuleosh.pipeline.step_handlers import PIPELINE_STEPS    (works)
   from yuleosh.pipeline.step_handlers import _check_llm_key    (works)
 
-60 子步骤执行层（含 SYS 系统层 6 步与 ACQ.4/REU.2/PIM.3/SPL.2 8 步及 HWE/MLE 16 步）+ 20 Gate 编排层
-（2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0；后续补齐 MAN.5/MAN.6/VAL.1、管理支撑组与 HWE.1~4/MLE.1~4）:
-  - 执行层 PIPELINE_STEPS = 60 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
+70 子步骤执行层（含 SYS 系统层 6 步、ACQ.4/REU.2/PIM.3/SPL.2 8 步、HWE/MLE 16 步及
+SUP.1/8/9/10 + MAN.3 10 步）+ 22 Gate 编排层
+（2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0；后续补齐 MAN.5/MAN.6/VAL.1、管理支撑组、
+HWE.1~4/MLE.1~4 与 SUP.1/8/9/10/MAN.3）:
+  - 执行层 PIPELINE_STEPS = 70 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
     step_cache / --from-step 全按实际步骤数
-  - 编排层 GATES（yuleosh.pipeline.gates）: 20 Gate 对外稳定契约,
+  - 编排层 GATES（yuleosh.pipeline.gates）: 22 Gate 对外稳定契约,
     gate status = 内部子步骤最差状态; 报告聚合 gate-summary.json
 """
 
@@ -116,6 +118,18 @@ from yuleosh.pipeline.step_handlers.hwe_mle import (
     step_mle4_evaluation,
     step_review_mle4,
 )
+from yuleosh.pipeline.step_handlers.sup_man import (
+    step_sup1_quality,
+    step_review_sup1,
+    step_sup8_config,
+    step_review_sup8,
+    step_sup9_problem,
+    step_review_sup9,
+    step_sup10_change,
+    step_review_sup10,
+    step_man3_project,
+    step_review_man3,
+)
 from yuleosh.pipeline.step_handlers.mgmt_support import (
     step_acq4_monitoring,
     step_review_acq4,
@@ -141,7 +155,7 @@ from yuleosh.knowledge_graph.merge_gate import step_merge_gate
 
 from yuleosh.pipeline.stages import _check_llm_key
 
-# 编排层 19 Gate（方案 B, 2026-08-19）
+# 编排层 22 Gate（方案 B, 2026-08-19）
 from yuleosh.pipeline.gates import GATES, write_gate_summary, validate_gates_contract
 
 
@@ -240,7 +254,7 @@ qemu_run = QemuTestHandler()
 # M1（2026-10-08）: 头部插入 SYS 系统层 6 步（G0），补齐 V 模型左半
 # （SYS.1~SYS.5 系统需求/架构/验证/集成/确认），贯通需求→开发→测试。
 #
-# 编排层 20 Gate 视图见 yuleosh.pipeline.gates.GATES（对外稳定契约）。
+# 编排层 22 Gate 视图见 yuleosh.pipeline.gates.GATES（对外稳定契约）。
 # ═══════════════════════════════════════════════════════════════
 PIPELINE_STEPS = [
     # ── G0 系统层 (SYS.1~SYS.5, V 模型左半) — M1 / Phase A ──
@@ -367,7 +381,21 @@ PIPELINE_STEPS = [
     ("mle4-evaluation", "小仓", "机器学习评估 (MLE.4)", step_mle4_evaluation),
     ("mle4-review", "小克", "机器学习评估评审 (确定性门禁)", step_review_mle4),
 
-    # ── G19 SPL.2 Product Release ──────────────────────────
+    # ── G19 SUP 支持过程 ──────────────────────────────────
+    ("sup1-quality", "小仓", "质量保证计划 (SUP.1)", step_sup1_quality),
+    ("sup1-review", "小克", "质量保证评审 (确定性门禁)", step_review_sup1),
+    ("sup8-config", "小仓", "配置管理与基线 (SUP.8)", step_sup8_config),
+    ("sup8-review", "小克", "配置管理评审 (确定性门禁)", step_review_sup8),
+    ("sup9-problem", "小仓", "问题与缺陷记录 (SUP.9)", step_sup9_problem),
+    ("sup9-review", "小克", "问题解决评审 (确定性门禁)", step_review_sup9),
+    ("sup10-change", "小仓", "变更请求记录 (SUP.10)", step_sup10_change),
+    ("sup10-review", "小克", "变更请求评审 (确定性门禁)", step_review_sup10),
+
+    # ── G20 MAN.3 项目管理 ────────────────────────────────
+    ("man3-project", "小仓", "项目计划与里程碑 (MAN.3)", step_man3_project),
+    ("man3-review", "小克", "项目管理评审 (确定性门禁)", step_review_man3),
+
+    # ── G21 SPL.2 Product Release ──────────────────────────
     ("spl2-release", "小仓", "产品发布清单 (SPL.2)", step_spl2_release),
     ("spl2-review", "小克", "发布评审 (确定性门禁)", step_review_spl2),
     ("final-report", "小明", "最终报告", step_final_report),
