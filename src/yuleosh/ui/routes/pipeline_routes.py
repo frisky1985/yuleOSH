@@ -28,6 +28,10 @@ log = logging.getLogger("routes.pipeline")
 # 证据包下载体积上限（防 zip 炸弹 / 磁盘打满）：单个包最多打包 50 MB 产物。
 _EVIDENCE_MAX_BYTES = 50 * 1024 * 1024
 
+# UI 只呈现人类可读产物；.json/.yaml 属机器证据（门禁/证据链校验用），
+# 仍保留在下载包内，但不进入 evidence 列表。
+HUMAN_EVIDENCE_EXTENSIONS = (".md", ".html", ".xlsx")
+
 
 def handle_pipeline_trigger(handler: BaseHTTPRequestHandler, body: bytes) -> dict:
     """POST /api/v1/pipeline/trigger — Start a new pipeline run.
@@ -876,9 +880,14 @@ def _run_evidence(row: dict, project_dir: str) -> dict:
     steps = snap.get("steps", []) or []
 
     artifacts: list[dict] = []
+    machine_artifacts = 0
     for s in steps:
         raw_path = s.get("output_path")
         if not raw_path:
+            continue
+        # JSON/YAML 是机器证据（门禁、证据链校验），不在 UI 产物清单中展示。
+        if Path(str(raw_path)).suffix.lower() not in HUMAN_EVIDENCE_EXTENSIONS:
+            machine_artifacts += 1
             continue
         fp = _resolve_artifact_path(str(raw_path), project_dir)
         exists = fp.exists() and _inside_osh_home(fp)
@@ -914,6 +923,7 @@ def _run_evidence(row: dict, project_dir: str) -> dict:
         "step_skipped": skipped,
         "artifact_count": len(artifacts),
         "artifact_available": sum(1 for a in artifacts if a["exists"]),
+        "machine_artifact_count": machine_artifacts,
         "total_size": sum(a["size"] for a in artifacts),
         "artifacts": artifacts,
     }

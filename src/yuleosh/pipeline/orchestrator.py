@@ -784,6 +784,17 @@ def run_pipeline(spec_path: str, name: Optional[str] = None, llm_client: Optiona
         except Exception as _verdict_err:  # pragma: no cover - defensive  # noqa: BLE001
             log.warning("gate verdict classification failed: %s", _verdict_err)
 
+        # 人类可读证据 (2026-11-11): 生成 HTML / Excel / Markdown 汇总到
+        # docs/evidence/<session>/。与 .osh/sessions 下的 JSON 机器证据分层：
+        # 前者给人看，后者供门禁校验。失败只记录，不阻断收尾。
+        try:
+            from yuleosh.evidence.human_report import write_human_evidence
+
+            _human = write_human_evidence(session, gate_summary=_gate_summary)
+            log.info("Human evidence written: %s", ", ".join(sorted(_human)))
+        except Exception as _human_err:  # noqa: BLE001 — 证据导出不得阻断流水线
+            log.warning("human evidence export failed (non-fatal): %s", _human_err)
+
         print(f"\n{'='*50}")
         # 三色结果分级 (2026-08-12; 2026-09-23 纳入门禁证据):
         #   🟢 GREEN      — 全部硬门禁 passed                  → 可放行
