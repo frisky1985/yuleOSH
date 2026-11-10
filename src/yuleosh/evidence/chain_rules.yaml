@@ -175,6 +175,8 @@ aspice:
     - SYS.1
     - SYS.2
     - SYS.3
+    - SYS.4
+    - SYS.5
     - SWE.1
     - SWE.2
     - SWE.3
@@ -208,6 +210,10 @@ aspice:
       process_area: SYS.2
     - pattern: "^docs/system-architecture\\.md$"
       process_area: SYS.3
+    - pattern: "^docs/system-integration-report\\.md$"
+      process_area: SYS.4
+    - pattern: "^docs/system-validation-report\\.md$"
+      process_area: SYS.5
     - pattern: "^docs/(architecture|software-architecture)\\.md$"
       process_area: SWE.2
     - pattern: "^docs/(detailed-design|design)\\.md$"
