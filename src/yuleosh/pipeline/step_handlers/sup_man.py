@@ -38,21 +38,31 @@ from yuleosh.pipeline.step_handlers.validation import _write_step_marker
 
 log = logging.getLogger("pipeline.step_handlers.sup_man")
 
+# SUP.1
 QA_PLAN = "docs/qa-plan.md"
 QA_REGISTER = "docs/qa-record-register.yaml"
-
+# SUP.8
 CM_PLAN = "docs/configuration-management.md"
 CM_ITEMS = "docs/configuration-items.yaml"
 CM_BASELINE = "baselines/pipeline-baseline.json"
-
+# SUP.9
 ISSUES_DOC = "docs/known-issues.md"
 ISSUE_REGISTER = "docs/issue-register.yaml"
-
+# SUP.10
 CR_DOC = "docs/change-requests.md"
 CR_REGISTER = "docs/change-request-register.yaml"
-
+# MAN.3
 PROJECT_PLAN = "docs/project-plan.md"
 MILESTONES = ".osh/project/milestones.json"
+# MAN.1
+PROJECT_CHARTER = "docs/project-charter.md"
+CHARTER_FILE = ".osh/project/charter.json"
+# MAN.2
+REQUIREMENTS_BASELINE = "docs/requirements-baseline.md"
+REQ_CHANGE_LOG = "docs/requirements-change-log.yaml"
+# MAN.4
+QM_DOC = "docs/quality-management.md"
+QM_REGISTER = "docs/quality-register.yaml"
 
 _EXCLUDE_DIRS = (".osh", ".git", ".venv", "node_modules",
                  "__pycache__", ".pytest_cache", "dist", "build-venv",
@@ -74,6 +84,15 @@ _PLAN_SECTIONS = ("## 项目范围", "## 里程碑", "## 进度跟踪", "## 数�
 _CLOSED_STATES = ("closed", "done", "resolved", "已关闭", "已解决")
 _APPROVED_STATES = ("approved", "accepted", "已批准", "已接受")
 _DONE_STATES = ("done", "completed", "已完成")
+
+_NO_CHARTER = "（无项目章程：未检测到 charter.json）"
+_NO_REQ_CHANGE = "（无需求变更：未检测到需求变更记录）"
+_NO_QUALITY = "（无质量记录：未检测到过程审计/改进记录）"
+
+_CHARTER_SECTIONS = ("## 项目目的", "## 范围与交付", "## 角色与资源",
+                     "## 预算与进度", "## 数据来源")
+_REQ_BASELINE_SECTIONS = ("## 需求基线", "## 变更日志", "## 数据来源")
+_QM_SECTIONS = ("## 质量策略", "## 过程审计", "## 质量改进", "## 数据来源")
 
 
 # ── 通用扫描与写盘 ──────────────────────────────────────────────────────
@@ -626,3 +645,319 @@ def step_review_man3(session: PipelineSession) -> str:
     _write_step_marker(session, "man3-review", status="completed",
                        verified=[PROJECT_PLAN, MILESTONES])
     return str(Path(session.project_dir) / PROJECT_PLAN)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# MAN.1 项目管理（项目章程）
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _load_charter(project_dir: str) -> dict | None:
+    data = _read_json(Path(project_dir) / CHARTER_FILE)
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _build_charter_doc(charter: dict | None, sources: list[str]) -> str:
+    if charter:
+        purpose = str(charter.get("purpose") or charter.get("objective") or "—").strip()
+        scope = str(charter.get("scope") or charter.get("deliverables") or "—").strip()
+        owner = str(charter.get("owner") or charter.get("manager") or "待指定").strip()
+        budget = str(charter.get("budget") or "未声明").strip()
+        schedule = str(charter.get("schedule") or "未声明").strip()
+        risk = str(charter.get("top_risk") or "未声明").strip()
+        charter_row = (
+            "| 字段 | 值 |\n|:---|:---|\n"
+            f"| 项目目的 | {_cell(purpose)} |\n"
+            f"| 范围与交付 | {_cell(scope)} |\n"
+            f"| 负责人 | {_cell(owner)} |\n"
+            f"| 预算 | {_cell(budget)} |\n"
+            f"| 进度 | {_cell(schedule)} |\n"
+            f"| 主要风险 | {_cell(risk)} |\n"
+        )
+    else:
+        charter_row = f"> {_NO_CHARTER}\n\n"
+
+    return (
+        "# 项目章程（MAN.1）\n\n"
+        f"- 生成时间：{_now()}\n"
+        f"- 章程来源：{CHARTER_FILE}（存在={charter is not None}）\n\n"
+        "## 项目目的\n\n"
+        f"{charter_row if not charter else '见下表。'}\n\n"
+        + (charter_row if charter else "")
+        + "## 范围与交付\n\n"
+        "- 范围以 `docs/system-requirements.md` 为准。\n"
+        "- 待人工确认：交付物清单、验收标准、合同约束。\n\n"
+        "## 角色与资源\n\n"
+        "- 项目负责人、架构师、测试负责人角色待明确。\n"
+        "- 待人工确认：资源分配、外包比例、关键技能缺口。\n\n"
+        "## 预算与进度\n\n"
+        "- 预算与进度基线以 MAN.3 的里程碑为准。\n"
+        "- 待人工确认：风险储备预算与关键路径。\n\n"
+        "## 数据来源\n\n"
+        + "\n".join(f"- `{s}`" for s in sources) + "\n"
+    )
+
+
+def step_man1_charter(session: PipelineSession) -> str:
+    """MAN.1 — 生成项目章程文档。"""
+    charter = _load_charter(session.project_dir)
+    target = Path(session.project_dir) / CHARTER_FILE
+    sources: list[str] = [f"file:{CHARTER_FILE}"]
+    if not target.is_file():
+        # 不臆造章程，只写空壳占位文件让评审能检测到；
+        # 空壳会被判定为"内容不足"，门禁会告警。
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(session, CHARTER_FILE, {})
+        charter = {}
+        sources.append("auto:placeholder")
+    doc_path = _write_doc(session, PROJECT_CHARTER,
+                          _build_charter_doc(charter, sources))
+    _write_step_marker(session, "man1-charter", status="completed",
+                       doc=PROJECT_CHARTER, charter=CHARTER_FILE,
+                       charter_present=bool(charter and charter.get("purpose")))
+    return str(doc_path)
+
+
+def step_review_man1(session: PipelineSession) -> str:
+    """MAN.1 门禁：章节齐全 + 章程字段非空。"""
+    problems: list[str] = []
+    _require_sections(session.project_dir, PROJECT_CHARTER,
+                      _CHARTER_SECTIONS, problems)
+    charter = _load_charter(session.project_dir)
+    if charter is None:
+        problems.append(f"缺少或无法解析 {CHARTER_FILE}")
+    elif not charter.get("purpose"):
+        problems.append(f"{CHARTER_FILE} 缺少项目目的字段 purpose")
+    elif not charter.get("scope") and not charter.get("deliverables"):
+        problems.append(f"{CHARTER_FILE} 缺少范围/交付物字段 scope 或 deliverables")
+    if problems:
+        raise PipelineStepError("MAN.1 项目管理门禁 RED：" + "；".join(problems))
+    _write_step_marker(session, "man1-review", status="completed",
+                       verified=[PROJECT_CHARTER, CHARTER_FILE])
+    return str(Path(session.project_dir) / PROJECT_CHARTER)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# MAN.2 需求管理（基线 + 变更跟踪）
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _normalize_req_changes(records: list[dict]) -> list[dict]:
+    items: list[dict] = []
+    for record in records:
+        req_ids = record.get("req_ids") or record.get("affected") or record.get("requirements") or []
+        if isinstance(req_ids, str):
+            req_ids = [x.strip() for x in req_ids.split(",") if x.strip()]
+        items.append({
+            "id": _record_id(record),
+            "title": str(record.get("title") or record.get("summary") or "").strip(),
+            "status": str(record.get("status") or "待分析").strip(),
+            "decision": str(record.get("decision") or "").strip(),
+            "req_ids": req_ids if isinstance(req_ids, list) else [],
+            "source": str(record.get("source") or ""),
+        })
+    return items
+
+
+def _build_req_baseline_doc(items: list[dict]) -> str:
+    rows = [
+        f"| {_cell(i['id'])} | {_cell(i['title'])} | {i['status']} "
+        f"| {_cell(', '.join(i['req_ids'])) or '—'} |"
+        for i in items
+    ]
+    listing = "\n".join(rows) if rows else f"| — | {_NO_REQ_CHANGE} | — | — |"
+    return (
+        "# 需求基线与变更（MAN.2）\n\n"
+        f"- 生成时间：{_now()}\n"
+        f"- 变更记录数：{len(items)}\n\n"
+        "## 需求基线\n\n"
+        "- 基线来源：`docs/system-requirements.md`、`docs/spec.md`。\n"
+        "- 需求 ID 应与 SYS.1/SWE.1 步骤的原文一致，不得改写或缩写。\n"
+        "- 基线一经批准不得原地修改；变更须走 SUP.10 变更请求流程。\n\n"
+        "## 变更日志\n\n"
+        "| ID | 标题 | 状态 | 影响需求 |\n|:---|:---|:---|:---|\n"
+        + listing + "\n\n"
+        + ("" if items else
+           "> 本次未检测到需求变更记录；不推断、不补造条目。\n\n")
+        + "## 数据来源\n\n"
+        "- `change-requests/*.json`、`.osh/ci/change-*.json`（真实记录，含零命中）。\n"
+    )
+
+
+def step_man2_requirements(session: PipelineSession) -> str:
+    """MAN.2 — 汇总真实需求变更记录，建立基线文档。"""
+    records, sources = _scan_json_records(
+        session.project_dir,
+        ("change-requests/*.json", ".osh/ci/change-*.json",
+         ".osh/reqs/change-*.yaml", ".osh/reqs/change-*.json"),
+        "MAN.2")
+    items = _normalize_req_changes(records)
+    _save_yaml(session.project_dir, REQ_CHANGE_LOG, {
+        "version": 1,
+        "generated_at": _now(),
+        "scan_sources": sources,
+        "items": items,
+    })
+    doc_path = _write_doc(session, REQUIREMENTS_BASELINE,
+                          _build_req_baseline_doc(items))
+    _write_step_marker(session, "man2-requirements", status="completed",
+                       doc=REQUIREMENTS_BASELINE, register=REQ_CHANGE_LOG,
+                       item_count=len(items))
+    return str(doc_path)
+
+
+def step_review_man2(session: PipelineSession) -> str:
+    """MAN.2 门禁：章节齐全 + 登记结构 + 已批准变更有决策。"""
+    problems: list[str] = []
+    text = _require_sections(session.project_dir, REQUIREMENTS_BASELINE,
+                             _REQ_BASELINE_SECTIONS, problems)
+    data = _load_yaml(session.project_dir, REQ_CHANGE_LOG)
+    if not data:
+        problems.append(f"缺少或无法解析 {REQ_CHANGE_LOG}")
+    else:
+        if not data.get("scan_sources"):
+            problems.append(f"{REQ_CHANGE_LOG} 缺少 scan_sources（无扫描证据）")
+        items = [i for i in data.get("items") or [] if isinstance(i, dict)]
+        if not items and text and _NO_REQ_CHANGE not in text:
+            problems.append(f"{REQUIREMENTS_BASELINE} 未明示无变更记录（{_NO_REQ_CHANGE}）")
+        seen: set[str] = set()
+        for item in items:
+            cid = str(item.get("id") or "").strip()
+            if not cid:
+                problems.append(f"{REQ_CHANGE_LOG} 存在缺少 id 的条目")
+                continue
+            if cid in seen:
+                problems.append(f"{REQ_CHANGE_LOG} 条目 id 重复: {cid}")
+            seen.add(cid)
+            if not str(item.get("title") or "").strip():
+                problems.append(f"{cid} 缺少标题")
+            if text and cid not in text:
+                problems.append(f"{REQUIREMENTS_BASELINE} 未列出变更 {cid}")
+            if (str(item.get("status") or "").lower() in _APPROVED_STATES
+                    and not str(item.get("decision") or "").strip()):
+                problems.append(f"{cid} 已批准但缺少决策依据")
+    if problems:
+        raise PipelineStepError("MAN.2 需求管理门禁 RED：" + "；".join(problems))
+    _write_step_marker(session, "man2-review", status="completed",
+                       verified=[REQUIREMENTS_BASELINE, REQ_CHANGE_LOG])
+    return str(Path(session.project_dir) / REQUIREMENTS_BASELINE)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# MAN.4 质量管理（过程审计 + 质量改进）
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _normalize_quality_records(records: list[dict]) -> list[dict]:
+    items: list[dict] = []
+    for record in records:
+        kind = str(record.get("kind") or record.get("type") or "audit").strip().lower()
+        if kind in ("improvement", "改进", "fix", "correction"):
+            kind = "improvement"
+        else:
+            kind = "audit"
+        items.append({
+            "id": _record_id(record),
+            "kind": kind,
+            "title": str(record.get("title") or record.get("finding") or "").strip(),
+            "status": str(record.get("status") or "待分析").strip(),
+            "closure": str(record.get("closure") or record.get("resolution") or "").strip(),
+            "source": str(record.get("source") or ""),
+        })
+    return items
+
+
+def _build_qm_doc(items: list[dict]) -> str:
+    audit_rows = [
+        f"| {_cell(i['id'])} | {_cell(i['title'])} | {i['status']} | {_cell(i['closure']) or '—'} |"
+        for i in items if i["kind"] == "audit"
+    ]
+    improv_rows = [
+        f"| {_cell(i['id'])} | {_cell(i['title'])} | {i['status']} | {_cell(i['closure']) or '—'} |"
+        for i in items if i["kind"] == "improvement"
+    ]
+    audit_listing = ("\n".join(audit_rows) if audit_rows
+                     else f"| — | {_NO_QUALITY} | — | — |")
+    improv_listing = ("\n".join(improv_rows) if improv_rows
+                      else f"| — | {_NO_QUALITY} | — | — |")
+    return (
+        "# 质量管理（MAN.4）\n\n"
+        f"- 生成时间：{_now()}\n"
+        f"- 审计记录数：{len(audit_rows)}；改进记录数：{len(improv_rows)}\n\n"
+        "## 质量策略\n\n"
+        "- 质量目标以组织过程定义与 SUP.1 质量保证计划为准。\n"
+        "- 过程审计独立执行；发现须跟踪至关闭。\n\n"
+        "## 过程审计\n\n"
+        "| ID | 发现 | 状态 | 关闭说明 |\n|:---|:---|:---|:---|\n"
+        + audit_listing + "\n\n"
+        + ("" if audit_rows else
+           "> 本次未检测到过程审计记录；不推断、不补造条目。\n\n")
+        + "## 质量改进\n\n"
+        "| ID | 改进项 | 状态 | 关闭说明 |\n|:---|:---|:---|:---|\n"
+        + improv_listing + "\n\n"
+        + ("" if improv_rows else
+           "> 本次未检测到质量改进记录；不推断、不补造条目。\n\n")
+        + "## 数据来源\n\n"
+        "- `.osh/ci/*quality*.json`、`.osh/ci/*audit*.json`、"
+        "`.osh/project/improvements/*.json`（真实记录，含零命中）。\n"
+    )
+
+
+def step_man4_quality(session: PipelineSession) -> str:
+    """MAN.4 — 汇总真实质量审计与改进记录。"""
+    records, sources = _scan_json_records(
+        session.project_dir,
+        (".osh/ci/*quality*.json", ".osh/ci/*audit*.json",
+         ".osh/project/improvements/*.json"),
+        "MAN.4")
+    items = _normalize_quality_records(records)
+    _save_yaml(session.project_dir, QM_REGISTER, {
+        "version": 1,
+        "generated_at": _now(),
+        "scan_sources": sources,
+        "items": items,
+    })
+    doc_path = _write_doc(session, QM_DOC, _build_qm_doc(items))
+    _write_step_marker(session, "man4-quality", status="completed",
+                       doc=QM_DOC, register=QM_REGISTER,
+                       item_count=len(items))
+    return str(doc_path)
+
+
+def step_review_man4(session: PipelineSession) -> str:
+    """MAN.4 门禁：章节齐全 + 登记结构 + 已关闭有说明。"""
+    problems: list[str] = []
+    text = _require_sections(session.project_dir, QM_DOC,
+                             _QM_SECTIONS, problems)
+    data = _load_yaml(session.project_dir, QM_REGISTER)
+    if not data:
+        problems.append(f"缺少或无法解析 {QM_REGISTER}")
+    else:
+        if not data.get("scan_sources"):
+            problems.append(f"{QM_REGISTER} 缺少 scan_sources（无扫描证据）")
+        items = [i for i in data.get("items") or [] if isinstance(i, dict)]
+        if not items and text and _NO_QUALITY not in text:
+            problems.append(f"{QM_DOC} 未明示无质量记录（{_NO_QUALITY}）")
+        seen: set[str] = set()
+        for item in items:
+            qid = str(item.get("id") or "").strip()
+            if not qid:
+                problems.append(f"{QM_REGISTER} 存在缺少 id 的条目")
+                continue
+            if qid in seen:
+                problems.append(f"{QM_REGISTER} 条目 id 重复: {qid}")
+            seen.add(qid)
+            if not str(item.get("title") or "").strip():
+                problems.append(f"{qid} 缺少标题/发现描述")
+            if text and qid not in text:
+                problems.append(f"{QM_DOC} 未列出质量记录 {qid}")
+            if (str(item.get("status") or "").lower() in _CLOSED_STATES
+                    and not str(item.get("closure") or "").strip()):
+                problems.append(f"{qid} 已关闭但缺少关闭说明")
+    if problems:
+        raise PipelineStepError("MAN.4 质量管理门禁 RED：" + "；".join(problems))
+    _write_step_marker(session, "man4-review", status="completed",
+                       verified=[QM_DOC, QM_REGISTER])
+    return str(Path(session.project_dir) / QM_DOC)

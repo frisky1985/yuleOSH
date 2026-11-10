@@ -2,7 +2,7 @@
 
 > **项目**: `.`
 > **标准**: ASPICE v3.1
-> **生成时间**: 2026-11-10T12:40:58.460987
+> **生成时间**: 2026-11-10T17:05:29.742116
 
 ---
 
@@ -10,12 +10,12 @@
 
 | 指标 | 数量 |
 |:-----|-----:|
-| 总 BP 数 | 116 |
-| ✅ 完全就绪 | 32 |
+| 总 BP 数 | 124 |
+| ✅ 完全就绪 | 33 |
 | ⚠️  部分就绪 | 14 |
-| ❌ 缺失/未开始 | 70 |
+| ❌ 缺失/未开始 | 77 |
 
-🚩 **84 个 Base Practice 尚待补齐** — 详见下方逐项检查
+🚩 **91 个 Base Practice 尚待补齐** — 详见下方逐项检查
 
 ---
 
@@ -437,44 +437,79 @@ the item; the pipeline never marks anything verified on its own.
 ---
 
 ## MAN.1: Project Management
-> Plan, monitor, and control the project to deliver the product within
-budget, schedule, and quality constraints.
+> Define project charter with purpose, scope, roles, resources, budget,
+and schedule. The charter comes only from the real charter.json; an
+empty placeholder triggers review RED.
 
-**状态**: 0/2 BP 尚待补齐
+**状态**: 4/4 BP 尚待补齐
 
-### MAN.1.BP1: Define project plan
-
-**状态**: ✅ 已就绪 (1/1)
-
-### MAN.1.BP2: Monitor project progress
-
-**状态**: ✅ 已就绪 (1/1)
-
----
-
-## MAN.2: Requirements Management
-> Elicit, document, and manage requirements and their changes under
-configuration control.
-
-**状态**: 1/2 BP 尚待补齐
-
-### MAN.2.BP1: Manage requirements baseline
-
-**状态**: ✅ 已就绪 (1/1)
-
-### MAN.2.BP2: Manage requirement changes
+### MAN.1.BP1: Define project charter
 
 **状态**: ❌ 缺失 (1/1 项未通过)
 
 **❌ 缺失项**:
 
-- Missing evidence: Requirement version records
-- Check: Requirement changes are traced and versioned (no substantive traceability matrix)
+- Missing evidence: Project charter with purpose, scope, owner, budget
+- Check: A project charter is defined with purpose and scope (no project charter with purpose+scope)
 
 **✅ 修复步骤**:
 
-- 📊 记录需求变更历史与版本信息
-- 🔗 需求变更追溯至受影响的设计、代码与测试
+- 📄 创建 `docs/project-plan.md`，含进度计划与里程碑
+- 🔖 定义 WBS 分解、出口准则与负责人
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### MAN.1.BP2: Assign roles and resources
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: Charter fields including owner, budget, schedule
+- Check: Roles and resources are assigned and recorded (no charter with owner)
+
+**✅ 修复步骤**:
+
+- 📊 在 `docs/project-plan.md` 记录进度跟踪与偏差
+- 🔄 定期更新项目状态，对比计划与实际
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### MAN.1.BP3: Establish budget and schedule
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: Budget and schedule section
+- Check: Budget and schedule baselines are established (no requirements baseline)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### MAN.1.BP4: Identify top risks
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: Top risk field in charter
+- Check: Top project risks are identified and tracked (no top_risk in charter.json)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
 
 **💡 相关 CLI 命令**:
 
@@ -482,9 +517,62 @@ configuration control.
 
 ---
 
-## MAN.3: Project Management
-> Plan, monitor, and control the project. Milestones come only from the real
-milestone list; completed milestones must carry completion evidence.
+## MAN.2: Requirements Management
+> Establish and maintain the requirements baseline with change tracking.
+Change records come from real change-request JSON files; approved changes
+must carry a decision record.
+
+**状态**: 2/4 BP 尚待补齐
+
+### MAN.2.BP1: Establish requirements baseline
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: Requirements baseline document
+- Check: A requirements baseline is established (no requirements baseline)
+
+**✅ 修复步骤**:
+
+- 📄 确保 `docs/requirements.md` 建立需求基线
+- 🔖 需求纳入版本控制，变更可追溯
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### MAN.2.BP2: Track requirement changes
+
+**状态**: ✅ 已就绪 (1/1)
+
+### MAN.2.BP3: Link changes to requirements
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: Change records with req_ids list
+- Check: Requirement changes reference affected requirements (no requirements change log)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### MAN.2.BP4: Approve changes under SUP.10
+
+**状态**: ✅ 已就绪 (1/1)
+
+---
+
+## MAN.3: Project Management (Milestones)
+> Plan, monitor, and control the project milestones. Milestones come only
+from the real milestone list; completed milestones must carry evidence.
 
 **状态**: 0/4 BP 尚待补齐
 
@@ -501,6 +589,59 @@ milestone list; completed milestones must carry completion evidence.
 **状态**: ✅ 已就绪 (1/1)
 
 ### MAN.3.BP4: Manage schedule deviations
+
+**状态**: ✅ 已就绪 (1/1)
+
+---
+
+## MAN.4: Quality Management
+> Ensure processes are performing as intended and drive continuous
+improvement through audits and improvements. Records come only from
+real JSON audit/improvement files; closed items must carry closure.
+
+**状态**: 2/4 BP 尚待补齐
+
+### MAN.4.BP1: Define quality strategy
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: Quality strategy section
+- Check: A quality management strategy is defined (no quality management document + register)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### MAN.4.BP2: Perform process audits
+
+**状态**: ✅ 已就绪 (1/1)
+
+### MAN.4.BP3: Drive improvements
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: Improvement items
+- Check: Quality improvements are identified and tracked (no quality management document + register)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### MAN.4.BP4: Track closure of audit findings
 
 **状态**: ✅ 已就绪 (1/1)
 

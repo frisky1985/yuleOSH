@@ -14,11 +14,11 @@ Import paths preserved:
   from yuleosh.pipeline.step_handlers import PIPELINE_STEPS    (works)
   from yuleosh.pipeline.step_handlers import _check_llm_key    (works)
 
-70 子步骤执行层（含 SYS 系统层 6 步、ACQ.4/REU.2/PIM.3/SPL.2 8 步、HWE/MLE 16 步及
-SUP.1/8/9/10 + MAN.3 10 步）+ 22 Gate 编排层
+76 子步骤执行层（含 SYS 系统层 6 步、ACQ.4/REU.2/PIM.3/SPL.2 8 步、HWE/MLE 16 步、
+SUP.1/8/9/10 8 步及 MAN.1/2/3/4 8 步）+ 22 Gate 编排层
 （2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0；后续补齐 MAN.5/MAN.6/VAL.1、管理支撑组、
 HWE.1~4/MLE.1~4 与 SUP.1/8/9/10/MAN.3）:
-  - 执行层 PIPELINE_STEPS = 70 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
+  - 执行层 PIPELINE_STEPS = 76 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
     step_cache / --from-step 全按实际步骤数
   - 编排层 GATES（yuleosh.pipeline.gates）: 22 Gate 对外稳定契约,
     gate status = 内部子步骤最差状态; 报告聚合 gate-summary.json
@@ -127,8 +127,14 @@ from yuleosh.pipeline.step_handlers.sup_man import (
     step_review_sup9,
     step_sup10_change,
     step_review_sup10,
+    step_man1_charter,
+    step_review_man1,
+    step_man2_requirements,
+    step_review_man2,
     step_man3_project,
     step_review_man3,
+    step_man4_quality,
+    step_review_man4,
 )
 from yuleosh.pipeline.step_handlers.mgmt_support import (
     step_acq4_monitoring,
@@ -391,9 +397,15 @@ PIPELINE_STEPS = [
     ("sup10-change", "小仓", "变更请求记录 (SUP.10)", step_sup10_change),
     ("sup10-review", "小克", "变更请求评审 (确定性门禁)", step_review_sup10),
 
-    # ── G20 MAN.3 项目管理 ────────────────────────────────
+    # ── G20 MAN 管理过程 ────────────────────────────────
+    ("man1-charter", "小仓", "项目章程 (MAN.1)", step_man1_charter),
+    ("man1-review", "小克", "项目章程评审 (确定性门禁)", step_review_man1),
+    ("man2-requirements", "小仓", "需求基线与变更 (MAN.2)", step_man2_requirements),
+    ("man2-review", "小克", "需求管理评审 (确定性门禁)", step_review_man2),
     ("man3-project", "小仓", "项目计划与里程碑 (MAN.3)", step_man3_project),
     ("man3-review", "小克", "项目管理评审 (确定性门禁)", step_review_man3),
+    ("man4-quality", "小仓", "质量管理 (MAN.4)", step_man4_quality),
+    ("man4-review", "小克", "质量管理评审 (确定性门禁)", step_review_man4),
 
     # ── G21 SPL.2 Product Release ──────────────────────────
     ("spl2-release", "小仓", "产品发布清单 (SPL.2)", step_spl2_release),

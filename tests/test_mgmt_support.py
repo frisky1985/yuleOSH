@@ -410,7 +410,11 @@ class TestRegistration:
             "risk-review", "acq4-monitoring", "acq4-review",
             "reu2-reuse", "reu2-review", "pim3-improvement", "pim3-review",
             "hwe4-review", "mle4-review",
-            "sup10-review", "man3-review",
+            "sup10-review",
+            "man1-charter", "man1-review",
+            "man2-requirements", "man2-review",
+            "man3-project", "man3-review",
+            "man4-quality", "man4-review",
             "spl2-release", "spl2-review", "final-report",
         ]
         positions = [keys.index(k) for k in order]

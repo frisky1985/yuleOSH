@@ -2,15 +2,11 @@
 # Copyright (c) 2025 frisky1985
 # SPDX-License-Identifier: Elastic-2.0
 
-"""SUP.1 / SUP.8 / SUP.9 / SUP.10 / MAN.3 确定性生成 + 评审回归。
+"""SUP.1 / SUP.8 / SUP.9 / SUP.10 / MAN.1 / MAN.2 / MAN.3 / MAN.4 确定性生成 + 评审回归。
 
 覆盖:
-- aspice_sup_man_v3.1 profile：5 个过程域，各 4 条 BP，证据路径对齐
-- SUP.1：无审计记录如实记录；登记缺 scan_sources / 文档漏列记录 → RED
-- SUP.8：基线逐项 SHA256 + 清单摘要；摘要篡改 → RED
-- SUP.9：无问题如实记录；已关闭缺关闭说明 / 文档漏列 → RED
-- SUP.10：无变更如实记录；已批准缺决策依据 → RED
-- MAN.3：无里程碑如实记录；已完成缺完成证据 → RED
+- aspice_sup_man_v3.1 profile：8 个过程域，各 4 条 BP，证据路径对齐
+- SUP.1~10 / MAN.1~4：各域 handler 的反假绿门禁
 - G19/G20/G21 门禁注册与步骤顺序
 """
 
@@ -26,8 +22,14 @@ from yuleosh.pipeline.gates import GATES
 from yuleosh.pipeline.session import PipelineSession, PipelineStepError
 from yuleosh.pipeline.step_handlers import (
     PIPELINE_STEPS,
+    step_man1_charter,
+    step_man2_requirements,
     step_man3_project,
+    step_man4_quality,
+    step_review_man1,
+    step_review_man2,
     step_review_man3,
+    step_review_man4,
     step_review_sup1,
     step_review_sup8,
     step_review_sup9,
@@ -45,10 +47,16 @@ from yuleosh.pipeline.step_handlers.sup_man import (
     CR_REGISTER,
     ISSUE_REGISTER,
     ISSUES_DOC,
+    CHARTER_FILE,
     MILESTONES,
+    PROJECT_CHARTER,
     PROJECT_PLAN,
+    QM_DOC,
+    QM_REGISTER,
     QA_PLAN,
     QA_REGISTER,
+    REQ_CHANGE_LOG,
+    REQUIREMENTS_BASELINE,
 )
 
 
@@ -91,10 +99,11 @@ def _write_json(tmp_path, rel, data):
 
 
 class TestProfile:
-    def test_five_domains_with_four_bps(self):
+    def test_nine_domains_with_four_bps(self):
         profile = load_profile("aspice_sup_man_v3.1")
         areas = {a.id: a for a in profile.areas}
-        assert set(areas) == {"SUP.1", "SUP.8", "SUP.9", "SUP.10", "MAN.3"}
+        assert set(areas) == {"SUP.1", "SUP.8", "SUP.9", "SUP.10",
+                              "MAN.1", "MAN.2", "MAN.3", "MAN.4"}
         for area in areas.values():
             assert len(area.base_practices) == 4, area.id
 
@@ -108,7 +117,10 @@ class TestProfile:
         }
         for expected in (QA_PLAN, QA_REGISTER, CM_PLAN, CM_ITEMS, CM_BASELINE,
                          ISSUES_DOC, ISSUE_REGISTER, CR_DOC, CR_REGISTER,
-                         PROJECT_PLAN, MILESTONES):
+                         PROJECT_CHARTER, CHARTER_FILE,
+                         REQUIREMENTS_BASELINE, REQ_CHANGE_LOG,
+                         PROJECT_PLAN, MILESTONES,
+                         QM_DOC, QM_REGISTER):
             assert expected in paths, expected
 
 
@@ -257,13 +269,22 @@ class TestComplianceProfile:
 
     def test_all_green_after_generation(self, tmp_path):
         sess = _make_session(tmp_path)
+        # MAN.1 charter.json 需有 purpose + scope + top_risk 字段才能过门禁
+        _write_json(tmp_path, ".osh/project/charter.json", {
+            "purpose": "验证 aspice_sup_man profile 全绿",
+            "scope": "SUP.1/8/9/10 + MAN.1/2/3/4 各域产物齐全",
+            "owner": "trae-agent",
+            "top_risk": "关键路径上的人力缺口，需提前补齐",
+        })
         for fn in (step_sup1_quality, step_sup8_config, step_sup9_problem,
-                   step_sup10_change, step_man3_project):
+                   step_sup10_change,
+                   step_man1_charter, step_man2_requirements,
+                   step_man3_project, step_man4_quality):
             fn(sess)
         summary = ComplianceChecker(
             str(tmp_path), profile_names=["aspice_sup_man_v3.1"]
         ).run()["summary"]
-        assert summary["failed"] == 0 and summary["passed"] == 20
+        assert summary["failed"] == 0 and summary["passed"] == 32, summary
 
 
 class TestRegistration:
@@ -272,7 +293,10 @@ class TestRegistration:
                  "sup8-config", "sup8-review",
                  "sup9-problem", "sup9-review",
                  "sup10-change", "sup10-review"]),
-        ("G20", ["man3-project", "man3-review"]),
+        ("G20", ["man1-charter", "man1-review",
+                 "man2-requirements", "man2-review",
+                 "man3-project", "man3-review",
+                 "man4-quality", "man4-review"]),
         ("G21", ["spl2-release", "spl2-review", "final-report"]),
     ])
     def test_gates_registered(self, gate, steps):

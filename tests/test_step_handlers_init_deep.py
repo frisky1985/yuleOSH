@@ -109,8 +109,11 @@ class TestPipelineStepsStructure:
             "sup8-config", "sup8-review",
             "sup9-problem", "sup9-review",
             "sup10-change", "sup10-review",
-            # ── G20 MAN.3 项目管理 ──
+            # ── G20 MAN 管理过程 ──
+            "man1-charter", "man1-review",
+            "man2-requirements", "man2-review",
             "man3-project", "man3-review",
+            "man4-quality", "man4-review",
             # ── G21 SPL.2 产品发布 ──
             "spl2-release", "spl2-review", "final-report",
         ]

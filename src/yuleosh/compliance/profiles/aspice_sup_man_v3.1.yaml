@@ -15,7 +15,7 @@
 meta:
   standard: ASPICE
   version: "3.1"
-  description: "Supporting & Project Management — SUP.1/8/9/10 + MAN.3"
+  description: "Supporting & Project Management — SUP.1/8/9/10 + MAN.1/2/3/4"
 
 sup.1:
   id: "SUP.1"
@@ -185,13 +185,97 @@ sup.10:
       check:
         - "Approved change requests are implemented under change management"
 
-man.3:
-  id: "MAN.3"
+man.1:
+  id: "MAN.1"
   title: "Project Management"
   description: |
-    Plan, monitor, and control the project. Milestones come only from the real
-    milestone list; completed milestones must carry completion evidence.
-  order: 46
+    Define project charter with purpose, scope, roles, resources, budget,
+    and schedule. The charter comes only from the real charter.json; an
+    empty placeholder triggers review RED.
+  order: 42
+  base_practices:
+    - id: "MAN.1.BP1"
+      title: "Define project charter"
+      output_evidence:
+        - type: "document"
+          path: "docs/project-charter.md"
+          description: "Project charter with purpose, scope, owner, budget"
+      check:
+        - "A project charter is defined with purpose and scope"
+    - id: "MAN.1.BP2"
+      title: "Assign roles and resources"
+      output_evidence:
+        - type: "document"
+          path: ".osh/project/charter.json"
+          description: "Charter fields including owner, budget, schedule"
+      check:
+        - "Roles and resources are assigned and recorded"
+    - id: "MAN.1.BP3"
+      title: "Establish budget and schedule"
+      output_evidence:
+        - type: "document"
+          path: "docs/project-charter.md"
+          description: "Budget and schedule section"
+      check:
+        - "Budget and schedule baselines are established"
+    - id: "MAN.1.BP4"
+      title: "Identify top risks"
+      output_evidence:
+        - type: "document"
+          path: ".osh/project/charter.json"
+          description: "Top risk field in charter"
+      check:
+        - "Top project risks are identified and tracked"
+
+man.2:
+  id: "MAN.2"
+  title: "Requirements Management"
+  description: |
+    Establish and maintain the requirements baseline with change tracking.
+    Change records come from real change-request JSON files; approved changes
+    must carry a decision record.
+  order: 43
+  base_practices:
+    - id: "MAN.2.BP1"
+      title: "Establish requirements baseline"
+      output_evidence:
+        - type: "document"
+          path: "docs/requirements-baseline.md"
+          description: "Requirements baseline document"
+      check:
+        - "A requirements baseline is established"
+    - id: "MAN.2.BP2"
+      title: "Track requirement changes"
+      output_evidence:
+        - type: "document"
+          path: "docs/requirements-change-log.yaml"
+          description: "Change log with scan sources"
+      check:
+        - "Requirement changes are tracked under configuration management"
+    - id: "MAN.2.BP3"
+      title: "Link changes to requirements"
+      output_evidence:
+        - type: "document"
+          path: "docs/requirements-change-log.yaml"
+          description: "Change records with req_ids list"
+      check:
+        - "Requirement changes reference affected requirements"
+    - id: "MAN.2.BP4"
+      title: "Approve changes under SUP.10"
+      output_evidence:
+        - type: "document"
+          path: "docs/requirements-change-log.yaml"
+          description: "Decision per approved change"
+      check:
+        - "Requirement changes are approved through SUP.10 change management"
+
+man.3:
+  id: "MAN.3"
+  title: "Project Management (Milestones)"
+  description: |
+    Plan, monitor, and control the project milestones. Milestones come only
+    from the real milestone list; completed milestones must carry evidence.
+  order: 44
   base_practices:
     - id: "MAN.3.BP1"
       title: "Define project plan"
@@ -225,3 +309,45 @@ man.3:
           description: "Corrective actions for schedule deviations"
       check:
         - "Project schedule deviations are managed with corrective actions"
+
+man.4:
+  id: "MAN.4"
+  title: "Quality Management"
+  description: |
+    Ensure processes are performing as intended and drive continuous
+    improvement through audits and improvements. Records come only from
+    real JSON audit/improvement files; closed items must carry closure.
+  order: 45
+  base_practices:
+    - id: "MAN.4.BP1"
+      title: "Define quality strategy"
+      output_evidence:
+        - type: "document"
+          path: "docs/quality-management.md"
+          description: "Quality strategy section"
+      check:
+        - "A quality management strategy is defined"
+    - id: "MAN.4.BP2"
+      title: "Perform process audits"
+      output_evidence:
+        - type: "document"
+          path: "docs/quality-register.yaml"
+          description: "Audit records with scan sources"
+      check:
+        - "Process audits are performed and recorded"
+    - id: "MAN.4.BP3"
+      title: "Drive improvements"
+      output_evidence:
+        - type: "document"
+          path: "docs/quality-management.md"
+          description: "Improvement items"
+      check:
+        - "Quality improvements are identified and tracked"
+    - id: "MAN.4.BP4"
+      title: "Track closure of audit findings"
+      output_evidence:
+        - type: "document"
+          path: "docs/quality-register.yaml"
+          description: "Closure per closed audit/improvement item"
+      check:
+        - "Audit findings are tracked to closure"

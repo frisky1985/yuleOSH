@@ -680,7 +680,7 @@ class ComplianceChecker:
         return isinstance(data, list) and len(data) > 0
 
     def _has_risk_records(self) -> bool:
-        """MAN.3: 风险登记证据（桌面端 project_mgmt.py 产物）。"""
+        """MAN.5: 风险登记证据（桌面端 project_mgmt.py 产物）。"""
         risk_dir = self.project_dir / ".osh" / "risks"
         if not risk_dir.is_dir():
             return False
@@ -692,6 +692,88 @@ class ComplianceChecker:
             if isinstance(data, dict) and data.get("id") and data.get("status"):
                 return True
         return False
+
+    def _has_charter_records(self) -> bool:
+        """MAN.1: 项目章程证据。
+
+        两个产物必须同时存在:
+        - ``docs/project-charter.md`` 有实质性内容；
+        - ``.osh/project/charter.json`` 存在且含 purpose / scope 字段。
+
+        反假绿：空壳占位文件 → 返回 False。
+        """
+        if not self._file_has_content("docs", "project-charter.md", min_chars=100):
+            return False
+        charter = self.project_dir / ".osh" / "project" / "charter.json"
+        if not charter.is_file():
+            return False
+        try:
+            data = json.loads(charter.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        if not isinstance(data, dict):
+            return False
+        purpose = str(data.get("purpose") or "").strip()
+        scope = str(data.get("scope") or data.get("deliverables") or "").strip()
+        return bool(purpose and scope)
+
+    def _has_req_baseline_records(self) -> bool:
+        """MAN.2: 需求基线证据。
+
+        认可：``docs/requirements-baseline.md`` 有实质性内容 +
+        ``docs/requirements-change-log.yaml`` 存在。两者缺一 → False。
+        """
+        if not self._file_has_content(
+                "docs", "requirements-baseline.md", min_chars=100):
+            return False
+        log = self.project_dir / "docs" / "requirements-change-log.yaml"
+        return log.is_file()
+
+    def _has_req_change_log_records(self) -> bool:
+        """MAN.2: 需求变更跟踪证据。
+
+        认可：``docs/requirements-change-log.yaml`` 存在且含 scan_sources
+        字段（反假绿：空壳占位返回 False）。
+        """
+        log = self.project_dir / "docs" / "requirements-change-log.yaml"
+        if not log.is_file():
+            return False
+        try:
+            import yaml
+            data = yaml.safe_load(log.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        if not isinstance(data, dict):
+            return False
+        return bool(data.get("scan_sources"))
+
+    def _has_quality_management_records(self) -> bool:
+        """MAN.4: 质量管理证据。
+
+        认可：``docs/quality-management.md`` 有实质性内容 +
+        ``docs/quality-register.yaml`` 存在。两者缺一 → False。
+        """
+        if not self._file_has_content("docs", "quality-management.md", min_chars=100):
+            return False
+        reg = self.project_dir / "docs" / "quality-register.yaml"
+        return reg.is_file()
+
+    def _has_quality_audit_records(self) -> bool:
+        """MAN.4: 过程审计证据。
+
+        认可：``docs/quality-register.yaml`` 存在且含 scan_sources。
+        """
+        reg = self.project_dir / "docs" / "quality-register.yaml"
+        if not reg.is_file():
+            return False
+        try:
+            import yaml
+            data = yaml.safe_load(reg.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        if not isinstance(data, dict):
+            return False
+        return bool(data.get("scan_sources"))
 
     def _has_change_records(self) -> bool:
         """SUP.10: 变更请求管理证据。
@@ -1770,6 +1852,65 @@ class ComplianceChecker:
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no change-request records found)")
+            # ── MAN.1/2/4 管理过程域专属关键词 ──────────────────
+            # 顺序先精确匹配: charter / requirements baseline / quality management /
+            # roles+resources 再落入通用 project / quality 分支，避免被误判。
+            elif "project charter" in check_item.lower():
+                if self._has_charter_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (project charter with purpose+scope found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no project charter with purpose+scope)")
+            elif "roles and resources" in check_item.lower() or "assign roles" in check_item.lower():
+                if self._has_charter_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (charter with owner present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no charter with owner)")
+            elif "requirements baseline" in check_item.lower() or "baseline" in check_item.lower():
+                if self._has_req_baseline_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (requirements baseline found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no requirements baseline)")
+            elif "requirement changes" in check_item.lower() or "change log" in check_item.lower():
+                if self._has_req_change_log_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (requirements change log found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no requirements change log)")
+            elif "affected requirements" in check_item.lower() or "requirement change" in check_item.lower():
+                if self._has_req_change_log_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (change log with req references present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no change log with req references)")
+            elif "quality management strategy" in check_item.lower() or "quality improvement" in check_item.lower() or "quality management" in check_item.lower():
+                if self._has_quality_management_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (quality management document + register found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no quality management document + register)")
+            elif "process audit" in check_item.lower() or "quality audit" in check_item.lower() or "audit finding" in check_item.lower() or "audit findings" in check_item.lower():
+                if self._has_quality_audit_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (quality audit records found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no quality audit records)")
+            elif "closure of audit" in check_item.lower() or "audit closure" in check_item.lower() or "track closure" in check_item.lower():
+                if self._has_quality_audit_records():
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (quality register + closure tracking present)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no quality register + closure tracking)")
             elif "project plan" in check_item.lower() or "schedule" in check_item.lower() or "milestone" in check_item.lower():
                 if self._file_has_content("docs", "project-plan.md", min_chars=100) or self._has_milestone_records():
                     passed += 1
@@ -1777,6 +1918,23 @@ class ComplianceChecker:
                 else:
                     failed += 1
                     details.append(f"  ❌ Check: {check_item} (no project plan / milestones found)")
+            elif "project risk" in check_item.lower() or "top project risk" in check_item.lower():
+                # MAN.1 特有的项目风险（登记在 charter.json top_risk 字段）；
+                # 先于通用 risk 分支，避免被 MAN.5 风险登记误判。
+                charter = self.project_dir / ".osh" / "project" / "charter.json"
+                ok = False
+                if charter.is_file():
+                    try:
+                        data = json.loads(charter.read_text(encoding="utf-8"))
+                        ok = bool(str(data.get("top_risk") or "").strip())
+                    except (OSError, ValueError):
+                        ok = False
+                if ok:
+                    passed += 1
+                    details.append(f"  ✅ Check: {check_item} (project risk in charter.json found)")
+                else:
+                    failed += 1
+                    details.append(f"  ❌ Check: {check_item} (no top_risk in charter.json)")
             elif "risk register" in check_item.lower() or "risk management" in check_item.lower() or "risk" in check_item.lower():
                 if self._file_has_content("docs", "risk-register.md", min_chars=100) or self._has_risk_records():
                     passed += 1

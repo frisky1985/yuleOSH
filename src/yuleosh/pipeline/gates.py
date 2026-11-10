@@ -7,9 +7,9 @@
 """
 Pipeline 编排层 — 22 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
 后续补齐 VAL.1 / MAN.6 / MAN.5 / 管理支撑组 ACQ.4 / REU.2 / PIM.3 / SPL.2、
-HWE.1~4 / MLE.1~4 及 SUP.1/8/9/10 / MAN.3).
+HWE.1~4 / MLE.1~4、SUP.1/8/9/10 及 MAN.1/2/4).
 
-执行层保持 70 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
+执行层保持 76 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
 step_cache 全保留；M1 头部插入 SYS 系统层 6 步）；编排层新增 GATES 视图，
 对外稳定契约（对齐 ASPICE 过程域，含 SYS 系统层 G0），一旦约定不再变动
 （分层原则 R1-R4，见 RULES.md §12）。
@@ -212,8 +212,13 @@ GATES: list[dict] = [
         # MAN.3：项目计划与里程碑。里程碑只来自 .osh/project/milestones.json；
         # 已完成里程碑必须提供完成证据，否则门禁 RED（见 sup_man.py）。
         "gate": "G20",
-        "name": "MAN.3 项目管理 Gate",
-        "step_keys": ["man3-project", "man3-review"],
+        "name": "MAN 管理过程 Gate",
+        "step_keys": [
+            "man1-charter", "man1-review",
+            "man2-requirements", "man2-review",
+            "man3-project", "man3-review",
+            "man4-quality", "man4-review",
+        ],
     },
     {
         # SPL.2：发布清单带 SHA256 摘要，批准状态默认「待批准」。
@@ -479,8 +484,14 @@ _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "sup9-review": ("known-issues.md",),
     "sup10-change": ("change-requests.md", "change-request-register.yaml"),
     "sup10-review": ("change-requests.md",),
+    "man1-charter": ("project-charter.md",),
+    "man1-review": ("project-charter.md",),
+    "man2-requirements": ("requirements-baseline.md", "requirements-change-log.yaml"),
+    "man2-review": ("requirements-baseline.md",),
     "man3-project": ("project-plan.md",),
     "man3-review": ("project-plan.md",),
+    "man4-quality": ("quality-management.md", "quality-register.yaml"),
+    "man4-review": ("quality-management.md",),
     "spl2-release": ("release-plan.md", "release-manifest.yaml"),
     "spl2-review": ("release-plan.md",),
     "final-report": ("final-report.md",),

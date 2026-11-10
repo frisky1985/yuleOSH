@@ -200,7 +200,10 @@ aspice:
     - SPL.2
     - REU.2
     - PIM.3
+    - MAN.1
+    - MAN.2
     - MAN.3
+    - MAN.4
     - MAN.5
     - MAN.6
   source_mapping:
@@ -270,6 +273,18 @@ aspice:
       process_area: MAN.3
     - pattern: "^\\.osh/project/milestones\\.json$"
       process_area: MAN.3
+    - pattern: "^docs/project-charter\\.md$"
+      process_area: MAN.1
+    - pattern: "^\\.osh/project/charter\\.json$"
+      process_area: MAN.1
+    - pattern: "^docs/requirements-baseline\\.md$"
+      process_area: MAN.2
+    - pattern: "^docs/requirements-change-log\\.yaml$"
+      process_area: MAN.2
+    - pattern: "^docs/quality-management\\.md$"
+      process_area: MAN.4
+    - pattern: "^docs/quality-register\\.yaml$"
+      process_area: MAN.4
   id_prefixes:
     - prefix: "METRIC"
       process_area: MAN.6
@@ -335,6 +350,12 @@ aspice:
       process_area: SUP.10
     - prefix: "MS"
       process_area: MAN.3
+    - prefix: "CHR"
+      process_area: MAN.1
+    - prefix: "RC"
+      process_area: MAN.2
+    - prefix: "QM"
+      process_area: MAN.4
   test_level_mapping:
     - pattern: "(^|/)(unit|ut)(/|_)|test_unit"
       process_area: SWE.4
