@@ -135,18 +135,23 @@ class TestCandidateTableIsReachable:
                            [{"name": "test-qualification", "status": "completed"}])
         assert _gate(summary, "G10")["status"] == "skipped"
 
-    def test_final_report_markdown_is_read_by_g10(self, tmp_path):
+    def test_final_report_markdown_is_read_by_g19(self, tmp_path):
         """撤销修复（删除 final-report 候选）→ 实测本用例转红。
 
         ``final-report.md`` 无 ``step`` 字段可扫，候选表是唯一通路。
+        HWE/MLE 落地后 final-report 归入 G19 产品发布 Gate。
         """
         (tmp_path / "qualification-test.json").write_text(
             json.dumps({"session": "test-sess", "step": "test-qualification",
                         "status": "passed"}), encoding="utf-8")
         (tmp_path / "final-report.md").write_text(
             "# Final report — SKIPPED (no qualification run)\n", encoding="utf-8")
+        for key in ("spl2-release", "spl2-review"):
+            (tmp_path / f"{key}.json").write_text(
+                json.dumps({"session": "test-sess", "step": key,
+                            "status": "completed"}), encoding="utf-8")
         summary = _summary(tmp_path, _all_completed())
-        assert _gate(summary, "G10")["status"] == "skipped"
+        assert _gate(summary, "G19")["status"] == "skipped"
 
 
 # ── P0-B ────────────────────────────────────────────────────────────────
@@ -175,7 +180,11 @@ class TestIntegrityIndexCoverage:
         for name in AUXILIARY:
             assert name in index, f"auxiliary artifact {name} has no tamper evidence"
         assert index["merge-gate-report.json"]  # gate-mapped artifact still there
-        assert len(index) > len({k for g in GATES for k in g["step_keys"]})
+        # 索引覆盖目录内全部产物（gate-summary 自身除外）；步骤数不等同于
+        # 产物数——多个步骤可共享同一候选产物（如 measurement 与 review）。
+        expected = {p.name for p in tmp_path.iterdir() if p.is_file()}
+        expected.discard("gate-summary.json")
+        assert set(index) == expected
 
     def test_gate_mapped_digests_are_no_longer_empty(self, tmp_path):
         """G5/G8/G9/G10 used to emit an empty artifact_hashes.

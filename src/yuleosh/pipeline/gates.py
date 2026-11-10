@@ -5,9 +5,11 @@
 # SPDX-License-Identifier: Elastic-2.0
 
 """
-Pipeline 编排层 — 11 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0).
+Pipeline 编排层 — 20 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
+后续补齐 VAL.1 / MAN.6 / MAN.5 / 管理支撑组 ACQ.4 / REU.2 / PIM.3 / SPL.2
+及 HWE.1~4 / MLE.1~4).
 
-执行层保持 30 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
+执行层保持 60 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
 step_cache 全保留；M1 头部插入 SYS 系统层 6 步）；编排层新增 GATES 视图，
 对外稳定契约（对齐 ASPICE 过程域，含 SYS 系统层 G0），一旦约定不再变动
 （分层原则 R1-R4，见 RULES.md §12）。
@@ -125,7 +127,81 @@ GATES: list[dict] = [
     {
         "gate": "G10",
         "name": "SWE.6 合格性 Gate",
-        "step_keys": ["test-qualification", "final-report"],
+        "step_keys": ["test-qualification"],
+    },
+    {
+        # VAL.1：产品级确认（预期使用场景 + 目标环境），与 SYS.5 系统确认互补。
+        # 门禁只校验证据结构；"未执行"不会被判绿（见 validation.py）。
+        "gate": "G11",
+        "name": "VAL.1 确认 Gate",
+        "step_keys": ["val-validation", "val-review"],
+    },
+    {
+        # MAN.6：度量项定义、真实数据采集与阈值判定。
+        # 无数据项不会被推断为通过（见 measurement.py）。
+        "gate": "G12",
+        "name": "MAN.6 测量 Gate",
+        "step_keys": ["measurement", "measurement-review"],
+    },
+    {
+        # MAN.5：风险识别、评估、应对与监控。自动风险来自 MAN.6 FAIL
+        # 度量项与流水线失败记录，人工条目在登记文件中维护。
+        # 自动识别的高风险在人工分级前列为「待分级」，不阻断自动化流水线；
+        # 人工登记的高风险缺责任人/缓解措施/评审日 → 门禁 RED（见 risk.py）。
+        "gate": "G13",
+        "name": "MAN.5 风险管理 Gate",
+        "step_keys": ["risk-assessment", "risk-review"],
+    },
+    {
+        # ACQ.4：第三方依赖盘点为供应商清单的初始输入；评估结论由人维护。
+        "gate": "G14",
+        "name": "ACQ.4 供应商监控 Gate",
+        "step_keys": ["acq4-monitoring", "acq4-review"],
+    },
+    {
+        # REU.2：内部组件自动识别为复用候选，复用决策由人签署。
+        "gate": "G15",
+        "name": "REU.2 复用管理 Gate",
+        "step_keys": ["reu2-reuse", "reu2-review"],
+    },
+    {
+        # PIM.3：改进项只从客观输入派生（MAN.6 FAIL / MAN.5 高风险）。
+        "gate": "G16",
+        "name": "PIM.3 过程改进 Gate",
+        "step_keys": ["pim3-improvement", "pim3-review"],
+    },
+    {
+        # HWE.1~HWE.4：硬件工程。范围由客观文件信号识别（链接脚本/
+        # CubeMX/板级目录/CAN 矩阵/启动代码）；无信号即如实记录「无硬件
+        # 范围」。验证结论必须引用真实存在的证据文件（见 hwe_mle.py）。
+        "gate": "G17",
+        "name": "HWE 硬件工程 Gate",
+        "step_keys": [
+            "hwe1-requirements", "hwe1-review",
+            "hwe2-design", "hwe2-review",
+            "hwe3-implementation", "hwe3-review",
+            "hwe4-verification", "hwe4-review",
+        ],
+    },
+    {
+        # MLE.1~MLE.4：机器学习工程。范围由模型文件/训练脚本/数据集目录
+        # 识别；「已评估」须引用含非空 metrics 的评估证据文件，训练指标
+        # 只由人工填写，不生成任何数值（见 hwe_mle.py）。
+        "gate": "G18",
+        "name": "MLE 机器学习工程 Gate",
+        "step_keys": [
+            "mle1-requirements", "mle1-review",
+            "mle2-approach", "mle2-review",
+            "mle3-training", "mle3-review",
+            "mle4-evaluation", "mle4-review",
+        ],
+    },
+    {
+        # SPL.2：发布清单带 SHA256 摘要，批准状态默认「待批准」。
+        # final-report 归入本 Gate，使最终报告收录发布结论。
+        "gate": "G19",
+        "name": "SPL.2 产品发布 Gate",
+        "step_keys": ["spl2-release", "spl2-review", "final-report"],
     },
 ]
 
@@ -346,6 +422,37 @@ _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "development": ("development-plan.md",),
     "test-planning": ("test-plan.md",),
     "test-qualification": ("qualification-test.json", "qualification-test.md"),
+    "val-validation": ("validation-plan.md", "validation-report.md"),
+    "val-review": ("validation-report.md",),
+    "measurement": ("measurement-plan.md", "measurement-report.md"),
+    "measurement-review": ("measurement-report.md",),
+    "risk-assessment": ("risk-report.md", "risk-register.yaml"),
+    "risk-review": ("risk-report.md",),
+    "acq4-monitoring": ("supplier-monitoring-report.md", "supplier-register.yaml"),
+    "acq4-review": ("supplier-monitoring-report.md",),
+    "reu2-reuse": ("reuse-report.md", "reuse-register.yaml"),
+    "reu2-review": ("reuse-report.md",),
+    "pim3-improvement": (
+        "process-improvement-report.md", "process-improvement-register.yaml"),
+    "pim3-review": ("process-improvement-report.md",),
+    "hwe1-requirements": ("hw-requirements.md", "hw-item-register.yaml"),
+    "hwe1-review": ("hw-requirements.md",),
+    "hwe2-design": ("hw-design.md",),
+    "hwe2-review": ("hw-design.md",),
+    "hwe3-implementation": ("hw-implementation-report.md",),
+    "hwe3-review": ("hw-implementation-report.md",),
+    "hwe4-verification": ("hw-verification-report.md",),
+    "hwe4-review": ("hw-verification-report.md",),
+    "mle1-requirements": ("ml-requirements.md", "ml-item-register.yaml"),
+    "mle1-review": ("ml-requirements.md",),
+    "mle2-approach": ("ml-approach.md",),
+    "mle2-review": ("ml-approach.md",),
+    "mle3-training": ("ml-training-report.md",),
+    "mle3-review": ("ml-training-report.md",),
+    "mle4-evaluation": ("ml-evaluation-report.md",),
+    "mle4-review": ("ml-evaluation-report.md",),
+    "spl2-release": ("release-plan.md", "release-manifest.yaml"),
+    "spl2-review": ("release-plan.md",),
     "final-report": ("final-report.md",),
 }
 

@@ -150,6 +150,17 @@ def _report_mock_path_hits() -> None:
     for tid, path, stack in _MOCK_PATH_HITS:
         by_test.setdefault(tid, []).append((path, stack))
 
+    # 收尾阶段 stdout 的 fd 可能已被 capture 插件关闭，print 会抛
+    # OSError: Bad file descriptor。诊断输出绝不能让整个 pytest 会话崩溃
+    # （CI 上表现为 exit code 120 且丢失全部汇总）。
+    try:
+        _emit_mock_path_report(by_test)
+    except (OSError, ValueError):
+        pass
+
+
+def _emit_mock_path_report(by_test: dict) -> None:
+    """打印 mock-path 命中报告；调用方负责兜住 stdout 不可写的异常。"""
     print("\n" + "=" * 78)
     print(f"[mock-path] 检测到 {len(_MOCK_PATH_HITS)} 次「MagicMock 路径落盘」"
           f"，来自 {len(by_test)} 个测试")
@@ -321,17 +332,22 @@ def _isolate_process_state():
             os.chdir(saved_cwd)
         except OSError:  # 目录在测试中被删除时忽略
             pass
-        # 清理测试内新建的 KG store / PipelineSession 缓存（OSH_HOME 变化后
-        # 模块级单例仍指向旧临时目录，导致 step_merge_gate 等拿到脏路径）。
+        # 清理测试内新建的 KG store 缓存（OSH_HOME 变化后模块级单例仍指向
+        # 旧临时目录，导致 step_merge_gate 等拿到脏路径）。
+        #
+        # 注意: yuleosh.pipeline.session._store 是**导入期创建**的单例
+        # （session.py:34-45，全模块无懒加载入口），不能放进这里删除 ——
+        # 一旦 delattr，后续所有 _save() 调用永久 NameError，
+        # 且 mock.patch("yuleosh.pipeline.session._store") 在 setup 阶段即
+        # AttributeError。2026-11-08 曾误加入，导致 CI 22 failed + 73 errors。
         from yuleosh.knowledge_graph import store as _kg_store
-        from yuleosh.pipeline import session as _pl_session
-        for holder in (_kg_store, _pl_session):
-            for attr in ("_store", "_session", "_instance", "_current_session"):
-                if hasattr(holder, attr):
-                    try:
-                        delattr(holder, attr)
-                    except Exception:
-                        pass
+
+        for attr in ("_store", "_session", "_instance", "_current_session"):
+            if hasattr(_kg_store, attr):
+                try:
+                    delattr(_kg_store, attr)
+                except Exception:
+                    pass
 
 
 @pytest.fixture(autouse=True)
