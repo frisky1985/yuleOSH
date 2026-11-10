@@ -148,10 +148,21 @@ export default function EvidencePage() {
     setGenResult(null);
     setError("");
     try {
-      await apiFetch("/api/v1/evidence/generate", {
+      const result = await apiFetch<{
+        status?: string;
+        stderr?: string | null;
+        returncode?: number;
+      }>("/api/v1/evidence/generate", {
         method: "POST",
         body: JSON.stringify({}),
       });
+      // 反假绿：后端等 0 才代表产物落盘；失败时不能展示"生成完成"。
+      if (result?.status === "failed") {
+        throw new Error(
+          result.stderr?.trim() ||
+            `证据生成失败 (returncode=${result.returncode ?? "?"})`,
+        );
+      }
       const after = await load();
       setGenResult({
         added: Math.max(0, after - before),

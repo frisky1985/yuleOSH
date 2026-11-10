@@ -1100,7 +1100,7 @@ def _run_evidence_task(task_id: str, project_dir: str) -> None:
         _ev_tasks[task_id]["status"] = "running"
 
         result = subprocess.run(
-            ["yuleosh", "evidence", "pack",
+            [sys.executable, "-m", "yuleosh", "evidence", "pack",
              "--project-dir", str(project_dir)],
             capture_output=True, text=True, timeout=300,
             cwd=str(Path(project_dir).resolve()),

@@ -5,6 +5,7 @@
 
 """Evidence endpoints — generate, list files, download compliance pack."""
 
+import os
 import shutil
 import sys
 import subprocess
@@ -134,9 +135,10 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
         return json_error("project_dir must be inside OSH_HOME", 403)
     try:
         result = subprocess.run(
-            [sys.executable, "src/evidence/pack.py", "pack"],
+            [sys.executable, "-m", "yuleosh.evidence.pack", "pack"],
             capture_output=True, text=True, timeout=120,
             cwd=project_dir, check=False,
+            env={**os.environ, "OSH_HOME": project_dir},
         )
         version = None
         if result.returncode == 0:
