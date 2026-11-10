@@ -1,0 +1,6 @@
+version: 1
+generated_at: '2026-11-10T15:31:24+00:00'
+scan_sources:
+- glob:processes/*.json
+- glob:.osh/processes/*.json
+items: []

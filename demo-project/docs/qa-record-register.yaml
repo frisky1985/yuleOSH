@@ -1,0 +1,8 @@
+version: 1
+generated_at: '2026-11-10T15:31:23+00:00'
+scan_sources:
+- glob:.osh/evidence/reviews/*.json
+- glob:.osh/ci/*qa*.json
+- glob:.osh/ci/*audit*.json
+- file:docs/review-records.md
+records: []

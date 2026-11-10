@@ -1,0 +1,6 @@
+version: 1
+generated_at: '2026-11-10T15:31:23+00:00'
+scan_sources:
+- glob:.osh/issues/*.json
+- glob:.osh/ci/issue-*.json
+items: []

@@ -1,0 +1,38 @@
+version: 1
+generated_at: '2026-11-10T15:31:23+00:00'
+scan_sources:
+- MAN.6/KPI
+- pipeline/session
+risks:
+- id: RISK-KPI-KG-COVERAGE-PCT
+  title: '度量项未达标: KG 需求覆盖率'
+  category: 质量
+  source: MAN.6/KPI
+  origin: auto
+  likelihood: 4
+  impact: 3
+  score: 12
+  band: high
+  detail: KG 需求覆盖率 当前值 0.0，阈值 80.0
+  owner: 待指定
+  status: open
+  response: mitigate
+  mitigation: ''
+  review_due: ''
+  last_seen: '2026-11-10T15:31:23+00:00'
+- id: RISK-STEP-SESSION
+  title: '流程步骤历史失败: session'
+  category: 进度
+  source: pipeline/session
+  origin: auto
+  likelihood: 3
+  impact: 4
+  score: 12
+  band: high
+  detail: '最近失败记录 '
+  owner: 待指定
+  status: open
+  response: mitigate
+  mitigation: ''
+  review_due: ''
+  last_seen: '2026-11-10T15:31:23+00:00'
