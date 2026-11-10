@@ -1,0 +1,150 @@
+{
+  "bundle": {
+    "generated_at": "2026-11-11T00:38:02.950784",
+    "project_dir": ".",
+    "version": "1.0.0",
+    "spec_ref": "G-50 / §22.1~§22.9"
+  },
+  "components": {
+    "ci-results": {
+      "label": "CI Layer Results",
+      "spec_ref": "§22.1",
+      "artifacts": []
+    },
+    "misra-reports": {
+      "label": "MISRA Analysis Reports",
+      "spec_ref": "§22.2",
+      "artifacts": []
+    },
+    "trend-data": {
+      "label": "KPI/Trend Data",
+      "spec_ref": "§22.3",
+      "artifacts": []
+    },
+    "coverage": {
+      "label": "Test Coverage",
+      "spec_ref": "§22.4",
+      "artifacts": []
+    },
+    "reviews": {
+      "label": "Review Artifacts",
+      "spec_ref": "§22.5",
+      "artifacts": []
+    },
+    "traceability": {
+      "label": "Traceability Matrices",
+      "spec_ref": "§22.6",
+      "artifacts": []
+    }
+  },
+  "integrity": {},
+  "artifacts": [
+    {
+      "type": "ci-config",
+      "source": ".yuleosh/ci-config.yaml",
+      "dest": "docs/evidence/yuleosh-self-audit/ci-config.yaml",
+      "sha256": "9584da28716e90de7a44fa284571aee563e927b3b5b1704cb5c939e09a2bb4db"
+    }
+  ],
+  "swe_status": {
+    "SWE.1": {
+      "name": "SWE.1 软件需求分析",
+      "short": "SWE.1",
+      "color": "#10b981",
+      "description": "Requirements traceability and analysis",
+      "status": "completed",
+      "label": "✅ 完成",
+      "last_updated": "2026-11-11"
+    },
+    "SWE.2": {
+      "name": "SWE.2 软件架构设计",
+      "short": "SWE.2",
+      "color": "#10b981",
+      "description": "Architecture design documentation",
+      "status": "partial",
+      "label": "⚠️ 部分完成",
+      "last_updated": "2026-11-11"
+    },
+    "SWE.3": {
+      "name": "SWE.3 软件详细设计",
+      "short": "SWE.3",
+      "color": "#faad14",
+      "description": "Detailed design and interface definitions",
+      "status": "completed",
+      "label": "✅ 完成",
+      "last_updated": "2026-11-11"
+    },
+    "SWE.4": {
+      "name": "SWE.4 软件单元验证",
+      "short": "SWE.4",
+      "color": "#faad14",
+      "description": "Unit test coverage and static analysis",
+      "status": "completed",
+      "label": "✅ 完成",
+      "last_updated": "2026-11-11"
+    },
+    "SWE.5": {
+      "name": "SWE.5 软件集成与测试",
+      "short": "SWE.5",
+      "color": "#ff4d4f",
+      "description": "Integration testing",
+      "status": "completed",
+      "label": "✅ 完成",
+      "last_updated": "2026-11-11"
+    },
+    "SWE.6": {
+      "name": "SWE.6 软件合格性测试",
+      "short": "SWE.6",
+      "color": "#10b981",
+      "description": "Qualification testing",
+      "status": "completed",
+      "label": "✅ 完成",
+      "last_updated": "2026-11-11"
+    },
+    "SYS.1": {
+      "name": "SYS.1 系统需求分析",
+      "short": "SYS.1",
+      "color": "#10b981",
+      "description": "System requirements analysis",
+      "status": "not_started",
+      "label": "❌ 未开始",
+      "last_updated": "2026-11-11"
+    },
+    "SYS.2": {
+      "name": "SYS.2 系统架构设计",
+      "short": "SYS.2",
+      "color": "#10b981",
+      "description": "System architecture design",
+      "status": "not_started",
+      "label": "❌ 未开始",
+      "last_updated": "2026-11-11"
+    },
+    "SYS.3": {
+      "name": "SYS.3 系统验证规划",
+      "short": "SYS.3",
+      "color": "#faad14",
+      "description": "System verification planning",
+      "status": "not_started",
+      "label": "❌ 未开始",
+      "last_updated": "2026-11-11"
+    },
+    "SYS.4": {
+      "name": "SYS.4 系统集成测试规划",
+      "short": "SYS.4",
+      "color": "#faad14",
+      "description": "System integration test planning",
+      "status": "not_started",
+      "label": "❌ 未开始",
+      "last_updated": "2026-11-11"
+    },
+    "SYS.5": {
+      "name": "SYS.5 系统确认",
+      "short": "SYS.5",
+      "color": "#ff4d4f",
+      "description": "System validation",
+      "status": "not_started",
+      "label": "❌ 未开始",
+      "last_updated": "2026-11-11"
+    }
+  }
+}
