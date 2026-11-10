@@ -1,0 +1,555 @@
+# ASPICE v3.1 — remaining process areas
+# ACQ.1/2/3 · SPL.1 · SUP.2~7 · PIM.1/2 · REU.1
+# Evidence paths align with step_handlers/remaining_processes.py;
+# config source of truth: compliance/remaining_specs.py.
+
+meta:
+  standard: ASPICE
+  version: '3.1'
+  description: Remaining process areas — ACQ.1/2/3, SPL.1, SUP.2~7, PIM.1/2, REU.1
+acq.1:
+  id: ACQ.1
+  title: Acquisition Preparation
+  description: 'Plan the acquisition: scope, make-or-buy decisions, acceptance criteria
+    and the inputs required before selecting a supplier.'
+  order: 46
+  base_practices:
+  - id: ACQ.1.BP1
+    title: Define acquisition strategy and criteria
+    output_evidence:
+    - type: document
+      path: docs/acquisition-plan.md
+      description: 'ACQ.1 work product: docs/acquisition-plan.md'
+    check:
+    - An acquisition plan defines scope, strategy and acceptance criteria
+  - id: ACQ.1.BP2
+    title: Collect acquisition inputs
+    output_evidence:
+    - type: document
+      path: docs/acquisition-requirements.yaml
+      description: 'ACQ.1 work product: docs/acquisition-requirements.yaml'
+    check:
+    - Acquisition records are collected from identified sources
+  - id: ACQ.1.BP3
+    title: Ensure acquisition traceability
+    output_evidence:
+    - type: document
+      path: docs/acquisition-plan.md
+      description: 'ACQ.1 work product: docs/acquisition-plan.md'
+    - type: document
+      path: docs/acquisition-requirements.yaml
+      description: 'ACQ.1 work product: docs/acquisition-requirements.yaml'
+    check:
+    - Acquisition entries are traceable in the plan
+  - id: ACQ.1.BP4
+    title: Control acquisition decisions
+    output_evidence:
+    - type: document
+      path: docs/acquisition-requirements.yaml
+      description: 'ACQ.1 work product: docs/acquisition-requirements.yaml'
+    check:
+    - Accepted acquisition items carry a decision rationale
+acq.2:
+  id: ACQ.2
+  title: Supplier Selection
+  description: Evaluate candidate suppliers against defined criteria and record the
+    selection decision with its rationale.
+  order: 47
+  base_practices:
+  - id: ACQ.2.BP1
+    title: Define supplier selection criteria
+    output_evidence:
+    - type: document
+      path: docs/supplier-selection.md
+      description: 'ACQ.2 work product: docs/supplier-selection.md'
+    check:
+    - Supplier selection criteria and candidates are documented
+  - id: ACQ.2.BP2
+    title: Evaluate and select suppliers
+    output_evidence:
+    - type: document
+      path: docs/supplier-selection.yaml
+      description: 'ACQ.2 work product: docs/supplier-selection.yaml'
+    check:
+    - Supplier evaluation records are collected from identified sources
+  - id: ACQ.2.BP3
+    title: Ensure selection traceability
+    output_evidence:
+    - type: document
+      path: docs/supplier-selection.md
+      description: 'ACQ.2 work product: docs/supplier-selection.md'
+    - type: document
+      path: docs/supplier-selection.yaml
+      description: 'ACQ.2 work product: docs/supplier-selection.yaml'
+    check:
+    - Supplier selection entries are traceable in the selection report
+  - id: ACQ.2.BP4
+    title: Justify selection decisions
+    output_evidence:
+    - type: document
+      path: docs/supplier-selection.yaml
+      description: 'ACQ.2 work product: docs/supplier-selection.yaml'
+    check:
+    - Selected suppliers carry an evaluation rationale
+acq.3:
+  id: ACQ.3
+  title: Contract Agreement
+  description: Agree and record the contract with the selected supplier, including
+    scope, deliverables, terms and signature evidence.
+  order: 48
+  base_practices:
+  - id: ACQ.3.BP1
+    title: Establish contract agreement
+    output_evidence:
+    - type: document
+      path: docs/contract-agreement.md
+      description: 'ACQ.3 work product: docs/contract-agreement.md'
+    check:
+    - A contract agreement defines scope, deliverables and terms
+  - id: ACQ.3.BP2
+    title: Record contract inputs
+    output_evidence:
+    - type: document
+      path: docs/contract-register.yaml
+      description: 'ACQ.3 work product: docs/contract-register.yaml'
+    check:
+    - Contract records are collected from identified sources
+  - id: ACQ.3.BP3
+    title: Ensure contract traceability
+    output_evidence:
+    - type: document
+      path: docs/contract-agreement.md
+      description: 'ACQ.3 work product: docs/contract-agreement.md'
+    - type: document
+      path: docs/contract-register.yaml
+      description: 'ACQ.3 work product: docs/contract-register.yaml'
+    check:
+    - Contract entries are traceable in the agreement document
+  - id: ACQ.3.BP4
+    title: Track signature evidence
+    output_evidence:
+    - type: document
+      path: docs/contract-register.yaml
+      description: 'ACQ.3 work product: docs/contract-register.yaml'
+    check:
+    - Signed contracts carry signature evidence
+spl.1:
+  id: SPL.1
+  title: Supplier Tendering
+  description: Prepare and issue tenders, evaluate responses and record the award
+    decision with its rationale.
+  order: 49
+  base_practices:
+  - id: SPL.1.BP1
+    title: Plan supplier tendering
+    output_evidence:
+    - type: document
+      path: docs/tender-plan.md
+      description: 'SPL.1 work product: docs/tender-plan.md'
+    check:
+    - A tender plan defines scope, evaluation criteria and award rules
+  - id: SPL.1.BP2
+    title: Collect tender responses
+    output_evidence:
+    - type: document
+      path: docs/tender-register.yaml
+      description: 'SPL.1 work product: docs/tender-register.yaml'
+    check:
+    - Tender records are collected from identified sources
+  - id: SPL.1.BP3
+    title: Ensure tender traceability
+    output_evidence:
+    - type: document
+      path: docs/tender-plan.md
+      description: 'SPL.1 work product: docs/tender-plan.md'
+    - type: document
+      path: docs/tender-register.yaml
+      description: 'SPL.1 work product: docs/tender-register.yaml'
+    check:
+    - Tender entries are traceable in the tender report
+  - id: SPL.1.BP4
+    title: Justify award decisions
+    output_evidence:
+    - type: document
+      path: docs/tender-register.yaml
+      description: 'SPL.1 work product: docs/tender-register.yaml'
+    check:
+    - Awarded tenders carry an evaluation rationale
+sup.2:
+  id: SUP.2
+  title: Verification
+  description: Verify work products against their requirements using planned methods,
+    and record execution evidence for every passed item.
+  order: 50
+  base_practices:
+  - id: SUP.2.BP1
+    title: Plan verification activities
+    output_evidence:
+    - type: document
+      path: docs/verification-plan.md
+      description: 'SUP.2 work product: docs/verification-plan.md'
+    check:
+    - A verification plan defines scope, methods and criteria
+  - id: SUP.2.BP2
+    title: Collect verification results
+    output_evidence:
+    - type: document
+      path: docs/verification-register.yaml
+      description: 'SUP.2 work product: docs/verification-register.yaml'
+    check:
+    - Verification records are collected from identified sources
+  - id: SUP.2.BP3
+    title: Ensure verification traceability
+    output_evidence:
+    - type: document
+      path: docs/verification-plan.md
+      description: 'SUP.2 work product: docs/verification-plan.md'
+    - type: document
+      path: docs/verification-register.yaml
+      description: 'SUP.2 work product: docs/verification-register.yaml'
+    check:
+    - Verification entries are traceable in the verification report
+  - id: SUP.2.BP4
+    title: Track verification evidence
+    output_evidence:
+    - type: document
+      path: docs/verification-register.yaml
+      description: 'SUP.2 work product: docs/verification-register.yaml'
+    check:
+    - Passed verification records carry execution evidence
+sup.3:
+  id: SUP.3
+  title: Validation
+  description: Validate that the product fulfils its intended use in the intended
+    environment, with recorded execution evidence.
+  order: 51
+  base_practices:
+  - id: SUP.3.BP1
+    title: Plan validation activities
+    output_evidence:
+    - type: document
+      path: docs/product-validation.md
+      description: 'SUP.3 work product: docs/product-validation.md'
+    check:
+    - A validation plan defines objectives, environment and criteria
+  - id: SUP.3.BP2
+    title: Collect validation results
+    output_evidence:
+    - type: document
+      path: docs/product-validation.yaml
+      description: 'SUP.3 work product: docs/product-validation.yaml'
+    check:
+    - Validation records are collected from identified sources
+  - id: SUP.3.BP3
+    title: Ensure validation traceability
+    output_evidence:
+    - type: document
+      path: docs/product-validation.md
+      description: 'SUP.3 work product: docs/product-validation.md'
+    - type: document
+      path: docs/product-validation.yaml
+      description: 'SUP.3 work product: docs/product-validation.yaml'
+    check:
+    - Validation entries are traceable in the validation report
+  - id: SUP.3.BP4
+    title: Track validation evidence
+    output_evidence:
+    - type: document
+      path: docs/product-validation.yaml
+      description: 'SUP.3 work product: docs/product-validation.yaml'
+    check:
+    - Passed validation records carry execution evidence
+sup.4:
+  id: SUP.4
+  title: Joint Review
+  description: Conduct joint reviews with affected parties, record findings and track
+    each finding to closure.
+  order: 52
+  base_practices:
+  - id: SUP.4.BP1
+    title: Plan joint reviews
+    output_evidence:
+    - type: document
+      path: docs/joint-review-report.md
+      description: 'SUP.4 work product: docs/joint-review-report.md'
+    check:
+    - A joint review plan defines scope, participants and criteria
+  - id: SUP.4.BP2
+    title: Record review inputs
+    output_evidence:
+    - type: document
+      path: docs/joint-review-register.yaml
+      description: 'SUP.4 work product: docs/joint-review-register.yaml'
+    check:
+    - Joint review records are collected from identified sources
+  - id: SUP.4.BP3
+    title: Ensure review traceability
+    output_evidence:
+    - type: document
+      path: docs/joint-review-report.md
+      description: 'SUP.4 work product: docs/joint-review-report.md'
+    - type: document
+      path: docs/joint-review-register.yaml
+      description: 'SUP.4 work product: docs/joint-review-register.yaml'
+    check:
+    - Review findings are traceable in the joint review report
+  - id: SUP.4.BP4
+    title: Track review closures
+    output_evidence:
+    - type: document
+      path: docs/joint-review-register.yaml
+      description: 'SUP.4 work product: docs/joint-review-register.yaml'
+    check:
+    - Closed review findings carry a closure note
+sup.5:
+  id: SUP.5
+  title: Audit
+  description: Audit work products and processes against defined criteria and track
+    findings to closure.
+  order: 53
+  base_practices:
+  - id: SUP.5.BP1
+    title: Plan audits
+    output_evidence:
+    - type: document
+      path: docs/audit-report.md
+      description: 'SUP.5 work product: docs/audit-report.md'
+    check:
+    - An audit plan defines scope, criteria and schedule
+  - id: SUP.5.BP2
+    title: Record audit inputs
+    output_evidence:
+    - type: document
+      path: docs/audit-register.yaml
+      description: 'SUP.5 work product: docs/audit-register.yaml'
+    check:
+    - Audit records are collected from identified sources
+  - id: SUP.5.BP3
+    title: Ensure audit traceability
+    output_evidence:
+    - type: document
+      path: docs/audit-report.md
+      description: 'SUP.5 work product: docs/audit-report.md'
+    - type: document
+      path: docs/audit-register.yaml
+      description: 'SUP.5 work product: docs/audit-register.yaml'
+    check:
+    - Audit findings are traceable in the audit report
+  - id: SUP.5.BP4
+    title: Track audit closures
+    output_evidence:
+    - type: document
+      path: docs/audit-register.yaml
+      description: 'SUP.5 work product: docs/audit-register.yaml'
+    check:
+    - Closed audit findings carry a closure note
+sup.6:
+  id: SUP.6
+  title: Product Evaluation
+  description: Evaluate the product against defined criteria and record the evaluation
+    result with its rationale.
+  order: 54
+  base_practices:
+  - id: SUP.6.BP1
+    title: Plan product evaluation
+    output_evidence:
+    - type: document
+      path: docs/product-evaluation.md
+      description: 'SUP.6 work product: docs/product-evaluation.md'
+    check:
+    - A product evaluation plan defines scope, criteria and methods
+  - id: SUP.6.BP2
+    title: Collect evaluation results
+    output_evidence:
+    - type: document
+      path: docs/product-evaluation.yaml
+      description: 'SUP.6 work product: docs/product-evaluation.yaml'
+    check:
+    - Product evaluation records are collected from identified sources
+  - id: SUP.6.BP3
+    title: Ensure evaluation traceability
+    output_evidence:
+    - type: document
+      path: docs/product-evaluation.md
+      description: 'SUP.6 work product: docs/product-evaluation.md'
+    - type: document
+      path: docs/product-evaluation.yaml
+      description: 'SUP.6 work product: docs/product-evaluation.yaml'
+    check:
+    - Evaluation entries are traceable in the evaluation report
+  - id: SUP.6.BP4
+    title: Justify evaluation results
+    output_evidence:
+    - type: document
+      path: docs/product-evaluation.yaml
+      description: 'SUP.6 work product: docs/product-evaluation.yaml'
+    check:
+    - Accepted evaluation results carry an evaluation rationale
+sup.7:
+  id: SUP.7
+  title: Documentation
+  description: Plan, produce, review and index the documentation required for the
+    project and its work products.
+  order: 55
+  base_practices:
+  - id: SUP.7.BP1
+    title: Define documentation plan
+    output_evidence:
+    - type: document
+      path: docs/documentation-plan.md
+      description: 'SUP.7 work product: docs/documentation-plan.md'
+    check:
+    - A documentation plan defines scope, owners and review rules
+  - id: SUP.7.BP2
+    title: Index controlled documents
+    output_evidence:
+    - type: document
+      path: docs/document-index.yaml
+      description: 'SUP.7 work product: docs/document-index.yaml'
+    check:
+    - Document records are collected from identified sources
+  - id: SUP.7.BP3
+    title: Ensure document traceability
+    output_evidence:
+    - type: document
+      path: docs/documentation-plan.md
+      description: 'SUP.7 work product: docs/documentation-plan.md'
+    - type: document
+      path: docs/document-index.yaml
+      description: 'SUP.7 work product: docs/document-index.yaml'
+    check:
+    - Document entries are traceable in the documentation index
+  - id: SUP.7.BP4
+    title: Track document approval
+    output_evidence:
+    - type: document
+      path: docs/document-index.yaml
+      description: 'SUP.7 work product: docs/document-index.yaml'
+    check:
+    - Approved documents carry a review evidence
+pim.1:
+  id: PIM.1
+  title: Process Establishment
+  description: Establish the process assets, their elements and tailoring rules that
+    the project shall apply.
+  order: 56
+  base_practices:
+  - id: PIM.1.BP1
+    title: Define process assets
+    output_evidence:
+    - type: document
+      path: docs/process-definition.md
+      description: 'PIM.1 work product: docs/process-definition.md'
+    check:
+    - A process definition describes scope, elements and tailoring
+  - id: PIM.1.BP2
+    title: Collect process assets
+    output_evidence:
+    - type: document
+      path: docs/process-assets.yaml
+      description: 'PIM.1 work product: docs/process-assets.yaml'
+    check:
+    - Process asset records are collected from identified sources
+  - id: PIM.1.BP3
+    title: Ensure process traceability
+    output_evidence:
+    - type: document
+      path: docs/process-definition.md
+      description: 'PIM.1 work product: docs/process-definition.md'
+    - type: document
+      path: docs/process-assets.yaml
+      description: 'PIM.1 work product: docs/process-assets.yaml'
+    check:
+    - Process assets are traceable in the process definition
+  - id: PIM.1.BP4
+    title: Track process approval
+    output_evidence:
+    - type: document
+      path: docs/process-assets.yaml
+      description: 'PIM.1 work product: docs/process-assets.yaml'
+    check:
+    - Approved process assets carry approval evidence
+pim.2:
+  id: PIM.2
+  title: Process Assessment
+  description: Assess the implemented processes against the process reference model
+    and record assessment findings.
+  order: 57
+  base_practices:
+  - id: PIM.2.BP1
+    title: Plan process assessment
+    output_evidence:
+    - type: document
+      path: docs/process-assessment.md
+      description: 'PIM.2 work product: docs/process-assessment.md'
+    check:
+    - A process assessment plan defines scope, method and criteria
+  - id: PIM.2.BP2
+    title: Collect assessment results
+    output_evidence:
+    - type: document
+      path: docs/process-assessment.yaml
+      description: 'PIM.2 work product: docs/process-assessment.yaml'
+    check:
+    - Process assessment records are collected from identified sources
+  - id: PIM.2.BP3
+    title: Ensure assessment traceability
+    output_evidence:
+    - type: document
+      path: docs/process-assessment.md
+      description: 'PIM.2 work product: docs/process-assessment.md'
+    - type: document
+      path: docs/process-assessment.yaml
+      description: 'PIM.2 work product: docs/process-assessment.yaml'
+    check:
+    - Assessment findings are traceable in the assessment report
+  - id: PIM.2.BP4
+    title: Track assessment completion
+    output_evidence:
+    - type: document
+      path: docs/process-assessment.yaml
+      description: 'PIM.2 work product: docs/process-assessment.yaml'
+    check:
+    - Completed assessments carry a report reference
+reu.1:
+  id: REU.1
+  title: Reuse Asset Management
+  description: Establish and maintain the reuse asset library, its attributes and
+    the rules for using and maintaining assets.
+  order: 58
+  base_practices:
+  - id: REU.1.BP1
+    title: Define reuse asset library
+    output_evidence:
+    - type: document
+      path: docs/reuse-asset-library.md
+      description: 'REU.1 work product: docs/reuse-asset-library.md'
+    check:
+    - A reuse asset library defines scope, attributes and maintenance rules
+  - id: REU.1.BP2
+    title: Collect reuse assets
+    output_evidence:
+    - type: document
+      path: docs/reuse-assets.yaml
+      description: 'REU.1 work product: docs/reuse-assets.yaml'
+    check:
+    - Reuse asset records are collected from identified sources
+  - id: REU.1.BP3
+    title: Ensure reuse traceability
+    output_evidence:
+    - type: document
+      path: docs/reuse-asset-library.md
+      description: 'REU.1 work product: docs/reuse-asset-library.md'
+    - type: document
+      path: docs/reuse-assets.yaml
+      description: 'REU.1 work product: docs/reuse-assets.yaml'
+    check:
+    - Reuse assets are traceable in the asset library
+  - id: REU.1.BP4
+    title: Justify asset approval
+    output_evidence:
+    - type: document
+      path: docs/reuse-assets.yaml
+      description: 'REU.1 work product: docs/reuse-assets.yaml'
+    check:
+    - Approved reuse assets carry an approval rationale

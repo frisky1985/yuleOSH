@@ -7,7 +7,7 @@
 覆盖:
 - aspice_sup_man_v3.1 profile：8 个过程域，各 4 条 BP，证据路径对齐
 - SUP.1~10 / MAN.1~4：各域 handler 的反假绿门禁
-- G19/G20/G21 门禁注册与步骤顺序
+- G19/G20/G24 门禁注册与步骤顺序
 """
 
 import json
@@ -297,7 +297,7 @@ class TestRegistration:
                  "man2-requirements", "man2-review",
                  "man3-project", "man3-review",
                  "man4-quality", "man4-review"]),
-        ("G21", ["spl2-release", "spl2-review", "final-report"]),
+        ("G24", ["spl2-release", "spl2-review", "final-report"]),
     ])
     def test_gates_registered(self, gate, steps):
         registered = next(g for g in GATES if g["gate"] == gate)
@@ -309,6 +309,9 @@ class TestRegistration:
             "mle4-review", "sup1-quality", "sup1-review",
             "sup8-config", "sup8-review", "sup9-problem", "sup9-review",
             "sup10-change", "sup10-review", "man3-project", "man3-review",
+            "man4-review", "acq1-preparation", "spl1-review",
+            "sup2-verification", "sup7-review",
+            "pim1-establishment", "reu1-review",
             "spl2-release", "spl2-review", "final-report",
         ]
         positions = [keys.index(k) for k in order]

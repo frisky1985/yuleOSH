@@ -43,6 +43,9 @@ ASPICE_FULL_PROFILES = [
     "aspice_man_v3.1",
     "aspice_hwe_mle_v3.1",
     "aspice_sup_man_v3.1",
+    # 剩余 13 域（ACQ.1~3 / SPL.1 / SUP.2~7 / PIM.1~2 / REU.1）；
+    # 各域键与既有 profile 不冲突，合并安全。
+    "aspice_remaining_v3.1",
 ]
 
 

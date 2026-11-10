@@ -191,14 +191,27 @@ aspice:
     - MLE.2
     - MLE.3
     - MLE.4
+    - SUP.2
+    - SUP.3
+    - SUP.4
+    - SUP.5
+    - SUP.6
+    - SUP.7
     - SUP.1
     - SUP.8
     - SUP.9
     - SUP.10
     - VAL.1
+    - ACQ.1
+    - ACQ.2
+    - ACQ.3
     - ACQ.4
+    - SPL.1
     - SPL.2
+    - REU.1
     - REU.2
+    - PIM.1
+    - PIM.2
     - PIM.3
     - MAN.1
     - MAN.2
@@ -235,6 +248,32 @@ aspice:
       process_area: MAN.5
     - pattern: "^docs/supplier-(register\\.yaml|monitoring-report\\.md)$"
       process_area: ACQ.4
+    - pattern: "^docs/acquisition-(plan\\.md|requirements\\.yaml)$"
+      process_area: ACQ.1
+    - pattern: "^docs/supplier-selection\\.(md|yaml)$"
+      process_area: ACQ.2
+    - pattern: "^docs/(contract-agreement\\.md|contract-register\\.yaml)$"
+      process_area: ACQ.3
+    - pattern: "^docs/tender-(plan\\.md|register\\.yaml)$"
+      process_area: SPL.1
+    - pattern: "^docs/(verification-plan\\.md|verification-register\\.yaml)$"
+      process_area: SUP.2
+    - pattern: "^docs/product-validation\\.(md|yaml)$"
+      process_area: SUP.3
+    - pattern: "^docs/(joint-review-report\\.md|joint-review-register\\.yaml)$"
+      process_area: SUP.4
+    - pattern: "^docs/audit-(report\\.md|register\\.yaml)$"
+      process_area: SUP.5
+    - pattern: "^docs/product-evaluation\\.(md|yaml)$"
+      process_area: SUP.6
+    - pattern: "^docs/(documentation-plan\\.md|document-index\\.yaml)$"
+      process_area: SUP.7
+    - pattern: "^docs/process-(definition\\.md|assets\\.yaml)$"
+      process_area: PIM.1
+    - pattern: "^docs/process-assessment\\.(md|yaml)$"
+      process_area: PIM.2
+    - pattern: "^docs/reuse-(asset-library\\.md|assets\\.yaml)$"
+      process_area: REU.1
     - pattern: "^docs/reuse-(register\\.yaml|report\\.md)$"
       process_area: REU.2
     - pattern: "^docs/process-improvement-(plan|report)\\.md$"
@@ -356,6 +395,32 @@ aspice:
       process_area: MAN.2
     - prefix: "QM"
       process_area: MAN.4
+    - prefix: "ACP"
+      process_area: ACQ.1
+    - prefix: "ASL"
+      process_area: ACQ.2
+    - prefix: "CTR"
+      process_area: ACQ.3
+    - prefix: "TND"
+      process_area: SPL.1
+    - prefix: "VER"
+      process_area: SUP.2
+    - prefix: "VLDR"
+      process_area: SUP.3
+    - prefix: "JRV"
+      process_area: SUP.4
+    - prefix: "AUD"
+      process_area: SUP.5
+    - prefix: "PEV"
+      process_area: SUP.6
+    - prefix: "DOC"
+      process_area: SUP.7
+    - prefix: "PRA"
+      process_area: PIM.1
+    - prefix: "PAS"
+      process_area: PIM.2
+    - prefix: "RUA"
+      process_area: REU.1
   test_level_mapping:
     - pattern: "(^|/)(unit|ut)(/|_)|test_unit"
       process_area: SWE.4

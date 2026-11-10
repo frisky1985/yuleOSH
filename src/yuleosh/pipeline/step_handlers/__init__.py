@@ -14,13 +14,14 @@ Import paths preserved:
   from yuleosh.pipeline.step_handlers import PIPELINE_STEPS    (works)
   from yuleosh.pipeline.step_handlers import _check_llm_key    (works)
 
-76 子步骤执行层（含 SYS 系统层 6 步、ACQ.4/REU.2/PIM.3/SPL.2 8 步、HWE/MLE 16 步、
-SUP.1/8/9/10 8 步及 MAN.1/2/3/4 8 步）+ 22 Gate 编排层
+102 子步骤执行层（含 SYS 系统层 6 步、ACQ.4/REU.2/PIM.3/SPL.2 8 步、HWE/MLE 16 步、
+SUP.1/8/9/10 8 步、MAN.1/2/3/4 8 步及 ACQ.1~3/SPL.1/SUP.2~7/PIM.1~2/REU.1 26 步）
++ 25 Gate 编排层
 （2026-08-19 老板八轮拍板 checkpoint v9；M1 增补 SYS 层 G0；后续补齐 MAN.5/MAN.6/VAL.1、管理支撑组、
-HWE.1~4/MLE.1~4 与 SUP.1/8/9/10/MAN.3）:
-  - 执行层 PIPELINE_STEPS = 76 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
+HWE.1~4/MLE.1~4 与 SUP.1/8/9/10/MAN.3，最后补齐剩余 13 域）:
+  - 执行层 PIPELINE_STEPS = 102 个子步骤（合并后，含 SYS.1~SYS.5 系统层 6 步）; checkpoint/resume /
     step_cache / --from-step 全按实际步骤数
-  - 编排层 GATES（yuleosh.pipeline.gates）: 22 Gate 对外稳定契约,
+  - 编排层 GATES（yuleosh.pipeline.gates）: 25 Gate 对外稳定契约,
     gate status = 内部子步骤最差状态; 报告聚合 gate-summary.json
 """
 
@@ -145,6 +146,34 @@ from yuleosh.pipeline.step_handlers.mgmt_support import (
     step_review_pim3,
     step_spl2_release,
     step_review_spl2,
+)
+from yuleosh.pipeline.step_handlers.remaining_processes import (
+    step_acq1_preparation,
+    step_review_acq1,
+    step_acq2_selection,
+    step_review_acq2,
+    step_acq3_contract,
+    step_review_acq3,
+    step_spl1_tendering,
+    step_review_spl1,
+    step_sup2_verification,
+    step_review_sup2,
+    step_sup3_validation,
+    step_review_sup3,
+    step_sup4_joint_review,
+    step_review_sup4,
+    step_sup5_audit,
+    step_review_sup5,
+    step_sup6_evaluation,
+    step_review_sup6,
+    step_sup7_documentation,
+    step_review_sup7,
+    step_pim1_establishment,
+    step_review_pim1,
+    step_pim2_assessment,
+    step_review_pim2,
+    step_reu1_assets,
+    step_review_reu1,
 )
 
 # QEMU firmware emulation test (L2)
@@ -407,7 +436,39 @@ PIPELINE_STEPS = [
     ("man4-quality", "小仓", "质量管理 (MAN.4)", step_man4_quality),
     ("man4-review", "小克", "质量管理评审 (确定性门禁)", step_review_man4),
 
-    # ── G21 SPL.2 Product Release ──────────────────────────
+    # ── G21 ACQ/SPL 采购与供应 ─────────────────────────────
+    ("acq1-preparation", "小仓", "采购准备 (ACQ.1)", step_acq1_preparation),
+    ("acq1-review", "小克", "采购准备评审 (确定性门禁)", step_review_acq1),
+    ("acq2-selection", "小仓", "供应商选择 (ACQ.2)", step_acq2_selection),
+    ("acq2-review", "小克", "供应商选择评审 (确定性门禁)", step_review_acq2),
+    ("acq3-contract", "小仓", "合同协议 (ACQ.3)", step_acq3_contract),
+    ("acq3-review", "小克", "合同协议评审 (确定性门禁)", step_review_acq3),
+    ("spl1-tendering", "小仓", "供方投标 (SPL.1)", step_spl1_tendering),
+    ("spl1-review", "小克", "供方投标评审 (确定性门禁)", step_review_spl1),
+
+    # ── G22 SUP 扩展支持过程 ──────────────────────────────
+    ("sup2-verification", "小仓", "验证 (SUP.2)", step_sup2_verification),
+    ("sup2-review", "小克", "验证评审 (确定性门禁)", step_review_sup2),
+    ("sup3-validation", "小仓", "确认 (SUP.3)", step_sup3_validation),
+    ("sup3-review", "小克", "确认评审 (确定性门禁)", step_review_sup3),
+    ("sup4-joint-review", "小仓", "联合评审 (SUP.4)", step_sup4_joint_review),
+    ("sup4-review", "小克", "联合评审门禁 (确定性)", step_review_sup4),
+    ("sup5-audit", "小仓", "审计 (SUP.5)", step_sup5_audit),
+    ("sup5-review", "小克", "审计评审 (确定性门禁)", step_review_sup5),
+    ("sup6-evaluation", "小仓", "产品评价 (SUP.6)", step_sup6_evaluation),
+    ("sup6-review", "小克", "产品评价评审 (确定性门禁)", step_review_sup6),
+    ("sup7-documentation", "小仓", "文档管理 (SUP.7)", step_sup7_documentation),
+    ("sup7-review", "小克", "文档管理评审 (确定性门禁)", step_review_sup7),
+
+    # ── G23 PIM/REU 组织过程 ──────────────────────────────
+    ("pim1-establishment", "小仓", "过程建立 (PIM.1)", step_pim1_establishment),
+    ("pim1-review", "小克", "过程建立评审 (确定性门禁)", step_review_pim1),
+    ("pim2-assessment", "小仓", "过程评估 (PIM.2)", step_pim2_assessment),
+    ("pim2-review", "小克", "过程评估评审 (确定性门禁)", step_review_pim2),
+    ("reu1-assets", "小仓", "复用资产管理 (REU.1)", step_reu1_assets),
+    ("reu1-review", "小克", "复用资产评审 (确定性门禁)", step_review_reu1),
+
+    # ── G24 SPL.2 Product Release ──────────────────────────
     ("spl2-release", "小仓", "产品发布清单 (SPL.2)", step_spl2_release),
     ("spl2-review", "小克", "发布评审 (确定性门禁)", step_review_spl2),
     ("final-report", "小明", "最终报告", step_final_report),

@@ -1432,6 +1432,99 @@ class ComplianceChecker:
             pass
         return stats
 
+    # ── 剩余 13 域（ACQ.1~3 / SPL.1 / SUP.2~7 / PIM.1~2 / REU.1）─────────
+    # 按过程域 id 精确分派，避免与既有 SUP.1/SUP.8/ACQ.4/REU.2 等关键词
+    # 分支互相截获。检查项语义由 remaining_specs.SPECS 的 BP 文案决定：
+    #   BP2 含 sources → 扫描来源；BP3 含 traceable → 登记与文档一致；
+    #   BP4 含 rationale/closure/evidence → 终态证据；其余 → 计划文档。
+    def _remaining_spec(self, swe_id: str) -> Optional[dict]:
+        try:
+            from yuleosh.compliance.remaining_specs import SPECS
+        except Exception:
+            return None
+        return SPECS.get(str(swe_id or "").upper())
+
+    def _remaining_register(self, spec: dict) -> Optional[dict]:
+        path = self.project_dir / spec["register"]
+        if not path.is_file():
+            return None
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _remaining_doc_ok(self, spec: dict) -> bool:
+        path = self.project_dir / spec["doc"]
+        if not path.is_file():
+            return False
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+        if len(text.strip()) < 100:
+            return False
+        return all(section in text for section in spec["sections"])
+
+    def _remaining_sources_ok(self, spec: dict) -> bool:
+        data = self._remaining_register(spec)
+        if not data:
+            return False
+        return bool(data.get("scan_sources")) and isinstance(
+            data.get("items"), list)
+
+    def _remaining_trace_ok(self, spec: dict) -> bool:
+        data = self._remaining_register(spec)
+        if not data or not isinstance(data.get("items"), list):
+            return False
+        path = self.project_dir / spec["doc"]
+        if not path.is_file():
+            return False
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+        items = [i for i in data["items"] if isinstance(i, dict)]
+        if not items:
+            return spec["no_data"] in text
+        return all(
+            str(item.get("id") or "") and str(item.get("id")) in text
+            for item in items
+        )
+
+    def _remaining_semantics_ok(self, spec: dict) -> bool:
+        data = self._remaining_register(spec)
+        if not data or not isinstance(data.get("items"), list):
+            return False
+        for item in data["items"]:
+            if not isinstance(item, dict):
+                return False
+            if not str(item.get("id") or "").strip():
+                return False
+            if item.get("status") not in spec["statuses"]:
+                return False
+            if (item.get("status") in spec["terminal"]
+                    and not str(item.get(spec["required"]) or "").strip()):
+                return False
+        return True
+
+    def _check_remaining_domain(
+        self, swe_id: str, check_item: str
+    ) -> Optional[bool]:
+        spec = self._remaining_spec(swe_id)
+        if spec is None:
+            return None
+        low = check_item.lower()
+        if "source" in low:
+            return self._remaining_sources_ok(spec)
+        if "traceab" in low:
+            return self._remaining_trace_ok(spec)
+        if any(key in low for key in (
+                "rationale", "closure", "evidence", "report reference",
+                "decision")):
+            return self._remaining_semantics_ok(spec)
+        return self._remaining_doc_ok(spec)
+
     def _check_bp(self, bp: dict, swe_id: str, kg_store=None) -> dict:
         """Run checks for a single base practice and return status."""
         bp_id = bp["id"]
@@ -1498,6 +1591,22 @@ class ComplianceChecker:
                 details.append(f"  ❌ Check: {check_item} [KG]")
                 continue
             # KG returned None — fall through to file-based check
+
+            # 剩余 13 域按过程域 id 精确分派，先于所有通用关键词分支，
+            # 避免 "audit"/"review"/"reuse"/"supplier" 等被既有分支截获。
+            remaining_result = self._check_remaining_domain(
+                swe_id, check_item)
+            if remaining_result is not None:
+                if remaining_result:
+                    passed += 1
+                    details.append(
+                        f"  ✅ Check: {check_item} (domain artifacts verified)")
+                else:
+                    failed += 1
+                    details.append(
+                        f"  ❌ Check: {check_item} (domain artifacts missing "
+                        f"or incomplete)")
+                continue
 
             if "req-" in check_item.lower() or "unique identifier" in check_item.lower():
                 # REQ-xxx unique identifiers parsed from the SRS

@@ -5,11 +5,11 @@
 # SPDX-License-Identifier: Elastic-2.0
 
 """
-Pipeline 编排层 — 22 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
+Pipeline 编排层 — 25 Gate 视图 (方案 B, 2026-08-19 老板第五轮拍板；M1 新增 SYS 系统层 G0；
 后续补齐 VAL.1 / MAN.6 / MAN.5 / 管理支撑组 ACQ.4 / REU.2 / PIM.3 / SPL.2、
-HWE.1~4 / MLE.1~4、SUP.1/8/9/10 及 MAN.1/2/4).
+HWE.1~4 / MLE.1~4、SUP.1/8/9/10、MAN.1/2/4 及剩余 13 域).
 
-执行层保持 76 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
+执行层保持 102 子步骤（外部 agent 独立超时 / P0 门禁 / --from-step /
 step_cache 全保留；M1 头部插入 SYS 系统层 6 步）；编排层新增 GATES 视图，
 对外稳定契约（对齐 ASPICE 过程域，含 SYS 系统层 G0），一旦约定不再变动
 （分层原则 R1-R4，见 RULES.md §12）。
@@ -221,9 +221,45 @@ GATES: list[dict] = [
         ],
     },
     {
+        # ACQ.1~3 / SPL.1：采购与供方过程。记录只来自显式扫描源；
+        # 终态必须带决策/签署/评标证据，否则门禁 RED（见 remaining_processes.py）。
+        "gate": "G21",
+        "name": "ACQ/SPL 采购与供应 Gate",
+        "step_keys": [
+            "acq1-preparation", "acq1-review",
+            "acq2-selection", "acq2-review",
+            "acq3-contract", "acq3-review",
+            "spl1-tendering", "spl1-review",
+        ],
+    },
+    {
+        # SUP.2~7：验证/确认/联合评审/审计/产品评价/文档管理。
+        # 扫描不到记录时如实记录「无条目」，终态必须带证据。
+        "gate": "G22",
+        "name": "SUP 扩展支持过程 Gate",
+        "step_keys": [
+            "sup2-verification", "sup2-review",
+            "sup3-validation", "sup3-review",
+            "sup4-joint-review", "sup4-review",
+            "sup5-audit", "sup5-review",
+            "sup6-evaluation", "sup6-review",
+            "sup7-documentation", "sup7-review",
+        ],
+    },
+    {
+        # PIM.1~2 / REU.1：组织级过程建立/评估与复用资产管理。
+        "gate": "G23",
+        "name": "PIM/REU 组织过程 Gate",
+        "step_keys": [
+            "pim1-establishment", "pim1-review",
+            "pim2-assessment", "pim2-review",
+            "reu1-assets", "reu1-review",
+        ],
+    },
+    {
         # SPL.2：发布清单带 SHA256 摘要，批准状态默认「待批准」。
         # final-report 归入本 Gate，使最终报告收录发布结论。
-        "gate": "G21",
+        "gate": "G24",
         "name": "SPL.2 产品发布 Gate",
         "step_keys": ["spl2-release", "spl2-review", "final-report"],
     },
@@ -492,6 +528,32 @@ _ARTIFACT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "man3-review": ("project-plan.md",),
     "man4-quality": ("quality-management.md", "quality-register.yaml"),
     "man4-review": ("quality-management.md",),
+    "acq1-preparation": ("acquisition-plan.md", "acquisition-requirements.yaml"),
+    "acq1-review": ("acquisition-plan.md",),
+    "acq2-selection": ("supplier-selection.md", "supplier-selection.yaml"),
+    "acq2-review": ("supplier-selection.md",),
+    "acq3-contract": ("contract-agreement.md", "contract-register.yaml"),
+    "acq3-review": ("contract-agreement.md",),
+    "spl1-tendering": ("tender-plan.md", "tender-register.yaml"),
+    "spl1-review": ("tender-plan.md",),
+    "sup2-verification": ("verification-plan.md", "verification-register.yaml"),
+    "sup2-review": ("verification-plan.md",),
+    "sup3-validation": ("product-validation.md", "product-validation.yaml"),
+    "sup3-review": ("product-validation.md",),
+    "sup4-joint-review": ("joint-review-report.md", "joint-review-register.yaml"),
+    "sup4-review": ("joint-review-report.md",),
+    "sup5-audit": ("audit-report.md", "audit-register.yaml"),
+    "sup5-review": ("audit-report.md",),
+    "sup6-evaluation": ("product-evaluation.md", "product-evaluation.yaml"),
+    "sup6-review": ("product-evaluation.md",),
+    "sup7-documentation": ("documentation-plan.md", "document-index.yaml"),
+    "sup7-review": ("documentation-plan.md",),
+    "pim1-establishment": ("process-definition.md", "process-assets.yaml"),
+    "pim1-review": ("process-definition.md",),
+    "pim2-assessment": ("process-assessment.md", "process-assessment.yaml"),
+    "pim2-review": ("process-assessment.md",),
+    "reu1-assets": ("reuse-asset-library.md", "reuse-assets.yaml"),
+    "reu1-review": ("reuse-asset-library.md",),
     "spl2-release": ("release-plan.md", "release-manifest.yaml"),
     "spl2-review": ("release-plan.md",),
     "final-report": ("final-report.md",),

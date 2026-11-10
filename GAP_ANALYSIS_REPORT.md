@@ -2,7 +2,7 @@
 
 > **项目**: `.`
 > **标准**: ASPICE v3.1
-> **生成时间**: 2026-11-10T17:05:29.742116
+> **生成时间**: 2026-11-10T18:50:33.253006
 
 ---
 
@@ -10,12 +10,252 @@
 
 | 指标 | 数量 |
 |:-----|-----:|
-| 总 BP 数 | 124 |
+| 总 BP 数 | 176 |
 | ✅ 完全就绪 | 33 |
 | ⚠️  部分就绪 | 14 |
-| ❌ 缺失/未开始 | 77 |
+| ❌ 缺失/未开始 | 129 |
 
-🚩 **91 个 Base Practice 尚待补齐** — 详见下方逐项检查
+🚩 **143 个 Base Practice 尚待补齐** — 详见下方逐项检查
+
+---
+
+## ACQ.1: Acquisition Preparation
+> Plan the acquisition: scope, make-or-buy decisions, acceptance criteria and the inputs required before selecting a supplier.
+
+**状态**: 4/4 BP 尚待补齐
+
+### ACQ.1.BP1: Define acquisition strategy and criteria
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.1 work product: docs/acquisition-plan.md
+- Check: An acquisition plan defines scope, strategy and acceptance criteria (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.1.BP2: Collect acquisition inputs
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.1 work product: docs/acquisition-requirements.yaml
+- Check: Acquisition records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.1.BP3: Ensure acquisition traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.1 work product: docs/acquisition-plan.md
+- Missing evidence: ACQ.1 work product: docs/acquisition-requirements.yaml
+- Check: Acquisition entries are traceable in the plan (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.1.BP4: Control acquisition decisions
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.1 work product: docs/acquisition-requirements.yaml
+- Check: Accepted acquisition items carry a decision rationale (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## ACQ.2: Supplier Selection
+> Evaluate candidate suppliers against defined criteria and record the selection decision with its rationale.
+
+**状态**: 4/4 BP 尚待补齐
+
+### ACQ.2.BP1: Define supplier selection criteria
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.2 work product: docs/supplier-selection.md
+- Check: Supplier selection criteria and candidates are documented (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.2.BP2: Evaluate and select suppliers
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.2 work product: docs/supplier-selection.yaml
+- Check: Supplier evaluation records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.2.BP3: Ensure selection traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.2 work product: docs/supplier-selection.md
+- Missing evidence: ACQ.2 work product: docs/supplier-selection.yaml
+- Check: Supplier selection entries are traceable in the selection report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.2.BP4: Justify selection decisions
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.2 work product: docs/supplier-selection.yaml
+- Check: Selected suppliers carry an evaluation rationale (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## ACQ.3: Contract Agreement
+> Agree and record the contract with the selected supplier, including scope, deliverables, terms and signature evidence.
+
+**状态**: 4/4 BP 尚待补齐
+
+### ACQ.3.BP1: Establish contract agreement
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.3 work product: docs/contract-agreement.md
+- Check: A contract agreement defines scope, deliverables and terms (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.3.BP2: Record contract inputs
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.3 work product: docs/contract-register.yaml
+- Check: Contract records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.3.BP3: Ensure contract traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.3 work product: docs/contract-agreement.md
+- Missing evidence: ACQ.3 work product: docs/contract-register.yaml
+- Check: Contract entries are traceable in the agreement document (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### ACQ.3.BP4: Track signature evidence
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: ACQ.3 work product: docs/contract-register.yaml
+- Check: Signed contracts carry signature evidence (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
 
 ---
 
@@ -1162,6 +1402,166 @@ review re-parses every cited file.
 
 ---
 
+## PIM.1: Process Establishment
+> Establish the process assets, their elements and tailoring rules that the project shall apply.
+
+**状态**: 4/4 BP 尚待补齐
+
+### PIM.1.BP1: Define process assets
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.1 work product: docs/process-definition.md
+- Check: A process definition describes scope, elements and tailoring (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### PIM.1.BP2: Collect process assets
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.1 work product: docs/process-assets.yaml
+- Check: Process asset records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### PIM.1.BP3: Ensure process traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.1 work product: docs/process-definition.md
+- Missing evidence: PIM.1 work product: docs/process-assets.yaml
+- Check: Process assets are traceable in the process definition (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### PIM.1.BP4: Track process approval
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.1 work product: docs/process-assets.yaml
+- Check: Approved process assets carry approval evidence (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## PIM.2: Process Assessment
+> Assess the implemented processes against the process reference model and record assessment findings.
+
+**状态**: 4/4 BP 尚待补齐
+
+### PIM.2.BP1: Plan process assessment
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.2 work product: docs/process-assessment.md
+- Check: A process assessment plan defines scope, method and criteria (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### PIM.2.BP2: Collect assessment results
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.2 work product: docs/process-assessment.yaml
+- Check: Process assessment records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### PIM.2.BP3: Ensure assessment traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.2 work product: docs/process-assessment.md
+- Missing evidence: PIM.2 work product: docs/process-assessment.yaml
+- Check: Assessment findings are traceable in the assessment report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### PIM.2.BP4: Track assessment completion
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: PIM.2 work product: docs/process-assessment.yaml
+- Check: Completed assessments carry a report reference (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
 ## PIM.3: Process Improvement
 > Identify and implement improvements to the processes used by the project.
 Improvement items are derived only from objective inputs (failing measures
@@ -1249,6 +1649,86 @@ and open high-severity items); an empty input set is reported as such.
 
 ---
 
+## REU.1: Reuse Asset Management
+> Establish and maintain the reuse asset library, its attributes and the rules for using and maintaining assets.
+
+**状态**: 4/4 BP 尚待补齐
+
+### REU.1.BP1: Define reuse asset library
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: REU.1 work product: docs/reuse-asset-library.md
+- Check: A reuse asset library defines scope, attributes and maintenance rules (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### REU.1.BP2: Collect reuse assets
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: REU.1 work product: docs/reuse-assets.yaml
+- Check: Reuse asset records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### REU.1.BP3: Ensure reuse traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: REU.1 work product: docs/reuse-asset-library.md
+- Missing evidence: REU.1 work product: docs/reuse-assets.yaml
+- Check: Reuse assets are traceable in the asset library (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### REU.1.BP4: Justify asset approval
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: REU.1 work product: docs/reuse-assets.yaml
+- Check: Approved reuse assets carry an approval rationale (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
 ## REU.2: Reuse Management
 > Identify reuse opportunities and decide, with recorded rationale, which
 components are reused. Automatic identification produces candidates only;
@@ -1323,6 +1803,86 @@ a human decides reuse.
 - Missing evidence: Reuse status report
 - Check: The report lists every registered reuse candidate (no reuse register / report found)
 - Check: Pending reuse candidates are reported as pending (no reuse register / report found)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## SPL.1: Supplier Tendering
+> Prepare and issue tenders, evaluate responses and record the award decision with its rationale.
+
+**状态**: 4/4 BP 尚待补齐
+
+### SPL.1.BP1: Plan supplier tendering
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SPL.1 work product: docs/tender-plan.md
+- Check: A tender plan defines scope, evaluation criteria and award rules (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SPL.1.BP2: Collect tender responses
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SPL.1 work product: docs/tender-register.yaml
+- Check: Tender records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SPL.1.BP3: Ensure tender traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SPL.1 work product: docs/tender-plan.md
+- Missing evidence: SPL.1 work product: docs/tender-register.yaml
+- Check: Tender entries are traceable in the tender report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SPL.1.BP4: Justify award decisions
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SPL.1 work product: docs/tender-register.yaml
+- Check: Awarded tenders carry an evaluation rationale (domain artifacts missing or incomplete)
 
 **✅ 修复步骤**:
 
@@ -1468,6 +2028,486 @@ scan is recorded as such rather than filled with invented requests.
 ### SUP.10.BP4: Implement approved changes
 
 **状态**: ✅ 已就绪 (1/1)
+
+---
+
+## SUP.2: Verification
+> Verify work products against their requirements using planned methods, and record execution evidence for every passed item.
+
+**状态**: 4/4 BP 尚待补齐
+
+### SUP.2.BP1: Plan verification activities
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.2 work product: docs/verification-plan.md
+- Check: A verification plan defines scope, methods and criteria (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.2.BP2: Collect verification results
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.2 work product: docs/verification-register.yaml
+- Check: Verification records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.2.BP3: Ensure verification traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.2 work product: docs/verification-plan.md
+- Missing evidence: SUP.2 work product: docs/verification-register.yaml
+- Check: Verification entries are traceable in the verification report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.2.BP4: Track verification evidence
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.2 work product: docs/verification-register.yaml
+- Check: Passed verification records carry execution evidence (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## SUP.3: Validation
+> Validate that the product fulfils its intended use in the intended environment, with recorded execution evidence.
+
+**状态**: 4/4 BP 尚待补齐
+
+### SUP.3.BP1: Plan validation activities
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.3 work product: docs/product-validation.md
+- Check: A validation plan defines objectives, environment and criteria (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.3.BP2: Collect validation results
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.3 work product: docs/product-validation.yaml
+- Check: Validation records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.3.BP3: Ensure validation traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.3 work product: docs/product-validation.md
+- Missing evidence: SUP.3 work product: docs/product-validation.yaml
+- Check: Validation entries are traceable in the validation report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.3.BP4: Track validation evidence
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.3 work product: docs/product-validation.yaml
+- Check: Passed validation records carry execution evidence (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## SUP.4: Joint Review
+> Conduct joint reviews with affected parties, record findings and track each finding to closure.
+
+**状态**: 4/4 BP 尚待补齐
+
+### SUP.4.BP1: Plan joint reviews
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.4 work product: docs/joint-review-report.md
+- Check: A joint review plan defines scope, participants and criteria (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.4.BP2: Record review inputs
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.4 work product: docs/joint-review-register.yaml
+- Check: Joint review records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.4.BP3: Ensure review traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.4 work product: docs/joint-review-report.md
+- Missing evidence: SUP.4 work product: docs/joint-review-register.yaml
+- Check: Review findings are traceable in the joint review report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.4.BP4: Track review closures
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.4 work product: docs/joint-review-register.yaml
+- Check: Closed review findings carry a closure note (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## SUP.5: Audit
+> Audit work products and processes against defined criteria and track findings to closure.
+
+**状态**: 4/4 BP 尚待补齐
+
+### SUP.5.BP1: Plan audits
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.5 work product: docs/audit-report.md
+- Check: An audit plan defines scope, criteria and schedule (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.5.BP2: Record audit inputs
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.5 work product: docs/audit-register.yaml
+- Check: Audit records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.5.BP3: Ensure audit traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.5 work product: docs/audit-report.md
+- Missing evidence: SUP.5 work product: docs/audit-register.yaml
+- Check: Audit findings are traceable in the audit report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.5.BP4: Track audit closures
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.5 work product: docs/audit-register.yaml
+- Check: Closed audit findings carry a closure note (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## SUP.6: Product Evaluation
+> Evaluate the product against defined criteria and record the evaluation result with its rationale.
+
+**状态**: 4/4 BP 尚待补齐
+
+### SUP.6.BP1: Plan product evaluation
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.6 work product: docs/product-evaluation.md
+- Check: A product evaluation plan defines scope, criteria and methods (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.6.BP2: Collect evaluation results
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.6 work product: docs/product-evaluation.yaml
+- Check: Product evaluation records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.6.BP3: Ensure evaluation traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.6 work product: docs/product-evaluation.md
+- Missing evidence: SUP.6 work product: docs/product-evaluation.yaml
+- Check: Evaluation entries are traceable in the evaluation report (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.6.BP4: Justify evaluation results
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.6 work product: docs/product-evaluation.yaml
+- Check: Accepted evaluation results carry an evaluation rationale (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+---
+
+## SUP.7: Documentation
+> Plan, produce, review and index the documentation required for the project and its work products.
+
+**状态**: 4/4 BP 尚待补齐
+
+### SUP.7.BP1: Define documentation plan
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.7 work product: docs/documentation-plan.md
+- Check: A documentation plan defines scope, owners and review rules (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.7.BP2: Index controlled documents
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.7 work product: docs/document-index.yaml
+- Check: Document records are collected from identified sources (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.7.BP3: Ensure document traceability
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.7 work product: docs/documentation-plan.md
+- Missing evidence: SUP.7 work product: docs/document-index.yaml
+- Check: Document entries are traceable in the documentation index (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
+
+### SUP.7.BP4: Track document approval
+
+**状态**: ❌ 缺失 (1/1 项未通过)
+
+**❌ 缺失项**:
+
+- Missing evidence: SUP.7 work product: docs/document-index.yaml
+- Check: Approved documents carry a review evidence (domain artifacts missing or incomplete)
+
+**✅ 修复步骤**:
+
+- 📋 查看过程组文档，确认此 BP 的产出物
+- 📎 检查 `.osh/evidence/` 中是否已有部分证据
+
+**💡 相关 CLI 命令**:
+
+- 查阅 `yuleosh --help` 获取全部命令
 
 ---
 
@@ -1619,8 +2659,8 @@ their interfaces, and data flow.
 
 **❌ 缺失项**:
 
-- Check: Unit tests exist for each software unit (591 test files but no passing-run evidence)
-- Check: Test cases cover normal, boundary, and error conditions (591 test files but no passing-run evidence)
+- Check: Unit tests exist for each software unit (592 test files but no passing-run evidence)
+- Check: Test cases cover normal, boundary, and error conditions (592 test files but no passing-run evidence)
 - Check: Test cases are traceable to requirements (no substantive traceability matrix)
 
 **✅ 修复步骤**:
@@ -1641,7 +2681,7 @@ their interfaces, and data flow.
 **❌ 缺失项**:
 
 - Check: Design review is conducted per component (no substantive review record found)
-- Check: Review covers correctness, consistency, and testability (591 test files but no passing-run evidence)
+- Check: Review covers correctness, consistency, and testability (592 test files but no passing-run evidence)
 
 **✅ 修复步骤**:
 
@@ -1666,7 +2706,7 @@ their interfaces, and data flow.
 **❌ 缺失项**:
 
 - Missing evidence: CI test execution records
-- Check: All unit tests pass (100% pass rate) (591 test files but no passing-run evidence)
+- Check: All unit tests pass (100% pass rate) (592 test files but no passing-run evidence)
 - Check: Statement coverage ≥ 80%
 - Check: Branch/condition coverage ≥ 70%
 
@@ -1709,8 +2749,8 @@ their interfaces, and data flow.
 **❌ 缺失项**:
 
 - Missing evidence: Evidence collection
-- Check: Failed tests are analyzed and documented (591 test files but no passing-run evidence)
-- Check: Regression test strategy is defined (591 test files but no passing-run evidence)
+- Check: Failed tests are analyzed and documented (592 test files but no passing-run evidence)
+- Check: Regression test strategy is defined (592 test files but no passing-run evidence)
 
 **✅ 修复步骤**:
 
@@ -1775,9 +2815,9 @@ the architecture and requirements.
 
 - Missing evidence: Integration test directory
 - Missing evidence: Integration test results
-- Check: Integration tests cover component interfaces (591 test files but no passing-run evidence)
-- Check: Integration tests verify data flow between components (591 test files but no passing-run evidence)
-- Check: All integration tests pass (591 test files but no passing-run evidence)
+- Check: Integration tests cover component interfaces (592 test files but no passing-run evidence)
+- Check: Integration tests verify data flow between components (592 test files but no passing-run evidence)
+- Check: All integration tests pass (592 test files but no passing-run evidence)
 
 **✅ 修复步骤**:
 
