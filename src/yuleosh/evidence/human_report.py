@@ -388,3 +388,224 @@ def write_human_evidence(session, gate_summary: Optional[dict] = None) -> dict[s
         written["excel"] = str(xlsx_path)
 
     return written
+
+
+def write_bundle_evidence(
+    bundle_dir: str | Path, manifest: dict[str, Any]
+) -> dict[str, str]:
+    """为 CL2 证据包生成 HTML / Excel / Markdown 三件套。
+
+    与流水线证据同一分层：只渲染 ``manifest`` 中真实存在的组件与产物，
+    不补造条目；``integrity.manifest_sha256`` 缺失时如实留空。
+
+    输出至 ``bundle_dir`` 根目录，文件名固定为 ``bundle-summary.*`` 与
+    ``bundle-manifest.xlsx``。返回 ``{格式: 路径}``，Excel 依赖缺失时
+    不含 ``excel`` 键。
+    """
+    target = Path(bundle_dir)
+    target.mkdir(parents=True, exist_ok=True)
+
+    bundle = manifest.get("bundle") or {}
+    components = manifest.get("components") or {}
+    artifacts = manifest.get("artifacts") or []
+    integrity = manifest.get("integrity") or {}
+    swe_status = manifest.get("swe_status") or {}
+    generated_at = str(bundle.get("generated_at")
+                       or datetime.now().isoformat(timespec="seconds"))
+    project_dir = str(bundle.get("project_dir") or "")
+    manifest_sha = str(integrity.get("manifest_sha256") or "")
+
+    comp_rows = [
+        {
+            "key": key,
+            "label": str((comp or {}).get("label") or key),
+            "count": len((comp or {}).get("artifacts") or []),
+        }
+        for key, comp in components.items()
+    ]
+    art_rows = [
+        {
+            "type": str(a.get("type") or ""),
+            "dest": _rel_dest(a.get("dest"), target),
+            "sha256": str(a.get("sha256") or ""),
+        }
+        for a in artifacts
+        if isinstance(a, dict)
+    ]
+    swe_rows = [
+        {
+            "id": key,
+            "name": str((val or {}).get("name") or key),
+            "status": str((val or {}).get("status") or ""),
+        }
+        for key, val in swe_status.items()
+    ]
+
+    written: dict[str, str] = {}
+
+    md_lines = [
+        "# 证据包摘要",
+        "",
+        f"- 项目目录：`{project_dir or '（未记录）'}`",
+        f"- 生成时间：{generated_at}",
+        f"- 组件数：{len(comp_rows)}",
+        f"- 产物数：{len(art_rows)}",
+        f"- Manifest SHA256：`{manifest_sha or '（未生成）'}`",
+        "",
+        "## 组件",
+        "",
+        "| 组件 | 说明 | 产物数 |",
+        "| --- | --- | --- |",
+    ]
+    md_lines += [f"| {c['key']} | {c['label']} | {c['count']} |" for c in comp_rows] or [
+        "| （无组件） | - | 0 |"]
+    md_lines += ["", "## 产物", "", "| 类型 | 路径 | SHA256 |", "| --- | --- | --- |"]
+    md_lines += [
+        f"| {a['type']} | `{a['dest']}` | `{a['sha256'][:16]}` |" for a in art_rows
+    ] or ["| （无产物） | - | - |"]
+    if swe_rows:
+        md_lines += ["", "## 过程域状态", "", "| 过程域 | 名称 | 状态 |", "| --- | --- | --- |"]
+        md_lines += [f"| {s['id']} | {s['name']} | {s['status']} |" for s in swe_rows]
+    md_path = target / "bundle-summary.md"
+    md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    written["markdown"] = str(md_path)
+
+    def comp_html() -> str:
+        rows = "".join(
+            f"<tr><td><code>{html.escape(c['key'])}</code></td>"
+            f"<td>{html.escape(c['label'])}</td><td>{c['count']}</td></tr>"
+            for c in comp_rows
+        )
+        return rows or "<tr><td colspan='3'>无组件</td></tr>"
+
+    def art_html() -> str:
+        rows = "".join(
+            f"<tr><td>{html.escape(a['type'])}</td>"
+            f"<td><code>{html.escape(a['dest'])}</code></td>"
+            f"<td><code class='digest'>{html.escape(a['sha256'])}</code></td></tr>"
+            for a in art_rows
+        )
+        return rows or "<tr><td colspan='3'>无产物</td></tr>"
+
+    def swe_html() -> str:
+        rows = "".join(
+            f"<tr><td>{html.escape(s['id'])}</td><td>{html.escape(s['name'])}</td>"
+            f"<td class='st-{html.escape(s['status'])}'>{html.escape(s['status'])}</td></tr>"
+            for s in swe_rows
+        )
+        return rows or "<tr><td colspan='3'>未评估过程域</td></tr>"
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>证据包摘要 — CL2 Audit Bundle</title>
+<style>
+  :root {{ --bg:#0a0e17; --surface:#111827; --line:#1e293b; --text:#e2e8f0; --muted:#94a3b8; }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0; padding:32px; background:var(--bg); color:var(--text);
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+  h1 {{ font-size:22px; margin:0 0 6px; }}
+  .meta {{ color:var(--muted); font-size:13px; margin-bottom:24px; }}
+  section {{ background:var(--surface); border:1px solid var(--line);
+             border-radius:12px; padding:18px 20px; margin-bottom:20px; }}
+  h2 {{ font-size:15px; margin:0 0 14px; color:#cbd5e1; }}
+  table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+  th, td {{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }}
+  th {{ color:var(--muted); font-weight:600; }}
+  code {{ color:#93c5fd; }}
+  .digest {{ color:var(--muted); font-size:11px; }}
+  .kpis {{ display:flex; gap:16px; flex-wrap:wrap; }}
+  .kpi {{ background:#0f172a; border:1px solid var(--line); border-radius:10px;
+          padding:12px 16px; min-width:120px; }}
+  .kpi b {{ display:block; font-size:22px; margin-bottom:4px; }}
+  .kpi span {{ color:var(--muted); font-size:12px; }}
+  .st-completed {{ color:#10b981; }} .st-partial {{ color:#f59e0b; }}
+  .st-not_started {{ color:#94a3b8; }}
+</style>
+</head>
+<body>
+  <h1>证据包摘要 — CL2 Audit Bundle</h1>
+  <div class="meta">项目 {html.escape(project_dir or '（未记录）')} · 生成于 {html.escape(generated_at)}</div>
+  <section>
+    <h2>概览</h2>
+    <div class="kpis">
+      <div class="kpi"><b>{len(comp_rows)}</b><span>组件</span></div>
+      <div class="kpi"><b>{len(art_rows)}</b><span>产物</span></div>
+      <div class="kpi"><b>{len(swe_rows)}</b><span>过程域</span></div>
+    </div>
+  </section>
+  <section><h2>组件</h2>
+    <table><thead><tr><th>组件</th><th>说明</th><th>产物数</th></tr></thead>
+    <tbody>{comp_html()}</tbody></table>
+  </section>
+  <section><h2>产物</h2>
+    <table><thead><tr><th>类型</th><th>路径</th><th>SHA256</th></tr></thead>
+    <tbody>{art_html()}</tbody></table>
+  </section>
+  <section><h2>过程域状态</h2>
+    <table><thead><tr><th>过程域</th><th>名称</th><th>状态</th></tr></thead>
+    <tbody>{swe_html()}</tbody></table>
+  </section>
+  <section><h2>完整性</h2>
+    <p class="meta">Manifest SHA256：<code class="digest">{html.escape(manifest_sha or '（未生成）')}</code></p>
+  </section>
+</body>
+</html>
+"""
+    html_path = target / "bundle-summary.html"
+    html_path.write_text(html_doc, encoding="utf-8")
+    written["html"] = str(html_path)
+
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+    except ImportError:  # pragma: no cover - 依赖缺失时降级为两件套
+        return written
+
+    wb = Workbook()
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1E293B")
+
+    def sheet(title: str, headers: list[str], rows: list[list[Any]],
+              widths: list[int]):
+        ws = wb.create_sheet(title)
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+        for row in rows:
+            ws.append(row)
+        ws.freeze_panes = "A2"
+        for idx, width in enumerate(widths, start=1):
+            ws.column_dimensions[chr(64 + idx)].width = width
+        return ws
+
+    wb.remove(wb.active)
+    sheet("概览", ["项", "值"], [
+        ["项目目录", project_dir],
+        ["生成时间", generated_at],
+        ["组件数", len(comp_rows)],
+        ["产物数", len(art_rows)],
+        ["Manifest SHA256", manifest_sha],
+    ], [26, 60])
+    sheet("组件", ["组件", "说明", "产物数"],
+          [[c["key"], c["label"], c["count"]] for c in comp_rows], [22, 34, 12])
+    sheet("产物", ["类型", "路径", "SHA256"],
+          [[a["type"], a["dest"], a["sha256"]] for a in art_rows], [18, 60, 70])
+    sheet("过程域状态", ["过程域", "名称", "状态"],
+          [[s["id"], s["name"], s["status"]] for s in swe_rows], [12, 34, 16])
+    xlsx_path = target / "bundle-manifest.xlsx"
+    wb.save(xlsx_path)
+    written["excel"] = str(xlsx_path)
+    return written
+
+
+def _rel_dest(dest: Any, base: Path) -> str:
+    """把 manifest 中的绝对/相对产物路径统一成相对 bundle 根的路径。"""
+    if not dest:
+        return ""
+    try:
+        return str(Path(str(dest)).resolve().relative_to(base.resolve()))
+    except (ValueError, OSError):
+        return str(dest)

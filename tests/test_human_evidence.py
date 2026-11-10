@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuleosh.evidence.human_report import write_human_evidence
+from yuleosh.evidence.human_report import write_bundle_evidence, write_human_evidence
 
 
 def _session(tmp_path: Path, name: str = "sess-abc") -> SimpleNamespace:
@@ -149,3 +149,63 @@ class TestUiArtifactFilter:
         assert [a["path"] for a in pkg["artifacts"]] == ["docs/spec.md"]
         assert pkg["artifact_count"] == 1
         assert pkg["machine_artifact_count"] == 2
+
+
+class TestBundleEvidence:
+    def _manifest(self, tmp_path: Path) -> dict:
+        return {
+            "bundle": {
+                "generated_at": "2026-11-11T10:00:00",
+                "project_dir": str(tmp_path),
+            },
+            "components": {
+                "ci-results": {"label": "CI Results", "artifacts": [{"dest": "a"}]},
+                "reviews": {"label": "Reviews", "artifacts": []},
+            },
+            "artifacts": [
+                {"type": "ci-results",
+                 "dest": str(tmp_path / "bundle" / "b" / "x.json"),
+                 "sha256": "a" * 64},
+            ],
+            "integrity": {"manifest_sha256": "b" * 64},
+            "swe_status": {
+                "SWE.1": {"name": "SWE.1 软件需求分析", "status": "completed"},
+            },
+        }
+
+    def test_writes_three_formats(self, tmp_path):
+        bundle = tmp_path / "bundle"
+        written = write_bundle_evidence(bundle, self._manifest(tmp_path))
+
+        assert (bundle / "bundle-summary.md").is_file()
+        assert (bundle / "bundle-summary.html").is_file()
+        html_text = (bundle / "bundle-summary.html").read_text(encoding="utf-8")
+        assert "CI Results" in html_text and "b" * 64 in html_text
+        try:
+            import openpyxl  # noqa: F401
+        except ImportError:
+            assert "excel" not in written
+        else:
+            assert (bundle / "bundle-manifest.xlsx").is_file()
+            assert "excel" in written
+
+    def test_artifact_paths_are_relative_to_bundle(self, tmp_path):
+        bundle = tmp_path / "bundle"
+        write_bundle_evidence(bundle, self._manifest(tmp_path))
+        md = (bundle / "bundle-summary.md").read_text(encoding="utf-8")
+        assert "b/x.json" in md
+        assert f"`{tmp_path}/b/x.json`" not in md
+
+    def test_pack_emits_human_reports(self, tmp_path):
+        from yuleosh.evidence.evidence_check import pack_evidence_bundle
+
+        (tmp_path / ".yuleosh").mkdir()
+        (tmp_path / ".yuleosh" / "ci-config.yaml").write_text(
+            "stages: [build]\n", encoding="utf-8")
+        out = tmp_path / "bundle"
+
+        pack_evidence_bundle(str(tmp_path), output_dir=str(out))
+
+        assert (out / "audit-manifest.json").is_file()
+        assert (out / "bundle-summary.md").is_file()
+        assert (out / "bundle-summary.html").is_file()

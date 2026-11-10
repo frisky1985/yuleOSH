@@ -444,6 +444,17 @@ def pack_evidence_bundle(
         "bundled_at": now.isoformat(),
     }
 
+    # 人类可读三件套（HTML/Excel/Markdown）——与流水线证据同一分层。
+    # 失败只记日志，不影响证据包本身的完整性。
+    try:
+        from yuleosh.evidence.human_report import write_bundle_evidence
+
+        human_files = write_bundle_evidence(bundle_dir, manifest)
+        if human_files:
+            print(f"     Human reports: {', '.join(sorted(human_files))}")
+    except Exception as e:  # pragma: no cover - 导出失败不阻断打包
+        log.warning("Cannot write human-readable bundle reports: %s", e)
+
     print(f"\n  {'=' * 55}")
     print(f"  ✅ Evidence bundle complete")
     print(f"     Directory: {bundle_dir}/")
