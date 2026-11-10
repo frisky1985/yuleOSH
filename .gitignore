@@ -223,3 +223,15 @@ frontend/test_cs
 # come after it, and the directory must be re-included before its contents.
 !docs/reports/
 !docs/reports/**
+
+# 证据生成物（每次运行重写，含时间戳与哈希）：默认不入库。
+# 预置的基线 / CI 层定义 / 待评审清单 / 追溯决策仍是受控输入，保留跟踪。
+docs/evidence/*
+!docs/evidence/baselines/
+!docs/evidence/baselines/**
+!docs/evidence/ci/
+!docs/evidence/ci/**
+!docs/evidence/pending-reviews/
+!docs/evidence/pending-reviews/**
+!docs/evidence/trace-decisions/
+!docs/evidence/trace-decisions/**
