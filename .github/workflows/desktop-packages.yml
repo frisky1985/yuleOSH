@@ -45,9 +45,19 @@ jobs:
           artifact-retention-days: ${{ inputs.artifact-retention-days || 7 }}
 
   # ─── macOS 构建 ─────────────────────────────────
+  # PyInstaller 产物与 CPU 架构绑定，因此每个架构用对应 runner 构建，
+  # 避免把 arm64 内置后端塞进 x64 dmg（运行即崩溃）。
   build-mac:
     needs: frontend-build
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x64
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'mac' || github.event.inputs.platform == 'all') || github.event_name != 'workflow_dispatch'
 
     steps:
@@ -75,10 +85,23 @@ jobs:
           cd desktop
           npm ci
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build embedded Python backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -e .
+          cd desktop
+          npm run build:backend
+          node -e "const fs=require('fs');const p='build/backend/yuleosh-server';if(!fs.existsSync(p))process.exit(1);console.log('backend OK',fs.readdirSync(p).length,'entries')"
+
       - name: Build macOS .dmg
         run: |
           cd desktop
-          npx electron-builder --mac --publish=never
+          npx electron-builder --mac --${{ matrix.arch }} --publish=never
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -86,8 +109,12 @@ jobs:
       - name: Upload macOS build
         uses: actions/upload-artifact@v7
         with:
-          name: yuleOSH-mac-dmg
-          path: desktop/release/*.dmg
+          name: yuleOSH-mac-dmg-${{ matrix.arch }}
+          # 两个架构并行构建会各自产出 latest-mac.yml（文件名相同、内容不同），
+          # 直接合并会互相覆盖，因此暂不上传；macOS 自更新元数据待合并后再接入。
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*-mac-*.zip
           retention-days: ${{ inputs.artifact-retention-days || 7 }}
 
   # ─── Linux 构建 ─────────────────────────────────
@@ -128,10 +155,24 @@ jobs:
           cd desktop
           npm ci
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build embedded Python backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -e .
+          cd desktop
+          npm run build:backend
+          node -e "const fs=require('fs');const p='build/backend/yuleosh-server';if(!fs.existsSync(p))process.exit(1);console.log('backend OK',fs.readdirSync(p).length,'entries')"
+
+      # 内置后端为 x64 产物；arm64 AppImage 需在 arm64 runner 上单独构建。
       - name: Build Linux .AppImage + .deb
         run: |
           cd desktop
-          npx electron-builder --linux --publish=never
+          npx electron-builder --linux --x64 --publish=never
 
       - name: Upload Linux build
         uses: actions/upload-artifact@v7
@@ -140,6 +181,7 @@ jobs:
           path: |
             desktop/release/*.AppImage
             desktop/release/*.deb
+            desktop/release/latest-linux.yml
           retention-days: ${{ inputs.artifact-retention-days || 7 }}
 
   # ─── Windows 构建 ───────────────────────────────
@@ -170,6 +212,18 @@ jobs:
       - name: Install desktop dependencies
         run: cd desktop && npm ci
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build embedded Python backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -e .
+          cd desktop
+          npm run build:backend
+
       - name: Build Windows .exe
         run: cd desktop && npx electron-builder --win --publish=never
 
@@ -177,5 +231,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: yuleOSH-win-installer
-          path: desktop/release/*.exe
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.exe.blockmap
+            desktop/release/latest.yml
           retention-days: ${{ inputs.artifact-retention-days || 7 }}

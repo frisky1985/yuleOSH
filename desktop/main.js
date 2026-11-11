@@ -22,6 +22,7 @@ const { pathToFileURL } = url;
 const ServerManager = require('./server-manager');
 const TrayManager = require('./tray');
 const { createLogger } = require('./logger');
+const { initAutoUpdater } = require('./updater');
 
 // ─── 常量 ────────────────────────────────────────────
 
@@ -1032,6 +1033,9 @@ async function bootstrap() {
   } catch (err) {
     console.warn(`[Main] Backend unavailable — keeping error page: ${err.message}`);
   }
+
+  // 3. 自动更新：仅打包版启用，失败降级为日志，不影响启动
+  initAutoUpdater({ app, logger: appLogger });
 
   // macOS: 点击 Dock 图标重新显示窗口
   app.on('activate', () => {

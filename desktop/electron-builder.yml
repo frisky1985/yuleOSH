@@ -15,6 +15,7 @@ files:
   - preload.js
   - server-manager.js
   - tray.js
+  - updater.js
   - logger.js
   - package.json
   - assets/**/*
@@ -40,6 +41,11 @@ mac:
   category: public.app-category.developer-tools
   target:
     - target: dmg
+      arch:
+        - x64
+        - arm64
+    # zip 是 macOS 自动更新（electron-updater）实际下载的载体，dmg 不能自更新
+    - target: zip
       arch:
         - x64
         - arm64
