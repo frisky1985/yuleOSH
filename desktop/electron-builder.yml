@@ -16,6 +16,7 @@ files:
   - server-manager.js
   - tray.js
   - updater.js
+  - crash-reporter.js
   - logger.js
   - package.json
   - assets/**/*

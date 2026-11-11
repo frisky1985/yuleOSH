@@ -106,15 +106,22 @@ jobs:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
 
+      - name: Stage macOS update metadata
+        # 两个架构并行构建会各自产出同名 latest-mac.yml，先按架构改名，
+        # 由 release.yml 合并成单一 latest-mac.yml 后上传 Release。
+        run: |
+          cd desktop/release
+          test -f latest-mac.yml
+          cp latest-mac.yml "latest-mac-${{ matrix.arch }}.yml"
+
       - name: Upload macOS build
         uses: actions/upload-artifact@v7
         with:
           name: yuleOSH-mac-dmg-${{ matrix.arch }}
-          # 两个架构并行构建会各自产出 latest-mac.yml（文件名相同、内容不同），
-          # 直接合并会互相覆盖，因此暂不上传；macOS 自更新元数据待合并后再接入。
           path: |
             desktop/release/*.dmg
             desktop/release/*-mac-*.zip
+            desktop/release/latest-mac-*.yml
           retention-days: ${{ inputs.artifact-retention-days || 7 }}
 
   # ─── Linux 构建 ─────────────────────────────────

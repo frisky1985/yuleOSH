@@ -23,6 +23,7 @@ const ServerManager = require('./server-manager');
 const TrayManager = require('./tray');
 const { createLogger } = require('./logger');
 const { initAutoUpdater } = require('./updater');
+const { initCrashReporter } = require('./crash-reporter');
 
 // ─── 常量 ────────────────────────────────────────────
 
@@ -1052,6 +1053,8 @@ async function bootstrap() {
 }
 
 if (!IS_TEST) {
+  // 崩溃转储需在应用就绪前启动；未打包运行不启用，避免污染本地目录
+  initCrashReporter({ app });
   app.whenReady().then(bootstrap);
 }
 
