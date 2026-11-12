@@ -1,0 +1,1921 @@
+{
+  "file_summary": [
+    {
+      "name": "evidence/report_builder.py",
+      "statements": 241,
+      "executed": 89,
+      "pct": 35.8
+    },
+    {
+      "name": "evidence/collection.py",
+      "statements": 275,
+      "executed": 167,
+      "pct": 58.4
+    },
+    {
+      "name": "evidence/exporters.py",
+      "statements": 173,
+      "executed": 0,
+      "pct": 0.0
+    }
+  ],
+  "func_coverage": [
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "start_line": 222,
+      "end_line": 441,
+      "total_lines": 220,
+      "executed": 197,
+      "pct": 89.5,
+      "missing": [
+        246,
+        247,
+        402,
+        403,
+        404,
+        415,
+        416,
+        417,
+        418,
+        424,
+        425,
+        426,
+        427,
+        428,
+        429,
+        430,
+        431,
+        432,
+        433,
+        434,
+        435,
+        436,
+        438
+      ]
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_reviews",
+      "start_line": 300,
+      "end_line": 351,
+      "total_lines": 52,
+      "executed": 51,
+      "pct": 98.1,
+      "missing": [
+        335
+      ]
+    }
+  ],
+  "all_missing": [
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 29,
+      "category": "其他分支",
+      "code": "if not hasattr(self, 'req_to_tests') or not self.req_to_tests:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 30,
+      "category": "其他分支",
+      "code": "self._build_requirement_to_test_map()"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 31,
+      "category": "其他分支",
+      "code": "uncovered = self._check_traceability_completeness()"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 33,
+      "category": "其他分支",
+      "code": "lines = ["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 40,
+      "category": "其他分支",
+      "code": "for req in self.requirements:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 41,
+      "category": "其他分支",
+      "code": "name = req.get(\"name\", \"Unknown\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 42,
+      "category": "其他分支",
+      "code": "shall_count = req.get(\"shall_count\", 0)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 43,
+      "category": "其他分支",
+      "code": "req_id = req.get(\"req_id\", \"\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 44,
+      "category": "其他分支",
+      "code": "lines.append(f\"### {name}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 45,
+      "category": "其他分支",
+      "code": "if req_id:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 46,
+      "category": "其他分支",
+      "code": "lines.append(f\"- Req ID: {req_id}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 47,
+      "category": "其他分支",
+      "code": "lines.append(f\"- SHALL statements: {shall_count}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 48,
+      "category": "其他分支",
+      "code": "impl_status = '✅ Covered' if shall_count > 0 else '❌ No implementation'"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 49,
+      "category": "其他分支",
+      "code": "lines.append(f\"- Status: {impl_status}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 51,
+      "category": "其他分支",
+      "code": "matching_scenarios = ["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 55,
+      "category": "其他分支",
+      "code": "if matching_scenarios:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 56,
+      "category": "其他分支",
+      "code": "lines.append(f\"- Scenarios: {len(matching_scenarios)}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 57,
+      "category": "其他分支",
+      "code": "for s in matching_scenarios:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 58,
+      "category": "其他分支",
+      "code": "lines.append(f\"  - {s['name']}: GIVEN({len(s['given'])}) → WHEN({len(s['when'])}) → THEN({"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 60,
+      "category": "其他分支",
+      "code": "lines.append(f\"- Scenarios: 0 ⚠️\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 62,
+      "category": "其他分支",
+      "code": "matching_tests = self.req_to_tests.get(name, [])"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 63,
+      "category": "其他分支",
+      "code": "if matching_tests:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 64,
+      "category": "其他分支",
+      "code": "lines.append(f\"- Test files ({len(matching_tests)}):\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 65,
+      "category": "其他分支",
+      "code": "for tf in matching_tests:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 66,
+      "category": "其他分支",
+      "code": "mode = self.match_modes.get(name, {}).get(tf, \"keyword\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 67,
+      "category": "其他分支",
+      "code": "conf = self.match_confidences.get(name, {}).get(tf, 0.5)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 68,
+      "category": "其他分支",
+      "code": "mode_icon = \"🎯\" if mode == \"exact\" else \"🔍\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 69,
+      "category": "其他分支",
+      "code": "lines.append(f\"  - {tf} ({mode_icon} {mode}, confidence: {conf:.0%})\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 71,
+      "category": "其他分支",
+      "code": "lines.append(f\"- Test files: 0 ❌ Not covered by any test\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 73,
+      "category": "其他分支",
+      "code": "lines.append(f\"- SHALL details:\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 74,
+      "category": "其他分支",
+      "code": "for shall in req.get(\"shall\", []):"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 75,
+      "category": "其他分支",
+      "code": "is_covered = bool(matching_tests)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 76,
+      "category": "其他分支",
+      "code": "icon = \"✅\" if is_covered else \"❌\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 77,
+      "category": "其他分支",
+      "code": "lines.append(f\"  {icon} {shall[:80]}{'...' if len(shall) > 80 else ''}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 79,
+      "category": "其他分支",
+      "code": "matching_reviews = ["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 83,
+      "category": "其他分支",
+      "code": "if matching_reviews:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 84,
+      "category": "其他分支",
+      "code": "for r in matching_reviews:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 85,
+      "category": "其他分支",
+      "code": "lines.append(f\"- Review: {r.get('decision', 'unknown')} by {len(r.get('reviews', []))} age"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 86,
+      "category": "其他分支",
+      "code": "lines.append(\"\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 88,
+      "category": "其他分支",
+      "code": "total = len(self.requirements)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 89,
+      "category": "其他分支",
+      "code": "covered = sum(1 for r in self.requirements if r.get(\"shall_count\", 0) > 0)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 90,
+      "category": "其他分支",
+      "code": "test_covered = sum(1 for r in self.requirements if self.req_to_tests.get(r.get(\"name\", \"\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 91,
+      "category": "其他分支",
+      "code": "total_str = total if total > 0 else 1"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 92,
+      "category": "其他分支",
+      "code": "lines.extend(["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 104,
+      "category": "其他分支",
+      "code": "sys_trace = load_sys_swe_trace(self.project_dir)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 105,
+      "category": "其他分支",
+      "code": "if sys_trace.get(\"sys_to_swe\"):"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 106,
+      "category": "其他分支",
+      "code": "lines.append(\"\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 107,
+      "category": "其他分支",
+      "code": "lines.append(\"## System Layer Traceability (SYS.1 → SWE.1)\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 108,
+      "category": "其他分支",
+      "code": "lines.append(\"> 系统需求向上追溯至软件需求 (SWE.1, spec 派生)\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 109,
+      "category": "其他分支",
+      "code": "for rid, target in sys_trace[\"sys_to_swe\"].items():"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 110,
+      "category": "其他分支",
+      "code": "lines.append(f\"- {rid} → {target}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 112,
+      "category": "其他分支",
+      "code": "content = \"\\n\".join(lines)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 113,
+      "category": "其他分支",
+      "code": "output_path = self.evidence_dir / \"traceability-matrix.md\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 114,
+      "category": "其他分支",
+      "code": "output_path.write_text(content)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 115,
+      "category": "其他分支",
+      "code": "print(f\"  ✅ Traceability matrix generated: {output_path}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 117,
+      "category": "其他分支",
+      "code": "ci_env = {"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 123,
+      "category": "其他分支",
+      "code": "json_data: dict = {"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 141,
+      "category": "其他分支",
+      "code": "for req in self.requirements:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 142,
+      "category": "其他分支",
+      "code": "req_name = req.get(\"name\", \"Unknown\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 143,
+      "category": "其他分支",
+      "code": "matching_tests = self.req_to_tests.get(req_name, [])"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 144,
+      "category": "其他分支",
+      "code": "json_data[\"requirements\"].append({"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 156,
+      "category": "其他分支",
+      "code": "json_path = self.evidence_dir / \"traceability-matrix.json\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 157,
+      "category": "其他分支",
+      "code": "json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False))"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 158,
+      "category": "其他分支",
+      "code": "print(f\"  ✅ Traceability JSON generated: {json_path}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_traceability_matrix",
+      "line": 159,
+      "category": "其他分支",
+      "code": "return str(output_path)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 168,
+      "category": "其他分支",
+      "code": "if not hasattr(self, 'req_to_tests') or not self.req_to_tests:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 169,
+      "category": "其他分支",
+      "code": "self._build_requirement_to_test_map()"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 171,
+      "category": "其他分支",
+      "code": "lines = ["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 177,
+      "category": "其他分支",
+      "code": "for req in self.requirements:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 178,
+      "category": "其他分支",
+      "code": "name = req.get(\"name\", \"Unknown\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 179,
+      "category": "其他分支",
+      "code": "sc = req.get(\"shall_count\", 0)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 180,
+      "category": "其他分支",
+      "code": "matching_tests = self.req_to_tests.get(name, [])"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 181,
+      "category": "其他分支",
+      "code": "test_count = len(matching_tests)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 182,
+      "category": "其他分支",
+      "code": "status_icon = '✅' if matching_tests else '❌'"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 183,
+      "category": "其他分支",
+      "code": "lines.append(f\"| {name} | {sc} | {test_count} | {status_icon} |\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 185,
+      "category": "其他分支",
+      "code": "total = len(self.requirements)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 186,
+      "category": "其他分支",
+      "code": "covered = sum(1 for r in self.requirements"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 188,
+      "category": "其他分支",
+      "code": "pct = (covered / total * 100) if total > 0 else 0"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 189,
+      "category": "其他分支",
+      "code": "lines.extend(["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 197,
+      "category": "其他分支",
+      "code": "content = \"\\n\".join(lines)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 198,
+      "category": "其他分支",
+      "code": "output_path = self.evidence_dir / \"requirement-coverage.md\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 199,
+      "category": "其他分支",
+      "code": "output_path.write_text(content)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 200,
+      "category": "其他分支",
+      "code": "print(f\"  ✅ Requirement coverage report: {output_path}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_requirement_coverage",
+      "line": 201,
+      "category": "其他分支",
+      "code": "return str(output_path)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 205,
+      "category": "其他分支",
+      "code": "lines = [f\"# Code Coverage Report\\n\", f\"> Generated: {self.generated_at}\\n\"]"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 206,
+      "category": "其他分支",
+      "code": "if self.coverage_data:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 207,
+      "category": "其他分支",
+      "code": "lines.extend(["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 214,
+      "category": "其他分支",
+      "code": "lines.append(\"No coverage data available — run CI Layer 1 first.\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 216,
+      "category": "其他分支",
+      "code": "content = \"\\n\".join(lines)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 217,
+      "category": "其他分支",
+      "code": "output_path = self.evidence_dir / \"code-coverage-report.md\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 218,
+      "category": "其他分支",
+      "code": "output_path.write_text(content)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 219,
+      "category": "其他分支",
+      "code": "print(f\"  ✅ Code coverage report: {output_path}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_code_coverage_report",
+      "line": 220,
+      "category": "其他分支",
+      "code": "return str(output_path)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 246,
+      "category": "防御异常",
+      "code": "except (TypeError, ValueError):"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 247,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 402,
+      "category": "防御异常",
+      "code": "except (OSError, IOError) as e:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 403,
+      "category": "归档逻辑",
+      "code": "import logging as _lg"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 404,
+      "category": "归档逻辑",
+      "code": "_lg.getLogger(\"evidence.report_builder\").error("
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 415,
+      "category": "归档逻辑",
+      "code": "for f in sorted(rev_dir.rglob(\"*.json\")):"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 416,
+      "category": "归档逻辑",
+      "code": "if f.resolve() == (raw_reviews_dir / f.name).resolve():"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 417,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 418,
+      "category": "归档逻辑",
+      "code": "dest = raw_reviews_dir / f.name"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 424,
+      "category": "归档逻辑",
+      "code": "if dest.exists():"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 425,
+      "category": "归档逻辑",
+      "code": "alt_name = f\"{f.parent.name}-{f.name}\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 426,
+      "category": "归档逻辑",
+      "code": "if len(alt_name) > 180:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 427,
+      "category": "归档逻辑",
+      "code": "import hashlib as _hl"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 428,
+      "category": "归档逻辑",
+      "code": "digest = _hl.sha1(f.name.encode()).hexdigest()[:12]"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 429,
+      "category": "归档逻辑",
+      "code": "alt_name = f\"{f.parent.name}-{digest}.json\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 430,
+      "category": "归档逻辑",
+      "code": "dest = raw_reviews_dir / alt_name"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 431,
+      "category": "其他分支",
+      "code": "try:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 432,
+      "category": "归档逻辑",
+      "code": "shutil.copy2(str(f), str(dest))"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 433,
+      "category": "防御异常",
+      "code": "except OSError as e:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 434,
+      "category": "其他分支",
+      "code": "print(f\"  ⚠️  Could not copy review file {f.name}: {e}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 435,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 436,
+      "category": "归档逻辑",
+      "code": "copied += 1"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "aggregate_review_logs",
+      "line": 438,
+      "category": "归档逻辑",
+      "code": "print(f\"  📁 Copied {copied} raw review file(s) to {raw_reviews_dir}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 445,
+      "category": "其他分支",
+      "code": "if not hasattr(self, 'req_to_tests') or not self.req_to_tests:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 446,
+      "category": "其他分支",
+      "code": "self._build_requirement_to_test_map()"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 448,
+      "category": "其他分支",
+      "code": "lines = ["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 459,
+      "category": "其他分支",
+      "code": "total_shalls = 0"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 460,
+      "category": "其他分支",
+      "code": "covered_shalls = 0"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 461,
+      "category": "其他分支",
+      "code": "for req in self.requirements:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 462,
+      "category": "其他分支",
+      "code": "name = req.get(\"name\", \"Unknown\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 463,
+      "category": "其他分支",
+      "code": "req_id = req.get(\"req_id\", \"RS---\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 464,
+      "category": "其他分支",
+      "code": "shall_list = req.get(\"shall\", [])"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 465,
+      "category": "其他分支",
+      "code": "matching_tests = self.req_to_tests.get(name, [])"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 466,
+      "category": "其他分支",
+      "code": "test_str = \", \".join(matching_tests) if matching_tests else \"—\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 467,
+      "category": "其他分支",
+      "code": "status = \"✅\" if matching_tests else \"❌\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 469,
+      "category": "其他分支",
+      "code": "modes = self.match_modes.get(name, {})"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 470,
+      "category": "其他分支",
+      "code": "confs = self.match_confidences.get(name, {})"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 471,
+      "category": "其他分支",
+      "code": "if matching_tests:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 472,
+      "category": "其他分支",
+      "code": "dominant_mode = \"exact\" if any(m == \"exact\" for m in modes.values()) else \"keyword\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 473,
+      "category": "其他分支",
+      "code": "best_conf = max(confs.values()) if confs else 0.0"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 475,
+      "category": "其他分支",
+      "code": "dominant_mode = \"—\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 476,
+      "category": "其他分支",
+      "code": "best_conf = 0.0"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 478,
+      "category": "其他分支",
+      "code": "for idx, shall in enumerate(shall_list):"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 479,
+      "category": "其他分支",
+      "code": "total_shalls += 1"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 480,
+      "category": "其他分支",
+      "code": "shall_status = status if matching_tests else \"❌\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 481,
+      "category": "其他分支",
+      "code": "if matching_tests:"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 482,
+      "category": "其他分支",
+      "code": "covered_shalls += 1"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 483,
+      "category": "其他分支",
+      "code": "mode_str = dominant_mode if idx == 0 else \"\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 484,
+      "category": "其他分支",
+      "code": "conf_str = f\"{best_conf:.0%}\" if idx == 0 and matching_tests else \"\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 485,
+      "category": "其他分支",
+      "code": "lines.append("
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 489,
+      "category": "其他分支",
+      "code": "pct = (covered_shalls / total_shalls * 100) if total_shalls > 0 else 0"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 490,
+      "category": "其他分支",
+      "code": "lines.extend(["
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 498,
+      "category": "其他分支",
+      "code": "content = \"\\n\".join(lines)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 499,
+      "category": "其他分支",
+      "code": "output_path = self.evidence_dir / \"acceptance-matrix.md\""
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 500,
+      "category": "其他分支",
+      "code": "output_path.write_text(content)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 501,
+      "category": "其他分支",
+      "code": "print(f\"  ✅ Acceptance matrix generated: {output_path}\")"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "generate_acceptance_matrix",
+      "line": 502,
+      "category": "其他分支",
+      "code": "return str(output_path)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "pack_compliance_zip",
+      "line": 506,
+      "category": "其他分支",
+      "code": "from yuleosh.evidence.compliance import pack_compliance_zip as _pack"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "pack_compliance_zip",
+      "line": 507,
+      "category": "其他分支",
+      "code": "return _pack(self)"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "_sev_counts",
+      "line": 246,
+      "category": "防御异常",
+      "code": "except (TypeError, ValueError):"
+    },
+    {
+      "file": "evidence/report_builder.py",
+      "function": "_sev_counts",
+      "line": 247,
+      "category": "计数防御",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_session_json",
+      "line": 68,
+      "category": "其他分支",
+      "code": "return _validate_json_schema(data, source, SESSION_JSON_SCHEMA, \"Session\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_review_session_json",
+      "line": 73,
+      "category": "其他分支",
+      "code": "return _validate_json_schema(data, source, REVIEW_SESSION_JSON_SCHEMA, \"ReviewSession\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 97,
+      "category": "其他分支",
+      "code": "if not isinstance(data, dict):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 98,
+      "category": "其他分支",
+      "code": "log.warning(f\"{label} data in {source} is not a dict (type={type(data).__name__})\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 99,
+      "category": "其他分支",
+      "code": "return False"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 102,
+      "category": "其他分支",
+      "code": "for req in schema.get(\"required\", []):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 103,
+      "category": "其他分支",
+      "code": "if req not in data:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 104,
+      "category": "其他分支",
+      "code": "log.warning(f\"{label} data in {source} missing required field '{req}'\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 107,
+      "category": "其他分支",
+      "code": "props = schema.get(\"properties\", {})"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 108,
+      "category": "其他分支",
+      "code": "for key, value in data.items():"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 109,
+      "category": "其他分支",
+      "code": "prop = props.get(key)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 110,
+      "category": "其他分支",
+      "code": "if prop is None:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 111,
+      "category": "其他分支",
+      "code": "continue  # additionalProperties allowed"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 113,
+      "category": "其他分支",
+      "code": "expected_type = prop.get(\"type\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 114,
+      "category": "其他分支",
+      "code": "if expected_type and expected_type != \"object\" and expected_type != \"array\":"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 115,
+      "category": "其他分支",
+      "code": "checker = _SCHEMA_TYPE_CHECKERS.get(expected_type)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 116,
+      "category": "其他分支",
+      "code": "if checker is not None and not isinstance(value, checker):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 117,
+      "category": "其他分支",
+      "code": "log.warning(f\"{label} field '{key}' in {source}: expected {expected_type}, got {type(value"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 119,
+      "category": "其他分支",
+      "code": "enum_vals = prop.get(\"enum\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 120,
+      "category": "其他分支",
+      "code": "if enum_vals and isinstance(value, str) and value not in enum_vals:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 121,
+      "category": "其他分支",
+      "code": "log.warning(f\"{label} field '{key}' in {source}: value '{value}' not in allowed values {en"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_validate_json_schema",
+      "line": 123,
+      "category": "其他分支",
+      "code": "return True"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_requirements",
+      "line": 143,
+      "category": "其他分支",
+      "code": "spec_files.append(spec_path)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_requirements",
+      "line": 148,
+      "category": "其他分支",
+      "code": "spec_files.append(docs_path)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_requirements",
+      "line": 180,
+      "category": "防御异常",
+      "code": "except Exception as e:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_requirements",
+      "line": 181,
+      "category": "其他分支",
+      "code": "print(f\"  ⚠️  Skipped {sf}: {e}\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_parse_legacy_mapping",
+      "line": 209,
+      "category": "防御异常",
+      "code": "except (OSError, UnicodeDecodeError):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_parse_legacy_mapping",
+      "line": 210,
+      "category": "其他分支",
+      "code": "return rules"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_parse_legacy_mapping",
+      "line": 217,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_match_legacy_rule",
+      "line": 235,
+      "category": "其他分支",
+      "code": "return rule"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 253,
+      "category": "其他分支",
+      "code": "return"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 276,
+      "category": "其他分支",
+      "code": "dropped += 1"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 277,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 286,
+      "category": "其他分支",
+      "code": "target = rule[\"target\"]"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 287,
+      "category": "其他分支",
+      "code": "if not target or target in kept_names or target in seen:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 288,
+      "category": "其他分支",
+      "code": "dropped += 1"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 289,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 290,
+      "category": "其他分支",
+      "code": "req[\"name\"] = target"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 291,
+      "category": "其他分支",
+      "code": "req[\"req_id\"] = target"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 292,
+      "category": "其他分支",
+      "code": "kept.append(req)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 293,
+      "category": "其他分支",
+      "code": "seen.add(target)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_apply_legacy_mapping",
+      "line": 294,
+      "category": "其他分支",
+      "code": "renamed += 1"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_reviews",
+      "line": 335,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 408,
+      "category": "其他分支",
+      "code": "sessions_dir = Path(self.project_dir) / \".osh\" / \"sessions\""
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 409,
+      "category": "其他分支",
+      "code": "if not sessions_dir.exists():"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 410,
+      "category": "其他分支",
+      "code": "print(\"  ⏭️  No pipeline session data found\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 411,
+      "category": "其他分支",
+      "code": "return"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 413,
+      "category": "其他分支",
+      "code": "session_count = 0"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 414,
+      "category": "其他分支",
+      "code": "step_files_found = 0"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 415,
+      "category": "其他分支",
+      "code": "step_coverage = {}  # step_name -> count of sessions with data"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 417,
+      "category": "其他分支",
+      "code": "for session_folder in sorted(sessions_dir.iterdir()):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 418,
+      "category": "其他分支",
+      "code": "if not session_folder.is_dir():"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 419,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 422,
+      "category": "其他分支",
+      "code": "session_json = session_folder / \"session.json\""
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 423,
+      "category": "其他分支",
+      "code": "if not session_json.exists():"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 424,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 426,
+      "category": "其他分支",
+      "code": "try:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 427,
+      "category": "其他分支",
+      "code": "with open(session_json) as f:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 428,
+      "category": "其他分支",
+      "code": "session_data = json.load(f)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 429,
+      "category": "防御异常",
+      "code": "except (json.JSONDecodeError, OSError):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 430,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 433,
+      "category": "其他分支",
+      "code": "_validate_session_json(session_data, str(session_json))"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 435,
+      "category": "其他分支",
+      "code": "session_count += 1"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 436,
+      "category": "其他分支",
+      "code": "self.session_data.append(session_data)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 440,
+      "category": "其他分支",
+      "code": "for step_file in sorted(session_folder.glob(\"*.json\")):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 441,
+      "category": "其他分支",
+      "code": "if step_file.name == \"session.json\":"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 442,
+      "category": "其他分支",
+      "code": "continue"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 443,
+      "category": "其他分支",
+      "code": "step_name = step_file.stem  # e.g. \"arch-review\", \"spec-check\""
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 444,
+      "category": "其他分支",
+      "code": "try:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 445,
+      "category": "其他分支",
+      "code": "with open(step_file) as f:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 446,
+      "category": "其他分支",
+      "code": "step_data = json.load(f)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 447,
+      "category": "其他分支",
+      "code": "step_data[\"_session_name\"] = session_data.get(\"name\", session_folder.name)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 448,
+      "category": "其他分支",
+      "code": "step_data[\"_step_name\"] = step_name"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 449,
+      "category": "其他分支",
+      "code": "step_data[\"_session_status\"] = session_data.get(\"status\", \"unknown\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 450,
+      "category": "其他分支",
+      "code": "self.pipeline_steps.append(step_data)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 451,
+      "category": "其他分支",
+      "code": "step_files_found += 1"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 452,
+      "category": "其他分支",
+      "code": "step_coverage[step_name] = step_coverage.get(step_name, 0) + 1"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 453,
+      "category": "防御异常",
+      "code": "except (json.JSONDecodeError, OSError):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 454,
+      "category": "其他分支",
+      "code": "pass"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 456,
+      "category": "其他分支",
+      "code": "if session_count > 0:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 457,
+      "category": "其他分支",
+      "code": "print(f\"  📋 Collected {session_count} session(s) with {step_files_found} step data file(s)"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 459,
+      "category": "其他分支",
+      "code": "covered_stages = sorted(step_coverage.keys())"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 460,
+      "category": "其他分支",
+      "code": "stages_summary = \", \".join(covered_stages[:10])"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 461,
+      "category": "其他分支",
+      "code": "if len(covered_stages) > 10:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 462,
+      "category": "其他分支",
+      "code": "stages_summary += f\" ... and {len(covered_stages) - 10} more\""
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 463,
+      "category": "其他分支",
+      "code": "print(f\"     Pipeline stages covered: {stages_summary}\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "collect_session_data",
+      "line": 465,
+      "category": "其他分支",
+      "code": "print(\"  ⏭️  No session data found in .osh/sessions/\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 469,
+      "category": "其他分支",
+      "code": "sessions_dir = Path(self.project_dir) / \".osh\" / \"sessions\""
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 470,
+      "category": "其他分支",
+      "code": "if not sessions_dir.exists():"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 471,
+      "category": "其他分支",
+      "code": "return None"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 473,
+      "category": "其他分支",
+      "code": "latest_session = None"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 474,
+      "category": "其他分支",
+      "code": "latest_mtime = 0"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 475,
+      "category": "其他分支",
+      "code": "for sf in sessions_dir.iterdir():"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 476,
+      "category": "其他分支",
+      "code": "sj = sf / \"session.json\""
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 477,
+      "category": "其他分支",
+      "code": "if sj.exists():"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 478,
+      "category": "其他分支",
+      "code": "mtime = sj.stat().st_mtime"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 479,
+      "category": "其他分支",
+      "code": "if mtime > latest_mtime:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 480,
+      "category": "其他分支",
+      "code": "latest_mtime = mtime"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 481,
+      "category": "其他分支",
+      "code": "latest_session = sj"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 483,
+      "category": "其他分支",
+      "code": "if latest_session:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 484,
+      "category": "其他分支",
+      "code": "try:"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 485,
+      "category": "其他分支",
+      "code": "data = json.loads(latest_session.read_text())"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 486,
+      "category": "其他分支",
+      "code": "spec = data.get(\"spec_path\", \"\")"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 487,
+      "category": "其他分支",
+      "code": "if spec and os.path.exists(spec):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 488,
+      "category": "其他分支",
+      "code": "return spec"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 489,
+      "category": "防御异常",
+      "code": "except (json.JSONDecodeError, OSError):"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 490,
+      "category": "其他分支",
+      "code": "pass"
+    },
+    {
+      "file": "evidence/collection.py",
+      "function": "_find_latest_pipeline_spec",
+      "line": 491,
+      "category": "其他分支",
+      "code": "return None"
+    }
+  ],
+  "category_counts": {
+    "其他分支": 237,
+    "防御异常": 9,
+    "归档逻辑": 15,
+    "计数防御": 1
+  },
+  "test_context": {
+    "executed_at": "2026-11-12 17:21:01",
+    "command": "coverage run -m pytest tests/test_evidence_pack_deep.py::TestAggregateReviewLogs tests/test_evidence_collection_ext.py -o addopts='' -p no:cacheprovider -q",
+    "tests_run": 22,
+    "tests_passed": 22,
+    "branch_coverage": true,
+    "fail_under": 60,
+    "note": "子集运行（仅 review summary 相关测试）。全量 CI 会跑 193+ 测试并触发 fail-under=60 门限。"
+  }
+}
