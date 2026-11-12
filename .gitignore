@@ -235,3 +235,19 @@ docs/evidence/*
 !docs/evidence/pending-reviews/**
 !docs/evidence/trace-decisions/
 !docs/evidence/trace-decisions/**
+
+# 覆盖率分析产物（coverage run/json/html 输出、报告目录）。
+.coverage
+.coverage.*
+coverage_report/
+coverage_html/
+coverage-report/
+htmlcov/
+
+# 覆盖率报告截图（screenshots/ 下的其他产品截图仍是交付物，保留跟踪）。
+screenshots/coverage-report/
+
+# 浏览器工具自动下载的临时文件。
+.data/tool/
+.data/
+.uploads/
