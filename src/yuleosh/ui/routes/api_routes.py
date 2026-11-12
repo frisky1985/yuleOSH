@@ -62,25 +62,31 @@ def handle_health(handler: BaseHTTPRequestHandler) -> dict:
 
 
 def list_evidence(handler: BaseHTTPRequestHandler) -> dict:
-    """List evidence files from the .osh/evidence directory."""
+    """List evidence files from the .osh/evidence directory.
+
+    Only human-readable artifacts are exposed to the UI.  Machine
+    authoritative formats (.json/.yaml/.xml) stay out of the list but
+    remain directly downloadable by name for the evidence chain
+    verifier and audit automation.
+    """
+    from yuleosh.api.evidence import (
+        _is_human_evidence_file, _EVIDENCE_HUMAN_ALLOWLIST,
+    )
+
     OSH_HOME = os.environ.get("OSH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     ev_dir = Path(OSH_HOME) / ".osh" / "evidence"
     files = []
     if ev_dir.exists():
         for f in sorted(ev_dir.iterdir()):
-            if f.is_file() and f.name != "compliance-pack.zip":
+            if f.is_file() and _is_human_evidence_file(f):
+                display_name = f.name
+                if f.name in _EVIDENCE_HUMAN_ALLOWLIST:
+                    display_name = f"{f.name} 🎯"
                 files.append({
-                    "name": f.name,
+                    "name": display_name,
                     "size": f"{f.stat().st_size} B",
                     "mtime": f.stat().st_mtime,
                 })
-        zip_file = ev_dir / "compliance-pack.zip"
-        if zip_file.exists():
-            files.append({
-                "name": "compliance-pack.zip 🎯",
-                "size": f"{zip_file.stat().st_size} B",
-                "mtime": zip_file.stat().st_mtime,
-            })
     return {"files": files, "count": len(files)}
 
 

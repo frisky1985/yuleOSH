@@ -129,7 +129,7 @@ class TestGenerateEvidence:
         assert result[1] == 200
         # Should use the default path (env OSH_HOME, no body project_dir)
         mock_run.assert_called_once()
-        assert "src/evidence/pack.py" in str(mock_run.call_args[0])
+        assert "yuleosh.evidence.pack" in str(mock_run.call_args[0])
         assert mock_run.call_args.kwargs["cwd"] == str(Path(tmp_path).resolve())
 
 
@@ -142,32 +142,58 @@ class TestListEvidenceFiles:
         assert result[0]["data"]["files"] == []
         assert result[0]["data"]["count"] == 0
 
-    def test_with_files(self, monkeypatch):
+    def test_filters_out_machine_formats(self, monkeypatch):
+        """UI 列表只返回人可读产物；机器真源 .json/.yaml/.xml 隐藏。"""
         with tempfile.TemporaryDirectory() as tmpdir:
             osh_dir = Path(tmpdir) / ".osh" / "evidence"
             osh_dir.mkdir(parents=True)
-            (osh_dir / "report.json").write_text("{}")
-            (osh_dir / "trace.xml").write_text("<data/>")
+            (osh_dir / "traceability-matrix.json").write_text("{}")     # 机器真源
+            (osh_dir / "chain.json").write_text("{}")                    # 机器真源
+            (osh_dir / "manifest.json").write_text("{}")                 # 机器真源
+            (osh_dir / "review-log.json").write_text("{}")               # 机器真源
+            (osh_dir / "some.yaml").write_text("k: v")                   # 机器真源
+            (osh_dir / "some.xml").write_text("<data/>")                 # 机器真源
+            # 人可读产物
+            (osh_dir / "traceability-matrix.md").write_text("# T")
+            (osh_dir / "acceptance-matrix.md").write_text("# A")
+            (osh_dir / "证据链总览.html").write_text("<html/>")
+            (osh_dir / "compliance-pack.zip").write_bytes(b"PK")          # 合规包单独放行
+            (osh_dir / "report.pdf").write_bytes(b"%PDF")
             monkeypatch.setattr("yuleosh.api.OSH_HOME", tmpdir)
 
             result = _list_evidence_files()
         assert result[1] == 200
-        assert result[0]["data"]["count"] == 2
         names = [f["name"] for f in result[0]["data"]["files"]]
-        assert "report.json" in names
-        assert "trace.xml" in names
+        # 机器格式不出现
+        assert "traceability-matrix.json" not in names
+        assert "chain.json" not in names
+        assert "manifest.json" not in names
+        assert "review-log.json" not in names
+        assert "some.yaml" not in names
+        assert "some.xml" not in names
+        # 人可读产物都在
+        assert "traceability-matrix.md" in names
+        assert "acceptance-matrix.md" in names
+        assert "证据链总览.html" in names
+        assert "compliance-pack.zip" in names
+        assert "report.pdf" in names
+        assert result[0]["data"]["count"] == 5
 
-    def test_skips_dirs(self, monkeypatch):
+    def test_skips_dirs_and_hidden(self, monkeypatch):
+        """子目录和隐藏文件都不应出现在列表里。"""
         with tempfile.TemporaryDirectory() as tmpdir:
             osh_dir = Path(tmpdir) / ".osh" / "evidence"
             osh_dir.mkdir(parents=True)
-            (osh_dir / "report.json").write_text("{}")
             (osh_dir / "subdir").mkdir()
+            (osh_dir / ".DS_Store").write_bytes(b"")
+            (osh_dir / "visible.md").write_text("# V")
             monkeypatch.setattr("yuleosh.api.OSH_HOME", tmpdir)
 
             result = _list_evidence_files()
+        names = [f["name"] for f in result[0]["data"]["files"]]
+        assert "visible.md" in names
+        assert ".DS_Store" not in names
         assert result[0]["data"]["count"] == 1
-        assert "report.json" in [f["name"] for f in result[0]["data"]["files"]]
 
 
 class TestDownloadPack:

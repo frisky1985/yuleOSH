@@ -158,13 +158,39 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
         return internal_error("evidence", e)
 
 
+# 给用户在 UI 上展示的证据文件格式 —— 人可读产物。
+# 机器真源（.json/.yaml/.xml）不暴露在列表里，但仍可通过
+# /api/v1/evidence/file?name=<bare> 直接下载（供链校验/自动化脚本）。
+_EVIDENCE_HUMAN_SUFFIXES = frozenset({
+    ".md", ".html", ".htm", ".pdf", ".xlsx", ".xls", ".csv", ".txt",
+})
+# compliance-pack.zip 单独放行（审计时需要下载整包，不是机器真源）。
+_EVIDENCE_HUMAN_ALLOWLIST = frozenset({"compliance-pack.zip"})
+
+
+def _is_human_evidence_file(f: Path) -> bool:
+    """True when *f* is a human-readable evidence artifact that should
+    appear in the UI file list."""
+    if f.name in _EVIDENCE_HUMAN_ALLOWLIST:
+        return True
+    return f.suffix.lower() in _EVIDENCE_HUMAN_SUFFIXES
+
+
 def _list_evidence_files() -> tuple[dict, int]:
-    """GET /api/v1/evidence/files — list generated evidence files."""
+    """GET /api/v1/evidence/files — list generated evidence files.
+
+    Only human-readable artifacts (md/html/pdf/xlsx/csv/txt and the
+    compliance-pack.zip bundle) are returned.  Machine-authoritative
+    formats (.json/.yaml/.xml — traceability-matrix.json, chain.json,
+    manifest.json, etc.) are intentionally hidden from the UI list but
+    still downloadable via ``/api/v1/evidence/file?name=<bare>`` so that
+    the evidence chain verifier and audit automation can fetch them.
+    """
     ev_dir = Path(_ev_home()) / ".osh" / "evidence"
     files = []
     if ev_dir.exists():
         for f in sorted(ev_dir.iterdir()):
-            if f.is_file():
+            if f.is_file() and _is_human_evidence_file(f):
                 files.append({
                     "name": f.name,
                     "size": f.stat().st_size,
