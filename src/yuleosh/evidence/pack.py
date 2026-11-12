@@ -94,10 +94,12 @@ def _initial_state() -> dict:
 
 def _advance_state(state: dict, next_stage: str, status: str = "waiting_confirm") -> dict:
     """stage 完成后推进状态。"""
-    if state["stage"] != next_stage and state["status"] != "waiting_confirm":
-        # 正常流程：当前 stage → next stage
-        if state["stage"] not in state["completed_stages"]:
-            state["completed_stages"].append(state["stage"])
+    # 语义：stage 字段 = 当前正在跑、或下一步待跑的 stage。
+    # 一个 stage 完整跑完后调用本函数：把刚跑完的 stage 记入 completed，
+    # 并把 stage 指向下一个待跑阶段（等待用户确认后启动）。
+    cur = state["stage"]
+    if cur not in state["completed_stages"]:
+        state["completed_stages"].append(cur)
     state["stage"] = next_stage
     state["status"] = status
     state["current_stage_started_at"] = datetime.now().isoformat()
@@ -245,19 +247,12 @@ def run_incremental_stage(
     if state["status"] == "waiting_confirm" and not confirm and target_stage is None:
         return state
 
-    # 如果 confirm=True，先推进状态（让当前 stage 正式进入 completed_stages）
-    if confirm and state["status"] == "waiting_confirm":
-        # 找到下一个要跑的 stage
-        idx = STAGE_ORDER.index(state["stage"])
-        if idx + 1 < len(STAGE_ORDER):
-            state["completed_stages"].append(state["stage"])
-            state["stage"] = STAGE_ORDER[idx + 1]
-            state["status"] = "running"
-            state["current_stage_started_at"] = datetime.now().isoformat()
-        else:
-            state["status"] = "done"
-            _save_state(project_dir, state)
-            return state
+    # 全部完成 → 直接返回
+    if state["stage"] == "done" and target_stage is None:
+        return state
+
+    # confirm=True 时无需额外推进：state["stage"] 本身就是"待确认后启动"的
+    # 那个阶段，下面 stages_to_run 会从它开始执行。
 
     # 确定要跑哪些 stage
     stages_to_run: list[str] = []

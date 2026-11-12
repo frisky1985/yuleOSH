@@ -272,19 +272,18 @@ class TestRunIncrementalStage:
         assert q["status"] == "waiting_confirm"
         assert q["stage"] == "reports"
 
-        # Step 2: confirm=True → 推进到 pack（reports 进 completed_stages）
-        #         → 跑 pack（只跑一个 stage，因为没指定 target_stage）→ 推进到 done
+        # Step 2: confirm=True → 执行当前待确认阶段 reports → 推进到 pack
         with patch("yuleosh.evidence.pack._stage_wait_pipeline", stub_stages["_stage_wait_pipeline"]), \
              patch("yuleosh.evidence.pack._stage_collect", stub_stages["_stage_collect"]), \
              patch("yuleosh.evidence.pack._stage_reports", stub_stages["_stage_reports"]), \
              patch("yuleosh.evidence.pack._stage_pack", stub_stages["_stage_pack"]):
             resumed = run_incremental_stage(project_dir, confirm=True)
 
-        # confirm 推进到 pack → 跑 pack（只一个 stage）→ pack stub 推进到 done
-        assert resumed["stage"] == "done"
-        assert resumed["status"] == "done"
+        # 跑完 reports → stage=pack，等待确认 pack
+        assert resumed["stage"] == "pack"
+        assert resumed["status"] == "waiting_confirm"
         assert "reports" in resumed["completed_stages"]
-        assert "pack" in resumed["completed_stages"]
+        assert "pack" not in resumed["completed_stages"]
 
     def test_no_target_stages_runs_one(self, project_dir, stub_stages):
         """target_stage=None → 只跑当前一个 stage。"""
@@ -415,6 +414,6 @@ class TestCLI:
 
         out = capsys.readouterr().out
         data = json.loads(out)
-        # confirm 推进 → 跑 collect → 推进到 reports
+        # confirm → 执行 wait_pipeline → 推进到 collect（待确认）
         assert "wait_pipeline" in data["completed_stages"]
-        assert data["stage"] == "reports"
+        assert data["stage"] == "collect"
