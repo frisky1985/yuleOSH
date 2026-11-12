@@ -89,15 +89,28 @@ def pack_compliance_zip(collector: "EvidenceCollector", formats=None) -> str:
         for reason in derived["skipped"]:
             print(f"  ⚠️  Skipped: {reason}")
 
+    # 清掉上一轮遗留的派生格式：md 是唯一真源，旧 html/xlsx/pdf 若不清理
+    # 会残留在 UI 列表与合规包里，且与本次选择的格式不一致。
+    keep_suffixes = {f".{fmt}" for fmt in selected}
+    for stale in collector.evidence_dir.iterdir():
+        if (
+            stale.is_file()
+            and stale.suffix.lower() in (".html", ".xlsx", ".pdf")
+            and stale.suffix.lower() not in keep_suffixes
+        ):
+            stale.unlink(missing_ok=True)
+
     def _add_to_zip(file_path: Path, arcname: str):
         if file_path.exists():
             zf.write(file_path, arcname=arcname)
             manifest_entries.append(_build_manifest_entry(file_path, arcname))
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Add all generated evidence files
+        # Add all generated evidence files —— 仅纳入本次选择的派生格式，
+        # 避免把上一轮遗留的 html/xlsx/pdf 混进合规包。
+        allowed_suffixes = {".md", ".json"} | {f".{fmt}" for fmt in selected}
         for f in collector.evidence_dir.iterdir():
-            if f.suffix in (".md", ".json", ".html", ".xlsx", ".pdf") and f.name != "compliance-pack.zip":
+            if f.is_file() and f.suffix.lower() in allowed_suffixes and f.name != "compliance-pack.zip":
                 _add_to_zip(f, f.name)
 
         # Add spec file

@@ -23,6 +23,10 @@ from pathlib import Path
 
 SUPPORTED_FORMATS = ("md", "html", "xlsx", "pdf")
 
+# 按需转换缓存目录：放在证据目录下的隐藏子目录，不进 UI 列表、不进合规包，
+# 文件名带源 md 内容哈希 —— 重新生成后哈希变化即自动失效。
+CACHE_DIRNAME = ".exports"
+
 _HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -206,7 +210,7 @@ def html_to_pdf(html_text: str, out_path: Path, base_url: str | None = None) -> 
 
 
 def export_formats(evidence_dir: str | Path, formats: object) -> dict:
-    """把 evidence_dir 下所有 .md 报告派生成所选格式。
+    """把 evidence_dir 下所有 .md 报告派生成所选格式（CLI / CI 批量预生成用）。
 
     Returns:
         {"generated": [文件名...], "skipped": [原因...]} — 供 CLI 打印与测试断言。
@@ -248,3 +252,51 @@ def export_formats(evidence_dir: str | Path, formats: object) -> dict:
                 skipped.append(f"{out.name}: {exc}")
 
     return {"generated": generated, "skipped": skipped}
+
+
+def _content_hash(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:12]
+
+
+def convert_markdown(
+    md_path: str | Path, fmt: str, cache_root: str | Path | None = None
+) -> Path:
+    """把单份 md 转成指定格式，结果缓存，返回产物路径。
+
+    缓存文件名含源文件内容哈希：报告的 md 变了，旧缓存自然不再命中，
+    无需额外失效逻辑；`.exports/` 隐藏目录不进 UI 列表与合规包。
+    """
+    src = Path(md_path)
+    if fmt not in SUPPORTED_FORMATS:
+        raise ValueError(f"unsupported format: {fmt}")
+    if fmt == "md":
+        return src
+    if not src.is_file():
+        raise FileNotFoundError(src)
+
+    root = Path(cache_root) if cache_root else src.parent / CACHE_DIRNAME
+    root.mkdir(parents=True, exist_ok=True)
+    out = root / f"{src.stem}-{_content_hash(src)}.{fmt}"
+    if out.is_file() and out.stat().st_size > 0:
+        return out
+
+    md_text = src.read_text(encoding="utf-8")
+    tmp = out.with_name(out.name + ".tmp")
+    try:
+        if fmt == "html":
+            tmp.write_text(markdown_to_html(md_text, src.stem), encoding="utf-8")
+        elif fmt == "xlsx":
+            markdown_to_xlsx(md_text, src.stem, tmp)
+        else:
+            html_to_pdf(markdown_to_html(md_text, src.stem), tmp, base_url=str(src.parent))
+        tmp.replace(out)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+    return out

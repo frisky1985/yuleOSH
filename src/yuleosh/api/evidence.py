@@ -245,6 +245,83 @@ def _list_evidence_history() -> tuple[dict, int]:
     })
 
 
+def _build_pack_variant(zip_path: Path, ev_dir: Path, extra: list[str]) -> Path:
+    """Return a ZIP that additionally carries on-demand converted formats.
+
+    基线证据包只含 md + 机器真源；这里把 md 从**该 ZIP 内部**取出转换
+    （历史快照内容可能与当前文件不同，不能直接读 .osh/evidence/*.md），
+    再把产物追加进去，并同步更新 manifest.json，保证证据链可校验。
+    结果按源包 mtime/size + 格式组合缓存。
+    """
+    import hashlib
+    import json
+    import tempfile
+
+    from yuleosh.evidence.exporters import convert_markdown
+
+    stat = zip_path.stat()
+    key = hashlib.sha256(
+        f"{zip_path.name}:{stat.st_mtime_ns}:{stat.st_size}:{','.join(extra)}".encode()
+    ).hexdigest()[:12]
+    cache_dir = ev_dir / ".exports"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    out = cache_dir / f"pack-{key}.zip"
+    if out.is_file() and out.stat().st_size > 0:
+        return out
+
+    tmp_out = cache_dir / f"pack-{key}.zip.tmp"
+    with tempfile.TemporaryDirectory(prefix="osh-pack-") as tmp:
+        tmp_dir = Path(tmp)
+        with zipfile.ZipFile(zip_path) as src:
+            md_names = [
+                n for n in src.namelist()
+                if n.lower().endswith(".md") and "/" not in n
+            ]
+            src.extractall(tmp_dir, members=md_names)
+
+            manifest = {}
+            if "manifest.json" in src.namelist():
+                try:
+                    manifest = json.loads(src.read("manifest.json"))
+                except (ValueError, KeyError):
+                    manifest = {}
+
+            derived: list[dict] = []
+            with zipfile.ZipFile(tmp_out, "w", zipfile.ZIP_DEFLATED) as dst:
+                for item in src.infolist():
+                    if item.filename == "manifest.json":
+                        continue
+                    dst.writestr(item, src.read(item.filename))
+                for md_name in md_names:
+                    for fmt in extra:
+                        product = convert_markdown(
+                            tmp_dir / md_name, fmt, cache_root=cache_dir
+                        )
+                        arcname = f"{Path(md_name).stem}.{fmt}"
+                        dst.write(product, arcname=arcname)
+                        data = product.read_bytes()
+                        derived.append({
+                            "path": arcname,
+                            "sha256": hashlib.sha256(data).hexdigest(),
+                            "size_bytes": len(data),
+                            "mtime_iso": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                        })
+
+                if manifest:
+                    manifest["files"] = list(manifest.get("files", [])) + derived
+                    manifest["total_files"] = len(manifest["files"])
+                    manifest["derived_formats"] = sorted(extra)
+                    manifest["derived_generated_at"] = datetime.now().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    )
+                    dst.writestr(
+                        "manifest.json",
+                        json.dumps(manifest, indent=2, ensure_ascii=False),
+                    )
+    tmp_out.replace(out)
+    return out
+
+
 def _download_pack(handler, query: dict | None = None) -> tuple[dict, int]:
     """GET /api/v1/evidence/pack — download compliance ZIP pack.
 
@@ -272,6 +349,24 @@ def _download_pack(handler, query: dict | None = None) -> tuple[dict, int]:
         zip_path = ev_dir / "compliance-pack.zip"
         if not zip_path.exists():
             return json_error("Compliance pack not found. Run evidence generation first.", 404)
+
+    # ?formats=html,xlsx,pdf —— 下载时按需把 md 转成所选格式再打进包，
+    # 生成阶段不再预产全部格式。基线包本身（md + 机器真源）保持不变。
+    formats_raw = (_qp(query or {}, "formats") or "").strip()
+    if formats_raw:
+        from yuleosh.evidence.exporters import ExportUnavailable, parse_formats
+
+        try:
+            extra = [f for f in parse_formats(formats_raw) if f != "md"]
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+        if extra:
+            try:
+                zip_path = _build_pack_variant(Path(zip_path), ev_dir, extra)
+            except ExportUnavailable as exc:
+                return json_error(str(exc), 503)
+            except Exception as e:  # noqa: BLE001 - 不向客户端回显内部细节
+                return internal_error("evidence-pack-export", e)
 
     if handler is not None:
         data = zip_path.read_bytes()
@@ -344,6 +439,32 @@ def _download_file(handler, query: dict | None = None) -> tuple[dict, int] | Non
     if not target.is_file():
         return json_error("Evidence file not found", 404)
 
+    # ?format=html|xlsx|pdf —— 按需转换（真源仍是 md，不预生成全部格式）。
+    # 结果缓存在 .osh/evidence/.exports/，不进 UI 列表与合规包。
+    fmt = (_qp(query or {}, "format") or "").strip().lower()
+    download_name = name
+    if fmt and fmt != "md":
+        from yuleosh.evidence.exporters import (
+            ExportUnavailable,
+            SUPPORTED_FORMATS,
+            convert_markdown,
+        )
+
+        if fmt not in SUPPORTED_FORMATS:
+            return json_error(
+                f"unsupported format: {fmt}; choose from {', '.join(SUPPORTED_FORMATS)}",
+                400,
+            )
+        if target.suffix.lower() != ".md":
+            return json_error("Only Markdown evidence can be converted", 400)
+        try:
+            target = convert_markdown(target, fmt)
+            download_name = f"{Path(name).stem}.{fmt}"
+        except ExportUnavailable as exc:
+            return json_error(str(exc), 503)
+        except Exception as e:  # noqa: BLE001 - 不向客户端回显内部细节
+            return internal_error("evidence-export", e)
+
     ctype = _FILE_CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
     # inline=1 供 UI 内嵌预览（浏览器 PDF 阅读器）；缺省仍 attachment 触发下载。
     disposition = "inline" if _qp(query or {}, "inline") in ("1", "true", "yes") else "attachment"
@@ -352,7 +473,7 @@ def _download_file(handler, query: dict | None = None) -> tuple[dict, int] | Non
         data = target.read_bytes()
         handler.send_response(200)
         handler.send_header("Content-Type", ctype)
-        handler.send_header("Content-Disposition", f'{disposition}; filename="{name}"')
+        handler.send_header("Content-Disposition", f'{disposition}; filename="{download_name}"')
         handler.send_header("Content-Length", str(len(data)))
         handler.send_header("Access-Control-Allow-Origin", get_cors_origin(handler.headers.get("Origin")))
         handler.end_headers()
@@ -362,7 +483,7 @@ def _download_file(handler, query: dict | None = None) -> tuple[dict, int] | Non
 
     return json_ok({
         "path": str(target),
-        "name": name,
+        "name": download_name,
         "size": target.stat().st_size,
         "content_type": ctype,
         "status": "ready",

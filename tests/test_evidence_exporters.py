@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from yuleosh.evidence.exporters import (
+    CACHE_DIRNAME,
     ExportUnavailable,
+    convert_markdown,
     export_formats,
     html_to_pdf,
     markdown_to_html,
@@ -142,6 +144,78 @@ class TestExportFormats:
         assert len(result["skipped"]) == 1
         assert "weasyprint" in result["skipped"][0]
         assert not (tmp_path / "a.pdf").exists()
+
+
+class TestConvertMarkdown:
+    """按需转换：单文件 + 内容哈希缓存（重新生成 md 后旧缓存不再命中）。"""
+
+    def test_passthrough_for_md(self, tmp_path):
+        src = tmp_path / "a.md"
+        src.write_text("# A\n", encoding="utf-8")
+        assert convert_markdown(src, "md") == src
+
+    def test_html_conversion_is_cached(self, tmp_path):
+        src = tmp_path / "a.md"
+        src.write_text(SAMPLE_MD, encoding="utf-8")
+        first = convert_markdown(src, "html")
+        assert first.is_file() and first.parent.name == CACHE_DIRNAME
+        mtime = first.stat().st_mtime_ns
+        assert convert_markdown(src, "html") == first
+        assert first.stat().st_mtime_ns == mtime  # 命中缓存，未重写
+
+    def test_cache_invalidated_when_md_changes(self, tmp_path):
+        src = tmp_path / "a.md"
+        src.write_text(SAMPLE_MD, encoding="utf-8")
+        first = convert_markdown(src, "html")
+        src.write_text(SAMPLE_MD + "\n\n新增段落\n", encoding="utf-8")
+        second = convert_markdown(src, "html")
+        assert second != first
+        assert "新增段落" in second.read_text(encoding="utf-8")
+
+    def test_rejects_unknown_format(self, tmp_path):
+        src = tmp_path / "a.md"
+        src.write_text("# A\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="unsupported format"):
+            convert_markdown(src, "docx")
+
+    def test_xlsx_conversion(self, tmp_path):
+        src = tmp_path / "a.md"
+        src.write_text(SAMPLE_MD, encoding="utf-8")
+        out = convert_markdown(src, "xlsx")
+        assert out.suffix == ".xlsx"
+        from openpyxl import load_workbook
+
+        assert load_workbook(out).active["A1"].value == "Traceability Matrix"
+
+
+class TestPackVariant:
+    """整包下载附加格式：从 ZIP 内部取 md 转换，并同步更新 manifest。"""
+
+    def test_appends_formats_and_updates_manifest(self, tmp_path):
+        import json
+        import zipfile
+
+        from yuleosh.api.evidence import _build_pack_variant
+
+        ev_dir = tmp_path / "evidence"
+        ev_dir.mkdir()
+        base = ev_dir / "compliance-pack.zip"
+        with zipfile.ZipFile(base, "w") as zf:
+            zf.writestr("a.md", SAMPLE_MD)
+            zf.writestr("manifest.json", json.dumps({"files": [], "total_files": 0}))
+
+        out = _build_pack_variant(base, ev_dir, ["html", "xlsx"])
+        assert out.is_file()
+        with zipfile.ZipFile(out) as zf:
+            names = set(zf.namelist())
+            manifest = json.loads(zf.read("manifest.json"))
+        assert {"a.md", "a.html", "a.xlsx", "manifest.json"} <= names
+        tracked = {e["path"] for e in manifest["files"]}
+        assert {"a.html", "a.xlsx"} <= tracked
+        assert manifest["total_files"] == 2
+        assert manifest["derived_formats"] == ["html", "xlsx"]
+        # 二次下载命中缓存，不重复转换
+        assert _build_pack_variant(base, ev_dir, ["html", "xlsx"]) == out
 
 
 def test_html_to_pdf_roundtrip(tmp_path):
