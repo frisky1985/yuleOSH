@@ -14,6 +14,7 @@ import {
   Loader2,
   RefreshCw,
   CheckCircle2,
+  Eye,
 } from "lucide-react";
 // 导航（顶栏/左栏）由 dashboard/layout 统一渲染，页面只提供内容
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePersistentState } from "@/lib/sidebar-persistence";
+import { EvidencePreviewDialog } from "@/components/dashboard/evidence-preview-dialog";
 
 interface EvidenceFile {
   name: string;
@@ -67,6 +69,7 @@ export default function EvidencePage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [previewFile, setPreviewFile] = useState<EvidenceFile | null>(null);
   // Stage-6 (2026-09-05): 展开状态持久化 — 关闭浏览器再打开仍在「展开全部」
   const [showAllFiles, setShowAllFiles] = usePersistentState<boolean>(
     "evidence", "showAllFiles", false);
@@ -353,14 +356,29 @@ export default function EvidencePage() {
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtSize(f.size)}</td>
                         <td className="px-3 py-2.5 text-[#94a3b8]">{fmtTime(f.mtime)}</td>
                         <td className="px-3 py-2.5 text-right">
-                          <button
-                            onClick={() => handleDownloadFile(f.name)}
-                            title={`下载 ${f.name}`}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-[#1e293b] px-2.5 py-1 text-xs text-[#e2e8f0] transition-colors hover:bg-[#1e293b]"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            下载
-                          </button>
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            {(f.type === "md" ||
+                              f.type === "html" ||
+                              f.type === "htm" ||
+                              f.type === "txt") && (
+                              <button
+                                onClick={() => setPreviewFile(f)}
+                                title={`预览 ${f.name}`}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-[#722ed1]/40 bg-[#722ed1]/10 px-2.5 py-1 text-xs text-[#c4b5fd] transition-colors hover:bg-[#722ed1]/20 hover:text-white"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                预览
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDownloadFile(f.name)}
+                              title={`下载 ${f.name}`}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-[#1e293b] px-2.5 py-1 text-xs text-[#e2e8f0] transition-colors hover:bg-[#1e293b]"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              下载
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -488,6 +506,15 @@ export default function EvidencePage() {
           </span>
         </div>
       </div>
+
+      {/* 内嵌预览 Dialog —— Portal 渲染到 body，位置无关 */}
+      <EvidencePreviewDialog
+        open={previewFile !== null}
+        file={previewFile}
+        onOpenChange={(open) => {
+          if (!open) setPreviewFile(null);
+        }}
+      />
     </div>
   );
 }
