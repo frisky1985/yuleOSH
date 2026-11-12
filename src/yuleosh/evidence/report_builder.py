@@ -9,6 +9,7 @@ for ``EvidenceCollector``.
 import json
 import logging
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -266,6 +267,24 @@ class ReportBuilderMixin:
                                    f"- {f_item.get('message', '')}")
             lines.append("")
 
+        if not lines:
+            # 没有评审记录时也必须写占位内容：0 字节文件在审计视角下
+            # 等同于“生成失败”，无法区分“未评审”和“报告损坏”。
+            lines = [
+                "# Review Log Summary",
+                "",
+                f"> Generated: {self.generated_at}",
+                "",
+                "本次证据生成未发现评审记录。",
+                "",
+                "可能原因：",
+                "- 尚未执行代码评审 / 需求评审；",
+                "- 评审记录未写入 `.osh/reviews/<task>/review-session.json`。",
+                "",
+                "评审完成后重新生成证据包即可纳入本报告。",
+                "",
+            ]
+
         content = "\n".join(lines)
         output_path = self.evidence_dir / "review-log-summary.md"
         output_path.write_text(content)
@@ -283,9 +302,13 @@ class ReportBuilderMixin:
         raw_reviews_dir = self.evidence_dir / "reviews"
         raw_reviews_dir.mkdir(parents=True, exist_ok=True)
         copied = 0
-        rev_dir = Path(self.project_dir) / ".osh" / "evidence" / "reviews"
+        # 源目录是评审真实产出区；此前从归档区自己拷自己（SameFileError
+        # 被吞掉），实际从未归档过任何文件。
+        rev_dir = Path(self.project_dir) / ".osh" / "reviews"
         if rev_dir.exists():
             for f in sorted(rev_dir.rglob("*.json")):
+                if f.resolve() == (raw_reviews_dir / f.name).resolve():
+                    continue
                 dest = raw_reviews_dir / f.name
                 # Avoid overwriting collisions by prepending subdir name —
                 # bounded, so repeated runs can never grow the name

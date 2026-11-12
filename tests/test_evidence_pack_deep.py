@@ -613,6 +613,10 @@ class TestAggregateReviewLogs:
     def test_no_reviews(self, collector, tmp_proj):
         path = collector.aggregate_review_logs()
         assert os.path.exists(path)
+        # 空集也必须写占位内容：0 字节文件无法区分“未评审”与“生成失败”。
+        content = open(path, encoding="utf-8").read()
+        assert "Review Log Summary" in content
+        assert "未发现评审记录" in content
 
     def test_with_reviews(self, collector, tmp_proj):
         collector.reviews = [
