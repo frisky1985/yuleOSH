@@ -46,6 +46,14 @@ def handle_evidence(method: str, path_tail: str, body: dict, query: dict, handle
     """Route to evidence sub-resources."""
     if path_tail == "generate" and method == "POST":
         return _generate_evidence(body)
+    elif path_tail == "stage" and method == "POST":
+        return _run_stage(body)
+    elif path_tail == "resume" and method == "POST":
+        return _resume_stage(body)
+    elif path_tail == "reset" and method == "POST":
+        return _reset_state(body)
+    elif path_tail == "status" and method == "GET":
+        return _get_status()
     elif path_tail == "files" and method == "GET":
         return _list_evidence_files()
     elif path_tail == "history" and method == "GET":
@@ -55,6 +63,108 @@ def handle_evidence(method: str, path_tail: str, body: dict, query: dict, handle
     elif path_tail == "file" and method == "GET":
         return _download_file(handler, query)
     return json_error(f"Unknown evidence resource: {path_tail}", 404)
+
+
+# ---------- P1 渐进执行 API ----------
+
+def _validate_project_dir(raw_dir: str, home: str) -> tuple[str | None, tuple[dict, int] | None]:
+    """复用 SEC-C1 安全校验。返回 (project_dir_or_None, error_response_or_None)。"""
+    try:
+        project_dir = str(Path(raw_dir).expanduser().resolve())
+        Path(project_dir).relative_to(Path(home).resolve())
+        return project_dir, None
+    except (ValueError, TypeError, OSError):
+        return None, json_error("project_dir must be inside OSH_HOME", 403)
+
+
+def _run_stage(body: dict) -> tuple[dict, int]:
+    """POST /api/v1/evidence/stage — 渐进执行：跑指定 stage。
+
+    body:
+        stage: wait_pipeline | collect | reports | pack  (必选)
+        project_dir: str (可选，默认 OSH_HOME)
+        spec_path: str (可选)
+        formats: list[str] (可选)
+    """
+    home = _ev_home()
+    raw_dir = body.get("project_dir") or home
+    project_dir, err = _validate_project_dir(raw_dir, home)
+    if err:
+        return err
+
+    stage = body.get("stage")
+    if stage not in ("wait_pipeline", "collect", "reports", "pack"):
+        return json_error(f"invalid stage: {stage}; choose from wait_pipeline/collect/reports/pack", 400)
+
+    spec_path = body.get("spec_path")
+    formats = body.get("formats")
+
+    try:
+        from yuleosh.evidence.pack import run_incremental_stage
+        state = run_incremental_stage(
+            project_dir,
+            target_stage=stage,
+            spec_path=spec_path,
+            formats=formats,
+        )
+    except ValueError as exc:
+        return json_error(str(exc), 400)
+    except Exception as exc:  # noqa: BLE001
+        return internal_error("evidence-stage", exc)
+
+    return json_ok(state)
+
+
+def _resume_stage(body: dict) -> tuple[dict, int]:
+    """POST /api/v1/evidence/resume — 等待确认后推进到下一 stage。
+
+    body:
+        confirm: bool  (True=确认推进；False=仅查看当前状态，不推进)
+        project_dir: str (可选)
+    """
+    home = _ev_home()
+    raw_dir = body.get("project_dir") or home
+    project_dir, err = _validate_project_dir(raw_dir, home)
+    if err:
+        return err
+
+    confirm = bool(body.get("confirm", False))
+
+    try:
+        from yuleosh.evidence.pack import run_incremental_stage
+        state = run_incremental_stage(project_dir, confirm=confirm)
+    except Exception as exc:  # noqa: BLE001
+        return internal_error("evidence-resume", exc)
+
+    return json_ok(state)
+
+
+def _reset_state(body: dict) -> tuple[dict, int]:
+    """POST /api/v1/evidence/reset — 放弃当前渐进 session，从头开始。"""
+    home = _ev_home()
+    raw_dir = body.get("project_dir") or home
+    project_dir, err = _validate_project_dir(raw_dir, home)
+    if err:
+        return err
+
+    try:
+        from yuleosh.evidence.pack import reset_incremental_state
+        state = reset_incremental_state(project_dir)
+    except Exception as exc:  # noqa: BLE001
+        return internal_error("evidence-reset", exc)
+
+    return json_ok(state)
+
+
+def _get_status() -> tuple[dict, int]:
+    """GET /api/v1/evidence/status — 读取当前渐进执行状态（前端 poll）。"""
+    home = _ev_home()
+    try:
+        from yuleosh.evidence.pack import get_incremental_status
+        state = get_incremental_status(home)
+    except Exception as exc:  # noqa: BLE001
+        return internal_error("evidence-status", exc)
+    return json_ok(state)
 
 
 def _snapshot_pack() -> str | None:
@@ -121,6 +231,10 @@ def snapshot_bundle(bundle_dir: str, osh_home: str | None = None) -> str | None:
 def _generate_evidence(body: dict) -> tuple[dict, int]:
     """POST /api/v1/evidence/generate — run evidence generation.
 
+    P1 渐进执行改造 (2026-10-18): 默认 incremental=True（一次性跑完所有 stage，
+    但状态落盘到 .state.json），支持 pause/resume。设 incremental=False 则走
+    原有 subprocess.run 一键模式（向后兼容，用于需要独立进程隔离的场景）。
+
     SECURITY (SEC-C1): project_dir must resolve inside OSH_HOME — same
     guard as the pipeline trigger.  Otherwise an authenticated user could
     run the pack script with an arbitrary cwd (e.g. /etc) and probe/write
@@ -142,6 +256,34 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
     except ValueError as exc:
         return json_error(str(exc), 400)
 
+    incremental = body.get("incremental", False)
+
+    if incremental:
+        # P1 渐进模式：进程内调用 run_incremental_stage，一次性跑到 done
+        try:
+            from yuleosh.evidence.pack import run_incremental_stage
+            state = run_incremental_stage(
+                project_dir,
+                target_stage="done",
+                spec_path=body.get("spec_path"),
+                formats=formats,
+            )
+            version = None
+            if state.get("status") == "done":
+                version = _snapshot_pack()
+            return json_ok({
+                "status": "completed" if state.get("status") == "done" else "failed",
+                "project_dir": project_dir,
+                "version": version,
+                "formats": formats,
+                "incremental": True,
+                "state": state,
+                "artifacts_count": len(state.get("artifacts_so_far", [])),
+            })
+        except Exception as exc:  # noqa: BLE001
+            return internal_error("evidence-incremental", exc)
+
+    # ---------- 原有 subprocess.run 模式（向后兼容）----------
     try:
         result = subprocess.run(
             [sys.executable, "-m", "yuleosh.evidence.pack", "pack",
@@ -161,6 +303,7 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
             "returncode": result.returncode,
             "version": version,
             "formats": formats,
+            "incremental": False,
             "stdout": result.stdout[:2000],
             "stderr": result.stderr[:500],
         })

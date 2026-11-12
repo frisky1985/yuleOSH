@@ -51,6 +51,20 @@ interface HistoryVersion {
   type: string;
 }
 
+/** P1 渐进执行状态（从 GET /api/v1/evidence/status 返回）。 */
+interface IncrementalStatus {
+  stage: string;
+  status: string;             // pending | running | waiting_confirm | done | failed
+  stage_label?: string;
+  progress_pct?: number;      // 0–100，后端计算好
+  started_at?: string | null;
+  current_stage_started_at?: string | null;
+  completed_stages: string[];
+  artifacts_so_far: string[];
+  error?: string | null;
+  version: string;
+}
+
 
 function fmtSize(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -96,6 +110,46 @@ export default function EvidencePage() {
   const [downloadTarget, setDownloadTarget] = useState<EvidenceFile | null>(null);
   const [packTarget, setPackTarget] = useState<{ version?: string } | null>(null);
   const [packFormats, setPackFormats] = useState<string[]>([]);
+
+  // P1 渐进执行模式 (2026-10-18)
+  const [incremental, setIncremental] = useState<boolean>(false);
+  const [incStatus, setIncStatus] = useState<IncrementalStatus | null>(null);
+  const [waitingConfirm, setWaitingConfirm] = useState<boolean>(false);
+  /** 渐进模式运行中（独立于 generating，让 poll 跨多个 stage 持续）。 */
+  const [incRunning, setIncRunning] = useState<boolean>(false);
+
+  /** Poll GET /api/v1/evidence/status —— 渐进模式运行时每 1s 拉一次。 */
+  const pollIncStatus = useCallback(async () => {
+    try {
+      const s = await apiFetch<IncrementalStatus>("/api/v1/evidence/status");
+      setIncStatus(s);
+      // waiting_confirm → 显示确认对话框
+      setWaitingConfirm(s?.status === "waiting_confirm");
+      // done/failed → 结束轮询
+      if (s?.status === "done" || s?.status === "failed") {
+        return false; // 停止轮询
+      }
+      return true;
+    } catch {
+      return true; // 继续轮询
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!incRunning) return;
+    let alive = true;
+    const tick = async () => {
+      const cont = await pollIncStatus();
+      if (cont && alive) {
+        setTimeout(tick, 1000);
+      } else if (!cont) {
+        setIncRunning(false);
+        setWaitingConfirm(false);
+      }
+    };
+    tick();
+    return () => { alive = false; };
+  }, [incRunning, pollIncStatus]);
 
   // Stage-6 (2026-09-05): 生成进度可视化
   // 后端 /api/v1/evidence/generate 是同步阻塞调用（无中间进度事件），
@@ -171,22 +225,34 @@ export default function EvidencePage() {
     setGenElapsed(0);
     setGenResult(null);
     setError("");
+    setIncStatus(null);
+    setWaitingConfirm(false);
+    setIncRunning(false);
     try {
-      const result = await apiFetch<{
-        status?: string;
-        stderr?: string | null;
-        returncode?: number;
-      }>("/api/v1/evidence/generate", {
-        method: "POST",
-        // 只生成 Markdown 真源；HTML/Excel/PDF 在下载时按需转换。
-        body: JSON.stringify({}),
-      });
-      // 反假绿：后端等 0 才代表产物落盘；失败时不能展示"生成完成"。
-      if (result?.status === "failed") {
-        throw new Error(
-          result.stderr?.trim() ||
-            `证据生成失败 (returncode=${result.returncode ?? "?"})`,
-        );
+      if (incremental) {
+        // P1 渐进模式：先重置 → 跑 wait_pipeline → 启动 poll 等待确认
+        await apiFetch("/api/v1/evidence/reset", { method: "POST" });
+        await apiFetch("/api/v1/evidence/stage", {
+          method: "POST",
+          body: JSON.stringify({ stage: "wait_pipeline" }),
+        });
+        setIncRunning(true); // 启动 poll
+      } else {
+        // 一键模式：原有路径
+        const result = await apiFetch<{
+          status?: string;
+          stderr?: string | null;
+          returncode?: number;
+        }>("/api/v1/evidence/generate", {
+          method: "POST",
+          body: JSON.stringify({ incremental: false }),
+        });
+        if (result?.status === "failed") {
+          throw new Error(
+            result.stderr?.trim() ||
+              `证据生成失败 (returncode=${result.returncode ?? "?"})`,
+          );
+        }
       }
       const after = await load();
       setGenResult({
@@ -196,9 +262,38 @@ export default function EvidencePage() {
       });
     } catch (e: any) {
       setError(e?.message || "生成证据包失败");
+      setIncRunning(false);
     } finally {
       setGenerating(false);
       setGenStartedAt(null);
+      // incRunning 在 poll 停止时自动 false，不在 finally 里清
+    }
+  };
+
+  /** P1: 渐进模式确认推进到下一阶段。 */
+  const handleConfirmResume = async () => {
+    try {
+      setWaitingConfirm(false);
+      // POST resume confirm=true，让后端推进当前 stage 并执行下一 stage
+      await apiFetch("/api/v1/evidence/resume", {
+        method: "POST",
+        body: JSON.stringify({ confirm: true }),
+      });
+      // poll 会持续拉取状态
+    } catch (e: any) {
+      setError(e?.message || "推进阶段失败");
+    }
+  };
+
+  /** P1: 渐进模式重置（放弃当前 session）。 */
+  const handleResetIncremental = async () => {
+    try {
+      await apiFetch("/api/v1/evidence/reset", { method: "POST" });
+      setIncStatus(null);
+      setWaitingConfirm(false);
+      setError("");
+    } catch (e: any) {
+      setError(e?.message || "重置失败");
     }
   };
 
@@ -252,7 +347,20 @@ export default function EvidencePage() {
               合规证据与报告打包（<code className="text-[#64748b]">.osh/evidence</code>）
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* P1 渐进模式开关 (2026-10-18) */}
+            <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={incremental}
+                onChange={(e) => {
+                  setIncremental(e.target.checked);
+                  if (e.target.checked) void handleResetIncremental();
+                }}
+                className="h-3.5 w-3.5 rounded border-[#1e293b] bg-[#0a0e17] text-[#722ed1] focus:ring-[#722ed1]/50 focus:ring-offset-0"
+              />
+              <span className="text-xs text-[#94a3b8]">渐进模式</span>
+            </label>
             <Button
               variant="outline"
               onClick={() => void load()}
@@ -276,7 +384,7 @@ export default function EvidencePage() {
               ) : (
                 <Archive className="h-4 w-4" />
               )}
-              生成证据包
+              {incremental ? "渐进生成" : "生成证据包"}
             </Button>
           </div>
         </div>
@@ -287,9 +395,9 @@ export default function EvidencePage() {
           </div>
         )}
 
-        {/* Stage-6 (2026-09-05): 生成进度可视化 —— 运行中显示阶段 + 耗时,
-            完成后显示真实增量（新增 N 份 / 共 M 份 / 耗时 X.Xs）。 */}
-        {generating && (
+        {/* Stage-6 (2026-09-05): 生成进度可视化
+            P1 (2026-10-18): 渐进模式用后端真实状态；一键模式保留原有假进度 + 耗时推断。 */}
+        {generating && !incremental && (
           <div className="mb-4 rounded-lg border border-[#722ed1]/30 bg-[#722ed1]/5 px-4 py-3">
             <div className="flex items-center justify-between gap-3 mb-2">
               <span className="flex items-center gap-2 text-xs text-[#c4b5fd]">
@@ -305,6 +413,94 @@ export default function EvidencePage() {
                 className="h-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] transition-all duration-300"
                 style={{ width: `${genPhase.pct}%` }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* P1 渐进模式真实进度 (2026-10-18) */}
+        {incremental && (generating || incStatus) && (
+          <div className="mb-4 rounded-lg border border-[#722ed1]/30 bg-[#722ed1]/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="flex items-center gap-2 text-xs text-[#c4b5fd]">
+                {incStatus?.status === "waiting_confirm" ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#95de64]" />
+                ) : incStatus?.status === "failed" ? (
+                  <span className="text-[#ff4d4f]">⚠</span>
+                ) : (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                {incStatus?.stage_label ?? "初始化..."}
+                {incStatus?.error && (
+                  <span className="text-[10px] text-[#ff4d4f]">— {incStatus.error}</span>
+                )}
+              </span>
+              <span className="font-mono text-xs text-[#94a3b8] tabular-nums">
+                {incStatus?.progress_pct ?? 0}%
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#0a0e17] overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#722ed1] to-[#1677ff] transition-all duration-500"
+                style={{ width: `${incStatus?.progress_pct ?? 0}%` }}
+              />
+            </div>
+            {/* 阶段步骤指示器 */}
+            {incStatus && (
+              <div className="mt-2 flex items-center gap-1">
+                {["wait_pipeline", "collect", "reports", "pack"].map((stg) => {
+                  const done = incStatus.completed_stages?.includes(stg);
+                  const current = incStatus.stage === stg && incStatus.status !== "done";
+                  return (
+                    <span
+                      key={stg}
+                      className={`flex-1 h-1 rounded-full transition-all ${
+                        done
+                          ? "bg-[#95de64]"
+                          : current
+                          ? "bg-[#722ed1]"
+                          : "bg-[#1e293b]"
+                      }`}
+                      title={stg}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* P1 渐进模式：waiting_confirm 确认对话框 */}
+        {waitingConfirm && incStatus && (
+          <div className="mb-4 rounded-lg border border-[#faad14]/30 bg-[#faad14]/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[#faad14] text-lg">⏸</span>
+                <div>
+                  <p className="text-xs text-[#e2e8f0] font-medium">
+                    {incStatus.stage_label} 已完成，请确认后进入下一阶段
+                  </p>
+                  <p className="text-[10px] text-[#94a3b8] mt-0.5">
+                    已收集 {incStatus.artifacts_so_far?.length ?? 0} 份产物
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleResetIncremental()}
+                  className="border-[#ff4d4f]/40 text-[#ff7875] hover:bg-[#ff4d4f]/10 text-xs"
+                >
+                  重置
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => void handleConfirmResume()}
+                  className="bg-[#722ed1] hover:bg-[#722ed1]/80 text-white text-xs"
+                >
+                  继续 →
+                </Button>
+              </div>
             </div>
           </div>
         )}
