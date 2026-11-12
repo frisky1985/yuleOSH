@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | **标题** | yuleOSH Desktop — Spec 契约层 |
-| **版本** | v0.1.0-MVP |
+| **版本** | v4.2.0 |
 | **状态** | 草案 |
 | **编写日期** | 2026-07-10 |
 | **负责角色** | 质量架构师（小马） |
@@ -93,7 +93,7 @@
 - **SHALL-5.1.1** 必须提供 macOS（.dmg）的构建产物。
 - **SHALL-5.1.2** 必须提供 Linux（.AppImage）的构建产物。
 - **MAY-5.1.3** 可为 Windows（.exe 或 .msi）提供构建产物。
-- **SHOULD-5.1.4** 构建产物中应包含 Python 运行时（或使用 PyInstaller 打包）。当前 MVP 版本用户需自行安装 Python 3.10+。
+- **SHALL-5.1.4** 构建产物中必须包含 Python 运行时（通过 PyInstaller 打包为 `yuleosh-server` 内嵌二进制）。若内嵌后端不可用（损坏或缺失），回退到系统 Python 3.10+ 并在日志中明确告警。
 
 ### 5.2 非功能约束
 
@@ -121,8 +121,8 @@
 ### 场景 1：正常启动流程
 
 ```
-GIVEN 用户已安装 yuleOSH Desktop v0.1.0-MVP
-  AND 系统环境中 yuleosh Python 后端可执行
+GIVEN 用户已安装 yuleOSH Desktop v4.2.0
+  AND 内嵌 Python 后端（`yuleosh-server`）可执行
 WHEN 用户双击应用图标启动
 THEN Electron 主进程启动
   AND Python 后端子进程 spawn 成功
@@ -135,8 +135,8 @@ THEN Electron 主进程启动
 ### 场景 2：后端启动失败
 
 ```
-GIVEN 用户已安装 yuleOSH Desktop v0.1.0-MVP
-  AND Python 后端不可执行（例如二进制损坏或缺失）
+GIVEN 用户已安装 yuleOSH Desktop v4.2.0
+  AND Python 后端不可执行（例如内嵌二进制损坏或缺失，且系统 Python 也不可用）
 WHEN 用户双击应用图标启动
 THEN Electron 主进程启动
   AND Python 后端子进程 spawn 失败或健康检查超时（>15 秒）

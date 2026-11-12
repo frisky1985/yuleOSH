@@ -1,4 +1,4 @@
-# yuleOSH Desktop v0.1.0-MVP — 实际验证报告
+# yuleOSH Desktop v4.2.0 — 实际验证报告
 
 | 属性 | 值 |
 |---|---|
@@ -25,7 +25,7 @@
 ### 1.2 启动/关闭测试 ✅ 全部通过
 
 ```
-[Main] yuleOSH Desktop v0.1.0
+[Main] yuleOSH Desktop v4.2.0
 [Main] Platform: darwin
 [Main] Dev mode: false
 [FileServer] Serving frontend on http://localhost:18789
@@ -106,7 +106,7 @@ frontend/out/
 | `tray.js` | 186 | ✅ 发布就绪 |
 | `electron-builder.yml` | 60+ | ✅ 配置完整 |
 | `package.json` | 40+ | ✅ 发布就绪 |
-| `spec.md` | — | ✅ v0.1.0-MVP |
+| `spec.md` | — | ✅ v4.2.0 |
 | `architecture.md` | — | ✅ |
 | `acceptance-matrix.md` | — | ✅ |
 | `self-check.md` | — | ✅ |
