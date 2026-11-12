@@ -421,15 +421,15 @@
     <div class="kpi-row">
       <div class="kpi-card ok">
         <div class="kpi-label">aggregate_review_logs</div>
-        <div class="kpi-value">89.5%</div>
-        <div class="kpi-sub">220 行中执行 197 行 · 未覆盖 23 行</div>
-        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:89.5%"></div></div>
+        <div class="kpi-value">98.2%</div>
+        <div class="kpi-sub">220 行中执行 216 行 · 未覆盖 4 行</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:98.2%"></div></div>
       </div>
       <div class="kpi-card ok">
         <div class="kpi-label">collect_reviews</div>
-        <div class="kpi-value">98.1%</div>
-        <div class="kpi-sub">52 行中执行 51 行 · 未覆盖 1 行</div>
-        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:98.1%"></div></div>
+        <div class="kpi-value">100%</div>
+        <div class="kpi-sub">52 行中执行 52 行 · ✅ 全覆盖</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%"></div></div>
       </div>
     </div>
 
@@ -440,7 +440,7 @@
 
     <div class="callout warn">
       <div class="label">⚠ 值得关注</div>
-      <p><code>aggregate_review_logs</code> 的归档逻辑（<code>.osh/reviews/**/*.json</code> → <code>evidence/reviews/</code>）共 23 行完全未命中。这条路径是修复 review summary 为空问题时新写的，生产上真实存在，但现有 fixture 未准备 <code>.osh/reviews/</code> 目录，所以从未跑过。</p>
+      <p>aggregate_review_logs 仍剩 4 行未覆盖，全是源码里的<strong>防御性超边界分支</strong>：L417 是同路径保护（源/归档目录永远不同），L427-429 是文件名碰撞超过 180 字符时的 hash fallback（构造成本太高）。属于工程上"覆盖不了"的分支，不是缺口。</p>
     </div>
   </section>
 

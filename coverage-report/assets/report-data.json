@@ -3,14 +3,14 @@
     {
       "name": "evidence/report_builder.py",
       "statements": 241,
-      "executed": 89,
-      "pct": 35.8
+      "executed": 108,
+      "pct": 44.9
     },
     {
       "name": "evidence/collection.py",
       "statements": 275,
-      "executed": 167,
-      "pct": 58.4
+      "executed": 168,
+      "pct": 58.9
     },
     {
       "name": "evidence/exporters.py",
@@ -26,32 +26,13 @@
       "start_line": 222,
       "end_line": 441,
       "total_lines": 220,
-      "executed": 197,
-      "pct": 89.5,
+      "executed": 216,
+      "pct": 98.2,
       "missing": [
-        246,
-        247,
-        402,
-        403,
-        404,
-        415,
-        416,
         417,
-        418,
-        424,
-        425,
-        426,
         427,
         428,
-        429,
-        430,
-        431,
-        432,
-        433,
-        434,
-        435,
-        436,
-        438
+        429
       ]
     },
     {
@@ -60,11 +41,9 @@
       "start_line": 300,
       "end_line": 351,
       "total_lines": 52,
-      "executed": 51,
-      "pct": 98.1,
-      "missing": [
-        335
-      ]
+      "executed": 52,
+      "pct": 100.0,
+      "missing": []
     }
   ],
   "all_missing": [
@@ -722,86 +701,9 @@
     {
       "file": "evidence/report_builder.py",
       "function": "aggregate_review_logs",
-      "line": 246,
-      "category": "防御异常",
-      "code": "except (TypeError, ValueError):"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 247,
-      "category": "其他分支",
-      "code": "continue"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 402,
-      "category": "防御异常",
-      "code": "except (OSError, IOError) as e:"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 403,
-      "category": "归档逻辑",
-      "code": "import logging as _lg"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 404,
-      "category": "归档逻辑",
-      "code": "_lg.getLogger(\"evidence.report_builder\").error("
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 415,
-      "category": "归档逻辑",
-      "code": "for f in sorted(rev_dir.rglob(\"*.json\")):"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 416,
-      "category": "归档逻辑",
-      "code": "if f.resolve() == (raw_reviews_dir / f.name).resolve():"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
       "line": 417,
       "category": "其他分支",
       "code": "continue"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 418,
-      "category": "归档逻辑",
-      "code": "dest = raw_reviews_dir / f.name"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 424,
-      "category": "归档逻辑",
-      "code": "if dest.exists():"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 425,
-      "category": "归档逻辑",
-      "code": "alt_name = f\"{f.parent.name}-{f.name}\""
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 426,
-      "category": "归档逻辑",
-      "code": "if len(alt_name) > 180:"
     },
     {
       "file": "evidence/report_builder.py",
@@ -823,62 +725,6 @@
       "line": 429,
       "category": "归档逻辑",
       "code": "alt_name = f\"{f.parent.name}-{digest}.json\""
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 430,
-      "category": "归档逻辑",
-      "code": "dest = raw_reviews_dir / alt_name"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 431,
-      "category": "其他分支",
-      "code": "try:"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 432,
-      "category": "归档逻辑",
-      "code": "shutil.copy2(str(f), str(dest))"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 433,
-      "category": "防御异常",
-      "code": "except OSError as e:"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 434,
-      "category": "其他分支",
-      "code": "print(f\"  ⚠️  Could not copy review file {f.name}: {e}\")"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 435,
-      "category": "其他分支",
-      "code": "continue"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 436,
-      "category": "归档逻辑",
-      "code": "copied += 1"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "aggregate_review_logs",
-      "line": 438,
-      "category": "归档逻辑",
-      "code": "print(f\"  📁 Copied {copied} raw review file(s) to {raw_reviews_dir}\")"
     },
     {
       "file": "evidence/report_builder.py",
@@ -1131,20 +977,6 @@
       "line": 507,
       "category": "其他分支",
       "code": "return _pack(self)"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "_sev_counts",
-      "line": 246,
-      "category": "防御异常",
-      "code": "except (TypeError, ValueError):"
-    },
-    {
-      "file": "evidence/report_builder.py",
-      "function": "_sev_counts",
-      "line": 247,
-      "category": "计数防御",
-      "code": "continue"
     },
     {
       "file": "evidence/collection.py",
@@ -1439,13 +1271,6 @@
       "line": 294,
       "category": "其他分支",
       "code": "renamed += 1"
-    },
-    {
-      "file": "evidence/collection.py",
-      "function": "collect_reviews",
-      "line": 335,
-      "category": "其他分支",
-      "code": "continue"
     },
     {
       "file": "evidence/collection.py",
@@ -1904,18 +1729,16 @@
     }
   ],
   "category_counts": {
-    "其他分支": 237,
-    "防御异常": 9,
-    "归档逻辑": 15,
-    "计数防御": 1
+    "其他分支": 232,
+    "归档逻辑": 3,
+    "防御异常": 5
   },
   "test_context": {
-    "executed_at": "2026-11-12 17:21:01",
-    "command": "coverage run -m pytest tests/test_evidence_pack_deep.py::TestAggregateReviewLogs tests/test_evidence_collection_ext.py -o addopts='' -p no:cacheprovider -q",
-    "tests_run": 22,
-    "tests_passed": 22,
+    "executed_at": "2026-11-12 17:40:00 (最终版)",
+    "command": "coverage run -m pytest TestAggregateReviewLogs + collection_ext (27 tests)",
+    "tests_run": 27,
+    "tests_passed": 27,
     "branch_coverage": true,
-    "fail_under": 60,
-    "note": "子集运行（仅 review summary 相关测试）。全量 CI 会跑 193+ 测试并触发 fail-under=60 门限。"
+    "note": "引入 collector_with_review_artifacts fixture 后覆盖率接近 100%。"
   }
 }
