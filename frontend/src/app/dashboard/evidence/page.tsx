@@ -63,6 +63,16 @@ function fmtTime(t: number): string {
 const FILE_COLLAPSE_LIMIT = 10;
 const HISTORY_COLLAPSE_LIMIT = 10;
 
+// 人类可读导出格式。Markdown 是生成真源（不可取消），HTML/Excel/PDF 为派生格式，
+// 由后端 evidence/exporters.py 在打包前从 md 转换，ZIP 与 manifest 同步覆盖。
+// JSON/YAML 机器真源不在此列 —— 它们只供后台校验，不进 UI。
+const FORMAT_OPTIONS: { id: string; label: string; hint: string }[] = [
+  { id: "md", label: "Markdown", hint: "生成真源，始终包含" },
+  { id: "html", label: "HTML", hint: "网页阅读 / 浏览器打印" },
+  { id: "xlsx", label: "Excel", hint: "表格筛选与二次加工" },
+  { id: "pdf", label: "PDF", hint: "审计归档（需服务端 weasyprint）" },
+];
+
 export default function EvidencePage() {
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [history, setHistory] = useState<HistoryVersion[]>([]);
@@ -75,6 +85,16 @@ export default function EvidencePage() {
     "evidence", "showAllFiles", false);
   const [showAllHistory, setShowAllHistory] = usePersistentState<boolean>(
     "evidence", "showAllHistory", false);
+  // 导出格式选择（持久化）：默认 md+html；md 真源始终包含，见 effectiveFormats。
+  const [formats, setFormats] = usePersistentState<string[]>(
+    "evidence", "formats", ["md", "html"]);
+  const effectiveFormats = Array.from(new Set(["md", ...formats]));
+  const toggleFormat = (id: string) => {
+    if (id === "md") return; // 真源不可取消
+    setFormats((prev) =>
+      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id],
+    );
+  };
 
   // Stage-6 (2026-09-05): 生成进度可视化
   // 后端 /api/v1/evidence/generate 是同步阻塞调用（无中间进度事件），
@@ -104,8 +124,8 @@ export default function EvidencePage() {
     const s = genElapsed / 1000;
     if (s < 8) return { label: "收集证据源（需求 / 测试 / 评审记录）", pct: 35 };
     if (s < 20) return { label: "渲染合规报告（追溯矩阵 / ASPICE 清单）", pct: 68 };
-    if (s < 45) return { label: "打包归档证据包", pct: 88 };
-    return { label: "仍在处理（耗时偏长，可查看后端日志）", pct: 92 };
+    if (s < 45) return { label: "渲染派生格式（HTML/Excel/PDF）并打包", pct: 88 };
+    return { label: "仍在处理（大矩阵 PDF 渲染较耗时，全格式约 2 分钟）", pct: 92 };
   })();
 
   /** 返回本次加载到的文件数（供生成后计算真实增量，闭包里的 files 是旧值）。 */
@@ -157,7 +177,7 @@ export default function EvidencePage() {
         returncode?: number;
       }>("/api/v1/evidence/generate", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ formats: effectiveFormats }),
       });
       // 反假绿：后端等 0 才代表产物落盘；失败时不能展示"生成完成"。
       if (result?.status === "failed") {
@@ -254,6 +274,36 @@ export default function EvidencePage() {
               生成证据包
             </Button>
           </div>
+        </div>
+
+        {/* 导出格式选择：生成证据包时生效。md 为真源固定选中；
+            HTML/Excel/PDF 为派生格式，点击切换，选择持久化保存。 */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#1e293b] bg-[#111827] px-4 py-2.5">
+          <span className="mr-1 text-xs font-medium text-[#94a3b8]">导出格式</span>
+          {FORMAT_OPTIONS.map((opt) => {
+            const selected = opt.id === "md" || formats.includes(opt.id);
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => toggleFormat(opt.id)}
+                disabled={opt.id === "md"}
+                title={opt.hint}
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                  selected
+                    ? "border-[#722ed1]/60 bg-[#722ed1]/15 text-[#c4b5fd]"
+                    : "border-[#1e293b] text-[#64748b] hover:bg-[#1e293b] hover:text-[#e2e8f0]"
+                } ${opt.id === "md" ? "cursor-default opacity-80" : ""}`}
+              >
+                {selected && <CheckCircle2 className="h-3 w-3" />}
+                {opt.label}
+                {opt.id === "md" && <span className="text-[10px] text-[#64748b]">真源</span>}
+              </button>
+            );
+          })}
+          <span className="ml-auto text-[10px] text-[#64748b]">
+            下次「生成证据包」生效；JSON/YAML 机器真源仅在后台校验，不在此列
+          </span>
         </div>
 
         {error && (
@@ -360,6 +410,7 @@ export default function EvidencePage() {
                             {(f.type === "md" ||
                               f.type === "html" ||
                               f.type === "htm" ||
+                              f.type === "pdf" ||
                               f.type === "txt") && (
                               <button
                                 onClick={() => setPreviewFile(f)}

@@ -133,10 +133,22 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
         Path(project_dir).relative_to(Path(home).resolve())
     except (ValueError, TypeError, OSError):
         return json_error("project_dir must be inside OSH_HOME", 403)
+
+    # 人类可读格式选择（md/html/xlsx/pdf）。非法值直接 400，不静默降级，
+    # 避免用户以为拿到了 PDF 实际只有 Markdown。
+    from yuleosh.evidence.exporters import parse_formats
+    try:
+        formats = parse_formats(body.get("formats"))
+    except ValueError as exc:
+        return json_error(str(exc), 400)
+
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "yuleosh.evidence.pack", "pack"],
-            capture_output=True, text=True, timeout=120,
+            [sys.executable, "-m", "yuleosh.evidence.pack", "pack",
+             "--formats", ",".join(formats)],
+            # 全格式（含 PDF）时大矩阵渲染耗时实测 ~2min（acceptance 60s +
+            # traceability 33s），120s 会中途杀掉子进程；放宽到 300s。
+            capture_output=True, text=True, timeout=300,
             cwd=project_dir, check=False,
             env={**os.environ, "OSH_HOME": project_dir},
         )
@@ -148,6 +160,7 @@ def _generate_evidence(body: dict) -> tuple[dict, int]:
             "project_dir": project_dir,
             "returncode": result.returncode,
             "version": version,
+            "formats": formats,
             "stdout": result.stdout[:2000],
             "stderr": result.stderr[:500],
         })
@@ -332,12 +345,14 @@ def _download_file(handler, query: dict | None = None) -> tuple[dict, int] | Non
         return json_error("Evidence file not found", 404)
 
     ctype = _FILE_CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
+    # inline=1 供 UI 内嵌预览（浏览器 PDF 阅读器）；缺省仍 attachment 触发下载。
+    disposition = "inline" if _qp(query or {}, "inline") in ("1", "true", "yes") else "attachment"
 
     if handler is not None:
         data = target.read_bytes()
         handler.send_response(200)
         handler.send_header("Content-Type", ctype)
-        handler.send_header("Content-Disposition", f'attachment; filename="{name}"')
+        handler.send_header("Content-Disposition", f'{disposition}; filename="{name}"')
         handler.send_header("Content-Length", str(len(data)))
         handler.send_header("Access-Control-Allow-Origin", get_cors_origin(handler.headers.get("Origin")))
         handler.end_headers()

@@ -43,7 +43,7 @@ def _build_manifest_entry(file_path: Path, arcname: str) -> dict:
     }
 
 
-def pack_compliance_zip(collector: "EvidenceCollector") -> str:
+def pack_compliance_zip(collector: "EvidenceCollector", formats=None) -> str:
     """Create compliance pack ZIP for ASPICE audit.
 
     Includes all generated evidence files, the requirements spec,
@@ -56,6 +56,9 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
     Args:
         collector: An ``EvidenceCollector`` instance that has already
             collected data and generated reports.
+        formats: 人类可读派生格式（md/html/xlsx/pdf，逗号分隔或列表）。
+            在能力映射生成之后、ZIP 打开之前派生，保证 ZIP 与 manifest
+            覆盖全部所选格式；缺省只保留 Markdown。
 
     Returns:
         Path to the created ZIP file.
@@ -71,6 +74,21 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
     except Exception as exc:  # noqa: BLE001 - 证据产物生成失败不阻断打包
         log.warning("process-capability-map generation failed (non-fatal): %s", exc)
 
+    # 人类可读派生格式（HTML/Excel/PDF）：必须晚于 capability map 生成、
+    # 早于 ZIP 打开，否则这两份报告缺派生格式，且 manifest 会漏记。
+    from yuleosh.evidence.exporters import export_formats, parse_formats
+    try:
+        selected = parse_formats(formats)
+    except ValueError as exc:
+        print(f"  ⚠️  {exc} — 回退为仅 Markdown")
+        selected = ["md"]
+    if any(f != "md" for f in selected):
+        derived = export_formats(collector.evidence_dir, selected)
+        for name in derived["generated"]:
+            print(f"  ✅ Derived format: {collector.evidence_dir / name}")
+        for reason in derived["skipped"]:
+            print(f"  ⚠️  Skipped: {reason}")
+
     def _add_to_zip(file_path: Path, arcname: str):
         if file_path.exists():
             zf.write(file_path, arcname=arcname)
@@ -79,7 +97,7 @@ def pack_compliance_zip(collector: "EvidenceCollector") -> str:
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # Add all generated evidence files
         for f in collector.evidence_dir.iterdir():
-            if f.suffix in (".md", ".json", ".html") and f.name != "compliance-pack.zip":
+            if f.suffix in (".md", ".json", ".html", ".xlsx", ".pdf") and f.name != "compliance-pack.zip":
                 _add_to_zip(f, f.name)
 
         # Add spec file

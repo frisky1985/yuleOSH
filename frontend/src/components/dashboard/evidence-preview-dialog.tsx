@@ -38,6 +38,9 @@ function isMarkdown(name: string) {
 function isHtmlFile(name: string) {
   return /\.(html|htm)$/i.test(name);
 }
+function isPdfFile(name: string) {
+  return /\.pdf$/i.test(name);
+}
 
 /** 深色主题 Markdown 样式 —— Tailwind @layer，dialog content 内生效。 */
 const MARKDOWN_STYLE = `
@@ -75,6 +78,8 @@ export function EvidencePreviewDialog({
   // open 时 fetch 内容；file 不变也不重拉（避免每次打开都请求）
   useEffect(() => {
     if (!open || !file) return;
+    // PDF 走浏览器内置阅读器（iframe src 直读），无需先拉文本进内存。
+    if (isPdfFile(file.name)) return;
     if (content && !error) return;
 
     let cancelled = false;
@@ -149,7 +154,8 @@ export function EvidencePreviewDialog({
 
   const isMd: boolean = useMemo(() => (file ? isMarkdown(file.name) : false), [file]);
   const isHtml: boolean = useMemo(() => (file ? isHtmlFile(file.name) : false), [file]);
-  const isText: boolean = useMemo(() => !isMd && !isHtml, [isMd, isHtml]);
+  const isPdf: boolean = useMemo(() => (file ? isPdfFile(file.name) : false), [file]);
+  const isText: boolean = useMemo(() => !isMd && !isHtml && !isPdf, [isMd, isHtml, isPdf]);
 
   const htmlFromMd = useMemo(() => {
     if (!isMd) return "";
@@ -162,12 +168,13 @@ export function EvidencePreviewDialog({
 
   const iframeSrcDoc = useMemo(() => {
     if (!isHtml) return "";
-    // 内嵌默认样式让裸 HTML 看起来协调一些（不影响文档内已定义的样式）
+    // 浅色内嵌视图：导出的证据 HTML 是浅色可打印模板（深字），若注入深色
+    // 背景会把正文压成「深字深底」。这里给浅色兜底，文档自带样式仍可覆盖。
     return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>
-      body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#e2e8f0;background:#0a0e17;margin:1.2rem;line-height:1.6}
-      a{color:#60a5fa}table{border-collapse:collapse}th,td{border:1px solid #1e293b;padding:.35em .6em}
-      h1,h2,h3,h4{color:#f8fafc}hr{border:0;border-top:1px solid #1e293b}
-      img{max-width:100%}pre,code{background:#1e293b}
+      body{font-family:-apple-system,Segoe UI,Roboto,"Noto Sans CJK SC",sans-serif;color:#1f2933;background:#ffffff;margin:1.2rem;line-height:1.6}
+      a{color:#1677ff}table{border-collapse:collapse}th,td{border:1px solid #cbd2d9;padding:.35em .6em}
+      h1,h2,h3,h4{color:#111827}hr{border:0;border-top:1px solid #d9e2ec}
+      img{max-width:100%}pre,code{background:#f0f2f5}
     </style></head><body>${content}</body></html>`;
   }, [isHtml, content]);
 
@@ -194,6 +201,7 @@ export function EvidencePreviewDialog({
           <div className="text-xs text-[#64748b]">
             {isMd && "Markdown 渲染视图"}
             {isHtml && "HTML 内嵌视图（sandbox）"}
+            {isPdf && "PDF 内嵌视图（浏览器阅读器）"}
             {isText && "纯文本预览"}
           </div>
           <button
@@ -259,7 +267,18 @@ export function EvidencePreviewDialog({
               sandbox="allow-same-origin"
               srcDoc={iframeSrcDoc}
               title={file.name}
-              className="block w-full h-full min-h-[400px] bg-[#0a0e17] border-0"
+              className="block w-full h-full min-h-[400px] bg-white border-0"
+            />
+          )}
+
+          {isPdf && (
+            <iframe
+              // inline=1 → 后端回 Content-Disposition: inline，浏览器内嵌阅读器
+              // 才能直接显示；缺省 attachment 会变成下载。PDF 为二进制，
+              // 不经 srcDoc，避免 base64 膨胀与二次编码。
+              src={`/api/v1/evidence/file?name=${encodeURIComponent(file.name)}&inline=1`}
+              title={file.name}
+              className="block w-full h-full min-h-[400px] bg-white border-0"
             />
           )}
 

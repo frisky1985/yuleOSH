@@ -18,6 +18,7 @@ dependencies = [
     "pillow>=12.3.0",  # Multiple CVEs
     "jinja2>=3.1.0",
     "openpyxl>=3.1.0",  # evidence/excel_writer.py 依赖（此前未声明导致 CI 干净环境 18 个测试失败）
+    "markdown>=3.5",  # evidence/exporters.py：md → html/pdf 的 GFM 渲染（tables/fenced_code）
     "cryptography>=42.0",  # SEC-PK: 加密存储 API Key（provider_secrets 保险库）
     "tree-sitter>=0.25.2,<1.0",  # B-M1 (T-011 B1-01): C AST 扫描器核心库。0.25.2 为可用索引上限且已验证；<1.0 防大版本 API 漂移
     "tree-sitter-c>=0.23.0",  # B-M1 (T-011 B1-02): C 语言 grammar（parse() 容错封装依赖）
@@ -43,7 +44,10 @@ saas = ["bcrypt>=5.0", "pyjwt>=2.13.0", "psycopg2-binary>=2.9", "pyserial>=3.5",
 # P1-1: pytest-cov 支撑 pytest.ini addopts 的 --cov 参数（未安装时 pytest 会报
 # "unrecognized arguments: --cov=..."）。安装: pip install -e ".[dev]"
 dev = ["pytest", "pytest-cov>=4.1.0", "pytest-mock", "pytest-asyncio>=0.23", "pytest-randomly>=4.0"]
-all = ["yuleosh[saas,dev]"]
+# 证据包 PDF 导出（可选，依赖系统 pango/cairo）：pip install "yuleosh[pdf]"
+# 未安装时 HTML/Excel/Markdown 照常生成，PDF 在生成日志中显式标注「未生成」。
+pdf = ["weasyprint>=62"]
+all = ["yuleosh[saas,dev,pdf]"]
 
 [project.scripts]
 yuleosh = "yuleosh._entry:main"

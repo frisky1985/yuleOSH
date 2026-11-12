@@ -803,3 +803,20 @@ class TestMain:
             with mock.patch.object(sys, "argv", ["pack", "pack", "/tmp/spec.md"]):
                 main()
                 mgen.assert_called_once_with(spec_path="/tmp/spec.md")
+
+    def test_formats_flag_forwarded(self, tmp_proj):
+        from yuleosh.evidence.pack import main
+        with mock.patch("yuleosh.evidence.pack.generate_evidence") as mgen:
+            argv = ["pack", "pack", "--formats", "md,html,xlsx,pdf", "/tmp/spec.md"]
+            with mock.patch.object(sys, "argv", argv):
+                main()
+                mgen.assert_called_once_with(
+                    spec_path="/tmp/spec.md", formats="md,html,xlsx,pdf"
+                )
+
+    def test_formats_flag_requires_value(self, tmp_proj):
+        import pytest
+        from yuleosh.evidence.pack import main
+        with mock.patch.object(sys, "argv", ["pack", "pack", "--formats"]):
+            with pytest.raises(SystemExit):
+                main()
