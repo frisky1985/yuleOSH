@@ -228,46 +228,133 @@ class ReportBuilderMixin:
         files are also copied to a reviews/ subdirectory in the
         evidence output for audit traceability.
         """
-        status_icon = {"passed": "✅", "failed": "❌", "retry": "🔄", "running": "⏳"}
-        lines = []
+        SEV_ORDER = {"critical": 0, "major": 1, "minor": 2, "info": 3}
+        MAX_DETAIL_ROWS = 50
 
-        for r in self.reviews:
-            if "task" in r:
+        def _cell(value) -> str:
+            """表格单元格转义：去掉换行、转义竖线，空值统一显示为 —。"""
+            text = str(value if value is not None else "").replace("\n", " ").strip()
+            text = text.replace("|", "\\|")
+            return text or "—"
+
+        def _sev_counts(items) -> dict:
+            counts = {"critical": 0, "major": 0, "minor": 0}
+            for item in items:
+                for sev in counts:
+                    try:
+                        counts[sev] += int(item.get(sev, 0) or 0)
+                    except (TypeError, ValueError):
+                        continue
+            return counts
+
+        overview_rows: list[str] = []
+        sections: list[str] = []
+        agent_total = 0
+        grand = {"critical": 0, "major": 0, "minor": 0}
+
+        for idx, record in enumerate(self.reviews, start=1):
+            if "task" in record:
                 # Legacy format: task/decision/reviews
-                lines.append(f"## Task: {r.get('task', 'N/A')}")
-                lines.append(f"- Decision: {r.get('decision', 'N/A')}")
-                lines.append(f"- Created: {r.get('created_at', 'N/A')}")
-                lines.append(f"- Reviews ({len(r.get('reviews', []))} agents):")
-                for rev in r.get("reviews", []):
-                    icon = status_icon.get(rev.get("status", ""), "❓")
-                    findings = rev.get("finding_breakdown", {})
-                    lines.append(f"  {icon} {rev.get('reviewer', 'N/A')}: {rev.get('status', 'N/A')} "
-                               f"(C:{findings.get('critical',0)} M:{findings.get('major',0)} "
-                               f"m:{findings.get('minor',0)})")
-                    lines.append(f"    Summary: {rev.get('summary', 'N/A')}")
+                name = record.get("task") or "N/A"
+                decision = record.get("decision") or "unknown"
+                agents = record.get("reviews") or []
+                counts = _sev_counts(
+                    (rev.get("finding_breakdown") or {}) for rev in agents
+                )
+                agent_total += len(agents)
+                for sev in grand:
+                    grand[sev] += counts[sev]
+
+                overview_rows.append(
+                    f"| {_cell(name)} | `{_cell(decision)}` | {len(agents)} "
+                    f"| {counts['critical']} | {counts['major']} | {counts['minor']} |"
+                )
+
+                block = [
+                    f"## {idx}. {_cell(name)}",
+                    "",
+                    "| 字段 | 值 |",
+                    "|:--|:--|",
+                    f"| 决策 | `{_cell(decision)}` |",
+                    f"| 创建时间 | {_cell(record.get('created_at'))} |",
+                    f"| 评审代理 | {len(agents)} 个 |",
+                    "",
+                ]
+                if agents:
+                    block += [
+                        "| 评审代理 | 状态 | Critical | Major | Minor | 结论 |",
+                        "|:--|:--:|--:|--:|--:|:--|",
+                    ]
+                    for rev in agents:
+                        fb = rev.get("finding_breakdown") or {}
+                        block.append(
+                            f"| {_cell(rev.get('reviewer'))} "
+                            f"| `{_cell(rev.get('status') or 'unknown')}` "
+                            f"| {fb.get('critical', 0)} | {fb.get('major', 0)} "
+                            f"| {fb.get('minor', 0)} | {_cell(rev.get('summary'))} |"
+                        )
+                    block += [
+                        "",
+                        "> 问题明细见 `review-log.json`；本报告仅汇总严重度分布。",
+                    ]
+                sections.append("\n".join(block))
             else:
                 # New flat format: review_type/status/findings/summary/agent
-                review_type = r.get("review_type", "unknown")
-                status = r.get("status", "unknown")
-                agent = r.get("agent", "N/A")
-                icon = status_icon.get(status, "❓")
-                lines.append(f"## {icon} Review: {review_type.upper()}")
-                lines.append(f"- Status: {status}")
-                lines.append(f"- Agent: {agent}")
-                lines.append(f"- Generated: {r.get('generated_at', 'N/A')}")
-                lines.append(f"- Build: {r.get('build_id', 'N/A')}")
-                lines.append(f"- Summary: {r.get('summary', 'N/A')}")
-                findings = r.get("findings", [])
-                if findings:
-                    lines.append(f"- Findings ({len(findings)}):")
-                    for f_item in findings:
-                        sev = f_item.get("severity", "info")
-                        sev_icon = {"critical": "🔴", "major": "🟡", "minor": "🔵", "info": "ℹ️"}.get(sev, "❓")
-                        lines.append(f"  {sev_icon} [{sev}] {f_item.get('file', '?')}:{f_item.get('line', '?')} "
-                                   f"- {f_item.get('message', '')}")
-            lines.append("")
+                name = record.get("review_type") or "review"
+                status = record.get("status") or "unknown"
+                findings = [
+                    f for f in (record.get("findings") or []) if isinstance(f, dict)
+                ]
+                sev_counts = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+                for f_item in findings:
+                    sev = f_item.get("severity", "info")
+                    sev_counts[sev] = sev_counts.get(sev, 0) + 1
+                agent_total += 1
+                for sev in grand:
+                    grand[sev] += sev_counts.get(sev, 0)
 
-        if not lines:
+                overview_rows.append(
+                    f"| {_cell(name)} | `{_cell(status)}` | 1 "
+                    f"| {sev_counts['critical']} | {sev_counts['major']} "
+                    f"| {sev_counts['minor']} |"
+                )
+
+                block = [
+                    f"## {idx}. 评审 · {_cell(name)}",
+                    "",
+                    "| 字段 | 值 |",
+                    "|:--|:--|",
+                    f"| 状态 | `{_cell(status)}` |",
+                    f"| 评审代理 | {_cell(record.get('agent'))} |",
+                    f"| 生成时间 | {_cell(record.get('generated_at'))} |",
+                    f"| 构建 | {_cell(record.get('build_id'))} |",
+                    f"| 结论 | {_cell(record.get('summary'))} |",
+                    "",
+                ]
+                if findings:
+                    ordered = sorted(
+                        findings,
+                        key=lambda f_item: SEV_ORDER.get(f_item.get("severity", "info"), 9),
+                    )
+                    block += [
+                        "| 严重度 | 位置 | 描述 |",
+                        "|:--:|:--|:--|",
+                    ]
+                    for f_item in ordered[:MAX_DETAIL_ROWS]:
+                        block.append(
+                            f"| `{_cell(f_item.get('severity') or 'info')}` "
+                            f"| `{_cell(f_item.get('file'))}:{_cell(f_item.get('line'))}` "
+                            f"| {_cell(f_item.get('message'))} |"
+                        )
+                    if len(findings) > MAX_DETAIL_ROWS:
+                        block += [
+                            "",
+                            f"> 共 {len(findings)} 条问题，上表按严重度排序并仅展示前 "
+                            f"{MAX_DETAIL_ROWS} 条，完整清单见 `review-log.json`。",
+                        ]
+                sections.append("\n".join(block))
+
+        if not overview_rows:
             # 没有评审记录时也必须写占位内容：0 字节文件在审计视角下
             # 等同于“生成失败”，无法区分“未评审”和“报告损坏”。
             lines = [
@@ -282,6 +369,25 @@ class ReportBuilderMixin:
                 "- 评审记录未写入 `.osh/reviews/<task>/review-session.json`。",
                 "",
                 "评审完成后重新生成证据包即可纳入本报告。",
+                "",
+            ]
+        else:
+            lines = [
+                "# Review Log Summary",
+                "",
+                f"> 生成时间：{self.generated_at} ｜ 评审任务：{len(self.reviews)} "
+                f"｜ 评审代理：{agent_total} ｜ 问题：Critical {grand['critical']} / "
+                f"Major {grand['major']} / Minor {grand['minor']}",
+                "",
+                "## 概览",
+                "",
+                "| 任务 / 评审 | 决策 | 代理 | Critical | Major | Minor |",
+                "|:--|:--:|--:|--:|--:|--:|",
+                *overview_rows,
+                "",
+                "---",
+                "",
+                "\n\n---\n\n".join(sections),
                 "",
             ]
 
