@@ -610,29 +610,132 @@ class TestGenerateCodeCoverageReport:
 # ==================================================================
 
 class TestAggregateReviewLogs:
-    def test_no_reviews(self, collector, tmp_proj):
-        path = collector.aggregate_review_logs()
-        assert os.path.exists(path)
-        # 空集也必须写占位内容：0 字节文件无法区分“未评审”与“生成失败”。
-        content = open(path, encoding="utf-8").read()
-        assert "Review Log Summary" in content
-        assert "未发现评审记录" in content
+    """review-log-summary.md 必须是条目化表格，可读、可审计、机器可解析。"""
 
-    def test_with_reviews(self, collector, tmp_proj):
+    def test_empty_reviews_produces_placeholder_not_zero_bytes(self, collector, tmp_proj):
+        """空集不应产生 0 字节文件；审计视角下 0 字节 == 生成失败。"""
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+        assert content, "placeholder 必须非空"
+        assert "# Review Log Summary" in content
+        assert "未发现评审记录" in content
+        assert "## 概览" not in content, "空集不应渲染概览表"
+
+    def test_legacy_format_renders_overview_and_agent_tables(self, collector, tmp_proj):
+        """Legacy 格式 (task/decision/reviews) → 概览表 + 代理明细表。"""
         collector.reviews = [
             {
                 "task": "Review Pipeline",
                 "decision": "pass",
                 "created_at": "2025-01-01",
                 "reviews": [
-                    {"reviewer": "bot", "status": "passed", "finding_breakdown": {"critical": 0, "major": 1, "minor": 2}, "summary": "all good"},
+                    {
+                        "reviewer": "style-bot",
+                        "status": "passed",
+                        "finding_breakdown": {"critical": 0, "major": 1, "minor": 2},
+                        "summary": "all good",
+                    },
                 ],
             }
         ]
         path = collector.aggregate_review_logs()
-        content = open(path).read()
-        assert "Review Pipeline" in content
-        assert "pass" in content
+        content = open(path, encoding="utf-8").read()
+
+        assert "## 概览" in content
+        assert "| 任务 / 评审 | 决策 | 代理 | Critical | Major | Minor |" in content
+        assert "| Review Pipeline | `pass` | 1 | 0 | 1 | 2 |" in content
+
+        assert "## 1. Review Pipeline" in content
+        assert "| 评审代理 | 状态 | Critical | Major | Minor | 结论 |" in content
+        assert "| style-bot | `passed` | 0 | 1 | 2 | all good |" in content
+
+    def test_flat_format_renders_findings_table_with_severity_sort(self, collector, tmp_proj):
+        """Flat 格式 (review_type/status/findings) → 逐条 finding 表，按严重度排序。"""
+        collector.reviews = [
+            {
+                "review_type": "security",
+                "status": "failed",
+                "agent": "sec-reviewer",
+                "generated_at": "2025-01-02",
+                "build_id": "build-42",
+                "summary": "2 issues found",
+                "findings": [
+                    {"severity": "minor", "file": "a.py", "line": 10, "message": "unused var"},
+                    {"severity": "critical", "file": "b.py", "line": 3, "message": "sql injection"},
+                    {"severity": "major", "file": "c.py", "line": 20, "message": "missing auth"},
+                ],
+            }
+        ]
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+
+        assert "| security | `failed` | 1 | 1 | 1 | 1 |" in content
+        assert "## 1. 评审 · security" in content
+        assert "| `failed` |" in content
+        assert "| sec-reviewer |" in content
+
+        crit_line = "| `critical` | `b.py:3` | sql injection |"
+        major_line = "| `major` | `c.py:20` | missing auth |"
+        minor_line = "| `minor` | `a.py:10` | unused var |"
+        assert crit_line in content
+        assert major_line in content
+        assert minor_line in content
+        crit_pos = content.index(crit_line)
+        major_pos = content.index(major_line)
+        minor_pos = content.index(minor_line)
+        assert crit_pos < major_pos < minor_pos, (
+            "严重度顺序应为 critical → major → minor"
+        )
+
+    def test_findings_truncate_at_50_rows(self, collector, tmp_proj):
+        """超过 50 条 finding 只展示前 50 条，底部注明 + 指向 JSON。"""
+        findings = [
+            {"severity": "info", "file": f"f{i}.py", "line": i, "message": f"msg {i}"}
+            for i in range(60)
+        ]
+        collector.reviews = [
+            {
+                "review_type": "lint",
+                "status": "passed",
+                "agent": "lint-bot",
+                "generated_at": "2025-01-03",
+                "summary": "60 info items",
+                "findings": findings,
+            }
+        ]
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+
+        assert "共 60 条问题" in content
+        assert "仅展示前 50 条" in content
+        assert "review-log.json" in content
+        assert "| `info` | `f49.py:49` | msg 49 |" in content
+        assert "| `info` | `f50.py:50` | msg 50 |" not in content
+
+    def test_cell_escapes_pipe_and_newline(self, collector, tmp_proj):
+        """_cell 应转义竖线、压缩换行、空值显示为 —。"""
+        review_with_escapes = {
+            "review_type": "smoke",
+            "status": "passed",
+            "agent": None,
+            "generated_at": "2025-01-04",
+            "summary": "summary | with pipe" + "\n" + "and newline",
+            "findings": [
+                {
+                    "severity": "info",
+                    "file": "x.py",
+                    "line": 1,
+                    "message": "a | b" + "\n" + "c",
+                },
+            ],
+        }
+        collector.reviews = [review_with_escapes]
+        path = collector.aggregate_review_logs()
+        content = open(path, encoding="utf-8").read()
+
+        assert "| — |" in content
+        assert "summary \\| with pipe and newline" in content
+        assert "a \\| b c" in content
 
 
 # ==================================================================
