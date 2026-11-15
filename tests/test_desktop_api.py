@@ -1165,6 +1165,59 @@ class TestComplianceAudit:
         # No fake-green: overall evidence-coverage should be NI.
         assert summary.get("overall_score") == "NI"
 
+    def test_summary_carries_dashboard_fields(self, desktop_api):
+        """The compliance dashboard needs titles, aggregate counters and
+        document status alongside the existing summary."""
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "docs/spec.md", "# Spec\n## REQ-001\n- SHALL do X.\n")
+        self._seed_evidence(pid)
+
+        d.handle_desktop("POST", f"projects/{pid}/compliance/run", _body({}), {})
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/compliance", None, {})
+        assert status == 200
+        summary = resp["summary"]
+        assert summary["overall_coverage_pct"] >= 0
+        assert summary["total_gaps"] == len(summary["gaps"])
+        assert summary["total_evidences"] >= 1
+        assert summary["scores"]
+        for process_id, score in summary["scores"].items():
+            assert score["title"], process_id
+
+        docs = {doc["name"]: doc for doc in resp["documents"]}
+        assert docs["qa-plan"]["path"] == "docs/qa-plan.md"
+        assert docs["qa-plan"]["exists"] is False
+
+    def test_documents_list_missing_evidence_templates(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        self._write(pid, "docs/qa-plan.md", "# QA Plan\n## 1. Scope\n")
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/compliance/documents", None, {},
+        )
+        assert status == 200
+        docs = {doc["name"]: doc for doc in resp["documents"]}
+        assert docs["qa-plan"]["exists"] is True
+        assert docs["risk-register"]["exists"] is False
+        assert "risk-register" in resp["missing"]
+        assert "qa-plan" not in resp["missing"]
+
+    def test_documents_endpoint_rejects_unknown_project(self, desktop_api):
+        resp, status = desktop_api.handle_desktop(
+            "GET", "projects/does-not-exist/compliance/documents", None, {},
+        )
+        assert status == 404
+
+    def test_documents_endpoint_rejects_non_get(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/documents", _body({}), {},
+        )
+        assert status == 405
+
 
 # ── Audit visualisation (P6) ───────────────────────────────────────────────
 

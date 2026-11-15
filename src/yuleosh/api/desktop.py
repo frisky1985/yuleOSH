@@ -1557,6 +1557,21 @@ def _dispatch_qa(project_id: str, method: str, parts: list, body: Any) -> tuple:
 
 # ── Compliance audit handlers (P5) ─────────────────────────────────────────
 
+def _compliance_documents(project_id: str) -> list[dict]:
+    """Status of the ASPICE evidence documents the checker looks for."""
+    proj_dir = workspace._project_dir(project_id)
+    docs = []
+    for name, (filename, title, _gen) in templates.TEMPLATES.items():
+        path = proj_dir / "docs" / filename
+        docs.append({
+            "name": name,
+            "title": title,
+            "path": f"docs/{filename}",
+            "exists": path.is_file(),
+        })
+    return docs
+
+
 def _dispatch_compliance(project_id: str, method: str, parts: list, body: Any) -> tuple:
     """Handle /projects/{id}/compliance[/run]."""
     try:
@@ -1575,13 +1590,31 @@ def _dispatch_compliance(project_id: str, method: str, parts: list, body: Any) -
                 "ok": False,
                 "error": "No audit summary yet. POST /compliance/run first.",
             }, 404)
-        return _json({"ok": True, "summary": summary})
+        return _json({
+            "ok": True,
+            "summary": summary,
+            "documents": _compliance_documents(project_id),
+        })
 
     if action == "run":
         if method != "POST":
             return _json({"ok": False, "error": "Method not allowed"}, 405)
         summary = audit.run_compliance_audit(project_id, body)
-        return _json({"ok": summary["ok"], "summary": summary}, 200)
+        return _json({
+            "ok": summary["ok"],
+            "summary": summary,
+            "documents": _compliance_documents(project_id),
+        }, 200)
+
+    if action == "documents":
+        if method != "GET":
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        docs = _compliance_documents(project_id)
+        return _json({
+            "ok": True,
+            "documents": docs,
+            "missing": [d["name"] for d in docs if not d["exists"]],
+        })
 
     if action == "dashboard":
         if method != "GET":
