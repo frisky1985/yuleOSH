@@ -41,6 +41,7 @@ import {
   countFiles,
   filterTree,
   firstFile,
+  flattenFiles,
   sectionMeta,
   sectionOf,
   type TreeNode,
@@ -720,6 +721,8 @@ export default function DesktopWorkspacePage() {
     }
   };
 
+  const artifactFiles = useMemo(() => flattenFiles(tree), [tree]);
+
   return (
     <div className="flex flex-col h-screen bg-[#0a0e17] text-[#e2e8f0] overflow-hidden">
       {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -1319,7 +1322,9 @@ export default function DesktopWorkspacePage() {
         onClose={() => setShowPalette(false)}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         activeId={activeId}
+        files={artifactFiles}
         onSelectProject={setActiveId}
+        onOpenFile={(path) => { void handleSelectFile(path); }}
         onGovernance={handleGovernanceSelect}
         onAction={handlePaletteAction}
       />
