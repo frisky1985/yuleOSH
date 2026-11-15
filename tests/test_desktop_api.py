@@ -1798,3 +1798,169 @@ class TestLLMSettings:
     def test_unknown_settings_resource_404(self, desktop_api, llm_env):
         _, status = desktop_api.handle_desktop("GET", "settings/other", None, {})
         assert status == 404
+
+    # ── 生效配置回显 ─────────────────────────────────────────────────────
+
+    def test_get_reports_effective_config_with_defaults(self, desktop_api, llm_env):
+        """未显式配置模型 / 地址时，生效配置回落到服务商默认值。"""
+        resp, status = desktop_api.handle_desktop("GET", "settings/llm", None, {})
+
+        assert status == 200
+        effective = resp["effective"]
+        assert effective["provider"] == "deepseek"
+        assert effective["model"] == "deepseek-v4"
+        assert effective["model_is_default"] is True
+        assert effective["base_url"] == "https://api.deepseek.com"
+        assert effective["base_url_is_default"] is True
+        assert effective["api_key_set"] is False
+
+    def test_effective_config_tracks_saved_values(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "openai",
+            "model": "qwen2.5-coder",
+            "base_url": "http://127.0.0.1:11434/v1",
+            "api_key": "sk-eff-4321",
+        }), {})
+
+        resp, _ = desktop_api.handle_desktop("GET", "settings/llm", None, {})
+
+        effective = resp["effective"]
+        assert effective["model"] == "qwen2.5-coder"
+        assert effective["model_is_default"] is False
+        assert effective["base_url"] == "http://127.0.0.1:11434/v1"
+        assert effective["base_url_is_default"] is False
+        assert effective["api_key_set"] is True
+        assert effective["api_key_source"] == "settings"
+
+    def test_mock_effective_config_needs_no_key(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({"provider": "mock"}), {})
+
+        resp, _ = desktop_api.handle_desktop("GET", "settings/llm", None, {})
+
+        assert resp["effective"]["api_key_set"] is True
+        assert resp["effective"]["api_key_source"] == ""
+
+    # ── 测试连接 ─────────────────────────────────────────────────────────
+
+    def test_connection_test_mock_succeeds_and_counts(self, desktop_api, llm_env):
+        resp, status = desktop_api.handle_desktop(
+            "POST", "settings/llm/test", _body({"provider": "mock"}), {},
+        )
+
+        assert status == 200
+        assert resp["ok"] is True
+        assert resp["model"] == "deepseek-v4"
+        assert resp["latency_ms"] >= 0
+        assert resp["stats"]["success"] == 1
+        assert resp["stats"]["failure"] == 0
+        assert resp["stats"]["last_ok"] is True
+        assert resp["tested_at"]
+
+        # 计数持久化，重新读取设置时仍然可见。
+        again, _ = desktop_api.handle_desktop("GET", "settings/llm", None, {})
+        assert again["stats"]["success"] == 1
+
+    def test_connection_test_requires_api_key(self, desktop_api, llm_env):
+        resp, status = desktop_api.handle_desktop(
+            "POST", "settings/llm/test", _body({"provider": "openai"}), {},
+        )
+
+        assert status == 400
+        assert resp["ok"] is False
+        assert "API Key" in resp["error"]
+        # 未发起请求，不计入成功/失败统计。
+        assert resp["stats"]["success"] == 0
+        assert resp["stats"]["failure"] == 0
+
+    def test_connection_test_failure_records_error(self, desktop_api, llm_env):
+        # 127.0.0.1:9 上没有服务监听，连接会立即被拒绝。
+        resp, status = desktop_api.handle_desktop(
+            "POST", "settings/llm/test",
+            _body({
+                "provider": "openai",
+                "model": "gpt-4o",
+                "base_url": "http://127.0.0.1:9/v1",
+                "api_key": "sk-fail-0001",
+            }),
+            {},
+        )
+
+        assert status == 200
+        assert resp["ok"] is False
+        assert resp["error"]
+        assert "127.0.0.1:9" in resp["endpoint"]
+        assert resp["stats"]["failure"] == 1
+        assert resp["stats"]["success"] == 0
+        assert resp["stats"]["last_ok"] is False
+
+        stored = desktop_api._read_settings()
+        assert stored["llm_stats"]["failure"] == 1
+        # 明文 Key 不应写进统计信息。
+        assert "sk-fail-0001" not in json.dumps(stored["llm_stats"])
+
+    def test_connection_test_uses_saved_key(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "openai",
+            "model": "gpt-4o",
+            "base_url": "http://127.0.0.1:9/v1",
+            "api_key": "sk-saved-5555",
+        }), {})
+
+        # 未在测试请求里传 Key，应复用已保存的 Key 并通过缺 Key 校验。
+        resp, status = desktop_api.handle_desktop(
+            "POST", "settings/llm/test", _body({"provider": "openai"}), {},
+        )
+
+        assert status == 200
+        assert "API Key" not in resp["error"]
+        assert resp["stats"]["failure"] == 1
+
+    def test_connection_test_defaults_endpoint_by_provider(self, desktop_api, llm_env):
+        # 指向本地空闲端口，避免测试访问真实服务商网络。
+        resp, _ = desktop_api.handle_desktop(
+            "POST", "settings/llm/test",
+            _body({
+                "provider": "anthropic",
+                "base_url": "http://127.0.0.1:9",
+                "api_key": "sk-ant-test",
+            }),
+            {},
+        )
+
+        # Anthropic 使用 /v1/messages 协议，默认模型来自路由表。
+        assert resp["model"] == "claude-4-sonnet"
+        assert resp["endpoint"] == "http://127.0.0.1:9/v1/messages"
+
+    def test_connection_test_accepts_v1_base_url(self, desktop_api, llm_env):
+        resp, _ = desktop_api.handle_desktop(
+            "POST", "settings/llm/test",
+            _body({
+                "provider": "openai",
+                "base_url": "http://127.0.0.1:9/v1/",
+                "api_key": "sk-v1-1111",
+            }),
+            {},
+        )
+
+        # 不应重复拼接 /v1/v1。
+        assert resp["endpoint"] == "http://127.0.0.1:9/v1/chat/completions"
+
+    def test_connection_test_rejects_invalid_input(self, desktop_api, llm_env):
+        resp, status = desktop_api.handle_desktop(
+            "POST", "settings/llm/test", _body({"provider": "nope"}), {},
+        )
+        assert status == 400
+        assert resp["ok"] is False
+
+        resp, status = desktop_api.handle_desktop(
+            "POST", "settings/llm/test",
+            _body({"provider": "openai", "base_url": "127.0.0.1:9"}),
+            {},
+        )
+        assert status == 400
+        assert "base_url" in resp["error"]
+
+    def test_connection_test_method_not_allowed(self, desktop_api, llm_env):
+        _, status = desktop_api.handle_desktop("GET", "settings/llm/test", None, {})
+        assert status == 405
+
