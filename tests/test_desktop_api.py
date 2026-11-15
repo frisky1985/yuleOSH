@@ -136,6 +136,85 @@ class TestPipeline:
         assert status == 200
         assert len(resp["runs"]) >= 1
 
+    def test_status_disk_fallback_includes_logs(self, desktop_api):
+        """重启后从 result.json 读取运行详情时，日志与失败原因不能丢。"""
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        run_dir = d.workspace._project_dir(pid) / "pipeline" / "runs" / "job-disk-logs"
+        run_dir.mkdir(parents=True)
+        (run_dir / "result.json").write_text(
+            json.dumps({
+                "status": "failed",
+                "started_at": "2026-11-15T10:00:00",
+                "completed_at": "2026-11-15T10:01:00",
+                "current_stage": "ci_compile",
+                "stages": [{"key": "ci_compile", "name": "编译", "status": "failed"}],
+                "logs": ["step a", "step b"],
+                "result": {"error": "boom"},
+            }),
+            encoding="utf-8",
+        )
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/pipeline/status/job-disk-logs", None, {},
+        )
+
+        assert status == 200
+        assert resp["source"] == "disk"
+        assert resp["logs"] == ["step a", "step b"]
+        assert resp["logs_total"] == 2
+        assert resp["result"]["error"] == "boom"
+        assert resp["stages"][0]["status"] == "failed"
+
+    def test_status_disk_logs_capped_at_500(self, desktop_api):
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        run_dir = d.workspace._project_dir(pid) / "pipeline" / "runs" / "job-disk-many"
+        run_dir.mkdir(parents=True)
+        logs = [f"line {i}" for i in range(600)]
+        (run_dir / "result.json").write_text(
+            json.dumps({"status": "passed", "logs": logs}), encoding="utf-8",
+        )
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/pipeline/status/job-disk-many", None, {},
+        )
+
+        assert status == 200
+        assert len(resp["logs"]) == 500
+        assert resp["logs"][0] == "line 100"
+        assert resp["logs_total"] == 600
+
+    def test_status_memory_reports_total_logs(self, desktop_api):
+        """内存中的运行也要给出日志总数，便于详情页显示进度。"""
+        from yuleosh.pipeline import async_runner
+
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        job_id = "job-mem-many"
+        async_runner._PIPELINE_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "running",
+            "progress": 40,
+            "stages": [{"key": "arxml_parse", "name": "解析", "status": "passed"}],
+            "logs": [f"l{i}" for i in range(520)],
+            "started_at": "2026-11-15T10:00:00",
+            "completed_at": None,
+            "result": None,
+        }
+        try:
+            resp, status = d.handle_desktop(
+                "GET", f"projects/{pid}/pipeline/status/{job_id}", None, {},
+            )
+        finally:
+            async_runner._PIPELINE_JOBS.pop(job_id, None)
+
+        assert status == 200
+        assert len(resp["logs"]) == 500
+        assert resp["logs_total"] == 520
+        assert resp["stages"][0]["status"] == "passed"
+
+
 
 # ── Artifacts ─────────────────────────────────────────────────────────────
 

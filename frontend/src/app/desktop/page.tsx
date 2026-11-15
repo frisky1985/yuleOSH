@@ -59,6 +59,7 @@ import { AccountInfoDialog } from "@/components/account/account-info-dialog";
 import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
 import { DesktopLLMSettingsDialog } from "@/components/account/desktop-llm-settings-dialog";
 import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
+import { PipelineRunDialog } from "@/components/desktop/pipeline-run-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,7 @@ export default function DesktopWorkspacePage() {
     { role: "assistant", content: "你好！我是 yuleOSH 助手。请输入需求（支持自然语言或 OpenSpec 格式），我会帮你导入并自动运行流水线。", timestamp: new Date().toISOString() },
   ]);
   const [runs, setRuns] = useState<PipelineRun[]>([]);
+  const [runDetailJob, setRunDetailJob] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [pollProgress, setPollProgress] = useState(0);
   const [pollStage, setPollStage] = useState<string | null>(null);
@@ -773,18 +775,25 @@ export default function DesktopWorkspacePage() {
             {runs.length === 0 ? (
               <div className="text-xs text-[#475569]">暂无运行记录</div>
             ) : (
-              <ul className="space-y-1">
-                {runs.slice(0, 6).map((r) => (
-                  <li key={r.job_id} className="flex items-center gap-2 text-xs">
-                    {r.status === "passed" ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981] shrink-0" />
-                    ) : r.status === "failed" ? (
-                      <XCircle className="w-3.5 h-3.5 text-[#ef4444] shrink-0" />
-                    ) : (
-                      <Clock className="w-3.5 h-3.5 text-[#f59e0b] shrink-0" />
-                    )}
-                    <span className="truncate text-[#94a3b8]">{r.job_id.slice(0, 10)}</span>
-                    <span className="text-[#475569] ml-auto">{timeAgo(r.completed_at || r.started_at)}</span>
+              <ul className="max-h-44 space-y-0.5 overflow-y-auto">
+                {runs.map((r) => (
+                  <li key={r.job_id}>
+                    <button
+                      type="button"
+                      onClick={() => setRunDetailJob(r.job_id)}
+                      title={`查看运行详情 ${r.job_id}`}
+                      className="flex w-full items-center gap-2 rounded px-1 py-1 text-left text-xs text-[#94a3b8] transition-colors hover:bg-[#1e293b]/60 hover:text-white"
+                    >
+                      {r.status === "passed" ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981] shrink-0" />
+                      ) : r.status === "failed" ? (
+                        <XCircle className="w-3.5 h-3.5 text-[#ef4444] shrink-0" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5 text-[#f59e0b] shrink-0" />
+                      )}
+                      <span className="truncate">{r.job_id.slice(0, 10)}</span>
+                      <span className="ml-auto text-[#475569]">{timeAgo(r.completed_at || r.started_at)}</span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -1126,6 +1135,18 @@ export default function DesktopWorkspacePage() {
         open={logoutOpen}
         onOpenChange={setLogoutOpen}
         emailLabel={session?.email}
+      />
+      <PipelineRunDialog
+        key={runDetailJob ?? "none"}
+        open={!!runDetailJob}
+        onOpenChange={(next) => !next && setRunDetailJob(null)}
+        projectId={activeId}
+        jobId={runDetailJob}
+        running={running}
+        onRerun={() => {
+          setRunDetailJob(null);
+          handleRunPipeline();
+        }}
       />
     </div>
   );
