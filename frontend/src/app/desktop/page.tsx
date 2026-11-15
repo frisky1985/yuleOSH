@@ -26,6 +26,7 @@ import {
   Bug,
   ClipboardCheck,
   Flag,
+  Tags,
   Sparkles,
   Search,
   Filter,
@@ -71,6 +72,7 @@ import { QualityGatesDialog } from "@/components/desktop/quality-gates-dialog";
 import { IssueTrackerDialog } from "@/components/desktop/issue-tracker-dialog";
 import { QaAuditDialog } from "@/components/desktop/qa-audit-dialog";
 import { ProjectMgmtDialog } from "@/components/desktop/project-mgmt-dialog";
+import { ReviewCenterDialog } from "@/components/desktop/review-center-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -165,6 +167,7 @@ export default function DesktopWorkspacePage() {
   const [showIssues, setShowIssues] = useState(false);
   const [showQa, setShowQa] = useState(false);
   const [showPm, setShowPm] = useState(false);
+  const [showReviews, setShowReviews] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -810,6 +813,16 @@ export default function DesktopWorkspacePage() {
           >
             <Flag className="w-4 h-4 mr-1" /> 管理
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowReviews(true)}
+            disabled={!activeId}
+            title="跨产物评审列表、按分区/glob 批量打标、导出评审报告"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <Tags className="w-4 h-4 mr-1" /> 评审
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1298,6 +1311,13 @@ export default function DesktopWorkspacePage() {
       <ProjectMgmtDialog
         open={showPm}
         onOpenChange={setShowPm}
+        projectId={activeId}
+      />
+
+      {/* ── Review center (SUP.4 cross-artifact reviews) ───────────────── */}
+      <ReviewCenterDialog
+        open={showReviews}
+        onOpenChange={setShowReviews}
         projectId={activeId}
       />
 

@@ -2380,3 +2380,168 @@ class TestQualityGates:
             "POST", f"projects/{pid}/quality-gates", _body({}), {},
         )
         assert status == 405
+
+
+# ── Review center (cross-artifact list / bulk tagging / export) ────────────
+
+class TestReviewCenter:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "RV"}), {})[
+            0]["project"]["id"]
+
+    def _write(self, pid, rel, content):
+        from yuleosh.desktop import workspace
+        p = workspace._project_dir(pid) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+
+    def _seed(self, d):
+        pid = self._project(d)
+        self._write(pid, "requirements/requirements.md", "# Req\n")
+        self._write(pid, "code/main.c", "int main(void){return 0;}\n")
+        self._write(pid, "code/util.c", "int add(int a,int b){return a+b;}\n")
+        self._write(pid, "tests/test_main.c", "int main(void){return 0;}\n")
+        return pid
+
+    def _artifacts(self, d, pid):
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/review", None, {})
+        assert status == 200
+        return {a["artifact"]: a for a in resp["artifacts"]}
+
+    def test_list_shows_unreviewed_artifacts_and_counts(self, desktop_api):
+        d = desktop_api
+        pid = self._seed(d)
+        d.handle_desktop("POST", f"projects/{pid}/review", _body({
+            "artifact": "code/main.c", "status": "approved", "author": "qa",
+        }), {})
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/review", None, {})
+        assert status == 200
+        arts = {a["artifact"]: a for a in resp["artifacts"]}
+        assert set(arts) == {
+            "requirements/requirements.md", "code/main.c",
+            "code/util.c", "tests/test_main.c",
+        }
+        assert arts["code/main.c"]["status"] == "approved"
+        assert arts["code/main.c"]["review_id"]
+        assert arts["code/util.c"]["status"] == "unreviewed"
+        # review.json / review-report.md 不能被当成待评审产物
+        assert "evidence/review.json" not in arts
+        assert resp["counts"] == {
+            "total_files": 4, "approved": 1, "rejected": 0,
+            "needs_revision": 0, "unreviewed": 3,
+        }
+        sections = {s["section"]: s for s in resp["sections"]}
+        assert sections["code"]["total"] == 2
+        assert sections["code"]["approved"] == 1
+        assert sections["code"]["unreviewed"] == 1
+
+    def test_bulk_by_section_updates_and_creates(self, desktop_api):
+        d = desktop_api
+        pid = self._seed(d)
+        d.handle_desktop("POST", f"projects/{pid}/review", _body({
+            "artifact": "code/main.c", "status": "approved",
+        }), {})
+
+        resp, status = d.handle_desktop("POST", f"projects/{pid}/review/bulk", _body({
+            "scope": "section", "section": "code",
+            "status": "needs_revision", "comment": "缺少注释",
+        }), {})
+        assert status == 200
+        assert resp["matched"] == 2
+        assert resp["created"] == 1
+        assert resp["updated"] == 1
+
+        arts = self._artifacts(d, pid)
+        assert arts["code/main.c"]["status"] == "needs_revision"
+        assert arts["code/main.c"]["comment"] == "缺少注释"
+        assert arts["code/util.c"]["status"] == "needs_revision"
+        assert arts["tests/test_main.c"]["status"] == "unreviewed"
+
+    def test_bulk_by_glob_only_matches_pattern(self, desktop_api):
+        d = desktop_api
+        pid = self._seed(d)
+
+        resp, status = d.handle_desktop("POST", f"projects/{pid}/review/bulk", _body({
+            "scope": "glob", "pattern": "code/*.c", "status": "approved",
+        }), {})
+        assert status == 200
+        assert resp == {
+            "ok": True, "scope": "glob", "matched": 2, "created": 2, "updated": 0,
+        }
+        arts = self._artifacts(d, pid)
+        assert arts["code/main.c"]["status"] == "approved"
+        assert arts["code/util.c"]["status"] == "approved"
+        assert arts["requirements/requirements.md"]["status"] == "unreviewed"
+        assert arts["tests/test_main.c"]["status"] == "unreviewed"
+
+        # 支持逗号分隔的多条模式
+        resp, status = d.handle_desktop("POST", f"projects/{pid}/review/bulk", _body({
+            "scope": "glob", "pattern": "requirements/*, tests/*",
+            "status": "rejected",
+        }), {})
+        assert status == 200
+        assert resp["matched"] == 2
+        assert resp["created"] == 2
+
+    def test_bulk_rejects_invalid_input(self, desktop_api):
+        d = desktop_api
+        pid = self._seed(d)
+
+        cases = [
+            ({"scope": "glob", "pattern": "", "status": "approved"}, "pattern"),
+            ({"scope": "glob", "pattern": "/etc/passwd", "status": "approved"},
+             "project-relative"),
+            ({"scope": "glob", "pattern": "../secret/*", "status": "approved"},
+             "project-relative"),
+            ({"scope": "section", "section": "", "status": "approved"}, "section"),
+            ({"scope": "section", "section": "code", "status": "ok"}, "status"),
+        ]
+        for body, keyword in cases:
+            resp, status = d.handle_desktop(
+                "POST", f"projects/{pid}/review/bulk", _body(body), {},
+            )
+            assert status == 400, body
+            assert keyword in resp["error"], body
+
+    def test_export_report_lists_unreviewed_and_coverage(self, desktop_api):
+        d = desktop_api
+        pid = self._seed(d)
+        d.handle_desktop("POST", f"projects/{pid}/review/bulk", _body({
+            "scope": "section", "section": "code", "status": "approved",
+        }), {})
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/review/export", None, {},
+        )
+        assert status == 200
+        assert resp["path"] == "evidence/review-report.md"
+        assert resp["reviewed_files"] == 2
+        assert resp["unreviewed_files"] == 2
+        assert resp["total_files"] == 4
+        assert "## 未评审产物" in resp["content"]
+        assert "tests/test_main.c" in resp["content"]
+        assert "覆盖：已评审 2/4" in resp["content"]
+
+        from yuleosh.desktop import workspace
+        path = workspace._project_dir(pid) / "evidence" / "review-report.md"
+        assert path.exists()
+
+    def test_delete_review_restores_unreviewed(self, desktop_api):
+        d = desktop_api
+        pid = self._seed(d)
+        created, _ = d.handle_desktop("POST", f"projects/{pid}/review", _body({
+            "artifact": "code/main.c", "status": "approved",
+        }), {})
+        rid = created["review"]["id"]
+
+        _, status = d.handle_desktop(
+            "DELETE", f"projects/{pid}/review/{rid}", None, {},
+        )
+        assert status == 200
+        assert self._artifacts(d, pid)["code/main.c"]["status"] == "unreviewed"
+
+        _, status = d.handle_desktop(
+            "DELETE", f"projects/{pid}/review/{rid}", None, {},
+        )
+        assert status == 404
