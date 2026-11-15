@@ -316,6 +316,7 @@ class TestPipeline:
             "started_at": "2026-11-15T10:00:00",
             "completed_at": None,
             "result": None,
+            "code_generation": {"status": "repairing", "attempts": 2, "repair_count": 1},
         }
         try:
             resp, status = d.handle_desktop(
@@ -328,6 +329,7 @@ class TestPipeline:
         assert len(resp["logs"]) == 500
         assert resp["logs_total"] == 520
         assert resp["stages"][0]["status"] == "passed"
+        assert resp["code_generation"]["repair_count"] == 1
 
 
 

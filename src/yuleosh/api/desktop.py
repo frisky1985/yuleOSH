@@ -831,6 +831,7 @@ def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
                 "logs": job.get("logs", [])[-500:],
                 "logs_total": len(job.get("logs", [])),
                 "result": job.get("result"),
+                "code_generation": job.get("code_generation"),
             })
     except Exception:  # noqa: BLE001 — runner 模块不可用时走磁盘
         pass
@@ -853,6 +854,7 @@ def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
                 "logs": data.get("logs", [])[-500:],
                 "logs_total": len(data.get("logs", [])),
                 "result": data.get("result"),
+                "code_generation": data.get("code_generation"),
                 "source": "disk",
             })
         except json.JSONDecodeError:

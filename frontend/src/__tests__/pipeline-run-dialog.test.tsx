@@ -103,6 +103,56 @@ describe("PipelineRunDialog", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("展示 AUTOSAR 模型生成次数与各层文件统计", async () => {
+    fetchMock.mockReturnValueOnce(jsonResponse({
+      ...baseDetail,
+      code_generation: {
+        status: "passed",
+        model: "yuleOSH",
+        rule_source: "pipeline/config.yaml",
+        attempts: 2,
+        repair_count: 1,
+        files: 12,
+        layers: [
+          { key: "application", name: "Application SWC", path: "src/application", files: 3 },
+          { key: "rte", name: "RTE", path: "src/rte", files: 3 },
+          { key: "services", name: "BSW Services", path: "src/bsw/services", files: 2 },
+          { key: "ecu_abstraction", name: "ECU Abstraction", path: "src/bsw/ecu_abstraction", files: 2 },
+          { key: "mcal", name: "MCAL", path: "src/bsw/mcal", files: 2 },
+        ],
+      },
+    }));
+
+    render(<PipelineRunDialog open onOpenChange={jest.fn()} projectId="p1" jobId="job-abc123456" />);
+
+    expect(await screen.findByTestId("code-generation-summary")).toBeInTheDocument();
+    expect(screen.getByText("已生成并部署")).toBeInTheDocument();
+    expect(screen.getByText("2 次生成 · 1 次修复")).toBeInTheDocument();
+    expect(screen.getByText("Application SWC")).toBeInTheDocument();
+    expect(screen.getByText("ECU Abstraction")).toBeInTheDocument();
+    expect(screen.getByText(/12 个源文件通过编译、分层目录与依赖校验/)).toBeInTheDocument();
+  });
+
+  it("模型修复中显示当前尝试次数与问题数", async () => {
+    fetchMock.mockReturnValueOnce(jsonResponse({
+      ...baseDetail,
+      status: "running",
+      completed_at: null,
+      code_generation: {
+        status: "repairing",
+        attempts: 2,
+        repair_count: 1,
+        error_count: 3,
+      },
+    }));
+
+    render(<PipelineRunDialog open onOpenChange={jest.fn()} projectId="p1" jobId="job-abc123456" />);
+
+    expect(await screen.findByText("模型修复中")).toBeInTheDocument();
+    expect(screen.getByText(/正在执行第 2 次生成/)).toBeInTheDocument();
+    expect(screen.getByText("2 次生成 · 1 次修复")).toBeInTheDocument();
+  });
+
   it("失败时展示原因", async () => {
     fetchMock.mockReturnValueOnce(
       jsonResponse({

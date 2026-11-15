@@ -179,12 +179,14 @@ def test_flat_model_output_is_returned_for_regeneration_until_compliant(tmp_path
         name="autosar-test", project_dir=str(tmp_path),
         spec_path=str(tmp_path / "requirements.md"), llm_client=fake_llm,
     )
+    events = []
     engine = CodegenEngine(
         output_dir=tmp_path / "out",
         max_retries=1,
         llm_client=fake_llm,
         verifier=lambda *args, **kwargs: {"ok": True, "errors": "", "command": "fake"},
         autosar_rules=DEFAULT_AUTOSAR_RULES,
+        event_handler=lambda event, data: events.append((event, data)),
     )
     result = engine.generate(session, "system", "generate", language_hint="c")
 
@@ -194,6 +196,10 @@ def test_flat_model_output_is_returned_for_regeneration_until_compliant(tmp_path
     assert "AUTOSAR: missing required layer" in calls[1]
     assert (tmp_path / "out/src/application/application.c").exists()
     assert (tmp_path / "out/src/bsw/mcal/mcal.c").exists()
+    assert [event for event, _ in events] == [
+        "generation_started", "validation_failed", "repair_started", "generation_validated",
+    ]
+    assert events[2][1]["attempt"] == 2
 
 
 def test_desktop_stage_calls_yuleosh_model_and_deploys_only_verified_layers(tmp_path):
@@ -232,6 +238,45 @@ def test_desktop_stage_calls_yuleosh_model_and_deploys_only_verified_layers(tmp_
     for idx, directory in enumerate(DEFAULT_AUTOSAR_RULES["required_dirs"]):
         deployed = project / "code" / directory / f"Generated{idx}.c"
         assert deployed.read_text(encoding="utf-8") == f"void generated_{idx}(void) {{}}\n"
+
+
+def test_desktop_stage_publishes_model_progress_and_layer_summary(tmp_path):
+    from yuleosh.api.desktop import _ensure_artifact_baseline
+    from yuleosh.pipeline import async_runner
+
+    project = tmp_path / "project"
+    project.mkdir()
+    _ensure_artifact_baseline(project, {"project_id": "p1"}, seed_code=False)
+    job_id = "job-progress"
+    async_runner._PIPELINE_JOBS[job_id] = {"logs": []}
+
+    def fake_step(session):
+        output_dir = Path(session.config["codegen"]["output_dir"])
+        for idx, directory in enumerate(DEFAULT_AUTOSAR_RULES["required_dirs"]):
+            target = output_dir / directory / f"Layer{idx}.c"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"void layer_{idx}(void) {{}}\n", encoding="utf-8")
+        session.codegen_event_handler("generation_started", {"attempt": 1})
+        session.codegen_event_handler("validation_failed", {"attempt": 1, "error_count": 2})
+        session.codegen_event_handler("repair_started", {"attempt": 2, "error_count": 2})
+        session.codegen_event_handler("generation_validated", {"attempt": 2})
+        return str(project / "development-plan.md")
+
+    try:
+        with mock.patch(
+            "yuleosh.pipeline.step_handlers.execution._step_claude_dev_codegen",
+            side_effect=fake_step,
+        ):
+            async_runner._stage_code_generation(str(project), job_id, {})
+        progress = async_runner._PIPELINE_JOBS[job_id]["code_generation"]
+        assert progress["status"] == "passed"
+        assert progress["attempts"] == 2
+        assert progress["repair_count"] == 1
+        assert progress["files"] == 5
+        assert {layer["files"] for layer in progress["layers"]} == {1}
+        assert any("attempt 2" in line for line in async_runner._PIPELINE_JOBS[job_id]["logs"])
+    finally:
+        async_runner._PIPELINE_JOBS.pop(job_id, None)
 
 
 def test_desktop_stage_rejects_flat_model_output_without_seed_fallback(tmp_path):

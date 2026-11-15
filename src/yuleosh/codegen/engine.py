@@ -311,6 +311,7 @@ class CodegenEngine:
         forbidden_features: Optional[dict[str, list[str]]] = None,
         requirement_ids: Optional[list[str] | set[str]] = None,
         autosar_rules: Optional[dict] = None,
+        event_handler: Optional[Callable[[str, dict], None]] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
@@ -349,10 +350,20 @@ class CodegenEngine:
         }
         from yuleosh.codegen.autosar import normalize_autosar_rules
         self.autosar_rules = normalize_autosar_rules(autosar_rules)
+        self.event_handler = event_handler
         # seed 基线内存快照 (rel_path -> content), _sync_seed 后立即抓取,
         # 供头脑风暴强制恢复 — 不依赖 seed_dir 磁盘 (测试里 seed_dir 可能
         # 指向 out_dir, 磁盘已被 LLM 污染)。
         self._seed_baseline: dict[str, str] = {}
+
+    def _emit(self, event: str, **data) -> None:
+        """Publish progress without allowing observers to break code generation."""
+        if self.event_handler is None:
+            return
+        try:
+            self.event_handler(event, data)
+        except Exception:  # noqa: BLE001 — progress reporting is best effort
+            log.debug("Codegen event handler failed", exc_info=True)
 
     # ---- Main entry ---------------------------------------------------
 
@@ -406,6 +417,11 @@ class CodegenEngine:
         for round_idx in range(self.max_retries + 1):
             result.rounds = round_idx + 1
             autosar_failed = False
+            self._emit(
+                "generation_started" if round_idx == 0 else "repair_started",
+                attempt=round_idx + 1,
+                error_count=self._error_count(result.last_errors) if round_idx else 0,
+            )
             llm_output = self._call_llm(session, system_prompt, user_prompt, repair_context)
             files = parse_generated_files(llm_output)
             if not files:
@@ -522,12 +538,18 @@ class CodegenEngine:
                 else:
                     result.status = "verified"
                     result.last_errors = ""
+                    self._emit("generation_validated", attempt=round_idx + 1)
                     break
 
             errors = (verify.get("errors") or "").strip()
             if not errors and result.last_errors:
                 errors = result.last_errors
             result.last_errors = errors or f"verification failed ({verify.get('command')})"
+            self._emit(
+                "validation_failed",
+                attempt=round_idx + 1,
+                error_count=self._error_count(result.last_errors),
+            )
             log.warning(
                 "Codegen round %d failed verification: %s",
                 round_idx + 1, result.last_errors[:300],
