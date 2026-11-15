@@ -428,6 +428,12 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             existing_headers=collect_existing_headers(project_dir),
             seed_sources=seed_sources,
             contracts_json=contracts_json,
+            autosar_classic=cfg.get(
+                "autosar_classic",
+                "autosar-coding" in skills
+                and str(language_hint or target_language or "c").strip().lower()
+                in {"c", "c99", "c11", "c17"},
+            ),
         )
 
         engine = CodegenEngine(

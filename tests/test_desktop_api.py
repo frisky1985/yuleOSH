@@ -199,7 +199,7 @@ class TestPipeline:
         assert status == 202
         assert resp["job_id"]
 
-        # Artifact tree should contain code/src/main.c etc.
+        # Artifact tree should preserve the AUTOSAR Classic layer directories.
         tree_resp, _ = d.handle_desktop("GET", f"projects/{pid}/artifacts", None, {})
         tree = tree_resp["tree"]
         all_paths = []
@@ -208,8 +208,11 @@ class TestPipeline:
             for c in n.get("children", []):
                 walk(c)
         walk(tree)
-        assert "code/src/main.c" in all_paths
-        assert "tests/test_main.c" in all_paths
+        assert "code/src/application/HeadlightSwc.c" in all_paths
+        assert "code/src/rte/Rte.c" in all_paths
+        assert "code/src/bsw/ecu_abstraction/IoHwAb.c" in all_paths
+        assert "code/src/bsw/mcal/Adc.c" in all_paths
+        assert "tests/test_headlight_swc.c" in all_paths
         assert "design/sdd.md" in all_paths
 
     def test_list_runs(self, desktop_api):
@@ -308,11 +311,11 @@ class TestArtifacts:
         pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
         d.handle_desktop("POST", f"projects/{pid}/pipeline/run", _body({"type": "full"}), {})
         resp, status = d.handle_desktop(
-            "GET", f"projects/{pid}/artifacts/code/src/main.c", None, {},
+            "GET", f"projects/{pid}/artifacts/code/src/application/HeadlightSwc.c", None, {},
         )
         assert status == 200
         assert resp["binary"] is False
-        assert "main" in resp["content"]
+        assert "HeadlightSwc_Run" in resp["content"]
 
     def test_read_missing_artifact_404(self, desktop_api):
         d = desktop_api
@@ -404,6 +407,12 @@ class TestClassifyArtifact:
             # RTE 生成代码固定进 code/rte
             ("rte/Rte.c", ("code", "code/rte", "rte")),
             ("rte/Rte.h", ("code", "code/rte", "rte")),
+            # AUTOSAR Classic 分层目录原样保留
+            ("src/application/HeadlightSwc.c", ("code", "code/src/application", "autosar:application")),
+            ("src/rte/Rte.c", ("code", "code/src/rte", "autosar:rte")),
+            ("src/bsw/services/EcuM.c", ("code", "code/src/bsw/services", "autosar:services")),
+            ("src/bsw/ecu_abstraction/IoHwAb.c", ("code", "code/src/bsw/ecu_abstraction", "autosar:ecu-abstraction")),
+            ("src/bsw/mcal/Dio.c", ("code", "code/src/bsw/mcal", "autosar:mcal")),
             # 目录语义
             ("design/sdd.md", ("design", "design", "dir:design")),
             ("tests/report_lamp.json", ("tests", "tests", "dir:tests")),
@@ -439,6 +448,8 @@ class TestCollectRealArtifacts:
             "tests/test_lamp.c": "// test",
             "reports/coverage.json": "{}",
             "src/main.c": "int main(void){}",
+            "src/application/HeadlightSwc.c": "// swc",
+            "src/bsw/mcal/Dio.c": "// mcal",
             "misc/board.png": "png",
             "config.json": "{}",
             "config.arxml": "<xml/>",
@@ -460,6 +471,8 @@ class TestCollectRealArtifacts:
             "tests/test_lamp.c",
             "evidence/coverage.json",
             "code/main.c",
+            "code/src/application/HeadlightSwc.c",
+            "code/src/bsw/mcal/Dio.c",
             "_unclassified/board.png",
         ])
         for rel in collected:
@@ -482,6 +495,8 @@ class TestCollectRealArtifacts:
         assert by_path["design/sdd.md"]["rule"] == "name:design"
         assert by_path["tests/test_lamp.c"]["section"] == "tests"
         assert by_path["code/rte/Rte.c"]["rule"] == "rte"
+        assert by_path["code/src/application/HeadlightSwc.c"]["rule"] == "autosar:application"
+        assert by_path["code/src/bsw/mcal/Dio.c"]["rule"] == "autosar:mcal"
         assert by_path["_unclassified/board.png"]["section"] == "_unclassified"
 
     def test_collect_is_idempotent_and_keeps_newer_destination(self, desktop_api, tmp_path):

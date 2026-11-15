@@ -19,6 +19,27 @@ from yuleosh.pipeline.prompts import _inject_spec, SPEC_INJECT_LIMIT
 # Skills applied by default when none are requested explicitly.
 DEFAULT_CODEGEN_SKILLS = ["autosar-coding"]
 
+AUTOSAR_CLASSIC_LAYOUT_RULES = """
+8. AUTOSAR CLASSIC LAYERING HARD RULE (for C projects):
+   - Use this directory contract instead of a flat source dump:
+     `src/application/<SwcName>.c|.h` for application SWCs,
+     `src/rte/Rte*.c|.h` for port interfaces and RTE glue,
+     `src/bsw/services/` for ECU/OS/diagnostic/memory services,
+     `src/bsw/ecu_abstraction/` for sensor/actuator and board abstraction,
+     `src/bsw/mcal/` for MCU peripheral drivers,
+     `src/common/Std_Types.h` for shared AUTOSAR standard types.
+   - Dependency direction is Application SWC -> RTE -> BSW Services /
+     ECU Abstraction -> MCAL. Upper layers MUST NOT include or call MCAL
+     drivers directly, and MUST NOT access hardware registers.
+   - Application SWCs contain requirement logic and call only `Rte_*` ports.
+     RTE contains interface mapping/glue, not business state machines.
+     ECU Abstraction hides channels/board routing. MCAL is the only layer
+     allowed to contain target register or peripheral access.
+   - Give every module a paired header with its public API. Keep `main.c`
+     (when needed) as a composition root for init/runnable dispatch only.
+     NEVER place all requirements in `main.c` or one monolithic source file.
+"""
+
 # Seed 基线限制: 最多收集的文件数与单文件字符数 (防止 prompt 超长)。
 SEED_MAX_FILES = 15
 # 2026-08-20 (G-17/r22 复盘): 4000 → 20000 — seed 基线是防回归的核心上下文,
@@ -122,6 +143,7 @@ def build_codegen_prompt(
     seed_sources: str = "",
     context_content: str = "",
     contracts_json: str = "",
+    autosar_classic: Optional[bool] = None,
 ) -> tuple[str, str]:
     """Build ``(system_prompt, user_prompt)`` for code generation.
 
@@ -147,6 +169,11 @@ def build_codegen_prompt(
     skills_block = render_skills(skills)
 
     lang_hint = f"  - 目标语言: **{target_language}**" if target_language else ""
+    if autosar_classic is None:
+        language = (target_language or "").strip().lower()
+        autosar_classic = "autosar-coding" in skills and language in {
+            "", "c", "c99", "c11", "c17",
+        }
 
     system_prompt = (
         "You are a senior embedded software engineer implementing code from "
@@ -186,6 +213,7 @@ def build_codegen_prompt(
         "`requirements` array — the controlled requirement IDs it implements, "
         "or `[]` for auxiliary code — consistent with the `@req` annotation in "
         "the file content.\n"
+        + (AUTOSAR_CLASSIC_LAYOUT_RULES if autosar_classic else "")
     )
 
     context_parts = [
