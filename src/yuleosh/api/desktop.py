@@ -11,6 +11,7 @@ filesystem workspace managed by :mod:`yuleosh.desktop.workspace`.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import logging
 import os
@@ -2150,6 +2151,33 @@ import secrets as _secrets
 
 _REVIEW_STATUS = {"approved", "rejected", "needs_revision"}
 
+# Sections that participate in review. ``evidence`` is included so generated
+# reports can be tagged too, but the review center groups it separately.
+_REVIEW_SECTIONS = ("requirements", "design", "code", "tests", "evidence")
+
+# The review store and its own report must not count as reviewable artifacts,
+# otherwise coverage would never reach 100% and bulk "all" would tag itself.
+_REVIEW_META_FILES = {"evidence/review.json", "evidence/review-report.md"}
+
+
+def _iter_project_files(project_id: str) -> list[str]:
+    """Every reviewable artifact path (project-relative), sorted."""
+    proj_dir = workspace._project_dir(project_id)
+    files: list[str] = []
+    for sub in _REVIEW_SECTIONS:
+        sub_path = proj_dir / sub
+        if sub_path.exists():
+            for fpath in sub_path.rglob("*"):
+                if fpath.is_file():
+                    rel = fpath.relative_to(proj_dir).as_posix()
+                    if rel not in _REVIEW_META_FILES:
+                        files.append(rel)
+    return sorted(files)
+
+
+def _review_section(artifact: str) -> str:
+    return artifact.split("/")[0] if "/" in artifact else "other"
+
 
 def _review_path(project_id: str) -> Path:
     """Return the evidence/review.json path, creating parent dirs if needed."""
@@ -2229,7 +2257,12 @@ def _add_review(project_id: str, body: Any) -> tuple:
 
 
 def _list_reviews(project_id: str) -> tuple:
-    """List all reviews for a project, newest first."""
+    """List reviews plus the cross-artifact review coverage.
+
+    Beyond the raw review entries this returns one row per artifact file so the
+    review center can show *unreviewed* files too, which is what makes the
+    coverage numbers trustworthy (reviews alone can't prove absence).
+    """
     store = _load_reviews(project_id)
     reviews = list(store["reviews"].values())
     reviews.sort(key=lambda r: r.get("created_at", ""), reverse=True)
@@ -2242,10 +2275,48 @@ def _list_reviews(project_id: str) -> tuple:
         agg[r["status"]] = agg.get(r["status"], 0) + 1
         agg["total"] += 1
 
+    # 每个文件的最新一次评审（reviews 已按时间倒序）
+    latest: dict[str, dict] = {}
+    for r in reviews:
+        latest.setdefault(r["artifact"], r)
+
+    files = _iter_project_files(project_id)
+    artifacts: list[dict] = []
+    for path in files:
+        rev = latest.get(path)
+        artifacts.append({
+            "artifact": path,
+            "section": _review_section(path),
+            "status": rev["status"] if rev else "unreviewed",
+            "review_id": rev["id"] if rev else None,
+            "comment": rev.get("comment", "") if rev else "",
+            "author": rev.get("author", "") if rev else "",
+            "reviewed_at": rev.get("created_at") if rev else None,
+        })
+    section_counts: dict[str, dict] = {}
+    for row in artifacts:
+        agg = section_counts.setdefault(row["section"], {
+            "section": row["section"], "total": 0,
+            "approved": 0, "rejected": 0, "needs_revision": 0, "unreviewed": 0,
+        })
+        agg["total"] += 1
+        agg[row["status"]] += 1
+
+    counts = {
+        "total_files": len(artifacts),
+        "approved": sum(1 for a in artifacts if a["status"] == "approved"),
+        "rejected": sum(1 for a in artifacts if a["status"] == "rejected"),
+        "needs_revision": sum(1 for a in artifacts if a["status"] == "needs_revision"),
+        "unreviewed": sum(1 for a in artifacts if a["status"] == "unreviewed"),
+    }
+
     return _json({
         "ok": True,
         "reviews": reviews,
         "summary_by_artifact": list(by_artifact.values()),
+        "artifacts": artifacts,
+        "sections": [section_counts[k] for k in sorted(section_counts)],
+        "counts": counts,
         "total": len(reviews),
     })
 
@@ -2272,42 +2343,57 @@ def _bulk_reviews(project_id: str, body: Any) -> tuple:
     """批量给多个产物打同一个评审标签。
 
     body 字段:
-        scope        "artifact" | "section" | "all"
+        scope        "artifact" | "section" | "glob" | "all"
         artifacts    list[str]   — scope="artifact" 时指定文件路径
         section      str         — scope="section" 时指定分区名（如 code / tests）
+        pattern      str/list    — scope="glob" 时指定 glob（支持逗号分隔或多条）
         status       str         — approved | rejected | needs_revision
         comment      str         — 可选批注
     """
     data = body if isinstance(body, dict) else {}
-    scope = data.get("scope", "all").strip()
+    scope = str(data.get("scope") or "all").strip().lower()
     status = (data.get("status") or "").strip().lower()
     comment = (data.get("comment") or "").strip()
 
     if status not in _REVIEW_STATUS:
         return _json({"ok": False, "error": f"status must be one of {_REVIEW_STATUS}"}, 400)
 
-    proj_dir = workspace._project_dir(project_id)
-    # 收集所有产物文件路径
-    all_files = []
-    for sub in ("requirements", "design", "code", "tests", "evidence"):
-        sub_path = proj_dir / sub
-        if sub_path.exists():
-            for fpath in sub_path.rglob("*"):
-                if fpath.is_file():
-                    all_files.append(str(fpath.relative_to(proj_dir)))
+    all_files = _iter_project_files(project_id)
 
     if scope == "artifact":
         targets = [p for p in (data.get("artifacts") or []) if p in all_files]
     elif scope == "section":
-        section = (data.get("section") or "").strip()
+        section = str(data.get("section") or "").strip().strip("/")
         if not section:
             return _json({"ok": False, "error": "section is required"}, 400)
         targets = [p for p in all_files if p.startswith(section + "/")]
+    elif scope == "glob":
+        raw = data.get("pattern") or data.get("patterns") or ""
+        if isinstance(raw, (list, tuple)):
+            patterns = [str(p).strip() for p in raw if str(p).strip()]
+        else:
+            patterns = [p.strip() for p in str(raw).split(",") if p.strip()]
+        if not patterns:
+            return _json({"ok": False, "error": "pattern is required"}, 400)
+        # 匹配的是工程相对路径，因此拒绝绝对路径和上级穿越写法
+        bad = [p for p in patterns if p.startswith("/") or ".." in p]
+        if bad:
+            return _json({
+                "ok": False,
+                "error": f"pattern must be project-relative: {bad}",
+            }, 400)
+        targets = [
+            p for p in all_files
+            if any(fnmatch.fnmatchcase(p, pat) for pat in patterns)
+        ]
     else:  # all
         targets = all_files
 
     if not targets:
-        return _json({"ok": True, "created": 0, "skipped": 0, "message": "no files matched"}, 200)
+        return _json({
+            "ok": True, "scope": scope, "matched": 0,
+            "created": 0, "updated": 0, "message": "no files matched",
+        }, 200)
 
     store = _load_reviews(project_id)
     existing_by_artifact: dict[str, str] = {
@@ -2339,7 +2425,13 @@ def _bulk_reviews(project_id: str, body: Any) -> tuple:
         created += 1
 
     _save_reviews(project_id, store)
-    return _json({"ok": True, "created": created, "updated": skipped})
+    return _json({
+        "ok": True,
+        "scope": scope,
+        "matched": len(targets),
+        "created": created,
+        "updated": skipped,
+    })
 
 
 def _export_reviews(project_id: str) -> tuple:
@@ -2365,8 +2457,12 @@ def _export_reviews(project_id: str) -> tuple:
     # 按分区分组
     sections: dict[str, list[dict]] = {}
     for r in reviews:
-        section = r["artifact"].split("/")[0] if "/" in r["artifact"] else "other"
-        sections.setdefault(section, []).append(r)
+        sections.setdefault(_review_section(r["artifact"]), []).append(r)
+
+    # 覆盖度：评审记录无法证明「未评审」，所以按产物清单反算
+    reviewed_artifacts = {r["artifact"] for r in reviews}
+    all_files = _iter_project_files(project_id)
+    unreviewed = [p for p in all_files if p not in reviewed_artifacts]
 
     # 生成 Markdown
     lines = [
@@ -2374,6 +2470,7 @@ def _export_reviews(project_id: str) -> tuple:
         "",
         f"> 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ",
         f"> 评审总数：{len(reviews)}  ✅ 通过 {summary['approved']}  ❌ 退回 {summary['rejected']}  🔍 修改 {summary['needs_revision']}",
+        f"> 覆盖：已评审 {len(reviewed_artifacts)}/{len(all_files)} 个产物，未评审 {len(unreviewed)} 个",
         "",
         "## 概览",
         "",
@@ -2399,6 +2496,12 @@ def _export_reviews(project_id: str) -> tuple:
             lines.append(f"  _by {r.get('author', 'local')} · {r.get('created_at', '').replace('T', ' ')}_  ")
             lines.append("")
 
+    if unreviewed:
+        lines.extend(["## 未评审产物", ""])
+        for p in unreviewed:
+            lines.append(f"- `{p}`")
+        lines.append("")
+
     content = "\n".join(lines)
 
     # 落盘到 evidence/review-report.md
@@ -2412,4 +2515,7 @@ def _export_reviews(project_id: str) -> tuple:
         "content": content,
         "total": len(reviews),
         "summary": summary,
+        "reviewed_files": len(reviewed_artifacts),
+        "unreviewed_files": len(unreviewed),
+        "total_files": len(all_files),
     })
