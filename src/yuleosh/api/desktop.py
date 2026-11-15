@@ -16,6 +16,9 @@ import logging
 import os
 import re
 import shutil
+import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -42,6 +45,13 @@ def _json(data: dict, status: int = 200):
 # is what yuleosh.llm resolves at call time.
 
 LLM_PROVIDERS: tuple = ("deepseek", "openai", "anthropic", "mock")
+
+# Provider → default API base URL (mirrors yuleosh.llm.providers.*).
+_LLM_DEFAULT_BASE_URLS: dict[str, str] = {
+    "deepseek": "https://api.deepseek.com",
+    "openai": "https://api.openai.com",
+    "anthropic": "https://api.anthropic.com",
+}
 
 # Provider → env vars consumed by the LLM provider implementations.
 _LLM_KEY_ENVS: dict[str, tuple] = {
@@ -132,6 +142,58 @@ def _bootstrap_llm_settings() -> None:
 _bootstrap_llm_settings()
 
 
+def _llm_stats() -> dict:
+    """Connection-test counters persisted alongside the settings."""
+    saved = _read_settings().get("llm_stats")
+    stats = saved if isinstance(saved, dict) else {}
+    return {
+        "success": int(stats.get("success") or 0),
+        "failure": int(stats.get("failure") or 0),
+        "last_tested_at": str(stats.get("last_tested_at") or ""),
+        "last_latency_ms": stats.get("last_latency_ms"),
+        "last_ok": bool(stats.get("last_ok")),
+        "last_error": str(stats.get("last_error") or ""),
+    }
+
+
+def _record_llm_test(ok: bool, latency_ms: int, error: str = "") -> dict:
+    settings = _read_settings()
+    stats = _llm_stats()
+    stats["success"] += 0 if not ok else 1
+    stats["failure"] += 1 if not ok else 0
+    stats["last_tested_at"] = datetime.now().isoformat(timespec="seconds")
+    stats["last_latency_ms"] = latency_ms
+    stats["last_ok"] = bool(ok)
+    stats["last_error"] = "" if ok else error
+    settings["llm_stats"] = stats
+    try:
+        _write_settings(settings)
+    except OSError:
+        log.warning("Failed to persist LLM test stats", exc_info=True)
+    return stats
+
+
+def _effective_llm_config(cfg: dict) -> dict:
+    """Resolve what the pipeline will actually use right now."""
+    from yuleosh.llm.client import PROVIDER_DEFAULT_MODELS
+
+    provider = str(cfg.get("provider") or os.environ.get("YULEOSH_LLM_PROVIDER") or "deepseek")
+    default_model = PROVIDER_DEFAULT_MODELS.get(provider, "")
+    model = str(cfg.get("model") or os.environ.get("LLM_MODEL") or "")
+    base_url = str(cfg.get("base_url") or os.environ.get("LLM_BASE_URL") or "")
+    file_key = str(cfg.get("api_key") or "")
+    key_source = "settings" if file_key else ("env" if _llm_env_key_configured(provider) else "")
+    return {
+        "provider": provider,
+        "model": model or default_model,
+        "model_is_default": not model,
+        "base_url": base_url or _LLM_DEFAULT_BASE_URLS.get(provider, ""),
+        "base_url_is_default": not base_url,
+        "api_key_set": provider == "mock" or bool(key_source),
+        "api_key_source": key_source,
+    }
+
+
 def _llm_settings_response() -> dict:
     from yuleosh.llm.client import PROVIDER_DEFAULT_MODELS
 
@@ -156,6 +218,8 @@ def _llm_settings_response() -> dict:
         "api_key_set": key_configured,
         "api_key_masked": _mask_key(file_key),
         "api_key_source": "settings" if file_key else ("env" if _llm_env_key_configured(provider) else ""),
+        "effective": _effective_llm_config(cfg),
+        "stats": _llm_stats(),
     }
 
 
@@ -200,6 +264,178 @@ def _update_llm_settings(body: Any) -> tuple:
     return _json(_llm_settings_response(), 200)
 
 
+# ── LLM connection test ───────────────────────────────────────────────────
+#
+# The test mirrors the real provider protocols with a 1-token request, so a
+# green result means the endpoint, key and model name are all usable. Stats
+# are persisted so the settings dialog can show recent test history.
+
+def _llm_endpoint(base_url: str, path: str) -> str:
+    base = (base_url or "").rstrip("/")
+    # Accept both root URLs and endpoints already ending in /v1.
+    if base.endswith("/v1"):
+        return f"{base}{path}"
+    return f"{base}/v1{path}"
+
+
+def _http_error_hint(code: int, body_text: str) -> str:
+    if code == 401:
+        return "认证失败（401）：API Key 无效或已过期"
+    if code == 403:
+        return "无权限（403）：该 Key 不被允许访问此模型"
+    if code == 404:
+        return "端点或模型不存在（404）：请检查 Base URL 与模型名"
+    if code == 429:
+        return "请求被限流（429）：请稍后重试或检查配额"
+    if code >= 500:
+        return f"服务端错误（{code}）：服务商暂时不可用"
+    snippet = " ".join((body_text or "").split())[:160]
+    return f"请求失败（{code}）{snippet}".strip()
+
+
+def _llm_test_request(provider: str, model: str, base_url: str, api_key: str,
+                      timeout: float = 12.0) -> tuple:
+    """Call the provider with a minimal prompt → (ok, reply, error)."""
+    if provider == "mock":
+        return True, "mock provider 无需网络请求，配置有效", ""
+
+    if provider == "anthropic":
+        url = _llm_endpoint(base_url, "/messages")
+        payload = {
+            "model": model,
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "ping"}],
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+    else:
+        url = _llm_endpoint(base_url, "/chat/completions")
+        payload = {
+            "model": model,
+            "max_tokens": 1,
+            "stream": False,
+            "messages": [{"role": "user", "content": "ping"}],
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace") or "{}")
+    except urllib.error.HTTPError as e:
+        body_text = ""
+        try:
+            body_text = e.read().decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 - best-effort error body
+            pass
+        return False, "", _http_error_hint(e.code, body_text)
+    except urllib.error.URLError as e:
+        return False, "", f"无法连接 {url}：{e.reason}"
+    except TimeoutError:
+        return False, "", f"连接 {url} 超时（>{timeout:.0f}s）"
+    except (OSError, ValueError) as e:
+        return False, "", f"请求 {url} 失败：{e}"
+
+    if provider == "anthropic":
+        blocks = data.get("content") if isinstance(data, dict) else None
+        reply = ""
+        if isinstance(blocks, list):
+            reply = "".join(
+                str(b.get("text") or "") for b in blocks if isinstance(b, dict)
+            )
+    else:
+        choices = data.get("choices") if isinstance(data, dict) else None
+        reply = ""
+        if isinstance(choices, list) and choices:
+            message = choices[0].get("message") if isinstance(choices[0], dict) else None
+            reply = str((message or {}).get("content") or "")
+    return True, (reply or "").strip(), ""
+
+
+def _test_llm_settings(body: Any) -> tuple:
+    """Test the config currently in the form (falls back to saved values)."""
+    from yuleosh.llm.client import PROVIDER_DEFAULT_MODELS
+
+    data = body if isinstance(body, dict) else {}
+    saved = _read_settings().get("llm")
+    cfg = saved if isinstance(saved, dict) else {}
+
+    provider = str(
+        data.get("provider") or cfg.get("provider")
+        or os.environ.get("YULEOSH_LLM_PROVIDER") or "deepseek"
+    ).strip().lower()
+    if provider not in LLM_PROVIDERS:
+        return _json({
+            "ok": False,
+            "error": f"provider 必须是 {list(LLM_PROVIDERS)} 之一",
+        }, 400)
+
+    model = str(data.get("model") or cfg.get("model") or os.environ.get("LLM_MODEL") or "").strip()
+    model = model or PROVIDER_DEFAULT_MODELS.get(provider, "")
+    base_url = str(
+        data.get("base_url") or cfg.get("base_url") or os.environ.get("LLM_BASE_URL") or ""
+    ).strip()
+    if base_url and not base_url.startswith(("http://", "https://")):
+        return _json({"ok": False, "error": "base_url 必须以 http:// 或 https:// 开头"}, 400)
+    base_url = base_url or _LLM_DEFAULT_BASE_URLS.get(provider, "")
+
+    submitted_key = data.get("api_key")
+    if isinstance(submitted_key, str) and submitted_key.strip():
+        api_key = submitted_key.strip()
+    else:
+        api_key = str(cfg.get("api_key") or "")
+        if not api_key:
+            api_key = next(
+                (os.environ.get(env, "") for env in _LLM_KEY_ENVS.get(provider, ()) if os.environ.get(env)),
+                "",
+            )
+
+    path = "/messages" if provider == "anthropic" else "/chat/completions"
+    endpoint = base_url if provider == "mock" else _llm_endpoint(base_url, path)
+
+    if provider != "mock" and not api_key:
+        stats = _llm_stats()
+        return _json({
+            "ok": False,
+            "error": "请先填写 API Key，或先在服务商处获取 Key 后再测试",
+            "provider": provider,
+            "model": model,
+            "endpoint": endpoint,
+            "stats": stats,
+        }, 400)
+
+    started = time.monotonic()
+    ok, reply, error = _llm_test_request(provider, model, base_url, api_key)
+    latency_ms = int((time.monotonic() - started) * 1000)
+    stats = _record_llm_test(ok, latency_ms, error)
+    log.info(
+        "Desktop LLM test: provider=%s model=%s ok=%s latency=%dms",
+        provider, model, ok, latency_ms,
+    )
+    return _json({
+        "ok": ok,
+        "provider": provider,
+        "model": model,
+        "endpoint": endpoint,
+        "latency_ms": latency_ms,
+        "reply": reply,
+        "error": error,
+        "tested_at": stats["last_tested_at"],
+        "stats": stats,
+    }, 200)
+
+
 def handle_desktop(method: str, path_tail: str, body: Any, query: dict,
                    handler=None) -> tuple:
     """Dispatcher for /api/v1/desktop/* routes.
@@ -223,6 +459,13 @@ def handle_desktop(method: str, path_tail: str, body: Any, query: dict,
     if resource == "settings":
         sub = parts[1] if len(parts) > 1 else ""
         if sub == "llm":
+            action = parts[2] if len(parts) > 2 else ""
+            if action == "test":
+                if method in ("POST", "PUT"):
+                    return _test_llm_settings(body)
+                return _json({"ok": False, "error": "Method not allowed"}, 405)
+            if action:
+                return _json({"ok": False, "error": f"Unknown llm action: {action}"}, 404)
             if method == "GET":
                 return _json(_llm_settings_response(), 200)
             if method in ("PUT", "POST"):
