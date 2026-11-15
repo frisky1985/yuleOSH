@@ -2231,3 +2231,152 @@ class TestLLMSettings:
         _, status = desktop_api.handle_desktop("GET", "settings/llm/test", None, {})
         assert status == 405
 
+
+
+# ── Quality gate board (traceability / review / CI / test) ────────────────
+
+class TestQualityGates:
+    def _project(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "QG"}), {})[
+            0]["project"]["id"]
+
+    def _write(self, pid, rel, content):
+        from yuleosh.desktop import workspace
+        p = workspace._project_dir(pid) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def _gate(self, resp, key):
+        return next(c for c in resp["categories"] if c["key"] == key)
+
+    def _green_project(self, d):
+        """Project whose four gates all verify green."""
+        pid = self._project(d)
+        d.handle_desktop("POST", f"projects/{pid}/requirements", _body({
+            "content": "# Reqs\n\n## REQ-001\n- The system SHALL switch on.\n",
+        }), {})
+        self._write(pid, "code/main.c", "// @req REQ-001\nint main(void){return 0;}\n")
+        self._write(pid, "tests/test_main.c", "// @req REQ-001\n")
+        self._write(pid, "tests/report.json",
+                    json.dumps({"passed": 3, "failed": 0, "coverage": "82%"}))
+        d.handle_desktop("POST", f"projects/{pid}/review", _body({
+            "artifact": "code/main.c", "status": "approved", "author": "qa",
+        }), {})
+
+        from yuleosh.desktop import workspace
+        workspace.record_pipeline_run(pid, "job-20261115")
+        workspace.save_pipeline_result(pid, "job-20261115", {
+            "status": "passed",
+            "started_at": "2026-11-15T10:00:00",
+            "completed_at": "2026-11-15T10:05:00",
+        })
+        self._write(pid, ".osh/sessions/s1/gate-summary.json", json.dumps({
+            "schema": "gate-summary-v1",
+            "session": "s1",
+            "timestamp": "2026-11-15T10:05:00",
+            "worst_gate_status": "passed",
+            "gates": [
+                {"gate": "G1", "name": "SWE.1 需求 Gate", "status": "passed",
+                 "step_keys": ["spec-check", "prd"], "advisory": False},
+                {"gate": "G4", "name": "方案评审 Gate", "status": "passed",
+                 "step_keys": ["claude-review"], "advisory": True},
+            ],
+            "not_run_gates": [],
+            "stale_gates": [],
+        }))
+        return pid
+
+    def test_empty_project_is_unverified_not_green(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/quality-gates", None, {},
+        )
+        assert status == 200
+        assert resp["overall"] == "unverified"
+        assert {c["key"] for c in resp["categories"]} == {
+            "traceability", "review", "ci", "test"}
+        for category in resp["categories"]:
+            assert category["status"] == "not-run", category["key"]
+        assert resp["latest_run"]["source"] == "none"
+        assert resp["latest_run"]["gates"] == []
+
+    def test_all_gates_green_with_pipeline_gate_summary(self, desktop_api):
+        d = desktop_api
+        pid = self._green_project(d)
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/quality-gates", None, {},
+        )
+        assert status == 200
+        assert resp["overall"] == "green"
+        assert resp["worst_status"] == "passed"
+        assert self._gate(resp, "traceability")["status"] == "passed"
+        assert self._gate(resp, "review")["status"] == "passed"
+        assert self._gate(resp, "ci")["status"] == "passed"
+        assert self._gate(resp, "test")["status"] == "passed"
+
+        latest = resp["latest_run"]
+        assert latest["job_id"] == "job-20261115"
+        assert latest["source"] == "gate-summary"
+        assert latest["session"] == "s1"
+        assert latest["worst_gate_status"] == "passed"
+        assert [g["gate"] for g in latest["gates"]] == ["G1", "G4"]
+        assert latest["gates"][1]["advisory"] is True
+
+    def test_rejected_review_turns_overall_red(self, desktop_api):
+        d = desktop_api
+        pid = self._green_project(d)
+        d.handle_desktop("POST", f"projects/{pid}/review", _body({
+            "artifact": "code/main.c", "status": "rejected", "author": "qa",
+        }), {})
+
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/quality-gates", None, {},
+        )
+        assert status == 200
+        assert resp["overall"] == "red"
+        review = self._gate(resp, "review")
+        assert review["status"] == "failed"
+        assert "驳回 1" in review["detail"]
+
+    def test_failed_test_report_fails_test_gate(self, desktop_api):
+        d = desktop_api
+        pid = self._green_project(d)
+        self._write(pid, "tests/report.json",
+                    json.dumps({"passed": 2, "failed": 1, "coverage": "70%"}))
+
+        resp, _ = d.handle_desktop("GET", f"projects/{pid}/quality-gates", None, {})
+        test_gate = self._gate(resp, "test")
+        assert test_gate["status"] == "failed"
+        assert "失败 1" in test_gate["detail"]
+        assert resp["overall"] == "red"
+
+    def test_run_without_gate_summary_uses_run_record(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        from yuleosh.desktop import workspace
+        workspace.record_pipeline_run(pid, "job-run-only")
+        workspace.save_pipeline_result(pid, "job-run-only", {
+            "status": "running", "started_at": "2026-11-15T11:00:00",
+        })
+
+        resp, _ = d.handle_desktop("GET", f"projects/{pid}/quality-gates", None, {})
+        assert self._gate(resp, "ci")["status"] == "warning"
+        assert resp["latest_run"]["source"] == "run-record"
+        assert resp["latest_run"]["gates"] == []
+        # 运行中不等于验证通过
+        assert resp["overall"] == "unverified"
+
+    def test_unknown_project_and_bad_method(self, desktop_api):
+        d = desktop_api
+        _, status = d.handle_desktop(
+            "GET", "projects/nope/quality-gates", None, {},
+        )
+        assert status == 404
+        pid = self._project(d)
+        _, status = d.handle_desktop(
+            "POST", f"projects/{pid}/quality-gates", _body({}), {},
+        )
+        assert status == 405

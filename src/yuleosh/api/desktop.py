@@ -625,6 +625,11 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
     if sub == "evidence-chain":
         return _dispatch_evidence_chain(project_id, method)
 
+    # 质量门禁看板：追溯 / 评审 / CI / 测试 四类门禁 + 最近一次流水线门禁明细
+    # /api/v1/desktop/projects/{id}/quality-gates (GET)
+    if sub == "quality-gates":
+        return _dispatch_quality_gates(project_id, method)
+
     if sub == "artifacts":
         rel = "/".join(parts[2:]) if len(parts) > 2 else ""
         if method == "GET":
@@ -1680,6 +1685,297 @@ def _dispatch_evidence_chain(project_id: str, method: str) -> tuple:
             "required_pairs": v_model.get("required_pairs", 0),
             "required_passed": v_model.get("required_passed", 0),
         },
+    })
+
+
+# ── Quality gate board (traceability / review / CI / test) ────────────────
+
+#: Worst-wins ranking for gate statuses (higher = more severe).
+_GATE_STATUS_RANK = {
+    "passed": 0,
+    "skipped": 1,
+    "not-run": 2,
+    "warning": 3,
+    "retry": 4,
+    "stale": 5,
+    "failed": 6,
+}
+
+#: Pipeline run status → gate status. ``running``/``queued`` are not evidence
+#: of success, so they surface as ``warning`` (never silently green).
+_RUN_STATUS_TO_GATE = {
+    "passed": "passed",
+    "failed": "failed",
+    "running": "warning",
+    "queued": "warning",
+}
+
+
+def _worst_gate_status(statuses: list[str]) -> str:
+    ranked = [s for s in statuses if s in _GATE_STATUS_RANK]
+    if not ranked:
+        return "not-run"
+    return max(ranked, key=lambda s: _GATE_STATUS_RANK[s])
+
+
+def _quality_traceability_gate(project_id: str) -> dict:
+    try:
+        matrix = tracing.build_matrix(project_id)
+        verdict = tracing.gate_verdict(matrix)
+    except (ValueError, OSError) as e:
+        return {
+            "key": "traceability",
+            "name": "追溯门禁",
+            "status": "not-run",
+            "detail": f"无法读取追溯矩阵：{e}",
+            "metrics": [],
+        }
+
+    summary = matrix.get("summary") or {}
+    raw = str(verdict.get("status") or "not-run")
+    # A disabled gate is not a failure, but it is also not verification.
+    status = "skipped" if raw == "disabled" else raw
+    if status not in _GATE_STATUS_RANK:
+        status = "not-run"
+    return {
+        "key": "traceability",
+        "name": "追溯门禁",
+        "status": status,
+        "detail": str(verdict.get("reason") or ""),
+        "threshold": verdict.get("threshold"),
+        "metrics": [
+            {"label": "需求总数", "value": summary.get("total_requirements", 0)},
+            {"label": "测试覆盖", "value": f"{summary.get('coverage_pct', 0.0)}%"},
+            {"label": "设计覆盖", "value": f"{summary.get('design_coverage_pct', 0.0)}%"},
+            {"label": "孤儿测试", "value": summary.get("orphaned_tests", 0)},
+        ],
+    }
+
+
+def _quality_review_gate(project_id: str) -> dict:
+    store = _load_reviews(project_id)
+    reviews = [r for r in store.get("reviews", {}).values() if isinstance(r, dict)]
+    counts = {"approved": 0, "rejected": 0, "needs_revision": 0}
+    for r in reviews:
+        status = str(r.get("status") or "")
+        if status in counts:
+            counts[status] += 1
+
+    total = len(reviews)
+    if not total:
+        status, detail = "not-run", "尚无评审记录"
+    elif counts["rejected"] or counts["needs_revision"]:
+        status = "failed"
+        detail = f"驳回 {counts['rejected']} / 需修改 {counts['needs_revision']}"
+    else:
+        status, detail = "passed", f"{counts['approved']} 项评审全部通过"
+    return {
+        "key": "review",
+        "name": "评审门禁",
+        "status": status,
+        "detail": detail,
+        "metrics": [
+            {"label": "评审总数", "value": total},
+            {"label": "通过", "value": counts["approved"]},
+            {"label": "需修改", "value": counts["needs_revision"]},
+            {"label": "驳回", "value": counts["rejected"]},
+        ],
+    }
+
+
+def _latest_pipeline_run(project_id: str) -> dict | None:
+    runs = workspace.list_pipeline_runs(project_id)
+    if not runs:
+        return None
+    return max(
+        runs,
+        key=lambda r: (str(r.get("started_at") or ""), str(r.get("job_id") or "")),
+    )
+
+
+def _quality_ci_gate(project_id: str) -> dict:
+    run = _latest_pipeline_run(project_id)
+    if run is None:
+        return {
+            "key": "ci",
+            "name": "CI 门禁",
+            "status": "not-run",
+            "detail": "尚无流水线运行记录",
+            "metrics": [],
+        }
+    raw = str(run.get("status") or "unknown")
+    status = _RUN_STATUS_TO_GATE.get(raw, "not-run")
+    detail = f"最近运行 {run.get('job_id')}：{raw}"
+    if run.get("completed_at"):
+        detail += f"（{run['completed_at']}）"
+    return {
+        "key": "ci",
+        "name": "CI 门禁",
+        "status": status,
+        "detail": detail,
+        "job_id": run.get("job_id"),
+        "metrics": [
+            {"label": "运行状态", "value": raw},
+            {"label": "开始时间", "value": run.get("started_at") or "—"},
+            {"label": "结束时间", "value": run.get("completed_at") or "—"},
+        ],
+    }
+
+
+def _quality_test_gate(project_id: str) -> dict:
+    proj_dir = workspace._project_dir(project_id)
+    tests_dir = proj_dir / "tests"
+    test_files = (
+        [p for p in tests_dir.rglob("*") if p.is_file()
+         and p.suffix in (".c", ".cpp", ".py", ".js", ".ts")]
+        if tests_dir.is_dir() else []
+    )
+
+    report = tests_dir / "report.json"
+    passed = failed = 0
+    coverage = None
+    has_report = False
+    if report.is_file():
+        try:
+            data = json.loads(report.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = None
+        if isinstance(data, dict):
+            has_report = True
+            try:
+                passed = int(data.get("passed") or 0)
+                failed = int(data.get("failed") or 0)
+            except (TypeError, ValueError):
+                passed = failed = 0
+            coverage = data.get("coverage")
+
+    if has_report:
+        if failed:
+            status = "failed"
+        elif passed:
+            status = "passed"
+        else:
+            status = "not-run"
+        detail = f"通过 {passed} / 失败 {failed}"
+    elif test_files:
+        status = "not-run"
+        detail = f"发现 {len(test_files)} 个测试文件，但没有测试报告"
+    else:
+        status = "not-run"
+        detail = "尚无测试产物"
+
+    metrics = [
+        {"label": "测试文件", "value": len(test_files)},
+        {"label": "通过", "value": passed},
+        {"label": "失败", "value": failed},
+    ]
+    if coverage is not None:
+        metrics.append({"label": "覆盖率", "value": str(coverage)})
+    return {
+        "key": "test",
+        "name": "测试门禁",
+        "status": status,
+        "detail": detail,
+        "metrics": metrics,
+    }
+
+
+def _latest_run_gate_detail(project_id: str, run: dict | None) -> dict:
+    """Gate-level detail for the newest run.
+
+    Prefers a real ``gate-summary.json`` written by the orchestrator (searched
+    newest-first under the project dir); falls back to the run record, which
+    only carries a coarse passed/failed status.
+    """
+    proj_dir = workspace._project_dir(project_id)
+    detail: dict = {
+        "job_id": run.get("job_id") if run else None,
+        "run_status": run.get("status") if run else None,
+        "started_at": run.get("started_at") if run else None,
+        "completed_at": run.get("completed_at") if run else None,
+        "source": "none",
+        "session": None,
+        "summary_timestamp": None,
+        "worst_gate_status": None,
+        "gates": [],
+        "not_run_gates": [],
+        "stale_gates": [],
+    }
+    if run is None:
+        return detail
+
+    detail["source"] = "run-record"
+    try:
+        summaries = sorted(
+            proj_dir.rglob("gate-summary.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        summaries = []
+
+    from yuleosh.pipeline.gates import load_gate_summary
+
+    for path in summaries:
+        data = load_gate_summary(path)
+        if not isinstance(data.get("gates"), list) or not data["gates"]:
+            continue
+        detail.update({
+            "source": "gate-summary",
+            "summary_path": str(path.relative_to(proj_dir)),
+            "session": data.get("session"),
+            "summary_timestamp": data.get("timestamp"),
+            "worst_gate_status": data.get("worst_gate_status"),
+            "not_run_gates": data.get("not_run_gates") or [],
+            "stale_gates": data.get("stale_gates") or [],
+            "gates": [
+                {
+                    "gate": g.get("gate"),
+                    "name": g.get("name"),
+                    "status": g.get("status"),
+                    "advisory": bool(g.get("advisory")),
+                    "step_total": len(g.get("step_keys") or []),
+                }
+                for g in data["gates"] if isinstance(g, dict)
+            ],
+        })
+        break
+    return detail
+
+
+def _dispatch_quality_gates(project_id: str, method: str) -> tuple:
+    """Aggregate the four quality gates plus the newest run's gate detail."""
+    if method != "GET":
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    categories = [
+        _quality_traceability_gate(project_id),
+        _quality_review_gate(project_id),
+        _quality_ci_gate(project_id),
+        _quality_test_gate(project_id),
+    ]
+    worst = _worst_gate_status([c["status"] for c in categories])
+    # GREEN only when every gate is verified; anything unverified is amber,
+    # a hard failure is red — no partial credit.
+    if worst == "passed":
+        overall = "green"
+    elif worst == "failed":
+        overall = "red"
+    else:
+        overall = "unverified"
+
+    run = _latest_pipeline_run(project_id)
+    return _json({
+        "ok": True,
+        "overall": overall,
+        "worst_status": worst,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "categories": categories,
+        "latest_run": _latest_run_gate_detail(project_id, run),
     })
 
 
