@@ -216,6 +216,11 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
 
     # 2) Evidence collection + report generation.
     def _stage_evidence() -> None:
+        # 桌面端追溯矩阵是权威真源（schema osh-traceability-v1）：
+        # 审计前先按当前产物重建，避免旧版 LRT 导出把它覆盖成空矩阵。
+        from yuleosh.desktop import tracing
+        tracing.refresh(project_id)
+
         from yuleosh.evidence.generator import EvidenceCollector
         collector = EvidenceCollector(str(proj_dir))
         collector.collect_requirements()

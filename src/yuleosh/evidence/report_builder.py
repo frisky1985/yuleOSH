@@ -154,6 +154,21 @@ class ReportBuilderMixin:
             })
 
         json_path = self.evidence_dir / "traceability-matrix.json"
+        # A desktop-generated matrix (schema ``osh-traceability-v1``) is the
+        # project's authoritative truth source — it backs the traceability
+        # dialog, the TRACE gate and the evidence chain. The legacy LRT export
+        # must never clobber it with its own (usually emptier) shape.
+        try:
+            existing = json.loads(json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = None
+        if isinstance(existing, dict) and existing.get("schema") == "osh-traceability-v1":
+            log.info(
+                "Keeping authoritative traceability matrix at %s; "
+                "legacy LRT JSON export skipped", json_path,
+            )
+            return str(output_path)
+
         json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False))
         print(f"  ✅ Traceability JSON generated: {json_path}")
         return str(output_path)

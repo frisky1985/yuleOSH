@@ -1131,6 +1131,31 @@ class TestComplianceAudit:
                 "aspice-report.html").read_text(encoding="utf-8")
         assert "非 ASPICE 能力等级" in html or "NOT Automotive SPICE" in html
 
+    def test_compliance_run_keeps_authoritative_traceability_matrix(self, desktop_api):
+        """合规审计不得用旧版 LRT 导出覆盖桌面追溯矩阵。"""
+        d = desktop_api
+        pid = self._project(d)
+        self._write(
+            pid, "requirements/requirements.md",
+            "# Spec\n\n## REQ-001\n- The system SHALL do X.\n"
+            "## REQ-002\n- The system SHALL do Y.\n",
+        )
+        self._write(pid, "code/main.c", "// @req REQ-001\nint main(void){return 0;}\n")
+        self._write(pid, "tests/test_main.c", "// @req REQ-001\nvoid test_x(void){}\n")
+
+        assert d.handle_desktop(
+            "POST", f"projects/{pid}/traceability/refresh", _body({}), {},
+        )[1] == 201
+        assert d.handle_desktop(
+            "POST", f"projects/{pid}/compliance/run", _body({}), {},
+        )[1] == 200
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/traceability", None, {})
+        assert status == 200
+        assert resp["summary"]["total_requirements"] == 2
+        assert resp["summary"]["with_test_coverage"] == 1
+        assert resp["gate"]["total_requirements"] == 2
+
     def test_get_before_run_returns_404(self, desktop_api):
         d = desktop_api
         pid = self._project(d)

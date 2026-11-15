@@ -254,6 +254,33 @@ def test_traceability_matrix_with_reviews():
         assert "Review" in content or "passed" in content
 
 
+def test_traceability_matrix_keeps_authoritative_desktop_matrix():
+    """Legacy LRT JSON export must not clobber an osh-traceability-v1 matrix."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ev = Path(tmp) / ".osh" / "evidence"
+        ev.mkdir(parents=True)
+        matrix_path = ev / "traceability-matrix.json"
+        authoritative = {
+            "schema": "osh-traceability-v1",
+            "summary": {"total_requirements": 4, "with_test_coverage": 3},
+            "requirements": [{"req_id": "REQ-001", "match_method": "annotation"}],
+        }
+        matrix_path.write_text(json.dumps(authoritative), encoding="utf-8")
+
+        c = EvidenceCollector(tmp)
+        c.requirements = [{"name": "R1", "shall_count": 1, "req_id": "REQ-001"}]
+        c.scenarios = []
+        path = c.generate_traceability_matrix()
+
+        # Markdown still generated for humans …
+        assert Path(path).is_file()
+        # … but the authoritative JSON is untouched.
+        data = json.loads(matrix_path.read_text(encoding="utf-8"))
+        assert data["schema"] == "osh-traceability-v1"
+        assert data["summary"]["total_requirements"] == 4
+        assert data["requirements"][0]["req_id"] == "REQ-001"
+
+
 # ===================================================================
 # pack_compliance_zip — additional files
 # ===================================================================
