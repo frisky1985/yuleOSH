@@ -22,11 +22,6 @@ import {
   Clock,
   Terminal,
   BookOpen,
-  ShieldCheck,
-  Bug,
-  ClipboardCheck,
-  Flag,
-  Tags,
   Sparkles,
   Search,
   Filter,
@@ -36,10 +31,6 @@ import {
   LogOut,
   LogIn,
   UserRound,
-  GitBranch,
-  Layers,
-  GitPullRequest,
-  Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +64,8 @@ import { IssueTrackerDialog } from "@/components/desktop/issue-tracker-dialog";
 import { QaAuditDialog } from "@/components/desktop/qa-audit-dialog";
 import { ProjectMgmtDialog } from "@/components/desktop/project-mgmt-dialog";
 import { ReviewCenterDialog } from "@/components/desktop/review-center-dialog";
+import { GovernanceMenu } from "@/components/desktop/governance-menu";
+import type { GovernanceKey } from "@/components/desktop/governance-menu";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -371,6 +364,22 @@ export default function DesktopWorkspacePage() {
       setRuns([]);
     }
   };
+
+  // ── Governance menu routing ────────────────────────────────────────────
+  const handleGovernanceSelect = useCallback((key: GovernanceKey) => {
+    const open: Record<GovernanceKey, () => void> = {
+      traceability: () => setShowTraceability(true),
+      baselines: () => setShowBaselines(true),
+      "change-requests": () => setShowChangeRequests(true),
+      "quality-gates": () => setShowQualityGates(true),
+      compliance: () => setShowCompliance(true),
+      reviews: () => setShowReviews(true),
+      issues: () => setShowIssues(true),
+      qa: () => setShowQa(true),
+      "project-mgmt": () => setShowPm(true),
+    };
+    open[key]?.();
+  }, []);
 
   // ── Error feedback via chatbot (no alert() breaking the flow) ──────────
   const pushAssistant = useCallback((content: string) => {
@@ -733,96 +742,7 @@ export default function DesktopWorkspacePage() {
             {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <UploadCloud className="w-4 h-4 mr-1" />}
             同步云端
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowTraceability(true)}
-            disabled={!activeId}
-            title="需求 → 设计 → 代码 → 测试的追溯矩阵与审计链校验"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <GitBranch className="w-4 h-4 mr-1" /> 追溯矩阵
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowBaselines(true)}
-            disabled={!activeId}
-            title="配置基线的创建、文件清单与差异比对"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <Layers className="w-4 h-4 mr-1" /> 基线
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowChangeRequests(true)}
-            disabled={!activeId}
-            title="变更请求列表、状态流转与影响分析"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <GitPullRequest className="w-4 h-4 mr-1" /> 变更
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowCompliance(true)}
-            disabled={!activeId}
-            title="ASPICE 过程域红黄绿、缺失证据清单与一键生成证据文档"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <ShieldCheck className="w-4 h-4 mr-1" /> 合规
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowQualityGates(true)}
-            disabled={!activeId}
-            title="追溯 / 评审 / CI / 测试门禁汇总与最近流水线门禁结果"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <Gauge className="w-4 h-4 mr-1" /> 门禁
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowIssues(true)}
-            disabled={!activeId}
-            title="问题/缺陷登记、根因分析、修复验证与关闭闭环"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <Bug className="w-4 h-4 mr-1" /> 问题
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowQa(true)}
-            disabled={!activeId}
-            title="审计计划、不符合项登记与流转、管理批准与 QA 报告导出"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <ClipboardCheck className="w-4 h-4 mr-1" /> QA 审计
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowPm(true)}
-            disabled={!activeId}
-            title="风险登记与影响矩阵、里程碑进度与完成度"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <Flag className="w-4 h-4 mr-1" /> 管理
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowReviews(true)}
-            disabled={!activeId}
-            title="跨产物评审列表、按分区/glob 批量打标、导出评审报告"
-            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
-          >
-            <Tags className="w-4 h-4 mr-1" /> 评审
-          </Button>
+          <GovernanceMenu disabled={!activeId} onSelect={handleGovernanceSelect} />
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
