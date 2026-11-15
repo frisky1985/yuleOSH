@@ -1540,6 +1540,182 @@ class TestOpenAPISpec:
         assert status == 405
 
 
+# ── LLM settings ──────────────────────────────────────────────────────────
+
+_LLM_ENV_VARS = (
+    "YULEOSH_LLM_PROVIDER",
+    "YULEOSH_DESKTOP_MODE",
+    "LLM_MODEL",
+    "LLM_BASE_URL",
+    "LLM_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+)
 
 
+@pytest.fixture
+def llm_env(monkeypatch):
+    """Isolate LLM-related env vars so tests see a deterministic state."""
+    for env in _LLM_ENV_VARS:
+        monkeypatch.delenv(env, raising=False)
+    return monkeypatch
 
+
+class TestLLMSettings:
+    def test_get_defaults(self, desktop_api, llm_env):
+        resp, status = desktop_api.handle_desktop("GET", "settings/llm", None, {})
+
+        assert status == 200
+        assert resp["ok"] is True
+        assert resp["provider"] == "deepseek"
+        assert resp["model"] == ""
+        assert resp["base_url"] == ""
+        assert resp["default_model"] == "deepseek-v4"
+        assert resp["providers"] == ["deepseek", "openai", "anthropic", "mock"]
+        assert resp["api_key_set"] is False
+        assert resp["api_key_masked"] == ""
+
+    def test_save_persists_masks_and_applies_env(self, desktop_api, llm_env):
+        resp, status = desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "openai",
+            "model": "qwen2.5-coder",
+            "base_url": "http://127.0.0.1:11434/v1",
+            "api_key": "sk-test-123456",
+        }), {})
+
+        assert status == 200
+        assert resp["api_key_set"] is True
+        assert resp["api_key_masked"] == "••••3456"
+        assert resp["api_key_source"] == "settings"
+        # The plaintext key must never leak through the API response.
+        assert "sk-test-123456" not in json.dumps(resp)
+
+        # Applied to the process env (read per-call by the LLM providers).
+        assert os.environ["YULEOSH_LLM_PROVIDER"] == "openai"
+        assert os.environ["LLM_MODEL"] == "qwen2.5-coder"
+        assert os.environ["LLM_BASE_URL"] == "http://127.0.0.1:11434/v1"
+        assert os.environ["OPENAI_API_KEY"] == "sk-test-123456"
+
+        # Persisted privately on disk.
+        path = desktop_api._settings_path()
+        assert path.exists()
+        assert json.loads(path.read_text(encoding="utf-8"))["llm"]["api_key"] == "sk-test-123456"
+        assert (path.stat().st_mode & 0o777) == 0o600
+
+    def test_omitted_key_keeps_previous(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "deepseek", "api_key": "sk-keep-9999",
+        }), {})
+
+        resp, status = desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "deepseek", "model": "deepseek-v4",
+        }), {})
+
+        assert status == 200
+        assert resp["api_key_masked"] == "••••9999"
+        assert os.environ["DEEPSEEK_API_KEY"] == "sk-keep-9999"
+
+    def test_clear_api_key(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "openai", "api_key": "sk-clear-8888",
+        }), {})
+        assert os.environ["OPENAI_API_KEY"] == "sk-clear-8888"
+
+        resp, status = desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "openai", "clear_api_key": True,
+        }), {})
+
+        assert status == 200
+        assert resp["api_key_set"] is False
+        assert resp["api_key_masked"] == ""
+        assert "OPENAI_API_KEY" not in os.environ
+        assert "LLM_API_KEY" not in os.environ
+
+    def test_mock_provider_reports_no_key(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "openai", "api_key": "sk-mock-7777",
+        }), {})
+
+        resp, status = desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "mock",
+        }), {})
+
+        assert status == 200
+        assert resp["provider"] == "mock"
+        assert resp["api_key_set"] is False
+
+    def test_empty_model_and_base_url_clear_env(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "deepseek",
+            "model": "deepseek-v4",
+            "base_url": "https://api.deepseek.com",
+        }), {})
+        assert os.environ["LLM_MODEL"] == "deepseek-v4"
+        assert os.environ["LLM_BASE_URL"] == "https://api.deepseek.com"
+
+        resp, status = desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "deepseek", "model": "", "base_url": "",
+        }), {})
+
+        assert status == 200
+        assert resp["model"] == ""
+        assert "LLM_MODEL" not in os.environ
+        assert "LLM_BASE_URL" not in os.environ
+
+    def test_invalid_provider_rejected(self, desktop_api, llm_env):
+        resp, status = desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "not-a-provider",
+        }), {})
+
+        assert status == 400
+        assert resp["ok"] is False
+        assert not desktop_api._settings_path().exists()
+
+    def test_invalid_base_url_rejected(self, desktop_api, llm_env):
+        resp, status = desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "openai", "base_url": "127.0.0.1:11434",
+        }), {})
+
+        assert status == 400
+        assert resp["ok"] is False
+
+    def test_bootstrap_restores_saved_settings(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "anthropic",
+            "model": "claude-4-sonnet",
+            "base_url": "https://api.anthropic.com",
+            "api_key": "sk-ant-1111",
+        }), {})
+
+        # Simulate a fresh process: env is empty, settings remain on disk.
+        for env in ("YULEOSH_LLM_PROVIDER", "LLM_MODEL", "LLM_BASE_URL", "ANTHROPIC_API_KEY"):
+            os.environ.pop(env, None)
+        llm_env.setenv("YULEOSH_DESKTOP_MODE", "1")
+
+        desktop_api._bootstrap_llm_settings()
+
+        assert os.environ["YULEOSH_LLM_PROVIDER"] == "anthropic"
+        assert os.environ["LLM_MODEL"] == "claude-4-sonnet"
+        assert os.environ["LLM_BASE_URL"] == "https://api.anthropic.com"
+        assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-1111"
+
+    def test_bootstrap_skipped_outside_desktop_mode(self, desktop_api, llm_env):
+        desktop_api.handle_desktop("PUT", "settings/llm", _body({
+            "provider": "deepseek", "model": "deepseek-v4", "api_key": "sk-skip-2222",
+        }), {})
+        os.environ.pop("LLM_MODEL", None)
+        os.environ.pop("DEEPSEEK_API_KEY", None)
+
+        desktop_api._bootstrap_llm_settings()
+
+        assert "LLM_MODEL" not in os.environ
+        assert "DEEPSEEK_API_KEY" not in os.environ
+
+    def test_method_not_allowed(self, desktop_api, llm_env):
+        _, status = desktop_api.handle_desktop("DELETE", "settings/llm", None, {})
+        assert status == 405
+
+    def test_unknown_settings_resource_404(self, desktop_api, llm_env):
+        _, status = desktop_api.handle_desktop("GET", "settings/other", None, {})
+        assert status == 404
