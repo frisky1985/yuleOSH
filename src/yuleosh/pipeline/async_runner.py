@@ -391,8 +391,10 @@ def _persist_job_result(job: dict) -> None:
     try:
         run_dir = Path(project_dir) / "pipeline" / "runs" / job_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        # Strip mutable fields that shouldn't outlive the process.
-        snapshot = {k: v for k, v in job.items() if k != "logs"}
+        # Logs are kept (capped) so the run detail view still has history
+        # after a process restart; other mutable fields are stripped.
+        snapshot = dict(job)
+        snapshot["logs"] = job.get("logs", [])[-500:]
         (run_dir / "result.json").write_text(
             json.dumps(snapshot, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",

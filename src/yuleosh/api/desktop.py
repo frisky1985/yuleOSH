@@ -497,7 +497,9 @@ def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
                 "stages": job.get("stages", []),
                 "started_at": job.get("started_at"),
                 "completed_at": job.get("completed_at"),
-                "logs": job.get("logs", [])[-50:],  # 只留最近 50 条，省带宽
+                # 详情弹窗需要看到完整过程，限制 500 条避免超大响应。
+                "logs": job.get("logs", [])[-500:],
+                "logs_total": len(job.get("logs", [])),
                 "result": job.get("result"),
             })
     except Exception:  # noqa: BLE001 — runner 模块不可用时走磁盘
@@ -518,7 +520,8 @@ def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
                 "stages": data.get("stages", []),
                 "started_at": data.get("started_at"),
                 "completed_at": data.get("completed_at"),
-                "logs": [],
+                "logs": data.get("logs", [])[-500:],
+                "logs_total": len(data.get("logs", [])),
                 "result": data.get("result"),
                 "source": "disk",
             })
