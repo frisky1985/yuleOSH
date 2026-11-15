@@ -62,6 +62,7 @@ import type { ProjectRef } from "@/components/desktop/project-actions-menu";
 import { TraceabilityDialog } from "@/components/desktop/traceability-dialog";
 import { BaselineDialog } from "@/components/desktop/baseline-dialog";
 import { ChangeRequestDialog } from "@/components/desktop/change-request-dialog";
+import { ComplianceDialog } from "@/components/desktop/compliance-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,7 @@ export default function DesktopWorkspacePage() {
   const [showTraceability, setShowTraceability] = useState(false);
   const [showBaselines, setShowBaselines] = useState(false);
   const [showChangeRequests, setShowChangeRequests] = useState(false);
+  const [showCompliance, setShowCompliance] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -746,6 +748,16 @@ export default function DesktopWorkspacePage() {
           >
             <GitPullRequest className="w-4 h-4 mr-1" /> 变更
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCompliance(true)}
+            disabled={!activeId}
+            title="ASPICE 过程域红黄绿、缺失证据清单与一键生成证据文档"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <ShieldCheck className="w-4 h-4 mr-1" /> 合规
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1199,6 +1211,13 @@ export default function DesktopWorkspacePage() {
       <ChangeRequestDialog
         open={showChangeRequests}
         onOpenChange={setShowChangeRequests}
+        projectId={activeId}
+      />
+
+      {/* ── ASPICE compliance dashboard ────────────────────────────────── */}
+      <ComplianceDialog
+        open={showCompliance}
+        onOpenChange={setShowCompliance}
         projectId={activeId}
       />
 

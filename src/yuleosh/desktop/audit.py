@@ -294,6 +294,7 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
         overall_score = rpt.overall_score
         for dim in rpt.dimensions:
             scores[dim.process_id] = {
+                "title": dim.title,
                 "score": dim.score,
                 "coverage_pct": dim.coverage_pct,
                 "evidence_count": dim.evidence_count,
@@ -311,6 +312,9 @@ def run_compliance_audit(project_id: str, body: Optional[dict] = None) -> dict:
         "scores": scores,
         "gaps": gaps,
         "overall_score": overall_score,
+        "overall_coverage_pct": rpt.overall_coverage_pct,
+        "total_gaps": rpt.total_gaps,
+        "total_evidences": rpt.total_evidences,
         "workflow": workflow_summary,
     })
 
