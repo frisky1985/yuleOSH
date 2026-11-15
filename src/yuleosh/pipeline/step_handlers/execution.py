@@ -287,6 +287,8 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             except Exception as e:
                 log.warning("structural_features load failed (non-fatal): %s", e)
         skills = cfg.get("skills") or ["autosar-coding"]
+        from yuleosh.codegen.autosar import normalize_autosar_rules
+        autosar_rules = normalize_autosar_rules(cfg.get("autosar_classic"))
         target_language = cfg.get("target_language")
         build_cmd = cfg.get("build_cmd")
         language_hint = cfg.get("language")
@@ -341,12 +343,16 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             seed_sources=seed_sources,
             context_content=context_content,
             contracts_json=contracts_json,
-            autosar_classic=cfg.get(
-                "autosar_classic",
-                "autosar-coding" in skills
-                and str(language_hint or target_language or "c").strip().lower()
-                in {"c", "c99", "c11", "c17"},
+            autosar_classic=(
+                autosar_rules is not None
+                or (
+                    cfg.get("autosar_classic") is None
+                    and "autosar-coding" in skills
+                    and str(language_hint or target_language or "c").strip().lower()
+                    in {"c", "c99", "c11", "c17"}
+                )
             ),
+            autosar_rules=autosar_rules,
         )
 
         # 可追溯性硬规则: 把权威需求 ID 目录注入 prompt, 让 LLM 用链可解析的 ID
@@ -374,6 +380,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             structural_features=structural_features,
             forbidden_features=forbidden_features,
             requirement_ids=list(catalog),
+            autosar_rules=autosar_rules,
         )
         result = engine.generate(
             session, system_prompt, user_prompt,
@@ -398,6 +405,10 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             "Codegen complete: status=%s files=%d rounds=%d",
             result.status, len(result.files), result.rounds,
         )
+        if cfg.get("require_verified") and result.status != "verified":
+            raise PipelineStepError(
+                f"Code generation did not satisfy pipeline rules: {result.last_errors}"
+            )
         return result.report_path
     except PipelineStepError:
         raise

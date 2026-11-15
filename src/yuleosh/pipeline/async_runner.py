@@ -16,6 +16,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 log = logging.getLogger("pipeline.async_runner")
@@ -28,6 +29,7 @@ _pool: Optional[ThreadPoolExecutor] = None
 FULL_PIPELINE_STAGES = [
     {"key": "arxml_parse",     "name": "ARXML 解析"},
     {"key": "config_validate", "name": "配置验证"},
+    {"key": "code_generate",   "name": "yuleOSH 大模型代码生成"},
     {"key": "rte_generate",    "name": "RTE 代码生成"},
     {"key": "ci_compile",      "name": "CI 编译 (Layer 1)"},
     {"key": "misra_check",     "name": "MISRA 检查 (Layer 2)"},
@@ -208,6 +210,55 @@ def _run_ci_job(job_id: str, project_dir: str, layer: int, org_id: int = 0,
     _persist_job_result(job)
 
 
+def _stage_code_generation(project_dir: str, job_id: str, config: dict) -> str:
+    """Generate code with yuleOSH LLM under the project's pipeline rules.
+
+    Output is isolated per job and deployed only after compile, AUTOSAR layout,
+    dependency, and behavior checks pass. A failed model run fails the stage.
+    """
+    import shutil
+    import yaml
+    from yuleosh.pipeline.step_handlers.execution import _step_claude_dev_codegen
+
+    root = Path(project_dir)
+    job_dir = root / ".yuleosh" / "pipeline" / job_id
+    output_dir = job_dir / "codegen"
+    template_path = (
+        Path(__file__).parent.parent / "templates" / "autosar-classic" / "pipeline" / "config.yaml"
+    )
+    template_raw = yaml.safe_load(template_path.read_text(encoding="utf-8")) or {}
+    codegen_cfg = dict(template_raw.get("codegen") or {})
+    project_pipeline = root / "pipeline" / "config.yaml"
+    if project_pipeline.exists():
+        project_raw = yaml.safe_load(project_pipeline.read_text(encoding="utf-8")) or {}
+        codegen_cfg.update(project_raw.get("codegen") or {})
+    codegen_cfg["output_dir"] = str(output_dir)
+    codegen_cfg["require_verified"] = True
+
+    spec_path = root / "requirements" / "requirements.md"
+    architecture_path = root / "design" / "architecture.md"
+    session = SimpleNamespace(
+        name=job_id,
+        spec_path=str(spec_path),
+        project_dir=str(root),
+        development_mode="generate-code",
+        config={"codegen": codegen_cfg},
+        artifacts={"architecture": str(architecture_path)} if architecture_path.exists() else {},
+        session_dir=job_dir,
+        llm_client=None,
+    )
+    report = _step_claude_dev_codegen(session)
+
+    generated_src = output_dir / "src"
+    if not generated_src.is_dir():
+        raise RuntimeError("Verified code-gen result has no src/ directory")
+    shutil.copytree(generated_src, root / "code" / "src", dirs_exist_ok=True)
+    generated_tests = output_dir / "tests"
+    if generated_tests.is_dir():
+        shutil.copytree(generated_tests, root / "tests", dirs_exist_ok=True)
+    return report
+
+
 def _run_full_pipeline(
     job_id: str, project_dir: str,
     config_json: Optional[str], arxml_content: Optional[str],
@@ -271,9 +322,17 @@ def _run_full_pipeline(
 
         _update_stage(job_id, "config_validate", "passed", int(30 / total_stages * 100))
 
-        # Stage 3: RTE Generate
+        # Stage 3: yuleOSH LLM code generation — pipeline rules are mandatory.
+        _update_stage(job_id, "code_generate", "running")
+        _append_log(job_id, "Stage 3/7: Generating AUTOSAR-layered code with yuleOSH LLM...")
+        run_config = json.loads(config_json) if config_json else {}
+        codegen_report = _stage_code_generation(project_dir, job_id, run_config)
+        _append_log(job_id, f"Code generation verified. Report: {codegen_report}")
+        _update_stage(job_id, "code_generate", "passed", int(45 / total_stages * 100))
+
+        # Stage 4: RTE Generate
         _update_stage(job_id, "rte_generate", "running")
-        _append_log(job_id, "Stage 3/6: Generating RTE code...")
+        _append_log(job_id, "Stage 4/7: Generating RTE code...")
         try:
             from yuleosh.autosar import rte_generator
             rte_dir = Path(project_dir) / ".yuleosh" / "pipeline" / job_id / "rte"
@@ -297,9 +356,9 @@ def _run_full_pipeline(
 
         _update_stage(job_id, "rte_generate", "passed", int(50 / total_stages * 100))
 
-        # Stage 4: CI Compile (Layer 1)
+        # Stage 5: CI Compile (Layer 1)
         _update_stage(job_id, "ci_compile", "running")
-        _append_log(job_id, "Stage 4/6: Compiling with GCC...")
+        _append_log(job_id, "Stage 5/7: Compiling with GCC...")
         time.sleep(1)
 
         try:
@@ -314,9 +373,9 @@ def _run_full_pipeline(
 
         _update_stage(job_id, "ci_compile", "passed", int(70 / total_stages * 100))
 
-        # Stage 5: MISRA Check (Layer 2)
+        # Stage 6: MISRA Check (Layer 2)
         _update_stage(job_id, "misra_check", "running")
-        _append_log(job_id, "Stage 5/6: Checking MISRA compliance...")
+        _append_log(job_id, "Stage 6/7: Checking MISRA compliance...")
         time.sleep(1)
 
         try:
@@ -332,9 +391,9 @@ def _run_full_pipeline(
 
         _update_stage(job_id, "misra_check", "passed", int(85 / total_stages * 100))
 
-        # Stage 6: Coverage (Layer 3)
+        # Stage 7: Coverage (Layer 3)
         _update_stage(job_id, "coverage", "running")
-        _append_log(job_id, "Stage 6/6: Analyzing code coverage...")
+        _append_log(job_id, "Stage 7/7: Analyzing code coverage...")
         time.sleep(0.5)
 
         try:
@@ -353,7 +412,7 @@ def _run_full_pipeline(
         # Finalize
         job["status"] = "passed"
         job["result"] = {
-            "summary": "All 6 stages completed successfully",
+            "summary": f"All {total_stages} stages completed successfully",
             "stages_passed": total_stages,
             "stages_total": total_stages,
         }

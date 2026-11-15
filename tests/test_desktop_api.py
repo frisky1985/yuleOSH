@@ -10,6 +10,7 @@ pointed at a temp dir via YULEOSH_DESKTOP_HOME.
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,11 +26,37 @@ def desktop_api(tmp_path, monkeypatch):
     importlib.reload(workspace)
     from yuleosh.api import desktop
     importlib.reload(desktop)
-    yield desktop
+    from yuleosh.pipeline import async_runner
+    from yuleosh.desktop.autosar_seed import seed_autosar_artifacts
+
+    def fake_codegen(project_dir, job_id, config):
+        # UI/API tests use a deterministic stand-in for a *verified* model
+        # result. The real LLM + rule/retry path is covered separately in
+        # tests/test_autosar_architecture.py.
+        seed_autosar_artifacts(project_dir)
+        report = Path(project_dir) / ".yuleosh" / "pipeline" / job_id / "codegen-report.md"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text("# Verified model output\n", encoding="utf-8")
+        return str(report)
+
+    with patch.object(async_runner, "_stage_code_generation", side_effect=fake_codegen):
+        yield desktop
 
 
 def _body(data):
     return data
+
+
+def _wait_for_artifact(d, pid, path):
+    """Full-pipeline code is deployed asynchronously after model verification."""
+    for _ in range(100):
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/artifacts/{path}", None, {},
+        )
+        if status == 200:
+            return resp
+        time.sleep(0.02)
+    raise AssertionError(f"artifact not deployed: {path}")
 
 
 # ── Projects ──────────────────────────────────────────────────────────────
@@ -198,6 +225,7 @@ class TestPipeline:
         )
         assert status == 202
         assert resp["job_id"]
+        _wait_for_artifact(d, pid, "code/src/application/HeadlightSwc.c")
 
         # Artifact tree should preserve the AUTOSAR Classic layer directories.
         tree_resp, _ = d.handle_desktop("GET", f"projects/{pid}/artifacts", None, {})
@@ -310,10 +338,7 @@ class TestArtifacts:
         d = desktop_api
         pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
         d.handle_desktop("POST", f"projects/{pid}/pipeline/run", _body({"type": "full"}), {})
-        resp, status = d.handle_desktop(
-            "GET", f"projects/{pid}/artifacts/code/src/application/HeadlightSwc.c", None, {},
-        )
-        assert status == 200
+        resp = _wait_for_artifact(d, pid, "code/src/application/HeadlightSwc.c")
         assert resp["binary"] is False
         assert "HeadlightSwc_Run" in resp["content"]
 

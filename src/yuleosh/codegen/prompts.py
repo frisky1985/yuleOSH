@@ -144,6 +144,7 @@ def build_codegen_prompt(
     context_content: str = "",
     contracts_json: str = "",
     autosar_classic: Optional[bool] = None,
+    autosar_rules: Optional[dict] = None,
 ) -> tuple[str, str]:
     """Build ``(system_prompt, user_prompt)`` for code generation.
 
@@ -174,6 +175,13 @@ def build_codegen_prompt(
         autosar_classic = "autosar-coding" in skills and language in {
             "", "c", "c99", "c11", "c17",
         }
+
+    if autosar_rules:
+        from yuleosh.codegen.autosar import build_autosar_prompt
+        autosar_classic = True
+        autosar_layout_prompt = build_autosar_prompt(autosar_rules)
+    else:
+        autosar_layout_prompt = AUTOSAR_CLASSIC_LAYOUT_RULES if autosar_classic else ""
 
     system_prompt = (
         "You are a senior embedded software engineer implementing code from "
@@ -213,7 +221,7 @@ def build_codegen_prompt(
         "`requirements` array — the controlled requirement IDs it implements, "
         "or `[]` for auxiliary code — consistent with the `@req` annotation in "
         "the file content.\n"
-        + (AUTOSAR_CLASSIC_LAYOUT_RULES if autosar_classic else "")
+        + autosar_layout_prompt
     )
 
     context_parts = [

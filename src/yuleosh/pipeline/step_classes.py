@@ -397,6 +397,8 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
 
         cfg = session.config.get("codegen", {}) if getattr(session, "config", None) else {}
         skills = cfg.get("skills") or ["autosar-coding"]
+        from yuleosh.codegen.autosar import normalize_autosar_rules
+        autosar_rules = normalize_autosar_rules(cfg.get("autosar_classic"))
         target_language = cfg.get("target_language")
         build_cmd = cfg.get("build_cmd")
         language_hint = cfg.get("language")
@@ -428,12 +430,16 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             existing_headers=collect_existing_headers(project_dir),
             seed_sources=seed_sources,
             contracts_json=contracts_json,
-            autosar_classic=cfg.get(
-                "autosar_classic",
-                "autosar-coding" in skills
-                and str(language_hint or target_language or "c").strip().lower()
-                in {"c", "c99", "c11", "c17"},
+            autosar_classic=(
+                autosar_rules is not None
+                or (
+                    cfg.get("autosar_classic") is None
+                    and "autosar-coding" in skills
+                    and str(language_hint or target_language or "c").strip().lower()
+                    in {"c", "c99", "c11", "c17"}
+                )
             ),
+            autosar_rules=autosar_rules,
         )
 
         engine = CodegenEngine(
@@ -444,6 +450,7 @@ Two modes (``mode`` constructor arg or ``session.development_mode``):
             seed_dir=project_dir if seed_sources else None,
             seed_contract=_collect_seed_contract(project_dir),
             behavior_verify=_make_behavior_verify(project_dir),
+            autosar_rules=autosar_rules,
         )
         result = engine.generate(
             session, system_prompt, user_prompt,

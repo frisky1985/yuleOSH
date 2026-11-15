@@ -310,6 +310,7 @@ class CodegenEngine:
         structural_features: Optional[dict[str, list[str]]] = None,
         forbidden_features: Optional[dict[str, list[str]]] = None,
         requirement_ids: Optional[list[str] | set[str]] = None,
+        autosar_rules: Optional[dict] = None,
     ):
         self.output_dir = Path(output_dir) if output_dir else None
         self.max_retries = max(0, int(max_retries))
@@ -346,6 +347,8 @@ class CodegenEngine:
         self.requirement_ids = {
             str(r).strip().upper() for r in (requirement_ids or []) if str(r).strip()
         }
+        from yuleosh.codegen.autosar import normalize_autosar_rules
+        self.autosar_rules = normalize_autosar_rules(autosar_rules)
         # seed 基线内存快照 (rel_path -> content), _sync_seed 后立即抓取,
         # 供头脑风暴强制恢复 — 不依赖 seed_dir 磁盘 (测试里 seed_dir 可能
         # 指向 out_dir, 磁盘已被 LLM 污染)。
@@ -402,6 +405,7 @@ class CodegenEngine:
         brainstorm_done = False
         for round_idx in range(self.max_retries + 1):
             result.rounds = round_idx + 1
+            autosar_failed = False
             llm_output = self._call_llm(session, system_prompt, user_prompt, repair_context)
             files = parse_generated_files(llm_output)
             if not files:
@@ -471,6 +475,10 @@ class CodegenEngine:
                 #   C) seed 契约: 生成代码不得删除既有公共函数
                 #   A) 行为验证: 真实测试套件跑一遍生成代码
                 extra_errors = self._check_seed_contract(out_dir)
+                autosar_errors = self._check_autosar_layout(out_dir)
+                autosar_failed = bool(autosar_errors)
+                if autosar_errors:
+                    extra_errors = (extra_errors + "\n" if extra_errors else "") + autosar_errors
                 # ── 结构性 smoke 特征 (2026-08-17) ──────────────────
                 # 编译通过但核心功能路径被删 (防夹检测/反转序列) — 行为验证
                 # 可能因环境 (ARM 链接) 无法执行, 特征级检查在链接前拦截。
@@ -591,7 +599,9 @@ class CodegenEngine:
                         truncated_files=truncated,
                         seed_baseline=self._seed_baseline,
                     )
-                allowlist = self._build_allowlist(
+                # 分层校验失败需要允许模型新增/移动整个层的文件，不能被
+                # 普通编译 repair 的“仅本轮文件”白名单锁死在扁平目录里。
+                allowlist = None if autosar_failed else self._build_allowlist(
                     result.last_errors, files, self.seed_contract,
                 )
 
@@ -1298,6 +1308,13 @@ class CodegenEngine:
         )
         return (prior_errors + "\n" + new_errors).strip() if prior_errors else new_errors
 
+    def _check_autosar_layout(self, out_dir: Path) -> str:
+        """Validate the pipeline-owned AUTOSAR directory/dependency contract."""
+        if not self.autosar_rules:
+            return ""
+        from yuleosh.codegen.autosar import validate_autosar_output
+        return validate_autosar_output(out_dir, self.autosar_rules)
+
     def _final_verify(
         self,
         result: CodegenResult,
@@ -1350,6 +1367,9 @@ class CodegenEngine:
 
         # 编译通过 → 契约链检查
         extra = self._check_seed_contract(out_dir)
+        autosar_errors = self._check_autosar_layout(out_dir)
+        if autosar_errors:
+            extra = (extra + "\n" if extra else "") + autosar_errors
         extra = self._check_structural_features(out_dir, extra)
         extra = self._check_forbidden_features(out_dir, extra)
         if extra:

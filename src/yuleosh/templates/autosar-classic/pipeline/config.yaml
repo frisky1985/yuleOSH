@@ -47,3 +47,24 @@ review_gates:
   - {type: internal, before: code-gen}
   - {type: autosar, before: static-analysis}
   - {type: compliance, after: system-verification}
+
+# yuleOSH 大模型代码生成的项目级硬规则。code-gen 每次运行都会把本段
+# 注入系统提示词，并在每轮输出后校验目录与 include 依赖，违规自动反馈重生成。
+codegen:
+  target_language: c
+  language: c
+  max_tokens: 16000
+  max_retries: 3
+  autosar_classic:
+    enabled: true
+    source_root: src
+    required_dirs:
+      - src/application
+      - src/rte
+      - src/bsw/services
+      - src/bsw/ecu_abstraction
+      - src/bsw/mcal
+    common_dirs:
+      - src/common
+    entry_files:
+      - src/main.c
