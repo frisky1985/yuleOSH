@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Bug,
   ClipboardCheck,
+  Flag,
   Sparkles,
   Search,
   Filter,
@@ -69,6 +70,7 @@ import { ComplianceDialog } from "@/components/desktop/compliance-dialog";
 import { QualityGatesDialog } from "@/components/desktop/quality-gates-dialog";
 import { IssueTrackerDialog } from "@/components/desktop/issue-tracker-dialog";
 import { QaAuditDialog } from "@/components/desktop/qa-audit-dialog";
+import { ProjectMgmtDialog } from "@/components/desktop/project-mgmt-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -162,6 +164,7 @@ export default function DesktopWorkspacePage() {
   const [showQualityGates, setShowQualityGates] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [showQa, setShowQa] = useState(false);
+  const [showPm, setShowPm] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -797,6 +800,16 @@ export default function DesktopWorkspacePage() {
           >
             <ClipboardCheck className="w-4 h-4 mr-1" /> QA 审计
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowPm(true)}
+            disabled={!activeId}
+            title="风险登记与影响矩阵、里程碑进度与完成度"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <Flag className="w-4 h-4 mr-1" /> 管理
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1278,6 +1291,13 @@ export default function DesktopWorkspacePage() {
       <QaAuditDialog
         open={showQa}
         onOpenChange={setShowQa}
+        projectId={activeId}
+      />
+
+      {/* ── Project management (MAN.3) ─────────────────────────────────── */}
+      <ProjectMgmtDialog
+        open={showPm}
+        onOpenChange={setShowPm}
         projectId={activeId}
       />
 
