@@ -126,7 +126,7 @@ def build_matrix(project_id: str, spec: str | None = None,
 
     proj_dir = workspace._project_dir(project_id)
     rows = []
-    with_code = with_test = 0
+    with_code = with_test = with_design = with_review = 0
     linked_tests: set[str] = set()
 
     for rid, statement in sorted(req_ids.items()):
@@ -136,13 +136,19 @@ def build_matrix(project_id: str, spec: str | None = None,
         review = _files_mentioning(proj_dir / "evidence", rid)
         with_code += 1 if code else 0
         with_test += 1 if tests else 0
+        with_design += 1 if design else 0
+        with_review += 1 if review else 0
         linked_tests.update(tests)
         rows.append({
             "req_id": rid,
             "statement": statement[:160],
             "section": "",
+            # Evidence-chain consumers only treat a matrix as authoritative
+            # when every row records how links were matched.
+            "match_method": "annotation",
             "has_code": bool(code),
             "has_test": bool(tests),
+            "has_design": bool(design),
             "has_review": bool(review),
             "code_files": code,
             "test_files": tests,
@@ -165,7 +171,11 @@ def build_matrix(project_id: str, spec: str | None = None,
             "total_requirements": total,
             "with_test_coverage": with_test,
             "with_implementation": with_code,
+            "with_design_coverage": with_design,
+            "with_review_coverage": with_review,
             "coverage_pct": pct,
+            "design_coverage_pct": round(with_design / total * 100.0, 1) if total else 0.0,
+            "review_coverage_pct": round(with_review / total * 100.0, 1) if total else 0.0,
             "orphaned_tests": len(orphaned),
         },
         "requirements": rows,

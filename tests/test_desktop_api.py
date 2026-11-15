@@ -748,6 +748,36 @@ class TestTraceability:
         assert status == 200
         assert resp["gate"]["status"] == "passed"
 
+    def test_matrix_rows_expose_design_code_test_links(self, desktop_api):
+        d = desktop_api
+        pid = self._project_with_requirements(d)
+        self._write(pid, "design/sdd.md", "# REQ-001 design\n")
+        self._write(pid, "code/main.c", "// @req REQ-001\n")
+        self._write(pid, "tests/test_main.c", "// REQ-001\n")
+        self._write(pid, "tests/test_orphan.c", "// unrelated\n")
+
+        assert d.handle_desktop(
+            "POST", f"projects/{pid}/traceability/refresh", _body({}), {},
+        )[1] == 201
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/traceability", None, {})
+        assert status == 200
+        summary = resp["summary"]
+        assert summary["with_design_coverage"] == 1
+        assert summary["with_implementation"] == 1
+        assert summary["design_coverage_pct"] == 50.0
+
+        rows = {r["req_id"]: r for r in resp["requirements"]}
+        assert rows["REQ-001"]["design_files"] == ["design/sdd.md"]
+        assert rows["REQ-001"]["code_files"] == ["code/main.c"]
+        assert rows["REQ-001"]["test_files"] == ["tests/test_main.c"]
+        assert rows["REQ-001"]["has_design"] is True
+        assert rows["REQ-001"]["match_method"] == "annotation"
+        assert rows["REQ-001"]["status"] == "Covered"
+        assert rows["REQ-002"]["design_files"] == []
+        assert rows["REQ-002"]["status"] == "Not Covered"
+        assert resp["orphaned_test_files"] == ["tests/test_orphan.c"]
+
     def test_refresh_bound_to_baseline(self, desktop_api):
         d = desktop_api
         pid = self._project_with_requirements(d)
@@ -823,6 +853,67 @@ class TestTraceability:
         )
         assert verdict["outcome"] == "unverified"
         assert {"gate": "TRACE", "status": "failed"} in verdict["blocking_gates"]
+
+
+# ── Evidence chain verification (audit chain) ─────────────────────────────
+
+class TestEvidenceChain:
+    def _project(self, d, with_artifacts=True):
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        content = (
+            "# Reqs\n\n## REQ-001\n- The system SHALL switch the lamp on request.\n"
+        )
+        d.handle_desktop("POST", f"projects/{pid}/requirements",
+                         _body({"content": content}), {})
+        if with_artifacts:
+            from yuleosh.desktop import workspace
+            proj = workspace._project_dir(pid)
+            for rel, text in (
+                ("design/sdd.md", "# REQ-001 design\n"),
+                ("code/main.c", "// @req REQ-001\n"),
+                ("tests/test_main.c", "// REQ-001\n"),
+            ):
+                p = proj / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(text, encoding="utf-8")
+        return pid
+
+    def test_chain_verdict_uses_desktop_matrix(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/evidence-chain", None, {})
+        assert status == 200
+        assert resp["status"] in ("PASS", "FAIL")
+        assert resp["source"] == "traceability-matrix.json"
+        assert resp["summary"]["requirements"] == 1
+        assert resp["summary"]["nodes"] >= 3
+        ids = {g["id"] for g in resp["gates"]}
+        assert {"G-REQ", "G-CODE", "G-TEST"} <= ids
+        assert isinstance(resp["problems"], list)
+        assert resp["v_model"]["required_pairs"] >= 0
+
+    def test_chain_autogenerates_matrix_when_missing(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d, with_artifacts=False)
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/evidence-chain", None, {})
+        assert status == 200
+        # 未手动刷新时也应先落盘矩阵再校验
+        from yuleosh.desktop import workspace
+        assert (workspace._project_dir(pid)
+                / ".osh/evidence/traceability-matrix.json").is_file()
+        assert resp["summary"]["requirements"] == 1
+
+    def test_chain_missing_project_404(self, desktop_api):
+        _, status = desktop_api.handle_desktop(
+            "GET", "projects/nope/evidence-chain", None, {})
+        assert status == 404
+
+    def test_chain_method_not_allowed(self, desktop_api):
+        d = desktop_api
+        pid = self._project(d)
+        _, status = d.handle_desktop(
+            "POST", f"projects/{pid}/evidence-chain", _body({}), {})
+        assert status == 405
 
 
 # ── Baselines (SUP.8) ─────────────────────────────────────────────────────
