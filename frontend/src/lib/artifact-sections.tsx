@@ -65,6 +65,13 @@ export function firstFile(node: TreeNode | null | undefined): string | null {
   return null;
 }
 
+/** 展平子树中的全部文件路径（dfs 前序），供命令面板快速打开。 */
+export function flattenFiles(node: TreeNode | null | undefined): string[] {
+  if (!node) return [];
+  if (node.type === "file") return [node.path];
+  return (node.children || []).flatMap((c) => flattenFiles(c));
+}
+
 /** 递归过滤文件树：路径含 query 则保留，否则剪掉。 */
 export function filterTree(node: TreeNode | null | undefined, query: string): TreeNode | null {
   if (!node) return null;

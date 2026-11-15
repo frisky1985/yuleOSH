@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { FolderPlus, Play, Search, UploadCloud } from "lucide-react";
+import { FileText, FolderPlus, Play, Search, UploadCloud } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GOVERNANCE_GROUPS } from "@/components/desktop/governance-menu";
 import type { GovernanceKey } from "@/components/desktop/governance-menu";
@@ -21,7 +21,10 @@ interface CommandPaletteProps {
   onClose: () => void;
   projects: PaletteProject[];
   activeId: string | null;
+  /** 当前工程的产物文件相对路径，用于快速打开。 */
+  files?: string[];
   onSelectProject: (id: string) => void;
+  onOpenFile?: (path: string) => void;
   onGovernance: (key: GovernanceKey) => void;
   onAction: (action: CommandActionKey) => void;
 }
@@ -46,7 +49,9 @@ export function CommandPalette({
   onClose,
   projects,
   activeId,
+  files = [],
   onSelectProject,
+  onOpenFile,
   onGovernance,
   onAction,
 }: CommandPaletteProps) {
@@ -92,6 +97,15 @@ export function CommandPalette({
       run: () => onSelectProject(p.id),
     }));
 
+    const fileItems: PaletteItem[] = files.map((path) => ({
+      id: `file-${path}`,
+      label: path.split("/").pop() || path,
+      hint: path,
+      group: "产物文件",
+      icon: FileText,
+      run: () => onOpenFile?.(path),
+    }));
+
     const governance: PaletteItem[] = GOVERNANCE_GROUPS.flatMap((g) =>
       g.items.map((item) => ({
         id: `gov-${item.key}`,
@@ -103,8 +117,8 @@ export function CommandPalette({
       })),
     );
 
-    return [...actions, ...projectItems, ...governance];
-  }, [projects, activeId, onAction, onSelectProject, onGovernance]);
+    return [...actions, ...projectItems, ...fileItems, ...governance];
+  }, [projects, activeId, files, onAction, onSelectProject, onOpenFile, onGovernance]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -192,7 +206,7 @@ export function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="搜索工程、治理工具或操作…"
+            placeholder="搜索产物文件、工程、治理工具或操作…"
             className="w-full bg-transparent text-sm text-[#e2e8f0] placeholder:text-[#475569] focus:outline-none"
           />
           <kbd className="shrink-0 rounded border border-[#1e293b] px-1.5 py-0.5 text-[10px] text-[#64748b]">

@@ -10,9 +10,12 @@ const PROJECTS = [
   { id: "p2", name: "座舱语音助手" },
 ];
 
-function renderPalette(open = true, activeId: string | null = "p1") {
+const FILES = ["requirements/requirements.md", "code/self_test.c"];
+
+function renderPalette(open = true, activeId: string | null = "p1", files = FILES) {
   const onClose = jest.fn();
   const onSelectProject = jest.fn();
+  const onOpenFile = jest.fn();
   const onGovernance = jest.fn();
   const onAction = jest.fn();
   render(
@@ -21,12 +24,14 @@ function renderPalette(open = true, activeId: string | null = "p1") {
       onClose={onClose}
       projects={PROJECTS}
       activeId={activeId}
+      files={files}
       onSelectProject={onSelectProject}
+      onOpenFile={onOpenFile}
       onGovernance={onGovernance}
       onAction={onAction}
     />,
   );
-  return { onClose, onSelectProject, onGovernance, onAction };
+  return { onClose, onSelectProject, onOpenFile, onGovernance, onAction };
 }
 
 describe("CommandPalette", () => {
@@ -36,6 +41,7 @@ describe("CommandPalette", () => {
     expect(screen.getByTestId("cmd-palette")).toBeInTheDocument();
     expect(screen.getByText("操作")).toBeInTheDocument();
     expect(screen.getByText("工程")).toBeInTheDocument();
+    expect(screen.getByText("产物文件")).toBeInTheDocument();
     expect(screen.getByText("追溯与变更")).toBeInTheDocument();
     expect(screen.getByText("质量与合规")).toBeInTheDocument();
     expect(screen.getByText("问题与审计")).toBeInTheDocument();
@@ -103,5 +109,22 @@ describe("CommandPalette", () => {
     const { onClose } = renderPalette();
     fireEvent.keyDown(screen.getByTestId("cmd-input"), { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("按文件名搜索并快速打开产物文件", () => {
+    const { onOpenFile, onClose } = renderPalette();
+
+    fireEvent.change(screen.getByTestId("cmd-input"), {
+      target: { value: "self_test" },
+    });
+    fireEvent.keyDown(screen.getByTestId("cmd-input"), { key: "Enter" });
+
+    expect(onOpenFile).toHaveBeenCalledWith("code/self_test.c");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("无产物文件时不展示文件分组", () => {
+    renderPalette(true, "p1", []);
+    expect(screen.queryByText("产物文件")).toBeNull();
   });
 });
