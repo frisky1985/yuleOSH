@@ -34,6 +34,7 @@ import {
   UserRound,
   GitBranch,
   Layers,
+  GitPullRequest,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ import { ProjectActionsMenu } from "@/components/desktop/project-actions-menu";
 import type { ProjectRef } from "@/components/desktop/project-actions-menu";
 import { TraceabilityDialog } from "@/components/desktop/traceability-dialog";
 import { BaselineDialog } from "@/components/desktop/baseline-dialog";
+import { ChangeRequestDialog } from "@/components/desktop/change-request-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -148,6 +150,7 @@ export default function DesktopWorkspacePage() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [showTraceability, setShowTraceability] = useState(false);
   const [showBaselines, setShowBaselines] = useState(false);
+  const [showChangeRequests, setShowChangeRequests] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -733,6 +736,16 @@ export default function DesktopWorkspacePage() {
           >
             <Layers className="w-4 h-4 mr-1" /> 基线
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowChangeRequests(true)}
+            disabled={!activeId}
+            title="变更请求列表、状态流转与影响分析"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <GitPullRequest className="w-4 h-4 mr-1" /> 变更
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1179,6 +1192,13 @@ export default function DesktopWorkspacePage() {
       <BaselineDialog
         open={showBaselines}
         onOpenChange={setShowBaselines}
+        projectId={activeId}
+      />
+
+      {/* ── Change requests + impact analysis ──────────────────────────── */}
+      <ChangeRequestDialog
+        open={showChangeRequests}
+        onOpenChange={setShowChangeRequests}
         projectId={activeId}
       />
 
