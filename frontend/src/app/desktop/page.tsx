@@ -28,6 +28,10 @@ import {
   Filter,
   ChevronsUpDown,
   ChevronsDownUp,
+  Settings,
+  LogOut,
+  LogIn,
+  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +54,9 @@ import {
   type TreeNode,
 } from "@/lib/artifact-sections";
 import { CodeBlock } from "@/components/code-block";
+import { AccountInfoDialog } from "@/components/account/account-info-dialog";
+import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
+import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -125,6 +132,63 @@ export default function DesktopWorkspacePage() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // ── 左下角用户区（参考 Trae 桌面版） ─────────────────────────────────
+  // 桌面端多数场景是本地离线工作区，不强制登录；这里用裸 fetch 探测会话，
+  // 避免 lib/api.ts 对 401 的「跳转登录页」副作用把工作台顶掉。
+  const [session, setSession] = useState<{
+    email: string;
+    org_name?: string | null;
+    user_id?: number | string;
+  } | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+  const userDockRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/auth/session", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (alive && s?.email) {
+          setSession({ email: s.email, org_name: s.org_name, user_id: s.user_id });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (api?.getVersion) {
+      api.getVersion().then((v: string) => setAppVersion(v)).catch(() => {});
+    }
+  }, []);
+
+  // outside-click / Esc 关闭用户菜单
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!userDockRef.current?.contains(e.target as Node)) setUserMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [userMenuOpen]);
+
+  const userName = session?.email ? session.email.split("@")[0] : "本地用户";
+  const userSub = session?.org_name || (session ? "已登录" : "离线工作区");
 
   // ── Load projects ──────────────────────────────────────────────────────
   const loadProjects = useCallback(async () => {
@@ -720,6 +784,101 @@ export default function DesktopWorkspacePage() {
               </ul>
             )}
           </div>
+
+          {/* 用户信息 + 设置（参考 Trae 桌面版左下角） */}
+          <div ref={userDockRef} className="relative px-2 py-2 border-t border-[#1e293b] shrink-0">
+            {userMenuOpen && (
+              <div
+                role="menu"
+                aria-label="用户菜单"
+                className="absolute bottom-full left-2 right-2 mb-1 z-30 rounded-lg border border-[#1e293b] bg-[#111827] text-[#e2e8f0] shadow-xl ring-1 ring-black/40 p-1"
+              >
+                <div className="px-2 py-1.5 mb-1 border-b border-[#1e293b]">
+                  <div className="text-xs text-[#e2e8f0] truncate">
+                    {session?.email ?? "未登录"}
+                  </div>
+                  <div className="text-[10px] text-[#64748b] truncate">
+                    {session?.org_name || (session ? "已登录账号" : "数据仅保存在本机")}
+                  </div>
+                </div>
+                {session && (
+                  <DockMenuItem
+                    icon={<UserRound className="w-3.5 h-3.5" />}
+                    label="个人信息"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      setAccountOpen(true);
+                    }}
+                  />
+                )}
+                <DockMenuItem
+                  icon={<Settings className="w-3.5 h-3.5" />}
+                  label="用户设置"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    setSettingsOpen(true);
+                  }}
+                />
+                <div className="my-1 h-px bg-[#1e293b]" />
+                {session ? (
+                  <DockMenuItem
+                    icon={<LogOut className="w-3.5 h-3.5" />}
+                    label="退出登录"
+                    tone="warning"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      setLogoutOpen(true);
+                    }}
+                  />
+                ) : (
+                  <DockMenuItem
+                    icon={<LogIn className="w-3.5 h-3.5" />}
+                    label="登录账号"
+                    onClick={() => window.location.assign("/login")}
+                  />
+                )}
+                {appVersion && (
+                  <div className="px-2 pt-1 pb-0.5 text-[10px] text-[#475569]">
+                    yuleOSH Desktop v{appVersion}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div
+              className={`flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors ${
+                userMenuOpen ? "bg-[#1e293b]" : "hover:bg-[#1e293b]"
+              }`}
+            >
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#722ed1]/20 text-[11px] font-bold text-[#a78bfa]">
+                  {(userName[0] ?? "Y").toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs text-[#e2e8f0]">{userName}</span>
+                  <span className="block truncate text-[10px] text-[#64748b]">{userSub}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                title="用户设置"
+                aria-label="用户设置"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  setSettingsOpen(true);
+                }}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#64748b] hover:text-white hover:bg-[#334155]"
+              >
+                <Settings className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </aside>
 
         {/* Center: unified code view */}
@@ -923,7 +1082,57 @@ export default function DesktopWorkspacePage() {
           </Card>
         </div>
       )}
+
+      {/* ── 用户区 Dialog（与 dashboard 共用） ────────────────────────── */}
+      {session && (
+        <AccountInfoDialog
+          open={accountOpen}
+          onOpenChange={setAccountOpen}
+          fallbackEmail={session.email}
+          fallbackOrgName={session.org_name ?? undefined}
+        />
+      )}
+      <UserSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        userId={session?.user_id}
+      />
+      <LogoutConfirmDialog
+        open={logoutOpen}
+        onOpenChange={setLogoutOpen}
+        emailLabel={session?.email}
+      />
     </div>
+  );
+}
+
+// ─── 用户菜单项 ──────────────────────────────────────────────────────────
+
+function DockMenuItem({
+  icon,
+  label,
+  tone = "default",
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  tone?: "default" | "warning";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={`w-full flex items-center gap-2 text-xs rounded-md px-2 py-1.5 cursor-pointer bg-transparent text-left transition-colors ${
+        tone === "warning"
+          ? "text-[#f59e0b] hover:bg-[#f59e0b]/10"
+          : "text-[#94a3b8] hover:text-white hover:bg-[#1e293b]"
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   );
 }
 
