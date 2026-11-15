@@ -1387,6 +1387,7 @@ class TestAsyncRunner:
         arxml_dir = tmp_path / ".yuleosh" / "pipeline" / job_id
         with mock.patch.object(mod, "_update_stage"), \
              mock.patch.object(mod, "_notify_pipeline_completion"), \
+             mock.patch.object(mod, "_stage_code_generation", return_value="codegen.md"), \
              mock.patch.object(mod.time, "sleep"):
             mod._run_full_pipeline(job_id, str(tmp_path), None, "<arxml/>")
         assert (arxml_dir / "config.arxml").exists()
@@ -1400,6 +1401,7 @@ class TestAsyncRunner:
         cfg_dir = tmp_path / ".yuleosh" / "pipeline" / job_id
         with mock.patch.object(mod, "_update_stage"), \
              mock.patch.object(mod, "_notify_pipeline_completion"), \
+             mock.patch.object(mod, "_stage_code_generation", return_value="codegen.md"), \
              mock.patch.object(mod.time, "sleep"):
             mod._run_full_pipeline(job_id, str(tmp_path), '{"a":1}', None)
         assert (cfg_dir / "config.json").exists()
@@ -1411,6 +1413,7 @@ class TestAsyncRunner:
             job_id = mod.submit_full_pipeline(str(tmp_path))
         with mock.patch.object(mod, "_update_stage"), \
              mock.patch.object(mod, "_notify_pipeline_completion"), \
+             mock.patch.object(mod, "_stage_code_generation", return_value="codegen.md"), \
              mock.patch.object(mod.time, "sleep"):
             mod._run_full_pipeline(job_id, str(tmp_path), None, None)
         assert mod._PIPELINE_JOBS[job_id]["status"] == "passed"
@@ -1421,6 +1424,7 @@ class TestAsyncRunner:
             job_id = mod.submit_full_pipeline(str(tmp_path), config_json="{}")
         with mock.patch.object(mod, "_update_stage"), \
              mock.patch.object(mod, "_notify_pipeline_completion"), \
+             mock.patch.object(mod, "_stage_code_generation", return_value="codegen.md"), \
              mock.patch.object(mod.time, "sleep"), \
              mock.patch("yuleosh.ci.run_layer1",
                         side_effect=RuntimeError("compile fail")):

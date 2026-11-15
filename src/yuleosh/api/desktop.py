@@ -789,9 +789,12 @@ def _run_pipeline(project_id: str, body: Any) -> tuple:
     #    so users review actual pipeline output, not just templates.
     collected = _collect_real_artifacts(proj_dir, job_id)
 
-    # 2. Baseline fallback: only writes files that don't already exist,
-    #    so real pipeline output is never overwritten.
-    _ensure_artifact_baseline(proj_dir, config)
+    # 2. Baseline fallback for non-LLM/stub runs. A full pipeline must leave
+    #    code generation to the model stage; it only receives spec/design here.
+    _ensure_artifact_baseline(
+        proj_dir, config,
+        seed_code=pipeline_type not in ("full", "full_pipeline"),
+    )
 
     return _json({
         "ok": True,
@@ -1041,12 +1044,11 @@ def _collect_real_artifacts(proj_dir, job_id: str = None) -> list:
     return collected
 
 
-def _ensure_artifact_baseline(proj_dir, config: dict) -> None:
-    """Seed baseline artifact files into the project's artifact folders.
+def _ensure_artifact_baseline(proj_dir, config: dict, seed_code: bool = True) -> None:
+    """Seed requirements/design and optional deterministic starter code.
 
-    Only writes files that don't already exist, so real pipeline output is
-    never overwritten. This gives the desktop three-pane view (requirements /
-    code / tests) reviewable content immediately after a pipeline run.
+    Full pipeline runs disable the code seed: C sources must be produced by
+    the yuleOSH LLM code-gen stage and pass the pipeline's AUTOSAR rules.
     """
     name = config.get("project_name", "project")
     pid = config.get("project_id", "")
@@ -1094,13 +1096,22 @@ def _ensure_artifact_baseline(proj_dir, config: dict) -> None:
             encoding="utf-8",
         )
 
-    from yuleosh.desktop.autosar_seed import seed_autosar_artifacts
-    seed_autosar_artifacts(proj_dir)
+    if seed_code:
+        from yuleosh.desktop.autosar_seed import seed_autosar_artifacts
+        seed_autosar_artifacts(proj_dir)
+
+    pipeline_cfg = proj_dir / "pipeline" / "config.yaml"
+    if not pipeline_cfg.exists():
+        pipeline_cfg.parent.mkdir(parents=True, exist_ok=True)
+        template_cfg = (
+            Path(__file__).parent.parent / "templates" / "autosar-classic" / "pipeline" / "config.yaml"
+        )
+        pipeline_cfg.write_text(template_cfg.read_text(encoding="utf-8"), encoding="utf-8")
 
     tests_dir = proj_dir / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
     report = tests_dir / "report.json"
-    if not report.exists():
+    if not report.exists() and seed_code:
         report.write_text(
             json.dumps({
                 "project": name,
