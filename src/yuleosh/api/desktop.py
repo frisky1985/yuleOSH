@@ -456,6 +456,10 @@ def handle_desktop(method: str, path_tail: str, body: Any, query: dict,
 
     if resource == "projects":
         return _dispatch_projects(method, parts[1:], body, query)
+    if resource == "project-templates":
+        if method == "GET":
+            return _json({"ok": True, "templates": templates.list_project_templates()})
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
     if resource == "settings":
         sub = parts[1] if len(parts) > 1 else ""
         if sub == "llm":
@@ -498,6 +502,8 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
                 return _json({"ok": True, "project": workspace.get_project(project_id)})
             except FileNotFoundError:
                 return _json({"ok": False, "error": "Project not found"}, 404)
+        if method in ("PATCH", "PUT"):
+            return _update_project(project_id, body)
         if method == "DELETE":
             try:
                 workspace.delete_project(project_id)
@@ -634,8 +640,12 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
                 return _json({"ok": False, "error": "Forbidden"}, 403)
         return _json({"ok": False, "error": "Method not allowed"}, 405)
 
-    if sub == "sync" and method == "POST":
-        return _sync_to_cloud(project_id, body)
+    if sub == "sync":
+        if method == "POST":
+            return _sync_to_cloud(project_id, body)
+        if method == "GET":
+            return _project_sync_status(project_id)
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
 
     return _json({"ok": False, "error": f"Unknown sub-resource: {sub}"}, 404)
 
@@ -644,15 +654,78 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
 
 def _create_project(body: Any) -> tuple:
     data = body if isinstance(body, dict) else {}
-    name = data.get("name", "").strip()
-    description = data.get("description", "").strip()
+    raw_name = data.get("name")
+    name = raw_name.strip() if isinstance(raw_name, str) else ""
+    raw_desc = data.get("description")
+    description = raw_desc.strip() if isinstance(raw_desc, str) else ""
+    raw_template = data.get("template")
+    template_id = raw_template.strip() if isinstance(raw_template, str) else ""
     if not name:
         return _json({"ok": False, "error": "Project name is required"}, 400)
+    # Validate the preset before creating the directory, so a bad template id
+    # never leaves an orphan project behind.
+    if template_id and template_id not in templates.PROJECT_TEMPLATES:
+        return _json({
+            "ok": False,
+            "error": f"Unknown project template: {template_id}",
+        }, 400)
     try:
         meta = workspace.create_project(name, description)
     except ValueError as e:
         return _json({"ok": False, "error": str(e)}, 400)
-    return _json({"ok": True, "project": meta}, 201)
+
+    applied = None
+    if template_id:
+        applied = templates.apply_project_template(meta["id"], template_id)
+        meta = workspace.get_project(meta["id"])
+
+    payload: dict = {"ok": True, "project": meta}
+    if applied:
+        payload["template"] = applied
+    return _json(payload, 201)
+
+
+def _update_project(project_id: str, body: Any) -> tuple:
+    """Rename / re-describe a project (PATCH /projects/{id})."""
+    data = body if isinstance(body, dict) else {}
+    if "name" not in data and "description" not in data:
+        return _json({"ok": False, "error": "No updatable fields (name/description)"}, 400)
+    name = data.get("name")
+    description = data.get("description")
+    if name is not None and not isinstance(name, str):
+        return _json({"ok": False, "error": "name must be a string"}, 400)
+    if description is not None and not isinstance(description, str):
+        return _json({"ok": False, "error": "description must be a string"}, 400)
+    try:
+        meta = workspace.update_project(project_id, name, description)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+    except ValueError as e:
+        return _json({"ok": False, "error": str(e)}, 400)
+    return _json({"ok": True, "project": meta})
+
+
+def _project_sync_status(project_id: str) -> tuple:
+    """Cloud sync state: configured endpoint, last sync, pending changes."""
+    try:
+        meta = workspace._load_meta(project_id)
+        inc = workspace.collect_artifact_incremental(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    cloud_url = os.environ.get("YULEOSH_CLOUD_URL", "").strip()
+    pending_count = inc["changed_count"] + inc["removed_count"]
+    return _json({
+        "ok": True,
+        "configured": bool(cloud_url),
+        "cloud_url": cloud_url or None,
+        "synced": bool(meta.get("cloud_synced")),
+        "last_synced_at": meta.get("last_synced_at"),
+        "changed_files": inc["changed_count"],
+        "removed_files": inc["removed_count"],
+        "total_files": inc["total_current"],
+        "pending": pending_count > 0 or not meta.get("cloud_synced"),
+    })
 
 
 def _import_requirements(project_id: str, body: Any) -> tuple:

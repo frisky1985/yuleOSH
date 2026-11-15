@@ -71,6 +71,90 @@ class TestProjects:
         _, status = d.handle_desktop("GET", f"projects/{pid}", None, {})
         assert status == 404
 
+    def test_rename_project(self, desktop_api):
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "Old"}), {})[0]["project"]["id"]
+
+        resp, status = d.handle_desktop(
+            "PATCH", f"projects/{pid}", _body({"name": "  New  ", "description": "d"}), {})
+        assert status == 200
+        assert resp["project"]["name"] == "New"
+        assert resp["project"]["description"] == "d"
+
+        resp, _ = d.handle_desktop("GET", f"projects/{pid}", None, {})
+        assert resp["project"]["name"] == "New"
+
+    def test_rename_blank_name_400(self, desktop_api):
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        _, status = d.handle_desktop("PATCH", f"projects/{pid}", _body({"name": "   "}), {})
+        assert status == 400
+
+    def test_rename_missing_404(self, desktop_api):
+        _, status = desktop_api.handle_desktop(
+            "PATCH", "projects/nope", _body({"name": "X"}), {})
+        assert status == 404
+
+    def test_rename_no_fields_400(self, desktop_api):
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        _, status = d.handle_desktop("PATCH", f"projects/{pid}", _body({}), {})
+        assert status == 400
+
+
+# ── Project templates (new-project wizard) ────────────────────────────────
+
+class TestProjectTemplates:
+    def test_list_project_templates(self, desktop_api):
+        resp, status = desktop_api.handle_desktop("GET", "project-templates", None, {})
+        assert status == 200
+        ids = {t["id"] for t in resp["templates"]}
+        assert {"blank", "aspice-lite", "automotive", "web-app"} <= ids
+        blank = next(t for t in resp["templates"] if t["id"] == "blank")
+        assert blank["doc_templates"] == []
+        assert blank["has_requirements_seed"] is False
+        # The wizard only needs metadata — seed bodies must not leak.
+        assert "requirements_seed" not in blank
+
+    def test_create_with_template_seeds_docs_and_requirements(
+            self, desktop_api, tmp_path, monkeypatch):
+        monkeypatch.setenv("YULEOSH_DESKTOP_HOME", str(tmp_path / "ws"))
+        d = desktop_api
+        resp, status = d.handle_desktop(
+            "POST", "projects", _body({"name": "Auto", "template": "aspice-lite"}), {})
+        assert status == 201
+        pid = resp["project"]["id"]
+        applied = resp["template"]
+        assert applied["template"] == "aspice-lite"
+        assert applied["requirements_saved"] is True
+        assert sorted(applied["created_docs"]) == [
+            "docs/project-plan.md", "docs/qa-plan.md", "docs/risk-register.md",
+        ]
+        for rel in applied["created_docs"]:
+            assert (Path(tmp_path) / "ws" / pid / rel).is_file()
+
+        req, status = d.handle_desktop("GET", f"projects/{pid}/requirements", None, {})
+        assert status == 200
+        assert "SYS-001" in req["content"]
+
+    def test_create_with_blank_template(self, desktop_api):
+        d = desktop_api
+        resp, status = d.handle_desktop(
+            "POST", "projects", _body({"name": "Empty", "template": "blank"}), {})
+        assert status == 201
+        assert resp["template"]["created_docs"] == []
+        assert resp["template"]["requirements_saved"] is False
+
+    def test_create_with_unknown_template_400(self, desktop_api):
+        d = desktop_api
+        resp, status = d.handle_desktop(
+            "POST", "projects", _body({"name": "Bad", "template": "nope"}), {})
+        assert status == 400
+        assert "template" in resp["error"].lower()
+        # A rejected preset must not leave an orphan project behind.
+        listing, _ = d.handle_desktop("GET", "projects", None, {})
+        assert listing["projects"] == []
+
 
 # ── Requirements ──────────────────────────────────────────────────────────
 
@@ -268,6 +352,45 @@ class TestSync:
             resp, status = d.handle_desktop("POST", f"projects/{pid}/sync", _body({}), {})
         assert status == 200
         assert resp["synced"] is True
+
+    def test_sync_status_unconfigured(self, desktop_api, monkeypatch):
+        monkeypatch.delenv("YULEOSH_CLOUD_URL", raising=False)
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/sync", None, {})
+        assert status == 200
+        assert resp["configured"] is False
+        assert resp["synced"] is False
+        assert resp["pending"] is True
+        assert resp["total_files"] == 0
+
+    def test_sync_status_after_sync(self, desktop_api, monkeypatch):
+        d = desktop_api
+        pid = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})[0]["project"]["id"]
+        d.handle_desktop("POST", f"projects/{pid}/pipeline/run", _body({"type": "full"}), {})
+        monkeypatch.setenv("YULEOSH_CLOUD_URL", "http://localhost:9999")
+
+        class FakeResp:
+            def read(self):
+                return b'{"ok":true}'
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        with patch("urllib.request.urlopen", return_value=FakeResp()):
+            d.handle_desktop("POST", f"projects/{pid}/sync", _body({}), {})
+
+        resp, status = d.handle_desktop("GET", f"projects/{pid}/sync", None, {})
+        assert status == 200
+        assert resp["configured"] is True
+        assert resp["synced"] is True
+        assert resp["pending"] is False
+        assert resp["last_synced_at"]
+
+    def test_sync_status_missing_404(self, desktop_api):
+        _, status = desktop_api.handle_desktop("GET", "projects/nope/sync", None, {})
+        assert status == 404
 
 
 # ── Artifact classification ───────────────────────────────────────────────

@@ -157,6 +157,24 @@ def get_project(project_id: str) -> dict:
     return meta
 
 
+def update_project(project_id: str, name: Optional[str] = None,
+                   description: Optional[str] = None) -> dict:
+    """Rename a project and/or update its description.
+
+    Only provided fields are changed; ``None`` leaves the existing value.
+    """
+    meta = _load_meta(project_id)
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise ValueError("Project name is required")
+        meta["name"] = name
+    if description is not None:
+        meta["description"] = description.strip()
+    _save_meta(project_id, meta)
+    return meta
+
+
 def delete_project(project_id: str) -> None:
     """Delete a project and all its artifacts."""
     proj_dir = _project_dir(project_id)
