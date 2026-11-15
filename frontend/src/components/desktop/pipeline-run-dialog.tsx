@@ -239,7 +239,7 @@ export function PipelineRunDialog({
               <div
                 ref={logRef}
                 data-testid="pipeline-run-logs"
-                className="max-h-64 overflow-y-auto rounded-md border border-[#1e293b] bg-[#0b1020] p-3 font-mono text-[11px] leading-relaxed text-[#94a3b8]"
+                className="scrollbar-dark max-h-64 overflow-y-auto rounded-md border border-[#1e293b] bg-[#0b1020] p-3 font-mono text-[11px] leading-relaxed text-[#94a3b8]"
               >
                 {logs.length === 0 ? (
                   <div className="text-[#475569]">暂无日志（该记录可能来自历史快照）。</div>

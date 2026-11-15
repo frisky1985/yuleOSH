@@ -136,6 +136,36 @@
 ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #334155; }
 
+/* 深色面板内的细滚动条（日志、代码块等）：轨道透明、滑块内缩加圆角。
+   注意：Chromium 下同时写 scrollbar-width 会让 ::-webkit-scrollbar 失效，
+   因此标准属性只对 Firefox 生效。 */
+.scrollbar-dark::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scrollbar-dark::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: #475569;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: content-box;
+}
+.scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+  background-clip: content-box;
+}
+.scrollbar-dark::-webkit-scrollbar-corner {
+  background: transparent;
+}
+@supports (-moz-appearance: none) {
+  .scrollbar-dark {
+    scrollbar-width: thin;
+    scrollbar-color: #475569 transparent;
+  }
+}
+
 /* Grid background */
 .bg-grid {
   background-image:
