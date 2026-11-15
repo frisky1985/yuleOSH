@@ -33,6 +33,7 @@ import {
   LogIn,
   UserRound,
   GitBranch,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,7 @@ import type { ProjectLite, TemplateApplyResult } from "@/components/desktop/proj
 import { ProjectActionsMenu } from "@/components/desktop/project-actions-menu";
 import type { ProjectRef } from "@/components/desktop/project-actions-menu";
 import { TraceabilityDialog } from "@/components/desktop/traceability-dialog";
+import { BaselineDialog } from "@/components/desktop/baseline-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -145,6 +147,7 @@ export default function DesktopWorkspacePage() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showTraceability, setShowTraceability] = useState(false);
+  const [showBaselines, setShowBaselines] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -720,6 +723,16 @@ export default function DesktopWorkspacePage() {
           >
             <GitBranch className="w-4 h-4 mr-1" /> 追溯矩阵
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowBaselines(true)}
+            disabled={!activeId}
+            title="配置基线的创建、文件清单与差异比对"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <Layers className="w-4 h-4 mr-1" /> 基线
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1159,6 +1172,13 @@ export default function DesktopWorkspacePage() {
       <TraceabilityDialog
         open={showTraceability}
         onOpenChange={setShowTraceability}
+        projectId={activeId}
+      />
+
+      {/* ── Configuration baselines ────────────────────────────────────── */}
+      <BaselineDialog
+        open={showBaselines}
+        onOpenChange={setShowBaselines}
         projectId={activeId}
       />
 
