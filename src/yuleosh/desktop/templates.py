@@ -194,3 +194,135 @@ def generate_doc_templates(project_id: str, names: list[str] | None = None,
             results.append({"name": name, "path": None, "created": False,
                             "error": "unknown template"})
     return results
+
+
+# ── Project presets (new-project wizard) ──────────────────────────────────
+
+_AUTOMOTIVE_REQS = """# 需求（汽车电子模板）
+
+> 请把下面的占位条目替换为真实需求，保留 `REQ-xxx` 编号便于追溯。
+
+## 功能需求
+- [ ] FR-001 描述主体功能行为与输入输出
+- [ ] FR-002 描述安全相关约束（ISO 26262 ASIL 等级）
+- [ ] FR-003 描述故障处理与降级策略
+
+## 非功能需求
+- [ ] NFR-001 时序 / 性能指标（响应时间、周期）
+- [ ] NFR-002 诊断与可维护性要求
+- [ ] NFR-003 环境与接口约束（总线、供电）
+"""
+
+_ASPICE_REQS = """# 需求（ASPICE 精简模板）
+
+> 按 SYS.2 / SWE.1 组织需求，保留可追溯编号。
+
+## 系统需求
+- [ ] SYS-001 系统级功能描述
+
+## 软件需求
+- [ ] SWE-001 软件功能需求
+- [ ] SWE-002 软件接口需求
+- [ ] SWE-003 资源与性能约束
+"""
+
+_WEB_REQS = """# 需求（Web 应用模板）
+
+## 用户故事
+- [ ] US-001 作为<角色>，我希望<能力>，以便<价值>
+
+## 验收标准
+- [ ] AC-001 可验证的验收条件
+
+## 非功能需求
+- [ ] NFR-001 性能 / 可用性 / 安全要求
+"""
+
+# template id → preset. Presets only seed documents; they never fabricate
+# compliance evidence (generated docs stay DRAFT).
+PROJECT_TEMPLATES: dict[str, dict] = {
+    "blank": {
+        "id": "blank",
+        "name": "空白工程",
+        "tag": "自定义",
+        "description": "只创建标准产出物目录，需求与文档自行编写。",
+        "doc_templates": [],
+        "requirements_seed": None,
+    },
+    "aspice-lite": {
+        "id": "aspice-lite",
+        "name": "ASPICE 精简",
+        "tag": "ASPICE",
+        "description": "预置项目计划、风险登记、质量计划三份骨架文档，适合中小项目快速起步。",
+        "doc_templates": ["project-plan", "risk-register", "qa-plan"],
+        "requirements_seed": _ASPICE_REQS,
+    },
+    "automotive": {
+        "id": "automotive",
+        "name": "汽车电子",
+        "tag": "ISO 26262",
+        "description": "完整 ASPICE 文档骨架 + 功能安全需求模板，适合车控 / ECU 类项目。",
+        "doc_templates": [
+            "project-plan", "risk-register", "qa-plan",
+            "change-requests", "impact-analysis", "known-issues",
+        ],
+        "requirements_seed": _AUTOMOTIVE_REQS,
+    },
+    "web-app": {
+        "id": "web-app",
+        "name": "Web 应用",
+        "tag": "通用",
+        "description": "以用户故事组织需求，预置项目计划与已知问题文档。",
+        "doc_templates": ["project-plan", "known-issues"],
+        "requirements_seed": _WEB_REQS,
+    },
+}
+
+
+def list_project_templates() -> list[dict]:
+    """Return wizard-facing preset metadata (no requirement text bodies)."""
+    return [
+        {
+            "id": t["id"],
+            "name": t["name"],
+            "tag": t["tag"],
+            "description": t["description"],
+            "doc_templates": list(t["doc_templates"]),
+            "has_requirements_seed": bool(t["requirements_seed"]),
+        }
+        for t in PROJECT_TEMPLATES.values()
+    ]
+
+
+def apply_project_template(project_id: str, template_id: str) -> dict:
+    """Seed a freshly created project from a wizard preset.
+
+    Returns ``{"template", "created_docs", "requirements_saved"}``. Unknown
+    template ids raise ``ValueError``; the project itself is left untouched
+    by the caller in that case.
+    """
+    preset = PROJECT_TEMPLATES.get(template_id)
+    if preset is None:
+        raise ValueError(
+            f"Unknown project template '{template_id}'. "
+            f"Available: {sorted(PROJECT_TEMPLATES)}"
+        )
+
+    created_docs: list[str] = []
+    # An empty list means "no documents" (blank preset) — unlike
+    # generate_doc_templates(), which treats a falsy ``names`` as "all".
+    if preset["doc_templates"]:
+        for result in generate_doc_templates(project_id, preset["doc_templates"]):
+            if result.get("created") and result.get("path"):
+                created_docs.append(result["path"])
+
+    requirements_saved = False
+    if preset["requirements_seed"]:
+        workspace.save_requirements(project_id, preset["requirements_seed"], source="template")
+        requirements_saved = True
+
+    return {
+        "template": preset["id"],
+        "created_docs": created_docs,
+        "requirements_saved": requirements_saved,
+    }

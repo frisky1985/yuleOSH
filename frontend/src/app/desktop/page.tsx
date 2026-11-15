@@ -24,7 +24,6 @@ import {
   BookOpen,
   ShieldCheck,
   Sparkles,
-  Plus,
   Search,
   Filter,
   ChevronsUpDown,
@@ -37,13 +36,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import { apiFetch } from "@/lib/api-fetch";
 import {
   buildSections,
@@ -60,6 +52,10 @@ import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
 import { DesktopLLMSettingsDialog } from "@/components/account/desktop-llm-settings-dialog";
 import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
 import { PipelineRunDialog } from "@/components/desktop/pipeline-run-dialog";
+import { ProjectWizardDialog } from "@/components/desktop/project-wizard-dialog";
+import type { ProjectLite, TemplateApplyResult } from "@/components/desktop/project-wizard-dialog";
+import { ProjectActionsMenu } from "@/components/desktop/project-actions-menu";
+import type { ProjectRef } from "@/components/desktop/project-actions-menu";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -74,6 +70,17 @@ interface ProjectMeta {
   cloud_synced: boolean;
   last_synced_at: string | null;
   artifacts?: Record<string, { path: string; exists: boolean; file_count: number }>;
+}
+
+interface SyncStatus {
+  configured: boolean;
+  cloud_url: string | null;
+  synced: boolean;
+  last_synced_at: string | null;
+  changed_files: number;
+  removed_files: number;
+  total_files: number;
+  pending: boolean;
 }
 
 interface PipelineRun {
@@ -133,7 +140,7 @@ export default function DesktopWorkspacePage() {
   const [pollProgress, setPollProgress] = useState(0);
   const [pollStage, setPollStage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -218,6 +225,24 @@ export default function DesktopWorkspacePage() {
     loadProjects();
   }, [loadProjects]);
 
+  // ── Cloud sync status ──────────────────────────────────────────────────
+  const loadSyncStatus = useCallback(async (id: string) => {
+    try {
+      const s = await apiFetch<SyncStatus>(`/api/v1/desktop/projects/${id}/sync`);
+      setSyncStatus(s);
+    } catch {
+      setSyncStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeId) {
+      setSyncStatus(null);
+      return;
+    }
+    loadSyncStatus(activeId);
+  }, [activeId, loadSyncStatus]);
+
   // ── Load active project details + tree + auto-select first file ────────
   const findArtifactPath = useCallback((node: TreeNode | null | undefined, target: string): string | null => {
     if (!node) return null;
@@ -274,26 +299,50 @@ export default function DesktopWorkspacePage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // ── Create project ─────────────────────────────────────────────────────
-  const handleCreateProject = async () => {
-    const name = newProjectName.trim();
-    if (!name) return;
-    try {
-      const data = await apiFetch<{ project: ProjectMeta }>("/api/v1/desktop/projects", {
-        method: "POST",
-        body: JSON.stringify({ name, description: "" }),
-      });
-      setProjects((p) => [data.project, ...p]);
-      setActiveId(data.project.id);
-      setNewProjectName("");
-      setShowNewProject(false);
-      setChatMessages((m) => [...m, {
-        role: "assistant",
-        content: `已创建工程「${name}」。现在可以输入需求了。`,
-        timestamp: new Date().toISOString(),
-      }]);
-    } catch (e) {
-      alert(`创建工程失败: ${(e as Error).message}`);
+  // ── Create project (from the wizard) ───────────────────────────────────
+  const handleProjectCreated = (project: ProjectLite, template: TemplateApplyResult | null) => {
+    setProjects((p) => [project as ProjectMeta, ...p]);
+    setActiveProject(project as ProjectMeta);
+    setActiveId(project.id);
+    setShowNewProject(false);
+    let extra = "";
+    if (template) {
+      const docs = template.created_docs.length;
+      if (docs) extra += ` 已按模板生成 ${docs} 份文档。`;
+      if (template.requirements_saved) extra += " 已预置需求模板。";
+    }
+    setChatMessages((m) => [...m, {
+      role: "assistant",
+      content: `已创建工程「${project.name}」。${extra}现在可以输入需求了。`,
+      timestamp: new Date().toISOString(),
+    }]);
+    loadSyncStatus(project.id);
+  };
+
+  // ── Rename / re-describe project ───────────────────────────────────────
+  const handleProjectUpdated = (updated: ProjectRef) => {
+    setProjects((list) => list.map((p) => (p.id === updated.id
+      ? { ...p, name: updated.name, description: updated.description ?? p.description }
+      : p)));
+    setActiveProject((p) => (p && p.id === updated.id
+      ? { ...p, name: updated.name, description: updated.description ?? p.description }
+      : p));
+  };
+
+  // ── Delete project ─────────────────────────────────────────────────────
+  const handleProjectDeleted = (id: string) => {
+    const next = projects.filter((p) => p.id !== id);
+    setProjects(next);
+    if (id !== activeId) return;
+
+    const fallback = next[0]?.id ?? null;
+    setActiveId(fallback);
+    if (!fallback) {
+      setActiveProject(null);
+      setTree(null);
+      setSelectedFile(null);
+      setFileContent("");
+      setRuns([]);
     }
   };
 
@@ -583,6 +632,7 @@ export default function DesktopWorkspacePage() {
       // Reload project to refresh sync status.
       const proj = await apiFetch<{ project: ProjectMeta }>(`/api/v1/desktop/projects/${activeId}`);
       setActiveProject(proj.project);
+      await loadSyncStatus(activeId);
     } catch (e) {
       setChatMessages((m) => [...m, {
         role: "assistant",
@@ -637,8 +687,16 @@ export default function DesktopWorkspacePage() {
           <Button variant="outline" size="sm" onClick={() => setShowNewProject(true)} className="border-[#1e293b] text-[#94a3b8] hover:text-white">
             <FolderPlus className="w-4 h-4 mr-1" /> 新建
           </Button>
+          <ProjectActionsMenu
+            project={activeProject}
+            syncing={syncing}
+            onSync={handleSync}
+            onUpdated={handleProjectUpdated}
+            onDeleted={handleProjectDeleted}
+          />
         </div>
         <div className="flex items-center gap-2">
+          <SyncStatusChip status={syncStatus} onSync={handleSync} disabled={!activeId || syncing} />
           <Button
             variant="outline"
             size="sm"
@@ -1077,37 +1135,12 @@ export default function DesktopWorkspacePage() {
         </main>
       </div>
 
-      {/* ── New project dialog ─────────────────────────────────────────── */}
-      {showNewProject && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowNewProject(false)}>
-          <Card className="w-[400px] bg-[#0d111f] border-[#1e293b]" onClick={(e) => e.stopPropagation()}>
-            <CardHeader>
-              <CardTitle className="text-[#e2e8f0] flex items-center gap-2">
-                <FolderPlus className="w-5 h-5 text-[#1677ff]" /> 新建工程
-              </CardTitle>
-              <CardDescription className="text-[#64748b]">创建一个本地工程，产出物将保存在独立文件夹中。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input
-                autoFocus
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
-                placeholder="工程名称，如：智能车灯控制器"
-                className="bg-[#111827] border-[#1e293b] text-[#e2e8f0]"
-              />
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowNewProject(false)}
-                  className="border-[#1e293b] text-[#94a3b8]">取消</Button>
-                <Button size="sm" onClick={handleCreateProject} disabled={!newProjectName.trim()}
-                  className="bg-gradient-to-r from-[#10b981] to-[#059669] text-white">
-                  <Plus className="w-4 h-4 mr-1" /> 创建
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* ── New project wizard ─────────────────────────────────────────── */}
+      <ProjectWizardDialog
+        open={showNewProject}
+        onOpenChange={setShowNewProject}
+        onCreated={handleProjectCreated}
+      />
 
       {/* ── 用户区 Dialog（与 dashboard 共用） ────────────────────────── */}
       {session && (
@@ -1149,6 +1182,59 @@ export default function DesktopWorkspacePage() {
         }}
       />
     </div>
+  );
+}
+
+// ─── 云端同步状态 chip ────────────────────────────────────────────────────
+
+function SyncStatusChip({
+  status,
+  onSync,
+  disabled,
+}: {
+  status: SyncStatus | null;
+  onSync: () => void;
+  disabled: boolean;
+}) {
+  if (!status) return null;
+
+  if (!status.configured) {
+    return (
+      <span
+        title="未配置云端地址（YULEOSH_CLOUD_URL），产物目前仅保存在本地"
+        data-testid="sync-status"
+        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-[#1e293b] text-[#64748b]"
+      >
+        <UploadCloud className="w-3 h-3" /> 云端未配置
+      </span>
+    );
+  }
+
+  if (status.pending) {
+    const count = status.changed_files + status.removed_files;
+    return (
+      <button
+        type="button"
+        onClick={onSync}
+        disabled={disabled}
+        title="点击立即同步到云端"
+        data-testid="sync-status"
+        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 disabled:opacity-60"
+      >
+        <Clock className="w-3 h-3" />
+        {status.synced ? `待同步 ${count} 个文件` : "尚未同步"}
+      </button>
+    );
+  }
+
+  return (
+    <span
+      title={status.last_synced_at ?? ""}
+      data-testid="sync-status"
+      className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-[#10b981]/40 bg-[#10b981]/10 text-[#10b981]"
+    >
+      <CheckCircle2 className="w-3 h-3" /> 已同步 · {timeAgo(status.last_synced_at)}
+    </span>
   );
 }
 
