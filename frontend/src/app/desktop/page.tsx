@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   FolderOpen,
   FolderPlus,
@@ -104,6 +105,7 @@ function timeAgo(iso?: string | null): string {
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export default function DesktopWorkspacePage() {
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ProjectMeta | null>(null);
@@ -164,9 +166,11 @@ export default function DesktopWorkspacePage() {
   }, []);
 
   useEffect(() => {
-    const api = (window as any).electronAPI;
+    const api = (window as Window & {
+      electronAPI?: { getVersion?: () => Promise<string> };
+    }).electronAPI;
     if (api?.getVersion) {
-      api.getVersion().then((v: string) => setAppVersion(v)).catch(() => {});
+      api.getVersion().then((v) => setAppVersion(v)).catch(() => {});
     }
   }, []);
 
@@ -834,7 +838,10 @@ export default function DesktopWorkspacePage() {
                   <DockMenuItem
                     icon={<LogIn className="w-3.5 h-3.5" />}
                     label="登录账号"
-                    onClick={() => window.location.assign("/login")}
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      router.push("/login");
+                    }}
                   />
                 )}
                 {appVersion && (
