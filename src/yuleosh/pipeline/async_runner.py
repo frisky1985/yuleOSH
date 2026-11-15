@@ -36,6 +36,14 @@ FULL_PIPELINE_STAGES = [
     {"key": "coverage",        "name": "覆盖率分析 (Layer 3)"},
 ]
 
+CODEGEN_LAYER_META = [
+    ("application", "Application SWC", "src/application"),
+    ("rte", "RTE", "src/rte"),
+    ("services", "BSW Services", "src/bsw/services"),
+    ("ecu_abstraction", "ECU Abstraction", "src/bsw/ecu_abstraction"),
+    ("mcal", "MCAL", "src/bsw/mcal"),
+]
+
 
 def _get_pool():
     global _pool
@@ -237,6 +245,42 @@ def _stage_code_generation(project_dir: str, job_id: str, config: dict) -> str:
 
     spec_path = root / "requirements" / "requirements.md"
     architecture_path = root / "design" / "architecture.md"
+    job = _PIPELINE_JOBS.get(job_id)
+    if job is not None:
+        job["code_generation"] = {
+            "status": "generating",
+            "model": "yuleOSH",
+            "rule_source": "pipeline/config.yaml",
+            "attempts": 0,
+            "repair_count": 0,
+            "error_count": 0,
+            "layers": [],
+        }
+
+    def on_codegen_event(event: str, data: dict) -> None:
+        if job is None:
+            return
+        progress = job.setdefault("code_generation", {})
+        attempt = int(data.get("attempt") or 0)
+        if attempt:
+            progress["attempts"] = max(int(progress.get("attempts") or 0), attempt)
+            progress["repair_count"] = max(0, progress["attempts"] - 1)
+        if event == "generation_started":
+            progress["status"] = "generating"
+        elif event == "validation_failed":
+            progress["status"] = "validating"
+            progress["error_count"] = int(data.get("error_count") or 0)
+        elif event == "repair_started":
+            progress["status"] = "repairing"
+            _append_log(
+                job_id,
+                f"Code generation attempt {attempt}: model repairing "
+                f"{data.get('error_count', 0)} validation issue(s)...",
+            )
+        elif event == "generation_validated":
+            progress["status"] = "validated"
+            progress["error_count"] = 0
+
     session = SimpleNamespace(
         name=job_id,
         spec_path=str(spec_path),
@@ -246,16 +290,49 @@ def _stage_code_generation(project_dir: str, job_id: str, config: dict) -> str:
         artifacts={"architecture": str(architecture_path)} if architecture_path.exists() else {},
         session_dir=job_dir,
         llm_client=None,
+        codegen_event_handler=on_codegen_event if job is not None else None,
     )
-    report = _step_claude_dev_codegen(session)
+    try:
+        report = _step_claude_dev_codegen(session)
+    except Exception:
+        if job is not None:
+            job["code_generation"]["status"] = "failed"
+        raise
 
     generated_src = output_dir / "src"
     if not generated_src.is_dir():
+        if job is not None:
+            job["code_generation"]["status"] = "failed"
         raise RuntimeError("Verified code-gen result has no src/ directory")
+
+    source_files = sorted(
+        path for path in output_dir.rglob("*")
+        if path.is_file() and path.suffix in (".c", ".h")
+    )
+    relative_files = [path.relative_to(output_dir).as_posix() for path in source_files]
+    if job is not None:
+        layers = [
+            {
+                "key": key,
+                "name": name,
+                "path": prefix,
+                "files": sum(path.startswith(prefix + "/") for path in relative_files),
+            }
+            for key, name, prefix in CODEGEN_LAYER_META
+        ]
+        job["code_generation"].update({
+            "status": "validated",
+            "files": len(relative_files),
+            "layers": layers,
+            "report": report,
+        })
+
     shutil.copytree(generated_src, root / "code" / "src", dirs_exist_ok=True)
     generated_tests = output_dir / "tests"
     if generated_tests.is_dir():
         shutil.copytree(generated_tests, root / "tests", dirs_exist_ok=True)
+    if job is not None:
+        job["code_generation"]["status"] = "passed"
     return report
 
 

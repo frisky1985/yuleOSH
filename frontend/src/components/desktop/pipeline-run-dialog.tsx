@@ -18,6 +18,7 @@ import {
   Clock,
   Loader2,
   RotateCw,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 
@@ -38,6 +39,16 @@ export interface PipelineRunDetail {
   started_at?: string | null;
   completed_at?: string | null;
   result?: { error?: string; summary?: string } | null;
+  code_generation?: {
+    status: string;
+    model?: string;
+    rule_source?: string;
+    attempts?: number;
+    repair_count?: number;
+    error_count?: number;
+    files?: number;
+    layers?: Array<{ key: string; name: string; path: string; files: number }>;
+  } | null;
   source?: string;
 }
 
@@ -55,6 +66,15 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   failed: { label: "失败", className: "bg-[#ef4444]/15 text-[#f87171] border-[#ef4444]/30" },
   running: { label: "运行中", className: "bg-[#f59e0b]/15 text-[#fbbf24] border-[#f59e0b]/30" },
   queued: { label: "排队中", className: "bg-[#64748b]/15 text-[#94a3b8] border-[#64748b]/30" },
+};
+
+const CODEGEN_STATUS: Record<string, { label: string; className: string }> = {
+  generating: { label: "模型生成中", className: "text-[#60a5fa] border-[#3b82f6]/30 bg-[#3b82f6]/10" },
+  validating: { label: "校验待修复", className: "text-[#fbbf24] border-[#f59e0b]/30 bg-[#f59e0b]/10" },
+  repairing: { label: "模型修复中", className: "text-[#fbbf24] border-[#f59e0b]/30 bg-[#f59e0b]/10" },
+  validated: { label: "校验通过", className: "text-[#34d399] border-[#10b981]/30 bg-[#10b981]/10" },
+  passed: { label: "已生成并部署", className: "text-[#34d399] border-[#10b981]/30 bg-[#10b981]/10" },
+  failed: { label: "生成失败", className: "text-[#f87171] border-[#ef4444]/30 bg-[#ef4444]/10" },
 };
 
 function isActiveStatus(status?: string): boolean {
@@ -135,6 +155,11 @@ export function PipelineRunDialog({
     label: detail?.status ?? "未知",
     className: "bg-[#64748b]/15 text-[#94a3b8] border-[#64748b]/30",
   };
+  const codegen = detail?.code_generation;
+  const codegenStatus = CODEGEN_STATUS[codegen?.status ?? ""] ?? {
+    label: codegen?.status ?? "未知",
+    className: "text-[#94a3b8] border-[#64748b]/30 bg-[#64748b]/10",
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -193,6 +218,52 @@ export function PipelineRunDialog({
                 style={{ width: `${Math.min(100, Math.max(0, detail.progress ?? 0))}%` }}
               />
             </div>
+
+            {/* AUTOSAR 模型生成摘要 */}
+            {codegen && (
+              <section
+                data-testid="code-generation-summary"
+                className="rounded-lg border border-[#1e293b] bg-[#111827] p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-[#60a5fa]" />
+                  <h3 className="text-xs font-semibold text-[#e2e8f0]">AUTOSAR 分层代码生成</h3>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] ${codegenStatus.className}`}>
+                    {codegenStatus.label}
+                  </span>
+                  {(codegen.attempts ?? 0) > 0 && (
+                    <span className="ml-auto text-[10px] text-[#94a3b8]">
+                      {codegen.attempts} 次生成 · {codegen.repair_count ?? 0} 次修复
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-[#94a3b8]">
+                  {codegen.status === "generating" &&
+                    `${codegen.model ?? "yuleOSH"} 正在按 ${codegen.rule_source ?? "pipeline"} 规则生成分层文件。`}
+                  {codegen.status === "validating" &&
+                    `第 ${codegen.attempts ?? 1} 次产物发现 ${codegen.error_count ?? 0} 项校验问题，准备反馈给模型。`}
+                  {codegen.status === "repairing" &&
+                    `编译、目录或跨层依赖错误已反馈给模型，正在执行第 ${codegen.attempts ?? 1} 次生成。`}
+                  {(codegen.status === "validated" || codegen.status === "passed") &&
+                    `${codegen.files ?? 0} 个源文件通过编译、分层目录与依赖校验${codegen.status === "passed" ? "，已部署到工程" : ""}。`}
+                  {codegen.status === "failed" && "模型产物未通过 pipeline 规则，代码未部署到工程。"}
+                </p>
+                {(codegen.layers?.length ?? 0) > 0 && (
+                  <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+                    {codegen.layers?.map((layer) => (
+                      <div
+                        key={layer.key}
+                        title={layer.path}
+                        className="rounded border border-[#1e293b] bg-[#0b1020] px-2 py-1.5"
+                      >
+                        <div className="truncate text-[10px] text-[#94a3b8]">{layer.name}</div>
+                        <div className="mt-0.5 text-xs font-semibold text-[#cbd5e1]">{layer.files} 文件</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* 步骤 */}
             {detail.stages && detail.stages.length > 0 && (

@@ -381,6 +381,7 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             forbidden_features=forbidden_features,
             requirement_ids=list(catalog),
             autosar_rules=autosar_rules,
+            event_handler=getattr(session, "codegen_event_handler", None),
         )
         result = engine.generate(
             session, system_prompt, user_prompt,
