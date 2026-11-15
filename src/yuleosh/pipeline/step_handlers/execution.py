@@ -341,6 +341,12 @@ def _step_claude_dev_codegen(session: PipelineSession) -> str:
             seed_sources=seed_sources,
             context_content=context_content,
             contracts_json=contracts_json,
+            autosar_classic=cfg.get(
+                "autosar_classic",
+                "autosar-coding" in skills
+                and str(language_hint or target_language or "c").strip().lower()
+                in {"c", "c99", "c11", "c17"},
+            ),
         )
 
         # 可追溯性硬规则: 把权威需求 ID 目录注入 prompt, 让 LLM 用链可解析的 ID
