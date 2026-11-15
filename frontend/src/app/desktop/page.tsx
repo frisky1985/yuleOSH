@@ -24,6 +24,7 @@ import {
   BookOpen,
   ShieldCheck,
   Bug,
+  ClipboardCheck,
   Sparkles,
   Search,
   Filter,
@@ -67,6 +68,7 @@ import { ChangeRequestDialog } from "@/components/desktop/change-request-dialog"
 import { ComplianceDialog } from "@/components/desktop/compliance-dialog";
 import { QualityGatesDialog } from "@/components/desktop/quality-gates-dialog";
 import { IssueTrackerDialog } from "@/components/desktop/issue-tracker-dialog";
+import { QaAuditDialog } from "@/components/desktop/qa-audit-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -159,6 +161,7 @@ export default function DesktopWorkspacePage() {
   const [showCompliance, setShowCompliance] = useState(false);
   const [showQualityGates, setShowQualityGates] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
+  const [showQa, setShowQa] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -784,6 +787,16 @@ export default function DesktopWorkspacePage() {
           >
             <Bug className="w-4 h-4 mr-1" /> 问题
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowQa(true)}
+            disabled={!activeId}
+            title="审计计划、不符合项登记与流转、管理批准与 QA 报告导出"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <ClipboardCheck className="w-4 h-4 mr-1" /> QA 审计
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1258,6 +1271,13 @@ export default function DesktopWorkspacePage() {
       <IssueTrackerDialog
         open={showIssues}
         onOpenChange={setShowIssues}
+        projectId={activeId}
+      />
+
+      {/* ── QA audit (SUP.1) ───────────────────────────────────────────── */}
+      <QaAuditDialog
+        open={showQa}
+        onOpenChange={setShowQa}
         projectId={activeId}
       />
 
