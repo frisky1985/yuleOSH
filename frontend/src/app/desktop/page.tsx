@@ -35,6 +35,7 @@ import {
   GitBranch,
   Layers,
   GitPullRequest,
+  Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,7 @@ import { TraceabilityDialog } from "@/components/desktop/traceability-dialog";
 import { BaselineDialog } from "@/components/desktop/baseline-dialog";
 import { ChangeRequestDialog } from "@/components/desktop/change-request-dialog";
 import { ComplianceDialog } from "@/components/desktop/compliance-dialog";
+import { QualityGatesDialog } from "@/components/desktop/quality-gates-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -153,6 +155,7 @@ export default function DesktopWorkspacePage() {
   const [showBaselines, setShowBaselines] = useState(false);
   const [showChangeRequests, setShowChangeRequests] = useState(false);
   const [showCompliance, setShowCompliance] = useState(false);
+  const [showQualityGates, setShowQualityGates] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -758,6 +761,16 @@ export default function DesktopWorkspacePage() {
           >
             <ShieldCheck className="w-4 h-4 mr-1" /> 合规
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowQualityGates(true)}
+            disabled={!activeId}
+            title="追溯 / 评审 / CI / 测试门禁汇总与最近流水线门禁结果"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <Gauge className="w-4 h-4 mr-1" /> 门禁
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1218,6 +1231,13 @@ export default function DesktopWorkspacePage() {
       <ComplianceDialog
         open={showCompliance}
         onOpenChange={setShowCompliance}
+        projectId={activeId}
+      />
+
+      {/* ── Quality gate board ─────────────────────────────────────────── */}
+      <QualityGatesDialog
+        open={showQualityGates}
+        onOpenChange={setShowQualityGates}
         projectId={activeId}
       />
 

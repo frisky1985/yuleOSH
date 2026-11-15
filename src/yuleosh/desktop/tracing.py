@@ -33,6 +33,12 @@ from yuleosh.desktop import baseline as baseline_mod, workspace
 
 TRACE_REL = Path(".osh") / "evidence" / "traceability-matrix.json"
 
+#: File suffixes eligible for orphaned-test detection (see ``build_matrix``).
+_TEST_SOURCE_SUFFIXES = frozenset({
+    ".c", ".cc", ".cpp", ".h", ".hpp", ".py", ".js", ".jsx",
+    ".ts", ".tsx", ".java", ".rb", ".go", ".rs", ".cs",
+})
+
 _REQ_ID_RE = re.compile(
     r"@req\s*[\(\s]\s*([A-Z][A-Z0-9_\-\.]+(?:\s*,\s*[A-Z][A-Z0-9_\-\.]+)*)",
     re.IGNORECASE,
@@ -156,8 +162,13 @@ def build_matrix(project_id: str, spec: str | None = None,
             "status": "Covered" if tests else "Not Covered",
         })
 
+    # Only test *sources* can be orphaned tests: a report/fixture file under
+    # ``tests/`` (e.g. report.json) references requirements by data, not by
+    # annotation, so counting it as an orphan would fail the traceability gate
+    # for a project whose tests are fully linked.
     all_tests = {str(p.relative_to(proj_dir)) for p in (proj_dir / "tests").rglob("*")
-                 if p.is_file()} if (proj_dir / "tests").is_dir() else set()
+                 if p.is_file() and p.suffix.lower() in _TEST_SOURCE_SUFFIXES} \
+        if (proj_dir / "tests").is_dir() else set()
     orphaned = sorted(all_tests - linked_tests)
 
     total = len(rows)
