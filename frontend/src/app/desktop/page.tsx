@@ -57,6 +57,7 @@ import {
 import { CodeBlock } from "@/components/code-block";
 import { AccountInfoDialog } from "@/components/account/account-info-dialog";
 import { UserSettingsDialog } from "@/components/account/user-settings-dialog";
+import { DesktopLLMSettingsDialog } from "@/components/account/desktop-llm-settings-dialog";
 import { LogoutConfirmDialog } from "@/components/account/logout-confirm-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -146,6 +147,7 @@ export default function DesktopWorkspacePage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [llmSettingsOpen, setLlmSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   const userDockRef = useRef<HTMLDivElement>(null);
@@ -823,6 +825,14 @@ export default function DesktopWorkspacePage() {
                     setSettingsOpen(true);
                   }}
                 />
+                <DockMenuItem
+                  icon={<Sparkles className="w-3.5 h-3.5" />}
+                  label="模型设置"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    setLlmSettingsOpen(true);
+                  }}
+                />
                 <div className="my-1 h-px bg-[#1e293b]" />
                 {session ? (
                   <DockMenuItem
@@ -1103,6 +1113,14 @@ export default function DesktopWorkspacePage() {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         userId={session?.user_id}
+        onOpenLLM={() => {
+          setSettingsOpen(false);
+          setLlmSettingsOpen(true);
+        }}
+      />
+      <DesktopLLMSettingsDialog
+        open={llmSettingsOpen}
+        onOpenChange={setLlmSettingsOpen}
       />
       <LogoutConfirmDialog
         open={logoutOpen}
