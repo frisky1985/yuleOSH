@@ -66,6 +66,8 @@ import { ProjectMgmtDialog } from "@/components/desktop/project-mgmt-dialog";
 import { ReviewCenterDialog } from "@/components/desktop/review-center-dialog";
 import { GovernanceMenu } from "@/components/desktop/governance-menu";
 import type { GovernanceKey } from "@/components/desktop/governance-menu";
+import { CommandPalette } from "@/components/desktop/command-palette";
+import type { CommandActionKey } from "@/components/desktop/command-palette";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -161,6 +163,7 @@ export default function DesktopWorkspacePage() {
   const [showQa, setShowQa] = useState(false);
   const [showPm, setShowPm] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -679,6 +682,25 @@ export default function DesktopWorkspacePage() {
     }
   };
 
+  // ── Command palette (Ctrl/Cmd+K) ───────────────────────────────────────
+  const handlePaletteAction = useCallback((action: CommandActionKey) => {
+    if (action === "new-project") setShowNewProject(true);
+    if (action === "run-pipeline") handleRunPipeline();
+    if (action === "sync") handleSync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleRunPipeline, handleSync]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowPalette((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // ── Read artifact file ─────────────────────────────────────────────────
   const handleSelectFile = async (relPath: string) => {
     if (!activeId) return;
@@ -742,6 +764,16 @@ export default function DesktopWorkspacePage() {
             {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <UploadCloud className="w-4 h-4 mr-1" />}
             同步云端
           </Button>
+          <button
+            type="button"
+            onClick={() => setShowPalette(true)}
+            data-testid="palette-trigger"
+            aria-label="命令面板"
+            title="命令面板 (Ctrl+K)"
+            className="rounded-md border border-[#1e293b] p-1.5 text-[#94a3b8] transition-colors hover:text-white"
+          >
+            <Search className="h-4 w-4" />
+          </button>
           <GovernanceMenu disabled={!activeId} onSelect={handleGovernanceSelect} />
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
@@ -1279,6 +1311,17 @@ export default function DesktopWorkspacePage() {
           setRunDetailJob(null);
           handleRunPipeline();
         }}
+      />
+
+      {/* ── 命令面板（Ctrl/Cmd+K） ─────────────────────────────────────── */}
+      <CommandPalette
+        open={showPalette}
+        onClose={() => setShowPalette(false)}
+        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        activeId={activeId}
+        onSelectProject={setActiveId}
+        onGovernance={handleGovernanceSelect}
+        onAction={handlePaletteAction}
       />
     </div>
   );
