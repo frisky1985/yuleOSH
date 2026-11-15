@@ -1314,6 +1314,13 @@ export default function DesktopWorkspacePage() {
           setRunDetailJob(null);
           handleRunPipeline();
         }}
+        onInspectLayer={(layerPath) => {
+          const prefix = `code/${layerPath}/`;
+          setQuery(prefix);
+          setOpenSections((s) => ({ ...s, code: true }));
+          const first = artifactFiles.find((path) => path.startsWith(prefix));
+          if (first) void handleSelectFile(first);
+        }}
       />
 
       {/* ── 命令面板（Ctrl/Cmd+K） ─────────────────────────────────────── */}
