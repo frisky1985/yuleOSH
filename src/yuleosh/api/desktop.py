@@ -620,6 +620,11 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
     if sub == "compliance":
         return _dispatch_compliance(project_id, method, parts[2:], body)
 
+    # 审计链校验：基于证据链收集器对产物/门禁做完整性校验（只读）
+    # /api/v1/desktop/projects/{id}/evidence-chain (GET 校验结果)
+    if sub == "evidence-chain":
+        return _dispatch_evidence_chain(project_id, method)
+
     if sub == "artifacts":
         rel = "/".join(parts[2:]) if len(parts) > 2 else ""
         if method == "GET":
@@ -1597,6 +1602,54 @@ def _dispatch_compliance(project_id: str, method: str, parts: list, body: Any) -
     return _json({"ok": False, "error": f"Unknown compliance action: {action}"}, 404)
 
 
+# ── Evidence chain verification (audit chain) ──────────────────────────────
+
+def _dispatch_evidence_chain(project_id: str, method: str) -> tuple:
+    """Validate the evidence chain against the project artifacts.
+
+    The desktop matrix is regenerated first when missing so the chain always
+    has a truth source to validate (``collect_chain`` reads
+    ``.osh/evidence/traceability-matrix.json``).
+    """
+    if method != "GET":
+        return _json({"ok": False, "error": "Method not allowed"}, 405)
+
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    try:
+        if tracing.load_matrix(project_id) is None:
+            tracing.refresh(project_id)
+        from yuleosh.evidence.chain import collect_chain
+
+        chain = collect_chain(str(workspace._project_dir(project_id)))
+    except (ValueError, OSError) as e:
+        return _json({"ok": False, "error": f"Evidence chain failed: {e}"}, 500)
+
+    summary = chain.get("summary") or {}
+    metrics = chain.get("metrics") or {}
+    problems = chain.get("problems") or []
+    v_model = chain.get("v_model") or {}
+    return _json({
+        "ok": True,
+        "status": summary.get("status"),
+        "summary": summary,
+        "metrics": metrics,
+        "generated_at": chain.get("generated_at"),
+        "source": chain.get("source"),
+        "problems": problems[:50],
+        "problem_total": len(problems),
+        "gates": chain.get("gates") or [],
+        "v_model": {
+            "pairs": len(v_model.get("pairs") or []),
+            "required_pairs": v_model.get("required_pairs", 0),
+            "required_passed": v_model.get("required_passed", 0),
+        },
+    })
+
+
 # ── Traceability handlers (P3) ────────────────────────────────────────────
 
 def _dispatch_traceability(project_id: str, method: str, parts: list,
@@ -1628,6 +1681,8 @@ def _dispatch_traceability(project_id: str, method: str, parts: list,
             return _json({
                 "ok": True,
                 "summary": matrix.get("summary", {}),
+                "requirements": matrix.get("requirements", []),
+                "orphaned_test_files": matrix.get("orphaned_test_files", []),
                 "baseline": matrix.get("baseline"),
                 "generated": matrix.get("generated"),
                 "gate": tracing.gate_verdict(matrix, threshold=threshold),
