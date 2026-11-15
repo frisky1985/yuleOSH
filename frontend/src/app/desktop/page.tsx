@@ -23,6 +23,7 @@ import {
   Terminal,
   BookOpen,
   ShieldCheck,
+  Bug,
   Sparkles,
   Search,
   Filter,
@@ -65,6 +66,7 @@ import { BaselineDialog } from "@/components/desktop/baseline-dialog";
 import { ChangeRequestDialog } from "@/components/desktop/change-request-dialog";
 import { ComplianceDialog } from "@/components/desktop/compliance-dialog";
 import { QualityGatesDialog } from "@/components/desktop/quality-gates-dialog";
+import { IssueTrackerDialog } from "@/components/desktop/issue-tracker-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -156,6 +158,7 @@ export default function DesktopWorkspacePage() {
   const [showChangeRequests, setShowChangeRequests] = useState(false);
   const [showCompliance, setShowCompliance] = useState(false);
   const [showQualityGates, setShowQualityGates] = useState(false);
+  const [showIssues, setShowIssues] = useState(false);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -771,6 +774,16 @@ export default function DesktopWorkspacePage() {
           >
             <Gauge className="w-4 h-4 mr-1" /> 门禁
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowIssues(true)}
+            disabled={!activeId}
+            title="问题/缺陷登记、根因分析、修复验证与关闭闭环"
+            className="border-[#1e293b] text-[#94a3b8] hover:text-white"
+          >
+            <Bug className="w-4 h-4 mr-1" /> 问题
+          </Button>
           <Button size="sm" onClick={handleRunPipeline} disabled={!activeId || running}
             className="bg-gradient-to-r from-[#722ed1] to-[#1677ff] text-white">
             {running ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
@@ -1238,6 +1251,13 @@ export default function DesktopWorkspacePage() {
       <QualityGatesDialog
         open={showQualityGates}
         onOpenChange={setShowQualityGates}
+        projectId={activeId}
+      />
+
+      {/* ── Issue tracker (SUP.9) ──────────────────────────────────────── */}
+      <IssueTrackerDialog
+        open={showIssues}
+        onOpenChange={setShowIssues}
         projectId={activeId}
       />
 
