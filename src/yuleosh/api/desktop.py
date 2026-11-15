@@ -34,6 +34,172 @@ def _json(data: dict, status: int = 200):
     return data, status
 
 
+# ── LLM settings (desktop-local, no account required) ─────────────────────
+#
+# The desktop app runs the backend with auth disabled, so the org-scoped
+# LLM config endpoints are unavailable. Persist the user's model config in
+# the desktop workspace and mirror it into the process environment, which
+# is what yuleosh.llm resolves at call time.
+
+LLM_PROVIDERS: tuple = ("deepseek", "openai", "anthropic", "mock")
+
+# Provider → env vars consumed by the LLM provider implementations.
+_LLM_KEY_ENVS: dict[str, tuple] = {
+    "deepseek": ("DEEPSEEK_API_KEY", "LLM_API_KEY"),
+    "openai": ("OPENAI_API_KEY", "LLM_API_KEY"),
+    "anthropic": ("ANTHROPIC_API_KEY",),
+    "mock": (),
+}
+_ALL_KEY_ENVS = ("LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY")
+
+
+def _settings_path() -> Path:
+    return workspace.workspace_root() / "settings.json"
+
+
+def _read_settings() -> dict:
+    path = _settings_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        log.warning("Failed to read desktop settings from %s", path)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_settings(settings: dict) -> None:
+    path = _settings_path()
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+    # The file may contain an API key — keep it private to the OS user.
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, path)
+
+
+def _mask_key(key: str) -> str:
+    if not key:
+        return ""
+    return "••••" + key[-4:] if len(key) > 4 else "••••"
+
+
+def _llm_env_key_configured(provider: str) -> bool:
+    return any(os.environ.get(env) for env in _LLM_KEY_ENVS.get(provider, ()))
+
+
+def _apply_llm_env(cfg: dict, clear_key: bool = False) -> None:
+    """Mirror the saved config into os.environ (read per-call by providers)."""
+    provider = str(cfg.get("provider") or "")
+    if provider:
+        os.environ["YULEOSH_LLM_PROVIDER"] = provider
+
+    model = str(cfg.get("model") or "")
+    if model:
+        os.environ["LLM_MODEL"] = model
+    else:
+        os.environ.pop("LLM_MODEL", None)
+
+    base_url = str(cfg.get("base_url") or "")
+    if base_url:
+        os.environ["LLM_BASE_URL"] = base_url
+    else:
+        os.environ.pop("LLM_BASE_URL", None)
+
+    key = str(cfg.get("api_key") or "")
+    if key:
+        for env in _LLM_KEY_ENVS.get(provider, ("LLM_API_KEY",)):
+            os.environ[env] = key
+    elif clear_key:
+        for env in _ALL_KEY_ENVS:
+            os.environ.pop(env, None)
+
+
+def _bootstrap_llm_settings() -> None:
+    """Apply persisted settings on startup (desktop mode only)."""
+    if os.environ.get("YULEOSH_DESKTOP_MODE") != "1":
+        return
+    cfg = _read_settings().get("llm")
+    if isinstance(cfg, dict) and cfg:
+        _apply_llm_env(cfg)
+
+
+# The router imports this module lazily on the first /api/v1/desktop/* call,
+# which happens on desktop app startup — early enough for subsequent runs.
+_bootstrap_llm_settings()
+
+
+def _llm_settings_response() -> dict:
+    from yuleosh.llm.client import PROVIDER_DEFAULT_MODELS
+
+    saved = _read_settings().get("llm")
+    cfg = saved if isinstance(saved, dict) else {}
+    provider = str(cfg.get("provider") or os.environ.get("YULEOSH_LLM_PROVIDER") or "deepseek")
+    file_key = str(cfg.get("api_key") or "")
+    model = str(cfg.get("model") or os.environ.get("LLM_MODEL") or "")
+    base_url = str(cfg.get("base_url") or os.environ.get("LLM_BASE_URL") or "")
+    key_configured = provider != "mock" and (
+        bool(file_key) or _llm_env_key_configured(provider)
+    )
+
+    return {
+        "ok": True,
+        "provider": provider,
+        "model": model,
+        "base_url": base_url,
+        "default_model": PROVIDER_DEFAULT_MODELS.get(provider, ""),
+        "default_models": PROVIDER_DEFAULT_MODELS,
+        "providers": list(LLM_PROVIDERS),
+        "api_key_set": key_configured,
+        "api_key_masked": _mask_key(file_key),
+        "api_key_source": "settings" if file_key else ("env" if _llm_env_key_configured(provider) else ""),
+    }
+
+
+def _update_llm_settings(body: Any) -> tuple:
+    data = body if isinstance(body, dict) else {}
+
+    provider = str(data.get("provider") or "deepseek").strip().lower()
+    if provider not in LLM_PROVIDERS:
+        return _json({
+            "ok": False,
+            "error": f"provider 必须是 {list(LLM_PROVIDERS)} 之一",
+        }, 400)
+
+    model = str(data.get("model") or "").strip()
+    base_url = str(data.get("base_url") or "").strip()
+    if base_url and not base_url.startswith(("http://", "https://")):
+        return _json({"ok": False, "error": "base_url 必须以 http:// 或 https:// 开头"}, 400)
+
+    settings = _read_settings()
+    saved = settings.get("llm")
+    cfg = dict(saved) if isinstance(saved, dict) else {}
+    cfg["provider"] = provider
+    cfg["model"] = model
+    cfg["base_url"] = base_url
+
+    clear_key = bool(data.get("clear_api_key"))
+    raw_key = data.get("api_key")
+    if clear_key:
+        cfg["api_key"] = ""
+    elif isinstance(raw_key, str) and raw_key.strip():
+        cfg["api_key"] = raw_key.strip()
+
+    settings["llm"] = cfg
+    try:
+        _write_settings(settings)
+    except OSError as e:
+        log.exception("Failed to persist LLM settings")
+        return _json({"ok": False, "error": f"保存设置失败: {e}"}, 500)
+
+    _apply_llm_env(cfg, clear_key=clear_key)
+    log.info("Desktop LLM settings updated: provider=%s model=%s", provider, model or "(default)")
+    return _json(_llm_settings_response(), 200)
+
+
 def handle_desktop(method: str, path_tail: str, body: Any, query: dict,
                    handler=None) -> tuple:
     """Dispatcher for /api/v1/desktop/* routes.
@@ -47,12 +213,22 @@ def handle_desktop(method: str, path_tail: str, body: Any, query: dict,
       projects/{id}/artifacts    → artifact tree (GET)
       projects/{id}/artifacts/*  → read artifact file (GET)
       projects/{id}/sync         → sync to cloud (POST)
+      settings/llm             → LLM config (GET) / update (PUT)
     """
     parts = (path_tail or "").strip("/").split("/")
     resource = parts[0] if parts else ""
 
     if resource == "projects":
         return _dispatch_projects(method, parts[1:], body, query)
+    if resource == "settings":
+        sub = parts[1] if len(parts) > 1 else ""
+        if sub == "llm":
+            if method == "GET":
+                return _json(_llm_settings_response(), 200)
+            if method in ("PUT", "POST"):
+                return _update_llm_settings(body)
+            return _json({"ok": False, "error": "Method not allowed"}, 405)
+        return _json({"ok": False, "error": f"Unknown settings resource: {sub}"}, 404)
     if resource == "openapi.json":
         if method == "GET":
             from yuleosh.api.openapi import build_openapi_spec

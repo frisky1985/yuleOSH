@@ -17,6 +17,9 @@ interface UserSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   userId?: number | string;
+  /** 桌面端：打开模型配置弹窗（不传则不展示该入口）。 */
+  onOpenLLM?: () => void;
+  llmLabel?: string;
 }
 
 interface PersistedSettings {
@@ -59,7 +62,7 @@ function saveSettings(userId: number | string | undefined, settings: PersistedSe
 
 /** 决策者顶栏 → 用户设置：本地偏好设置（语言/通知/主题）。
  * 占位实现：后端无 /api/v1/me/settings 端点，仅持久化在 localStorage。 */
-export function UserSettingsDialog({ open, onOpenChange, userId }: UserSettingsDialogProps) {
+export function UserSettingsDialog({ open, onOpenChange, userId, onOpenLLM, llmLabel }: UserSettingsDialogProps) {
   const [settings, setSettings] = useState<PersistedSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
 
@@ -85,12 +88,28 @@ export function UserSettingsDialog({ open, onOpenChange, userId }: UserSettingsD
         <DialogHeader>
           <DialogTitle>用户设置</DialogTitle>
           <DialogDescription>
-            当前用户偏好。后端尚未提供设置同步（v4 占位），以下选项将持久化到
-            本浏览器 localStorage。
+            当前用户偏好。界面偏好保存在本浏览器 localStorage；桌面端的模型配置保存在本机工作区。
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-5 mt-1">
+          {onOpenLLM && (
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs text-[#94a3b8]">大模型</Label>
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-[#1e293b] bg-[#0f172a] px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-[#e2e8f0]">
+                    {llmLabel || "本地模型服务"}
+                  </div>
+                  <div className="text-[11px] text-[#64748b]">配置服务商、模型与 API Key</div>
+                </div>
+                <Button variant="outline" size="sm" onClick={onOpenLLM}>
+                  配置
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             <Label htmlFor="settings-language" className="text-xs text-[#94a3b8]">
               语言
