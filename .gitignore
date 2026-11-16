@@ -251,3 +251,6 @@ screenshots/coverage-report/
 .data/tool/
 .data/
 .uploads/
+
+# HTML 分享包（测试每次重新打包，2.9MB 二进制，切换分支时频繁冲突）。
+.trae-html-share-packages/
