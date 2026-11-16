@@ -28,6 +28,37 @@ class TrayManager {
     this.tray = null;
     this.mainWindow = mainWindow;
     this._iconPath = null;
+    /** @type {Array<{id:string,name:string}>} 渲染进程同步过来的最近工程 */
+    this.recentProjects = [];
+    /** @type {{running:boolean,progress:number,stage?:string|null}|null} */
+    this.pipelineStatus = null;
+  }
+
+  /** 更新最近工程列表（最多 5 个），供托盘快速切换。 */
+  setRecentProjects(list) {
+    this.recentProjects = Array.isArray(list) ? list.slice(0, 5) : [];
+    this._updateMenu();
+  }
+
+  /** 更新当前流水线状态，显示在托盘菜单与 tooltip 上。 */
+  setPipelineStatus(info) {
+    this.pipelineStatus = info && info.running ? info : null;
+    if (this.tray) {
+      const suffix = this.pipelineStatus
+        ? ` — 流水线 ${this.pipelineStatus.progress ?? 0}%${this.pipelineStatus.stage ? ` · ${this.pipelineStatus.stage}` : ''}`
+        : '';
+      this.tray.setToolTip(`yuleOSH — 嵌入式AI开发全流程平台${suffix}`);
+    }
+    this._updateMenu();
+  }
+
+  /** 点击托盘里的最近工程：显示窗口并通知渲染进程切换。 */
+  _openProject(projectId) {
+    if (!this.mainWindow) return;
+    if (this.mainWindow.isMinimized()) this.mainWindow.restore();
+    this.mainWindow.show();
+    this.mainWindow.focus();
+    this.mainWindow.webContents.send('open-project', projectId);
   }
 
   /**
@@ -77,11 +108,30 @@ class TrayManager {
 
     const isVisible = this.mainWindow && this.mainWindow.isVisible();
 
+    const pipelineItem = this.pipelineStatus
+      ? [{
+        label: `流水线 ${this.pipelineStatus.progress ?? 0}%${this.pipelineStatus.stage ? ` · ${this.pipelineStatus.stage}` : ''}`,
+        enabled: false,
+      }, { type: 'separator' }]
+      : [];
+
+    const recentItem = this.recentProjects.length > 0
+      ? [{
+        label: '最近工程',
+        submenu: this.recentProjects.map((p) => ({
+          label: p.name,
+          click: () => this._openProject(p.id),
+        })),
+      }, { type: 'separator' }]
+      : [];
+
     const contextMenu = Menu.buildFromTemplate([
+      ...pipelineItem,
       {
         label: isVisible ? '隐藏窗口 (H)' : '显示窗口 (S)',
         click: () => this._toggleWindow(),
       },
+      ...recentItem,
       { type: 'separator' },
       {
         label: '关于 yuleOSH',

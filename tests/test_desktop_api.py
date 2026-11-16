@@ -2616,6 +2616,45 @@ class TestReviewCenter:
 
 # ── Artifact full-text search (desktop) ───────────────────────────────────
 
+class TestPipelinePreflight:
+    def _create(self, d):
+        return d.handle_desktop("POST", "projects", _body({"name": "PF"}), {})[0]["project"]["id"]
+
+    def test_preflight_returns_all_checks(self, desktop_api):
+        d = desktop_api
+        pid = self._create(d)
+        resp, status = d.handle_desktop(
+            "GET", f"projects/{pid}/pipeline/preflight", None, {})
+        assert status == 200
+        assert resp["ok"] is True
+        keys = {c["key"] for c in resp["checks"]}
+        assert {"python", "workspace", "disk", "requirements", "cppcheck", "llm"} <= keys
+        # 新工程没有需求文档 -> warn，但不是阻塞项
+        req = next(c for c in resp["checks"] if c["key"] == "requirements")
+        assert req["status"] == "warn"
+        assert req["hint"]
+        assert resp["ready"] is True
+
+    def test_preflight_missing_project_404(self, desktop_api):
+        _, status = desktop_api.handle_desktop(
+            "GET", "projects/nope/pipeline/preflight", None, {})
+        assert status == 404
+
+    def test_preflight_blocks_on_low_disk(self, desktop_api):
+        d = desktop_api
+        pid = self._create(d)
+        from types import SimpleNamespace
+        with patch("yuleosh.api.desktop.shutil.disk_usage",
+                   return_value=SimpleNamespace(free=10 * 1024 * 1024)):
+            resp, status = d.handle_desktop(
+                "GET", f"projects/{pid}/pipeline/preflight", None, {})
+        assert status == 200
+        assert resp["ready"] is False
+        disk = next(c for c in resp["checks"] if c["key"] == "disk")
+        assert disk["status"] == "fail"
+        assert disk["hint"]
+
+
 class TestArtifactSearch:
     def _project(self, d):
         resp, _ = d.handle_desktop("POST", "projects", _body({"name": "P"}), {})

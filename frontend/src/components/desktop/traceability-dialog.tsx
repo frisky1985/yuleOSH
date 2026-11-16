@@ -94,6 +94,8 @@ interface TraceabilityDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string | null;
+  /** 点击 RTM 中的产物文件名时打开对应文件（关闭弹窗后跳到工作区预览）。 */
+  onOpenArtifact?: (path: string) => void;
 }
 
 type Tab = "rtm" | "chain";
@@ -137,7 +139,12 @@ function ChainStatusChip({ status }: { status?: string }) {
 // ─── Dialog ───────────────────────────────────────────────────────────────
 
 /** 桌面端 ASPICE 追溯视图：RTM 矩阵 + 审计链校验结果。 */
-export function TraceabilityDialog({ open, onOpenChange, projectId }: TraceabilityDialogProps) {
+export function TraceabilityDialog({
+  open,
+  onOpenChange,
+  projectId,
+  onOpenArtifact,
+}: TraceabilityDialogProps) {
   const [tab, setTab] = useState<Tab>("rtm");
   const [rtm, setRtm] = useState<RtmPayload | null>(null);
   const [chain, setChain] = useState<ChainPayload | null>(null);
@@ -414,7 +421,7 @@ export function TraceabilityDialog({ open, onOpenChange, projectId }: Traceabili
                               {isOpen && (
                                 <tr className="border-t border-[#1e293b] bg-[#0b1020]">
                                   <td colSpan={6} className="px-3 py-2">
-                                    <FileGroups row={row} />
+                                    <FileGroups row={row} onOpenArtifact={onOpenArtifact} />
                                   </td>
                                 </tr>
                               )}
@@ -590,7 +597,13 @@ function Stat({
   );
 }
 
-function FileGroups({ row }: { row: RtmRequirement }) {
+function FileGroups({
+  row,
+  onOpenArtifact,
+}: {
+  row: RtmRequirement;
+  onOpenArtifact?: (path: string) => void;
+}) {
   const groups: Array<[string, string[]]> = [
     ["设计", row.design_files || []],
     ["代码", row.code_files || []],
@@ -601,8 +614,23 @@ function FileGroups({ row }: { row: RtmRequirement }) {
       {groups.map(([label, files]) => (
         <div key={label} className="flex gap-2">
           <span className="w-8 shrink-0 text-[#64748b]">{label}</span>
-          <span className="font-mono text-[#94a3b8]">
-            {files.length ? files.join("、") : "—"}
+          <span className="flex flex-wrap gap-x-1 font-mono text-[#94a3b8]">
+            {files.length
+              ? files.map((file, idx) => (
+                <span key={file}>
+                  <button
+                    type="button"
+                    data-testid={`rtm-file-${file}`}
+                    onClick={() => onOpenArtifact?.(file)}
+                    className="underline-offset-2 hover:text-[#38bdf8] hover:underline"
+                    title={`打开 ${file}`}
+                  >
+                    {file}
+                  </button>
+                  {idx < files.length - 1 ? "、" : ""}
+                </span>
+              ))
+              : "—"}
           </span>
         </div>
       ))}

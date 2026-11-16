@@ -127,4 +127,55 @@ describe("CommandPalette", () => {
     renderPalette(true, "p1", []);
     expect(screen.queryByText("产物文件")).toBeNull();
   });
+
+  it("展示最近打开文件并置顶打开", () => {
+    const onOpenFile = jest.fn();
+    render(
+      <CommandPalette
+        open
+        onClose={jest.fn()}
+        projects={PROJECTS}
+        activeId="p1"
+        files={FILES}
+        recentFiles={["code/self_test.c", "code/missing.c"]}
+        onSelectProject={jest.fn()}
+        onOpenFile={onOpenFile}
+        onGovernance={jest.fn()}
+        onAction={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText("最近打开")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("cmd-item-recent-code/self_test.c"));
+    expect(onOpenFile).toHaveBeenCalledWith("code/self_test.c");
+  });
+
+  it("运行中展示取消、选中文件时展示复制路径与缺口入口", () => {
+    const onAction = jest.fn();
+    render(
+      <CommandPalette
+        open
+        onClose={jest.fn()}
+        projects={PROJECTS}
+        activeId="p1"
+        files={FILES}
+        canCancel
+        hasSelection
+        notificationsOn={false}
+        onSelectProject={jest.fn()}
+        onOpenFile={jest.fn()}
+        onGovernance={jest.fn()}
+        onAction={onAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("cmd-item-action-cancel-run"));
+    expect(onAction).toHaveBeenCalledWith("cancel-run");
+    fireEvent.click(screen.getByTestId("cmd-item-action-copy-path"));
+    expect(onAction).toHaveBeenCalledWith("copy-path");
+    fireEvent.click(screen.getByTestId("cmd-item-action-open-gaps"));
+    expect(onAction).toHaveBeenCalledWith("open-gaps");
+    // notificationsOn=false → 菜单项文案应是「开启桌面通知」
+    expect(screen.getByText("开启桌面通知")).toBeInTheDocument();
+  });
 });

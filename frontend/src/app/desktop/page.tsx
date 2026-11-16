@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   FolderOpen,
@@ -27,6 +28,11 @@ import {
   Filter,
   Copy,
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Inbox,
+  Bell,
+  BellOff,
   ChevronsUpDown,
   ChevronsDownUp,
   Settings,
@@ -151,7 +157,13 @@ interface PersistedWorkspaceState {
   query?: string;
   onlyWithFiles?: boolean;
   reviewFilter?: ReviewFilter;
+  /** 最近打开的文件（按时间倒序，最多 8 个）。 */
+  recentFiles?: string[];
+  /** 桌面通知开关。 */
+  notificationsOn?: boolean;
 }
+
+const NOTIFY_STATE_KEY = "yuleosh.desktop.notify.v1";
 
 function loadWorkspaceState(): PersistedWorkspaceState {
   if (typeof window === "undefined") return {};
@@ -172,9 +184,20 @@ function saveWorkspaceState(state: PersistedWorkspaceState) {
   }
 }
 
+/** 读取桌面通知开关（默认开启）。 */
+function notificationsEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(NOTIFY_STATE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
 /** 长任务完成后弹桌面通知；在 Electron 里由主进程负责（窗口聚焦时跳过）。 */
 function notifyDesktop(title: string, body: string) {
   if (typeof window === "undefined") return;
+  if (!notificationsEnabled()) return;
   const api = (window as any).electronAPI;
   if (api?.notify) {
     api.notify({ title, body }).catch(() => {});
@@ -211,6 +234,31 @@ export default function DesktopWorkspacePage() {
   const [lineEnd, setLineEnd] = useState("");
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
+  // 最近打开 / 前进后退
+  const [recentFiles, setRecentFiles] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyRef = useRef<{ list: string[]; index: number }>({ list: [], index: -1 });
+  const goHistoryRef = useRef<(delta: number) => void>(() => {});
+  // 证据缺口收件箱
+  const [showGaps, setShowGaps] = useState(false);
+  const [openIssues, setOpenIssues] = useState<Array<{
+    id: string; title: string; status: string; severity?: string;
+  }>>([]);
+  // 桌面通知 / 拖拽导入
+  const [notificationsOn, setNotificationsOn] = useState(true);
+  const [dragActive, setDragActive] = useState(false);
+  // 流水线预检
+  const [preflight, setPreflight] = useState<{
+    ready: boolean;
+    checks: Array<{ key: string; label: string; status: string; detail: string; hint: string }>;
+  } | null>(null);
+  const [pendingRun, setPendingRun] = useState<string | null>(null);
+  const loggedLogsRef = useRef<Set<string>>(new Set());
+  // 桌面深链接（yuleosh://open?project=&file=&line=）与托盘工程切换
+  const [deepLink, setDeepLink] = useState<{
+    projectId: string; file: string | null; line: number | null;
+  } | null>(null);
   const [searchResults, setSearchResults] = useState<Array<{
     path: string; line: number; text: string;
   }>>([]);
@@ -258,6 +306,18 @@ export default function DesktopWorkspacePage() {
     if (typeof saved.onlyWithFiles === "boolean") setOnlyWithFiles(saved.onlyWithFiles);
     if (saved.openSections) setOpenSections(saved.openSections);
     if (saved.reviewFilter) setReviewFilter(saved.reviewFilter);
+    if (saved.recentFiles) setRecentFiles(saved.recentFiles);
+    if (typeof saved.notificationsOn === "boolean") {
+      setNotificationsOn(saved.notificationsOn);
+      try {
+        window.localStorage.setItem(
+          NOTIFY_STATE_KEY,
+          saved.notificationsOn ? "on" : "off",
+        );
+      } catch {
+        /* 忽略存储异常 */
+      }
+    }
     setPersistReady(true);
   }, []);
 
@@ -270,8 +330,20 @@ export default function DesktopWorkspacePage() {
       query,
       onlyWithFiles,
       reviewFilter,
+      recentFiles,
+      notificationsOn,
     });
-  }, [persistReady, activeId, openSections, selectedFile, query, onlyWithFiles, reviewFilter]);
+  }, [
+    persistReady,
+    activeId,
+    openSections,
+    selectedFile,
+    query,
+    onlyWithFiles,
+    reviewFilter,
+    recentFiles,
+    notificationsOn,
+  ]);
 
   // ── Python 后端健康状态（Electron） ─────────────────────────────────
   useEffect(() => {
@@ -410,6 +482,10 @@ export default function DesktopWorkspacePage() {
   useEffect(() => {
     if (!activeId) return;
     let cancelled = false;
+    // 切换工程时重置当前工程的文件前进/后退栈
+    historyRef.current = { list: [], index: -1 };
+    setHistory([]);
+    setHistoryIndex(-1);
     (async () => {
       try {
         const proj = await apiFetch<{ project: ProjectMeta }>(`/api/v1/desktop/projects/${activeId}`);
@@ -440,6 +516,13 @@ export default function DesktopWorkspacePage() {
             );
             if (cancelled) return;
             setSelectedFile(targetPath);
+            // 初始文件也进入历史栈，保证「后退」在打开工程后立即可用。
+            historyRef.current = { list: [targetPath], index: 0 };
+            setHistory([targetPath]);
+            setHistoryIndex(0);
+            setRecentFiles((prev) =>
+              [targetPath, ...prev.filter((p) => p !== targetPath)].slice(0, 8),
+            );
             setFileContent(f.content || "");
             setFileNotice(f.message ?? null);
             setOpenSections((s) => ({ ...s, [sectionOf(targetPath)]: true }));
@@ -748,12 +831,45 @@ export default function DesktopWorkspacePage() {
   }, [activeId, query]);
 
   // ── Run pipeline ───────────────────────────────────────────────────────
+  // 先跑环境预检：阻塞项（磁盘/权限/Python）直接拦下并展示修复建议；
+  // 降级项（cppcheck/模型 Key）只提示，不阻断运行。
   const handleRunPipeline = async (resumeFrom?: string) => {
+    if (!activeId || running) return;
+    try {
+      const pf = await apiFetch<{
+        ready: boolean;
+        checks: Array<{ key: string; label: string; status: string; detail: string; hint: string }>;
+      }>(`/api/v1/desktop/projects/${activeId}/pipeline/preflight`);
+      const checks = pf.checks || [];
+      const blocking = checks.filter((c) => c.status === "fail");
+      if (blocking.length > 0) {
+        setPreflight({ ready: false, checks });
+        setPendingRun(resumeFrom ?? null);
+        pushAssistant(
+          `⛔ 运行前检查未通过：${blocking.map((c) => `${c.label}（${c.detail}）`).join("、")}。\n`
+          + blocking.filter((c) => c.hint).map((c) => `· ${c.hint}`).join("\n"),
+        );
+        return;
+      }
+      const warns = checks.filter((c) => c.status === "warn");
+      if (warns.length > 0) {
+        pushAssistant(
+          `⚠️ 运行前提示：${warns.map((c) => `${c.label}（${c.detail}）`).join("、")}。流水线将降级继续。`,
+        );
+      }
+    } catch {
+      /* 预检失败不阻塞运行 */
+    }
+    await startPipeline(resumeFrom);
+  };
+
+  const startPipeline = async (resumeFrom?: string) => {
     if (!activeId || running) return;
     setRunning(true);
     setCancelling(false);
     setPollProgress(0);
     setPollStage(null);
+    loggedLogsRef.current = new Set();
     const resumed = Boolean(resumeFrom);
     setChatMessages((m) => [...m, {
       role: "assistant",
@@ -782,12 +898,22 @@ export default function DesktopWorkspacePage() {
           const currentStage = s.stages?.find((st) => st.status === "running");
           setPollStage(currentStage?.name || currentStage?.key || s.current_stage || null);
 
-          // 把最新日志追加到对话里（每 3 秒最多一条，避免刷屏）
-          if (s.logs && s.logs.length > 0 && Math.random() < 0.3) {
-            const tail = s.logs[s.logs.length - 1];
-            setChatMessages((m) => m.length > 0 && m[m.length - 1].content.includes(tail)
-              ? m
-              : [...m, { role: "assistant", content: `📋 ${tail}`, timestamp: new Date().toISOString() }]);
+          // 增量日志：只追加本次运行中尚未展示过的行（最多 3 条/轮询），
+          // 比随机抽样更及时，也不会重复刷屏。
+          if (s.logs && s.logs.length > 0) {
+            const seen = loggedLogsRef.current;
+            const fresh = s.logs.filter((line) => line && !seen.has(line)).slice(-3);
+            if (fresh.length > 0) {
+              fresh.forEach((line) => seen.add(line));
+              setChatMessages((m) => [
+                ...m,
+                ...fresh.map((line) => ({
+                  role: "assistant" as const,
+                  content: `📋 ${line}`,
+                  timestamp: new Date().toISOString(),
+                })),
+              ]);
+            }
           }
 
           if (s.status === "passed" || s.status === "failed" || s.status === "cancelled") {
@@ -831,7 +957,7 @@ export default function DesktopWorkspacePage() {
             }
           }
         } catch { /* 轮询中途报错忽略，下一轮继续 */ }
-      }, 1500);
+      }, 1000);
 
       // Safety timeout: stop polling after 5 min.
       window.setTimeout(() => {
@@ -930,8 +1056,20 @@ export default function DesktopWorkspacePage() {
   // ── Command palette (Ctrl/Cmd+K) ───────────────────────────────────────
   const handlePaletteAction = useCallback((action: CommandActionKey) => {
     if (action === "new-project") setShowNewProject(true);
-    if (action === "run-pipeline") handleRunPipeline();
+    if (action === "run-pipeline") void handleRunPipeline();
+    if (action === "cancel-run") void handleCancelPipeline();
     if (action === "sync") handleSync();
+    if (action === "open-gaps") setShowGaps(true);
+    if (action === "copy-path") void copySelectedPath();
+    if (action === "toggle-notifications") {
+      setNotificationsOn((v) => {
+        const next = !v;
+        try {
+          window.localStorage.setItem(NOTIFY_STATE_KEY, next ? "on" : "off");
+        } catch { /* 忽略存储异常 */ }
+        return next;
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleRunPipeline, handleSync]);
 
@@ -940,6 +1078,13 @@ export default function DesktopWorkspacePage() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setShowPalette((v) => !v);
+        return;
+      }
+      // Alt+←/→ 在最近打开的文件之间前进/后退
+      if (e.altKey && !e.ctrlKey && !e.metaKey
+        && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        goHistoryRef.current(e.key === "ArrowLeft" ? -1 : 1);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -947,8 +1092,20 @@ export default function DesktopWorkspacePage() {
   }, []);
 
   // ── Read artifact file ─────────────────────────────────────────────────
-  const handleSelectFile = async (relPath: string) => {
+  const handleSelectFile = async (
+    relPath: string,
+    opts?: { pushHistory?: boolean },
+  ) => {
     if (!activeId) return;
+    const currentEntry = historyRef.current.list[historyRef.current.index];
+    if (opts?.pushHistory !== false && currentEntry !== relPath) {
+      const cur = historyRef.current;
+      const next = [...cur.list.slice(0, cur.index + 1), relPath].slice(-50);
+      historyRef.current = { list: next, index: next.length - 1 };
+      setHistory(next);
+      setHistoryIndex(next.length - 1);
+      setRecentFiles((prev) => [relPath, ...prev.filter((p) => p !== relPath)].slice(0, 8));
+    }
     setSelectedFile(relPath);
     setHighlightLine(null);
     setLineStart("");
@@ -1008,8 +1165,158 @@ export default function DesktopWorkspacePage() {
   const previewLineRange = reviewLineRange
     ?? (highlightLine ? { start: highlightLine, end: highlightLine } : null);
 
+  // 最近打开 / 前进后退
+  const goHistory = (delta: number) => {
+    const cur = historyRef.current;
+    const next = cur.index + delta;
+    if (next < 0 || next >= cur.list.length) return;
+    historyRef.current = { ...cur, index: next };
+    setHistoryIndex(next);
+    void handleSelectFile(cur.list[next], { pushHistory: false });
+  };
+  goHistoryRef.current = goHistory;
+
+  // 证据缺口：未评审 + 过期评审 + 未闭环问题
+  const gapFiles = useMemo(() => {
+    const reviewed = new Set(latestReviews.keys());
+    return {
+      unreviewed: artifactFiles.filter((p) => !reviewed.has(p)),
+      stale: Array.from(stalePaths),
+    };
+  }, [artifactFiles, latestReviews, stalePaths]);
+  const gapCount = gapFiles.unreviewed.length + gapFiles.stale.length + openIssues.length;
+
+  // 未闭环问题（closed/rejected 之外都算未闭环）
+  useEffect(() => {
+    if (!activeId) { setOpenIssues([]); return; }
+    let alive = true;
+    apiFetch<{ issues: Array<{ id: string; title: string; status: string; severity?: string }> }>(
+      `/api/v1/desktop/projects/${activeId}/issues`,
+    )
+      .then((r) => {
+        if (!alive) return;
+        setOpenIssues((r.issues || []).filter((i) => !["closed", "rejected"].includes(i.status)));
+      })
+      .catch(() => { if (alive) setOpenIssues([]); });
+    return () => { alive = false; };
+  }, [activeId, showGaps, showIssues]);
+
+  // 托盘：最近工程 + 运行状态
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.updateTray) return;
+    api.updateTray({
+      recentProjects: projects.map((p) => ({ id: p.id, name: p.name })),
+      pipeline: { running, progress: pollProgress, stage: pollStage },
+    }).catch(() => {});
+  }, [projects, running, pollProgress, pollStage]);
+
+  // 托盘「最近工程」点击 + 深链接入口
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api) return;
+    const offOpen = api.onOpenProject?.((pid: string) => setActiveId(pid));
+    const offLink = api.onDeepLink?.((url: string) => {
+      try {
+        const u = new URL(url);
+        const pid = u.searchParams.get("project") || "";
+        const line = parseInt(u.searchParams.get("line") || "", 10);
+        if (pid) setActiveId(pid);
+        setDeepLink({
+          projectId: pid,
+          file: u.searchParams.get("file"),
+          line: Number.isFinite(line) && line > 0 ? line : null,
+        });
+      } catch { /* 非法深链接忽略 */ }
+    });
+    return () => { offOpen?.(); offLink?.(); };
+  }, []);
+
+  // 产物树加载后消费深链接：打开目标文件并定位到行
+  useEffect(() => {
+    if (!deepLink || !tree || !activeId) return;
+    if (deepLink.projectId && deepLink.projectId !== activeId) return;
+    const target = deepLink.file ? findArtifactPath(tree, deepLink.file) : null;
+    if (target) {
+      void handleSelectFile(target).then(() => {
+        if (deepLink.line) setHighlightLine(deepLink.line);
+      });
+    }
+    setDeepLink(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLink, tree, activeId]);
+
+  // 评审快捷键：Alt+A 通过 / Alt+R 退回（输入框内不生效）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (
+        target.tagName === "INPUT"
+        || target.tagName === "TEXTAREA"
+        || target.isContentEditable
+      );
+      if (!typing && e.altKey && !e.ctrlKey && !e.metaKey) {
+        const k = e.key.toLowerCase();
+        if (k === "a") { e.preventDefault(); void submitReview("approved"); }
+        if (k === "r") { e.preventDefault(); void submitReview("needs_revision"); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFile, activeId, reviewComment, lineStart, lineEnd]);
+
+  // 拖拽导入：把 Markdown/文本内容载入输入框，确认后发送即可导入需求
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (!dropped || !activeId) return;
+    const isText = /\.(md|markdown|txt)$/i.test(dropped.name)
+      || dropped.type.startsWith("text/");
+    if (!isText) {
+      pushAssistant(`暂不支持拖入 ${dropped.name}：请拖入 Markdown 或文本文件。`);
+      return;
+    }
+    if (dropped.size > 1024 * 1024) {
+      pushAssistant(`文件 ${dropped.name} 超过 1 MB，请先精简后再导入。`);
+      return;
+    }
+    try {
+      const text = await dropped.text();
+      setChatInput(text);
+      pushAssistant(`已载入 ${dropped.name}（${text.length} 字符），确认后点击发送即可导入需求。`);
+    } catch {
+      pushAssistant("读取拖入的文件失败。");
+    }
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-[#0a0e17] text-[#e2e8f0] overflow-hidden">
+    <div
+      className="relative flex flex-col h-screen bg-[#0a0e17] text-[#e2e8f0] overflow-hidden"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragActive(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragActive(false);
+      }}
+      onDrop={handleDrop}
+    >
+      {dragActive && (
+        <div
+          data-testid="drop-overlay"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-[#0a0e17]/85 border-2 border-dashed border-[#38bdf8] pointer-events-none"
+        >
+          <div className="text-center">
+            <Inbox className="w-10 h-10 mx-auto text-[#38bdf8]" />
+            <p className="mt-3 text-sm text-[#e2e8f0]">松开以导入需求文档</p>
+            <p className="mt-1 text-xs text-[#64748b]">支持 .md / .txt，≤ 1 MB</p>
+          </div>
+        </div>
+      )}
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-[#1e293b] bg-[#0d111f] shrink-0">
         <div className="flex items-center gap-3">
@@ -1102,6 +1409,56 @@ export default function DesktopWorkspacePage() {
         </div>
       </header>
 
+      {/* 运行前环境预检：阻塞项可见并可修复后重跑 */}
+      {preflight && (
+        <div
+          data-testid="pipeline-preflight"
+          className="shrink-0 border-b border-[#7f1d1d] bg-[#1f1214] px-4 py-2"
+        >
+          <div className="flex items-center gap-2 text-xs text-[#fca5a5]">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            运行前检查未通过
+            <button
+              type="button"
+              onClick={() => { setPreflight(null); setPendingRun(null); }}
+              className="ml-auto rounded border border-[#334155] px-2 py-0.5 text-[11px] text-[#94a3b8] hover:text-white"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              data-testid="preflight-continue"
+              onClick={() => {
+                const resume = pendingRun;
+                setPreflight(null);
+                setPendingRun(null);
+                void startPipeline(resume ?? undefined);
+              }}
+              className="rounded border border-[#7f1d1d] px-2 py-0.5 text-[11px] text-[#f87171] hover:bg-[#7f1d1d]/30"
+            >
+              仍然运行
+            </button>
+          </div>
+          <ul className="mt-1 space-y-0.5 text-[11px]">
+            {preflight.checks.map((c) => (
+              <li
+                key={c.key}
+                className={
+                  c.status === "fail"
+                    ? "text-[#f87171]"
+                    : c.status === "warn"
+                      ? "text-[#fbbf24]"
+                      : "text-[#64748b]"
+                }
+              >
+                {c.label}：{c.detail}
+                {c.hint ? ` — ${c.hint}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* ── Body ───────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: 5-section artifact tree */}
@@ -1179,6 +1536,96 @@ export default function DesktopWorkspacePage() {
                 )}
               </div>
             )}
+            {/* 证据缺口收件箱：未评审 / 过期评审 / 未闭环问题 */}
+            <div className="pt-0.5">
+              <button
+                type="button"
+                data-testid="gap-inbox-toggle"
+                onClick={() => setShowGaps((v) => !v)}
+                className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-[11px] text-[#94a3b8] hover:bg-[#1e293b]"
+                title="聚合未评审、过期评审与未闭环问题"
+              >
+                <Inbox className="h-3 w-3" />
+                证据缺口
+                <span
+                  className={`ml-auto rounded-full px-1.5 text-[10px] tabular-nums ${
+                    gapCount > 0 ? "bg-[#7c2d12] text-[#fdba74]" : "bg-[#1e293b] text-[#64748b]"
+                  }`}
+                >
+                  {gapCount}
+                </span>
+              </button>
+              {showGaps && (
+                <div
+                  data-testid="gap-inbox"
+                  className="mt-1 max-h-56 overflow-y-auto rounded border border-[#1e293b] bg-[#111827] py-1"
+                >
+                  {gapCount === 0 && (
+                    <div className="px-2 py-1.5 text-[10px] text-[#64748b]">暂无缺口，评审与问题均已闭环。</div>
+                  )}
+                  {gapFiles.unreviewed.length > 0 && (
+                    <div className="px-2 py-1 text-[10px] text-[#64748b]">
+                      未评审 <span className="tabular-nums">{gapFiles.unreviewed.length}</span>
+                    </div>
+                  )}
+                  {gapFiles.unreviewed.slice(0, 8).map((p) => (
+                    <button
+                      key={`unrev-${p}`}
+                      type="button"
+                      data-testid={`gap-unreviewed-${p}`}
+                      onClick={() => {
+                        setShowGaps(false);
+                        setReviewFilter("unreviewed");
+                        void handleSelectFile(p);
+                      }}
+                      className="block w-full truncate px-2 py-0.5 text-left font-mono text-[10px] text-[#93c5fd] hover:bg-[#1e293b]/60"
+                      title={p}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  {gapFiles.stale.length > 0 && (
+                    <div className="px-2 py-1 text-[10px] text-[#f59e0b]">
+                      过期评审 <span className="tabular-nums">{gapFiles.stale.length}</span>
+                    </div>
+                  )}
+                  {gapFiles.stale.slice(0, 8).map((p) => (
+                    <button
+                      key={`stale-${p}`}
+                      type="button"
+                      data-testid={`gap-stale-${p}`}
+                      onClick={() => {
+                        setShowGaps(false);
+                        setReviewFilter("needs_revision");
+                        void handleSelectFile(p);
+                      }}
+                      className="block w-full truncate px-2 py-0.5 text-left font-mono text-[10px] text-[#fbbf24] hover:bg-[#1e293b]/60"
+                      title={p}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  {openIssues.length > 0 && (
+                    <div className="px-2 py-1 text-[10px] text-[#f87171]">
+                      未闭环问题 <span className="tabular-nums">{openIssues.length}</span>
+                    </div>
+                  )}
+                  {openIssues.slice(0, 6).map((issue) => (
+                    <button
+                      key={`issue-${issue.id}`}
+                      type="button"
+                      data-testid={`gap-issue-${issue.id}`}
+                      onClick={() => { setShowGaps(false); setShowIssues(true); }}
+                      className="block w-full truncate px-2 py-0.5 text-left text-[10px] text-[#fca5a5] hover:bg-[#1e293b]/60"
+                      title={`${issue.title}（${issue.status}）`}
+                    >
+                      {issue.title}
+                      <span className="ml-1 text-[#64748b]">{issue.status}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {searchResults.length > 0 && (
               <div
                 data-testid="artifact-search-results"
@@ -1370,6 +1817,21 @@ export default function DesktopWorkspacePage() {
                     setLlmSettingsOpen(true);
                   }}
                 />
+                <DockMenuItem
+                  icon={notificationsOn
+                    ? <Bell className="w-3.5 h-3.5" />
+                    : <BellOff className="w-3.5 h-3.5" />}
+                  label={notificationsOn ? "桌面通知：开" : "桌面通知：关"}
+                  onClick={() => {
+                    setNotificationsOn((v) => {
+                      const next = !v;
+                      try {
+                        window.localStorage.setItem(NOTIFY_STATE_KEY, next ? "on" : "off");
+                      } catch { /* 忽略存储异常 */ }
+                      return next;
+                    });
+                  }}
+                />
                 <div className="my-1 h-px bg-[#1e293b]" />
                 {session ? (
                   <DockMenuItem
@@ -1497,6 +1959,26 @@ export default function DesktopWorkspacePage() {
                 }}
                 actions={(
                   <>
+                    <button
+                      type="button"
+                      data-testid="file-history-back"
+                      onClick={() => goHistory(-1)}
+                      disabled={historyIndex <= 0}
+                      title="上一个文件（Alt+←）"
+                      className="inline-flex items-center rounded border border-[#1e293b] p-1 text-[10px] text-[#94a3b8] hover:text-white disabled:opacity-30"
+                    >
+                      <ArrowLeft className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="file-history-forward"
+                      onClick={() => goHistory(1)}
+                      disabled={historyIndex < 0 || historyIndex >= history.length - 1}
+                      title="下一个文件（Alt+→）"
+                      className="inline-flex items-center rounded border border-[#1e293b] p-1 text-[10px] text-[#94a3b8] hover:text-white disabled:opacity-30"
+                    >
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => void copySelectedPath()}
@@ -1697,6 +2179,10 @@ export default function DesktopWorkspacePage() {
         open={showTraceability}
         onOpenChange={setShowTraceability}
         projectId={activeId}
+        onOpenArtifact={(path) => {
+          setShowTraceability(false);
+          void handleSelectFile(path);
+        }}
       />
 
       {/* ── Configuration baselines ────────────────────────────────────── */}
@@ -1809,6 +2295,10 @@ export default function DesktopWorkspacePage() {
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
         activeId={activeId}
         files={artifactFiles}
+        recentFiles={recentFiles}
+        canCancel={running}
+        hasSelection={Boolean(selectedFile)}
+        notificationsOn={notificationsOn}
         onSelectProject={setActiveId}
         onOpenFile={(path) => { void handleSelectFile(path); }}
         onGovernance={handleGovernanceSelect}
@@ -1924,7 +2414,7 @@ function ArtifactTreeLite({
   const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({});
 
   return (
-    <div>
+    <div data-tree-root={depth === 0 ? "true" : undefined}>
       {nodes.map((node) => {
         const isDir = node.type === "dir";
         const isOpen = openDirs[node.path] ?? false;
@@ -1937,7 +2427,12 @@ function ArtifactTreeLite({
         return (
           <div key={node.path}>
             <div
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer text-[11px] hover:bg-[#1e293b] ${
+              data-tree-row={node.path}
+              role="treeitem"
+              tabIndex={0}
+              aria-expanded={isDir && hasChildren ? isOpen : undefined}
+              aria-selected={!isDir ? selectedFile === node.path : undefined}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer text-[11px] hover:bg-[#1e293b] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#1677ff] ${
                 selectedFile === node.path ? "bg-[#1e293b] text-white" : "text-[#94a3b8]"
               }`}
               style={{ paddingLeft: `${depth * 10 + 10}px` }}
@@ -1946,6 +2441,37 @@ function ArtifactTreeLite({
                   setOpenDirs((s) => ({ ...s, [node.path]: !s[node.path] }));
                 } else if (!isDir) {
                   onSelect(node.path);
+                }
+              }}
+              onKeyDown={(e) => {
+                const row = e.currentTarget;
+                const root = row.closest('[data-tree-root="true"]');
+                const rows = root
+                  ? Array.from(root.querySelectorAll<HTMLElement>('[data-tree-row]'))
+                  : [];
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  const next = rows[rows.indexOf(row) + (e.key === "ArrowDown" ? 1 : -1)];
+                  next?.focus();
+                  return;
+                }
+                if (e.key === "ArrowRight" && isDir && hasChildren) {
+                  e.preventDefault();
+                  setOpenDirs((s) => ({ ...s, [node.path]: true }));
+                  return;
+                }
+                if (e.key === "ArrowLeft" && isDir && hasChildren && isOpen) {
+                  e.preventDefault();
+                  setOpenDirs((s) => ({ ...s, [node.path]: false }));
+                  return;
+                }
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  if (isDir && hasChildren) {
+                    setOpenDirs((s) => ({ ...s, [node.path]: !s[node.path] }));
+                  } else if (!isDir) {
+                    onSelect(node.path);
+                  }
                 }
               }}
             >
