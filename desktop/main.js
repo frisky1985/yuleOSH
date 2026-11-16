@@ -12,7 +12,7 @@
  *   - 协调 ServerManager + TrayManager
  */
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session, Notification } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -488,8 +488,66 @@ function serveFile(res, fullPath) {
 
 // ─── 创建窗口 ────────────────────────────────────────
 
+// 窗口位置/尺寸持久化：记住上次退出时的大小，避免每次启动都重置为 1280x860。
+function windowStatePath() {
+  return path.join(app.getPath('userData'), 'window-state.json');
+}
+
+function loadWindowState() {
+  try {
+    const raw = fs.readFileSync(windowStatePath(), 'utf-8');
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== 'object') return null;
+    const state = { maximized: Boolean(saved.maximized) };
+    for (const key of ['x', 'y', 'width', 'height']) {
+      if (Number.isFinite(saved[key])) state[key] = saved[key];
+    }
+    if (
+      !Number.isFinite(state.width) || !Number.isFinite(state.height)
+      || state.width < 900 || state.height < 600
+    ) {
+      delete state.width;
+      delete state.height;
+    }
+    // 显示器变化后，避免窗口恢复到不可见区域。
+    if (Number.isFinite(state.x) && Number.isFinite(state.y)) {
+      const { screen } = require('electron');
+      if (screen && typeof screen.getAllDisplays === 'function') {
+        const width = state.width || 1280;
+        const height = state.height || 860;
+        const visible = screen.getAllDisplays().some((display) => {
+          const area = display.workArea;
+          return state.x < area.x + area.width && state.x + width > area.x
+            && state.y < area.y + area.height && state.y + height > area.y;
+        });
+        if (!visible) {
+          delete state.x;
+          delete state.y;
+        }
+      }
+    }
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+function saveWindowState(win) {
+  if (!win || (typeof win.isDestroyed === 'function' && win.isDestroyed())) return;
+  try {
+    const maximized = typeof win.isMaximized === 'function' ? win.isMaximized() : false;
+    const bounds = typeof win.getNormalBounds === 'function'
+      ? win.getNormalBounds()
+      : win.getBounds();
+    fs.writeFileSync(windowStatePath(), JSON.stringify({ ...bounds, maximized }));
+  } catch {
+    /* 磁盘不可写时忽略 */
+  }
+}
+
 async function createWindow() {
-  mainWindow = new BrowserWindow({
+  const savedState = loadWindowState();
+  const windowOptions = {
     width: 1280,
     height: 860,
     minWidth: 900,
@@ -504,6 +562,28 @@ async function createWindow() {
       nodeIntegration: false,
       sandbox: false, // 需要 preload 使用 Node.js API
     },
+  };
+  if (savedState?.width) windowOptions.width = savedState.width;
+  if (savedState?.height) windowOptions.height = savedState.height;
+  if (Number.isFinite(savedState?.x)) windowOptions.x = savedState.x;
+  if (Number.isFinite(savedState?.y)) windowOptions.y = savedState.y;
+
+  mainWindow = new BrowserWindow(windowOptions);
+
+  // 记录窗口变化（防抖 400ms），退出时再兜底写一次。
+  let stateTimer = null;
+  const scheduleSaveState = () => {
+    if (stateTimer) clearTimeout(stateTimer);
+    stateTimer = setTimeout(() => {
+      stateTimer = null;
+      saveWindowState(mainWindow);
+    }, 400);
+  };
+  mainWindow.on('resize', scheduleSaveState);
+  mainWindow.on('move', scheduleSaveState);
+  mainWindow.on('close', () => {
+    if (stateTimer) clearTimeout(stateTimer);
+    saveWindowState(mainWindow);
   });
 
   // 只允许应用内部导航；外部链接交给系统浏览器，禁止窗口内跳转
@@ -530,6 +610,9 @@ async function createWindow() {
 
   // 窗口可见后显示 (防止白闪)
   mainWindow.once('ready-to-show', () => {
+    if (savedState?.maximized) {
+      mainWindow.maximize();
+    }
     mainWindow.show();
   });
 
@@ -898,6 +981,51 @@ function registerIpcHandlers() {
     running: Boolean(serverManager && serverManager.isRunning()),
     url: serverManager ? serverManager.getBackendUrl() : null,
   }));
+
+  // 在系统文件管理器中定位产物文件（限制在工作区目录内，防止任意路径访问）
+  ipcMain.handle('reveal-artifact', (_event, projectId, relPath) => {
+    try {
+      if (!projectId || !relPath) {
+        return { ok: false, error: 'projectId and relPath are required' };
+      }
+      const workspaceRoot = path.resolve(
+        process.env.YULEOSH_DESKTOP_HOME
+          || path.join(require('os').homedir(), 'yuleosh-workspace'),
+      );
+      const target = path.resolve(workspaceRoot, String(projectId), String(relPath));
+      const relative = path.relative(workspaceRoot, target);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        return { ok: false, error: 'forbidden' };
+      }
+      if (!fs.existsSync(target)) {
+        return { ok: false, error: 'not found' };
+      }
+      shell.showItemInFolder(target);
+      return { ok: true, path: target };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // 桌面通知：窗口在前台时不打扰用户
+  ipcMain.handle('show-notification', (_event, payload = {}) => {
+    try {
+      if (!Notification || typeof Notification.isSupported !== 'function'
+        || !Notification.isSupported()) {
+        return false;
+      }
+      if (mainWindow && typeof mainWindow.isFocused === 'function' && mainWindow.isFocused()) {
+        return false;
+      }
+      new Notification({
+        title: String(payload.title || 'yuleOSH'),
+        body: String(payload.body || ''),
+      }).show();
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 // ─── 信号转发 ────────────────────────────────────────

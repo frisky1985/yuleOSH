@@ -7,6 +7,8 @@ export interface TreeNode {
   path: string;
   type: "dir" | "file";
   size?: number;
+  /** 文件最后修改时间（Unix 秒），目录节点不带；用于评审陈旧检测。 */
+  mtime?: number | null;
   children?: TreeNode[];
 }
 
@@ -85,6 +87,22 @@ export function filterTree(node: TreeNode | null | undefined, query: string): Tr
     return { ...node, children };
   }
   return null;
+}
+
+/**
+ * 按文件路径谓词过滤文件树：文件保留 predicate(path) 为 true 的节点，
+ * 目录只要有命中后代就保留（会被裁成只含命中的子树）。
+ */
+export function filterTreeByPaths(
+  node: TreeNode | null | undefined,
+  keep: (path: string) => boolean,
+): TreeNode | null {
+  if (!node) return null;
+  if (node.type === "file") return keep(node.path) ? node : null;
+  const children = (node.children || [])
+    .map((c) => filterTreeByPaths(c, keep))
+    .filter((c): c is TreeNode => c !== null);
+  return children.length > 0 ? { ...node, children } : null;
 }
 
 /** 把顶层目录按 SECTION_ORDER 排列，末尾追加"其他"。始终保证 requirements 在前。 */

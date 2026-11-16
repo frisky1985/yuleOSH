@@ -58,7 +58,7 @@ interface PipelineRunDialogProps {
   projectId: string | null;
   jobId: string | null;
   running?: boolean;
-  onRerun?: () => void;
+  onRerun?: (fromStage?: string) => void;
   onInspectLayer?: (path: string) => void;
 }
 
@@ -67,6 +67,7 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   failed: { label: "失败", className: "bg-[#ef4444]/15 text-[#f87171] border-[#ef4444]/30" },
   running: { label: "运行中", className: "bg-[#f59e0b]/15 text-[#fbbf24] border-[#f59e0b]/30" },
   queued: { label: "排队中", className: "bg-[#64748b]/15 text-[#94a3b8] border-[#64748b]/30" },
+  cancelled: { label: "已取消", className: "bg-[#64748b]/15 text-[#cbd5e1] border-[#64748b]/30" },
 };
 
 const CODEGEN_STATUS: Record<string, { label: string; className: string }> = {
@@ -102,6 +103,7 @@ function duration(detail: PipelineRunDetail): string {
 function StageIcon({ status }: { status: string }) {
   if (status === "passed") return <CheckCircle2 className="w-4 h-4 text-[#10b981] shrink-0" />;
   if (status === "failed") return <XCircle className="w-4 h-4 text-[#ef4444] shrink-0" />;
+  if (status === "cancelled") return <XCircle className="w-4 h-4 text-[#94a3b8] shrink-0" />;
   if (status === "running") return <Loader2 className="w-4 h-4 text-[#f59e0b] animate-spin shrink-0" />;
   if (status === "skipped") return <Circle className="w-4 h-4 text-[#475569] shrink-0" />;
   return <Clock className="w-4 h-4 text-[#475569] shrink-0" />;
@@ -158,6 +160,8 @@ export function PipelineRunDialog({
     className: "bg-[#64748b]/15 text-[#94a3b8] border-[#64748b]/30",
   };
   const codegen = detail?.code_generation;
+  const failedStage = detail?.stages?.find((stage) => stage.status === "failed")?.key;
+  const canResume = detail?.status === "failed" && Boolean(failedStage);
   const codegenStatus = CODEGEN_STATUS[codegen?.status ?? ""] ?? {
     label: codegen?.status ?? "未知",
     className: "text-[#94a3b8] border-[#64748b]/30 bg-[#64748b]/10",
@@ -215,7 +219,11 @@ export function PipelineRunDialog({
             <div className="h-1.5 overflow-hidden rounded-full bg-[#1e293b]">
               <div
                 className={`h-full rounded-full transition-all ${
-                  detail.status === "failed" ? "bg-[#ef4444]" : "bg-[#10b981]"
+                  detail.status === "failed"
+                    ? "bg-[#ef4444]"
+                    : detail.status === "cancelled"
+                      ? "bg-[#64748b]"
+                      : "bg-[#10b981]"
                 }`}
                 style={{ width: `${Math.min(100, Math.max(0, detail.progress ?? 0))}%` }}
               />
@@ -340,11 +348,13 @@ export function PipelineRunDialog({
             <Button
               size="sm"
               variant="outline"
-              onClick={onRerun}
+              data-testid="rerun-pipeline"
+              onClick={() => onRerun(canResume ? failedStage : undefined)}
               disabled={running || !projectId || isActiveStatus(detail?.status)}
               className="border-[#1e293b] text-[#94a3b8]"
             >
-              <RotateCw className="mr-1 w-3.5 h-3.5" /> 重新运行
+              <RotateCw className="mr-1 w-3.5 h-3.5" />
+              {canResume ? `从「${failedStage}」重试` : "重新运行"}
             </Button>
           )}
           <Button

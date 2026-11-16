@@ -250,6 +250,13 @@ describe('AC-2.x — 后端错误恢复 IPC', () => {
     expect(channels).toContain('get-backend-status');
   });
 
+  test('桌面增强：注册文件定位与通知通道', async () => {
+    await main.createWindow();
+    const channels = ipcMain.handle.mock.calls.map((call) => call[0]);
+    expect(channels).toContain('reveal-artifact');
+    expect(channels).toContain('show-notification');
+  });
+
   test('AC-2.1.5: IPC 处理器只注册一次（重复 createWindow 不抛异常）', async () => {
     await main.createWindow();
     const before = ipcMain.handle.mock.calls.filter((call) => call[0] === 'open-directory').length;

@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import parse_qs
 
 from yuleosh.desktop import audit, baseline, change_control, issues, project_mgmt, qa, templates, tracing, workspace
@@ -526,6 +526,9 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
             return _run_pipeline(project_id, body)
         if action == "runs" and method == "GET":
             return _json({"ok": True, "runs": workspace.list_pipeline_runs(project_id)})
+        # 取消运行中/排队中的任务（协作式：在阶段边界退出）
+        if action == "cancel" and method == "POST":
+            return _cancel_pipeline(project_id, body)
         # 单 job 状态（给前端轮询用，免鉴权）。
         # /api/v1/desktop/projects/{id}/pipeline/status/{job_id}
         if action == "status" and method == "GET" and len(parts) > 3:
@@ -632,6 +635,10 @@ def _dispatch_projects(method: str, parts: list, body: Any, query: dict) -> tupl
         return _dispatch_quality_gates(project_id, method)
 
     if sub == "artifacts":
+        # 全文搜索（必须在文件读取之前分发，否则会被当成名为 search 的产物）
+        # /api/v1/desktop/projects/{id}/artifacts/search?q=xxx
+        if method == "GET" and parts[2:3] == ["search"]:
+            return _search_artifacts(project_id, query)
         rel = "/".join(parts[2:]) if len(parts) > 2 else ""
         if method == "GET":
             if not rel:
@@ -775,12 +782,15 @@ def _run_pipeline(project_id: str, body: Any) -> tuple:
     }
     data = body if isinstance(body, dict) else {}
     pipeline_type = data.get("type", "full")
+    resume_from = data.get("resume_from")
+    resume_from = resume_from.strip() if isinstance(resume_from, str) else None
 
     # Record the run folder (config + placeholders).
-    job_id = _submit_pipeline(proj_dir, pipeline_type, config)
+    job_id = _submit_pipeline(proj_dir, pipeline_type, config, resume_from=resume_from)
     workspace.record_pipeline_run(project_id, job_id, {
         "type": pipeline_type,
         "config": config,
+        "resume_from": resume_from,
     })
 
     # 1. Collect REAL pipeline output into the artifact folders.
@@ -832,6 +842,7 @@ def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
                 "logs_total": len(job.get("logs", [])),
                 "result": job.get("result"),
                 "code_generation": job.get("code_generation"),
+                "cancel_requested": bool(job.get("cancel_requested")),
             })
     except Exception:  # noqa: BLE001 — runner 模块不可用时走磁盘
         pass
@@ -855,12 +866,115 @@ def _pipeline_job_status(project_id: str, job_id: str) -> tuple:
                 "logs_total": len(data.get("logs", [])),
                 "result": data.get("result"),
                 "code_generation": data.get("code_generation"),
+                "cancel_requested": bool(data.get("cancel_requested")),
                 "source": "disk",
             })
         except json.JSONDecodeError:
             pass
 
     return _json({"ok": False, "error": f"Job {job_id} not found"}, 404)
+
+
+def _cancel_pipeline(project_id: str, body: Any) -> tuple:
+    """请求取消运行中的流水线任务（在阶段边界生效）。"""
+    data = body if isinstance(body, dict) else {}
+    job_id = data.get("job_id")
+    job_id = job_id.strip() if isinstance(job_id, str) else ""
+    if not job_id:
+        return _json({"ok": False, "error": "job_id is required"}, 400)
+
+    try:
+        from yuleosh.pipeline.async_runner import get_job_status, request_cancel
+    except Exception as e:  # noqa: BLE001 — runner 不可用时无法取消
+        return _json({"ok": False, "error": f"Pipeline runner unavailable: {e}"}, 503)
+
+    job = get_job_status(job_id)
+    if not job:
+        return _json({"ok": False, "error": f"Job {job_id} not found"}, 404)
+    # 只允许取消本工程的任务，避免跨工程误操作。
+    expected = str(workspace._project_dir(project_id))
+    actual = str(job.get("project_dir") or "")
+    if actual and os.path.abspath(actual) != os.path.abspath(expected):
+        return _json({"ok": False, "error": "Job does not belong to this project"}, 403)
+
+    cancelled = request_cancel(job_id)
+    return _json({
+        "ok": True,
+        "job_id": job_id,
+        "cancel_requested": cancelled,
+        "status": get_job_status(job_id).get("status") if get_job_status(job_id) else "unknown",
+    }, 202 if cancelled else 200)
+
+
+# ── Full-text artifact search ─────────────────────────────────────────────
+
+_SEARCH_TEXT_SUFFIXES = {
+    ".md", ".txt", ".json", ".yaml", ".yml", ".c", ".h", ".cpp", ".hpp",
+    ".py", ".js", ".ts", ".tsx", ".html", ".css", ".log", ".xml", ".cfg",
+    ".ini", ".toml", ".sh", ".make", ".mk",
+}
+_SEARCH_MAX_FILE_BYTES = 512 * 1024
+_SEARCH_MAX_RESULTS = 50
+
+
+def _search_artifacts(project_id: str, query: Any) -> tuple:
+    """在产物目录里做朴素全文搜索，返回命中文件、行号与行文本。
+
+    只扫描文本类产物且单文件上限 512KB，避免大文件拖垮桌面轮询。
+    """
+    try:
+        workspace._load_meta(project_id)
+    except FileNotFoundError:
+        return _json({"ok": False, "error": "Project not found"}, 404)
+
+    q = ""
+    if isinstance(query, dict):
+        raw = query.get("q")
+        if isinstance(raw, list):
+            raw = raw[0] if raw else ""
+        q = str(raw or "")
+    q = q.strip()
+    if len(q) < 2:
+        return _json({"ok": True, "query": q, "matches": [], "truncated": False})
+
+    proj_dir = workspace._project_dir(project_id)
+    roots = [proj_dir / name for name in workspace.ARTIFACT_DIRS]
+    roots.append(proj_dir / workspace.UNCLASSIFIED_DIR)
+
+    needle = q.lower()
+    matches: list[dict] = []
+    truncated = False
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.name.startswith("."):
+                continue
+            if path.suffix.lower() not in _SEARCH_TEXT_SUFFIXES:
+                continue
+            try:
+                if path.stat().st_size > _SEARCH_MAX_FILE_BYTES:
+                    continue
+                lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except OSError:
+                continue
+            rel = str(path.relative_to(proj_dir))
+            for lineno, line in enumerate(lines, start=1):
+                if needle in line.lower():
+                    matches.append({
+                        "path": rel,
+                        "line": lineno,
+                        "text": line.strip()[:200],
+                    })
+                    if len(matches) >= _SEARCH_MAX_RESULTS:
+                        truncated = True
+                        break
+            if truncated:
+                break
+        if truncated:
+            break
+
+    return _json({"ok": True, "query": q, "matches": matches, "truncated": truncated})
 
 
 # ── Artifact classification contract ───────────────────────────────────
@@ -1153,7 +1267,8 @@ def _ensure_artifact_baseline(proj_dir, config: dict, seed_code: bool = True) ->
             pass
 
 
-def _submit_pipeline(project_dir: str, pipeline_type: str, config: dict) -> str:
+def _submit_pipeline(project_dir: str, pipeline_type: str, config: dict,
+                     resume_from: Optional[str] = None) -> str:
     """Submit the pipeline job. Falls back to a stub job if the runner
     cannot be imported (e.g. optional deps missing), so the desktop UI
     always gets a job_id to poll.
@@ -1164,6 +1279,7 @@ def _submit_pipeline(project_dir: str, pipeline_type: str, config: dict) -> str:
             return submit_full_pipeline(
                 project_dir=str(project_dir),
                 config_json=json.dumps(config),
+                resume_from=resume_from,
             )
         layer = int(config.get("layer", 1))
         return submit_pipeline(project_dir=str(project_dir), layer=layer)

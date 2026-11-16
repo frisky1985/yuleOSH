@@ -1,8 +1,13 @@
 import {
+  aggregateReviewTone,
   countReviewTones,
+  isReviewStale,
   latestReviewByArtifact,
+  matchesReviewFilter,
+  reviewCoverage,
   reviewTone,
   reviewToneByArtifact,
+  staleArtifactsByTree,
 } from "@/lib/review-status";
 
 const rec = (artifact: string, status: string, created_at: string) => ({
@@ -93,5 +98,107 @@ describe("countReviewTones", () => {
       needs_revision: 0,
       rejected: 0,
     });
+  });
+});
+
+describe("aggregateReviewTone", () => {
+  it("取最严重的状态", () => {
+    expect(aggregateReviewTone(["approved", "needs_revision"])).toBe("needs_revision");
+    expect(aggregateReviewTone(["approved", "rejected", "needs_revision"])).toBe("rejected");
+  });
+
+  it("全部未评审返回 null", () => {
+    expect(aggregateReviewTone([])).toBeNull();
+    expect(aggregateReviewTone([null, undefined])).toBeNull();
+  });
+});
+
+describe("reviewCoverage", () => {
+  it("统计已评审与总数", () => {
+    expect(
+      reviewCoverage(["a.c", "b.c", "c.c"], { "a.c": "approved", "c.c": "rejected" }),
+    ).toEqual({ reviewed: 2, total: 3 });
+  });
+
+  it("空输入返回 0/0", () => {
+    expect(reviewCoverage(null, null)).toEqual({ reviewed: 0, total: 0 });
+  });
+});
+
+describe("isReviewStale", () => {
+  const reviewedAt = "2026-01-01T10:00:00Z";
+  const reviewedMs = new Date(reviewedAt).getTime();
+
+  it("文件修改晚于评审时间 → 过期", () => {
+    expect(isReviewStale(reviewedMs / 1000 + 120, reviewedAt)).toBe(true);
+  });
+
+  it("同一秒或更早 → 不过期", () => {
+    expect(isReviewStale(reviewedMs / 1000, reviewedAt)).toBe(false);
+    expect(isReviewStale(reviewedMs / 1000 - 60, reviewedAt)).toBe(false);
+  });
+
+  it("缺少 mtime 或时间非法 → 不过期", () => {
+    expect(isReviewStale(null, reviewedAt)).toBe(false);
+    expect(isReviewStale(123, "")).toBe(false);
+    expect(isReviewStale(123, "not-a-date")).toBe(false);
+  });
+});
+
+describe("staleArtifactsByTree", () => {
+  const reviewedAt = "2026-01-01T10:00:00Z";
+  const reviewedMs = new Date(reviewedAt).getTime();
+  const tree = {
+    type: "dir" as const,
+    path: ".",
+    children: [
+      {
+        type: "dir" as const,
+        path: "code",
+        children: [
+          { type: "file" as const, path: "code/a.c", mtime: reviewedMs / 1000 + 60 },
+          { type: "file" as const, path: "code/b.c", mtime: reviewedMs / 1000 - 60 },
+        ],
+      },
+      { type: "file" as const, path: "code/c.c", mtime: reviewedMs / 1000 + 60 },
+    ],
+  };
+  const latest = latestReviewByArtifact([
+    rec("code/a.c", "approved", reviewedAt),
+    rec("code/b.c", "approved", reviewedAt),
+    rec("code/c.c", "needs_revision", reviewedAt),
+  ]);
+
+  it("只标记评审后被修改的文件", () => {
+    expect(Array.from(staleArtifactsByTree(tree, latest))).toEqual(["code/a.c", "code/c.c"]);
+  });
+
+  it("无评审记录时不标记", () => {
+    expect(staleArtifactsByTree(tree, new Map()).size).toBe(0);
+  });
+});
+
+describe("matchesReviewFilter", () => {
+  const tones = { "a.c": "approved" as const, "b.c": "needs_revision" as const };
+  const stale = new Set(["a.c"]);
+
+  it("all 全部保留", () => {
+    expect(matchesReviewFilter("z.c", tones, "all")).toBe(true);
+  });
+
+  it("unreviewed 只保留无评审结论的文件", () => {
+    expect(matchesReviewFilter("z.c", tones, "unreviewed")).toBe(true);
+    expect(matchesReviewFilter("a.c", tones, "unreviewed")).toBe(false);
+  });
+
+  it("needs_revision 包含待修订与过期通过", () => {
+    expect(matchesReviewFilter("b.c", tones, "needs_revision")).toBe(true);
+    expect(matchesReviewFilter("a.c", tones, "needs_revision", stale)).toBe(true);
+    expect(matchesReviewFilter("a.c", tones, "needs_revision")).toBe(false);
+  });
+
+  it("approved 排除过期结论", () => {
+    expect(matchesReviewFilter("a.c", tones, "approved", new Set())).toBe(true);
+    expect(matchesReviewFilter("a.c", tones, "approved", stale)).toBe(false);
   });
 });
