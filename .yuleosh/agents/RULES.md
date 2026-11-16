@@ -1,6 +1,6 @@
 # RULES.md — Agent Behavioral Rules (Zero-Tolerance)
 
-> **Version**: 1.5.0
+> **Version**: 1.6.0
 > **Status**: Active
 > **Format**: OpenSpec (RFC 2119: SHALL/SHOULD/MAY)
 > **优先级**: 本文件所有规则服从第一准则 PRIME-DIRECTIVE.md（工程诚实）。冲突时以第一准则为准；测试真实性与降级透明性的详细落地见 TEST-INTEGRITY.md。
@@ -525,3 +525,25 @@ The loop chain covers, but is not limited to:
 
 **MAY**：
 - 合理下限（如 `>= 20`）MAY 用于防误删（数量异常缩水时红，合理重构不红）。
+
+---
+
+## 16. 技能包 / 角色包安装纪律 (2026-11-16)
+
+**背景**: yuleOSH 内置 automotive 技能包（4,863 条）与角色包（218 agents + 192
+commands → 8 个角色约束），默认随包可用、需显式安装到工程。2026-11-16 决定：
+框架仓库只承载包本体，不在自身工程安装角色包，避免框架开发提示词混入域专家
+约束、以及被误提交。
+
+**SHALL**:
+- 框架仓库（yuleOSH 自身）SHALL NOT 执行 `agents install-pack`，其
+  `.yuleosh/agents/` SHALL 只放框架开发规则（AGENTS/RULES/METHODOLOGY 等）。
+- 角色包 SHALL 只安装到流水线运行的目标工程
+  （`<project>/.yuleosh/agents/`），且按该工程需要安装。
+- 同一评估批次（如 CL2 DoD-1 的 3 次连跑）SHALL 使用相同 spec、技能包、
+  角色约束与 LLM provider；批次内 SHALL NOT 变更上述运行条件。
+- 技能/角色内容变更后 SHALL 重跑受影响回归，并把结果记入评估证据。
+
+**SHOULD**:
+- 安装 SHALL 默认不覆盖目标工程已有的同名角色文件（如 `developer.md`）；
+  确需覆盖时 SHALL 显式使用 `--force` 并记录理由。

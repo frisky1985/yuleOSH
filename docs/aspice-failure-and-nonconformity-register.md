@@ -330,7 +330,7 @@
 
 | DoD | 状态 | 说明 |
 |---|---|---|
-| 1. 同一需求连续 3 次 3/3 GREEN | ⛔ **外部阻塞** | 2026-11-16 实测 DeepSeek 余额 `-2.12 CNY`、`is_available=false`，chat 返回 HTTP 402。已从步骤 1 起验证到步骤 26 可跑通（RUN-D），68–104 步亦全部 completed（RUN-F/G）；仅「全新 3 连跑」需充值或切换 provider。4xx 短路已保证不产生假绿。 |
+| 1. 同一需求连续 3 次 3/3 GREEN | ⛔ **外部阻塞** | 2026-11-16 实测 DeepSeek 余额 `-2.12 CNY`、`is_available=false`，chat 返回 HTTP 402。已从步骤 1 起验证到步骤 26 可跑通（RUN-D），68–104 步亦全部 completed（RUN-F/G）；仅「全新 3 连跑」需充值或切换 provider。4xx 短路已保证不产生假绿。**批次条件一致性**：三次连跑必须使用同一 spec、技能包（4,863 条 automotive）、角色约束（8 角色包，已安装到 `/tmp/cl2-run{1,2,3}`）与同一 LLM provider，中途不得变更（RULES.md §16）。 |
 | 2. G0–G7 全 passed，0 skipped | ⏳ 依赖 DoD-1 | 门禁严格化已完成，待真实跑绿取证。 |
 | 3. 产物齐全并哈希入账 | ✅ | `artifact_hashes` 覆盖 session + project 产物（F-04）。 |
 | 4. 四层追溯 100% / 0 orphan | ✅（确定性可验） | `ast_trace` + `spec/ssot.validate_topology` 提供 0 orphan 判定。 |
