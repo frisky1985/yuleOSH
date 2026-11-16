@@ -139,6 +139,36 @@ class TestOrchestratorReworkLoop:
         assert orchestrator._maybe_rework(
             session, registered, 0, "arch-review", "s.md", str(tmp_path), 0) is False
 
+    def test_code_review_rework_runs_generate_then_deploy(self, tmp_path, monkeypatch):
+        """F-08：内部代码评审返工必须按序重跑 development → codegen-deploy。"""
+        write_artifact(tmp_path, "internal-code-review", "failed", [
+            {"severity": "major", "message": "overflow handling missing"},
+        ])
+        session = FakeSession(tmp_path)
+        calls = []
+
+        def fake_execute(session, step_idx, step_key, agent, name, handler,
+                         spec_path, project_dir, from_step, callback=None):
+            calls.append(step_key)
+            if step_key == "internal-code-review":
+                write_artifact(tmp_path, "internal-code-review", "passed", [])
+            return None
+
+        monkeypatch.setattr(orchestrator, "_execute_step", fake_execute)
+        registered = [
+            (0, "development", "Claude", "开发", object),
+            (1, "codegen-deploy", "小明", "部署", object),
+            (2, "internal-code-review", "小克", "代码评审", object),
+        ]
+
+        did = orchestrator._maybe_rework(
+            session, registered, 2, "internal-code-review",
+            "spec.md", str(tmp_path), 0)
+
+        assert did is True
+        assert calls == ["development", "codegen-deploy", "internal-code-review"]
+        assert session.rework_rounds["internal-code-review"] == 1
+
 
 class TestPromptInjection:
     def test_architecture_prompt_carries_rework_directive(self, monkeypatch):

@@ -32,6 +32,12 @@
 `Insufficient Balance`（HTTP 402）。因此「同一 spec 连续 3 次**全新**全流程运行」当前
 无法执行；上表 RUN-D～RUN-G 为同一工程目录上的真实运行记录，非模拟。
 
+修复后再做两次全新尝试（`/tmp/cl2-run2` → `a97d206b0f45`、`/tmp/cl2-run3` → `613f804ac050`）：
+步骤 1–7（sys-requirements … spec-check）全部 completed，第 8/11 步首个 LLM 调用即
+`non-retryable HTTP 402`，单次 <1s 短路，会话判 `failed`。即：确定性前置段无回归，
+唯一断点是外部账户余额。
+
+
 
 产物路径：`/workspace/demos/desktop-workspace/62e87b875c79/`
 关键证据：`.osh/sessions/90dc720be61c/{gate-summary,prd-review,arch-review,codegen-deploy,c-coverage-gate}.json`、`.yuleosh/reports/codegen-deploy.json`、`artifacts/generated-code/aspice-led-1hz/codegen-report.md`
